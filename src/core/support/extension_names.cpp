@@ -9,7 +9,6 @@ ExtensionNames::ExtensionNames(BlockSource &blocks, Pool pool) : names_(blocks, 
     AV_SCOPE("ExtensionNames::ExtensionNames");
 }
 
-/* The guest DLLs have no C runtime, and the compiler makes strcmp a call. */
 bool ExtensionNames::same(const char *one, const char *other) const
 {
     AV_SCOPE("ExtensionNames::same");
@@ -94,4 +93,4 @@ bool ExtensionNames::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

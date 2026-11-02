@@ -1,12 +1,3 @@
-/* Images, samplers, the device-side copies and fills, and what a program and a
- * kernel say about themselves: the entries the OpenCL samples reach beyond a
- * buffer and a kernel.
- *
- * What is asserted is what an application would see - the object it is handed,
- * the error it is told, the bytes it reads - and, where the ICD decides it,
- * what crossed: the host's number for an object rather than the guest's
- * pointer, a transfer that waited for its queue before asking the host to
- * block, a queue of the ICD's own that went again. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
@@ -43,8 +34,6 @@ constexpr std::uint64_t host_image = 0x6A00u;
 constexpr std::uint64_t host_sampler = 0x6B00u;
 constexpr std::uint64_t own_queue = 0x6C00u;
 
-/* A context, a queue, a buffer, a program and a kernel: everything the entries
- * below act on, so each test is about the entry and not the setup. */
 const cl_icd_dispatch *table_of(const void *object)
 {
     return object != nullptr ? *reinterpret_cast<const cl_icd_dispatch *const *>(object) : nullptr;
@@ -88,7 +77,6 @@ public:
     cl_program       program() const { return program_; }
     cl_kernel        kernel() const { return kernel_; }
 
-    /* An image the host made as `host_image`. */
     cl_mem image()
     {
         const cl_image_format format = {CL_RGBA, CL_UNORM_INT8};
@@ -100,11 +88,6 @@ public:
         return rig_.root().create_image(context_, CL_MEM_READ_WRITE, &format, &desc, nullptr, nullptr);
     }
 
-    /* What a drain of the queue answers: the marker, the flush, a complete
-     * status, and the marker given back. */
-    /* Something left on the queue - a marker - so that the next transfer has
-     * a queue to drain: a queue nothing was sent to is known idle, and a
-     * transfer to it drains nothing. */
     void leaves_work()
     {
         rig_.host().cl_enqueued(CL_SUCCESS, host_event);
@@ -121,7 +104,6 @@ public:
         rig_.host().cl_result(CL_SUCCESS);
     }
 
-    /* CL_IMAGE_ELEMENT_SIZE's answer. */
     void element_is(std::size_t bytes)
     {
         rig_.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&bytes), sizeof bytes);
@@ -137,17 +119,12 @@ private:
     cl_kernel        kernel_ = nullptr;
 };
 
-/* What the loader dispatches through: the table in the object's first word. */
-
-/* The payload of the command at `index` of the journal, past its header. */
 av::WireReader payload_of(const av::MockKmt &kmt, std::uint32_t index)
 {
     return av::WireReader(kmt.command_bytes(index) + av::CommandHeader::encoded_size,
                           av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
 }
 
-/* Whether `handle` appears, as eight little-endian bytes, anywhere in the
- * command at `index`: how a test sees which number crossed for an object. */
 bool carries(const av::MockKmt &kmt, std::uint32_t index, std::uint64_t handle)
 {
     const std::uint8_t *const frame = kmt.command_bytes(index);
@@ -157,7 +134,7 @@ bool carries(const av::MockKmt &kmt, std::uint32_t index, std::uint64_t handle)
     return false;
 }
 
-}  // namespace
+}
 
 TEST(cl_image_paths, a_programs_build_log_is_the_hosts_for_its_own_device)
 { ClIcdRig rig;
@@ -182,7 +159,6 @@ TEST(cl_image_paths, a_programs_build_log_is_the_hosts_for_its_own_device)
   CHECK(std::strcmp(text, "no errors") == 0);
   CHECK_EQ(size, 10u);
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clGetProgramBuildInfo);
-  /* The host's program and the host's device, not the guest's pointers. */
   CHECK(carries(rig.kmt(), sent, host_program));
   CHECK(carries(rig.kmt(), sent, host_device)); }
 
@@ -221,16 +197,12 @@ TEST(cl_image_paths, a_copy_and_a_fill_are_enqueued_with_the_hosts_numbers_and_i
   cl_mem other = rig.root().create_buffer(run.context(), CL_MEM_READ_WRITE, 256u, nullptr, nullptr, nullptr);
   CHECK(other != nullptr);
 
-  /* Asked for no event: the host is asked for none, and the copy goes without
-   * waiting for its answer - held until a command that is answered. */
   std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(table_of(run.queue())->clEnqueueCopyBuffer(run.queue(), run.buffer(), other, 4u, 8u, 64u, 0u,
                                                                     nullptr, nullptr),
            CL_SUCCESS);
   CHECK_EQ(rig.kmt().commands(), sent);
 
-  /* Asked for one: the application is handed an object of its own, and the
-   * held copy goes ahead of it. */
   cl_event event = nullptr;
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
   CHECK_EQ(rig.root().enqueue_copy_buffer(run.queue(), run.buffer(), other, 0u, 0u, 64u, &event), CL_SUCCESS);
@@ -258,7 +230,6 @@ TEST(cl_image_paths, a_copy_and_a_fill_are_enqueued_with_the_hosts_numbers_and_i
   CHECK(carries(rig.kmt(), sent, host_buffer));
   CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clEnqueueFillBuffer);
 
-  /* The host's refusal is the application's, and no event is made of it. */
   cl_event refused = nullptr;
   rig.host().cl_enqueued(CL_INVALID_VALUE, 0u);
   CHECK_EQ(rig.root().enqueue_copy_buffer(run.queue(), run.buffer(), other, 250u, 0u, 64u, &refused),
@@ -318,8 +289,6 @@ TEST(cl_image_paths, an_image_is_the_hosts_and_a_buffer_it_is_made_over_crosses_
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clCreateImage);
   CHECK(table_of(image) != nullptr);
 
-  /* An image over a buffer: the description the host decodes names the
-   * host's buffer, in the field the application wrote its pointer in. */
   const cl_image_format format = {CL_RGBA, CL_UNORM_INT8};
   cl_image_desc         desc = {};
   desc.image_type = CL_MEM_OBJECT_IMAGE1D_BUFFER;
@@ -342,7 +311,6 @@ TEST(cl_image_paths, an_image_is_the_hosts_and_a_buffer_it_is_made_over_crosses_
   CHECK(payload.read_pod(present) && present == 1u && payload.read(&crossed, sizeof crossed));
   CHECK_EQ(reinterpret_cast<std::uintptr_t>(crossed.buffer), host_buffer);
   CHECK_EQ(crossed.image_width, 64u);
-  /* The application's own description is untouched. */
   CHECK(desc.buffer == run.buffer());
   CHECK(rig.root().invariants_hold()); }
 
@@ -366,22 +334,18 @@ TEST(cl_image_paths, an_image_the_api_or_this_driver_refuses_asks_the_host_nothi
   CHECK_EQ(error, CL_INVALID_IMAGE_FORMAT_DESCRIPTOR);
   CHECK(rig.root().create_image(run.context(), 0u, &format, nullptr, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_IMAGE_DESCRIPTOR);
-  /* Memory the application keeps is refused, and the log says why. */
   CHECK(rig.root().create_image(run.context(), CL_MEM_USE_HOST_PTR, &format, &desc, texels, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_VALUE);
   CHECK_EQ(rig.log().holding("not carried"), 1u);
-  /* A pointer exactly when the flags say to copy from one. */
   CHECK(rig.root().create_image(run.context(), CL_MEM_COPY_HOST_PTR, &format, &desc, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_HOST_PTR);
   CHECK(rig.root().create_image(run.context(), 0u, &format, &desc, texels, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_HOST_PTR);
-  /* A buffer the description names has to be one. */
   desc.buffer = reinterpret_cast<cl_mem>(run.kernel());
   CHECK(rig.root().create_image(run.context(), 0u, &format, &desc, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_IMAGE_DESCRIPTOR);
   CHECK_EQ(rig.kmt().commands(), sent);
 
-  /* And the host's own refusal is the application's. */
   desc.buffer = nullptr;
   rig.host().cl_handle(0u, CL_IMAGE_FORMAT_NOT_SUPPORTED);
   CHECK(rig.root().create_image(run.context(), 0u, &format, &desc, nullptr, &error) == nullptr);
@@ -416,11 +380,9 @@ TEST(cl_image_paths, an_image_copied_from_memory_is_written_on_a_queue_of_the_ic
   CHECK_EQ(rig.kmt().command_id(sent + 2u), av::clproto::kCmd_clCreateCommandQueueWithProperties);
   CHECK_EQ(rig.kmt().command_id(sent + 3u), av::clproto::kCmd_clEnqueueWriteImage);
   CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clReleaseCommandQueue);
-  /* The write is on the ICD's queue and carries the image's bytes. */
   CHECK(carries(rig.kmt(), sent + 3u, own_queue));
   CHECK(carries(rig.kmt(), sent + 3u, host_image));
   CHECK(carries(rig.kmt(), sent + 3u, 0x0000000200000001ull));
-  /* The create asked the host to copy nothing: the bytes follow it. */
   av::WireReader payload = payload_of(rig.kmt(), sent);
   std::uint64_t  context = 0u, flags = 0u;
   CHECK(payload.read_pod(context) && payload.read_varint(flags));
@@ -440,7 +402,6 @@ TEST(cl_image_paths, an_image_whose_bytes_could_not_be_written_is_given_back_to_
   std::uint32_t texels[8] = {};
   cl_int        error = CL_SUCCESS;
 
-  /* The host would not say how large a texel is. */
   std::uint32_t sent = rig.kmt().commands();
   rig.host().cl_handle(host_image, CL_SUCCESS);
   rig.host().cl_info(CL_INVALID_MEM_OBJECT, "", 0u);
@@ -450,7 +411,6 @@ TEST(cl_image_paths, an_image_whose_bytes_could_not_be_written_is_given_back_to_
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::clproto::kCmd_clReleaseMemObject);
   CHECK(carries(rig.kmt(), rig.kmt().commands() - 1u, host_image));
 
-  /* The host would not make the queue. */
   rig.host().cl_handle(host_image, CL_SUCCESS);
   run.element_is(4u);
   rig.host().cl_handle(0u, CL_OUT_OF_HOST_MEMORY);
@@ -459,7 +419,6 @@ TEST(cl_image_paths, an_image_whose_bytes_could_not_be_written_is_given_back_to_
   CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::clproto::kCmd_clReleaseMemObject);
 
-  /* The host refused the write: the queue goes, then the image. */
   sent = rig.kmt().commands();
   rig.host().cl_handle(host_image, CL_SUCCESS);
   run.element_is(4u);
@@ -472,7 +431,6 @@ TEST(cl_image_paths, an_image_whose_bytes_could_not_be_written_is_given_back_to_
   CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clReleaseCommandQueue);
   CHECK_EQ(rig.kmt().command_id(sent + 5u), av::clproto::kCmd_clReleaseMemObject);
 
-  /* A 1D array's layout is not rows and slices, so its bytes are not carried. */
   desc.image_type = CL_MEM_OBJECT_IMAGE1D_ARRAY;
   desc.image_array_size = 2u;
   rig.host().cl_handle(host_image, CL_SUCCESS);
@@ -489,8 +447,6 @@ TEST(cl_image_paths, every_image_layout_made_of_rows_and_slices_can_be_copied_fr
   const cl_image_format      format = {CL_R, CL_UNSIGNED_INT8};
   const cl_mem_object_type   types[4] = {CL_MEM_OBJECT_IMAGE1D, CL_MEM_OBJECT_IMAGE2D, CL_MEM_OBJECT_IMAGE2D_ARRAY,
                                          CL_MEM_OBJECT_IMAGE3D};
-  /* The rows each layout's bytes are written as: one, a height, and a height
-   * of a slice or a layer. */
   const std::uint64_t rows[4] = {1u, 3u, 3u, 3u};
   const std::uint64_t slices[4] = {1u, 1u, 2u, 2u};
   std::uint8_t        texels[64] = {};
@@ -510,7 +466,6 @@ TEST(cl_image_paths, every_image_layout_made_of_rows_and_slices_can_be_copied_fr
       cl_int              error = CL_INVALID_VALUE;
       CHECK(rig.root().create_image(run.context(), CL_MEM_COPY_HOST_PTR, &format, &desc, texels, &error) != nullptr);
       CHECK_EQ(error, CL_SUCCESS);
-      /* A write per slice, each of the layout's rows. */
       CHECK_EQ(rig.kmt().commands(), sent + 4u + static_cast<std::uint32_t>(slices[index]));
       av::WireReader payload = payload_of(rig.kmt(), sent + 3u);
       std::uint64_t  queue = 0u, image = 0u, blocking = 0u, count = 0u, origin[3] = {}, region[3] = {};
@@ -548,7 +503,6 @@ TEST(cl_image_paths, an_image_read_waits_for_its_queue_and_hands_back_the_rows_i
                                                                    into, 0u, nullptr, &event),
            CL_SUCCESS);
   for (std::size_t index = 0u; index < sizeof into; ++index) CHECK_EQ(into[index], answered[index]);
-  /* The size, the drain, the one read, and the marker the event is. */
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clGetImageInfo);
   CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
   CHECK_EQ(rig.kmt().command_id(sent + 5u), av::clproto::kCmd_clEnqueueReadImage);
@@ -577,7 +531,6 @@ TEST(cl_image_paths, an_image_write_waits_for_its_queue_and_asks_for_an_event_on
   CHECK_EQ(rig.kmt().command_id(sent + 5u), av::clproto::kCmd_clEnqueueWriteImage);
   CHECK(carries(rig.kmt(), sent + 5u, host_image));
 
-  /* The host's refusal of the write is the application's, and makes no event. */
   run.leaves_work();
   run.element_is(4u);
   run.drains();
@@ -587,7 +540,6 @@ TEST(cl_image_paths, an_image_write_waits_for_its_queue_and_asks_for_an_event_on
            CL_INVALID_OPERATION);
   CHECK(event == nullptr);
 
-  /* A drain the host refuses ends the transfer before it starts. */
   run.leaves_work();
   run.element_is(4u);
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
@@ -640,8 +592,6 @@ TEST(cl_image_paths, an_image_transfer_the_api_would_refuse_asks_the_host_at_mos
   CHECK_EQ(rig.root().enqueue_write_image(run.queue(), image, origin, region, 0u, 0u, nullptr, nullptr),
            CL_INVALID_VALUE);
   CHECK_EQ(rig.kmt().commands(), sent);
-  /* A region of no rows, and a pitch too small for its row: the size is asked
-   * and nothing after it. */
   run.element_is(4u);
   CHECK_EQ(rig.root().enqueue_read_image(run.queue(), image, origin, empty, 0u, 0u, texels, nullptr),
            CL_INVALID_VALUE);
@@ -670,7 +620,6 @@ TEST(cl_image_paths, a_sampler_is_made_from_the_three_properties_and_nothing_els
                                                                 &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_VALUE);
 
-  /* The 1.2 call is the same list, written out. */
   rig.host().cl_handle(host_sampler, CL_SUCCESS);
   const std::uint32_t at = rig.kmt().commands();
   cl_sampler          sampler = table_of(run.context())->clCreateSampler(
@@ -682,20 +631,15 @@ TEST(cl_image_paths, a_sampler_is_made_from_the_three_properties_and_nothing_els
   std::uint64_t  context = 0u, count = 0u, name = 0u, value = 0u;
   std::uint8_t   present = 0u;
   CHECK(payload.read_pod(context) && payload.read_pod(present) && present == 1u && payload.read_varint(count));
-  /* Three pairs; the terminator is the wire's to add back, not to carry. */
   CHECK_EQ(count, 6u);
   CHECK(payload.read_pod(name) && payload.read_pod(value));
   CHECK_EQ(name, static_cast<std::uint64_t>(CL_SAMPLER_NORMALIZED_COORDS));
   CHECK_EQ(value, static_cast<std::uint64_t>(CL_TRUE));
 
-  /* An argument the size of a sampler that is one crosses as the host's
-   * number for it - unanswered, held until the next command that is. */
   const std::uint32_t set = rig.kmt().commands();
   CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 0u, sizeof sampler, &sampler), CL_SUCCESS);
   CHECK_EQ(rig.kmt().commands(), set);
 
-  /* Retained once, released twice: the host is told at the second, and the
-   * held argument goes ahead of it. */
   CHECK_EQ(table_of(sampler)->clRetainSampler(sampler), CL_SUCCESS);
   CHECK_EQ(table_of(sampler)->clReleaseSampler(sampler), CL_SUCCESS);
   const std::uint32_t before = rig.kmt().commands();
@@ -718,9 +662,6 @@ TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_i
   static std::uint8_t from[2u * av::clicd::ClTransferChunks::write_room + 1u];
   for (std::size_t index = 0u; index < bytes; ++index) from[index] = static_cast<std::uint8_t>(index);
 
-  /* The create names no bytes and no copy; one write staged in the arena,
-   * on a queue of the ICD's own, follows - answered, since the block it names
-   * is free for the next transfer once it returns - and the queue goes. */
   std::uint32_t sent = rig.kmt().commands();
   rig.host().cl_handle(host_buffer + 2u, CL_SUCCESS);
   rig.host().cl_handle(own_queue, CL_SUCCESS);
@@ -746,14 +687,11 @@ TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_i
   CHECK(carries(rig.kmt(), sent + 2u, own_queue));
   CHECK_EQ(rig.kmt().command_id(sent + 3u), av::clproto::kCmd_clReleaseCommandQueue);
 
-  /* A copy one command carries rides inside the create. */
   sent = rig.kmt().commands();
   rig.host().cl_handle(host_buffer + 3u, CL_SUCCESS);
   CHECK(rig.root().create_buffer(run.context(), CL_MEM_COPY_HOST_PTR, 64u, from, nullptr, &error) != nullptr);
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
 
-  /* A write the host refuses is the create's failure: the buffer goes back
-   * and the application is told the host's error. */
   sent = rig.kmt().commands();
   rig.host().cl_handle(host_buffer + 4u, CL_SUCCESS);
   rig.host().cl_handle(own_queue, CL_SUCCESS);
@@ -766,8 +704,6 @@ TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_i
   CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clReleaseMemObject);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
 
-  /* A queue the host will not make gives the buffer back, and the application
-   * is told the host's error. */
   rig.host().cl_handle(host_buffer + 5u, CL_SUCCESS);
   rig.host().cl_handle(0u, CL_OUT_OF_RESOURCES);
   rig.host().cl_result(CL_SUCCESS);
@@ -776,10 +712,6 @@ TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_i
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::clproto::kCmd_clReleaseMemObject);
   CHECK(rig.root().invariants_hold()); }
 
-/* An application whose buffers fill the arena's part for them - one mapped
- * buffer per tile - still has its transfers staged: they have the arena's top
- * to themselves. The copy after a create is one staged write whatever the
- * buffers hold. */
 TEST(cl_image_paths, transfers_are_staged_while_buffers_fill_their_part_of_the_arena)
 { ClIcdRig rig;
   Running  run(rig);
@@ -819,7 +751,6 @@ TEST(cl_image_paths, the_supported_image_formats_are_the_hosts_as_they_stand)
            CL_INVALID_VALUE);
   CHECK_EQ(rig.kmt().commands(), sent);
 
-  /* Two of the host's thirty, and the thirty. */
   const cl_image_format answered[2] = {{CL_RGBA, CL_UNORM_INT8}, {CL_R, CL_FLOAT}};
   rig.host().cl_formats(CL_SUCCESS, answered, 2u, 30u);
   CHECK_EQ(table_of(run.context())->clGetSupportedImageFormats(run.context(), CL_MEM_READ_ONLY,
@@ -830,7 +761,6 @@ TEST(cl_image_paths, the_supported_image_formats_are_the_hosts_as_they_stand)
   CHECK_EQ(formats[1].image_channel_data_type, static_cast<cl_channel_type>(CL_FLOAT));
   CHECK_EQ(formats[2].image_channel_order, 0u);
 
-  /* Asked for the count alone. */
   rig.host().cl_formats(CL_SUCCESS, nullptr, 0u, 30u);
   listed = 0u;
   CHECK_EQ(rig.root().supported_image_formats(run.context(), CL_MEM_READ_ONLY, CL_MEM_OBJECT_IMAGE2D, 0u, nullptr,
@@ -843,7 +773,6 @@ TEST(cl_image_paths, a_marker_or_a_barrier_names_the_hosts_events_and_hands_back
   Running  run(rig);
   CHECK(run.made());
   if (!run.made()) return;
-  /* An event of this context to wait on: a copy's. */
   cl_event copied = nullptr;
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 7u);
   CHECK_EQ(rig.root().enqueue_copy_buffer(run.queue(), run.buffer(), run.buffer(), 0u, 128u, 64u, &copied),
@@ -863,13 +792,11 @@ TEST(cl_image_paths, a_marker_or_a_barrier_names_the_hosts_events_and_hands_back
   CHECK_EQ(table_of(run.queue())->clEnqueueBarrierWithWaitList(run.queue(), 0u, nullptr, nullptr), CL_SUCCESS);
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueBarrierWithWaitList);
 
-  /* The host's refusal makes no event. */
   cl_event refused = nullptr;
   rig.host().cl_enqueued(CL_INVALID_EVENT_WAIT_LIST, 0u);
   CHECK_EQ(rig.root().enqueue_barrier(run.queue(), 1u, &copied, &refused), CL_INVALID_EVENT_WAIT_LIST);
   CHECK(refused == nullptr);
 
-  /* Lists the API refuses, and lists this ICD cannot hold, ask nothing. */
   sent = rig.kmt().commands();
   CHECK_EQ(rig.root().enqueue_marker(reinterpret_cast<cl_command_queue>(run.context()), 0u, nullptr, nullptr),
            CL_INVALID_COMMAND_QUEUE);
@@ -889,7 +816,6 @@ TEST(cl_image_paths, an_event_of_another_context_is_not_one_a_queue_can_wait_on)
   Running  run(rig);
   CHECK(run.made());
   if (!run.made()) return;
-  /* A second context, and a user event of its. */
   rig.host().blob_import(0u, 0x79u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
@@ -905,8 +831,6 @@ TEST(cl_image_paths, an_event_of_another_context_is_not_one_a_queue_can_wait_on)
   CHECK_EQ(rig.kmt().commands(), sent); }
 
 namespace {
-
-/* The description the command at `index` carried to the host, and its flags. */
 bool crossed_description(const av::MockKmt &kmt, std::uint32_t index, std::uint64_t &flags, cl_image_desc &crossed)
 {
     av::WireReader  payload = payload_of(kmt, index);
@@ -919,7 +843,7 @@ bool crossed_description(const av::MockKmt &kmt, std::uint32_t index, std::uint6
            payload.read(&crossed, sizeof crossed);
 }
 
-}  // namespace
+}
 
 TEST(cl_image_paths, the_1_1_image_calls_make_the_image_clcreateimage_would_be_described)
 { ClIcdRig rig;
@@ -956,8 +880,6 @@ TEST(cl_image_paths, the_1_1_image_calls_make_the_image_clcreateimage_would_be_d
   CHECK_EQ(crossed.image_height, 16u);
   CHECK_EQ(crossed.image_depth, 8u);
 
-  /* The 1.1 calls refuse what clCreateImage refuses, before anything crosses:
-   * a pointer the flags do not ask to copy from. */
   at = rig.kmt().commands();
   std::uint8_t pixels[16] = {};
   CHECK(table->clCreateImage2D(run.context(), CL_MEM_READ_ONLY, &format, 2u, 2u, 0u, pixels, &error) == nullptr);
@@ -965,14 +887,11 @@ TEST(cl_image_paths, the_1_1_image_calls_make_the_image_clcreateimage_would_be_d
   CHECK_EQ(rig.kmt().commands(), at);
   CHECK(rig.root().invariants_hold()); }
 
-/* ---- buffer rectangles -------------------------------------------------------- */
-
 TEST(cl_image_paths, a_buffer_rectangle_read_waits_for_its_queue_and_hands_back_its_rows)
 { ClIcdRig rig;
   Running  run(rig);
   CHECK(run.made());
   if (!run.made()) return;
-  /* Four 8-byte rows of a buffer 16 bytes wide, into packed memory. */
   const size_t        corner[3] = {4u, 2u, 0u}, at[3] = {0u, 0u, 0u}, region[3] = {8u, 4u, 1u};
   unsigned char       answered[32] = {};
   for (std::size_t index = 0u; index < sizeof answered; ++index) answered[index] = static_cast<unsigned char>(index + 1u);
@@ -987,7 +906,6 @@ TEST(cl_image_paths, a_buffer_rectangle_read_waits_for_its_queue_and_hands_back_
                                                           0u, 0u, 0u, into, 0u, nullptr, &event),
            CL_SUCCESS);
   for (std::size_t index = 0u; index < sizeof into; ++index) CHECK_EQ(into[index], answered[index]);
-  /* The drain, the one rectangle, and the marker the event is. */
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
   CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clEnqueueReadBufferRect);
   CHECK(carries(rig.kmt(), sent + 4u, host_buffer));
@@ -995,7 +913,6 @@ TEST(cl_image_paths, a_buffer_rectangle_read_waits_for_its_queue_and_hands_back_
   CHECK_EQ(rig.kmt().commands(), sent + 6u);
   CHECK(event != nullptr);
 
-  /* The host's refusal is the application's, and makes no event. */
   run.leaves_work();
   run.drains();
   rig.host().cl_bytes(CL_INVALID_VALUE, answered, 0u);
@@ -1004,7 +921,6 @@ TEST(cl_image_paths, a_buffer_rectangle_read_waits_for_its_queue_and_hands_back_
                                                ClBufferRect(corner, at, region, 16u, 0u, 0u, 0u), into, &refused),
            CL_INVALID_VALUE);
   CHECK(refused == nullptr);
-  /* A drain the host refuses ends the read before it starts. */
   run.leaves_work();
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), run.buffer(),
@@ -1013,9 +929,6 @@ TEST(cl_image_paths, a_buffer_rectangle_read_waits_for_its_queue_and_hands_back_
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
-/* A queue nothing was left on has nothing to drain: a tile read back one
- * blocking rectangle at a time is the one read, not a marker, a flush, a
- * poll and a release before it. */
 TEST(cl_image_paths, a_transfer_to_a_queue_known_idle_drains_nothing)
 { ClIcdRig rig;
   Running  run(rig);
@@ -1033,7 +946,6 @@ TEST(cl_image_paths, a_transfer_to_a_queue_known_idle_drains_nothing)
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueReadBufferRect);
   for (std::size_t index = 0u; index < sizeof into; ++index) CHECK_EQ(into[index], answered[index]);
-  /* A write after it is the same: the read left nothing behind. */
   rig.host().cl_result(CL_SUCCESS);
   sent = rig.kmt().commands();
   CHECK_EQ(rig.root().enqueue_write_buffer_rect(run.queue(), run.buffer(),
@@ -1044,9 +956,6 @@ TEST(cl_image_paths, a_transfer_to_a_queue_known_idle_drains_nothing)
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
-/* Work left on the queue is drained before the next transfer, once: the
- * drain leaves the queue known idle, and the transfer after it goes alone. A
- * drain that fails leaves it as it was, so the next transfer drains again. */
 TEST(cl_image_paths, work_left_on_a_queue_is_drained_before_the_next_transfer_and_only_once)
 { ClIcdRig rig;
   Running  run(rig);
@@ -1131,7 +1040,6 @@ TEST(cl_image_paths, a_buffer_rectangle_copy_is_enqueued_with_the_hosts_numbers_
   CHECK(other != nullptr);
   const size_t from_corner[3] = {1u, 1u, 0u}, to_corner[3] = {0u, 2u, 0u}, region[3] = {8u, 3u, 1u};
 
-  /* No event asked for: sent without waiting for its answer. */
   std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(table_of(run.queue())->clEnqueueCopyBufferRect(run.queue(), run.buffer(), other, from_corner, to_corner,
                                                           region, 16u, 0u, 32u, 0u, 0u, nullptr, nullptr),

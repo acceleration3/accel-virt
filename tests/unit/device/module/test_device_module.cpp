@@ -1,5 +1,3 @@
-/* The module's devices through the C ABI the QEMU glue calls, over a C host
- * table that reaches the MockHost. */
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/state_reporter.hpp"
@@ -31,9 +29,6 @@ namespace {
 
 constexpr std::uint8_t gpu[16] = {0x7b, 0x7a};
 
-/* A module holds every device slot's device by value - megabytes, more than a
- * test's stack - so each test's module lives in static storage, as the
- * process's own does, made fresh for the test and gone at its end. */
 av::ObjectStorage<DeviceModule> module_storage;
 
 class FreshModule {
@@ -45,7 +40,7 @@ public:
     DeviceModule &module() { return module_storage.object(); }
 };
 
-}  // namespace
+}
 
 TEST(device_module_create, realizes_a_device_on_the_named_gpu)
 { MockHost host; MockHostOps ops(host);
@@ -65,7 +60,6 @@ TEST(device_module_create, realizes_a_device_on_the_named_gpu)
   CHECK_EQ(host.live_threads(), 0u);
   CHECK_STATUS(module.destroy(instance), Status::invalid_parameter); }
 
-/* The module is the state root: its line, then each live device by slot. */
 TEST(device_module_report, writes_every_live_device_under_its_slot)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
@@ -146,8 +140,6 @@ TEST(av_device_abi, create_reset_and_destroy_through_the_c_entry_points)
   CHECK(av_device_create(&ops.table(), nullptr, "gpu0", 0, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
   CHECK_EQ(av::device_module.live(), 0u); }
 
-/* The glue writes what this answers into the function's configuration space,
- * so a guest's Device Manager and DXGI see the host GPU's IDs. */
 TEST(av_device_abi, av_device_pci_identity_answers_the_bound_gpus_ids_or_nothing)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
@@ -165,7 +157,6 @@ TEST(av_device_abi, av_device_pci_identity_answers_the_bound_gpus_ids_or_nothing
   CHECK_EQ(identity.device_id, 0x7550u);
   CHECK_EQ(identity.revision, 0xC0u);
   CHECK_EQ(av_device_destroy(device), 0);
-  /* Bound to a GPU the host cannot place on PCI: virtio-gpu's own IDs stay. */
   MockHost bare; MockHostOps bare_ops(bare);
   bare.add_gpu(gpu);
   AvDevice *const off_pci = av_device_create(&bare_ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
@@ -184,7 +175,6 @@ TEST(av_device_abi, av_device_control_answers_blob_requests_and_leaves_the_rest_
   AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
   CHECK(device != nullptr);
   CHECK_EQ(av_device_capsets(device), 1u);
-  /* A guest blob over one page of guest RAM. */
   GpuRequestBuilder create(0x010Cu);
   create.u32(1u).u32(1u).u32(0u).u32(1u).u64(0u).u64(0x1000u).u64(0x100000u).u32(0x1000u).u32(0u);
   MockRequest blob(create.bytes(), create.size());

@@ -1,10 +1,3 @@
-/* The Vulkan the probe calls (feature 045, T037): the C API, one method per
- * command the probe makes, with the allocator argument dropped - the probe
- * never passes one - and the plural creates and binds taken one object at a
- * time. Two things implement it: LoaderVulkan, over a loader's
- * vkGetInstanceProcAddr (vulkan-1.dll in the guest, the ICD's own entry
- * point on the full-stack rig), and the scripted Vulkan the probe's unit tests
- * play the GPU with, so it is virtual for the reason Platform is. */
 #ifndef AV_VULKAN_ENTRY_HPP
 #define AV_VULKAN_ENTRY_HPP
 
@@ -31,15 +24,7 @@ public:
                                        VkPhysicalDeviceMemoryProperties *properties) = 0;
     virtual VkResult create_device(VkPhysicalDevice physical_device, const VkDeviceCreateInfo *info,
                                    VkDevice *device) = 0;
-    /* The ICD's vkAvForceContextFault, resolved through `device` with
-     * vkGetDeviceProcAddr, which answers the driver's own pointer whatever the
-     * loader knows; VK_ERROR_EXTENSION_NOT_PRESENT when nothing answers. */
     virtual VkResult force_context_fault(VkDevice device) = 0;
-    /* The ICD's vkAvLastKernelStatus, resolved as the forced fault is: the
-     * NTSTATUS of the last D3DKMT call the *driver* made. A probe's own Kmt
-     * never made it - the driver did, in another module - so this is the only
-     * way a step can report which kernel call refused (feature 053). 0 when
-     * nothing answers the function. */
     virtual uint32_t last_kernel_status(VkDevice device) = 0;
 
     virtual void     destroy_device(VkDevice device) = 0;
@@ -58,16 +43,9 @@ public:
     virtual VkResult allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info,
                                      VkDeviceMemory *memory) = 0;
     virtual void     free_memory(VkDevice device, VkDeviceMemory memory) = 0;
-    /* The extensions a physical device reports, as far as `count` has room:
-     * VK_INCOMPLETE is a list and not a failure (feature 053). */
     virtual VkResult enumerate_device_extensions(VkPhysicalDevice physical_device, uint32_t *count,
                                                  VkExtensionProperties *properties) = 0;
-    /* vkGetMemoryWin32HandleKHR for memory allocated with an NT handle export.
-     * The handle is the process's and is closed with the memory. A loader that
-     * answers no such function answers VK_ERROR_EXTENSION_NOT_PRESENT
-     * (feature 053). */
     virtual VkResult memory_win32_handle(VkDevice device, VkDeviceMemory memory, void **handle) = 0;
-    /* The whole allocation, from offset 0. */
     virtual VkResult map_memory(VkDevice device, VkDeviceMemory memory, void **data) = 0;
     virtual VkResult create_image_view(VkDevice device, const VkImageViewCreateInfo *info,
                                        VkImageView *view) = 0;
@@ -111,27 +89,19 @@ public:
     virtual VkResult end_command_buffer(VkCommandBuffer command_buffer) = 0;
     virtual void     cmd_bind_pipeline(VkCommandBuffer command_buffer, VkPipelineBindPoint point,
                                        VkPipeline pipeline) = 0;
-    /* Set 0 at the compute bind point, no dynamic offsets. */
     virtual void     cmd_bind_compute_set(VkCommandBuffer command_buffer, VkPipelineLayout layout,
                                           VkDescriptorSet set) = 0;
     virtual void     cmd_dispatch(VkCommandBuffer command_buffer, uint32_t groups_x) = 0;
     virtual void     cmd_begin_render_pass(VkCommandBuffer command_buffer, const VkRenderPassBeginInfo *info) = 0;
     virtual void     cmd_end_render_pass(VkCommandBuffer command_buffer) = 0;
-    /* One instance from vertex 0. */
     virtual void     cmd_draw(VkCommandBuffer command_buffer, uint32_t vertices) = 0;
     virtual void     cmd_copy_image_to_buffer(VkCommandBuffer command_buffer, VkImage image, VkImageLayout layout,
                                               VkBuffer buffer, const VkBufferImageCopy *region) = 0;
-    /* `value` written over `size` bytes of `buffer` from its start. The one way
-     * a probe puts known bytes into memory it cannot map, which is what memory
-     * shared with another API is (feature 053). */
     virtual void     cmd_fill_buffer(VkCommandBuffer command_buffer, VkBuffer buffer, VkDeviceSize size,
                                      uint32_t value) = 0;
 
     virtual VkResult queue_submit(VkQueue queue, const VkSubmitInfo *submit, VkFence fence) = 0;
 
-    /* The window-system commands (feature 046). `module` and `window` are the
-     * Windows handles the surface is made for; the record's layout is the
-     * Windows structure's (win32_surface_create_record.hpp). */
     virtual VkResult create_win32_surface(VkInstance instance, void *module, void *window,
                                           VkSurfaceKHR *surface) = 0;
     virtual void     destroy_surface(VkInstance instance, VkSurfaceKHR surface) = 0;
@@ -146,7 +116,6 @@ public:
     virtual void     destroy_swapchain(VkDevice device, VkSwapchainKHR swapchain) = 0;
     virtual VkResult swapchain_images(VkDevice device, VkSwapchainKHR swapchain, uint32_t *count,
                                       VkImage *images) = 0;
-    /* No semaphore and no fence: this driver's present is synchronous. */
     virtual VkResult acquire_next_image(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout,
                                         uint32_t *index) = 0;
     virtual VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *info) = 0;
@@ -157,6 +126,6 @@ protected:
     ~VulkanEntry() = default;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VULKAN_ENTRY_HPP
+#endif

@@ -24,16 +24,12 @@ extern "C" VOID APIENTRY avumd_d3d11_DestroyDeferredContext(D3D10DDI_HDEVICE dev
 namespace av::d3d11 {
 
 namespace {
-
-/* D3D_FEATURE_LEVEL by the DDI's pipeline level, which CreateDevice's flags
- * carry. */
 constexpr uint32_t feature_levels[] = {0xa000u, 0xa100u, 0xb000u, 0xb100u, 0x9100u,
                                        0x9200u, 0x9300u, 0xc000u, 0xc100u};
 
-/* D3D11_COPY_DISCARD: only the first piece of an upload may discard. */
 constexpr uint32_t copy_discard = 0x2u;
 
-}  // namespace
+}
 
 D3d11Device::D3d11Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog &log, const D3d11HostCaps &caps,
                          d3d::D3dCallTrace &trace, const d3d::SharedRowsRequest &rows)
@@ -116,7 +112,6 @@ uint32_t D3d11Device::id_of(const void *object_block) const
 {
     AV_SCOPE("D3d11Device::id_of");
     if (object_block == nullptr) return 0u;
-    /* Every record starts with its stamp: resource, object and query alike. */
     return static_cast<const d3d::RecordStamp *>(object_block)->id();
 }
 
@@ -148,7 +143,6 @@ HRESULT D3d11Device::lost(const char *entry)
 void D3d11Device::not_implemented(const char *call)
 {
     AV_SCOPE("D3d11Device::not_implemented");
-    /* Once per call: the runtime makes the same one every frame. */
     refused_.unserved(call);
     set_error(E_NOTIMPL);
 }
@@ -184,7 +178,6 @@ HRESULT D3d11Device::initialize_deferred(D3d11Device &parent, const D3D11DDIARG_
     d3d::CommandRecording &recorded = recorded_.object();
     static_cast<void>(recording_.construct(session_.transport()));
     recording_.object().record(recorded);
-    /* Recorded for the parent's device, which execution selects first. */
     recording_.object().selected(device);
     static_cast<void>(channel_.construct(recording_.object(), recording_lock_, device));
     return S_OK;
@@ -194,7 +187,6 @@ void D3d11Device::lock_calls()
 {
     AV_SCOPE("D3d11Device::lock_calls");
     calls_.acquire();
-    /* Before the scan below, which takes milliseconds and is not the gap. */
     note_call_after_resolve();
     if (gdi_watched_.size() != 0u && !taking_gdi_writes_) take_gdi_writes();
 }
@@ -293,8 +285,6 @@ bool D3d11Device::UpdateWriter::piece(const d3dproto::Box &box, const uint8_t *d
                                    slice_pitch, first ? flags_ : flags_ & ~copy_discard);
 }
 
-/* A buffer's box is in bytes; a texture of a format with no layout is still
- * copied, a byte a texel. */
 void D3d11Device::upload(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX *box,
                          const void *data, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags)
 {
@@ -311,15 +301,12 @@ void D3d11Device::upload(const ResourceRecord &resource, uint32_t subresource, c
     const bool             bytes = resource.dimension == D3D10DDIRESOURCE_BUFFER || format.element_bytes() == 0u;
     const TexelLayout      layout = bytes ? TexelLayout(1u, 1u, 1u) : TexelLayout(format);
     const d3d::TextureUpload upload(layout, region, row_pitch, depth_pitch, piece_bytes());
-    /* An empty box uploads nothing, and is no error. */
     if (upload.bytes() == 0u) return;
     UpdateWriter writer(*this, resource.stamp.id(), subresource, copy_flags);
     if (!upload.send(writer, static_cast<const uint8_t *>(data)))
         lines_.once("an upload whose rows are closer together than a row of them");
 }
 
-/* A deferred context records its uploads inline, so a piece is what one
- * recorded command carries. */
 size_t D3d11Device::piece_bytes() const
 {
     AV_SCOPE("D3d11Device::piece_bytes");
@@ -331,8 +318,6 @@ bool D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const
                                   uint32_t copy_flags)
 {
     AV_SCOPE("D3d11Device::upload_piece_of");
-    /* Large data leases the arena; an arena short of room is emptied first,
-     * which is one round trip rather than a refused upload. */
     if (!wire().make_room_for_blobs(bytes)) lines_.once("an upload larger than the arena");
     if (d3dproto::av_d3d_UpdateSubresource(wire(), resource, subresource, 1u, box, row_pitch, depth_pitch, copy_flags,
                                             data, bytes))
@@ -359,8 +344,6 @@ void D3d11Device::destroy_object(uint32_t id)
     if (id != 0u) static_cast<void>(d3dproto::av_d3d_DestroyObject(wire(), id));
 }
 
-/* ---------------------------------------------------------------- device-wide slots */
-
 BOOL D3d11Device::flush(UINT, UINT)
 {
     AV_SCOPE("D3d11Device::flush");
@@ -369,8 +352,6 @@ BOOL D3d11Device::flush(UINT, UINT)
         lost(__func__);
         return TRUE;
     }
-    /* The runtime signals a fence it was asked to after flushing, on the
-     * kernel context: the signal must wait for what the flush sent. */
     if (FAILED(follow_host())) lost(__func__);
     session_.reclaim_retired();
     return TRUE;
@@ -414,11 +395,6 @@ VOID D3d11Device::set_text_filter_size(UINT, UINT)
     AV_SCOPE("D3d11Device::set_text_filter_size");
 }
 
-/* DWM asks before it flips an application's buffer (`candidate`) in place of
- * its own primary (`primary`): the host shows any surface it holds by its key,
- * so the two need only match - the same size and format, both allocated and
- * keyed - for the scanout to take one where it took the other. An immediate
- * flip is no different: one completes when the kernel's flip returns. */
 VOID D3d11Device::check_direct_flip_support(D3D10DDI_HRESOURCE primary, D3D10DDI_HRESOURCE candidate, UINT,
                                             BOOL *supported)
 {
@@ -455,8 +431,6 @@ VOID D3d11Device::set_hardware_protection_state(BOOL)
     AV_SCOPE("D3d11Device::set_hardware_protection_state");
 }
 
-/* The wait is only queued here: the batch that next reaches the host passes
- * the kernel context first (KernelContextGate), this wait among what it holds. */
 VOID D3d11Device::acquire_resource(D3D10DDI_HRESOURCE, HANDLE token)
 {
     AV_SCOPE("D3d11Device::acquire_resource");
@@ -466,13 +440,6 @@ VOID D3d11Device::acquire_resource(D3D10DDI_HRESOURCE, HANDLE token)
     LogLine(lines_).text("the kernel refused a buffer's sync token ").hex(static_cast<uint32_t>(queued), 8u).write();
 }
 
-/* A compositor - DWM - is done with an application's flip-model buffer. Its
- * reads of it went to the host on the session's ring, which dxgkrnl never
- * sees, so they are flushed and followed on the kernel context first: the
- * release queued behind them reaches the application, through its own
- * acquire, only once the host has composed from the buffer. Dropped, the
- * release came as soon as DWM's composition was recorded, and the next frame
- * was drawn into the buffer while the host still read it. */
 VOID D3d11Device::release_resource(D3D10DDI_HRESOURCE, HANDLE token)
 {
     AV_SCOPE("D3d11Device::release_resource");
@@ -550,8 +517,6 @@ VOID D3d11Device::command_list_execute(D3D11DDI_HCOMMANDLIST handle)
     lost(__func__);
 }
 
-/* A context-local handle is a copy of the immediate context's block
- * (context_local), so each type needs what its block does. */
 SIZE_T D3d11Device::context_handle_bytes(uint32_t type) const
 {
     AV_SCOPE("D3d11Device::context_handle_bytes");
@@ -629,8 +594,6 @@ SIZE_T D3d11Device::calc_private_command_list_size(const D3D11DDIARG_CREATECOMMA
     return sizeof(CommandListRecord);
 }
 
-/* The deferred context's recording becomes the list's own copy, and the
- * context starts recording afresh. */
 VOID D3d11Device::create_command_list(const D3D11DDIARG_CREATECOMMANDLIST *args, D3D11DDI_HCOMMANDLIST handle,
                                       D3D11DDI_HRTCOMMANDLIST)
 {
@@ -686,8 +649,6 @@ HRESULT D3d11Device::recycle_create_command_list(const D3D11DDIARG_CREATECOMMAND
                                                                                                          : E_OUTOFMEMORY;
 }
 
-/* The runtime reuses a deferred context's block for a fresh recording: the
- * context already in it starts over, and a block with none gets one. */
 HRESULT D3d11Device::recycle_create_deferred_context(const D3D11DDIARG_CREATEDEFERREDCONTEXT *args)
 {
     AV_SCOPE("D3d11Device::recycle_create_deferred_context");
@@ -764,14 +725,6 @@ VOID D3d11Device::resize_tile_pool(D3D10DDI_HRESOURCE, UINT64)
     not_implemented("pfnResizeTilePool");
 }
 
-/* The runtime asks this of a texture it made through its Direct3D 10 layer,
- * right after making it (CResource::FinalConstruct), and a refusal there fails
- * the texture. The texture's contents live on the host; what the guest has of
- * it is the shadow Map hands out, laid out by row, so that is the layout
- * answered: row-major, each subresource at the offset and with the pitches Map
- * gives, and the allocation the kernel knows it by, if any. The runtime's own
- * answer for a removed device has the same shape (DDI_GetResourceLayout_DR:
- * no handle, TL_ROW_MAJOR, no swizzle transition). */
 VOID D3d11Device::get_resource_layout(D3D10DDI_HRESOURCE handle, UINT count, D3DKMT_HANDLE *allocation,
                                       D3DWDDM2_0DDI_TEXTURE_LAYOUT *layout, UINT *swizzle_transition,
                                       D3DWDDM2_0DDI_SUBRESOURCE_LAYOUT *subresources)
@@ -793,11 +746,9 @@ VOID D3d11Device::get_resource_layout(D3D10DDI_HRESOURCE handle, UINT count, D3D
         uint32_t depth = 0u;
         extent(resource, index, width, height, depth);
         out.BaseOffset = subresource_offset(resource, index);
-        /* A cross-adapter texture is laid out by its allocation: the pitch
-         * the kernel gave it. */
         out.RowPitch = lent ? resource.allocation_pitch : row_bytes(resource, width);
         out.DepthPitch = out.RowPitch * rows(resource, height);
     }
 }
 
-}  // namespace av::d3d11
+}

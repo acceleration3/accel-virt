@@ -1,7 +1,3 @@
-/* Root signatures and pipelines from the wire's descriptions. Making one needs
- * vkd3d-proton on the host GPU (test_d3d12_session_device.cpp); what any host
- * judges is that a builder with no device, or with a device vkd3d-proton never
- * opened, or naming a root signature it never made, describes nothing. */
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 #include "executor/d3d/d3d12_pipeline_job.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
@@ -17,12 +13,10 @@ using av::D3d12PipelineBuilder;
 using namespace av::d3d12proto;
 
 namespace {
-
-/* Most of a megabyte: kept out of the stack. */
 av::HostHeap       objects_heap;
 av::D3dObjectTable objects(objects_heap);
 
-}  // namespace
+}
 
 TEST(d3d12_pipeline_builder, an_unbound_builder_makes_nothing)
 { D3d12PipelineBuilder builder(objects);

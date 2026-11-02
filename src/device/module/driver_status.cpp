@@ -45,12 +45,10 @@ uint8_t DriverStatus::value() const
     return value_;
 }
 
-/* Interrupts connected while DRIVER_OK is not held would outlive the driver
- * that asked for them, which is the abort 035's live run hit. */
 bool DriverStatus::invariants_hold() const
 {
     AV_SCOPE("DriverStatus::invariants_hold");
     return !interrupts_.connected() || (value_ & driver_ok) != 0u;
 }
 
-}  // namespace av
+}

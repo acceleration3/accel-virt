@@ -24,14 +24,12 @@ namespace {
 
 constexpr std::uint8_t first[GpuIdentity::uuid_bytes] = {1};
 constexpr std::uint8_t second[GpuIdentity::uuid_bytes] = {2};
-/* What a device offers is what its host has, so every test here says which
- * host it ran on. */
 std::uint64_t decided(MockHost &host)
 {
     return HostFeasibility(host).features();
 }
 
-}  // namespace
+}
 
 TEST(device_capset_describe, offers_vulkan_every_ring_order_and_the_bound_gpu)
 { MockHost host;
@@ -62,9 +60,6 @@ TEST(device_capset_describe, offers_vulkan_every_ring_order_and_the_bound_gpu)
   CapsetInfo decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok); }
 
-/* Constitution VI: every bit the guest reads is one this host has. Host
- * memory reaches the guest only through the hostmem window, so the window is
- * the bit, and the two memory paths that were once a choice are gone. */
 TEST(device_capset_describe, offers_host_visible_memory_exactly_when_there_is_a_window)
 { MockHost host;
   host.add_gpu(first);
@@ -72,7 +67,6 @@ TEST(device_capset_describe, offers_host_visible_memory_exactly_when_there_is_a_
   DeviceCapset capset(host);
   capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
   CHECK(capset.info().has_feature(CapsetInfo::feature_host_visible_memory));
-  /* Bits 2 and 4 are retired, and no host sets them. */
   CHECK(!capset.info().has_feature(2u));
   CHECK(!capset.info().has_feature(4u));
 
@@ -115,11 +109,6 @@ TEST(device_capset, describe_is_main_loop_only)
   host.join_thread(thread);
   CHECK(host.claim(HostViolation::main_loop_required)); }
 
-/* The display's answer is not the device's to know at realize: QEMU registers
- * its display backends in qemu_init_displays(), after qmp_x_exit_preconfig()
- * has realized every device, and it is the backend that gives a console its GL
- * context. So the bit is decided when the guest first reads the capset, once,
- * and the answer it was given is kept. */
 TEST(device_capset_resolve_display, the_bit_follows_the_display_and_is_decided_once)
 { MockHost host;
   host.add_gpu(first);
@@ -155,8 +144,6 @@ TEST(device_capset_resolve_display, a_capset_nobody_described_announces_nothing)
   CHECK(!capset.described());
   CHECK(!capset.info().has_feature(CapsetInfo::feature_dmabuf_scanout)); }
 
-/* The guest names its adapter from this field, so it carries the product and
- * not the host driver Mesa appends to it. */
 TEST(device_capset_describe, names_the_gpu_without_the_host_driver_suffix)
 { MockHost host;
   host.add_gpu(GpuIdentity(0x1002u, 0x7550u, GpuIdentity::discrete_gpu, first, 16ull << 30, 0u,

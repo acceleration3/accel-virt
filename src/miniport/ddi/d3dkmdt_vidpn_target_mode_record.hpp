@@ -1,6 +1,3 @@
-/* D3DKMDT_VIDPN_TARGET_MODE. A DDI record: WireFormatAndPreference is the
- * union whose low two bits are the D3DKMDT_MODE_PREFERENCE;
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_D3DKMDT_VIDPN_TARGET_MODE_RECORD_HPP
 #define AV_D3DKMDT_VIDPN_TARGET_MODE_RECORD_HPP
 
@@ -20,6 +17,6 @@ struct D3dkmdtVidPnTargetModeRecord {
     uint32_t                    Padding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_D3DKMDT_VIDPN_TARGET_MODE_RECORD_HPP
+#endif

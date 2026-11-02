@@ -1,9 +1,3 @@
-/* A host GPU's images handed to QEMU's display as dma-bufs: a linear,
- * exportable image of the size and format being shown, which a scanout's
- * image is copied into on the GPU, so the display composes straight
- * from video memory - no readback into guest-sized CPU memory on QEMU's main
- * loop, and no upload back into a texture there. Made on DXVK's own Vulkan
- * device (DxvkVulkanDevice). */
 #ifndef AV_HOST_IMAGE_EXPORT_HPP
 #define AV_HOST_IMAGE_EXPORT_HPP
 
@@ -25,8 +19,6 @@ class DxvkVulkanDevice;
 
 class HostImageExport {
 public:
-    /* One, kept bound: switching the display between two exported images
-     * every frame made gtk show a blank frame at each switch. */
     static constexpr uint32_t images = 1u;
 
     explicit HostImageExport(DxvkVulkanDevice &vulkan);
@@ -34,15 +26,9 @@ public:
     HostImageExport(const HostImageExport &) = delete;
     HostImageExport &operator=(const HostImageExport &) = delete;
 
-    /* Under the device's lock: `source` copied into the next image, and the
-     * copy queued. False where DXVK cannot export or `source` is no 32-bit
-     * colour image. */
     [[nodiscard]] bool stage(ID3D11Device5 *device, ID3D11DeviceContext4 *context, ID3D11Texture2D *source,
                              uint32_t &slot);
-    /* Under the device's lock: whether the GPU has finished the slot's copy. */
     bool copied(ID3D11DeviceContext4 *context, uint32_t slot) const;
-    /* The slot's image as the display imports it; its dma-buf stays this
-     * one's. False for a format no DRM format names. */
     [[nodiscard]] bool describe(uint32_t slot, AvExportedImage &image) const;
     void release();
 
@@ -67,6 +53,6 @@ private:
     bool                       unavailable_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_HOST_IMAGE_EXPORT_HPP
+#endif

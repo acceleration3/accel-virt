@@ -52,17 +52,12 @@ Status DeviceVblank::attach(VirtioGpuDevice &device)
     const Status      decoded = response.decode(answer, written);
     if (decoded != Status::ok) return decoded;
     if (!response.ok()) return Status::not_supported;
-    /* A page the device takes is one it zeroes: whatever was asked before is
-     * asked again, and the count starts where the device's is. */
     platform_.store_atomic(sequence_, 0u);
     phase_.forget();
     ask();
     return Status::ok;
 }
 
-/* A waiter wants the blank after it asked: one the page already shows came
- * before, while nothing was reported and no DPC need have looked, and is taken
- * as seen rather than reported the moment a DPC does. */
 Status DeviceVblank::enable()
 {
     AV_SCOPE("DeviceVblank::enable");
@@ -135,10 +130,6 @@ void DeviceVblank::tick(uint64_t now, bool latching)
     if (blanks_ >= blanks_per_report) report_rate(now);
 }
 
-/* A multiplane flip is retired only by a multiplane vsync, and one that
- * disabled every plane only by one with no layers; an address flip only by a
- * plain vsync naming it; an MPO3 flip only by a multiplane vsync naming the
- * PresentId each of its layers was given. */
 Status DeviceVblank::report(const FlipView &shown)
 {
     AV_SCOPE("DeviceVblank::report");
@@ -154,8 +145,6 @@ Status DeviceVblank::report(const FlipView &shown)
     return notification_.report_vsync(target, shown.address());
 }
 
-/* Blanks the DPC did not see one by one are ones a late DPC folded into one
- * report: counted, since they are what a user sees as a stutter. */
 void DeviceVblank::report_rate(uint64_t now)
 {
     AV_SCOPE("DeviceVblank::report_rate");
@@ -204,4 +193,4 @@ bool DeviceVblank::invariants_hold() const
     return page_.invariants_hold() && phase_.invariants_hold() && (!suspended_ || !reporting_) && missed_ <= blanks_;
 }
 
-}  // namespace av
+}

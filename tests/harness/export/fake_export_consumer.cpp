@@ -102,4 +102,4 @@ void FakeExportConsumer::forget_descriptor()
     descriptor_ = -1;
 }
 
-}  // namespace av
+}

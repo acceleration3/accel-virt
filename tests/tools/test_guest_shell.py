@@ -1,5 +1,3 @@
-"""tools/guest/guest_shell.py against a scripted guest agent: programs and
-PowerShell with their output and exit code, files both ways, and no agent."""
 import base64
 import pathlib
 import shutil

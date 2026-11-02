@@ -6,15 +6,11 @@
 namespace av::icd {
 
 namespace {
-
-/* The ICD presents itself (046): its surfaces are never the host's. */
 const char *const withheld[] = {"VK_KHR_surface", "VK_KHR_win32_surface"};
 
-/* A row's name is compared with its terminator against as many of the host's
- * bytes, which the rows' invariant keeps inside the host's field. */
 static_assert(ExtensionRows::name_bytes == VK_MAX_EXTENSION_NAME_SIZE);
 
-}  // namespace
+}
 
 ExtensionPolicy::ExtensionPolicy(const Row *rows, uint32_t count)
     : rows_(rows, count, "VK_",
@@ -26,7 +22,6 @@ ExtensionPolicy::ExtensionPolicy(const Row *rows, uint32_t count)
     AV_SCOPE("ExtensionPolicy::ExtensionPolicy");
 }
 
-/* What the application is told is always the row's own name. */
 bool ExtensionPolicy::reported_by_host(uint32_t index, const VkExtensionProperties *host, uint32_t host_count,
                                        VkExtensionProperties &entry) const
 {
@@ -75,4 +70,4 @@ bool ExtensionPolicy::invariants_hold() const
     return rows_.invariants_hold();
 }
 
-}  // namespace av::icd
+}

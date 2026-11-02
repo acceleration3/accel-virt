@@ -1,22 +1,3 @@
-"""The generated OpenGL half of the wire.
-
-Six files come out of here.
-
-``gl_protocol_ids.h``    one id per command, never moved once assigned
-``gl_command_names``     id back to name, for logs
-``gl_sizes.h``           how many values an enum answers with, and how
-                         wide an index type is: the two questions the
-                         registry poses as COMPSIZE and does not answer
-``gl_dispatch_client``   what the guest driver calls
-``gl_dispatch_server``   what the host reads, and what it calls
-``gl_real_dispatch.h``   the host entry points, loaded by name
-
-The shape follows the OpenCL generator, with one difference that runs
-through all of it: a command with nothing to answer does not wait. It
-goes on the ring and the caller returns. Ordering is the ring's, so a
-later command that does wait sees everything before it.
-"""
-
 from __future__ import annotations
 
 import re
@@ -30,8 +11,6 @@ HEADER = """// THIS FILE IS GENERATED. DO NOT EDIT.
 //                  --profile tools/codegen/profiles/opengl.toml --out ...
 """
 
-# Types written as they are rather than as a varint: a float that goes
-# through a varint is a float that has been rounded.
 POD_SCALARS = {"GLfloat", "GLclampf", "GLdouble", "GLclampd", "GLhalf"}
 
 
@@ -46,29 +25,12 @@ def _ret_kind(cmd: Command) -> str:
     if ret.base == "GLsync":
         return "sync"
     if ret.pointer_depth > 0:
-        # const GLubyte* from glGetString and friends. There is no
-        # pointer to hand over, so the text comes back as bytes and the
-        # guest keeps its own copy.
         if ret.base in ("GLubyte", "GLchar", "char"):
             return "string"
         return "pointer"
     return "scalar"
 
 
-# ---------------------------------------------------------------------
-# Signatures
-# ---------------------------------------------------------------------
-
-# A read states the room it has: bufSize is the caller's answer to how
-# many bytes there are, and asking again is a second answer to the same
-# question and somewhere for the two to disagree.
-#
-# A compressed upload's imageSize is not that answer. It says how long
-# the image is, not where in the caller's memory it begins: with the
-# unpack skips set the host starts whole rows of blocks in, and those
-# rows are the caller's bytes as much as the image is. So the driver
-# works the length out — see compressed_bytes — and imageSize crosses
-# as what it is, an argument of the call.
 STATED_SIZE_PARAMS = ("bufSize",)
 
 
@@ -81,7 +43,6 @@ def _stated_size(cmd: Command) -> str | None:
 
 
 def _pixel_bytes_expr(cmd: Command, p: Param) -> str:
-    """The byte count of a pixel parameter, in the client's scope."""
     stated = _stated_size(cmd)
     if stated is not None:
         return f"static_cast<size_t>({stated})"
@@ -89,7 +50,6 @@ def _pixel_bytes_expr(cmd: Command, p: Param) -> str:
 
 
 def fail_for(cmd: Command) -> str:
-    """What a client entry point returns when it cannot send."""
     return {"void": "return;", "scalar": "return 0;", "sync": "return 0;",
             "string": "return false;", "pointer": "return nullptr;"}[_ret_kind(cmd)]
 
@@ -110,12 +70,6 @@ def _client_params(cmd: Command, defaults: bool = False) -> list[str]:
             out.append(f"{const}void* {p.name}")
             if _stated_size(cmd) is None:
                 out.append(f"size_t {p.name}_bytes")
-            # With a pixel buffer bound the pointer is an offset into
-            # it, not an address in the caller — the same argument
-            # meaning two different things is what the specification
-            # says, so the wire has to be told which one it got. A
-            # caller with no pixel buffer says nothing and gets the
-            # address it always got.
             out.append(f"bool {p.name}_is_offset" +
                        (" = false" if defaults else ""))
         else:
@@ -135,27 +89,14 @@ def _client_return(cmd: Command) -> str:
 
 
 def _client_signature(cmd: Command, defaults: bool = False) -> str:
-    # The transport is av_t rather than t because GL has parameters
-    # called t: glTexCoord2f(s, t) is one, and a transport named the
-    # same thing shadows it in the very expression that needs both.
     params = ["::av::ClientTransport& av_t"] + _client_params(cmd, defaults)
     if _ret_kind(cmd) == "string":
-        # GL answers with a pointer to storage the driver owns, and there
-        # is no growable string here to put it in. So the caller lends a
-        # buffer and is told how long the answer really was: a driver that
-        # was handed too little sees the truncation and asks again with
-        # room, rather than the wire deciding for it.
         params += ["char* out", "size_t out_capacity",
                    "size_t* out_length"]
     return f"{_client_return(cmd)} av_{cmd.name}({', '.join(params)})"
 
 
-# ---------------------------------------------------------------------
-# How long is it
-# ---------------------------------------------------------------------
-
 def _count_expr(p: Param) -> str:
-    """C for how many elements the parameter has, in the caller's scope."""
     length = p.length
     if length is None:
         return "0"
@@ -166,9 +107,6 @@ def _count_expr(p: Param) -> str:
     if length.kind is LengthKind.STRING:
         return f"({p.name} != nullptr ? __builtin_strlen(reinterpret_cast<const char*>({p.name})) : 0)"
     if length.kind is LengthKind.PNAME:
-        # The transport-taking overload: a few of these are lists whose
-        # length only the driver knows, and a table that guessed too
-        # high would write past the end of the caller's array.
         return f"::av::glproto::pname_count(av_t, {length.reads[0]})"
     if length.kind is LengthKind.TYPED_COUNT:
         count, type_name = length.reads
@@ -178,25 +116,14 @@ def _count_expr(p: Param) -> str:
 
 
 def _storage_type(p: Param) -> str:
-    """What a run of the parameter is measured and stored as.
-
-    ``void`` is neither: a void* run is a count of bytes, which is what
-    ``sizeof(void)`` means where a compiler allows it at all.
-    """
     return "uint8_t" if p.type.base == "void" else p.type.base
 
 
 def _bytes_expr(p: Param) -> str:
     if p.length is not None and p.length.kind is LengthKind.TYPED_COUNT:
-        # Already a byte count: an index array is counted in elements of
-        # a type the registry names rather than in elements of its own.
         return _count_expr(p)
     return f"({_count_expr(p)} * sizeof({_storage_type(p)}))"
 
-
-# ---------------------------------------------------------------------
-# ids and names
-# ---------------------------------------------------------------------
 
 def emit_ids(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n", "#include <stdint.h>\n",
@@ -208,10 +135,6 @@ def emit_ids(reg: Registry, out_dir: Path) -> None:
     write(out_dir / "gl_protocol_ids.h", "\n".join(out))
 
 
-# The registry writes its sized types in the names KHR/khrplatform.h
-# gives them, and that header is not fetched: the registries are, and
-# nothing else. Each name means one width, and a width is what the wire
-# needs it for.
 KHRONOS_WIDTHS = {
     "khronos_int8_t": "int8_t",
     "khronos_uint8_t": "uint8_t",
@@ -230,14 +153,6 @@ KHRONOS_WIDTHS = {
 
 
 def emit_types(reg: Registry, out_dir: Path) -> None:
-    """The registry's own types, rather than a GL header.
-
-    There is no OpenGL SDK on either side of this wire - the guest is a
-    Windows driver and the host is a QEMU device - and every GL header
-    that exists brings a window system in with it. The registry
-    declares each type itself, in dependency order, so the declarations
-    are what is written out.
-    """
     out = [HEADER, "#pragma once\n",
            "#include <stddef.h>",
            "#include <stdint.h>\n",
@@ -287,10 +202,6 @@ def emit_names(reg: Registry, out_dir: Path) -> None:
     write(out_dir / "gl_command_names.cpp", "\n".join(c))
 
 
-# ---------------------------------------------------------------------
-# The two questions COMPSIZE poses
-# ---------------------------------------------------------------------
-
 def emit_sizes(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
            "#include <stddef.h>",
@@ -308,8 +219,6 @@ def emit_sizes(reg: Registry, out_dir: Path) -> None:
     for name, count in sorted(reg.pname_counts.items()):
         value = _enum_value(name)
         if value in written:
-            # Two spellings of one enum. They must agree about the
-            # count, because the wire only sees the number.
             first, first_count = written[value]
             if first_count != count:
                 raise AssertionError(
@@ -350,10 +259,6 @@ def _enum_value(name: str) -> int:
     return _ENUM_VALUES.get(name, 0)
 
 
-# ---------------------------------------------------------------------
-# The guest's side
-# ---------------------------------------------------------------------
-
 def _lease_for_write(name: str, out: list[str], guard: str) -> None:
     out.append(f"    ::av::ClientBlobLease {name}_lease{{}};")
     out.append(f"    bool {name}_via_blob = false;")
@@ -376,19 +281,10 @@ def _write_leases(cmd: Command) -> list[str]:
 
 
 def _read_leases(cmd: Command) -> list[str]:
-    """Read-back (PIXELS_OUT) leases: given back in the reply decode on success,
-    but a send that never happened must give them back too, or they leak."""
     return [p.name for p in cmd.params if p.role is Role.PIXELS_OUT]
 
 
 def _hand_back_leases(cmd: Command, out: list[str], indent: str = "    ") -> None:
-    """Rewinds the write leases of a command the host will not read, or has
-    read already because it answered.
-
-    A command that was sent keeps its leases: the host reads them when it
-    runs the command, which for a one-way call is later than the send. They
-    are retired together once an answer shows the host has run everything
-    before it (KmtTransport::end_call)."""
     for name in _write_leases(cmd):
         out.append(f"{indent}if ({name}_via_blob) {{")
         out.append(f"{indent}    av_t.blobs()")
@@ -439,18 +335,6 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
         return
     if p.role is Role.PIXELS_OUT:
         size = _pixel_bytes_expr(cmd, p)
-        # A read big enough to be worth a lease goes through the blob.
-        #
-        # The alternative is the reply slot, and the reply slot is
-        # 64 KiB: a 640x480 frame is nineteen synchronous fetches, each
-        # one a command out and an answer back, for bytes that both
-        # sides already map. Through the blob the host writes the
-        # pixels where this side can read them and the answer carries
-        # nothing at all.
-        #
-        # Below a page it is not worth it — the allocator rounds to
-        # one, so a four-byte read would take 4096 and a round trip to
-        # give it back, which is worse than the reply slot it replaced.
         out.append(f"    const size_t {name}_want = static_cast<size_t>({size});")
         out.append(f"    ::av::ClientBlobLease {name}_lease{{}};")
         out.append(f"    bool {name}_via_blob = false;")
@@ -461,17 +345,6 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
             out.append("        if (av_blobs.ready()) {")
             out.append(f"            {name}_lease = av_blobs.take({name}_want);")
             out.append(f"            {name}_via_blob = {name}_lease.taken();")
-            # Cleared before the host writes into it.
-            #
-            # A read is allowed to ask for more than there is: a caller
-            # may read a region larger than the framebuffer, and what
-            # lands outside it is undefined. Undefined has to mean
-            # zero here rather than whatever the arena last held,
-            # because the arena last held somebody else's pixels — so
-            # the alternative is handing an application another
-            # program's frame, and a picture that changes with what ran
-            # before it. The host writes zeros there, and this is how
-            # it looks like the host.
             out.append(f"            if ({name}_via_blob) "
                        f"__builtin_memset({name}_lease.data(), 0, {name}_want);")
             out.append("        }")
@@ -506,8 +379,6 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
         out.append("        for (size_t av_i = 0; av_i < av_n; ++av_i) {")
         out.append(f"            const auto* av_s = {name}[av_i];")
         if p.has_lengths:
-            # glShaderSource: a negative length, or none at all, means
-            # the string is terminated rather than counted.
             out.append("            const size_t av_len = av_s == nullptr ? 0")
             out.append("                : (length != nullptr && length[av_i] >= 0)")
             out.append("                    ? static_cast<size_t>(length[av_i])")
@@ -535,11 +406,6 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
         out.append("    }")
         return
     if p.role in (Role.ARRAY_OUT, Role.STRING_OUT):
-        # Worked out once, on the way out, and remembered: the reply
-        # is measured against it, and a length that reads the driver's
-        # own state - how many values this enum answers with - would
-        # be a second question over the wire to bound the first one's
-        # answer.
         out.append(f"    const size_t {name}_want = "
                    f"{name} != nullptr ? {_bytes_expr(p)} : 0u;")
         out.append(f"    av_b.write_pod<uint8_t>({name} != nullptr ? 1 : 0);")
@@ -565,12 +431,7 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
         out.append(f"    if (!av_r.read_varint(av_present)) {fail}")
         out.append("    uint64_t length = 0;")
         out.append(f"    if (!av_r.read_varint(length)) {fail}")
-        # The length is the host's word for it, and the reply is the
-        # only thing that bounds it.
         out.append(f"    if (length > av_r.remaining()) {fail}")
-        # The length the host has, whatever the caller had room for, so a
-        # caller holding nothing can ask with a null buffer and then ask
-        # again with the right one.
         out.append("    if (out_length != nullptr) "
                    "*out_length = static_cast<size_t>(length);")
         out.append("    size_t av_kept = 0;")
@@ -578,21 +439,14 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
         out.append("        av_kept = static_cast<size_t>(length) < out_capacity")
         out.append("            ? static_cast<size_t>(length) : out_capacity - 1;")
         out.append(f"        if (av_kept != 0 && !av_r.read(out, av_kept)) {fail}")
-        # Terminated, because what the caller hands its own caller back is
-        # a const GLubyte* and nothing carries the length with it.
         out.append("        out[av_kept] = '\\0';")
         out.append("    }")
-        # Whatever did not fit is still on the reply, and anything the
-        # command answers with follows it.
         out.append("    for (uint64_t av_i = av_kept; av_i < length; ++av_i) {")
         out.append("        uint8_t av_byte = 0;")
         out.append(f"        if (!av_r.read_pod(av_byte)) {fail}")
         out.append("    }")
     for p in cmd.params:
         if p.role in (Role.ARRAY_OUT, Role.STRING_OUT):
-            # The caller's array is the bound, not the reply's own
-            # count: a host that answers with more than was asked for
-            # is answering past the end of somebody's buffer.
             out.append(f"    if ({p.name} != nullptr) {{")
             out.append("        uint64_t av_bytes = 0;")
             out.append(f"        if (!av_r.read_varint(av_bytes)) {fail}")
@@ -601,17 +455,11 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
             out.append(f"            !av_r.read({p.name}, static_cast<size_t>(av_bytes))) {fail}")
             out.append("    }")
         elif p.role is Role.PIXELS_OUT:
-            # Through the blob the pixels are already here: the host
-            # wrote them into memory this side lent it, so all that is
-            # left is to hand them to the caller and give the lease
-            # back.
             out.append(f"    if ({p.name}_via_blob) {{")
             out.append(f"        __builtin_memcpy({p.name}, {p.name}_lease.data(), {p.name}_want);")
             out.append("        av_t.blobs()")
             out.append(f"            .give_back({p.name}_lease);")
             out.append("    }")
-            # A read into a pixel buffer lands on the host and stays
-            # there; nothing comes back for the caller to be given.
             out.append(f"    if ({p.name} != nullptr && !{p.name}_is_offset && "
                        f"!{p.name}_via_blob) {{")
             out.append("        uint64_t av_bytes = 0;")
@@ -629,8 +477,6 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
 
 
 def _into_blob_variant(cmd: Command, h: list[str], c: list[str]) -> None:
-    """av_<name>_into_blob: the read sent one-way, its pixels written by
-    the host at `av_blob_at` of the arena. See Registry.read_into_blob."""
     pixels = [p for p in cmd.params if p.role is Role.PIXELS_OUT]
     size = _stated_size(cmd)
     if len(pixels) != 1 or size is None or _ret_kind(cmd) != "void":
@@ -649,9 +495,6 @@ def _into_blob_variant(cmd: Command, h: list[str], c: list[str]) -> None:
     c.append("    ::av::WireWriter av_b = av_t.request_writer();")
     for p in cmd.params:
         if p is out:
-            # Mode 3, as the synchronous read spells a blob lease: the
-            # server cannot tell the two apart, and answers neither
-            # through the reply slot.
             c.append("    av_b.write_pod<uint8_t>(3);")
             c.append(f"    av_b.write_varint(static_cast<uint64_t>({size}));")
             c.append("    av_b.write_varint(av_blob_at);")
@@ -693,46 +536,23 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
     for cmd in reg.commands.values():
         h.append(f"{_client_signature(cmd, defaults=True)};")
         if cmd.name in reg.answered_by_guest:
-            # Declared and called like any other, defined by hand: the
-            # answer is in the guest already and asking for it would be
-            # the round trip this exists to remove. See
-            # `answered_by_guest` in gl_profile.toml.
             continue
         c.append(f"{_client_signature(cmd)} {{")
-        # One trace scope per command sent (docs/trace.md).
         c.append(f'    AV_SCOPE("av_{cmd.name}");')
         c.append("    ::av::WireWriter av_b = av_t.request_writer();")
         if not cmd.is_async:
-            # Ends the call on every path from here, a payload dropped
-            # before the send included: a transport shared between threads
-            # holds its lock from the writer to this (feature 050).
             c.append("    const ::av::SyncCallScope av_call{av_t};")
         if cmd.mints_handle:
-            # The handle the guest is about to answer with, written
-            # first so the server binds it before it decodes anything
-            # that could fail. See the av_sync_* fields on RealGl for
-            # why the guest gets to choose it at all.
             c.append("    const uint64_t av_token = "
                      "::av::glproto::mint_sync_token();")
             c.append("    av_b.write_pod<uint64_t>(av_token);")
         for p in cmd.params:
             _encode_param(cmd, p, c)
-        # A buffer that dropped a write must not be sent.
-        #
-        # Buffer records a failed write rather than throwing — it sits
-        # under noexcept generated code — and nothing read that flag.
-        # What went out instead was a header saying "four thousand
-        # bytes of pixels follow" with no pixels behind it, and the
-        # server answered "undecodable command" and dropped the whole
-        # thing. That is a tile of an image that silently never
-        # arrived. Sending nothing is no better for the picture, but it
-        # is honest, and it says so once.
         c.append("    if (av_b.status() != ::av::Status::ok) {")
         c.append(f'        ::av::icd::payload_dropped("gl", "{cmd.name}",')
         c.append("                                       av_b.offset());")
         _hand_back_leases(cmd, c, indent="        ")
         if cmd.is_async:
-            # No send will let the writer's lock go, so the call ends here.
             c.append("        av_t.end_call();")
         c.append(f"        {'return;' if _ret_kind(cmd) == 'void' else fail_for(cmd)}")
         c.append("    }")
@@ -764,15 +584,6 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
     write(out_dir / "gl_dispatch_client.cpp", "\n".join(c))
 
 
-# ---------------------------------------------------------------------
-# The host's side
-# ---------------------------------------------------------------------
-
-# The commands whose sync is taken out of the table rather than looked up:
-# the host's object the token names - none for a token the host retired,
-# whose answers come from a sync that other tokens still stand on - is
-# deleted, and the token names nothing after. Taken once the entry point is
-# known to be there, so a token is never dropped by a call that cannot run.
 SYNC_TAKEN = {"glDeleteSync"}
 
 
@@ -791,10 +602,6 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
             out.append(f"      {name} = static_cast<{p.type.cpp()}>(av_v); }}")
         return
     if p.role is Role.SYNC:
-        # The guest's token, not the host's pointer. The table says
-        # which of the host's fences it stands for; an unknown token
-        # resolves to null, which is what GL does with a handle that was
-        # never a handle. See the av_sync_* fields on RealGl.
         out.append(f"    uint64_t {name}_token = 0;")
         out.append(f"    if (!av_r.read_pod({name}_token)) return false;")
         if taken:
@@ -829,13 +636,6 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         out.append(f"      {name} = reinterpret_cast<const void*>(static_cast<uintptr_t>(av_v)); }}")
         return
     if p.role is Role.PIXELS_IN:
-        # Out of the caller's block, like everything else a decoded
-        # command points at: there is no heap on this side. An upload
-        # larger than the block is refused here rather than truncated,
-        # because a texture that arrives short is a texture that is
-        # wrong for the rest of the run. A guest with a level that
-        # large sends it through the blob, which is what the 3 case
-        # above is.
         out.append(f"    uint8_t* {name}_storage = nullptr;")
         out.append(f"    size_t {name}_storage_count = 0;")
         out.append(f"    const void* {name} = nullptr;")
@@ -869,8 +669,6 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         out.append(f"                {name}_storage = av_arena.allocate<uint8_t>("
                    f"{name}_storage_count);")
         out.append(f"                if ({name}_storage == nullptr) return false;")
-        # Every byte of it is about to be overwritten by the read, so it
-        # is the one block that is not cleared first.
         out.append(f"                if (!av_r.read({name}_storage, "
                    f"{name}_storage_count)) return false;")
         out.append("            }")
@@ -879,19 +677,13 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         out.append("    }")
         return
     if p.role is Role.PIXELS_OUT:
-        # Out of the caller's block. A read too large for it is refused
-        # rather than answered short: the guest sizes its own buffer
-        # from the same arguments, so a truncated answer would be read
-        # back as pixels. A frame-sized read goes through the blob and
-        # never lands here at all — that is the 3 case below, and the
-        # guest takes it for anything above a page.
         out.append(f"    uint8_t* {name}_storage = nullptr;")
         out.append(f"    size_t {name}_storage_count = 0;")
         out.append(f"    void* {name} = nullptr;")
         out.append(f"    size_t {name}_bytes = 0;")
         out.append(f"    bool {name}_is_offset = false;")
         out.append(f"    bool {name}_via_blob = false;")
-        packs = p.type.base == "void"   # a pixel transfer a pack buffer answers
+        packs = p.type.base == "void"
         if packs:
             out.append(f"    uint64_t {name}_at = 0;")
         out.append("    {")
@@ -904,16 +696,11 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
                    "static_cast<uintptr_t>(av_offset));")
         out.append(f"            {name}_is_offset = true;")
         out.append("        } else if (av_present == 3) {")
-        # The guest lent a range of the region; GL writes into it
-        # directly and nothing goes back through the reply.
         out.append("            uint64_t av_bytes = 0;")
         out.append("            uint64_t av_at = 0;")
         out.append("            if (!av_r.read_varint(av_bytes)) return false;")
         out.append("            if (!av_r.read_varint(av_at)) return false;")
         out.append("            if (av_gl.av_guest == nullptr) return false;")
-        # Bounds-checked against the whole mapping by the resolver,
-        # which is the server's only defence against a guest that lies
-        # about where its memory is.
         out.append(f"            {name} = av_gl.av_guest->at(av_at, av_bytes);")
         out.append(f"            if ({name} == nullptr) return false;")
         out.append(f"            {name}_bytes = static_cast<size_t>(av_bytes);")
@@ -924,17 +711,10 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         out.append("            uint64_t av_bytes = 0;")
         out.append("            if (!av_r.read_varint(av_bytes)) return false;")
         out.append(f"            {name}_bytes = static_cast<size_t>(av_bytes);")
-        # One past what was asked for, which also makes the overflow
-        # harmless: a length of SIZE_MAX wraps the count to zero, the
-        # arena answers null for that, and the command is refused
-        # rather than handed a block smaller than it was told.
         out.append(f"            {name}_storage_count = {name}_bytes + 1;")
         out.append(f"            {name}_storage = av_arena.allocate<uint8_t>("
                    f"{name}_storage_count);")
         out.append(f"            if ({name}_storage == nullptr) return false;")
-        # Cleared, because the driver may write fewer bytes than were
-        # asked for and the reply sends back what is there: whatever
-        # the block last held is another guest's picture.
         out.append(f"            for (size_t av_z = 0; "
                    f"av_z < {name}_storage_count; ++av_z) {{ "
                    f"{name}_storage[av_z] = 0; }}")
@@ -951,8 +731,6 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         out.append("        if (av_present != 0) {")
         out.append("            uint64_t av_n = 0;")
         out.append("            if (!av_r.read_varint(av_n)) return false;")
-        # A length out of the frame buys room in the arena, so what is
-        # left of the frame bounds it before it is spent.
         out.append("            if (av_n > av_r.remaining()) return false;")
         out.append(f"            auto* av_text = av_arena.allocate<{p.type.base}>(static_cast<size_t>(av_n) + 1);")
         out.append("            if (av_text == nullptr) return false;")
@@ -980,8 +758,6 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         out.append(f"            auto** av_strings = av_arena.allocate<{base}*>(static_cast<size_t>(av_n) + 1);")
         out.append("            if (av_strings == nullptr) return false;")
         if p.has_lengths:
-            # What each string holds, for the lengths the call is also
-            # handed: the driver reads as far as a length says.
             out.append(f"            {name}_lengths = av_arena.allocate<uint64_t>(static_cast<size_t>(av_n) + 1);")
             out.append(f"            if ({name}_lengths == nullptr) return false;")
         out.append("            for (uint64_t av_i = 0; av_i < av_n; ++av_i) {")
@@ -1012,8 +788,6 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         out.append("        if (!av_r.read_pod(av_present)) return false;")
         out.append("        if (av_present == 3) {")
         if queries:
-            # A handful of values, which only ever cross inline: see
-            # below for why they have to be copied.
             out.append("            return false;")
         else:
             out.append("            uint64_t av_bytes = 0;")
@@ -1030,16 +804,8 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         out.append("            if (!av_r.read_varint(av_bytes)) return false;")
         out.append("            if (av_bytes > av_r.remaining()) return false;")
         out.append(f"            {name}_room = av_bytes;")
-        # Room for the run as the element type, so that it is aligned
-        # for the one the call reads it as. A block of bytes is aligned
-        # for nothing.
         out.append(f"            size_t av_elements = static_cast<size_t>(av_bytes) / sizeof({storage}) + 1;")
         if queries:
-            # How many values a parameter enum takes comes from the same
-            # table a query's answer does, and it can be short the same
-            # way: the driver reads as many as the enum really has. So
-            # the run is never shorter than the largest, and zero past
-            # what the guest sent.
             out.append("            if (av_elements < kQuerySlack + 1) av_elements = kQuerySlack + 1;")
         out.append(f"            auto* av_run = av_arena.allocate<{storage}>(av_elements);")
         out.append("            if (av_run == nullptr) return false;")
@@ -1052,10 +818,6 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         out.append("    }")
         return
     if p.role in (Role.ARRAY_OUT, Role.STRING_OUT):
-        # Only what the guest asked for is read here. The room the call
-        # writes into is made once every argument is known - see
-        # _output_room - because how much the driver writes is a
-        # question of those arguments and not of the guest's count.
         storage = _storage_type(p)
         out.append(f"    {storage}* {name}_storage = nullptr;")
         out.append(f"    size_t {name}_storage_count = 0;")
@@ -1075,18 +837,6 @@ def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
         return
     raise AssertionError(f"no decoder for {p.role}")
 
-
-# ---------------------------------------------------------------------
-# What a read-back may write
-#
-# A pixel read writes as many bytes as GL works out - the format, the
-# type, the extent and the pack state - at whatever pointer it is given.
-# The guest's own count of them is a number off the wire, so before any
-# read the server works the count out again and refuses a destination
-# smaller than it (feature 044, research section 2). An offset is only
-# an offset while a buffer is bound; without one GL writes at the
-# guest's number as an address, so that is refused too.
-# ---------------------------------------------------------------------
 
 GL_PIXEL_PACK_BUFFER_BINDING = "0x88ED"
 GL_QUERY_BUFFER_BINDING = "0x9193"
@@ -1350,13 +1100,9 @@ PACK_HELPERS = [
 
 
 def _pixels_out_checks(cmd: Command, p: Param) -> list[str]:
-    """Between decoding a read-back and calling it: a bound buffer behind an
-    offset, and room for what GL will write behind a pointer."""
     names = {q.name for q in cmd.params}
     n = p.name
     binding = GL_PIXEL_PACK_BUFFER_BINDING if p.type.base == "void" else GL_QUERY_BUFFER_BINDING
-    # A null destination is an offset too: with no buffer bound GL writes
-    # at address zero.
     out = [f"    if ({n}_is_offset || {n} == nullptr) {{",
            "        GLint av_bound = 0;",
            "        if (av_gl.glGetIntegerv == nullptr) return false;",
@@ -1365,8 +1111,6 @@ def _pixels_out_checks(cmd: Command, p: Param) -> list[str]:
            "    } else {"]
     room = f"static_cast<uint64_t>({n}_bytes)"
     if "bufSize" in names:
-        # GL writes no more than the caller says it has, so the saying is
-        # what has to be true.
         out.append(f"        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > {room}) return false;")
     elif {"width", "height", "format", "type"} <= names:
         out.append("        uint64_t av_needed = 0;")
@@ -1375,7 +1119,6 @@ def _pixels_out_checks(cmd: Command, p: Param) -> list[str]:
     elif "pname" in names and p.type.base != "void":
         out.append(f"        if (::av::glproto::pname_count(pname) * sizeof({p.type.base}) > {room}) return false;")
     elif {"target", "level", "format", "type"} <= names and not names & {"texture", "texunit"}:
-        # The extent is the level's, which only the driver knows.
         out.append("        GLint av_width = 0, av_height = 0, av_depth = 0;")
         out.append("        uint64_t av_needed = 0;")
         out.append("        if (av_gl.glGetTexLevelParameteriv == nullptr) return false;")
@@ -1385,23 +1128,10 @@ def _pixels_out_checks(cmd: Command, p: Param) -> list[str]:
         out.append("        if (!pack_bytes(av_gl, av_width, av_height, av_depth, format, type, av_needed) ||")
         out.append(f"            av_needed > {room}) return false;")
     else:
-        # A compressed level, or a texture named rather than bound: sized
-        # by state this server does not ask for yet, so read only into a
-        # bound pack buffer, which GL bounds itself.
         out.append("        return false;")
     out.append("    }")
     return out
 
-
-# ---------------------------------------------------------------------
-# What every other pointer the driver is handed may reach
-#
-# The same rule as the reads above, for the rest of the pointers: the
-# driver reads or writes as far as its own arguments and state say, so
-# the server works that out again and holds what crossed to it - an
-# input no shorter, an output never handed less room, no pointer null
-# where GL would follow it, and no offset followed as an address.
-# ---------------------------------------------------------------------
 
 GL_ARRAY_BUFFER_BINDING = "0x8894"
 GL_ELEMENT_ARRAY_BUFFER_BINDING = "0x8895"
@@ -1412,17 +1142,11 @@ GL_PARAMETER_BUFFER_BINDING = "0x80EF"
 SIGNED_SCALARS = {"GLint", "GLsizei", "GLsizeiptr", "GLintptr", "GLshort", "GLbyte",
                   "GLint64", "GLint64EXT", "GLsizeiptrARB", "GLintptrARB"}
 
-# Refused whatever their arguments, and why. The driver keeps the pointer
-# past the call, and what it points at is a block the next command reuses.
 REFUSED_COMMANDS = {
     "glFeedbackBuffer": "feedback mode writes into the buffer at every later draw",
     "glSelectBuffer": "selection mode writes its hits into the buffer at every later draw",
 }
 
-# The draws that read every enabled vertex array at its pointer.
-# What array_neutral lets past without forgetting arrays_verified's
-# verdicts: draws, and state no vertex array holds. glEnable and glDisable
-# are not here - a compatibility context takes GL_VERTEX_ARRAY through them.
 ARRAY_NEUTRAL_PREFIXES = ("glUniform", "glProgramUniform", "glClearBuffer", "glClearNamedFramebuffer")
 ARRAY_NEUTRAL = frozenset((
     "glBindVertexArray", "glUseProgram", "glBindBuffer", "glBindBufferBase", "glBindBufferRange",
@@ -1450,28 +1174,21 @@ def _array_neutral(name):
 DRAWS_FROM_ARRAYS = ("glDrawArrays", "glDrawElements", "glDrawRangeElements", "glMultiDrawArrays",
                      "glMultiDrawElements", "glArrayElement", "glDrawTransformFeedback")
 
-# The fixed-function arrays arrays_in_buffers asks about. An array it does
-# not know of - a vendor's weights or palette indices, a program's NV
-# attributes - is one a draw would read without that check, so it may not
-# be enabled at all.
 KNOWN_ARRAYS = "array == 0x8074 || array == 0x8075 || array == 0x8076 || array == 0x8077 || " \
                "array == 0x8078 || array == 0x8079 || array == 0x8457 || array == 0x845E"
 ENABLED_ARRAYS = {
     "glEnableClientState": KNOWN_ARRAYS,
     "glEnableClientStateIndexedEXT": "array == 0x8078",
     "glEnableClientStateiEXT": "array == 0x8078",
-    # Direct state access also names a unit's texture coordinates by unit.
     "glEnableVertexArrayEXT": KNOWN_ARRAYS + " || (array >= 0x84C0 && array < 0x84C0 + kMaxArrays)",
 }
 
-# Which buffer a void* offset is an offset into, by the parameter's name.
 OFFSET_BINDINGS = {
     "indices": (GL_ELEMENT_ARRAY_BUFFER_BINDING,),
     "indirect": (GL_DRAW_INDIRECT_BUFFER_BINDING,),
     "pointer": (GL_ARRAY_BUFFER_BINDING,),
 }
 
-# An input GL permits to be null, with the condition under which it does.
 NULLABLE_INPUTS = {
     "glBufferData.data": "true",
     "glBufferStorage.data": "true",
@@ -1497,14 +1214,9 @@ NULLABLE_INPUTS = {
     "glObjectPtrLabel.label": "true",
 }
 
-# Inputs a bound pixel unpack buffer turns into offsets, where null is the
-# start of that buffer rather than nothing.
 UNPACKED_INPUTS = ("glBitmap.bitmap", "glPolygonStipple.mask", "glPixelMapfv.values",
                    "glPixelMapuiv.values", "glPixelMapusv.values")
 
-# Outputs GL permits to be null, which stay null: a length a string query
-# reports through, and the debug log's columns, whose being null changes
-# what the call does.
 NULLABLE_OUTPUTS = {
     "glGetAttachedShaders.count", "glGetAttachedObjectsARB.count",
     "glGetDebugMessageLog.sources", "glGetDebugMessageLog.types", "glGetDebugMessageLog.ids",
@@ -1512,18 +1224,11 @@ NULLABLE_OUTPUTS = {
     "glGetDebugMessageLog.messageLog", "glGetObjectLabel.label", "glGetObjectPtrLabel.label",
 }
 
-# An output the driver writes more of than the length the guest sizes it
-# by: its own count of values, which is the one the room must hold.
 SERVER_BOUNDS = {
-    # Every property's values, up to `count`, where the guest counts one
-    # a property.
     "glGetProgramResourceiv.params": "count",
-    # One value for every sync pname there is; the slack, in case of one
-    # more.
     "glGetSynciv.values": "kQuerySlack",
 }
 
-# The state queries whose answer is a list as long as another query says.
 LIST_QUERIES = {
     **{name: (("0x86A3", "av_gl.glGetIntegerv(0x86A2, &av_listed)"),
               ("0x87FF", "av_gl.glGetIntegerv(0x87FE, &av_listed)"),
@@ -1545,7 +1250,6 @@ def _scalar(cmd: Command, name: str) -> Param:
 
 
 def _not_negative(cmd: Command, names: list[str]) -> list[str]:
-    """A count GL refuses when negative, refused here before it is one."""
     return [f"    if ({n} < 0) return false;" for n in names
             if _scalar(cmd, n).type.base in SIGNED_SCALARS]
 
@@ -1567,7 +1271,6 @@ def _listed_values(cmd: Command, p: Param) -> list[str]:
 
 
 def _helper_elements(cmd: Command, p: Param, text: str) -> list[str]:
-    """A length only the driver's state can say, asked of the driver."""
     n = p.name
     if "pname_count(av_t," in text or "uniform_value_count(" in text:
         return [f"    const uint64_t {n}_elements = kQuerySlack;"]
@@ -1608,8 +1311,6 @@ def _helper_elements(cmd: Command, p: Param, text: str) -> list[str]:
 
 
 def _server_elements(cmd: Command, p: Param) -> list[str]:
-    """Lines defining `<name>_elements`: how many elements the driver reads
-    or writes through the parameter, worked out from its arguments."""
     n = p.name
     length = p.length
     bound = SERVER_BOUNDS.get(f"{cmd.name}.{n}")
@@ -1637,8 +1338,6 @@ def _server_elements(cmd: Command, p: Param) -> list[str]:
         text = length.text
         if "av_t" in text or "::av::glproto::" in text:
             return _helper_elements(cmd, p, text)
-        # C over the call's own arguments, evaluated in 64 bits once none
-        # of them is negative.
         scalars = [q.name for q in cmd.params if q.role is Role.SCALAR]
         named = [s for s in scalars if re.search(rf"\b{re.escape(s)}\b", text)]
         for s in named:
@@ -1685,8 +1384,6 @@ def _pixels_in_checks(cmd: Command, p: Param) -> list[str]:
            "    } else {",
            f"        uint64_t {n}_needed = 0;"]
     if clears:
-        # One element, of the format and type given: the pixel store
-        # does not apply to a clear.
         out.append(f"        if (({n}_needed = pixel_bytes(format, type)) == 0 || {n}_room < {n}_needed) return false;")
     elif p.length is not None and p.length.kind is LengthKind.PARAM:
         size = p.length.text
@@ -1705,8 +1402,6 @@ def _pixels_in_checks(cmd: Command, p: Param) -> list[str]:
 
 
 def _refusals(cmd: Command) -> list[str]:
-    """Between decoding a command and making room for its answers: every
-    pointer it carries held to what the driver will do with it."""
     out: list[str] = []
     names = {q.name for q in cmd.params}
     late: list[str] = []
@@ -1721,8 +1416,6 @@ def _refusals(cmd: Command) -> list[str]:
                 out.append(f"    if ({n} == nullptr) return false;")
             if any(q.name == "length" and q.role is Role.SCALAR and q.type.base in SIGNED_SCALARS
                    for q in cmd.params):
-                # A length that is not negative is how far the driver
-                # reads, terminator or not.
                 out.append(f"    if ({n} != nullptr && length >= 0 && static_cast<uint64_t>(length) > {n}_length) return false;")
             else:
                 out.append(f"    (void){n}_length;")
@@ -1744,9 +1437,6 @@ def _refusals(cmd: Command) -> list[str]:
         elif p.role is Role.BUFFER_OFFSET:
             if n not in OFFSET_BINDINGS:
                 raise ValueError(f"{cmd.name}.{n}: an offset into no buffer this server knows")
-            # A null array pointer with no buffer is an array with nowhere to
-            # read from, which GL takes, and which arrays_in_buffers refuses
-            # to draw from; a null index or indirect pointer is read at once.
             unbound = "pointer != nullptr && " if n == "pointer" else ""
             for binding in OFFSET_BINDINGS[n]:
                 out.append(f"    if ({unbound}!buffer_bound(av_gl, {binding})) return false;")
@@ -1761,10 +1451,6 @@ def _refusals(cmd: Command) -> list[str]:
 
 
 def _output_room(cmd: Command, p: Param) -> list[str]:
-    """The room an output is written into: as much as the guest asked for,
-    and never less than the driver will write. A guest that asked for none
-    of an output GL will not take null for has it written into the block
-    and not sent back."""
     n = p.name
     storage = _storage_type(p)
     nullable = f"{cmd.name}.{n}" in NULLABLE_OUTPUTS or (
@@ -1779,9 +1465,6 @@ def _output_room(cmd: Command, p: Param) -> list[str]:
             f"        {n}_storage_count = static_cast<size_t>(av_room) + 1;",
             f"        {n}_storage = av_arena.allocate<{storage}>({n}_storage_count);",
             f"        if ({n}_storage == nullptr) return false;",
-            # Cleared, because the driver may answer with fewer values than
-            # were asked for and the reply sends back as many as were: the
-            # difference would be whatever the block last held.
             f"        for (size_t av_z = 0; av_z < {n}_storage_count; ++av_z) {{ {n}_storage[av_z] = {{}}; }}"]
     if storage == p.type.base:
         out.append(f"        {n} = {n}_storage;")
@@ -1830,7 +1513,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                  "::av::WireReader& av_r, "
                  "::av::WireWriter& av_reply, "
                  "::av::WireArena& av_arena) {")
-        # One trace scope per decoded command (docs/trace.md).
         c.append(f'    AV_SCOPE("server:{cmd.name}");')
         c.append("    (void)av_arena; (void)av_reply; (void)av_r;")
         if cmd.name in REFUSED_COMMANDS:
@@ -1851,14 +1533,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         for p in cmd.params:
             if p.role is Role.PIXELS_OUT:
                 c.extend(_pixels_out_checks(cmd, p))
-        # A pixel parameter is decoded as void*, which is what every
-        # pixel transfer's own signature says. A query result is not:
-        # glGetQueryObjectuiv wants GLuint*, and it is carried the same
-        # way because the question — is this an address or an offset
-        # into a bound buffer — is the same one.
-        # A pixel transfer (a void* pixel parameter, which a pack buffer
-        # bound answers) into the region is the pack buffer's where the
-        # server has one: the GPU writes the guest's memory itself.
         packed = [p for p in cmd.params if p.role is Role.PIXELS_OUT and p.type.base == "void"]
         call_args = ", ".join(
             (f"static_cast<{p.type.cpp()}>({p.name})"
@@ -1885,8 +1559,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         for p in packed:
             c.append(f"    if ({p.name}_packs) av_gl.av_unpack_blob(av_gl.av_blob_user);")
         if cmd.mints_handle:
-            # The guest already answered with the token; all that is
-            # owed here is the note of which fence it meant.
             c.append("    if (av_gl.av_bind_sync != nullptr) { av_gl.av_bind_sync(av_gl.av_sync_user, av_token, av_ret); }")
         if kind == "scalar":
             c.append("    av_reply.write_varint(static_cast<uint64_t>(av_ret));")
@@ -1937,10 +1609,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
     write(out_dir / "gl_dispatch_server.h", "\n".join(h))
     write(out_dir / "gl_dispatch_server.cpp", "\n".join(c))
 
-
-# ---------------------------------------------------------------------
-# The host's entry points
-# ---------------------------------------------------------------------
 
 def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
@@ -2021,10 +1689,6 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
     write(out_dir / "gl_real_dispatch.h", "\n".join(out))
 
 
-# ---------------------------------------------------------------------
-# What this driver may claim
-# ---------------------------------------------------------------------
-
 def emit_tier(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
            "#include <stdint.h>\n",
@@ -2061,84 +1725,26 @@ def emit_tier(reg: Registry, out_dir: Path) -> None:
     write(out_dir / "gl_tier.h", "\n".join(out))
 
 
-# ---------------------------------------------------------------------
-# The guest's own entry points
-# ---------------------------------------------------------------------
-#
-# What an application links against is the platform's OpenGL library,
-# and every one of its entry points has to exist. Nearly all of them
-# are the same shape — take the arguments, hand them to the generated
-# client — so they are written here rather than by hand, and only the
-# ones that need something of the guest's own are left out for the
-# driver to write itself.
-#
-# Three shapes need that something:
-#
-#   pixels    how many bytes a transfer is depends on the format, the
-#             type, the extent and the pixel store state, and the
-#             guest is the side that knows the store state
-#   strings   glGetString answers with a pointer the caller keeps, so
-#             the guest has to own the storage
-#   mapping   a pointer into a buffer has to be guest memory, filled
-#             at map and written back at unmap
-#
-# Everything else is forwarding.
-
 HANDWRITTEN_PREFIXES = ("glMapBuffer", "glMapNamedBuffer", "glUnmapBuffer",
                         "glUnmapNamedBuffer", "glFlushMappedBufferRange",
                         "glFlushMappedNamedBufferRange")
 
 HANDWRITTEN = {
     "glGetString", "glGetStringi",
-    # Answered from the region when the server has already written the
-    # answer there. An application polls a fence rather than waiting on
-    # it, and a poll that crosses the wire cannot be answered until the
-    # server has drained everything queued in front of it.
     "glClientWaitSync",
-    # A finish is a wait on the host with no timeout, and a host call that
-    # blocks past TdrDelay has the adapter reset: the ICD fences, waits for
-    # the fence a slice at a time (HostCompletionWait) and deletes it.
     "glFinish",
-    # Created out of a blob where the host will allow it, so that a
-    # coherent mapping of it needs no write-backs at all. Immutable
-    # storage cannot be respecified, so this is the only moment it can
-    # be decided. See glBufferStorage in entries_by_hand.cpp.
     "glBufferStorage",
     "glGetBufferPointerv", "glGetNamedBufferPointerv",
     "glGetVertexAttribPointerv",
     "glDebugMessageCallback",
-    # Forwarded like the rest, and noted on the way past: the driver
-    # needs the pixel store state to work out how long a transfer is,
-    # and the buffer bindings to know whether a pointer argument is an
-    # address or an offset.
     "glPixelStorei", "glPixelStoref",
     "glBindBuffer", "glDeleteBuffers",
-    # A location is fixed when a program is linked and stays fixed
-    # until it is linked again, so the answer is the driver's to keep.
-    # Applications ask for them per draw — one measured example asked
-    # two thousand times a frame — and each one was a round trip.
     "glGetUniformLocation", "glGetAttribLocation",
     "glLinkProgram", "glDeleteProgram",
-    # Names are answers too, and an application that builds geometry
-    # every frame asks for them constantly. The driver takes them from
-    # a block the host reserved.
     "glGenBuffers", "glGenVertexArrays", "glGenTextures",
-    # "Start working on what I have given you" — which means the
-    # commands gathered here go out, not just the ones already sent.
     "glFlush",
-    # The window. Framebuffer zero is a framebuffer object on this host,
-    # and the buffers an application names for it - GL_BACK, GL_FRONT -
-    # are that object's colour attachment; only the guest knows which
-    # window the calling context is current on (back_buffer_presenter).
-    # GL_FRONT has no host buffer at all: what it names is the frame the
-    # swap already read back and put on the window, which the guest still
-    # holds, so a read of it is answered here (feature 051, FrontBuffer).
     "glBindFramebuffer", "glDrawBuffer", "glReadBuffer", "glReadPixels",
 
-    # The array pointers and the draws that read them. A pointer taken
-    # with no buffer bound is an address in the guest, and the rows it
-    # names have to be copied across before the draw goes — which is
-    # something only the guest can do. See client_arrays.cpp.
     "glVertexPointer", "glNormalPointer", "glColorPointer",
     "glSecondaryColorPointer", "glIndexPointer", "glEdgeFlagPointer",
     "glFogCoordPointer", "glTexCoordPointer", "glVertexAttribPointer",
@@ -2146,22 +1752,12 @@ HANDWRITTEN = {
     "glEnableClientState", "glDisableClientState",
     "glEnableVertexAttribArray", "glDisableVertexAttribArray",
     "glClientActiveTexture",
-    # Which vertex array object those arrays belong to. They are the
-    # object's state and not the context's, so the driver has to see
-    # the binding change and the deletion.
     "glBindVertexArray", "glDeleteVertexArrays",
     "glDrawArrays", "glDrawArraysInstanced", "glDrawElements",
     "glDrawElementsInstanced", "glDrawRangeElements", "glArrayElement",
 
-    # The calls that give a buffer its storage. What they carry is the
-    # size, and the size is what glMapBuffer would otherwise ask the
-    # host for — a round trip in front of every map.
     "glBufferData", "glBufferStorage", "glNamedBufferData",
     "glNamedBufferStorage",
-    # Every call that moves a buffer's bytes. One command carries only so
-    # much inline, and without a blob arena to lend the bytes whole a
-    # transfer goes as many commands as it takes (av::glicd::BufferPieces)
-    # - one command larger than the room is dropped, or faults the context.
     "glBufferSubData", "glNamedBufferSubData", "glNamedBufferSubDataEXT",
     "glGetBufferSubData", "glGetNamedBufferSubData",
     "glGetNamedBufferSubDataEXT", "glNamedBufferDataEXT",
@@ -2169,26 +1765,12 @@ HANDWRITTEN = {
 }
 
 
-# Binds whose effect can already be in place.
-#
-# Half of what SuperTuxKart sends a frame is these three, and 42% of
-# those ask for a binding the driver has already made. The expression
-# answers "this call cannot change anything", and a call that cannot
-# change anything is not worth a ring record. See support.hpp.
 BIND_SHADOW = {
     "glActiveTexture": "::av::glicd::skip_active_texture(texture)",
     "glBindTexture": "::av::glicd::skip_bind_texture(target, texture)",
     "glBindSampler": "::av::glicd::skip_bind_sampler(unit, sampler)",
 }
 
-# Queries some of whose names only the guest can answer.
-#
-# A buffer's map state - GL_BUFFER_MAPPED, _ACCESS, _ACCESS_FLAGS,
-# _MAP_OFFSET and _MAP_LENGTH - describes a map the host never saw: a map is
-# a copy in the guest (av::glicd::MappedBuffers), so the host always says
-# unmapped. The expression answers those names and says so; every other name
-# still goes to the host. A tracer's glUnmapBuffer asks them to learn what
-# the application wrote, and recorded nothing while the host answered.
 ANSWERED_BY_GUEST_NAMES = {
     "glGetBufferParameteriv": "::av::glicd::answer_buffer_map_state(target, pname, params)",
     "glGetBufferParameteri64v": "::av::glicd::answer_buffer_map_state(target, pname, params)",
@@ -2197,18 +1779,6 @@ ANSWERED_BY_GUEST_NAMES = {
     "glGetNamedBufferParameterivEXT": "::av::glicd::answer_named_buffer_map_state(buffer, pname, params)",
 }
 
-# Commands that change a buffer's bytes on the host, told to the guest's
-# copies of them before they go.
-#
-# A map is a copy in the guest, and OpenGL keeps every byte a map does not
-# write, so a map that only writes starts from the guest's copy of what the
-# host holds and sends back only what differs (av::glicd::BufferShadows).
-# The copy is only as good as the guest's knowledge: a command the host runs
-# that writes a buffer drops that buffer's copy, glBufferSubData updates it,
-# and anything that lets a shader write buffers the guest cannot follow ends
-# the copies for the context. A download into a pack or query buffer is
-# every command with pixels out, which _icd_buffer_writes adds itself; the
-# calls that write a buffer's bytes themselves are the ICD's own (HANDWRITTEN).
 BUFFER_WRITES = {
     "glCopyBufferSubData": "::av::glicd::host_writes_target(writeTarget)",
     "glCopyNamedBufferSubData": "::av::glicd::host_writes_buffer(writeBuffer)",
@@ -2228,8 +1798,6 @@ BUFFER_WRITES = {
     "glGetQueryBufferObjectiv": "::av::glicd::host_writes_buffer(buffer)",
     "glGetQueryBufferObjectui64v": "::av::glicd::host_writes_buffer(buffer)",
     "glGetQueryBufferObjectuiv": "::av::glicd::host_writes_buffer(buffer)",
-    # These bind the target's own binding as well as the index, which the
-    # guest follows to know what a target names.
     "glBindBufferBase": "::av::glicd::bind_buffer_indexed(target, buffer)",
     "glBindBufferRange": "::av::glicd::bind_buffer_indexed(target, buffer)",
     "glBindBuffersBase": "::av::glicd::bind_buffers_indexed(target)",
@@ -2237,7 +1805,6 @@ BUFFER_WRITES = {
     "glTransformFeedbackBufferBase": "::av::glicd::shaders_write_buffers()",
     "glTransformFeedbackBufferRange": "::av::glicd::shaders_write_buffers()",
     "glBeginTransformFeedback": "::av::glicd::shaders_write_buffers()",
-    # A transform feedback object brings its own buffer bindings.
     "glBindTransformFeedback": "::av::glicd::bind_buffers_indexed(0x8C8Eu)",
     "glBindImageTexture": "::av::glicd::shaders_write_buffers()",
     "glBindImageTextures": "::av::glicd::shaders_write_buffers()",
@@ -2245,17 +1812,14 @@ BUFFER_WRITES = {
     "glMakeNamedBufferResidentNV": "::av::glicd::shaders_write_buffers()",
     "glMakeImageHandleResidentARB": "::av::glicd::shaders_write_buffers()",
     "glMakeImageHandleResidentNV": "::av::glicd::shaders_write_buffers()",
-    # Restores the array and pixel buffer bindings out of sight.
     "glPopClientAttrib": "::av::glicd::bindings_restored()",
 }
 
-# The binding a download writes through when its pointer is an offset.
 PACK_TARGET = "0x88EBu"
 QUERY_TARGET = "0x9192u"
 
 
 def _icd_buffer_writes(cmd: Command) -> list[str]:
-    """The guest's copies told what this command writes (BUFFER_WRITES)."""
     lines = []
     for p in cmd.params:
         if p.role is Role.PIXELS_OUT:
@@ -2268,27 +1832,11 @@ def _icd_buffer_writes(cmd: Command) -> list[str]:
     return lines
 
 
-# Everything else that can move one of those bindings.
-#
-# Skipping a bind is only safe while the driver knows what is bound, so
-# a command that can change a binding without naming it in the way the
-# three above do drops the shadow entirely. They are rare — one
-# measured run deleted textures 489 times against seven million binds —
-# so forgetting everything costs nothing and needs no bookkeeping to be
-# right.
-#
-# glBindVertexArray is deliberately absent: vertex array objects hold
-# buffer bindings, not texture units. wglMakeCurrent is not here
-# because it is not a GL command; it forgets them itself.
 BIND_SHADOW_FORGETS = (
-    # Bind several at once, or by unit, without going through the three.
     "glBindTextures", "glBindSamplers", "glBindTextureUnit",
     "glBindMultiTextureEXT",
-    # A deleted name is unbound from every unit it was bound to.
     "glDeleteTextures", "glDeleteSamplers",
-    # Restores bindings saved by glPushAttrib(GL_TEXTURE_BIT).
     "glPopAttrib",
-    # A list can contain binds, and executing it does not call them.
     "glCallList", "glCallLists",
 )
 
@@ -2319,39 +1867,23 @@ def _icd_signature(cmd: Command) -> str:
 
 
 def _stages(cmd: Command, p: Param) -> bool:
-    """Whether this parameter's bytes may cross through the context's pixel
-    staging buffer: a pixel transfer, which a pixel buffer can stand in for.
-    A query result's buffer is another binding, and its few bytes always
-    fit a command."""
     return ((p.role is Role.PIXELS_IN or p.role is Role.PIXELS_OUT) and
             not cmd.name.startswith("glGetQueryObject"))
 
 
 def _icd_prologue(cmd: Command) -> list[str]:
-    """What the driver has to look up before it can forward the call."""
     lines = []
     for p in cmd.params:
         if p.role is Role.PIXELS_IN or p.role is Role.PIXELS_OUT:
-            # Which binding decides whether the pointer is an address.
-            # For a pixel transfer it is the pixel buffer for the
-            # direction the transfer goes; for a query result it is the
-            # query buffer, which is the same rule about a different
-            # binding.
             if cmd.name.startswith("glGetQueryObject"):
                 bound = "::av::glicd::query_buffer_bound()"
             else:
                 packing = "true" if p.role is Role.PIXELS_OUT else "false"
                 bound = f"::av::glicd::pixel_buffer_bound({packing})"
             lines.append(f"    const bool av_{p.name}_offset = {bound};")
-            # An offset needs no length, and working one out would ask
-            # the host how big a texture level is for an answer that is
-            # then thrown away.
             lines.append(f"    const size_t av_{p.name}_bytes = av_{p.name}_offset ? 0 : "
                          f"{_icd_pixel_bytes(cmd, p)};")
         if _stages(cmd, p):
-            # Too many bytes to cross with the command and no blob arena
-            # to lend them: they go through a host pixel buffer, and the
-            # command names offset 0 in it (av::glicd::PixelStagingBuffer).
             hook = ("stage_download" if p.role is Role.PIXELS_OUT
                     else "stage_upload")
             lines.append(f"    const bool av_{p.name}_staged = !av_{p.name}_offset && "
@@ -2360,7 +1892,6 @@ def _icd_prologue(cmd: Command) -> list[str]:
 
 
 def _icd_epilogue(cmd: Command) -> list[str]:
-    """What a staged transfer needs once its command is sent."""
     lines = []
     for p in cmd.params:
         if not _stages(cmd, p):
@@ -2404,11 +1935,7 @@ def _icd_forward_args(cmd: Command) -> list[str]:
 
 
 def _icd_pixel_bytes(cmd: Command, p: Param) -> str:
-    """How many bytes of pixels this call carries, in the guest's terms."""
     names = {q.name for q in cmd.params}
-    # Where the caller states the room there is nothing to work out,
-    # and working it out anyway would be a second answer to a question
-    # already answered.
     if "bufSize" in names:
         return "static_cast<size_t>(bufSize)"
     reads = p.length.reads if p.length is not None else ()
@@ -2419,49 +1946,22 @@ def _icd_pixel_bytes(cmd: Command, p: Param) -> str:
     typ = "type" if "type" in names else "0"
     packing = "true" if p.role is Role.PIXELS_OUT else "false"
     if "imageSize" in names:
-        # A compressed image: its length is stated, its beginning is
-        # not. What crosses starts at the caller's pointer and runs far
-        # enough that the host, applying the same skips, lands inside
-        # what it was given.
         return (f"::av::glicd::compressed_bytes({width}, {height}, {depth}, "
                 f"imageSize, {packing})")
     if "Compressed" in cmd.name:
-        # glGetCompressedTexImage: neither the extent nor the format
-        # says how many bytes a compressed level is. The host is asked
-        # for that, and the pack state says where in the caller's
-        # memory it lands.
-        #
-        # The direct-state-access spellings ask the same question and
-        # call the level "lod", so the level is taken by whichever name
-        # this command gave it.
         level = "level" if "level" in names else "lod"
         return (f"::av::glicd::compressed_level_bytes(target, {level}, "
                 f"{packing})")
     if "pname" in names and "format" not in names and "type" not in names:
-        # A query answered by enum: how many values it is worth is the
-        # same table every other such query uses, and how wide each one
-        # is the parameter's own type says.
         return (f"::av::glproto::pname_count(*av_t, pname) * "
                 f"sizeof({p.type.base})")
     if "target" in reads and "level" in reads:
-        # glGetTexImage: the extent is the level's, which only the
-        # driver knows.
         return (f"::av::glicd::level_bytes(target, level, {fmt}, {typ})")
     return (f"::av::glicd::pixel_bytes({fmt}, {typ}, {width}, {height}, "
             f"{depth}, {packing})")
 
 
 def _framebuffer_names(cmd) -> list[str]:
-    """Parameters that name a framebuffer the application may call zero.
-
-    The direct-state-access family says which framebuffer it means
-    instead of binding it, so zero appears as an argument rather than as
-    a binding — and zero is the window, which on this host is a
-    framebuffer object with a name of its own.
-
-    glIsFramebuffer is left alone on purpose: an application asking
-    whether zero is a framebuffer is entitled to be told no.
-    """
     if cmd.name == "glIsFramebuffer" or cmd.name == "glBindFramebuffer":
         return []
     wanted = {"framebuffer", "srcFramebuffer", "dstFramebuffer",
@@ -2471,12 +1971,6 @@ def _framebuffer_names(cmd) -> list[str]:
 
 
 def _reads_buffers(cmd) -> bool:
-    """Commands that read buffer contents the GPU has to see first.
-
-    Draws and dispatches, which is where a persistently mapped buffer's
-    contents must have arrived. Everything else can wait for the unmap
-    it is going to get.
-    """
     name = cmd.name
     return (name.startswith("glDraw") or name.startswith("glMultiDraw") or
             name.startswith("glDispatchCompute"))
@@ -2486,17 +1980,10 @@ class GenerationError(Exception):
     pass
 
 
-# The suffix opengl32 gives the colour entries of its RGBA table; the command
-# is the one without it.
 RGBA_SUFFIX = "_InRGBA"
 
 
 def read_proc_table(text: str) -> list[str]:
-    """The command names of opengl32's GLCLTPROCTABLE, in slot order.
-
-    The file is `<index> <name>` per line from 0 without a gap; `#` starts a
-    comment line. Anything else is refused: the order is Microsoft's ABI, and
-    a slot out of place calls the wrong function with the wrong arguments."""
     names: list[str] = []
     for number, line in enumerate(text.splitlines(), 1):
         stripped = line.strip()
@@ -2549,13 +2036,8 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
             continue
         forwarded.append(cmd.name)
         out.append(f"{_icd_entry_declaration(cmd)} {{")
-        # One trace scope per API call (docs/trace.md).
         out.append(f'    AV_SCOPE("{cmd.name}");')
         if cmd.tier == "compat":
-            # A compatibility command exists only where the host granted a
-            # compatibility context: on a core one it is the GL_INVALID_OPERATION
-            # a core context records for an entry point its profile does not have
-            # (feature 051, research.md §3).
             zero = {"void": "return;", "sync": "return nullptr;"}.get(
                 _ret_kind(cmd), "return 0;")
             out.append("    if (!::av::glicd::legacy_calls_live()) {")
@@ -2565,16 +2047,9 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
         args = ", ".join(["*av_t"] + _icd_forward_args(cmd))
         out.append("    auto* av_t = ::av::glicd::wire();")
         for rewritten in _framebuffer_names(cmd):
-            # Zero names the window, and the window is a framebuffer
-            # object here. See av::glicd::framebuffer_name.
             out.append(f"    {rewritten} = "
                        f"::av::glicd::framebuffer_name({rewritten});")
         if _reads_buffers(cmd):
-            # A persistent mapping is memory the application writes into
-            # and never unmaps, so nothing tells this driver the bytes
-            # changed. What the specification promises is that the write
-            # is visible to the next draw — so the next draw is where it
-            # is sent. See av::glicd::flush_persistent_mappings.
             out.append("    ::av::glicd::flush_persistent_mappings();")
         if cmd.name in BIND_SHADOW_FORGETS:
             out.append("    ::av::glicd::forget_bindings();")
@@ -2611,9 +2086,6 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
     out += ["}  // namespace av::glicd::generated", ""]
     write(out_dir / "gl_icd_entries.cpp", "\n".join(out))
 
-    # Internal names only: opengl32 reaches an ICD through the table and
-    # DrvGetProcAddress, and a GL symbol of the ICD's own could only collide
-    # with the one the application links.
     header = [HEADER, "#pragma once\n",
               '#include "gl_types.h"\n',
               "// Declared for the driver's own use; defined either by the",
@@ -2668,10 +2140,6 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
             continue
         table.append(f'    {{"{name}", reinterpret_cast<GlProc>(&Wrap_{name})}},')
         named += 1
-    # The same entry points under the names an extension gave them.
-    # A loader asking for glDebugMessageInsertARB is asking for
-    # glDebugMessageInsert; answering nothing leaves it a null pointer
-    # to call.
     for name, target in sorted(reg.aliases.items()):
         table.append(f'    {{"{name}", reinterpret_cast<GlProc>(&Wrap_{target})}},')
         named += 1

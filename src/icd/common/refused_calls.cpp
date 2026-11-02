@@ -46,4 +46,4 @@ void RefusedCalls::dropped(const char *api, const char *entry, size_t written)
         .write();
 }
 
-}  // namespace av::icd
+}

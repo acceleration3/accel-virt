@@ -1,8 +1,3 @@
-/* Query results written where the guest reads them. Every end is counted as
- * the guest counts them, whether or not it will be published; a query ended
- * again supersedes its last end; a pending query holds one reference, given
- * back when it is written, forgotten or dropped. Publishing itself is judged
- * on the host GPU, through DXVK, at the end of this file. */
 #include "executor/d3d/query_result_publisher.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/d3d_runtime.hpp"
@@ -46,7 +41,7 @@ public:
 
 alignas(8) std::uint8_t results[4u * QueryResultPublisher::slot_bytes];
 
-}  // namespace
+}
 
 TEST(query_result_publisher_ended, holds_a_reference_to_each_pending_query_and_asks_for_a_flush)
 { MockPlatform         platform;
@@ -61,13 +56,11 @@ TEST(query_result_publisher_ended, holds_a_reference_to_each_pending_query_and_a
   CHECK(publisher.needs_flush());
   publisher.flushed();
   CHECK(!publisher.needs_flush());
-  CHECK(publisher.pending());   /* flushed is not published */
+  CHECK(publisher.pending());
   publisher.release_all();
   CHECK_EQ(query.references, 1u);
   CHECK(!publisher.pending()); }
 
-/* D3D11 reads only a query's latest end: a second end replaces the first and
- * gives its reference back. */
 TEST(query_result_publisher_ended, a_query_ended_again_supersedes_its_last_end)
 { MockPlatform         platform;
   QueryResultPublisher publisher(platform);
@@ -80,11 +73,9 @@ TEST(query_result_publisher_ended, a_query_ended_again_supersedes_its_last_end)
   publisher.forget(1u);
   CHECK_EQ(second.references, 1u);
   CHECK(!publisher.pending());
-  publisher.forget(1u);   /* nothing left of it: nothing */
+  publisher.forget(1u);
   CHECK_EQ(second.references, 1u); }
 
-/* Unbound, or with no query behind the end, nothing is held and nothing asks
- * for a flush; the end is still counted. */
 TEST(query_result_publisher_ended, an_unbound_publisher_or_a_missing_query_holds_nothing)
 { MockPlatform         platform;
   QueryResultPublisher publisher(platform);
@@ -92,7 +83,7 @@ TEST(query_result_publisher_ended, an_unbound_publisher_or_a_missing_query_holds
   CHECK_STATUS(publisher.ended(1u, &query), Status::ok);
   CHECK_EQ(query.references, 1u);
   CHECK(!publisher.needs_flush());
-  publisher.bind(results, 0u);   /* no slots is no binding */
+  publisher.bind(results, 0u);
   CHECK_STATUS(publisher.ended(1u, &query), Status::ok);
   CHECK_EQ(query.references, 1u);
   publisher.bind(results, 4u);
@@ -117,8 +108,6 @@ TEST(query_result_publisher_bind, a_new_binding_or_an_unbind_drops_every_pending
   CHECK_STATUS(publisher.ended(1u, &one), Status::ok);
   CHECK_EQ(one.references, 1u); }
 
-/* The old list held 256: a frame of occlusion queries well past it keeps
- * every one pending, each with its reference, and each given back once. */
 TEST(query_result_publisher_ended, keeps_every_query_pending_well_past_the_old_list)
 { MockPlatform         platform;
   QueryResultPublisher publisher(platform);
@@ -137,8 +126,6 @@ TEST(query_result_publisher_ended, keeps_every_query_pending_well_past_the_old_l
   publisher.release_all();
   for (const CountedQuery &query : queries) CHECK_EQ(query.references, 1u); }
 
-/* A query that cannot be kept pending is answered with no_memory and holds
- * nothing; the end is still counted, and the next one is kept. */
 TEST(query_result_publisher_ended, a_query_that_cannot_be_kept_holds_nothing)
 { MockPlatform         platform;
   QueryResultPublisher publisher(platform);
@@ -152,16 +139,12 @@ TEST(query_result_publisher_ended, a_query_that_cannot_be_kept_holds_nothing)
   CHECK_EQ(query.references, 2u);
   publisher.release_all(); }
 
-/* ---- on the host GPU ------------------------------------------------------ */
-
 namespace {
-
-/* The first Vulkan physical device's UUID, which is how DXVK's adapter is found. */
 bool first_gpu(std::uint8_t *uuid)
 {
     VkApplicationInfo application = {};
     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    application.apiVersion = (1u << 22u) | (1u << 12u);   /* 1.1 */
+    application.apiVersion = (1u << 22u) | (1u << 12u);
     VkInstanceCreateInfo made = {};
     made.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     made.pApplicationInfo = &application;
@@ -183,7 +166,6 @@ bool first_gpu(std::uint8_t *uuid)
     return found;
 }
 
-/* What the child saw: whether it ran at all, and what the slot held. */
 struct Published {
     std::uint32_t ran;
     std::uint32_t pending;
@@ -192,10 +174,6 @@ struct Published {
     std::uint32_t first_byte;
 };
 
-/* DXVK's own threads allocate from modules it unloads before exit, which
- * LeakSanitizer reports as an unknown module no suppression can name - so the
- * GPU's part runs in a child that leaves with _exit, and hands back what it
- * saw. */
 Published publish_an_event_query()
 {
     Published seen = {};
@@ -222,7 +200,6 @@ Published publish_an_event_query()
     av::HostHeap         heap;
     QueryResultPublisher publisher(heap);
     publisher.bind(results, 4u);
-    /* An end the guest counted that never ran. */
     if (publisher.ended(9u, nullptr) != Status::ok) return seen;
     context->End(query);
     if (publisher.ended(6u, query) != Status::ok) return seen;
@@ -243,11 +220,8 @@ Published publish_an_event_query()
     return seen;
 }
 
-}  // namespace
+}
 
-/* An event query ended through DXVK on the host GPU, published into its slot
- * once the GPU has it: its data (TRUE), its size and, last, the count of the
- * end - the second the guest sent, though the first never ran. */
 TEST(query_result_publisher_publish, writes_a_finished_query_s_result_and_its_end_count_into_its_slot)
 { int channel[2] = {-1, -1};
   CHECK_EQ(pipe(channel), 0);
@@ -265,8 +239,8 @@ TEST(query_result_publisher_publish, writes_a_finished_query_s_result_and_its_en
   int status = 0;
   CHECK_EQ(waitpid(child, &status, 0), child);
   CHECK_EQ(got, static_cast<ssize_t>(sizeof seen));
-  if (seen.ran == 0u) return;   /* no DXVK on a GPU here: nothing to judge */
+  if (seen.ran == 0u) return;
   CHECK_EQ(seen.pending, 0u);
   CHECK(seen.end == 2u);
-  CHECK_EQ(seen.size, 4u);   /* a BOOL */
+  CHECK_EQ(seen.size, 4u);
   CHECK_EQ(seen.first_byte, 1u); }

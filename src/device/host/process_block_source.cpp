@@ -2,8 +2,6 @@
 
 #include "core/trace/function_scope.hpp"
 
-/* The device library is built freestanding, which hides the C library's
- * declarations; the QEMU it is linked into has the functions. */
 extern "C" {
 void *calloc(size_t count, size_t bytes);
 void  free(void *block);
@@ -42,4 +40,4 @@ void ProcessBlockSource::require_irql_at_most(Irql, const char *)
     AV_SCOPE("ProcessBlockSource::require_irql_at_most");
 }
 
-}  // namespace av
+}

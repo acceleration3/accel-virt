@@ -59,4 +59,4 @@ bool UniformShapes::invariants_hold() const
     return shaped && values_.invariants_hold();
 }
 
-}  // namespace av::glicd
+}

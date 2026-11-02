@@ -1,6 +1,3 @@
-"""The ICD reports an extension only through a policy row that names a test
-which exists and an extension the generator implemented, or the gate says which
-row does not (tools/check_extension_policy.py)."""
 import pathlib
 import shutil
 import tempfile
@@ -136,7 +133,6 @@ class CheckExtensionPolicy(unittest.TestCase):
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("ok, 1 reported (opengl 0, vulkan 1)", result.stdout)
-        # One directory's table does not stand in for another's.
         self.write("src/icd/opengl/gl_icd_root.cpp", "// no table yet\n")
         result = self.check()
         self.assertEqual(result.returncode, 1)
@@ -150,7 +146,6 @@ class CheckExtensionPolicy(unittest.TestCase):
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("ok, 1 reported (vulkan 1)", result.stdout)
-        # Its first source makes it an ICD, which then needs its table.
         self.write("src/icd/opengl/pixel_format_table.cpp", "// no table\n")
         result = self.check()
         self.assertEqual(result.returncode, 1)
@@ -176,7 +171,6 @@ class CheckExtensionPolicy(unittest.TestCase):
         self.assertIn("VK_KHR_spirv_1_4 is answered over VK_KHR_external_memory_fd, which is in neither", result.stderr)
         self.write("src/executor/shim/host.cpp", 'const char *name = "VK_KHR_external_memory_fd";\n')
         self.assertEqual(self.check().returncode, 0)
-        # A row answered by the ICD alone promises no host mechanism at all.
         self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv", "-"}')
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)

@@ -12,21 +12,12 @@
 namespace av {
 
 namespace {
-
-/* 8.0f, 0.125f and 1.0f as IEEE single bits: the factors DXGI compares a
- * plane's scale with, destination over source (COverlayContext::
- * AreSupportedStretchFactors, dwmcore.dll), so the shrink is a fraction. */
 constexpr uint32_t factor_max_stretch = 0x41000000u;
 constexpr uint32_t factor_max_shrink = 0x3E000000u;
 constexpr uint32_t factor_one = 0x3F800000u;
-/* D3DDDI_COLOR_SPACE_RGB_FULL_G22_NONE_P709, the desktop's, and the YCbCr
- * spaces of BT.601 and BT.709 video, studio and full range, which the host
- * converts (PlaneScanout). */
 constexpr uint32_t colour_space_srgb = 0u;
 constexpr uint32_t first_ycbcr_space = 5u, last_ycbcr_space = 9u;
-/* D3DDDIFMT_NV12 and D3DDDIFMT_YUY2, the video surfaces a plane shows. */
 constexpr uint32_t format_nv12 = 0x3231564Eu, format_yuy2 = 0x32595559u;
-/* D3DDDI_ROTATION_IDENTITY, or 0 for one never set. */
 constexpr uint32_t rotation_unset = 0u;
 
 int64_t extent(int32_t from, int32_t to)
@@ -35,14 +26,13 @@ int64_t extent(int32_t from, int32_t to)
     return static_cast<int64_t>(to) - static_cast<int64_t>(from);
 }
 
-/* Destination over source no further than max_scale either way. */
 bool scaled_within(int64_t source, int64_t destination)
 {
     AV_SCOPE("scaled_within");
     return destination <= source * OverlaySupport::max_scale && source <= destination * OverlaySupport::max_scale;
 }
 
-}  // namespace
+}
 
 OverlaySupport::OverlaySupport(Platform &platform, DisplaySources &sources)
     : platform_(platform), sources_(sources), composed_(false)
@@ -70,7 +60,6 @@ Status OverlaySupport::caps(DxgkargGetMultiPlaneOverlayCapsRecord &caps) const
     if (caps.VidPnSourceId >= sources_.count()) return Status::invalid_parameter;
     caps.MaxPlanes = planes();
     caps.MaxRGBPlanes = planes();
-    /* Video goes over the desktop, never under it: every plane but the base. */
     caps.MaxYUVPlanes = planes() - 1u;
     caps.OverlayCaps = overlay_caps_stretch_rgb | overlay_caps_bilinear_filter |
                        (caps.MaxYUVPlanes != 0u ? overlay_caps_stretch_yuv : 0u);
@@ -89,9 +78,6 @@ Status OverlaySupport::post_composition_caps(DxgkargGetPostCompositionCapsRecord
     return Status::ok;
 }
 
-/* dxgkrnl hands every source's planes at once, the query merged into what is
- * on screen (CheckMultiPlaneOverlayInternal3, dxgkrnl.sys), so the limit on
- * planes is per source and each layer may appear once in it. */
 Status OverlaySupport::check(DxgkargCheckMultiPlaneOverlaySupport3Record &check) const
 {
     AV_SCOPE("OverlaySupport::check");
@@ -142,7 +128,6 @@ bool OverlaySupport::shows(const DxgkMultiplaneOverlayPlaneWithSource2Record &pl
         source.right > static_cast<int64_t>(layout.width()) || source.bottom > static_cast<int64_t>(layout.height()))
         return false;
     if (destination_width <= 0 || destination_height <= 0) return false;
-    /* The host's composer neither rotates nor mirrors a plane. */
     if (attributes.Rotation != rotation_unset && attributes.Rotation != rotation_identity) return false;
     if ((attributes.Flags & (overlay_vertical_flip | overlay_horizontal_flip)) != 0u) return false;
     const bool ycbcr = attributes.ColorSpaceType >= first_ycbcr_space && attributes.ColorSpaceType <= last_ycbcr_space;
@@ -161,4 +146,4 @@ bool OverlaySupport::shows(const DxgkMultiplaneOverlayPostCompositionWithSourceR
            extent(source.top, source.bottom) == extent(destination.top, destination.bottom);
 }
 
-}  // namespace av
+}

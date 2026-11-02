@@ -1,5 +1,3 @@
-"""Emit ``vk_protocol_ids.h`` — the stable wire-protocol command ID enum."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,7 +17,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "// Stable wire-protocol command IDs. See codegen/protocol_ids.toml.",
         "enum CmdId : uint32_t {",
     ]
-    # Sort by ID so the file is stable.
     for cmd in sorted(reg.commands.values(), key=lambda c: c.cmd_id):
         lines.append(f"    kCmd_{cmd.name} = 0x{cmd.cmd_id:08X}u,")
     lines.append("};")

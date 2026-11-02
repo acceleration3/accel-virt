@@ -45,4 +45,4 @@ bool PowerTransition::scanning_out(uint32_t source) const
     return source < sizeof(sources_) * 8u && (sources_ & (1u << source)) != 0u;
 }
 
-}  // namespace av
+}

@@ -1,20 +1,3 @@
-/* The dispatchable handles this ICD has handed the loader, each at an address
- * that stays put until it is destroyed.
- *
- * The loader de-duplicates physical devices by address, and asks for the same
- * ones through vkEnumeratePhysicalDevices and vk_icdEnumerateAdapterPhysicalDevices,
- * so one host object on one connection is one handle however often it is
- * wrapped. A pointer from outside is only ever looked at after the pool says it
- * is a live handle of this registry. The registry takes no lock: IcdRoot
- * serializes it.
- *
- * Which handle a host object already has is found through an index by a key
- * mixed from the kind, the host object and the connection, so wrapping the
- * command buffers of one allocation is not a walk of every handle per buffer.
- * Two objects whose keys meet - which a 64-bit mix makes rare - leave the
- * second out of the index, counted, and only then is a miss walked for. A
- * connection's instance, which every handle wrapped on it is made through, is
- * found by the connection in an index of its own. */
 #ifndef AV_ICD_HANDLE_REGISTRY_HPP
 #define AV_ICD_HANDLE_REGISTRY_HPP
 
@@ -41,59 +24,38 @@ public:
     HandleRegistry(const HandleRegistry &) = delete;
     HandleRegistry &operator=(const HandleRegistry &) = delete;
 
-    /* The handle for `host` on `connection` as a `kind`: the one already made if
-     * there is one, else a new one made through `parent`. invalid_parameter for
-     * host 0, no connection, an instance given a parent, anything else given
-     * none, or a parent that is not live, not of a lower kind or not on the same
-     * connection; no_memory when the pool refuses. `handle` is null unless ok. */
     [[nodiscard]] Status wrap(LoaderHandle::Kind kind, uint64_t host, Connection *connection, LoaderHandle *parent,
                               LoaderHandle *&handle);
-    /* The live handle of `kind` at `pointer`, or null: a stack address, a
-     * destroyed handle and a handle of another kind are not one. */
     LoaderHandle *made(void *pointer, LoaderHandle::Kind kind) const;
-    /* The `index`th live handle of `kind` made through `parent`, in the order
-     * they were made, or null past the last. */
     LoaderHandle *child(const LoaderHandle &parent, LoaderHandle::Kind kind, uint32_t index) const;
-    /* The live instance on `connection`, or null. */
     LoaderHandle *instance_of(const Connection *connection) const;
-    /* Destroys `handle` and every handle made through it, at any depth.
-     * invalid_parameter for a pointer that is not a live handle. */
     [[nodiscard]] Status destroy(LoaderHandle *handle);
     uint32_t             live() const;
-    /* How many of them send through `connection`. */
     uint32_t             live_on(const Connection *connection) const;
-    /* How many command buffers own a batch, and devices their memory. */
     uint32_t             batches() const;
     uint32_t             memories() const;
 
-    /* A line per live handle on `connection`, numbered in the pool's order
-     * across every connection, naming its kind, host object and parent's
-     * number, with a line for the memory or batch it owns. */
     void report(StateWriter &writer, const Connection *connection) const;
 
     bool invariants_hold() const;
 
 private:
-    /* The pool-order number of `handle`; live() when it is not live. */
     uint32_t      number_of(const LoaderHandle *handle) const;
     LoaderHandle *existing(LoaderHandle::Kind kind, uint64_t host, const Connection *connection) const;
     bool          parent_fits(LoaderHandle::Kind kind, const Connection *connection, LoaderHandle *parent) const;
     bool          unique(const LoaderHandle &handle) const;
     uint64_t      key_of(LoaderHandle::Kind kind, uint64_t host, const Connection *connection) const;
     uint64_t      address_of(const Connection *connection) const;
-    /* `handle` out of the index, or out of the count of those it left out. */
     void          unindex(const LoaderHandle &handle);
 
     HandleTree<LoaderHandle>             tree_;
     KeyedSlots<uint64_t, LoaderHandle *> index_;
-    /* Each connection's instance, by the connection's address. */
     KeyedSlots<uint64_t, LoaderHandle *> instances_;
-    /* Live handles the index has no entry for. */
     uint32_t                             unindexed_;
 
     friend struct HandleRegistryProbe;
 };
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_HANDLE_REGISTRY_HPP
+#endif

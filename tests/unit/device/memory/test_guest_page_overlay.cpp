@@ -1,7 +1,3 @@
-/* Guest pages a process lent, laid under one host blob: the RAM they held is
- * the blob's memory from then on - what the guest wrote is there, and what
- * the blob's memory takes is what the guest reads - and restored, the RAM
- * holds what the memory held. A page is under one blob at a time. */
 #include "core/support/status.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/guest_page_overlay.hpp"
@@ -35,7 +31,7 @@ struct GuestPageOverlayProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -43,7 +39,6 @@ constexpr std::uint64_t ram = 0x100000u;
 constexpr std::uint64_t page = 4096u;
 constexpr std::size_t   header = 32u;
 
-/* An ATTACH_BACKING's entries, from byte 32. */
 class EntryList {
 public:
     explicit EntryList(std::uint32_t capacity)
@@ -66,8 +61,6 @@ private:
     std::uint32_t count_;
 };
 
-/* The blob's memory: a file of `size` bytes, as the executor's dma-buf, and
- * the library's own mapping of it. */
 class BlobMemory {
 public:
     explicit BlobMemory(std::uint64_t size) : fd_(memfd_create("blob", MFD_CLOEXEC)), size_(size), bytes_(nullptr)
@@ -115,11 +108,8 @@ private:
     GuestPageOverlay overlay_;
 };
 
-}  // namespace
+}
 
-/* Pieces in order fill the blob in order: the guest's bytes become the
- * memory's, the memory's writes are what the guest reads, and restored, the
- * guest keeps them. */
 TEST(guest_page_overlay_add, the_guests_pages_and_the_blobs_memory_are_one_until_restored)
 { Fixture fixture;
   std::uint8_t *const second = fixture.host().guest_ram(ram + 5u * page);
@@ -138,10 +128,8 @@ TEST(guest_page_overlay_add, the_guests_pages_and_the_blobs_memory_are_one_until
   CHECK_EQ(fixture.overlay().runs(), 2u);
   CHECK_EQ(fixture.host().overlaid_bytes(), 3u * page);
   CHECK_EQ(fixture.lent().count(), 3u);
-  /* What the guest held is in the memory, at the blob's offsets. */
   CHECK_EQ(fixture.memory().bytes()[10], 0x11u);
   CHECK_EQ(fixture.memory().bytes()[2u * page + 20u], 0x22u);
-  /* The GPU's writes are the guest's reads, and the guest's writes the GPU's. */
   fixture.memory().bytes()[page + 7u] = 0x33u;
   CHECK_EQ(second[7], 0x33u);
   first[40] = 0x44u;
@@ -151,15 +139,12 @@ TEST(guest_page_overlay_add, the_guests_pages_and_the_blobs_memory_are_one_until
   CHECK_EQ(fixture.lent().count(), 0u);
   CHECK_EQ(fixture.overlay().covered(), 0u);
   CHECK_EQ(fixture.host().live_guest_mappings(), 0u);
-  /* Restored, the RAM holds what the memory last held - and is RAM again. */
   CHECK_EQ(second[7], 0x33u);
   CHECK_EQ(first[40], 0x44u);
   fixture.memory().bytes()[page + 8u] = 0x55u;
   CHECK(second[8] != 0x55u);
   CHECK(fixture.overlay().invariants_hold()); }
 
-/* An entry across a region boundary is as many runs as QEMU maps it in; the
- * record grows past its first size. */
 TEST(guest_page_overlay_add, entries_across_boundaries_and_past_the_first_record_are_all_laid)
 { Fixture fixture(80u * page);
   fixture.host().split_guest_memory_at(ram + page);
@@ -204,8 +189,6 @@ TEST(guest_page_overlay_add, a_bad_piece_lays_nothing_of_itself)
       CHECK_EQ(fixture.host().live_guest_mappings(), 0u);
   } }
 
-/* A page already under a blob - this one or another - is refused, and what
- * was laid before it stays laid until restored. */
 TEST(guest_page_overlay_add, a_page_already_lent_is_refused_and_earlier_runs_stay_laid)
 { Fixture fixture;
   EntryList first(1u);
@@ -225,9 +208,6 @@ TEST(guest_page_overlay_add, a_page_already_lent_is_refused_and_earlier_runs_sta
   CHECK_EQ(fixture.host().overlaid_bytes(), 0u);
   CHECK_STATUS(other.add(fixture.host(), fixture.lent(), request, header, 1u, fixture.memory().fd(), fixture.memory().size()), Status::ok); }
 
-/* A host that will not lay a run, or no room to record it, leaves that run as
- * it was and the claim on it given back; a run that will not come back is
- * logged and left. */
 TEST(guest_page_overlay_add, a_run_the_host_refuses_or_cannot_record_is_left_as_it_was)
 { { Fixture fixture;
     fixture.host().fail_overlay_at(1u);
@@ -237,7 +217,7 @@ TEST(guest_page_overlay_add, a_run_the_host_refuses_or_cannot_record_is_left_as_
     CHECK_EQ(fixture.lent().count(), 0u);
     CHECK_EQ(fixture.host().live_guest_mappings(), 0u); }
   { Fixture fixture;
-    fixture.host().fail_allocation_at(2u);   /* the lent set's table first, then the record */
+    fixture.host().fail_allocation_at(2u);
     EntryList single(1u);
     single.add(ram, static_cast<std::uint32_t>(page));
     CHECK_STATUS(fixture.add(single, 1u), Status::no_memory);
@@ -277,7 +257,6 @@ TEST(guest_page_overlay_invariants, a_record_that_is_not_its_runs_breaks_them)
   av::GuestPageOverlayProbe::overcount(fixture.overlay());
   CHECK(!fixture.overlay().invariants_hold());
   av::GuestPageOverlayProbe::repair(fixture.overlay(), 1u, page);
-  /* A laid page the lent set does not know of could be laid twice. */
   fixture.lent().release(ram, page);
   CHECK(!fixture.overlay().invariants_hold());
   CHECK_STATUS(fixture.lent().claim(ram, page), Status::ok);

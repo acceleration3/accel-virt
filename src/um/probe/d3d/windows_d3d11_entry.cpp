@@ -9,7 +9,7 @@ namespace {
 constexpr uint32_t channels = 4u;
 constexpr float    full = 255.0F;
 
-}  // namespace
+}
 
 WindowsD3d11Entry::WindowsD3d11Entry()
     : swapchain_(nullptr), device_(nullptr), context_(nullptr), back_(nullptr), target_(nullptr),
@@ -110,8 +110,6 @@ int32_t WindowsD3d11Entry::read_back(uint8_t *pixels, uint32_t bytes)
     return asked;
 }
 
-/* AV_PROBE_HOLD=<frames> keeps the window presenting, a colour a frame at
- * vsync, so the frames can be watched on the guest's screen. */
 int32_t WindowsD3d11Entry::present()
 {
     AV_SCOPE("WindowsD3d11Entry::present");
@@ -147,4 +145,4 @@ void WindowsD3d11Entry::release()
     device_ = nullptr;
 }
 
-}  // namespace av
+}

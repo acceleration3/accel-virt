@@ -15,9 +15,6 @@ using av::RingHeader;
 using av::Status;
 
 namespace {
-
-/* Byte 5 is the device's awake flag and bytes 24..31 the fence the guest last
- * published: the header reads past both, so neither is part of a round trip. */
 constexpr std::size_t awake_offset = 5u;
 constexpr std::size_t published_fence_offset = 24u;
 
@@ -36,7 +33,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(ring_header_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[RingHeader::encoded_size] = {};
@@ -103,12 +100,5 @@ TEST(ring_header_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 256u);
-  /* The format constrains the magic, the order and one reserved pair, and
-   * leaves the counters to RingProgress and the awake flag and published fence
-   * to their readers. So the acceptable flips are the 128 bits of tail and head,
-   * the 8 of the awake flag and the 64 of the published fence, plus the four
-   * flips of order 16 that land inside [12, 24] - 17, 18, 20 and 24. Every
-   * shorter input is short of 32 bytes, all-zero and all-ones carry no magic,
-   * and the untouched input is the last acceptance. */
   const std::uint32_t acceptable = 128u + 8u + 64u + 4u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

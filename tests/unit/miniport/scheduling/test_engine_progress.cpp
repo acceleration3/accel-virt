@@ -1,6 +1,3 @@
-/* What QueryEngineStatus answers, and why it matters: VidSchiCheckNodeTimeout
- * (dxgmms2.sys @1400c9b50) returns "no timeout this round" whenever the driver
- * says responsive, so an answer that is always yes defers a hung host forever. */
 #include "miniport/driver/dxgkrnl_interface.hpp"
 #include "miniport/driver/interrupt_notification.hpp"
 #include "miniport/scheduling/engine_progress.hpp"
@@ -26,9 +23,6 @@ using av::Status;
 using av::Violation;
 
 namespace {
-
-/* A node with somewhere to report completions to, which is all this needs from
- * dxgkrnl. */
 class Fixture {
 public:
     Fixture() : dxgkrnl_(platform_, function_), interface_(platform_), notification_(platform_, interface_),
@@ -53,7 +47,7 @@ private:
     EngineProgress        progress_;
 };
 
-}  // namespace
+}
 
 TEST(engine_progress_responsive, an_idle_engine_is_not_a_hung_one)
 { Fixture fixture;
@@ -61,8 +55,6 @@ TEST(engine_progress_responsive, an_idle_engine_is_not_a_hung_one)
   fixture.platform().advance_time(100u);
   CHECK(fixture.progress().responsive()); }
 
-/* The check that asks has just decided the node is late; one deferral is the
- * round trip a slow host may already be inside. */
 TEST(engine_progress_responsive, the_first_answer_about_a_busy_engine_is_a_deferral)
 { Fixture fixture;
   CHECK_STATUS(fixture.node().submit(1u), Status::ok);
@@ -81,9 +73,6 @@ TEST(engine_progress_responsive, an_engine_that_moved_since_the_last_answer_is_r
   fixture.platform().advance_time(100u);
   CHECK(!fixture.progress().responsive()); }
 
-/* Two answers in the same tick cannot both be "moved": a node that completes
- * and resubmits between them has moved once, and the second answer is about
- * what happened since the first. */
 TEST(engine_progress_responsive, an_engine_that_stopped_moving_is_admitted)
 { Fixture fixture;
   CHECK_STATUS(fixture.node().submit(1u), Status::ok);
@@ -96,8 +85,6 @@ TEST(engine_progress_responsive, an_engine_that_stopped_moving_is_admitted)
   CHECK(fixture.progress().responsive());
   CHECK(!fixture.progress().responsive()); }
 
-/* The timeout check runs in a DPC inside dxgkrnl's own timer: nothing here may
- * allocate, block or take a mutex. */
 TEST(engine_progress_responsive, answers_at_dispatch_without_allocating_or_blocking)
 { Fixture fixture;
   CHECK_STATUS(fixture.node().submit(1u), Status::ok);

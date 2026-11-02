@@ -16,8 +16,6 @@ using av::RecordKind;
 using av::Status;
 
 namespace {
-
-/* argv as a shell gives it, argv[0] included. */
 class Arguments {
 public:
     Arguments() : count_(1), values_{"avrecord"} {}
@@ -43,20 +41,18 @@ RecordHeader a_batch(std::uint32_t context, std::uint64_t fence)
     return RecordHeader(RecordKind::batch, context, 0u, 0u, fence);
 }
 
-}  // namespace
+}
 
 namespace av {
 
 struct RecordingToolRequestProbe {
-    /* A request that refused with no reason, and one that took an action with
-     * no recording behind it: neither survives parse. */
     static void refuse_silently(RecordingToolRequest &request) { request.reason_ = ""; }
     static void forget_the_recording(RecordingToolRequest &request) { request.recording_ = nullptr; }
     static void refuse_after_the_fact(RecordingToolRequest &request) { request.reason_ = "later"; }
     static void forget_the_library(RecordingToolRequest &request) { request.executor_ = nullptr; }
 };
 
-}  // namespace av
+}
 
 TEST(recording_tool_request_parse, reads_a_print_of_a_recording)
 { RecordingFilter      filter;
@@ -144,7 +140,6 @@ TEST(recording_tool_request_parse, refuses_a_fence_that_is_no_range)
                           {"3:x", "wants a fence or a range"},
                           {"1234567890123456789012345", "wants a fence or a range"},
                           {"99999999999999999999999999", "wants a fence or a range"},
-                          /* A range the reader could walk, backwards. */
                           {"9:3", "ends before it starts"}};
   for (const Case &c : refused) {
       RecordingFilter      filter;
@@ -153,14 +148,11 @@ TEST(recording_tool_request_parse, refuses_a_fence_that_is_no_range)
       CHECK_STATUS(request.parse(arguments.count(), arguments.values(), filter), Status::invalid_parameter);
       CHECK(std::strstr(request.reason(), "--fence") != nullptr);
       CHECK(std::strstr(request.reason(), c.reason) != nullptr);
-      /* Nothing was narrowed: the filter still keeps every fence. */
       CHECK(filter.keeps(a_batch(1u, 1u)));
       CHECK(filter.keeps(a_batch(1u, ~std::uint64_t{0})));
       CHECK(request.invariants_hold());
   } }
 
-/* The largest fence a recording can carry is a fence, and the first number
- * past sixty-four bits is not: the guard is what stands between them. */
 TEST(recording_tool_request_parse, takes_the_largest_fence_and_refuses_the_first_one_past_it)
 { RecordingFilter      filter;
   RecordingToolRequest request;
@@ -201,7 +193,6 @@ TEST(recording_tool_request_parse, refuses_what_it_does_not_understand)
       CHECK(request.action() == RecordingToolRequest::Action::none);
       CHECK(request.invariants_hold());
   }
-  /* No arguments at all, which is what a program started with none has. */
   RecordingFilter      filter;
   RecordingToolRequest none;
   CHECK_STATUS(none.parse(0, nullptr, filter), Status::invalid_parameter);
@@ -221,7 +212,6 @@ TEST(recording_tool_request_parse, refuses_a_command_fragment_longer_than_any_na
 TEST(recording_tool_request_parse, refuses_arguments_it_was_handed_none_of)
 { RecordingFilter      filter;
   RecordingToolRequest request;
-  /* A count that promises arguments and a pointer that has none. */
   CHECK_STATUS(request.parse(3, nullptr, filter), Status::invalid_parameter);
   CHECK(std::strstr(request.reason(), "usage") != nullptr);
   CHECK(request.invariants_hold()); }
@@ -254,9 +244,6 @@ TEST(recording_tool_request_parse, reads_a_gpu_in_either_case_and_refuses_anythi
                    c.taken ? Status::ok : Status::invalid_parameter);
       CHECK((request.gpu() != nullptr) == c.taken);
       if (c.taken) {
-          /* Both nibbles of the first and the last byte, so a table that read
-           * a digit's value wrong or packed the nibbles the other way round
-           * would not answer these. */
           CHECK_EQ(request.gpu()[0], c.byte);
           CHECK_EQ(request.gpu()[15], c.byte);
       }
@@ -266,8 +253,6 @@ TEST(recording_tool_request_parse, reads_a_gpu_in_either_case_and_refuses_anythi
 TEST(recording_tool_request_invariants, catch_a_request_that_does_not_say_what_it_is)
 { RecordingFilter      filter;
   RecordingToolRequest refused;
-  /* A refusal that got as far as naming the recording, so both halves of
-   * "it refused, or it never started" are judged. */
   const Arguments      bad = Arguments().add("print").add("run.av").add("--nonsense").add("1");
   CHECK_STATUS(refused.parse(bad.count(), bad.values(), filter), Status::invalid_parameter);
   CHECK(refused.invariants_hold());

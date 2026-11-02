@@ -1,29 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch a pinned translation layer: its source, for the required list, and its
-release, for the DLLs the guest runs (feature 047, FR-001 and SC-001).
-
-The same standard as the other fetches (tools/fetch_vulkan_runtime.py): pinned
-URLs, a SHA-256 for every archive and every file taken out of one, nothing
-written when a hash disagrees, and --check to say whether what is on disk is
-what was pinned. A layer's required list is read from the source archive by
-tools/layer_requirements.py, so the list is the release's own rather than a copy
-of it kept here.
-
-One tool for both layers, because the two differ only in their pins:
-
-    fetch_layers.py dxvk
-    fetch_layers.py vkd3d-proton --check
-
-The pins are data, in tools/<layer>_pins.txt:
-
-    source  <url> <sha256>          the archive the required list is read from
-    release <url> <sha256>          the archive the DLLs come from
-    file <name> <path inside the release> <sha256>
-
-which is what lets the tests drive this against local archives through file://.
-Archives may be .zip, .tar.gz or .tar.zst; zstd is in the standard library from
-Python 3.14.
-"""
+"""Fetch a pinned translation layer: its source, for the required list, and its"""
 import argparse
 import hashlib
 import io
@@ -41,13 +17,10 @@ SOURCE_DIRECTORY = "source"
 
 
 class Refused(Exception):
-    """A pin that cannot be honoured; the message names what."""
+    pass
 
 
 class LayerPins:
-    """One layer's pins: the two archives and the files taken from the
-    release."""
-
     def __init__(self, path):
         self.path = path
         self.source = None
@@ -80,8 +53,6 @@ class LayerPins:
         return self
 
     def invariants_hold(self):
-        """Every pin it read is a URL and a hash, and no file is pinned twice
-        (a repeated key would have silently replaced the first)."""
         for pin in (self.source, self.release):
             if pin is not None and (len(pin) != 2 or not pin[0] or len(pin[1]) != 64):
                 return False
@@ -89,8 +60,6 @@ class LayerPins:
 
 
 class Archive:
-    """One pinned archive on disk, and what can be taken out of it."""
-
     def __init__(self, path, digest):
         self.path = path
         self.digest = digest
@@ -104,7 +73,6 @@ class Archive:
         return raw
 
     def members(self):
-        """{path inside, without the top directory: bytes}."""
         raw = self.raw()
         name = self.path.name
         if name.endswith(".zip"):
@@ -141,21 +109,11 @@ class Archive:
         return taken
 
     def without_top(self, name):
-        """Release archives carry one top directory named for their version,
-        which no pin should have to name."""
         parts = name.split("/", 1)
         return parts[1] if len(parts) == 2 else name
 
 
 class ArchiveCache:
-    """Where pinned archives are kept, and how one is got.
-
-    An archive is cached under the hash it is pinned to, so a cache hit is a
-    hit on the bytes that were asked for and nothing else; a partial download
-    is removed rather than trusted next time. Shared with tools/fetch_cts.py,
-    which pins its archive the same way.
-    """
-
     def __init__(self, directory, name):
         self.directory = directory
         self.name = name
@@ -184,8 +142,6 @@ class ArchiveCache:
 
 
 class LayerFetch:
-    """One layer's files on disk, and whether they are the pinned ones."""
-
     def __init__(self, layer, pins, into, cache):
         self.layer = layer
         self.pins = pins
@@ -193,8 +149,6 @@ class LayerFetch:
         self.cache = cache
 
     def problems(self):
-        """What is wrong with what is on disk; empty when it is the pinned
-        set."""
         problems = {}
         source = self.into / SOURCE_DIRECTORY
         if not source.is_dir() or not any(source.iterdir()):
@@ -213,8 +167,6 @@ class LayerFetch:
         return ArchiveCache(self.cache, self.layer).get(url, digest, kind)
 
     def fetch(self):
-        """Both archives verified and everything extracted, or Refused with
-        nothing written."""
         source = self.download(*self.pins.source, "source")
         sources = source.members()
         release_files = {}
@@ -228,7 +180,6 @@ class LayerFetch:
                 if got != digest:
                     raise Refused(f"{name} sha256 {got}, want {digest}")
                 release_files[name] = members[inside]
-        # Nothing is written until every hash agreed.
         into_source = self.into / SOURCE_DIRECTORY
         if into_source.is_dir():
             shutil.rmtree(into_source)

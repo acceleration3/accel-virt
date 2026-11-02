@@ -1,7 +1,3 @@
-/* The host Vulkan device a scenario stands on, over MockKmt with the test
- * playing the host through ScriptedHost: made in order with each step
- * reported, the host's handles kept, and destroyed device before instance,
- * naming only what was made. */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
@@ -25,13 +21,11 @@
 namespace av {
 
 struct VulkanDeviceChainProbe {
-    /* A device held without the physical device it was made on. */
     static void orphan_device(VulkanDeviceChain &chain) { chain.physical_device_ = 0u; }
-    /* A physical device held without its instance. */
     static void orphan_physical_device(VulkanDeviceChain &chain) { chain.device_ = 0u; chain.instance_ = 0u; }
 };
 
-}  // namespace av
+}
 
 using av::AdapterScenario;
 using av::AdapterSearch;
@@ -90,7 +84,7 @@ private:
     VulkanDeviceChain chain_;
 };
 
-}  // namespace
+}
 
 TEST(vulkan_device_chain, make_reports_each_step_and_keeps_the_hosts_handles)
 { Rig rig;
@@ -111,16 +105,12 @@ TEST(vulkan_device_chain, make_reports_each_step_and_keeps_the_hosts_handles)
   CHECK(rig.chain().invariants_hold());
   CHECK(rig.chain().device() == VK_NULL_HANDLE);
   CHECK(rig.chain().physical_device() == VK_NULL_HANDLE);
-  /* The destroys went out without a wait: the device's, then the instance's. */
   CHECK_EQ(rig.kmt().commands(), made + 2u);
   CHECK_EQ(rig.kmt().command_id(made), static_cast<std::uint32_t>(kCmd_vkDestroyDevice));
   CHECK_EQ(rig.kmt().command_id(made + 1u), static_cast<std::uint32_t>(kCmd_vkDestroyInstance));
-  /* Destroyed twice sends nothing more. */
   rig.chain().destroy();
   CHECK_EQ(rig.kmt().commands(), made + 2u); }
 
-/* A device the host refused leaves the instance to destroy; an instance it
- * refused leaves nothing, and nothing is named to the host. */
 TEST(vulkan_device_chain, a_refusal_destroys_only_what_was_made)
 { { Rig rig;
     rig.host().vk_handle(0, ScriptedHost::vk_instance);

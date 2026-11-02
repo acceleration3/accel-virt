@@ -1,5 +1,3 @@
-/* One pinned blob's bytes, as a worker reads and writes them: across extents,
- * and never outside the blob. */
 #include "core/support/status.hpp"
 #include "device/memory/blob_window.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -19,11 +17,9 @@ struct BlobWindowProbe {
     static void lose_lengths(BlobWindow &window) { window.lengths_ = nullptr; }
 };
 
-}  // namespace av
+}
 
 namespace {
-
-/* Three extents of 3, 1 and 4 bytes: a blob of 8 bytes numbered 0..7. */
 class Extents {
 public:
     Extents() : first_{0u, 1u, 2u}, second_{3u}, third_{4u, 5u, 6u, 7u},
@@ -42,7 +38,7 @@ private:
     std::uint64_t lengths_[3];
 };
 
-}  // namespace
+}
 
 TEST(blob_window_read, copies_across_every_extent)
 { const Extents extents;
@@ -128,8 +124,6 @@ TEST(blob_window_extent, answers_each_extent_in_order_and_nothing_past_the_last)
   CHECK_EQ(bytes, 0u); }
 
 namespace {
-
-/* Two aligned words, each its own extent, and a third split over two. */
 class Words {
 public:
     Words() : first_{0x1111111111111111u}, second_{0x2222222222222222u}, split_{},
@@ -147,10 +141,8 @@ private:
     std::uint64_t lengths_[4];
 };
 
-}  // namespace
+}
 
-/* A word another processor stores whole is read and written in one piece: at
- * an aligned offset inside one extent, and nowhere else. */
 TEST(blob_window_word, loads_and_stores_a_whole_aligned_word_of_one_extent)
 { Words words;
   const BlobWindow window = words.window();
@@ -176,7 +168,6 @@ TEST(blob_window_word, a_word_split_misaligned_or_outside_is_neither_loaded_nor_
   for (std::uint32_t i = 0u; i < 8u; i++) CHECK_EQ(words.split()[i], 0u);
   CHECK(words.first() == 0x1111111111111111u);
   CHECK(words.second() == 0x2222222222222222u);
-  /* Whole and in one extent, but not on a word's boundary. */
   alignas(8) std::uint8_t wide[16] = {};
   void *const         pointer = wide;
   const std::uint64_t length = sizeof wide;

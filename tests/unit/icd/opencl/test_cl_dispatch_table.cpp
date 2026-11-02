@@ -1,15 +1,3 @@
-/* The table the Khronos loader dispatches through, and what is in the slots
- * this ICD does not claim.
- *
- * The ICD ABI is positional and unchecked: the loader reads a slot and jumps,
- * so a null one is a jump into nothing with no diagnostic. What is asserted
- * here is that no slot a carried command could reach is null, that the slots
- * this ICD claims hold its own entries, and that the rest refuse rather than
- * pretend - an application asking for something this driver does not implement
- * is told so, and the process survives being asked.
- *
- * `ClIcdBinding` is what those entries reach the root through, and `ClIcdRoot`
- * is what binds itself to it. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
 #include "icd/opencl/cl_dispatch_table.hpp"
@@ -22,11 +10,6 @@ using av::clicd::ClDispatchTable;
 using av::clicd::ClDispatchTableProbe;
 
 namespace av::clicd {
-
-/* The states the table never builds. The ICD ABI is positional and unchecked
- * - the loader reads a slot and jumps - so a filled table that claims nothing,
- * or whose own entries are not this ICD's, is a jump into nothing with no
- * diagnostic at all. */
 struct ClDispatchTableProbe {
     static void filled_but_claiming_nothing(ClDispatchTable &table) { table.claimed_ = 0u; }
     static void a_slot_this_icd_does_not_own(ClDispatchTable &table)
@@ -43,7 +26,7 @@ struct ClDispatchTableProbe {
     { table.filled_ = false; table.claimed_ = 1u; }
 };
 
-}  // namespace av::clicd
+}
 using av::clicd::ClIcdBinding;
 using av::clicd::ClIcdRoot;
 
@@ -60,17 +43,13 @@ TEST(cl_dispatch_table, filling_claims_this_icds_entries_and_refuses_everywhere_
   CHECK(table.claimed() > 0u);
   CHECK(table.invariants_hold());
   const cl_icd_dispatch &slots = table.table();
-  /* Claimed. */
   CHECK(slots.clGetPlatformIDs != nullptr);
   CHECK(slots.clCreateContext != nullptr);
   CHECK(slots.clEnqueueNDRangeKernel != nullptr);
-  /* The two buffer creates are different entries: one carries a property
-   * list and the other has none to carry (feature 053). */
   CHECK(slots.clCreateBuffer != nullptr);
   CHECK(slots.clCreateBufferWithProperties != nullptr);
   CHECK(reinterpret_cast<const void *>(slots.clCreateBuffer) !=
         reinterpret_cast<const void *>(slots.clCreateBufferWithProperties));
-  /* Not claimed, and still not null: the loader would call through it. */
   CHECK(slots.clCreateImage != nullptr);
   CHECK(slots.clSVMAlloc != nullptr);
   CHECK(slots.clCreateSubDevices != nullptr); }
@@ -90,28 +69,16 @@ TEST(cl_dispatch_table, filling_twice_changes_nothing)
 TEST(cl_dispatch_table, the_enumeration_is_answered_outside_the_table)
 { ClDispatchTable table;
   table.fill();
-  /* cl_icd_dispatch has no slot for clIcdGetPlatformIDsKHR: the loader asks
-   * clGetExtensionFunctionAddress for it by name, before it has a platform to
-   * dispatch through at all. */
   CHECK(table.icd_get_platform_ids() != nullptr); }
 
-/* And the other two the loader asks for by name: cl_khr_external_memory's
- * acquire and release, which the ICD ABI predates - cl_icd_dispatch has no
- * slot for either, so an application reaches them through
- * clGetExtensionFunctionAddressForPlatform or not at all. */
 TEST(cl_dispatch_table, the_external_memory_pair_is_answered_outside_the_table_too)
 { ClDispatchTable table;
   table.fill();
   CHECK(table.external_mem_acquire() != nullptr);
   CHECK(table.external_mem_release() != nullptr);
-  /* Two entry points, not one answered twice: an application that acquires
-   * where it meant to release would otherwise never find out. */
   CHECK(table.external_mem_acquire() != table.external_mem_release());
   CHECK(table.external_mem_acquire() != table.icd_get_platform_ids()); }
 
-/* clGetGLContextInfoKHR is asked before there is any object to dispatch
- * through, so a loader finds it by name as well as in its slot: both routes
- * reach the one entry, and the name answers nothing else. */
 TEST(cl_dispatch_table, the_gl_context_query_is_answered_by_name_and_by_its_slot_alike)
 { ClIcdRig        rig;
   ClDispatchTable table;
@@ -122,8 +89,6 @@ TEST(cl_dispatch_table, the_gl_context_query_is_answered_by_name_and_by_its_slot
   CHECK(table.gl_context_info() != table.external_mem_acquire());
   CHECK(table.gl_context_info() != table.icd_get_platform_ids()); }
 
-/* cl_khr_il_program's clCreateProgramWithILKHR is the core call under the
- * extension's name, asked for by name: the same entry as the slot. */
 TEST(cl_dispatch_table, the_il_program_extension_s_create_is_the_core_slot_by_name)
 { ClIcdRig        rig;
   ClDispatchTable table;
@@ -132,7 +97,6 @@ TEST(cl_dispatch_table, the_il_program_extension_s_create_is_the_core_slot_by_na
   CHECK(table.program_from_il() == reinterpret_cast<void *>(table.table().clCreateProgramWithIL));
   CHECK(rig.root().extension_function("clCreateProgramWithILKHR") == table.program_from_il());
   CHECK(table.program_from_il() != table.gl_context_info());
-  /* The 1.1 by-name slot, of no platform, answers as the ICD's own export. */
   CHECK(table.table().clGetExtensionFunctionAddress("clCreateProgramWithILKHR") == table.program_from_il());
   CHECK(table.table().clGetExtensionFunctionAddress("clNoSuchThing") == nullptr); }
 
@@ -142,9 +106,6 @@ TEST(cl_dispatch_table, an_unclaimed_slot_refuses_and_the_process_survives_it)
   const cl_icd_dispatch &slots = table.table();
   CHECK_EQ(slots.clGetDeviceAndHostTimer(nullptr, nullptr, nullptr), CL_INVALID_OPERATION);
   CHECK(slots.clSVMAlloc(nullptr, 0u, 16u, 0u) == nullptr);
-  /* A 1.0 command whose device capability this ICD reports no device
-   * having: a host function pointer of the guest's means nothing on the
-   * host. */
   CHECK_EQ(slots.clEnqueueNativeKernel(nullptr, nullptr, nullptr, 0u, 0u, nullptr, nullptr, 0u, nullptr, nullptr),
            CL_INVALID_OPERATION); }
 
@@ -152,17 +113,13 @@ TEST(cl_icd_binding, a_root_binds_itself_and_unbinds_when_it_goes)
 { ClIcdBinding binding;
   CHECK(!binding.bound());
   { ClIcdRig rig;
-    /* The rig's root binds to the process's binding, not this one - which is
-     * the point of having one: an entry point handed no context reaches the
-     * root through exactly one pointer. */
     CHECK(av::clicd::cl_icd_binding.bound());
     CHECK(&av::clicd::cl_icd_binding.root() == &rig.root()); }
   CHECK(!av::clicd::cl_icd_binding.bound());
   CHECK(!binding.bound()); }
 
 TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
-{ /* No rig, so nothing is bound: what an application sees when the driver
-   * failed to start. The loader still calls through the table. */
+{
   CHECK(!av::clicd::cl_icd_binding.bound());
   ClDispatchTable table;
   table.fill();
@@ -172,11 +129,6 @@ TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
            CL_INVALID_PLATFORM);
   CHECK_EQ(table.table().clReleaseContext(nullptr), CL_INVALID_CONTEXT);
 
-  /* Every entry that answers an object rather than a status: each has its own
-   * "nothing to reach" path, and each must write the API's own error into the
-   * out-parameter the application gave it - a driver that failed to start
-   * must not leave that word as the application had it, because the
-   * application reads it to find out why. */
   cl_int error = 7;
   CHECK(table.table().clCreateContext(nullptr, 0u, nullptr, nullptr, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_PLATFORM);
@@ -204,21 +156,12 @@ TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
   CHECK(table.table().clCreateUserEvent(nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_CONTEXT);
 
-  /* And the two that answer nothing at all: an address, and a free. Neither
-   * has anywhere to report a failure, so the only right answer is to do
-   * nothing and survive being called. */
   CHECK(table.table().clSVMAlloc(nullptr, 0u, 0u, 0u) == nullptr);
   table.table().clSVMFree(nullptr, nullptr);
 
-  /* A callback registration with no root is the event that cannot be found,
-   * not the argument that is missing: with no root there is no event either,
-   * so the binding is what answers first. */
   CHECK_EQ(table.table().clSetEventCallback(nullptr, CL_COMPLETE, nullptr, nullptr),
            CL_INVALID_EVENT);
 
-  /* The same calls again with nowhere to report the error. An application
-   * that passes no errcode_ret is entitled to be ignored rather than to have
-   * a null written through, and every one of these entries has to check. */
   CHECK(table.table().clCreateContext(nullptr, 0u, nullptr, nullptr, nullptr, nullptr) == nullptr);
   CHECK(table.table().clCreateCommandQueueWithProperties(nullptr, nullptr, nullptr, nullptr) ==
         nullptr);
@@ -232,7 +175,6 @@ TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
                                          nullptr, nullptr) == nullptr);
   CHECK(table.table().clCreateUserEvent(nullptr, nullptr) == nullptr);
 
-  /* The buffer rectangles name a queue first, so that is what they refuse. */
   const size_t corner[3] = {0u, 0u, 0u}, region[3] = {1u, 1u, 1u};
   unsigned char memory[1] = {};
   CHECK_EQ(table.table().clEnqueueReadBufferRect(nullptr, nullptr, CL_TRUE, corner, corner, region, 0u, 0u, 0u, 0u,
@@ -245,16 +187,11 @@ TEST(cl_icd_binding, an_entry_reached_before_a_root_exists_refuses)
                                                  nullptr, nullptr),
            CL_INVALID_COMMAND_QUEUE);
 
-  /* The deprecated 1.2 queue call is its own slot: an application built
-   * against the older header reaches it and not the properties one, so it
-   * needs the same answer. */
   error = 7;
   CHECK(table.table().clCreateCommandQueue(nullptr, nullptr, 0u, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_CONTEXT);
   CHECK(table.table().clCreateCommandQueue(nullptr, nullptr, 0u, nullptr) == nullptr); }
 
-/* The invariant catches the states the table never builds - every one of
- * which the loader would turn into a jump through a null pointer. */
 TEST(cl_dispatch_table, the_invariant_catches_a_table_the_loader_would_jump_into_nothing_through)
 { const auto broken = [](void (*corrupt)(ClDispatchTable &)) {
       ClDispatchTable table;

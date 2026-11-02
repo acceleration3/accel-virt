@@ -1,12 +1,3 @@
-/* What the platform and its devices say they are, and the calls answered
- * without the host: a context from a device type, sub-devices, the
- * destructor callbacks, a sampler's own answers and the per-platform
- * extension lookup - each reached through the dispatch table, as the loader
- * reaches it.
- *
- * The point of most of these is that an application which asks before it
- * calls is told the truth: a feature no guest can reach is answered absent,
- * so it never takes the path to the refusal. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
@@ -50,7 +41,6 @@ cl_device_id opened_device(ClIcdRig &rig)
     return device;
 }
 
-/* What the host answers while a context is made on an opened device. */
 void context_opens(ClIcdRig &rig)
 {
     rig.host().blob_import(0u, 0x78u);
@@ -68,7 +58,6 @@ cl_context opened_context(ClIcdRig &rig, cl_device_id &device)
     return rig.loader().create_context(device, &error);
 }
 
-/* Destructor callbacks append which ran, in the order they ran. */
 class Destructions {
 public:
     void note(char which, const void *object)
@@ -90,8 +79,6 @@ struct Tagged {
     char          which;
 };
 
-/* ABI boundaries C requires: the API hands a callback the object and one
- * pointer, so the object recording is the pointer. */
 void CL_CALLBACK mem_went(cl_mem object, void *user_data)
 {
     const Tagged &tag = *static_cast<const Tagged *>(user_data);
@@ -104,12 +91,8 @@ void CL_CALLBACK context_went(cl_context object, void *user_data)
     tag.seen->note(tag.which, object);
 }
 
-}  // namespace
+}
 
-/* The platform keeps no timer a guest could read against the host GPU's,
- * and says so with the resolution of a platform that has none; its
- * extensions with their versions are the very names CL_PLATFORM_EXTENSIONS
- * gives, each the version this ICD carries. */
 TEST(cl_info_paths, the_platform_has_no_host_timer_and_versions_its_own_extensions)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
@@ -139,8 +122,6 @@ TEST(cl_info_paths, the_platform_has_no_host_timer_and_versions_its_own_extensio
   CHECK_EQ(table.clGetPlatformInfo(platform, CL_PLATFORM_EXTENSIONS_WITH_VERSION, sizeof versions, versions,
                                    nullptr),
            CL_SUCCESS);
-  /* Rebuilt from the versioned list, the names are the string's, word for
-   * word and in its order. */
   char rebuilt[512] = {};
   for (std::size_t index = 0u; index < versions_bytes / sizeof versions[0]; ++index) {
       if (index != 0u) std::strcat(rebuilt, " ");
@@ -148,7 +129,6 @@ TEST(cl_info_paths, the_platform_has_no_host_timer_and_versions_its_own_extensio
       CHECK_EQ(versions[index].version, CL_MAKE_VERSION(1u, 0u, 0u));
   }
   CHECK_EQ(std::strcmp(rebuilt, named), 0);
-  /* Too little room writes nothing, and a platform not this one is told. */
   cl_name_version one = {};
   CHECK_EQ(table.clGetPlatformInfo(platform, CL_PLATFORM_EXTENSIONS_WITH_VERSION, sizeof one, &one, nullptr),
            CL_INVALID_VALUE);
@@ -158,9 +138,6 @@ TEST(cl_info_paths, the_platform_has_no_host_timer_and_versions_its_own_extensio
                                     CL_PLATFORM_EXTENSIONS_WITH_VERSION, sizeof versions, versions, nullptr),
            CL_INVALID_PLATFORM); }
 
-/* A native kernel, a partition and a device queue are each a thing no guest
- * can reach, and the device says so whatever the host GPU has - without
- * asking the host at all. */
 TEST(cl_info_paths, what_no_guest_can_reach_is_answered_absent_without_the_host)
 { ClIcdRig rig;
   const cl_device_id device = opened_device(rig);
@@ -205,15 +182,12 @@ TEST(cl_info_paths, what_no_guest_can_reach_is_answered_absent_without_the_host)
                                     nullptr),
            CL_SUCCESS);
   CHECK_EQ(enqueue, 0u);
-  /* Too little room for a word is refused, as for every answer. */
   std::uint8_t cramped = 0u;
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXECUTION_CAPABILITIES, sizeof cramped, &cramped, nullptr),
            CL_INVALID_VALUE);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK_EQ(rig.kmt().queued_answers(), 0u); }
 
-/* CL_DEVICE_EXTENSIONS_WITH_VERSION is the same intersection as the string -
- * never the host's whole list - with the version this ICD carries. */
 TEST(cl_info_paths, the_versioned_extensions_are_the_policy_intersected_with_the_host)
 { cl_name_version versions[32] = {};
   { ClIcdRig rig;
@@ -227,8 +201,6 @@ TEST(cl_info_paths, the_versioned_extensions_are_the_policy_intersected_with_the
   CHECK(std::strstr(named, "cl_khr_fp16") != nullptr);
   CHECK(std::strstr(named, "cl_khr_3d_image_writes") != nullptr);
   CHECK(std::strstr(named, "cl_khr_spir") == nullptr);
-  /* The host's list is kept from the first ask: the versioned one asks
-   * nothing more. */
   const std::uint32_t sent = rig.kmt().commands();
   std::size_t     size = 0u;
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_EXTENSIONS_WITH_VERSION, sizeof versions, versions, &size),
@@ -241,7 +213,6 @@ TEST(cl_info_paths, the_versioned_extensions_are_the_policy_intersected_with_the
       CHECK_EQ(versions[index].version, CL_MAKE_VERSION(1u, 0u, 0u));
   }
   CHECK_EQ(std::strcmp(rebuilt, named), 0); }
-  /* A host that will not answer is the host's status. */
   { ClIcdRig refused;
     const cl_device_id other = opened_device(refused);
     refused.host().cl_info(CL_OUT_OF_RESOURCES, nullptr, 0u);
@@ -249,9 +220,6 @@ TEST(cl_info_paths, the_versioned_extensions_are_the_policy_intersected_with_the
                                           nullptr),
              CL_OUT_OF_RESOURCES); } }
 
-/* The OpenCL C features are the host compiler's, less device-side enqueue:
- * a kernel enqueueing from the device needs a device queue, which no queue
- * here is. */
 TEST(cl_info_paths, the_c_features_are_the_host_compiler_s_without_device_enqueue)
 { cl_name_version features[4] = {};
   { ClIcdRig rig;
@@ -271,10 +239,8 @@ TEST(cl_info_paths, the_c_features_are_the_host_compiler_s_without_device_enqueu
            CL_SUCCESS);
   CHECK_EQ(size, 2u * sizeof features[0]);
   CHECK_EQ(std::strcmp(features[0].name, "__opencl_c_images"), 0);
-  /* Only the whole name goes: a feature that merely begins with it stays. */
   CHECK_EQ(std::strcmp(features[1].name, "__opencl_c_device_enqueue_x"), 0);
   CHECK_EQ(features[1].version, CL_MAKE_VERSION(3u, 0u, 0u)); }
-  /* A host older than the query refuses it, and so does this. */
   { ClIcdRig older;
     const cl_device_id other = opened_device(older);
     older.host().cl_info(CL_INVALID_VALUE, nullptr, 0u);
@@ -282,9 +248,6 @@ TEST(cl_info_paths, the_c_features_are_the_host_compiler_s_without_device_enqueu
     CHECK_EQ(older.loader().device_info(other, CL_DEVICE_OPENCL_C_FEATURES, sizeof features, features, nullptr),
              CL_INVALID_VALUE); } }
 
-/* A device queue is no queue's here, and a size belongs to a device queue
- * alone: each refused before the host is asked, with the specification's
- * error for each. */
 TEST(cl_info_paths, a_device_queue_or_its_size_is_refused_before_the_host)
 { ClIcdRig   rig;
   cl_device_id device = nullptr;
@@ -303,15 +266,11 @@ TEST(cl_info_paths, a_device_queue_or_its_size_is_refused_before_the_host)
   const std::uint64_t unknown_bit[] = {static_cast<std::uint64_t>(CL_QUEUE_PROPERTIES), 1u << 12u, 0u};
   CHECK(rig.root().create_queue(context, device, unknown_bit, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_VALUE);
-  /* The 1.2 spelling carries the bits the same way. */
   CHECK(table_of(context)->clCreateCommandQueue(context, device, CL_QUEUE_ON_DEVICE_DEFAULT, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_QUEUE_PROPERTIES);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK_EQ(rig.loader().release_context(context), CL_SUCCESS); }
 
-/* No device here can be split, so a partition of one of its devices is the
- * specification's unsupported one, and something that is not a device is
- * told so first. */
 TEST(cl_info_paths, a_sub_device_is_refused_as_a_partition_the_device_does_not_have)
 { ClIcdRig rig;
   const cl_device_id device = opened_device(rig);
@@ -328,8 +287,6 @@ TEST(cl_info_paths, a_sub_device_is_refused_as_a_partition_the_device_does_not_h
                                                 &made),
            CL_INVALID_DEVICE); }
 
-/* The per-platform lookup is the ICD's own lookup for its own platform, and
- * nothing for any other. */
 TEST(cl_info_paths, the_per_platform_lookup_answers_for_this_platform_alone)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
@@ -343,9 +300,6 @@ TEST(cl_info_paths, the_per_platform_lookup_answers_for_this_platform_alone)
   int not_a_platform = 0;
   CHECK(lookup(reinterpret_cast<cl_platform_id>(&not_a_platform), "clIcdGetPlatformIDsKHR") == nullptr); }
 
-/* A context from a type: a GPU, the default device and every device are the
- * first device, made into a context as clCreateContext would; a type of no
- * device here finds none, and no bits at all is a different mistake. */
 TEST(cl_info_paths, a_context_from_a_type_is_the_first_device_s_and_other_types_find_none)
 { ClIcdRig rig;
   const cl_device_id device = opened_device(rig);
@@ -370,15 +324,12 @@ TEST(cl_info_paths, a_context_from_a_type_is_the_first_device_s_and_other_types_
   CHECK_EQ(error, CL_DEVICE_NOT_FOUND);
   CHECK(table.clCreateContextFromType(nullptr, 0u, nullptr, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_DEVICE_TYPE);
-  /* The list is judged as clCreateContext judges it. */
   const cl_context_properties unknown[] = {0x4242, 1, 0};
   CHECK(table.clCreateContextFromType(unknown, CL_DEVICE_TYPE_GPU, nullptr, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_PROPERTY);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
 
-/* A sampler's count and context are this ICD's - the application's count and
- * its own handle - and the rest is the host's answer. */
 TEST(cl_info_paths, a_sampler_s_count_and_context_are_the_icd_s_and_its_modes_the_host_s)
 { ClIcdRig   rig;
   cl_device_id device = nullptr;
@@ -412,10 +363,6 @@ TEST(cl_info_paths, a_sampler_s_count_and_context_are_the_icd_s_and_its_modes_th
                                    &owner, nullptr),
            CL_INVALID_SAMPLER); }
 
-/* A memory object's callbacks run when it is destroyed - not at a release
- * that leaves it alive - the latest registered first, each handed the
- * object; a context's run once the context itself goes, which is after the
- * last object made on it. */
 TEST(cl_info_paths, destructor_callbacks_run_latest_first_when_the_object_goes)
 { ClIcdRig   rig;
   cl_device_id device = nullptr;
@@ -434,7 +381,6 @@ TEST(cl_info_paths, destructor_callbacks_run_latest_first_when_the_object_goes)
   CHECK_EQ(table.clSetMemObjectDestructorCallback(buffer, &mem_went, &first), CL_SUCCESS);
   CHECK_EQ(table.clSetMemObjectDestructorCallback(buffer, &mem_went, &second), CL_SUCCESS);
   CHECK_EQ(table.clSetContextDestructorCallback(context, &context_went, &of_context), CL_SUCCESS);
-  /* The application lets go of its context first: the buffer holds it. */
   CHECK_EQ(rig.loader().release_context(context), CL_SUCCESS);
   CHECK_EQ(std::strcmp(seen.order(), ""), 0);
   CHECK_EQ(table.clRetainMemObject(buffer), CL_SUCCESS);
@@ -446,8 +392,6 @@ TEST(cl_info_paths, destructor_callbacks_run_latest_first_when_the_object_goes)
   CHECK(seen.last() == context);
   CHECK(rig.root().invariants_hold()); }
 
-/* What a registration is refused for: an object that is not one of the kind,
- * no callback, and no room left to keep one. */
 TEST(cl_info_paths, a_destructor_callback_is_refused_for_no_object_no_callback_or_no_room)
 { ClIcdRig   rig;
   cl_device_id device = nullptr;
@@ -476,7 +420,6 @@ TEST(cl_info_paths, a_destructor_callback_is_refused_for_no_object_no_callback_o
   CHECK_EQ(std::strlen(seen.order()), 15u);
   CHECK(rig.root().invariants_hold()); }
 
-/* Unbound, every new entry answers its own refusal and nothing more. */
 TEST(cl_info_paths, the_new_entries_refuse_before_there_is_a_root)
 { av::clicd::ClDispatchTable dispatch;
   dispatch.fill();
@@ -490,7 +433,6 @@ TEST(cl_info_paths, the_new_entries_refuse_before_there_is_a_root)
   CHECK_EQ(table.clCreateSubDevices(nullptr, nullptr, 0u, nullptr, nullptr), CL_INVALID_DEVICE);
   CHECK(table.clGetExtensionFunctionAddressForPlatform(nullptr, "clIcdGetPlatformIDsKHR") == nullptr); }
 
-/* The root's own spellings of the two, as the entries reach them. */
 TEST(cl_info_paths, watch_destruction_and_extension_function_for_judge_their_objects)
 { ClIcdRig   rig;
   cl_device_id device = nullptr;

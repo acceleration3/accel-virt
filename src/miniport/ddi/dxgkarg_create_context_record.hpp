@@ -1,7 +1,3 @@
-/* DXGKARG_CREATECONTEXT, as DxgkDdiCreateContext receives and answers it. A
- * DDI record: Flags is the DXGK_CREATECONTEXTFLAGS Value and ContextInfo's
- * fields are prefixed with its name. src/km/ddi_record_layout.cpp proves each
- * offset. */
 #ifndef AV_DXGKARG_CREATE_CONTEXT_RECORD_HPP
 #define AV_DXGKARG_CREATE_CONTEXT_RECORD_HPP
 
@@ -28,6 +24,6 @@ struct DxgkargCreateContextRecord {
     uint32_t Padding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_CREATE_CONTEXT_RECORD_HPP
+#endif

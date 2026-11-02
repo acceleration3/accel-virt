@@ -66,8 +66,6 @@ cl_int WindowsD3d11Bridge::read(void *device, void *resource, uint32_t subresour
         ID3D10Multithread *const section = section_of(*owner);
         enter(section);
         context->CopySubresourceRegion(staging, 0u, 0u, 0u, 0u, source, subresource, nullptr);
-        /* The map waits for the copy, and the copy for every command made
-         * before it: Direct3D's work on the resource is done. */
         result = visit_mapped(*context, section, *staging, D3D11_MAP_READ, rows);
         leave(section);
         if (section != nullptr) section->Release();
@@ -94,8 +92,6 @@ cl_int WindowsD3d11Bridge::write(void *device, void *resource, uint32_t subresou
         ID3D10Multithread *const section = section_of(*owner);
         enter(section);
         result = visit_mapped(*context, section, *staging, D3D11_MAP_WRITE, rows);
-        /* On the immediate context, so every command the application makes
-         * on it from here is ordered after the copy. */
         if (result == CL_SUCCESS) context->CopySubresourceRegion(target, subresource, 0u, 0u, 0u, staging, 0u, nullptr);
         leave(section);
         if (section != nullptr) section->Release();
@@ -145,16 +141,11 @@ bool WindowsD3d11Bridge::made_on(ID3D11Resource &resource, ID3D11Device &device)
     AV_SCOPE("WindowsD3d11Bridge::made_on");
     ID3D11Device *owner = nullptr;
     resource.GetDevice(&owner);
-    /* Both are the device's ID3D11Device, which COM answers as one pointer. */
     const bool same = owner == &device;
     if (owner != nullptr) owner->Release();
     return same;
 }
 
-/* One mip, one slice, shared by NT handle: avumd makes such a texture over
- * memory the host exports and publishes it under its key, which is what an
- * open of the handle names - as rows, which OpenCL's image over the memory
- * reads (SharedRowsTexture). */
 void *WindowsD3d11Bridge::twin(void *device, void *resource, uint32_t subresource, uint32_t kmt_device,
                                uint64_t &handle, uint64_t &bytes)
 {
@@ -241,8 +232,6 @@ cl_int WindowsD3d11Bridge::from_twin(void *device, void *twin, void *resource, u
     return result;
 }
 
-/* A map of staging waits for the copy into it, which waits for every command
- * before: a wait the device blocks in, where an event query is polled. */
 cl_int WindowsD3d11Bridge::drain(ID3D11Device &device, ID3D11DeviceContext &context, ID3D11Resource &twin)
 {
     AV_SCOPE("WindowsD3d11Bridge::drain");
@@ -265,9 +254,6 @@ cl_int WindowsD3d11Bridge::drain(ID3D11Device &device, ID3D11DeviceContext &cont
     return waited ? CL_SUCCESS : CL_OUT_OF_RESOURCES;
 }
 
-/* The resource is the interface its dimension says, which its own GetType
- * answers, and an ID3D11Resource of a buffer or texture is that interface's
- * base: a cast down to it is the object itself. */
 D3d11Resource WindowsD3d11Bridge::description(ID3D11Resource &resource)
 {
     AV_SCOPE("WindowsD3d11Bridge::description");
@@ -366,4 +352,4 @@ void WindowsD3d11Bridge::leave(ID3D10Multithread *section)
     if (section != nullptr) section->Leave();
 }
 
-}  // namespace av
+}

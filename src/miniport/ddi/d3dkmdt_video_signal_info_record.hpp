@@ -1,6 +1,3 @@
-/* D3DKMDT_VIDEO_SIGNAL_INFO, the timing of a target or monitor mode. A DDI
- * record: ScanLineOrdering is the union with AdditionalSignalInfo;
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_D3DKMDT_VIDEO_SIGNAL_INFO_RECORD_HPP
 #define AV_D3DKMDT_VIDEO_SIGNAL_INFO_RECORD_HPP
 
@@ -24,6 +21,6 @@ struct D3dkmdtVideoSignalInfoRecord {
     uint32_t Padding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_D3DKMDT_VIDEO_SIGNAL_INFO_RECORD_HPP
+#endif

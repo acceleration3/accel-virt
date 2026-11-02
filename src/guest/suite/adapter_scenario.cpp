@@ -21,4 +21,4 @@ void AdapterScenario::run()
     steps_.check("driver_version", queried == Status::ok && version != wddm_3_2 ? Status::not_supported : queried);
 }
 
-}  // namespace av
+}

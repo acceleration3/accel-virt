@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Dump public symbols from a stripped MS PDB via llvm-pdbutil, cleaned up."""
 import re, subprocess, sys
 p = sys.argv[1]
 out = subprocess.run(["llvm-pdbutil","dump","--publics",p],capture_output=True,text=True).stdout

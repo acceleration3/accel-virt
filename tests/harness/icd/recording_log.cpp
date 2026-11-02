@@ -31,4 +31,4 @@ std::uint32_t RecordingLog::holding(const char *text) const
     return found;
 }
 
-}  // namespace av
+}

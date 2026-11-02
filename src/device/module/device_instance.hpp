@@ -1,5 +1,3 @@
-/* A device and the host operations it was created over: the QEMU glue's table
- * outlives the device, and the TableHost over it lives exactly as long. */
 #ifndef AV_DEVICE_INSTANCE_HPP
 #define AV_DEVICE_INSTANCE_HPP
 
@@ -21,6 +19,6 @@ private:
     VirtioGpuAv device_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DEVICE_INSTANCE_HPP
+#endif

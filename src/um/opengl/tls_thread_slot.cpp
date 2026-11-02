@@ -17,7 +17,6 @@ TlsThreadSlot::~TlsThreadSlot()
     if (index_ != TLS_OUT_OF_INDEXES) static_cast<void>(TlsFree(index_));
 }
 
-/* With no index every thread has nothing current, and a GL call does nothing. */
 void *TlsThreadSlot::get()
 {
     AV_SCOPE("TlsThreadSlot::get");
@@ -42,4 +41,4 @@ void TlsThreadSlot::set_last_error(uint32_t code)
     SetLastError(code);
 }
 
-}  // namespace av
+}

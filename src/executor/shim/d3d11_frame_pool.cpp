@@ -46,8 +46,6 @@ D3d11FramePool::Frame::Frame()
 D3d11FramePool::Frame::~Frame()
 {
     AV_SCOPE("D3d11FramePool::Frame::~Frame");
-    /* A copy that is not done keeps its texture: a leak, where a release is a
-     * use after free. */
     if (held_ != nullptr && !copy_pending()) held_->Release();
     if (texture_ != nullptr) texture_->Release();
 }
@@ -129,8 +127,6 @@ StagedFrame::Reading D3d11FramePool::Frame::map_when_copied(const uint8_t *&pixe
 {
     AV_SCOPE("D3d11FramePool::Frame::map_when_copied");
     device_->lock(nullptr);
-    /* A frame of a device that was lost - or lost and made again, which let
-     * its textures go - is never copied. */
     if (held_ == nullptr || device_->lost() || (!staged_ && !copy_to_staging())) {
         device_->unlock();
         return Reading::failed;
@@ -146,8 +142,6 @@ StagedFrame::Reading D3d11FramePool::Frame::map_when_copied(const uint8_t *&pixe
     return Reading::mapped;
 }
 
-/* Recorded under the device's lock, as the session's own commands are, and
- * waited for outside it. */
 StagedFrame::Copying D3d11FramePool::Frame::copy_into(const AvFrameCopy &target, uint32_t wait_ms)
 {
     AV_SCOPE("D3d11FramePool::Frame::copy_into");
@@ -158,7 +152,6 @@ StagedFrame::Copying D3d11FramePool::Frame::copy_into(const AvFrameCopy &target,
     uint64_t          value = 0u;
     bool              submitted = false;
     device_->lock(nullptr);
-    /* A frame of a device that was lost is never copied. */
     if (held_ == nullptr || device_->lost()) {
         device_->unlock();
         return Copying::timed_out;
@@ -186,4 +179,4 @@ void D3d11FramePool::Frame::unmap()
     device_->unlock();
 }
 
-}  // namespace av
+}

@@ -5,16 +5,9 @@
 namespace av::icd {
 
 namespace {
-
-/* What this ICD implements over the host rather than through it: the two
- * instance extensions a window needs, and the swapchain that presents on it. */
 const char *const icd_extensions[] = {"VK_KHR_surface", "VK_KHR_win32_surface", "VK_KHR_swapchain"};
 constexpr uint32_t icd_extension_count = sizeof icd_extensions / sizeof icd_extensions[0];
 
-/* What the host is asked for in place of an extension this ICD answers over a
- * different host mechanism: a Win32 external object is a host object shared by
- * fd, so the host's device is made with the fd extension the ICD will call
- * (feature 047, research.md §10). */
 struct HostSpelling {
     const char *asked_;
     const char *host_;
@@ -25,7 +18,7 @@ constexpr HostSpelling host_spellings[] = {
 };
 constexpr uint32_t host_spelling_count = sizeof host_spellings / sizeof host_spellings[0];
 
-}  // namespace
+}
 
 HostExtensionList::HostExtensionList(BlockSource &memory)
     : names_(memory, Pool::paged), given_names_(nullptr), given_(0u), kept_(0u), added_(0u)
@@ -42,8 +35,6 @@ Status HostExtensionList::take(const char *const *names, uint32_t count)
     kept_ = 0u;
     added_ = 0u;
     if (names == nullptr && count != 0u) return Status::invalid_parameter;
-    /* A name the application did not give is not one to pass on; what
-     * answers for it is the caller's refusal, not a null dereference. */
     for (uint32_t index = 0u; index < count; index++)
         if (names[index] == nullptr) return Status::invalid_parameter;
     if (count == ~uint32_t{0} || names_.reserve(count + 1u) != Status::ok) return Status::no_memory;
@@ -54,7 +45,6 @@ Status HostExtensionList::take(const char *const *names, uint32_t count)
             kept_++;
             continue;
         }
-        /* Room was made, and an empty name is the loader's to refuse. */
         static_cast<void>(names_.add(host_spelling_of(names[index])));
     }
     return Status::ok;
@@ -114,9 +104,7 @@ bool HostExtensionList::is_the_icd_s(const char *name) const
 bool HostExtensionList::invariants_hold() const
 {
     AV_SCOPE("HostExtensionList::invariants_hold");
-    /* Every name it holds came from the list it was given or was added, and
-     * the ones it kept for this ICD are the rest of that list. */
     return names_.invariants_hold() && names_.count() + kept_ <= given_ + added_;
 }
 
-}  // namespace av::icd
+}

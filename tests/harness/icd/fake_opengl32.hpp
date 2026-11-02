@@ -1,12 +1,3 @@
-/* The system opengl32.dll, as far as it drives an ICD (research.md §1): the
- * driver's exports found by name, the driver refused as
- * pgldrvLoadAndAllocDriverInfo refuses one (a missing required entry, a
- * missing Flags & 1 entry, DrvValidateVersion answering 0), nine callbacks
- * handed over, HGLRCs of its own mapped to the driver's DHGLRCs, and a proc
- * table taken per thread only when it holds 336 or 306 entries, as
- * __wglSetProcTable takes one. GL is then called through the calling
- * thread's table, as opengl32's gl* exports call it. It is also the
- * SystemOpengl the ICD's wglCreateContextAttribsARB creates through. */
 #ifndef AV_FAKE_OPENGL32_HPP
 #define AV_FAKE_OPENGL32_HPP
 
@@ -32,34 +23,23 @@ public:
     FakeOpengl32(const FakeOpengl32 &) = delete;
     FakeOpengl32 &operator=(const FakeOpengl32 &) = delete;
 
-    /* The next wglCreateContext makes no HGLRC, whatever the driver did. */
     void refuse_next_create();
-    /* The next wglCreateContext answers an HGLRC without asking the driver. */
     void skip_driver_next_create();
-    /* An export opengl32 would not find, for the refusal cases. */
     void hide_export(const char *name);
     Load load(std::uint32_t version, std::uint32_t flags);
 
     std::int32_t describe_pixel_format(void *dc, std::int32_t index, std::uint32_t bytes, std::uint8_t *descriptor);
     bool         set_pixel_format(void *dc, std::int32_t index);
-    /* wglCreateContext: an HGLRC, null when the driver made nothing. */
     void        *create_context(void *dc) override;
-    /* wglMakeCurrent; a null context releases the thread's. */
     bool         make_current(void *dc, void *context);
     bool         delete_context(void *context);
-    /* wglShareLists: `second` shares `first`'s objects. */
     bool         share_lists(void *first, void *second);
     bool         swap_buffers(void *dc);
-    /* wglGetProcAddress: null unless the calling thread has a context current. */
     void        *get_proc_address(const char *name);
-    /* DrvGetProcAddress itself, as opengl32 calls it behind that check. */
     void        *driver_proc_address(const char *name);
-    /* The DHGLRC an HGLRC names, as wglCbGetDhglrc answers. */
     std::uintptr_t driver_context(void *context) const;
-    /* The calling thread's table slot, null without a table. */
     void        *slot(std::uint32_t index) const;
     std::uint32_t table_entries() const;
-    /* How many times the ICD called wglCbGetDhglrc. */
     std::uint32_t dhglrc_lookups() const;
     void          count_lookup();
 
@@ -89,6 +69,6 @@ private:
     void                 *procs_[callbacks];
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FAKE_OPENGL32_HPP
+#endif

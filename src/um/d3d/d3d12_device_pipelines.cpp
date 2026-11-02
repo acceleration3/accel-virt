@@ -1,9 +1,3 @@
-/* Pipeline state: the DDI hands the pieces over one at a time - blend,
- * rasterizer and depth-stencil states, input layouts, each stage's shader -
- * and then a pipeline naming them. The pieces are records in the runtime's
- * blocks; only the pipeline, which carries all of them, crosses to the host,
- * where vkd3d-proton makes one pipeline state of it. Root signatures cross as
- * the DDI gives them, parsed, never as a serialized blob. */
 #include "core/trace/function_scope.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "um/d3d/d3d12_device.hpp"
@@ -11,8 +5,6 @@
 namespace av::d3d12 {
 
 namespace {
-
-/* The SignatureEntry stage numbers: set = stage * 3 + role. */
 constexpr uint32_t stage_vertex = 0u;
 constexpr uint32_t stage_hull = 1u;
 constexpr uint32_t stage_domain = 2u;
@@ -23,21 +15,15 @@ constexpr uint32_t roles = 3u;
 constexpr uint32_t role_input = 0u;
 constexpr uint32_t role_output = 1u;
 constexpr uint32_t role_patch = 2u;
-constexpr uint32_t container_magic = 0x43425844u; /* "DXBC" */
+constexpr uint32_t container_magic = 0x43425844u;
 constexpr size_t   container_size_at = 24u;
 constexpr uint32_t most_parameters = 64u;
 constexpr uint32_t most_ranges = 512u;
 constexpr uint32_t most_samplers = 64u;
-/* CreateCommandSignature12's own maximum. */
 constexpr uint32_t most_indirect_arguments = 16u;
 constexpr uint32_t most_signatures = 1024u;
-/* The runtime's block for a pipeline library. The driver keeps nothing in it
- * (PipelineLibraryBlob says why), but no runtime is documented to take a
- * private size of zero. */
 constexpr SIZE_T library_private_bytes = sizeof(uint64_t);
 
-/* A DXBC or DXIL container says its size at byte 24; a token stream and a
- * DXIL program header both say theirs, in words, as their second word. */
 uint32_t code_bytes(const UINT *code)
 {
     AV_SCOPE("code_bytes");
@@ -77,8 +63,6 @@ const d3d12proto::SignatureEntry *signatures_of(const ShaderRecord &shader)
                                                                 aligned);
 }
 
-/* The DDI's argument types are the API's, in the same order, and each carries
- * as many of its union's members as its kind has; the rest cross as 0. */
 d3d12proto::IndirectArgument indirect_argument(const D3D12DDI_INDIRECT_ARGUMENT_DESC &from)
 {
     AV_SCOPE("indirect_argument");
@@ -103,9 +87,7 @@ d3d12proto::IndirectArgument indirect_argument(const D3D12DDI_INDIRECT_ARGUMENT_
     return to;
 }
 
-}  // namespace
-
-/* ---------------------------------------------------------------- states */
+}
 
 SIZE_T D3d12Device::calc_private_blend_state_size(const D3D12DDI_BLEND_DESC_0010 *)
 {
@@ -200,10 +182,6 @@ VOID D3d12Device::destroy_element_layout(D3D12DDI_HELEMENTLAYOUT handle)
     *static_cast<LayoutRecord *>(handle.pDrvPrivate) = LayoutRecord{};
 }
 
-/* ---------------------------------------------------------------- shaders */
-
-/* A stage's signatures: input and output, and a hull or domain shader's patch
- * constants. The union's arms share their first two signatures' layout. */
 SIZE_T D3d12Device::shader_bytes(const D3D12DDIARG_CREATE_SHADER_0026 &args, bool tessellation) const
 {
     AV_SCOPE("D3d12Device::shader_bytes");
@@ -314,16 +292,12 @@ VOID D3d12Device::destroy_shader(D3D12DDI_HSHADER handle)
     static_cast<ShaderRecord *>(handle.pDrvPrivate)->header = RecordHeader{};
 }
 
-/* ---------------------------------------------------------------- root signatures */
-
 SIZE_T D3d12Device::calc_private_root_signature_size(const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0100 *)
 {
     AV_SCOPE("D3d12Device::calc_private_root_signature_size");
     return sizeof(ObjectRecord);
 }
 
-/* Version 1.1's static samplers are the 1.2 ones without their flags, so the
- * two are read through their own types; everything else is one layout. */
 HRESULT D3d12Device::create_root_signature(const D3D12DDIARG_CREATE_ROOT_SIGNATURE_0100 *args,
                                            D3D12DDI_HROOTSIGNATURE handle)
 {
@@ -395,8 +369,6 @@ VOID D3d12Device::destroy_root_signature(D3D12DDI_HROOTSIGNATURE handle)
     root = ObjectRecord{};
 }
 
-/* ---------------------------------------------------------------- command signatures */
-
 SIZE_T D3d12Device::calc_private_command_signature_size(const D3D12DDIARG_CREATE_COMMAND_SIGNATURE_0001 *)
 {
     AV_SCOPE("D3d12Device::calc_private_command_signature_size");
@@ -431,8 +403,6 @@ VOID D3d12Device::destroy_command_signature(D3D12DDI_HCOMMANDSIGNATURE handle)
     static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), signature.header.stamp.id()), "Destroy12"));
     signature = ObjectRecord{};
 }
-
-/* ---------------------------------------------------------------- pipelines */
 
 void D3d12Device::graphics_state(const D3D12DDIARG_CREATE_PIPELINE_STATE_0099 &args,
                                  d3d12proto::GraphicsState &state) const
@@ -552,13 +522,6 @@ VOID D3d12Device::destroy_pipeline_state(D3D12DDI_HPIPELINESTATE handle)
     pipeline = ObjectRecord{};
 }
 
-/* Pipeline libraries. D3D12Core reports a library-capable shader cache for
- * every driver at this DDI version, so these slots must answer: Resident
- * Evil 4's engine makes a library first on every new device, and the
- * E_NOTIMPL an unimplemented slot answers made the runtime remove the device
- * (DXGI_ERROR_DRIVER_INTERNAL_ERROR) before it had a queue. A pipeline
- * loaded from a library still comes to CreatePipelineState with its whole
- * description, which is all the host compiles from. */
 SIZE_T D3d12Device::calc_private_pipeline_library_size(const D3D12DDIARG_CREATE_PIPELINE_LIBRARY_0010 *args)
 {
     AV_SCOPE("D3d12Device::calc_private_pipeline_library_size");
@@ -607,4 +570,4 @@ HRESULT D3d12Device::serialize_library(D3D12DDI_HPIPELINELIBRARY library, void *
     return S_OK;
 }
 
-}  // namespace av::d3d12
+}

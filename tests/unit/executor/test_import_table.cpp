@@ -1,4 +1,3 @@
-/* The imports one session holds, by the id the device chose for each. */
 #include "executor/exported_memory.hpp"
 #include "executor/import_table.hpp"
 #include "executor/source_memory.hpp"
@@ -26,7 +25,7 @@ public:
     SourceMemory memory;
 };
 
-}  // namespace
+}
 
 TEST(import_table, holds_memory_under_the_id_the_device_chose)
 { Memory      held;
@@ -41,8 +40,6 @@ TEST(import_table, holds_memory_under_the_id_the_device_chose)
   CHECK(table.find(10u) == nullptr);
   CHECK(table.invariants_hold()); }
 
-/* A re-import of a live id is refused rather than silently tearing the old one
- * down, which is what a hostile guest would drive at the worst moment. */
 TEST(import_table, an_id_already_imported_is_a_conflict)
 { Memory      first;
   Memory      second;
@@ -58,7 +55,6 @@ TEST(import_table, an_id_already_imported_is_a_conflict)
   CHECK(&table.find(9u)->memory() == &first.memory);
   CHECK(table.invariants_hold()); }
 
-/* Release is idempotent: the device may release an id whose import failed. */
 TEST(import_table, forgetting_one_it_never_had_is_nothing)
 { MockPlatform platform;
   ImportTable  table(platform);
@@ -81,8 +77,6 @@ TEST(import_table, a_forgotten_import_gives_its_memory_back_and_its_id_comes_bac
   CHECK(table.find(9u) == taken);
   CHECK(table.invariants_hold()); }
 
-/* An import the table holds under one id that names another is one whose
- * release would give back the wrong memory, which its invariant says. */
 TEST(import_table_invariants, a_blob_held_under_an_id_it_does_not_hold_breaks_them)
 { Memory       held;
   MockPlatform platform;
@@ -94,9 +88,6 @@ TEST(import_table_invariants, a_blob_held_under_an_id_it_does_not_hold_breaks_th
   av::ImportedBlobProbe(*taken).set_id(9u);
   CHECK(table.invariants_hold()); }
 
-/* Well past the 4096 a context once held, every import is found as itself
- * where it was made; a table that cannot grow refuses the next and changes
- * nothing. */
 TEST(import_table, holds_imports_past_any_old_bound_and_refuses_only_when_it_cannot_grow)
 { Memory       held;
   MockPlatform platform;
@@ -123,8 +114,6 @@ TEST(import_table, holds_imports_past_any_old_bound_and_refuses_only_when_it_can
   for (ImportedBlob *blob = table.any(); blob != nullptr; blob = table.any()) CHECK(table.forget(blob->id()) != nullptr);
   CHECK_EQ(table.count(), 0u); }
 
-/* An object pool that cannot make the blob refuses too, with no id left
- * behind. */
 TEST(import_table, a_blob_that_cannot_be_made_leaves_no_id)
 { Memory       held;
   MockPlatform platform;
@@ -137,7 +126,6 @@ TEST(import_table, a_blob_that_cannot_be_made_leaves_no_id)
   CHECK_EQ(table.count(), 0u);
   CHECK(table.invariants_hold()); }
 
-/* A session being destroyed releases what the guest never did. */
 TEST(import_table, offers_every_import_still_held_so_none_is_left_behind)
 { Memory       held;
   MockPlatform platform;

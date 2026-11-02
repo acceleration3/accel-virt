@@ -18,7 +18,7 @@ namespace {
 
 constexpr size_t  line_bytes = 512u;
 
-}  // namespace
+}
 
 WindowsCrash::WindowsCrash() : directory_(), modules_(), returns_{}
 {
@@ -67,11 +67,6 @@ void WindowsCrash::write(const char *module, TraceTable &table, TraceHost &host,
 }
 
 #if defined(_M_IX86)
-/* x86 has no unwind tables to walk, so the frame-pointer chain is followed:
- * each frame holds the caller's EBP and above it the return address. A frame
- * outside the thread's stack, or one not above the last, ends the walk rather
- * than fault inside the handler; a function built without a frame pointer
- * hides its caller, which is what an x86 stack walk without symbols can give. */
 uint32_t WindowsCrash::unwind(void *pointers)
 {
     AV_SCOPE("WindowsCrash::unwind");
@@ -103,7 +98,6 @@ uint32_t WindowsCrash::unwind(void *pointers)
         DWORD64            image_base = 0u;
         PRUNTIME_FUNCTION  function = RtlLookupFunctionEntry(context.Rip, &image_base, nullptr);
         if (function == nullptr) {
-            /* A leaf function: its return address is on top of the stack. */
             context.Rip = *reinterpret_cast<DWORD64 *>(context.Rsp);
             context.Rsp += sizeof(DWORD64);
             continue;
@@ -117,4 +111,4 @@ uint32_t WindowsCrash::unwind(void *pointers)
 }
 #endif
 
-}  // namespace av
+}

@@ -71,4 +71,4 @@ bool HwQueueContexts::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

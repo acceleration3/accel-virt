@@ -1,8 +1,3 @@
-/* DXGKARG_BUILDPAGINGBUFFER's operation union for
- * DXGK_OPERATION_MAP_APERTURE_SEGMENT: the segment pages an allocation is being
- * mapped into, and the MDL of the guest pages that back them. A DDI record:
- * Flags is the DXGK_MAPAPERTUREFLAGS Value, and MdlOffset is in pages;
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGK_BUILD_PAGING_BUFFER_MAP_APERTURE_SEGMENT_RECORD_HPP
 #define AV_DXGK_BUILD_PAGING_BUFFER_MAP_APERTURE_SEGMENT_RECORD_HPP
 
@@ -22,6 +17,6 @@ struct DxgkBuildPagingBufferMapApertureSegmentRecord {
     uint32_t MdlOffset;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_BUILD_PAGING_BUFFER_MAP_APERTURE_SEGMENT_RECORD_HPP
+#endif

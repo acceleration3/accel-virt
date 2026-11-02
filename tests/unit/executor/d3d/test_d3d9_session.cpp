@@ -1,10 +1,3 @@
-/* The Direct3D 9 half of a Direct3D session with no Direct3D 9 behind it - a
- * host without DXVK's d3d9, or a GPU it does not run on - and a guest naming
- * devices and objects this session never made. Every asynchronous command is
- * refused, every synchronous one answered as a device that is not there, and
- * nothing is made: a handler that trusted a guest's id would hand DXVK a null
- * device. What a session does with a device is judged on the host GPU in
- * test_d3d9_session_device.cpp. */
 #include "core/support/object_storage.hpp"
 #include "executor/d3d/d3d9_session.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
@@ -32,13 +25,13 @@ struct WatchedBlocksProbe {
     static void draw_from(WatchedBlocks &blocks, BlockSource &source) { blocks.blocks_ = &source; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
 constexpr std::uint32_t nobody = 77u;
-constexpr std::uint32_t not_available = 0x8876086au;   /* D3DERR_NOTAVAILABLE */
-constexpr std::uint32_t invalid_call = 0x8876086cu;    /* D3DERR_INVALIDCALL */
+constexpr std::uint32_t not_available = 0x8876086au;
+constexpr std::uint32_t invalid_call = 0x8876086cu;
 
 av::HostHeap                          heap;
 av::WatchedBlocks                     blocks(heap);
@@ -85,7 +78,7 @@ private:
     GuestRegion     region_;
 };
 
-}  // namespace
+}
 
 TEST(d3d9_session_guest_bytes, are_the_session_s_region_and_nothing_past_it)
 {
@@ -105,12 +98,10 @@ TEST(d3d9_session_knows, its_own_range_and_no_other)
     CHECK(session.knows(kCmd_CreateDevice9));
     CHECK(session.knows(kCmd_Clear9));
     CHECK(!session.knows(kCmd_CreateDevice9 - 1u));
-    CHECK(!session.knows(0x00040001u));   /* Direct3D 11's CreateDevice11 */
-    CHECK(!session.knows(0x00041000u));   /* Direct3D 12's OpenDevice12 */
+    CHECK(!session.knows(0x00040001u));
+    CHECK(!session.knows(0x00041000u));
 }
 
-/* A GPU with no Direct3D 9 makes no device, says why, and answers every
- * adapter question as not available rather than with a caps of zeros. */
 TEST(d3d9_session_on_CreateDevice9, a_gpu_with_no_d3d9_makes_no_device)
 {
     FreshSession fresh;
@@ -142,8 +133,6 @@ TEST(d3d9_session_on_CreateDevice9, a_gpu_with_no_d3d9_makes_no_device)
     CHECK_EQ(support_size, 0u);
 }
 
-/* A device the session has no room to keep is not made, and the guest is
- * told why: E_OUTOFMEMORY, asked before the host device would be made. */
 TEST(d3d9_session_on_CreateDevice9, a_device_there_is_no_memory_to_keep_is_out_of_memory)
 {
     av::MockPlatform platform;
@@ -162,9 +151,6 @@ TEST(d3d9_session_on_CreateDevice9, a_device_there_is_no_memory_to_keep_is_out_o
     av::WatchedBlocksProbe::draw_from(blocks, heap);
 }
 
-/* With no device selected every command that would draw or make something is
- * refused: there is no device to hand DXVK, and nobody to remove. A flush
- * has nothing to do and is no refusal: the guest flushes as its devices go. */
 TEST(d3d9_session_on_commands, with_no_device_selected_each_is_refused)
 {
     FreshSession fresh;
@@ -225,8 +211,6 @@ TEST(d3d9_session_on_commands, with_no_device_selected_each_is_refused)
     CHECK(session.invariants_hold());
 }
 
-/* A read or a query of nothing is answered - the guest is waiting - as an
- * invalid call, with nothing written. */
 TEST(d3d9_session_on_ReadSurface9, of_nothing_answers_invalid_call_and_writes_nothing)
 {
     FreshSession fresh;
@@ -243,8 +227,6 @@ TEST(d3d9_session_on_ReadSurface9, of_nothing_answers_invalid_call_and_writes_no
     CHECK_EQ(data_size, 0u);
 }
 
-/* Run straight through the generated decoder: a refused asynchronous command
- * with no device selected fails the session, a synchronous one is answered. */
 TEST(d3d9_session_run, a_refusal_with_no_device_fails_the_session)
 {
     FreshSession fresh;
@@ -256,7 +238,6 @@ TEST(d3d9_session_run, a_refusal_with_no_device_fails_the_session)
     av::WireReader   indices(frame, sizeof(std::uint32_t));
     av::WireWriter   indices_reply(answer, sizeof answer);
     CHECK(!session.run(kCmd_SetIndices9, indices, indices_reply, arena));
-    /* A flush has nothing to do, which is no refusal. */
     av::WireReader flush(frame, 0u);
     av::WireWriter flush_reply(answer, sizeof answer);
     CHECK(session.run(kCmd_Flush9, flush, flush_reply, arena));
@@ -266,8 +247,6 @@ TEST(d3d9_session_run, a_refusal_with_no_device_fails_the_session)
     CHECK(finish_reply.offset() != 0u);
 }
 
-/* The table is the whole session's: shutting Direct3D 9 down lets go of its
- * own objects and leaves Direct3D 11's where they are. */
 TEST(d3d9_session_shut_down, lets_go_of_direct3d_9_objects_and_keeps_the_rest)
 {
     FreshSession fresh;
@@ -284,8 +263,6 @@ TEST(d3d9_session_shut_down, lets_go_of_direct3d_9_objects_and_keeps_the_rest)
     fresh.table().clear();
 }
 
-/* The session's table holds every runtime's objects under one id space:
- * Destroy9 removes Direct3D 9's and refuses another runtime's. */
 TEST(d3d9_session_on_Destroy9, removes_only_direct3d_9_objects)
 {
     FreshSession fresh;

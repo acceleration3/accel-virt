@@ -30,8 +30,6 @@ RecordingHeader a_header()
 
 bool rejects(const std::uint8_t *bytes, std::size_t length)
 {
-    /* Loaded with a header a test can recognise: a refusal must leave it as it
-     * was, which is what "unchanged unless ok" promises every caller. */
     RecordingHeader header = a_header();
     const Status    status = header.decode(bytes, length);
     if (status != Status::ok) {
@@ -50,16 +48,15 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return false;
 }
 
-}  // namespace
+}
 
 namespace av {
 
 struct RecordingHeaderProbe {
-    /* A major no reader accepts, which nothing but a probe can put there. */
     static void set_major(RecordingHeader &header, std::uint16_t major) { header.major_ = major; }
 };
 
-}  // namespace av
+}
 
 TEST(recording_header_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[RecordingHeader::encoded_size] = {};
@@ -187,17 +184,7 @@ TEST(recording_header_decode, survives_the_hostile_sweep)
   CHECK_STATUS(a_header().encode(bytes, sizeof bytes), Status::ok);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  /* Every truncation, every bit flipped, and the all-zero and all-ones cases:
-   * a sweep that quietly stopped short would still be a passing sweep. */
   CHECK_EQ(sweep.cases_run(), sizeof bytes + 1u + 8u * sizeof bytes + 2u);
-  /* The format constrains the magic, the major it was written by and the
-   * reserved word; everything else a reader takes as written. The minor, both
-   * wire versions, the kinds mask, the start time, the wrap count, the two PCI
-   * ids and the UUID are 46 free bytes, 368 acceptable bits, and the 64 bits of
-   * the ceiling are acceptable too: clearing the only set bit of 1 MiB leaves
-   * "no ceiling" and every other flip leaves a ceiling above the header. Each
-   * shorter input is short of 64 bytes, all-zero and all-ones carry no magic,
-   * and the untouched input is the one acceptance left. */
   const std::uint32_t acceptable = 368u + 64u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 

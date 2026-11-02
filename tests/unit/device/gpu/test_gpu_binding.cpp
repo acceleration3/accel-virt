@@ -39,7 +39,7 @@ private:
     GpuBinding binding_;
 };
 
-}  // namespace
+}
 
 TEST(gpu_binding_bind, a_uuid_binds_the_device_that_has_it)
 { Fixture fixture;
@@ -76,9 +76,6 @@ TEST(gpu_binding_bind, each_failure_is_named_and_logged)
   CHECK(std::strcmp(bytes, "virtio-gpu-av: the host has no Vulkan device") == 0);
   CHECK_STATUS(none.bind("7b7ad2c5-4219-8c80-c4fd-a64b8775aedb", text), Status::not_found); }
 
-/* The glue cannot allocate on a physical device nobody named to it, so binding
- * tells it which one this instance runs on - and a host that cannot take the
- * GPU leaves the device unbound rather than silently on another one. */
 TEST(gpu_binding_bind, tells_the_host_which_gpu_this_device_runs_on)
 { Fixture fixture;
   CHECK_STATUS(fixture.binding().bind("7b7ad2c5-4219-8c80-c4fd-a64b8775aedb", fixture.text()), Status::ok);
@@ -110,6 +107,5 @@ TEST(gpu_binding, binds_on_the_main_loop)
                    &call, thread),
                Status::ok);
   fixture.host().join_thread(thread);
-  /* Binding names the main loop, and so does telling the host which GPU it took. */
   CHECK(fixture.host().claim(HostViolation::main_loop_required));
   CHECK(fixture.host().claim(HostViolation::main_loop_required)); }

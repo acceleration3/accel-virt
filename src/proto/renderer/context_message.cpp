@@ -44,4 +44,4 @@ Status ContextMessage::decode(const uint8_t *bytes, size_t length, uint32_t desc
     return Status::ok;
 }
 
-}  // namespace av
+}

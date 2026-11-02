@@ -1,7 +1,3 @@
-/* The hooks the generated Vulkan ICD wrappers call by name (063
- * contracts/generated_code.md §F), among them the translation every wrapper
- * encodes its handles through. Each is one line into the bound root, which is
- * the only state here (icd_binding.hpp). */
 #include "core/trace/function_scope.hpp"
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/icd_binding.hpp"
@@ -111,4 +107,4 @@ vkproto::HandleTranslation &wire_handles()
     return icd_binding.root().wire_handles();
 }
 
-}  // namespace av::icd
+}

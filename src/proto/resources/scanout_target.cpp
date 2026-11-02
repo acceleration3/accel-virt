@@ -37,4 +37,4 @@ bool ScanoutTarget::is_empty() const
     return source_ == 0u && refresh_numerator_ == 0u && refresh_denominator_ == 0u;
 }
 
-}  // namespace av
+}

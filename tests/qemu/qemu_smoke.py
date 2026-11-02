@@ -12,10 +12,8 @@ import subprocess
 import sys
 
 SLOT = 5
-VIRTIO_GPU = 0x10501AF4          # device 1050, vendor 1af4
-AV_SUBSYSTEM = 0x52561AF4       # subsystem 5256 ("RV"), vendor 1af4
-# What the device says when it takes the bound host GPU's PCI identity as its
-# own; without the line it kept virtio-gpu's.
+VIRTIO_GPU = 0x10501AF4
+AV_SUBSYSTEM = 0x52561AF4
 HOST_IDENTITY = re.compile(r"virtio-gpu-av: pci identity ([0-9a-f]{4}):([0-9a-f]{4}) rev ([0-9a-f]{2}), "
                            r"the host's ([0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7])")
 SYSFS_PCI = "/sys/bus/pci/devices"
@@ -36,8 +34,6 @@ class Qemu:
         return self.config_registers_with(host_gpu, "", registers)
 
     def config_registers_with(self, host_gpu, options, registers):
-        """The PCI configuration registers a guest reads, and what QEMU printed.
-        QEMU keeps running on qtest's EOF, so it is stopped once they are read."""
         process = self.start(host_gpu, options)
         values = []
         try:
@@ -59,7 +55,6 @@ class Qemu:
                 return reply.split()
 
     def refused(self, host_gpu, options=""):
-        """The exit status and stderr of a device that must fail to realize."""
         process = self.start(host_gpu, options)
         try:
             _, stderr = process.communicate(timeout=60)
@@ -70,9 +65,6 @@ class Qemu:
 
 
 def complaints(stderr):
-    """What the device said beyond its probe verdicts. A realize says what each
-    feasibility probe found (feature 039) whether it passed or not, so those
-    lines are the device working, not the device complaining."""
     return "\n".join(line for line in stderr.splitlines()
                      if "virtio-gpu-av" in line and ": probe " not in line and ": pci identity " not in line)
 
@@ -83,9 +75,6 @@ def sysfs_value(address, attribute):
 
 
 def presented_identity(stderr):
-    """The vendor/device register the function must read as, and its revision:
-    the host GPU's when the device said it took them, which must be what sysfs
-    says that GPU is, and virtio-gpu's own otherwise."""
     taken = HOST_IDENTITY.search(stderr)
     if taken is None:
         return VIRTIO_GPU, 1
@@ -122,9 +111,6 @@ def main():
         code, stderr = qemu.refused(host_gpu)
         check(code != 0, f"host-gpu={host_gpu} realized")
         check(reason in stderr, f"host-gpu={host_gpu}: {stderr.strip()}")
-    # The third is the one that used to pass silently: a library that loads and
-    # answers no table left the device up as a plain virtio-gpu with no capset,
-    # and nothing said why (feature 042).
     for executor, reason in (("/nonexistent/libav_codec.so", "could not be loaded"),
                              ("libc.so.6", "exports no av_executor_ops"),
                              (sys.argv[3], "answered no table")):
@@ -133,10 +119,6 @@ def main():
         check(reason in stderr, f"executor={executor}: {stderr.strip()}")
     (identity, _), stderr = qemu.config_registers_with("auto", f",executor={sys.argv[2]}", (0x00, 0x2C))
     check(identity == presented_identity(stderr)[0] and not complaints(stderr), f"the echo executor: {stderr}")
-    # The library that answers for real, loaded into the real device: it has to
-    # survive QEMU's own dlopen, answer version 2, and have its sub_apis reach a
-    # capset - the first place the executor and the device meet outside a unit
-    # test (feature 042).
     (identity, _), stderr = qemu.config_registers_with("auto", f",executor={sys.argv[4]}", (0x00, 0x2C))
     check(identity == presented_identity(stderr)[0] and not complaints(stderr), f"this project's executor: {stderr}")
     print("qemu_smoke: ok")

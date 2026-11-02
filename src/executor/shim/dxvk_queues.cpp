@@ -95,4 +95,4 @@ void DxvkD3d9Queue::unlock()
     if (interop_ != nullptr) interop_->ReleaseSubmissionQueue();
 }
 
-}  // namespace av
+}

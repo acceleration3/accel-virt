@@ -1,6 +1,3 @@
-/* D3d9Session's shaders, declarations, constants, state, draws, queries and
- * output (d3d9_session.hpp). Every range a value indexes is judged here,
- * because DXVK's d3d9 indexes arrays with them. */
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/d3d9_session.hpp"
@@ -23,7 +20,7 @@ constexpr uint32_t boolean_registers = 16u;
 constexpr uint32_t components = 4u;
 constexpr uint32_t pair = 2u;
 constexpr uint32_t triple = 3u;
-constexpr uint32_t max_render_state = 255u;           /* DXVK keeps 256 */
+constexpr uint32_t max_render_state = 255u;
 constexpr uint32_t max_sampler_state = D3DSAMP_DMAPOFFSET;
 constexpr uint32_t max_stage_state = D3DTSS_CONSTANT;
 constexpr uint32_t pixel_samplers = 16u;
@@ -33,7 +30,6 @@ constexpr uint32_t texture_stages = 8u;
 constexpr uint32_t streams = 16u;
 constexpr uint32_t max_render_targets = 4u;
 constexpr uint32_t clear_flags = D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL;
-/* d3d9.toml's bound on Clear9's rects, which the decoder enforces. */
 constexpr uint32_t max_clear_rects = 64u;
 constexpr uint32_t max_lights = 1024u;
 constexpr uint32_t clip_planes = 6u;
@@ -44,8 +40,6 @@ constexpr uint32_t max_decl_type = D3DDECLTYPE_UNUSED;
 constexpr uint32_t max_decl_method = D3DDECLMETHOD_LOOKUPPRESAMPLED;
 constexpr uint32_t max_decl_usage = D3DDECLUSAGE_SAMPLE;
 constexpr uint32_t max_usage_index = 15u;
-/* Ends past a shader, so a model 1 reader that miscounts reads an end, not the
- * arena beyond (D3d9ShaderTokens). */
 constexpr uint32_t shader_padding = 16u;
 constexpr uint32_t end_token = 0x0000ffffu;
 
@@ -62,7 +56,7 @@ bool valid_transform(uint32_t state)
            (state >= D3DTS_WORLD && state <= D3DTS_WORLDMATRIX(255));
 }
 
-}  // namespace
+}
 
 const uint32_t *D3d9Session::padded(const uint8_t *code, uint64_t code_size)
 {
@@ -189,9 +183,6 @@ bool D3d9Session::on_SetConstantsB9(uint32_t stage, uint32_t start, uint32_t val
                                            : host->SetPixelShaderConstantB(start, booleans, value_count));
 }
 
-/* A state the API would refuse is ignored there too, which is what the guest's
- * runtime expects of a state it passes through; only one past what DXVK keeps
- * is the guest's mistake. */
 bool D3d9Session::on_SetRenderStates9(uint32_t value_count, const uint32_t *values)
 {
     AV_SCOPE("D3d9Session::on_SetRenderStates9");
@@ -405,4 +396,4 @@ bool D3d9Session::on_Clear9(uint32_t rect_count, const d3d9proto::Rect *rects, u
                                                stencil));
 }
 
-}  // namespace av
+}

@@ -39,7 +39,6 @@ Status InterruptNotification::report_preempted(uint32_t preemption_fence, uint32
     return report();
 }
 
-/* MonitoredFenceSignaled's NodeOrdinal and EngineOrdinal are the first two UINTs. */
 Status InterruptNotification::report_monitored_fence_signaled(uint32_t node, uint32_t engine)
 {
     AV_SCOPE("InterruptNotification::report_monitored_fence_signaled");
@@ -51,7 +50,6 @@ Status InterruptNotification::report_monitored_fence_signaled(uint32_t node, uin
     return report();
 }
 
-/* CRTC_VSYNC's PhysicalAddress spans the two UINTs after the target. */
 Status InterruptNotification::report_vsync(uint32_t target, uint64_t address)
 {
     AV_SCOPE("InterruptNotification::report_vsync");
@@ -65,9 +63,6 @@ Status InterruptNotification::report_vsync(uint32_t target, uint64_t address)
     return report();
 }
 
-/* CrtcVsyncWithMultiPlaneOverlay: the target, the physical adapter mask and
- * the layer count as the first three UINTs, then the layers' address at the
- * next 8-byte boundary. */
 Status InterruptNotification::report_multiplane_vsync(uint32_t target, const DxgkMultiplaneOverlayVsyncInfoRecord *layers,
                                                       uint32_t count)
 {
@@ -84,7 +79,6 @@ Status InterruptNotification::report_multiplane_vsync(uint32_t target, const Dxg
     return report();
 }
 
-/* CrtcVsyncWithMultiPlaneOverlay2 lays its union out as the first one does. */
 Status InterruptNotification::report_presented_vsync(uint32_t target, const DxgkMultiplaneOverlayVsyncInfo2Record *layers,
                                                      uint32_t count)
 {
@@ -109,4 +103,4 @@ uint8_t InterruptNotification::notify()
     return 1u;
 }
 
-}  // namespace av
+}

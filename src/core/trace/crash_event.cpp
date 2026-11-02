@@ -27,4 +27,4 @@ uint64_t CrashEvent::address() const
     return address_;
 }
 
-}  // namespace av
+}

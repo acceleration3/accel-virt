@@ -1,5 +1,3 @@
-"""av-codegen for OpenGL: gl.xml and wgl.xml in, the GL half of the wire out."""
-
 from __future__ import annotations
 
 import argparse
@@ -48,8 +46,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
-    # The enum values the size tables are written with. They are in the
-    # registry as text, in whatever base the extension author wrote.
     values: dict[str, int] = {}
     for name, text in raw.enums.items():
         try:

@@ -37,4 +37,4 @@ bool PathTransformation::default_gamma() const
     return gamma_ == gamma_uninitialized || gamma_ == gamma_default;
 }
 
-}  // namespace av
+}

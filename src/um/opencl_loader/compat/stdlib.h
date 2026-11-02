@@ -1,10 +1,3 @@
-/* What the Khronos OpenCL loader reaches for from <stdlib.h>, and no more.
- *
- * The guest build has no C runtime (cmake/windows_user_flags_c.cmake passes
- * /Zl /X), so the loader is compiled against these declarations and linked
- * against loader_crt.c, which answers them over the process heap. Only the
- * names the pinned loader actually calls are here: a name it does not call is
- * a name this build does not have to be right about. */
 #ifndef AV_OPENCL_LOADER_STDLIB_H
 #define AV_OPENCL_LOADER_STDLIB_H
 
@@ -28,4 +21,4 @@ char *getenv(const char *name);
 }
 #endif
 
-#endif  /* AV_OPENCL_LOADER_STDLIB_H */
+#endif

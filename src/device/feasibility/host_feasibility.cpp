@@ -23,4 +23,4 @@ uint64_t HostFeasibility::features() const
     return host_.hostmem_size() != 0u ? CapsetInfo::feature_host_visible_memory : 0u;
 }
 
-}  // namespace av
+}

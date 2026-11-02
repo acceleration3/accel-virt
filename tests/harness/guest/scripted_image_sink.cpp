@@ -35,4 +35,4 @@ std::size_t ScriptedImageSink::size(const char *name) const
     return kept != nullptr ? kept->size : 0u;
 }
 
-}  // namespace av
+}

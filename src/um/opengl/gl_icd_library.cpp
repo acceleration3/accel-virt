@@ -16,10 +16,6 @@ GlIcdLibrary::Seams::Seams()
            glicd::gl_icd_binding)
 {
     AV_SCOPE("GlIcdLibrary::Seams::Seams");
-    /* The present thread's D3DKMT event and wake events: without them frames
-     * are shown on the swapping thread, which costs the process nothing else,
-     * so their failure refuses only the loop. The seams are made on the first
-     * call, never under the loader lock. */
     if (present_kmt.initialize() != Status::ok || present_handed.initialize() != Status::ok ||
         present_shown.initialize() != Status::ok) {
         process.log().write("no present thread: its D3DKMT event or wake events could not be made");
@@ -129,4 +125,4 @@ long GlIcdLibrary::crashed(void *pointers)
     return driver_.crashed(pointers);
 }
 
-}  // namespace av
+}

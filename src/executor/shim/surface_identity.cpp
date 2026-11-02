@@ -9,7 +9,7 @@ namespace {
 
 constexpr GUID surface_tag = {0x7a2c5e19, 0x4b3d, 0x4e81, {0x9f, 0x06, 0x2d, 0xc4, 0x58, 0xb1, 0x37, 0xe2}};
 
-}  // namespace
+}
 
 SurfaceIdentity::SurfaceIdentity(uint64_t surface) : surface_(surface)
 {
@@ -54,4 +54,4 @@ bool SurfaceIdentity::mark(ID3D12Object *resource) const
            SUCCEEDED(resource->SetPrivateData(surface_tag, sizeof surface_, &surface_));
 }
 
-}  // namespace av
+}

@@ -74,8 +74,6 @@ bool SharedObjectRecord::fields_valid() const
 {
     AV_SCOPE("SharedObjectRecord::fields_valid");
     if (!kind_.known()) return false;
-    /* An id and an adapter travel together: a record naming one without the
-     * other is one no miniport ever wrote. */
     if ((object_id_ == 0u) != (adapter_id_ == 0u)) return false;
     return kind_.sized(size_);
 }
@@ -99,4 +97,4 @@ Status SharedObjectRecord::decode(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-}  // namespace av
+}

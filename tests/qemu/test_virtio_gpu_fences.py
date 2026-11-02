@@ -1,12 +1,3 @@
-"""Fence pages and fence interrupts against the real device: a worker writes a
-bound context's fence page after every batch it consumes, and interrupts the
-guest through the guest notifier of the context's fence queue. Under qtest
-virtio-pci raises the vector from its notifier handler, so a masked vector's
-pending bit - and, with MSI-X off, the ISR - shows the interrupt arrived.
-
-Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
-AV_QEMU_BUILD.
-"""
 import os
 import struct
 import time
@@ -22,7 +13,6 @@ FENCE_QUEUE_FIRST = 2
 DOORBELLS = 64
 WANTED = virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID | FEATURE_CONTEXT_INIT
 QUIET = 0.3
-# SC-004's 10,000 is 40k qtest round trips; the live run carries that sweep.
 TOGGLES = 1000
 
 
@@ -36,8 +26,6 @@ def wait_for(condition, seconds=10.0):
 
 
 class Context:
-    """A context bound to a guest-backed ring and a guest-backed fence page."""
-
     def __init__(self, test, gpu, context, doorbell):
         self.gpu = gpu
         self.doorbell = doorbell
@@ -55,7 +43,6 @@ class Context:
         return struct.unpack("<IIQQII", self.gpu.qtest.read_bytes(self.page, 32))
 
     def complete(self, batches=1):
-        """Batches written and published and the doorbell rung: the last fence."""
         for _ in range(batches):
             self.fence += 1
             self.ring.write_batch(self.fence, 24)
@@ -76,8 +63,6 @@ class VirtioGpuFences(unittest.TestCase):
         return qtest
 
     def msix_gpu(self, qtest, vectors):
-        """A driver with MSI-X on, every vector masked, and fence queue vectors
-        assigned before DRIVER_OK: {doorbell: vector}."""
         msix = {}
 
         def configure(device):
@@ -101,8 +86,6 @@ class VirtioGpuFences(unittest.TestCase):
         self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 0, 0, 0, 0))
         fence = context.complete(3)
         self.assertTrue(context.completed(fence))
-        # A command in each batch: the context's first command run is a
-        # heartbeat (the next is 256 commands on), and each completion another.
         self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 3, 4, 0, 0))
         fence = context.complete(2)
         self.assertTrue(context.completed(fence))
@@ -124,7 +107,7 @@ class VirtioGpuFences(unittest.TestCase):
         address = gpu.device.shared_memory[DOORBELL_SHM_ID][0]
         gpu.qtest.write(32, address, 1)
         self.assertTrue(wait_for(lambda: "context faulted" in gpu.qtest.printed()))
-        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 1, 1, 2, 2, 0))   # faulted: ring tail
+        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 1, 1, 2, 2, 0))
 
     def test_a_completion_pends_the_masked_vector_of_its_fence_queue_until_unmasked(self):
         qtest = self.qtest()
@@ -159,7 +142,7 @@ class VirtioGpuFences(unittest.TestCase):
     def test_with_msix_off_a_completion_sets_the_isr(self):
         gpu = virtio_qtest.VirtioGpu(self.qtest(), WANTED)
         context = Context(self, gpu, 1, 3)
-        gpu.device.isr()   # the control responses' bit, cleared
+        gpu.device.isr()
         self.assertEqual(gpu.device.isr(), 0)
         self.assertTrue(context.completed(context.complete()))
         self.assertTrue(wait_for(lambda: gpu.device.isr() & 1))
@@ -177,9 +160,6 @@ class VirtioGpuFences(unittest.TestCase):
         self.assertTrue(wait_for(lambda: msix.pending(3)))
 
     def test_a_driver_that_stops_without_resetting_releases_its_fence_interrupts(self):
-        """035's live run: viogpudo cleared DRIVER_OK with status 11 and never
-        reset, so the guest notifiers stayed registered and avgpu's MSI-X
-        toggle registered the same eventfd twice, which KVM refuses."""
         qtest = self.qtest()
         gpu, msix = self.msix_gpu(qtest, {6: 2})
         stopping = virtio_qtest.STATUS_ACKNOWLEDGE | virtio_qtest.STATUS_DRIVER | virtio_qtest.STATUS_FEATURES_OK
@@ -190,9 +170,9 @@ class VirtioGpuFences(unittest.TestCase):
         self.assertTrue(wait_for(lambda: not msix.pending(2)))
         gpu.device.status(stopping)
         fence = context.complete()
-        self.assertTrue(context.completed(fence))   # progress is still readable
+        self.assertTrue(context.completed(fence))
         time.sleep(QUIET)
-        self.assertFalse(msix.pending(2))           # but nothing was injected
+        self.assertFalse(msix.pending(2))
         msix.disable()
         msix.enable()
         gpu.device.status(stopping | virtio_qtest.STATUS_DRIVER_OK)

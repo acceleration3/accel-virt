@@ -14,9 +14,6 @@ ProcessTrace::ProcessTrace()
     AV_SCOPE("ProcessTrace::ProcessTrace");
 }
 
-/* A timeline of this process for Perfetto, when one is being recorded: every
- * scope an event in a file the host pulls, stamped by the performance
- * counter the host's batches carry too. */
 void ProcessTrace::record_events(const char *module, uint32_t pid)
 {
     AV_SCOPE("ProcessTrace::record_events");
@@ -42,9 +39,6 @@ Status ProcessTrace::start(const char *module, StateReporter &reporter, Filter f
     if (status != Status::ok) return status;
     status = table_.initialize(section_.region(), section_.bytes(), module, pid);
     if (status != Status::ok) return status;
-    /* Every scope costs the call it opens, thousands a frame on an
-     * application's own thread, so the table is bound only when a trace is
-     * asked for: C:\ProgramData\av\trace-scopes, or the perfetto flag. */
     if (directory_.flagged(L"trace-scopes") || events_file_.wanted())
         scope_binding.bind(table_);
     record_events(module, pid);
@@ -63,4 +57,4 @@ long ProcessTrace::crashed(void *pointers)
     return previous_ != nullptr ? previous_(pointers) : EXCEPTION_CONTINUE_SEARCH;
 }
 
-}  // namespace av
+}

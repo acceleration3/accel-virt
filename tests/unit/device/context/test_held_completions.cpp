@@ -1,6 +1,3 @@
-/* The fences a ring ran whose GPU work has not finished: released oldest first
- * once the GPU passes each one's mark, and never past one still held, because
- * the guest reads a context's completions as one rising value. */
 #include "device/context/held_completions.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -16,7 +13,7 @@ struct HeldCompletionsProbe {
     static void move_head_out(HeldCompletions &held) { held.head_ = HeldCompletions::capacity; }
 };
 
-}  // namespace av
+}
 
 TEST(held_completions, starts_empty_and_releases_nothing)
 { HeldCompletions held;
@@ -31,8 +28,8 @@ TEST(held_completions_release, answers_the_newest_fence_whose_mark_was_reached)
   CHECK(held.hold(2u, 20u));
   CHECK(held.hold(3u, 30u));
   CHECK(held.invariants_hold());
-  CHECK(held.release(9u) == 0u);    /* the oldest mark not reached: nothing goes */
-  CHECK(held.release(10u) == 1u);   /* reached exactly is reached */
+  CHECK(held.release(9u) == 0u);
+  CHECK(held.release(10u) == 1u);
   CHECK(held.release(29u) == 2u);
   CHECK(!held.empty());
   CHECK(held.release(30u) == 3u);

@@ -1,6 +1,3 @@
-/* DXGKARG_ENUMVIDPNCOFUNCMODALITY, as DxgkDdiEnumVidPnCofuncModality receives
- * it. EnumPivot is its source and target ids. A DDI record;
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_ENUM_VIDPN_COFUNC_MODALITY_RECORD_HPP
 #define AV_DXGKARG_ENUM_VIDPN_COFUNC_MODALITY_RECORD_HPP
 
@@ -16,6 +13,6 @@ struct DxgkargEnumVidPnCofuncModalityRecord {
     uint32_t Padding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_ENUM_VIDPN_COFUNC_MODALITY_RECORD_HPP
+#endif

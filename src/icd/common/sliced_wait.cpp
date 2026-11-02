@@ -9,7 +9,7 @@ namespace {
 constexpr uint64_t ns_per_second = 1000000000u;
 constexpr uint64_t saturated = ~uint64_t{0};
 
-}  // namespace
+}
 
 SlicedWait::SlicedWait(uint64_t timeout, uint64_t now, uint64_t frequency)
     : timeout_(timeout), start_(now), frequency_(frequency), slice_(0u), asked_(false)
@@ -53,4 +53,4 @@ bool SlicedWait::invariants_hold() const
     return slice_ <= slice_ns && slice_ <= timeout_;
 }
 
-}  // namespace av::icd
+}

@@ -1,8 +1,3 @@
-/* The device object model (contracts/umd_interface.md, "The device object
- * model"): the runtime owns the block, the driver's pool owns the device, and
- * a cookie in that block is the only thing joining them. Everything here is
- * about what happens when the block is not what the driver wrote - which is
- * the normal case for memory another component can reach. */
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/fake_d3d_runtime.hpp"
@@ -21,10 +16,6 @@ using av::d3d::RuntimeKind;
 using namespace av::d3d;
 
 namespace av::d3d {
-
-/* The create without the runtime's answer, so a test can hold a live device
- * and drive the entry points that name one. Feature 056's create is this plus
- * a filled device-functions table (umd_root.hpp). */
 struct UmdRootProbe {
     static Hresult adopt(UmdRoot &root, void *adapter, D3d10ddiargCreateDeviceRecord &create, UmdDevice *&made)
     {
@@ -35,12 +26,9 @@ struct UmdRootProbe {
     static void release(UmdRoot &root, void *block) { root.forget_device(block); }
 };
 
-}  // namespace av::d3d
+}
 
 namespace {
-
-/* One open adapter with a create the driver will accept, so the tests below
- * can be about the block rather than about opening. */
 class Fixture {
 public:
     Fixture() : rig_(), runtime_(rig_.root(), RuntimeKind::d3d10_11)
@@ -80,11 +68,8 @@ private:
     int                           um_ = 0;
 };
 
-}  // namespace
+}
 
-/* The size is the cookie's and one pointer whatever the runtime asked with,
- * because a magic, a pointer and the host driver's device are what the block
- * holds however the device grows. */
 TEST(umd_device_model, the_private_device_size_is_the_cookie_for_every_create)
 { UmdRig rig;
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
@@ -103,20 +88,16 @@ TEST(umd_device_model, a_created_device_records_the_runtimes_handles_and_both_ca
   if (device == nullptr) return;
   CHECK(device->runtime_device() == fixture.create().hRTDevice);
   CHECK(device->runtime_core_layer() == fixture.create().hRTCoreLayer);
-  /* Pointers to the runtime's tables, not copies of their rows. */
   CHECK(device->kernel_callbacks() == fixture.create().pKTCallbacks);
   CHECK(device->core_layer_callbacks() == fixture.create().pUMCallbacks);
   CHECK_EQ(device->interface_version(), FakeD3dRuntime::d3d11_interface);
   CHECK(device->invariants_hold());
   CHECK(fixture.rig().root().invariants_hold());
-  /* The cookie in the runtime's block names it, and nothing else does. */
   CHECK(fixture.rig().root().device_of(fixture.block()) == device);
   UmdRootProbe::release(fixture.rig().root(), fixture.block());
   CHECK(fixture.rig().root().device_of(fixture.block()) == nullptr);
   CHECK(fixture.rig().root().invariants_hold()); }
 
-/* The count the adapter guards its close with is the table's, so the two must
- * not be able to disagree. */
 TEST(umd_device_model, the_tables_count_follows_every_device_made_and_destroyed)
 { Fixture fixture;
   DeviceTable table(fixture.rig().platform(), fixture.rig().log());
@@ -130,7 +111,6 @@ TEST(umd_device_model, the_tables_count_follows_every_device_made_and_destroyed)
   CHECK_EQ(adapter.devices(), 1u);
   UmdRootProbe::release(fixture.rig().root(), fixture.block());
   CHECK_EQ(adapter.devices(), 0u);
-  /* A table of its own stays empty throughout: the root's is the one counting. */
   CHECK_EQ(table.live_devices(), 0u);
   CHECK(table.invariants_hold()); }
 
@@ -139,8 +119,6 @@ TEST(umd_device_model, a_block_the_driver_did_not_write_names_no_device)
   UmdDevice *device = nullptr;
   CHECK_EQ(UmdRootProbe::adopt(fixture.rig().root(), fixture.runtime().adapter(), fixture.create(), device), hr_ok);
 
-  /* Every way a block can be wrong, in the order a hostile or buggy caller
-   * produces them. */
   alignas(16) unsigned char foreign[64] = {};
   CHECK(fixture.rig().root().device_of(foreign) == nullptr);
   CHECK(fixture.rig().root().device_of(nullptr) == nullptr);
@@ -150,7 +128,6 @@ TEST(umd_device_model, a_block_the_driver_did_not_write_names_no_device)
   scribbled[0] ^= 0xFFu;
   CHECK(fixture.rig().root().device_of(scribbled) == nullptr);
 
-  /* The right magic over a pointer the pool never handed out. */
   alignas(16) unsigned char forged[64] = {};
   std::memcpy(forged, fixture.block(), sizeof forged);
   int elsewhere = 0;
@@ -159,7 +136,6 @@ TEST(umd_device_model, a_block_the_driver_did_not_write_names_no_device)
   CHECK(fixture.rig().root().device_of(forged) == nullptr);
 
   UmdRootProbe::release(fixture.rig().root(), fixture.block());
-  /* And a block whose device is gone. */
   CHECK(fixture.rig().root().device_of(fixture.block()) == nullptr);
   CHECK(fixture.rig().root().invariants_hold()); }
 
@@ -175,10 +151,6 @@ TEST(umd_device_model, destroying_twice_is_refused_and_logged_rather_than_repeat
   CHECK_EQ(fixture.rig().log().holding("device destroy, status"), 2u);
   CHECK(fixture.rig().root().invariants_hold()); }
 
-/* Until feature 056 fills the device functions, a device that cannot draw is
- * not offered as one - and the object model built for it is given back rather
- * than leaked, because the runtime never calls DestroyDevice for a create that
- * failed. */
 TEST(umd_device_model, the_create_answers_not_implemented_and_leaves_no_device_behind)
 { UmdRig rig;
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
@@ -186,13 +158,9 @@ TEST(umd_device_model, the_create_answers_not_implemented_and_leaves_no_device_b
   CHECK_EQ(runtime.create_device(), hr_not_impl);
   CHECK(rig.root().device_of(runtime.device_block()) == nullptr);
   CHECK(rig.root().invariants_hold());
-  /* Which means the adapter can still be closed: nothing is counted on it. */
   CHECK_EQ(runtime.close_adapter(), hr_ok);
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* The D3D12 create adopts the device into the same table as D3D11's and hands
- * it to the host driver; with none, the device it adopted is given back, the
- * block's cookie cleared, and the runtime told no device was made. */
 TEST(umd_device_model, without_a_host_driver_the_d3d12_create_makes_no_device)
 { UmdRig rig;
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d12);
@@ -200,7 +168,6 @@ TEST(umd_device_model, without_a_host_driver_the_d3d12_create_makes_no_device)
   CHECK_EQ(runtime.create_device(), hr_not_impl);
   CHECK(rig.root().device_of(runtime.device_block()) == nullptr);
   CHECK(rig.root().invariants_hold());
-  /* pfnDestroyDevice on a block no create wrote is ignored, not dereferenced. */
   runtime.destroy_device();
   CHECK(rig.root().invariants_hold());
   CHECK_EQ(runtime.close_adapter(), hr_ok); }

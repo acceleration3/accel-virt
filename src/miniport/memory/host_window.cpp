@@ -57,10 +57,6 @@ bool HostWindow::offered() const
     return offered_;
 }
 
-/* First fit from page 0 every time, never from where the last chunk ended:
- * every range ever mapped into a process costs that process page tables for
- * the rest of the boot, so a workload that makes and frees chunks must keep
- * landing on the same few pages rather than walk across the whole window. */
 Status HostWindow::take(uint32_t pages, uint32_t &first)
 {
     AV_SCOPE("HostWindow::take");
@@ -71,7 +67,6 @@ Status HostWindow::take(uint32_t pages, uint32_t &first)
     if (!offered_) return Status::not_supported;
     if (pages == 0u) return Status::invalid_parameter;
     uint32_t run = 0u;
-    /* 64 bits wide, so skipping the window's last full word cannot wrap. */
     for (uint64_t page = 0u; page < pages_; page++) {
         if (page % bits_per_word == 0u && map_[page / bits_per_word] == UINT64_MAX) {
             page += bits_per_word - 1u;
@@ -135,4 +130,4 @@ bool HostWindow::invariants_hold() const
     return set == used_ && used_ <= pages_;
 }
 
-}  // namespace av
+}

@@ -1,9 +1,3 @@
-/* The 64 bits of a Vulkan handle, whichever shape the build gives the handle
- * type: a pointer in a 64-bit build; on x86 a NonDispatchableHandle, or a
- * 32-bit pointer for a dispatchable one. The ICD makes some handles from its
- * own slots' addresses and hands the host's through as others, and reads both
- * back; this is the one conversion either shape takes, where a cast would
- * compile for only one of them. */
 #ifndef AV_HANDLE_BITS_HPP
 #define AV_HANDLE_BITS_HPP
 
@@ -15,12 +9,10 @@ namespace av::icd {
 
 class HandleBits {
 public:
-    /* A handle, a pointer, or the 64-bit value itself. */
     template <typename H>
     explicit HandleBits(H handle);
 
     uint64_t value() const;
-    /* The bits as a handle or pointer of type H. */
     template <typename H>
     H as() const;
 
@@ -46,6 +38,6 @@ H HandleBits::as() const
     return handle;
 }
 
-}  // namespace av::icd
+}
 
-#endif  // AV_HANDLE_BITS_HPP
+#endif

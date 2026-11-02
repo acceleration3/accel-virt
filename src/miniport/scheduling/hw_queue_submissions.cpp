@@ -63,8 +63,6 @@ Status HwQueueSubmissions::complete(InterruptNotification &notification)
     {
         SpinLockGuard lock(lock_);
         InvariantScope<HwQueueSubmissions> guard(platform_, *this, "complete");
-        /* A submission that carried no batch has nothing to wait for: the
-         * device never heard of it, and what it promised was the fence. */
         uint32_t kept = 0u;
         for (uint32_t index = 0u; index < count_; index++) {
             if (contexts_[index] == nullptr) {
@@ -127,4 +125,4 @@ bool HwQueueSubmissions::invariants_hold() const
     return count_ <= capacity;
 }
 
-}  // namespace av
+}

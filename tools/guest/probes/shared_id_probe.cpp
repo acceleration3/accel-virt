@@ -1,21 +1,3 @@
-// The guest half of docs/external-export.md, as a program a mirror copies:
-// Direct3D 11 textures made to be read by a process outside QEMU, and the
-// shared id avgpu minted for each, learnt in user mode with no driver call of
-// this project's own - only D3DKMT, which gdi32 exports to every process.
-//
-//   shared_id_probe.exe [count] [wait]
-//
-// For each of `count` (default 3) B8G8R8A8 textures made with
-// D3D11_RESOURCE_MISC_SHARED it prints the legacy shared handle and the id,
-// and a frame copied into it, counted, with its event query waited for; with
-// `wait` it keeps them shared until Enter is pressed. A
-// process outside the guest exports the id over the device's export socket.
-//
-// The id is in the allocation's private driver data, which the miniport wrote
-// back at DxgkDdiCreateAllocation and dxgkrnl hands every process that opens
-// the resource: 56 bytes of avgpu's allocation descriptor, then a 40-byte
-// record whose magic is "AVS\0" (0x00535641), version 1, and the id at byte 8.
-// Opening the resource by its shared handle in this process reads them.
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -26,8 +8,6 @@
 #include <cstring>
 
 namespace {
-
-// d3dkmthk.h's, which MinGW does not ship; the layouts are the WDK's.
 typedef UINT D3DKMT_HANDLE;
 typedef LONG NTSTATUS_VALUE;
 
@@ -99,13 +79,11 @@ NTSTATUS_VALUE WINAPI D3DKMTOpenResource(D3DKMT_OPENRESOURCE *);
 NTSTATUS_VALUE WINAPI D3DKMTDestroyAllocation(const D3DKMT_DESTROYALLOCATION *);
 }
 
-constexpr UINT     descriptor_bytes = 56u;   // avgpu's AllocationDescriptor
-constexpr UINT     record_bytes = 40u;       // its SharedObjectRecord
+constexpr UINT     descriptor_bytes = 56u;
+constexpr UINT     record_bytes = 40u;
 constexpr uint32_t record_magic = 0x00535641u;
 constexpr uint32_t record_version = 1u;
 
-// A D3DKMT device on the adapter the Direct3D device runs on: what a shared
-// resource is opened on.
 class KmtDevice {
 public:
     explicit KmtDevice(ID3D11Device *device)
@@ -141,8 +119,6 @@ public:
 
     bool usable() const { return device_ != 0u; }
 
-    // The id avgpu minted over the resource `shared` names (a legacy shared
-    // handle, IDXGIResource::GetSharedHandle); 0 when it is not avgpu's.
     uint64_t shared_id(HANDLE shared) const
     {
         const D3DKMT_HANDLE global = static_cast<D3DKMT_HANDLE>(reinterpret_cast<uintptr_t>(shared));
@@ -178,7 +154,6 @@ public:
             if (magic == record_magic && version == record_version)
                 std::memcpy(&id, data + descriptor_bytes + 8u, sizeof id);
         }
-        // The open is this process's second hold on the resource: let go of it.
         const D3DKMT_DESTROYALLOCATION closed = {device_, open.hResource, nullptr, 0u};
         D3DKMTDestroyAllocation(&closed);
         return id;
@@ -189,7 +164,7 @@ private:
     D3DKMT_HANDLE device_ = 0u;
 };
 
-}  // namespace
+}
 
 int wmain(int argc, wchar_t **argv)
 {
@@ -234,8 +209,6 @@ int wmain(int argc, wchar_t **argv)
             continue;
         }
         const uint64_t id = kmt.shared_id(shared);
-        // A frame into the slot: one copy counted, flushed, and its event
-        // query waited for - the host has then run the copy (writes 1).
         ID3D11Query *done = nullptr;
         context->CopyResource(texture, frame);
         device->CreateQuery(&event, &done);
@@ -248,8 +221,6 @@ int wmain(int argc, wchar_t **argv)
         failures += id != 0u ? 0 : 1;
         if (done != nullptr) done->Release();
         resource->Release();
-        // Kept, so the ids printed stay shared while the program waits: a
-        // consumer outside the guest can export them until Enter is pressed.
         (void)texture;
     }
     if (count > 0 && argc > 2) std::getchar();

@@ -14,7 +14,7 @@ constexpr std::uint32_t argb = 21u;
 constexpr std::uint32_t dxt1 = 0x31545844u;
 constexpr std::uint32_t unknown = 0u;
 
-}  // namespace
+}
 
 TEST(d3d9_texture_write, a_whole_level_is_rows_of_its_width)
 {
@@ -26,14 +26,12 @@ TEST(d3d9_texture_write, a_whole_level_is_rows_of_its_width)
     CHECK_EQ(write.slices(), 1u);
 }
 
-/* The last row needs only its own bytes, not a whole pitch after it. */
 TEST(d3d9_texture_write, data_ends_with_the_last_row_not_its_pitch)
 {
     const D3d9FormatLayout layout(argb);
     const std::uint64_t    needed = 7u * 256u + 64u;
     CHECK(D3d9TextureWrite(Box{0u, 0u, 0u, 16u, 8u, 1u}, 256u, 0u, needed, layout).fits(16u, 8u, 1u));
     CHECK(!D3d9TextureWrite(Box{0u, 0u, 0u, 16u, 8u, 1u}, 256u, 0u, needed - 1u, layout).fits(16u, 8u, 1u));
-    /* A pitch shorter than a row would read rows over each other. */
     CHECK(!D3d9TextureWrite(Box{0u, 0u, 0u, 16u, 8u, 1u}, 63u, 0u, 4096u, layout).fits(16u, 8u, 1u));
 }
 
@@ -44,18 +42,13 @@ TEST(d3d9_texture_write, refuses_a_box_outside_the_level)
     CHECK(!D3d9TextureWrite(Box{0u, 0u, 0u, 17u, 8u, 1u}, 128u, 0u, plenty, layout).fits(16u, 8u, 1u));
     CHECK(!D3d9TextureWrite(Box{0u, 0u, 0u, 16u, 9u, 1u}, 128u, 0u, plenty, layout).fits(16u, 8u, 1u));
     CHECK(!D3d9TextureWrite(Box{0u, 0u, 0u, 16u, 8u, 2u}, 128u, 4096u, plenty, layout).fits(16u, 8u, 1u));
-    /* Empty, and inverted. */
     CHECK(!D3d9TextureWrite(Box{4u, 0u, 0u, 4u, 8u, 1u}, 128u, 0u, plenty, layout).fits(16u, 8u, 1u));
     CHECK(!D3d9TextureWrite(Box{0u, 5u, 0u, 16u, 4u, 1u}, 128u, 0u, plenty, layout).fits(16u, 8u, 1u));
-    /* Edges that wrap a u32 when added. */
     CHECK(!D3d9TextureWrite(Box{0xffffffffu, 0u, 0u, 16u, 8u, 1u}, 128u, 0u, plenty, layout).fits(16u, 8u, 1u));
-    /* A format with no layout has nothing to write. */
     CHECK(!D3d9TextureWrite(Box{0u, 0u, 0u, 16u, 8u, 1u}, 128u, 0u, plenty, D3d9FormatLayout(unknown))
                .fits(16u, 8u, 1u));
 }
 
-/* Blocks: a box starts on a block and ends on one, or at the level's edge, so
- * a 2x2 mip of a DXT1 texture is one whole block. */
 TEST(d3d9_texture_write, a_block_box_starts_and_ends_on_blocks)
 {
     const D3d9FormatLayout layout(dxt1);
@@ -72,12 +65,10 @@ TEST(d3d9_texture_write, a_block_box_starts_and_ends_on_blocks)
 TEST(d3d9_texture_write, slices_end_with_the_last_slice)
 {
     const D3d9FormatLayout layout(argb);
-    /* Two slices of four rows: the second slice's last row ends the data. */
     const std::uint64_t needed = 1u * 1024u + 3u * 64u + 64u;
     const D3d9TextureWrite volume(Box{0u, 0u, 0u, 16u, 4u, 2u}, 64u, 1024u, needed, layout);
     CHECK(volume.fits(16u, 4u, 2u));
     CHECK_EQ(volume.slices(), 2u);
     CHECK(!D3d9TextureWrite(Box{0u, 0u, 0u, 16u, 4u, 2u}, 64u, 1024u, needed - 1u, layout).fits(16u, 4u, 2u));
-    /* A slice pitch shorter than its rows overlaps the slices. */
     CHECK(!D3d9TextureWrite(Box{0u, 0u, 0u, 16u, 4u, 2u}, 64u, 255u, 1u << 20u, layout).fits(16u, 4u, 2u));
 }

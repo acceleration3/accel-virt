@@ -1,12 +1,3 @@
-/* Memory as an application reaches it through the loader (docs/host-memory.md):
- * the physical device's types over the adapter's budgets, each host-visible
- * allocation host memory of exactly its type - a window chunk of its own the
- * host imports as the VkDeviceMemory it answers - mapped as the process's own
- * view with no round trip, and every other type the host's to allocate and
- * never mappable. A device's memory is given back before the device - or its
- * instance - goes. DeviceMemory is judged directly and through the root's
- * entry points; the host is ScriptedHost, the chunk's bytes MockKmt's view of
- * it. Invariants after every call. */
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "guest/kmt/memory_segment_group.hpp"
@@ -53,7 +44,7 @@ struct IcdRootProbe {
     static ObjectPool<DeviceMemory> &memories(IcdRoot &root) { return root.memories_; }
 };
 
-}  // namespace av::icd
+}
 
 namespace av {
 
@@ -62,7 +53,7 @@ struct ObjectPoolProbe {
     static void miscount(ObjectPool<T> &pool, std::int32_t by) { pool.live_ += static_cast<std::uint32_t>(by); }
 };
 
-}  // namespace av
+}
 
 using av::ObjectPoolProbe;
 using av::icd::IcdRootProbe;
@@ -85,7 +76,6 @@ using MappedRanges = VkResult (*)(VkDevice, std::uint32_t, const VkMappedMemoryR
 
 constexpr std::uint64_t page = 4096u;
 constexpr std::uint64_t mib = 1024u * 1024u;
-/* Four types: 1 and 2 host visible. */
 constexpr std::uint32_t types = 4u;
 constexpr std::uint32_t visible = 0x6u;
 constexpr std::uint64_t imported = 0x0000700000000040ull;
@@ -133,7 +123,6 @@ public:
       CHECK(rig_.root().invariants_hold());
       return result; }
 
-    /* A host-visible allocation, the device's types learnt first when `first`. */
     VkDeviceMemory host_visible(std::uint64_t bytes, std::uint64_t host, bool first)
     { if (first) rig_.host().vk_memory_properties(types, visible);
       rig_.host().blob_import(0u, host);
@@ -159,10 +148,8 @@ private:
     VkDevice         device_ = VK_NULL_HANDLE;
 };
 
-}  // namespace
+}
 
-/* The host's four types, as the adapter presents them: its one heap is not
- * device local, so it is the adapter's non-local budget. */
 TEST(icd_memory, the_physical_device_s_types_sit_on_the_adapter_s_budgets)
 { MemoryRig rig;
   rig.kmt().set_video_memory(MemorySegmentGroup::non_local, 512u * mib, 12u * mib);
@@ -180,9 +167,6 @@ TEST(icd_memory, the_physical_device_s_types_sit_on_the_adapter_s_budgets)
   CHECK_EQ(properties.memoryHeaps[1].size, 0u);
   CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(av::vkproto::kCmd_vkGetPhysicalDeviceMemoryProperties)); }
 
-/* The second spelling answers the same structure, and VK_EXT_memory_budget's
- * nodes in the application's chain - wherever they are - from the adapter's
- * budget and usage; other nodes are left as the application wrote them. */
 TEST(icd_memory, the_budget_nodes_in_the_chain_are_the_adapter_s)
 { MemoryRig rig;
   rig.kmt().set_video_memory(MemorySegmentGroup::non_local, 512u * mib, 12u * mib);
@@ -213,7 +197,6 @@ TEST(icd_memory, the_budget_nodes_in_the_chain_are_the_adapter_s)
   CHECK(other.pNext == &second);
   CHECK_EQ(other.deviceNodeMask, 7u);
   CHECK_EQ(other.sType, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES);
-  /* The extension the ICD reports for this, enabled by a device. */
   const char *const budget_extension = "VK_EXT_memory_budget";
   VkDeviceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -224,7 +207,6 @@ TEST(icd_memory, the_budget_nodes_in_the_chain_are_the_adapter_s)
   CHECK_EQ(rig.entry<CreateDevice>("vkCreateDevice")(rig.physical(), &info, nullptr, &enabled), VK_SUCCESS);
   CHECK(enabled != VK_NULL_HANDLE); }
 
-/* A cyclic chain is walked a bounded distance, not forever. */
 TEST(icd_memory, a_cyclic_chain_is_walked_a_bounded_distance)
 { MemoryRig rig;
   rig.host().vk_memory_properties(types, visible);
@@ -238,8 +220,6 @@ TEST(icd_memory, a_cyclic_chain_is_walked_a_bounded_distance)
   CHECK_EQ(budget.heapBudget[0], MockKmt::default_non_local_budget);
   CHECK(budget.pNext == &budget); }
 
-/* A host whose types do not hold together, or an adapter that will not say its
- * budgets, answers no types at all, and says why once. */
 TEST(icd_memory, types_that_cannot_be_taken_answer_nothing)
 { MemoryRig rig;
   rig.host().vk_memory_properties(VK_MAX_MEMORY_TYPES + 1u, visible);
@@ -274,10 +254,6 @@ TEST(icd_memory, a_physical_device_it_did_not_make_is_not_asked_about)
   CHECK_EQ(properties2.memoryProperties.memoryTypeCount, 3u);
   CHECK_EQ(rig.kmt().commands(), commands); }
 
-/* Each host-visible allocation is a window chunk of its own, of exactly the
- * type asked, which the host imported as the memory it answered; the
- * application maps the chunk's own bytes, with no host call, and what it
- * writes is what the host GPU reads. Freeing one gives its chunk back. */
 TEST(icd_memory, a_host_visible_allocation_maps_its_own_chunk_with_no_round_trip)
 { MemoryRig rig;
   const VkDeviceMemory first = rig.host_visible(page, imported, true);
@@ -318,8 +294,6 @@ TEST(icd_memory, a_host_visible_allocation_maps_its_own_chunk_with_no_round_trip
   rig.free(second);
   CHECK_EQ(rig.kmt().window_chunks(), 0u); }
 
-/* The range asked for must lie in the allocation - which is its whole pages -
- * and be some bytes; flags are refused, having none this ICD implements. */
 TEST(icd_memory, a_map_outside_the_allocation_fails)
 { MemoryRig rig;
   const VkDeviceMemory memory = rig.host_visible(page + 1u, imported, true);
@@ -351,10 +325,6 @@ TEST(icd_memory, a_map_outside_the_allocation_fails)
   rig.host().nop();
   rig.free(memory); }
 
-/* vkMapMemory2 is the same mapping read out of a structure (feature 047,
- * contracts/placed_mappings.md), and placement is refused rather than ignored:
- * the address a chunk is at is VidMm's, so a caller that asked for one of its
- * own must be told no instead of being handed a pointer elsewhere. */
 TEST(icd_memory, map_memory2_maps_what_vk_map_memory_does_and_refuses_placement)
 { MemoryRig rig;
   const VkDeviceMemory memory = rig.host_visible(2u * page, 0x30000u, true);
@@ -373,20 +343,15 @@ TEST(icd_memory, map_memory2_maps_what_vk_map_memory_does_and_refuses_placement)
   void *through_two = nullptr;
   CHECK_EQ(map2(rig.device(), &info, &through_two), VK_SUCCESS);
   CHECK(through_two != nullptr);
-  /* The same pointer the five-parameter entry answers: one mapping, one
-   * address. */
   void *through_one = nullptr;
   CHECK_EQ(rig.map(memory, 0u, VK_WHOLE_SIZE, through_one), VK_SUCCESS);
   CHECK(through_one == through_two);
-  /* An offset within it answers that far in. */
   info.offset = page;
   info.size = page;
   void *further = nullptr;
   CHECK_EQ(map2(rig.device(), &info, &further), VK_SUCCESS);
   CHECK_EQ(static_cast<const unsigned char *>(further) - static_cast<const unsigned char *>(through_two), page);
 
-  /* A range past the allocation, and a flag: refused, as vkMapMemory refuses
-   * them. */
   info.offset = 0u;
   info.size = 2u * page + 1u;
   CHECK_EQ(map2(rig.device(), &info, &further), VK_ERROR_MEMORY_MAP_FAILED);
@@ -395,7 +360,6 @@ TEST(icd_memory, map_memory2_maps_what_vk_map_memory_does_and_refuses_placement)
   CHECK_EQ(map2(rig.device(), &info, &further), VK_ERROR_MEMORY_MAP_FAILED);
   info.flags = 0u;
 
-  /* Placement asked for in the chain: refused, and said once in the log. */
   VkMemoryMapPlacedInfoEXT placed = {};
   placed.sType = VK_STRUCTURE_TYPE_MEMORY_MAP_PLACED_INFO_EXT;
   placed.pPlacedAddress = reinterpret_cast<void *>(0x40000000u);
@@ -404,11 +368,9 @@ TEST(icd_memory, map_memory2_maps_what_vk_map_memory_does_and_refuses_placement)
   CHECK_EQ(rig.rig().log().holding("cannot place"), 1u);
   info.pNext = nullptr;
 
-  /* Nothing to map, or nowhere to put the answer. */
   CHECK_EQ(map2(rig.device(), nullptr, &further), VK_ERROR_MEMORY_MAP_FAILED);
   CHECK_EQ(map2(rig.device(), &info, nullptr), VK_ERROR_MEMORY_MAP_FAILED);
 
-  /* Unmapping frees nothing and answers success; a flag in it does not. */
   VkMemoryUnmapInfoKHR unmapping = {};
   unmapping.sType = VK_STRUCTURE_TYPE_MEMORY_UNMAP_INFO;
   unmapping.memory = memory;
@@ -416,14 +378,12 @@ TEST(icd_memory, map_memory2_maps_what_vk_map_memory_does_and_refuses_placement)
   unmapping.flags = VK_MEMORY_UNMAP_RESERVE_BIT_EXT;
   CHECK_EQ(unmap2(rig.device(), &unmapping), VK_ERROR_MEMORY_MAP_FAILED);
   CHECK_EQ(unmap2(rig.device(), nullptr), VK_ERROR_MEMORY_MAP_FAILED);
-  /* The memory is still there after all of that. */
   void *again = nullptr;
   CHECK_EQ(rig.map(memory, 0u, VK_WHOLE_SIZE, again), VK_SUCCESS);
   CHECK(again == through_two);
   rig.host().nop();
   rig.free(memory); }
 
-/* Any other type is the host's: allocated and freed there, and never mapped. */
 TEST(icd_memory, a_device_local_allocation_is_the_host_s_and_cannot_be_mapped)
 { MemoryRig rig;
   rig.host().vk_memory_properties(types, visible);
@@ -438,15 +398,12 @@ TEST(icd_memory, a_device_local_allocation_is_the_host_s_and_cannot_be_mapped)
   CHECK(data == nullptr);
   rig.free(memory);
   CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(av::vkproto::kCmd_vkFreeMemory));
-  /* A type past the host's is the host's to refuse. */
   rig.host().vk_handle(VK_ERROR_OUT_OF_DEVICE_MEMORY, 0u);
   CHECK_EQ(rig.allocate(page, types, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
-  /* Freeing nothing asks nothing. */
   const std::uint32_t commands = rig.kmt().commands();
   rig.free(VK_NULL_HANDLE);
   CHECK_EQ(rig.kmt().commands(), commands); }
 
-/* The types are learnt once, by the first allocation. */
 TEST(icd_memory, the_types_are_asked_for_once)
 { MemoryRig rig;
   const VkDeviceMemory memory = rig.host_visible(page, imported, true);
@@ -458,8 +415,6 @@ TEST(icd_memory, the_types_are_asked_for_once)
   rig.host().nop();
   rig.free(memory); }
 
-/* Any step of a host-visible allocation refused - the types, the chunk, the
- * import - is out of device memory, said once, with nothing kept. */
 TEST(icd_memory, a_host_visible_allocation_refused_anywhere_is_out_of_device_memory)
 { MemoryRig rig;
   VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -468,20 +423,18 @@ TEST(icd_memory, a_host_visible_allocation_refused_anywhere_is_out_of_device_mem
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   rig.host().vk_memory_properties(types, visible);
   CHECK_EQ(rig.rig().log().holding("memory types cannot be learnt"), 1u);
-  rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);   /* the chunk's open */
+  rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   CHECK_EQ(rig.rig().log().holding("no host-visible memory"), 1u);
   rig.host().blob_import(4u, 0u);
   CHECK_EQ(rig.allocate(page, 2u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   CHECK_EQ(rig.rig().log().holding("no host-visible memory"), 2u);
-  /* An allocation of nothing is refused before anything is asked. */
   const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
   CHECK_EQ(rig.allocate(0u, 1u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
   CHECK_EQ(rig.kmt().window_chunks(), 0u);
   CHECK_EQ(rig.kmt().queued_answers(), 0u); }
 
-/* A release the host answers wrongly is logged; the allocation is gone. */
 TEST(icd_memory, a_refused_release_is_logged_and_the_allocation_gone)
 { MemoryRig rig;
   const VkDeviceMemory memory = rig.host_visible(page, imported, true);
@@ -490,8 +443,6 @@ TEST(icd_memory, a_refused_release_is_logged_and_the_allocation_gone)
   CHECK_EQ(rig.rig().log().holding("the host refused to release the memory"), 1u);
   CHECK_EQ(rig.kmt().window_chunks(), 0u); }
 
-/* Destroying the device releases its imports and gives its chunks back before
- * the device's own destroy is sent: the memory was imported into that device. */
 TEST(icd_memory, destroying_the_device_gives_its_memory_back_first)
 { MemoryRig rig;
   static_cast<void>(rig.host_visible(page, imported, true));
@@ -506,14 +457,10 @@ TEST(icd_memory, destroying_the_device_gives_its_memory_back_first)
   CHECK_EQ(rig.kmt().command_id(commands + 1u), CommandHeader::release_blob_id);
   CHECK_EQ(rig.kmt().command_id(commands + 2u), static_cast<std::uint32_t>(av::vkproto::kCmd_vkDestroyDevice));
   CHECK_EQ(rig.kmt().window_chunks(), 0u);
-  /* The memory lock around both releases, each under the connection's lock,
-   * then the destroy, with nothing but root-lock lookups between. */
   const char *const trace = rig.rig().trace().text();
   if (std::strstr(trace, "MSsSsmHhHhS") == nullptr)
       av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "trace %s", trace); }
 
-/* A release the device refuses on the way out is logged, and the device still
- * goes. */
 TEST(icd_memory, a_device_whose_memory_is_not_released_whole_still_goes)
 { MemoryRig rig;
   static_cast<void>(rig.host_visible(page, imported, true));
@@ -523,8 +470,6 @@ TEST(icd_memory, a_device_whose_memory_is_not_released_whole_still_goes)
   CHECK_EQ(rig.kmt().window_chunks(), 0u);
   CHECK(rig.rig().root().invariants_hold()); }
 
-/* Destroying the instance releases every device's memory - devices that never
- * allocated included - before the instance's destroy. */
 TEST(icd_memory, destroying_the_instance_gives_every_device_s_memory_back_first)
 { MemoryRig rig;
   static_cast<void>(rig.host_visible(page, imported, true));
@@ -551,8 +496,6 @@ TEST(icd_memory, an_instance_or_device_it_did_not_make_is_nothing_to_destroy)
   rig.rig().root().destroy_device(reinterpret_cast<VkDevice>(&stack), nullptr);
   CHECK_EQ(rig.kmt().commands(), commands); }
 
-/* A device the ICD did not make, or made through something other than a
- * physical device, has no memory: nothing is asked of anyone. */
 TEST(icd_memory, memory_of_a_device_it_did_not_make_is_refused)
 { MemoryRig rig;
   const std::uint32_t commands = rig.kmt().commands();
@@ -565,8 +508,6 @@ TEST(icd_memory, memory_of_a_device_it_did_not_make_is_refused)
   root.free_memory(foreign, as_memory(imported), nullptr);
   void *data = nullptr;
   CHECK_EQ(root.map_memory(foreign, as_memory(imported), 0u, 1u, 0u, &data), VK_ERROR_MEMORY_MAP_FAILED);
-  /* A device only the generated hook could have made, with its instance as
-   * its parent. */
   const auto hooked = static_cast<VkDevice>(root.wrap(Kind::device, ScriptedHost::vk_device + 7u, &rig.connection()));
   CHECK(hooked != VK_NULL_HANDLE);
   CHECK_EQ(root.allocate_memory(hooked, &info, nullptr, &memory), VK_ERROR_DEVICE_LOST);
@@ -574,14 +515,11 @@ TEST(icd_memory, memory_of_a_device_it_did_not_make_is_refused)
   CHECK_EQ(rig.rig().log().holding("did not make through a physical device"), 4u);
   root.destroy_wrapper(hooked, Kind::device); }
 
-/* A device that never allocated has nothing to map. */
 TEST(icd_memory, a_device_that_never_allocated_maps_nothing)
 { MemoryRig rig;
   void *data = nullptr;
   CHECK_EQ(rig.map(as_memory(imported), 0u, 1u, data), VK_ERROR_MEMORY_MAP_FAILED); }
 
-/* No memory to keep a device's allocations in is out of host memory, and a free
- * on such a device asks nothing. */
 TEST(icd_memory, no_memory_for_a_device_s_allocations_is_out_of_host_memory)
 { MemoryRig rig;
   rig.rig().platform().fail_allocation_at(1u);
@@ -594,7 +532,6 @@ TEST(icd_memory, no_memory_for_a_device_s_allocations_is_out_of_host_memory)
   CHECK_EQ(rig.kmt().commands(), commands);
   CHECK_EQ(rig.rig().log().holding("no memory to keep"), 2u); }
 
-/* DeviceMemory on its own, over the rig's connection. */
 TEST(device_memory, holds_nothing_and_releases_nothing_until_it_allocates)
 { MemoryRig    rig;
   DeviceMemory memory(rig.kmt(), rig.connection(), rig.rig().log());
@@ -635,12 +572,10 @@ TEST(device_memory, invariants_refuse_allocations_before_the_types_are_known)
   CHECK(!memory.invariants_hold());
   DeviceMemoryProbe::learnt(memory) = true;
   CHECK(memory.invariants_hold());
-  /* The count out of step with what is held. */
   DeviceMemoryProbe::count(memory) = 2u;
   CHECK(!memory.invariants_hold());
   DeviceMemoryProbe::count(memory) = 1u;
   CHECK(memory.invariants_hold());
-  /* A slot naming an allocation that holds nothing. */
   av::HostAllocation empty(av::icd::ConnectionProbe::guest(rig.connection()),
                            av::icd::ConnectionProbe::transport(rig.connection()));
   DeviceMemoryProbe::held(memory, 7u) = &empty;
@@ -652,8 +587,6 @@ TEST(device_memory, invariants_refuse_allocations_before_the_types_are_known)
   rig.host().nop();
   CHECK_STATUS(memory.release_all(), Status::ok); }
 
-/* A device holds at most DeviceMemory::max_allocations: the next is refused
- * before the kernel or the host is asked. */
 TEST(device_memory, every_slot_held_refuses_the_next_allocation)
 { MemoryRig    rig;
   DeviceMemory memory(rig.kmt(), rig.connection(), rig.rig().log());
@@ -676,8 +609,6 @@ TEST(device_memory, every_slot_held_refuses_the_next_allocation)
   rig.host().nop();
   CHECK_STATUS(memory.release_all(), Status::ok); }
 
-/* Releasing every allocation at once answers the first refusal, and lets go
- * of all of them whatever each answered. */
 TEST(device_memory, release_all_answers_the_first_refusal_and_lets_everything_go)
 { MemoryRig    rig;
   DeviceMemory memory(rig.kmt(), rig.connection(), rig.rig().log());
@@ -689,14 +620,13 @@ TEST(device_memory, release_all_answers_the_first_refusal_and_lets_everything_go
   VkDeviceMemory second = VK_NULL_HANDLE;
   CHECK_EQ(memory.allocate(rig.physical(), rig.device(), info, nullptr, first), VK_SUCCESS);
   CHECK_EQ(memory.allocate(rig.physical(), rig.device(), info, nullptr, second), VK_SUCCESS);
-  rig.host().blob_import(0u, 1u);   /* bytes where the first release answers nothing */
+  rig.host().blob_import(0u, 1u);
   rig.host().nop();
   CHECK_STATUS(memory.release_all(), Status::malformed);
   CHECK(memory.invariants_hold());
   CHECK_EQ(rig.kmt().window_chunks(), 0u);
   CHECK_STATUS(memory.release_all(), Status::ok); }
 
-/* The root holds every device's memory, and each only through its device. */
 TEST(icd_memory, root_invariants_refuse_memory_no_device_owns_or_that_is_broken)
 { MemoryRig rig;
   av::icd::IcdRoot &root = rig.rig().root();

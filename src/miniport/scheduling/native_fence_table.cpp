@@ -37,8 +37,6 @@ Status NativeFenceTable::create(DxgkargCreateNativeFenceRecord &request)
     platform_.require_irql_at_most(Irql::passive, "NativeFenceTable::create");
     MutexGuard                       lock(lock_);
     InvariantScope<NativeFenceTable> guard(platform_, *this, "create");
-    /* A fence type this driver has no meaning for is one whose semantics it
-     * would be guessing at (constitution V). */
     if (request.Type != native_fence_type_default && request.Type != native_fence_type_intra_gpu)
         return Status::invalid_parameter;
     for (uint32_t slot = 0u; slot < max_fences; slot++) {
@@ -70,18 +68,10 @@ Status NativeFenceTable::destroy(const DxgkargDestroyNativeFenceRecord &request)
     return Status::ok;
 }
 
-/* The OS names every fence and every address, and this driver writes what it
- * asked for. A request that names anything this table did not make is refused
- * whole: half-written values would leave the OS's waiters reading a mixture of
- * what it asked for and what it did not. */
 Status NativeFenceTable::update(const DxgkargUpdateNativeFenceValuesRecord &request,
                                 uint64_t (&values)[max_fences])
 {
     AV_SCOPE("NativeFenceTable::update");
-    /* No lock: the monitored values arrive as high as PROFILE, where nothing
-     * may be taken, and nothing needs one - the slots are fixed storage, the
-     * OS owns the memory being written, and a fence it is destroying is one it
-     * is not updating. */
     if (request.NativeFenceArray == nullptr || request.UpdatedValueArray == nullptr ||
         request.ValueKernelCpuVa == nullptr || request.NumFences == 0u || request.NumFences > max_fences)
         return Status::invalid_parameter;
@@ -162,10 +152,9 @@ bool NativeFenceTable::invariants_hold() const
             counted++;
             continue;
         }
-        /* A fence nobody made holds nothing. */
         if (current_[slot] != 0u || monitored_[slot] != 0u) return false;
     }
     return counted == live_;
 }
 
-}  // namespace av
+}

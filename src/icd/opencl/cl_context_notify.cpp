@@ -20,4 +20,4 @@ void ClContextNotify::say(const char *text) const
     if (callback_ != nullptr) callback_(text, nullptr, 0u, user_data_);
 }
 
-}  // namespace av::clicd
+}

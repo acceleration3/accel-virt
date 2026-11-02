@@ -59,8 +59,6 @@ bool D3d11HostDevice::make()
     const HRESULT made = runtime_->create_device11(adapter, device, context, level);
     adapter->Release();
     if (FAILED(made)) return false;
-    /* DXVK's device is every revision at once; the newest is asked for so the
-     * backend can call anything up to Direct3D 11.4 without asking again. */
     const bool upgraded =
         SUCCEEDED(device->QueryInterface(__uuidof(ID3D11Device5), reinterpret_cast<void **>(&device_))) &&
         SUCCEEDED(context->QueryInterface(__uuidof(ID3D11DeviceContext4), reinterpret_cast<void **>(&context_)));
@@ -72,8 +70,6 @@ bool D3d11HostDevice::make()
     }
     feature_level_ = level;
     capabilities_.measure(*device_, level);
-    /* Without DXVK's Vulkan interop the scanout is read back rather than
-     * exported, and a Direct3D 12 swap chain has nothing to be shown by. */
     if (!vulkan_.connect(device_))
         lines_.write("DXVK offers no Vulkan interop with fd export; Direct3D 12 swap chains cannot be shown");
     if (FAILED(context_->QueryInterface(__uuidof(ID3D11VkExtContext2), reinterpret_cast<void **>(&slices_)))) {
@@ -86,7 +82,6 @@ bool D3d11HostDevice::make()
 void D3d11HostDevice::close()
 {
     AV_SCOPE("D3d11HostDevice::close");
-    /* Every share of this GPU holds this device's textures: they go first. */
     if (shares_ != nullptr) shares_->clear();
     retire_locked();
     unmake();
@@ -112,12 +107,6 @@ void D3d11HostDevice::unmake()
     active_ = nullptr;
 }
 
-/* Copying and mapping use no pipeline state, so whichever session's is in
- * force stays. The copy waits for everything the sessions submitted before it,
- * the frame the scanout names included. */
-/* The copy is queued under the lock and waited for outside it: the wait is
- * the GPU finishing everything queued ahead, and every session's commands
- * need the lock meanwhile. */
 bool D3d11HostDevice::read_image(uint32_t domain, uint64_t id, void *pixels, uint32_t stride, uint32_t width,
                                  uint32_t height)
 {
@@ -131,7 +120,6 @@ bool D3d11HostDevice::read_image(uint32_t domain, uint64_t id, void *pixels, uin
     return drain(wanted, static_cast<uint8_t *>(pixels), stride, width, height);
 }
 
-/* Queued under the lock and waited for outside it, as a readback is. */
 bool D3d11HostDevice::export_image(uint32_t domain, uint64_t id, AvExportedImage &image)
 {
     AV_SCOPE("D3d11HostDevice::export_image");
@@ -145,11 +133,6 @@ bool D3d11HostDevice::export_image(uint32_t domain, uint64_t id, AvExportedImage
     return exports_.describe(slot, image);
 }
 
-/* An image handed over before its copy is done shows whatever the slot held
- * last - frames from before, which a game the GPU draws slower than the old
- * 20 ms budget showed jumping back and forth. The copy waits behind every
- * frame queued before it, so the wait is as long as a slow frame, and an
- * image not done even then is not shown at all. */
 bool D3d11HostDevice::exported(uint32_t slot)
 {
     AV_SCOPE("D3d11HostDevice::exported");
@@ -167,8 +150,6 @@ bool D3d11HostDevice::exported(uint32_t slot)
     return false;
 }
 
-/* Composed and queued under the lock, waited for outside it, as export_image
- * is. Every plane's image must be there: a frame missing one is not shown. */
 bool D3d11HostDevice::compose_planes(uint32_t domain, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
                                      uint32_t height, AvExportedImage &image)
 {
@@ -206,11 +187,6 @@ bool D3d11HostDevice::export_surface(uint32_t domain, uint64_t surface, uint32_t
     return exported;
 }
 
-/* The count is read under the lock every copy into the surface is made and
- * counted under, and the sync_file made before it is let go, so the sync_file
- * covers every copy the count says ran. For a consumer on another GPU the
- * copy into the surface's twin is queued under the same lock, after every
- * copy counted, so the sync_file covers that copy too. */
 bool D3d11HostDevice::sync_surface(uint32_t domain, uint64_t surface, uint32_t flags, uint64_t &writes, int &fd)
 {
     AV_SCOPE("D3d11HostDevice::sync_surface");
@@ -290,8 +266,6 @@ bool D3d11HostDevice::drain(const D3D11_TEXTURE2D_DESC &wanted, uint8_t *pixels,
                             uint32_t height)
 {
     AV_SCOPE("D3d11HostDevice::drain");
-    /* Five seconds still drawing is a hung GPU, as Direct3D 12's drain
-     * judges one: the scanout's reader gives up rather than hang. */
     constexpr uint64_t       poll_nanoseconds = 200000u;
     constexpr uint64_t       hung_nanoseconds = 5000000000u;
     D3D11_MAPPED_SUBRESOURCE mapped = {};
@@ -348,8 +322,6 @@ void D3d11HostDevice::dismiss(WakeSignal &wake)
     renewal_.dismiss(wake);
 }
 
-/* DXVK knows its device is lost once a submission or a wait said so, and
- * answers it as a removed device from then on: asking costs one atomic read. */
 bool D3d11HostDevice::lost()
 {
     AV_SCOPE("D3d11HostDevice::lost");
@@ -380,9 +352,6 @@ bool D3d11HostDevice::renew(uint32_t wait_ms)
     return runtime_ != nullptr && renewal_.renew(*this, wait_ms);
 }
 
-/* What anything still holds of the old device goes before it does: the
- * shares' textures under this lock - what each is kept first, to be made
- * again - then everything made on it. */
 bool D3d11HostDevice::remake()
 {
     AV_SCOPE("D3d11HostDevice::remake");
@@ -459,7 +428,6 @@ void D3d11HostDevice::unlock()
     const uint64_t mine = __atomic_load_n(&taken_, __ATOMIC_ACQUIRE);
     lock_.release();
     if (__atomic_load_n(&waiting_, __ATOMIC_ACQUIRE) == 0u) return;
-    /* Bounded: a waiter that is itself descheduled must not stall this one. */
     constexpr uint32_t patience = 100000u;
     for (uint32_t spin = 0u; spin < patience && __atomic_load_n(&taken_, __ATOMIC_ACQUIRE) == mine; spin++)
         __builtin_ia32_pause();
@@ -489,10 +457,6 @@ void D3d11HostDevice::forget_state(ID3DDeviceContextState *state)
     AV_SCOPE("D3d11HostDevice::forget_state");
     const ThreadLockHold locked(lock_);
     if (state != nullptr && state == active_) {
-        /* The context holds a reference to the state in force, so the session
-         * releasing its own would not free it; a fresh state is swapped in so
-         * this one's bindings - resources the session is about to destroy -
-         * are let go now rather than at the next session's swap. */
         const D3D_FEATURE_LEVEL wanted = static_cast<D3D_FEATURE_LEVEL>(feature_level_);
         D3D_FEATURE_LEVEL chosen = wanted;
         ID3DDeviceContextState *blank = nullptr;
@@ -522,8 +486,6 @@ bool D3d11HostDevice::show(uint32_t domain, uint64_t id, ID3D11Texture2D *presen
     return true;
 }
 
-/* The flip copy of `id`, made like `presented` when there is none yet; with a
- * reference of the caller's, null when it cannot be made. */
 ID3D11Texture2D *D3d11HostDevice::made_shown(uint32_t domain, uint64_t id, ID3D11Texture2D *presented)
 {
     AV_SCOPE("D3d11HostDevice::made_shown");
@@ -577,9 +539,6 @@ bool D3d11HostDevice::prepare_shown(uint32_t domain, uint64_t id, ID3D11Texture2
     return true;
 }
 
-/* What a present showed of `id` - the copy its flip took - where one was, and
- * the texture itself otherwise: a scanout reads what was presented, never
- * what the application has drawn into the buffer since. */
 ID3D11Texture2D *D3d11HostDevice::presented_texture(uint32_t domain, uint64_t id)
 {
     AV_SCOPE("D3d11HostDevice::presented_texture");
@@ -694,9 +653,6 @@ ID3D11Texture2D *D3d11HostDevice::adopt_rows(OwnedFd &descriptor, const D3D11_TE
     return images_.adopt(descriptor, desc, drm_format_mod_linear, 0u, pitch);
 }
 
-/* A swap chain buffer is one 2D image of one mip; what DWM makes of it is a
- * texture it samples, and the view formats vkd3d-proton made it with are what
- * DXVK may view it as. */
 ID3D11Texture2D *D3d11HostDevice::view_of(ID3D12Resource *resource)
 {
     AV_SCOPE("D3d11HostDevice::view_of");
@@ -782,4 +738,4 @@ bool D3d11HostDevice::bind_storage(ID3D11Buffer *buffer, const VulkanBuffer &sto
     return SUCCEEDED(slices_->BindBufferStorage(buffer, storage.buffer(), offset, bytes, host));
 }
 
-}  // namespace av
+}

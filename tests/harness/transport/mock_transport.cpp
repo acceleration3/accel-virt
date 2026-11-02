@@ -30,8 +30,6 @@ TransportResult MockTransport::deliver(std::uint32_t command_id, WireWriter &wri
         fail_next_ = false;
         return TransportResult::failed;
     }
-    /* The overflow check the contract puts in send_*: a writer that did not fit
-     * its slot is a dropped frame, not a short one. */
     if (writer.status() != Status::ok) return TransportResult::failed;
     last_command_ = command_id;
     last_length_ = writer.offset();
@@ -57,4 +55,4 @@ TransportResult MockTransport::send_sync(std::uint32_t command_id, WireWriter &w
 WireArena       &MockTransport::decode_arena() { return arena_; }
 ClientBlobArena &MockTransport::blobs() { return blobs_; }
 
-}  // namespace av
+}

@@ -21,7 +21,7 @@ constexpr uint32_t target_id = 0x100u;
 constexpr uint32_t view_id = 0x101u;
 constexpr uint32_t milliseconds_per_second = 1000u;
 
-}  // namespace
+}
 
 HostLossScenario::HostLossScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : kmt_(kmt), search_(search), steps_(kmt, report, "host_loss"), link_(kmt, search, steps_, SubApi::d3d),
@@ -147,4 +147,4 @@ void HostLossScenario::run()
     static_cast<void>(steps_.check("recreated", recreated));
 }
 
-}  // namespace av
+}

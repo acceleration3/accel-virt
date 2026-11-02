@@ -47,8 +47,6 @@ uint64_t    TraceSnapshot::crash_address() const { return field(TraceLayout::cra
 uint32_t    TraceSnapshot::crash_thread() const { return static_cast<uint32_t>(field(TraceLayout::crash_thread_at, 4u)); }
 uint64_t    TraceSnapshot::crashed_at() const { return field(TraceLayout::crashed_at, 8u); }
 
-/* Nothing read and nothing held, or a table read whose module name is
- * terminated inside its field. */
 bool TraceSnapshot::invariants_hold() const
 {
     if (bytes_ == nullptr) return layout_.slots() == 0u && module_[0] == '\0';
@@ -65,4 +63,4 @@ uint64_t TraceSnapshot::field(uint32_t offset, uint32_t bytes) const
     return value;
 }
 
-}  // namespace av
+}

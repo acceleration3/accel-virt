@@ -44,4 +44,4 @@ uint64_t Fnv1aDigest::value() const
     return value_;
 }
 
-}  // namespace av
+}

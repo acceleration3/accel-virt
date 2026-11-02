@@ -42,7 +42,7 @@ private:
     InterruptNotification notification_;
 };
 
-}  // namespace
+}
 
 TEST(interrupt_notification_report_completed, notifies_dma_completed_at_device_irql)
 { Fixture fixture;
@@ -52,8 +52,8 @@ TEST(interrupt_notification_report_completed, notifies_dma_completed_at_device_i
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).InterruptType, dma_completed);
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).FenceId, 7u);
-  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument1, 0u);   /* node */
-  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument2, 0u);   /* engine */ }
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument1, 0u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument2, 0u);   }
 
 TEST(interrupt_notification_report_monitored_fence_signaled, names_the_node_and_engine)
 { Fixture fixture;
@@ -112,11 +112,11 @@ TEST(interrupt_notification_report_vsync, notifies_crtc_vsync_with_the_target_an
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   const av::DxgkargcbNotifyInterruptDataRecord &data = fixture.dxgkrnl().interrupt(0u);
-  CHECK_EQ(data.InterruptType, 3);   /* DXGK_INTERRUPT_CRTC_VSYNC */
-  CHECK_EQ(data.FenceId, 0u);        /* VidPnTargetId */
+  CHECK_EQ(data.InterruptType, 3);
+  CHECK_EQ(data.FenceId, 0u);
   CHECK_EQ(data.Argument2, 0x23456000u);
   CHECK_EQ(data.Argument3, 0x1u);
-  CHECK_EQ(data.UnionRemainder[0], 1u);   /* PhysicalAdapterMask */
+  CHECK_EQ(data.UnionRemainder[0], 1u);
   CHECK_EQ(data.Flags, 0u);
   fixture.platform().set_irql(Irql::isr);
   static_cast<void>(fixture.notification().report_vsync(0u, 0u));

@@ -44,4 +44,4 @@ bool GuestRegion::invariants_hold() const
     return bytes_.invariants_hold();
 }
 
-}  // namespace av
+}

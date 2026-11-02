@@ -1,6 +1,3 @@
-/* Contexts that run in QEMU's own process: the executor library loaded here,
- * the device's domain in it - where the library keeps the objects the
- * contexts share - and one worker thread per context. */
 #ifndef AV_LOCAL_CONTEXT_PLANE_HPP
 #define AV_LOCAL_CONTEXT_PLANE_HPP
 
@@ -78,6 +75,6 @@ private:
     friend struct LocalContextPlaneProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_LOCAL_CONTEXT_PLANE_HPP
+#endif

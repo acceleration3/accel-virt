@@ -37,4 +37,4 @@ void ScriptedGlShareSource::count_commands_with(std::uint32_t (*count)(void *), 
     counter_ = counter;
 }
 
-}  // namespace av
+}

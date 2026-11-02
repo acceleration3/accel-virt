@@ -1,10 +1,3 @@
-/* Hostile swapchain creation (feature 046): the application's
- * VkSwapchainCreateInfoKHR is foreign bytes, so every field of it comes from
- * the fuzzer - the structure type, the image count, extent, format, colour
- * space, usage, transform, alpha and present mode - over a window whose client
- * size the fuzzer chooses too. A swapchain that says it was made must hold its
- * invariants and have exactly the images it promised; one that refuses must
- * leave no host object and no guest memory behind. */
 #include "harness/icd/open_connection.hpp"
 #include "harness/icd/scripted_vulkan_device.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
@@ -20,11 +13,7 @@
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size);
 
 namespace {
-
-/* The structure's fields, two window dimensions and the refusal selector. */
 constexpr std::size_t   needed_bytes = 44u;
-/* Large enough for a swapchain of the greatest image count, small enough that
- * a whole corpus runs fast. */
 constexpr std::uint32_t max_side = 8u;
 
 std::uint32_t read_u32(const std::uint8_t *bytes)
@@ -33,7 +22,7 @@ std::uint32_t read_u32(const std::uint8_t *bytes)
            static_cast<std::uint32_t>(bytes[2]) << 16u | static_cast<std::uint32_t>(bytes[3]) << 24u;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {
@@ -63,7 +52,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     info.compositeAlpha = static_cast<VkCompositeAlphaFlagBitsKHR>(1u << (data[37u] % 4u));
     info.presentMode = static_cast<VkPresentModeKHR>(data[38u] % 6u);
     info.clipped = data[39u] & 1u;
-    /* Every step of making the host objects, refused in turn. */
     const char *const steps[] = {nullptr, "vkCreateBuffer", "vkMapMemory", "vkCreateImage", "vkCreateFence"};
     const char *const refused = steps[data[40u] % (sizeof steps / sizeof steps[0])];
     if (refused != nullptr) host.refuse(refused, 1u + (data[41u] % 2u), VK_ERROR_OUT_OF_DEVICE_MEMORY);

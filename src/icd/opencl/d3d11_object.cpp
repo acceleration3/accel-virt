@@ -104,4 +104,4 @@ void D3d11Object::pair(void *twin)
     twin_ = twin;
 }
 
-}  // namespace av::clicd
+}

@@ -48,8 +48,6 @@ HRESULT D3d12Residency::evict(const D3D12DDIARG_EVICT &args) const
     return S_OK;
 }
 
-/* A committed resource's heap is the pageable object D3D12Core names; the
- * resource itself is named only by an application asking for it. */
 D3DKMT_HANDLE D3d12Residency::allocation_of(const D3D12DDI_HANDLE_AND_TYPE &object) const
 {
     AV_SCOPE("D3d12Residency::allocation_of");
@@ -80,8 +78,6 @@ uint32_t D3d12Residency::gather(const D3D12DDI_HANDLE_AND_TYPE *objects, uint32_
     return gathered;
 }
 
-/* Every adapter's queue pages the same allocations in: this device runs on
- * one GPU, and D3D12Core names one queue for it. */
 HRESULT D3d12Residency::page_in(D3D12DDIARG_MAKERESIDENT_0001 &args, const D3DKMT_HANDLE *allocations,
                                 uint32_t count) const
 {
@@ -106,4 +102,4 @@ HRESULT D3d12Residency::page_in(D3D12DDIARG_MAKERESIDENT_0001 &args, const D3DKM
     return answer;
 }
 
-}  // namespace av::d3d12
+}

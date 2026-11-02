@@ -1,10 +1,3 @@
-"""avrecord, as a person runs it: a recording printed, a damaged one reported,
-a usage error refused, and a recording replayed into an executor library.
-
-The recordings are the committed seed corpus of `fuzz_recording_reader`, which
-is what the device writes; the tool is skipped when the tree is not built, so
-this test says what it could not check rather than failing a source checkout.
-"""
 import pathlib
 import shutil
 import struct
@@ -101,9 +94,6 @@ class AvRecord(unittest.TestCase):
             self.skipTest(f"{ECHO} is not built")
         answered = run(TOOL, "replay", self.recording("run.av"), "--executor", ECHO)
         self.assertIn("replay: 1 contexts,", answered.stdout)
-        # The echo library answers every command with its payload, and the
-        # recording's reply is not that, so the difference is reported and the
-        # run is a failure - which is the point of comparing at all.
         self.assertEqual(answered.returncode, 1, answered.stdout)
         self.assertRegex(answered.stdout, r"ctx=\d+ fence=\d+ replied \d+ bytes, recorded \d+")
 
@@ -112,7 +102,6 @@ class AvRecord(unittest.TestCase):
             self.skipTest(f"{ECHO} is not built")
         setup_only = self.scratch / "setup.av"
         whole = (CORPUS / "one-of-each").read_bytes()
-        # The file header and the setup record alone: 64 + 32 + the setup's 32.
         setup_only.write_bytes(whole[:128])
         answered = run(TOOL, "replay", setup_only, "--executor", ECHO)
         self.assertEqual(answered.returncode, 0, answered.stdout + answered.stderr)
@@ -120,8 +109,6 @@ class AvRecord(unittest.TestCase):
 
 
 class Corpus(unittest.TestCase):
-    """The committed seeds are recordings, so the tool's tests mean something."""
-
     def test_the_seed_the_tool_reads_is_a_recording_of_every_kind(self):
         whole = (CORPUS / "one-of-each").read_bytes()
         self.assertEqual(struct.unpack_from("<I", whole)[0], 0x00525641)

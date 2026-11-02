@@ -1,6 +1,3 @@
-/* One GetCaps answer into the runtime's buffer (CapsReply): a whole answer
- * only where it fits, a prefix answer as far as the buffer goes, the rest of
- * the buffer zeroed either way, and no buffer refused. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/caps_reply.hpp"
 
@@ -19,9 +16,8 @@ struct Options {
 
 const Options answer = {0x11u, 0x22u, 0x33u};
 
-}  // namespace
+}
 
-/* A runtime that lends more than the answer reads its later bytes as zero. */
 TEST(caps_reply, a_whole_answer_fits_and_the_rest_is_zero)
 { std::uint8_t lent[sizeof(Options) + 8u];
   std::memset(lent, 0xEE, sizeof lent);
@@ -31,7 +27,6 @@ TEST(caps_reply, a_whole_answer_fits_and_the_rest_is_zero)
   CHECK_EQ(read.third, 0x33u);
   for (std::size_t at = sizeof(Options); at < sizeof lent; at++) CHECK_EQ(lent[at], 0u); }
 
-/* A buffer one word short of a whole answer is refused, and not written. */
 TEST(caps_reply, a_whole_answer_too_large_for_the_buffer_is_refused_untouched)
 { std::uint32_t lent[2] = {0xEEEEEEEEu, 0xEEEEEEEEu};
   CHECK(!CapsReply(lent, sizeof lent).give_whole(&answer, sizeof answer));
@@ -41,7 +36,6 @@ TEST(caps_reply, a_whole_answer_too_large_for_the_buffer_is_refused_untouched)
   CHECK(!CapsReply(&word, 0u).give_whole(&answer.first, sizeof answer.first));
   CHECK_EQ(word, 7u); }
 
-/* An older runtime's revision takes the fields it has. */
 TEST(caps_reply, a_prefix_answer_gives_the_fields_the_buffer_has)
 { std::uint32_t older[2] = {0xEEEEEEEEu, 0xEEEEEEEEu};
   CHECK(CapsReply(older, sizeof older).give_prefix(&answer, sizeof answer));

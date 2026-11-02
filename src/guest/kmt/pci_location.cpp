@@ -33,4 +33,4 @@ uint32_t PciLocation::function() const
     return function_;
 }
 
-}  // namespace av
+}

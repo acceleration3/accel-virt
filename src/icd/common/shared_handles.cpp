@@ -26,12 +26,9 @@ void SharedHandles::keep(const SharedHandleSlot &row)
     AV_SCOPE("SharedHandles::keep");
     uint32_t slot = 0u;
     static_cast<void>(slots_.insert(row.handle_, row, slot));
-    /* An object already held under another handle keeps that one. */
     static_cast<void>(handles_of_.insert(row.object_id_, row.handle_, slot));
 }
 
-/* Room is made before the kernel is asked, so a handle the kernel made is
- * never one this table has nowhere to keep. */
 Status SharedHandles::mint(uint32_t device, uint32_t carrier, uint64_t object_id, uint64_t &handle)
 {
     AV_SCOPE("SharedHandles::mint");
@@ -71,9 +68,6 @@ Status SharedHandles::adopt(uint32_t device, uint64_t handle, uint64_t &object_i
     uint32_t     resource = 0u;
     const Status opened = kmt_.open_shared_object(device, handle, resource, carried, max_private, written);
     if (opened != Status::ok) return opened;
-    /* What came back is the creating process's bytes, which this process did
-     * not write: a record that is not there, or one with no id minted into it,
-     * names no object and the open is given back. */
     SharedAllocationData data;
     if (data.decode(carried, written) != Status::ok || !data.assigned()) {
         static_cast<void>(kmt_.destroy_shared_allocation(device, resource));
@@ -98,8 +92,6 @@ void SharedHandles::give_back(const SharedHandleSlot &row)
 {
     AV_SCOPE("SharedHandles::give_back");
     static_cast<void>(kmt_.close_shared_object(row.handle_));
-    /* Only what an adopt opened: a minted handle's carrier is the
-     * application's, and destroying it would take away what it is using. */
     if (row.resource_ != 0u)
         static_cast<void>(kmt_.destroy_shared_allocation(row.device_, row.resource_));
     const uint64_t *const named = handles_of_.find(row.object_id_);
@@ -133,8 +125,6 @@ uint32_t SharedHandles::live() const
     return slots_.count();
 }
 
-/* Every row names a handle and an object under its own handle, and every
- * object's handle is a row of that object. */
 bool SharedHandles::invariants_hold() const
 {
     AV_SCOPE("SharedHandles::invariants_hold");
@@ -149,4 +139,4 @@ bool SharedHandles::invariants_hold() const
     return whole;
 }
 
-}  // namespace av::icd
+}

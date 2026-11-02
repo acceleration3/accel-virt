@@ -78,8 +78,6 @@ BorrowedQueue &DxvkVulkanDevice::queue()
     return queue_;
 }
 
-/* A transition to the layout the image is already in makes DXVK prepare the
- * image, which carries out a clear it deferred. */
 bool DxvkVulkanDevice::texture_image(ID3D11Texture2D *texture, VkImage &image, VkImageLayout &layout,
                                      VkImageCreateInfo &described) const
 {
@@ -130,11 +128,6 @@ bool DxvkVulkanDevice::signal(const VulkanTimeline &timeline, uint64_t value)
     return work_.signal(timeline, value);
 }
 
-/* DXVK submits from a thread of its own, after its CS thread has recorded:
- * the flush drains the CS thread, and its submission lock waits for its
- * submission queue to empty, so the empty batch here is submitted after all
- * of it - and a signal covers everything earlier in submission order on the
- * queue. */
 bool DxvkVulkanDevice::sync_file(int &fd)
 {
     AV_SCOPE("DxvkVulkanDevice::sync_file");
@@ -156,4 +149,4 @@ bool DxvkVulkanDevice::sync_file(int &fd)
     return false;
 }
 
-}  // namespace av
+}

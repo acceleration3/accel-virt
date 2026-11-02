@@ -1,8 +1,3 @@
-/* The unix socket a host binary answers its state dump on (docs/trace.md):
- * /dev/shm/av-state-<module>-<pid>.sock, where a client sends `state\n` and
- * reads the dump, or one error line, until the binary closes the connection.
- * The accept is marked as a wait, so its thread reads as waiting, not stuck.
- * One per binary; its thread runs for the life of the process. */
 #ifndef AV_STATE_SOCKET_HPP
 #define AV_STATE_SOCKET_HPP
 
@@ -23,10 +18,7 @@ public:
     StateSocket(const StateSocket &) = delete;
     StateSocket &operator=(const StateSocket &) = delete;
 
-    /* Listens and starts the thread; false, with nothing left behind, when the
-     * socket or the thread cannot be made. */
     [[nodiscard]] bool start(const char *module, uint32_t process, StateSource &source);
-    /* The socket's thread. */
     void               serve();
 
 private:
@@ -44,6 +36,6 @@ private:
     char         dump_[dump_bytes];
 };
 
-}  // namespace av
+}
 
-#endif  // AV_STATE_SOCKET_HPP
+#endif

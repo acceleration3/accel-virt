@@ -1,11 +1,3 @@
-/* BuildPagingBuffer over an attacker-chosen operation, DMA size, multipass
- * offset and operation record, with the page table, entries and copy ranges it
- * points at exactly as large as they claim. An aperture mapping also gets an
- * MDL of fuzzed page frames and an allocation to record them on, and whatever
- * it recorded is then asked for at a fuzzed address and written as a backing
- * request. Whatever is refused, nothing may be written outside the DMA buffer,
- * the one page table or the backing request, the DMA pointer may only advance
- * within the buffer, and no IRQL rule may break. */
 #include "miniport/ddi/dxgk_build_paging_buffer_copy_page_table_entries_record.hpp"
 #include "miniport/ddi/dxgk_build_paging_buffer_copy_range_record.hpp"
 #include "miniport/ddi/dxgk_build_paging_buffer_update_page_table_record.hpp"
@@ -46,7 +38,6 @@ constexpr std::int32_t  unmap_aperture_segment = 6;
 constexpr std::int32_t  update_page_table = 11;
 constexpr std::int32_t  copy_page_table_entries = 14;
 constexpr std::uint32_t max_frames = 64u;
-/* Room for a backing request of one memory entry per page of the allocation. */
 constexpr std::size_t   backing_bytes = av::GpuRequestWriter::backing_header_size +
                                         max_frames * av::GpuRequestWriter::memory_entry_size;
 
@@ -57,7 +48,7 @@ bool untouched(const std::uint8_t *bytes, std::size_t first, std::size_t end)
     return true;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {
@@ -109,8 +100,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::AllocationTable   allocations(platform, segment, segments, shared);
     av::LogBudget       budget(platform);
 
-    /* One allocation of max_frames pages, so a mapping of any length the
-     * record claims is either recorded or refused, never truncated silently. */
     const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
                                               av::SurfaceLayout(16u, 16u, 21u, 1024u),
                                               std::uint64_t{max_frames} * 0x1000u, av::ScanoutTarget());

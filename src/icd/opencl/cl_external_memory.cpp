@@ -10,10 +10,6 @@
 #include <CL/cl_ext.h>
 
 namespace av::clicd {
-
-/* The header writes the five property names out as numbers so that nothing
- * above it has to include cl_ext.h to judge a list; these hold it to what the
- * registry says they are. */
 static_assert(ClExternalMemory::handle_properties[0] == CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR);
 static_assert(ClExternalMemory::handle_properties[1] == CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KMT_KHR);
 static_assert(ClExternalMemory::handle_properties[2] == CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_NAME_KHR);
@@ -41,9 +37,6 @@ bool ClExternalMemory::names_handle(const ClPropertyList &list, uint64_t &handle
         }
         found++;
     }
-    /* Two handle types name two different objects, and there is one buffer:
-     * a list that asks for both is refused rather than answered with whichever
-     * this loop met first. */
     if (found > 1u) taken = false;
     return found != 0u;
 }
@@ -129,4 +122,4 @@ bool ClExternalMemory::invariants_hold() const
     return opened_.invariants_hold();
 }
 
-}  // namespace av::clicd
+}

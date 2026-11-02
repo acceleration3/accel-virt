@@ -6,12 +6,9 @@
 namespace av {
 
 namespace {
-
-/* D3D12_SUBRESOURCE_TILING's StartTileIndexInOverallResource for a mip that
- * is one of the packed ones: its tiles are the packed mips' tiles. */
 constexpr UINT packed_mip = 0xFFFFFFFFu;
 
-}  // namespace
+}
 
 D3d12TileSpace::D3d12TileSpace(uint32_t tiles, uint32_t packed_start) : tiles_(tiles), packed_start_(packed_start)
 {
@@ -28,8 +25,6 @@ bool D3d12TileSpace::holds(const d3d12proto::TileCoordinate &start, const d3d12p
         return index_of(start.x, start.y, start.z, tiling, first) && first <= uint64_t{tiles_} - size.tiles;
     if (size.width == 0u || size.height == 0u || size.depth == 0u) return false;
     if (uint64_t{size.width} * size.height * size.depth != size.tiles) return false;
-    /* The index only grows along each axis, so the box's far corner is its
-     * last tile. */
     uint64_t last = 0u;
     return index_of(uint64_t{start.x} + size.width - 1u, uint64_t{start.y} + size.height - 1u,
                     uint64_t{start.z} + size.depth - 1u, tiling, last) &&
@@ -44,11 +39,10 @@ bool D3d12TileSpace::index_of(uint64_t x, uint64_t y, uint64_t z, const D3D12_SU
         index = uint64_t{packed_start_} + x;
         return true;
     }
-    /* Below 2^50: the height is 16-bit and each coordinate below 2^33. */
     const uint64_t rows = uint64_t{tiling.HeightInTiles} * z + y;
     uint64_t       across = 0u;
     if (__builtin_mul_overflow(uint64_t{tiling.WidthInTiles}, rows, &across)) return false;
     return !__builtin_add_overflow(uint64_t{tiling.StartTileIndexInOverallResource} + x, across, &index);
 }
 
-}  // namespace av
+}

@@ -28,9 +28,6 @@ uint64_t PerformanceClock::frequency() const
     return frequency_;
 }
 
-/* Whole seconds and the ticks left over, each scaled on its own: the product
- * of the whole count and a million passes 64 bits after three weeks of uptime
- * on a 10 MHz counter. */
 uint64_t PerformanceClock::microseconds() const
 {
     AV_SCOPE("PerformanceClock::microseconds");
@@ -55,4 +52,4 @@ void PerformanceClock::pause(uint64_t nanoseconds)
     Sleep(static_cast<DWORD>(milliseconds < most_finite_milliseconds ? milliseconds : most_finite_milliseconds));
 }
 
-}  // namespace av
+}

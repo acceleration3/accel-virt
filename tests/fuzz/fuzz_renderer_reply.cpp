@@ -1,7 +1,3 @@
-/* A reply between QEMU and av-renderer, fed attacker-chosen bytes: the first
- * byte is how many descriptors arrived beside it and the rest is its body.
- * What decodes must re-encode to exactly the bytes read and carry a status
- * av::Status has. */
 #include "core/support/status.hpp"
 #include "proto/renderer/reply_message.hpp"
 

@@ -1,8 +1,3 @@
-/* A window's bytes found forward from wherever the last offset was: a range
- * across extents of odd lengths reads and writes whole and in order, an offset
- * before the last starts over and still lands right, an empty extent is
- * stepped over, and a range past the window - or past what its extents hold -
- * is refused. */
 #include "device/memory/blob_window.hpp"
 #include "device/memory/window_cursor.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -15,8 +10,6 @@ using av::Status;
 using av::WindowCursor;
 
 namespace {
-
-/* Sixteen bytes in extents of 5, 0, 3 and 8: byte i of the window is i. */
 class Extents {
 public:
     Extents()
@@ -41,7 +34,7 @@ private:
     std::uint64_t  lengths_[4] = {5u, 0u, 3u, 8u};
 };
 
-}  // namespace
+}
 
 TEST(window_cursor, reads_a_range_across_extents_in_order)
 { Extents      extents;
@@ -52,7 +45,6 @@ TEST(window_cursor, reads_a_range_across_extents_in_order)
   CHECK_STATUS(cursor.read(15u, bytes, 1u), Status::ok);
   CHECK_EQ(bytes[0], 15u); }
 
-/* Rows asked for out of order - a region above the last - start over. */
 TEST(window_cursor, an_offset_before_the_last_starts_over)
 { Extents      extents;
   WindowCursor cursor(extents.window());
@@ -82,8 +74,6 @@ TEST(window_cursor, a_range_past_the_window_is_refused_and_moves_nothing)
   CHECK_STATUS(cursor.write(10u, bytes, sizeof bytes), Status::invalid_parameter);
   CHECK_EQ(extents.byte(10u), 10u); }
 
-/* A window whose extents hold less than it says: the bytes they hold move,
- * and the range is refused where they end rather than read from nowhere. */
 TEST(window_cursor, extents_short_of_the_window_are_refused_where_they_end)
 { Extents      extents;
   WindowCursor cursor(extents.window(20u));
@@ -94,9 +84,6 @@ TEST(window_cursor, extents_short_of_the_window_are_refused_where_they_end)
   CHECK_STATUS(cursor.write(15u, written, sizeof written), Status::invalid_parameter);
   CHECK_EQ(extents.byte(15u), 0xB0u); }
 
-/* A range copied from one window to another goes piece by piece across the
- * extents of both, whole and in order, and one that leaves either is refused
- * with nothing copied. */
 TEST(window_cursor, copies_a_range_between_windows_across_the_extents_of_both)
 { const Extents source;
   Extents       target;

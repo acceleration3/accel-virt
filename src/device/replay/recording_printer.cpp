@@ -22,7 +22,6 @@ constexpr const char *blob_actions[] = {"created", "imported", "released"};
 constexpr uint32_t    blob_action_count = sizeof blob_actions / sizeof blob_actions[0];
 constexpr const char *command_indent = "                   ";
 
-/* Microseconds with the nanoseconds under them, so a person reads the gaps. */
 void append_time(TextBuffer &text, uint64_t nanoseconds)
 {
     AV_SCOPE("append_time");
@@ -35,7 +34,7 @@ void append_time(TextBuffer &text, uint64_t nanoseconds)
     text.append_decimal(rest);
 }
 
-}  // namespace
+}
 
 RecordingPrinter::RecordingPrinter(RecordingReader &reader, const RecordingFilter &filter,
                                    uint32_t payload_bytes, BlockSource &memory)
@@ -76,7 +75,6 @@ Status RecordingPrinter::next(const char *&line)
         return Status::ok;
     }
     stage_ = Stage::done;
-    /* The damage is the last line, once. */
     if (!reader_.damaged() || damage_printed_) return Status::not_found;
     damage_printed_ = true;
     append_damage(text);
@@ -124,9 +122,6 @@ uint16_t RecordingPrinter::api_of(uint32_t context) const
     return known != nullptr ? *known : RecordingFilter::any_api;
 }
 
-/* A batch is shown when one of its commands passes the filter; every other
- * kind passes on the sub-API of the context it names. Counting the commands
- * here is what lets the batch's own line say how many there are. */
 bool RecordingPrinter::shown(const RecordHeader &record, const uint8_t *payload)
 {
     AV_SCOPE("RecordingPrinter::shown");
@@ -200,7 +195,6 @@ void RecordingPrinter::append_record(TextBuffer &text) const
         text.append("reply ");
         text.append_decimal(record_.length());
         text.append(" bytes");
-        /* As a command's payload is: the answer is what a replay compares. */
         const uint32_t shown = record_.length() < payload_bytes_ ? record_.length() : payload_bytes_;
         if (shown == 0u || payload_ == nullptr) return;
         text.append(" ");
@@ -307,8 +301,6 @@ void RecordingPrinter::append_command(TextBuffer &text, const RecordedCommand &c
     for (uint32_t index = 0u; index < shown; index++) text.append_hex(command.payload()[index], 2u);
 }
 
-/* The transport's commands are this repository's own, so their arguments are
- * decoded in full; every other command's are its registry's (research.md §5). */
 void RecordingPrinter::append_transport(TextBuffer &text, const RecordedCommand &command) const
 {
     AV_SCOPE("RecordingPrinter::append_transport");
@@ -367,4 +359,4 @@ bool RecordingPrinter::invariants_hold() const
     return command_offset_ <= record_.length() && filter_.invariants_hold() && apis_.invariants_hold();
 }
 
-}  // namespace av
+}

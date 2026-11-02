@@ -23,7 +23,7 @@ constexpr uint32_t length_mask = 0xfu;
 constexpr uint32_t dword_bytes = 4u;
 constexpr uint32_t walked_from_major = 2u;
 
-}  // namespace
+}
 
 D3d9ShaderTokens::D3d9ShaderTokens(const uint8_t *code, uint64_t size)
     : code_(code), dwords_(size / dword_bytes), valid_(false)
@@ -72,8 +72,6 @@ bool D3d9ShaderTokens::judge() const
     return walks_to_end();
 }
 
-/* vs 1.1, 2.0, 2.x, 3.0; ps 1.1-1.4, 2.0, 2.x, 3.0 (d3d9types.h's D3DVS_VERSION
- * and D3DPS_VERSION). */
 bool D3d9ShaderTokens::version_known(uint32_t version) const
 {
     AV_SCOPE("D3d9ShaderTokens::version_known");
@@ -104,4 +102,4 @@ bool D3d9ShaderTokens::walks_to_end() const
     return index + 1u == dwords_;
 }
 
-}  // namespace av
+}

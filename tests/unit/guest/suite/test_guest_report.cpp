@@ -16,7 +16,7 @@ struct GuestReportProbe {
     static void set(GuestReport &report, std::uint32_t index, char value) { report.text_.at(index) = value; }
 };
 
-}  // namespace av
+}
 
 TEST(guest_report, writes_a_line_per_step_and_a_summary)
 { av::MockPlatform report_memory;
@@ -40,9 +40,6 @@ TEST(guest_report, writes_a_line_per_step_and_a_summary)
   CHECK_EQ(report.length(), std::strlen(report.text()));
   CHECK(report.invariants_hold()); }
 
-/* The 16 KiB the report once held are no bound: thousands of steps - what a
- * suite replaying an application's trace runs - are each a line, and the
- * summary that judges the run is never cut off. */
 TEST(guest_report, keeps_every_line_and_the_summary_past_the_old_capacity)
 { av::MockPlatform report_memory;
   GuestReport report(report_memory);
@@ -56,8 +53,6 @@ TEST(guest_report, keeps_every_line_and_the_summary_past_the_old_capacity)
   CHECK(std::strstr(report.text(), "avtest: 2000 passed, 0 failed\n") != nullptr);
   CHECK(report.invariants_hold()); }
 
-/* A line there is no memory to keep is lost whole - never half a line - and
- * still counted; the next line is kept. */
 TEST(guest_report, a_line_with_no_memory_to_keep_it_is_lost_whole_and_still_counted)
 { av::MockPlatform report_memory;
   GuestReport report(report_memory);
@@ -72,8 +67,6 @@ TEST(guest_report, a_line_with_no_memory_to_keep_it_is_lost_whole_and_still_coun
   CHECK_EQ(report.failed(), 1u);
   CHECK(report.invariants_hold()); }
 
-/* Text the report never wrote is the empty string, and a terminator inside
- * the text, or none at its end, is a broken report. */
 TEST(guest_report_invariants, fail_for_a_terminator_inside_the_text_or_none_at_its_end)
 { av::MockPlatform report_memory;
   GuestReport report(report_memory);
@@ -90,8 +83,6 @@ TEST(guest_report_invariants, fail_for_a_terminator_inside_the_text_or_none_at_i
   av::GuestReportProbe::set(report, 16u, '\0');
   CHECK(report.invariants_hold()); }
 
-/* The summary names the program that ran the steps: avvkprobe.exe's report
- * is judged by its own line (feature 045). */
 TEST(guest_report, the_summary_names_its_program)
 { av::MockPlatform report_memory;
   GuestReport report(report_memory, "avvkprobe");
@@ -123,8 +114,6 @@ TEST(guest_report_report, names_the_counts_and_the_step_checked_last)
                                  "last_step=rate finished=true") == 0);
   CHECK(report.invariants_hold()); }
 
-/* A note carries text a step learned, cut at its first line break or at
- * note_bytes, and counts as neither a pass nor a failure. */
 TEST(guest_report, a_note_is_one_line_of_text_and_no_verdict)
 { av::MockPlatform report_memory;
   GuestReport report(report_memory, "avglprobe");

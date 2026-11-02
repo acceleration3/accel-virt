@@ -12,11 +12,9 @@
 namespace av::d3d {
 
 namespace {
-
-/* A format with no fixed element size is laid out as a 32-bit one. */
 constexpr uint32_t unsized_element_bytes = 4u;
 
-}  // namespace
+}
 
 KernelSurface::KernelSurface()
     : allocation_(), resource_{}, width_(0u), rows_(0u), format_(0u), pitch_(0u), bytes_(0u), scanout_(),
@@ -32,11 +30,6 @@ KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format)
     primary_ = false;
 }
 
-/* A row wider than 32 bits of bytes is no surface: its pitch is 0, and so is
- * its size, which make() refuses. A block-compressed surface's rows are rows
- * of blocks: counted a texel at a time, a BC1 texture asked for sixteen times
- * its bytes, and Direct3D 9 on 12, which shares every texture it makes, ran
- * the aperture out loading a level. */
 KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format, const ScanoutTarget &scanout)
     : allocation_(), resource_{}, width_(width), rows_(0u), format_(format), pitch_(0u), bytes_(0u),
       scanout_(scanout), primary_(true), cross_adapter_(false)
@@ -54,9 +47,6 @@ KernelSurface::KernelSurface(uint32_t width, uint32_t height, uint32_t format, c
     bytes_ = SharedBytes(uint64_t{pitch_} * rows_).pages();
 }
 
-/* The layout is the kernel's to hold the miniport to: the same one the miniport
- * describes the allocation by when the runtime asks it to for the opener's
- * adapter, so both adapters' allocations have the same pages. */
 KernelSurface::KernelSurface(SharedWith, uint32_t width, uint32_t height, uint32_t format)
     : allocation_(), resource_{}, width_(width), rows_(height), format_(format), pitch_(0u), bytes_(0u), scanout_(),
       primary_(false), cross_adapter_(true)
@@ -71,8 +61,6 @@ KernelSurface::KernelSurface(SharedWith, uint32_t width, uint32_t height, uint32
     bytes_ = across.bytes();
 }
 
-/* A surface of no texels is refused first: its descriptor would be one the
- * miniport refuses. */
 Status KernelSurface::make()
 {
     AV_SCOPE("KernelSurface::make");
@@ -125,7 +113,6 @@ uint64_t KernelSurface::bytes() const
 uint64_t KernelSurface::key() const
 {
     AV_SCOPE("KernelSurface::key");
-    /* The kernel writes into the bytes lent, so they are read afresh. */
     SharedAllocationData minted;
     if (minted.decode(allocation_.bytes(), allocation_bytes) != Status::ok) return 0u;
     return minted.object_id();
@@ -149,4 +136,4 @@ uint32_t KernelSurface::kernel_format() const
     return D3d9PresentFormat(format_).ddi();
 }
 
-}  // namespace av::d3d
+}

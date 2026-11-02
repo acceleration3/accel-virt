@@ -1,7 +1,3 @@
-/* The probes' one graphics pipeline over a scripted Vulkan: both shaders, a
- * layout and the pipeline for a render pass at the caller's extent; a refusal
- * at any of them is the outcome's and leaves nothing behind once released;
- * and a pipeline never stands without its layout and shaders. */
 #include "guest/probe/probe_device.hpp"
 #include "guest/probe/probe_outcome.hpp"
 #include "guest/probe/triangle_pipeline.hpp"
@@ -21,7 +17,7 @@ struct TrianglePipelineProbe {
     }
 };
 
-}  // namespace av
+}
 
 using av::ProbeDevice;
 using av::ProbeOutcome;
@@ -44,7 +40,6 @@ void make(ProbeDevice &device)
     CHECK_EQ(device.make_device(), VK_SUCCESS);
 }
 
-/* A render pass of the device's own for the pipeline to be made against. */
 VkRenderPass render_pass(ProbeDevice &device)
 {
     VkAttachmentDescription colour = {};
@@ -66,7 +61,7 @@ VkRenderPass render_pass(ProbeDevice &device)
     return made;
 }
 
-}  // namespace
+}
 
 TEST(triangle_pipeline, is_made_over_both_shaders_and_a_layout_and_released_whole)
 { ScriptedVulkan vulkan;
@@ -84,7 +79,7 @@ TEST(triangle_pipeline, is_made_over_both_shaders_and_a_layout_and_released_whol
       CHECK_EQ(vulkan.calls(Call::create_shader_module), 2u);
       pipeline.release();
       CHECK(pipeline.pipeline() == VK_NULL_HANDLE);
-      pipeline.release();   /* safe twice */
+      pipeline.release();
       vulkan.destroy_render_pass(device.device(), pass);
   }
   CHECK_EQ(vulkan.live(), 0u);

@@ -1,22 +1,3 @@
-/* One session's devices, by the id the guest named each with, the one whose
- * commands run now, and why each was removed.
- *
- * A guest process runs every device of one Direct3D runtime on one session,
- * so the doorbell, ring and arena a session costs are spent once per process
- * rather than once per device - the desktop's processes make dozens. What a
- * device owns on the host is a Handle: Direct3D 11's ID3DDeviceContextState,
- * which the session swaps in before running its commands, or a Direct3D 9
- * device. Each entry holds one reference, which the caller gives and takes
- * back; the table never touches the handles.
- *
- * A removed device stays kept, with the first reason it was removed for -
- * what went wrong; the rest follow from it - until the guest destroys it. It
- * is not ready: its commands are refused until the guest makes another. An id
- * the guest selected that names no device is removed the same way, until the
- * next selection: its commands are refused too, and the first refusal is the
- * one that says why rather than every one after it.
- *
- * A process may run any number of devices: the devices are KeyedSlots. */
 #ifndef AV_GUEST_DEVICES_HPP
 #define AV_GUEST_DEVICES_HPP
 
@@ -39,48 +20,22 @@ public:
     GuestDevices(const GuestDevices &) = delete;
     GuestDevices &operator=(const GuestDevices &) = delete;
 
-    /* Keeps `handle` under `device`: invalid_parameter for id 0 or a null
-     * handle, conflict for an id already kept, no_memory when the table cannot
-     * grow; the reference stays the caller's unless ok. */
     [[nodiscard]] Status add(uint32_t device, Handle *handle);
-    /* Room for one more device, so the next add of a new id cannot fail:
-     * asked before a device is made that could not be kept. */
     [[nodiscard]] Status make_room();
     Handle              *find(uint32_t device) const;
-    /* The handle kept under `device`, no longer kept, its reference passed to
-     * the caller; a selected device is selected no more. Null for an id that
-     * names nothing. */
     Handle              *remove(uint32_t device);
-    /* Any kept handle, no longer kept, with its reference; null when none is.
-     * How a closing session gives every device back. */
     Handle              *remove_any();
     uint32_t             count() const;
 
-    /* Commands run on `device` from now on, and its handle; null for an id
-     * that names nothing kept, which selects nothing until the next one. */
     Handle              *select(uint32_t device);
-    /* The selected device's handle, null when none is; and its id, which an
-     * id that named nothing keeps. */
     Handle              *selected() const;
     uint32_t             selected_id() const;
-    /* A device is selected and not removed: its commands may run. */
     bool                 ready() const;
 
-    /* The device is removed for `reason` (an HRESULT, non-zero); the first
-     * reason stands. Nothing for a device neither kept nor selected. */
     void                 mark_removed(uint32_t device, uint32_t reason);
-    /* Why the device was removed; 0 while it was not, or for one neither
-     * kept nor selected. */
     uint32_t             removed_reason(uint32_t device) const;
-    /* A command refused while the selected device spoke: that device removed
-     * for `reason`, the first refusal logged (CommandRefusal). False when no
-     * device was selected at all, which leaves the session nobody else to
-     * blame. */
     [[nodiscard]] bool   refuse(const CommandRefusal &refusal, const char *command, uint32_t reason);
 
-    /* No kept id is 0 or has no handle; the selected handle is the selected
-     * id's, and only a selected id that names nothing kept has a removal of
-     * its own. */
     bool invariants_hold() const;
 
 private:
@@ -94,7 +49,6 @@ private:
     KeyedSlots<uint32_t, Device> devices_;
     uint32_t                     selected_id_;
     Handle                      *selected_;
-    /* Why the selected id was removed, when it names no device kept. */
     uint32_t                     selected_removed_;
 };
 
@@ -235,6 +189,6 @@ bool GuestDevices<Handle>::invariants_hold() const
     return selected_ == find(selected_id_);
 }
 
-}  // namespace av
+}
 
-#endif  // AV_GUEST_DEVICES_HPP
+#endif

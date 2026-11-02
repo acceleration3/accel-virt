@@ -1,12 +1,3 @@
-/* A lost device as an application reaches it through the loader: once the
- * host has faulted an instance's context, every entry point on that instance
- * answering a VkResult answers VK_ERROR_DEVICE_LOST without asking the Kmt
- * anything; a view mapped before the loss stays the process's memory until the
- * allocation is freed; freeing and destroying succeed locally, giving back what
- * the kernel still holds for the process; and a new instance opens a
- * connection of its own. The host faults a context by withholding an answer
- * (MockKmt::withhold_answer_at), as a device that faulted it does. Invariants
- * after every call that changes the root. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -58,7 +49,6 @@ using CreateBuffer = VkResult (*)(VkDevice, const VkBufferCreateInfo *, const Vk
 using QueueSubmit = VkResult (*)(VkQueue, std::uint32_t, const VkSubmitInfo *, VkFence);
 
 constexpr std::uint64_t page = 4096u;
-/* Four host types: 1 and 2 host visible. */
 constexpr std::uint32_t types = 4u;
 constexpr std::uint32_t visible = 0x6u;
 constexpr std::uint64_t imported = 0x0000700000000040ull;
@@ -88,7 +78,6 @@ VkMemoryAllocateInfo allocation(std::uint64_t bytes, std::uint32_t type)
 
 VkDeviceMemory as_memory(std::uint64_t host) { return reinterpret_cast<VkDeviceMemory>(host); }
 
-/* An instance, its physical device and a device on it, made through the root. */
 class LossRig {
 public:
     LossRig()
@@ -158,7 +147,6 @@ public:
         return result;
     }
 
-    /* A page of host-visible memory, the device's types learnt first. */
     VkDeviceMemory host_visible()
     {
         rig_.host().vk_memory_properties(types, visible);
@@ -175,8 +163,6 @@ public:
         return entry<MapMemory>("vkMapMemory")(device_, memory, 0u, page, 0u, &data);
     }
 
-    /* A synchronous call whose answer the host withholds: the connection is
-     * faulted from here on. */
     void lose()
     {
         kmt().withhold_answer_at(1u);
@@ -193,11 +179,8 @@ private:
     VkDevice         device_ = VK_NULL_HANDLE;
 };
 
-}  // namespace
+}
 
-/* The generated wrappers send through the faulted transport, which refuses
- * without a D3DKMT call; synchronous and asynchronous commands alike answer
- * the loss. */
 TEST(device_loss, generated_entry_points_answer_lost_with_no_kmt_call)
 { LossRig rig;
   const VkQueue queue = rig.queue();
@@ -218,8 +201,6 @@ TEST(device_loss, generated_entry_points_answer_lost_with_no_kmt_call)
   CHECK_EQ(kmt_calls(rig.kmt()), before);
   CHECK(rig.rig().root().invariants_hold()); }
 
-/* The ICD's own entry points answer the loss before anything else is asked of
- * anyone, each logging it once. */
 TEST(device_loss, local_entry_points_answer_lost_with_no_kmt_call)
 { LossRig rig;
   const VkDevice idle = rig.make_device(ScriptedHost::vk_device + 1u);
@@ -284,15 +265,11 @@ TEST(device_loss, local_entry_points_answer_lost_with_no_kmt_call)
   CHECK_EQ(rig.entry<DeviceWaitIdle>("vkDeviceWaitIdle")(rig.device()), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(rig.entry<DeviceWaitIdle>("vkDeviceWaitIdle")(idle), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(kmt_calls(rig.kmt()), before);
-  /* One line per entry point, not per call: enumeration, allocation and
-   * vkDeviceWaitIdle were each called twice and named once. */
   CHECK_EQ(rig.rig().log().holding("on a lost device"), logged + 14u);
   CHECK_EQ(rig.rig().log().holding("avvk: vkQueueWaitIdle on a lost device"), 1u);
   CHECK_EQ(rig.rig().log().holding("avvk: vkDeviceWaitIdle on a lost device"), 1u);
   CHECK(rig.rig().root().invariants_hold()); }
 
-/* The memory queries have no result to answer the loss with: they answer no
- * types and no heaps, asking nobody. */
 TEST(device_loss, the_memory_properties_of_a_lost_device_are_empty)
 { LossRig rig;
   rig.lose();
@@ -316,8 +293,6 @@ TEST(device_loss, the_memory_properties_of_a_lost_device_are_empty)
   CHECK(properties2.pNext == &budget);
   CHECK_EQ(kmt_calls(rig.kmt()), before); }
 
-/* A query the host faults while answering is taken as no answer: the adapter's
- * budgets are not asked for. */
 TEST(device_loss, a_memory_properties_query_the_host_faults_asks_no_budget)
 { LossRig rig;
   const std::uint32_t budgets = rig.kmt().calls(MockKmt::Call::query_video_memory);
@@ -329,10 +304,6 @@ TEST(device_loss, a_memory_properties_query_the_host_faults_asks_no_budget)
   CHECK_EQ(properties.memoryTypeCount, 0u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::query_video_memory), budgets); }
 
-/* A view mapped before the loss is still the process's memory: what was written
- * is read back after it, until the allocation is freed. Freeing lets the chunk
- * go without asking the host - or the kernel, which refuses a lost context's
- * escapes and closes the chunk with the context. */
 TEST(device_loss, a_view_mapped_before_the_loss_stays_readable_until_freed)
 { LossRig rig;
   const VkDeviceMemory memory = rig.host_visible();
@@ -353,16 +324,12 @@ TEST(device_loss, a_view_mapped_before_the_loss_stays_readable_until_freed)
   rig.entry<FreeMemory>("vkFreeMemory")(rig.device(), memory, nullptr);
   CHECK(rig.rig().root().invariants_hold());
   CHECK_EQ(rig.kmt().open_objects(), objects);
-  CHECK_EQ(rig.kmt().window_chunks(), 1u);   /* the kernel's, until the context goes */
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submissions);
   CHECK_EQ(rig.kmt().commands(), commands);
-  /* Freed, it is no allocation to map. */
   CHECK_EQ(rig.map(memory, data), VK_ERROR_DEVICE_LOST); }
 
-/* The same over a host window chunk: its view stays the window's memory
- * after the loss, freeing it sends the kernel nothing, and the kernel closes
- * it when the instance's context goes. */
 TEST(device_loss, a_window_chunk_freed_after_the_loss_is_left_to_the_kernel)
 { LossRig rig;
   rig.kmt().open_host_window(std::uint64_t{128} << 20u);
@@ -383,9 +350,6 @@ TEST(device_loss, a_window_chunk_freed_after_the_loss_is_left_to_the_kernel)
   CHECK_EQ(rig.kmt().commands(), commands);
   CHECK_EQ(rig.kmt().window_chunks(), 1u); }
 
-/* Everything made before the loss can still be given back: command buffers,
- * memory of either kind, the device and the instance, each locally, with the
- * kernel asked only to close what it holds for the process. */
 TEST(device_loss, freeing_and_destroying_after_the_loss_succeed_locally)
 { LossRig rig;
   static_cast<void>(rig.queue());
@@ -419,8 +383,6 @@ TEST(device_loss, freeing_and_destroying_after_the_loss_succeed_locally)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), waits);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes); }
 
-/* A device destroyed with host-visible memory still allocated lets the chunk
- * go the same way, with no host call; the kernel closes it with the context. */
 TEST(device_loss, destroying_a_lost_device_gives_its_chunks_back)
 { LossRig rig;
   static_cast<void>(rig.host_visible());
@@ -433,8 +395,6 @@ TEST(device_loss, destroying_a_lost_device_gives_its_chunks_back)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
   CHECK_EQ(rig.kmt().commands(), commands); }
 
-/* A host that faults the context while the device's types are learnt: the
- * allocation is lost, and no chunk is made. */
 TEST(device_loss, a_fault_while_the_types_are_learnt_is_lost)
 { LossRig rig;
   const std::uint32_t objects = rig.kmt().open_objects();
@@ -448,8 +408,6 @@ TEST(device_loss, a_fault_while_the_types_are_learnt_is_lost)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::query_video_memory), budgets);
   CHECK_EQ(rig.rig().log().holding("cannot be learnt"), 1u); }
 
-/* A host that faults the context while importing: the allocation is lost, and
- * the chunk opened for it is left to the kernel without a close. */
 TEST(device_loss, a_fault_while_importing_is_lost_and_the_chunk_goes_back)
 { LossRig rig;
   rig.host().vk_memory_properties(types, visible);
@@ -460,12 +418,10 @@ TEST(device_loss, a_fault_while_importing_is_lost_and_the_chunk_goes_back)
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_DEVICE_LOST);
   CHECK(memory == VK_NULL_HANDLE);
   CHECK(rig.connection()->faulted());
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 1u);   /* the open */
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 1u);
   CHECK_EQ(rig.kmt().window_chunks(), 1u);
   CHECK_EQ(rig.kmt().open_objects(), objects); }
 
-/* A refusal that is not a loss stays what it was: an import the host refuses
- * on a live connection is out of device memory. */
 TEST(device_loss, an_import_refused_without_a_loss_is_out_of_device_memory)
 { LossRig rig;
   rig.host().vk_memory_properties(types, visible);
@@ -474,8 +430,6 @@ TEST(device_loss, an_import_refused_without_a_loss_is_out_of_device_memory)
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   CHECK(!rig.connection()->faulted()); }
 
-/* A new instance after the loss opens a connection of its own, which works;
- * the lost one stays lost. */
 TEST(device_loss, a_new_instance_opens_a_new_connection_that_works)
 { LossRig rig;
   rig.lose();
@@ -501,8 +455,6 @@ TEST(device_loss, a_new_instance_opens_a_new_connection_that_works)
   rig.rig().destroy_instance(instance);
   CHECK(rig.rig().root().invariants_hold()); }
 
-/* Flushing and invalidating carry nothing on a live device, and are refused on
- * one this ICD did not make, as on a lost one, without asking anyone. */
 TEST(device_loss, mapped_ranges_answer_success_live_and_lost_for_a_foreign_device)
 { LossRig rig;
   av::icd::IcdRoot &root = rig.rig().root();

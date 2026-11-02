@@ -89,8 +89,6 @@ bool UmdDevice::invariants_hold() const
 {
     AV_SCOPE("UmdDevice::invariants_hold");
     if (!dxgi_.invariants_hold()) return false;
-    /* Adopted or not adopted, never half: the DXGI table is published in the
-     * same step that records the runtime's handles. */
     const bool adopted = runtime_device_ != nullptr;
     if (adopted != dxgi_.published()) return false;
     if (adopted && kernel_callbacks_ == nullptr) return false;
@@ -98,4 +96,4 @@ bool UmdDevice::invariants_hold() const
     return true;
 }
 
-}  // namespace av::d3d
+}

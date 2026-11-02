@@ -1,15 +1,3 @@
-/* One runtime's open instance of an avgpu adapter (contracts/umd_interface.md).
- * A process holds one per OpenAdapter call: the D3D10/11 runtime and D3D12Core
- * each open their own, and two opens of one adapter are separate objects over
- * one connection. The connection is the adapter the runtime opened, and every
- * device made through this one reaches the host GPU through it.
- *
- * The adapter's own address is the handle handed back in `hAdapter`, so the
- * pool that made it is what validates a handle coming the other way.
- *
- * Closing while a device made through it is live is refused: the runtime
- * destroys devices first, and letting the adapter go would leave those devices
- * naming a parent that is gone. */
 #ifndef AV_D3D_UMD_ADAPTER_HPP
 #define AV_D3D_UMD_ADAPTER_HPP
 
@@ -38,9 +26,6 @@ public:
 
     RuntimeKind runtime() const;
     void       *runtime_adapter() const;
-    /* The table the runtime gave, as it stands now: the runtime may move its
-     * rows whenever no thread is inside the driver, so this is the pointer it
-     * handed over and never a copy. */
     const D3dddiAdapterCallbacksRecord *callbacks() const;
     UmdConnection                      &connection() const;
     uint32_t                            interface_version() const;
@@ -68,6 +53,6 @@ private:
     friend struct UmdAdapterProbe;
 };
 
-}  // namespace av::d3d
+}
 
-#endif  // AV_D3D_UMD_ADAPTER_HPP
+#endif

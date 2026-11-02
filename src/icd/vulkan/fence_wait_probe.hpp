@@ -1,6 +1,3 @@
-/* vkWaitForFences asked of the host a slice at a time (HostCompletionWait):
- * the host blocks for the slice itself, so nothing pauses between asks, and
- * any answer but VK_TIMEOUT ends the wait. */
 #ifndef AV_ICD_FENCE_WAIT_PROBE_HPP
 #define AV_ICD_FENCE_WAIT_PROBE_HPP
 
@@ -12,11 +9,11 @@
 
 namespace av {
 class ClientTransport;
-}  // namespace av
+}
 
 namespace av::vkproto {
 class HandleTranslation;
-}  // namespace av::vkproto
+}
 
 namespace av::icd {
 
@@ -26,7 +23,6 @@ public:
 
     [[nodiscard]] bool ask(uint64_t slice) override;
     void               pause(uint64_t slice) override;
-    /* The host's last answer: VK_TIMEOUT until one ends the wait. */
     VkResult           result() const;
 
 private:
@@ -39,6 +35,6 @@ private:
     VkResult         result_;
 };
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_FENCE_WAIT_PROBE_HPP
+#endif

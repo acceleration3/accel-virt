@@ -1,9 +1,3 @@
-// The upstream VulkanSwapChain's interface over images the example owns: the
-// samples render off-screen, so the benchmark measures rendering and not a
-// compositor. Acquire and present keep the semaphore protocol a window's swap
-// chain has - an empty submission signals the acquire semaphore and another
-// waits on the present one - so every sample's frame submits what it would
-// against a window, in the same order.
 #pragma once
 
 #include <assert.h>
@@ -21,7 +15,6 @@ typedef struct _SwapChainBuffers {
 class VulkanSwapChain
 {
 private:
-	// A window's swap chain on a desktop driver: minImageCount 2, plus the one the examples ask for.
 	static const uint32_t headlessImageCount = 3;
 
 	VkInstance instance = VK_NULL_HANDLE;
@@ -45,7 +38,6 @@ private:
 		return 0;
 	}
 
-	// An empty batch on the example's queue: what acquire and present do to their semaphores.
 	VkResult submitEmpty(VkQueue target, VkSemaphore wait, VkSemaphore signal)
 	{
 		VkPipelineStageFlags stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
@@ -71,7 +63,6 @@ public:
 
 	uint32_t queueNodeIndex = UINT32_MAX;
 
-	// No surface: find the graphics queue a window's surface would have been presented from.
 	void initSurface()
 	{
 		uint32_t queueCount = 0;
@@ -118,7 +109,6 @@ public:
 			imageInfo.arrayLayers = 1;
 			imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 			imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-			// Transfer source: the runner reads the captured frame back.
 			imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 			imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;

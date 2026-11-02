@@ -1,5 +1,3 @@
-/* One line composed from text and values, written with the log's prefix
- * (LogLine), and cut rather than overrun when too long. */
 #include "core/log/driver_log.hpp"
 #include "core/log/log_line.hpp"
 #include "harness/framework/test_registry.hpp"

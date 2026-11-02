@@ -36,8 +36,6 @@ uint32_t ScanoutBlobSource::page_count() const
     return DisplayMode(width_, height_).frame_pages();
 }
 
-/* The one request whose writer answer is not voided: a page list the driver
- * could not complete is a refusal, not a buffer that was too small. */
 Status ScanoutBlobSource::create(VirtioGpuDevice &device, const GuestPageList &pages)
 {
     AV_SCOPE("ScanoutBlobSource::create");
@@ -59,8 +57,6 @@ Status ScanoutBlobSource::show(VirtioGpuDevice &device, uint32_t resource)
     return device.send_control(bytes, writer.length());
 }
 
-/* No transfer, which is the whole point of this backing: the host's display
- * samples the guest's own pages, so a flush is the only thing a frame costs. */
 Status ScanoutBlobSource::flush(VirtioGpuDevice &device)
 {
     AV_SCOPE("ScanoutBlobSource::flush");
@@ -100,9 +96,6 @@ void ScanoutBlobSource::release()
     height_ = 0u;
 }
 
-/* Nothing is sent here. A blob is made over the primary's pages and the mode
- * commit knows no primary; what the mode settles is how big the blob will be,
- * which is what the request buffer is sized from. */
 Status ScanoutBlobSource::prepare(const DisplayMode &mode)
 {
     AV_SCOPE("ScanoutBlobSource::prepare");
@@ -165,9 +158,6 @@ void ScanoutBlobSource::forget_device()
     height_ = 0u;
 }
 
-/* The address moves when dxgkrnl flips to another primary: the blob names the
- * pages of one allocation, so a new address is a new blob and the old one is
- * given back before it is made. */
 Status ScanoutBlobSource::refresh(uint64_t address, const GuestPageList &pages, bool presented)
 {
     AV_SCOPE("ScanoutBlobSource::refresh");
@@ -203,10 +193,8 @@ Status ScanoutBlobSource::refresh(uint64_t address, const GuestPageList &pages, 
 bool ScanoutBlobSource::invariants_hold() const
 {
     AV_SCOPE("ScanoutBlobSource::invariants_hold");
-    /* An address only with the blob that was made over it, nothing scanned out
-     * that was not made, and nothing scanned out of no address. */
     const bool addressed = created_ || blob_address_ == 0u;
     return addressed && (created_ || !scanning_out_) && (!scanning_out_ || blob_address_ != 0u);
 }
 
-}  // namespace av
+}

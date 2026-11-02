@@ -34,4 +34,4 @@ bool CapsReply::give_none() const
     return true;
 }
 
-}  // namespace av::d3d
+}

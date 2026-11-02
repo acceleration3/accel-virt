@@ -37,9 +37,6 @@ Status DisplayModeList::follow(const DisplayInfoResponse &info, uint32_t scanout
         if (mode.width() == display.width() && mode.height() == display.height()) preferred = count;
         modes_[count++] = mode;
     }
-    /* A mode that fits has no more pixels than the display, so the display's
-     * own size goes last and the list stays in ascending area - and it is
-     * offered once, however standard it is. */
     if (preferred == max_modes) {
         preferred = count;
         modes_[count++] = display;
@@ -58,8 +55,6 @@ Status DisplayModeList::adopt(const DisplayModeSet &set)
     for (uint32_t index = 0u; index < set.count() && count < max_modes; index++) {
         const DisplayMode mode(set.width(index), set.height(index), set.refresh_millihz());
         if (!mode.offerable()) continue;
-        /* Into place by area, after any of the same area: ascending, and in
-         * the host's order where two modes tie. */
         uint32_t at = count;
         while (at != 0u && area_of(taken[at - 1u]) > area_of(mode)) {
             taken[at] = taken[at - 1u];
@@ -71,7 +66,6 @@ Status DisplayModeList::adopt(const DisplayModeSet &set)
         count++;
     }
     if (count == 0u) return Status::not_found;
-    /* Sorted by area, the last is the largest. */
     if (preferred == max_modes) preferred = count - 1u;
     for (uint32_t index = 0u; index < count; index++) modes_[index] = taken[index];
     count_ = count;
@@ -128,4 +122,4 @@ bool DisplayModeList::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

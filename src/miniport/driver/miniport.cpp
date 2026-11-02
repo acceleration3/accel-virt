@@ -110,8 +110,6 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiControlModeBehavior, reinterpret_cast<DdiRoutine>(&AvDdiControlModeBehavior)},
         {DdiSlot::DxgkDdiUpdateMonitorLinkInfo, reinterpret_cast<DdiRoutine>(&AvDdiUpdateMonitorLinkInfo)},
         {DdiSlot::DxgkDdiCreateHwQueue, reinterpret_cast<DdiRoutine>(&AvDdiCreateHwQueue)},
-        /* The native fences WDDM 3.1 asks for beside the doorbells, and the
-         * doorbells a process submits through (feature 049). */
         {DdiSlot::DxgkDdiCreateNativeFence, reinterpret_cast<DdiRoutine>(&AvDdiCreateNativeFence)},
         {DdiSlot::DxgkDdiDestroyNativeFence, reinterpret_cast<DdiRoutine>(&AvDdiDestroyNativeFence)},
         {DdiSlot::DxgkDdiUpdateMonitoredValues, reinterpret_cast<DdiRoutine>(&AvDdiUpdateMonitoredValues)},
@@ -192,4 +190,4 @@ bool Miniport::invariants_hold() const
     return table_status_ == 0u && table_.invariants_hold();
 }
 
-}  // namespace av
+}

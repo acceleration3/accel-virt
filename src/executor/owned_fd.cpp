@@ -30,8 +30,6 @@ void OwnedFd::hold(int fd)
     fd_ = fd >= 0 ? fd : -1;
 }
 
-/* Close-on-exec, as every descriptor this library makes: nothing it holds is
- * a child's. */
 bool OwnedFd::hold_copy(int fd)
 {
     AV_SCOPE("OwnedFd::hold_copy");
@@ -74,4 +72,4 @@ void OwnedFd::close()
     fd_ = -1;
 }
 
-}  // namespace av
+}

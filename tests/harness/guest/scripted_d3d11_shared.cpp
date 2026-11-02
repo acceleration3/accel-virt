@@ -139,4 +139,4 @@ void ScriptedD3d11Shared::release()
     live_ = false;
 }
 
-}  // namespace av
+}

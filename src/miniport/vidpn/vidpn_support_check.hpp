@@ -1,7 +1,3 @@
-/* DxgkDdiIsSupportedVidPn for one proposed VidPn: supported when it has at most
- * one path, that path joins a source to a target the adapter has, it pins no
- * transformation the adapter cannot do, as basicdisplay.sys decides, and the
- * source mode it pins, if any, is one the adapter offers. */
 #ifndef AV_VIDPN_SUPPORT_CHECK_HPP
 #define AV_VIDPN_SUPPORT_CHECK_HPP
 
@@ -25,21 +21,15 @@ public:
     VidPnSupportCheck(Platform &platform, DxgkrnlInterface &dxgkrnl, const DisplayModeList &modes,
                       const DisplaySources &sources, DxgkargIsSupportedVidPnRecord &request);
 
-    /* Success whether or not the VidPn is supported; IsVidPnSupported says. */
     NtStatus decide();
     [[nodiscard]] Status visit(const D3dkmdtVidPnPresentPathRecord &path) override;
-    /* Why decide() found the VidPn unsupported - "paths", "path ends",
-     * "transformation", "source mode" or "target mode" - or null when it did not. */
     const char *refusal() const;
-    /* The pinned source mode a "source mode" refusal turned down. */
     const D3dkmdtVidPnSourceModeRecord &refused_mode() const;
 
 private:
     static constexpr uint32_t max_paths = 1u;
 
-    /* ok with no source mode pinned, not_supported for one the adapter does not offer. */
     [[nodiscard]] Status offers_pinned_source(uint32_t source);
-    /* ok with no target mode pinned, not_supported for one at a size or a refresh the adapter does not offer. */
     [[nodiscard]] Status offers_pinned_target(uint32_t target);
 
     Platform                      &platform_;
@@ -53,6 +43,6 @@ private:
     D3dkmdtVidPnSourceModeRecord   refused_mode_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VIDPN_SUPPORT_CHECK_HPP
+#endif

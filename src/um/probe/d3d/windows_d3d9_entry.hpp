@@ -1,7 +1,3 @@
-/* D3d9Entry over the d3d9.dll beside the probe (feature 047, T028), which in
- * the guest is DXVK's: one device on the probe's window, its back buffer
- * cleared, and a system-memory surface to read that back through. Translation
- * only. */
 #ifndef AV_WINDOWS_D3D9_ENTRY_HPP
 #define AV_WINDOWS_D3D9_ENTRY_HPP
 
@@ -33,6 +29,6 @@ private:
     uint32_t          height_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WINDOWS_D3D9_ENTRY_HPP
+#endif

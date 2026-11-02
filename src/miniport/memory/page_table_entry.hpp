@@ -1,6 +1,3 @@
-/* One VidMm page table entry in the layout the device walks (docs/protocol.md):
- * bit 0 valid, bit 1 read-only, bit 2 no-execute, bit 3 cache-coherent, bits
- * 4-8 the segment, bits 12-63 the page frame. An invalid entry is all zero. */
 #ifndef AV_PAGE_TABLE_ENTRY_HPP
 #define AV_PAGE_TABLE_ENTRY_HPP
 
@@ -17,7 +14,7 @@ public:
     uint64_t encoded() const;
 
 private:
-    enum : uint64_t {   /* DXGK_PTE */
+    enum : uint64_t {
         pte_valid = 0x1u,
         pte_cache_coherent = 0x4u,
         pte_read_only = 0x8u,
@@ -27,7 +24,7 @@ private:
     static constexpr uint64_t segment_mask = 0x1Fu;
     static constexpr uint32_t page_shift = 12u;
     static constexpr uint64_t frame_mask = (uint64_t{1} << 52u) - 1u;
-    enum : uint64_t {   /* the device's entry */
+    enum : uint64_t {
         entry_valid = 0x1u,
         entry_read_only = 0x2u,
         entry_no_execute = 0x4u,
@@ -39,6 +36,6 @@ private:
     uint64_t page_address_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_PAGE_TABLE_ENTRY_HPP
+#endif

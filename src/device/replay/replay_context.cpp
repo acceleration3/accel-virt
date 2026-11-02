@@ -20,8 +20,6 @@ ReplayContext::ReplayContext()
     AV_SCOPE("ReplayContext::ReplayContext");
 }
 
-/* The library's own destroy is the caller's: this object does not hold the
- * library it was made on. */
 ReplayContext::~ReplayContext()
 {
     AV_SCOPE("ReplayContext::~ReplayContext");
@@ -72,9 +70,6 @@ Status ReplayContext::execute(const ExecutorLibrary &library, const RecordedComm
 {
     AV_SCOPE("ReplayContext::execute");
     if (executor_ == nullptr) return Status::invalid_state;
-    /* Only a command that asks for an answer is given somewhere to write one,
-     * exactly as the device does it, so a later command cannot overwrite the
-     * answer the batch's reply will be compared against. */
     const bool     replying = command.header().generates_reply();
     size_t         produced = 0u;
     const uint32_t answered =
@@ -142,10 +137,8 @@ bool ReplayContext::invariants_hold() const
 {
     AV_SCOPE("ReplayContext::invariants_hold");
     if (executor_ == nullptr) return !answered_ && answer_length_ == 0u;
-    /* No context is named 0, and a context that answered nothing kept no
-     * length to compare a recorded reply against. */
     if (context_ == 0u) return false;
     return answered_ || answer_length_ == 0u;
 }
 
-}  // namespace av
+}

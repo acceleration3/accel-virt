@@ -27,4 +27,4 @@ void HostBlobTableProbe::misplace(uint32_t index, uint64_t offset)
     table.placed_.at(index).offset_ = offset;
 }
 
-}  // namespace av
+}

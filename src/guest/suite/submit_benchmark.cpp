@@ -14,7 +14,7 @@ namespace {
 constexpr uint64_t nanoseconds_per_second = 1000000000ull;
 constexpr uint32_t hundredths = 100u;
 
-}  // namespace
+}
 
 SubmitBenchmark::SubmitBenchmark(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : kmt_(kmt), report_(report), steps_(kmt, report, "submit"), link_(kmt, search, steps_, SubApi::vulkan),
@@ -34,8 +34,6 @@ Status SubmitBenchmark::time_block(uint64_t &elapsed_ticks)
         if (queued != TransportResult::ok) return Status::invalid_state;
     }
     elapsed_ticks += kmt_.performance_counter(frequency) - began;
-    /* Outside the timing: the device catches up, so the next block starts on a
-     * ring with room in it rather than measuring how fast the host is. */
     uint32_t answered = 0u;
     return link_.transport().nop(answered);
 }
@@ -61,18 +59,12 @@ void SubmitBenchmark::run()
     AV_SCOPE("SubmitBenchmark::run");
     ScopeExit closing([&] { link_.close(); });
     if (link_.open() != Status::ok) return;
-    /* The first round trip opens the host's backend, which is not a submission
-     * cost and must not land inside a timed block. */
     uint32_t answered = 0u;
     if (steps_.check("warm", link_.transport().nop(answered)) != Status::ok) return;
 
     measured_ = link_.transport().submissions_through_doorbell() != 0u;
-    /* A machine whose OS hands out no hardware queue has no gain to report,
-     * and the run says which it was (research.md §11). */
     report_.note("submit", "doorbell", measured_ ? "connected" : "none");
     if (measured_ && steps_.check("doorbell", time_path(doorbell_ns_)) != Status::ok) return;
-    /* Both costs on one boot: the doorbell is given back and the same batches
-     * go through the kernel. */
     link_.transport().give_back_doorbell();
     if (steps_.check("kernel", time_path(kernel_ns_)) != Status::ok) return;
 
@@ -104,7 +96,6 @@ void SubmitBenchmark::round_trips()
         trip_ns_[trip] = static_cast<uint32_t>(ticks * nanoseconds_per_second / frequency);
         total += trip_ns_[trip];
     }
-    /* Few enough to sort in place. */
     for (uint32_t index = 1u; index < trips; index++) {
         const uint32_t value = trip_ns_[index];
         uint32_t       at = index;
@@ -120,8 +111,6 @@ void SubmitBenchmark::round_trips()
     steps_.check_measured("trip_p90_ns", Status::ok, trip_ns_[trips * ninetieth / percent]);
     steps_.check_measured("trip_p99_ns", Status::ok, trip_ns_[trips * tail_percent / percent]);
     steps_.check_measured("trip_mean_ns", Status::ok, static_cast<uint32_t>(total / trips));
-    /* What the clock itself costs, which the transport reads for every batch
-     * and every turn of a spin: a clock the hypervisor serves is an exit a read. */
     constexpr uint32_t reads = 100000u;
     const uint64_t     clock_began = kmt_.performance_counter(frequency);
     for (uint32_t read = 0u; read < reads; read++) static_cast<void>(kmt_.performance_counter(frequency));
@@ -145,12 +134,8 @@ uint32_t SubmitBenchmark::kernel_ns() const
 uint32_t SubmitBenchmark::ratio() const
 {
     AV_SCOPE("SubmitBenchmark::ratio");
-    /* No doorbell is no comparison. Where there was one, the doorbell cost is
-     * charged a nanosecond more than it measured: one too fast for the clock
-     * would otherwise divide by nothing, and the ratio is a lower bound on the
-     * gain either way. */
     if (!measured_) return 0u;
     return kernel_ns_ * hundredths / (doorbell_ns_ + 1u);
 }
 
-}  // namespace av
+}

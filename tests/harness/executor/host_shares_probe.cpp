@@ -32,4 +32,4 @@ ShareHolder *HostSharesProbe::stray_holder(SessionBackend &session)
 
 void HostSharesProbe::drop_stray(ShareHolder *holder) { static_cast<void>(shares.holders_.destroy(holder)); }
 
-}  // namespace av
+}

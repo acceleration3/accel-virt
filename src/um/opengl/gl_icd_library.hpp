@@ -1,11 +1,3 @@
-/* avgl.dll's ICD root and what it is constructed over: the process heap, the
- * two thread locks, the log file, D3DKMT through gdi32, the application's
- * windows, thread-local storage, the loaded opengl32.dll, and the present
- * thread with the lock, D3DKMT waits and events of its own. One per process,
- * in the exports' storage (avgl_exports.cpp), constructed on opengl32's first
- * call rather than at DLL attach, where the loader lock forbids opening a file
- * or an event. Translation only: what the root decides is in src/icd/opengl,
- * reached through the entry points GlIcdBinding answers. */
 #ifndef AV_UM_GL_ICD_LIBRARY_HPP
 #define AV_UM_GL_ICD_LIBRARY_HPP
 
@@ -30,14 +22,10 @@ namespace av {
 
 class GlIcdLibrary {
 public:
-    /* `crashed` is the exports' unhandled-exception filter, which forwards to
-     * crashed(). Constexpr: the library is the exports' constinit storage. */
     constexpr explicit GlIcdLibrary(ProcessTrace::Filter crashed);
     GlIcdLibrary(const GlIcdLibrary &) = delete;
     GlIcdLibrary &operator=(const GlIcdLibrary &) = delete;
 
-    /* Every entry of a process LazyDriver refuses answers failure, and
-     * opengl32 then takes this for no driver. */
     int32_t   validate_version(uint32_t version);
     void      set_callback_procs(int32_t count, void *const *procs);
     int32_t   describe_pixel_format(void *dc, int32_t index, uint32_t bytes, uint8_t *descriptor);
@@ -53,7 +41,6 @@ public:
     int32_t   describe_layer_plane(void *dc, int32_t format, int32_t plane, uint32_t bytes, void *descriptor);
     int32_t   swap_layer_buffers(void *dc, uint32_t planes);
     int32_t   swap_buffers(void *dc);
-    /* The process is crashing: the crash file, if tracing started. */
     long      crashed(void *pointers);
 
 private:
@@ -67,11 +54,8 @@ private:
         GdiWindowSurface  surface;
         TlsThreadSlot     slot;
         LoadedOpengl32    opengl32;
-        /* Before the present loop, which presents through them, and the
-         * root, whose presenters open and close them. */
         SrwLock              chains_lock;
         DxgiWindowChains     chains;
-        /* Before the root, which settles every presenter on it as it goes. */
         SrwLock              present_lock;
         GdiKmt               present_kmt;
         WindowsServiceThread present_thread;
@@ -89,6 +73,6 @@ private:
 
 constexpr GlIcdLibrary::GlIcdLibrary(ProcessTrace::Filter crashed) : driver_("avgl", crashed) {}
 
-}  // namespace av
+}
 
-#endif  // AV_UM_GL_ICD_LIBRARY_HPP
+#endif

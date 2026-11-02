@@ -17,4 +17,4 @@ bool OnceLatch::first()
     return true;
 }
 
-}  // namespace av::icd
+}

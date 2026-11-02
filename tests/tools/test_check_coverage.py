@@ -99,10 +99,6 @@ if __name__ == "__main__":
 
 
 class GeneratedDirectories(unittest.TestCase):
-    """A registry's thousands of commands are not branches any test could walk;
-    what holds generated code honest is the compiler and check_generated.py
-    (feature 063)."""
-
     def setUp(self):
         self.tree = SourceTree()
         self.addCleanup(self.tree.remove)
@@ -115,8 +111,6 @@ class GeneratedDirectories(unittest.TestCase):
         self.assertEqual(verdict.unlinked(), [])
 
     def test_a_hand_written_source_still_is(self):
-        """The exclusion is the directory, and moving a file out of it puts the
-        rule back."""
         self.tree.write("src/proto/hand_written/wire.cpp", "int written() { return 1; }\n")
         verdict = check_coverage.CoverageVerdict(self.tree.root, {"data": [{"files": []}]}, (), self.profiles)
         self.assertEqual(len(verdict.unlinked()), 1)
@@ -124,11 +118,6 @@ class GeneratedDirectories(unittest.TestCase):
 
 
 class ShimDirectories(unittest.TestCase):
-    """Constitution II: the core is portable, the shim is not. A file that only
-    calls the host's own loaders cannot be driven by a unit test on a machine
-    that may have no GPU at all; it is proven at L3 and L5 instead (feature
-    042)."""
-
     def setUp(self):
         self.tree = SourceTree()
         self.addCleanup(self.tree.remove)
@@ -151,8 +140,6 @@ class ShimDirectories(unittest.TestCase):
         self.assertEqual(verdict.violations(), [])
 
     def test_a_portable_source_still_is(self):
-        """The exclusion is the directory, and moving a file out of it puts the
-        rule back."""
         files = [source_file(self.tree.root, "src/device/portable/loader.cpp", [branch(3, 1, 1, 0)])]
         verdict = check_coverage.CoverageVerdict(self.tree.root, {"data": [{"files": files}]}, (),
                                                  self.profiles)

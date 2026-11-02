@@ -16,11 +16,9 @@ using namespace d3d12proto;
 
 constexpr uint32_t graphics = 0u;
 constexpr uint32_t compute = 1u;
-/* SetRootView12's kinds. */
 constexpr uint32_t view_constant = 0u;
 constexpr uint32_t view_shader_resource = 1u;
 constexpr uint32_t view_unordered = 2u;
-/* Barrier types on the wire. */
 constexpr uint32_t barrier_transition = 0u;
 constexpr uint32_t barrier_aliasing = 1u;
 constexpr uint32_t barrier_uav = 2u;
@@ -29,11 +27,10 @@ constexpr uint32_t most_views = 16u;
 constexpr uint32_t most_buffers = 32u;
 constexpr uint32_t most_targets = 8u;
 constexpr uint32_t most_constants = 64u;
-/* CopyLocation types. */
 constexpr uint32_t location_subresource = 0u;
 constexpr uint32_t location_footprint = 1u;
 
-}  // namespace
+}
 
 D3d12Recorder::D3d12Recorder(D3d12Device &device) : device_(device)
 {
@@ -52,17 +49,12 @@ void D3d12Recorder::sent(bool sent_ok, const char *what)
     if (!sent_ok) device_.lost(what);
 }
 
-/* ---------------------------------------------------------------- lifetime */
-
 VOID D3d12Recorder::close_command_list(D3D12DDI_HCOMMANDLIST handle)
 {
     AV_SCOPE("D3d12Recorder::close_command_list");
     sent(av_d3d12_CloseCommandList12(device_.wire(), list(handle)), "CloseCommandList12");
 }
 
-/* The pool's allocator is made with the first list that records into it,
- * and the list with its first reset: the host's command list is made open,
- * which is what a reset leaves it. */
 VOID D3d12Recorder::reset_command_list(D3D12DDI_HCOMMANDLIST handle, const D3D12DDIARG_RESETCOMMANDLIST_0040 *args)
 {
     AV_SCOPE("D3d12Recorder::reset_command_list");
@@ -103,8 +95,6 @@ VOID D3d12Recorder::discard_resource(D3D12DDI_HCOMMANDLIST, D3D12DDI_HRESOURCE, 
     AV_SCOPE("D3d12Recorder::discard_resource");
 }
 
-/* ---------------------------------------------------------------- work */
-
 VOID D3d12Recorder::draw_instanced(D3D12DDI_HCOMMANDLIST handle, UINT vertices, UINT instances, UINT first_vertex,
                                    UINT first_instance)
 {
@@ -134,8 +124,6 @@ VOID D3d12Recorder::clear_render_target_view(D3D12DDI_HCOMMANDLIST handle, D3D12
     AV_SCOPE("D3d12Recorder::clear_render_target_view");
     Float4 value = {};
     for (uint32_t channel = 0u; color != nullptr && channel < 4u; channel++) value.v[channel] = color[channel];
-    /* A longer list is cleared most_views at a time, and none clears the
-     * whole view. */
     icd::ListPieces pieces(rects == nullptr ? 0u : rect_count, most_views);
     while (pieces.next()) {
         Rect       areas[most_views] = {};
@@ -169,8 +157,6 @@ VOID D3d12Recorder::clear_depth_stencil_view(D3D12DDI_HCOMMANDLIST handle, D3D12
     }
 }
 
-/* ---------------------------------------------------------------- copies */
-
 CopyLocation D3d12Recorder::location(const D3D12DDIARG_BUFFER_PLACEMENT &placement,
                                      const D3D12DDIARG_PLACED_RESOURCE &layout) const
 {
@@ -192,9 +178,6 @@ CopyLocation D3d12Recorder::location(const D3D12DDIARG_BUFFER_PLACEMENT &placeme
         made.depth = footprint.VirtualDepth;
         made.row_pitch = footprint.Pitch;
     } else if (layout.pLayout != nullptr) {
-        /* d3d12umddi.h calls these block dimensions, but D3D12Core fills them
-         * with the API footprint's texels: Direct3D 9 on 12 uploads a 32x32
-         * BC1 mip as 32x32 at a 256-byte pitch, 2 KiB apart. */
         const auto &footprint = *static_cast<const D3D12DDIARG_PHYSICAL_SUBRESOURCE_PITCHED_LAYOUT *>(layout.pLayout);
         made.format = static_cast<uint32_t>(footprint.Format);
         made.width = footprint.PhysicalWidth;
@@ -269,7 +252,6 @@ VOID D3d12Recorder::execute_indirect(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HCOM
          "ExecuteIndirect12");
 }
 
-/* Not recorded: a present is its queue's work (D3d12Device::present). */
 VOID D3d12Recorder::present(D3D12DDI_HCOMMANDLIST, D3D12DDI_HCOMMANDQUEUE queue, const D3D12DDIARG_PRESENT_0001 *args,
                             D3D12DDI_PRESENT_0051 *out, D3D12DDI_PRESENT_CONTEXTS_0051 *contexts,
                             D3D12DDI_PRESENT_HWQUEUES_0051 *hardware_queues)
@@ -289,8 +271,6 @@ VOID D3d12Recorder::resource_resolve_subresource(D3D12DDI_HCOMMANDLIST handle, D
          "ResolveSubresource12");
 }
 
-/* The DDI's states are the API's, bit for bit; its ranged barrier, which
- * replaced aliasing, is an aliasing barrier on the resource it names. */
 VOID D3d12Recorder::resource_barrier(D3D12DDI_HCOMMANDLIST handle, UINT count,
                                      const D3D12DDIARG_RESOURCE_BARRIER_0022 *barriers)
 {
@@ -321,8 +301,6 @@ VOID D3d12Recorder::resource_barrier(D3D12DDI_HCOMMANDLIST handle, UINT count,
     }
 }
 
-/* ---------------------------------------------------------------- queries */
-
 VOID D3d12Recorder::begin_query(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HQUERYHEAP heap, D3D12DDI_QUERY_TYPE type,
                                 UINT index)
 {
@@ -349,8 +327,6 @@ VOID D3d12Recorder::resolve_query_data(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_HQ
                                       offset),
          "ResolveQueryData12");
 }
-
-/* ---------------------------------------------------------------- fixed function */
 
 VOID D3d12Recorder::ia_set_topology(D3D12DDI_HCOMMANDLIST handle, D3D12DDI_PRIMITIVE_TOPOLOGY topology)
 {
@@ -421,7 +397,6 @@ VOID D3d12Recorder::ia_set_vertex_buffers(D3D12DDI_HCOMMANDLIST handle, UINT sta
     sent(av_d3d12_SetVertexBuffers12(device_.wire(), list(handle), start, taken, made), "SetVertexBuffers12");
 }
 
-/* A single handle to a range names `count` descriptors one increment apart. */
 VOID D3d12Recorder::om_set_render_targets(D3D12DDI_HCOMMANDLIST handle, UINT count,
                                           const D3D12DDI_CPU_DESCRIPTOR_HANDLE *targets, BOOL single_range,
                                           const D3D12DDI_CPU_DESCRIPTOR_HANDLE *depth)
@@ -438,8 +413,6 @@ VOID D3d12Recorder::om_set_render_targets(D3D12DDI_HCOMMANDLIST handle, UINT cou
     sent(av_d3d12_SetRenderTargets12(device_.wire(), list(handle), taken, made, depth != nullptr ? 1u : 0u, depth_view),
          "SetRenderTargets12");
 }
-
-/* ---------------------------------------------------------------- root arguments */
 
 VOID D3d12Recorder::set_descriptor_heaps(D3D12DDI_HCOMMANDLIST handle, UINT count, D3D12DDI_HDESCRIPTORHEAP *heaps)
 {
@@ -563,4 +536,4 @@ VOID D3d12Recorder::set_graphics_root_unordered_access_view(D3D12DDI_HCOMMANDLIS
     set_root_view(handle, graphics, parameter, view_unordered, address);
 }
 
-}  // namespace av::d3d12
+}

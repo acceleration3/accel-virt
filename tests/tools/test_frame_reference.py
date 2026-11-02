@@ -1,9 +1,3 @@
-"""Whether a captured frame is the one committed (feature 048, US2).
-
-What the runner captures is the device's scanout, so these are PPMs; what is
-judged is every channel of every pixel within the step a GPU may round by, and
-what a failure leaves behind is an image a person can look at.
-"""
 import pathlib
 import sys
 import tempfile
@@ -46,7 +40,6 @@ class Frames(unittest.TestCase):
         captured = self.solid("captured.ppm", (65, 127, 191))
         reference = self.solid("reference.ppm", (64, 128, 191))
         self.assertEqual(FrameReference(captured, reference, 1).differs(), 0)
-        # And a step further is not.
         self.assertEqual(FrameReference(captured, reference, 0).differs(), 8)
 
     def test_one_pixel_out_is_one_pixel_counted_whatever_channel_moved(self):
@@ -67,7 +60,6 @@ class Frames(unittest.TestCase):
         difference = frame.write_difference(self.root / "difference.ppm")
         picked = PpmImage(difference)
         self.assertEqual(picked.size(), (4, 2))
-        # The pixel that moved is picked out; the rest is the frame, dimmed.
         self.assertEqual(tuple(picked.pixels[0:3]), (255, 0, 255))
         self.assertEqual(tuple(picked.pixels[3:6]), (64 // 3, 128 // 3, 191 // 3))
 
@@ -79,8 +71,6 @@ class Frames(unittest.TestCase):
         self.assertIn("2x2", frame.mismatched_size())
 
     def test_what_is_not_an_image_says_so_rather_than_raising(self):
-        """These files come from a QEMU that may have died halfway through
-        writing one."""
         cases = {
             "empty": b"",
             "not a ppm": b"not an image at all",
@@ -102,8 +92,6 @@ class Frames(unittest.TestCase):
         self.assertIn("is not a P6 PPM", missing.unreadable())
 
     def test_a_dump_with_trailing_bytes_is_read_to_its_size(self):
-        """QEMU writes exactly the frame; a file with more in it is read to the
-        size its header gave rather than refused."""
         captured = self.image("captured.ppm", ppm(2, 2, [7] * 12) + b"trailing")
         picked = PpmImage(captured)
         self.assertTrue(picked.valid())

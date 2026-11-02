@@ -1,5 +1,3 @@
-/* RECT, as the present DDIs carry rectangles. A DDI record: fields keep the
- * SDK's lowercase names; src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_RECT_RECORD_HPP
 #define AV_RECT_RECORD_HPP
 
@@ -14,6 +12,6 @@ struct RectRecord {
     int32_t bottom;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_RECT_RECORD_HPP
+#endif

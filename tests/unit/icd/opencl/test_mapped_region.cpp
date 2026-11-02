@@ -1,13 +1,3 @@
-/* One live mapping of a buffer, and the three things an unmap has to know.
- *
- * A guest cannot be handed the host's pointer, so a mapping is a pair of
- * addresses: what the application was given, and what the host's own map
- * answered - an unmap names the second, and the application only ever sees the
- * first. The third thing is whether the bytes have to go back, which is what
- * the map flags say and what makes a read-only mapping free to throw away.
- *
- * The mappings themselves live on the context, because a buffer released with
- * one still live keeps the mapping's memory until the unmap. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/cl_context_rig.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
@@ -22,12 +12,6 @@ using av::clicd::MappedRegion;
 using av::clicd::MappedRegionProbe;
 
 namespace av::clicd {
-
-/* A mapping is either live or wholly empty. Each of these is a halfway state
- * the class never builds: a live mapping of no bytes, or one naming neither
- * the buffer nor the address the host's own map answered, could never be
- * unmapped; and an empty one still naming a buffer would have the context
- * believe a slot is free while an unmap could still find it. */
 struct MappedRegionProbe {
     static void forget_length(MappedRegion &region) { region.bytes_ = 0u; }
     static void forget_buffer(MappedRegion &region) { region.buffer_ = 0u; }
@@ -39,14 +23,14 @@ struct MappedRegionProbe {
     static void stray_element(MappedRegion &region) { region.element_bytes_ = 4u; }
 };
 
-}  // namespace av::clicd
+}
 
 namespace {
 
 constexpr std::uint64_t host_buffer = 0x6600u;
 constexpr std::uint64_t host_address = 0x0000'7F44'0000'2000ull;
 
-}  // namespace
+}
 
 TEST(mapped_region, one_that_holds_nothing_answers_for_nothing)
 { MappedRegion region;
@@ -63,8 +47,6 @@ TEST(mapped_region, it_answers_the_pointer_the_map_returned_and_no_other)
   region.take(host_buffer, host_address, 16u, sizeof block, CL_MAP_READ, block, MappedRegion::Memory::staged);
   CHECK(region.held());
   CHECK(region.answers(block));
-  /* An unmap takes what it was given; an address inside the mapping is not
-   * that pointer. */
   CHECK(!region.answers(block + 1));
   CHECK(!region.answers(block + sizeof block));
   CHECK_EQ(region.offset(), 16u);
@@ -75,8 +57,6 @@ TEST(mapped_region, it_answers_the_pointer_the_map_returned_and_no_other)
 TEST(mapped_region, a_read_only_mapping_is_thrown_away_rather_than_written_back)
 { MappedRegion region;
   std::uint8_t block[64] = {};
-  /* CL_MAP_READ is a promise not to write through the pointer, so writing the
-   * bytes back would overwrite whatever the device did in the meantime. */
   region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_READ, block, MappedRegion::Memory::staged);
   CHECK(!region.writes_back());
   region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_WRITE, block, MappedRegion::Memory::staged);
@@ -89,8 +69,6 @@ TEST(mapped_region, a_read_only_mapping_is_thrown_away_rather_than_written_back)
 TEST(mapped_region, a_mapping_that_was_not_staged_writes_nothing_back)
 { MappedRegion region;
   std::uint8_t block[64] = {};
-  /* The bytes were already the guest's own - a host-visible blob - so there
-   * is nothing to copy either way. */
   region.take(host_buffer, host_address, 0u, sizeof block, CL_MAP_WRITE, block, MappedRegion::Memory::shared);
   CHECK(!region.staged());
   CHECK(!region.writes_back());
@@ -119,7 +97,6 @@ TEST(guest_cl_context, a_mapping_is_taken_from_the_context_and_given_back_to_it)
   MappedRegion *const region = context.mapping_at(at);
   CHECK(region != nullptr);
   CHECK(region->answers(at));
-  /* A pointer no live mapping answered is not one this context can unmap. */
   CHECK(context.mapping_at(at + 1) == nullptr);
   CHECK(context.mapping_at(nullptr) == nullptr);
   CHECK(context.invariants_hold());
@@ -136,15 +113,10 @@ TEST(guest_cl_context, a_mapping_of_nothing_or_of_no_buffer_is_refused)
   CHECK_STATUS(context.make(), Status::ok);
   CHECK(context.take_mapping(host_buffer, host_address, 0u, 0u, CL_MAP_READ) == nullptr);
   CHECK(context.take_mapping(0u, host_address, 0u, 16u, CL_MAP_READ) == nullptr);
-  /* And one the host answered no address for: an unmap would have nothing to
-   * name. */
   CHECK(context.take_mapping(host_buffer, 0u, 0u, 16u, CL_MAP_READ) == nullptr);
   CHECK_EQ(context.mappings(), 0u);
   CHECK(context.invariants_hold()); }
 
-/* A mapping of the application's own memory is handed back where it is and
- * written back like a staged one, but never freed; and a buffer that goes
- * takes every mapping of its own with it, and none of another's. */
 TEST(guest_cl_context, application_mappings_are_never_freed_and_a_released_buffer_takes_its_own)
 { ClContextRig rig;
   rig.host().blob_import(0u, 0x77u);
@@ -163,9 +135,6 @@ TEST(guest_cl_context, application_mappings_are_never_freed_and_a_released_buffe
   CHECK(context.take_mapping(host_buffer, host_address + 0x1000u, 0u, 16u, CL_MAP_READ) != nullptr);
   CHECK(context.take_mapping(host_buffer + 1u, host_address + 0x2000u, 0u, 16u, CL_MAP_READ) != nullptr);
   CHECK_EQ(context.mappings(), 3u);
-  /* Two of the buffer's own - one the application's memory, one staged - go,
-   * and the other buffer's stays. Giving back the application's memory frees
-   * nothing: the mock platform aborts on a release of what it never lent. */
   CHECK_EQ(context.give_back_mappings_of(host_buffer), 2u);
   CHECK_EQ(context.mappings(), 1u);
   CHECK_EQ(context.give_back_mappings_of(host_buffer), 0u);
@@ -176,9 +145,6 @@ TEST(guest_cl_context, a_context_that_can_hold_no_more_mappings_refuses_and_stay
   rig.host().blob_import(0u, 0x77u);
   GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
-  /* One staged mapping, then the rest of the table with mappings of memory
-   * the context already has - thousands of staged blocks are more than the
-   * mock platform lends. */
   std::uint8_t *const first = context.take_mapping(host_buffer, host_address, 0u, 16u, CL_MAP_READ);
   CHECK(first != nullptr);
   static std::uint8_t shared[GuestClContext::max_mappings];
@@ -199,11 +165,8 @@ TEST(guest_cl_context, mappings_left_live_go_with_the_context)
     CHECK_STATUS(context.make(), Status::ok);
     CHECK(context.take_mapping(host_buffer, host_address, 0u, 256u, CL_MAP_WRITE) != nullptr);
     CHECK_EQ(context.mappings(), 1u); }
-  /* An application that never unmapped is an application that leaked nothing:
-   * the blocks were the context's. */
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
-/* The invariant catches the halfway states the class never builds. */
 TEST(mapped_region, the_invariant_catches_a_live_mapping_that_could_not_be_unmapped)
 { std::uint8_t at[64] = {};
   const auto broken = [&at](void (*corrupt)(MappedRegion &)) {
@@ -229,8 +192,6 @@ TEST(mapped_region, the_invariant_catches_an_empty_mapping_that_still_names_some
   CHECK(!broken(MappedRegionProbe::stray_offset));
   CHECK(!broken(MappedRegionProbe::stray_staging)); }
 
-/* An image's mapping has no host map behind it: it names the image, where in
- * it the region is and its element's size, and lays the region out packed. */
 TEST(mapped_region, an_image_mapping_names_its_region_and_lays_it_out_packed)
 { MappedRegion region;
   CHECK(!region.image());
@@ -253,13 +214,9 @@ TEST(mapped_region, an_image_mapping_names_its_region_and_lays_it_out_packed)
   CHECK_EQ(at[1], 3u);
   CHECK_EQ(at[2], 1u);
   CHECK(region.writes_back());
-  /* Given up, it names no image any more. */
   region.give_up();
   CHECK(!region.image());
   CHECK(region.invariants_hold());
-  /* An image's mapping is staged and has no host address; one that claims
-   * either, or an empty one still naming an element size, is no state a map
-   * builds. */
   region.take(host_buffer, 0x1000u, 0u, sizeof block, CL_MAP_WRITE, block, MappedRegion::Memory::staged);
   region.place_in_image(origin, extent, 4u);
   CHECK(!region.invariants_hold());

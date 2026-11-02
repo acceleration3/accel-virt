@@ -105,4 +105,4 @@ uint64_t SharedRowsTexture::bytes() const
     return bytes_;
 }
 
-}  // namespace av
+}

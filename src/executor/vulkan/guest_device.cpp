@@ -33,4 +33,4 @@ VulkanMemoryImport &GuestDevice::memory()
     return memory_;
 }
 
-}  // namespace av
+}

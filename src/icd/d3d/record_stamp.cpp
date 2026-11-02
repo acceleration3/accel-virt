@@ -26,4 +26,4 @@ uint32_t RecordStamp::id() const
     return id_;
 }
 
-}  // namespace av::d3d
+}

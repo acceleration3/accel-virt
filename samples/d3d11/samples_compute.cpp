@@ -1,15 +1,11 @@
-// computeparticles, computeshader, particlefire, raytracing, bloom, radialblur, offscreen
 #include "framework.h"
 
 namespace samples {
 
 namespace {
 
-// ---------------------------------------------------------------- shared pieces
-
 #define COMPUTE_QUAD_HLSL "struct Quad { float4 position : SV_Position; float2 uv : TEXCOORD; };\n"
 
-// A full-screen triangle from SV_VertexID alone: no vertex buffer, no layout.
 const char *const quad_source = COMPUTE_QUAD_HLSL R"(
 Quad vs(uint id : SV_VertexID) {
     Quad o;
@@ -70,7 +66,6 @@ ID3D11DepthStencilState *depth_state(Gpu &gpu, bool test, bool write)
     return made;
 }
 
-// The procedural meshes here are not all wound one way, so nothing is culled.
 ID3D11RasterizerState *no_cull_state(Gpu &gpu)
 {
     D3D11_RASTERIZER_DESC desc = {};
@@ -82,7 +77,6 @@ ID3D11RasterizerState *no_cull_state(Gpu &gpu)
     return made;
 }
 
-// An off-screen colour target, optionally with its own depth, readable as a texture.
 struct RenderTexture {
     ID3D11Texture2D           *texture = nullptr;
     ID3D11RenderTargetView    *rtv = nullptr;
@@ -144,8 +138,6 @@ struct RenderTexture {
     }
 };
 
-// ---- CPU-side procedural content
-
 float smooth(float a, float b, float x)
 {
     const float t = clamp((x - a) / (b - a), 0.0f, 1.0f);
@@ -160,7 +152,6 @@ float lattice(int x, int y, uint32_t seed)
     return static_cast<float>(h & 0xFFFFFFu) / 16777216.0f;
 }
 
-// Value noise that tiles with `period` lattice cells (period 0: no tiling).
 float value_noise(float x, float y, uint32_t seed, int period)
 {
     const float fx = floor(x), fy = floor(y);
@@ -194,7 +185,6 @@ uint32_t pack_rgba(float r, float g, float b, float a)
     return byte(r) | (byte(g) << 8u) | (byte(b) << 16u) | (byte(a) << 24u);
 }
 
-// A tangent-space normal map from a tiling height field.
 void normal_map(const float *height, uint32_t size, float strength, uint32_t *texels)
 {
     for (uint32_t y = 0; y < size; y++)
@@ -212,7 +202,6 @@ float3 transform_direction(float3 v, const float4x4 &m)
             v.x * m.m[0][2] + v.y * m.m[1][2] + v.z * m.m[2][2]};
 }
 
-// A rotation taking +y to `d`.
 float4x4 basis_from_y(float3 d)
 {
     const float3 x = normalize(cross(d, abs(d.x) < 0.9f ? float3{1, 0, 0} : float3{0, 0, 1}));
@@ -224,7 +213,6 @@ float4x4 basis_from_y(float3 d)
     return r;
 }
 
-// A capped frustum around +y from 0 to `height`: a cylinder when both radii match, a cone when top is 0.
 Mesh frustum_mesh(uint32_t sides, float bottom, float top, float height)
 {
     Mesh mesh;
@@ -264,8 +252,6 @@ Mesh frustum_mesh(uint32_t sides, float bottom, float top, float height)
     return mesh;
 }
 
-// Several meshes baked into one, each placed, coloured, and given a glow
-// amount (carried in uv.x) that the bloom and radial-blur passes read.
 struct MeshBuilder {
     Mesh     mesh;
     uint32_t vertex_capacity = 0;
@@ -304,7 +290,6 @@ struct MeshBuilder {
     }
 };
 
-// Lit geometry that also glows: the bloom and radial blur scenes.
 const char *const glow_scene_source = R"(
 cbuffer Scene : register(b0) {
     row_major float4x4 world;
@@ -346,10 +331,6 @@ struct GlowScene {
     float4   eye;
 };
 
-// ---------------------------------------------------------------- computeparticles
-
-// A compute shader moves 256K particles between two typed buffers; a geometry
-// shader expands each one into a sprite, blended additively.
 class ComputeParticles final : public Sample {
 public:
     const char *name() const override { return "computeparticles"; }
@@ -475,8 +456,6 @@ float4 ps(Corner c) : SV_Target {
     void render(Gpu &gpu, float time) override
     {
         auto *c = gpu.context;
-        // The state at `time` is a fixed number of fixed steps from the start,
-        // so a jump back in time replays from the initial particles.
         const uint32_t target = static_cast<uint32_t>((time + preroll) * steps_per_second + 0.001f);
         if (target < steps_) {
             c->CopyResource(particles_[0], initial_);
@@ -558,12 +537,8 @@ private:
         float4 gradient;
     };
     static constexpr uint32_t count = 256u * 1024u;
-    // Two steps a frame with the forces scaled up stand in for the original's
-    // one step per frame at the ~1000 fps it was shown running at.
     static constexpr float steps_per_second = 120.0f;
     static constexpr float force = 8.0f;
-    // Time zero shows the swarm already settled into its streams, as the
-    // original looks after running a while; replaying reaches it in one frame.
     static constexpr float preroll = 8.0f;
 
     ID3D11ComputeShader       *cs_ = nullptr;
@@ -571,7 +546,6 @@ private:
     ID3D11GeometryShader      *gs_ = nullptr;
     ID3D11PixelShader         *ps_ = nullptr;
     ID3D11Buffer              *initial_ = nullptr;
-    // Ping-pong: typed UAV loads of four-component formats are optional in D3D11.
     ID3D11Buffer              *particles_[2] = {};
     ID3D11ShaderResourceView  *particles_srv_[2] = {};
     ID3D11UnorderedAccessView *particles_uav_[2] = {};
@@ -586,10 +560,6 @@ private:
     uint32_t                   current_ = 0;
 };
 
-// ---------------------------------------------------------------- computeshader
-
-// A painting generated on the CPU, filtered by a compute shader into a UAV
-// texture, shown beside the original. The filter changes every two seconds.
 class ComputeShader final : public Sample {
 public:
     const char *name() const override { return "computeshader"; }
@@ -687,8 +657,6 @@ float4 ps(Quad q) : SV_Target { return image.Sample(filter, q.uv); }
 private:
     static constexpr uint32_t size = 512;
 
-    // Sky, clouds and smoke over a brown sea, and a tall ship: the original's
-    // painting, in spirit.
     static void paint(uint32_t *texels)
     {
         for (uint32_t y = 0; y < size; y++)
@@ -713,7 +681,6 @@ private:
         const float cloud = smooth(0.42f, 0.7f, n + v * 0.25f - 0.1f);
         const float shade = 0.45f + 0.5f * fbm(u * 9.0f + 3.0f, v * 9.0f, 23u, 4, 0);
         c = c * (1 - cloud) + float3{shade, shade, shade * 1.02f} * cloud;
-        // gun smoke low beside the hull
         const float dx = (u - 0.45f) / 0.18f, dy = (v - 0.72f) / 0.1f;
         const float puff = smooth(1.0f, 0.3f, dx * dx + dy * dy) * smooth(0.3f, 0.6f, fbm(u * 12, v * 12, 41u, 4, 0));
         const float white = 0.85f + 0.12f * fbm(u * 20, v * 20, 43u, 3, 0);
@@ -750,11 +717,6 @@ private:
     ID3D11SamplerState       *sampler_ = nullptr;
 };
 
-// ---------------------------------------------------------------- particlefire
-
-// A camp fire: normal-mapped ground and logs lit by the flickering fire, and
-// flame and smoke billboards whose every property is a closed-form function
-// of time and the instance id, expanded from SV_VertexID in the vertex shader.
 class ParticleFire final : public Sample {
 public:
     const char *name() const override { return "particlefire"; }
@@ -1081,10 +1043,6 @@ private:
     ID3D11RasterizerState    *no_cull_ = nullptr;
 };
 
-// ---------------------------------------------------------------- raytracing
-
-// A compute shader ray traces three spheres over a plane (shadows, one
-// reflection bounce, fog) into a UAV texture that a full-screen pass shows.
 class Raytracing final : public Sample {
 public:
     const char *name() const override { return "raytracing"; }
@@ -1206,8 +1164,6 @@ private:
     ID3D11Buffer        *constants_ = nullptr;
 };
 
-// ---------------------------------------------------------------- bloom
-
 const char *const blur_source = COMPUTE_QUAD_HLSL R"(
 Texture2D image : register(t0);
 SamplerState filter : register(s0);
@@ -1223,8 +1179,6 @@ float4 ps(Quad q) : SV_Target {
 }
 )";
 
-// A flying saucer whose glowing parts are drawn again into a small target,
-// blurred vertically there, then horizontally onto the frame, additively.
 class Bloom final : public Sample {
 public:
     const char *name() const override { return "bloom"; }
@@ -1421,10 +1375,6 @@ private:
     ID3D11RasterizerState   *no_cull_ = nullptr;
 };
 
-// ---------------------------------------------------------------- radialblur
-
-// A caged glowing sphere: its glowing faces drawn into an off-screen target,
-// then blurred radially from the centre and added over the lit scene.
 class RadialBlur final : public Sample {
 public:
     const char *name() const override { return "radialblur"; }
@@ -1515,8 +1465,6 @@ float4 ps(Quad q) : SV_Target {
 private:
     static constexpr uint32_t glow_size = 512;
 
-    // A once-subdivided icosahedron; each face becomes a glowing inner
-    // triangle, set back a little, inside a dark frame.
     void build_cage(Gpu &gpu)
     {
         const float g = (1.0f + sqrt(5.0f)) * 0.5f;
@@ -1584,10 +1532,6 @@ private:
     ID3D11RasterizerState   *no_cull_ = nullptr;
 };
 
-// ---------------------------------------------------------------- offscreen
-
-// A mirror floor: the scene, reflected and clipped at the floor plane, is rendered into a texture that the floor samples
-// with projected coordinates.
 class Offscreen final : public Sample {
 public:
     const char *name() const override { return "offscreen"; }
@@ -1758,7 +1702,6 @@ private:
         ball_.draw(c);
     }
 
-    // A (2,3) torus knot tube, standing in for the original's dragon.
     static Mesh knot_mesh(uint32_t rings, uint32_t sides)
     {
         Mesh mesh;
@@ -1795,7 +1738,6 @@ private:
         return mesh;
     }
 
-    // Riveted, scratched metal plates.
     void make_plate(Gpu &gpu)
     {
         const uint32_t n = 512, panel = 256;
@@ -1834,7 +1776,7 @@ private:
     ID3D11RasterizerState    *no_cull_ = nullptr;
 };
 
-}  // namespace
+}
 
 void register_compute(Sample **all, uint32_t &made)
 {
@@ -1847,4 +1789,4 @@ void register_compute(Sample **all, uint32_t &made)
     all[made++] = new Offscreen();
 }
 
-}  // namespace samples
+}

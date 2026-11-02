@@ -1,16 +1,5 @@
-/* Proves at compile time that each DDI record in src/icd/d3d/ddi/ is laid out
- * byte-for-byte as the structure the Direct3D runtime passes, so the UMD's core
- * can be driven on Linux through the same memory the runtime hands it - what
- * src/km/ddi_record_layout.cpp does for dxgkrnl's side.
- *
- * It also pins the HRESULT values src/icd/d3d/hresult.hpp spells out, because
- * the portable core cannot include winerror.h and a transcription error there
- * would be a wrong answer to the runtime rather than a build failure. */
 #include <windows.h>
 
-/* The kit's user-mode headers define no NTSTATUS, and d3dkmddi.h - which
- * d3d10umddi.h includes - is written in it, as src/um/kmt/gdi_kmt.cpp does for
- * d3dkmthk.h. */
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 
 #include <d3d9types.h>
@@ -62,8 +51,6 @@ AV_SAME_SIZE(D3dddiAdapterFuncsRecord, D3DDDI_ADAPTERFUNCS);
 AV_SAME_OFFSET(D3dddiAdapterFuncsRecord, pfnGetCaps, D3DDDI_ADAPTERFUNCS, pfnGetCaps);
 AV_SAME_OFFSET(D3dddiAdapterFuncsRecord, pfnCreateDevice, D3DDDI_ADAPTERFUNCS, pfnCreateDevice);
 AV_SAME_OFFSET(D3dddiAdapterFuncsRecord, pfnCloseAdapter, D3DDDI_ADAPTERFUNCS, pfnCloseAdapter);
-/* Direct3D 9's GetCaps argument is Direct3D 10's in all but its name, so one
- * record and one root slot answer both. */
 AV_SAME_SIZE(D3d102ddiargGetCapsRecord, D3DDDIARG_GETCAPS);
 AV_SAME_OFFSET(D3d102ddiargGetCapsRecord, Type, D3DDDIARG_GETCAPS, Type);
 AV_SAME_OFFSET(D3d102ddiargGetCapsRecord, pInfo, D3DDDIARG_GETCAPS, pInfo);
@@ -92,7 +79,6 @@ AV_SAME_SIZE(D3d10ddiargCalcPrivateDeviceSizeRecord, D3D10DDIARG_CALCPRIVATEDEVI
 AV_SAME_OFFSET(D3d10ddiargCalcPrivateDeviceSizeRecord, Interface, D3D10DDIARG_CALCPRIVATEDEVICESIZE, Interface);
 AV_SAME_OFFSET(D3d10ddiargCalcPrivateDeviceSizeRecord, Version, D3D10DDIARG_CALCPRIVATEDEVICESIZE, Version);
 AV_SAME_OFFSET(D3d10ddiargCalcPrivateDeviceSizeRecord, Flags, D3D10DDIARG_CALCPRIVATEDEVICESIZE, Flags);
-/* D3D12's is the same three fields, so one record serves both creates. */
 static_assert(sizeof(av::d3d::D3d10ddiargCalcPrivateDeviceSizeRecord) == sizeof(D3D12DDIARG_CALCPRIVATEDEVICESIZE));
 
 AV_SAME_SIZE(D3d102ddiargGetCapsRecord, D3D10_2DDIARG_GETCAPS);
@@ -100,7 +86,6 @@ AV_SAME_OFFSET(D3d102ddiargGetCapsRecord, Type, D3D10_2DDIARG_GETCAPS, Type);
 AV_SAME_OFFSET(D3d102ddiargGetCapsRecord, pInfo, D3D10_2DDIARG_GETCAPS, pInfo);
 AV_SAME_OFFSET(D3d102ddiargGetCapsRecord, pData, D3D10_2DDIARG_GETCAPS, pData);
 AV_SAME_OFFSET(D3d102ddiargGetCapsRecord, DataSize, D3D10_2DDIARG_GETCAPS, DataSize);
-/* And D3D12DDIARG_GETCAPS is the same shape, so the one thunk serves both. */
 AV_SAME_SIZE(D3d102ddiargGetCapsRecord, D3D12DDIARG_GETCAPS);
 AV_SAME_OFFSET(D3d102ddiargGetCapsRecord, DataSize, D3D12DDIARG_GETCAPS, DataSize);
 
@@ -124,8 +109,6 @@ AV_SAME_OFFSET(D3d12ddiargOpenAdapterRecord, hAdapter, D3D12DDIARG_OPENADAPTER, 
 AV_SAME_OFFSET(D3d12ddiargOpenAdapterRecord, pAdapterCallbacks, D3D12DDIARG_OPENADAPTER, pAdapterCallbacks);
 AV_SAME_OFFSET(D3d12ddiargOpenAdapterRecord, pAdapterFuncs, D3D12DDIARG_OPENADAPTER, pAdapterFuncs);
 
-/* Eight slots are the region D3D12Core clears before the open (research.md
- * §12): 0x40 bytes in a 64-bit process, 0x20 in a 32-bit one. */
 AV_SAME_SIZE(D3d12ddiAdapterFuncsRecord, D3D12DDI_ADAPTERFUNCS);
 static_assert(sizeof(D3D12DDI_ADAPTERFUNCS) == 8u * sizeof(void *));
 AV_SAME_OFFSET(D3d12ddiAdapterFuncsRecord, pfnCalcPrivateDeviceSize, D3D12DDI_ADAPTERFUNCS,
@@ -174,9 +157,6 @@ AV_SAME_OFFSET(Dxgi161DdiBaseFunctionsRecord, pfnTrimResidencySet, DXGI1_6_1_DDI
 AV_SAME_OFFSET(Dxgi161DdiBaseFunctionsRecord, pfnReclaimResources1, DXGI1_6_1_DDI_BASE_FUNCTIONS,
                pfnReclaimResources1);
 
-/* The argument views: shorter than the runtime's structures on purpose, so
- * only the fields named here are checked - what is past them is the runtime's
- * and is never written. */
 AV_SAME_OFFSET(DxgiDdiArgRecord, hDevice, DXGI_DDI_ARG_PRESENT, hDevice);
 AV_SAME_OFFSET(DxgiDdiArgGetGammaControlCapsRecord, hDevice, DXGI_DDI_ARG_GET_GAMMA_CONTROL_CAPS, hDevice);
 AV_SAME_OFFSET(DxgiDdiArgGetGammaControlCapsRecord, pGammaCapabilities, DXGI_DDI_ARG_GET_GAMMA_CONTROL_CAPS,
@@ -206,12 +186,6 @@ AV_SAME_OFFSET(DxgiDdiArgReclaimResources1Record, pResults, DXGI_DDI_ARG_RECLAIM
 AV_SAME_OFFSET(DxgiDdiArgReclaimResources1Record, Resources, DXGI_DDI_ARG_RECLAIMRESOURCES1, Resources);
 static_assert(sizeof(D3DDDI_RECLAIM_RESULT) == sizeof(uint32_t) && D3DDDI_RECLAIM_RESULT_OK == 0);
 
-/* Every slot 055 fills answers an HRESULT, except the two the WDK declares
- * otherwise. This matters because BOOL and HRESULT both mirror to int32_t, so
- * nothing but this catches a decliner handing E_NOTIMPL to a BOOL-returning
- * slot - where it reads as TRUE, and a "not supported" becomes a "yes"
- * (contracts/dxgi_seam.md). The device-functions tables of 056, 057 and 064 do
- * have BOOL slots; they need the same assertion. */
 static_assert(__is_same(HRESULT, int32_t) || __is_same(HRESULT, long));
 static_assert(sizeof(HRESULT) == sizeof(av::d3d::Hresult));
 static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnPresent(nullptr)), HRESULT));
@@ -221,7 +195,6 @@ static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnGetMultiplane
 static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnTrimResidencySet(nullptr)), HRESULT));
 static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnCheckPresentDurationSupport(nullptr)), HRESULT));
 static_assert(__is_same(decltype(DXGI1_6_1_DDI_BASE_FUNCTIONS{}.pfnReclaimResources1(nullptr)), HRESULT));
-/* The two adapter slots that are not HRESULT, and which the thunks match. */
 static_assert(__is_same(decltype(D3D10_2DDI_ADAPTERFUNCS{}.pfnCalcPrivateDeviceSize(
                             D3D10DDI_HADAPTER{}, nullptr)), SIZE_T));
 static_assert(__is_same(decltype(D3D12DDI_ADAPTERFUNCS{}.pfnDestroyDevice(D3D12DDI_HDEVICE{})), VOID));
@@ -240,5 +213,4 @@ static_assert(av::d3d::hr_dxgi_device_hung == DXGI_ERROR_DEVICE_HUNG);
 static_assert(av::d3d::hr_dxgi_device_reset == DXGI_ERROR_DEVICE_RESET);
 static_assert(av::d3d::hr_d3d12_driver_version_mismatch == D3D12_ERROR_DRIVER_VERSION_MISMATCH);
 
-/* The WDDM 3.2 D3D11 DDI word DdiVersionList names (d3d10umddi.h:7969). */
 static_assert(D3DWDDM3_2_DDI_SUPPORTED == 0x000B002D00010000ull);

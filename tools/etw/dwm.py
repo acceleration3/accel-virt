@@ -1,21 +1,3 @@
-"""DWM's composition frames in a trace, and what decides whether a
-Windows.Graphics.Capture capture gets one.
-
-DWM composes once a vblank on its render thread (Dwm-Core
-SCHEDULE_PROCESS_FRAME). In a frame it renders and presents the display - the
-legacy swapchain's LEGACYSWAPCHAIN_BUFFERFLIP marks that present - and then
-considers each capture target. A capture target renders only when
-COffScreenRenderTarget::IsRenderTime allows it: MinUpdateInterval of QPC time
-(16 ms unless the capture session sets another) since the capture last started
-rendering. Otherwise DWM schedules a composition pass for reason
-DelayedRendering and the capture skips the frame. At 60 Hz that leaves 0.67 ms
-of slack: a frame that reaches its capture check that much earlier after the
-vblank than the last captured frame did is skipped.
-
-    frames = DwmFrames(trace, min_update_interval_ms=16.0)
-    frames.frames        # [Frame], with stages, the capture decision and the rule's prediction
-    frames.analyze(symbols)                        # per-frame account of the render thread
-"""
 import bisect
 import collections
 import statistics
@@ -26,27 +8,27 @@ from etw.threads import Account, ThreadTimeline
 DWM_CORE = "Microsoft-Windows-Dwm-Core"
 DXGKRNL = "Microsoft-Windows-DxgKrnl"
 WIN32K = "Microsoft-Windows-Win32k"
-DELAYED_RENDERING = 0x1          # CompositionReason::DelayedRendering
+DELAYED_RENDERING = 0x1
 DEFAULT_MIN_UPDATE_INTERVAL_MS = 16.0
 
 
 @dataclass
 class Frame:
     index: int
-    start: int                    # SCHEDULE_PROCESS_FRAME start
+    start: int
     stop: int
-    vblank: int = None            # the vblank the frame follows, None before the first
-    render: int = 0               # SCHEDULE_RENDER start
-    first_submit: int = 0         # the render thread's first DxgkSubmitCommand
-    present: int = 0              # the display present (DxgkPresent)
-    check: int = 0                # the capture check: the legacy swapchain's buffer flip
-    delayed: bool = False         # DelayedRendering scheduled: a capture was skipped
-    captured: bool = False        # the capture flip manager got a present
-    elapsed_ms: float = -1.0      # capture check to the last captured frame's check
+    vblank: int = None
+    render: int = 0
+    first_submit: int = 0
+    present: int = 0
+    check: int = 0
+    delayed: bool = False
+    captured: bool = False
+    elapsed_ms: float = -1.0
     predicted_skip: bool = False
-    account: Account = None       # the render thread, vblank to capture check
-    calls: dict = field(default_factory=dict)       # dxgkrnl function -> ms
-    samples: list = field(default_factory=list)     # kernel Sample objects
+    account: Account = None
+    calls: dict = field(default_factory=dict)
+    samples: list = field(default_factory=list)
 
     def phase_ms(self, to_ms):
         return to_ms(self.check - self.vblank) if self.check and self.vblank is not None else None
@@ -62,11 +44,7 @@ class DwmFrames:
         self.frames = self.find_frames()
         self.apply_rule()
 
-    # -- finding ---------------------------------------------------------------
-
     def find_vblanks(self):
-        """The vblanks of the display DWM presents to: VSyncDPC's QPC time of
-        each frame, on the adapter and source that report the most."""
         counts = collections.Counter()
         for event in self.trace.named(DXGKRNL, "VSyncDPC"):
             counts[(event.fields.get("pDxgAdapter"), event.fields.get("VidPnSourceId"))] += 1
@@ -132,11 +110,7 @@ class DwmFrames:
                 elif function == "DxgkPresent" and not frame.present:
                     frame.present = event.time
 
-    # -- the rule --------------------------------------------------------------
-
     def apply_rule(self):
-        """Each frame that wanted a capture (captured or skipped) against the
-        last captured frame's check: less than the interval predicts a skip."""
         last = None
         for frame in self.frames:
             if not frame.check or not (frame.captured or frame.delayed):
@@ -148,7 +122,6 @@ class DwmFrames:
                 last = frame.check
 
     def rule_agreement(self):
-        """(predicted and skipped, skipped only, predicted only, neither)."""
         tally = collections.Counter()
         for frame in self.frames:
             if frame.elapsed_ms < 0:
@@ -156,11 +129,7 @@ class DwmFrames:
             tally[(frame.predicted_skip, frame.delayed and not frame.captured)] += 1
         return tally[(True, True)], tally[(False, True)], tally[(True, False)], tally[(False, False)]
 
-    # -- where the time went -----------------------------------------------------
-
     def analyze(self, symbols=None):
-        """Fills each frame's account of the render thread from its vblank to
-        its capture check, its dxgkrnl calls and its CPU samples."""
         timeline = ThreadTimeline(self.trace.kernel, self.render_tid, self.trace.ms)
         samples = [sample for sample in self.trace.kernel.samples if sample.tid == self.render_tid]
         sample_times = [sample.time for sample in samples]
@@ -181,7 +150,6 @@ class DwmFrames:
         return timeline
 
     def calls(self, start, end):
-        """dxgkrnl's profiler: ms in each function the render thread entered."""
         spent = collections.defaultdict(float)
         open_calls = {}
         for event in self.trace.between(start, end):
@@ -194,12 +162,7 @@ class DwmFrames:
                 spent[function] += self.trace.ms(event.time - open_calls.pop(function))
         return dict(spent)
 
-    # -- grouping ----------------------------------------------------------------
-
     def groups(self):
-        """(before a skip, skipped, normal): the captured frame each skipped
-        one was measured against, the skipped frames, and the rest that
-        wanted a capture."""
         before, skipped = set(), set()
         last_captured = None
         for frame in self.frames:

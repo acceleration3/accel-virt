@@ -1,6 +1,3 @@
-/* One window's back buffer (research.md §6): what a first frame, a resize and
- * a multisampled frame send to a scripted host, what reaches the window - the
- * host's bytes, bottom row first - and every refusal on the way. */
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -60,7 +57,7 @@ struct BackBufferPresenterProbe {
     static void drop_arena(BackBufferPresenter &presenter) { presenter.arena_ = nullptr; }
 };
 
-}  // namespace av::glicd
+}
 
 namespace {
 
@@ -68,8 +65,6 @@ const PixelFormat plain_d24s8(24u, 8u, true, false, 0u);
 const PixelFormat multisampled_d32_srgb(32u, 0u, false, true, 4u);
 const PixelFormat bare(0u, 0u, true, false, 0u);
 
-/* A made context whose transport the presenter sends through, a window of
- * 8x4 on one DC, and the client state a swap reads the pack state from. */
 struct Rig {
     GlContextRig               context_rig;
     GuestGlContext             context{context_rig.connection(), context_rig.platform(), context_rig.send_lock(),
@@ -83,8 +78,6 @@ struct Rig {
     explicit Rig(bool arena = true, std::uint32_t width = 8u, std::uint32_t height = 4u)
     {
         if (!arena) {
-            /* The device will not import the arena at its size, nor at the
-             * half of it that is the last size above the least. */
             host().blob_import(1u, 0u);
             host().blob_import(1u, 0u);
             host().gl_string("vendor");
@@ -92,7 +85,6 @@ struct Rig {
             host().gl_string("4.6");
             host().gl_string("4.60");
             for (int list = 0; list < 3; list++) host().gl_integer(0);
-            /* GL_MAJOR_VERSION, GL_MINOR_VERSION, GL_CONTEXT_PROFILE_MASK. */
             host().gl_integer(4);
             host().gl_integer(6);
             host().gl_integer(2);
@@ -105,8 +97,6 @@ struct Rig {
     av::ScriptedHost    &host() { return context_rig.host(); }
     av::MockKmt         &kmt() { return context_rig.kmt(); }
     av::ClientTransport &wire() { return *context.wire(); }
-    /* What reached the host: the context holds its calls in a batch until a
-     * flush, so the held ones are sent first. */
     std::uint32_t        commands()
     {
         context.flush();
@@ -117,7 +107,6 @@ struct Rig {
         context.flush();
         return kmt().command_id(index);
     }
-    /* The `nth` varint argument of command `index`. */
     std::uint64_t argument(std::uint32_t index, std::uint32_t nth)
     {
         context.flush();
@@ -139,7 +128,6 @@ void pattern(std::uint8_t *bytes, std::size_t size)
 
 using Probe = av::glicd::BackBufferPresenterProbe;
 
-/* The present thread a swap hands its frames to, stepped by the test. */
 struct Presents {
     av::ScriptedThread       thread;
     av::CountedWakeSignal    handed;
@@ -151,16 +139,12 @@ struct Presents {
     av::glicd::GlPresentLoop loop;
 
     explicit Presents(Rig &rig) : loop(thread, handed, shown, lock, rig.kmt(), rig.surface, chains, log), rig_(rig) {}
-    /* The presenter lets go of the thread before the thread goes, as the
-     * ICD's root goes before its present loop. */
     ~Presents() { rig_.presenter.release(nullptr); }
 
 private:
     Rig &rig_;
 };
 
-/* A one-way glGetTextureSubImage into the arena: its eleven scalars, the
- * blob mode, the byte count and the offset the host writes at. */
 struct IntoBlob {
     std::uint64_t texture = 0u;
     std::uint64_t width = 0u;
@@ -187,7 +171,7 @@ IntoBlob into_blob(Rig &rig, std::uint32_t index)
     return read;
 }
 
-}  // namespace
+}
 
 TEST(back_buffer_presenter, a_first_frame_makes_the_framebuffer_and_puts_the_hosts_pixels_on_the_window)
 { Rig rig;
@@ -209,20 +193,16 @@ TEST(back_buffer_presenter, a_first_frame_makes_the_framebuffer_and_puts_the_hos
                                     ids::kCmd_glNamedFramebufferRenderbuffer};
   CHECK_EQ(rig.commands() - made, 7u);
   for (std::uint32_t at = 0u; at < 7u; at++) CHECK_EQ(rig.id(made + at), expected[at]);
-  /* glTextureStorage2D(texture 101, 1 level, GL_RGBA8, 8, 4). */
   CHECK_EQ(rig.argument(made + 3u, 0u), 101u);
   CHECK_EQ(rig.argument(made + 3u, 2u), Presenter::gl_rgba8);
   CHECK_EQ(rig.argument(made + 3u, 3u), 8u);
   CHECK_EQ(rig.argument(made + 3u, 4u), 4u);
-  /* The texture on the framebuffer's colour attachment, the D24S8
-   * renderbuffer 102 on its depth-stencil one. */
   CHECK_EQ(rig.argument(made + 4u, 0u), 100u);
   CHECK_EQ(rig.argument(made + 4u, 1u), Presenter::gl_color_attachment0);
   CHECK_EQ(rig.argument(made + 5u, 0u), 102u);
   CHECK_EQ(rig.argument(made + 5u, 1u), 0u);
   CHECK_EQ(rig.argument(made + 5u, 2u), Presenter::gl_depth24_stencil8);
   CHECK_EQ(rig.argument(made + 6u, 1u), Presenter::gl_depth_stencil_attachment);
-  /* The same window at the same size is made once. */
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
   CHECK_EQ(rig.commands() - made, 7u);
   std::uint8_t frame[8u * 4u * 4u];
@@ -256,14 +236,12 @@ TEST(back_buffer_presenter, a_resize_deletes_the_old_objects_and_makes_new_ones)
   CHECK_EQ(rig.presenter.width(), 16u);
   CHECK_EQ(rig.presenter.height(), 2u);
   CHECK(rig.presenter.invariants_hold());
-  /* Smaller again keeps the pixels it has. */
   const std::size_t live = rig.context_rig.platform().live_allocations();
   rig.surface.resize(&rig.window, 2u, 2u);
   rig.host().gl_window(1u, 1u, 300u);
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
   CHECK_EQ(rig.context_rig.platform().live_allocations(), live);
   CHECK_EQ(rig.presenter.framebuffer(), 300u);
-  /* A different window of the same size is made again too. */
   int other = 0;
   int other_dc = 0;
   rig.surface.add_dc(&other_dc, &other, 2u, 2u);
@@ -271,16 +249,12 @@ TEST(back_buffer_presenter, a_resize_deletes_the_old_objects_and_makes_new_ones)
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &other, plain_d24s8, rig.surface), Status::ok);
   CHECK_EQ(rig.presenter.framebuffer(), 400u);
   CHECK(rig.presenter.window() == &other);
-  /* Only the height changed. */
   rig.surface.resize(&other, 2u, 3u);
   rig.host().gl_window(1u, 1u, 500u);
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &other, plain_d24s8, rig.surface), Status::ok);
   CHECK_EQ(rig.presenter.framebuffer(), 500u);
   CHECK_EQ(rig.presenter.height(), 3u); }
 
-/* WGL_ARB_multisample's formats: a multisampled colour renderbuffer on the
- * framebuffer, resolved into the texture on a second framebuffer before it
- * is read. */
 TEST(back_buffer_presenter, a_multisampled_frame_is_resolved_before_it_is_read)
 { Rig rig;
   rig.host().gl_window(2u, 2u);
@@ -290,11 +264,8 @@ TEST(back_buffer_presenter, a_multisampled_frame_is_resolved_before_it_is_read)
   CHECK(!rig.presenter.double_buffered());
   CHECK_EQ(rig.argument(made, 0u), 2u);
   CHECK_EQ(rig.argument(made + 2u, 0u), 2u);
-  /* Storage: the texture, then the colour renderbuffer 103 and the depth one
-   * 104, both of four samples. */
   CHECK_EQ(rig.id(made + 3u), ids::kCmd_glTextureStorage2D);
   CHECK_EQ(rig.id(made + 4u), ids::kCmd_glNamedFramebufferTexture);
-  /* The texture 102 is the resolve framebuffer's (101) colour. */
   CHECK_EQ(rig.argument(made + 4u, 0u), 101u);
   CHECK_EQ(rig.argument(made + 4u, 2u), 102u);
   CHECK_EQ(rig.id(made + 5u), ids::kCmd_glNamedRenderbufferStorageMultisample);
@@ -315,8 +286,6 @@ TEST(back_buffer_presenter, a_multisampled_frame_is_resolved_before_it_is_read)
   CHECK_EQ(rig.id(read + 1u), ids::kCmd_glGetTextureSubImage);
   CHECK_EQ(rig.surface.blits(), 1u); }
 
-/* WGL_ARB_framebuffer_sRGB's formats store sRGB colour, which is what the
- * window is shown. */
 TEST(back_buffer_presenter, an_srgb_format_stores_srgb_colour)
 { Rig rig;
   rig.host().gl_window(2u, 2u);
@@ -364,8 +333,6 @@ TEST(back_buffer_presenter, refuses_a_window_that_is_gone_or_too_large)
   CHECK_EQ(rig.presenter.framebuffer(), 0u);
   CHECK(rig.presenter.invariants_hold()); }
 
-/* Whichever name the host does not give, nothing is kept and what it did give
- * is deleted again. */
 TEST(back_buffer_presenter, a_name_the_host_does_not_give_keeps_nothing)
 { struct Case { const PixelFormat *format; std::uint32_t framebuffers; bool texture; std::uint32_t renderbuffers; };
   const Case cases[] = {
@@ -386,7 +353,6 @@ TEST(back_buffer_presenter, a_name_the_host_does_not_give_keeps_nothing)
     CHECK_EQ(rig.presenter.framebuffer(), 0u);
     CHECK(rig.presenter.invariants_hold());
     CHECK_EQ(rig.context_rig.platform().live_allocations(), live);
-    /* Something was named, so the partial set is deleted. */
     CHECK_EQ(rig.id(rig.commands() - 1u), ids::kCmd_glDeleteRenderbuffers);
     CHECK(rig.commands() - made >= 5u);
   }
@@ -406,9 +372,6 @@ TEST(back_buffer_presenter, pixels_it_cannot_have_are_no_memory)
   CHECK_EQ(rig.presenter.framebuffer(), 0u);
   CHECK(rig.presenter.invariants_hold()); }
 
-/* A read-back writes where the application's pack state says, so a pack
- * buffer or pack state that would move the rows is set aside for the read
- * and the application's put back after it. */
 TEST(back_buffer_presenter, the_applications_pack_state_is_set_aside_for_the_read)
 { Rig rig(true, 3u, 2u);
   rig.host().gl_window(1u, 1u);
@@ -429,7 +392,6 @@ TEST(back_buffer_presenter, the_applications_pack_state_is_set_aside_for_the_rea
   CHECK_EQ(rig.id(read + 7u), ids::kCmd_glGetTextureSubImage);
   CHECK_EQ(rig.argument(read + 8u, 1u), 9u);
   CHECK_EQ(rig.argument(read + 11u, 1u), 2u);
-  /* An odd width under 8-byte alignment pads rows: set aside too. */
   rig.state.bind_buffer(ClientArrayState::pixel_pack_buffer, 0u);
   CHECK(rig.state.store_pixel(Presenter::gl_pack_skip_rows, 0));
   CHECK(rig.state.store_pixel(Presenter::gl_pack_alignment, 8));
@@ -438,14 +400,12 @@ TEST(back_buffer_presenter, the_applications_pack_state_is_set_aside_for_the_rea
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   CHECK_EQ(rig.commands() - read, 15u);
   CHECK_EQ(rig.argument(read + 9u, 1u), 8u);
-  /* Plain again: the read alone. */
   CHECK(rig.state.store_pixel(Presenter::gl_pack_alignment, 1));
   rig.host().gl_bytes(nullptr, 0u);
   read = rig.commands();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   CHECK_EQ(rig.commands() - read, 1u); }
 
-/* Without a blob arena every read is a reply, which holds 48 KiB. */
 TEST(back_buffer_presenter, a_tall_frame_is_read_in_rows_a_reply_holds)
 { Rig rig(false, 64u, 200u);
   rig.host().gl_window(1u, 1u);
@@ -455,7 +415,6 @@ TEST(back_buffer_presenter, a_tall_frame_is_read_in_rows_a_reply_holds)
   const std::uint32_t read = rig.commands();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
   CHECK_EQ(rig.commands() - read, 2u);
-  /* 48 KiB is 192 rows of 64 pixels; the rest is 8. */
   CHECK_EQ(rig.argument(read, 3u), 0u);
   CHECK_EQ(rig.argument(read, 6u), 192u);
   CHECK_EQ(rig.argument(read + 1u, 3u), 192u);
@@ -481,8 +440,6 @@ TEST(back_buffer_presenter, release_deletes_through_a_wire_and_frees_without_one
   CHECK_EQ(rig.commands() - released, 3u);
   CHECK_EQ(rig.presenter.framebuffer(), 0u);
   CHECK(rig.presenter.invariants_hold());
-  /* Without a wire the host's objects are gone with its context: only the
-   * names and the pixels are let go. */
   Rig quiet;
   quiet.host().gl_window(1u, 1u);
   CHECK_STATUS(quiet.presenter.prepare(quiet.wire(), &quiet.window, plain_d24s8, quiet.surface), Status::ok);
@@ -534,8 +491,6 @@ TEST(back_buffer_presenter_invariants, fail_when_a_made_presenter_is_missing_a_p
   made(orphan, plain_d24s8, 1u, 1u);
   Probe::drop_framebuffer(orphan.presenter);
   CHECK(!orphan.presenter.invariants_hold());
-  /* Unmade, any name left is broken: the resolve framebuffer, the colour
-   * renderbuffer, the depth one. */
   Rig names;
   made(names, multisampled_d32_srgb, 2u, 2u);
   Probe::drop_framebuffer(names.presenter);
@@ -552,10 +507,6 @@ TEST(back_buffer_presenter_invariants, fail_when_a_made_presenter_is_missing_a_p
   Probe::drop_colour(colour.presenter);
   CHECK(!colour.presenter.invariants_hold()); }
 
-/* With a present thread the swap does not wait for its frame: it reads it
- * one-way into a slot of room set aside in the arena, hands it over once the
- * batch is sent, and the thread blits what the host wrote there - which is
- * then what GL_FRONT answers. */
 TEST(back_buffer_presenter, with_a_present_thread_a_frame_is_read_one_way_and_shown_by_the_thread)
 { Rig      rig;
   Presents presents(rig);
@@ -581,7 +532,6 @@ TEST(back_buffer_presenter, with_a_present_thread_a_frame_is_read_one_way_and_sh
   rig.context.flush();
   rig.presenter.hand_over(rig.context.mark());
   CHECK_EQ(presents.loop.queued(), 1u);
-  /* What the host writes when it runs the read. */
   std::uint8_t pixels[frame];
   pattern(pixels, sizeof pixels);
   std::memcpy(Probe::room(rig.presenter), pixels, sizeof pixels);
@@ -591,7 +541,6 @@ TEST(back_buffer_presenter, with_a_present_thread_a_frame_is_read_one_way_and_sh
   std::uint8_t front[frame] = {};
   CHECK(rig.presenter.read_front(0, 0, 8, 4, 0x80E1u, 0x1401u, front));
   CHECK(std::memcmp(front, pixels, sizeof pixels) == 0);
-  /* Two frames in the thread's hands at once; a third waits, then is given up. */
   read = rig.commands();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   rig.presenter.hand_over(rig.context.mark());
@@ -606,8 +555,6 @@ TEST(back_buffer_presenter, with_a_present_thread_a_frame_is_read_one_way_and_sh
   CHECK_EQ(presents.loop.queued(), 2u);
   CHECK(rig.presenter.invariants_hold()); }
 
-/* The room is made again for a window of another size, once the thread has
- * nothing of the old one's; going, the presenter gives its room back. */
 TEST(back_buffer_presenter, a_resize_takes_new_room_after_the_thread_and_release_gives_it_back)
 { Rig      rig;
   Presents presents(rig);
@@ -620,7 +567,6 @@ TEST(back_buffer_presenter, a_resize_takes_new_room_after_the_thread_and_release
   rig.surface.resize(&rig.window, 16u, 8u);
   rig.host().gl_window(1u, 1u, 200u);
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
-  /* The thread was never stepped: the frame it did not show was dropped. */
   CHECK_EQ(presents.loop.queued(), 0u);
   CHECK_EQ(presents.loop.dropped_frames(), 1u);
   const std::uint32_t read = rig.commands();
@@ -633,10 +579,6 @@ TEST(back_buffer_presenter, a_resize_takes_new_room_after_the_thread_and_release
   CHECK_EQ(Probe::room_bytes(rig.presenter), 0u);
   CHECK(rig.presenter.invariants_hold()); }
 
-/* No arena to set room aside in, room that will not fit, or no thread: the
- * swap reads back and blits the frame itself, after whatever the thread
- * still had of this window's. A pack state that moves rows is set aside for
- * a read into a slot as for any other. */
 TEST(back_buffer_presenter, without_room_or_a_thread_the_swap_shows_the_frame_itself)
 { { Rig      rig(false);
     Presents presents(rig);
@@ -674,8 +616,6 @@ TEST(back_buffer_presenter, without_room_or_a_thread_the_swap_shows_the_frame_it
   CHECK_EQ(into_blob(rig, read + 7u).mode, 3u);
   CHECK_EQ(rig.argument(read + 8u, 1u), 9u); }
 
-/* Nothing read for the thread, nothing handed; a frame shown bigger than the
- * pixels the front buffer keeps is not kept. */
 TEST(back_buffer_presenter, a_hand_over_with_no_frame_read_hands_nothing)
 { Rig      rig;
   Presents presents(rig);
@@ -705,10 +645,6 @@ TEST(back_buffer_presenter_invariants, fail_for_a_frame_pending_without_room_or_
   Probe::drop_arena(rig.presenter);
   CHECK(!rig.presenter.invariants_hold()); }
 
-/* With the window's chain the frame never crosses into guest memory: it is
- * copied into a slot of the chain the swap opened on the context's adapter,
- * finished one-way, and the thread presents that slot instead of blitting -
- * the next frame into the other slot. GL_FRONT is then the host's to answer. */
 TEST(back_buffer_presenter, with_a_chain_a_frame_is_drawn_into_a_slot_and_presented_by_the_thread)
 { Rig      rig;
   Presents presents(rig);
@@ -725,11 +661,9 @@ TEST(back_buffer_presenter, with_a_chain_a_frame_is_drawn_into_a_slot_and_presen
   CHECK_EQ(presents.chains.last_luid(), 0x1234u);
   CHECK_EQ(presents.chains.last_width(), 8u);
   CHECK_EQ(presents.chains.last_height(), 4u);
-  /* No room was set aside: nothing is read back. */
   CHECK_EQ(rig.wire().blobs().room(), lendable);
   const std::uint32_t sent = rig.commands();
   CHECK_EQ(rig.id(sent - 2u), ids::kCmd_glCopyImageSubData);
-  /* From the window's colour texture into the first slot's. */
   CHECK_EQ(rig.argument(sent - 2u, 0u), 101u);
   CHECK_EQ(rig.argument(sent - 2u, 6u), 200u);
   CHECK_EQ(rig.id(sent - 1u), ids::kCmd_glFinish);
@@ -743,8 +677,6 @@ TEST(back_buffer_presenter, with_a_chain_a_frame_is_drawn_into_a_slot_and_presen
   std::uint8_t front[8u * 4u * 4u] = {};
   CHECK(!rig.presenter.read_front(0, 0, 8, 4, 0x80E1u, 0x1401u, front));
 
-  /* A presented slot is free again; while one is still held, the next frame
-   * goes into the other. The chain is opened once. */
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
   CHECK_EQ(rig.argument(rig.commands() - 2u, 6u), 200u);
   rig.presenter.hand_over(rig.context.mark());
@@ -756,14 +688,10 @@ TEST(back_buffer_presenter, with_a_chain_a_frame_is_drawn_into_a_slot_and_presen
   CHECK_EQ(presents.chains.presents(), 3u);
   CHECK_EQ(presents.chains.last_slot(), 1u);
   CHECK_EQ(presents.chains.opens(), 1u);
-  /* The presenter going closes the window's chain. */
   rig.presenter.release(&rig.wire());
   CHECK_EQ(presents.chains.closes(), 1u);
   CHECK(presents.chains.last_closed() == &rig.window); }
 
-/* A chain that cannot be had is asked for once: the window's frames are read
- * back and blitted, as without one, until its size changes - and a context
- * with no adapter to name asks for none. */
 TEST(back_buffer_presenter, a_refused_chain_reads_frames_back_until_the_window_resizes)
 { Rig      rig;
   Presents presents(rig);
@@ -778,7 +706,6 @@ TEST(back_buffer_presenter, a_refused_chain_reads_frames_back_until_the_window_r
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
   rig.presenter.hand_over(rig.context.mark());
   CHECK_EQ(presents.chains.opens(), 1u);
-  /* A new size asks again. */
   CHECK(presents.thread.step());
   rig.surface.resize(&rig.window, 16u, 8u);
   rig.host().gl_window(1u, 1u, 300u);
@@ -787,6 +714,5 @@ TEST(back_buffer_presenter, a_refused_chain_reads_frames_back_until_the_window_r
   CHECK_EQ(presents.chains.opens(), 2u);
   rig.presenter.hand_over(rig.context.mark());
   CHECK(presents.thread.step());
-  /* No adapter: no chain asked for. */
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   CHECK_EQ(presents.chains.opens(), 2u); }

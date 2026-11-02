@@ -37,20 +37,12 @@
 namespace av {
 
 namespace {
-
-/* Every device type bit OpenCL 3.0 defines. CL_DEVICE_TYPE_ALL is all ones,
- * so it is the one value with bits past these that is not a mistake. */
 constexpr cl_device_type defined_types = CL_DEVICE_TYPE_DEFAULT | CL_DEVICE_TYPE_CPU | CL_DEVICE_TYPE_GPU |
                                          CL_DEVICE_TYPE_ACCELERATOR | CL_DEVICE_TYPE_CUSTOM;
 
-/* The two extension names the guest is shown as this executor finds them
- * (on_clGetDeviceInfo). */
 constexpr const char *gl_sharing = "cl_khr_gl_sharing";
 constexpr const char *external_memory = "cl_khr_external_memory";
 
-/* Dependents before what they depend on, the order an application tearing
- * down in reverse would use, so the driver is never asked to free a context
- * it still has queues and buffers on. */
 constexpr clproto::HandleKind release_order[] = {
     clproto::HandleKind::event,   clproto::HandleKind::kernel,        clproto::HandleKind::program,
     clproto::HandleKind::sampler, clproto::HandleKind::mem,           clproto::HandleKind::command_queue,
@@ -62,12 +54,8 @@ uint64_t number_of(const void *object)
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object));
 }
 
-}  // namespace
+}
 
-/* What the host's OpenCL calls when an event completes, on a thread of its
- * own. An ABI boundary C requires: the callback is a bare function pointer
- * with nowhere to put a `this`, so the slot is the user data and this
- * forwards straight into it, with no logic of its own. */
 extern "C" void CL_CALLBACK av_cl_event_completed(cl_event, cl_int, void *user_data)
 {
     static_cast<ClEventRegistration *>(user_data)->completed();
@@ -78,8 +66,6 @@ OpenClBackend::OpenClBackend(DriverLog &lines) : OpenClBackend(heap_, lines)
     AV_SCOPE("OpenClBackend::OpenClBackend");
 }
 
-/* heap_ is constructed before blocks_ is bound to it, whichever constructor
- * runs: it is declared first. */
 OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
     : clproto::RealDispatch(guest_), heap_(), blocks_(blocks), bound_(nullptr), envelope_(), arguments_(), binaries_(), il_(), argument_kinds_(),
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
@@ -98,16 +84,8 @@ bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *disp
     imported_ = &imports;
     bound_ = device;
     if (bound_ == nullptr) return false;
-    /* A device that will not describe itself seals no binary and opens
-     * none; it runs everything else as before. */
     static_cast<void>(envelope_.identify(static_cast<cl_platform_id>(bound_->platform()),
                                          static_cast<cl_device_id>(bound_->device())));
-    /* The vehicle is optional and its failure is not a plain context's: a GPU
-     * with no EGL display, or a driver that will not make a context, leaves
-     * OpenCL running everything it ran before and sharing nothing (feature
-     * 053, T019). A context made from a GL context asked for nothing else.
-     * The defaults: the vehicle draws nothing and is never shown to the
-     * guest, so it wants no version, no profile and no debug flag. */
     const GlContextAttributes plain(nullptr);
     if (display == nullptr || !display->open() ||
         !vehicle_.open(*display, plain, share != nullptr ? &share->context() : nullptr))
@@ -124,7 +102,6 @@ bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *disp
     } else {
         reaches_gl_ = copy_gl_objects();
     }
-    /* A plain context keeps the vehicle only to import through. */
     if (!reaches_gl_ || (share == nullptr && !imports_)) close_vehicle();
     return reaches_gl_ || share == nullptr;
 }
@@ -212,8 +189,6 @@ cl_uint OpenClBackend::program_binary_sizes(cl_program program, size_t *sizes)
         return 0u;
     if (::clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, devices * sizeof(size_t), sizes, nullptr) != CL_SUCCESS)
         return 0u;
-    /* A device that will not describe itself has nothing it can seal, and
-     * an answer of no binary is the API's own for that. */
     if (!envelope_.identified())
         for (cl_uint index = 0u; index < devices; ++index) sizes[index] = 0u;
     return devices;
@@ -306,7 +281,6 @@ bool OpenClBackend::declared_argument(cl_kernel kernel, cl_uint index, clproto::
         ::clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, 0u, nullptr, &length) != CL_SUCCESS || length == 0u ||
         length > GrowableArray<char>::most_values)
         return false;
-    /* As long as the kernel's name is, whatever the application called it. */
     GrowableArray<char> name(blocks_, Pool::paged);
     if (name.resize(static_cast<uint32_t>(length), '\0') != Status::ok ||
         ::clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, length, name.begin(), nullptr) != CL_SUCCESS)
@@ -327,7 +301,6 @@ bool OpenClBackend::shares_with_gl(const GlDisplay &display) const
     cl_device_id const one = static_cast<cl_device_id>(bound_->device());
     cl_int             made = CL_SUCCESS;
     cl_context const   asked = ::clCreateContext(named, 1u, &one, nullptr, nullptr, &made);
-    /* NVIDIA's OpenCL refuses every EGL context here, which is the copy path. */
     if (asked == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a GL-sharing context; OpenClBackendProbe takes the copy path on one that shares"); return false; }
     static_cast<void>(::clReleaseContext(asked));
     return true;
@@ -337,8 +310,6 @@ void *OpenClBackend::acquire_queue()
 {
     AV_SCOPE("OpenClBackend::acquire_queue");
     if (queue_ != nullptr) return queue_;
-    /* A context and a device, because `import_object` is the only caller and
-     * it has already refused a backend without either. */
     cl_int made = CL_SUCCESS;
     queue_ = ::clCreateCommandQueueWithProperties(static_cast<cl_context>(context_),
                                                   static_cast<cl_device_id>(bound_->device()), nullptr,
@@ -357,9 +328,6 @@ cl_context OpenClBackend::on_clCreateContext(const cl_context_properties *proper
 bool OpenClBackend::knows(uint32_t command_id) const
 {
     AV_SCOPE("OpenClBackend::knows");
-    /* An id the profile does not carry - clGetKernelSuggestedLocalWorkSize is
-     * the only one reserved today - is a skip, not a fault: a guest using a
-     * command this build left out must not have its context stopped for it. */
     return clproto::knows_command(command_id);
 }
 
@@ -367,8 +335,6 @@ bool OpenClBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
                         WireArena &arena)
 {
     AV_SCOPE("OpenClBackend::run");
-    /* Anything but another read or a question about an object may change a
-     * buffer, or free one whose handle a new one then takes. */
     if (command_id != clproto::kCmd_clEnqueueReadBuffer &&
         strncmp(clproto::cmd_id_to_string(command_id), "clGet", 5u) != 0)
         read_ahead_.forget();
@@ -407,9 +373,6 @@ bool OpenClBackend::lost() const
     return lost_;
 }
 
-/* Buffers over either are made over the source's own mapping with
- * CL_MEM_USE_HOST_PTR, which needs no extension on any platform; memory with
- * no mapping is refused, and the guest copies. */
 bool OpenClBackend::adopt(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("OpenClBackend::adopt");
@@ -418,8 +381,6 @@ bool OpenClBackend::adopt(const SourceMemory &memory, uint64_t &handle)
     return memory.pointer() != nullptr;
 }
 
-/* Lent pages go with their import: a buffer still made over them was retired
- * by the guest first (docs/host-memory.md). */
 void OpenClBackend::abandon(const SourceMemory &memory, uint64_t)
 {
     AV_SCOPE("OpenClBackend::abandon");
@@ -437,9 +398,6 @@ cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
         return ::clCreateBufferWithProperties(context, properties, flags, size, host_ptr,
                                               errcode_ret);
     }
-    /* The offset is the guest's, so the arena - or the import it names -
-     * judges it before it is a pointer. A buffer made over memory that is not
-     * the guest's would let the guest choose what the host writes into. */
     const SourceMemory *const lent =
         backing.memory() != 0u && imported_ != nullptr ? imported_->named(backing.memory()) : nullptr;
     uint8_t *const at = backing.memory() == 0u ? guest_.at(backing.offset(), static_cast<uint64_t>(size))
@@ -449,10 +407,6 @@ cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
         if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_VALUE;
         return nullptr;
     }
-    /* The property is this wire's and not OpenCL's, so it is not passed on;
-     * what the host is asked for is the plain call over the guest's memory.
-     * CL_MEM_COPY_HOST_PTR alongside would name host_ptr as well, which this
-     * call has none of. */
     const cl_mem_flags over_arena =
         (flags & ~static_cast<cl_mem_flags>(CL_MEM_ALLOC_HOST_PTR | CL_MEM_COPY_HOST_PTR)) |
         static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR);
@@ -475,15 +429,7 @@ bool OpenClBackend::room_for(uint64_t objects)
 void OpenClBackend::made(clproto::HandleKind kind, void *object)
 {
     AV_SCOPE("OpenClBackend::made");
-    /* The decoder made room_for every object a reply carries before the ICD
-     * made any, so only an ICD answering an address this context still holds
-     * as another kind is refused here: the host could no longer say which
-     * object the guest's number means, and the device is lost rather than
-     * guess. An object remembered nowhere is refused when the guest names it. */
     if (hold(kind, object) == Status::conflict) lost_ = true;
-    /* The first context is the one a shared object is opened into: it is the
-     * one created naming this backend's GL context, so it is the only one
-     * clCreateFromGLBuffer would take (feature 053, T019). */
     if (kind == clproto::HandleKind::context && context_ == nullptr) context_ = object;
 }
 
@@ -497,8 +443,6 @@ void OpenClBackend::released(clproto::HandleKind kind, void *object)
 {
     AV_SCOPE("OpenClBackend::released");
     const bool last = handles_.release(number_of(object), kind);
-    /* What was made for a GL object's cl_mem goes with the guest's last
-     * reference: the host's OpenCL holds what it imported itself. */
     if (last && kind == clproto::HandleKind::mem && gl_ != nullptr) gl_->forget(static_cast<cl_mem>(object));
 }
 
@@ -511,8 +455,6 @@ Status OpenClBackend::hold(clproto::HandleKind kind, void *object)
     return handles_.remember(number_of(object), kind, 0u, object);
 }
 
-/* What the ICD answers changes nothing: the context is gone either way, and
- * there is nobody left to tell. */
 void OpenClBackend::let_go(clproto::HandleKind kind, void *object, uint32_t times)
 {
     AV_SCOPE("OpenClBackend::let_go");
@@ -563,9 +505,6 @@ cl_context OpenClBackend::on_clCreateContextFromType(const cl_context_properties
                                                      cl_device_type device_type, cl_int *errcode_ret)
 {
     AV_SCOPE("OpenClBackend::on_clCreateContextFromType");
-    /* The decoder has already refused a CL_CONTEXT_PLATFORM that is not a
-     * platform this context was shown, so the properties name the bound one or
-     * none, and both mean the bound device. */
     const cl_int refused = bound_ == nullptr ? CL_INVALID_PLATFORM : answers_type(device_type);
     if (refused == CL_SUCCESS) {
         const cl_device_id device = static_cast<cl_device_id>(bound_->device());
@@ -580,26 +519,18 @@ cl_int OpenClBackend::answers_type(cl_device_type device_type) const
     AV_SCOPE("OpenClBackend::answers_type");
     if (device_type == 0u || (device_type != CL_DEVICE_TYPE_ALL && (device_type & ~defined_types) != 0u))
         return CL_INVALID_DEVICE_TYPE;
-    /* DEFAULT is the implementation's choice, and the only device this
-     * implementation has is the bound one. */
     return (device_type & (CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_DEFAULT)) != 0u ? CL_SUCCESS : CL_DEVICE_NOT_FOUND;
 }
 
 void OpenClBackend::shut_down()
 {
     AV_SCOPE("OpenClBackend::shut_down");
-    /* What this context imported is released by HostShares as the session
-     * ends, before this: the registry holds no shared cl_mem by now. */
     stop_pacing();
-    /* The module kept is of a program the guest may have released already;
-     * its last reference goes with the guest's objects. */
     il_.forget();
     handles_.release_all(release_order, sizeof release_order / sizeof release_order[0],
                          [this](uint64_t, clproto::HandleKind kind, void *object, uint32_t times) {
                              let_go(kind, object, times);
                          });
-    /* Before the ranges go: a release may free an allocation, and nothing
-     * afterwards may resolve one. */
     svm_.forget_all();
     mapped_.forget_all();
     if (queue_ != nullptr) {
@@ -607,12 +538,7 @@ void OpenClBackend::shut_down()
         queue_ = nullptr;
     }
     context_ = nullptr;
-    /* Every event callback still to come goes stale here. The host cannot be
-     * told to stop calling them, so being called and doing nothing is what
-     * they do from now on. */
     events_.shut_down();
-    /* The vehicle last: its context is what deletes what was made for the
-     * guest's GL objects. */
     close_vehicle();
     reaches_gl_ = false;
     bound_ = nullptr;
@@ -686,7 +612,6 @@ void OpenClBackend::pace(cl_command_queue queue)
     pacer_.flushed();
 }
 
-/* A marker that failed is a group that ended, as far as timing it goes. */
 void OpenClBackend::look_at_marker()
 {
     AV_SCOPE("OpenClBackend::look_at_marker");
@@ -729,8 +654,6 @@ void *OpenClBackend::on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, s
                                    cl_uint alignment)
 {
     AV_SCOPE("OpenClBackend::on_clSVMAlloc");
-    /* Room first: an allocation this could not remember is one whose address
-     * could never be judged. clSVMAlloc answers a lack of memory with null. */
     if (svm_.make_room() != Status::ok) return nullptr;
     void *const allocated = ::clSVMAlloc(context, flags, size, alignment);
     if (allocated == nullptr) return nullptr;
@@ -744,9 +667,6 @@ void *OpenClBackend::on_clSVMAlloc(cl_context context, cl_svm_mem_flags flags, s
 void OpenClBackend::on_clSVMFree(cl_context context, void *svm_pointer)
 {
     AV_SCOPE("OpenClBackend::on_clSVMFree");
-    /* Only what this allocated is freed. The decoder has already refused an
-     * address in no range, but it resolves an address *inside* one too, and
-     * that is not a pointer the host's allocator was given. */
     if (!svm_.forget(svm_pointer)) return;
     ::clSVMFree(context, svm_pointer);
 }
@@ -774,10 +694,6 @@ void *OpenClBackend::on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_me
         ::clEnqueueMapBuffer(command_queue, buffer, blocking_map, map_flags, offset, size,
                              num_events_in_wait_list, event_wait_list, event, errcode_ret);
     if (mapped == nullptr) return nullptr;
-    /* A mapping this cannot remember - no bytes, or past the end of the
-     * address space - is one whose unmap could never be judged, and a buffer
-     * that can never be unmapped is worse than a map that failed: the guest
-     * would hold it for the life of the context. */
     if (mapped_.remember(mapped, static_cast<uint64_t>(size),
                          static_cast<uint64_t>(reinterpret_cast<uintptr_t>(buffer))) != Status::ok) { AV_UNTESTABLE("room was made above, and no host maps no bytes or past the end of the address space");
         static_cast<void>(::clEnqueueUnmapMemObject(command_queue, buffer, mapped, 0u, nullptr,
@@ -795,8 +711,6 @@ cl_int OpenClBackend::on_clEnqueueUnmapMemObject(cl_command_queue command_queue,
     AV_SCOPE("OpenClBackend::on_clEnqueueUnmapMemObject");
     const cl_int unmapped = ::clEnqueueUnmapMemObject(
         command_queue, memobj, mapped_ptr, num_events_in_wait_list, event_wait_list, event);
-    /* Forgotten only once the host has taken it: a refused unmap leaves the
-     * mapping live, and an address the guest may still name. */
     if (unmapped == CL_SUCCESS) static_cast<void>(mapped_.forget(mapped_ptr));
     return unmapped;
 }
@@ -970,7 +884,6 @@ cl_int OpenClBackend::on_clGetEventInfo(cl_event event, cl_event_info param_name
     if (asked != CL_SUCCESS || param_name != CL_EVENT_COMMAND_EXECUTION_STATUS || param_value == nullptr ||
         param_value_size < sizeof(cl_int) || *static_cast<const cl_int *>(param_value) != CL_QUEUED)
         return asked;
-    /* A user event has no queue, and its status is the guest's to set. */
     cl_command_queue queue = nullptr;
     if (::clGetEventInfo(event, CL_EVENT_COMMAND_QUEUE, sizeof queue, &queue, nullptr) == CL_SUCCESS &&
         queue != nullptr)
@@ -981,9 +894,6 @@ cl_int OpenClBackend::on_clGetEventInfo(cl_event event, cl_event_info param_name
 cl_int OpenClBackend::on_clSetEventCallback(cl_event event, cl_int command_exec_callback_type)
 {
     AV_SCOPE("OpenClBackend::on_clSetEventCallback");
-    /* A device that gave this library nothing to signal with cannot wake the
-     * guest, and a callback nobody hears is worse than a refusal: the guest
-     * would wait on it forever. */
     if (!events_.bound()) return CL_INVALID_OPERATION;
     ClEventRegistration *const slot = events_.take();
     if (slot == nullptr) return CL_OUT_OF_HOST_MEMORY;
@@ -1013,16 +923,12 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     AV_SCOPE("OpenClBackend::import_object");
     wire_handle = 0u;
     detail = 0u;
-    /* Memory only, and only as a dma-buf: a fence is a host semaphore that
-     * OpenCL names through a different extension this host has not got, and an
-     * opaque fd is another driver's private handle that OpenGL cannot read
-     * (research.md §7). */
     if (kind != AV_SHARED_MEMORY || handle_kind != AV_SHARED_HANDLE_DMA_BUF || fd < 0 || size == 0u || into != 0u)
         return false;
     if (!imports_ || context_ == nullptr) return false;
     if (acquire_queue() == nullptr) { AV_UNTESTABLE("no host beside a test here refuses a command queue"); return false; }
     uint32_t memory = 0u, buffer = 0u;
-    if (!buffers_.make(fd, size, memory, buffer)) return false; // AV_UNTESTABLE("a descriptor this host's GL refuses; an ordinary fd is taken and then faults in the driver")
+    if (!buffers_.make(fd, size, memory, buffer)) return false;
     cl_int   made = CL_SUCCESS;
     cl_mem const shared =
         ::clCreateFromGLBuffer(static_cast<cl_context>(context_), CL_MEM_READ_WRITE, buffer, &made);
@@ -1030,22 +936,9 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
         buffers_.destroy(memory, buffer);
         return false;
     }
-    /* Acquired once and held: the acquire is the rule about OpenGL and OpenCL
-     * taking turns over one object, and the GL context here is an import
-     * vehicle that never draws - so OpenCL's turn is the whole of the object's
-     * life, and no enqueue has to be bracketed. Proven on this host: a write
-     * and a read across enqueues under one acquire, and what OpenCL wrote read
-     * back through the exporting Vulkan device's own mapping. */
-    const bool taken = ::clEnqueueAcquireGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u, nullptr, nullptr) == CL_SUCCESS && ::clFinish(static_cast<cl_command_queue>(queue_)) == CL_SUCCESS;  // AV_UNTESTABLE("no host beside a test here refuses an acquire")
-    /* A Direct3D 11 texture's memory is that image, viewed over the buffer at
-     * the pitch the GPU laid it out with: nothing is copied either way. */
+    const bool taken = ::clEnqueueAcquireGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u, nullptr, nullptr) == CL_SUCCESS && ::clFinish(static_cast<cl_command_queue>(queue_)) == CL_SUCCESS;
     cl_mem const named = taken ? image_over(shared, shape) : nullptr;
-    /* Named in the guest's commands from now on, as any cl_mem the host made
-     * is: one the registry did not hold would resolve to nothing in every
-     * enqueue that names it. */
     if (!taken || hold(clproto::HandleKind::mem, named) != Status::ok) { AV_UNTESTABLE("the acquire above, and a table that cannot grow");
-        /* An image holds the buffer's one reference: letting it go lets both
-         * go. */
         cl_mem const held = named != nullptr ? named : shared;
         static_cast<void>(handles_.release(number_of(held), clproto::HandleKind::mem));
         static_cast<void>(::clReleaseMemObject(held));
@@ -1053,15 +946,10 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
         return false;
     }
     wire_handle = reinterpret_cast<uint64_t>(named);
-    /* The GL objects behind it, which the release deletes: HostShares keeps
-     * them with the hold. */
     detail = (uint64_t{buffer} << 32u) | memory;
     return true;
 }
 
-/* The image over `buffer` that `shape` describes, holding a reference to the
- * buffer of its own; `buffer` itself where the memory is no image OpenCL can
- * name, or the host will not make one over it. */
 cl_mem OpenClBackend::image_over(cl_mem buffer, const SharedImageShape &shape)
 {
     AV_SCOPE("OpenClBackend::image_over");
@@ -1083,7 +971,6 @@ cl_mem OpenClBackend::image_over(cl_mem buffer, const SharedImageShape &shape)
                       static_cast<uint32_t>(-made), 8u);
         return buffer;
     }
-    /* The image holds the buffer: the reference the import took is its. */
     static_cast<void>(::clReleaseMemObject(buffer));
     return image;
 }
@@ -1093,14 +980,8 @@ void OpenClBackend::release_object(uint32_t, uint64_t wire_handle, uint64_t deta
     AV_SCOPE("OpenClBackend::release_object");
     const auto buffer = static_cast<uint32_t>(detail >> 32u);
     const auto memory = static_cast<uint32_t>(detail);
-    /* The reverse of the making: the turn given back, then the cl_mem, then
-     * the buffer that was its storage, and the memory object last. */
-    /* The queue is the import's own and outlives every row it made, so a row
-     * to give back is a queue to give it back on. */
     cl_mem const named = reinterpret_cast<cl_mem>(wire_handle);
     static_cast<void>(handles_.release(number_of(named), clproto::HandleKind::mem));
-    /* An image's turn was taken on the buffer under it, which the image
-     * holds: the buffer is what is given back, and the image let go first. */
     cl_mem shared = named;
     cl_mem under = nullptr;
     if (::clGetMemObjectInfo(named, CL_MEM_ASSOCIATED_MEMOBJECT, sizeof under, &under, nullptr) == CL_SUCCESS &&
@@ -1116,4 +997,4 @@ void OpenClBackend::release_object(uint32_t, uint64_t wire_handle, uint64_t deta
     buffers_.destroy(memory, buffer);
 }
 
-}  // namespace av
+}

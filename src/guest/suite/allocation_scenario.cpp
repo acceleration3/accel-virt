@@ -11,7 +11,7 @@ namespace {
 
 constexpr uint64_t allocation_bytes = 65536u;
 
-}  // namespace
+}
 
 AllocationScenario::AllocationScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : kmt_(kmt), search_(search), steps_(kmt, report, "allocation")
@@ -35,4 +35,4 @@ void AllocationScenario::run()
     steps_.check_teardown(session);
 }
 
-}  // namespace av
+}

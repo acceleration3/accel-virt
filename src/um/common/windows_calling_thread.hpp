@@ -10,6 +10,6 @@ public:
     uint32_t thread_id() override;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_WINDOWS_CALLING_THREAD_HPP
+#endif

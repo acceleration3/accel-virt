@@ -1,6 +1,3 @@
-/* An acquire's copy in: a mapped subresource's rows written into the cl_mem
- * over it - a buffer's bytes as one write, an image's rows as an image write
- * with the mapping's pitches, a slice pitch only where there are slices. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
 #include "harness/icd/fake_cl_loader.hpp"
@@ -25,7 +22,6 @@ constexpr std::uint64_t host_context = 0x6400u;
 constexpr std::uint64_t host_queue = 0x6500u;
 constexpr std::uint64_t host_mem = 0x6600u;
 
-/* A context and a queue, to copy into. */
 class Opened {
 public:
     explicit Opened(ClIcdRig &rig) : rig_(rig)
@@ -73,7 +69,7 @@ private:
 
 int resource = 0;
 
-}  // namespace
+}
 
 TEST(cl_d3d11_upload, a_buffer_s_bytes_cross_as_one_write)
 { ClIcdRig rig;
@@ -89,7 +85,6 @@ TEST(cl_d3d11_upload, a_buffer_s_bytes_cross_as_one_write)
   ClD3d11Upload       upload(rig.root(), opened.queue(), buffer, object);
   const std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(upload.visit(bytes, 16u, 16u), CL_SUCCESS);
-  /* The write is answered with the next command that is: a read back. */
   rig.host().cl_bytes(CL_SUCCESS, bytes, 16u);
   CHECK_EQ(rig.root().enqueue_read(opened.queue(), buffer, CL_TRUE, 0u, 16u, bytes, nullptr), CL_SUCCESS);
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueWriteBuffer);
@@ -102,8 +97,6 @@ TEST(cl_d3d11_upload, an_image_s_rows_cross_with_the_mapping_s_pitches)
   if (opened.queue() == nullptr) return;
   const std::size_t element = 4u;
   std::uint8_t      rows[256] = {};
-  /* A 2D image: the slice pitch the mapping has is not one an image of one
-   * slice may be written with, so none is passed. */
   const cl_mem      flat = opened.image(CL_MEM_OBJECT_IMAGE2D, 0u);
   const D3d11Object flat_object(flat, &resource, 0u,
                                 D3d11Resource(D3d11Resource::Kind::texture2d, 28u, 0u, 4u, 2u, 1u, 1u, 1u, 1u),
@@ -112,7 +105,6 @@ TEST(cl_d3d11_upload, an_image_s_rows_cross_with_the_mapping_s_pitches)
   rig.host().cl_result(CL_SUCCESS);
   ClD3d11Upload flat_upload(rig.root(), opened.queue(), flat, flat_object);
   CHECK_EQ(flat_upload.visit(rows, 32u, 64u), CL_SUCCESS);
-  /* A 3D one moves its slices a slice pitch apart. */
   const cl_mem      volume = opened.image(CL_MEM_OBJECT_IMAGE3D, 2u);
   const D3d11Object volume_object(volume, &resource, 0u,
                                   D3d11Resource(D3d11Resource::Kind::texture3d, 28u, 0u, 4u, 2u, 2u, 1u, 1u, 1u),
@@ -124,6 +116,5 @@ TEST(cl_d3d11_upload, an_image_s_rows_cross_with_the_mapping_s_pitches)
   ClD3d11Upload       volume_upload(rig.root(), opened.queue(), volume, volume_object);
   CHECK_EQ(volume_upload.visit(rows, 16u, 64u), CL_SUCCESS);
   CHECK_EQ(rig.kmt().command_id(sent + 1u), av::clproto::kCmd_clEnqueueWriteImage);
-  /* A pitch shorter than a row is the transfer's refusal, and the visit's. */
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&element), sizeof element);
   CHECK_EQ(volume_upload.visit(rows, 4u, 64u), CL_INVALID_VALUE); }

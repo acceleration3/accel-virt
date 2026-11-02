@@ -1,12 +1,3 @@
-/* A transport blob command as a hostile guest frames it, run over a context
- * whose process opened host blob 0, beside host blob 1 of another context:
- * whatever the bytes, the command answers or refuses the framing, an import
- * it answers names memory only when it made some, releasing that import
- * leaves the context as it was, and nothing reads or writes outside what it
- * was given (ASan).
- *
- * Input: u8 command (0 IMPORT_BLOB, 1 RELEASE_BLOB, anything else another
- * transport id), u8 reply capacity, then the body. */
 #include "core/support/status.hpp"
 #include "device/execution/blob_import_command.hpp"
 #include "device/execution/blob_imports.hpp"
@@ -31,7 +22,7 @@ std::uint32_t command_of(std::uint8_t selector)
     return selector == 1u ? av::CommandHeader::release_blob_id : selector;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

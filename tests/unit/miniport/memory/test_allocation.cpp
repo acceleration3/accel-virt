@@ -27,15 +27,12 @@ struct AperturePagesProbe {
 struct AllocationProbe {
     explicit AllocationProbe(Allocation &target) : allocation(target) {}
     void set_size(std::uint64_t size) { allocation.size_ = size; }
-    /* Opens with nobody holding them: what open() and close() never leave
-     * behind, and what the invariant is there to catch. */
     void set_opens(std::uint32_t opens) { allocation.opens_ = opens; }
-    /* An allocation whose aperture pages lost their own invariant. */
     void break_aperture() { AperturePagesProbe::forget_capacity(allocation.aperture_); }
     Allocation &allocation;
 };
 
-}  // namespace av
+}
 
 using av::Allocation;
 using av::AllocationDescriptor;
@@ -51,15 +48,12 @@ using av::SurfaceLayout;
 using av::Violation;
 
 namespace {
-
-/* What this adapter has: the aperture, and nothing else. */
 class Segments {
 public:
     explicit Segments(MockPlatform &platform) : aperture_(platform), segments_(platform, aperture_)
     { CHECK_STATUS(aperture_.initialize(0x100000000), av::Status::ok); }
 
     const av::MemorySegments &segments() const { return segments_; }
-    /* The host GPU's memory, reported after the aperture. */
     void offer_local(std::uint64_t bytes)
     {
         const std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {};
@@ -83,7 +77,7 @@ std::uint64_t aperture_address(std::uint64_t offset_in_pages)
     return static_cast<std::uint64_t>(av::ApertureSegment::base_address) + offset_in_pages * page;
 }
 
-}  // namespace
+}
 
 TEST(allocation, remembers_its_descriptor_and_page_rounded_size)
 { MockPlatform platform; const Segments segments(platform); Allocation allocation(platform, segments.segments(), shadow, 0x1000u);
@@ -92,9 +86,6 @@ TEST(allocation, remembers_its_descriptor_and_page_rounded_size)
   CHECK_EQ(allocation.opens(), 0u);
   CHECK(allocation.invariants_hold()); }
 
-/* What the host holds the allocation's image under: a key the creator named
- * in its descriptor, until the adapter mints an identity for the allocation,
- * which is what a Direct3D session then shares the surface under. */
 TEST(allocation_host_key, is_the_descriptor_s_until_an_identity_is_minted)
 { MockPlatform platform; const Segments segments(platform);
   const AllocationDescriptor keyed(AllocationKind::surface, true, SurfaceLayout(10u, 10u, 21u, 40u), 400u,
@@ -116,14 +107,14 @@ TEST(allocation_report_to, tells_vidmm_the_size_segment_and_cpu_visibility)
   CHECK_EQ(info.Alignment, 0u);
   CHECK(info.PitchAlignedSize == 0u);
   CHECK_EQ(info.HintedBank, 0u);
-  CHECK_EQ(info.PreferredSegment, 2u);   /* VidMm's system memory segment */
+  CHECK_EQ(info.PreferredSegment, 2u);
   CHECK_EQ(info.SupportedReadSegmentSet, 2u);
   CHECK_EQ(info.SupportedWriteSegmentSet, 2u);
   CHECK_EQ(info.EvictionSegmentSet, 0u);
   CHECK_EQ(info.MaximumRenamingListLength, 0u);
   CHECK(info.hAllocation == &allocation);
-  CHECK_EQ(info.Flags, 1u);                         /* CpuVisible */
-  CHECK_EQ(info.AllocationPriority, 0x28000000u);   /* D3DDDI_ALLOCATIONPRIORITY_NORMAL */
+  CHECK_EQ(info.Flags, 1u);
+  CHECK_EQ(info.AllocationPriority, 0x28000000u);
   CHECK_EQ(info.Flags2, 0u);
   CHECK(info.pPrivateDriverData == &platform); }
 
@@ -135,8 +126,6 @@ TEST(allocation_report_to, a_gpu_only_allocation_is_not_cpu_visible)
   allocation.report_to(info);
   CHECK_EQ(info.Flags, 0u); }
 
-/* Pages the host lays write-back memory under: the processor's mapping is
- * cached, in the implicit system memory segment where the process's pages are. */
 TEST(allocation_report_to, a_cross_adapter_texture_is_cached_system_memory_and_an_existing_heap_is_not)
 { MockPlatform platform;
   const AllocationDescriptor lent(AllocationKind::cross_adapter, true, SurfaceLayout(1249u, 805u, 21u, 5120u),
@@ -144,9 +133,8 @@ TEST(allocation_report_to, a_cross_adapter_texture_is_cached_system_memory_and_a
   Segments segments(platform); Allocation allocation(platform, segments.segments(), lent, 1010u * 4096u);
   DxgkAllocationInfoRecord info = {};
   allocation.report_to(info);
-  CHECK_EQ(info.Flags, 5u);   /* CpuVisible | Cached */
+  CHECK_EQ(info.Flags, 5u);
   CHECK_EQ(info.PreferredSegment, 2u);
-  /* An existing heap is a row of no format, and is reported as before. */
   const AllocationDescriptor heap(AllocationKind::cross_adapter, true, SurfaceLayout(0x30000u, 1u, 0u, 0x30000u),
                                   0x30000u, ScanoutTarget());
   Allocation existing(platform, segments.segments(), heap, 0x30000u);
@@ -189,8 +177,6 @@ TEST(allocation_invariants, a_size_below_the_descriptor_or_off_a_page_is_detecte
   AllocationProbe(undersized).set_size(0x1000u);
   CHECK(!undersized.invariants_hold()); }
 
-/* An aperture address means nothing to the device; these are the pages behind
- * it, and an address of a different allocation's is not this one's. */
 TEST(allocation_pages_at, answers_the_pages_the_aperture_mapping_recorded)
 { MockPlatform platform; Segments segments(platform); Allocation allocation(platform, segments.segments(), shadow, 2u * page);
   const std::uint64_t frames[] = {6u * page, 7u * page};
@@ -234,9 +220,6 @@ TEST(allocation_map_aperture, is_passive_only)
   CHECK(platform.claim(Violation::irql_ceiling));
   while (platform.claim(Violation::irql_ceiling)) {} }
 
-/* Only the aperture segment is one the host can read a frame out of: a primary
- * left in VidMm's implicit system memory segment is never mapped, and
- * SetVidPnSourceAddress then answers segment 0, address 0. */
 TEST(allocation_report_to, a_primary_is_preferred_in_the_aperture_and_anything_else_in_system_memory)
 { MockPlatform platform;
   const AllocationDescriptor primary(AllocationKind::shared_primary, true,
@@ -251,17 +234,9 @@ TEST(allocation_report_to, a_primary_is_preferred_in_the_aperture_and_anything_e
   Allocation other(platform, segments.segments(), shadow, 0x1000u);
   DxgkAllocationInfoRecord plain = {};
   other.report_to(plain);
-  CHECK_EQ(plain.PreferredSegment, 2u);   /* VidMm's own, after the one segment this adapter reports */
+  CHECK_EQ(plain.PreferredSegment, 2u);
   CHECK_EQ(plain.SupportedReadSegmentSet, 2u); }
 
-/* A staging surface is the destination of an application's blt-model present -
- * the window's redirection surface, which CDD makes as one - and the miniport
- * writes it through its pages: it is pinned in the aperture, where those pages
- * are known. */
-/* A window's redirection surface is pinned where its pages are known, and
- * mapped write-back: dxgkrnl reads every blt-model frame out of it on the CPU.
- * A surface of the user-mode driver's, beside it, keeps the default
- * write-combined mapping. */
 TEST(allocation_report_to, a_staging_surface_is_pinned_in_the_aperture_and_cached)
 { MockPlatform platform;
   Segments segments(platform);
@@ -272,18 +247,14 @@ TEST(allocation_report_to, a_staging_surface_is_pinned_in_the_aperture_and_cache
   redirection.report_to(info);
   CHECK_EQ(info.PreferredSegment, av::ApertureSegment::segment_id);
   CHECK_EQ(info.SupportedReadSegmentSet, av::ApertureSegment::segment_set);
-  CHECK_EQ(info.Flags, 0x8005u);   /* CpuVisible | Cached | AccessedPhysically */
+  CHECK_EQ(info.Flags, 0x8005u);
   const AllocationDescriptor surface(AllocationKind::surface, true, SurfaceLayout(64u, 64u, 21u, 256u), 64u * 256u,
                                      ScanoutTarget());
   Allocation back_buffer(platform, segments.segments(), surface, 64u * 256u);
   DxgkAllocationInfoRecord drawn = {};
   back_buffer.report_to(drawn);
-  CHECK_EQ(drawn.Flags, 0x8001u);   /* CpuVisible | AccessedPhysically */ }
+  CHECK_EQ(drawn.Flags, 0x8001u);   }
 
-/* With software device bitmaps reported, CDD makes the window's redirection
- * surface a GDI surface and the miniport writes the redirected blt through its
- * pages: it is pinned in the aperture like a staging surface, whether or not
- * the GDI type is one the CPU may map. */
 TEST(allocation_report_to, a_gdi_surface_is_pinned_in_the_aperture_and_cached)
 { MockPlatform platform;
   Segments segments(platform);
@@ -297,18 +268,15 @@ TEST(allocation_report_to, a_gdi_surface_is_pinned_in_the_aperture_and_cached)
       CHECK_EQ(info.PreferredSegment, av::ApertureSegment::segment_id);
       CHECK_EQ(info.SupportedReadSegmentSet, av::ApertureSegment::segment_set);
       CHECK_EQ(info.SupportedWriteSegmentSet, av::ApertureSegment::segment_set);
-      CHECK_EQ(info.Flags, cpu_visible ? 0x8005u : 0x8004u);   /* [CpuVisible |] Cached | AccessedPhysically */
+      CHECK_EQ(info.Flags, cpu_visible ? 0x8005u : 0x8004u);
   } }
 
-/* The aperture pages are part of the allocation's own invariant. */
 TEST(allocation_invariants, aperture_pages_that_lost_theirs_are_detected)
 { MockPlatform platform; Segments segments(platform); Allocation allocation(platform, segments.segments(), shadow, 0x1000u);
   CHECK(allocation.invariants_hold());
   AllocationProbe(allocation).break_aperture();
   CHECK(!allocation.invariants_hold()); }
 
-/* A primary is read by the display, which has no BAR to read it through: it
- * stays in the aperture. */
 TEST(allocation_report_to, a_primary_stays_in_the_aperture)
 { MockPlatform platform;
   Segments segments(platform);
@@ -318,12 +286,8 @@ TEST(allocation_report_to, a_primary_stays_in_the_aperture)
   DxgkAllocationInfoRecord info = {};
   scanned_out.report_to(info);
   CHECK_EQ(info.PreferredSegment, av::ApertureSegment::segment_id);
-  CHECK_EQ(info.Flags, 0x8001u);   /* CpuVisible | AccessedPhysically */ }
+  CHECK_EQ(info.Flags, 0x8001u);   }
 
-/* Feature 041, US2: the pages an av context runs on belong to the device that
- * made them. A second device asking for the same ring is asking for another
- * process's submissions, and is refused; anything else is shared memory and is
- * not. */
 TEST(allocation_open, a_ring_belongs_to_the_device_that_opened_it)
 { MockPlatform platform;
   Segments segments(platform);
@@ -333,19 +297,15 @@ TEST(allocation_open, a_ring_belongs_to_the_device_that_opened_it)
   Allocation allocation(platform, segments.segments(), ring, 0x1000u);
   CHECK_STATUS(allocation.open(&first_device, nullptr), Status::ok);
   CHECK_STATUS(allocation.open(&second_device, nullptr), Status::invalid_parameter);
-  CHECK_STATUS(allocation.open(&first_device, nullptr), Status::ok);   /* the same device, twice */
+  CHECK_STATUS(allocation.open(&first_device, nullptr), Status::ok);
   CHECK(allocation.invariants_hold());
 
-  /* Once nobody holds it, it is anybody's again: the handle is gone and what
-   * is left is memory. */
   CHECK_STATUS(allocation.close(), Status::ok);
   CHECK_STATUS(allocation.close(), Status::ok);
   CHECK_STATUS(allocation.open(&second_device, nullptr), Status::ok);
   CHECK(allocation.invariants_hold());
   CHECK_STATUS(allocation.close(), Status::ok); }
 
-/* Two rings are held together when one device holds both, or nobody holds
- * either: the rule two OpenGL contexts are shared under (feature 050). */
 TEST(allocation_open, rings_are_held_together_only_by_one_device_or_by_none)
 { MockPlatform platform;
   Segments segments(platform);
@@ -368,10 +328,6 @@ TEST(allocation_open, rings_are_held_together_only_by_one_device_or_by_none)
   CHECK_STATUS(second.close(), Status::ok);
   CHECK(first.held_with(second)); }
 
-/* An OpenCL context sharing an OpenGL one is made by another ICD on a device
- * of its own, so its rings are held in one process rather than by one device
- * (feature 052's cl_khr_gl_sharing). Unlike held_with, rings nobody holds are
- * not held together: there is no process to compare. */
 TEST(allocation_open, rings_are_held_in_one_process_only_when_both_are_held_there)
 { MockPlatform platform;
   Segments segments(platform);
@@ -398,8 +354,6 @@ TEST(allocation_open, rings_are_held_in_one_process_only_when_both_are_held_ther
   CHECK(!gl.held_in_process_of(cl));
   CHECK(gl.invariants_hold()); }
 
-/* Only a context's name is one device's: every other kind is memory, which
- * any device may open. */
 TEST(allocation_open, a_shadow_is_opened_by_any_device)
 { MockPlatform platform;
   Segments segments(platform);
@@ -410,8 +364,6 @@ TEST(allocation_open, a_shadow_is_opened_by_any_device)
   CHECK_STATUS(shared.open(&second_device, nullptr), Status::ok);
   CHECK(shared.invariants_hold()); }
 
-/* An allocation that is open with nobody holding it, or held by somebody with
- * no opens, is a handle this driver has lost track of. */
 TEST(allocation_invariants, an_open_with_no_holder_is_detected)
 { MockPlatform platform;
   Segments segments(platform);
@@ -427,9 +379,6 @@ TEST(allocation_invariants, an_open_with_no_holder_is_detected)
   AllocationProbe(allocation).set_opens(1u);
   CHECK_STATUS(allocation.close(), Status::ok); }
 
-/* A client's buffer, and a context's name, are guest RAM VidMm keeps in its
- * own system memory segment, the one after the aperture: the device's hostmem
- * region is no segment of this adapter (docs/host-window.md). */
 TEST(allocation_report_to, a_client_buffer_lives_in_vidmm_s_own_system_memory)
 { MockPlatform platform;
   Segments segments(platform);
@@ -444,12 +393,9 @@ TEST(allocation_report_to, a_client_buffer_lives_in_vidmm_s_own_system_memory)
       CHECK_EQ(info.SupportedReadSegmentSet, 0x2u);
       CHECK_EQ(info.SupportedWriteSegmentSet, 0x2u);
       CHECK_EQ(info.EvictionSegmentSet, 0u);
-      CHECK_EQ(info.Flags, 1u);   /* still CPU-visible, and still guest-backed */
+      CHECK_EQ(info.Flags, 1u);
   } }
 
-/* With the host GPU's memory reported as the second segment, VidMm's own system
- * memory is the third, and a client's buffer follows it there; nothing is ever
- * placed in the host GPU's segment. */
 TEST(allocation_report_to, a_client_buffer_follows_vidmm_s_system_memory_past_the_local_segment)
 { MockPlatform platform;
   Segments segments(platform);
@@ -469,9 +415,6 @@ TEST(allocation_report_to, a_client_buffer_follows_vidmm_s_system_memory_past_th
   CHECK_EQ(name_info.PreferredSegment, 3u);
   CHECK_EQ(name_info.SupportedReadSegmentSet, 0x4u); }
 
-/* A context's name is no memory the device reads - the context runs on the
- * driver's own (docs/protocol.md, "Context memory") - so VidMm keeps it where
- * it keeps a client's buffer, and evicting it moves nothing a device holds. */
 TEST(allocation_report_to, a_context_s_name_is_not_pinned_in_the_aperture)
 { MockPlatform platform;
   Segments segments(platform);
@@ -482,10 +425,8 @@ TEST(allocation_report_to, a_context_s_name_is_not_pinned_in_the_aperture)
   CHECK_EQ(info.PreferredSegment, 2u);
   CHECK_EQ(info.SupportedReadSegmentSet, 0x2u);
   CHECK_EQ(info.SupportedWriteSegmentSet, 0x2u);
-  CHECK_EQ(info.Flags, 1u);   /* CpuVisible, and nothing AccessedPhysically */ }
+  CHECK_EQ(info.Flags, 1u);   }
 
-/* The binding publishes the whole allocation, wherever VidMm placed it: every
- * page, in order, or nothing while any page is not mapped. */
 TEST(allocation_pages, answers_every_page_only_once_all_are_mapped)
 { MockPlatform platform; Segments segments(platform);
   const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
@@ -498,7 +439,7 @@ TEST(allocation_pages, answers_every_page_only_once_all_are_mapped)
   head.NumberOfPages = 2u;
   head.pMdl = platform.attach_page_frames(frames, 4u);
   CHECK_STATUS(allocation.map_aperture(head), Status::ok);
-  CHECK_EQ(allocation.pages().count(), 0u);   /* half of it */
+  CHECK_EQ(allocation.pages().count(), 0u);
   av::DxgkBuildPagingBufferMapApertureSegmentRecord rest = head;
   rest.OffsetInPages = 12u;
   rest.MdlOffset = 2u;
@@ -516,8 +457,6 @@ TEST(allocation_pages, answers_every_page_only_once_all_are_mapped)
   CHECK_EQ(allocation.pages().count(), 0u);
   CHECK(allocation.invariants_hold()); }
 
-/* Feature 053: the identity the adapter minted, kept on the allocation so that
- * an open can find the object it has to count and a destroy can forget it. */
 TEST(allocation, carries_no_shared_identity_until_the_adapter_mints_one)
 { MockPlatform platform;
   Segments     segments(platform);
@@ -528,8 +467,6 @@ TEST(allocation, carries_no_shared_identity_until_the_adapter_mints_one)
   CHECK_EQ(allocation.shared_id(), 0x2A00000000000001u);
   CHECK(allocation.invariants_hold()); }
 
-/* A shared allocation is held by more than one device, which is the whole
- * point of it: only a ring or a fence page keeps a second device out. */
 TEST(allocation_open, a_shared_allocation_takes_a_second_device_where_a_ring_would_not)
 { MockPlatform platform;
   Segments     segments(platform);
@@ -545,10 +482,6 @@ TEST(allocation_open, a_shared_allocation_takes_a_second_device_where_a_ring_wou
   CHECK_STATUS(allocation.close(), Status::ok);
   CHECK(allocation.invariants_hold()); }
 
-/* The resource an allocation was created into, which the table needs to know so
- * that destroying the allocation releases one from the resource's count. None
- * until a create says so: an allocation outside a resource belongs_to nothing
- * (feature 053, research.md §16). */
 TEST(allocation, belongs_to_the_resource_it_was_created_into_and_to_none_by_default)
 { MockPlatform platform;
   Segments     segments(platform);
@@ -562,8 +495,6 @@ TEST(allocation, belongs_to_the_resource_it_was_created_into_and_to_none_by_defa
   allocation.belongs_to(nullptr);
   CHECK(allocation.resource() == nullptr); }
 
-/* One count per allocation, so a reader of one window's pages is not made to
- * wait for a present into another's. */
 TEST(allocation, counts_the_presents_written_into_its_pages_apart_from_every_other_allocation_s)
 { MockPlatform platform;
   Segments     segments(platform);
@@ -578,8 +509,6 @@ TEST(allocation, counts_the_presents_written_into_its_pages_apart_from_every_oth
   CHECK_EQ(other.writes().sequence(), 0u);
   CHECK(allocation.invariants_hold()); }
 
-/* A read of one window's pages holds back the presents into that window and
- * no other. */
 TEST(allocation, holds_the_reads_open_on_its_pages_apart_from_every_other_allocation_s)
 { MockPlatform platform;
   Segments     segments(platform);

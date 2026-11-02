@@ -16,7 +16,7 @@ constexpr size_t set_scanout_size = 48u;
 
 constexpr size_t resource_flush_size = 48u;
 
-}  // namespace
+}
 
 GpuRequestWriter::GpuRequestWriter(uint8_t *bytes, size_t capacity)
     : bytes_(bytes), capacity_(bytes != nullptr ? capacity : 0u), length_(0u)
@@ -98,7 +98,6 @@ Status GpuRequestWriter::resource_unref(uint32_t resource_id)
     return Status::ok;
 }
 
-/* struct virtio_gpu_resource_detach_backing: the resource and padding, as unref's. */
 Status GpuRequestWriter::detach_backing(uint32_t resource_id)
 {
     AV_SCOPE("GpuRequestWriter::detach_backing");
@@ -120,8 +119,6 @@ Status GpuRequestWriter::scanout_image(uint32_t resource_id, uint64_t key, uint3
     return Status::ok;
 }
 
-/* struct virtio_gpu_set_scanout: the rectangle, then the scanout and the
- * resource whose pixels it shows. */
 Status GpuRequestWriter::set_scanout(uint32_t scanout, uint32_t resource_id, uint32_t width, uint32_t height)
 {
     AV_SCOPE("GpuRequestWriter::set_scanout");
@@ -135,8 +132,6 @@ Status GpuRequestWriter::set_scanout(uint32_t scanout, uint32_t resource_id, uin
     return Status::ok;
 }
 
-/* The rectangle is the whole framebuffer, which is what a primary's scanout
- * always shows; a blob of 0 is the disable and carries none of it. */
 Status GpuRequestWriter::set_scanout_blob(uint32_t scanout, uint32_t resource_id, uint32_t width,
                                           uint32_t height, uint32_t stride)
 {
@@ -178,8 +173,6 @@ Status GpuRequestWriter::get_display_info()
     return begin(writer, get_display_info_type, header_size) ? Status::ok : Status::too_large;
 }
 
-/* struct virtio_gpu_update_cursor after its header: the position, then the
- * fields only an update reads. */
 Status GpuRequestWriter::update_cursor(uint32_t scanout, int32_t x, int32_t y, uint32_t resource_id, uint32_t hot_x,
                                        uint32_t hot_y)
 {
@@ -197,7 +190,6 @@ Status GpuRequestWriter::update_cursor(uint32_t scanout, int32_t x, int32_t y, u
     return Status::ok;
 }
 
-/* The same layout as an update, whose last fields a move leaves zero. */
 Status GpuRequestWriter::move_cursor(uint32_t scanout, int32_t x, int32_t y, uint32_t resource_id)
 {
     AV_SCOPE("GpuRequestWriter::move_cursor");
@@ -212,4 +204,4 @@ size_t GpuRequestWriter::length() const
     return length_;
 }
 
-}  // namespace av
+}

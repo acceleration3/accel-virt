@@ -1,8 +1,3 @@
-/* The GPU MMU half of adapter start for physical adapter 0: the GPUMMUCAPS and
- * PAGETABLELEVELDESC queries and node metadata checks ADAPTER_RENDER::Initialize
- * @ 1401b3d4c makes, and VidMm's InitializeGpuVaState @ 1400972cc over the
- * answers once segments exist. Both run only for an adapter whose physical
- * adapter caps report GpuMmuSupported. */
 #ifndef AV_FAKE_GPU_MMU_HPP
 #define AV_FAKE_GPU_MMU_HPP
 
@@ -23,9 +18,7 @@ public:
 
     explicit FakeGpuMmu(FakeDxgadapter &adapter);
 
-    /* Answers the NTSTATUS adapter start fails with. */
     std::int32_t query(void *context);
-    /* Over `segments`, the count VidMm knows including its implicit one. */
     std::int32_t initialize_va_state(std::uint32_t segments);
 
     bool                                 supported() const;
@@ -51,6 +44,6 @@ private:
     GpuMmuRule                   failed_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FAKE_GPU_MMU_HPP
+#endif

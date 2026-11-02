@@ -1,7 +1,3 @@
-/* Ranges placed first fit in a region, kept sorted, given back by where they
- * begin: what OpenCL's arena blocks, Direct3D 12's heaps and Vulkan's chunk
- * ranges are all built on. Invariants after every change, and every state the
- * table never builds caught by them. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -14,10 +10,6 @@ using av::Status;
 using av::icd::RangeTable;
 
 namespace av::icd {
-
-/* The rows the table never writes, one per bug the invariant is there for: an
- * overlap is two owners writing each other's bytes and a range past the end
- * is memory nobody has. */
 struct RangeTableProbe {
     static void set_row(RangeTable &table, std::uint32_t row, std::uint64_t offset, std::uint64_t size)
     {
@@ -30,7 +22,7 @@ struct RangeTableProbe {
     }
 };
 
-}  // namespace av::icd
+}
 
 using av::icd::RangeTableProbe;
 
@@ -47,7 +39,7 @@ std::uint64_t placed_at(Table &table, std::uint64_t bytes)
     return offset;
 }
 
-}  // namespace
+}
 
 TEST(range_table, places_nothing_until_given_a_region)
 { MockPlatform platform;
@@ -59,8 +51,6 @@ TEST(range_table, places_nothing_until_given_a_region)
   CHECK_EQ(table.placed(), 0u);
   CHECK_EQ(table.alignment(), page); }
 
-/* Rounded inward: a region that starts and ends mid-page holds only the whole
- * pages inside it; one that ends before it begins is empty, not wrapped. */
 TEST(range_table, the_region_is_rounded_inward_to_the_alignment)
 { MockPlatform platform;
   Table table(platform, page);
@@ -72,7 +62,6 @@ TEST(range_table, the_region_is_rounded_inward_to_the_alignment)
   CHECK_EQ(table.begin(), table.end());
   std::uint64_t offset = 0u;
   CHECK_STATUS(table.place(1u, offset), Status::no_space);
-  /* A begin that would wrap rounding up leaves nothing to place in. */
   table.reset(~std::uint64_t{0} - 1u, ~std::uint64_t{0});
   CHECK_EQ(table.begin(), table.end());
   CHECK(table.invariants_hold()); }
@@ -88,8 +77,6 @@ TEST(range_table, ranges_are_whole_aligned_and_first_fit)
   CHECK_EQ(placed_at(table, page), 3u * page);
   CHECK_EQ(table.placed(), 3u); }
 
-/* A range given back leaves a gap: the next range that fits takes it, and one
- * that does not goes after what is still placed. */
 TEST(range_table, a_gap_is_reused_by_the_first_range_that_fits)
 { MockPlatform platform;
   Table table(platform, page);
@@ -118,13 +105,10 @@ TEST(range_table, no_bytes_a_size_that_does_not_round_and_a_full_region_are_refu
   for (std::uint32_t row = 0u; row < 16u; row++) static_cast<void>(placed_at(table, page));
   CHECK_STATUS(table.place(page, offset), Status::no_space);
   CHECK_EQ(offset, 9u);
-  /* A region too small for the range, with rows to spare. */
   table.reset(0u, page);
   CHECK_STATUS(table.place(2u * page, offset), Status::no_space);
   CHECK(table.invariants_hold()); }
 
-/* Far past the 1024 rows the tables under it once had: only the region's
- * bytes bound the ranges, and each is found and given back by its offset. */
 TEST(range_table, places_as_many_ranges_as_the_region_holds)
 { MockPlatform platform;
   Table table(platform, page);
@@ -169,7 +153,6 @@ TEST(range_table, only_where_a_range_begins_removes_it)
   CHECK_EQ(table.placed(), 0u);
   CHECK(table.invariants_hold()); }
 
-/* A new region forgets every range of the old one, rows and all. */
 TEST(range_table, a_new_region_forgets_the_old_ranges)
 { MockPlatform platform;
   Table table(platform, page);

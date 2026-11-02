@@ -1,8 +1,3 @@
-/* Programs and kernels beyond the one-source build, through the dispatch
- * table: binaries, IL, built-in kernels, separate compilation and linking,
- * what a program and a kernel say about themselves, and the refusals the API
- * names for each - every one judged before anything crosses. The host is
- * ScriptedHost, so each answer queued is the one a command gets. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
@@ -31,7 +26,6 @@ const cl_icd_dispatch *table_of(const void *object)
     return object != nullptr ? *reinterpret_cast<const cl_icd_dispatch *const *>(object) : nullptr;
 }
 
-/* Whether the command at `index` of the journal carries `value` anywhere. */
 bool carries(const av::MockKmt &kmt, std::uint32_t index, std::uint64_t value)
 {
     const std::uint8_t *const frame = kmt.command_bytes(index);
@@ -43,8 +37,6 @@ bool carries(const av::MockKmt &kmt, std::uint32_t index, std::uint64_t value)
     return false;
 }
 
-/* A device, a context on it and a program built from source: what every test
- * below starts from. */
 class Programs {
 public:
     explicit Programs(ClIcdRig &rig) : rig_(rig), device_(nullptr), context_(nullptr), program_(nullptr)
@@ -80,7 +72,6 @@ private:
     cl_program   program_;
 };
 
-/* pfn_notify's calls, counted with what they were told. */
 class Told {
 public:
     void heard(cl_program program)
@@ -94,7 +85,7 @@ public:
 
 void CL_CALLBACK told(cl_program program, void *user_data) { static_cast<Told *>(user_data)->heard(program); }
 
-}  // namespace
+}
 
 TEST(cl_program_paths, a_program_notify_runs_once_for_a_build_that_ran_and_never_without_a_callback)
 { Told heard;
@@ -118,9 +109,6 @@ TEST(cl_program_paths, a_build_judges_its_device_list_and_tells_its_callback_whe
   if (!run.made()) return;
   const cl_icd_dispatch &table = *table_of(run.program());
   Told heard;
-  /* User data with no callback, a count with no list, a list with no count,
-   * and a list naming what is not the context's device: refused before
-   * anything is sent. */
   const std::uint32_t sent = rig.kmt().commands();
   cl_device_id device = run.device();
   CHECK_EQ(table.clBuildProgram(run.program(), 0u, nullptr, nullptr, nullptr, &heard), CL_INVALID_VALUE);
@@ -131,16 +119,13 @@ TEST(cl_program_paths, a_build_judges_its_device_list_and_tells_its_callback_whe
   CHECK_EQ(table.clBuildProgram(reinterpret_cast<cl_program>(run.context()), 0u, nullptr, nullptr, nullptr, nullptr),
            CL_INVALID_PROGRAM);
   CHECK_EQ(rig.kmt().commands(), sent);
-  /* Built: the callback runs once with the program, on this thread. */
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(table.clBuildProgram(run.program(), 1u, &device, "-DX", &told, &heard), CL_SUCCESS);
   CHECK_EQ(heard.calls, 1u);
   CHECK(heard.last == run.program());
-  /* A build the host refused to begin tells nobody. */
   rig.host().cl_result(CL_INVALID_OPERATION);
   CHECK_EQ(table.clBuildProgram(run.program(), 0u, nullptr, nullptr, &told, &heard), CL_INVALID_OPERATION);
   CHECK_EQ(heard.calls, 1u);
-  /* One that failed to compile tells it all the same, after the log. */
   rig.host().cl_result(CL_BUILD_PROGRAM_FAILURE);
   rig.host().cl_info(CL_SUCCESS, "", 0u);
   CHECK_EQ(table.clBuildProgram(run.program(), 0u, nullptr, nullptr, &told, &heard), CL_BUILD_PROGRAM_FAILURE);
@@ -161,7 +146,6 @@ TEST(cl_program_paths, a_binary_crosses_for_the_context_s_device_and_its_status_
   cl_int                 status[2] = {7, 7};
   cl_int                 error = CL_SUCCESS;
   const std::uint32_t    sent = rig.kmt().commands();
-  /* No context, no devices, no binaries, an empty one, two devices. */
   CHECK(table.clCreateProgramWithBinary(reinterpret_cast<cl_context>(run.program()), 1u, devices, &length, &binary,
                                         status, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_CONTEXT);
@@ -179,14 +163,12 @@ TEST(cl_program_paths, a_binary_crosses_for_the_context_s_device_and_its_status_
   CHECK_EQ(error, CL_INVALID_DEVICE);
   CHECK_EQ(rig.kmt().commands(), sent);
 
-  /* The host's refusal is the binary's status and the call's error. */
   rig.host().cl_from_binary(0u, CL_INVALID_BINARY, CL_INVALID_BINARY);
   CHECK(table.clCreateProgramWithBinary(run.context(), 1u, devices, &length, &binary, status, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_BINARY);
   CHECK_EQ(status[0], CL_INVALID_BINARY);
   CHECK(carries(rig.kmt(), sent, host_device));
   CHECK(carries(rig.kmt(), sent, host_context));
-  /* Taken: a program of this ICD's. */
   rig.host().cl_from_binary(host_program + 1u, CL_SUCCESS, CL_SUCCESS);
   const cl_program loaded =
       table.clCreateProgramWithBinary(run.context(), 1u, devices, &length, &binary, status, &error);
@@ -194,7 +176,6 @@ TEST(cl_program_paths, a_binary_crosses_for_the_context_s_device_and_its_status_
   CHECK_EQ(error, CL_SUCCESS);
   CHECK_EQ(status[0], CL_SUCCESS);
   CHECK(table_of(loaded) == table_of(run.context()));
-  /* A host that took it and answered no program says so as the binary. */
   rig.host().cl_from_binary(0u, CL_SUCCESS, CL_SUCCESS);
   CHECK(table.clCreateProgramWithBinary(run.context(), 1u, devices, &length, &binary, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_BINARY);
@@ -216,14 +197,12 @@ TEST(cl_program_paths, il_and_built_in_kernels_are_the_host_s_to_take_or_refuse)
   CHECK(table.clCreateProgramWithIL(reinterpret_cast<cl_context>(run.program()), words, sizeof words, &error) ==
         nullptr);
   CHECK_EQ(error, CL_INVALID_CONTEXT);
-  /* A host that takes no IL refuses it as the API says it must. */
   rig.host().cl_handle(0u, CL_INVALID_OPERATION);
   CHECK(table.clCreateProgramWithIL(run.context(), words, sizeof words, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_OPERATION);
   rig.host().cl_handle(host_program + 2u, CL_SUCCESS);
   CHECK(table.clCreateProgramWithIL(run.context(), words, sizeof words, &error) != nullptr);
   CHECK_EQ(error, CL_SUCCESS);
-  /* clCreateProgramWithILKHR is the same entry, by name. */
   CHECK(rig.root().extension_function("clCreateProgramWithILKHR") ==
         reinterpret_cast<void *>(table.clCreateProgramWithIL));
 
@@ -250,8 +229,6 @@ TEST(cl_program_paths, a_compile_names_its_headers_by_the_host_s_numbers_and_a_l
   const char            *name = "h.h";
   const cl_program       header = run.program();
   Told                   heard;
-  /* Headers counted with no names, a header that is not a program, more
-   * than the stack holds, and user data with no callback. */
   CHECK_EQ(table.clCompileProgram(run.program(), 0u, nullptr, nullptr, 1u, &header, nullptr, nullptr, nullptr),
            CL_INVALID_VALUE);
   const cl_program stranger = reinterpret_cast<cl_program>(run.context());
@@ -290,7 +267,6 @@ TEST(cl_program_paths, a_compile_names_its_headers_by_the_host_s_numbers_and_a_l
   CHECK(context_table.clLinkProgram(reinterpret_cast<cl_context>(run.program()), 0u, nullptr, nullptr, 1u, &header,
                                     nullptr, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_CONTEXT);
-  /* Linked: a new program of this ICD's, told to the callback. */
   rig.host().cl_handle(host_program + 3u, CL_SUCCESS);
   const cl_program linked =
       context_table.clLinkProgram(run.context(), 0u, nullptr, "-x", 1u, &header, &told, &heard, &error);
@@ -298,14 +274,12 @@ TEST(cl_program_paths, a_compile_names_its_headers_by_the_host_s_numbers_and_a_l
   CHECK_EQ(error, CL_SUCCESS);
   CHECK_EQ(heard.calls, 3u);
   CHECK(heard.last == linked);
-  /* A link that failed still answers the program its log is on. */
   rig.host().cl_handle(host_program + 4u, CL_LINK_PROGRAM_FAILURE);
   rig.host().cl_info(CL_SUCCESS, "", 0u);
   const cl_program failed =
       context_table.clLinkProgram(run.context(), 0u, nullptr, nullptr, 1u, &header, nullptr, nullptr, &error);
   CHECK(failed != nullptr);
   CHECK_EQ(error, CL_LINK_PROGRAM_FAILURE);
-  /* And one the host made nothing for answers its error. */
   rig.host().cl_handle(0u, CL_INVALID_LINKER_OPTIONS);
   CHECK(context_table.clLinkProgram(run.context(), 0u, nullptr, "-bad", 1u, &header, nullptr, nullptr, &error) ==
         nullptr);
@@ -337,8 +311,6 @@ TEST(cl_program_paths, a_program_names_this_icd_s_objects_and_fetches_its_binary
                                   &count, nullptr),
            CL_INVALID_PROGRAM);
 
-  /* The binary: the size the host answers, then its bytes into the
-   * application's own pointer. */
   unsigned char  into[16] = {};
   unsigned char *pointers[1] = {into};
   std::size_t    answered = 0u;
@@ -351,12 +323,10 @@ TEST(cl_program_paths, a_program_names_this_icd_s_objects_and_fetches_its_binary
   CHECK_EQ(table.clGetProgramInfo(run.program(), CL_PROGRAM_BINARIES, sizeof pointers, pointers, &answered),
            CL_SUCCESS);
   CHECK(std::memcmp(into, "sealed", 6u) == 0);
-  /* A null entry is one the application does not want. */
   unsigned char *skipped[1] = {nullptr};
   const std::uint32_t before = rig.kmt().commands();
   CHECK_EQ(table.clGetProgramInfo(run.program(), CL_PROGRAM_BINARIES, sizeof skipped, skipped, nullptr), CL_SUCCESS);
   CHECK_EQ(rig.kmt().commands(), before);
-  /* No binary yet, and a host that answers more sizes than one device has. */
   const std::size_t empty = 0u;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&empty), sizeof empty);
   CHECK_EQ(table.clGetProgramInfo(run.program(), CL_PROGRAM_BINARIES, sizeof pointers, pointers, nullptr), CL_SUCCESS);
@@ -367,13 +337,11 @@ TEST(cl_program_paths, a_program_names_this_icd_s_objects_and_fetches_its_binary
   rig.host().cl_info(CL_INVALID_PROGRAM_EXECUTABLE, "", 0u);
   CHECK_EQ(table.clGetProgramInfo(run.program(), CL_PROGRAM_BINARIES, sizeof pointers, pointers, nullptr),
            CL_INVALID_PROGRAM_EXECUTABLE);
-  /* Everything else is the host's. */
   rig.host().cl_info(CL_SUCCESS, "k", 2u);
   char names[8] = {};
   CHECK_EQ(table.clGetProgramInfo(run.program(), CL_PROGRAM_KERNEL_NAMES, sizeof names, names, nullptr), CL_SUCCESS);
   CHECK_EQ(std::strcmp(names, "k"), 0);
 
-  /* What a program may be told and what it refuses. */
   CHECK_EQ(table.clSetProgramSpecializationConstant(run.program(), 1u, 0u, nullptr), CL_INVALID_VALUE);
   rig.host().cl_result(CL_INVALID_PROGRAM);
   const std::uint32_t constant = 3u;
@@ -405,7 +373,6 @@ TEST(cl_program_paths, kernels_made_together_or_cloned_are_this_icd_s_and_say_wh
   CHECK_EQ(table.clCreateKernelsInProgram(run.program(), 0u, kernels, &made), CL_INVALID_VALUE);
   CHECK_EQ(table.clCreateKernelsInProgram(reinterpret_cast<cl_program>(run.context()), 2u, kernels, &made),
            CL_INVALID_PROGRAM);
-  /* How many, then which. */
   rig.host().cl_count(CL_SUCCESS, 2u);
   CHECK_EQ(table.clCreateKernelsInProgram(run.program(), 0u, nullptr, &made), CL_SUCCESS);
   CHECK_EQ(made, 2u);
@@ -446,7 +413,6 @@ TEST(cl_program_paths, kernels_made_together_or_cloned_are_this_icd_s_and_say_wh
                                         &count, nullptr),
            CL_INVALID_KERNEL);
 
-  /* A clone: the host's, and a kernel of the same program. */
   cl_int error = CL_SUCCESS;
   rig.host().cl_handle(0u, CL_OUT_OF_RESOURCES);
   CHECK(kernel_table.clCloneKernel(kernels[0], &error) == nullptr);
@@ -461,7 +427,6 @@ TEST(cl_program_paths, kernels_made_together_or_cloned_are_this_icd_s_and_say_wh
   CHECK_EQ(kernel_table.clGetKernelInfo(clone, CL_KERNEL_PROGRAM, sizeof program, &program, nullptr), CL_SUCCESS);
   CHECK(program == run.program());
 
-  /* A device for a sub-group query is the context's or none. */
   cl_device_id stranger = reinterpret_cast<cl_device_id>(run.program());
   std::size_t  value = 0u;
   CHECK_EQ(kernel_table.clGetKernelSubGroupInfo(kernels[0], stranger, CL_KERNEL_MAX_NUM_SUB_GROUPS, 0u, nullptr,
@@ -472,8 +437,6 @@ TEST(cl_program_paths, kernels_made_together_or_cloned_are_this_icd_s_and_say_wh
                                                    sizeof value, &value, nullptr),
            CL_SUCCESS);
 
-  /* Execution info: fine-grained system SVM only off, pointers only inside
-   * an allocation, and no other name. */
   cl_bool on = CL_TRUE;
   CHECK_EQ(kernel_table.clSetKernelExecInfo(kernels[0], CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM, sizeof on, &on),
            CL_INVALID_OPERATION);
@@ -495,7 +458,6 @@ TEST(cl_program_paths, kernels_made_together_or_cloned_are_this_icd_s_and_say_wh
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
-/* The root answers as its entries do: each entry is a line through it. */
 TEST(cl_program_paths, the_root_s_own_calls_answer_as_the_entries_through_it_do)
 { ClIcdRig rig;
   Programs run(rig);
@@ -515,6 +477,4 @@ TEST(cl_program_paths, the_root_s_own_calls_answer_as_the_entries_through_it_do)
   CHECK_EQ(root.set_kernel_exec_info(reinterpret_cast<cl_kernel>(run.program()), CL_KERNEL_EXEC_INFO_SVM_PTRS, 0u,
                                      nullptr),
            CL_INVALID_KERNEL);
-  /* clCreateProgramWithILKHR, which the loader asks for by name, is the
-   * table's own entry. */
   CHECK(root.extension_function("clCreateProgramWithILKHR") == root.dispatch().clCreateProgramWithIL); }

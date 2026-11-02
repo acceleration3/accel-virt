@@ -41,11 +41,10 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PROCESSOR = ROOT / "build-perfetto" / "trace_processor"
 WAITS = ("D3d11Device::query_get_data", "KmtTransport::await", "KmtTransport::drain",
          "KmtTransport::room_within_spin")
-TRACER_NS_PER_SCOPE = 60   # a scope's enter and leave events, measured on this host
+TRACER_NS_PER_SCOPE = 60
 
 
 def query(trace, sql):
-    """Rows of `sql` over `trace`, as dicts."""
     out = subprocess.run([str(PROCESSOR), "-q", "/dev/stdin", str(trace)], input=sql, capture_output=True,
                          text=True, timeout=900)
     if out.returncode != 0:
@@ -86,8 +85,6 @@ def scope_count(trace, utid):
 
 
 def pick_threads(trace, marker):
-    """The guest thread that runs the frames (the most `marker` scopes; a
-    worker recording commands may be busier) and the busiest host thread."""
     threads = query(trace, THREADS)
     marked = query(trace, f"""
 select tt.utid, count(*) n from slice s join thread_track tt on s.track_id = tt.id
@@ -106,9 +103,6 @@ def frames_of(markers):
 
 
 class Slices:
-    """A thread's top-level slices, sorted, for summing the parts of them that
-    fall in a window without walking all of them."""
-
     def __init__(self, rows):
         self.ts = [int(row["ts"]) for row in rows]
         self.dur = [int(row["dur"]) for row in rows]
@@ -131,8 +125,6 @@ def first_at_or_after(values, at):
 
 
 def chain(trace, guest_utid, host_utid, frames):
-    """Per frame, the last query end's legs: guest end to host end, host end to
-    the host writing the result, and the write to the guest's GetData seeing it."""
     ends = named(trace, guest_utid, "D3d11Device::query_end")
     host_ends = named(trace, host_utid, "D3dBackend::on_EndQuery")
     writes = named(trace, host_utid, "QueryResultPublisher::write")

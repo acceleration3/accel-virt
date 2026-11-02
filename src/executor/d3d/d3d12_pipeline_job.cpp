@@ -116,4 +116,4 @@ bool D3d12PipelineJob::invariants_hold() const
     return (id_ == 0u) == (root_ == nullptr) && (made_ == nullptr || root_ != nullptr);
 }
 
-}  // namespace av
+}

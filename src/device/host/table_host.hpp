@@ -1,5 +1,3 @@
-/* The host QEMU provides: every Host call forwarded to the glue's operations
- * table, with the threading contract checked against QEMU's big lock. */
 #ifndef AV_TABLE_HOST_HPP
 #define AV_TABLE_HOST_HPP
 
@@ -91,6 +89,6 @@ private:
     const AvHostOps &ops_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_TABLE_HOST_HPP
+#endif

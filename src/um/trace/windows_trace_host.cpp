@@ -45,4 +45,4 @@ bool WindowsTraceHost::exchange(uint64_t &word, uint64_t expected, uint64_t desi
                                                                static_cast<LONG64>(expected))) == expected;
 }
 
-}  // namespace av
+}

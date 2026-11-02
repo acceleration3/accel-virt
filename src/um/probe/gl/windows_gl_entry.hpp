@@ -1,8 +1,3 @@
-/* The GL probe's GlEntry in the guest (feature 050, T042): WGL and GL 1.1
- * through the system opengl32.dll's exports, SwapBuffers and the pixel format
- * through gdi32, everything past GL 1.1 and the ICD's probe hook through
- * wglGetProcAddress of the current context, as an application reaches them.
- * The window is the probe's own. Translation only. */
 #ifndef AV_UM_WINDOWS_GL_ENTRY_HPP
 #define AV_UM_WINDOWS_GL_ENTRY_HPP
 
@@ -71,14 +66,12 @@ public:
     void     delete_texture(uint32_t texture) override;
 
 private:
-    /* Past GL 1.1, found through the current context; null when the ICD has
-     * no such entry. */
     template <typename Function>
     Function named(const char *name) const;
 
     ProbeWindow &window_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_WINDOWS_GL_ENTRY_HPP
+#endif

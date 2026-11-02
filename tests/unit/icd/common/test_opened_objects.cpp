@@ -1,10 +1,3 @@
-/* The shared objects one context opened from a Win32 handle (OpenedObjects),
- * which OpenGL's and OpenCL's imports are both built on: a handle another
- * process sent is opened through the kernel, a memory object is named as the
- * whole pages it was published as and a fence as none, one object is opened
- * once, and every refusal leaves no row and sends nothing it should not.
- * Invariants after every change, and every state the table never builds
- * caught by them. */
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -36,7 +29,6 @@ using av::icd::OpenedObjects;
 namespace av::icd {
 
 struct OpenedObjectsProbe {
-    /* A row kept as no open would: what the invariants are judged against. */
     static OpenedObjectRow &add(OpenedObjects &opened, const OpenedObjectRow &row)
     {
         OpenedObjectRow *made = nullptr;
@@ -45,7 +37,7 @@ struct OpenedObjectsProbe {
     }
 };
 
-}  // namespace av::icd
+}
 
 using av::icd::OpenedObjectsProbe;
 
@@ -55,7 +47,6 @@ constexpr std::uint64_t page = av::SharedObjectRecord::page_size;
 constexpr std::uint64_t made_memory = 0x5150u;
 constexpr std::uint64_t made_fence = 0x6160u;
 
-/* The device's 16-byte answer, as the transport hands it back. */
 class Answer {
 public:
     Answer(std::uint32_t status, std::uint64_t made) : bytes_{}
@@ -69,8 +60,6 @@ private:
     std::uint8_t bytes_[SharedObjectAnswer::encoded_size];
 };
 
-/* One process: a kernel that mints identities and NT handles, the ICD's handle
- * table over it, a transport playing the device, and the table under test. */
 class Process {
 public:
     Process() : memory_(), trace_(), lock_(trace_, 'S'), kmt_(), log_(), wire_(), device_(0u),
@@ -90,8 +79,6 @@ public:
     av::MockPlatform         &memory() { return memory_; }
     std::uint32_t             device() const { return device_; }
 
-    /* A handle another process sent: an allocation the kernel minted an
-     * identity of `kind` into, and shared - never adopted here. */
     std::uint64_t handle(std::uint32_t kind = SharedObjectKind::memory)
     {
         const av::AllocationDescriptor descriptor(av::AllocationKind::client, true, av::SurfaceLayout(), page,
@@ -142,7 +129,7 @@ std::uint32_t u32_at(const std::uint8_t *bytes, std::size_t at)
     return value;
 }
 
-}  // namespace
+}
 
 TEST(opened_objects, a_new_table_holds_nothing)
 { Process process;
@@ -150,9 +137,6 @@ TEST(opened_objects, a_new_table_holds_nothing)
   CHECK(!process.opened().answered(SharedObjectKind::memory, made_memory));
   CHECK(process.opened().invariants_hold()); }
 
-/* A handle this process never held is adopted through the kernel - which is
- * what tells it from a number an application invented - and the size the
- * application gave in bytes is named as whole pages, which the wire demands. */
 TEST(opened_objects, a_handle_another_process_sent_opens_as_whole_pages)
 { Process             process;
   const std::uint64_t named = process.handle();
@@ -170,7 +154,6 @@ TEST(opened_objects, a_handle_another_process_sent_opens_as_whole_pages)
   CHECK_EQ(process.opened().live(), 1u);
   CHECK(process.opened().invariants_hold()); }
 
-/* A fence has no bytes, whatever the caller passed for a size. */
 TEST(opened_objects, a_fence_opens_with_no_size)
 { Process             process;
   const std::uint64_t named = process.handle(SharedObjectKind::monitored_fence);
@@ -184,9 +167,6 @@ TEST(opened_objects, a_fence_opens_with_no_size)
   CHECK(!process.opened().answered(SharedObjectKind::memory, made_fence));
   CHECK(process.opened().invariants_hold()); }
 
-/* Nothing about a handle of 0, a memory object of no bytes or of a size that
- * would wrap, or a kind the wire does not have reaches the kernel or the
- * device. */
 TEST(opened_objects, a_request_that_names_no_object_is_refused_before_anything_is_asked)
 { Process             process;
   const std::uint64_t named = process.handle();
@@ -206,8 +186,6 @@ TEST(opened_objects, a_request_that_names_no_object_is_refused_before_anything_i
   CHECK_EQ(process.handles().live(), 0u);
   CHECK_EQ(process.opened().live(), 0u); }
 
-/* The refusal this table exists for: a number an application invented is not
- * a handle the kernel lets this process open. */
 TEST(opened_objects, a_handle_this_process_may_not_open_is_not_found_and_sends_nothing)
 { Process       process;
   std::uint64_t made = 7u;
@@ -219,8 +197,6 @@ TEST(opened_objects, a_handle_this_process_may_not_open_is_not_found_and_sends_n
   CHECK_EQ(process.log().holding("avtest: a Win32 handle this process may not open"), 1u);
   CHECK_EQ(process.opened().live(), 0u); }
 
-/* One object opened twice in one context is two handles a guest could release
- * it through: the second open is refused, by either handle to it. */
 TEST(opened_objects, one_object_is_opened_once)
 { Process             process;
   const std::uint64_t named = process.handle();
@@ -237,7 +213,6 @@ TEST(opened_objects, one_object_is_opened_once)
   CHECK_EQ(process.opened().live(), 1u);
   CHECK(process.opened().invariants_hold()); }
 
-/* A device that will not open it leaves no row, and says why. */
 TEST(opened_objects, a_device_that_refuses_leaves_no_row)
 { Process             process;
   const std::uint64_t named = process.handle();
@@ -251,8 +226,6 @@ TEST(opened_objects, a_device_that_refuses_leaves_no_row)
            1u);
   CHECK(process.opened().invariants_hold()); }
 
-/* No count of objects past which an open is refused: the table this replaced
- * stopped at 64. */
 TEST(opened_objects, opens_past_any_fixed_table)
 { Process process;
   for (std::uint32_t index = 0u; index < 100u; index++)
@@ -269,9 +242,6 @@ TEST(opened_objects, opens_past_any_fixed_table)
   CHECK_EQ(process.opened().live(), 101u);
   CHECK(process.opened().invariants_hold()); }
 
-/* No row to keep the object in refuses before the device is asked: an object
- * opened with nowhere to keep it is one nothing would give back. The handle's
- * own row is the first allocation, the opened object's the second. */
 TEST(opened_objects, no_memory_for_a_row_refuses_before_the_device_is_asked)
 { Process             process;
   const std::uint64_t named = process.handle();
@@ -284,8 +254,6 @@ TEST(opened_objects, no_memory_for_a_row_refuses_before_the_device_is_asked)
   CHECK_EQ(process.opened().live(), 0u);
   CHECK_EQ(process.log().holding("avtest: no memory to keep an opened shared object"), 1u);
   CHECK(process.opened().invariants_hold());
-  /* And one with no row for the handle itself, which a fresh process's
-   * first allocation is. */
   Process             fresh;
   const std::uint64_t another = fresh.handle();
   fresh.memory().fail_allocation_at(1u);
@@ -295,9 +263,6 @@ TEST(opened_objects, no_memory_for_a_row_refuses_before_the_device_is_asked)
   CHECK_EQ(fresh.handles().live(), 0u);
   CHECK_EQ(fresh.log().holding("avtest: no memory to keep a Win32 handle"), 1u); }
 
-/* A memory object and a fence the device answered the same number for are two
- * objects - OpenGL's namespaces are separate - and each is given back by its
- * own kind, naming the size it was opened as. */
 TEST(opened_objects, each_object_is_given_back_by_its_kind_and_size)
 { Process             process;
   const std::uint64_t memory = process.handle();
@@ -314,7 +279,6 @@ TEST(opened_objects, each_object_is_given_back_by_its_kind_and_size)
   CHECK(!process.opened().give_back(process.wire(), SharedObjectKind::memory, made_memory + 1u));
   CHECK(!process.opened().give_back(process.wire(), SharedObjectKind::memory, 0u));
   CHECK(process.opened().give_back(process.wire(), SharedObjectKind::memory, made_memory));
-  /* Given back once: what is left with that number is the fence. */
   CHECK(!process.opened().give_back(process.wire(), SharedObjectKind::memory, made_memory));
   CHECK_EQ(process.wire().last_command(), av::CommandHeader::release_shared_object_id);
   CHECK_EQ(u32_at(process.wire().last_payload(), 8u), SharedObjectKind::memory);
@@ -324,7 +288,6 @@ TEST(opened_objects, each_object_is_given_back_by_its_kind_and_size)
   CHECK_EQ(process.opened().live(), 1u);
   CHECK(process.opened().invariants_hold()); }
 
-/* A context torn down gives back everything it still holds, each once. */
 TEST(opened_objects, release_all_gives_every_object_back)
 { Process       process;
   std::uint64_t made = 0u;
@@ -355,7 +318,6 @@ TEST(opened_objects, report_names_each_object)
   CHECK(std::strstr(writer.dump(), "made=20816") != nullptr);
   CHECK(std::strstr(writer.dump(), "size=4096") != nullptr); }
 
-/* Every way a row can be wrong, made by hand: the invariant exists to fail. */
 TEST(opened_objects, invariants_reject_every_row_no_open_leaves)
 { Process process;
   av::icd::OpenedObjectRow &first = OpenedObjectsProbe::add(
@@ -365,28 +327,28 @@ TEST(opened_objects, invariants_reject_every_row_no_open_leaves)
   CHECK(process.opened().invariants_hold());
   const av::icd::OpenedObjectRow whole = second;
   second.object_id_ = 0u;
-  CHECK(!process.opened().invariants_hold());          /* no object */
+  CHECK(!process.opened().invariants_hold());
   second = whole;
   second.made_ = 0u;
-  CHECK(!process.opened().invariants_hold());          /* nothing the device made */
+  CHECK(!process.opened().invariants_hold());
   second = whole;
   second.size_ = page;
-  CHECK(!process.opened().invariants_hold());          /* a fence with bytes */
+  CHECK(!process.opened().invariants_hold());
   second = whole;
   second.kind_ = SharedObjectKind::native_fence + 1u;
-  CHECK(!process.opened().invariants_hold());          /* a kind the wire has not */
+  CHECK(!process.opened().invariants_hold());
   second = av::icd::OpenedObjectRow{8u, made_fence, 0u, SharedObjectKind::memory};
-  CHECK(!process.opened().invariants_hold());          /* memory of no bytes */
+  CHECK(!process.opened().invariants_hold());
   second.size_ = page + 1u;
-  CHECK(!process.opened().invariants_hold());          /* memory not in pages */
+  CHECK(!process.opened().invariants_hold());
   second = whole;
   second.object_id_ = first.object_id_;
-  CHECK(!process.opened().invariants_hold());          /* one object twice */
+  CHECK(!process.opened().invariants_hold());
   second = whole;
   second.kind_ = SharedObjectKind::memory;
   second.size_ = page;
   second.made_ = made_memory;
-  CHECK(!process.opened().invariants_hold());          /* one kind's answer twice */
+  CHECK(!process.opened().invariants_hold());
   second.kind_ = SharedObjectKind::native_fence;
   second.size_ = 0u;
-  CHECK(process.opened().invariants_hold()); }          /* another kind's is its own */
+  CHECK(process.opened().invariants_hold()); }

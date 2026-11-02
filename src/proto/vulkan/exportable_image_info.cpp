@@ -7,22 +7,13 @@
 namespace av {
 
 namespace {
-
-/* D3D11_BIND_FLAG values. */
 constexpr uint32_t bind_shader_resource = 0x8u;
 constexpr uint32_t bind_render_target = 0x20u;
 constexpr uint32_t shared_binds = bind_shader_resource | bind_render_target;
-/* DRM_FORMAT_MOD_LINEAR, from drm_fourcc.h. */
 constexpr uint64_t drm_format_mod_linear = 0u;
-/* The bytes between the starts of two rows are a multiple of this. NVIDIA
- * (580) lays a linear image's rows only 32 bytes apart - 2464 for 614 BGRA
- * texels - and its 3D engine faults on clearing a target whose rows are not
- * 128-byte aligned (Xid 69, CLEAR_SURFACE, ErrorCode 0xf): the device is lost,
- * and with it every Direct3D 11 session on the GPU. 256 is what RADV lays
- * linear rows at itself, and RADV, ANV and NVIDIA all take it. */
 constexpr uint32_t row_alignment = 256u;
 
-}  // namespace
+}
 
 ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32_t mips, uint32_t layers,
                                          uint32_t samples, uint32_t format, uint32_t bind_flags)
@@ -48,21 +39,7 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
     info_.mipLevels = 1u;
     info_.arrayLayers = 1u;
     info_.samples = VK_SAMPLE_COUNT_1_BIT;
-    /* Laid out by a modifier, which names the layout to every importer: the
-     * memory goes to other APIs and to processes outside QEMU (a window
-     * mirror's import, docs/external-export.md), and an optimal image's tiling
-     * travels with its memory on some kernels' buffers (amdgpu) and on others
-     * not at all (i915, Xe), where the importer read it as linear and showed
-     * it scrambled. A modifier rather than VK_IMAGE_TILING_LINEAR for rows
-     * too: a driver may export a dma-buf only for an image laid out by a
-     * modifier - RADV from Mesa 26.2 refuses the other. Rows are placed here
-     * rather than left to the driver: every device that makes this image then
-     * lays the memory out alike by construction, and no driver picks a pitch
-     * its own engines cannot draw at (row_alignment). */
     info_.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
-    /* Drawn and sampled whatever the binds say: another API opening the
-     * memory draws into it, and a superset of what DXVK asks is an image DXVK
-     * can wrap. */
     info_.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     info_.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -79,8 +56,6 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
     supported_ = true;
 }
 
-/* The rows' description with its last link - the explicit linear layout -
- * replaced by the list the driver picks from. */
 ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32_t mips, uint32_t layers,
                                          uint32_t samples, uint32_t format, uint32_t bind_flags,
                                          const uint64_t *modifiers, uint32_t count)
@@ -118,4 +93,4 @@ const VkImageCreateInfo &ExportableImageInfo::info() const
     return info_;
 }
 
-}  // namespace av
+}

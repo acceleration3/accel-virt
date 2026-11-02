@@ -1,14 +1,3 @@
-/* GL objects reaching OpenCL as copies (CopiedGlSharing), on this host's own
- * GPU. The copy path is what a host whose OpenCL makes no context against the
- * vehicle gets - NVIDIA's - and nothing in it asks the host's OpenCL to share:
- * the cl_mems are plain ones of a context that names no GL context. So it runs
- * here as it runs there, on any GPU with OpenCL and EGL, and what is judged is
- * the bytes: what the guest's GL holds is what OpenCL reads after an acquire,
- * and what OpenCL wrote is what GL reads after a release.
- *
- * The guest's GL is a context of its own (HostGlRig) and the vehicle another
- * in its share group, as on the host; a host with no OpenCL and EGL GPU
- * returns without judging. */
 #include "executor/opencl/copied_gl_sharing.hpp"
 #include "executor/opengl/gl_context_attributes.hpp"
 #include "executor/shim/gl_context.hpp"
@@ -55,8 +44,6 @@ constexpr std::uint32_t gl_rgba = 0x1908u, gl_rg = 0x8227u, gl_red = 0x1903u, gl
 constexpr std::uint32_t gl_unsigned_byte = 0x1401u, gl_unsigned_short = 0x1403u, gl_unsigned_int = 0x1405u,
                         gl_float = 0x1406u;
 
-/* The vehicle: a context in the rig's share group, and the two things the
- * copies go through on it. */
 class Vehicle {
 public:
     explicit Vehicle(HostGlRig &rig) : context_(), objects_(), textures_()
@@ -101,11 +88,8 @@ bool filled(const std::uint8_t *bytes, std::size_t count, std::uint8_t seed)
     return true;
 }
 
-}  // namespace
+}
 
-/* The whole turn of a buffer: GL's bytes are OpenCL's after the acquire, and
- * OpenCL's are GL's after the release; each gives the guest the event it asked
- * for, and the cl_mem says what GL object it is. */
 TEST(copied_gl_sharing_device, a_buffer_s_bytes_cross_at_the_acquire_and_come_back_at_the_release)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -133,7 +117,6 @@ TEST(copied_gl_sharing_device, a_buffer_s_bytes_cross_at_the_acquire_and_come_ba
   CHECK(filled(seen, sizeof seen, 1u));
   fill(bytes, sizeof bytes, 2u);
   CHECK_EQ(::clEnqueueWriteBuffer(rig.queue(), mem, CL_TRUE, 0u, sizeof bytes, bytes, 0u, nullptr, nullptr), CL_SUCCESS);
-  /* Waiting on the acquire's event is a wait list the release takes. */
   cl_event released = nullptr;
   CHECK_EQ(sharing.release(rig.queue(), 1u, &mem, 1u, &acquired, &released), CL_SUCCESS);
   CHECK(released != nullptr);
@@ -159,9 +142,6 @@ TEST(copied_gl_sharing_device, a_buffer_s_bytes_cross_at_the_acquire_and_come_ba
   ::clReleaseMemObject(mem);
   rig.delete_buffer(name); }
 
-/* Read-only is never copied back, whatever OpenCL did to it; write-only is
- * still copied in, so what a kernel leaves alone is GL's still; and an object
- * released without being acquired is not copied back at all. */
 TEST(copied_gl_sharing_device, only_what_opencl_may_have_written_is_copied_back)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -196,7 +176,6 @@ TEST(copied_gl_sharing_device, only_what_opencl_may_have_written_is_copied_back)
   bool rest_kept = true;
   for (std::size_t at = sizeof ones; at < sizeof seen; at++) rest_kept = rest_kept && seen[at] == pattern(at, 3u);
   CHECK(rest_kept);
-  /* A second release copies nothing back: the turn is GL's already. */
   const std::uint8_t twos[16] = {2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u};
   CHECK_EQ(::clEnqueueWriteBuffer(rig.queue(), writer, CL_TRUE, 0u, sizeof twos, twos, 0u, nullptr, nullptr),
            CL_SUCCESS);
@@ -209,9 +188,6 @@ TEST(copied_gl_sharing_device, only_what_opencl_may_have_written_is_copied_back)
   const std::uint32_t names[3] = {read_only, write_only, untaken};
   for (const std::uint32_t each : names) rig.delete_buffer(each); }
 
-/* What clCreateFromGLBuffer refuses: flags that are not one access flag
- * alone, and a name that is no buffer with a store; and a context the host
- * refuses is the host's answer. Nothing is remembered for any of them. */
 TEST(copied_gl_sharing_device, a_buffer_that_cannot_be_mirrored_is_refused_as_the_extension_says)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -231,7 +207,6 @@ TEST(copied_gl_sharing_device, a_buffer_that_cannot_be_mirrored_is_refused_as_th
   CHECK_EQ(error, CL_INVALID_GL_OBJECT);
   CHECK(sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name + 1000u, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_GL_OBJECT);
-  /* A buffer with no store yet. */
   const std::uint32_t empty = rig.buffer(nullptr, 0u);
   CHECK(sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, empty, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_GL_OBJECT);
@@ -242,9 +217,6 @@ TEST(copied_gl_sharing_device, a_buffer_that_cannot_be_mirrored_is_refused_as_th
   rig.delete_buffer(empty);
   rig.delete_buffer(name); }
 
-/* Past the 2048 the table was once sized to every mirror is made; a table
- * that cannot grow refuses the next as out of host memory, with its cl_mem
- * let go. */
 TEST(copied_gl_sharing_device, a_table_that_cannot_grow_refuses_the_next_mirror_and_releases_its_cl_mem)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -279,8 +251,6 @@ namespace {
 constexpr std::uint32_t pool_side = 4u;
 constexpr std::size_t   pool_bytes = pool_side * pool_side * 4u;
 
-/* A texture of the pool: which one it is in its first two bytes, and the
- * turn it is from in the third, so no two textures or turns read alike. */
 void stamp(std::uint8_t *bytes, std::uint32_t texture, std::uint8_t turn)
 {
     fill(bytes, pool_bytes, turn);
@@ -289,13 +259,8 @@ void stamp(std::uint8_t *bytes, std::uint32_t texture, std::uint8_t turn)
     bytes[2] = turn;
 }
 
-}  // namespace
+}
 
-/* DaVinci Resolve's texture pool: every texture it hands OpenCL is kept for
- * the session, and the 257th held at once used to be refused with
- * CL_OUT_OF_RESOURCES. More than that are made, acquired in one call - each
- * reading its own texture - written and released in one call - each
- * texture reading what its cl_mem was given - and each forgotten. */
 TEST(copied_gl_sharing_device, a_texture_pool_past_256_is_held_acquired_and_released_at_once)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -355,9 +320,6 @@ TEST(copied_gl_sharing_device, a_texture_pool_past_256_is_held_acquired_and_rele
   CHECK(forgotten);
   CHECK_EQ(sharing.mirrors(), 0u); }
 
-/* What an acquire or a release refuses before copying anything: objects that
- * do not match their count, a cl_mem made from no GL object, a wait list the
- * host refuses. No objects at all is a marker. */
 TEST(copied_gl_sharing_device, an_acquire_or_release_of_what_is_no_mirror_copies_nothing)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -386,9 +348,6 @@ TEST(copied_gl_sharing_device, an_acquire_or_release_of_what_is_no_mirror_copies
   ::clReleaseMemObject(mem);
   rig.delete_buffer(name); }
 
-/* A GL object deleted while its cl_mem lives reads and writes as nothing:
- * the GL object is refused. A copy the host refuses is the host's answer,
- * and leaves the object unacquired. */
 TEST(copied_gl_sharing_device, a_gl_object_gone_or_a_copy_the_host_refuses_is_answered_as_such)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -400,11 +359,9 @@ TEST(copied_gl_sharing_device, a_gl_object_gone_or_a_copy_the_host_refuses_is_an
   cl_mem const        mem = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, kept, nullptr);
   cl_mem const        gone = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, doomed, nullptr);
   CHECK(mem != nullptr && gone != nullptr);
-  /* Gone before the acquire. */
   rig.delete_buffer(doomed);
   CHECK_EQ(sharing.acquire(rig.queue(), 1u, &gone, 0u, nullptr, nullptr), CL_INVALID_GL_OBJECT);
 
-  /* A queue of another context: the barrier is taken, the copy is not. */
   cl_int                      error = CL_SUCCESS;
   cl_device_id const          device = static_cast<cl_device_id>(rig.device().device());
   const cl_context_properties properties[] = {
@@ -412,11 +369,9 @@ TEST(copied_gl_sharing_device, a_gl_object_gone_or_a_copy_the_host_refuses_is_an
   cl_context const       other = ::clCreateContext(properties, 1u, &device, nullptr, nullptr, &error);
   cl_command_queue const elsewhere = ::clCreateCommandQueueWithProperties(other, device, nullptr, &error);
   CHECK_EQ(sharing.acquire(elsewhere, 1u, &mem, 0u, nullptr, nullptr), CL_INVALID_CONTEXT);
-  /* Not acquired, so a release copies nothing back and is no refusal. */
   CHECK_EQ(sharing.release(elsewhere, 1u, &mem, 0u, nullptr, nullptr), CL_SUCCESS);
   CHECK_EQ(sharing.acquire(rig.queue(), 1u, &mem, 0u, nullptr, nullptr), CL_SUCCESS);
   CHECK_EQ(sharing.release(elsewhere, 1u, &mem, 0u, nullptr, nullptr), CL_INVALID_CONTEXT);
-  /* Gone between the acquire and the release. */
   CHECK_EQ(sharing.acquire(rig.queue(), 1u, &mem, 0u, nullptr, nullptr), CL_SUCCESS);
   rig.delete_buffer(kept);
   CHECK_EQ(sharing.release(rig.queue(), 1u, &mem, 0u, nullptr, nullptr), CL_INVALID_GL_OBJECT);
@@ -435,8 +390,6 @@ struct Level {
     cl_gl_object_type object;
 };
 
-/* Texels a format holds exactly whichever way they cross: bytes for the
- * normalized and integer formats, small whole floats for the float ones. */
 void texels_of(const Level &shape, std::uint8_t *into, std::size_t bytes, std::uint8_t seed)
 {
     if (shape.type != gl_float) {
@@ -449,12 +402,8 @@ void texels_of(const Level &shape, std::uint8_t *into, std::size_t bytes, std::u
     }
 }
 
-}  // namespace
+}
 
-/* Every kind of level the extension names, at a format of each kind: what GL
- * holds is the image OpenCL reads after the acquire, byte for byte, and what
- * OpenCL writes is what GL reads after the release. The cl_mem is the image
- * the level is, and says which target and level it was named at. */
 TEST(copied_gl_sharing_device, each_kind_of_texture_level_crosses_both_ways_byte_for_byte)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -520,8 +469,6 @@ TEST(copied_gl_sharing_device, each_kind_of_texture_level_crosses_both_ways_byte
   }
   CHECK_EQ(sharing.mirrors(), 0u); }
 
-/* The texture questions: the size alone, room too small, a question the
- * extension does not ask, and a cl_mem of no texture. */
 TEST(copied_gl_sharing_device, a_texture_question_is_answered_as_clGetGLTextureInfo_answers)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -547,10 +494,6 @@ TEST(copied_gl_sharing_device, a_texture_question_is_answered_as_clGetGLTextureI
   ::clReleaseMemObject(mem);
   rig.delete_texture(name); }
 
-/* What clCreateFromGLTexture refuses: a target the extension does not name,
- * a negative level, flags that are not one access flag, a name that is no
- * texture of the target or has no texels at the level, an internal format
- * OpenCL has no image for; a context the host refuses is its answer. */
 TEST(copied_gl_sharing_device, a_texture_that_cannot_be_mirrored_is_refused_as_the_extension_says)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -567,8 +510,8 @@ TEST(copied_gl_sharing_device, a_texture_that_cannot_be_mirrored_is_refused_as_t
       cl_int        refusal;
   };
   const Case cases[] = {
-      {CL_MEM_READ_WRITE, 0x8C2Au /* TEXTURE_BUFFER */, 0, name, CL_INVALID_VALUE},
-      {CL_MEM_READ_WRITE, 0x9100u /* TEXTURE_2D_MULTISAMPLE */, 0, name, CL_INVALID_VALUE},
+      {CL_MEM_READ_WRITE, 0x8C2Au , 0, name, CL_INVALID_VALUE},
+      {CL_MEM_READ_WRITE, 0x9100u , 0, name, CL_INVALID_VALUE},
       {CL_MEM_READ_WRITE, gl_texture_2d, -1, name, CL_INVALID_MIP_LEVEL},
       {CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, gl_texture_2d, 0, name, CL_INVALID_VALUE},
       {CL_MEM_READ_WRITE, gl_texture_3d, 0, name, CL_INVALID_GL_OBJECT},
@@ -591,10 +534,6 @@ TEST(copied_gl_sharing_device, a_texture_that_cannot_be_mirrored_is_refused_as_t
   rig.delete_texture(rgb);
   rig.delete_texture(name); }
 
-/* A renderbuffer crosses through a texture of its storage: what GL cleared it
- * to is what OpenCL reads, what OpenCL writes is what GL reads out of the
- * renderbuffer, and the guest is told of the renderbuffer and never of the
- * texture, which goes with the mirror. */
 TEST(copied_gl_sharing_device, a_renderbuffer_crosses_through_a_texture_of_its_storage)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -638,7 +577,6 @@ TEST(copied_gl_sharing_device, a_renderbuffer_crosses_through_a_texture_of_its_s
   CHECK_EQ(sharing.mirrors(), 0u);
   ::clReleaseMemObject(mem);
 
-  /* Left held, it goes with everything else. */
   cl_mem const held = sharing.from_renderbuffer(rig.context(), CL_MEM_READ_ONLY, renderbuffer, nullptr);
   CHECK(held != nullptr);
   sharing.forget_all();
@@ -646,9 +584,6 @@ TEST(copied_gl_sharing_device, a_renderbuffer_crosses_through_a_texture_of_its_s
   ::clReleaseMemObject(held);
   rig.delete_renderbuffer(renderbuffer); }
 
-/* No renderbuffer by the name, one whose format OpenCL has no image for, and
- * flags that are not one access flag: nothing is made, and the texture made
- * on the way goes. */
 TEST(copied_gl_sharing_device, a_renderbuffer_that_cannot_be_mirrored_is_refused)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
@@ -670,9 +605,6 @@ TEST(copied_gl_sharing_device, a_renderbuffer_that_cannot_be_mirrored_is_refused
   rig.delete_renderbuffer(rgb);
   rig.delete_renderbuffer(rgba); }
 
-/* The guest's context is its own: no context made here names a GL one. It is
- * made through GlSharing, as the backend makes it whichever way its GL objects
- * reach OpenCL. */
 TEST(copied_gl_sharing_device, the_guest_s_context_is_made_as_it_asked)
 { HostGlRig rig;
   Vehicle   vehicle(rig);

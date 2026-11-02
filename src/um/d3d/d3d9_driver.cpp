@@ -11,12 +11,9 @@
 namespace av::d3d9 {
 
 namespace {
-
-/* What a Direct3D 9 session's bulk data crosses through: a 1080p frame read
- * back for a present is 8 MB. */
 constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
 
-}  // namespace
+}
 
 D3d9Driver::D3d9Driver(BlockSource &memory, Kmt &kmt, KeyedLog &log, d3d::D3dCallTrace &trace)
     : memory_(memory), lines_(log), trace_(trace), devices_(memory),
@@ -53,7 +50,6 @@ d3d::Hresult D3d9Driver::caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt
     AV_SCOPE("D3d9Driver::caps");
     const uint32_t slot = slot_of(kmt_adapter);
     if (slot == AdapterSessions<D3d9HostCaps>::none) return d3d::hr_fail;
-    /* D3DDDIARG_GETCAPS is D3D10_2DDIARG_GETCAPS's shape (umd_record_layout.cpp). */
     const auto &asked = *reinterpret_cast<const D3DDDIARG_GETCAPS *>(&args);
     const HRESULT answered = adapters_.caps(slot).answer(asked);
     if (FAILED(answered)) {
@@ -65,7 +61,6 @@ d3d::Hresult D3d9Driver::caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt
     return static_cast<d3d::Hresult>(answered);
 }
 
-/* The device's handle is the device: d3d9.dll sizes no block for it. */
 d3d::Hresult D3d9Driver::build(d3d::UmdAdapter &adapter, void *create, uint32_t kmt_adapter)
 {
     AV_SCOPE("D3d9Driver::build");
@@ -100,4 +95,4 @@ d3d::UmdAdapter *D3d9Driver::tear_down(void *device)
     return &adapter;
 }
 
-}  // namespace av::d3d9
+}

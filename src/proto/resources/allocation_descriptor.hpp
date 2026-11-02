@@ -1,7 +1,3 @@
-/* The private driver data of one allocation (docs/protocol.md): written by
- * DxgkDdiGetStandardAllocationDriverData for the runtime's standard allocations
- * and by a user-mode driver for its own, read back by DxgkDdiCreateAllocation.
- * The bytes come from user mode, so decoding validates every field. */
 #ifndef AV_ALLOCATION_DESCRIPTOR_HPP
 #define AV_ALLOCATION_DESCRIPTOR_HPP
 
@@ -20,8 +16,6 @@ public:
     static constexpr size_t encoded_size = 56u;
 
     AllocationDescriptor();
-    /* `host_key` names the host image the allocation shows, for a resource a
-     * Direct3D session made under one (docs/d3d-desktop.md §3.1); 0 for none. */
     AllocationDescriptor(AllocationKind kind, bool cpu_visible, const SurfaceLayout &layout, uint64_t size,
                          const ScanoutTarget &scanout, uint64_t host_key = 0u);
 
@@ -33,12 +27,11 @@ public:
     uint64_t             host_key() const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
-    /* Unchanged unless ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
     static constexpr uint64_t page_bytes = 0x1000u;
-    static constexpr uint32_t magic = 0x00415641u;   /* "AVA" */
+    static constexpr uint32_t magic = 0x00415641u;
     static constexpr uint16_t flag_cpu_visible = 0x1u;
 
     bool is_valid() const;
@@ -51,6 +44,6 @@ private:
     uint64_t       host_key_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_ALLOCATION_DESCRIPTOR_HPP
+#endif

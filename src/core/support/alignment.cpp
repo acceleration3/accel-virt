@@ -37,4 +37,4 @@ bool Alignment::align_up(uint64_t address, uint64_t &result) const
     return true;
 }
 
-}  // namespace av
+}

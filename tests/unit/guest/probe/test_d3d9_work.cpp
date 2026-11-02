@@ -1,6 +1,3 @@
-/* The D3D9 proof over a scripted D3D9 (feature 047, US1): every step in order,
- * the frame judged against the colour it was cleared to, a refusal at each
- * call kept as the HRESULT it is, and the device released whatever happened. */
 #include "guest/probe/d3d9_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
@@ -22,7 +19,7 @@ struct D3d9WorkProbe {
     static std::uint32_t coloured(const D3d9Work &work) { return work.coloured(); }
 };
 
-}  // namespace av
+}
 
 using av::D3d9Work;
 using av::D3d9WorkProbe;
@@ -71,7 +68,7 @@ private:
     std::uint64_t     adapter_ = 0u;
 };
 
-}  // namespace
+}
 
 TEST(d3d9_work, every_step_passes_and_the_frame_is_the_colour_it_was_cleared_to)
 { D3d9Rig     rig;
@@ -83,7 +80,6 @@ TEST(d3d9_work, every_step_passes_and_the_frame_is_the_colour_it_was_cleared_to)
   CHECK(std::strstr(report, "ok d3d9.pixels 4096") != nullptr);
   CHECK(std::strstr(report, "ok d3d9.present") != nullptr);
   CHECK(std::strstr(report, "avd3d9probe: 6 passed, 0 failed") != nullptr);
-  /* The vendor in the high half, the device in the low. */
   CHECK_EQ(rig.adapter(), (static_cast<std::uint64_t>(ScriptedD3d9::vendor) << 32) | ScriptedD3d9::device);
   CHECK(rig.d3d9().window() == window);
   CHECK_EQ(rig.d3d9().width(), D3d9Work::extent);
@@ -100,7 +96,6 @@ TEST(d3d9_work, a_frame_of_the_wrong_colour_fails_with_the_count)
       CHECK(std::strstr(report, "ok d3d9.present") != nullptr);
       CHECK(std::strstr(report, "avd3d9probe: 5 passed, 1 failed") != nullptr);
   }
-  /* X8R8G8B8: the fourth byte is not a channel at all. */
   D3d9Rig unused;
   unused.d3d9().miscolour(3u);
   CHECK(std::strstr(unused.run(), "ok d3d9.pixels 4096") != nullptr); }
@@ -124,7 +119,6 @@ TEST(d3d9_work, a_refusal_at_each_call_stops_the_run_there)
       rig.d3d9().fail(refusal.call, 1u, d3derr_invalidcall);
       const char *report = rig.run();
       CHECK(std::strstr(report, refusal.step) != nullptr);
-      /* D3DERR_INVALIDCALL as its two's-complement bits. */
       CHECK(std::strstr(report, "2289436780") != nullptr);
       CHECK_EQ(rig.report().passed(), refusal.passed);
       CHECK_EQ(rig.report().failed(), 1u);
@@ -158,7 +152,6 @@ TEST(d3d9_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
   CHECK(work.invariants_hold());
   D3d9WorkProbe::read_without_a_device(work);
   CHECK(!work.invariants_hold());
-  /* The other two: something learnt from a device that was never made. */
   D3d9Work adapter(d3d9, images);
   D3d9WorkProbe::adapter_without_a_device(adapter);
   CHECK(!adapter.invariants_hold()); }

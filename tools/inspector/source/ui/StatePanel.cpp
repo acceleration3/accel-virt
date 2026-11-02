@@ -19,7 +19,6 @@ bool Matches(const StateNode& node, StringView filter) {
     return false;
 }
 
-// Every node that matches the filter, and every ancestor of one, so a match is reachable.
 DynamicArray<bool> VisibleNodes(const StateDump& dump, StringView filter) {
     const DynamicArray<StateNode>& nodes = dump.GetNodes();
     DynamicArray<bool> visible;
@@ -38,7 +37,7 @@ DynamicArray<bool> VisibleNodes(const StateDump& dump, StringView filter) {
     return visible;
 }
 
-} // namespace
+}
 
 void Inspector::StateNodeTree(ui::Context& ctx, const ProcessSample& process, const StateDump& dump, usize index,
                               const DynamicArray<bool>& visible) {
@@ -49,7 +48,6 @@ void Inspector::StateNodeTree(ui::Context& ctx, const ProcessSample& process, co
     const String process_key = process.source.Key();
     String& label = ctx.GetScratchString();
     FormatTo(label, "{}{}{}##{}", node.kind, node.index.IsEmpty() ? "" : "/", node.index, node.path);
-    // A preview of the fields, so a closed node still says what it is.
     String& preview = ctx.GetScratchString();
     for (usize f = 0; f < node.fields.GetSize() && f < 4; ++f) {
         FormatTo(preview, "{}{}={}", f == 0 ? "   " : "  ", node.fields[f].key, node.fields[f].value);
@@ -63,7 +61,6 @@ void Inspector::StateNodeTree(ui::Context& ctx, const ProcessSample& process, co
     }
     const bool is_new = m_model.IsNewNode(process_key, node.path);
     const bool open = ui::TreeNode(ctx, label, flags);
-    // The preview sits after the label on the same row.
     {
         const RectF row = ui::GetLastTreeRowRect(ctx);
         const float label_width = ctx.MeasureTextWidth(StringView(label).Substr(0, StringView(label).Find("##")));
@@ -143,4 +140,4 @@ void Inspector::StatePanel(ui::Context& ctx) {
     ui::EndWindow(ctx);
 }
 
-} // namespace inspector
+}

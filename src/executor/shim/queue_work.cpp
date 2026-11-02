@@ -8,13 +8,9 @@
 namespace av {
 
 namespace {
-
-/* A copy not done in a second leaves its command buffer alone: resetting one
- * the GPU may still run is a use after free, so the caller is told there is
- * no buffer and declines. */
 constexpr uint64_t most_wait_nanoseconds = 1000000000u;
 
-}  // namespace
+}
 
 QueueWork::QueueWork()
     : table_(nullptr), queue_(nullptr), pool_(VK_NULL_HANDLE), buffers_{}, signals_{}, values_{}, next_(0u)
@@ -86,9 +82,6 @@ VkCommandBuffer QueueWork::next_buffer()
     return buffers_[slot];
 }
 
-/* The source back in the layout the runtime left it in, which it expects
- * before it uses the image again; the destination GENERAL, the layout every
- * runtime keeps an image it imported in. */
 void QueueWork::record(VkCommandBuffer buffer, VkImage source, VkImageLayout layout, VkImage destination,
                        uint32_t width, uint32_t height) const
 {
@@ -140,8 +133,6 @@ void QueueWork::record_to_buffer(VkCommandBuffer buffer, VkImage source, VkImage
                                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, layout, VK_QUEUE_FAMILY_IGNORED,
                                         VK_QUEUE_FAMILY_IGNORED, source, whole};
     table_->barrier(buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 1u, &after);
-    /* The guest's CPU reads these bytes through its own mapping, not this
-     * device's: the writes are made available to the host before the signal. */
     const VkMemoryBarrier visible = {VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr, VK_ACCESS_TRANSFER_WRITE_BIT,
                                      VK_ACCESS_HOST_READ_BIT};
     table_->memory_barrier(buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, visible);
@@ -179,7 +170,6 @@ bool QueueWork::send(uint32_t slot, VkCommandBuffer buffer, const VulkanTimeline
     return true;
 }
 
-/* An empty signal follows all commands already recorded by the runtime. */
 bool QueueWork::signal(const VulkanTimeline &timeline, uint64_t value)
 {
     AV_SCOPE("QueueWork::signal");
@@ -196,14 +186,10 @@ bool QueueWork::signal(const VulkanTimeline &timeline, uint64_t value)
     return sent;
 }
 
-/* The runtime submits from a thread of its own; holding its lock puts this
- * between two of its submissions, so everything it submits after waits. */
 bool QueueWork::wait(const VulkanTimeline &timeline, uint64_t value)
 {
     AV_SCOPE("QueueWork::wait");
     if (queue_ == nullptr || !timeline.made()) return false;
-    // The submission lock alone does not drain the runtime's recording thread:
-    // an external wait must not overtake commands already recorded for it.
     queue_->flush();
     const VkSemaphore                   semaphore = timeline.semaphore();
     const VkPipelineStageFlags          stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
@@ -217,4 +203,4 @@ bool QueueWork::wait(const VulkanTimeline &timeline, uint64_t value)
     return sent;
 }
 
-}  // namespace av
+}

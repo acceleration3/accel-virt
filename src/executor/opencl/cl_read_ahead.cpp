@@ -24,7 +24,6 @@ bool ClReadAhead::read(cl_command_queue queue, cl_mem buffer, size_t offset, siz
     if (::clGetMemObjectInfo(buffer, CL_MEM_SIZE, sizeof total, &total, nullptr) != CL_SUCCESS || offset >= total)
         return false;
     const size_t span = total - offset < cache_bytes ? total - offset : cache_bytes;
-    /* A read that is the rest of the buffer already gains nothing. */
     if (span <= size) return false;
     if (!bytes_.reserve(span) ||
         ::clEnqueueReadBuffer(queue, buffer, CL_TRUE, offset, span, bytes_.bytes(), 0u, nullptr, nullptr) != CL_SUCCESS)
@@ -46,4 +45,4 @@ void ClReadAhead::forget()
     buffer_ = nullptr;
 }
 
-}  // namespace av
+}

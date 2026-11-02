@@ -15,4 +15,4 @@ void HandleRegistryProbe::hold_null()
 { uint32_t slot = 0u;
   static_cast<void>(registry.slots_.insert(0u, HandleSlot{HandleRegistry::no_slot, 0u, HandleKind::other}, slot)); }
 
-}  // namespace av
+}

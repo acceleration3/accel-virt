@@ -37,17 +37,12 @@ Status PresentRequest::operation(PresentOperation &operation) const
     }
 }
 
-/* Only the sub-rectangles not yet presented are read. */
 Status PresentRequest::validate(PresentOperation operation, const PresentAddressing &addressing) const
 {
     AV_SCOPE("PresentRequest::validate");
     const DxgkargPresentRecord &r = request_;
     if (r.pDmaBuffer == nullptr || r.MultipassOffset > r.SubRectCnt) return Status::invalid_parameter;
     if (r.SubRectCnt != 0u && r.pDstSubRects == nullptr) return Status::invalid_parameter;
-    /* A flip is carried out by SetVidPnSourceAddress when its DMA completes,
-     * not by the DMA, and under GPU virtual addressing dxgkrnl hands one over
-     * with no allocation list at all: refused, it hid the desktop's source on
-     * every frame. So a flip names its source only when it can. */
     const uint32_t references = operation == PresentOperation::blt ? 2u : operation == PresentOperation::flip ? 0u : 1u;
     if (addressing.validate(references) != Status::ok) return Status::invalid_parameter;
     if (!Rectangle(r.SrcRect.left, r.SrcRect.top, r.SrcRect.right, r.SrcRect.bottom).is_valid() ||
@@ -71,9 +66,6 @@ NtStatus PresentRequest::present()
                                         : static_cast<PresentAddressing &>(virtual_addresses);
     PresentOperation kind = PresentOperation::blt;
     Status status = operation(kind);
-    /* Under GPU virtual addressing the compositor's flips come with no DMA
-     * buffer at all: dxgkrnl carries them out through SetVidPnSourceAddress,
-     * and there is nothing to write. */
     if (status == Status::ok && kind == PresentOperation::flip && request_.pDmaBuffer == nullptr)
         return NtStatus(Status::ok);
     if (status == Status::ok) status = validate(kind, addressing);
@@ -91,7 +83,6 @@ NtStatus PresentRequest::present()
                                  kind == PresentOperation::flip ? static_cast<uint32_t>(request_.FlipInterval) : 0u,
                                  count, addressing.space());
     auto *const dma = static_cast<uint8_t *>(request_.pDmaBuffer);
-    /* Exactly the bytes shown to fit, so nothing the writer is given overflows. */
     WireWriter writer(dma, PresentCommand::header_size + count * PresentCommand::sub_rectangle_size);
     command.write(writer);
     for (uint32_t index = 0u; index < count; index++) {
@@ -109,4 +100,4 @@ NtStatus PresentRequest::present()
     return NtStatus(insufficient_dma_buffer);
 }
 
-}  // namespace av
+}

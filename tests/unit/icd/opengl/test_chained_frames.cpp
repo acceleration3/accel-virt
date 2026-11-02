@@ -1,9 +1,3 @@
-/* One window's frames as host surfaces: a chain opened in the context - each
- * slot opened on the device by the id the chain shares it as, and made a
- * texture over that memory - a frame copied into a slot and finished
- * one-way, and everything given back on close. The
- * device is a transport that answers by command: opens with memory names,
- * creates with GL names, and every send recorded. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
@@ -39,7 +33,6 @@ constexpr std::uint64_t luid = 0x1234u;
 constexpr std::uint32_t width = 64u;
 constexpr std::uint32_t height = 32u;
 
-/* The device and host GL behind one context. */
 class ScriptedGlHost final : public ClientTransport {
 public:
     static constexpr std::uint32_t max_sends = 64u;
@@ -48,7 +41,6 @@ public:
     ScriptedGlHost() : request_{}, reply_{}, commands_{}, async_{}, payloads_{}, sends_(0u), opens_(0u),
                        names_(first_name), refuse_open_at_(0u), arena_(nullptr, 0u), blobs_() {}
 
-    /* The nth open from now (1-based) is refused; 0 refuses none. */
     void refuse_open_at(std::uint32_t nth) { refuse_open_at_ = nth; }
 
     std::uint32_t sends() const { return sends_; }
@@ -61,7 +53,6 @@ public:
         for (std::uint32_t index = 0u; index < sends_; index++) found += commands_[index] == id ? 1u : 0u;
         return found;
     }
-    /* The index of the last send of `id`; max_sends for none. */
     std::uint32_t last(std::uint32_t id) const
     {
         std::uint32_t found = max_sends;
@@ -93,7 +84,6 @@ public:
             reply = WireReader(reply_, SharedObjectAnswer::encoded_size);
             return TransportResult::ok;
         }
-        /* glCreate*: target (textures only), count, then the names asked for. */
         WireReader asked(payloads_[sends_ - 1u], slot_bytes);
         std::uint64_t target = 0u, n = 0u;
         if (command_id == av::glproto::kCmd_glCreateTextures) static_cast<void>(asked.read_varint(target));
@@ -145,10 +135,8 @@ std::uint64_t varint(WireReader &reader)
     return value;
 }
 
-}  // namespace
+}
 
-/* Each slot is opened by the id the chain shares it as, at its size, and made
- * a texture of the window's colour format over the memory the device named. */
 TEST(chained_frames, a_chain_opens_every_slot_over_the_memory_the_device_names)
 { static ScriptedGlHost host;
   ScriptedWindowChains chains;
@@ -157,7 +145,6 @@ TEST(chained_frames, a_chain_opens_every_slot_over_the_memory_the_device_names)
   int window = 0;
   CHECK(frames.open(host, chains, &window, luid, width, height, true));
   CHECK(frames.opened());
-  /* As many slots as an icd::WindowChains chain offers. */
   CHECK_EQ(ChainedFrames::slot_count, av::icd::WindowChains::max_slots);
   CHECK_EQ(chains.opens(), 1u);
   CHECK(frames.fits(&window, width, height));
@@ -165,15 +152,12 @@ TEST(chained_frames, a_chain_opens_every_slot_over_the_memory_the_device_names)
   CHECK(frames.invariants_hold());
   CHECK_EQ(chains.last_luid(), luid);
   CHECK_EQ(chains.last_width(), width);
-  /* OpenGL stores its frame bottom row first, in red-first order. */
   CHECK(chains.last_layout() == av::icd::SlotLayout::rgba_bottom_up);
   CHECK_EQ(host.count(CommandHeader::open_shared_object_id), ChainedFrames::slot_count);
-  /* The second open names the second slot, at the bytes the chain shared it as. */
   const std::uint8_t *second = host.payload(1u);
   CHECK_EQ(u64_at(second, 0u), ScriptedWindowChains::first_id + 1u);
   CHECK_EQ(u64_at(second, 24u), std::uint64_t{width} * height * 4u);
   CHECK_EQ(host.count(av::glproto::kCmd_glTextureStorageMem2DEXT), ChainedFrames::slot_count);
-  /* Each slot's texture is linear, as the image under it is, before its storage. */
   CHECK_EQ(host.count(av::glproto::kCmd_glTextureParameteri), ChainedFrames::slot_count);
   CHECK(host.last(av::glproto::kCmd_glTextureParameteri) + 1u == host.last(av::glproto::kCmd_glTextureStorageMem2DEXT));
   WireReader tiling(host.payload(host.last(av::glproto::kCmd_glTextureParameteri)), ScriptedGlHost::slot_bytes);
@@ -189,8 +173,6 @@ TEST(chained_frames, a_chain_opens_every_slot_over_the_memory_the_device_names)
   CHECK_EQ(varint(storage), first_memory + 1u);
   CHECK(frames.invariants_hold()); }
 
-/* A frame is copied into a slot whole, as it is stored, and a glFinish follows
- * it one-way. */
 TEST(chained_frames, a_frame_is_copied_whole_and_finished_one_way)
 { static ScriptedGlHost host;
   ScriptedWindowChains chains;
@@ -207,7 +189,6 @@ TEST(chained_frames, a_frame_is_copied_whole_and_finished_one_way)
   for (std::uint64_t &argument : arguments) argument = varint(copy);
   CHECK_EQ(arguments[0], 7u);
   CHECK_EQ(arguments[1], std::uint64_t{ChainedFrames::gl_texture_2d});
-  /* Into the second slot's texture, at its corner, the whole frame. */
   CHECK_EQ(arguments[6], first_name + 1u);
   CHECK_EQ(arguments[9], 0u);
   CHECK_EQ(arguments[10], 0u);
@@ -217,12 +198,9 @@ TEST(chained_frames, a_frame_is_copied_whole_and_finished_one_way)
   CHECK_EQ(host.command(before + 1u), av::glproto::kCmd_glFinish);
   CHECK(host.async(before + 1u));
 
-  /* A slot the chain does not have draws nothing. */
   frames.draw(host, 7u, ChainedFrames::slot_count);
   CHECK_EQ(host.sends(), before + 2u); }
 
-/* A chain that cannot be had, or a slot the device will not open, leaves
- * nothing held: what was opened is released and the chain closed. */
 TEST(chained_frames, a_refused_chain_or_slot_holds_nothing)
 { static ScriptedGlHost host;
   ScriptedWindowChains chains;
@@ -239,15 +217,12 @@ TEST(chained_frames, a_refused_chain_or_slot_holds_nothing)
   CHECK(!frames.open(host, chains, &window, luid, width, height, false));
   CHECK(!frames.opened());
   CHECK(frames.invariants_hold());
-  /* The first slot's memory went back, and the chain was closed. */
   CHECK_EQ(host.count(CommandHeader::release_shared_object_id), 1u);
   CHECK_EQ(u64_at(host.payload(host.last(CommandHeader::release_shared_object_id)), 0u),
            ScriptedWindowChains::first_id);
   CHECK_EQ(chains.closes(), 1u);
   CHECK(chains.last_closed() == &window); }
 
-/* Closing deletes the slots' names and releases their memory; reopening at a
- * new size keeps the window's chain, and another window's is closed. */
 TEST(chained_frames, close_gives_everything_back_and_a_new_window_closes_the_old_chain)
 { static ScriptedGlHost host;
   ScriptedWindowChains chains;
@@ -267,7 +242,6 @@ TEST(chained_frames, close_gives_everything_back_and_a_new_window_closes_the_old
   CHECK(chains.last_closed() == &second);
   CHECK_EQ(host.count(av::glproto::kCmd_glDeleteTextures), 3u);
   CHECK_EQ(host.count(CommandHeader::release_shared_object_id), 3u * ChainedFrames::slot_count);
-  /* With the context gone there is nothing to send: only the chain goes. */
   CHECK(frames.open(host, chains, &first, luid, width, height, false));
   const std::uint32_t sent = host.sends();
   frames.close(nullptr, chains);

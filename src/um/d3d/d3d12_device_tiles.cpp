@@ -1,10 +1,3 @@
-/* Reserved resources and their tiles: a resource made with no memory of its
- * own, whose 64 KiB tiles a queue maps to heaps' tiles, and how the host
- * tiled it. The runtime works out a resource's tiles itself from the standard
- * tile shapes and asks the driver only how its mips are packed
- * (pfnGetMipPacking), and the host's vkd3d-proton tiles by the same shapes, so
- * the host's answer is the runtime's. An update of the mappings crosses in
- * pieces of what one command carries (TilePieces). */
 #include "core/log/keyed_log.hpp"
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
@@ -19,10 +12,9 @@ namespace av::d3d12 {
 namespace {
 
 constexpr uint32_t buffer_dimension = 1u;
-/* D3D12_HEAP_TYPE_DEFAULT: a reserved resource's tiles are the GPU's. */
 constexpr uint32_t heap_default = 1u;
 
-}  // namespace
+}
 
 HRESULT D3d12Device::reserve_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, const D3D12DDI_CLEAR_VALUES *clear,
                                       ResourceRecord &resource)
@@ -79,7 +71,6 @@ VOID D3d12Device::update_tile_mappings(D3D12DDI_HCOMMANDQUEUE queue_handle, D3D1
     if (queue_handle.pDrvPrivate == nullptr || resource_handle.pDrvPrivate == nullptr) return;
     const QueueRecord &queue = *static_cast<const QueueRecord *>(queue_handle.pDrvPrivate);
     ResourceRecord    &resource = *static_cast<ResourceRecord *>(resource_handle.pDrvPrivate);
-    /* Only one region of neither a start nor a size needs the whole count. */
     const uint32_t     whole = starts == nullptr && sizes == nullptr ? tiling(resource).tiles : 0u;
     const DdiTileSource source(region_count, starts, sizes, range_count, flags, offsets, counts, whole);
     icd::TilePieces     pieces(source);
@@ -115,4 +106,4 @@ VOID D3d12Device::copy_tile_mappings(D3D12DDI_HCOMMANDQUEUE queue_handle, D3D12D
                            "CopyTileMappings12"));
 }
 
-}  // namespace av::d3d12
+}

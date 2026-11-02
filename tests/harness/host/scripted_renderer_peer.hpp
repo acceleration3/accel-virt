@@ -1,11 +1,3 @@
-/* A renderer that answers from a script, for tests of QEMU's end of the
- * socket: it keeps the kind, sequence, descriptor count and body of every
- * datagram it is sent, closing the duplicates it is handed, and answers each
- * hello with a Ready, each request with a reply carrying the outcome the
- * test set, and each allocate_memory with memory of the size asked - a
- * memfd, so QEMU's end maps it - unless it was told to fall silent. Datagrams a test queues are
- * answered before those, so a stale reply, a wrong kind, garbage or a
- * datagram carrying descriptors can stand between a request and its answer. */
 #ifndef AV_SCRIPTED_RENDERER_PEER_HPP
 #define AV_SCRIPTED_RENDERER_PEER_HPP
 
@@ -36,32 +28,19 @@ public:
     bool answer(std::uint8_t *buffer, std::size_t capacity, std::size_t &length, int *descriptors,
                 std::uint32_t capacity_descriptors, std::uint32_t &count) override;
 
-    /* What each request is answered with from here on. */
     void answer_requests_with(Status outcome);
-    /* What each hello is answered with from here on. */
     void ready_with(const ReadyMessage &ready);
-    /* Each allocate_memory is answered from here on with nothing allocated. */
     void refuse_memory();
-    /* Nothing is answered from here on, as a renderer that hung. */
     void fall_silent();
-    /* The next datagram delivered makes the renderer die, as MockHost's
-     * renderer_gone says, before it answers. */
     void die_on_next_delivery();
-    /* A datagram answered before any scripted answer, carrying `descriptors`
-     * fresh descriptors of this process. */
     void queue(const std::uint8_t *bytes, std::size_t length, std::uint32_t descriptors);
-    /* A reply framed as a renderer frames one: header and body both naming
-     * `sequence`. */
     void queue_reply(std::uint64_t sequence, Status outcome, std::uint32_t descriptors);
-    /* A reply whose header names `header_sequence` and whose body names
-     * `body_sequence`. */
     void queue_reply(std::uint64_t header_sequence, std::uint64_t body_sequence, Status outcome);
 
     std::uint32_t               delivered() const;
     RendererMessageHeader::Kind kind_at(std::uint32_t index) const;
     std::uint64_t               sequence_at(std::uint32_t index) const;
     std::uint32_t               descriptors_at(std::uint32_t index) const;
-    /* Descriptors delivered that were open when they arrived. */
     std::uint32_t               open_descriptors_at(std::uint32_t index) const;
     const std::uint8_t         *body_at(std::uint32_t index) const;
     std::uint32_t               body_length_at(std::uint32_t index) const;
@@ -80,7 +59,6 @@ private:
         std::uint8_t  bytes[RendererMessageHeader::encoded_size + max_body];
         std::size_t   length;
         std::uint32_t descriptors;
-        /* Bytes of the memfd each descriptor is, or 0 for a pipe. */
         std::uint64_t memory_size;
     };
 
@@ -102,6 +80,6 @@ private:
     bool          dying_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_RENDERER_PEER_HPP
+#endif

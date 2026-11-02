@@ -1,6 +1,3 @@
-/* Drives one virtio-pci device (virtio 1.2 4.1): reset, feature negotiation,
- * MSI-X vectors, queue activation and DRIVER_OK. Every value read back from the
- * device is checked; any failure after ACKNOWLEDGE leaves the device FAILED. */
 #ifndef AV_VIRTIO_PCI_TRANSPORT_HPP
 #define AV_VIRTIO_PCI_TRANSPORT_HPP
 
@@ -24,22 +21,12 @@ public:
     VirtioPciTransport(const VirtioPciTransport &) = delete;
     VirtioPciTransport &operator=(const VirtioPciTransport &) = delete;
 
-    /* 3.1.1 steps 1-6. The negotiated set is offered & (wanted | required). */
     [[nodiscard]] Status negotiate(uint64_t wanted, uint64_t required);
-    /* 3.1.1 step 8, after queues are activated. */
     [[nodiscard]] Status start();
-    /* Writes status 0 and waits for the device to acknowledge; the device is
-     * unconfigured either way. */
     [[nodiscard]] Status reset();
-    /* Writes status 0 and returns: for DxgkDdiResetDevice, at any IRQL. */
     void                 abandon();
     [[nodiscard]] Status assign_config_vector(uint16_t vector);
-    /* Sizes, allocates and enables `queue` on the device, bound to MSI-X `vector`. */
     [[nodiscard]] Status activate_queue(VirtQueue &queue, uint16_t vector);
-    /* Binds queue `index` to MSI-X `vector` without enabling it, before or
-     * after DRIVER_OK: a fence queue carries no requests and exists so its
-     * interrupts have a vector (docs/protocol.md). not_found for a queue the
-     * device does not have; no_space for a vector it refuses. */
     [[nodiscard]] Status assign_queue_vector(uint16_t index, uint16_t vector);
     void                 notify(const VirtQueue &queue);
     void                 fail();
@@ -49,7 +36,6 @@ public:
     bool     needs_reset();
     uint8_t  read_isr();
     [[nodiscard]] Status read_device_u32(uint64_t offset, uint32_t &value);
-    /* Up to DISPATCH_LEVEL: a store to the device-specific configuration. */
     [[nodiscard]] Status write_device_u32(uint64_t offset, uint32_t value);
 
     bool invariants_hold() const;
@@ -77,6 +63,6 @@ private:
     friend struct VirtioPciTransportProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VIRTIO_PCI_TRANSPORT_HPP
+#endif

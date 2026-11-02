@@ -38,4 +38,4 @@ void Mutex::release()
     platform_.release_mutex(storage_, rank_);
 }
 
-}  // namespace av
+}

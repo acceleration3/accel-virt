@@ -1,10 +1,3 @@
-/* The escape record a process hands the kernel to learn where its context's
- * ring, reply slot and fence page are mapped, fed attacker-chosen bytes (docs/protocol.md,
- * "Context memory"). What decodes must re-encode to exactly the bytes read, and
- * the kernel's answer must never decode as a request. The same bytes are then
- * a kernel's answer the process reads back: what it accepts must re-encode to
- * exactly those bytes too, and name distinct addresses: two in version 1,
- * three in version 2. Both versions are asked. */
 #include "core/support/status.hpp"
 #include "proto/escape/context_views_record.hpp"
 

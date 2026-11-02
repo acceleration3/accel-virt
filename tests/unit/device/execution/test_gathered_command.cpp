@@ -1,6 +1,3 @@
-/* A command that crossed in pieces, gathered back (docs/protocol.md, "Long
- * commands"): pieces appended in turn, closed by the command's own bytes
- * into one payload, and the memory given back. */
 #include "core/support/status.hpp"
 #include "device/execution/gathered_command.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -20,7 +17,6 @@ TEST(gathered_command, pieces_and_the_closing_command_make_one_payload)
   CHECK(!gathered.gathering());
   static std::uint8_t piece[600u * 1024u];
   for (std::size_t index = 0u; index < sizeof piece; index++) piece[index] = static_cast<std::uint8_t>(index * 3u);
-  /* Two pieces of 600 KiB grow the block past its least megabyte. */
   CHECK_STATUS(gathered.gather(piece, sizeof piece), Status::ok);
   CHECK(gathered.gathering());
   CHECK_STATUS(gathered.gather(piece, sizeof piece), Status::ok);
@@ -39,7 +35,6 @@ TEST(gathered_command, pieces_and_the_closing_command_make_one_payload)
   CHECK(!gathered.gathering());
   CHECK(gathered.invariants_hold()); }
 
-/* No memory gives back what was gathered: the command cannot be whole. */
 TEST(gathered_command, no_memory_drops_what_was_gathered)
 { MockHost        host;
   GatheredCommand gathered(host);

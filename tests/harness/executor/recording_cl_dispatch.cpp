@@ -10,15 +10,12 @@ namespace {
 
 constexpr const char kernel_arg_info_flag[] = "-cl-kernel-arg-info";
 
-/* One declared argument, as clGetKernelArgInfo answers it. */
 struct Declaration {
     cl_kernel_arg_address_qualifier address;
     cl_kernel_arg_type_qualifier    qualifier;
     const char                     *type_name;
 };
 
-/* In RecordingClDispatch::Declared order. A typedef'd pointer in constant
- * space is named without its star, so only the address says it is one. */
 constexpr Declaration declarations[RecordingClDispatch::declared_arguments] = {
     {CL_KERNEL_ARG_ADDRESS_GLOBAL, CL_KERNEL_ARG_TYPE_NONE, "float*"},
     {CL_KERNEL_ARG_ADDRESS_PRIVATE, CL_KERNEL_ARG_TYPE_NONE, "image2d_array_t"},
@@ -32,7 +29,6 @@ constexpr Declaration declarations[RecordingClDispatch::declared_arguments] = {
     {CL_KERNEL_ARG_ADDRESS_PRIVATE, CL_KERNEL_ARG_TYPE_NONE, ""},
 };
 
-/* The ICD's answer to an info query: `bytes` of `answer`, or the size alone. */
 cl_int answer_info(const void *answer, std::size_t bytes, std::size_t room, void *destination,
                    std::size_t *written)
 {
@@ -42,7 +38,7 @@ cl_int answer_info(const void *answer, std::size_t bytes, std::size_t room, void
     return CL_SUCCESS;
 }
 
-}  // namespace
+}
 
 RecordingClDispatch::RecordingClDispatch(const std::uint8_t *block, const WireArena &arena)
     : platform_(), block_(block), arena_(arena), lent_(nullptr), lent_bytes_(0u), handles_(platform_), svm_(platform_), shared_(), shared_used_(0u), objects_{}, produced_(0u), calls_(0u),
@@ -125,8 +121,6 @@ void *RecordingClDispatch::handle_for(clproto::HandleKind kind, std::uint64_t wi
 
 void *RecordingClDispatch::svm_for(std::uint64_t address, std::uint64_t bytes) const
 {
-    /* A refusal, not a stranger: the decoder reads null as "the guest named
-     * an address it was never given" and never makes the call. */
     return svm_.resolve(address, bytes);
 }
 
@@ -274,8 +268,6 @@ cl_int RecordingClDispatch::on_clSetKernelArg(cl_kernel kernel, cl_uint arg_inde
     if (arg_value == nullptr || arg_size != sizeof(cl_mem)) return CL_SUCCESS;
     std::uint64_t object = 0u;
     std::memcpy(&object, arg_value, sizeof object);
-    /* An ICD with no declaration to go by reads eight bytes as whatever the
-     * kernel wanted, so none may reach it. */
     if (declared == Declared::undeclared) {
         strangers_++;
         return CL_SUCCESS;
@@ -374,8 +366,6 @@ void RecordingClDispatch::called(std::uint32_t command_id)
 
 void RecordingClDispatch::handed(clproto::HandleKind kind, void *object)
 {
-    /* Null is the API's own and the ICD refuses it; anything else has to be
-     * an object this dispatch holds as exactly this kind. */
     if (object == nullptr) return;
     if (handles_.resolve(kind, wire_of(object)) != object) strangers_++;
 }
@@ -400,4 +390,4 @@ std::uint32_t RecordingClDispatch::called_at(std::size_t index) const
     return index < calls_ && index < max_logged ? logged_[index] : 0u;
 }
 
-}  // namespace av
+}

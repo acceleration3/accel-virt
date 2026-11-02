@@ -1,13 +1,3 @@
-/* The OpenGL server dispatch between a guest's pointers and the host driver.
- *
- * A call reads or writes what GL works out - format, type, extent, pixel
- * store, a count, an enum, the driver's own state - at the pointer it is
- * given, and the room behind that pointer is a number the guest sent. Driven
- * over RecordingGl, with no OpenGL: what is asserted is that an input shorter
- * than GL's own count, an output with less room than the driver writes, a
- * null GL would follow, or an offset with no buffer bound behind it never
- * reaches the driver, and that a call with room still runs (feature 044,
- * research section 2 and T030). */
 #include "harness/executor/recording_gl.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opengl/gl_dispatch_server.h"
@@ -55,7 +45,6 @@ public:
 
     std::size_t answered() const { return answered_; }
 
-    /* glReadPixels(0, 0, width, height, format, type) into `room` inline bytes. */
     bool read(std::int64_t width, std::int64_t height, std::uint64_t format, std::uint64_t type,
               std::uint64_t room)
     {
@@ -72,7 +61,6 @@ public:
         return run(av::glproto::kCmd_glReadPixels, frame, bytes);
     }
 
-    /* A two-argument state command: glPixelStorei or glBindBuffer. */
     void set(std::uint32_t command, std::uint64_t first, std::uint64_t second)
     {
         std::uint8_t bytes[frame_bytes];
@@ -92,9 +80,8 @@ private:
     std::size_t  answered_;
 };
 
-}  // namespace
+}
 
-/* T006: 16 by 16 RGBA8 is 1024 bytes, and one fewer is a write past the room. */
 TEST(opengl_dispatch, a_read_into_less_room_than_its_pixels_is_refused_before_the_driver)
 { GlSession session;
   CHECK(!session.read(16, 16, rgba, unsigned_byte, 1023u));
@@ -105,13 +92,9 @@ TEST(opengl_dispatch, a_read_into_less_room_than_its_pixels_is_refused_before_th
   CHECK_EQ(session.gl().reads(), 2u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* Width times height times bytes per pixel is not what GL writes once the
- * pack store says otherwise: at alignment 8 every row of three RGB pixels is
- * padded from 9 bytes to 16, and skipped rows come first. */
 TEST(opengl_dispatch, the_pack_store_counts_toward_what_a_read_needs)
 { GlSession session;
   session.set(av::glproto::kCmd_glPixelStorei, pack_alignment, 8u);
-  /* 4 rows: 3 padded rows of 16 and a last row of 9. */
   CHECK(!session.read(3, 4, rgb, unsigned_byte, 36u));
   CHECK(!session.read(3, 4, rgb, unsigned_byte, 56u));
   CHECK(session.read(3, 4, rgb, unsigned_byte, 57u));
@@ -121,8 +104,6 @@ TEST(opengl_dispatch, the_pack_store_counts_toward_what_a_read_needs)
   CHECK_EQ(session.gl().reads(), 2u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* Sizes that multiply past 64 bits, negative ones, and a format this server
- * cannot size are not reads it can bound. An empty one writes nothing. */
 TEST(opengl_dispatch, a_read_it_cannot_size_is_refused_and_an_empty_one_runs)
 { GlSession session;
   CHECK(!session.read(0x7FFFFFFF, 0x7FFFFFFF, rgba, floating, 64u));
@@ -133,15 +114,12 @@ TEST(opengl_dispatch, a_read_it_cannot_size_is_refused_and_an_empty_one_runs)
   CHECK(session.read(0, 4, rgba, unsigned_byte, 0u));
   CHECK_EQ(session.gl().reads(), 1u); }
 
-/* Without glGetIntegerv the pack store cannot be asked, so no read is sized. */
 TEST(opengl_dispatch, a_host_without_state_queries_reads_nothing_inline)
 { GlSession session;
   session.gl().forget_state_queries();
   CHECK(!session.read(1, 1, rgba, unsigned_byte, 4u));
   CHECK_EQ(session.gl().reads(), 0u); }
 
-/* An offset is an offset only while a pack buffer is bound; without one GL
- * writes at the guest's number as an address. */
 TEST(opengl_dispatch, an_offset_read_needs_a_pack_buffer_bound)
 { GlSession session;
   std::uint8_t bytes[frame_bytes];
@@ -160,7 +138,6 @@ TEST(opengl_dispatch, an_offset_read_needs_a_pack_buffer_bound)
   CHECK(session.run(av::glproto::kCmd_glReadPixels, frame, bytes));
   CHECK_EQ(session.gl().reads(), 1u); }
 
-/* glReadnPixels writes no more than its bufSize, so bufSize is what must fit. */
 TEST(opengl_dispatch, a_bounded_read_whose_bound_exceeds_its_room_is_refused)
 { GlSession session;
   struct Case { std::int64_t bound; std::uint64_t room; bool runs; };
@@ -180,7 +157,6 @@ TEST(opengl_dispatch, a_bounded_read_whose_bound_exceeds_its_room_is_refused)
   CHECK_EQ(session.gl().reads(), ran);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* glGetTexImage's extent is the level's, which the driver is asked for. */
 TEST(opengl_dispatch, a_texture_read_is_sized_by_the_level_the_driver_reports)
 { GlSession session;
   session.gl().set_level_extent(8, 8, 2);
@@ -199,8 +175,6 @@ TEST(opengl_dispatch, a_texture_read_is_sized_by_the_level_the_driver_reports)
   CHECK_EQ(session.gl().reads(), 1u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* A compressed level's size is state this server does not ask for yet, so it
- * is read only into a bound pack buffer. A query result is one value wide. */
 TEST(opengl_dispatch, a_compressed_read_goes_only_to_a_buffer_and_a_query_needs_one_value)
 { GlSession session;
   std::uint8_t bytes[frame_bytes];
@@ -223,9 +197,6 @@ TEST(opengl_dispatch, a_compressed_read_goes_only_to_a_buffer_and_a_query_needs_
   CHECK_EQ(session.gl().reads(), 1u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* GL has no state query that takes a null destination: the driver writes
- * through it. A guest that sends none has the answer written into the block
- * and nothing sent back, which is what it asked for. */
 TEST(opengl_dispatch, a_state_query_with_no_destination_is_answered_into_the_block_and_not_sent)
 { GlSession session;
   std::uint8_t bytes[frame_bytes];
@@ -239,7 +210,6 @@ TEST(opengl_dispatch, a_state_query_with_no_destination_is_answered_into_the_blo
     frame.write_pod<std::uint8_t>(inline_bytes);
     frame.write_varint(sizeof(GLint));
     CHECK(session.run(av::glproto::kCmd_glGetIntegerv, frame, bytes)); }
-  /* A one-byte length and the four bytes of alignment 4. */
   CHECK_EQ(session.answered(), 1u + sizeof(GLint)); }
 
 namespace {
@@ -266,7 +236,6 @@ constexpr std::uint8_t  absent = 0u;
 constexpr std::uint8_t  via_blob = 3u;
 constexpr std::size_t   big_frame_bytes = 512u;
 
-/* A frame for one command, written a field at a time. */
 class Frame {
 public:
     Frame() : bytes_{}, writer_(bytes_, sizeof bytes_) {}
@@ -275,7 +244,6 @@ public:
     Frame &pod64(std::uint64_t value) { writer_.write_pod<std::uint64_t>(value); return *this; }
     Frame &real(GLfloat value) { writer_.write_pod<GLfloat>(value); return *this; }
     Frame &none() { writer_.write_pod<std::uint8_t>(absent); return *this; }
-    /* An input run of `length` bytes, each its index. */
     Frame &run(std::uint64_t length)
     {
         writer_.write_pod<std::uint8_t>(inline_bytes);
@@ -290,7 +258,6 @@ public:
         writer_.write(characters, length);
         return *this;
     }
-    /* Room for an answer of `length` bytes. */
     Frame &room(std::uint64_t length)
     {
         writer_.write_pod<std::uint8_t>(inline_bytes);
@@ -318,8 +285,6 @@ bool send(GlSession &session, std::uint32_t command, const Frame &frame)
     return session.run(command, frame.writer(), frame.bytes());
 }
 
-/* glTexSubImage2D or glTexImage2D of `width` x `height` RGB bytes, the pixels
- * as `pixels` puts them. */
 Frame upload(bool specifies, std::int64_t width, std::int64_t height)
 {
     Frame frame;
@@ -332,11 +297,8 @@ Frame upload(bool specifies, std::int64_t width, std::int64_t height)
     return frame;
 }
 
-}  // namespace
+}
 
-/* glGenBuffers writes n names whatever room the guest says it has: the room
- * is made for n, a name count GL refuses is refused, and a guest that wants
- * none back still gives the driver somewhere to write them. */
 TEST(opengl_dispatch, a_count_sized_output_gets_room_for_the_count_the_driver_writes)
 { GlSession session;
   CHECK(send(session, av::glproto::kCmd_glGenBuffers, Frame().varint(64u).room(4u)));
@@ -349,8 +311,6 @@ TEST(opengl_dispatch, a_count_sized_output_gets_room_for_the_count_the_driver_wr
   CHECK_EQ(session.gl().calls(), 2u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* An info log is written up to bufSize, so bufSize is the room; the length
- * GL may be told nothing of, and the log it may not. */
 TEST(opengl_dispatch, a_string_output_gets_its_stated_room_and_is_never_null)
 { GlSession session;
   const std::uint32_t log = av::glproto::kCmd_glGetShaderInfoLog;
@@ -361,8 +321,6 @@ TEST(opengl_dispatch, a_string_output_gets_its_stated_room_and_is_never_null)
   CHECK_EQ(session.gl().calls(), 2u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* glUniform4fv reads four floats a count; fewer that crossed is a read past
- * them, and null is a read at address zero. */
 TEST(opengl_dispatch, an_input_array_shorter_than_its_count_or_null_is_refused)
 { GlSession session;
   const std::uint32_t uniform = av::glproto::kCmd_glUniform4fv;
@@ -381,7 +339,6 @@ TEST(opengl_dispatch, an_input_array_shorter_than_its_count_or_null_is_refused)
   CHECK_EQ(session.gl().calls(), ran);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* A parameter list is as long as its enum takes, and crosses only inline. */
 TEST(opengl_dispatch, a_parameter_list_is_held_to_what_its_enum_takes)
 { GlSession session;
   const std::uint32_t parameter = av::glproto::kCmd_glTexParameteriv;
@@ -393,14 +350,10 @@ TEST(opengl_dispatch, a_parameter_list_is_held_to_what_its_enum_takes)
   CHECK_EQ(session.gl().calls(), 2u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* An upload reads what the unpack store says, an offset needs an unpack
- * buffer, and so does null for an update - only an image being specified may
- * leave its contents undefined. */
 TEST(opengl_dispatch, an_upload_is_held_to_the_unpack_store_and_an_offset_to_a_bound_buffer)
 { GlSession session;
   const std::uint32_t sub = av::glproto::kCmd_glTexSubImage2D;
   session.set(av::glproto::kCmd_glPixelStorei, unpack_alignment, 8u);
-  /* 3 rows padded to 16 and a last row of 9. */
   CHECK(!send(session, sub, upload(false, 3, 4).run(56u)));
   CHECK(send(session, sub, upload(false, 3, 4).run(57u)));
   session.set(av::glproto::kCmd_glPixelStorei, unpack_skip_rows, 2u);
@@ -417,8 +370,6 @@ TEST(opengl_dispatch, an_upload_is_held_to_the_unpack_store_and_an_offset_to_a_b
   CHECK_EQ(session.gl().calls(), 5u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* A compressed image reads imageSize bytes from where the unpack skips put
- * its start, which with a block size set is whole blocks in. */
 TEST(opengl_dispatch, a_compressed_upload_is_held_to_its_size_and_its_start)
 { GlSession session;
   const std::uint32_t compressed = av::glproto::kCmd_glCompressedTexImage2D;
@@ -439,7 +390,6 @@ TEST(opengl_dispatch, a_compressed_upload_is_held_to_its_size_and_its_start)
   CHECK_EQ(session.gl().calls(), 3u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* A clear's data is one element, never an offset: no buffer makes it one. */
 TEST(opengl_dispatch, clear_data_is_one_element_of_its_format_and_never_an_offset)
 { GlSession session;
   const std::uint32_t clear = av::glproto::kCmd_glClearBufferData;
@@ -458,7 +408,6 @@ TEST(opengl_dispatch, clear_data_is_one_element_of_its_format_and_never_an_offse
   CHECK_EQ(session.gl().calls(), 2u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* glBufferData may be handed no data, and otherwise reads size bytes. */
 TEST(opengl_dispatch, buffer_data_may_be_null_and_is_otherwise_held_to_its_size)
 { GlSession session;
   const std::uint32_t data = av::glproto::kCmd_glBufferData;
@@ -468,30 +417,20 @@ TEST(opengl_dispatch, buffer_data_may_be_null_and_is_otherwise_held_to_its_size)
   CHECK_EQ(session.gl().calls(), 2u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* glCallLists reads n names, each as wide as its type. */
 TEST(opengl_dispatch, call_lists_is_held_to_its_count_times_its_type)
 { GlSession session;
   const std::uint32_t lists = av::glproto::kCmd_glCallLists;
   CHECK(!send(session, lists, Frame().varint(4u).varint(unsigned_short).run(7u)));
   CHECK(!send(session, lists, Frame().varint(static_cast<std::uint32_t>(-1)).varint(unsigned_short).run(8u)));
   CHECK(send(session, lists, Frame().varint(4u).varint(unsigned_short).run(8u)));
-  /* GL_2_BYTES through GL_4_BYTES name a list of that many bytes each; the
-   * decoder sizes them by the wider element table, which is room GL never
-   * reads past. */
   constexpr std::uint64_t three_bytes = 0x1408u;
   CHECK(!send(session, lists, Frame().varint(4u).varint(three_bytes).run(12u)));
   CHECK(send(session, lists, Frame().varint(4u).varint(three_bytes).run(16u)));
-  /* The signed types are as narrow as their unsigned twins. */
   CHECK(send(session, lists, Frame().varint(4u).varint(0x1400u).run(4u)));
-  /* An enum glCallLists has no list type for is GL_INVALID_ENUM: GL reads
-   * nothing, whatever room the run carried. */
   CHECK(send(session, lists, Frame().varint(4u).varint(0x140Bu).run(8u)));
   CHECK_EQ(session.gl().calls(), 4u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* Index offsets need an element buffer. An array with no buffer is a client
- * array read at the guest's number, so no draw reads one - including an
- * array whose buffer was deleted from under it after the pointer was set. */
 TEST(opengl_dispatch, a_draw_follows_no_offset_and_reads_no_array_without_a_buffer)
 { GlSession session;
   const Frame elements = Frame().varint(triangles).varint(3u).varint(unsigned_short).pod64(0u);
@@ -521,8 +460,6 @@ TEST(opengl_dispatch, a_draw_follows_no_offset_and_reads_no_array_without_a_buff
   CHECK(!send(session, av::glproto::kCmd_glDrawElements, elements));
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* The fixed-function arrays count as much as the attributes, on every
- * texture unit, and asking about a unit leaves the guest's unit selected. */
 TEST(opengl_dispatch, a_draw_reads_no_client_array_on_any_texture_unit)
 { GlSession session;
   const Frame arrays = Frame().varint(triangles).varint(0u).varint(3u);
@@ -537,15 +474,10 @@ TEST(opengl_dispatch, a_draw_reads_no_client_array_on_any_texture_unit)
   CHECK(!send(session, av::glproto::kCmd_glTexCoordPointer, Frame().varint(2u).varint(floating).varint(0u).pod64(8u)));
   CHECK(send(session, av::glproto::kCmd_glEnableClientState, Frame().varint(texture_coord_array)));
   CHECK(!send(session, av::glproto::kCmd_glDrawArrays, arrays));
-  /* The check walked unit 0 last and put unit 1 back: disabling now
-   * disables unit 1's array, and the draw runs again. */
   CHECK(send(session, av::glproto::kCmd_glDisableClientState, Frame().varint(texture_coord_array)));
   CHECK(send(session, av::glproto::kCmd_glDrawArrays, arrays));
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* A core context has no fixed-function arrays, and asking it about one is an
- * error the application would read back from its own glGetError: a draw asks
- * nothing of them there, and still refuses an attribute with no buffer. */
 TEST(opengl_dispatch, a_core_context_draw_asks_nothing_of_the_fixed_function_arrays)
 { GlSession session;
   const Frame arrays = Frame().varint(triangles).varint(0u).varint(3u);
@@ -560,7 +492,6 @@ TEST(opengl_dispatch, a_core_context_draw_asks_nothing_of_the_fixed_function_arr
   CHECK_EQ(session.gl().capability_queries(), asked);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* glMultiDrawElements reads drawcount counts and drawcount offsets. */
 TEST(opengl_dispatch, a_multi_draw_holds_its_lists_to_the_draw_count)
 { GlSession session;
   session.set(av::glproto::kCmd_glBindBuffer, element_array_buffer, 2u);
@@ -578,8 +509,6 @@ TEST(opengl_dispatch, a_multi_draw_holds_its_lists_to_the_draw_count)
   CHECK(!send(session, av::glproto::kCmd_glMultiDrawElements, draw(2u)));
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* A length that is not negative is how far GL reads a source string, and it
- * may not reach past what crossed; there are as many strings as the count. */
 TEST(opengl_dispatch, shader_source_lengths_may_not_reach_past_the_strings_that_crossed)
 { GlSession session;
   const auto source = [](std::uint64_t count, std::int32_t first_length, std::uint64_t lengths_bytes) {
@@ -621,8 +550,6 @@ TEST(opengl_dispatch, debug_text_is_read_no_further_than_what_crossed)
   CHECK_EQ(session.gl().calls(), 2u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* A query whose answer is a list as long as another query says - more
- * values than any fixed slack - gets room for the list. */
 TEST(opengl_dispatch, a_list_query_gets_room_for_the_whole_list_the_driver_counts)
 { GlSession session;
   CHECK(send(session, av::glproto::kCmd_glGetIntegerv, Frame().varint(compressed_texture_formats).room(4u)));
@@ -631,8 +558,6 @@ TEST(opengl_dispatch, a_list_query_gets_room_for_the_whole_list_the_driver_count
              Frame().varint(1u).varint(0u).varint(active_uniform_indices).room(4u)));
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* An evaluator map reads a stride a control point, and its coefficients
- * come back as many as its order says - past the slack here. */
 TEST(opengl_dispatch, a_map_is_held_to_its_order_and_stride_and_answered_by_its_order)
 { GlSession session;
   const auto map = [](std::uint64_t stride, std::uint64_t order, std::uint64_t bytes) {
@@ -650,8 +575,6 @@ TEST(opengl_dispatch, a_map_is_held_to_its_order_and_stride_and_answered_by_its_
   CHECK_EQ(session.gl().calls(), 3u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* The stipple packs 32 by 32 bits by the pack store; a bitmap unpacks by the
- * unpack store and is read at once, so null needs an unpack buffer. */
 TEST(opengl_dispatch, stipple_and_bitmap_are_held_to_their_stores)
 { GlSession session;
   session.set(av::glproto::kCmd_glPixelStorei, pack_alignment, 8u);
@@ -662,7 +585,6 @@ TEST(opengl_dispatch, stipple_and_bitmap_are_held_to_their_stores)
       return frame;
   };
   const std::uint32_t draw = av::glproto::kCmd_glBitmap;
-  /* Two rows of 9 bits at alignment 4: one row of 4 and a last of 2. */
   CHECK(!send(session, draw, bitmap(9u, 2u).run(5u)));
   CHECK(send(session, draw, bitmap(9u, 2u).run(6u)));
   CHECK(!send(session, draw, bitmap(9u, 2u).none()));
@@ -670,8 +592,6 @@ TEST(opengl_dispatch, stipple_and_bitmap_are_held_to_their_stores)
   CHECK_EQ(session.gl().calls(), 3u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* The driver keeps a selection or feedback buffer and writes into it at
- * every draw after, long after the block it was decoded into is reused. */
 TEST(opengl_dispatch, selection_and_feedback_buffers_are_refused_whatever_they_carry)
 { GlSession session;
   CHECK(!send(session, av::glproto::kCmd_glSelectBuffer, Frame().varint(4u).room(16u)));
@@ -679,9 +599,6 @@ TEST(opengl_dispatch, selection_and_feedback_buffers_are_refused_whatever_they_c
   CHECK_EQ(session.gl().calls(), 0u);
   CHECK_EQ(session.gl().strays(), 0u); }
 
-/* An array the draw-time check does not know of could not be refused at the
- * draw, so it is not enabled: a vendor's vertex weights, a program's NV
- * attributes. */
 TEST(opengl_dispatch, only_the_arrays_a_draw_is_checked_for_may_be_enabled)
 { GlSession session;
   constexpr std::uint64_t weight_array = 0x86ADu;

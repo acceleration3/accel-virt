@@ -43,4 +43,4 @@ bool WindowsModuleResolver::image_of(uint64_t address, uint64_t &base, uint64_t 
     return true;
 }
 
-}  // namespace av
+}

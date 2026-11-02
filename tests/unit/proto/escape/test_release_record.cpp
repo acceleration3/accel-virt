@@ -1,7 +1,3 @@
-/* The record a packet carries to release a batch: the fields at their offsets,
- * a round trip, a prefix of a longer private data read as the record, and
- * anything else - too few bytes, another magic, ring 0, a descriptor that is
- * none - refused with the reader unchanged. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -19,7 +15,7 @@ TEST(release_record, places_its_fields_and_reads_back_as_written)
 { std::uint8_t bytes[ReleaseRecord::encoded_size] = {};
   CHECK_STATUS(ReleaseRecord(0x11223344u, SubmissionDescriptor(7u, 64u, 128u)).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x00525641u);   /* "AVR" */
+  CHECK(layout.at(0u, 4u) == 0x00525641u);
   CHECK(layout.at(4u, 4u) == 0x11223344u);
   ReleaseRecord read;
   CHECK_STATUS(read.decode(bytes, sizeof bytes), Status::ok);
@@ -44,10 +40,10 @@ TEST(release_record, anything_else_is_malformed_and_leaves_the_reader_unchanged)
   other[0] ^= 0xFFu;
   CHECK_STATUS(read.decode(other, sizeof other), Status::malformed);
   for (std::size_t i = 0u; i < sizeof other; i++) other[i] = bytes[i];
-  other[4] = other[5] = other[6] = other[7] = 0u;   /* ring 0 */
+  other[4] = other[5] = other[6] = other[7] = 0u;
   CHECK_STATUS(read.decode(other, sizeof other), Status::malformed);
   for (std::size_t i = 0u; i < sizeof other; i++) other[i] = bytes[i];
-  for (std::size_t i = 16u; i < 24u; i++) other[i] = 0u;   /* fence 0 */
+  for (std::size_t i = 16u; i < 24u; i++) other[i] = 0u;
   CHECK_STATUS(read.decode(other, sizeof other), Status::malformed);
   CHECK_EQ(read.ring(), 3u);
   CHECK_STATUS(ReleaseRecord(5u, SubmissionDescriptor(1u, 0u, 8u)).encode(other, ReleaseRecord::encoded_size - 1u),

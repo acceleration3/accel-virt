@@ -1,10 +1,3 @@
-"""av-codegen for OpenCL: cl.xml in, the OpenCL half of the wire out.
-
-``--check`` re-emits into a temporary directory and diffs against ``--out``;
-that is what tools/check_generated.py runs, and it is why nothing under the
-generated tree may be hand-edited.
-"""
-
 from __future__ import annotations
 
 import argparse

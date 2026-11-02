@@ -38,7 +38,6 @@ bool ContextCommands::answer(ControlRequest &request, uint32_t type)
     return true;
 }
 
-/* One capset, at index 0. */
 void ContextCommands::capset_info(ControlRequest &request, GpuResponse &response)
 {
     AV_SCOPE("ContextCommands::capset_info");
@@ -67,7 +66,6 @@ void ContextCommands::capset(ControlRequest &request, GpuResponse &response)
     response.set_capset(capset_.info());
 }
 
-/* Only the av capset: context_init's reserved bits must be clear too. */
 uint32_t ContextCommands::create(ControlRequest &request)
 {
     AV_SCOPE("ContextCommands::create");
@@ -97,7 +95,6 @@ uint32_t ContextCommands::destroy(ControlRequest &request)
                                                                  : GpuResponse::err_invalid_context_id;
 }
 
-/* The command buffer is exactly one context setup, of either size. */
 uint32_t ContextCommands::submit(ControlRequest &request)
 {
     AV_SCOPE("ContextCommands::submit");
@@ -122,4 +119,4 @@ uint32_t ContextCommands::submit(ControlRequest &request)
     }
 }
 
-}  // namespace av
+}

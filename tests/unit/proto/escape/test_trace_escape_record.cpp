@@ -26,9 +26,8 @@ bool reject_request(const std::uint8_t *bytes, std::size_t length)
     return decoded != Status::ok || record.window() > length - TraceEscapeRecord::encoded_size;
 }
 
-}  // namespace
+}
 
-/* docs/trace.md's layout, byte by byte. */
 TEST(trace_escape_record, encodes_the_documented_layout)
 { std::uint8_t bytes[escape_bytes];
   std::memset(bytes, 0xEE, sizeof bytes);
@@ -84,7 +83,6 @@ TEST(trace_escape_record, the_kernel_refuses_a_request_that_is_not_one)
   TraceEscapeRecord record;
   CHECK_STATUS(record.decode(valid, 39u), Status::malformed);
   CHECK_STATUS(record.decode(nullptr, sizeof valid), Status::malformed);
-  /* A window of exactly the bytes after the record fits; one more does not. */
   CHECK_STATUS(record.decode(valid, sizeof valid), Status::ok);
   CHECK_STATUS(record.decode(valid, sizeof valid - 1u), Status::malformed);
   std::uint8_t empty[40];
@@ -114,7 +112,6 @@ TEST(trace_escape_record, the_process_refuses_an_answer_to_another_request)
   std::uint8_t garbage[escape_bytes] = {};
   TraceEscapeRecord process = request;
   CHECK_STATUS(process.accept_answer(garbage, sizeof garbage), Status::malformed);
-  /* The window may end exactly at the total, and an offset at the total is an empty answer. */
   std::uint8_t bytes[escape_bytes];
   CHECK_STATUS(request.answered(150u, 50u, 3u).encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(process.accept_answer(bytes, sizeof bytes), Status::ok);
@@ -123,7 +120,6 @@ TEST(trace_escape_record, the_process_refuses_an_answer_to_another_request)
   CHECK_STATUS(request.answered(100u, 0u, 3u).encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(at_end.accept_answer(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(at_end.window(), 0u);
-  /* An offset near 2^64 cannot make the window wrap past the total. */
   const TraceEscapeRecord far(Kind::table, 0xFFFFFFFFFFFFFFF0ull, 64u);
   CHECK_STATUS(far.answered(0xFFFFFFFFFFFFFFF8ull, 32u, 1u).encode(bytes, sizeof bytes), Status::ok);
   TraceEscapeRecord far_process = far;
@@ -135,13 +131,5 @@ TEST(trace_escape_record, hostile_requests_never_claim_a_window_past_their_bytes
   av::HostileSweep sweep(&reject_request, valid, sizeof valid);
   sweep.run();
   CHECK(sweep.cases_run() > sizeof valid);
-  /* The record is 40 bytes in front of a 64-byte window, and the window's 512
-   * bits are payload no reader touches. Of the record, only the offset is free
-   * (64 bits): the magic, the version, the kind, the reserved word and the
-   * answer fields a request must leave zero are all judged, and of the window
-   * length only the flip that clears 64 to nothing still fits the bytes it
-   * arrived in. Every shorter input either cannot hold the record or cannot
-   * hold the window it claims, all-zero and all-ones carry no magic, and the
-   * untouched request is the last acceptance. */
   const std::uint32_t acceptable = 512u + 64u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

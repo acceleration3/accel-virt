@@ -72,9 +72,6 @@ int64_t ExportRequest::shift_ns() const
     return shift_ns_;
 }
 
-/* A timing's shift takes the surface's place, as a two's complement; an export
- * and a sync put their flags in the word at 12, and every other operation,
- * a timing among them, leaves it 0. */
 Status ExportRequest::encode(uint8_t *bytes, size_t capacity) const
 {
     AV_SCOPE("ExportRequest::encode");
@@ -128,4 +125,4 @@ Status ExportRequest::decode(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-}  // namespace av
+}

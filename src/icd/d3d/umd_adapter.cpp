@@ -90,12 +90,9 @@ bool UmdAdapter::invariants_hold() const
     AV_SCOPE("UmdAdapter::invariants_hold");
     if (callbacks_ == nullptr) return false;
     if (!versions_.invariants_hold()) return false;
-    /* An adapter is only ever opened at a version it serves, so one that does
-     * not is one whose open wrote its fields in the wrong order. D3D12 carries
-     * no Interface at all and records zero. */
     if (runtime_ == RuntimeKind::d3d10_11 && !versions_.serves(interface_version_)) return false;
     if (runtime_ == RuntimeKind::d3d12 && interface_version_ != 0u) return false;
     return true;
 }
 
-}  // namespace av::d3d
+}

@@ -1,7 +1,3 @@
-/* avinspect.exe (docs/trace.md): reads a process's trace table or state
- * dump, or the driver's, and writes it to the file --out names. Every answer
- * is a file; the exit code says only whether the command was understood and
- * the file written. */
 #ifndef AV_INSPECT_PROGRAM_HPP
 #define AV_INSPECT_PROGRAM_HPP
 
@@ -34,10 +30,8 @@ public:
     InspectProgram(const InspectProgram &) = delete;
     InspectProgram &operator=(const InspectProgram &) = delete;
 
-    /* The command in `line`, as GetCommandLineW gives it. */
     Exit run(const uint16_t *line);
 
-    /* What run() tells a caller who asked for something it does not do. */
     const char *usage() const;
 
 private:
@@ -46,10 +40,8 @@ private:
     Exit state(uint32_t pid, const char *module, const char *out);
     Exit kernel(TraceEscapeRecord::Kind kind, uint64_t luid, const char *out);
     Exit dump_file(SnapshotFile &file, const char *section);
-    /* `<prefix>av-<kind>-<module>-<pid>`. */
     void name(TextBuffer &out, const char *prefix, const char *kind, const char *module, uint32_t pid) const;
     bool module_name(const char *module) const;
-    /* The table in `bytes` as a kind 1 file, or the reason it is none as kind 3. */
     Exit table_file(const char *out, uint64_t clock, const uint8_t *bytes, size_t length, const char *source);
     Exit finish(Status written) const;
 
@@ -59,6 +51,6 @@ private:
     CommandLine  line_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_INSPECT_PROGRAM_HPP
+#endif

@@ -64,4 +64,4 @@ uint64_t CreateBlobRequest::size() const
     return size_;
 }
 
-}  // namespace av
+}

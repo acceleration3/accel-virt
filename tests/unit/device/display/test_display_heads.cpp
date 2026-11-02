@@ -1,7 +1,3 @@
-/* A device's display heads: which blob each shows, what the host is told, and
- * what happens on a host whose display has no such head. A head shows the
- * device's own mapping of the blob's pages, which every display backend reads,
- * so a host started with `-display none` shows blobs too. */
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/control/control_request.hpp"
@@ -104,10 +100,8 @@ private:
     DisplayHeads heads_;
 };
 
-}  // namespace
+}
 
-/* A head the display does not have refuses, said once: a guest that keeps
- * asking must not turn the log into the reason the run is slow. */
 TEST(display_heads_show, a_head_the_display_lacks_is_refused_and_said_once)
 { Fixture fixture(0u);
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::not_supported);
@@ -120,11 +114,8 @@ TEST(display_heads_show, a_head_the_display_lacks_is_refused_and_said_once)
   CHECK(fixture.heads().invariants_hold());
   CHECK_EQ(fixture.heads().showing(), 0u);
   CHECK_EQ(fixture.host().head(0u).shows, 0u);
-  /* Nothing was pinned, so the guest may still release the blob. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok); }
 
-/* The first frame a head shows is said once: the moment the guest stopped
- * copying. */
 TEST(display_heads_show, the_first_frame_shown_is_said_once)
 { Fixture fixture(2u);
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::ok);
@@ -133,7 +124,6 @@ TEST(display_heads_show, the_first_frame_shown_is_said_once)
   CHECK_STATUS(fixture.heads().show(1u, 2u, fixture.whole()), Status::ok);
   CHECK_STATUS(fixture.heads().show(0u, 2u, fixture.whole()), Status::ok);
   CHECK_EQ(fixture.host().logged(), 1u);
-  /* What the head was handed is the device's mapping of the guest's page. */
   std::memset(fixture.host().guest_ram(ram + 0x10000u), 0x5A, picture_bytes);
   CHECK(fixture.host().head(0u).blob != nullptr);
   CHECK_EQ(fixture.host().head(0u).blob[0], 0x5Au);
@@ -165,7 +155,6 @@ TEST(display_heads_show, two_heads_showing_one_blob_hold_a_pin_each)
   CHECK(fixture.heads().shows(1u));
   CHECK(!fixture.heads().shows(2u));
   CHECK(fixture.heads().invariants_hold());
-  /* Two pins: one head letting go is not enough to release the blob. */
   CHECK_STATUS(fixture.heads().hide(0u), Status::ok);
   CHECK_STATUS(fixture.blobs().release(1u), Status::invalid_state);
   CHECK_STATUS(fixture.heads().hide(1u), Status::ok);
@@ -189,8 +178,6 @@ TEST(display_heads_flush, every_head_showing_the_blob_is_updated_and_no_other)
   CHECK_EQ(fixture.host().head(1u).updates, 0u);
   CHECK_STATUS(fixture.heads().flush(2u, rect(0u, 0u, picture_width, picture_height)), Status::ok);
   CHECK_EQ(fixture.host().head(1u).updates, 1u);
-  /* A blob no head shows, and a rectangle outside the framebuffer. */
-  /* A head that was used and now shows nothing is passed over, not updated. */
   CHECK_STATUS(fixture.heads().hide(0u), Status::ok);
   CHECK_STATUS(fixture.heads().flush(2u, rect(0u, 0u, picture_width, picture_height)), Status::ok);
   CHECK_EQ(fixture.host().head(1u).updates, 2u);
@@ -204,13 +191,12 @@ TEST(display_heads_flush, every_head_showing_the_blob_is_updated_and_no_other)
 TEST(display_heads, release_all_lets_go_of_every_head_from_every_state)
 { Fixture fixture(2u);
   CHECK_STATUS(fixture.heads().show(0u, 1u, fixture.whole()), Status::ok);
-  CHECK_STATUS(fixture.heads().hide(1u), Status::ok);   /* made, never shown */
+  CHECK_STATUS(fixture.heads().hide(1u), Status::ok);
   fixture.heads().release_all();
   CHECK_EQ(fixture.heads().showing(), 0u);
   CHECK(!fixture.host().head(0u).shown);
   CHECK(fixture.heads().invariants_hold());
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
-  /* Again, on heads that are all gone. */
   fixture.heads().release_all();
   CHECK(fixture.heads().invariants_hold()); }
 
@@ -249,6 +235,5 @@ TEST(display_heads_show, every_way_the_host_can_fail_leaves_no_head_half_shown)
   CHECK_EQ(fixture.heads().showing(), 0u);
   CHECK_EQ(fixture.host().head(0u).shows, 0u);
   CHECK(fixture.heads().invariants_hold());
-  /* Nothing was pinned by either failure. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
   CHECK_STATUS(fixture.blobs().release(2u), Status::ok); }

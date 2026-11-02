@@ -1,16 +1,3 @@
-/* One VkInstance's way to the host: the avgpu adapter, a device and paging
- * queue on it, and one Vulkan av context whose transport every object under the
- * instance sends through (research.md §3). The host's handles are per context,
- * so nothing made through an instance can cross another's connection.
- *
- * Opening is all or nothing, and any reason it cannot open - no avgpu adapter,
- * no LUID for it, a device the driver refuses, a context whose capset offers no
- * Vulkan - is the same answer to the loader: this driver does not serve here.
- * The transport stages its largest command, 256 KiB (research.md §4), in memory
- * taken when it opens: a connection lives in an ObjectPool chunk beside 63
- * others, so that room cannot be a member, and the transport is built over it
- * then. A transport the host has failed stays faulted, refusing every send
- * without a D3DKMT call, until the connection is closed. */
 #ifndef AV_ICD_CONNECTION_HPP
 #define AV_ICD_CONNECTION_HPP
 
@@ -34,7 +21,7 @@ class KeyedLog;
 class Kmt;
 class StateWriter;
 class ThreadLock;
-}  // namespace av
+}
 
 namespace av::icd {
 
@@ -47,70 +34,30 @@ public:
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   command_bytes = 256u * 1024u;
 
-    /* `lock` is the channel's send lock; `lines` is the driver's, where a
-     * loss is said once per entry point. `handles` resolves the Win32
-     * handles an import names. */
     Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock, KeyedLog &lines, SharedHandles &handles);
     ~Connection();
     Connection(const Connection &) = delete;
     Connection &operator=(const Connection &) = delete;
 
-    /* On the avgpu adapter whose LUID is `luid`; 0 takes the one the primary
-     * display is on (AdapterSearch::find_avgpu). invalid_state once open;
-     * no_memory when the staging cannot be had; not_supported for every other
-     * reason it cannot open. Nothing is left open unless ok. */
     [[nodiscard]] Status open(uint64_t luid);
-    /* Closes the context, the device and the adapter; nothing when not open. */
     void                 close();
     bool                 opened() const;
-    /* Whether the instance's context is lost (HostChannel::lost); false
-     * while not open. */
     bool                 lost() const;
-    /* Whether lost, the cause kept (LossLatch) and logged the first time
-     * `entry` finds it: what every entry point asks before it sends. */
     [[nodiscard]] bool   refuses(const char *entry);
-    /* The avgpu adapter's handle, 0 until open. */
     uint32_t             adapter() const;
-    /* The D3DKMT device the connection made; 0 unless open. */
     uint32_t             device() const;
-    /* The adapter's LUID, 0 until open. */
     uint64_t             luid() const;
-    /* What Windows calls the adapter - the name Device Manager, DXGI and the
-     * OpenCL ICD show - read as it opens; empty until open, or where Windows
-     * gives none. */
     const char          *adapter_name() const;
-    /* Remembered from the one time the host was asked for its device
-     * extensions: whether it has VK_EXT_external_memory_dma_buf, which decides
-     * what a shared allocation is exported as. A host never asked is taken not
-     * to have it, which is the answer that shares by an opaque fd - what every
-     * host did before feature 053. */
     void                 note_host_dma_buf();
     bool                 host_has_dma_buf() const;
-    /* What the generated wrappers send through, only while open: the root
-     * closes a connection only as it destroys it. */
     ClientTransport     &transport();
-    /* Batches sent on this connection so far, every kind. */
     uint64_t             submissions() const;
-    /* `length` bytes of commands a CommandBatch framed, published as one
-     * submission under the lock, only while open; failed for a batch the
-     * transport refuses whole or a faulted transport. None of them asks for an
-     * answer, so none is waited for. */
     [[nodiscard]] TransportResult send_batch(const uint8_t *framed, size_t length);
-    /* A recorded command too long for any batch, sent alone under the lock
-     * (HostChannel::send_command), only while open. */
     [[nodiscard]] TransportResult send_command(uint32_t command_id, WireWriter &writer);
 
-    /* The channel the connection's host memory is opened on and kept by,
-     * for each device of its instance (HostChannel::open_memory). */
     HostChannel         &channel();
-    /* The shared objects the instance's context opened, for every device of
-     * it (feature 053): what a Win32 handle another process or another of
-     * this process's devices published was imported as. Its caller holds the
-     * root's memory lock. */
     OpenedObjects       &opened_objects();
 
-    /* Its fields on the line `writer` has open: whether open and lost, and
-     * why, and the adapter, LUID, device and context it sends through. */
     void report(StateWriter &writer) const;
 
     bool invariants_hold() const;
@@ -120,12 +67,8 @@ private:
     AdapterSearch                  search_;
     GuestConnection                connection_;
     HostChannel                    channel_;
-    /* Why the instance's context was lost. */
     LossLatch                      loss_;
-    /* Open from a whole open to the close: the channel opened alone is a
-     * connection that was not. */
     bool                           opened_;
-    /* What Windows says of the adapter: its LUID, and the name Vulkan shows. */
     AdapterFacts                   adapter_;
     bool                           host_dma_buf_;
     OpenedObjects                  opened_objects_;
@@ -133,6 +76,6 @@ private:
     friend struct ConnectionProbe;
 };
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_CONNECTION_HPP
+#endif

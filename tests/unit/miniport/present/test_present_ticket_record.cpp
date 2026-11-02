@@ -1,7 +1,3 @@
-/* A present's ticket as the miniport writes it beside the DMA buffer and reads
- * it back at submission: the fields at their offsets, a round trip, and
- * private data that is anything else - another magic, no epoch, no ticket, too
- * few bytes - refused with the reader unchanged. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -32,13 +28,13 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(present_ticket_record_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[PresentTicketRecord::encoded_size] = {};
   CHECK_STATUS(PresentTicketRecord(0x11223344u, 0x5566778899AABBCCull).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x00545641u);   /* "AVT" */
+  CHECK(layout.at(0u, 4u) == 0x00545641u);
   CHECK(layout.at(4u, 4u) == 0x11223344u);
   CHECK(layout.at(8u, 8u) == 0x5566778899AABBCCull); }
 
@@ -48,7 +44,7 @@ TEST(present_ticket_record, round_trips_and_reads_only_its_own_bytes_of_longer_p
   CHECK_STATUS(PresentTicketRecord(2u, 9u).encode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(bytes[16], 0xEEu);
   PresentTicketRecord decoded;
-  CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);   /* an av context's private data is longer */
+  CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(decoded.epoch(), 2u);
   CHECK(decoded.ticket() == 9u);
   const PresentTicketRecord none;
@@ -85,7 +81,5 @@ TEST(present_ticket_record_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 128u);
-  /* Only the magic is constrained beyond non-zero: epoch and ticket are 3, so
-   * no single flip clears either, and all 32 + 64 of their flips are records. */
   const std::uint32_t acceptable = 32u + 64u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

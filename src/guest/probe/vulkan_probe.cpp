@@ -20,7 +20,7 @@ uint32_t low_part(uint64_t luid)
     return static_cast<uint32_t>(luid & ((uint64_t{1} << low_part_bits) - 1u));
 }
 
-}  // namespace
+}
 
 VulkanProbe::VulkanProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan, ImageSink &images, WindowFrame &windows,
                          void *module, void *window)
@@ -55,9 +55,6 @@ void VulkanProbe::run()
     recreated_step();
 }
 
-/* A window of one's own, a surface on it, and the frames the driver puts
- * there. They run on the recreated device, which outlives them: everything a
- * swapchain holds goes with the device it was made on. */
 void VulkanProbe::window_steps(ProbeDevice &device)
 {
     AV_SCOPE("VulkanProbe::window_steps");
@@ -79,8 +76,6 @@ bool VulkanProbe::surface_step(PresentWork &present)
     return offered;
 }
 
-/* Sixty FIFO frames, and then the window itself: every pixel of it must be the
- * frame's, whatever the driver says it did. */
 bool VulkanProbe::present_step(PresentWork &present)
 {
     AV_SCOPE("VulkanProbe::present_step");
@@ -103,10 +98,6 @@ bool VulkanProbe::present_step(PresentWork &present)
     return drawn == pixels;
 }
 
-/* FIFO holds each frame to a vertical blank: sixty frames cannot have taken
- * less time than sixty blanks, less the one a first frame need not wait for.
- * Judged against one fewer still, as the GL probe's interval step is: the
- * period is a mean of blanks a waiter woke for a little late (VblankClock). */
 void VulkanProbe::pacing_step()
 {
     AV_SCOPE("VulkanProbe::pacing_step");
@@ -120,10 +111,6 @@ void VulkanProbe::pacing_step()
                                             static_cast<uint32_t>(elapsed_ / period)));
 }
 
-/* The window changes size under the swapchain: what it hands out is out of
- * date until the application makes another, which presents at the new size -
- * the background past the triangle shows that it is a frame of that size, and
- * not the last one before the resize still on the window. */
 void VulkanProbe::resized_step(PresentWork &present)
 {
     AV_SCOPE("VulkanProbe::resized_step");
@@ -149,8 +136,6 @@ void VulkanProbe::resized_step(PresentWork &present)
     again.measure(present.drawn_on_the_window("vulkan-resized", again), pixels);
     again.report(steps_, "resized");
 }
-
-/* One vertical blank, timed on an adapter and device of this step's own. */
 
 Status VulkanProbe::adapter_step()
 {
@@ -178,8 +163,6 @@ Status VulkanProbe::device_step(ProbeDevice &device)
     return steps_.check_result("device", device.make_device());
 }
 
-/* The fault is the first call; the device's next call must see the loss too,
- * without the probe telling it anything. */
 void VulkanProbe::lost_step(ProbeDevice &device)
 {
     AV_SCOPE("VulkanProbe::lost_step");
@@ -216,4 +199,4 @@ void VulkanProbe::recreated_step()
     window_steps(device);
 }
 
-}  // namespace av
+}

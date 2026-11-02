@@ -1,7 +1,3 @@
-/* One virtio-gpu control response the device core sends (virtio 1.2 5.7.6.7):
- * a 24-byte header whose type is the result, or one with its payload -
- * OK_MAP_INFO, OK_CAPSET_INFO, OK_CAPSET. The host fills fence, flags and
- * context from the request. */
 #ifndef AV_GPU_RESPONSE_HPP
 #define AV_GPU_RESPONSE_HPP
 
@@ -26,8 +22,8 @@ public:
         err_invalid_context_id = 0x1204u,
         err_invalid_parameter = 0x1205u,
     };
-    static constexpr uint32_t map_cache_cached = 1u;   /* VIRTIO_GPU_MAP_CACHE_CACHED */
-    static constexpr uint32_t map_cache_wc = 3u;       /* VIRTIO_GPU_MAP_CACHE_WC */
+    static constexpr uint32_t map_cache_cached = 1u;
+    static constexpr uint32_t map_cache_wc = 3u;
     static constexpr size_t   max_length = 24u + CapsetInfo::encoded_size > DisplayModeSet::max_encoded_size
                                                ? 24u + CapsetInfo::encoded_size
                                                : DisplayModeSet::max_encoded_size;
@@ -38,7 +34,6 @@ public:
     void           set_map_info(uint32_t map_info);
     void           set_capset_info(uint32_t capset_id, uint32_t max_version, uint32_t max_size);
     void           set_capset(const CapsetInfo &capset);
-    /* OK_AV_DISPLAY_MODES and the set; ERR_UNSPEC for an empty one. */
     void           set_display_modes(const DisplayModeSet &modes);
     uint32_t       type() const;
     const uint8_t *bytes() const;
@@ -54,6 +49,6 @@ private:
     uint32_t type_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_GPU_RESPONSE_HPP
+#endif

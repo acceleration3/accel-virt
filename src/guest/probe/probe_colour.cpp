@@ -31,4 +31,4 @@ bool ProbeColour::is(const uint8_t *pixel) const
     return true;
 }
 
-}  // namespace av
+}

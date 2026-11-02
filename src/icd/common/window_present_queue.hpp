@@ -1,29 +1,3 @@
-/* Shows handed frames on their windows in the order they were handed: the
- * present thread of a process's OpenGL swaps and of its Vulkan presents, so
- * that a present only queues its frame's read-back or copy and returns.
- *
- * A present used to read its frame back and blit it itself, and the read-back
- * waits for the host to run everything the frame queued: the application's
- * render thread did nothing while the host drew, and the host nothing while
- * the thread built the next frame. Now a present sends the read or the copy
- * one-way into a free slot of its `Source` (a window's back buffer, a
- * swapchain) and hands the frame here; this thread waits for it to be drawn,
- * puts it on the window - a slot of the window's chain presented, or its
- * pixels blitted - and gives the slot back. A frame shows as soon as the host
- * has it, and the render thread is already building the next one.
- *
- * Two policies, each with two implementations: `Source` is the presenter
- * frames belong to (OpenGL's BackBufferPresenter, Vulkan's Swapchain), told
- * under the lock when the queue is done with one of its frames
- * (`done(frame, drawn)`); `Readiness` is how a frame is waited for (OpenGL's
- * BatchReady, a batch through a Kmt only this thread waits on; Vulkan's
- * FenceReady, the copy's fence), with its `Mark` the frame carries and
- * `wait(mark)` answering a FrameWait.
- *
- * One per process and API, over one thread. It sleeps on `handed` when
- * nothing is queued, and a presenter waiting for a slot sleeps on `shown`.
- * Every table below is shared with the presenters' threads and read and
- * written under `lock`, never across a wait or a blit. */
 #ifndef AV_ICD_WINDOW_PRESENT_QUEUE_HPP
 #define AV_ICD_WINDOW_PRESENT_QUEUE_HPP
 
@@ -54,15 +28,10 @@ public:
     using Mark  = typename Readiness::Mark;
     using Frame = HandedFrame<Source, Mark>;
 
-    /* An idle thread looks again this often; a hand-over wakes it at once. */
     static constexpr uint32_t idle_milliseconds = 1000u;
-    /* A presenter waiting for a slot looks again this often, this many times,
-     * before it gives the frame up: two seconds is dxgkrnl's patience with a
-     * GPU, and a thread showing nothing for that long is not coming back. */
     static constexpr uint32_t slot_milliseconds = 4u;
     static constexpr uint32_t slot_looks = 500u;
 
-    /* `log` is the presenting driver's. */
     WindowPresentQueue(BlockSource &memory, ServiceThread &thread, ThreadWake &handed, ThreadWake &shown,
                        ThreadLock &lock, Readiness &readiness, WindowSurface &surface, WindowChains &chains,
                        DriverLog &log);
@@ -70,39 +39,17 @@ public:
     WindowPresentQueue(const WindowPresentQueue &) = delete;
     WindowPresentQueue &operator=(const WindowPresentQueue &) = delete;
 
-    /* Whether frames may be handed over: the thread runs, started here the
-     * first time. A thread that would not start, or a queue refused, never is. */
     bool     start();
-    /* The shim could not make what the thread needs: presenters show their
-     * own frames. */
     void     refuse();
-    /* A slot of `owner`'s `slots` that no handed frame holds and that is not
-     * `reserved`, waiting for the thread to show one while all are taken;
-     * `slots` when none came free in time, and the caller drops its frame. */
     uint32_t free_slot(const Source &owner, uint32_t slots, uint32_t reserved);
-    /* Queues `frame` and wakes the thread; false, the frame dropped, when
-     * there is no memory for a row. */
     bool     hand(const Frame &frame);
-    /* Returns once nothing of `owner`'s is queued or being shown: before its
-     * slots or its window change, and before it goes. What the thread will
-     * not show - it stopped, or showed nothing for slot_looks looks - is
-     * dropped, and its source told so. */
     void     settle(const Source &owner);
-    /* Sleeps until the thread has shown a frame or `milliseconds` pass. */
     void     await_shown(uint32_t milliseconds);
-    /* A frame drawn already put on its window on the calling thread, under
-     * the lock: a presenter's own present when there is no thread to hand
-     * it to. False when the window or its chain refused it. */
     bool     show_now(const Frame &frame);
-    /* The windows' chains a presenter opens its slots in, and this thread
-     * presents a frame drawn into a slot through. */
     WindowChains &chains();
-    /* For a reader or writer of what the thread's done() writes. */
     void     acquire();
     void     release();
 
-    /* One frame: the oldest queued, waited for, shown and given back; or,
-     * with none queued, a sleep until one is. False once stopping. */
     bool turn() override;
 
     uint32_t queued() const;
@@ -111,9 +58,6 @@ public:
 
     void report(StateWriter &writer) const;
 
-    /* A row holds a frame exactly while it is queued or showing, a held
-     * frame's order is one handed out, and no two held frames share an
-     * order. */
     bool invariants_hold() const;
 
 private:
@@ -128,23 +72,14 @@ private:
     static constexpr uint32_t no_row = 0xFFFFFFFFu;
     static constexpr uint32_t pixel_bytes = 4u;
 
-    /* The queued frame handed first, or no_row. */
     uint32_t oldest() const;
     uint32_t free_row() const;
     uint32_t held_by(const Source &owner) const;
     void     drop_queued(const Source &owner);
     bool     holds(const Source &owner, uint32_t slot) const;
-    /* Waits for the frame to be drawn, again while the wait is bounded and
-     * the frame is not drawn yet: false for one that never will be, or once
-     * stopping. */
     bool     wait_for(const Mark &mark);
-    /* Shows the frame taken from `row` once it is drawn. */
     void     show(uint32_t row, const Frame &frame);
-    /* The frame on its window: false when the window or its chain refused it. */
     bool     put_on_window(const Frame &frame);
-    /* An RGBA frame's rows with red and blue traded, in the scratch: a DIB is
-     * BGRA. Null with no memory for them. A pixel at a time: a byte at a time
-     * over 14 MB a frame was a fifth of a game's render thread. */
     const uint8_t *as_bgra(const Frame &frame);
     bool     stopping() const;
     void     log_refusal();
@@ -158,16 +93,12 @@ private:
     WindowSurface  &surface_;
     WindowChains   &chains_;
     DriverLog      &lines_;
-    /* As many as frames are ever handed at once - two for each window
-     * presenting - and reused once free. */
     GrowableArray<Row> rows_;
     uint64_t        next_order_;
     uint64_t        shown_frames_;
     uint64_t        dropped_frames_;
-    /* The thread's own: an RGBA frame traded into BGRA. */
     uint8_t        *scratch_;
     size_t          scratch_bytes_;
-    /* Read by the thread, written by the destructor on another. */
     uint32_t        stopping_;
     bool            refused_;
     OnceLatch       refusal_logged_;
@@ -186,8 +117,6 @@ WindowPresentQueue<Source, Readiness>::WindowPresentQueue(BlockSource &memory, S
     AV_SCOPE("WindowPresentQueue::WindowPresentQueue");
 }
 
-/* A turn asleep on `handed` wakes to the flag; one waiting for a frame wakes
- * when its bounded wait comes back. */
 template <typename Source, typename Readiness>
 WindowPresentQueue<Source, Readiness>::~WindowPresentQueue()
 {
@@ -253,8 +182,6 @@ bool WindowPresentQueue<Source, Readiness>::hand(const Frame &frame)
     return true;
 }
 
-/* A frame being shown is waited for whatever happens, since the thread is
- * reading the slot it is in - and its wait is bounded. */
 template <typename Source, typename Readiness>
 void WindowPresentQueue<Source, Readiness>::settle(const Source &owner)
 {
@@ -516,6 +443,6 @@ void WindowPresentQueue<Source, Readiness>::log_refusal()
     lines_.write("a window refused a frame the present thread showed; later ones are not logged");
 }
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_WINDOW_PRESENT_QUEUE_HPP
+#endif

@@ -56,7 +56,6 @@ void RecordingHostDriver::tear_down(d3d::UmdDevice &device, void *block)
     torn_runtime_ = device.adapter().runtime();
 }
 
-/* hDevice is D3DDDIARG_CREATEDEVICE's first member. */
 d3d::Hresult RecordingHostDriver::build9(d3d::UmdAdapter &adapter, void *create, std::uint32_t kmt_adapter)
 {
     kmt_adapter_ = kmt_adapter;
@@ -98,4 +97,4 @@ std::uint32_t    RecordingHostDriver::tear_downs() const { return tear_downs_; }
 void            *RecordingHostDriver::torn_block() const { return torn_block_; }
 d3d::RuntimeKind RecordingHostDriver::torn_runtime() const { return torn_runtime_; }
 
-}  // namespace av
+}

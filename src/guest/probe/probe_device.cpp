@@ -6,13 +6,11 @@
 namespace av {
 
 namespace {
-
-/* VK_API_VERSION_1_3, spelled without the header's macro and its C casts. */
 constexpr uint32_t   api_version_1_3 = (1u << 22u) | (3u << 12u);
 constexpr float      queue_priority = 1.0f;
 constexpr VkQueueFlags draws_and_computes = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
 
-}  // namespace
+}
 
 ProbeDevice::ProbeDevice(VulkanEntry &vulkan)
     : vulkan_(vulkan), instance_(VK_NULL_HANDLE), listed_{}, listed_count_(0u), physical_device_(VK_NULL_HANDLE),
@@ -28,8 +26,6 @@ ProbeDevice::~ProbeDevice()
     if (instance_ != VK_NULL_HANDLE) vulkan_.destroy_instance(instance_);
 }
 
-/* What a windowed application enables: a surface on a Win32 window, and the
- * swapchain that presents on it. */
 const char *const ProbeDevice::instance_extensions[] = {"VK_KHR_surface", "VK_KHR_win32_surface"};
 const char *const ProbeDevice::device_extensions[] = {"VK_KHR_swapchain"};
 
@@ -43,10 +39,6 @@ VkResult ProbeDevice::make_instance()
     VkInstanceCreateInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     info.pApplicationInfo = &application;
-    /* The window-system extensions the present steps use. An application that
-     * calls vkCreateWin32SurfaceKHR without enabling them reaches a dispatch
-     * slot the Khronos loader never filled, which is a jump to address zero -
-     * how the live probe of feature 046 first crashed. */
     info.enabledExtensionCount = instance_extension_count;
     info.ppEnabledExtensionNames = instance_extensions;
     return vulkan_.create_instance(&info, &instance_);
@@ -179,4 +171,4 @@ bool ProbeDevice::invariants_hold() const
     return (queue_ == VK_NULL_HANDLE) == (device_ == VK_NULL_HANDLE);
 }
 
-}  // namespace av
+}

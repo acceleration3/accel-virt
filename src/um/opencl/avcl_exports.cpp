@@ -1,14 +1,3 @@
-/* avcl.dll's entry points (contracts/icd_interface.md): the two names the
- * Khronos ICD loader may resolve, each one line into the library in this
- * translation unit's storage - the OpenCL ICD's process-lifetime state
- * (constitution III) - and a DLL entry that does nothing at attach or detach,
- * where the loader lock allows nothing. No C runtime runs constructors, so the
- * storage is constinit and the library constructs itself on the first call.
- *
- * The pinned loader resolves only clGetExtensionFunctionAddress by name and
- * asks it for clIcdGetPlatformIDsKHR (khrIcdVendorAdd, loader/icd.c:111-119);
- * older loaders looked the second up directly, and exporting it costs a line.
- */
 #include "core/trace/function_scope.hpp"
 #include "um/opencl/cl_icd_library.hpp"
 
@@ -20,7 +9,6 @@ static long WINAPI avcl_crashed(void *pointers);
 
 static constinit av::ClIcdLibrary avcl_library{&avcl_crashed};
 
-/* The process's unhandled-exception filter while avcl traces it. */
 static long WINAPI avcl_crashed(void *pointers)
 {
     AV_SCOPE("avcl_crashed");

@@ -1,7 +1,3 @@
-/* What IMPORT_BLOB answers (docs/protocol.md, Transport commands; feature
- * 045): whether the import was made and, when it was, the wire handle of the
- * device memory the guest names it by from then on. A refusal is an answer,
- * not a fault: the context keeps running. */
 #ifndef AV_BLOB_IMPORT_ANSWER_HPP
 #define AV_BLOB_IMPORT_ANSWER_HPP
 
@@ -18,13 +14,9 @@ public:
 
     enum : uint32_t {
         imported = 0u,
-        /* No resource, or a reserved field that is not zero. */
         refused_request = 1u,
-        /* Not a host blob opened for this context. */
         unknown_resource = 2u,
-        /* No executor, or one whose API will not take the memory. */
         executor_refused = 3u,
-        /* No host memory to keep the import in. */
         no_room = 4u,
     };
 
@@ -35,9 +27,6 @@ public:
     uint64_t device_memory() const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
-    /* malformed for a short buffer, a non-zero reserved field, a status past
-     * no_room, an import with no handle or a refusal with one. Unchanged
-     * unless ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
@@ -47,6 +36,6 @@ private:
     uint64_t device_memory_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_BLOB_IMPORT_ANSWER_HPP
+#endif

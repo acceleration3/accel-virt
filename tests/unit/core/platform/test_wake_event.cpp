@@ -1,5 +1,3 @@
-/* What a control exchange sleeps on while the host works on its request: set
- * from the DPC, waited on at PASSIVE, and unset by the wait it ends. */
 #include "core/platform/wake_event.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -15,8 +13,6 @@ using av::WakeEvent;
 TEST(wake_event, reserves_storage_for_the_kernel_event)
 { CHECK(WakeEvent::storage_bytes >= 24u); }
 
-/* A set before the wait - the answer harvested before the waiter slept - wakes
- * it at once, and only once. */
 TEST(wake_event_wait, a_set_event_wakes_at_once_and_is_unset_by_the_wake)
 { MockPlatform platform; WakeEvent event(platform);
   platform.set_irql(Irql::dispatch);
@@ -39,11 +35,8 @@ struct Setter {
     std::uint32_t calls = 0u;
 };
 
-}  // namespace
+}
 
-/* What happens while the thread sleeps happens on the device's side: a set
- * then - the DPC finding the answer - ends the wait without the clock moving
- * past it; nothing set times the wait out. */
 TEST(wake_event_wait, the_device_acts_while_the_thread_sleeps)
 { MockPlatform platform; WakeEvent event(platform);
   Setter setter{&event, &platform};

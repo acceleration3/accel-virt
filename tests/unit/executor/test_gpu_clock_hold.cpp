@@ -1,8 +1,3 @@
-/* The host GPU's clocks, held by a thread of their own while batches flow. The
- * render node is the host's, so what is judged on any host is every refusal -
- * no node, a node that is not there - and, where this host has an amdgpu
- * render node, that the hold opens once, stays open when asked again, is told
- * of batches without blocking the caller, and closes as often as asked. */
 #include "executor/gpu_clock_hold.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -19,8 +14,6 @@
 using av::GpuClockHold;
 
 namespace {
-
-/* The minor of the first render node amdgpu drives, or -1. */
 std::int32_t amdgpu_render_minor()
 {
     for (std::int32_t minor = 128; minor < 192; minor++) {
@@ -54,8 +47,6 @@ void *open_with_the_others(void *raw)
     return nullptr;
 }
 
-/* Rounds in which every opener's open returned true; a round where one never
- * returns never ends, which is what the parent's deadline catches. */
 std::uint32_t open_together(std::int32_t minor)
 {
     std::uint32_t whole = 0u;
@@ -87,13 +78,12 @@ std::uint64_t now_ns()
     return static_cast<std::uint64_t>(now.tv_sec) * 1000000000u + static_cast<std::uint64_t>(now.tv_nsec);
 }
 
-}  // namespace
+}
 
 TEST(gpu_clock_hold_open, a_gpu_whose_driver_names_no_render_node_holds_nothing)
 { GpuClockHold hold;
   CHECK(!hold.open(-1));
   CHECK(!hold.open(-128));
-  /* Never opened: told of a batch, and closed, it does nothing. */
   hold.busy();
   hold.close();
   hold.close(); }
@@ -106,24 +96,20 @@ TEST(gpu_clock_hold_open, a_render_node_that_is_not_there_holds_nothing)
 
 TEST(gpu_clock_hold_open, an_amdgpu_node_opens_once_and_is_told_of_batches_without_waiting)
 { const std::int32_t minor = amdgpu_render_minor();
-  if (minor < 0) return;   /* no amdgpu here: the refusals above are what this host can judge */
+  if (minor < 0) return;
   GpuClockHold hold;
   CHECK(hold.open(minor));
-  CHECK(hold.open(minor));   /* already open: true at once */
-  CHECK(hold.open(-1));      /* the node is not asked again */
+  CHECK(hold.open(minor));
+  CHECK(hold.open(-1));
   const std::uint64_t started = now_ns();
   for (std::uint32_t batch = 0u; batch < 1000u; batch++) hold.busy();
-  /* A batch pays an atomic store, not a wait on the watching thread. */
   CHECK(now_ns() - started < 100000000u);
   hold.close();
   hold.close();
-  /* Closed, it opens again. */
   CHECK(hold.open(minor));
   hold.busy();
   hold.close(); }
 
-/* The destructor closes an open hold: its thread is joined, not left running
- * over freed memory. */
 TEST(gpu_clock_hold, an_open_hold_goes_with_its_owner)
 { const std::int32_t minor = amdgpu_render_minor();
   if (minor < 0) return;
@@ -133,12 +119,6 @@ TEST(gpu_clock_hold, an_open_hold_goes_with_its_owner)
       hold.busy();
   } }
 
-/* Two contexts on one GPU attach on workers of their own at the same moment,
- * and each opens the GPU's hold. Every open returns, true, round after round:
- * a second open that found the hold not yet open, and set up the condition the
- * first one's thread already waits on, never returned - and QEMU's main loop,
- * closing that context, waited on it for good. The rounds run in a child, so
- * one that never ends fails here instead of hanging the suite. */
 TEST(gpu_clock_hold_open, eight_threads_opening_one_hold_at_once_all_return_true)
 { const std::int32_t minor = amdgpu_render_minor();
   if (minor < 0) return;

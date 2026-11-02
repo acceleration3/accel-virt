@@ -72,8 +72,6 @@ Status AllocationDescriptor::encode(uint8_t *bytes, size_t capacity) const
     return writer.status();
 }
 
-/* A surface's rows fit in its size and a row holds at least a byte per pixel;
- * only a primary names a scanout; a buffer that is not a surface is a client's. */
 bool AllocationDescriptor::is_valid() const
 {
     AV_SCOPE("AllocationDescriptor::is_valid");
@@ -84,7 +82,6 @@ bool AllocationDescriptor::is_valid() const
     if (!known_kind || size_ == 0u) return false;
     if (layout_.bytes() > size_ || layout_.pitch() < layout_.width()) return false;
     if (kind_ != AllocationKind::shared_primary && !scanout_.is_empty()) return false;
-    /* A context's name is a page and nothing more: nothing is ever kept in it. */
     if (kind_ == AllocationKind::context_ring) return size_ == page_bytes && !layout_.is_surface();
     return kind_ == AllocationKind::client || layout_.is_surface();
 }
@@ -116,4 +113,4 @@ Status AllocationDescriptor::decode(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-}  // namespace av
+}

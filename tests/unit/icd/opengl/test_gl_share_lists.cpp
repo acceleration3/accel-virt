@@ -1,10 +1,3 @@
-/* wglShareLists through opengl32 over MockKmt (contracts/icd_interface.md): a
- * share is recorded while the context taking it has never been current, and
- * becomes the share handle of the record it is made with; the context it
- * shares may be unmade or in use; a chain is made from its far end; a context
- * made by wglCreateContextAttribsARB and never current is made again,
- * sharing; a share into a context once current, onto a deleted context, into
- * a loop or twice is refused. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
@@ -23,7 +16,7 @@ struct GlIcdRootProbe {
     static GuestGlContext *context(GlIcdRoot &root, std::uint64_t handle) { return root.contexts_.resolve(handle); }
 };
 
-}  // namespace av::glicd
+}
 
 using av::GlIcdRig;
 using av::MockKmt;
@@ -42,8 +35,6 @@ void check_error(GlIcdRig &rig, std::uint32_t expected)
     rig.threads().clear_last_error();
 }
 
-/* `context` current on the rig's DC, its window's framebuffer answered; the
- * root's context for it. */
 GuestGlContext *current_on(GlIcdRig &rig, void *context)
 {
     rig.host().gl_window(1u, 1u);
@@ -58,7 +49,7 @@ std::uint32_t last_record_share(GlIcdRig &rig)
     return record.options().share_context();
 }
 
-}  // namespace
+}
 
 TEST(gl_share_lists, a_chain_is_made_from_its_far_end_each_naming_the_one_before)
 { GlIcdRig rig;
@@ -77,7 +68,6 @@ TEST(gl_share_lists, a_chain_is_made_from_its_far_end_each_naming_the_one_before
   GuestGlContext *const third = current_on(rig, c);
   CHECK(third != nullptr);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual) - opened, 3u);
-  /* c was made last. */
   CHECK_EQ(last_record_share(rig), third->options().share_context());
   GuestGlContext *const second = current_on(rig, b);
   GuestGlContext *const first = current_on(rig, a);
@@ -86,14 +76,10 @@ TEST(gl_share_lists, a_chain_is_made_from_its_far_end_each_naming_the_one_before
   CHECK_EQ(third->options().share_context(), second->share_name());
   CHECK_EQ(second->options().share_context(), first->share_name());
   CHECK_EQ(first->options().share_context(), 0u);
-  /* A share asks a version: 1.0 when none was asked. The head of the chain
-   * shares with nobody, so it is the one that asks the compatibility ladder's
-   * first rung (feature 051). */
   CHECK_EQ(second->options().major(), 1u);
   CHECK_EQ(first->options().major(), 4u);
   CHECK(first->options().profile() == av::GlContextOptions::Profile::compatibility);
   CHECK_EQ(third->share_target(), rig.opengl32().driver_context(b));
-  /* Each writes buffers another can: none keeps copies of them. */
   CHECK(!first->shadows().trusted());
   CHECK(!second->shadows().trusted());
   CHECK(!third->shadows().trusted());
@@ -113,7 +99,6 @@ TEST(gl_share_lists, a_share_into_a_context_once_current_or_unknown_or_same_or_i
   check_error(rig, Root::error_invalid_operation);
   CHECK(rig.opengl32().share_lists(a, b));
   CHECK(rig.opengl32().share_lists(b, c));
-  /* c -> ... -> a would close a loop; b already shares. */
   CHECK(!rig.opengl32().share_lists(c, a));
   check_error(rig, Root::error_invalid_operation);
   CHECK(!rig.opengl32().share_lists(c, b));
@@ -122,8 +107,6 @@ TEST(gl_share_lists, a_share_into_a_context_once_current_or_unknown_or_same_or_i
   CHECK(!rig.opengl32().share_lists(d, b));
   check_error(rig, Root::error_invalid_operation);
   CHECK(rig.opengl32().share_lists(d, a));
-  /* Into a context that has been current, even after it was let go: it may
-   * hold objects of its own. */
   void *const made = rig.opengl32().create_context(rig.dc());
   rig.host().gl_make("host gpu", "4.6");
   rig.host().gl_policy(0);
@@ -150,7 +133,6 @@ TEST(gl_share_lists, a_context_in_use_lends_its_objects_to_one_never_current)
   rig.host().gl_policy(0);
   GuestGlContext *const borrower = current_on(rig, fresh);
   CHECK(borrower != nullptr);
-  /* Only the fresh one is made, naming the ring of the one in use. */
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual) - opened, 1u);
   CHECK(lender->share_name() != 0u);
   CHECK_EQ(last_record_share(rig), lender->share_name());
@@ -168,8 +150,6 @@ TEST(gl_share_lists, a_context_made_with_attributes_and_never_current_is_made_ag
   GuestGlContext *const lender = current_on(rig, in_use);
   CHECK(lender != nullptr);
   if (lender == nullptr) return;
-  /* What Photoshop's GPU compute does: a 3.0 context, made at once, then
-   * wglShareLists from the one it draws with. */
   const std::int32_t three_oh[] = {0x2091, 3, 0x2092, 0, 0};
   rig.host().gl_make("host gpu", "4.6");
   rig.host().gl_policy(0);
@@ -177,7 +157,6 @@ TEST(gl_share_lists, a_context_made_with_attributes_and_never_current_is_made_ag
   CHECK(compute != nullptr);
   const std::uint32_t destroyed = rig.kmt().calls(MockKmt::Call::destroy_context);
   CHECK(rig.opengl32().share_lists(in_use, compute));
-  /* Its first host context went; nothing had been asked of it. */
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::destroy_context) - destroyed, 1u);
   const std::uint32_t opened = rig.kmt().calls(MockKmt::Call::create_context_virtual);
   rig.host().gl_make("host gpu", "4.6");
@@ -189,10 +168,8 @@ TEST(gl_share_lists, a_context_made_with_attributes_and_never_current_is_made_ag
   av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.options().share_context(), lender->share_name());
-  /* The version it asked for is the one it is made again with. */
   CHECK_EQ(record.options().major(), 3u);
   CHECK_EQ(record.options().minor(), 0u);
-  /* Current once: no second share. */
   CHECK(rig.opengl32().make_current(rig.dc(), nullptr));
   void *const other = rig.opengl32().create_context(rig.dc());
   CHECK(!rig.opengl32().share_lists(other, compute));
@@ -229,7 +206,6 @@ TEST(gl_share_lists, a_target_that_cannot_be_made_or_was_lost_fails_the_make)
   CHECK(!rig.opengl32().make_current(rig.dc(), b));
   check_error(rig, Root::error_invalid_operation);
   CHECK(rig.root().current() == nullptr);
-  /* a made and then lost: b cannot share it. */
   rig.host().gl_make("host gpu", "4.6");
   rig.host().gl_policy(0);
   CHECK(current_on(rig, a) != nullptr);
@@ -253,8 +229,6 @@ TEST(gl_share_lists, a_context_records_one_target_and_only_while_unmade)
   CHECK_STATUS(context->share(9u), Status::invalid_state);
   CHECK_EQ(context->share_target(), 0u); }
 
-/* A loop of shares a bug could leave is walked no further than the table
- * holds, and a context sharing through it is not made. */
 TEST(gl_share_lists, a_loop_of_targets_is_walked_no_further_than_the_table)
 { GlIcdRig rig;
   rig.load_with_format();
@@ -272,7 +246,6 @@ TEST(gl_share_lists, a_loop_of_targets_is_walked_no_further_than_the_table)
   check_error(rig, Root::error_invalid_operation);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), opened); }
 
-/* A share walked through a deleted target stops there. */
 TEST(gl_share_lists, a_walk_through_a_deleted_target_stops_at_it)
 { GlIcdRig rig;
   rig.load_with_format();
@@ -285,10 +258,6 @@ TEST(gl_share_lists, a_walk_through_a_deleted_target_stops_at_it)
   CHECK_EQ(av::glicd::GlIcdRootProbe::context(rig.root(), rig.opengl32().driver_context(c))->share_target(),
            rig.opengl32().driver_context(b)); }
 
-/* What the OpenCL ICD asks for the GL context an application names
- * (cl_khr_gl_sharing, avGetShareName): the calling thread's current
- * context's share name, by which the miniport finds its objects - and 0 with
- * nothing current, which the OpenCL ICD refuses as no share group. */
 TEST(gl_share_lists, the_current_share_name_is_the_current_context_s_and_none_without_one)
 { GlIcdRig rig;
   rig.load_with_format();
@@ -312,10 +281,6 @@ TEST(gl_share_lists, the_current_share_name_is_the_current_context_s_and_none_wi
   CHECK_EQ(root.current_share_name(), 0u);
   CHECK(root.invariants_hold()); }
 
-/* The OpenCL ICD's other question (avRunHeldCalls): before it names a GL
- * object, the calling thread's current context's held calls are run on the
- * host - sent, and the transport's no-op answered behind them. 0 with nothing
- * current, which sends nothing. */
 TEST(gl_share_lists, run_held_calls_runs_the_current_context_s_and_nothing_without_one)
 { GlIcdRig rig;
   rig.load_with_format();

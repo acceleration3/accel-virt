@@ -57,4 +57,4 @@ size_t CommandRecording::capacity() const
     return capacity_;
 }
 
-}  // namespace av::d3d
+}

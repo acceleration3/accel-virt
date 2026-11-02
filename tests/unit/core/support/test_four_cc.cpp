@@ -9,8 +9,6 @@ TEST(four_cc, packs_the_first_character_into_the_low_byte)
 { CHECK_EQ(FourCc('D', 'X', 'T', '1').value(), 0x31545844u);
   CHECK_EQ(FourCc('A', 'R', '2', '4').value(), 0x34325241u); }
 
-/* A character above 0x7f is negative where char is signed: widened without
- * going through unsigned char it would set every byte above its own. */
 TEST(four_cc, a_high_character_fills_only_its_own_byte)
 { CHECK_EQ(FourCc('\x80', 'A', 'B', 'C').value(), 0x43424180u);
   CHECK_EQ(FourCc('A', '\xff', 'B', 'C').value(), 0x4342ff41u);

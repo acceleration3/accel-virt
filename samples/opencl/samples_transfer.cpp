@@ -1,6 +1,3 @@
-// buffertransfer, imagetransfer, mapbuffer, kernellaunch, programstream: what it costs to move
-// bytes and commands between the application and the device - the part of a
-// paravirtual driver a kernel's own speed says nothing about.
 #include "framework.h"
 
 namespace samples {
@@ -9,10 +6,6 @@ namespace {
 
 uint32_t pattern(uint32_t i, uint32_t seed) { return mix_bits(i * 0x9E3779B1u + seed); }
 
-// ---------------------------------------------------------------- buffertransfer
-
-// Each iteration writes 8 MiB in, copies it on the device, fills the source,
-// and reads the copy back out.
 class BufferTransfer final : public Sample {
 public:
     const char *name() const override { return "buffertransfer"; }
@@ -40,7 +33,6 @@ public:
     {
         for (uint32_t i = 0; i < words; i++) host_in_[i] = pattern(i, 7);
         step(gpu);
-        // An unaligned read and write of an odd length, within one buffer.
         const uint32_t marker[5] = {1, 2, 3, 4, 5};
         gpu.write(copy_, marker, sizeof marker, 4 * 1001);
         uint32_t window[16] = {};
@@ -53,7 +45,6 @@ public:
             const uint32_t at = 999 + i;
             right = window[i] == (at >= 1001 && at < 1006 ? marker[at - 1001] : pattern(at, 7));
         }
-        // A digest of the whole copy, then the window, then the copy's head.
         uint32_t digest[4 + 16 + 1024] = {};
         for (uint32_t i = 0; i < words; i++) {
             digest[0] += host_out_[i];
@@ -83,10 +74,6 @@ private:
     uint32_t                 *host_in_ = nullptr, *host_out_ = nullptr;
 };
 
-// ---------------------------------------------------------------- imagetransfer
-
-// A 1024x1024 RGBA8 image written in, copied image to image, and read back; the
-// capture is also a sub-rectangle written at an offset.
 class ImageTransfer final : public Sample {
 public:
     const char *name() const override { return "imagetransfer"; }
@@ -118,8 +105,6 @@ public:
         step(gpu);
         bool right = !gpu.failed;
         for (uint32_t i = 0; i < size * size && right; i++) right = host_out_[i] == host_in_[i];
-        // A 200x100 block of a flat colour written at (300, 400), with a pitch
-        // wider than the block.
         const uint32_t pitch = 256, w = 200, h = 100;
         uint32_t      *block = static_cast<uint32_t *>(allocate(pitch * h * 4u));
         for (uint32_t i = 0; i < pitch * h; i++) block[i] = pack_rgba(1.0f, 0.2f, 0.6f, 1.0f);
@@ -152,10 +137,6 @@ private:
     uint32_t                 *host_in_ = nullptr, *host_out_ = nullptr;
 };
 
-// ---------------------------------------------------------------- mapbuffer
-
-// A host-accessible buffer written through a map, incremented by a kernel, and
-// read through a map: the zero-copy path where a driver has one.
 class MapBuffer final : public Sample {
 public:
     const char *name() const override { return "mapbuffer"; }
@@ -198,8 +179,6 @@ private:
     static constexpr uint32_t bytes = 8u << 20;
     static constexpr uint32_t words = bytes / 4u;
 
-    // Writes i ^ seed through a map, adds 3 * seed on the device, and answers
-    // a checksum of a strided sample read back through a map.
     uint32_t round(Gpu &gpu, uint32_t seed)
     {
         cl_int    error = CL_SUCCESS;
@@ -225,10 +204,6 @@ private:
     uint32_t   iteration_ = 0;
 };
 
-// ---------------------------------------------------------------- kernellaunch
-
-// A thousand launches of a one-work-item kernel, each with an argument set
-// before it: nothing but the cost of a command.
 class KernelLaunch final : public Sample {
 public:
     const char *name() const override { return "kernellaunch"; }
@@ -274,11 +249,6 @@ private:
     cl_mem                    counter_ = nullptr;
 };
 
-// ---------------------------------------------------------------- heldmaps
-
-// Hundreds of small host-accessible buffers, every one of them mapped at once,
-// written, and only then unmapped: what Affinity does to open a document. A
-// driver that holds only a few mappings at a time refuses it.
 class HeldMaps final : public Sample {
 public:
     const char *name() const override { return "heldmaps"; }
@@ -314,8 +284,6 @@ private:
     static constexpr uint32_t buffers = 600;
     static constexpr uint32_t bytes = 4096;
 
-    // Maps every buffer, writes seed ^ (buffer + word) into each, and unmaps
-    // them all once every one is mapped.
     void round(Gpu &gpu, uint32_t seed)
     {
         uint32_t *mapped[buffers] = {};
@@ -335,11 +303,6 @@ private:
     uint32_t iteration_ = 0;
 };
 
-// ---------------------------------------------------------------- bufferrects
-
-// Rectangles of a buffer written, filled and read back with every origin and
-// pitch away from zero, judged byte by byte against the same copies done on
-// the host: the shape of what Affinity does to start a document.
 class BufferRects final : public Sample {
 public:
     const char *name() const override { return "bufferrects"; }
@@ -405,12 +368,6 @@ private:
     cl_mem buffer_ = nullptr;
 };
 
-// ---------------------------------------------------------------- eventcallback
-
-// A write's completion told through clSetEventCallback after a flush, with no
-// wait of the application's own: what Affinity waits on to make a document. A
-// round whose callback never came in two seconds is a failure, and every
-// round is one - the first callback of a process is not the only one.
 class EventCallback final : public Sample {
 public:
     const char *name() const override { return "eventcallback"; }
@@ -460,19 +417,8 @@ private:
     cl_mem buffer_ = nullptr;
 };
 
-}  // namespace
+}
 
-// ---------------------------------------------------------------- programstream
-
-// Six programs of 300 KB of source each - past the room one command is lent,
-// so each crosses in pieces over several batches - built one after another
-// with a buffer made from the application's data between each two, as an
-// application loading kernels while it streams data in. Each program's kernel
-// writes its own mark into its own buffer. The guest driver holds what it
-// sends, and the transport once took a command's arrays to be read by the
-// batch carrying its first piece; a command of its own sent between pieces,
-// or an array lent again too early, would build one program from another's
-// source, and its marks would come back in the wrong buffer.
 class ProgramStream final : public Sample {
 public:
     const char *name() const override { return "programstream"; }
@@ -535,7 +481,6 @@ private:
 
     static uint32_t mark_of(uint32_t program) { return 0x51000000u + program * 0x10101u; }
 
-    // The program's mark, its kernel, and 300 KB of comment after them.
     void program_source(uint32_t program)
     {
         copy_text(source_, 512, "#define MARK ");
@@ -568,4 +513,4 @@ void register_transfer(Sample **all, uint32_t &made)
     all[made++] = new ProgramStream();
 }
 
-}  // namespace samples
+}

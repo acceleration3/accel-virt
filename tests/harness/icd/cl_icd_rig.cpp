@@ -19,9 +19,6 @@ ClIcdRig::ClIcdRig()
     kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     kmt_.open_host_window(MockKmt::rig_window_bytes);
     kmt_.set_adapter_luid(0u, adapter_luid);
-    /* The transport watches the reply slot for a budget of the guest's clock
-     * before it asks the kernel to wait, and a command no answer was queued
-     * for is one it would watch for ever on a clock that never moves. */
     kmt_.reads_clock(nullptr, transport_clock_step);
 }
 
@@ -40,4 +37,4 @@ ScriptedD3d11Bridge &ClIcdRig::d3d11() { return d3d11_; }
 clicd::ClIcdRoot    &ClIcdRig::root() { return root_; }
 FakeClLoader        &ClIcdRig::loader() { return loader_; }
 
-}  // namespace av
+}

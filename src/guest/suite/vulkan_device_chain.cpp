@@ -8,15 +8,11 @@
 namespace av {
 
 namespace {
-
-/* VK_API_VERSION_1_1, spelled without the header's macro and its C casts. */
 constexpr uint32_t api_version_1_1 = (1u << 22u) | (1u << 12u);
 constexpr float    queue_priority = 1.0f;
-/* Every Vulkan device has a family 0, and one queue of it is all a scenario
- * submits to. */
 constexpr uint32_t queue_family = 0u;
 
-}  // namespace
+}
 
 VulkanDeviceChain::VulkanDeviceChain(ScenarioSteps &steps, ClientTransport &transport)
     : steps_(steps), transport_(transport), handles_(), instance_(0u), physical_device_(0u), device_(0u)
@@ -51,9 +47,6 @@ Status VulkanDeviceChain::make_instance()
     return instanced;
 }
 
-/* Asked twice, the way an application does: how many, then as many as there
- * is room for. The count is what the step reports, and a host with none fails
- * it; one with more than the room answers VK_INCOMPLETE, which fails it too. */
 Status VulkanDeviceChain::find_physical_device()
 {
     AV_SCOPE("VulkanDeviceChain::find_physical_device");
@@ -91,8 +84,6 @@ Status VulkanDeviceChain::make_device()
     return judged;
 }
 
-/* A null device or instance is refused by the host as undecodable and would
- * fault the context, so only what was made is named. */
 void VulkanDeviceChain::destroy()
 {
     AV_SCOPE("VulkanDeviceChain::destroy");
@@ -121,11 +112,10 @@ vkproto::HandleTranslation &VulkanDeviceChain::handles()
     return handles_;
 }
 
-/* Each handle is only ever held with the one it was made from. */
 bool VulkanDeviceChain::invariants_hold() const
 {
     AV_SCOPE("VulkanDeviceChain::invariants_hold");
     return (device_ == 0u || physical_device_ != 0u) && (physical_device_ == 0u || instance_ != 0u);
 }
 
-}  // namespace av
+}

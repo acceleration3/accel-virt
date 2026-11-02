@@ -136,8 +136,6 @@ void GuestRamLending::give_back(Host &host)
     fd_ = -1;
 }
 
-/* A lending that is held has its memory; the pages it lies over are the
- * overlay's, and none are laid past its size. */
 bool GuestRamLending::invariants_hold() const
 {
     AV_SCOPE("GuestRamLending::invariants_hold");
@@ -145,4 +143,4 @@ bool GuestRamLending::invariants_hold() const
            (holders_.size() == 0u || fd_ >= 0);
 }
 
-}  // namespace av
+}

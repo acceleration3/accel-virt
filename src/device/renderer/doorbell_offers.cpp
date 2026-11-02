@@ -38,8 +38,6 @@ Status DoorbellOffers::withdraw(int &descriptor)
     return Status::not_found;
 }
 
-/* No descriptor stands at two pages: it would be closed twice, the second
- * time perhaps under a descriptor number something else has reused. */
 bool DoorbellOffers::invariants_hold() const
 {
     AV_SCOPE("DoorbellOffers::invariants_hold");
@@ -52,4 +50,4 @@ bool DoorbellOffers::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

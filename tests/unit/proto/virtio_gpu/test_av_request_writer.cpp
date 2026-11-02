@@ -1,5 +1,3 @@
-/* The requests a driver sends to use av contexts, read back by the device's
- * own decoders: the two sides agree on every byte. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -47,7 +45,7 @@ struct Buffer {
     std::uint8_t bytes[AvRequestWriter::max_request_size + 8u];
 };
 
-}  // namespace
+}
 
 TEST(av_request_writer_capset_info, is_get_capset_info_for_the_index)
 { Buffer buffer;
@@ -119,9 +117,6 @@ TEST(av_request_writer_guest_blob, is_a_guest_blob_of_one_entry)
   CHECK(layout.at(64u, 4u) == 0x2000u);
   CHECK(layout.at(68u, 4u) == 0u); }
 
-/* An aperture allocation's scattered pages become one blob with a memory entry
- * per run of adjacent frames, its size their total - two runs here, a lone page
- * then a pair. */
 TEST(av_request_writer_guest_blob_pages, one_entry_per_run_of_adjacent_pages)
 { Buffer buffer;
   AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -142,8 +137,6 @@ TEST(av_request_writer_guest_blob_pages, one_entry_per_run_of_adjacent_pages)
   CHECK(layout.at(72u, 8u) == 0x22222000ull);
   CHECK(layout.at(80u, 4u) == 0x2000u); }
 
-/* A list with a page that is not page-aligned is not complete and is refused;
- * so is the empty list. */
 TEST(av_request_writer_guest_blob_pages, refuses_an_incomplete_list)
 { Buffer buffer;
   AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -180,8 +173,6 @@ TEST(av_request_writer_setup, is_submit_3d_carrying_one_context_setup)
   CHECK_EQ(read_back.doorbell(), 7u);
   CHECK_EQ(read_back.reply_resource(), 42u); }
 
-/* A setup of the current minor carries its options in 48 bytes; one whose
- * options it cannot carry is refused and nothing is left to send. */
 TEST(av_request_writer_setup, carries_a_setup_of_its_own_size)
 { Buffer buffer;
   AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -221,10 +212,6 @@ TEST(av_request_writer, a_request_that_does_not_fit_writes_nothing)
   CHECK_STATUS(none.unref(1u), Status::too_large);
   CHECK_STATUS(none.setup(1u, ContextSetup()), Status::too_large); }
 
-/* A host blob is the device's own shape - HOST3D, mappable, no memory
- * entries - made for one context, with the memory it is wanted as carried as
- * the blob id (docs/host-memory.md); the offset it is mapped at is the
- * guest's to choose, which is why the driver has to be able to say it. */
 TEST(av_request_writer_host_blob, is_a_mappable_host3d_blob_of_no_entries_for_its_context)
 { Buffer buffer;
   AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -244,8 +231,6 @@ TEST(av_request_writer_host_blob, is_a_mappable_host3d_blob_of_no_entries_for_it
   CHECK(HostMemoryRequest(static_cast<std::uint32_t>(decoded.blob_id())).vulkan_type() == 7u);
   CHECK(decoded.size() == 0x200000u); }
 
-/* Pages a process lent: HOST3D_GUEST, not mappable, no entries - the pages
- * follow in ATTACH_BACKING pieces - of the memory named and the size lent. */
 TEST(av_request_writer_adopted_blob, is_an_unmappable_host3d_guest_blob_of_no_entries_yet)
 { Buffer buffer;
   AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -292,7 +277,6 @@ TEST(av_request_writer_unmap_blob, names_the_resource_alone)
   CHECK_STATUS(decoded.decode_resource(reader), Status::ok);
   CHECK_EQ(decoded.resource_id(), 50u); }
 
-/* A request that does not fit writes nothing, as every other one does. */
 TEST(av_request_writer_host_blob, what_does_not_fit_is_not_written)
 { std::uint8_t bytes[40];
   std::memset(bytes, 0xEE, sizeof bytes);

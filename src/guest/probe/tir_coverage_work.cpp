@@ -11,17 +11,14 @@ namespace av {
 namespace {
 
 constexpr int32_t pixel = static_cast<int32_t>(CoverageTriangle::subpixels);
-/* Subpixels across half the target: clip space's unit. */
 constexpr float   half_extent = static_cast<float>(pixel * static_cast<int32_t>(TirCoverageWork::extent / 2u));
 
-}  // namespace
+}
 
 TirCoverageWork::TirCoverageWork(D3d11TirEntry &d3d11)
     : d3d11_(d3d11), made_(false), read_(false), added_(0u), x_{}, y_{}, positions_{}, texels_{}, expected_{}
 {
     AV_SCOPE("TirCoverageWork::TirCoverageWork");
-    /* Rows and columns of strokes 1/32 to 8/32 of a pixel thin, each a
-     * sixteenth further across the pattern's rows than the last. */
     for (int32_t i = 0; i < static_cast<int32_t>(straight); i++) {
         const int32_t width = (1 + i) * pixel / 32;
         const int32_t row = (2 + 3 * i) * pixel + i * pixel / 16;
@@ -29,7 +26,6 @@ TirCoverageWork::TirCoverageWork(D3d11TirEntry &d3d11)
         const int32_t column = row + pixel / 32;
         quad(column, 26 * pixel, column + width, 62 * pixel - i * pixel / 4);
     }
-    /* Strokes a sixteenth of a pixel across, at four slopes. */
     for (int32_t i = 0; i < static_cast<int32_t>(slanted); i++)
         stroke((28 + 8 * i) * pixel, 27 * pixel + i * pixel / 16, (36 + 6 * i) * pixel, 62 * pixel, pixel / 16);
     expect();
@@ -82,7 +78,6 @@ void TirCoverageWork::stroke(int32_t x0, int32_t y0, int32_t x1, int32_t y1, int
     add(x0 + width, y0);
 }
 
-/* Clip space exactly: a subpixel count below 2^24 over a power of two. */
 void TirCoverageWork::add(int32_t x, int32_t y)
 {
     AV_SCOPE("TirCoverageWork::add");
@@ -120,4 +115,4 @@ bool TirCoverageWork::invariants_hold() const
     return added_ == vertices;
 }
 
-}  // namespace av
+}

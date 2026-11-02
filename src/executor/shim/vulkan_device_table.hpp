@@ -1,11 +1,3 @@
-/* One Vulkan device's entry points and memory types, whoever made the device:
- * the compositor's own (CompositorDevice), one DXVK made and lends through its
- * interop - Direct3D 11's (DxvkVulkanDevice) or a Direct3D 9 device's
- * (D3d9VulkanLane) - or a guest's (VulkanBackend, through VulkanMemoryImport).
- * Every image, buffer, import, timeline and copy the executor adds to a device
- * goes through the table its device was loaded into (VulkanImage,
- * VulkanBuffer, VulkanTimeline, QueueWork), and every memory import through
- * one primitive, import_memory. */
 #ifndef AV_VULKAN_DEVICE_TABLE_HPP
 #define AV_VULKAN_DEVICE_TABLE_HPP
 
@@ -22,75 +14,28 @@ public:
     VulkanDeviceTable(const VulkanDeviceTable &) = delete;
     VulkanDeviceTable &operator=(const VulkanDeviceTable &) = delete;
 
-    /* `device`, on `physical` of `instance`, with every entry point it
-     * answers; false for a null handle. What a device was made without is
-     * asked of with interoperates and imports_dma_bufs. The device is not
-     * this table's to destroy. */
     [[nodiscard]] bool load(VkInstance instance, VkPhysicalDevice physical, VkDevice device);
     void               forget();
     bool               loaded() const;
-    /* Whether the device shares memory and timelines with other devices:
-     * exports a dma-buf, and imports, exports and waits on a timeline's fd -
-     * what the compositor and DXVK's devices are refused without. */
     bool               interoperates() const;
-    /* Whether it imports a dma-buf, and says as which types. */
     bool               imports_dma_bufs() const;
     VkDevice           device() const;
-    /* For tests: the device made lost, as a GPU fault would lose it, through
-     * the layer that loses one on request (tests/gpu_fault). False where that
-     * layer is not loaded - everywhere but a test - or nothing is loaded. */
     [[nodiscard]] bool lose() const;
 
-    /* Whether the GPU makes an image as `info` describes - its format, type,
-     * tiling, usage and flags, its view formats, the modifier it is laid out
-     * by, and its extent - over memory it can export as a dma-buf. The rows
-     * the layout places are not asked about: the query has no field for
-     * them, and a driver that refuses them refuses the image. */
     [[nodiscard]] bool supports_exportable(const VkImageCreateInfo &info) const;
-    /* The GPU's own tilings an image like `rows` (ExportableImageInfo's rows,
-     * which it describes but for the layout) can be laid out by instead, at
-     * most `capacity` into `modifiers`: how many. None on a device that cannot
-     * say which modifier it picked. */
     uint32_t           tiled_modifiers(const VkImageCreateInfo &rows, uint64_t *modifiers, uint32_t capacity) const;
-    /* The modifier `image`, laid out by one, was laid out by;
-     * DRM_FORMAT_MOD_INVALID when the device cannot say. */
     uint64_t           modifier_of(VkImage image) const;
-    /* The first memory type `allowed` permits, a device-local one first;
-     * VK_MAX_MEMORY_TYPES for none. */
     uint32_t           memory_type(uint32_t allowed) const;
-    /* Of `allowed`, memory whose bytes another API may read as they are:
-     * device local and host visible first, which a GPU keeps uncompressed for
-     * the CPU's sake - GFX12 compresses the rest of its VRAM, and an OpenCL
-     * buffer over it read the compressed bytes - then as memory_type does. */
     uint32_t           raw_memory_type(uint32_t allowed) const;
-    /* Of `allowed`, memory in system RAM the GPU reaches over the bus: host
-     * visible and not device local (GTT on a discrete GPU), where another
-     * GPU can open it as a dma-buf; VK_MAX_MEMORY_TYPES when there is none,
-     * which allocate_exportable refuses: VRAM is no stand-in. */
     uint32_t           system_memory_type(uint32_t allowed) const;
-    /* Of `allowed`, memory the CPU sees the GPU's writes in without an
-     * invalidate: host visible and coherent, host cached first because the
-     * guest maps the same pages write-back. VK_MAX_MEMORY_TYPES when none is
-     * allowed - a type that is not host visible says nothing of what a CPU
-     * sees, and one that is visible and not coherent would be read stale. */
     uint32_t           coherent_memory_type(uint32_t allowed) const;
-    /* The device's memory types and heaps: none before it is loaded. */
     void                  memory_properties(VkPhysicalDeviceMemoryProperties &answer) const;
-    /* `size` bytes of `type`, exportable as a dma-buf and dedicated to
-     * nothing (docs/host-memory.md). */
     [[nodiscard]] bool    allocate_exportable(VkDeviceSize size, uint32_t type, VkDeviceMemory &memory) const;
-    /* The same, dedicated to `image`, which is not bound to it. */
     [[nodiscard]] bool    allocate_exportable(VkImage image, VkDeviceSize size, uint32_t type,
                                               VkDeviceMemory &memory) const;
-    /* `size` bytes of `type` imported from `descriptor` as `handle`, with
-     * `next` chained after the import - the image or buffer the memory is
-     * dedicated to, a device address - into `memory`. The driver owns the
-     * descriptor only where it made the memory, and only then is it taken
-     * from `descriptor`: a refused import leaves it held. */
     [[nodiscard]] bool    import_memory(OwnedFd &descriptor, VkExternalMemoryHandleTypeFlagBits handle,
                                         VkDeviceSize size, uint32_t type, const void *next,
                                         VkDeviceMemory &memory) const;
-    /* `memory`, host-visible, mapped whole into this process. */
     [[nodiscard]] bool    map_memory(VkDeviceMemory memory, void *&pointer) const;
 
     [[nodiscard]] bool   create_image(const VkImageCreateInfo &info, VkImage &image) const;
@@ -99,14 +44,11 @@ public:
     [[nodiscard]] bool   bind_image(VkImage image, VkDeviceMemory memory) const;
     void                 free_memory(VkDeviceMemory memory) const;
     [[nodiscard]] bool   memory_fd(VkDeviceMemory memory, VkExternalMemoryHandleTypeFlagBits type, int &fd) const;
-    /* The first row of the only memory plane of an image laid out by a
-     * modifier (ExportableImageInfo): where it starts and its pitch. */
     VkSubresourceLayout  row_layout(VkImage image) const;
 
     [[nodiscard]] bool create_buffer(const VkBufferCreateInfo &info, VkBuffer &buffer) const;
     void               destroy_buffer(VkBuffer buffer) const;
     VkMemoryRequirements buffer_requirements(VkBuffer buffer) const;
-    /* The memory types a dma-buf `fd` may be imported as; 0 for none. */
     uint32_t           dma_buf_types(int fd) const;
     [[nodiscard]] bool bind_buffer(VkBuffer buffer, VkDeviceMemory memory) const;
     [[nodiscard]] bool create_semaphore(const void *chain, VkSemaphore &semaphore) const;
@@ -115,7 +57,6 @@ public:
                                            int fd) const;
     [[nodiscard]] bool semaphore_fd(VkSemaphore semaphore, VkExternalSemaphoreHandleTypeFlagBits type,
                                     int &fd) const;
-    /* Waits for `semaphore` to reach `value`, at most `nanoseconds`. */
     [[nodiscard]] bool wait_semaphore(VkSemaphore semaphore, uint64_t value, uint64_t nanoseconds) const;
 
     [[nodiscard]] bool create_command_pool(uint32_t family, VkCommandPool &pool) const;
@@ -128,18 +69,14 @@ public:
                                uint32_t count, const VkImageMemoryBarrier *barriers) const;
     void               copy_image(VkCommandBuffer buffer, VkImage source, VkImage destination,
                                   const VkImageCopy &region) const;
-    /* `count` regions of `source`, in TRANSFER_SRC_OPTIMAL, into `destination`. */
     void               copy_image_to_buffer(VkCommandBuffer buffer, VkImage source, VkBuffer destination,
                                             uint32_t count, const VkBufferImageCopy *regions) const;
-    /* Everything `from` wrote is available to `to`, memory as a whole. */
     void               memory_barrier(VkCommandBuffer buffer, VkPipelineStageFlags from, VkPipelineStageFlags to,
                                       const VkMemoryBarrier &barrier) const;
     [[nodiscard]] bool submit(VkQueue queue, const VkSubmitInfo &submit) const;
     void               queue_idle(VkQueue queue) const;
 
 private:
-    /* Whether the image `info` describes, viewed as `views` and laid out by
-     * `modifier` (none for any other tiling), exports as a dma-buf. */
     bool supports_layout(const VkImageCreateInfo &info, const VkImageFormatListCreateInfo *views,
                          const uint64_t *modifier) const;
 
@@ -179,10 +116,9 @@ private:
     PFN_vkCmdCopyImageToBuffer       copy_image_to_buffer_;
     PFN_vkQueueSubmit                submit_;
     PFN_vkQueueWaitIdle              queue_idle_;
-    /* vkAvLoseDeviceAV, which only the loss layer answers. */
     void (*lose_)(VkDevice device);
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VULKAN_DEVICE_TABLE_HPP
+#endif

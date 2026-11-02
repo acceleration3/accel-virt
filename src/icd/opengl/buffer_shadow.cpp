@@ -86,7 +86,6 @@ void BufferShadow::report(StateWriter &writer, uint32_t index) const
     writer.close();
 }
 
-/* A shadow holds its block exactly while it names a buffer and has bytes. */
 bool BufferShadow::invariants_hold() const
 {
     AV_SCOPE("BufferShadow::invariants_hold");
@@ -94,4 +93,4 @@ bool BufferShadow::invariants_hold() const
            offset_ + length_ >= offset_;
 }
 
-}  // namespace av::glicd
+}

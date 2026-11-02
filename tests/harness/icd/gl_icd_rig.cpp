@@ -14,7 +14,7 @@ namespace {
 const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
                          PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 
-}  // namespace
+}
 
 GlIcdRig::GlIcdRig(bool present_thread)
     : platform_(), kmt_(), host_(kmt_), trace_(), lock_(trace_, 'H'), send_lock_(trace_, 'S'), log_(), surface_(),
@@ -62,9 +62,7 @@ void *GlIcdRig::current_context(const char *renderer, const char *version)
     void *const context = opengl32_.create_context(dc());
     if (context == nullptr) return nullptr;
     host_.gl_make(renderer, version);
-    /* The root's policy reports a row, so the make asks the host's list. */
     host_.gl_policy(0);
-    /* Format 1 is double-buffered D24S8 with no samples. */
     host_.gl_window(1u, 1u);
     return opengl32_.make_current(dc(), context) ? context : nullptr;
 }
@@ -79,4 +77,4 @@ void *GlIcdRig::current_core_context()
     return opengl32_.make_current(dc(), context) ? context : nullptr;
 }
 
-}  // namespace av
+}

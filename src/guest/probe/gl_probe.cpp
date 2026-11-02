@@ -12,9 +12,6 @@
 namespace av {
 
 namespace {
-
-/* triangle.vert and solid.frag for OpenGL, which numbers vertices with
- * gl_VertexID rather than gl_VertexIndex. */
 constexpr const char *triangle_source = "#version 330 core\n"
                                         "void main() {\n"
                                         "    vec2 corner = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);\n"
@@ -29,7 +26,6 @@ constexpr const char *solid_source = "#version 330 core\n"
 constexpr uint32_t lowest_major = 3u, highest_major = 4u, highest_minor = 6u, bytes_per_pixel = 4u;
 constexpr uint32_t version_scale = 10u;
 
-/* WGL_ARB_create_context(_profile, _robustness) names. */
 constexpr int32_t major_version = 0x2091, minor_version = 0x2092, profile_mask = 0x9126;
 constexpr int32_t context_flags = 0x2094, robust_access_bit = 0x4;
 constexpr int32_t reset_strategy = 0x8256, lose_context_on_reset = 0x8252;
@@ -38,7 +34,6 @@ constexpr int32_t both_profiles = 3;
 constexpr uint8_t share_texels[GlProbe::share_extent * GlProbe::share_extent * bytes_per_pixel] = {
     1u, 2u, 3u, 255u, 40u, 50u, 60u, 255u, 70u, 80u, 90u, 255u, 200u, 210u, 220u, 255u};
 
-/* Leading digits as a number, and where they end; `end` null when there are none. */
 uint32_t number_at(const char *text, const char *&end)
 {
     AV_SCOPE("number_at");
@@ -52,7 +47,7 @@ uint32_t number_at(const char *text, const char *&end)
 }
 
 
-}  // namespace
+}
 
 GlProbe::GlProbe(Kmt &kmt, GuestReport &report, GlEntry &gl, ImageSink &images)
     : clock_(kmt), report_(report), gl_(gl), images_(images), steps_(kmt, report, "opengl")
@@ -70,9 +65,6 @@ void GlProbe::run()
     draw_step("draw");
     share_step(context);
     busy_step(context);
-    /* opengl32 names an extension function only to a thread with a context
-     * current, so the first context stays current while the attribute
-     * contexts are made; the forced loss takes it down with its device. */
     compat_step();
     interval_step();
     resized_step();
@@ -145,8 +137,6 @@ void GlProbe::draw_step(const char *name)
     gl_.delete_program(made);
 }
 
-/* The frame now on the window: swapped, read back, saved for a person to open,
- * and judged pixel by pixel against the colour both draws make. */
 void GlProbe::judge_frame(const char *name)
 {
     AV_SCOPE("GlProbe::judge_frame");
@@ -160,20 +150,13 @@ void GlProbe::judge_frame(const char *name)
     TextBuffer     named(picture, sizeof picture);
     named.append("opengl-");
     named.append(name);
-    /* glReadPixels returns the bottom row first. */
     images_.save(named.text(), BmpImage(pixels, width, height, BmpImage::Rows::bottom_first));
     const uint32_t count = width * height;
     const uint32_t matched = ProbeColour(colour, sizeof colour).matched(pixels, count, bytes_per_pixel);
-    /* A window of no pixels proves nothing, however well the swap went. */
     const bool     whole = count != 0u && swapped && error == 0u && matched == count;
     static_cast<void>(steps_.check_measured(name, whole ? Status::ok : Status::invalid_state, matched));
 }
 
-/* Feature 051, US1: the profile the host granted, and the fixed-function
- * pipeline drawn through a display list on it. The measurement is the mask, so
- * a report says which profile the run had; a core context is not a failure of
- * this driver, it is a host with no compatibility profile, and the step says
- * so with the pixels it could not draw. */
 void GlProbe::compat_step()
 {
     AV_SCOPE("GlProbe::compat_step");
@@ -194,12 +177,6 @@ void GlProbe::compat_step()
     judge_frame("compat");
 }
 
-/* Feature 051, US2.2: sixty swaps at interval 1 cannot have taken less time
- * than fifty-nine vertical blanks - the first waits for whatever was left of
- * one - and interval 0 waits for none. Judged against fifty-eight: the period
- * is a mean of blanks a waiter woke for a little late (VblankClock), and a
- * swap count just past fifty-nine measured against one even a fraction long
- * comes to less; a driver that held nothing comes to none either way. */
 void GlProbe::interval_step()
 {
     AV_SCOPE("GlProbe::interval_step");
@@ -212,9 +189,6 @@ void GlProbe::interval_step()
         static_cast<void>(steps_.check_measured("interval", Status::not_found, 0u));
         return;
     }
-    /* What interval 0 does instead is the ICD's to prove, and its own test
-     * does (gl_icd_root.a_swap_waits_for_the_blanks_its_interval_asks_for);
-     * here the question is only whether the driver held the frames. */
     const uint64_t started = clock_.now();
     for (uint32_t frame = 0u; frame < paced_frames; frame++) static_cast<void>(gl_.swap_buffers());
     const uint64_t paced = clock_.now() - started;
@@ -223,16 +197,11 @@ void GlProbe::interval_step()
                                             static_cast<uint32_t>(paced / period)));
 }
 
-/* Feature 051, US2.3: a window resized under a context that keeps swapping is
- * presented at its new extent, and nothing had to be made again by hand. */
 void GlProbe::resized_step()
 {
     AV_SCOPE("GlProbe::resized_step");
     const uint32_t width = gl_.width();
     const uint32_t height = gl_.height();
-    /* Widened, not narrowed: Windows clamps a window to its minimum tracking
-     * size, so a narrower one is a resize the window system refuses and this
-     * step would be judging user32 rather than the driver. */
     const uint32_t widened = width * 2u;
     if (width == 0u) {
         static_cast<void>(steps_.check_measured("resized", Status::not_supported, 0u));
@@ -242,8 +211,6 @@ void GlProbe::resized_step()
         static_cast<void>(steps_.check_measured("resized", Status::not_supported, width));
         return;
     }
-    /* The first swap presents what the window had; the second is the first at
-     * the new extent. */
     static_cast<void>(gl_.swap_buffers());
     gl_.viewport(0, 0, static_cast<int32_t>(gl_.width()), static_cast<int32_t>(gl_.height()));
     gl_.clear_colour(0.0f, 0.0f, 0.0f, 1.0f);
@@ -254,7 +221,6 @@ void GlProbe::resized_step()
     static_cast<void>(gl_.resize(width, height));
 }
 
-/* Both contexts are shared before either is made, as the ICD requires. */
 void GlProbe::share_step(void *current)
 {
     AV_SCOPE("GlProbe::share_step");
@@ -279,7 +245,6 @@ void GlProbe::share_step(void *current)
             for (uint32_t at = 0u; at < sizeof read; at += bytes_per_pixel)
                 matched += __builtin_memcmp(read + at, share_texels + at, bytes_per_pixel) == 0 ? 1u : 0u;
         }
-        /* Deleted from whichever context shares it. */
         gl_.bind_texture(0u);
         gl_.delete_texture(texture);
     }
@@ -302,7 +267,6 @@ void GlProbe::busy_step(void *current)
     static_cast<void>(steps_.check_measured("busy", error == error_busy ? Status::ok : Status::invalid_state, error));
 }
 
-/* The fault loses every context on the device, so nothing else is current. */
 void GlProbe::lost_step()
 {
     AV_SCOPE("GlProbe::lost_step");
@@ -391,4 +355,4 @@ uint32_t GlProbe::shader(uint32_t type, const char *source)
 }
 
 
-}  // namespace av
+}

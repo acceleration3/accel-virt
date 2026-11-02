@@ -4,8 +4,6 @@
 
 namespace inspector {
 namespace {
-
-// The path less its last name/index pair; empty for a root ("adapter/0").
 StringView ParentPath(StringView path) {
     const usize index_slash = path.RFind('/');
     if (index_slash == StringView::Npos) {
@@ -15,7 +13,7 @@ StringView ParentPath(StringView path) {
     return name_slash == StringView::Npos ? StringView{} : path.Substr(0, name_slash);
 }
 
-} // namespace
+}
 
 const StateField* StateNode::Field(StringView key) const noexcept {
     for (const StateField& field : fields) {
@@ -131,4 +129,4 @@ const StateNode* StateDump::Ancestor(const StateNode& node, StringView kind) con
     return nullptr;
 }
 
-} // namespace inspector
+}

@@ -54,4 +54,4 @@ uint64_t LogQueue::take_dropped()
     return dropped;
 }
 
-}  // namespace av
+}

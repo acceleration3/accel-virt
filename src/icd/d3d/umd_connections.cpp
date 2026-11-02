@@ -8,7 +8,6 @@ namespace av::d3d {
 UmdConnections::UmdConnections(Kmt &kmt) : connections_()
 {
     AV_SCOPE("UmdConnections::UmdConnections");
-    /* Storage built with the table cannot already hold one. */
     for (ObjectStorage<UmdConnection> &connection : connections_) static_cast<void>(connection.construct(kmt));
 }
 
@@ -65,8 +64,6 @@ void UmdConnections::report(StateWriter &writer) const
     }
 }
 
-/* Two open on one adapter would be two sets of kernel objects for what the
- * runtimes treat as one. */
 bool UmdConnections::invariants_hold() const
 {
     AV_SCOPE("UmdConnections::invariants_hold");
@@ -80,4 +77,4 @@ bool UmdConnections::invariants_hold() const
     return true;
 }
 
-}  // namespace av::d3d
+}

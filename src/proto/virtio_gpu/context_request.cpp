@@ -15,7 +15,7 @@ void ContextRequest::read_header(WireReader &reader)
     AV_SCOPE("ContextRequest::read_header");
     reader.skip(context_id_offset);
     context_id_ = reader.read_u32();
-    static_cast<void>(reader.read_u32());   /* ring_idx and padding */
+    static_cast<void>(reader.read_u32());
 }
 
 Status ContextRequest::decode_destroy(WireReader &reader)
@@ -68,4 +68,4 @@ uint32_t ContextRequest::command_size() const
     return command_size_;
 }
 
-}  // namespace av
+}

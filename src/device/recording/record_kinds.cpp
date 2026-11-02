@@ -5,8 +5,6 @@
 namespace av {
 
 namespace {
-
-/* One name the `record-kinds` property accepts, and what it turns on. */
 class KindName {
 public:
     constexpr KindName(const char *text, uint32_t bit) : text_(text), bit_(bit) {}
@@ -15,8 +13,6 @@ public:
     {
         uint32_t index = 0u;
         for (; index < length; index++) {
-            /* `length` is a token, so `text[index]` is never the terminator:
-             * a name that ends first differs here. */
             if (text_[index] != text[index]) return 0u;
         }
         return text_[index] == '\0' ? bit_ : 0u;
@@ -35,7 +31,7 @@ constexpr KindName kind_names[] = {
 
 constexpr uint32_t name_count = sizeof kind_names / sizeof kind_names[0];
 
-}  // namespace
+}
 
 RecordKinds::RecordKinds() : mask_(by_default)
 {
@@ -96,4 +92,4 @@ bool RecordKinds::invariants_hold() const
     return mask_ != 0u && (mask_ & ~every_kind) == 0u;
 }
 
-}  // namespace av
+}

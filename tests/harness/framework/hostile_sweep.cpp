@@ -46,4 +46,4 @@ void HostileSweep::run() const
     feed(buffer.data(), length_);
 }
 
-}  // namespace av
+}

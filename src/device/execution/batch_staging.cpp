@@ -68,11 +68,10 @@ size_t   BatchStaging::reply_capacity() const
     return reply_capacity_;
 }
 
-/* A capacity is only ever claimed for a block that is held. */
 bool BatchStaging::invariants_hold() const
 {
     AV_SCOPE("BatchStaging::invariants_hold");
     return (payload_ != nullptr || payload_capacity_ == 0u) && (reply_ != nullptr || reply_capacity_ == 0u);
 }
 
-}  // namespace av
+}

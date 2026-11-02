@@ -1,17 +1,3 @@
-/* Hostile replies into the ICD's physical-device properties (feature 045, T028).
- *
- * The generated decoder reads the host's reply into the application's own
- * structures, labels included; PhysicalDeviceView then writes the adapter's LUID
- * into the application's identity node. Whatever the reply: every structure's
- * sType and pNext come back as the application set them, nothing past a
- * structure is written, the API version is never newer than 1.3, and an identity
- * node the application passed carries the adapter's LUID. ASan and UBSan judge
- * the rest.
- *
- * An input is a byte of flags - bit 0, vkGetPhysicalDeviceProperties rather
- * than the 2 form; bit 1, an identity node in the chain; bit 2, a driver node
- * before it; bit 3, a point-clipping node, the smallest a relabelling could aim
- * the LUID at - and then the reply, exactly as the transport hands it over. */
 #include "harness/icd/icd_rig.hpp"
 #include "harness/transport/mock_transport.hpp"
 #include "icd/vulkan/physical_device_view.hpp"
@@ -37,7 +23,6 @@ void require(bool holds)
     if (!holds) __builtin_trap();
 }
 
-/* One root for the process: libFuzzer calls with no context of its own. */
 class Target {
 public:
     Target()
@@ -100,7 +85,7 @@ private:
     av::MockTransport transport_;
 };
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

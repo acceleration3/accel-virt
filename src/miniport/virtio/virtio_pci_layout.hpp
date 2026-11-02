@@ -1,5 +1,3 @@
-/* Where a virtio-pci device's structures live, as its capabilities describe
- * them. Built only by VirtioCapabilityWalk. */
 #ifndef AV_VIRTIO_PCI_LAYOUT_HPP
 #define AV_VIRTIO_PCI_LAYOUT_HPP
 
@@ -24,7 +22,6 @@ public:
     const VirtioRegion &isr() const;
     const VirtioRegion &device() const;
     uint32_t            notify_multiplier() const;
-    /* Absent if the device has no shared memory region with this id. */
     VirtioRegion        shared_memory(uint8_t id) const;
 
 private:
@@ -38,6 +35,6 @@ private:
     uint8_t      shared_memory_count_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VIRTIO_PCI_LAYOUT_HPP
+#endif

@@ -1,9 +1,3 @@
-/* The adversarial platform. Not a stub: it enforces every rule the platform
- * contract states, in every unit test, and a rule broken without the test
- * claiming it fails the test when the mock is destroyed.
- *
- * One instance per test, constructed on the stack. No globals, no reset hook.
- * Tests are single-threaded, so the lock stack models one thread. */
 #ifndef AV_MOCK_PLATFORM_HPP
 #define AV_MOCK_PLATFORM_HPP
 
@@ -25,11 +19,8 @@ public:
     static constexpr std::uint32_t max_register_windows = 16u;
 
     MockPlatform();
-    /* The NTSTATUS register_miniport answers, as dxgkrnl would. */
     explicit MockPlatform(std::uint32_t registration_status);
-    /* The same, with every line also written where it outlives this platform. */
     MockPlatform(std::uint32_t registration_status, LogRecord &record);
-    /* The same, with one value under the service key for DriverEntry to read. */
     MockPlatform(std::uint32_t registration_status, const ServiceValue &service);
     ~MockPlatform();
     MockPlatform(const MockPlatform &) = delete;
@@ -40,46 +31,19 @@ public:
     void    *allocate_contiguous(std::size_t bytes) override;
     void     release_contiguous(void *block, std::size_t bytes) override;
     std::uint64_t physical_address(void *block) override;
-    /* A zero-filled block at a fresh physical address, as allocate_contiguous
-     * makes one - so map_frame and a device reach its frames - whose record
-     * read_page_frames and map_pages_to_process take. Null for a size that is
-     * not whole pages, at DISPATCH, and at the allocation
-     * fail_page_allocation_at names. A block left allocated fails the test. */
     void         *allocate_pages(std::uint64_t bytes) override;
-    /* Releasing pages a process still has a view of is frame misuse. */
     void          release_pages(void *pages) override;
     Status        read_page_frames(void *mdl, std::uint32_t first, std::uint32_t count,
                                    std::uint64_t *frames) override;
-    /* A frame inside a contiguous block maps to that block's own memory; any
-     * other is refused with null. A view left mapped fails the test. */
     std::uint8_t *map_frame(std::uint64_t frame) override;
     void          unmap_frame(std::uint8_t *view) override;
-    /* A copy of the pages in one buffer, written back to them on unmapping, as
-     * a real mapping's writes land in the pages: one more map for
-     * fail_frame_map_at to count, and a view left mapped fails the test. */
     std::uint8_t *map_pages(const GuestPageList &pages, void *&mapping) override;
     void          unmap_pages(std::uint8_t *view, void *mapping) override;
-    /* A view of `bytes` at `physical` in the one process a test models: the
-     * memory behind it where a resolver says what that is, otherwise an
-     * address no live view overlaps and nothing may touch. Recorded until
-     * unmapped, and a view left mapped fails the test. Misaligned or empty
-     * ranges are frame misuse. */
     Status        map_to_process(std::uint64_t physical, std::uint64_t bytes, PageCaching caching,
                                  std::uint64_t &view, void *&mapping) override;
-    /* The block itself is the view: the modelled process and the test share one
-     * address space, so what a process writes there the device reads. Counted
-     * with map_to_process for fail_process_map_at. */
-    /* A range lend_process_range registered: its frames, as an MDL
-     * read_page_frames reads, held until unlocked. Anything else is a range
-     * the modelled process does not have, refused as the kernel's probe
-     * refuses it; fail_process_lock_at refuses one that is there. A lock left
-     * held fails the test. */
     Status        lock_process_pages(std::uint64_t address, std::uint64_t bytes, void *&locked) override;
     void          unlock_process_pages(void *locked) override;
     Status        map_pages_to_process(void *pages, std::uint64_t &view, void *&mapping) override;
-    /* As map_pages_to_process, the view marked read-only for
-     * read_only_process_mappings; the modelled process is trusted to keep to
-     * it. */
     Status        map_pages_to_process_read_only(void *pages, std::uint64_t &view, void *&mapping) override;
     void          unmap_from_process(void *mapping) override;
     void     zero(void *dst, std::size_t bytes) override;
@@ -88,8 +52,6 @@ public:
     void     require_irql_at_most(Irql ceiling, const char *function) override;
     Irql     acquire_spin_lock(std::uintptr_t &word, LockRank rank) override;
     void     release_spin_lock(std::uintptr_t &word, LockRank rank, Irql previous) override;
-    /* Taken as acquire_spin_lock takes it, unless the test holds that rank
-     * elsewhere. */
     bool     try_acquire_spin_lock(std::uintptr_t &word, LockRank rank, Irql &previous) override;
     void     initialize_mutex(void *storage) override;
     void     acquire_mutex(void *storage, LockRank rank) override;
@@ -99,18 +61,13 @@ public:
     void     acquire_wait_mutex(void *storage, LockRank rank) override;
     void     release_wait_mutex(void *storage, LockRank rank) override;
     std::uint64_t interrupt_time() const override;
-    /* The test clock, at 10 000 000 ticks per second. */
     std::uint64_t performance_counter(std::uint64_t &frequency) const override;
-    /* One thread: a plain store and load. */
     void          store_atomic(std::uint64_t &target, std::uint64_t value) override;
     std::uint64_t load_atomic(std::uint64_t &source) override;
     std::uint64_t add_atomic(std::uint64_t &target, std::uint64_t delta) override;
     void     stall(std::uint32_t microseconds) override;
-    /* The first byte of the storage is whether the event is set. */
     void     initialize_wake_event(void *storage) override;
     void     set_wake_event(void *storage) override;
-    /* A wait is when the device acts (on_stall's callback); an event that is
-     * still not set then times the wait out, the clock moving by all of it. */
     bool     wait_wake_event(void *storage, std::uint64_t ticks) override;
     std::uint8_t  read_register_u8(void *address) override;
     std::uint16_t read_register_u16(void *address) override;
@@ -120,7 +77,6 @@ public:
     void     write_register_u32(void *address, std::uint32_t value) override;
     void     write_register_u64(void *address, std::uint64_t value) override;
     void     log(const char *message) override;
-    /* Kept apart from log(): a test reads what a bugcheck wrote. */
     void     log_at_bugcheck(const char *message) override;
     bool     register_bugcheck(void *buffer, std::size_t bytes, BugcheckRoutine routine) override;
     void     deregister_bugcheck() override;
@@ -138,150 +94,81 @@ public:
     std::uint32_t read_service_u32(void *registry_path, const char *name, std::uint32_t fallback) override;
     Status   write_driver_u64(void *physical_device_object, const char *name, std::uint64_t value) override;
 
-    /* The Nth device property or driver-key write from now (1-based) is
-     * refused with not_supported, as the PnP manager refuses one; 0 disables. */
     void          refuse_device_write_at(std::uint32_t nth);
-    /* The device whose description was last set, and whether it is `ascii`
-     * exactly (UTF-16, NUL-terminated, `bytes` counting the NUL). */
     void         *described_device() const;
     bool          device_description_is(const char *ascii) const;
     std::uint32_t device_writes() const;
-    /* The driver-key value `name` as last written: a REG_SZ equal to `ascii`,
-     * or a number of either width, and its REG_ type (1, 4 or 11; 0 when never
-     * written). */
     bool          driver_text_is(const char *name, const char *ascii) const;
     std::uint64_t driver_number(const char *name) const;
     std::uint32_t driver_value_type(const char *name) const;
 
-    /* Fail the Nth allocation from now (1-based); 0 disables. This is how
-     * out-of-memory paths reach full branch coverage instead of being assumed
-     * correct. */
     void fail_allocation_at(std::uint32_t nth);
 
-    /* Simulates the IRQL a DDI is entered at. */
     void set_irql(Irql irql);
 
     void advance_time(std::uint64_t ticks);
-    /* The clock's ticks spent in stall, which holds a processor, and in timed
-     * out waits, which do not. */
     std::uint64_t stalled_ticks() const;
     std::uint64_t slept_ticks() const;
 
-    /* Register accesses from `base` to base + window.length() reach `window`,
-     * the way a mapped BAR reaches the device. Anything else is unmapped. */
     void          attach_register_window(void *base, RegisterWindow &window);
-    /* Every window whose base lies in [base, base + length). */
     void          detach_register_windows(void *base, std::uint64_t length);
     std::uint32_t attached_register_windows() const;
 
-    /* What the device does while the driver stalls waiting for it: the only
-     * point a test can answer a request the driver is blocked on. */
     using StallCallback = void (*)(void *context);
     void on_stall(StallCallback callback, void *context);
-    /* Called inside every blocking lock acquire, before the lock is taken: the
-     * moment a thread is waiting on it. */
     void on_acquire(StallCallback callback, void *context);
-    /* Called inside every load_atomic, before it reads: the moment another
-     * processor's store can land between two loads of a seqlock. */
     void on_load(StallCallback callback, void *context);
 
-    /* An MDL of `page_count` pages with those frame addresses, as dxgkrnl hands
-     * one to BuildPagingBuffer. The frames must outlive this platform; any
-     * other pointer is an MDL this platform never made, and is refused. */
     void *attach_page_frames(const std::uint64_t *frames, std::uint32_t page_count);
 
-    /* The modelled process's memory at `address`: `page_count` pages, these
-     * frames. The frames must outlive this platform. */
     void          lend_process_range(std::uint64_t address, const std::uint64_t *frames, std::uint32_t page_count);
-    /* Makes the Nth lock_process_pages from now (1-based) answer no_memory. */
     void          fail_process_lock_at(std::uint32_t nth);
-    /* Locks lock_process_pages took and unlock_process_pages has not let go. */
     std::uint32_t process_locks() const;
 
-    /* What a device sees at a fake physical address: the host pointer, if the
-     * whole range lies inside one contiguous block. */
     void *translate_physical(std::uint64_t physical_address, std::size_t bytes) const;
-    /* The physical address of the newest contiguous block still held; 0 for none. */
     std::uint64_t last_contiguous_address() const;
 
-    /* Every try_acquire of a lock of `rank` fails, as if another thread held
-     * it, until released_elsewhere. */
     void hold_elsewhere(LockRank rank);
     void released_elsewhere();
 
-    /* An event the modelled process holds a handle to, which may be set;
-     * the handle reference_event takes. */
     std::uint64_t make_process_event();
-    /* The process closes its handle: the event lives on while the kernel
-     * still holds it. */
     void          close_process_event(std::uint64_t handle);
-    /* The times the kernel set the event `handle` named, and the references
-     * it still holds on it. */
     std::uint32_t event_signals(std::uint64_t handle) const;
     std::uint32_t event_references(std::uint64_t handle) const;
 
-    /* The next register_bugcheck is refused. */
     void refuse_bugcheck_registration();
-    /* The kernel bugchecks: the registered routine runs with its buffer at
-     * above DISPATCH; false with nothing registered. */
     bool bugcheck();
     bool          bugcheck_registered() const;
     const void   *bugcheck_buffer() const;
     std::size_t   bugcheck_bytes() const;
     std::uint32_t bugcheck_lines() const;
-    /* Whether any line written at a bugcheck holds `text`. */
     bool          bugcheck_line(const char *text) const;
 
-    /* Removes one recorded occurrence of `kind`; false if there was none. */
     bool claim(Violation kind);
 
     std::uint32_t unclaimed_violations() const;
     std::uint32_t live_allocations() const;
     std::uint32_t mapped_frames() const;
-    /* Makes the Nth map_frame from now (1-based) answer null; 0 disables. */
     void          fail_frame_map_at(std::uint32_t nth);
-    /* Process views still mapped. */
     std::uint32_t process_mappings() const;
-    /* Of process_mappings, those made read-only. */
     std::uint32_t read_only_process_mappings() const;
-    /* Of process_mappings, those of device memory made write-combined. */
     std::uint32_t write_combined_process_mappings() const;
-    /* Whether a live process view at `view` maps `bytes` of `physical`. */
     bool          maps_into_process(std::uint64_t view, std::uint64_t physical, std::uint64_t bytes) const;
-    /* Makes the Nth map_to_process from now (1-based) answer no_memory; 0
-     * disables. */
     void          fail_process_map_at(std::uint32_t nth);
-    /* Makes the Nth allocate_pages from now (1-based) answer null; 0 disables. */
     void          fail_page_allocation_at(std::uint32_t nth);
-    /* What a rig whose host GPU imports guest RAM answers for `bytes` of pages:
-     * zeroed memory a second mapping of which the host can take, and its guest
-     * physical address; null for none, and allocate_pages uses its own. */
     using PageBacker = void *(*)(void *context, std::uint64_t bytes, std::uint64_t &physical);
     void          back_pages_with(PageBacker backer, void *context);
-    /* Blocks allocate_pages handed out and release_pages has not taken back. */
     std::uint32_t owned_page_blocks() const;
-    /* How many blocks allocate_pages has ever handed out, and the memory of
-     * the `ordinal`th of them (0-based) while it is live, null otherwise: how
-     * a test plays the host on pages only the driver maps, such as a context's
-     * fence page. */
     std::uint32_t page_blocks_made() const;
     std::uint8_t *page_block(std::uint32_t ordinal) const;
-    /* Frees every such block no process view maps - what a driver kept out of
-     * use for good, which the test then counts - and answers how many. */
     std::uint32_t reclaim_page_blocks();
-    /* What a rig whose device backs device memory answers for a process view
-     * of `bytes` at `physical`: the host memory there, or null for none. */
     using ProcessViewResolver = void *(*)(void *context, std::uint64_t physical, std::uint64_t bytes);
     void          resolve_process_views(ProcessViewResolver resolver, void *context);
     std::uint32_t allocations_made() const;
     std::uint32_t locks_held() const;
-    /* Whether a lock of `rank` is held right now. */
     bool          holds(LockRank rank) const;
     std::uint32_t logged() const;
-    /* The last message logged, empty before the first, cut at its capacity. */
     const char   *last_log() const;
-    /* Whether any line logged so far holds `text`: a line written in the middle
-     * of a DDI is not the last one by the time the test looks. */
     bool          logged_line(const char *text) const;
     void         *registered_driver_object() const;
     void         *registered_registry_path() const;
@@ -294,10 +181,7 @@ private:
     static constexpr std::uint32_t max_frame_views = 256u;
     static constexpr std::uint32_t max_process_views = 256u;
     static constexpr std::uint32_t max_events = 32u;
-    /* A handle value as a process's look: a multiple of four, never 0. */
     static constexpr std::uint64_t first_event_handle = 0x1F0u;
-    /* Where the modelled process's views start: a user-mode address, so a test
-     * reading one back can tell it from any host pointer. */
     static constexpr std::uint64_t first_process_view = 0x00007FF000000000ull;
     static constexpr std::uint64_t first_physical_address = 0x100000000ull;
     static constexpr std::uint32_t violation_kinds =
@@ -307,7 +191,6 @@ private:
         void         *block;
         std::uint64_t physical_address;
         std::size_t   bytes;
-        /* Memory a page backer lent, which is the rig's to free. */
         bool          borrowed = false;
     };
 
@@ -315,11 +198,9 @@ private:
         std::uint64_t handle = 0u;
         std::uint32_t references = 0u;
         std::uint32_t signals = 0u;
-        /* Whether the process still holds its handle. */
         bool          open = false;
     };
 
-    /* The event reference_event answered as `event`, or null for none. */
     MockEvent *referenced(void *event);
     const MockEvent *event_of(std::uint64_t handle) const;
 
@@ -338,7 +219,6 @@ private:
         std::uint32_t        count;
     };
 
-    /* One allocate_pages block: `record` is what its caller holds. */
     struct OwnedPages {
         PageFrames     record;
         void          *block;
@@ -350,7 +230,6 @@ private:
     };
     static constexpr std::uint32_t max_owned_pages = 512u;
 
-    /* The live block `pages` names, or null. */
     OwnedPages *find_owned(void *pages);
 
     struct AttachedWindow {
@@ -367,7 +246,6 @@ private:
     void record(Violation kind, const char *format, ...);
     void push_lock(LockRank rank, Irql previous);
     bool pop_lock(LockRank rank);
-    /* The window holding [address, address + width), and the offset in it. */
     RegisterWindow *route(void *address, std::uint32_t width, std::uint64_t &offset);
 
     void         *live_[max_live];
@@ -377,7 +255,6 @@ private:
     std::uint32_t contiguous_count_;
     std::uint64_t next_physical_address_;
     std::uint8_t *frame_views_[max_frame_views] = {};
-    /* map_pages' views: the buffer and the frames it is written back to. */
     struct PageMapping {
         std::uint8_t  *view;
         std::uint64_t *frames;
@@ -456,17 +333,15 @@ private:
     static constexpr std::uint32_t max_driver_values = 16u;
     static constexpr std::size_t   max_value_name = 64u;
     static constexpr std::size_t   max_value_units = 128u;
-    static constexpr std::uint32_t registry_text = 1u;     /* REG_SZ */
-    static constexpr std::uint32_t registry_u32 = 4u;      /* REG_DWORD */
-    static constexpr std::uint32_t registry_u64 = 11u;     /* REG_QWORD */
+    static constexpr std::uint32_t registry_text = 1u;
+    static constexpr std::uint32_t registry_u32 = 4u;
+    static constexpr std::uint32_t registry_u64 = 11u;
     struct DriverValue {
         char          name[max_value_name];
         std::uint32_t type;
         std::uint16_t text[max_value_units];
         std::uint64_t number;
     };
-    /* Whether this write is the one refuse_device_write_at named; records a
-     * write above PASSIVE. */
     bool         device_write_refused(const char *function);
     DriverValue *driver_value(const char *name, bool create);
     const DriverValue *find_driver_value(const char *name) const;
@@ -481,6 +356,6 @@ private:
     std::uint32_t  driver_value_count_ = 0u;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MOCK_PLATFORM_HPP
+#endif

@@ -29,8 +29,6 @@ bool D3d9FrameCopier::connect(IDirect3DDevice9 *device)
 void D3d9FrameCopier::close()
 {
     AV_SCOPE("D3d9FrameCopier::close");
-    /* Closing waits for the copies in flight and flushes DXVK's recorder, as a
-     * copy does, so another frame's copy must not be recording meanwhile. */
     lane_.lock_device();
     copies_.close();
     lane_.unlock_device();
@@ -43,9 +41,6 @@ IDirect3DDevice9 *D3d9FrameCopier::device() const
     return lane_.device();
 }
 
-/* The recording thread is not the session's, so DXVK's device lock is taken
- * for what touches its recorder - the image's preparation and the flush - and
- * let go before the wait, which the session's own commands would stall on. */
 StagedFrame::Copying D3d9FrameCopier::copy(IDirect3DSurface9 *surface, const AvFrameCopy &target, uint32_t wait_ms,
                                            uint64_t &value)
 {
@@ -72,4 +67,4 @@ bool D3d9FrameCopier::wait(uint64_t value, uint32_t wait_ms) const
     return copies_.wait(value, wait_ms);
 }
 
-}  // namespace av
+}

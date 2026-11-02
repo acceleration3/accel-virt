@@ -1,6 +1,3 @@
-/* avglprobe.exe's process entry, which lld-link is told about. `--discovery` runs T008's experiment
- * (GlDiscoveryProbe); anything else runs the proof (GlProbeProgram). With no
- * C runtime there is no argv: the word is looked for in the command line. */
 #include "core/trace/function_scope.hpp"
 #include "um/probe/gl/gl_discovery_probe.hpp"
 #include "um/probe/gl/gl_probe_program.hpp"

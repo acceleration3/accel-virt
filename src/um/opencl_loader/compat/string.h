@@ -1,6 +1,3 @@
-/* What the Khronos OpenCL loader reaches for from <string.h>. See stdlib.h
- * beside this for why these are declared here rather than taken from a C
- * runtime the guest build does not link. */
 #ifndef AV_OPENCL_LOADER_STRING_H
 #define AV_OPENCL_LOADER_STRING_H
 
@@ -21,8 +18,6 @@ int    strcmp(const char *first, const char *second);
 char  *strstr(const char *text, const char *wanted);
 char  *strchr(const char *text, int wanted);
 size_t wcslen(const unsigned short *text);
-/* The app-package path builds a path out of two pieces. The _s pair is
- * Microsoft's, and takes the destination's capacity in elements. */
 int    wcscpy_s(unsigned short *to, size_t elements, const unsigned short *from);
 int    wcscat_s(unsigned short *to, size_t elements, const unsigned short *from);
 
@@ -30,4 +25,4 @@ int    wcscat_s(unsigned short *to, size_t elements, const unsigned short *from)
 }
 #endif
 
-#endif  /* AV_OPENCL_LOADER_STRING_H */
+#endif

@@ -15,8 +15,6 @@ public:
     BgraRows(uint8_t *base, uint64_t bytes, uint64_t pitch);
     BgraRows(const uint8_t *base, uint64_t bytes, uint64_t pitch);
 
-    // Exact in-place conversion is supported; otherwise the spans must not overlap.
-    // Both rectangles are checked before any pixel is written. Padding is left alone.
     [[nodiscard]] Status copy_from(const BgraRows &from, uint32_t width, uint32_t height, Channels channels);
     bool invariants_hold() const;
 
@@ -29,6 +27,6 @@ private:
     uint64_t       pitch_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_BGRA_ROWS_HPP
+#endif

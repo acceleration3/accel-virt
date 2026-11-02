@@ -23,7 +23,7 @@ namespace {
 
 constexpr std::int32_t dma_completed = 1, dma_preempted = 2, monitored_fence_signaled = 11;
 
-}  // namespace
+}
 
 FakeVidSch::FakeVidSch(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlAdapter &dxgkrnl, void *adapter)
     : platform_(platform), table_(table), dxgkrnl_(dxgkrnl), adapter_(adapter), device_(nullptr), context_(nullptr),
@@ -104,7 +104,7 @@ std::int32_t FakeVidSch::present_blt_virtual(std::uint64_t source, std::uint64_t
     present.DstRect = {0, 0, 1, 1};
     present.SubRectCnt = count;
     present.pDstSubRects = sub_rects;
-    present.Flags = 1u;   /* Blt */
+    present.Flags = 1u;
     const std::int32_t status = reinterpret_cast<std::int32_t (*)(void *, DxgkargPresentRecord *)>(
         table_.routine(DdiSlot::DxgkDdiPresent))(context_, &present);
     if (status < 0) return status;
@@ -127,7 +127,7 @@ std::int32_t FakeVidSch::present_blt(std::int64_t source, std::int64_t destinati
     present.DstRect = {0, 0, 1, 1};
     present.SubRectCnt = count;
     present.pDstSubRects = sub_rects;
-    present.Flags = 1u;   /* Blt */
+    present.Flags = 1u;
     const std::int32_t status = reinterpret_cast<std::int32_t (*)(void *, DxgkargPresentRecord *)>(
         table_.routine(DdiSlot::DxgkDdiPresent))(context_, &present);
     if (status < 0) return status;
@@ -186,8 +186,6 @@ std::int32_t FakeVidSch::submit_virtual(std::uint64_t dma_address)
 
 std::int32_t FakeVidSch::preempt()
 {
-    /* VidSch draws the preemption fence from the node's own sequence, after
-     * every packet it submitted. */
     DxgkargPreemptCommandRecord preempt = {};
     preemption_fence_ = ++submitted_;
     preempt.PreemptionFenceId = preemption_fence_;
@@ -211,18 +209,11 @@ void FakeVidSch::check_notification(const DxgkargcbNotifyInterruptDataRecord &da
         if (data.FenceId != preemption_fence_ || data.Argument1 != completed_)
             TestRegistry::instance().record_failure(__FILE__, __LINE__, "preemption %u after %u, expected %u after %u",
                                                     data.FenceId, data.Argument1, preemption_fence_, completed_);
-        /* VidSchiProcessIsrPreemptedPacket (dxgmms2.sys @1400357a4) retires
-         * every packet still queued as preempted, to be resubmitted under new
-         * fences; VidSchiProcessIsrCompletedPacket bugchecks 0x119/1 when one
-         * of them is reported completed afterwards. */
         preempted_through_ = preemption_fence_;
         preemptions_++;
         return;
     }
     if (data.InterruptType == monitored_fence_signaled) {
-        /* MonitoredFenceSignaled's NodeOrdinal and EngineOrdinal overlay FenceId
-         * and Argument1; the queues run on the hardware-scheduled node
-         * (feature 049, research.md §16). */
         if (data.FenceId != av::HwQueueSubmissions::node || data.Argument1 != 0u)
             TestRegistry::instance().record_failure(__FILE__, __LINE__, "fence signalled for node %u engine %u",
                                                     data.FenceId, data.Argument1);
@@ -274,4 +265,4 @@ std::uint32_t       FakeVidSch::submitted() const { return submitted_; }
 std::uint32_t       FakeVidSch::completed() const { return completed_; }
 std::uint32_t       FakeVidSch::preemptions() const { return preemptions_; }
 
-}  // namespace av
+}

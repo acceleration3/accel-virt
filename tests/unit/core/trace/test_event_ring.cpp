@@ -12,10 +12,6 @@ using av::EventRingLayout;
 using av::Status;
 
 namespace {
-
-/* docs/trace.md's event ring, written out so a mistake in the code does not
- * move the test with it: a 32-byte header, then per slot a 16-byte header
- * (the count written) and 16-byte events of time, name and thread. */
 constexpr std::size_t header = 32u;
 constexpr std::size_t slot_header = 16u;
 constexpr std::size_t event = 16u;
@@ -58,7 +54,7 @@ struct Ring {
     void          stop_at(std::uint64_t time) { std::memcpy(bytes + 24u, &time, sizeof time); }
 };
 
-}  // namespace
+}
 
 TEST(event_ring_initialize, writes_the_header_a_reader_checks)
 { Ring ring;
@@ -67,7 +63,7 @@ TEST(event_ring_initialize, writes_the_header_a_reader_checks)
   CHECK_EQ(u32_at(ring.bytes, 4u), 1u);
   CHECK_EQ(u32_at(ring.bytes, 8u), slots);
   CHECK_EQ(u32_at(ring.bytes, 12u), events);
-  CHECK(u64_at(ring.bytes, 16u) == 0u);   /* no clock described yet */
+  CHECK(u64_at(ring.bytes, 16u) == 0u);
   CHECK(u64_at(ring.bytes, 24u) == 0u); }
 
 TEST(event_ring_initialize, refuses_a_region_that_is_missing_or_too_small_or_a_shape_of_nothing)
@@ -78,13 +74,11 @@ TEST(event_ring_initialize, refuses_a_region_that_is_missing_or_too_small_or_a_s
   CHECK_STATUS(ring.initialize(bytes, region_bytes, 0u, events), Status::invalid_parameter);
   CHECK_STATUS(ring.initialize(bytes, region_bytes, slots, 0u), Status::invalid_parameter);
   CHECK(!ring.recording());
-  CHECK_EQ(u32_at(bytes, 0u), 0u);   /* nothing written */
-  /* Not recording, a ring records and describes nothing. */
+  CHECK_EQ(u32_at(bytes, 0u), 0u);
   ring.record(0u, 5u, 1u, 1u, true);
   ring.describe_clock(10000000u);
   for (const std::uint8_t byte : bytes) CHECK_EQ(byte, 0u); }
 
-/* A reader needs the stamps' unit to place events on a timeline. */
 TEST(event_ring_describe_clock, puts_the_ticks_per_second_in_the_header)
 { Ring ring;
   ring.ring.describe_clock(10000000u);
@@ -98,17 +92,15 @@ TEST(event_ring_record, writes_the_time_name_and_thread_with_the_begin_bit)
   ring.ring.record(1u, 0x1122334455ull, 0xABCDu, 7u, true);
   ring.ring.record(1u, 0x1122334466ull, 0u, 7u, false);
   CHECK(ring.written(1u) == 2u);
-  CHECK(ring.written(0u) == 0u);   /* another slot's ring is untouched */
+  CHECK(ring.written(0u) == 0u);
   CHECK(u64_at(ring.bytes, event_at(1u, 0u)) == 0x1122334455ull);
   CHECK_EQ(u32_at(ring.bytes, event_at(1u, 0u) + 8u), 0xABCDu);
   CHECK_EQ(u32_at(ring.bytes, event_at(1u, 0u) + 12u), 7u | begin_bit);
   CHECK(u64_at(ring.bytes, event_at(1u, 1u)) == 0x1122334466ull);
   CHECK_EQ(u32_at(ring.bytes, event_at(1u, 1u) + 12u), 7u);
-  /* A thread number cannot forge the begin bit. */
   ring.ring.record(0u, 1u, 1u, 0xFFFFFFFFu, false);
   CHECK_EQ(u32_at(ring.bytes, event_at(0u, 0u) + 12u), 0x7FFFFFFFu); }
 
-/* The newest events_per_slot are kept: the fourth overwrites the first. */
 TEST(event_ring_record, overwrites_the_oldest_once_full)
 { Ring ring;
   for (std::uint64_t time = 1u; time <= 4u; time++) ring.ring.record(0u, time, 0u, 1u, true);
@@ -116,7 +108,6 @@ TEST(event_ring_record, overwrites_the_oldest_once_full)
   CHECK(u64_at(ring.bytes, event_at(0u, 0u)) == 4u);
   CHECK(u64_at(ring.bytes, event_at(0u, 1u)) == 2u);
   CHECK(u64_at(ring.bytes, event_at(0u, 2u)) == 3u);
-  /* Nothing past the last slot's last event was written. */
   CHECK(u64_at(ring.bytes, region_bytes) == 0u); }
 
 TEST(event_ring_record, a_slot_past_the_ring_is_ignored)
@@ -126,8 +117,6 @@ TEST(event_ring_record, a_slot_past_the_ring_is_ignored)
   CHECK(ring.written(1u) == 0u);
   for (std::size_t offset = region_bytes; offset < sizeof ring.bytes; offset++) CHECK_EQ(ring.bytes[offset], 0u); }
 
-/* A reader stops every ring at one instant so a capture holds still: nothing
- * at or after the stop time is recorded, anything before it is. */
 TEST(event_ring_record, stops_at_the_time_a_reader_set)
 { Ring ring;
   ring.stop_at(100u);
@@ -136,6 +125,6 @@ TEST(event_ring_record, stops_at_the_time_a_reader_set)
   ring.ring.record(0u, 101u, 1u, 1u, true);
   CHECK(ring.written(0u) == 1u);
   CHECK(u64_at(ring.bytes, event_at(0u, 0u)) == 99u);
-  ring.stop_at(0u);   /* recording again */
+  ring.stop_at(0u);
   ring.ring.record(0u, 200u, 1u, 1u, true);
   CHECK(ring.written(0u) == 2u); }

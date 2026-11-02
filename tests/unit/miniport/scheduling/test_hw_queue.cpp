@@ -28,15 +28,11 @@ TEST(hw_queue_context, is_the_context_it_runs_on_and_leads_to_the_adapter)
   const HwQueue queue(platform, context, &progress);
   CHECK(&queue.context() == &context);
   CHECK(&queue.context().device().adapter() == &adapter);
-  /* What dxgkrnl allocated for the queue's progress, kept for the driver to
-   * write while the process submits for itself (feature 049). */
   CHECK(queue.progress() == &progress);
   platform.set_irql(Irql::apc);
   static_cast<void>(queue.context());
   static_cast<void>(queue.progress());
   CHECK_EQ(platform.unclaimed_violations(), 0u);
-  /* A submission to a hardware queue arrives at DISPATCH and reaches the
-   * context from the handle, so that is the ceiling; above it is not. */
   platform.set_irql(Irql::dispatch);
   static_cast<void>(queue.context());
   static_cast<void>(queue.progress());

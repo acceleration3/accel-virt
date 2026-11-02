@@ -5,11 +5,6 @@
 namespace av {
 
 namespace {
-
-/* The bound device, as a loader's entry points reach a driver's root: the
- * entry points below are bare functions with nowhere to put a `this`. A test
- * may hold two devices at once, so the binding is a stack: the newest is the
- * bound one and its destruction gives the binding back. */
 ScriptedVulkanDevice *bound = nullptr;
 
 VKAPI_ATTR VkResult VKAPI_CALL scripted_create_image(VkDevice, const VkImageCreateInfo *info,
@@ -135,7 +130,7 @@ const Named entries[] = {
     {"vkQueueSubmit", reinterpret_cast<PFN_vkVoidFunction>(&scripted_submit)},
 };
 
-}  // namespace
+}
 
 ScriptedVulkanDevice::ScriptedVulkanDevice()
     : outer_(bound), refusal_{nullptr, 0u, VK_SUCCESS}, calls_(0u), images_{}, memories_{}, buffer_bytes_{}, buffer_size_(0u),
@@ -417,9 +412,6 @@ void ScriptedVulkanDevice::record_image_copy(VkImage source, VkImage target, con
     image_copy_count_++;
 }
 
-/* A submit runs what was recorded: a copy to the buffer moves the image's
- * bytes into the read-back buffer, and one to an image into that image, as
- * the host's would. */
 VkResult ScriptedVulkanDevice::submit(VkQueue, const VkSubmitInfo *info, VkFence)
 {
     const VkResult refused = judge("vkQueueSubmit");
@@ -495,4 +487,4 @@ const ScriptedVulkanDevice::Barrier &ScriptedVulkanDevice::barrier(std::uint32_t
 
 const std::uint8_t *ScriptedVulkanDevice::readback() const { return buffer_bytes_; }
 
-}  // namespace av
+}

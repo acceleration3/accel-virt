@@ -1,7 +1,3 @@
-/* A creation call's error (ClNotedError): the root writes it into the note's
- * own slot, the application's pointer - if it gave one - is handed it as the
- * note goes, and a failure is logged under the entry point's name either way,
- * which a creation with no error pointer would otherwise lose. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
 #include "harness/icd/recording_log.hpp"
@@ -36,9 +32,6 @@ TEST(cl_noted_error, a_success_is_handed_back_and_logs_nothing)
   CHECK_EQ(application, CL_SUCCESS);
   CHECK_EQ(rig.log().lines(), before); }
 
-/* An entry point this ICD does not serve (icd::stub_called) is named once,
- * however often an application calls it, so a log says what was missing
- * without drowning; a stub with no name to give says nothing. */
 TEST(cl_noted_error, note_refused_names_an_unserved_entry_point_once)
 { ClIcdRig rig;
   const std::uint32_t before = rig.log().lines();

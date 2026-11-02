@@ -1,8 +1,3 @@
-/* The process's links to the avgpu adapter (US3): the first context made
- * opens a device, the rest share it, the last closes it; a device lost is
- * retired - the contexts on it keep their link until they go, and the next
- * context opens a new device beside it. The adapter is found by enumeration
- * and closed with the last link. */
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -27,7 +22,7 @@ struct GuestConnectionProbe {
     static std::uint32_t queue(const GuestConnection &c) { return c.queue_; }
 };
 
-}  // namespace av
+}
 
 namespace av::icd {
 
@@ -41,7 +36,7 @@ struct IcdConnectionProbe {
     static void set_current(av::icd::IcdConnection &connection, std::uint32_t link) { connection.current_ = link; }
 };
 
-}  // namespace av::glicd
+}
 
 using av::icd::IcdConnectionProbe;
 
@@ -49,7 +44,7 @@ namespace {
 
 constexpr std::uint32_t no_link = av::icd::IcdConnection::no_link;
 
-}  // namespace
+}
 
 TEST(gl_connection, the_first_user_opens_a_device_the_rest_share_it_and_the_last_closes_it)
 { GlContextRig rig;
@@ -76,16 +71,12 @@ TEST(gl_connection, the_first_user_opens_a_device_the_rest_share_it_and_the_last
   CHECK_EQ(connection.users(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::close_adapter), 1u);
-  /* Releasing what is not held, or no link at all, changes nothing. */
   connection.release(first);
   connection.release(no_link);
   connection.release(0xFFFFFFFFu);
   CHECK_EQ(connection.users(), 0u);
   CHECK(connection.invariants_hold()); }
 
-/* A lost device takes no new users: the next context opens a device of its
- * own on the same adapter while the lost one's contexts still hold theirs,
- * and each device closes with its own last user. */
 TEST(gl_connection, a_lost_device_is_retired_and_the_next_user_opens_a_new_one)
 { GlContextRig rig;
   av::icd::IcdConnection &connection = rig.connection();
@@ -106,7 +97,6 @@ TEST(gl_connection, a_lost_device_is_retired_and_the_next_user_opens_a_new_one)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_device), 2u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::enumerate_adapters), 1u);
   CHECK_EQ(connection.users(), 3u);
-  /* Losing it twice, or losing a link nobody holds, changes nothing. */
   connection.lose(old_link);
   connection.lose(no_link);
   std::uint32_t idle = 0u;
@@ -125,7 +115,6 @@ TEST(gl_connection, a_lost_device_is_retired_and_the_next_user_opens_a_new_one)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(connection.invariants_hold()); }
 
-/* With every link lost and still held, a new context has nowhere to go. */
 TEST(gl_connection, every_link_lost_and_held_leaves_no_room)
 { GlContextRig rig;
   av::icd::IcdConnection &connection = rig.connection();
@@ -159,7 +148,6 @@ TEST(gl_connection, no_avgpu_adapter_or_no_device_is_not_supported_with_nothing_
   CHECK_EQ(link, no_link);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.connection().invariants_hold());
-  /* A second device that cannot be made leaves the first, and the adapter, open. */
   std::uint32_t first = no_link;
   CHECK_STATUS(rig.connection().acquire(first), Status::ok);
   rig.connection().lose(first);
@@ -230,13 +218,11 @@ TEST(gl_connection, invariants_fail_when_links_devices_and_the_adapter_disagree)
     av::GuestConnectionProbe::set_queue(rig.connection().device(link), 0u);
     CHECK(!rig.connection().invariants_hold());
     av::GuestConnectionProbe::set_queue(rig.connection().device(link), queue);
-    /* A held link whose device is not open. */
     const std::uint32_t device = av::GuestConnectionProbe::device(rig.connection().device(link));
     av::GuestConnectionProbe::set_device(rig.connection().device(link), 0u);
     CHECK(!rig.connection().invariants_hold());
     av::GuestConnectionProbe::set_device(rig.connection().device(link), device);
     CHECK(rig.connection().invariants_hold());
-    /* A held link that is not lost is the one new users join. */
     IcdConnectionProbe::set_current(rig.connection(), no_link);
     CHECK(!rig.connection().invariants_hold());
     IcdConnectionProbe::set_current(rig.connection(), link);
@@ -249,7 +235,6 @@ TEST(gl_connection, invariants_fail_when_links_devices_and_the_adapter_disagree)
     CHECK(!rig.connection().invariants_hold());
     rig.connection().release(link); }
   { GlContextRig rig;
-    /* A lost link nobody holds, and a current link that is lost. */
     IcdConnectionProbe::set_lost(rig.connection(), 1u, true);
     CHECK(!rig.connection().invariants_hold());
     IcdConnectionProbe::set_lost(rig.connection(), 1u, false);
@@ -259,7 +244,6 @@ TEST(gl_connection, invariants_fail_when_links_devices_and_the_adapter_disagree)
     CHECK(!rig.connection().invariants_hold());
     IcdConnectionProbe::set_lost(rig.connection(), link, false);
     CHECK(rig.connection().invariants_hold());
-    /* A current link nobody holds. */
     rig.connection().release(link);
     IcdConnectionProbe::set_current(rig.connection(), link);
     CHECK(!rig.connection().invariants_hold());

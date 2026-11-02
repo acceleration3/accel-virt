@@ -8,12 +8,9 @@
 namespace av::glicd {
 
 namespace {
-
-/* What a GL semaphore is on the wire. Either fence kind is one host
- * semaphore, so the choice only has to be the same at every call. */
 constexpr uint32_t semaphore_kind = SharedObjectKind::monitored_fence;
 
-}  // namespace
+}
 
 GlExternalObjects::GlExternalObjects(icd::SharedHandles &handles, BlockSource &memory, DriverLog &log)
     : log_(log), opened_(handles, memory, log), rows_(memory, Pool::paged), names_()
@@ -54,10 +51,7 @@ uint32_t GlExternalObjects::create(uint32_t kind, int32_t count, uint32_t *names
     if (!known(kind, memory)) return gl_invalid_value;
     if (count < 0 || (count > 0 && names == nullptr)) return gl_invalid_value;
     const uint32_t wanted = static_cast<uint32_t>(count);
-    /* All of them or none: a half-filled array is one an application reads
-     * whole, and the names it did not get would be numbers of its own stack. */
     if (wanted == 0u) return gl_no_error;
-    /* Below 2^31 each, so the sum cannot wrap. */
     if (rows_.reserve(rows_.count() + wanted) != Status::ok) {
         log_.write("no memory for a memory object or semaphore name");
         return gl_out_of_memory;
@@ -65,8 +59,6 @@ uint32_t GlExternalObjects::create(uint32_t kind, int32_t count, uint32_t *names
     const uint32_t first = names_.run(wanted);
     for (uint32_t index = 0u; index < wanted; index++) {
         uint32_t slot = 0u;
-        /* Room was made, so only a name the mint came round to while the
-         * context still holds it is refused. */
         if (rows_.insert(first + index, GlSharedObjectRow{0u, memory, false, false}, slot) != Status::ok) {
             for (uint32_t made = 0u; made < index; made++) static_cast<void>(rows_.erase(first + made));
             log_.write("every memory object and semaphore name is taken");
@@ -92,8 +84,6 @@ uint32_t GlExternalObjects::set_parameter(uint32_t kind, uint32_t name, uint32_t
     if (!known(kind, memory)) return gl_invalid_value;
     GlSharedObjectRow *const row = row_of(memory, name);
     if (row == nullptr) return gl_invalid_value;
-    /* A semaphore's only parameter names a D3D12 fence's value, and nothing
-     * here is ever imported from one, so no pname reaches a row of that kind. */
     if (!memory || (pname != dedicated && pname != protected_memory)) return gl_invalid_enum;
     if (pname == dedicated) row->dedicated_ = value != 0;
     else row->protected_ = value != 0;
@@ -130,14 +120,7 @@ uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t device, uint3
         return gl_invalid_operation;
     }
     GlSharedObjectRow *const row = row_of(memory, name);
-    /* A name this context never made, or one already naming an object: GL has
-     * no way to say "imported twice" and the second would leak the first. */
     if (row == nullptr || row->made_ != 0u) return gl_invalid_value;
-    /* What the application asked for before it got here. Dedicated memory is
-     * an allocation made for this one image and protected memory is a
-     * different heap; the device makes the object inside OPEN_SHARED_OBJECT
-     * and is told neither, so the honest answer is the error the extension
-     * has rather than an import that quietly ignores both (research.md §12). */
     if (row->dedicated_ || row->protected_) {
         log_.write("a memory object asked for dedicated or protected memory, which a shared "
                    "object cannot be");
@@ -149,8 +132,6 @@ uint32_t GlExternalObjects::import(ClientTransport &wire, uint32_t device, uint3
     if (taken == Status::invalid_parameter) return gl_invalid_value;
     if (taken == Status::not_found || taken == Status::conflict) return gl_invalid_operation;
     if (taken != Status::ok) return gl_out_of_memory;
-    /* A GL name is 32 bits; a device that answered anything else answered no
-     * name this context could ever use. */
     const uint32_t made = static_cast<uint32_t>(opened);
     if (opened != made) {
         static_cast<void>(opened_.give_back(wire, wire_kind(*row), opened));
@@ -175,8 +156,6 @@ uint32_t GlExternalObjects::destroy(ClientTransport &wire, uint32_t kind, int32_
     if (count < 0 || (count > 0 && names == nullptr)) return gl_invalid_value;
     for (uint32_t index = 0u; index < static_cast<uint32_t>(count); index++) {
         GlSharedObjectRow *const row = row_of(memory, names[index]);
-        /* A name this context never made is ignored, as GL ignores one it
-         * never generated. */
         if (row != nullptr) give_back(wire, names[index], *row);
     }
     return gl_no_error;
@@ -231,4 +210,4 @@ bool GlExternalObjects::invariants_hold() const
     return holds;
 }
 
-}  // namespace av::glicd
+}

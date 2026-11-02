@@ -20,7 +20,7 @@ void *run_clock_hold(void *hold)
     return nullptr;
 }
 
-}  // namespace
+}
 
 GpuClockHold::GpuClockHold()
     : clock_(), fd_(-1), context_(0u), thread_{}, lock_(), wake_(lock_),
@@ -35,8 +35,6 @@ GpuClockHold::~GpuClockHold()
     close();
 }
 
-/* Contexts on one GPU attach on workers of their own, so two may open its
- * hold at once. Under the lock only one sets it up. */
 bool GpuClockHold::open(int32_t render_minor)
 {
     AV_SCOPE("GpuClockHold::open");
@@ -44,8 +42,6 @@ bool GpuClockHold::open(int32_t render_minor)
     return open_ || start(render_minor);
 }
 
-/* The watching thread takes the lock first thing, so it starts only once this
- * has let go of it. */
 bool GpuClockHold::start(int32_t render_minor)
 {
     AV_SCOPE("GpuClockHold::start");
@@ -92,8 +88,6 @@ void GpuClockHold::watch()
             if (held_) let_go();
             slow_ = 0u;
             __atomic_store_n(&wanted_, false, __ATOMIC_SEQ_CST);
-            /* A batch after the store above either sees wanted_ clear and
-             * signals, or was counted before the idle test: no wake is lost. */
             if (clock_.now_nanoseconds() - __atomic_load_n(&last_busy_, __ATOMIC_SEQ_CST) >= release_after_ns)
                 wake_.wait();
             continue;
@@ -119,16 +113,12 @@ bool GpuClockHold::slow() const
            sensor(AMDGPU_INFO_SENSOR_GFX_SCLK) * 10u < peak_mhz_ * 9u;
 }
 
-/* A refusal - another process holds a stable state - is left be: the next
- * slow stretch asks again. */
 void GpuClockHold::take()
 {
     AV_SCOPE("GpuClockHold::take");
     slow_ = 0u;
     if (!request(AMDGPU_CTX_STABLE_PSTATE_PEAK)) return;
     __atomic_store_n(&held_, true, __ATOMIC_RELEASE);
-    /* A hold that follows a look soon after the last one let go is one the
-     * driver's own clock did not beat: it may stay longer. */
     const uint64_t taken = clock_.now_nanoseconds();
     hold_for_ = taken - held_since_ < probe_every_ns + first_probe_ns ? probe_every_ns : first_probe_ns;
     held_since_ = taken;
@@ -184,4 +174,4 @@ bool GpuClockHold::request(uint32_t pstate)
 }
 
 
-}  // namespace av
+}

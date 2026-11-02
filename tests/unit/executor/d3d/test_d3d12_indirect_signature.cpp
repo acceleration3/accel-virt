@@ -1,10 +1,3 @@
-/* A command signature's arguments judged before vkd3d-proton sees them: the
- * shapes applications use hold, and each thing vkd3d-proton would trust
- * without checking - an argument type this driver does not report, a root
- * argument naming a parameter that is not there or not of its kind, a vertex
- * buffer slot past the last, a constant count that could wrap - is refused,
- * as is a stride that is not whole words, too large, or too small for the
- * arguments. Making one takes a device, which the GPU tests have. */
 #include "executor/d3d/d3d12_indirect_signature.hpp"
 #include "executor/d3d/d3d12_root_layout.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -23,7 +16,6 @@ enum : std::uint32_t {
     shader_resource_view, unordered_access_view, dispatch_rays, dispatch_mesh, incrementing_constant
 };
 
-/* Parameter 0 is four root constants, 1 a CBV, 2 an SRV, 3 a UAV, 4 a table. */
 D3d12RootLayout rooted()
 {
     RootParameter parameters[5] = {};
@@ -42,11 +34,8 @@ bool holds(const IndirectArgument *arguments, std::uint32_t count, std::uint32_t
     return D3d12IndirectSignature(arguments, count, stride).holds(root);
 }
 
-}  // namespace
+}
 
-/* What wgpu makes at device creation, and what it adds for a pipeline whose
- * shaders read the first vertex and instance: a draw alone, and the same with
- * root constants in front of it. */
 TEST(d3d12_indirect_signature, the_shapes_applications_use_hold)
 { const D3d12RootLayout root = rooted();
   const IndirectArgument draws[] = {{draw, 0u, 0u, 0u}};
@@ -57,7 +46,7 @@ TEST(d3d12_indirect_signature, the_shapes_applications_use_hold)
   CHECK(holds(dispatches, 1u, 12u, nullptr));
   const IndirectArgument with_constants[] = {{constant, 0u, 0u, 3u}, {draw, 0u, 0u, 0u}};
   CHECK(holds(with_constants, 2u, 28u, &root));
-  CHECK(!holds(with_constants, 2u, 24u, &root));   /* 12 bytes of constants and a 16-byte draw */
+  CHECK(!holds(with_constants, 2u, 24u, &root));
   const IndirectArgument views[] = {{vertex_buffer_view, 31u, 0u, 0u}, {index_buffer_view, 0u, 0u, 0u},
                                     {constant_buffer_view, 1u, 0u, 0u}, {shader_resource_view, 2u, 0u, 0u},
                                     {unordered_access_view, 3u, 0u, 0u}, {draw_indexed, 0u, 0u, 0u}};
@@ -65,8 +54,8 @@ TEST(d3d12_indirect_signature, the_shapes_applications_use_hold)
 
 TEST(d3d12_indirect_signature, a_stride_that_is_no_command_s_is_refused)
 { const IndirectArgument draws[] = {{draw, 0u, 0u, 0u}};
-  CHECK(!holds(draws, 1u, 12u, nullptr));   /* shorter than a draw */
-  CHECK(!holds(draws, 1u, 18u, nullptr));   /* not whole words */
+  CHECK(!holds(draws, 1u, 12u, nullptr));
+  CHECK(!holds(draws, 1u, 18u, nullptr));
   CHECK(!holds(draws, 1u, 0u, nullptr));
   CHECK(holds(draws, 1u, D3d12IndirectSignature::max_stride, nullptr));
   CHECK(!holds(draws, 1u, D3d12IndirectSignature::max_stride + 4u, nullptr));
@@ -76,8 +65,6 @@ TEST(d3d12_indirect_signature, a_stride_that_is_no_command_s_is_refused)
   many[D3d12IndirectSignature::max_arguments] = {draw, 0u, 0u, 0u};
   CHECK(!holds(many, D3d12IndirectSignature::max_arguments + 1u, 1024u, nullptr)); }
 
-/* Rays, mesh shaders and incrementing constants are past the tier this
- * driver reports; a number that is no type at all is refused the same. */
 TEST(d3d12_indirect_signature, an_argument_type_the_driver_does_not_report_is_refused)
 { const D3d12RootLayout root = rooted();
   const std::uint32_t unreported[] = {dispatch_rays, dispatch_mesh, incrementing_constant, 0xFFFFFFFFu};
@@ -100,7 +87,6 @@ TEST(d3d12_indirect_signature, a_root_argument_that_names_no_parameter_of_its_ki
   CHECK(!holds(descriptor_as_constants, 2u, 20u, &root));
   const IndirectArgument past_width[] = {{constant, 0u, 2u, 3u}, {draw, 0u, 0u, 0u}};
   CHECK(!holds(past_width, 2u, 28u, &root));
-  /* A count that would wrap the bytes it adds up to a small number. */
   const IndirectArgument wrapping[] = {{constant, 0u, 0u, 0x40000000u}, {draw, 0u, 0u, 0u}};
   CHECK(!holds(wrapping, 2u, 20u, &root));
   const IndirectArgument slot[] = {{vertex_buffer_view, 32u, 0u, 0u}, {draw, 0u, 0u, 0u}};

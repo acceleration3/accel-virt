@@ -1,4 +1,3 @@
-/* One acquisition of a WaitMutex, released when the scope ends. */
 #ifndef AV_WAIT_MUTEX_GUARD_HPP
 #define AV_WAIT_MUTEX_GUARD_HPP
 
@@ -17,6 +16,6 @@ private:
     WaitMutex &mutex_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WAIT_MUTEX_GUARD_HPP
+#endif

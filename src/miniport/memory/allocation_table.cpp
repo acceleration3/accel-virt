@@ -36,12 +36,6 @@ Status AllocationTable::create_one(DxgkAllocationInfoRecord &info, Resource *res
     AllocationDescriptor descriptor;
     const bool           shareable = info.PrivateDriverDataSize == shareable_private_size;
     if (info.pPrivateDriverData == nullptr) return Status::invalid_parameter;
-    /* A length this driver has no shape for is not_supported, where data of a
-     * length it knows but cannot read is invalid_parameter. The two are
-     * different answers to different questions, and telling them apart is what
-     * lets a guest say whether a create was refused by dxgkrnl before it
-     * arrived or by this driver after it did - both of which are
-     * STATUS_INVALID_PARAMETER otherwise (feature 053). */
     if (info.PrivateDriverDataSize != AllocationDescriptor::encoded_size && !shareable)
         return Status::not_supported;
     const auto *const    bytes = static_cast<const uint8_t *>(info.pPrivateDriverData);
@@ -73,13 +67,6 @@ Status AllocationTable::share(Allocation &allocation, SharedObjectRecord record)
     AV_SCOPE("AllocationTable::share");
     const Status minted = shared_.mint(allocation, record);
     if (minted != Status::ok) return minted;
-    /* Nothing is written back here. dxgkrnl copies the caller's own bytes over
-     * this buffer before the open it runs inside every create, so a record
-     * written at create time is discarded before anyone reads it - which is
-     * what DeviceTable::claim was refusing for four guest boots. The minting
-     * belongs here, because this is where the allocation is; the writing
-     * belongs in the open, which is where the bytes survive
-     * (research.md §15). */
     allocation.shared_as(record.object_id());
     return Status::ok;
 }
@@ -93,8 +80,6 @@ void AllocationTable::destroy_created(DxgkargCreateAllocationRecord &request, ui
     }
 }
 
-/* The identity goes with what it named, so a process holding a stale record
- * finds nothing rather than whatever took its place. */
 void AllocationTable::retire(Allocation &allocation)
 {
     AV_SCOPE("AllocationTable::retire");
@@ -109,19 +94,10 @@ Status AllocationTable::create(DxgkargCreateAllocationRecord &request)
     platform_.require_irql_at_most(Irql::passive, "AllocationTable::create");
     MutexGuard lock(mutex_);
     InvariantScope<AllocationTable> guard(platform_, *this, "create");
-    /* A resource's own private data is dxgkrnl's to keep and hand whoever
-     * opens the resource; the one user-mode driver that writes any (avumd's
-     * share key) writes exactly this much, and nothing here reads it. */
     if (request.NumAllocations == 0u || request.NumAllocations > max_per_call || request.pAllocationInfo == nullptr ||
         (request.PrivateDriverDataSize != 0u && request.PrivateDriverDataSize != resource_private_bytes))
         return Status::invalid_parameter;
-    /* A resource is asked for by the flag and answered as a handle of this
-     * driver's own, because D3DKMTShareObjects mints an NT handle over a
-     * resource and refuses anything else (research.md §16). dxgkrnl hands back
-     * the handle it was given when a later create adds to the same resource. */
     const bool wanted = (request.Flags & resource_flag) != 0u;
-    /* hResource means nothing without the flag, so whatever was in it is not
-     * read and the answer is none. */
     Resource *resource = wanted ? static_cast<Resource *>(request.hResource) : nullptr;
     bool      made_here = false;
     if (wanted && resource == nullptr) {
@@ -161,10 +137,6 @@ Status AllocationTable::destroy(const DxgkargDestroyAllocationRecord &request)
         for (uint32_t earlier = 0u; earlier < index; earlier++)
             if (request.pAllocationList[earlier] == request.pAllocationList[index]) return Status::invalid_parameter;
     }
-    /* A destroy that takes the resource takes every allocation in it, which is
-     * the call dxgkrnl makes: one naming a resource that would outlive the
-     * list is refused here, before anything is destroyed, because this list is
-     * all-or-nothing like every other. */
     if (resource != nullptr && listed_of_resource != resource->allocations()) return Status::invalid_state;
     for (uint32_t index = 0u; index < request.NumAllocations; index++)
         retire(*static_cast<Allocation *>(request.pAllocationList[index]));
@@ -276,4 +248,4 @@ bool AllocationTable::invariants_hold() const
            allocations_.all_of([](const Allocation &allocation) { return allocation.invariants_hold(); });
 }
 
-}  // namespace av
+}

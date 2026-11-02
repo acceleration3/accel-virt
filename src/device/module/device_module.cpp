@@ -22,7 +22,7 @@ DeviceInstance *DeviceModule::create(const AvHostOps *ops, const AvExecutorOps *
         static_cast<void>(lendings_.construct(blocks_.object()));
     }
     for (ObjectStorage<DeviceInstance> &slot : slots_) {
-        if (slot.construct(*ops) != Status::ok) continue;   /* occupied */
+        if (slot.construct(*ops) != Status::ok) continue;
         slot.object().device().share_lendings(lendings_.object());
         if (slot.object().device().realize(host_gpu, base_blobs, executor, recording, renderer, executor_path,
                                            message) == Status::ok)
@@ -82,4 +82,4 @@ uint32_t DeviceModule::live() const
     return count;
 }
 
-}  // namespace av
+}

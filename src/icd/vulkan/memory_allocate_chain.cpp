@@ -23,8 +23,6 @@ Status MemoryAllocateChain::take(const VkMemoryAllocateInfo &info, const Win32Ha
     VkStructureType seen[carried_kinds] = {};
     for (const auto *node = static_cast<const VkBaseInStructure *>(info.pNext); node != nullptr;
          node = node->pNext) {
-        /* The application wrote it, so a value outside the enumeration is a
-         * value to refuse rather than to load as one. */
         const VkStructureType type = static_cast<VkStructureType>(foreign_enum(node->sType));
         for (uint32_t earlier = 0u; earlier < read; earlier++)
             if (seen[earlier] == type) return refusal(Status::malformed);
@@ -42,8 +40,6 @@ Status MemoryAllocateChain::take(const VkMemoryAllocateInfo &info, const Win32Ha
             exports_ = true;
             continue;
         }
-        /* A security descriptor and a name are what another process would open
-         * the handle with, and the kernel's NT handle carries neither. */
         if (type == export_memory_win32_handle_info) continue;
         if (type == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO) {
             dedicated_ = *reinterpret_cast<const VkMemoryDedicatedAllocateInfo *>(node);
@@ -114,4 +110,4 @@ bool MemoryAllocateChain::invariants_hold() const
     return true;
 }
 
-}  // namespace av::icd
+}

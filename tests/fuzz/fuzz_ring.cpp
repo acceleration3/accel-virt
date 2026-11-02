@@ -1,12 +1,3 @@
-/* A context's ring as a hostile guest writes it: the consumer serves after each
- * change to the ring header or data the input makes. Whatever the bytes, the
- * consumer stays consistent, its head only moves forward and never past what
- * was published, a stopped context stays stopped, and nothing is read or
- * written outside the ring's blob (ASan).
- *
- * Input: u16 initial tail, then operations of [u8 kind][u16 position][u8 count]
- * followed by `count` bytes - kind 0 writes the data area at a ring counter,
- * 1 writes the tail, 2 writes raw header bytes. */
 #include "core/support/status.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
@@ -43,7 +34,6 @@ private:
     std::uint64_t length_;
 };
 
-/* The page the guest reads says what the consumer completed, whatever else happened. */
 void serve(av::MockHost &host, av::RingConsumer &consumer, const std::uint8_t *page_bytes)
 {
     consumer.service();
@@ -56,7 +46,7 @@ void serve(av::MockHost &host, av::RingConsumer &consumer, const std::uint8_t *p
         __builtin_trap();
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

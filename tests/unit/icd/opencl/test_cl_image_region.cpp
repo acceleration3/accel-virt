@@ -1,5 +1,3 @@
-/* Where each row of an image transfer is in the application's memory, and
- * which regions the API would refuse before anything is sent. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/opencl/cl_image_region.hpp"
 
@@ -12,7 +10,7 @@ namespace {
 constexpr std::size_t origin[3] = {5u, 7u, 2u};
 constexpr std::size_t extent[3] = {10u, 4u, 3u};
 constexpr std::size_t no_origin[3] = {0u, 0u, 0u};
-}  // namespace
+}
 
 TEST(cl_image_region, tight_pitches_are_the_rows_and_slices_of_the_region_itself)
 { const ClImageRegion region(origin, extent, 0u, 0u, 4u);
@@ -25,7 +23,6 @@ TEST(cl_image_region, tight_pitches_are_the_rows_and_slices_of_the_region_itself
   CHECK_EQ(region.row_pitch(), 40u);
   CHECK_EQ(region.slice_pitch(), 160u);
   CHECK(region.rows_packed());
-  /* Row 2 of slice 1: one whole slice and two rows in. */
   CHECK_EQ(region.row_offset(2u, 1u), 160u + 80u); }
 
 TEST(cl_image_region, a_pitch_wider_than_a_row_leaves_a_gap_and_is_what_rows_are_found_by)
@@ -33,7 +30,6 @@ TEST(cl_image_region, a_pitch_wider_than_a_row_leaves_a_gap_and_is_what_rows_are
   CHECK(region.valid());
   CHECK(!region.rows_packed());
   CHECK_EQ(region.row_pitch(), 64u);
-  /* A tight slice of pitched rows. */
   CHECK_EQ(region.slice_pitch(), 256u);
   CHECK_EQ(region.row_offset(3u, 2u), 2u * 256u + 3u * 64u);
   const ClImageRegion sliced(origin, extent, 64u, 1000u, 4u);
@@ -57,10 +53,9 @@ TEST(cl_image_region, a_region_of_nothing_or_of_no_element_size_is_refused)
   CHECK(!ClImageRegion(no_origin, flat_z, 0u, 0u, 4u).valid()); }
 
 TEST(cl_image_region, a_pitch_too_small_for_what_it_must_hold_is_refused)
-{ /* A row is 40 bytes, so a pitch of 39 would overlap the next. */
+{
   CHECK(!ClImageRegion(origin, extent, 39u, 0u, 4u).valid());
   CHECK(ClImageRegion(origin, extent, 40u, 0u, 4u).valid());
-  /* A slice of four 40-byte rows is 160 bytes. */
   CHECK(!ClImageRegion(origin, extent, 0u, 159u, 4u).valid());
   CHECK(ClImageRegion(origin, extent, 0u, 160u, 4u).valid()); }
 
@@ -83,7 +78,6 @@ TEST(cl_image_region, a_point_is_found_at_the_layouts_own_pitches)
   CHECK(tight.offset_of(point, offset));
   CHECK_EQ(offset, 160u + 2u * 40u + 12u); }
 
-/* Every term that can wrap, and a sum of terms that each fit. */
 TEST(cl_image_region, a_point_past_what_a_size_reaches_is_not_found)
 { const ClImageRegion region(no_origin, extent, 64u, 512u, 4u);
   std::size_t         offset = 7u;
@@ -102,6 +96,5 @@ TEST(cl_image_region, a_slice_is_whole_rows_only_at_a_multiple_of_the_row_pitch)
 { CHECK(ClImageRegion(no_origin, extent, 64u, 512u, 4u).slices_are_whole_rows());
   CHECK(!ClImageRegion(no_origin, extent, 64u, 520u, 4u).slices_are_whole_rows());
   CHECK(ClImageRegion(no_origin, extent, 0u, 0u, 4u).slices_are_whole_rows());
-  /* A region of nothing has no row to count slices in. */
   const std::size_t nothing[3] = {0u, 4u, 3u};
   CHECK(!ClImageRegion(no_origin, nothing, 0u, 0u, 4u).slices_are_whole_rows()); }

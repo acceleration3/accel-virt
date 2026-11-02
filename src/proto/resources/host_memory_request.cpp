@@ -48,4 +48,4 @@ uint32_t HostMemoryRequest::encoded() const
     return encoded_;
 }
 
-}  // namespace av
+}

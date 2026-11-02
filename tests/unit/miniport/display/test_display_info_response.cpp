@@ -18,8 +18,6 @@ void write_u32(std::uint8_t *bytes, std::size_t offset, std::uint32_t value)
     for (unsigned byte = 0u; byte < 4u; byte++) bytes[offset + byte] = static_cast<std::uint8_t>(value >> (8u * byte));
 }
 
-/* A display-info answer as QEMU writes it: the type, then one rectangle and
- * enabled flag per scanout. */
 class Answer {
 public:
     Answer() : bytes_{}
@@ -47,7 +45,7 @@ private:
     std::uint8_t bytes_[DisplayInfoResponse::encoded_size];
 };
 
-}  // namespace
+}
 
 TEST(display_info_response, has_no_scanouts_before_it_decodes_one)
 { const DisplayInfoResponse info;
@@ -86,10 +84,10 @@ TEST(display_info_response_decode, answers_nothing_for_a_scanout_the_device_does
 TEST(display_info_response_decode, refuses_an_answer_that_is_not_display_info)
 { Answer answer;
   answer.scanout(0u, 0u, 0u, 1280u, 800u);
-  answer.field(0u, 0x1100u);   /* OK_NODATA */
+  answer.field(0u, 0x1100u);
   DisplayInfoResponse info;
   CHECK_STATUS(info.decode(answer.bytes(), answer.length()), Status::malformed);
-  answer.field(0u, 0x1200u);   /* ERR_UNSPEC */
+  answer.field(0u, 0x1200u);
   CHECK_STATUS(info.decode(answer.bytes(), answer.length()), Status::malformed); }
 
 TEST(display_info_response_decode, refuses_an_answer_truncated_at_any_field)
@@ -127,8 +125,6 @@ TEST(display_info_response_decode, refuses_an_enabled_flag_that_is_neither_on_no
   DisplayInfoResponse info;
   CHECK_STATUS(info.decode(answer.bytes(), answer.length()), Status::malformed); }
 
-/* A disabled scanout says nothing about its rectangle, so nothing in it is
- * judged - QEMU leaves the bytes of an unused one as they were. */
 TEST(display_info_response_decode, ignores_the_rectangle_of_a_disabled_scanout)
 { Answer answer;
   answer.scanout(0u, 0u, 0u, 1280u, 800u);
@@ -139,8 +135,6 @@ TEST(display_info_response_decode, ignores_the_rectangle_of_a_disabled_scanout)
   CHECK(!info.enabled(1u));
   CHECK_EQ(info.width(1u), 0u); }
 
-/* A refused answer leaves what was decoded before it, so one bad answer from
- * the host does not lose the modes the driver is offering. */
 TEST(display_info_response_decode, keeps_the_last_good_answer_when_one_is_refused)
 { Answer answer;
   answer.scanout(0u, 0u, 0u, 1280u, 800u);
@@ -173,14 +167,12 @@ TEST(display_info_response_decode, accepts_every_scanout_at_once)
   CHECK(info.invariants_hold()); }
 
 namespace av {
-
-/* The state the invariant guards, which decode never leaves behind. */
 struct DisplayInfoResponseProbe {
     static void forget_a_width(DisplayInfoResponse &info) { info.widths_[0] = 0u; }
     static void forget_a_height(DisplayInfoResponse &info) { info.heights_[0] = 0u; }
 };
 
-}  // namespace av
+}
 
 TEST(display_info_response_invariants, an_enabled_scanout_with_no_width_is_detected)
 { Answer answer;

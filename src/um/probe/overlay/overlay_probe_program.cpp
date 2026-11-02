@@ -26,4 +26,4 @@ uint32_t OverlayProbeProgram::run()
     return report_.failed();
 }
 
-}  // namespace av
+}

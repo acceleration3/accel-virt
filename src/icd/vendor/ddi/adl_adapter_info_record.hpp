@@ -1,7 +1,3 @@
-/* AdapterInfo (adl_structures.h, AMD Display Library SDK, MIT): what
- * ADL_Adapter_AdapterInfo_Get writes for each adapter, the Windows layout.
- * A DDI record; its size and offsets are proven in
- * src/um/vendor/vendor_record_layout.cpp. */
 #ifndef AV_VENDOR_ADL_ADAPTER_INFO_RECORD_HPP
 #define AV_VENDOR_ADL_ADAPTER_INFO_RECORD_HPP
 
@@ -25,6 +21,6 @@ struct AdlAdapterInfoRecord {
     int  iOSDisplayIndex;
 };
 
-}  // namespace av::vendor
+}
 
-#endif  // AV_VENDOR_ADL_ADAPTER_INFO_RECORD_HPP
+#endif

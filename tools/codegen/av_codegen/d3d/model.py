@@ -1,15 +1,3 @@
-"""The D3D registry: this project's own description of the commands its
-Direct3D user-mode driver sends and the device's executor runs.
-
-There is no Khronos registry for Direct3D, so the registry is written here
-(tools/codegen/registry/d3d.toml), in the smallest vocabulary that carries the
-DDI: fixed-width scalars, plain structs, counted arrays of either, and bulk
-bytes that cross inline or through the context's blob arena. What the wire
-carries is plain data both ends lay out identically - the guest and the host
-are both little-endian x86-64 - so a struct crosses as its bytes, and every
-field of it is judged by the server before the host's Direct3D sees it.
-"""
-
 from __future__ import annotations
 
 import re
@@ -38,7 +26,7 @@ class RegistryError(Exception):
 class Field:
     type: str
     name: str
-    length: int  # 0 for a single value
+    length: int
 
     def c_decl(self, structs) -> str:
         base = SCALARS[self.type][0] if self.type in SCALARS else self.type
@@ -56,9 +44,9 @@ class Struct:
 
 @dataclass
 class Param:
-    type: str      # a scalar, a struct, "bytes", or (reply only) "out_bytes"
+    type: str
     name: str
-    count: str = ""  # the u32 parameter counting an array
+    count: str = ""
     max: int = 0
 
     @property
@@ -102,8 +90,6 @@ def _parse_param(text: str) -> Param:
 
 
 def _layout(structs: dict[str, Struct]) -> None:
-    """Sizes and alignments as the C++ compiler lays the emitted structs out;
-    the emitter static_asserts each, so a disagreement is a build failure."""
     done: set[str] = set()
 
     def visit(s: Struct, stack: tuple[str, ...]) -> None:
@@ -166,7 +152,6 @@ def load(path: Path) -> Registry:
         structs[name] = Struct(name, [_parse_field(f) for f in body["fields"]])
     _layout(structs)
     reg = Registry(int(meta["api"]), meta.get("prefix", "d3d"), structs, [])
-    # Registries that share an api share its id space: each keeps to its range.
     first_id, last_id = int(meta.get("first_id", 1)), int(meta.get("last_id", 0xffff))
     ids: set[int] = set()
     names: set[str] = set()

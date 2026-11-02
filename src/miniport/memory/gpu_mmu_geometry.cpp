@@ -58,4 +58,4 @@ bool GpuMmuGeometry::root_reaches(uint64_t address, uint32_t root_entries) const
     return (address >> virtual_address_bits_) == 0u && (address >> root_shift) < root_entries;
 }
 
-}  // namespace av
+}

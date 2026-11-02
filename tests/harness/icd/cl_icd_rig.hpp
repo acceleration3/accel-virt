@@ -1,11 +1,3 @@
-/* One process's OpenCL ICD, as the Khronos loader meets it: the root over
- * MockKmt with the avgpu adapter, the host played through ScriptedHost, the
- * locks' trace, the log, and a loader that dispatches through the table rather
- * than calling the root by name.
- *
- * The rig reaches the ICD only through what the loader reaches, which is the
- * point: a test that called the root's methods directly would not notice a
- * dispatch table slot left null. */
 #ifndef AV_CL_ICD_RIG_HPP
 #define AV_CL_ICD_RIG_HPP
 
@@ -27,11 +19,7 @@ namespace av {
 
 class ClIcdRig {
 public:
-    /* Both halves non-zero and different, so a half dropped or swapped
-     * shows. */
     static constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
-    /* How far the guest's clock moves each time the ICD reads it: a tenth of a
-     * millisecond, so a spin for a reply gives up after ten reads. */
     static constexpr std::uint64_t transport_clock_step = 1000u;
 
     ClIcdRig();
@@ -45,12 +33,9 @@ public:
     RecordingThreadLock &lock();
     RecordingThreadLock &send_lock();
     RecordingLog        &log();
-    /* The watcher's thread, which a test turns itself. */
     ScriptedThread      &watcher();
-    /* Which OpenGL context the rig's process has current. */
     ScriptedGlShareSource &gl_share();
     ScriptedD3dAdapterSource &d3d_adapters();
-    /* What the rig's Direct3D 11 device and resources are. */
     ScriptedD3d11Bridge &d3d11();
     clicd::ClIcdRoot    &root();
     FakeClLoader        &loader();
@@ -69,13 +54,10 @@ private:
     ScriptedGlShareSource gl_share_;
     ScriptedD3dAdapterSource d3d_adapters_;
     ScriptedD3d11Bridge  d3d11_;
-    /* The root binds itself to the process's one binding - the same one the
-     * dispatch table's entries reach it through - so what a test drives is
-     * what a loader would. One rig at a time, as one ICD per process. */
     clicd::ClIcdRoot     root_;
     FakeClLoader         loader_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_CL_ICD_RIG_HPP
+#endif

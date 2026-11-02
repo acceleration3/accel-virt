@@ -1,5 +1,3 @@
-/* avoverlayprobe.exe's entry point: the one line the linker's /ENTRY names. No
- * C runtime, so nothing runs before or after it. */
 #include "um/probe/overlay/overlay_probe_program.hpp"
 
 #include "core/trace/function_scope.hpp"
@@ -10,9 +8,6 @@
 extern "C" void avoverlayprobe_entry();
 
 namespace {
-
-/* The command line's last word, if it is a number: how many more presents the
- * partial window holds for. No C runtime, so read here. */
 uint32_t hold_presents()
 {
     AV_SCOPE("hold_presents");
@@ -25,6 +20,6 @@ uint32_t hold_presents()
     return *word == L'\0' || *word == L' ' ? value : 0u;
 }
 
-}  // namespace
+}
 
 extern "C" void avoverlayprobe_entry() { ExitProcess(av::OverlayProbeProgram(hold_presents()).run()); }

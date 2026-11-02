@@ -32,8 +32,6 @@ Status Connection::open(uint64_t luid)
     if (opened()) return Status::invalid_state;
     ScopeExit undo([&] { close(); });
     if (search_.find_avgpu(luid) != Status::ok) return Status::not_supported;
-    /* A name Windows will not give is no reason to refuse the adapter: the
-     * host's own name stands. Its LUID is what names it. */
     adapter_.learn(kmt_, search_.adapter());
     if (!adapter_.knows(AdapterFacts::luid_fact)) return Status::not_supported;
     if (connection_.open(search_.adapter()) != Status::ok) return Status::not_supported;
@@ -48,10 +46,8 @@ void Connection::close()
 {
     AV_SCOPE("Connection::close");
     opened_ = false;
-    /* No batch and no arena: nothing differs for a faulted channel. */
     channel_.close(false);
     connection_.close();
-    /* Nothing is left to report a failed close to: the instance is gone. */
     static_cast<void>(search_.close());
     adapter_.forget();
 }
@@ -166,4 +162,4 @@ bool Connection::host_has_dma_buf() const
     return host_dma_buf_;
 }
 
-}  // namespace av::icd
+}

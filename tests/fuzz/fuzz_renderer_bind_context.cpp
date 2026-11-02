@@ -1,7 +1,3 @@
-/* The bind QEMU sends av-renderer for a context, fed attacker-chosen bytes:
- * the first byte is how many descriptors arrived beside it and the rest is its
- * body. What decodes must re-encode to exactly the bytes read, and a doorbell
- * must come with exactly its one eventfd. */
 #include "core/support/status.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/renderer/bind_context_message.hpp"

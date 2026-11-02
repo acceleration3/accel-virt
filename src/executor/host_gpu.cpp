@@ -59,4 +59,4 @@ void HostGpu::report(StateWriter &writer) const
     writer.close();
 }
 
-}  // namespace av
+}

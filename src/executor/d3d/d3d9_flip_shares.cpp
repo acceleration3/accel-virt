@@ -17,8 +17,6 @@
 namespace av {
 
 namespace {
-
-/* The texture DWM and the scanout read a primary as. */
 D3D11_TEXTURE2D_DESC1 shared_texture_desc(uint32_t width, uint32_t height, uint32_t format)
 {
     AV_SCOPE("shared_texture_desc");
@@ -27,7 +25,6 @@ D3D11_TEXTURE2D_DESC1 shared_texture_desc(uint32_t width, uint32_t height, uint3
     described.Height = height;
     described.MipLevels = 1u;
     described.ArraySize = 1u;
-    /* flip() takes X8R8G8B8 and A8R8G8B8 only; anything else stays BGRA. */
     D3d9PresentFormat presented(DXGI_FORMAT_B8G8R8A8_UNORM);
     static_cast<void>(presented.take_ddi(format));
     described.Format = static_cast<DXGI_FORMAT>(presented.dxgi());
@@ -38,7 +35,7 @@ D3D11_TEXTURE2D_DESC1 shared_texture_desc(uint32_t width, uint32_t height, uint3
     return described;
 }
 
-}  // namespace
+}
 
 D3d9FlipShares::D3d9FlipShares(BlockSource &blocks)
     : device11_(nullptr), shares_(nullptr), lanes_(blocks), lane_of_(blocks, Pool::paged), flips_(0u), cpu_frames_(), clock_()
@@ -83,16 +80,12 @@ Status D3d9FlipShares::flip(IDirect3DDevice9 *device, IDirect3DSurface9 *source,
     return flipped;
 }
 
-/* Direct3D 9 waits for previous readers before overwriting the shared image;
- * Direct3D 11 waits for that write before recording new readers. */
 Status D3d9FlipShares::flip_on_gpu(Primary &shown, IDirect3DSurface9 *source)
 {
     AV_SCOPE("D3d9FlipShares::flip_on_gpu");
     Lane         &lane = *shown.lane_;
     VkImage       image = VK_NULL_HANDLE;
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    /* Keep other readers out between releasing the previous frame and
-     * publishing the new writer's wait on the shared Direct3D 11 queue. */
     device11_->lock(nullptr);
     ScopeExit unlock([this] { device11_->unlock(); });
     if (!device11_->vulkan().signal(lane.consumed_, lane.order_.next()) ||
@@ -131,8 +124,6 @@ Status D3d9FlipShares::flip_on_cpu(Primary &shown, IDirect3DSurface9 *source, bo
     return Status::invalid_state;
 }
 
-/* A device's lane is connected once: a device DXVK gives no interop, or a GPU
- * with no compositor, is asked no more and flips on the CPU. */
 D3d9FlipShares::Lane *D3d9FlipShares::lane_for(IDirect3DDevice9 *device)
 {
     AV_SCOPE("D3d9FlipShares::lane_for");
@@ -168,8 +159,6 @@ D3d9FlipShares::Lane *D3d9FlipShares::connect(IDirect3DDevice9 *device, Lane &la
     return nullptr;
 }
 
-/* A device's lane is connected once: a device DXVK gives no interop, or a GPU
- * with no compositor, is asked no more and flips on the CPU. */
 void D3d9FlipShares::close_lane(Lane &lane)
 {
     AV_SCOPE("D3d9FlipShares::close_lane");
@@ -182,8 +171,6 @@ void D3d9FlipShares::close_lane(Lane &lane)
     lane.timeline_.release();
 }
 
-/* A key already published by someone else (conflict) is not this primary's
- * to write: the slot is given back. */
 D3d9FlipShares::Primary *D3d9FlipShares::primary(IDirect3DDevice9 *device, uint64_t key, uint32_t width,
                                                  uint32_t height, uint32_t format)
 {
@@ -212,8 +199,6 @@ D3d9FlipShares::Primary *D3d9FlipShares::primary(IDirect3DDevice9 *device, uint6
     return &made;
 }
 
-/* One image of the compositor's, opened by both devices: Direct3D 11 as the
- * shared texture, Direct3D 9 as what its flips copy into. */
 bool D3d9FlipShares::make_on_gpu(Primary &made, Lane &lane)
 {
     AV_SCOPE("D3d9FlipShares::make_on_gpu");
@@ -253,8 +238,6 @@ void D3d9FlipShares::forget(Primary &primary)
         primary.texture_->Release();
         device11_->unlock();
     }
-    /* A copy may still be writing the image: it is done before the image
-     * goes. */
     if (primary.lane_ != nullptr) static_cast<void>(primary.lane_->signalled_.wait(primary.lane_->order_.value(), 1000000000u));
     primary.adopted_.release();
     primary.image_.release();
@@ -289,4 +272,4 @@ void D3d9FlipShares::release()
     lanes_.destroy_all();
 }
 
-}  // namespace av
+}

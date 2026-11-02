@@ -1,24 +1,3 @@
-// Cross-adapter sharing between two avgpu adapters, as Affinity does it
-// (docs/host-memory.md, "Application memory"): row-major memory made on one
-// adapter and opened on another, and what each step answers.
-//
-//   cross_adapter_probe.exe
-//
-// With two or more hardware adapters (the guest's two avgpu functions), for
-// every ordered pair (A, B):
-//   1. Direct3D 12: a heap of 1 MiB flagged SHARED | SHARED_CROSS_ADAPTER on A,
-//      a shared handle made of it (ID3D12Device::CreateSharedHandle), and the
-//      heap opened on B (OpenSharedHandle) with a buffer placed in it.
-//   2. Direct3D 11: a 1249x805 B8G8R8A8 texture of row-major layout, shared
-//      (ID3D11Device3 / D3D11_TEXTURE_LAYOUT_ROW_MAJOR with a shared NT
-//      handle), made on A and opened on B (ID3D11Device1::OpenSharedResource1).
-// Each step prints its HRESULT, so the miniport's log line for a refused
-// allocation ("avgpu: refused GDI surface: ... width .. format .. type ..",
-// lsw-avgpu.log) and the driver's ("a cross-adapter resource: ... misc ..")
-// can be read beside the probe's: the former settles which format space
-// D3DKMDT_GDISURFACEDATA.Format is in, the latter what misc flags the runtime
-// gave the creation. The pixels are not compared: once both opens succeed, the
-// colour is checked by drawing on one adapter and reading on the other.
 #include <windows.h>
 #include <d3d11_4.h>
 #include <d3d12.h>
@@ -153,7 +132,7 @@ bool texture_on_both(IDXGIAdapter1 *a, IDXGIAdapter1 *b)
     return done;
 }
 
-}  // namespace
+}
 
 int wmain()
 {

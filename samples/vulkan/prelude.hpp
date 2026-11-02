@@ -1,6 +1,3 @@
-// Everything a sample's source includes, included here first and outside the
-// namespace sample.cpp.in wraps the sample in: inside it, each header's guard
-// then skips it, and only the sample's own declarations land in the namespace.
 #pragma once
 
 #include <assert.h>

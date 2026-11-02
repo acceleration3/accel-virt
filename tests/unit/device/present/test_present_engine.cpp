@@ -1,11 +1,3 @@
-/* The present engine on its own thread over the mock's guest RAM: presents
- * taken in order are moved in order and complete in the page as they do, the
- * present line raised; a refused ticket completes in its turn - with the
- * present before it, or at once with none outstanding - and is counted; a
- * present past the engine's depth, a ticket out of count, an image source and
- * a region outside a surface are refused. Nothing is counted without a page;
- * registering one again or resetting forgets every present and holds
- * nothing. */
 #include "device/abi/entry_points.hpp"
 #include "device/control/control_request.hpp"
 #include "device/fence/fence_interrupts.hpp"
@@ -23,9 +15,6 @@
 #include <time.h>
 
 namespace av {
-
-/* The engine's thread stopped and started again, so a test can queue past
- * what the thread would already have moved. */
 struct PresentEngineProbe {
     static void   pause(PresentEngine &engine) { engine.stop_thread(); }
     static Status resume(PresentEngine &engine, Host &host)
@@ -35,7 +24,7 @@ struct PresentEngineProbe {
     }
 };
 
-}  // namespace av
+}
 
 using av::ControlRequest;
 using av::FenceInterrupts;
@@ -81,7 +70,6 @@ struct Rig {
         ControlRequest request(host, &mock);
         return engine.queue(request);
     }
-    /* Waits up to two seconds for the page to say `completed`. */
     bool reaches(std::uint64_t completed, PresentProgress &progress)
     {
         const timespec pause = {0, 100000};
@@ -94,7 +82,7 @@ struct Rig {
     std::uint32_t present_lines() { return host.raised(FenceInterrupts::present_line); }
 };
 
-}  // namespace
+}
 
 TEST(present_engine, presents_are_moved_in_order_and_complete_in_the_page)
 { Rig rig;
@@ -115,7 +103,6 @@ TEST(present_engine, presents_are_moved_in_order_and_complete_in_the_page)
   CHECK(rig.present_lines() >= 1u);
   CHECK(rig.present_lines() <= 3u);
   CHECK(rig.engine.invariants_hold());
-  /* The moved presents' mappings go when the next is taken. */
   CHECK_EQ(rig.send(rig.scene.blt(4u, 8u, 1u)), ok_nodata);
   CHECK(rig.reaches(4u, progress));
   CHECK(rig.host.live_guest_mappings() <= 1u + 3u);
@@ -128,7 +115,7 @@ TEST(present_engine, nothing_is_taken_or_counted_without_a_page)
 { Rig rig;
   CHECK_EQ(rig.send(rig.scene.blt(1u, 0u, 1u)), err_invalid_parameter);
   CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
-  CHECK_EQ(rig.send(rig.scene.blt(1u, 0u, 1u)), ok_nodata);   /* still the first */
+  CHECK_EQ(rig.send(rig.scene.blt(1u, 0u, 1u)), ok_nodata);
   PresentProgress progress;
   CHECK(rig.reaches(1u, progress));
   CHECK_EQ(progress.refused(), 0u); }
@@ -136,13 +123,13 @@ TEST(present_engine, nothing_is_taken_or_counted_without_a_page)
 TEST(present_engine, a_refusal_with_nothing_outstanding_completes_at_once)
 { Rig rig;
   CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
-  CHECK_EQ(rig.send(rig.scene.blt(5u, 0u, 1u)), err_invalid_parameter);   /* the first is ticket 1 */
+  CHECK_EQ(rig.send(rig.scene.blt(5u, 0u, 1u)), err_invalid_parameter);
   PresentProgress progress;
   CHECK(rig.scene.progress(progress));
   CHECK_EQ(progress.completed(), 1u);
   CHECK_EQ(progress.refused(), 1u);
   CHECK_EQ(rig.present_lines(), 1u);
-  CHECK_EQ(rig.send(rig.scene.image(2u, 0x77u)), err_invalid_parameter);   /* nothing reads snapshots here */
+  CHECK_EQ(rig.send(rig.scene.image(2u, 0x77u)), err_invalid_parameter);
   CHECK(rig.scene.progress(progress));
   CHECK_EQ(progress.completed(), 2u);
   CHECK_EQ(progress.refused(), 2u);
@@ -163,7 +150,7 @@ TEST(present_engine, a_refusal_behind_an_outstanding_present_completes_with_it)
   CHECK_EQ(rig.send(rig.scene.blt(4u, 3u, 1u)), err_out_of_memory);
   PresentProgress progress;
   CHECK(rig.scene.progress(progress));
-  CHECK_EQ(progress.completed(), 0u);   /* ticket 2 waits for ticket 1 */
+  CHECK_EQ(progress.completed(), 0u);
   CHECK(rig.engine.invariants_hold());
   CHECK_STATUS(PresentEngineProbe::resume(rig.engine, rig.host), Status::ok);
   CHECK(rig.reaches(4u, progress));
@@ -188,7 +175,6 @@ TEST(present_engine, a_present_past_the_depth_is_refused_and_completes_in_its_tu
   CHECK_EQ(progress.refused(), 1u);
   CHECK(rig.scene.copied(1u, PresentEngine::depth));
   CHECK_EQ(rig.scene.destination_pixel(0u, 0u), 0u);
-  /* Room again once the moved presents are let go. */
   CHECK_EQ(rig.send(rig.scene.blt(PresentEngine::depth + 2u, 0u, 1u)), ok_nodata);
   CHECK(rig.reaches(PresentEngine::depth + 2u, progress));
   CHECK(rig.scene.copied(0u, 1u)); }
@@ -229,7 +215,7 @@ TEST(present_engine, an_engine_that_cannot_start_holds_nothing)
   {
       PresentEngine engine(host, interrupts);
       CHECK_STATUS(engine.attach(PresentScene::engine_page, none, lendings), Status::invalid_state);
-      engine.detach();   /* nothing to stop */
+      engine.detach();
       host.fail_mutex_at(1u);
       CHECK_STATUS(engine.initialize(), Status::no_memory);
       host.fail_event_at(1u);
@@ -245,22 +231,18 @@ TEST(present_engine, an_engine_that_cannot_start_holds_nothing)
       CHECK(engine.invariants_hold());
       CHECK_STATUS(engine.attach(PresentScene::engine_page, none, lendings), Status::ok);
   }
-  CHECK_EQ(host.live_threads(), 0u);   /* destroyed running, its thread stopped */
+  CHECK_EQ(host.live_threads(), 0u);
   CHECK_EQ(host.live_guest_mappings(), 0u);
   CHECK_EQ(host.live_events(), 0u); }
 
-/* An image source is moved out of the snapshot its key names - rows its
- * pitch apart, padding and all - which is let go after; one whose snapshot
- * never comes is counted refused, and one naming a key where nothing reads
- * snapshots is refused at once. */
 TEST(present_engine, an_image_source_is_moved_out_of_its_snapshot_and_the_snapshot_let_go)
 { Rig rig;
-  constexpr std::uint32_t pitch = 20u * 4u;   /* 16 pixels and 4 of padding a row */
+  constexpr std::uint32_t pitch = 20u * 4u;
   static std::uint32_t    pixels[20u * 2u];
   for (std::uint32_t at = 0u; at < 40u; at++) pixels[at] = 0xA0000000u | at;
   const AvFrameView view = {reinterpret_cast<const std::uint8_t *>(pixels), pitch, 16u, 2u, 0u};
   CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
-  CHECK_EQ(rig.send(rig.scene.image(1u, 0x51u)), 0x1205u);   /* nothing reads snapshots yet */
+  CHECK_EQ(rig.send(rig.scene.image(1u, 0x51u)), 0x1205u);
   rig.plane.serve_frame(av::SurfacePoint(0x52u, 1u), view);
   CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots, rig.lendings), Status::ok);
   CHECK_EQ(rig.send(rig.scene.image(1u, 0x52u)), ok_nodata);
@@ -271,7 +253,7 @@ TEST(present_engine, an_image_source_is_moved_out_of_its_snapshot_and_the_snapsh
   CHECK_EQ(rig.scene.destination_pixel(0u, 1u), 0u);
   CHECK(!rig.plane.snapshot_mapped());
   CHECK_EQ(rig.plane.unmaps(), 1u);
-  CHECK_EQ(rig.send(rig.scene.image(2u, 0x53u)), ok_nodata);   /* a key no session took */
+  CHECK_EQ(rig.send(rig.scene.image(2u, 0x53u)), ok_nodata);
   CHECK(rig.reaches(2u, progress));
   CHECK_EQ(progress.refused(), 1u);
   CHECK(rig.engine.invariants_hold()); }

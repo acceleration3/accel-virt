@@ -1,10 +1,3 @@
-/* How long the GPU spends inside each guest submission, and idle between one
- * and the next, logged once a second: AV_VK_SUBMIT_TIMING=1 in QEMU's
- * environment. A timestamp is written before a submission's first command
- * buffer and after its last, from command buffers of this class's own; the
- * results are read back without waiting, submissions later. What a frame the
- * GPU takes longer over in the VM than natively spends inside the work and
- * what between it are the two numbers here. */
 #ifndef AV_DEVICE_EXECUTOR_VULKAN_SUBMIT_TIMING_HPP
 #define AV_DEVICE_EXECUTOR_VULKAN_SUBMIT_TIMING_HPP
 
@@ -20,19 +13,14 @@ class DriverLog;
 
 class VulkanSubmitTiming {
 public:
-    /* `lines` is where the timing is said. */
     explicit VulkanSubmitTiming(DriverLog &lines);
     ~VulkanSubmitTiming();
     VulkanSubmitTiming(const VulkanSubmitTiming &) = delete;
     VulkanSubmitTiming &operator=(const VulkanSubmitTiming &) = delete;
 
     bool     enabled() const;
-    /* `queue` is family `family` of `device`, whose physical device is `physical`. */
     void     queue_made(VkPhysicalDevice physical, VkDevice device, uint32_t family, VkQueue queue);
-    /* The guest's submission, timed: its own submit infos with one command
-     * buffer of this class's before the first and after the last. */
     VkResult submit(VkQueue queue, uint32_t count, const VkSubmitInfo *submits, VkFence fence);
-    /* Before `device` goes. */
     void     forget(VkDevice device);
 
 private:
@@ -65,6 +53,6 @@ private:
     uint64_t         window_started_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DEVICE_EXECUTOR_VULKAN_SUBMIT_TIMING_HPP
+#endif

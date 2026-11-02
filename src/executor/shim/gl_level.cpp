@@ -86,4 +86,4 @@ uint32_t GlLevel::depth() const
     return depth_;
 }
 
-}  // namespace av
+}

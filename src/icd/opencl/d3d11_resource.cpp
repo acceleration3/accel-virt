@@ -78,4 +78,4 @@ MipExtent D3d11Resource::extent_of(uint32_t subresource) const
                      SubresourceLayout(mips_, layers_, 1u).mip_of(subresource));
 }
 
-}  // namespace av::clicd
+}

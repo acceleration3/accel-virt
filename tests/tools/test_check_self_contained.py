@@ -5,7 +5,6 @@ from tool_run import ROOT, run
 
 CHECK = ROOT / "tools" / "check_self_contained.py"
 
-# Assembled so this file does not itself trip the gate it tests.
 SCRATCH = "claude" + "-scratch"
 KB = "wddm" + "-kb"
 SIBLING = "../" + "render-server"

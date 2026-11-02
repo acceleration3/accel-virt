@@ -64,9 +64,6 @@ void Worker::connect_signal(ContextSignal &signal)
     signal_ = &signal;
 }
 
-/* A wake that outlived the worker would signal an event that is gone. Nothing
- * raises after teardown because the registration a foreign thread reaches this
- * through is made stale first, on the worker (ClEventSignals). */
 void Worker::wake()
 {
     AV_SCOPE("Worker::wake");
@@ -176,9 +173,6 @@ void Worker::run()
     AV_SCOPE("Worker::run");
     host_.require_worker("Worker::run");
     for (;;) {
-        /* Asleep only once the process can see it is, and only if nothing
-         * was published before it could: the process publishes its tail and
-         * then reads the flag, this clears the flag and then reads the tail. */
         if (!work_within_spin()) {
             ring_.announce_awake(false);
             if (!ring_.has_work()) host_.wait_event(wake_);
@@ -195,27 +189,16 @@ void Worker::run()
     }
 }
 
-/* A guest waiting on an answer sends its next batch within microseconds, and
- * a thread asleep in poll() on an idle core takes tens of them to wake: the
- * ring is watched for a moment before the worker sleeps. */
 bool Worker::work_within_spin()
 {
     AV_SCOPE("Worker::work_within_spin");
     constexpr uint64_t spin_ns = 100000u;
-    /* While the executor waits on the GPU for a result the guest reads in its
-     * own memory, the worker stays up to write it the moment it comes - a
-     * guest waiting on it sends nothing that would wake a sleeping worker. */
     constexpr uint64_t publishing_ns = 100000000u;
-    /* A poll takes the host device's lock, which other contexts' workers
-     * take too: every couple of microseconds, not every look at the ring. */
     constexpr uint64_t poll_every_ns = 2000u;
     const uint64_t     started = host_.monotonic_nanoseconds();
     uint64_t           polled = started;
     bool               publishing = ring_.poll();
     for (;;) {
-        /* A posted item, a stop or a raised signal is work too: while results
-         * are pending the spin lasts long enough that any would otherwise wait
-         * on it. */
         if (ring_.has_work() || __atomic_load_n(&count_, __ATOMIC_ACQUIRE) != 0u ||
             __atomic_load_n(&stopping_, __ATOMIC_ACQUIRE) || (signal_ != nullptr && signal_->pending()))
             return true;
@@ -229,7 +212,6 @@ bool Worker::work_within_spin()
     }
 }
 
-/* A doorbell rings only a running worker's event. */
 bool Worker::invariants_hold() const
 {
     AV_SCOPE("Worker::invariants_hold");
@@ -237,4 +219,4 @@ bool Worker::invariants_hold() const
            (thread_ != nullptr || !doorbell_.connected());
 }
 
-}  // namespace av
+}

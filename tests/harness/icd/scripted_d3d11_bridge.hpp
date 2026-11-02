@@ -1,10 +1,3 @@
-/* The tests' D3d11Bridge: one Direct3D 11 device and the few resources a test
- * names, each with what it says of itself and the bytes of the subresource
- * the test copies through it. A read hands a staging copy of those bytes to
- * the rows, as a map of a staging resource would; a write hands zeroed
- * staging and copies what the rows wrote back into them. It counts each
- * object's references and every read and write, and can be told to refuse
- * the next one, as a device that will not make a staging resource does. */
 #ifndef AV_SCRIPTED_D3D11_BRIDGE_HPP
 #define AV_SCRIPTED_D3D11_BRIDGE_HPP
 
@@ -23,17 +16,10 @@ public:
 
     ScriptedD3d11Bridge();
 
-    /* `device` is an ID3D11Device from now on. */
     void name_device(void *device);
-    /* `resource` is a resource of `device` described as `described`; `bytes`
-     * is its subresource, laid out a row every `row_pitch` bytes and a slice
-     * every `slice_pitch`, `size` of them in all. */
     void name_resource(void *resource, void *device, const clicd::D3d11Resource &described, std::uint8_t *bytes,
                        std::size_t size, std::size_t row_pitch, std::size_t slice_pitch);
-    /* The next read or write answers CL_OUT_OF_RESOURCES and maps nothing. */
     void refuse_next();
-    /* The next twin made is `twin`, with `handle` to it; none is made
-     * otherwise, as a device that shares nothing. */
     void offer_twin(void *twin, std::uint64_t handle);
 
     bool   device(void *object) override;
@@ -47,13 +33,10 @@ public:
     cl_int to_twin(void *device, void *resource, std::uint32_t subresource, void *twin) override;
     cl_int from_twin(void *device, void *twin, void *resource, std::uint32_t subresource) override;
 
-    /* References held to `object` and not let go of. */
     std::int32_t  references(const void *object) const;
     std::uint32_t reads() const;
     std::uint32_t writes() const;
-    /* The subresource the last read or write named. */
     std::uint32_t subresource() const;
-    /* Handles closed, and copies into and out of a twin. */
     std::uint32_t closed() const;
     std::uint32_t to_twins() const;
     std::uint32_t from_twins() const;
@@ -70,7 +53,6 @@ private:
     };
 
     Resource    *named(const void *object);
-    /* Whether the next read or write is refused, which it then is not again. */
     bool         refused();
 
     void         *device_;
@@ -90,6 +72,6 @@ private:
     std::uint32_t from_twins_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_D3D11_BRIDGE_HPP
+#endif

@@ -8,7 +8,7 @@ namespace {
 
 constexpr uint64_t offset_mask = GuestMemoryTable::max_region_size - 1u;
 
-}  // namespace
+}
 
 GuestMemoryTable::GuestMemoryTable() : regions_{}
 {
@@ -100,8 +100,6 @@ uint32_t GuestMemoryTable::count() const
     return used;
 }
 
-/* Every region is one the encoding can name and whole, and no two share an id
- * or a byte: locate would otherwise answer whichever came first. */
 bool GuestMemoryTable::invariants_hold() const
 {
     AV_SCOPE("GuestMemoryTable::invariants_hold");
@@ -119,4 +117,4 @@ bool GuestMemoryTable::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

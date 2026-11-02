@@ -1,5 +1,3 @@
-/* The device itself: joining the session, the queues and what records into
- * them, fences, queries, and the slots that answer a fixed fact. */
 #include "um/d3d/d3d12_device.hpp"
 
 #include "core/log/log_line.hpp"
@@ -16,29 +14,22 @@
 namespace av::d3d12 {
 
 namespace {
-
-/* D3D12_COMMAND_LIST_TYPE. */
 constexpr uint32_t list_direct = 0u;
 constexpr uint32_t list_bundle = 1u;
 constexpr uint32_t list_compute = 2u;
 constexpr uint32_t list_copy = 3u;
-/* Executes between the host's verdicts on what the device was sent. */
 constexpr uint64_t verdict_every = 64u;
 
 uint32_t list_type_of(D3D12DDI_COMMAND_QUEUE_FLAGS flags)
 {
     AV_SCOPE("list_type_of");
-    /* A direct queue is described by everything it can do - 3D, compute and
-     * copy together - so 3D decides before compute does: tested the other way
-     * every direct list was recorded for a compute queue, and its first draw
-     * was an illegal opcode that hung the host GPU. */
     if ((flags & D3D12DDI_COMMAND_QUEUE_FLAG_3D) != 0) return list_direct;
     if ((flags & D3D12DDI_COMMAND_QUEUE_FLAG_COMPUTE) != 0) return list_compute;
     if ((flags & D3D12DDI_COMMAND_QUEUE_FLAG_COPY) != 0) return list_copy;
     return list_direct;
 }
 
-}  // namespace
+}
 
 D3d12Device::D3d12Device(d3d::D3dSession &session, KeyedLog &log,
                          const D3d12HostCaps &caps,
@@ -90,7 +81,6 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
 HRESULT D3d12Device::answered(const char *slot, HRESULT hresult)
 {
     AV_SCOPE("D3d12Device::answered");
-    /* E_PENDING is MakeResident's answer when it queued paging, not a refusal. */
     if (FAILED(hresult) && hresult != E_PENDING) refused_.failed(slot, hresult);
     return hresult;
 }
@@ -143,15 +133,12 @@ bool D3d12Device::sent(bool sent_ok, const char *what)
     return sent_ok;
 }
 
-/* ---------------------------------------------------------------- formats */
-
 VOID D3d12Device::check_format_support(DXGI_FORMAT format, UINT *support)
 {
     AV_SCOPE("D3d12Device::check_format_support");
     if (support != nullptr) *support = caps_.format_support(format);
 }
 
-/* No tiled resources, so none multisampled either. */
 VOID D3d12Device::check_multisample_quality_levels(DXGI_FORMAT format, UINT samples,
                                                    D3D12DDI_MULTISAMPLE_QUALITY_LEVEL_FLAGS flags, UINT *levels)
 {
@@ -161,16 +148,12 @@ VOID D3d12Device::check_multisample_quality_levels(DXGI_FORMAT format, UINT samp
                                                                                    : caps_.quality_levels(format, samples);
 }
 
-/* ---------------------------------------------------------------- facts */
-
 UINT D3d12Device::get_implicit_physical_adapter_mask()
 {
     AV_SCOPE("D3d12Device::get_implicit_physical_adapter_mask");
     return 1u;
 }
 
-/* Room for the point a present names (PresentPointRecord), which the runtime
- * hands back in the present's arguments and the miniport reads at the blt. */
 UINT D3d12Device::get_present_private_driver_data_size(const D3D12DDIARG_PRESENT_0001 *)
 {
     AV_SCOPE("D3d12Device::get_present_private_driver_data_size");
@@ -191,9 +174,6 @@ HRESULT D3d12Device::enumerate_meta_commands(UINT *count, D3D12DDIARG_META_COMMA
     return S_OK;
 }
 
-/* The allocations behind an object, for the debug layer: its memory is the
- * host's, so there are none to name - and the counts must say so, since the
- * runtime reads them whether or not it gets a list. */
 VOID D3d12Device::get_debug_allocation_info(D3D12DDI_HANDLE_AND_TYPE, UINT *virtual_addresses,
                                             D3D12DDI_DEBUG_VIRTUAL_ADDRESS_ALLOCATION_INFO_0012 *,
                                             UINT *kernel_allocations, D3D12DDI_DEBUG_KMT_ALLOCATION_INFO_0014 *)
@@ -203,7 +183,6 @@ VOID D3d12Device::get_debug_allocation_info(D3D12DDI_HANDLE_AND_TYPE, UINT *virt
     if (kernel_allocations != nullptr) *kernel_allocations = 0u;
 }
 
-/* No pipeline is ever serialized, so no blob is this driver's. */
 D3D12DDI_DRIVER_MATCHING_IDENTIFIER_STATUS
 D3d12Device::check_driver_matching_identifier(D3D12DDI_SERIALIZED_DATA_TYPE,
                                               const D3D12DDI_SERIALIZED_DATA_DRIVER_MATCHING_IDENTIFIER_0054 *)
@@ -212,8 +191,6 @@ D3d12Device::check_driver_matching_identifier(D3D12DDI_SERIALIZED_DATA_TYPE,
     return D3D12DDI_DRIVER_MATCHING_IDENTIFIER_UNSUPPORTED_TYPE;
 }
 
-/* No extended feature: no video, no meta commands, no render passes, no
- * shader cache of the driver's own. */
 HRESULT D3d12Device::get_supported_extended_features(D3D12DDI_FEATURE_0020, UINT32 *count, D3D12DDI_FEATURE_0020 *)
 {
     AV_SCOPE("D3d12Device::get_supported_extended_features");
@@ -256,8 +233,6 @@ HRESULT D3d12Device::evict(const D3D12DDIARG_EVICT *args)
     return residency_.object().evict(*args);
 }
 
-/* ---------------------------------------------------------------- queues */
-
 SIZE_T D3d12Device::calc_private_command_queue_size(const D3D12DDIARG_CREATECOMMANDQUEUE_0050 *)
 {
     AV_SCOPE("D3d12Device::calc_private_command_queue_size");
@@ -274,7 +249,6 @@ HRESULT D3d12Device::create_command_queue(const D3D12DDIARG_CREATECOMMANDQUEUE_0
     stamp(queue.header, QueueRecord::tag, next_id());
     queue.runtime = runtime;
     queue.type = list_type_of(args->QueueFlags);
-    /* The context D3D12Core signals and waits the queue's fences on. */
     D3DDDICB_CREATECONTEXTVIRTUAL context = {};
     context.NodeOrdinal = 0u;
     context.EngineAffinity = 1u;
@@ -293,8 +267,6 @@ VOID D3d12Device::destroy_command_queue(D3D12DDI_HCOMMANDQUEUE handle)
 {
     AV_SCOPE("D3d12Device::destroy_command_queue");
     QueueRecord &queue = *static_cast<QueueRecord *>(handle.pDrvPrivate);
-    /* The queue's context is D3D12Core's to destroy with the queue: its
-     * device-level DestroyContextCb refuses a queue's context. */
     static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), queue.header.stamp.id()), "Destroy12"));
     queue = QueueRecord{};
 }
@@ -313,27 +285,18 @@ VOID D3d12Device::execute_command_lists(D3D12DDI_HCOMMANDQUEUE handle, UINT coun
                   "ExecuteCommandLists12"))
             return;
     }
-    /* The runtime signals an application's fence on the queue's context once
-     * its packets are done: the batch goes out as any other, and a packet on
-     * that context follows it (see the class comment). */
     queue.executed++;
     if (wire().flush() != Status::ok) {
         lost("the queue's work could not be sent");
         return;
     }
     if (!follow(queue)) return;
-    /* The host's verdict on what was sent: a command it refused - a pipeline
-     * it could not compile, a view of nothing - removed the device. Asked now
-     * and then rather than every execute, because asking is a round trip. */
     if (queue.executed % verdict_every != 0u) return;
     uint32_t removed = 0u;
     if (!sent(d3d12proto::av_d3d12_Finish12(wire(), &removed), "Finish12")) return;
     if (removed != 0u) lost("the host removed the device");
 }
 
-/* A packet on the queue's context that completes once the host has completed
- * the newest batch of the session's ring - the one that carried the execute,
- * or one after it (FollowRecord). */
 bool D3d12Device::follow(const QueueRecord &queue)
 {
     AV_SCOPE("D3d12Device::follow");
@@ -344,8 +307,6 @@ bool D3d12Device::follow(const QueueRecord &queue)
     return false;
 }
 
-/* Native fences only: D3D12Core signals and waits a monitored fence itself,
- * on the queue's context, and this driver reports no native fences. */
 VOID D3d12Device::signal_fence(D3D12DDI_HCOMMANDQUEUE, D3D12DDIARG_FENCE_OPERATION *)
 {
     AV_SCOPE("D3d12Device::signal_fence");
@@ -357,8 +318,6 @@ VOID D3d12Device::wait_for_fence(D3D12DDI_HCOMMANDQUEUE, D3D12DDIARG_FENCE_OPERA
     AV_SCOPE("D3d12Device::wait_for_fence");
     unsupported("pfnWaitForFence");
 }
-
-/* ---------------------------------------------------------------- pools, recorders, lists */
 
 SIZE_T D3d12Device::calc_private_command_pool_size(const D3D12DDIARG_CREATE_COMMAND_POOL_0040 *)
 {
@@ -435,9 +394,6 @@ HRESULT D3d12Device::create_command_list(const D3D12DDIARG_CREATE_COMMAND_LIST_0
     AV_SCOPE("D3d12Device::create_command_list");
     if (args == nullptr || handle.pDrvPrivate == nullptr || core_ == nullptr || list_table_ == nullptr)
         return E_INVALIDARG;
-    /* Without this D3D12Core records the list into its own stubs ("Driver
-     * didn't call pfnSetCommandListDDITableCb ... defaulting to stubbed
-     * DDIs"), and none of it reaches this driver. */
     core_->pfnSetCommandListDDITableCb(runtime_list, D3D12DDI_HRTTABLE{list_table_});
     ListRecord &list = *static_cast<ListRecord *>(handle.pDrvPrivate);
     list = ListRecord{};
@@ -454,16 +410,12 @@ VOID D3d12Device::destroy_command_list(D3D12DDI_HCOMMANDLIST handle)
     list = ListRecord{};
 }
 
-/* ---------------------------------------------------------------- fences, queries */
-
 SIZE_T D3d12Device::calc_private_fence_size(const D3D12DDIARG_CREATE_FENCE *)
 {
     AV_SCOPE("D3d12Device::calc_private_fence_size");
     return sizeof(ObjectRecord);
 }
 
-/* D3D12Core keeps the fence - a monitored fence the kernel made - and signals
- * it; the record is for a native fence's signal, which never comes. */
 HRESULT D3d12Device::create_fence(D3D12DDI_HFENCE handle, const D3D12DDIARG_CREATE_FENCE *)
 {
     AV_SCOPE("D3d12Device::create_fence");
@@ -508,4 +460,4 @@ VOID D3d12Device::destroy_query_heap(D3D12DDI_HQUERYHEAP handle)
     heap = ObjectRecord{};
 }
 
-}  // namespace av::d3d12
+}

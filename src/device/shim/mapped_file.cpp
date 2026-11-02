@@ -54,4 +54,4 @@ size_t MappedFile::length() const
     return length_;
 }
 
-}  // namespace av
+}

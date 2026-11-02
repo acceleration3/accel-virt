@@ -17,8 +17,6 @@ struct FakeDevice {
 constexpr std::uint8_t pattern = 0xA5u;
 constexpr std::size_t  guard = 16u;
 
-/* The runtime's block for a device, sized as pfnCalcPrivateDeviceSize
- * answered, with a band past its end the driver must never write. */
 struct RuntimeBlock {
     alignas(8) std::uint8_t bytes[DeviceTable::private_bytes + guard];
 
@@ -35,7 +33,7 @@ struct RuntimeBlock {
     }
 };
 
-}  // namespace
+}
 
 TEST(device_block, names_the_device_it_was_bound_to)
 { RuntimeBlock block;
@@ -44,8 +42,6 @@ TEST(device_block, names_the_device_it_was_bound_to)
   CHECK(&DeviceBlock<FakeDevice>(block.bytes).device() == &device);
   CHECK(DeviceBlock<FakeDevice>(block.bytes).device().serial == 7u); }
 
-/* The cookie DeviceTable wrote ahead of the slot, which is how the table finds
- * the device again, and whatever lies past the block, are not the slot's. */
 TEST(device_block, writes_only_the_extension_slot)
 { RuntimeBlock block;
   FakeDevice   device{1u};
@@ -54,8 +50,6 @@ TEST(device_block, writes_only_the_extension_slot)
   CHECK(!block.untouched(DeviceTable::extension_offset, DeviceTable::private_bytes));
   CHECK(block.untouched(DeviceTable::private_bytes, sizeof block.bytes)); }
 
-/* A deferred context's block names a device of its own, and binding it again
- * moves it - the runtime reuses blocks. */
 TEST(device_block, each_block_names_its_own_device_and_a_rebind_replaces_it)
 { RuntimeBlock first, second;
   FakeDevice   one{1u}, two{2u};

@@ -45,7 +45,7 @@ private:
     std::uint32_t last_target_;
 };
 
-}  // namespace
+}
 
 TEST(vidpn_initialize, reaches_the_topology_of_the_vidpn)
 { VidPnFixture fixture;
@@ -173,7 +173,7 @@ TEST(vidpn_update_path_support, forwards_the_path)
   CHECK_STATUS(vidpn.initialize(), Status::ok);
   D3dkmdtVidPnPresentPathRecord path = fixture.vidpn().path(0u);
   path.ContentTransformationScalingSupport = 1u;
-  path.ContentTransformationRotationSupport = 0x11u;   /* Identity | Offset0 */
+  path.ContentTransformationRotationSupport = 0x11u;
   CHECK_STATUS(vidpn.update_path_support(path), Status::ok);
   CHECK_EQ(fixture.vidpn().path_support_updates(), 1u);
   CHECK_EQ(fixture.vidpn().path(0u).ContentTransformationRotationSupport, 0x11u);
@@ -208,8 +208,6 @@ TEST(vidpn_acquire_mode_set, a_refusal_or_a_missing_set_fails)
   CHECK_STATUS(vidpn.acquire_mode_set(0u, set, target_interface), Status::malformed);
   CHECK(set == nullptr); }
 
-/* A created set is empty, and dxgkrnl refuses an empty one to assign - so the
- * round trip a caller performs is create, add one mode, assign. */
 TEST(vidpn_create_mode_set, answers_fresh_sets_to_fill_and_assign)
 { VidPnFixture fixture;
   VidPn vidpn(fixture.platform(), fixture.dxgkrnl(), fixture.handle());

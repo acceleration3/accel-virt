@@ -1,12 +1,3 @@
-// gl_window.exe: an OpenGL window as an application makes one - a visible
-// window, a double-buffered pixel format, a context through wgl - swapped for a
-// few seconds. The top half is cleared blue and the bottom half red, so a
-// screenshot shows whether the frame reached the screen the right way up, and a
-// white bar crosses it, so one shows whether frames keep coming. Prints the
-// swaps it made and how long they took. With "resize", the window grows by a
-// third two seconds in, as a game's does when it leaves its loading screen.
-//
-//   gl_window.exe [seconds] [width] [height] [resize]
 #include <cstdio>
 #include <cstdlib>
 #include <cwchar>
@@ -96,7 +87,6 @@ int wmain(int argc, wchar_t **argv)
         glClear(GL_COLOR_BUFFER_BIT);
         SwapBuffers(dc);
         frames++;
-        /* What a driver's own calls on the context raised shows here too. */
         const GLenum error = glGetError();
         if (error != GL_NO_ERROR && errors++ < 4) wprintf(L"frame %d: GL error 0x%04x\n", frames, error);
     }

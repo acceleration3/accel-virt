@@ -47,4 +47,4 @@ uint64_t WindowsD3dAdapterSource::luid_of(IDXGIAdapter &adapter)
            description.AdapterLuid.LowPart;
 }
 
-}  // namespace av
+}

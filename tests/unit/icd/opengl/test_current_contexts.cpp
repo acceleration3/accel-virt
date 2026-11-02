@@ -1,6 +1,3 @@
-/* The context each thread has current: at most one thread per context, a
- * thread refused another's context with that thread untouched, and release
- * clearing only the calling thread's (US3.2). */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_context_rig.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
@@ -25,7 +22,7 @@ struct Threads {
                           GlContextOptions()};
 };
 
-}  // namespace
+}
 
 TEST(current_contexts, a_context_is_current_on_one_thread_and_another_is_refused_it)
 { Threads threads;

@@ -1,7 +1,3 @@
-/* The memory one av context runs on: its ring, fence page and reply slot in
- * guest RAM the driver owns (docs/protocol.md, "Context memory"), the kernel's
- * views of the ring header and fence page, and the process's of the ring and
- * reply slot. */
 #include "miniport/av_context/context_memory.hpp"
 #include "miniport/av_context/context_pages.hpp"
 #include "core/support/status.hpp"
@@ -44,7 +40,7 @@ struct ContextMemoryProbe {
     static GuestPages &reply(ContextMemory &memory) { return memory.reply_; }
 };
 
-}  // namespace av
+}
 
 using av::ContextMemoryProbe;
 
@@ -57,11 +53,8 @@ std::uint8_t *at(std::uint64_t view)
     return reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(view));
 }
 
-}  // namespace
+}
 
-/* The ring holds its 32-byte header and 2^order bytes in whole pages, with a
- * fresh header the device can read at setup; the reply slot is the size asked
- * for, in whole pages; the fence page is one page. */
 TEST(context_memory_allocate, holds_a_fresh_ring_a_fence_page_and_a_reply_slot)
 { MockPlatform platform;
   ContextMemory memory(platform);
@@ -73,15 +66,14 @@ TEST(context_memory_allocate, holds_a_fresh_ring_a_fence_page_and_a_reply_slot)
   CHECK_EQ(memory.order(), 13u);
   const ContextPages pages = memory.pages();
   CHECK(pages.complete());
-  CHECK_EQ(pages.ring().count(), 3u);    /* 32 + 8192, in pages */
+  CHECK_EQ(pages.ring().count(), 3u);
   CHECK_EQ(pages.fence().count(), 1u);
-  CHECK_EQ(pages.reply().count(), 2u);   /* 4097, in pages */
+  CHECK_EQ(pages.reply().count(), 2u);
   RingHeader header;
   CHECK_STATUS(header.decode(pages.ring_view(), RingHeader::encoded_size), Status::ok);
   CHECK_EQ(header.order(), 13u);
   CHECK(header.tail() == 0u && header.head() == 0u);
   CHECK_EQ(pages.fence_view()[page - 1u], 0u);
-  /* The kernel's two views are of the pages the device is handed. */
   CHECK(platform.translate_physical(pages.ring().frame(0u), page) == pages.ring_view());
   CHECK(platform.translate_physical(pages.fence().frame(0u), page) == pages.fence_view());
   CHECK_EQ(memory.ring_view(), 0u);
@@ -112,10 +104,8 @@ TEST(context_memory_allocate, an_order_or_reply_slot_outside_the_protocol_is_ref
   CHECK_EQ(memory.pages().ring().count(), 4097u);
   CHECK_EQ(memory.pages().reply().count(), 4096u); }
 
-/* Pages, the frames of any of the three, or either kernel view missing: no
- * memory, and nothing left held or mapped. */
 TEST(context_memory_allocate, every_step_that_fails_leaves_nothing_held)
-{ for (std::uint32_t failing = 1u; failing <= 3u; failing++) {   /* ring, fence, reply pages */
+{ for (std::uint32_t failing = 1u; failing <= 3u; failing++) {
       MockPlatform platform;
       ContextMemory memory(platform);
       platform.fail_page_allocation_at(failing);
@@ -125,7 +115,7 @@ TEST(context_memory_allocate, every_step_that_fails_leaves_nothing_held)
       CHECK_EQ(platform.owned_page_blocks(), 0u);
       CHECK_STATUS(memory.allocate(12u, 4096u), Status::ok);
   }
-  for (std::uint32_t failing = 1u; failing <= 3u; failing++) {   /* their frames */
+  for (std::uint32_t failing = 1u; failing <= 3u; failing++) {
       MockPlatform platform;
       ContextMemory memory(platform);
       platform.fail_allocation_at(failing);
@@ -133,7 +123,7 @@ TEST(context_memory_allocate, every_step_that_fails_leaves_nothing_held)
       CHECK(!memory.allocated());
       CHECK_EQ(platform.owned_page_blocks(), 0u);
   }
-  for (std::uint32_t failing = 1u; failing <= 2u; failing++) {   /* ring header, fence page views */
+  for (std::uint32_t failing = 1u; failing <= 2u; failing++) {
       MockPlatform platform;
       ContextMemory memory(platform);
       platform.fail_frame_map_at(failing);
@@ -144,8 +134,6 @@ TEST(context_memory_allocate, every_step_that_fails_leaves_nothing_held)
       CHECK_EQ(platform.mapped_frames(), 0u);
   } }
 
-/* The process sees the ring and the reply slot, the same memory the device is
- * handed, and the fence page read-only: GPU progress it may read, never forge. */
 TEST(context_memory_map, the_process_sees_the_ring_and_reply_the_device_is_handed)
 { MockPlatform platform;
   ContextMemory memory(platform);
@@ -174,8 +162,6 @@ TEST(context_memory_map, the_process_sees_the_ring_and_reply_the_device_is_hande
   CHECK_EQ(platform.process_mappings(), 0u);
   CHECK_EQ(platform.owned_page_blocks(), 0u); }
 
-/* A process that can be given the ring but not the reply slot is given
- * neither, and the memory stays, to be mapped again. */
 TEST(context_memory_map, both_views_or_neither)
 { for (std::uint32_t failing = 1u; failing <= 2u; failing++) {
       MockPlatform platform;
@@ -191,8 +177,6 @@ TEST(context_memory_map, both_views_or_neither)
       CHECK_STATUS(memory.map_into_process(), Status::ok);
   } }
 
-/* Abandoned memory loses every view but its pages are never freed: a device
- * that never answered the teardown may still write them. */
 TEST(context_memory, abandon_takes_every_view_and_keeps_the_pages_out_of_use)
 { MockPlatform platform;
   ContextMemory memory(platform);
@@ -222,13 +206,12 @@ TEST(context_memory, is_released_when_destroyed_and_works_at_passive)
   platform.set_irql(Irql::dispatch);
   CHECK_STATUS(memory.allocate(12u, 4096u), Status::no_memory);
   platform.set_irql(Irql::passive);
-  CHECK(platform.claim(Violation::irql_ceiling));   /* allocate */
-  CHECK(platform.claim(Violation::irql_ceiling));   /* its ring's pages */
+  CHECK(platform.claim(Violation::irql_ceiling));
+  CHECK(platform.claim(Violation::irql_ceiling));
   CHECK(platform.claim(Violation::allocation_at_dispatch));
-  while (platform.claim(Violation::irql_ceiling)) {}   /* the release that undoes it */
+  while (platform.claim(Violation::irql_ceiling)) {}
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
-/* Each part of the invariant, broken on its own. */
 TEST(context_memory_invariants, a_holding_without_every_part_is_detected)
 { MockPlatform platform;
   ContextMemory memory(platform);
@@ -243,7 +226,6 @@ TEST(context_memory_invariants, a_holding_without_every_part_is_detected)
   CHECK(!memory.invariants_hold());
   ContextMemoryProbe::set_order(memory, 12u);
   CHECK(memory.invariants_hold());
-  /* The fence page in the process, or the ring there without the reply slot. */
   CHECK_STATUS(ContextMemoryProbe::fence(memory).map_into_process(), Status::ok);
   CHECK(!memory.invariants_hold());
   ContextMemoryProbe::fence(memory).unmap_from_process();
@@ -252,7 +234,6 @@ TEST(context_memory_invariants, a_holding_without_every_part_is_detected)
   CHECK(!memory.invariants_hold());
   CHECK_STATUS(ContextMemoryProbe::reply(memory).map_into_process(), Status::ok);
   CHECK(memory.invariants_hold());
-  /* A block missing while the rest are held; releasing that says so. */
   ContextMemoryProbe::fence(memory).release();
   CHECK(!memory.invariants_hold());
   memory.release();

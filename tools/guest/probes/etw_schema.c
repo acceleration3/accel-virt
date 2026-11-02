@@ -1,9 +1,3 @@
-// etw_schema <out.json> <provider>...: every event a manifest provider declares, as the guest's own
-// Windows describes it through TDH - task, opcode, level, keywords and each field's name, type, count
-// and value map - with the maps themselves, so events read from a trace on a machine with no TDH can be
-// decoded field by field. A provider is named as `logman query providers` lists it
-// (Microsoft-Windows-Dwm-Core) or by its GUID in braces. tools/frame_pacing.py runs it and caches the
-// JSON per guest build.
 #define INITGUID
 #include <windows.h>
 #include <evntcons.h>
@@ -13,8 +7,6 @@
 #include <string.h>
 #include <wchar.h>
 
-// Windows 10 1709's TDH, which MinGW-w64's tdh.h predates: declared here and
-// found in tdh.dll at run time.
 typedef struct {
     ULONG NumberOfEvents;
     ULONG Reserved;
@@ -23,7 +15,7 @@ typedef struct {
 typedef ULONG(WINAPI *EnumerateManifestProviderEvents)(LPGUID provider, ProviderEvents *buffer, ULONG *size);
 typedef ULONG(WINAPI *GetManifestEventInformation)(LPGUID provider, PEVENT_DESCRIPTOR descriptor,
                                                    PTRACE_EVENT_INFO buffer, ULONG *size);
-enum { fixed_count = 0x20 };   // PropertyParamFixedCount
+enum { fixed_count = 0x20 };
 
 static EnumerateManifestProviderEvents enumerate_events;
 static GetManifestEventInformation event_information;
@@ -76,8 +68,6 @@ static TRACE_EVENT_INFO *fetch_event(const GUID *provider, EVENT_DESCRIPTOR *des
     return info;
 }
 
-// A map is looked up through an event of its provider; the event's payload is
-// not read, so a record carrying only the provider and descriptor will do.
 static EVENT_MAP_INFO *fetch_map(const GUID *provider, EVENT_DESCRIPTOR *descriptor, const wchar_t *name)
 {
     EVENT_RECORD record;
@@ -110,8 +100,6 @@ static int remember_map(MapName *maps, int count, int capacity, const wchar_t *n
     return count + 1;
 }
 
-// Every property: a struct's members follow the top-level fields and are named
-// by index, so the top-level count says where the payload's own fields end.
 static void write_fields(const TRACE_EVENT_INFO *info)
 {
     fprintf(out, "\"top_level\": %lu, \"fields\": [", info->TopLevelPropertyCount);

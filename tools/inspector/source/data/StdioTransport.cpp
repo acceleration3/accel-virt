@@ -30,7 +30,7 @@ mcp::ReceiveStatus StdioTransport::Receive(String& message, Milliseconds<i64> ti
         const ssize_t got = read(STDIN_FILENO, chunk, sizeof chunk);
         if (got <= 0) {
             m_closed = true;
-            continue; // a last line may still be buffered
+            continue;
         }
         m_framer.Append(StringView(chunk, static_cast<usize>(got)));
     }
@@ -53,4 +53,4 @@ bool StdioTransport::Send(StringView message) {
     return write(STDOUT_FILENO, "\n", 1) == 1;
 }
 
-} // namespace inspector
+}

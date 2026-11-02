@@ -1,6 +1,3 @@
-/* DXGKARG_CREATEALLOCATION, as DxgkDdiCreateAllocation receives and answers
- * it. A DDI record: Flags is the DXGK_CREATEALLOCATIONFLAGS Value.
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_CREATE_ALLOCATION_RECORD_HPP
 #define AV_DXGKARG_CREATE_ALLOCATION_RECORD_HPP
 
@@ -20,6 +17,6 @@ struct DxgkargCreateAllocationRecord {
     uint32_t                 FlagsPadding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_CREATE_ALLOCATION_RECORD_HPP
+#endif

@@ -9,16 +9,13 @@ namespace {
 using Buffer = av::NonDispatchableHandle<struct BufferTag>;
 using Image = av::NonDispatchableHandle<struct ImageTag>;
 
-/* What lets it stand where the ABI has a uint64_t: the same size and
- * alignment, and copied as bytes. And what it is for: two handles are two
- * types, which one uint64_t for both is not. */
 static_assert(sizeof(Buffer) == sizeof(std::uint64_t));
 static_assert(alignof(Buffer) == alignof(std::uint64_t));
 static_assert(__is_trivially_copyable(Buffer));
 static_assert(__is_standard_layout(Buffer));
 static_assert(!__is_same(Buffer, Image));
 
-}  // namespace
+}
 
 TEST(non_dispatchable_handle, a_default_or_null_handle_holds_zero)
 { const Buffer none;

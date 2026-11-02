@@ -22,12 +22,11 @@ struct ExecutionNodeProbe {
     void set_count(std::uint32_t count) { node.count_ = count; }
     void set_last_submitted(std::uint32_t fence) { node.last_submitted_ = fence; }
     void set_pending(std::uint32_t index, std::uint32_t fence) { node.pending_[index] = fence; }
-    /* A packet waiting on a host fence with nobody to say it finished. */
     void orphan_awaited(std::uint32_t index) { node.owners_[index] = nullptr; }
     ExecutionNode &node;
 };
 
-}  // namespace av
+}
 
 using av::DxgkrnlInterface;
 using av::ExecutionNode;
@@ -66,7 +65,7 @@ private:
     ExecutionNode         node_;
 };
 
-}  // namespace
+}
 
 TEST(execution_node_submit, queues_increasing_fences)
 { Fixture fixture;
@@ -103,10 +102,6 @@ TEST(execution_node_complete, reports_every_pending_fence_in_order_then_the_curr
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 3u); }
 
-/* Feature 043: an av submission is finished by the host, not by the DPC. It
- * waits at the head of the node until its context says the host completed the
- * wire fence it carried, and everything queued behind it waits too - dxgkrnl
- * takes a completed fence as the completion of every lower one on the node. */
 TEST(execution_node_complete, a_packet_awaiting_the_host_holds_the_node_until_its_owner_finishes_it)
 { Fixture fixture;
   int first = 0;
@@ -114,17 +109,17 @@ TEST(execution_node_complete, a_packet_awaiting_the_host_holds_the_node_until_it
   CHECK_STATUS(fixture.node().submit(1u, &first, 7u), Status::ok);
   CHECK(fixture.node().invariants_hold());
   CHECK_STATUS(fixture.node().submit(2u, &second, 3u), Status::ok);
-  CHECK_STATUS(fixture.node().submit(3u), Status::ok);   /* a plain packet behind them */
+  CHECK_STATUS(fixture.node().submit(3u), Status::ok);
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
   CHECK_EQ(fixture.node().current_fence(), 0u);
 
-  fixture.node().finish(&second, 3u);   /* the second is done; the first still holds the node */
+  fixture.node().finish(&second, 3u);
   CHECK(fixture.node().invariants_hold());
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
 
-  fixture.node().finish(&first, 6u);    /* not yet the fence it waits for */
+  fixture.node().finish(&first, 6u);
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
 
@@ -139,15 +134,14 @@ TEST(execution_node_finish, only_the_owner_s_packets_are_finished)
 { Fixture fixture;
   int owner = 0;
   int stranger = 0;
-  CHECK_STATUS(fixture.node().submit(4u, nullptr, 2u), Status::invalid_parameter);   /* nobody could finish it */
-  CHECK_STATUS(fixture.node().submit(4u, &owner, 0u), Status::invalid_parameter);    /* no host fence is 0 */
+  CHECK_STATUS(fixture.node().submit(4u, nullptr, 2u), Status::invalid_parameter);
+  CHECK_STATUS(fixture.node().submit(4u, &owner, 0u), Status::invalid_parameter);
   CHECK_EQ(fixture.node().pending(), 0u);
   CHECK_STATUS(fixture.node().submit(4u, &owner, 2u), Status::ok);
   fixture.node().finish(&stranger, 100u);
   fixture.node().finish(nullptr, 100u);
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.node().pending(), 1u);
-  /* The owner's own host finishing through 2 is what lets it complete. */
   fixture.node().finish(&owner, 1u);
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.node().pending(), 1u);
@@ -157,9 +151,6 @@ TEST(execution_node_finish, only_the_owner_s_packets_are_finished)
   CHECK_EQ(fixture.node().current_fence(), 4u);
   CHECK(fixture.node().invariants_hold()); }
 
-/* A context the host faulted has everything it queued finished at once: the
- * node completes its packets in order with the others', and one owner's
- * finish never releases another's. */
 TEST(execution_node_finish, finishing_everything_an_owner_queued_releases_only_its_packets)
 { Fixture fixture;
   int faulted = 0;
@@ -170,7 +161,7 @@ TEST(execution_node_finish, finishing_everything_an_owner_queued_releases_only_i
   fixture.node().finish(&faulted, UINT64_MAX);
   CHECK(fixture.node().invariants_hold());
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
-  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);   /* 1, then the healthy 2 holds 3 behind it */
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).FenceId, 1u);
   CHECK_EQ(fixture.node().pending(), 2u);
   fixture.node().finish(&healthy, 1u);
@@ -178,7 +169,7 @@ TEST(execution_node_finish, finishing_everything_an_owner_queued_releases_only_i
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 3u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(1u).FenceId, 2u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(2u).FenceId, 3u);
-  CHECK_EQ(fixture.dxgkrnl().interrupt(2u).InterruptType, 1);   /* DMA_COMPLETED */
+  CHECK_EQ(fixture.dxgkrnl().interrupt(2u).InterruptType, 1);
   CHECK_EQ(fixture.node().pending(), 0u);
   CHECK(fixture.node().invariants_hold()); }
 
@@ -207,10 +198,6 @@ TEST(execution_node_preempt, the_next_completion_reports_the_preemption_after_th
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u); }
 
-/* A packet the host is still running cannot be taken back, so the preemption
- * waits for it: answered early, VidSch would call it preempted, move its last
- * completed fence to the preemption fence and bugcheck 0x119/1 on the
- * packet's completion. */
 TEST(execution_node_preempt, waits_for_a_packet_the_host_is_still_running)
 { Fixture fixture;
   int owner = 0;
@@ -258,16 +245,14 @@ TEST(execution_node_invariants, detect_a_regressed_or_unordered_queue)
       CHECK_STATUS(fixture.node().submit(2u), Status::ok);
       CHECK_STATUS(fixture.node().submit(3u, &owner, 1u), Status::ok);
       ExecutionNodeProbe probe(fixture.node());
-      if (knob == 0) probe.set_last_completed(4u);                      /* completed past submitted */
+      if (knob == 0) probe.set_last_completed(4u);
       if (knob == 1) probe.set_count(ExecutionNode::capacity + 1u);
-      if (knob == 2) probe.set_pending(1u, 2u);                         /* not increasing */
-      if (knob == 3) probe.set_last_completed(2u);                      /* a pending fence already completed */
-      if (knob == 4) probe.set_last_submitted(9u);                      /* a submission missing from the queue */
-      if (knob == 5) probe.orphan_awaited(1u);                          /* awaited, and nobody can finish it */
+      if (knob == 2) probe.set_pending(1u, 2u);
+      if (knob == 3) probe.set_last_completed(2u);
+      if (knob == 4) probe.set_last_submitted(9u);
+      if (knob == 5) probe.orphan_awaited(1u);
       CHECK(!fixture.node().invariants_hold());
   } }
-
-/* ---- Reset and restart (feature 010) ------------------------------------------ */
 
 TEST(execution_node_reset, drops_the_queue_silently_and_refuses_submissions_until_restart)
 { Fixture fixture;
@@ -372,8 +357,6 @@ TEST(execution_node_report, writes_the_fences_and_each_pending_packet_in_order)
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   fixture.platform().set_irql(Irql::dispatch); }
 
-/* A host that never finishes a batch must not hold its packet past the
- * deadline: dxgkrnl would call the engine hung and reset every context. */
 TEST(execution_node_release_overdue, lets_go_of_a_held_packet_only_once_it_has_waited_the_deadline)
 { Fixture fixture;
   int owner = 0;
@@ -382,12 +365,12 @@ TEST(execution_node_release_overdue, lets_go_of_a_held_packet_only_once_it_has_w
   const std::uint64_t queued = fixture.platform().interrupt_time();
   CHECK_EQ(fixture.node().release_overdue(queued + ExecutionNode::park_deadline - 1u), 0u);
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
-  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);   /* still held one tick short of the deadline */
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
 
   CHECK_EQ(fixture.node().release_overdue(queued + ExecutionNode::park_deadline), 1u);
   CHECK(fixture.node().invariants_hold());
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
-  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);   /* the held packet and the one behind it */
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(1u).FenceId, 2u);
   CHECK_EQ(fixture.node().pending(), 0u);
   CHECK_EQ(fixture.node().release_overdue(queued + 10u * ExecutionNode::park_deadline), 0u); }
@@ -399,13 +382,10 @@ TEST(execution_node_release_overdue, leaves_plain_packets_and_finished_packets_a
   CHECK_STATUS(fixture.node().submit(2u, &owner, 4u), Status::ok);
   fixture.node().finish(&owner, 4u);
   const std::uint64_t later = fixture.platform().interrupt_time() + 2u * ExecutionNode::park_deadline;
-  CHECK_EQ(fixture.node().release_overdue(later), 0u);   /* nothing was still waiting */
+  CHECK_EQ(fixture.node().release_overdue(later), 0u);
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u); }
 
-/* The DPC reads the clock before it asks, and another processor may queue a
- * held packet in between: one queued after `now` is the youngest there is,
- * not one that has waited since the clock began. */
 TEST(execution_node_release_overdue, a_packet_queued_after_the_clock_was_read_stays_held)
 { Fixture fixture;
   int owner = 0;
@@ -431,5 +411,5 @@ TEST(execution_node_release_overdue, only_the_overdue_packet_goes_a_younger_one_
   fixture.platform().advance_time(ExecutionNode::park_deadline / 2u);
   CHECK_EQ(fixture.node().release_overdue(fixture.platform().interrupt_time()), 1u);
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
-  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);   /* the second still waits on its host */
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(fixture.node().pending(), 1u); }

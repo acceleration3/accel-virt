@@ -9,9 +9,6 @@ namespace av::d3d {
 
 class D3dSession;
 
-// Presents follow the submitted host work. Reused flip/primary buffers also
-// keep subsequent host work behind the runtime's kernel-context waits, and a
-// write into a fullscreen primary behind the flip before it (FlipShownWait).
 class PresentOrder {
 public:
     enum class Reuse { immediate, after_context };
@@ -24,11 +21,7 @@ public:
 
     [[nodiscard]] HRESULT follow();
     [[nodiscard]] HRESULT submitted(HRESULT status, Reuse reuse);
-    /* `status` of a present that flipped a fullscreen primary of VidPn
-     * `source`, submitted as `submitted` does with after_context. */
     [[nodiscard]] HRESULT flipped(HRESULT status, uint32_t source);
-    /* Before the host writes a fullscreen primary: returns once the flip
-     * before it has been shown. */
     void                  await_flip_shown();
 
 private:
@@ -39,6 +32,6 @@ private:
     FlipShownWait shown_;
 };
 
-}  // namespace av::d3d
+}
 
-#endif  // AV_UM_PRESENT_ORDER_HPP
+#endif

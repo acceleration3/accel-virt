@@ -1,6 +1,3 @@
-/* The escape naming a surface's next present point: the fields at their
- * offsets, a round trip, and anything else - another magic, a point or surface
- * of 0, another length - refused with the reader unchanged. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -19,7 +16,7 @@ TEST(next_point_record, places_its_fields_and_reads_back_as_written)
 { std::uint8_t bytes[NextPointRecord::encoded_size] = {};
   CHECK_STATUS(NextPointRecord(0x1122334455667788ull, 0x99AABBCCu).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x004E5641u);   /* "AVN" */
+  CHECK(layout.at(0u, 4u) == 0x004E5641u);
   CHECK(layout.at(4u, 4u) == 0x99AABBCCu);
   CHECK(layout.at(8u, 8u) == 0x1122334455667788ull);
   NextPointRecord read;
@@ -30,7 +27,6 @@ TEST(next_point_record, places_its_fields_and_reads_back_as_written)
 
 TEST(next_point_record, anything_else_is_malformed_and_changes_nothing)
 { struct Case { std::size_t offset; std::size_t width; std::uint64_t value; };
-  /* The present's own "AVP", a point of 0, a surface of 0. */
   const Case cases[] = {{0u, 4u, 0x00505641u}, {4u, 4u, 0u}, {8u, 8u, 0u}};
   for (const Case &c : cases) {
       std::uint8_t bytes[NextPointRecord::encoded_size] = {};
@@ -51,7 +47,6 @@ TEST(next_point_record, anything_else_is_malformed_and_changes_nothing)
   CHECK_STATUS(NextPointRecord(9u, 7u).encode(buffer.data(), buffer.size()), Status::too_large);
   CHECK(buffer.guards_intact()); }
 
-/* A point taken back, and "read my pages": other magics of the same record. */
 TEST(next_point_record, a_withdrawal_and_a_pages_record_round_trip_and_keep_their_rules)
 { std::uint8_t bytes[NextPointRecord::encoded_size] = {};
   CHECK_STATUS(NextPointRecord(9u, 4u, NextPointRecord::Action::withdraw).encode(bytes, sizeof bytes), Status::ok);

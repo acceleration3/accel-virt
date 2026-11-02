@@ -1,17 +1,3 @@
-/* One session's Direct3D 12, run on the host's vkd3d-proton.
- *
- * The Direct3D 12 half of a Direct3D session (D3dBackend routes the commands
- * of d3d12.toml's range here): the objects the guest's driver named, the
- * buffers its GPU addresses fall in, and the fences it reads from memory. The
- * wire is generated from tools/codegen/registry/d3d12.toml; what the values
- * mean - an id of the wrong kind, a descriptor past its heap, an address in
- * no buffer - is judged here before vkd3d-proton sees it, because
- * vkd3d-proton trusts its caller and a guest is not a caller to trust.
- *
- * A refused command does nothing, and removes the device as far as the guest
- * can tell: Finish12 answers DXGI_ERROR_DRIVER_INTERNAL_ERROR from then on, as
- * the Direct3D 11 half does, and the guest recreates its device. Nothing a
- * refusal names is ever dereferenced. */
 #ifndef AV_D3D12_SESSION_HPP
 #define AV_D3D12_SESSION_HPP
 
@@ -54,38 +40,18 @@ class ImportTable;
 
 class D3d12Session final : public d3d12proto::ServerDispatch {
 public:
-    /* `guest` is the session's blob arena, which D3dBackend adopts and this
-     * reads bulk data through. */
-    /* `objects` is the session's table, which the guest names every object
-     * of from one id space: Direct3D 12's share it with 11's and 9's. */
-    /* `tenant` is what wakes the session's worker should the GPU's Direct3D
-     * 12 device, which it joins as it opens it, be lost (DeviceTenants);
-     * `fence_wake` what wakes it when the GPU reaches a mark a queue left. */
-    /* `blocks` is what the session's tables grow in. */
     D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, WakeSignal &tenant,
                  EventfdWake &fence_wake, WatchedBlocks &blocks, DriverLog &lines);
 
-    /* Binds the session to its GPU's device, which must outlive it; null is a
-     * GPU with none, on which every command is refused. A CPU-visible heap is
-     * memory the session imported, found in `imports` (docs/host-memory.md). Swap chain buffers are
-     * shown through `shown_by`, the GPU's Direct3D 11 device; with none, a
-     * share or a present is refused. A present publishes its point on
-     * `surfaces`, and stages its frame where that asks (SharedSurfaces). */
     void               initialize(const ImportTable &imports, D3d12HostDevice *device,
                                   D3d11HostDevice *shown_by = nullptr,
                                   SharedSurfaces *surfaces = nullptr, SessionShares *shares = nullptr);
-    /* Waits for the GPU to finish with everything, then lets it all go. */
     void               shut_down();
 
     bool               knows(uint32_t command_id) const;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena);
-    /* The mark the latest execute left, and the highest mark everything up to
-     * which the GPU has finished (D3d12QueueProgress). */
     void               gpu_progress(uint64_t &marked, uint64_t &reached) const;
-    /* The reason the guest is told its device was removed; 0 while it is not. */
     uint32_t           removed_reason() const;
-    /* Whether the device this session opened is lost; false for a session
-     * that never opened one. */
     bool               lost() const;
 
 
@@ -161,53 +127,30 @@ public:
 
 private:
     ID3D12GraphicsCommandList *list(uint32_t id) const;
-    /* A descriptor's CPU (or GPU) handle, for a heap of `type`; false for a
-     * heap that is not one, of another type, or an index past its end - and
-     * for a GPU handle, a heap that is not shader visible. */
     bool                       cpu_handle(const d3d12proto::DescriptorRef &ref, uint32_t type, size_t &handle) const;
     bool                       gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &handle) const;
-    /* Registers a buffer's guest range, or refuses the resource. */
     bool                       place(uint32_t id, IUnknown *resource, uint64_t address, uint64_t width);
-    /* objects_.keep, and a line saying how full the table is when it cannot:
-     * a refused create says only its command's name. */
     bool                       kept(uint32_t id, D3dObjectKind kind, IUnknown *made);
-    /* A resource placed at `offset` in `in`, and kept as `resource`. */
     bool                       placed(uint32_t resource, ID3D12Heap *in, uint64_t offset,
                                       const d3d12proto::ResourceDesc &desc, uint32_t state,
                                       const d3d12proto::ClearValue &clear, uint64_t address);
-    /* `location`'s resource and kind as the host's copy names them; false for
-     * an unknown resource, kind or format. */
     bool                       copy_location(const d3d12proto::CopyLocation &location,
                                              D3D12_TEXTURE_COPY_LOCATION &made) const;
-    /* A footprint location's buffer holds `region` of it; a subresource holds
-     * anything. The location was resolved (copy_location). */
     bool                       footprint_holds(const d3d12proto::CopyLocation &location,
                                                const d3d12proto::Box &region) const;
-    /* Whether `size` tiles from `start` are all tiles of `resource`, a
-     * reserved resource; false for any other resource (D3d12TileSpace). */
     bool                       tiles_hold(ID3D12Resource *resource, const d3d12proto::TileCoordinate &start,
                                           const d3d12proto::TileSize &size) const;
-    /* Every queue of the session has finished what was executed on it; one
-     * that has not in 5 s removes the device. */
     void                       drain();
-    /* The pipeline `id` names, collected first if it is still compiling. */
     ID3D12PipelineState       *pipeline(uint32_t id);
-    /* A job for the next pipeline: the oldest collected while none is free;
-     * null when none can be. */
     D3d12PipelineJob          *vacant_job();
-    /* `job`'s pipeline into the table, once compiled; one the runtime
-     * refused removes the device, as a create refused at once would have. */
     bool                       settle(D3d12PipelineJob &job);
-    /* Every pipeline still compiling, settled. */
     void                       settle_pipelines();
 
-    /* The session's imports; null between sessions. */
     const ImportTable     *imports_;
     D3d12HostDevice       *device_;
     D3d11HostDevice       *shown_by_;
     SessionShares         *shares_;
     WakeSignal            &tenant_;
-    /* Whether the session opened the device, which made it a tenant. */
     bool                   joined_;
     SharedSurfaces        *surfaces_;
     D3dObjectTable        &objects_;
@@ -218,16 +161,13 @@ private:
     D3d12PipelineBuilder   pipelines_;
     D3d12PipelineCompiles  compiles_;
     D3d12Presentation      presentation_;
-    /* The update UpdateTileMappings12 is building. */
     D3d12TileUpdate        tile_update_;
     uint32_t               removed_;
-    /* Where the host log is read when a guest's command fails. */
     DriverLog             &lines_;
     CommandRefusal         refusal_;
-    /* What a drain's wait for the GPU measures its deadline on. */
     MonotonicClock         clock_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_D3D12_SESSION_HPP
+#endif

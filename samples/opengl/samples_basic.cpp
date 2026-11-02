@@ -1,4 +1,3 @@
-// triangle, pushconstants, gears, texture
 #include "framework.h"
 
 namespace samples {
@@ -112,8 +111,6 @@ private:
     GLuint constants_ = 0;
 };
 
-// Vulkan's push constants become a small uniform buffer rewritten per draw:
-// a ring of spheres, each with its own colour and offset.
 class PushConstants final : public Sample {
 public:
     const char *name() const override { return "pushconstants"; }
@@ -207,7 +204,6 @@ private:
     GLuint   constants_ = 0;
 };
 
-// A mipmapped, anisotropically filtered texture on a receding quad.
 class Texture final : public Sample {
 public:
     const char *name() const override { return "texture"; }
@@ -273,11 +269,11 @@ private:
     GLuint   constants_ = 0;
 };
 
-}  // namespace
+}
 
 Sample *make_triangle() { return new Triangle(); }
 Sample *make_pushconstants() { return new PushConstants(); }
 Sample *make_gears() { return new Gears(); }
 Sample *make_texture() { return new Texture(); }
 
-}  // namespace samples
+}

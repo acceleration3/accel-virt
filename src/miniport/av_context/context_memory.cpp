@@ -14,7 +14,7 @@ namespace {
 constexpr uint64_t page_bytes = GuestPageList::page_bytes;
 constexpr uint64_t page_mask = page_bytes - 1u;
 
-}  // namespace
+}
 
 ContextMemory::ContextMemory(Platform &platform)
     : platform_(platform), ring_(platform), fence_(platform), reply_(platform), ring_header_(nullptr),
@@ -49,7 +49,6 @@ Status ContextMemory::allocate(uint8_t order, uint32_t reply_bytes)
     if (ring_header_ == nullptr || fence_view_ == nullptr) return Status::no_memory;
     release_all.dismiss();
     order_ = order;
-    /* A page holds the header. */
     static_cast<void>(RingHeader(order, 0u, 0u).encode(ring_header_, RingHeader::encoded_size));
     return Status::ok;
 }
@@ -91,7 +90,6 @@ void ContextMemory::release()
     free_all();
 }
 
-/* Whatever part is held: an allocation that failed half way leaves some. */
 void ContextMemory::free_all()
 {
     AV_SCOPE("ContextMemory::free_all");
@@ -151,9 +149,6 @@ ContextPages ContextMemory::pages() const
     return ContextPages(ring_.pages(), fence_.pages(), reply_.pages(), ring_header_, fence_view_);
 }
 
-/* The three blocks, both kernel views and the order are held together or not
- * at all, and the process sees the ring, reply slot and fence page all or
- * none. */
 bool ContextMemory::invariants_hold() const
 {
     AV_SCOPE("ContextMemory::invariants_hold");
@@ -164,4 +159,4 @@ bool ContextMemory::invariants_hold() const
     return (ring_.view() != 0u) == (reply_.view() != 0u) && (ring_.view() != 0u) == (fence_.view() != 0u);
 }
 
-}  // namespace av
+}

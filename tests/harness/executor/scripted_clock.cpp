@@ -28,4 +28,4 @@ uint32_t ScriptedClock::yields() const { return yields_; }
 
 uint64_t ScriptedClock::paused() const { return paused_; }
 
-}  // namespace av
+}

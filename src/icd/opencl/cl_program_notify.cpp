@@ -26,4 +26,4 @@ void ClProgramNotify::tell(cl_program program) const
     if (callback_ != nullptr && program != nullptr) callback_(program, user_data_);
 }
 
-}  // namespace av::clicd
+}

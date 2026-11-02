@@ -34,8 +34,6 @@ bool PresentEngineCommands::answer(ControlRequest &request, uint32_t type)
     return true;
 }
 
-/* A page the device cannot map leaves the guest presenting the slow way, so
- * the refusal is said here as well as answered. */
 void PresentEngineCommands::register_page(ControlRequest &request)
 {
     AV_SCOPE("PresentEngineCommands::register_page");
@@ -56,4 +54,4 @@ void PresentEngineCommands::register_page(ControlRequest &request)
     request.respond(response);
 }
 
-}  // namespace av
+}

@@ -1,15 +1,3 @@
-/* The host's Direct3D: DXVK's dxgi, d3d11 and d3d9 and vkd3d-proton's d3d12, built
- * natively for Linux from third_party/ and loaded into this process.
- *
- * Loaded rather than linked because they are optional: a host without them
- * serves every other sub-API, and a configuration that never built them still
- * links the executor library. Found in the directory AV_D3D_PATH names, or
- * by the loader's own search when it names none.
- *
- * DXVK's native build must be told which window system it runs under even
- * when it presents to none - it refuses to make a factory otherwise - so the
- * loader names SDL3, whose driver loads with no display at all, unless the
- * environment already chose one. */
 #ifndef AV_D3D_RUNTIME_HPP
 #define AV_D3D_RUNTIME_HPP
 
@@ -32,34 +20,17 @@ public:
     D3dRuntime(const D3dRuntime &) = delete;
     D3dRuntime &operator=(const D3dRuntime &) = delete;
 
-    /* Loads what is there. False when DXVK's d3d11 is not: without it nothing
-     * here serves anything. vkd3d-proton missing only takes Direct3D 12. */
     [[nodiscard]] bool open();
     void               close();
 
-    /* The DXGI adapter whose Vulkan device has this UUID, with a reference the
-     * caller owns; null for none. */
     IDXGIAdapter1 *adapter_for(const uint8_t *uuid) const;
-    /* D3D11CreateDevice on `adapter` at the highest level it offers up to
-     * 12_1; the HRESULT, with the device and its immediate context on S_OK. */
     int32_t create_device11(IDXGIAdapter1 *adapter, ID3D11Device *&device, ID3D11DeviceContext *&context,
                             uint32_t &feature_level) const;
-    /* DXVK's Direct3D 9, with a reference the caller owns; null without it. */
     IDirect3D9 *create_d3d9() const;
-    /* A vkd3d-proton device of its own on the Vulkan device with this UUID;
-     * `device` is an ID3D12Device, null on failure. */
     int32_t create_device12(const uint8_t *uuid, void *&device) const;
-    /* The same pages as the dma-buf `fd`, which the caller keeps. */
     int32_t open_dmabuf_heap(void *device, void *address, int fd, uint64_t size, void *&heap) const;
-    /* A shared committed texture of vkd3d-proton's - `resource` an
-     * ID3D12Resource - as the fd of its memory and the image it was made as;
-     * the HRESULT. */
     int32_t export_image(void *resource, Vkd3dImageExport &image) const;
-    /* A shared fence's timeline semaphore - `fence` an ID3D12Fence - as an fd
-     * the caller owns; the HRESULT, `fd` -1 on failure. */
     int32_t export_fence(void *fence, int &fd) const;
-    /* D3D12SerializeVersionedRootSignature on a D3D12_VERSIONED_ROOT_SIGNATURE_DESC;
-     * `blob` an ID3DBlob the caller owns, null on failure. */
     int32_t serialize_root_signature(const void *desc, void *&blob) const;
 
 private:
@@ -76,9 +47,6 @@ private:
     using ExportFence = int32_t (*)(void *fence, int *fd);
 
     void *open_library(const char *name) const;
-    /* Where the Vulkan device with this UUID comes in the loader's
-     * enumeration, which is what vkd3d-proton selects a device by; ~0u when
-     * none has it. */
     uint32_t vulkan_index(const uint8_t *uuid) const;
 
     void *dxgi_;
@@ -96,6 +64,6 @@ private:
     ExportFence    export_fence_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_D3D_RUNTIME_HPP
+#endif

@@ -1,8 +1,3 @@
-; What the compiler calls on x86 that a C runtime would define: the stack
-; probe, and multiplication, division and shifts of 64-bit integers. ntdll
-; exports them under these names; llvm-dlltool gives each the C symbol the
-; compiler references (__chkstk, __alldiv, ...). x86 only - the x64 ntdll has
-; none of the arithmetic, and the x64 stack probe is src/um/stack_probe.cpp.
 LIBRARY ntdll.dll
 EXPORTS
 _chkstk

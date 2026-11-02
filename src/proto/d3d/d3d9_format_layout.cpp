@@ -6,22 +6,19 @@
 namespace av {
 
 namespace {
-
-/* Bytes per texel of every D3DFORMAT from R8G8B8 (20) to A2B10G10R10_XR_BIAS
- * (119), in order; 0 for the values d3d9types.h leaves unnamed and for A1. */
 constexpr uint8_t texel_sizes[] = {
-    3, 4, 4, 2, 2, 2, 2, 1, 1, 2, 2, 4, 4, 4, 4, 4, 8, 0, 0, 0,     /* 20-39 */
-    2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0,     /* 40-59 */
-    2, 2, 4, 4, 4, 0, 0, 4, 0, 0, 2, 4, 0, 2, 0, 4, 0, 4, 0, 4,     /* 60-79 */
-    2, 2, 4, 4, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,     /* 80-99 */
-    0, 2, 4, 0, 0, 0, 0, 0, 0, 0, 8, 2, 4, 8, 4, 8, 16, 2, 0, 4};  /* 100-119 */
+    3, 4, 4, 2, 2, 2, 2, 1, 1, 2, 2, 4, 4, 4, 4, 4, 8, 0, 0, 0,
+    2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0,
+    2, 2, 4, 4, 4, 0, 0, 4, 0, 0, 2, 4, 0, 2, 0, 4, 0, 4, 0, 4,
+    2, 2, 4, 4, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 2, 4, 0, 0, 0, 0, 0, 0, 0, 8, 2, 4, 8, 4, 8, 16, 2, 0, 4};
 
-constexpr uint32_t first_texel_format = 20u;   /* D3DFMT_R8G8B8 */
-constexpr uint32_t last_texel_format = 119u;   /* D3DFMT_A2B10G10R10_XR_BIAS */
+constexpr uint32_t first_texel_format = 20u;
+constexpr uint32_t last_texel_format = 119u;
 constexpr uint32_t block = 4u;
 constexpr uint32_t pair = 2u;
 
-}  // namespace
+}
 
 D3d9FormatLayout::D3d9FormatLayout(uint32_t format) : format_(format)
 {
@@ -56,4 +53,4 @@ void D3d9FormatLayout::four_cc()
     }
 }
 
-}  // namespace av
+}

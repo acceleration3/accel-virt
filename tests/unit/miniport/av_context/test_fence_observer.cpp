@@ -1,5 +1,3 @@
-/* Reading a context's fence page against what the driver submitted, and every
- * page a device could not have written. */
 #include "miniport/av_context/fence_observer.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -25,7 +23,7 @@ struct FenceObserverProbe {
     static void fail_unattached(FenceObserver &observer) { observer.failed_ = true; observer.page_ = nullptr; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -55,11 +53,11 @@ private:
     FenceObserver observer_;
 };
 
-}  // namespace
+}
 
 TEST(fence_observer_observe, follows_completions_progress_and_a_fault)
 { Fixture fixture;
-  CHECK_STATUS(fixture.observe(), Status::invalid_state);   /* not attached */
+  CHECK_STATUS(fixture.observe(), Status::invalid_state);
   CHECK_STATUS(fixture.observer().attach(fixture.page()), Status::ok);
   CHECK_STATUS(fixture.observe(), Status::ok);
   CHECK_EQ(fixture.observer().completed(), 0u);

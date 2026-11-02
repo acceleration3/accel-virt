@@ -36,4 +36,4 @@ bool WindowsGlShareSource::resolve()
     return current_ != nullptr && proc_address_ != nullptr;
 }
 
-}  // namespace av
+}

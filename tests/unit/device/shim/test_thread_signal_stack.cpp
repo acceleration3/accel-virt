@@ -1,11 +1,3 @@
-/* Every thread that enters traced code gets an alternate signal stack, so a
- * stack overflow on a device worker or a vCPU thread still writes the crash
- * file. For real, on this host: the stack is mapped with a guard page below
- * it, a thread's own stack is kept, the mapping goes when the thread ends,
- * and a forked process whose thread overflows its stack leaves the file.
- *
- * ASan handles SEGV and gives threads stacks of its own by default; neither
- * may stand in for the code under test here. */
 #include "core/trace/function_scope.hpp"
 #include "core/trace/scope_binding.hpp"
 #include "core/trace/scope_name.hpp"
@@ -39,7 +31,6 @@ struct Seen {
     bool    guard_below;
 };
 
-/* Whether the page just below `address` is mapped with no access. */
 bool guarded_below(const void *address)
 {
     const auto below = static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(address)) - 1u;
@@ -120,7 +111,6 @@ void never_scheduled(AvHostRoutine, void *) {}
     const av::FunctionScope scope(av::scope_binding, name);
     volatile char ballast[4096];
     ballast[0] = static_cast<char>(depth);
-    /* Far past any stack: the guard page ends the recursion first. */
     if (depth > (1u << 30u)) return depth;
     return recurse(depth + 1u) + static_cast<std::uint64_t>(ballast[0]);
 }
@@ -131,7 +121,7 @@ void *overflow(void *)
     return nullptr;
 }
 
-}  // namespace
+}
 
 TEST(posix_trace_host, a_thread_gets_a_guarded_alternate_signal_stack_once)
 { Seen seen = {};
@@ -145,7 +135,6 @@ TEST(posix_trace_host, a_thread_gets_a_guarded_alternate_signal_stack_once)
   CHECK(seen.guard_below);
   CHECK(seen.after_second.ss_sp == seen.after_first.ss_sp);
   CHECK_EQ(seen.after_second.ss_size, seen.after_first.ss_size);
-  /* The thread has ended: its stack and guard are unmapped. */
   const auto stack = static_cast<std::uintptr_t>(reinterpret_cast<std::uintptr_t>(seen.after_first.ss_sp));
   CHECK(stack != 0u);
   CHECK(!mapped(stack));
@@ -163,8 +152,6 @@ TEST(device_trace, a_stack_overflow_on_any_thread_writes_the_crash_file)
 { const pid_t child = fork();
   CHECK(child >= 0);
   if (child == 0) {
-    /* The frames a crash file lists are the bound table's, and the table is
-     * bound only where a trace is asked for. */
     setenv("AV_TRACE_SCOPES", "1", 1);
     services.start(root, &never_scheduled, &forward_crash);
     pthread_attr_t attributes = {};

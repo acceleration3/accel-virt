@@ -1,11 +1,3 @@
-/* Holds one object whose lifetime is started and ended explicitly - the
- * miniport root in the kernel shim's static storage, and the adapters inside
- * the root. The kernel runs no global constructors and there is no heap new, so
- * this and ObjectPool are the only places in the codebase a placement-new
- * expression appears (tools/check_design.py enforces it).
- *
- * The destructor is deliberately trivial: storage with static lifetime must not
- * need a destructor call at unload. Whoever constructs destroys. */
 #ifndef AV_OBJECT_STORAGE_HPP
 #define AV_OBJECT_STORAGE_HPP
 
@@ -33,9 +25,6 @@ public:
         return Status::ok;
     }
 
-    /* Not constructed before the destructor runs, not after: an interrupt that
-     * asks while this is tearing down must be told no, and a half-destroyed
-     * device is exactly what it must not be handed. */
     void destroy()
     {
         AV_SCOPE("ObjectStorage::destroy");
@@ -75,6 +64,6 @@ private:
     bool constructed_ = false;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_OBJECT_STORAGE_HPP
+#endif

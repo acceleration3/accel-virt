@@ -1,8 +1,3 @@
-/* What the generated OpenGL ICD entries ask of the ICD (feature 050,
- * research.md §2): the calling thread's current context's transport, the pixel
- * store and buffer bindings a transfer's length depends on, the window's
- * framebuffer, and the binding shadow. Defined in src/icd/opengl/gl_hooks.cpp,
- * each one line into the bound GlIcdRoot. */
 #ifndef AV_PROTO_GL_ICD_SUPPORT_HPP
 #define AV_PROTO_GL_ICD_SUPPORT_HPP
 
@@ -16,8 +11,6 @@ class ClientTransport;
 }
 
 namespace av::glicd {
-
-/* Null when the thread has no current context: the call does nothing. */
 ClientTransport *wire() noexcept;
 size_t           pixel_bytes(GLenum format, GLenum type, GLsizei width, GLsizei height, GLsizei depth,
                              bool packing) noexcept;
@@ -34,34 +27,23 @@ void             forget_bindings() noexcept;
 bool             skip_active_texture(GLenum texture) noexcept;
 bool             skip_bind_texture(GLenum target, GLuint texture) noexcept;
 bool             skip_bind_sampler(GLuint unit, GLuint sampler) noexcept;
-/* A pixel transfer of `bytes` too large to cross with its command goes
- * through the context's staging buffer (av::glicd::PixelStagingBuffer): true
- * when it was staged, and the command then names offset 0; finish_* after the
- * command, which a download's bytes come back in. */
 bool             stage_upload(const void *pixels, size_t bytes) noexcept;
 void             finish_upload() noexcept;
 bool             stage_download(const void *pixels, size_t bytes) noexcept;
 void             finish_download(void *pixels, size_t bytes) noexcept;
-/* What changes a buffer's bytes on the host, for the guest's copies of them
- * (av::glicd::BufferShadows): before the command is sent. */
 void             host_writes_target(GLenum target) noexcept;
 void             host_writes_buffer(GLuint buffer) noexcept;
 void             bind_buffer_indexed(GLenum target, GLuint buffer) noexcept;
 void             bind_buffers_indexed(GLenum target) noexcept;
 void             shaders_write_buffers() noexcept;
 void             bindings_restored() noexcept;
-/* A buffer's map state, which only the guest holds: true once `params` has
- * the answer, false for a name the host answers. */
 bool             answer_buffer_map_state(GLenum target, GLenum pname, GLint *params) noexcept;
 bool             answer_buffer_map_state(GLenum target, GLenum pname, GLint64 *params) noexcept;
 bool             answer_named_buffer_map_state(GLuint buffer, GLenum pname, GLint *params) noexcept;
 bool             answer_named_buffer_map_state(GLuint buffer, GLenum pname, GLint64 *params) noexcept;
-/* Whether the current context has the fixed-function pipeline: a compatibility
- * profile, or a context made before profiles existed (feature 051). A
- * compatibility command called without one is refused rather than sent. */
 bool             legacy_calls_live() noexcept;
 void             refuse_legacy() noexcept;
 
-}  // namespace av::glicd
+}
 
-#endif  // AV_PROTO_GL_ICD_SUPPORT_HPP
+#endif

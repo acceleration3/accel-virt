@@ -23,32 +23,19 @@ namespace av {
 namespace {
 
 constexpr const char *scenario = "shared";
-/* CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR and CL_MEM_READ_WRITE, written
- * out because this file includes no OpenCL header: the probe's seam takes
- * numbers (feature 053, T019). */
 constexpr uint64_t external_memory_win32 = 0x2061u;
 constexpr uint64_t cl_read_write = 1u;
-/* CL_DEVICE_EXTENSIONS, and the extension that says a Win32 handle can be
- * opened on this device at all. */
 constexpr uint32_t cl_device_extensions = 0x1030u;
 constexpr const char *cl_external_memory = "cl_khr_external_memory_win32";
-/* What the exportable allocation is filled with before it is shared, and what
- * OpenCL must read back out of it. */
 constexpr uint32_t filled_word = 0xABCD0000u;
 constexpr const char *win32_memory = "VK_KHR_external_memory_win32";
 
-/* A VkResult read as a Status, so a step's report carries the NTSTATUS of the
- * last kernel call rather than the Vulkan number: which of the four D3DKMT
- * calls refused is the thing a guest run is for, and the Vulkan error is the
- * same VK_ERROR_TOO_MANY_OBJECTS whichever of them it was (feature 053). */
 Status answered(VkResult result)
 {
     AV_SCOPE("answered");
     return result == VK_SUCCESS ? Status::ok : Status::invalid_state;
 }
 
-/* Whether `listed` - OpenCL's one space-separated string - has `name` as a
- * whole word rather than as part of a longer one. */
 bool offers(const char *listed, const char *name)
 {
     AV_SCOPE("offers");
@@ -64,10 +51,6 @@ bool offers(const char *listed, const char *name)
     return false;
 }
 
-/* `wanted` is this file's own literal and terminates well inside the array the
- * registry sizes every extension name by, so the compare runs to its end and
- * then demands the same end of the other - which is the bound, since what a
- * host reports is not guaranteed terminated. */
 bool names(const VkExtensionProperties &listed, const char *wanted)
 {
     AV_SCOPE("names");
@@ -77,7 +60,7 @@ bool names(const VkExtensionProperties &listed, const char *wanted)
     return listed.extensionName[index] == '\0';
 }
 
-}  // namespace
+}
 
 SharedObjectProbe::SharedObjectProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan, ClEntry *cl)
     : kmt_(kmt), vulkan_(vulkan), cl_(cl), target_(VK_NULL_HANDLE), target_types_(0u), filled_(false),
@@ -89,12 +72,7 @@ SharedObjectProbe::SharedObjectProbe(Kmt &kmt, GuestReport &report, VulkanEntry 
 void SharedObjectProbe::opencl_steps(void *handle)
 {
     AV_SCOPE("SharedObjectProbe::opencl_steps");
-    /* Nothing runs without an OpenCL beside this process, and nothing is worth
-     * running when the bytes were never written: a read judged against memory
-     * nobody filled would pass or fail on whatever was there. */
     if (cl_ == nullptr || !filled_) return;
-    /* The device this process's OpenCL shows, which is the avgpu adapter's:
-     * the ICD shows one platform and one device, so the first of each is it. */
     void    *platforms[4] = {};
     uint32_t written = 0u;
     if (steps_.check_result("cl_platform", cl_->platforms(platforms, 4u, written)) != Status::ok) return;
@@ -104,12 +82,6 @@ void SharedObjectProbe::opencl_steps(void *handle)
     if (steps_.check_result("cl_device", cl_->devices(platforms[0], devices, 4u, written)) != Status::ok)
         return;
     if (steps_.check("cl_device_found", written != 0u ? Status::ok : Status::not_found) != Status::ok) return;
-    /* What this driver says it can do, asked rather than assumed. The
-     * extension is what tells an application a Win32 handle may be named in a
-     * property list, and a probe that named one without it would be proving
-     * something no application is allowed to do. A driver that does not report
-     * it says so here and the rest do not run - as the Vulkan half does for a
-     * host with no external memory (feature 053, T019; research.md §21). */
     char   listed[cl_extension_bytes] = {};
     size_t needed = 0u;
     if (steps_.check_result("cl_extensions",
@@ -128,21 +100,13 @@ void SharedObjectProbe::opencl_steps(void *handle)
     if (steps_.check_result("cl_queue", queue != nullptr ? 0 : error) != Status::ok) return;
     ScopeExit dropping_queue([&] { cl_->release_queue(queue); });
 
-    /* The whole point: a buffer over the memory Vulkan exported, named by the
-     * NT handle and by nothing else. */
     const uint64_t properties[] = {external_memory_win32,
                                    static_cast<uint64_t>(reinterpret_cast<uintptr_t>(handle)), 0u};
     void *const    shared =
         cl_->create_buffer_with_properties(context, properties, cl_read_write, bytes, error);
     if (steps_.check_result("cl_opened", shared != nullptr ? 0 : error) != Status::ok) return;
-    /* Given back before the memory is freed: the object the device opened is
-     * held by this context until it is, and the Vulkan release that follows is
-     * what the run judges. */
     ScopeExit dropping_buffer([&] { cl_->release_buffer(shared); });
 
-    /* And the bytes: what Vulkan put there is what OpenCL reads. A buffer that
-     * was a copy rather than the same memory reads zeroes here, which is the
-     * failure this step exists to catch. */
     uint32_t read[8] = {};
     const int32_t taken = cl_->read_buffer(queue, shared, sizeof read, read);
     const bool    same = taken == 0 && read[0] == filled_word && read[7] == filled_word;
@@ -182,16 +146,11 @@ bool SharedObjectProbe::target_step(ProbeDevice &device)
 bool SharedObjectProbe::exportable_step(ProbeDevice &device, VkDeviceMemory &memory)
 {
     AV_SCOPE("SharedObjectProbe::exportable_step");
-    /* A type the buffer can be bound to: the fill is a transfer onto that
-     * buffer, so memory of a type it refuses is memory nothing could write
-     * (feature 053, T019). */
     uint32_t type = 0u;
     if (!device.memory_type(target_types_, 0u, type)) {
         steps_.check("exportable", Status::not_supported);
         return false;
     }
-    /* The node that makes the miniport mint: without it this is an ordinary
-     * allocation and no identity is asked for. */
     VkExportMemoryAllocateInfo exporting = {};
     exporting.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
     exporting.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
@@ -201,26 +160,12 @@ bool SharedObjectProbe::exportable_step(ProbeDevice &device, VkDeviceMemory &mem
     allocate.allocationSize = bytes;
     allocate.memoryTypeIndex = type;
     const VkResult made = vulkan_.allocate_memory(device.device(), &allocate, &memory);
-    /* Judged on the memory and not the VkResult alone: a host answering success
-     * and nothing would otherwise have this step read "ok" in a report where
-     * every step after it is missing, which is the one thing a guest report
-     * must never do.
-     *
-     * The status on the line is the driver's NTSTATUS, not this probe's: the
-     * kernel call was made inside the ICD, by its own Kmt, and every one of
-     * them answers the application the same VK_ERROR_TOO_MANY_OBJECTS. */
     const Status judged = made == VK_SUCCESS && memory != VK_NULL_HANDLE ? Status::ok : Status::invalid_state;
     return steps_.check_kernel("exportable", judged,
                                vulkan_.last_kernel_status(device.device())) ==
            Status::ok;
 }
 
-/* The bytes the other API must read back, written by the GPU rather than by
- * this process: memory that is shared is the host's own and never a chunk of
- * the guest's RAM, so vkMapMemory refuses it and a transfer is the only way
- * known bytes get in (research.md §21). A fill that did not happen leaves
- * `filled_` false and the OpenCL read is skipped rather than compared against
- * memory nobody wrote. */
 void SharedObjectProbe::fill_step(ProbeDevice &device, VkDeviceMemory memory)
 {
     AV_SCOPE("SharedObjectProbe::fill_step");
@@ -246,10 +191,6 @@ bool SharedObjectProbe::handle_step(ProbeDevice &device, VkDeviceMemory memory, 
 void SharedObjectProbe::released_step(ProbeDevice &device, VkDeviceMemory memory)
 {
     AV_SCOPE("SharedObjectProbe::released_step");
-    /* Freeing the memory releases the object on the device, closes the NT
-     * handle and destroys the carrier allocation the identity was minted into.
-     * What says it worked is that the kernel refused none of it. The buffer
-     * bound to it goes first, as Vulkan demands of anything naming memory. */
     vulkan_.destroy_buffer(device.device(), target_);
     vulkan_.free_memory(device.device(), memory);
     const uint32_t refused = vulkan_.last_kernel_status(device.device());
@@ -259,17 +200,6 @@ void SharedObjectProbe::released_step(ProbeDevice &device, VkDeviceMemory memory
 void SharedObjectProbe::carrier_size_steps(uint32_t device)
 {
     AV_SCOPE("SharedObjectProbe::carrier_size_steps");
-    /* Named one per length because a report is read by eye: the step that
-     * stops passing is the answer. 48 is the descriptor alone and 88 the
-     * descriptor with a record, which are the two this driver has shapes for;
-     * the rest exist only to find the boundary, and the driver answers them
-     * not_supported once they reach it.
-     *
-     * Every length but the last sends the same filler - a valid descriptor
-     * and zeros - so that the length is the only thing that varies. The last
-     * sends a real unassigned record at a length the driver has no shape for,
-     * which is what separates a refusal of the length from a refusal of the
-     * bytes (feature 053). */
     struct Sweep {
         const char *step;
         uint32_t    bytes;
@@ -295,14 +225,6 @@ void SharedObjectProbe::carrier_size_steps(uint32_t device)
         uint32_t             made = 0u;
         const uint8_t *const from = one.with_record ? carried : filler;
         const Status         answered = kmt_.create_allocation(device, from, one.bytes, made);
-        /* Measured, not judged: most of these lengths are ones no caller uses
-         * and the driver rightly refuses, so a sweep that failed the run for
-         * them would fail every run for ever. What is wanted is the number on
-         * the line. 0xC00000BB is this driver refusing a shape it has none
-         * for; 0xC000000D is *not* proof of dxgkrnl, because at 88 the driver
-         * knows the shape and refuses the zeroed record with the same code.
-         * The driver log names the length on each line, and that - not this
-         * number - says which side answered. */
         steps_.check_measured(one.step, Status::ok, kmt_.last_code());
         if (answered == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, made));
     }
@@ -323,18 +245,11 @@ void SharedObjectProbe::carrier_steps()
 
     carrier_size_steps(device);
 
-    /* The ordinary create, which every other allocation in the guest uses */
     uint32_t     plain = 0u;
     const Status made = kmt_.create_allocation(device, data, AllocationDescriptor::encoded_size, plain);
     steps_.check("carrier_plain", made);
     if (made == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, plain));
 
-    /* The same 88 bytes through the *one-way* create, which copies them into a
-     * buffer of its own before handing them to the kernel. This is what
-     * separates the two things the two-way create changes at once: if the
-     * kernel takes 88 bytes here and refuses them below, the length is fine
-     * and the fault is in handing it the caller's own buffer; if it refuses
-     * both, the length is the fault (feature 053). */
     static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes)
                           .encode(data + AllocationDescriptor::encoded_size,
                                   SharedObjectRecord::encoded_size));
@@ -343,8 +258,6 @@ void SharedObjectProbe::carrier_steps()
     steps_.check("carrier_long", longer);
     if (longer == Status::ok) static_cast<void>(kmt_.destroy_allocation(device, copied));
 
-    /* And the two-way one, whose private data is a descriptor followed by an
-     * unassigned record - the only thing about it that differs. */
     static_cast<void>(SharedObjectRecord(0u, SharedObjectKind(SharedObjectKind::memory), 0u, bytes)
                           .encode(data + AllocationDescriptor::encoded_size,
                                   SharedObjectRecord::encoded_size));
@@ -357,8 +270,6 @@ void SharedObjectProbe::carrier_steps()
                                                  SharedObjectRecord::encoded_size);
         steps_.check("carrier_minted", decoded == Status::ok && read.assigned() ? Status::ok
                                                                                : Status::invalid_state);
-        /* A carrier is a resource, and only a destroy that names it as one
-         * takes it (research.md §17). */
         static_cast<void>(kmt_.destroy_shared_allocation(device, shared));
     }
     static_cast<void>(kmt_.destroy_device(device));
@@ -367,18 +278,12 @@ void SharedObjectProbe::carrier_steps()
 void SharedObjectProbe::run()
 {
     AV_SCOPE("SharedObjectProbe::run");
-    /* The avgpu adapter's own physical device: an export on anybody else's
-     * would prove nothing about this driver. */
     AdapterSearch search(kmt_);
     uint64_t      luid = 0u;
     Status        found = search.find_avgpu(0u);
     if (found == Status::ok) found = kmt_.adapter_luid(search.adapter(), luid);
     if (steps_.check("adapter", found) != Status::ok) return;
 
-    /* Asked of the kernel first, and whatever the host GPU can do: whether
-     * dxgkrnl takes the carrier create is a question about this machine's
-     * Windows, not about fd sharing, and a host that offers no external
-     * objects still answers it. */
     carrier_steps();
 
     ProbeDevice device(vulkan_);
@@ -386,11 +291,6 @@ void SharedObjectProbe::run()
     if (steps_.check("physical_device", answered(device.list_physical_devices())) != Status::ok) return;
     if (steps_.check("chosen", device.choose(luid) ? Status::ok : Status::not_found) != Status::ok) return;
     if (steps_.check("family", device.choose_family() ? Status::ok : Status::not_found) != Status::ok) return;
-    /* A host with no fd sharing offers these to nobody, and there is nothing
-     * here to prove on it: the step records what it found and the rest do not
-     * run, exactly as the window-system steps do without a window. Asked
-     * before the device is made, because a device made without the extension
-     * may not be asked for an export. */
     const bool offered = reported_step(device);
     steps_.check("reported", offered ? Status::ok : Status::not_supported);
     if (!offered) return;
@@ -405,4 +305,4 @@ void SharedObjectProbe::run()
     released_step(device, memory);
 }
 
-}  // namespace av
+}

@@ -1,5 +1,3 @@
-/* The executor library's state dump (docs/trace.md): the GPUs the host
- * offered and each live session's API and GPU, written without waiting. */
 #include "core/trace/state_reporter.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/abi/av_executor.h"
@@ -27,7 +25,7 @@ constexpr std::uint8_t intel[16] = {0x86, 0x80, 0xa6, 0x46, 0x0c, 0, 0, 0, 0, 0x
 constexpr std::uint8_t nvidia[16] = {0x7b, 0x7a, 0xd2, 0xc5, 0x42, 0x19, 0x8c, 0x80,
                                      0xc4, 0xfd, 0xa6, 0x4b, 0x87, 0x75, 0xae, 0xdb};
 
-}  // namespace
+}
 
 TEST(executor_root_report, names_each_gpu_and_each_live_session)
 { MockHostApis apis;
@@ -85,8 +83,6 @@ TEST(executor_root_report, names_the_api_of_every_kind_of_session)
                                    "executor/0/session/2 api=unknown gpu=0 domain=0") != nullptr);
   for (std::uint32_t slot = 0u; slot < 3u; slot++) probe.session_at(slot).release(); }
 
-/* A GPU with a Direct3D 11 device reports its exportable images beside its
- * shares. */
 TEST(executor_root_report, a_gpu_s_device_reports_its_exportable_images)
 { MockHostApis apis;
   apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);

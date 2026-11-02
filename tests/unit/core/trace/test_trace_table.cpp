@@ -25,12 +25,9 @@ struct TraceTableProbe {
     static void desynchronize(TraceTable &table) { table.slots_ = table.layout_.slots() + 1u; }
 };
 
-}  // namespace av
+}
 
 namespace {
-
-/* docs/trace.md, written out: a mistake in TraceLayout must not move the test
- * with it. */
 constexpr std::size_t header = 96u;
 constexpr std::size_t slot_size = 56u + 32u * 24u;
 constexpr std::size_t four_slots = header + 4u * slot_size;
@@ -90,7 +87,7 @@ void enter_and_leave_on_same_thread(void *context)
     table->leave(slot);
 }
 
-}  // namespace
+}
 
 TEST(trace_table_initialize, writes_the_documented_header_and_zeroes_only_the_table)
 { TableFixture fixture;
@@ -141,7 +138,6 @@ TEST(trace_table_initialize, refuses_what_cannot_hold_a_table)
   CHECK_STATUS(table.initialize(region.bytes + 1u, four_slots, "x", 1u), Status::invalid_parameter);
   CHECK_STATUS(table.initialize(region.bytes, four_slots, nullptr, 1u), Status::invalid_parameter);
   CHECK_STATUS(table.initialize(region.bytes, four_slots, "sixteen-letters!", 1u), Status::invalid_parameter);
-  /* Nothing was written by any refusal, and the table is still unlaid. */
   CHECK_EQ(region.bytes[0], 0xAAu);
   CHECK_EQ(table.bytes(), 0u);
   CHECK(table.region() == nullptr);
@@ -186,7 +182,6 @@ TEST(trace_table_enter, pushes_nested_frames_with_name_level_time_and_text)
   CHECK_EQ(u32_at(bytes, frame_at(slot, 1u)), middle.id());
   CHECK_EQ(u16_at(bytes, frame_at(slot, 1u) + 4u), 2u);
   CHECK_EQ(u64_at(bytes, frame_at(slot, 1u) + 8u), 1100u);
-  /* The only swap was the claim: nesting finds the slot without one. */
   CHECK_EQ(fixture.host.exchanges(), 1u); }
 
 TEST(trace_table_leave, the_outermost_leave_makes_the_slot_idle_and_remembers_the_function)
@@ -209,7 +204,6 @@ TEST(trace_table_leave, the_outermost_leave_makes_the_slot_idle_and_remembers_th
   CHECK_EQ(u32_at(bytes, slot_at(slot) + 24u), outer.id());
   CHECK_EQ(u64_at(bytes, slot_at(slot) + 32u), 7777u);
   CHECK_EQ(u64_at(bytes, slot_at(slot) + 40u), 0u);
-  /* Leaving again, with the slot idle, changes nothing. */
   fixture.table.leave(slot);
   CHECK_EQ(u32_at(bytes, slot_at(slot) + 8u), 0u);
   CHECK(fixture.table.invariants_hold()); }
@@ -254,7 +248,6 @@ TEST(trace_table_enter, a_full_table_gives_up_another_thread_s_idle_slot_and_its
   }
   fixture.host.run_as(0x999u, 99u);
   CHECK_EQ(fixture.table.enter(outer), TraceTable::no_slot);
-  /* Every slot is some thread's active one: none is given up. */
   for (std::uint32_t thread = 0u; thread < 4u; thread++)
     CHECK_EQ(u64_at(fixture.bytes(), slot_at(slots[thread])), (0x100u + thread) | active_bit);
   fixture.host.run_as(0x102u, 2u);
@@ -270,7 +263,6 @@ TEST(trace_table_enter, a_full_table_gives_up_another_thread_s_idle_slot_and_its
   CHECK_EQ(u64_at(fixture.bytes(), at + 32u), 0u);
   CHECK_EQ(u64_at(fixture.bytes(), at + 40u), 0u);
   CHECK_EQ(u64_at(fixture.bytes(), at + 48u), 0u);
-  /* An active thread still nests on its own slot in a full table. */
   fixture.host.run_as(0x101u, 1u);
   CHECK_EQ(fixture.table.enter(middle), slots[1]); }
 
@@ -282,8 +274,6 @@ TEST(trace_table_enter, a_lost_swap_moves_on_to_the_next_candidate)
   fixture.host.run_as(0x20u, 2u);
   const std::uint32_t second = fixture.table.enter(outer);
   fixture.table.leave(second);
-  /* Thread 0x10 loses the swap on its own idle slot at the hashed try and
-   * again in the scan: it takes a free one and its idle slot is left as it was. */
   fixture.host.run_as(0x10u, 1u);
   fixture.host.fail_exchange_at(1u, 2u);
   const std::uint32_t taken = fixture.table.enter(middle);
@@ -299,8 +289,6 @@ TEST(trace_table_enter, a_lost_swap_moves_on_to_the_next_candidate)
   CHECK_EQ(fixture.table.enter(outer), TraceTable::no_slot);
   CHECK(fixture.table.invariants_hold()); }
 
-/* One lost swap at the hashed slot is retried by the scan, which finds the
- * slot still idle and this thread's. */
 TEST(trace_table_enter, a_swap_lost_once_at_the_hashed_slot_is_retried)
 { TableFixture fixture;
   fixture.host.run_as(0x10u, 1u);
@@ -353,7 +341,6 @@ TEST(trace_table_enter, frames_past_the_stored_depth_are_counted_not_written)
   CHECK_EQ(u64_at(bytes, slot_at(slot) + 16u), 40u);
   CHECK_EQ(u64_at(bytes, frame_at(slot, 31u) + 8u), 131u);
   CHECK_EQ(u32_at(bytes, frame_at(slot, 31u)), outer.id());
-  /* The next slot's owner, right after the last frame, is untouched. */
   if (slot < 3u) CHECK_EQ(u64_at(bytes, slot_at(slot + 1u)), 0u);
   for (std::uint32_t depth = 0u; depth < 40u; depth++) {
     fixture.table.leave(slot);
@@ -362,9 +349,6 @@ TEST(trace_table_enter, frames_past_the_stored_depth_are_counted_not_written)
   CHECK_EQ(u64_at(bytes, slot_at(slot)), 0x10u);
   CHECK_EQ(u32_at(bytes, slot_at(slot) + 24u), outer.id()); }
 
-/* An interrupt on the same thread arrives inside a push, after the depth was
- * raised: its frame goes above the one being written, and the outer frame
- * and depth are right once it has returned. */
 TEST(trace_table_enter, an_interrupt_inside_a_push_nests_above_the_frame)
 { TableFixture fixture;
   fixture.host.run_as(0x10u, 1u);
@@ -394,7 +378,6 @@ TEST(trace_table_locks, records_the_lock_waited_on_then_held_then_released)
   fixture.table.released(0xAAAAu);
   CHECK_EQ(u64_at(fixture.bytes(), at + 48u), 0u);
   CHECK(fixture.table.invariants_hold());
-  /* A thread outside every function has no slot to mark. */
   fixture.host.run_as(0x20u, 2u);
   fixture.table.waiting(0xCCCCu);
   fixture.table.acquired(0xCCCCu);
@@ -458,8 +441,6 @@ TEST(trace_table_invariants, fail_for_a_slot_count_that_differs_from_the_layout)
   av::TraceTableProbe::desynchronize(fixture.table);
   CHECK(!fixture.table.invariants_hold()); }
 
-/* A table withdrawn while a scope is open writes nothing when that scope
- * leaves, so its owner may release the region first. */
 TEST(trace_table_withdraw, later_calls_write_nothing_to_the_region)
 { TableFixture fixture;
   fixture.host.run_as(0x10u, 1u);
@@ -478,8 +459,6 @@ TEST(trace_table_withdraw, later_calls_write_nothing_to_the_region)
   for (std::size_t byte = 0u; byte < sizeof fixture.region.bytes; byte++) CHECK_EQ(fixture.region.bytes[byte], 0xEEu);
   CHECK(fixture.table.invariants_hold()); }
 
-/* Two threads whose keys hash to one slot: the second lives elsewhere, and
- * its nested entries find its slot by the scan, never the first thread's. */
 TEST(trace_table_enter, a_thread_whose_hashed_slot_is_taken_nests_on_its_own)
 { TableFixture fixture;
   fixture.host.run_as(0x10u, 1u);
@@ -490,8 +469,6 @@ TEST(trace_table_enter, a_thread_whose_hashed_slot_is_taken_nests_on_its_own)
     const std::uint32_t probe = fixture.table.enter(inner);
     if (probe == TraceTable::no_slot) continue;
     fixture.table.leave(probe);
-    /* Hashing to the same slot leaves this key's slot elsewhere; a key that
-     * hashed elsewhere got its own hashed slot, which is not the first's. */
     const std::uint64_t key_mix = 0x9E3779B97F4A7C15ull;
     const std::uint64_t mixed = colliding * key_mix;
     if (static_cast<std::uint32_t>(((mixed >> 32u) * 4u) >> 32u) == first) break;
@@ -507,8 +484,6 @@ TEST(trace_table_enter, a_thread_whose_hashed_slot_is_taken_nests_on_its_own)
   CHECK(fixture.table.invariants_hold()); }
 
 namespace {
-
-/* One slot's events of a ring the table records into. */
 struct Events {
     static constexpr std::uint32_t slots = 4u;
     static constexpr std::uint32_t per_slot = 8u;
@@ -523,17 +498,15 @@ struct Events {
     }
 };
 
-}  // namespace
+}
 
-/* Once given a ring, every enter is a begin event with the scope's name and
- * every leave an end event, stamped with the host's clock and thread. */
 TEST(trace_table_record_events, each_enter_and_leave_is_an_event)
 { TableFixture fixture;
   Events events;
   fixture.host.run_as(0x10u, 7u);
   const std::uint32_t before = fixture.table.enter(outer);
   fixture.table.leave(before);
-  CHECK(events.count(before) == 0u);   /* nothing before the ring was given */
+  CHECK(events.count(before) == 0u);
   fixture.table.record_events(events.ring);
   fixture.host.set_clock(600u);
   const std::uint32_t slot = fixture.table.enter(outer);
@@ -547,8 +520,6 @@ TEST(trace_table_record_events, each_enter_and_leave_is_an_event)
   CHECK_EQ(u32_at(events.bytes, events.at(slot, 1u) + 12u), 7u);
   CHECK(fixture.table.invariants_hold()); }
 
-/* Past the depth limit a scope is neither pushed nor recorded, and its leave
- * touches nothing; 0 is no limit. */
 TEST(trace_table_limit_depth, scopes_past_the_limit_are_neither_pushed_nor_recorded)
 { TableFixture fixture;
   Events events;
@@ -559,7 +530,7 @@ TEST(trace_table_limit_depth, scopes_past_the_limit_are_neither_pushed_nor_recor
   const std::uint32_t third = fixture.table.enter(inner);
   CHECK_EQ(second, first);
   CHECK_EQ(third, TraceTable::no_slot);
-  CHECK_EQ(u32_at(fixture.bytes(), slot_at(first) + 8u), 2u);   /* the depth stayed at the limit */
+  CHECK_EQ(u32_at(fixture.bytes(), slot_at(first) + 8u), 2u);
   CHECK(events.count(first) == 2u);
   fixture.table.leave(third);
   CHECK(events.count(first) == 2u);
@@ -577,8 +548,6 @@ TEST(trace_table_limit_depth, scopes_past_the_limit_are_neither_pushed_nor_recor
   fixture.table.leave(a);
   CHECK(fixture.table.invariants_hold()); }
 
-/* A scope named by only() is traced at any depth: the limit is for tracing
- * everything, not the few legs a measurement asked for. */
 TEST(trace_table_limit_depth, does_not_apply_to_the_scopes_only_names)
 { TableFixture fixture;
   fixture.table.limit_depth(1u);

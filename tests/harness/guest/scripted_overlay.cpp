@@ -75,4 +75,4 @@ void ScriptedOverlay::release()
     live_ = false;
 }
 
-}  // namespace av
+}

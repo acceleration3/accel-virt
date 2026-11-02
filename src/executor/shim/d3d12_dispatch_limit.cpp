@@ -8,11 +8,9 @@
 namespace av {
 
 namespace {
-
-/* D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION. */
 constexpr uint32_t direct3d_most_groups = 65535u;
 
-}  // namespace
+}
 
 D3d12DispatchLimit::D3d12DispatchLimit()
     : most_x_(direct3d_most_groups), most_y_(direct3d_most_groups), most_z_(direct3d_most_groups)
@@ -47,4 +45,4 @@ bool D3d12DispatchLimit::admits(uint32_t x, uint32_t y, uint32_t z) const
     return x <= most_x_ && y <= most_y_ && z <= most_z_;
 }
 
-}  // namespace av
+}

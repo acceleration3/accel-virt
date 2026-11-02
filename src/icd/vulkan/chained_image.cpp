@@ -15,7 +15,7 @@ using CreateImage = VkResult(VKAPI_PTR *)(VkDevice, const VkImageCreateInfo *, c
 using DestroyImage = void(VKAPI_PTR *)(VkDevice, VkImage, const VkAllocationCallbacks *);
 using BindImage = VkResult(VKAPI_PTR *)(VkDevice, VkImage, VkDeviceMemory, VkDeviceSize);
 
-}  // namespace
+}
 
 ChainedImage::ChainedImage(EntryLookup &entries, VkDevice device, uint64_t host_device, WindowChains &chains,
                            ClientTransport &wire)
@@ -42,13 +42,9 @@ bool ChainedImage::open(void *window, uint64_t luid, VkFormat format, VkExtent2D
     return false;
 }
 
-/* The bytes are the slot's surface as the guest counts them, its rows end to
- * end; the device opened the whole of the host's memory behind them, which
- * the host's tiling of the same image fits (test_d3d_vulkan_interop_device). */
 bool ChainedImage::make_image(const SlotFormat &slot, VkExtent2D extent)
 {
     AV_SCOPE("ChainedImage::make_image");
-    /* The slots refused an open that answered no handle. */
     const VkDeviceMemory memory = HandleBits(slots_.memory(0u)).as<VkDeviceMemory>();
     const ExportableImageInfo described(extent.width, extent.height, 1u, 1u, 1u, slot.dxgi(), slot.bind_flags());
     const auto create = reinterpret_cast<CreateImage>(entries_.entry("vkCreateImage"));
@@ -72,8 +68,6 @@ VkImage ChainedImage::slot() const
     return image_;
 }
 
-/* The memory is the device's to free: releasing the object does
- * (VulkanBackend::release_object), as a vkFreeMemory of it would not. */
 void ChainedImage::release()
 {
     AV_SCOPE("ChainedImage::release");
@@ -90,7 +84,6 @@ void ChainedImage::close()
     slots_.close();
 }
 
-/* An image only over a slot's memory. */
 bool ChainedImage::invariants_hold() const
 {
     AV_SCOPE("ChainedImage::invariants_hold");
@@ -98,4 +91,4 @@ bool ChainedImage::invariants_hold() const
     return slots_.invariants_hold();
 }
 
-}  // namespace av::icd
+}

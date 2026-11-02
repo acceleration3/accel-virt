@@ -28,4 +28,4 @@ void ProcessHeap::require_irql_at_most(Irql, const char *)
     AV_SCOPE("ProcessHeap::require_irql_at_most");
 }
 
-}  // namespace av
+}

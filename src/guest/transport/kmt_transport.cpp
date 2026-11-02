@@ -25,9 +25,8 @@ namespace av {
 
 namespace {
 constexpr uint64_t page_bytes = 4096u;
-/* A ring counts a batch's bytes in 32 bits. */
 constexpr size_t   max_batch = 0xFFFFFFFFu;
-}  // namespace
+}
 
 KmtTransport::KmtTransport(GuestConnection &connection, BlockSource &memory, SubApi sub_api, uint8_t ring_order,
                            uint32_t reply_bytes, uint8_t *staging, size_t staging_bytes)
@@ -96,20 +95,13 @@ Status KmtTransport::initialize(const GlContextOptions &options)
     if (!record_carries(options)) return Status::invalid_parameter;
     ScopeExit undo([&] { teardown(); });
     uint64_t  unused = 0u;
-    /* A page the driver resolves the context by, the one handle of it another
-     * context of this process can name (feature 050). */
     const Status named = setup_allocation(name_index, AllocationKind::context_ring, page_bytes, false, unused);
     if (named != Status::ok) return named;
-    /* The DMA buffer is only what dxgkrnl insists a submission names; the
-     * descriptor travels as the submission's private data. */
     const Status dma_ready = setup_allocation(dma_index, AllocationKind::client, dma_bytes, true, dma_address_);
     if (dma_ready != Status::ok) return dma_ready;
     const AvContextRecord record(sub_api_, ring_order_, allocations_[name_index], reply_bytes_, options);
     uint8_t      private_data[AvContextRecord::encoded_size] = {};
     static_cast<void>(record.encode(private_data, sizeof private_data));
-    /* A context a hardware queue may run on first: that is what a doorbell
-     * hangs off, and a machine whose OS hands out no hardware queue refuses it
-     * and gets the context this transport has always had (research.md §13). */
     bool doorbells = false;
     static_cast<void>(connection_.kmt().query_native_gpu_fences(connection_.adapter(), doorbells));
     Status made = doorbells ? connection_.kmt().create_hw_queue_context(connection_.device(), private_data,
@@ -120,12 +112,6 @@ Status KmtTransport::initialize(const GlContextOptions &options)
         made = connection_.kmt().create_context_virtual(connection_.device(), private_data, sizeof private_data,
                                                         context_);
     if (made != Status::ok) return made;
-    /* A hardware-scheduled context without a doorbell still submits, but
-     * through D3DKMTSubmitCommandToHwQueue at ten times the cost of the plain
-     * context's D3DKMTSubmitCommand, so none is asked for where the adapter
-     * has no native fences - a doorbell needs them, and 26100 refuses them
-     * (049 research.md §20) - and one whose doorbell is refused anyway is
-     * given back for the plain one. */
     if (hardware_scheduled_ &&
         doorbell_.initialize(connection_.device(), context_, allocations_[name_index]) == Status::ok) {
         static_cast<void>(doorbell_.connect());
@@ -142,7 +128,6 @@ Status KmtTransport::initialize(const GlContextOptions &options)
     if (!doorbell_.established()) {
         uint8_t escape[TailPublishRecord::encoded_size] = {};
         static_cast<void>(TailPublishRecord(ring()).encode(escape, sizeof escape));
-        /* An older driver refuses it, and the kernel publishes as it always has. */
         if (connection_.kmt().escape(connection_.adapter(), connection_.device(), context_, escape, sizeof escape) ==
             Status::ok)
             path_.publish_before_kernel();
@@ -151,11 +136,6 @@ Status KmtTransport::initialize(const GlContextOptions &options)
     return Status::ok;
 }
 
-/* A view the driver answered past what this process can address - a 32-bit
- * one, above 4 GiB - is no answer it gives, and is refused rather than cut
- * down to some other address. */
-/* A driver from before the fence page refuses a version-2 request as it
- * refuses any record it does not know, and is asked again with version 1. */
 Status KmtTransport::adopt_views()
 {
     AV_SCOPE("KmtTransport::adopt_views");
@@ -183,7 +163,7 @@ Status KmtTransport::ask_views(ContextViewsRecord &views)
 {
     AV_SCOPE("KmtTransport::ask_views");
     uint8_t bytes[ContextViewsRecord::encoded_size] = {};
-    static_cast<void>(views.encode(bytes, sizeof bytes));   /* the buffer is the encoded size */
+    static_cast<void>(views.encode(bytes, sizeof bytes));
     const Status escaped =
         connection_.kmt().escape(connection_.adapter(), connection_.device(), context_, bytes, sizeof bytes);
     if (escaped != Status::ok) return escaped;
@@ -208,9 +188,6 @@ uint64_t KmtTransport::published_fence() const
     return newest_fence_;
 }
 
-/* The fence page says when one batch is done, so a wait the kernel would
- * stretch over later batches - a frame's throttle waits for one a few behind
- * the newest - is a watch on the page alone. */
 Status KmtTransport::await_gpu(uint64_t fence)
 {
     AV_SCOPE("KmtTransport::await_gpu");
@@ -227,8 +204,6 @@ Status KmtTransport::await_gpu(uint64_t fence)
 bool KmtTransport::kernel_waits_for(uint64_t fence) const
 {
     AV_SCOPE("KmtTransport::kernel_waits_for");
-    /* A routed transport's batches are no packet of its own context's and write
-     * no hardware queue's progress: only the fence page says when they ran. */
     if (path_.releases()) return false;
     return !watch_.reads_page() || doorbell_.queue() != 0u || fence == newest_fence_;
 }
@@ -246,8 +221,6 @@ Status KmtTransport::wake_on_raise(uint64_t handle)
 bool KmtTransport::record_carries(const GlContextOptions &options) const
 {
     AV_SCOPE("KmtTransport::record_carries");
-    /* A stand-in for the handle the name will have: the record judges the
-     * reply slot and the options as the miniport will. */
     const AvContextRecord candidate(sub_api_, ring_order_, 1u, reply_bytes_, options);
     uint8_t                bytes[AvContextRecord::encoded_size] = {};
     static_cast<void>(candidate.encode(bytes, sizeof bytes));
@@ -298,8 +271,6 @@ Status KmtTransport::release_by(ReleaseRoute &route)
     AV_SCOPE("KmtTransport::release_by");
     if (!established() || faulted_ || !watch_.reads_page()) return watch_.reads_page() ? Status::invalid_state : Status::not_supported;
     if (routed_by(route)) return Status::ok;
-    /* A second device of the session that shares rides the first's route, and
-     * takes it over when the first goes. */
     if (route_ != nullptr) {
         if (standby_ != nullptr) return Status::no_space;
         standby_ = &route;
@@ -316,14 +287,11 @@ void KmtTransport::release_directly(const ReleaseRoute &route)
     if (standby_ == &route) standby_ = nullptr;
     if (route_ != &route) return;
     if (standby_ != nullptr) {
-        /* The same ring, in the same order: only the context the packets go on changes. */
         route_ = standby_;
         standby_ = nullptr;
         path_.release_through(const_cast<ReleaseRoute *>(route_), ring());
         return;
     }
-    /* Whatever the route released is in the miniport's order: a batch
-     * published by the ways before it must not overtake one still held. */
     if (established() && !faulted_) static_cast<void>(await_gpu(newest_fence_));
     path_.release_through(nullptr, 0u);
     route_ = nullptr;
@@ -377,14 +345,10 @@ TransportResult KmtTransport::flush()
     uint64_t              fence = 0u;
     const TransportResult sent = publish_batch(pending_.bytes(), static_cast<uint32_t>(pending_.used()), fence);
     pending_.clear();
-    /* What was held is gone either way, and a context missing commands its
-     * application made is no context to go on sending on. */
     if (sent != TransportResult::ok) faulted_ = true;
     return sent;
 }
 
-/* Every lease taken before them is named by them or by what went before, so
- * they are whole as far as the arena is concerned. */
 TransportResult KmtTransport::hold_framed(const uint8_t *framed, size_t length)
 {
     AV_SCOPE("KmtTransport::hold_framed");
@@ -397,7 +361,7 @@ TransportResult KmtTransport::hold_framed(const uint8_t *framed, size_t length)
     }
     if (length > pending_.capacity()) return TransportResult::failed;
     if (!pending_.fits(length) && flush() != TransportResult::ok) return TransportResult::failed;
-    static_cast<void>(pending_.append(framed, length));   /* an empty block holds it */
+    static_cast<void>(pending_.append(framed, length));
     blobs_.seal();
     return TransportResult::ok;
 }
@@ -411,9 +375,6 @@ TransportResult KmtTransport::hold(uint32_t command_id, const WireWriter &writer
     return TransportResult::ok;
 }
 
-/* The block is sent each time a piece fills it: those batches carry the
- * command before it is whole, so its leases are sealed only with its last
- * piece, and stay lent until the batch that carries that has run. */
 TransportResult KmtTransport::hold_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags)
 {
     AV_SCOPE("KmtTransport::hold_pieces");
@@ -472,7 +433,6 @@ void KmtTransport::teardown()
     AV_SCOPE("KmtTransport::teardown");
     Kmt           &kmt = connection_.kmt();
     const uint32_t device = connection_.device();
-    /* Before the context: a doorbell names a queue of it. */
     doorbell_.teardown();
     if (context_ != 0u) {
         static_cast<void>(kmt.destroy_context(context_));
@@ -488,16 +448,11 @@ void KmtTransport::teardown()
         static_cast<void>(kmt.destroy_allocation(device, allocations_[index]));
         allocations_[index] = 0u;
     }
-    /* The ring and reply views went with the context, and a context set up
-     * again numbers its fences from the start: without this a transport torn
-     * down could never be initialized again. */
     ring_ = TransportRing();
     reply_ = ReplyReader();
     watch_.read_page(nullptr);
     fences_ = TransportFence();
     faulted_ = false;
-    /* A gate is its device's, which a transport torn down outlives no
-     * longer; what was held was for the context that went. */
     for (PublishGate *&held : held_) held = nullptr;
     path_.release_through(nullptr, 0u);
     route_ = nullptr;
@@ -561,10 +516,6 @@ TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, u
     return publish_batch(staging_, command_size, fence);
 }
 
-/* The staging is free once the command spilled out of it, so each piece is
- * framed there and published as a batch of its own; the ring takes one at a
- * time however long the command, and the fence of the last is the
- * command's - the batch its leases are sealed into. */
 TransportResult KmtTransport::publish_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags,
                                              uint64_t &fence)
 {
@@ -581,8 +532,6 @@ TransportResult KmtTransport::publish_pieces(uint32_t command_id, const WireWrit
     return TransportResult::ok;
 }
 
-/* The performance counter in 100 ns, the unit the trace timeline keeps: the
- * device orders batches by it, and Perfetto aligns guest and host by it. */
 uint64_t KmtTransport::published_now() const
 {
     AV_SCOPE("KmtTransport::published_now");
@@ -598,8 +547,6 @@ bool KmtTransport::drain()
     AV_SCOPE("KmtTransport::drain");
     const uint64_t newest = fences_.completed() + fences_.outstanding();
     if (fences_.outstanding() == 0u) return true;
-    /* The device publishes its head as it finishes each batch; all taken is
-     * all done, and that is usually a matter of microseconds away. */
     if (consumed_within_spin()) {
         fences_.close(newest);
         blobs_.retire_through(newest);
@@ -615,9 +562,6 @@ bool KmtTransport::drain()
     return true;
 }
 
-/* The oldest batches the host has yet to run are waited for one at a time,
- * so the host keeps working on the rest while their leases come back. What
- * is held is sent first: its leases come back only once it has run. */
 const TransferRoom &KmtTransport::room() const
 {
     AV_SCOPE("KmtTransport::room");
@@ -634,8 +578,6 @@ bool KmtTransport::make_room_for_blobs(size_t bytes)
     while (blobs_.room() < bytes && fences_.outstanding() != 0u && !faulted_) {
         const uint64_t oldest = fences_.oldest();
         const uint64_t end = fence_ends_[oldest % TransportFence::max_outstanding];
-        /* The fence can signal before the head the device published after
-         * the batch is seen here, as drain knows. */
         if (ring_.head() < end && (wait_for_host(oldest) != Status::ok ||
                                    !arrives_eventually([this, end] { return ring_.head() >= end; }))) {
             faulted_ = true;
@@ -646,11 +588,6 @@ bool KmtTransport::make_room_for_blobs(size_t bytes)
     return blobs_.room() >= bytes;
 }
 
-/* The kernel's wait is bounded, so it is asked again for as long as the host
- * is still at work: one command can block in a host driver until the GPU
- * drains a queue of seconds (a Radeon 610M, an Iris Xe), and a guest that
- * gave up on it lost a context the host was still running. Only a fault, or a
- * device gone silent, ends it (HostWatch). */
 Status KmtTransport::wait_for_host(uint64_t fence)
 {
     AV_SCOPE("KmtTransport::wait_for_host");
@@ -666,12 +603,6 @@ Status KmtTransport::wait_for_host(uint64_t fence)
     }
 }
 
-/* A routed transport's batches are released by the scheduler, and the kernel
- * has no object that is signaled when one has run: the fence page is read
- * until it says so, for as long as the host is at work. A wait that outlasts a
- * few seconds is told to the route once: a batch held behind a wait only the
- * application's own thread satisfies later (a CPU signal, then a call that
- * waits for the answer) looks the same. */
 Status KmtTransport::wait_on_page(uint64_t fence)
 {
     AV_SCOPE("KmtTransport::wait_on_page");
@@ -692,8 +623,6 @@ Status KmtTransport::wait_on_page(uint64_t fence)
     }
 }
 
-/* Every fence whose batch the device has moved its head past is done: the
- * device publishes the head as it finishes each batch. */
 void KmtTransport::retire_consumed()
 {
     AV_SCOPE("KmtTransport::retire_consumed");
@@ -709,9 +638,6 @@ void KmtTransport::retire_consumed()
     blobs_.retire_through(done);
 }
 
-/* A full fence window waits for its oldest batch, not for all of them: a
- * sender of many small batches - a flush a frame - drained the device empty
- * every 64, and then refilled it from nothing. */
 bool KmtTransport::room_for_fence()
 {
     AV_SCOPE("KmtTransport::room_for_fence");
@@ -729,8 +655,6 @@ bool KmtTransport::room_for_fence()
 TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence)
 {
     AV_SCOPE("KmtTransport::publish_batch");
-    /* Taken out before any is passed: a gate that is passed may be asked to
-     * hold again, and the ones that stay are the ones to pass next time. */
     PublishGate *passing[most_gates] = {};
     uint32_t     passes = 0u;
     lock_gates();
@@ -741,9 +665,6 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
     }
     unlock_gates();
     for (uint32_t index = 0u; index < passes; index++) passing[index]->pass();
-    /* Asynchronous batches open fences nobody waits on: a sender faster than
-     * the host fills the fence window or the ring, and then waits for the
-     * host to catch up rather than failing. */
     if (fences_.full() && !room_for_fence()) return TransportResult::failed;
     uint64_t next = fences_.peek();
     if (next == 0u) return TransportResult::failed;
@@ -784,7 +705,6 @@ TransportResult KmtTransport::send_async(uint32_t command_id, WireWriter &writer
     return publish(command_id, writer, 0u, fence);
 }
 
-/* An answer is the host having run its batch and every one before it. */
 void KmtTransport::end_call()
 {
     AV_SCOPE("KmtTransport::end_call");
@@ -831,8 +751,6 @@ BatchMark KmtTransport::newest_mark() const
     return BatchMark(connection_.device(), context_, fence_object, newest_fence_);
 }
 
-/* The batch is judged whole before a byte reaches the ring: a frame the device
- * would fault the context for is the caller's mistake, not the context's. */
 TransportResult KmtTransport::send_batch(const uint8_t *framed, size_t length, WireReader &reply)
 {
     AV_SCOPE("KmtTransport::send_batch");
@@ -863,9 +781,6 @@ TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
     return read == Status::ok ? TransportResult::ok : TransportResult::failed;
 }
 
-/* Each part is a round trip of its own, asked while the caller still holds
- * the transport, so no command of its runs on the host in between and the
- * answer kept there is the one asked about. */
 TransportResult KmtTransport::fetch_answer(WireReader &reply)
 {
     AV_SCOPE("KmtTransport::fetch_answer");
@@ -879,9 +794,6 @@ TransportResult KmtTransport::fetch_answer(WireReader &reply)
         const uint64_t length = part.read_u64();
         const size_t   bytes = part.remaining();
         const bool     first = fetched == 0u;
-        /* The slot said the answer was too long for it, so a host that
-         * answers with none, or with another length, or with no progress,
-         * broke the protocol. */
         if (part.status() != Status::ok || (first && length == 0u) || (!first && length != total) ||
             bytes > length - fetched || (bytes == 0u && fetched < length)) {
             faulted_ = true;
@@ -914,15 +826,8 @@ TransportResult KmtTransport::fetch_part(uint64_t offset, WireReader &part)
 Status KmtTransport::await_slot(uint64_t fence, WireReader &reply)
 {
     AV_SCOPE("KmtTransport::await_slot");
-    /* What a hardware-scheduled context has in flight is not in any packet the
-     * kernel queued, so what it waits on is the queue's progress fence - the
-     * monitored fence dxgkrnl made with the queue, which this driver writes
-     * what the device finished into (research.md §12). */
     if (!replied_within_spin(fence)) {
         const Status waited = wait_for_host(fence);
-        /* A batch the kernel was not told of is the device's alone, so the
-         * kernel's wait can return before it: the slot is watched until the
-         * answer lands. */
         if (waited != Status::ok || !arrives_eventually([this, fence] {
                 WireReader   probe(nullptr, 0u);
                 const Status read = reply_.read(fence, probe);
@@ -940,19 +845,12 @@ Status KmtTransport::await_slot(uint64_t fence, WireReader &reply)
     return Status::invalid_state;
 }
 
-/* No PAUSE in a guest's spin: KVM takes a run of them for a vCPU waiting on a
- * lock held elsewhere and descheduled it, so the answer arrived to a vCPU
- * that was not running. A compiler barrier keeps the loads in the loop. */
 void KmtTransport::spin_once() const
 {
     AV_SCOPE("KmtTransport::spin_once");
     __asm__ __volatile__("" ::: "memory");
 }
 
-/* A reply usually lands within tens of microseconds, and the kernel's wait -
- * a CPU notification the scheduler signals behind the context's work - takes
- * far longer to come back: the slot is watched for a millisecond first. The
- * device writes the fence id last, so seeing it means the answer is whole. */
 bool KmtTransport::replied_within_spin(uint64_t fence)
 {
     AV_SCOPE("KmtTransport::replied_within_spin");
@@ -966,9 +864,6 @@ bool KmtTransport::replied_within_spin(uint64_t fence)
     }
 }
 
-/* A full ring needs room for one batch, not an empty ring: the host frees it
- * a batch at a time, and waiting for all of it would stop the guest until the
- * host had nothing left to do. */
 bool KmtTransport::room_within_spin(uint64_t span)
 {
     AV_SCOPE("KmtTransport::room_within_spin");
@@ -980,9 +875,6 @@ bool KmtTransport::room_within_spin(uint64_t span)
     }
 }
 
-/* What the device has yet to write is watched for for as long as the host is
- * at work (HostWatch): a device that has stopped taking the ring ends the wait
- * in a fault rather than never. */
 template <typename Arrived> bool KmtTransport::arrives_eventually(Arrived arrived)
 {
     AV_SCOPE("KmtTransport::arrives_eventually");
@@ -1019,8 +911,6 @@ Status KmtTransport::nop(uint32_t &answered)
     return answered != 0u ? Status::malformed : Status::ok;
 }
 
-/* An answer with bytes in it is still an answer: the host ran what came
- * before it. */
 Status KmtTransport::run_held()
 {
     AV_SCOPE("KmtTransport::run_held");
@@ -1048,9 +938,7 @@ void KmtTransport::give_back_doorbell()
 bool KmtTransport::invariants_hold() const
 {
     AV_SCOPE("KmtTransport::invariants_hold");
-    /* An established context has its name and its DMA buffer mapped; the ring
-     * and fence keep their own invariants, tested with them. */
     return pending_.invariants_hold() && (context_ == 0u || (allocations_[name_index] != 0u && dma_address_ != 0u));
 }
 
-}  // namespace av
+}

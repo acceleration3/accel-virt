@@ -1,9 +1,3 @@
-"""The guest probes' SPIR-V headers are what their GLSL compiles to.
-
-Most tests put a fake glslangValidator on PATH, so what the tool does with a
-module - the header it writes, what --check says - is judged without depending
-on the real compiler's output; one test runs the real compiler when there is one.
-"""
 import os
 import pathlib
 import re
@@ -18,8 +12,6 @@ from tool_run import ROOT
 GEN = ROOT / "tools" / "gen_spirv.py"
 SHADERS = ROOT / "src" / "guest" / "probe" / "shaders"
 
-# Words: SPIR-V's magic, a version, the source's length in bytes, then ten
-# counting words, so a module spans more than one line of the header.
 FAKE_COMPILER = f"""#!{sys.executable}
 import pathlib, struct, sys
 arguments = sys.argv[1:]
@@ -61,8 +53,6 @@ def expected_header(stem, source, length):
             f"#endif\n")
 
 
-# The assembler: the same module for assembly, logged beside the compiler's
-# calls, its own failure spelled as spirv-as spells one.
 FAKE_ASSEMBLER = f"""#!{sys.executable}
 import pathlib, struct, sys
 arguments = sys.argv[1:]

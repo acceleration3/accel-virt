@@ -1,6 +1,3 @@
-/* nvapi64.dll's root behind its exports (nvapi_exports.cpp), one per process
- * in their storage. Translation only: what is answered is decided in
- * src/icd/vendor/nvapi_root.cpp. */
 #ifndef AV_UM_NVAPI_LIBRARY_HPP
 #define AV_UM_NVAPI_LIBRARY_HPP
 
@@ -11,7 +8,7 @@
 
 namespace av::vendor {
 struct NvDisplayDriverMemoryInfoRecord;
-}  // namespace av::vendor
+}
 
 namespace av {
 
@@ -42,6 +39,6 @@ private:
 
 constexpr NvapiLibrary::NvapiLibrary() : driver_() {}
 
-}  // namespace av
+}
 
-#endif  // AV_UM_NVAPI_LIBRARY_HPP
+#endif

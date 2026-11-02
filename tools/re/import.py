@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Import PE binaries into a Ghidra project, apply the sibling PDB, analyze."""
 import os, sys, pathlib
 os.environ.setdefault("GHIDRA_INSTALL_DIR", "/opt/ghidra")
 os.environ.setdefault("JAVA_HOME", "/usr/lib/jvm/java-26-openjdk")

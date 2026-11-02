@@ -1,5 +1,3 @@
-/* Where the device's hostmem region is, and whether the driver may use it as
- * its host window at all (docs/host-memory.md). */
 #include "miniport/memory/host_visible_segment.hpp"
 #include "miniport/pci/pci_base_addresses.hpp"
 #include "core/support/status.hpp"
@@ -30,8 +28,6 @@ using av::Violation;
 namespace av {
 
 struct HostVisibleSegmentProbe {
-    /* A segment offered over a region that is not there, or not whole pages:
-     * what discover() never builds, and what the invariant is there to catch. */
     static void offer_without_a_region(HostVisibleSegment &segment) { segment.offered_ = true; }
     static void offer_a_partial_page(HostVisibleSegment &segment, std::uint64_t size, std::uint64_t base)
     {
@@ -41,7 +37,7 @@ struct HostVisibleSegmentProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -57,8 +53,6 @@ CapsetInfo capset(std::uint64_t features)
                       GpuIdentity(1u, 2u, GpuIdentity::discrete_gpu, uuid, 0u, 0u, "the host's"));
 }
 
-/* A configuration space whose BAR 4 is where the region lives, as firmware
- * assigned it: 64-bit, prefetchable. */
 class Function {
 public:
     Function()
@@ -85,7 +79,7 @@ VirtioPciLayout layout_with(const VirtioRegion &host_visible)
                            host_visible.present() ? 1u : 0u);
 }
 
-}  // namespace
+}
 
 TEST(host_visible_segment, offers_nothing_until_it_has_looked)
 { MockPlatform platform;
@@ -94,15 +88,12 @@ TEST(host_visible_segment, offers_nothing_until_it_has_looked)
   CHECK_EQ(segment.size(), 0u);
   CHECK(segment.invariants_hold()); }
 
-/* The region and the capset both have to say yes: a device with the region but
- * a capset that does not claim it is a device this driver has not proved
- * anything about. */
 TEST(host_visible_segment, is_offered_only_where_the_region_and_the_capset_agree)
 { MockPlatform platform;
   Function function;
   HostVisibleSegment segment(platform);
   segment.discover(function.bars(), layout_with(VirtioRegion(region_bar, 0u, region_bytes)));
-  CHECK(!segment.offered());                    /* nothing has been claimed yet */
+  CHECK(!segment.offered());
   segment.offer(capset(0u));
   CHECK(!segment.offered());
   segment.offer(capset(CapsetInfo::feature_host_visible_memory));
@@ -120,9 +111,6 @@ TEST(host_visible_segment, a_device_with_no_region_offers_none)
   CHECK(!segment.offered());
   CHECK_EQ(segment.size(), 0u); }
 
-/* A region whose length is not a whole number of pages, or whose BAR firmware
- * never assigned, is not a segment: VidMm would place an allocation in the part
- * that is not there. */
 TEST(host_visible_segment, a_region_that_does_not_fit_a_page_is_refused)
 { MockPlatform platform;
   Function function;
@@ -138,8 +126,6 @@ TEST(host_visible_segment, a_region_that_does_not_fit_a_page_is_refused)
   unassigned.offer(capset(CapsetInfo::feature_host_visible_memory));
   CHECK(!unassigned.offered()); }
 
-/* Where the window is: the BAR firmware assigned plus the region's offset in
- * it, which is the guest physical address chunks are mapped from. */
 TEST(host_visible_segment, says_where_the_region_is_in_guest_physical_memory)
 { MockPlatform platform;
   Function function;
@@ -149,7 +135,6 @@ TEST(host_visible_segment, says_where_the_region_is_in_guest_physical_memory)
   CHECK_EQ(segment.base(), bar_address + 0x1000u);
   CHECK_EQ(segment.size(), region_bytes); }
 
-/* A region found but not offered is no window: nothing is placed in it. */
 TEST(host_visible_segment, an_unoffered_region_is_nowhere)
 { MockPlatform platform;
   Function function;
@@ -159,8 +144,6 @@ TEST(host_visible_segment, an_unoffered_region_is_nowhere)
   CHECK_EQ(segment.base(), 0u);
   CHECK_EQ(segment.size(), 0u); }
 
-/* StopDevice: the next start looks again, because the device it looks at may
- * be another one (feature 040, FR-005). */
 TEST(host_visible_segment, forgetting_leaves_nothing_offered)
 { MockPlatform platform;
   Function function;
@@ -184,8 +167,6 @@ TEST(host_visible_segment, every_call_keeps_its_irql_ceiling)
   CHECK(platform.claim(Violation::irql_ceiling));
   platform.set_irql(Irql::passive); }
 
-/* A segment offered over a region that is not whole pages, or over none at all,
- * would have VidMm place allocations in memory that is not there. */
 TEST(host_visible_segment_invariants, an_offer_without_a_whole_region_is_caught)
 { MockPlatform platform;
   HostVisibleSegment nothing(platform);

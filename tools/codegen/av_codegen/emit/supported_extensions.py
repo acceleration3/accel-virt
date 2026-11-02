@@ -1,22 +1,3 @@
-"""Generate ``vk_supported_extensions.h``: what this build can actually do.
-
-The ICD answers ``vkEnumerateDeviceExtensionProperties`` by forwarding
-the question to the server, which asks the real driver — so the list an
-application sees is every device extension that GPU supports. The ICD
-implements the four dozen in ``profile.toml``.
-
-Nothing catches the difference. An application enables an extension it
-was offered, asks for one of its entry points, gets null from
-``vkGetDeviceProcAddr`` because no such command was ever generated, and
-calls it. That is a jump to address zero with no Vulkan error raised
-anywhere along the way — the failure mode that took a D3D8 title down
-inside DXVK, four frames deep with an empty backtrace.
-
-Advertising only what exists is the fix, and the list has to be
-generated: maintained by hand next to the generator it would be wrong
-the first time an extension was added or removed.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -55,12 +36,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "inline constexpr const char* kImplementedInstanceExtensions[] = {",
     ]
     for name in instance:
-        # The platform surface-creation extension is chosen at compile
-        # time: the profile names the Xlib one because that is what the
-        # host build presents through, but the same source cross-compiled
-        # for Windows presents through Win32 and must advertise that
-        # name instead. Emitting both behind an #if keeps one generated
-        # header honest for both targets.
         if name == "VK_KHR_xlib_surface":
             out += [
                 "    // The platform surface-creation extension is the one the"
@@ -95,11 +70,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "inline constexpr const char* kManualEntryPoints[] = {",
     ]
     for name in sorted(reg.manual_commands):
-        # The platform surface commands follow the extension: the build
-        # that advertises VK_KHR_win32_surface must promise its two
-        # commands, and the Xlib build its own. Promising the absent
-        # platform's commands would make the startup self-check report a
-        # gap that is correct by design.
         if name == "vkCreateXlibSurfaceKHR":
             out += [
                 "#if defined(_WIN32)",

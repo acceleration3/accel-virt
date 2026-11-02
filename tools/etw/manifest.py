@@ -1,18 +1,9 @@
-"""Manifest events decoded field by field with the schema the guest's own TDH
-gave (tools/guest/probes/etw_schema.c): names, types, counts and value maps.
-
-    schema = Schema.load(path)
-    fields = schema.decode(record)            # {"Reasons": 1, ...} or None
-    schema.event_name(record)                 # "SCHEDULED_COMPOSITION_REASON"
-    schema.map_text("CompositionReason", 1)   # "DelayedRendering"
-"""
 import json
 import struct
 import uuid
 
-POINTER = 8   # every event this reads is a 64-bit one
+POINTER = 8
 
-# TDH_INTYPE: the size of each fixed-size type and how struct reads it.
 FIXED = {
     3: "<b", 4: "<B", 5: "<h", 6: "<H", 7: "<i", 8: "<I", 9: "<q", 10: "<Q",
     11: "<f", 12: "<d", 13: "<I", 16: "<Q", 17: "<Q", 20: "<I", 21: "<Q",
@@ -27,7 +18,6 @@ class Truncated(Exception):
 
 class Schema:
     def __init__(self, providers):
-        # provider guid (lower case, no braces) -> {"name", "events": {(id, version): event}, "maps"}
         self.providers = providers
 
     @classmethod
@@ -66,8 +56,6 @@ class Schema:
         return f"{name}/{opcode}" if opcode and opcode not in ("Info", "win:Info") else name
 
     def map_text(self, provider_guid, map_name, value):
-        """A mapped value as the manifest spells it: a value map's one name,
-        or a bitmap's set bits joined by '|'. The part after '::' only."""
         provider = self.providers.get(provider_guid)
         mapping = provider["maps"].get(map_name) if provider else None
         if mapping is None:
@@ -80,9 +68,6 @@ class Schema:
         return "|".join(text for bit, text in sorted(entries.items()) if bit and value & bit == bit) or str(value)
 
     def decode(self, record):
-        """{field name: value} of a manifest event, or None when the schema
-        does not know the event. A payload shorter than its fields decodes as
-        far as it goes."""
         event = self.event(record)
         if event is None:
             return None

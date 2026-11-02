@@ -45,4 +45,4 @@ uint32_t SharedImageShape::pitch() const
     return pitch_;
 }
 
-}  // namespace av
+}

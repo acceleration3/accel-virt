@@ -1,6 +1,3 @@
-/* D3DKMDT_VIDPN_PRESENT_PATH. A DDI record: nested structures are prefixed with
- * their names, the support bitfields are their UINTs, and the gamma ramp's
- * data union is its pointer; src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_D3DKMDT_VIDPN_PRESENT_PATH_RECORD_HPP
 #define AV_D3DKMDT_VIDPN_PRESENT_PATH_RECORD_HPP
 
@@ -33,6 +30,6 @@ struct D3dkmdtVidPnPresentPathRecord {
     void    *GammaRampData;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_D3DKMDT_VIDPN_PRESENT_PATH_RECORD_HPP
+#endif

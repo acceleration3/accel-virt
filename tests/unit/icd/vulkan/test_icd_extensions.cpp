@@ -1,10 +1,3 @@
-/* Device extensions as the loader reaches them through the root (research.md
- * §9): the host is asked how many it lists and then for all of them, and the
- * application sees what the ICD's policy reports - only VK_EXT_memory_budget,
- * which it answers itself (T035), whatever else the host lists. A device naming an
- * extension the policy would not report is refused before the host sees it.
- * The host's answers are hostile: refusals, a count past what it sends, more
- * than any driver lists. Invariants after every call that changes the root. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -69,10 +62,8 @@ public:
         return result;
     }
 
-    /* The host's count: a result and how many it lists. */
     void answer_count(std::int32_t result, std::uint32_t listed) { rig_.host().vk_count(result, listed); }
 
-    /* The host's list: a result, the count it claims, and `sent` entries. */
     void answer_list(std::int32_t result, std::uint32_t claimed, const char *const *names, std::uint32_t sent)
     {
         std::uint8_t answer[MockKmt::max_answer] = {};
@@ -89,7 +80,6 @@ public:
         rig_.kmt().queue_answer(answer, static_cast<std::uint32_t>(writer.offset()));
     }
 
-    /* Whether the last command asked for the list itself, and with room for how many. */
     std::uint32_t last_capacity()
     {
         WireReader body(kmt().command_bytes(kmt().commands() - 1u) + CommandHeader::encoded_size,
@@ -105,15 +95,10 @@ private:
     VkPhysicalDevice physical_device_;
 };
 
-/* None of these is reported: one is not implemented, one is not in the
- * policy, and one is an instance extension. */
 const char *const host_extensions[] = {"VK_KHR_spirv_1_4", "VK_KHR_timeline_semaphore", "VK_KHR_surface"};
 
-}  // namespace
+}
 
-/* The extensions the ICD has proven, once the host lists them, beside others it
- * does not report. The swapchain is the ICD's own (feature 046), and the host
- * lists it because the host driver presents too. */
 TEST(icd_extensions, reports_the_memory_budget_and_the_swapchain_the_host_lists_and_nothing_else)
 { ExtensionRig rig;
   const char *const listed[] = {"VK_KHR_swapchain", "VK_EXT_memory_budget", "VK_KHR_spirv_1_4"};
@@ -145,7 +130,6 @@ TEST(icd_extensions, reports_none_of_the_hosts_extensions_while_none_is_proven)
   CHECK_EQ(rig.last_capacity(), 3u);
   CHECK_EQ(rig.rig().platform().live_allocations(), allocations);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
-  /* A host listing none is asked once. */
   rig.answer_count(VK_SUCCESS, 0u);
   count = 7u;
   CHECK_EQ(rig.enumerate(&count, nullptr), VK_SUCCESS);
@@ -161,7 +145,6 @@ TEST(icd_extensions, the_hosts_refusals_are_passed_on_and_a_shorter_list_is_filt
   rig.answer_count(VK_SUCCESS, 3u);
   rig.answer_list(VK_ERROR_OUT_OF_HOST_MEMORY, 0u, host_extensions, 0u);
   CHECK_EQ(rig.enumerate(&count, nullptr), VK_ERROR_OUT_OF_HOST_MEMORY);
-  /* The host's list shrank between the two questions. */
   rig.answer_count(VK_SUCCESS, 3u);
   rig.answer_list(VK_INCOMPLETE, 2u, host_extensions, 2u);
   count = 5u;
@@ -239,7 +222,6 @@ TEST(icd_extensions, a_device_naming_no_extension_is_made_through_its_physical_d
   CHECK(static_cast<LoaderHandle *>(static_cast<void *>(device))->parent() ==
         static_cast<LoaderHandle *>(static_cast<void *>(rig.physical_device())));
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), static_cast<std::uint32_t>(kCmd_vkCreateDevice));
-  /* The host's refusal is passed on; a device the host names 0 has no handle. */
   VkDevice refused = VK_NULL_HANDLE;
   rig.rig().host().vk_handle(vk_error_initialization_failed, 0u);
   CHECK_EQ(rig.create(nullptr, 0u, &refused), vk_error_initialization_failed);
@@ -249,9 +231,6 @@ TEST(icd_extensions, a_device_naming_no_extension_is_made_through_its_physical_d
   CHECK(refused == VK_NULL_HANDLE);
   CHECK_EQ(rig.rig().log().holding("no handle for host object"), 1u); }
 
-/* A swapchain is this ICD's own: it is reported to the application, and the
- * host - a Vulkan driver on the host's platform, which presents nothing for
- * this ICD - is never asked to enable it (feature 046). */
 TEST(icd_extensions, the_swapchain_the_application_enables_is_not_asked_of_the_host)
 { ExtensionRig rig;
   VkDevice     device = VK_NULL_HANDLE;
@@ -270,10 +249,6 @@ TEST(icd_extensions, the_swapchain_the_application_enables_is_not_asked_of_the_h
   CHECK(deserialize_VkDeviceCreateInfo(body, &forwarded, arena));
   CHECK_EQ(forwarded.enabledExtensionCount, 0u); }
 
-/* The window-system instance extensions are this ICD's own too: an application
- * that enables them gets its instance, and the host is asked only for what it
- * can answer. Asking it for VK_KHR_win32_surface - which no host driver has -
- * is how a real vulkaninfo was refused (feature 046). */
 TEST(icd_extensions, the_window_system_instance_extensions_are_not_asked_of_the_host)
 { IcdRig            rig;
   const char *const enabled[] = {"VK_KHR_surface", "VK_KHR_win32_surface"};
@@ -291,8 +266,6 @@ TEST(icd_extensions, the_window_system_instance_extensions_are_not_asked_of_the_
   CHECK(rig.root().invariants_hold());
   rig.destroy_instance(instance); }
 
-/* A list longer than this driver passes on is refused before the host is asked
- * for any of it, at an instance and at a device. */
 TEST(icd_extensions, a_list_longer_than_the_driver_passes_on_is_refused)
 { const char *too_many[av::icd::HostExtensionList::max_names + 1u] = {};
   for (const char *&name : too_many) name = "VK_KHR_get_physical_device_properties2";
@@ -305,7 +278,6 @@ TEST(icd_extensions, a_list_longer_than_the_driver_passes_on_is_refused)
   { ExtensionRig        rig;
     const std::uint32_t quiet = rig.kmt().commands();
     VkDevice            device = VK_NULL_HANDLE;
-    /* Every name is one the policy reports, so what refuses it is the length. */
     const char *many[av::icd::HostExtensionList::max_names + 1u] = {};
     for (const char *&name : many) name = "VK_EXT_memory_budget";
     CHECK_EQ(rig.create(many, av::icd::HostExtensionList::max_names + 1u, &device), VK_ERROR_EXTENSION_NOT_PRESENT);
@@ -313,13 +285,8 @@ TEST(icd_extensions, a_list_longer_than_the_driver_passes_on_is_refused)
     CHECK_EQ(rig.kmt().commands(), quiet);
     CHECK_EQ(rig.rig().log().holding("not a list this driver can pass on"), 1u); } }
 
-/* The mapping and descriptor-template extensions feature 047 added, and the one
- * it deliberately does not report. A host that lists placement gets no more
- * from this driver for it: the ICD cannot place a mapping, so reporting it
- * would be a capability that is not implemented (constitution VI). */
 TEST(icd_extensions, the_mapping_and_template_extensions_are_reported_and_placement_is_not)
 { ExtensionRig rig;
-  /* Three at a time: the answer a host sends fits three of these structures. */
   const char *const listed[] = {"VK_KHR_map_memory2", "VK_EXT_map_memory_placed", "VK_KHR_push_descriptor"};
   rig.answer_count(VK_SUCCESS, 3u);
   rig.answer_list(VK_SUCCESS, 3u, listed, 3u);
@@ -341,8 +308,7 @@ TEST(icd_extensions, the_mapping_and_template_extensions_are_reported_and_placem
   CHECK(map_memory2);
   CHECK(push_descriptor);
   CHECK(!placed);
-  CHECK(!templates);   /* this host did not list it */
-  /* The template extension, from a host that does list it. */
+  CHECK(!templates);
   const char *const with_templates[] = {"VK_KHR_descriptor_update_template"};
   rig.answer_count(VK_SUCCESS, 1u);
   rig.answer_list(VK_SUCCESS, 1u, with_templates, 1u);
@@ -351,7 +317,6 @@ TEST(icd_extensions, the_mapping_and_template_extensions_are_reported_and_placem
   CHECK_EQ(rig.enumerate(&count, second), VK_SUCCESS);
   CHECK_EQ(count, 1u);
   CHECK(std::strcmp(second[0].extensionName, "VK_KHR_descriptor_update_template") == 0);
-  /* A device may be made with the three, and not with the one. */
   VkDevice          device = VK_NULL_HANDLE;
   const char *const enabling[] = {"VK_KHR_map_memory2", "VK_KHR_descriptor_update_template",
                                   "VK_KHR_push_descriptor"};
@@ -360,10 +325,6 @@ TEST(icd_extensions, the_mapping_and_template_extensions_are_reported_and_placem
   const char *const placing[] = {"VK_EXT_map_memory_placed"};
   CHECK_EQ(rig.create(placing, 1u, &device), VK_ERROR_EXTENSION_NOT_PRESENT); }
 
-/* The application's own enumeration is the second place the host's list is
- * read, and the dma-buf name in it is noted there too. An application that
- * asks what the host has before it allocates must not be the reason a shared
- * allocation goes out as an opaque fd (feature 053, T031). */
 TEST(icd_extensions, the_applications_own_enumeration_notes_the_hosts_dma_buf)
 { ExtensionRig rig;
   const char *const listed[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
@@ -376,21 +337,14 @@ TEST(icd_extensions, the_applications_own_enumeration_notes_the_hosts_dma_buf)
   VkExtensionProperties properties[8] = {};
   std::uint32_t         room = 8u;
   CHECK_EQ(rig.enumerate(&room, properties), VK_SUCCESS);
-  /* Noted, and not passed on: the host's fd spellings are how this ICD talks
-   * to the host, and an application on Windows is offered the Win32 ones. */
   for (std::uint32_t index = 0u; index < room; index++) {
       CHECK(std::strcmp(properties[index].extensionName, "VK_EXT_external_memory_dma_buf") != 0);
       CHECK(std::strcmp(properties[index].extensionName, "VK_KHR_external_memory_fd") != 0);
   } }
 
-/* The device create reads the application's own extension list to decide
- * whether sharing is in play, and an application may hand it a list with a
- * hole in it, or one with no room left for the name the host needs
- * (feature 053, T031). */
 TEST(icd_extensions, an_extension_list_with_a_hole_in_it_is_refused_before_anything_reads_it)
 {
-  { /* A null among the names is refused before anything reads it, which is
-     * why nothing further down has to check for one. */
+  {
     ExtensionRig      rig;
     const char *const names[] = {nullptr, "VK_KHR_external_memory_win32"};
     VkDevice          device = VK_NULL_HANDLE;
@@ -400,10 +354,6 @@ TEST(icd_extensions, an_extension_list_with_a_hole_in_it_is_refused_before_anyth
 }
 
 
-/* The host's list is read into memory this ICD asks for, and there may be none.
- * What a shared allocation is exported as then stays what it was - the opaque
- * fd - because a host that could not be read is not a host known to share by
- * dma-buf (feature 053, T031). */
 TEST(icd_extensions, no_memory_to_read_the_hosts_list_into_leaves_the_device_made_and_sharing_as_it_was)
 { const char *const host_listed[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
   const char *const names[] = {"VK_KHR_external_memory_win32"};
@@ -420,6 +370,4 @@ TEST(icd_extensions, no_memory_to_read_the_hosts_list_into_leaves_the_device_mad
       CHECK(device != VK_NULL_HANDLE);
       CHECK(rig.rig().root().invariants_hold());
   }
-  /* At least one of those allocations is the host list's, and the device was
-   * still made without it. */
   CHECK(made != 0u); }

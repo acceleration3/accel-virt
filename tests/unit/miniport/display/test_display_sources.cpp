@@ -69,11 +69,6 @@ TEST(display_sources_set_scanout, remembers_the_primary_address_and_allocation_u
   CHECK_EQ(sources.scanout_address(0u), 0u);
   CHECK(sources.primary(0u) == nullptr); }
 
-/* A multiplane flip's base plane is the primary, and the source remembers the
- * flip was multiplane so the vsync reports it as one; a flip with no base
- * plane shows nothing. SetVidPnSourceAddress makes it a plain flip again. The
- * layer handed back carries the flip's address and attributes, and every call
- * is usable at device IRQL, where dxgkrnl makes them. */
 TEST(display_sources_set_multiplane_scanout, remembers_the_base_plane_and_that_the_flip_was_multiplane)
 { MockPlatform platform; DisplaySources sources(platform);
   CHECK(sources.flip(0u) == DisplaySources::Flip::address);
@@ -106,7 +101,7 @@ TEST(display_sources_set_multiplane_scanout, remembers_the_base_plane_and_that_t
   CHECK_STATUS(sources.set_multiplane_scanout(1u, &base), Status::invalid_parameter);
   CHECK(sources.flip(1u) == DisplaySources::Flip::address);
   platform.set_irql(Irql::passive);
-  CHECK(sources.shown(sources.count(), 0u).kind() == DisplaySources::Flip::address);   /* no such source */
+  CHECK(sources.shown(sources.count(), 0u).kind() == DisplaySources::Flip::address);
   CHECK_EQ(sources.shown(sources.count(), 0u).address(), 0u);
   CHECK(sources.invariants_hold()); }
 
@@ -116,8 +111,6 @@ TEST(display_sources_set_scanout, a_source_the_adapter_does_not_have_is_invalid)
   CHECK_EQ(sources.scanout_address(sources.count()), 0u);
   CHECK(sources.primary(sources.count()) == nullptr); }
 
-/* The DPC reads the handle; an allocation being destroyed must not leave one
- * behind for it to follow. */
 TEST(display_sources_forget_primary, clears_the_source_showing_that_allocation)
 { MockPlatform platform; DisplaySources sources(platform);
   std::uint32_t allocation = 0u;
@@ -155,15 +148,11 @@ TEST(display_sources, is_passive_only)
   sources.set_vsync(true);
   static_cast<void>(sources.vsync_enabled());
   static_cast<void>(sources.set_visible(0u, true));
-  /* visible() is asked from the DPC that carries the frame, so DISPATCH is its
-   * ceiling and this one is not a violation. */
   static_cast<void>(sources.visible(0u));
   platform.set_irql(Irql::passive);
   for (int call = 0; call < 6; call++) CHECK(platform.claim(Violation::irql_ceiling));
   CHECK(!platform.claim(Violation::irql_ceiling)); }
 
-/* The device says how many displays it has; the driver's arrays say how many it
- * can offer, and a count outside that is clamped with the value answered. */
 TEST(display_sources_set_count, follows_the_device_up_to_what_the_arrays_hold)
 { MockPlatform platform; DisplaySources sources(platform);
   CHECK_EQ(sources.count(), 1u);
@@ -177,7 +166,6 @@ TEST(display_sources_set_count, follows_the_device_up_to_what_the_arrays_hold)
   CHECK_EQ(sources.count(), DisplaySources::max_sources);
   CHECK(sources.invariants_hold()); }
 
-/* Every source the device reports keeps its own mode, primary and visibility. */
 TEST(display_sources, keeps_each_output_apart)
 { MockPlatform platform; DisplaySources sources(platform);
   CHECK_STATUS(sources.set_count(2u), Status::ok);
@@ -196,21 +184,17 @@ TEST(display_sources, keeps_each_output_apart)
   CHECK_STATUS(sources.commit(2u, &first), Status::invalid_parameter); }
 
 namespace av {
-
-/* The state the invariant guards, which correct code never reaches. */
 struct DisplaySourcesProbe {
     static void offer_nothing(DisplaySources &sources) { sources.count_ = 0u; }
     static void offer_more_than_it_holds(DisplaySources &sources)
     { sources.count_ = DisplaySources::max_sources + 1u; }
-    /* The count as the four billionth flip leaves it. */
     static void number_from(DisplaySources &sources, std::uint32_t source, std::uint64_t frame)
     { sources.frames_[source] = frame; }
-    /* An entry caught while a flip at device IRQL rewrites it. */
     static void tear(DisplaySources &sources, std::uint32_t source, std::uint32_t frame)
     { sources.numbered_frames_[source][frame % DisplaySources::remembered_flips] = 0u; }
 };
 
-}  // namespace av
+}
 
 TEST(display_sources_invariants, no_outputs_and_more_than_it_holds_are_detected)
 { MockPlatform platform; DisplaySources sources(platform);
@@ -244,8 +228,6 @@ TEST(display_sources_report, writes_each_source_s_format_mode_scanout_and_visibi
                 static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(&primary)));
   CHECK(std::strcmp(writer.dump(), expected) == 0); }
 
-/* A source's planes follow it in the report: each layer a flip named, with
- * its PresentId, where it is shown and whether it blends. */
 TEST(display_sources_report, writes_each_flipped_plane_after_its_source)
 { MockPlatform platform; DisplaySources sources(platform);
   int overlay = 0;
@@ -267,10 +249,6 @@ TEST(display_sources_report, writes_each_flipped_plane_after_its_source)
   CHECK(std::strstr(writer.dump(), "display_sources/0/source/0/plane/0 present_id=41 shown=false") != nullptr);
   CHECK(std::strstr(writer.dump(), expected) != nullptr); }
 
-/* Every flip is a numbered frame, the number the device's display clock shows
- * it as: counted from 1 per source, and the last remembered_flips kept as they
- * were made, so a vsync can name the one the device latched. One no longer
- * remembered, 0, or one being rewritten reads as the flip the source has now. */
 TEST(display_sources_frames, each_flip_is_numbered_and_the_last_few_are_remembered_as_they_were)
 { MockPlatform platform; DisplaySources sources(platform);
   CHECK_EQ(sources.frame(0u), 0u);
@@ -280,13 +258,13 @@ TEST(display_sources_frames, each_flip_is_numbered_and_the_last_few_are_remember
       CHECK_STATUS(sources.set_scanout(0u, static_cast<std::int64_t>(flip) * 0x1000, &allocation), Status::ok);
       CHECK_EQ(sources.frame(0u), flip);
   }
-  CHECK_EQ(sources.frame(1u), 0u);   /* each source counts its own */
+  CHECK_EQ(sources.frame(1u), 0u);
   CHECK_EQ(sources.frame(sources.count()), 0u);
   platform.set_irql(Irql::dispatch);
   CHECK_EQ(sources.shown(0u, 12u).address(), 0xC000u);
-  CHECK_EQ(sources.shown(0u, 5u).address(), 0x5000u);   /* twelve flips keep the last eight */
-  CHECK_EQ(sources.shown(0u, 4u).address(), 0xC000u);   /* forgotten: the source as it is */
-  CHECK_EQ(sources.shown(0u, 13u).address(), 0xC000u);  /* never made */
+  CHECK_EQ(sources.shown(0u, 5u).address(), 0x5000u);
+  CHECK_EQ(sources.shown(0u, 4u).address(), 0xC000u);
+  CHECK_EQ(sources.shown(0u, 13u).address(), 0xC000u);
   CHECK_EQ(sources.shown(0u, 0u).address(), 0xC000u);
   av::DisplaySourcesProbe::tear(sources, 0u, 9u);
   CHECK_EQ(sources.shown(0u, 9u).address(), 0xC000u);
@@ -314,7 +292,7 @@ TEST(display_sources_frames, a_multiplane_flip_is_remembered_with_its_own_attrib
   CHECK(first.kind() == DisplaySources::Flip::base_plane);
   first.layer(layer);
   CHECK_EQ(layer.PhysicalAddress, 0x4000ll);
-  CHECK_EQ(layer.PlaneAttributes[0], 5u);   /* not the second flip's */
+  CHECK_EQ(layer.PlaneAttributes[0], 5u);
   sources.shown(0u, 2u).layer(layer);
   CHECK_EQ(layer.PlaneAttributes[0], 7u);
   CHECK(sources.shown(0u, 3u).kind() == DisplaySources::Flip::planes_disabled);
@@ -332,10 +310,6 @@ TEST(display_sources_frames, the_count_wraps_past_zero_which_is_no_frame)
   CHECK_EQ(sources.shown(0u, 0xFFFFFFFFu).address(), 0x1000u);
   CHECK_EQ(sources.shown(0u, 1u).address(), 0x2000u); }
 
-/* An MPO3 flip replaces only the layers it names; the base plane is the
- * primary. Each flip is remembered whole, so a blank that latched an older one
- * still names its PresentIds. A plane whose allocation is destroyed shows
- * nothing and keeps its PresentId; a layer past the planes is refused. */
 TEST(display_sources_present_planes, replaces_the_layers_named_and_remembers_each_flip)
 { MockPlatform platform; DisplaySources sources(platform);
   int base = 0, overlay = 0;
@@ -344,10 +318,10 @@ TEST(display_sources_present_planes, replaces_the_layers_named_and_remembers_eac
   platform.set_irql(Irql::isr);
   const av::OverlayPlane first[] = {av::OverlayPlane(0u, 41u, &base, 0x4000ll, attributes),
                                     av::OverlayPlane(1u, 5u, &overlay, 0x8000ll, attributes)};
-  CHECK_STATUS(sources.present_planes(0u, first, 2u), Status::ok);   /* frame 1 */
+  CHECK_STATUS(sources.present_planes(0u, first, 2u), Status::ok);
   CHECK(sources.flip(0u) == DisplaySources::Flip::presented_plane);
   CHECK_EQ(sources.scanout_address(0u), 0x4000u);
-  const av::OverlayPlane second[] = {av::OverlayPlane(1u, 6u)};      /* frame 2: the overlay off */
+  const av::OverlayPlane second[] = {av::OverlayPlane(1u, 6u)};
   CHECK_STATUS(sources.present_planes(0u, second, 1u), Status::ok);
   platform.set_irql(Irql::dispatch);
   CHECK(sources.primary(0u) == &base);
@@ -361,7 +335,7 @@ TEST(display_sources_present_planes, replaces_the_layers_named_and_remembers_eac
   CHECK_EQ(layers[1].PresentId, 5u);
   CHECK(sources.shown(0u, 1u).plane(1u).allocation() == &overlay);
   CHECK_EQ(sources.shown(0u, 1u).plane(1u).destination().bottom, 220);
-  CHECK_EQ(sources.shown(0u, 0u).layers(layers), 2u);   /* the source as it is now */
+  CHECK_EQ(sources.shown(0u, 0u).layers(layers), 2u);
   CHECK_EQ(layers[1].PresentId, 6u);
   platform.set_irql(Irql::passive);
   sources.forget_primary(&base);

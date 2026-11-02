@@ -16,8 +16,6 @@
 namespace av {
 
 namespace {
-
-/* A report the console does not take is still the exit code. */
 void write_report(const GuestReport &report)
 {
     AV_SCOPE("write_report");
@@ -26,7 +24,7 @@ void write_report(const GuestReport &report)
                                 static_cast<DWORD>(report.length()), &written, nullptr));
 }
 
-}  // namespace
+}
 
 D3d9ProbeProgram::D3d9ProbeProgram()
     : kmt_(), heap_(), report_(heap_, "avd3d9probe"), images_(), window_(), windows_(), d3d9_(), d3d9ex_()
@@ -81,9 +79,6 @@ uint32_t D3d11ProbeProgram::run()
             TirCoverageWork tir(tir_);
             tir.run(steps);
         }
-        /* Last: where the host can lose a device on request, it loses the
-         * one every Direct3D device of the guest on this GPU runs on, the
-         * desktop's among them. Its waits take the kernel's event. */
         if (kmt_.initialize() == Status::ok) {
             HostLossWork loss(lost_, remade_, loss_, kmt_);
             loss.run(steps);
@@ -103,8 +98,6 @@ D3d12ProbeProgram::D3d12ProbeProgram() : kmt_(), heap_(), report_(heap_, "avd3d1
     AV_SCOPE("D3d12ProbeProgram::D3d12ProbeProgram");
 }
 
-/* No window: a D3D12 device is made on an adapter, and what this probe clears
- * is a render target of its own. */
 uint32_t D3d12ProbeProgram::run()
 {
     AV_SCOPE("D3d12ProbeProgram::run");
@@ -116,4 +109,4 @@ uint32_t D3d12ProbeProgram::run()
     return report_.failed();
 }
 
-}  // namespace av
+}

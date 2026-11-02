@@ -1,7 +1,3 @@
-/* A call's error, taken where the application may have given nowhere to put
- * it: the root writes it here, the application's pointer is given it after,
- * and a failure is noted under the entry point's name - which a creation
- * whose application passed no error pointer would otherwise lose. */
 #ifndef AV_CLICD_CL_NOTED_ERROR_HPP
 #define AV_CLICD_CL_NOTED_ERROR_HPP
 
@@ -29,6 +25,6 @@ private:
     cl_int      error_;
 };
 
-}  // namespace av::clicd
+}
 
-#endif  // AV_CLICD_CL_NOTED_ERROR_HPP
+#endif

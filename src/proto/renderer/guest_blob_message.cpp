@@ -105,4 +105,4 @@ Status GuestBlobMessage::decode(const uint8_t *bytes, size_t length, uint32_t de
     return Status::ok;
 }
 
-}  // namespace av
+}

@@ -1,6 +1,3 @@
-/* FIFO's pacing (feature 046, research.md §4): a presented frame is held until
- * the adapter's next vertical blank, and an adapter that cannot be waited on
- * leaves the frame unpaced - said once, however many frames follow. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/recording_log.hpp"
@@ -25,7 +22,6 @@ av::PciIdentity av_identity()
 { return av::PciIdentity(av::PciIdentity::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
                          av::PciIdentity::virtio_vendor, av::AvgpuAdapters::av_subsystem); }
 
-/* An adapter and a D3DKMT device on it, as the ICD's connection holds. */
 class PacerRig {
 public:
     PacerRig()
@@ -39,7 +35,6 @@ public:
 
     MockKmt      &kmt() { return kmt_; }
     RecordingLog &log() { return log_; }
-    /* The OpenGL ICD's lines: the pacer is the Vulkan ICD's and OpenGL's. */
     av::DriverLog &lines() { return lines_; }
     std::uint32_t adapter() const { return adapter_; }
     std::uint32_t device() const { return device_; }
@@ -52,7 +47,7 @@ private:
     std::uint32_t device_ = 0u;
 };
 
-}  // namespace
+}
 
 TEST(frame_pacer, a_wait_counts_one_blank_on_the_adapter_s_primary_source)
 { PacerRig rig;
@@ -71,8 +66,6 @@ TEST(frame_pacer, a_wait_counts_one_blank_on_the_adapter_s_primary_source)
   CHECK_EQ(rig.log().holding(unpaced), 0u);
   CHECK_EQ(rig.kmt().misuses(), 0u); }
 
-/* The frame is already on its window: a failed wait costs pacing, not the
- * present, and a log line for every frame would be the whole log. */
 TEST(frame_pacer, a_refused_wait_is_said_once_and_paces_nothing)
 { PacerRig rig;
   FramePacer pacer(rig.kmt(), rig.lines(), rig.adapter(), rig.device());
@@ -86,13 +79,10 @@ TEST(frame_pacer, a_refused_wait_is_said_once_and_paces_nothing)
   pacer.wait();
   CHECK_EQ(pacer.failures(), 2u);
   CHECK_EQ(rig.log().holding(unpaced), 1u);
-  /* A wait that works after one that did not still paces. */
   pacer.wait();
   CHECK_EQ(pacer.blanks(), 1u);
   CHECK_EQ(pacer.failures(), 2u); }
 
-/* A swapchain on a device the ICD did not open through D3DKMT: there is no
- * adapter to wait on, so nothing is waited on. */
 TEST(frame_pacer, no_adapter_means_no_wait_at_all)
 { PacerRig rig;
   FramePacer pacer(rig.kmt(), rig.lines(), 0u, rig.device());
@@ -103,9 +93,6 @@ TEST(frame_pacer, no_adapter_means_no_wait_at_all)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), 0u);
   CHECK_EQ(rig.log().holding(unpaced), 1u); }
 
-/* B-1: OpenGL's swap interval paces through the same FramePacer as Vulkan's
- * FIFO, and its failures were logged as the Vulkan ICD's ("avvk: FIFO
- * present unpaced"): a line names the driver whose pacer refused. */
 TEST(frame_pacer, a_refused_wait_is_said_in_the_name_of_the_driver_that_paces)
 { PacerRig rig;
   av::DriverLog vulkan(rig.log(), "avvk: ");
@@ -119,15 +106,9 @@ TEST(frame_pacer, a_refused_wait_is_said_in_the_name_of_the_driver_that_paces)
   CHECK_EQ(rig.log().holding("FIFO"), 0u); }
 
 namespace {
-
-/* The mock's refresh: a blank every sixtieth of its second, the first at 0. */
 constexpr std::uint64_t refresh = MockKmt::ticks_per_second / 60u;
-/* The first present, 0.6 into the third refresh: a clock that has run a while,
- * so that a schedule of the pacer's own starts where that present was. */
 constexpr std::uint64_t first_present = 2u * refresh + 100000u;
 
-/* Whether each of `count` unpaced presents was admitted: the first at
- * first_present, the rest `step` ticks apart. */
 template <std::size_t count>
 void admit_every(FramePacer &pacer, MockKmt &kmt, std::uint64_t step, bool (&admitted)[count])
 { kmt.reads_clock(nullptr, first_present);
@@ -135,12 +116,8 @@ void admit_every(FramePacer &pacer, MockKmt &kmt, std::uint64_t step, bool (&adm
   kmt.reads_clock(nullptr, step);
   for (std::size_t i = 1u; i < count; i++) admitted[i] = pacer.admits(); }
 
-}  // namespace
+}
 
-/* Presents 0.3 of a refresh apart: blanks fall before the 3rd, the 6th and,
- * by two ticks, the 9th, and the first frame after each is the one shown. A
- * schedule a refresh apart from the first would have shown the 5th and 8th,
- * late in their refreshes. */
 TEST(frame_pacer, the_first_frame_presented_after_each_blank_is_admitted)
 { PacerRig rig;
   FramePacer pacer(rig.kmt(), rig.lines(), rig.adapter(), rig.device());
@@ -152,8 +129,6 @@ TEST(frame_pacer, the_first_frame_presented_after_each_blank_is_admitted)
   CHECK(pacer.invariants_hold());
   CHECK_EQ(rig.kmt().misuses(), 0u); }
 
-/* A frame a refresh after the last, at the same place in its refresh, has a
- * blank between them however the lines compare. */
 TEST(frame_pacer, a_frame_a_refresh_after_the_last_is_admitted_at_the_same_line)
 { PacerRig rig;
   FramePacer pacer(rig.kmt(), rig.lines(), rig.adapter(), rig.device());
@@ -161,8 +136,6 @@ TEST(frame_pacer, a_frame_a_refresh_after_the_last_is_admitted_at_the_same_line)
   admit_every(pacer, rig.kmt(), refresh, admitted);
   for (bool each : admitted) CHECK(each); }
 
-/* Presents a sixteenth of a refresh short of one apart count as a blank apart
- * even within one refresh; a tick closer, and only the scan-out says. */
 TEST(frame_pacer, presents_nearly_a_refresh_apart_count_as_a_blank_apart)
 { const std::uint64_t nearly = refresh - refresh / 16u;
   const std::uint64_t gaps[2] = {nearly - 1u, nearly};
@@ -173,13 +146,10 @@ TEST(frame_pacer, presents_nearly_a_refresh_apart_count_as_a_blank_apart)
       CHECK(pacer.admits());
       rig.kmt().reads_clock(nullptr, 5000u);
       CHECK(!pacer.admits());
-      /* Still before the blank at `refresh`. */
       rig.kmt().reads_clock(nullptr, gap);
       CHECK_EQ(pacer.admits(), gap == nearly);
   } }
 
-/* Where the scan-out cannot be read, frames keep a schedule a refresh apart
- * from the first. */
 TEST(frame_pacer, without_an_adapter_frames_are_admitted_a_refresh_apart)
 { PacerRig rig;
   FramePacer pacer(rig.kmt(), rig.lines(), 0u, rig.device());
@@ -189,7 +159,6 @@ TEST(frame_pacer, without_an_adapter_frames_are_admitted_a_refresh_apart)
   for (std::size_t i = 0u; i < 9u; i++) CHECK_EQ(admitted[i], expected[i]);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::scan_line), 0u); }
 
-/* A refused read falls back to the schedule for that frame. */
 TEST(frame_pacer, a_refused_scan_line_admits_on_the_schedule)
 { PacerRig rig;
   FramePacer pacer(rig.kmt(), rig.lines(), rig.adapter(), rig.device());
@@ -200,9 +169,6 @@ TEST(frame_pacer, a_refused_scan_line_admits_on_the_schedule)
   CHECK(!pacer.admits());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::scan_line), 2u); }
 
-/* The pacer's refresh is the adapter's, not a constant: a sixteenth of a
- * 240 Hz refresh short of one apart is a blank apart, and the same gap at
- * 60 Hz is not. */
 TEST(frame_pacer, presents_nearly_a_refresh_apart_at_the_adapter_s_own_refresh_count_as_a_blank_apart)
 { constexpr std::uint64_t fast = MockKmt::ticks_per_second / 240u;
   const std::uint64_t     nearly = fast - fast / 16u;
@@ -215,15 +181,10 @@ TEST(frame_pacer, presents_nearly_a_refresh_apart_at_the_adapter_s_own_refresh_c
       CHECK(pacer.admits());
       rig.kmt().reads_clock(nullptr, 300u);
       CHECK(!pacer.admits());
-      /* Still before the blank at `fast`. */
       rig.kmt().reads_clock(nullptr, gap);
       CHECK_EQ(pacer.admits(), gap == nearly);
   } }
 
-/* The host can change the rate while the VM runs, so the pacer reads it
- * again: within the second it keeps what it had, after it, the new rate. The
- * scan-out is refused throughout, so frames are admitted on the schedule, a
- * refresh apart. */
 TEST(frame_pacer, a_refresh_changed_while_running_is_read_again_within_a_second)
 { constexpr std::uint64_t fast = MockKmt::ticks_per_second / 240u;
   PacerRig rig;
@@ -233,11 +194,11 @@ TEST(frame_pacer, a_refresh_changed_while_running_is_read_again_within_a_second)
       rig.kmt().fail_at(MockKmt::Call::scan_line, 1u, 0xC0000001u);
       return pacer.admits();
   };
-  CHECK(admits(first_present));   /* due again a 60 Hz refresh on */
+  CHECK(admits(first_present));
   rig.kmt().set_blank_period(fast);
-  CHECK(admits(MockKmt::ticks_per_second / 2u));   /* due; the rate read half a second ago stands */
+  CHECK(admits(MockKmt::ticks_per_second / 2u));
   CHECK(!admits(fast + fast / 2u));
-  CHECK(admits(MockKmt::ticks_per_second / 2u));   /* a second after the first read: now 240 Hz */
+  CHECK(admits(MockKmt::ticks_per_second / 2u));
   CHECK(!admits(fast / 2u));
   CHECK(admits(fast / 2u + fast / 10u));
   CHECK(pacer.invariants_hold()); }

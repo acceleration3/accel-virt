@@ -23,4 +23,4 @@ bool ClHostNumbers::invariants_hold() const
     return spilled_.invariants_hold() && (spilled_.size() == 0u || spilled_.size() > kept_inline);
 }
 
-}  // namespace av::clicd
+}

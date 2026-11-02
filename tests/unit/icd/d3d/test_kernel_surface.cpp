@@ -1,8 +1,3 @@
-/* A presented or shared surface as the kernel sees it: its rows in pages for
- * the miniport, a primary's scanout, the D3DDDIFORMAT each presentable DXGI
- * format is scanned out as, an identity asked for and the one the miniport
- * mints read back as the key - and an open that finds that key only in what
- * this driver made. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/kernel_surface.hpp"
@@ -36,7 +31,6 @@ AllocationDescriptor described(KernelSurface &surface)
     return descriptor;
 }
 
-/* What the miniport does at CreateAllocation: mint the id into the record. */
 void mint(KernelSurface &surface, std::uint64_t id)
 {
     std::uint8_t *const record_bytes = surface.allocation_data() + AllocationDescriptor::encoded_size;
@@ -46,7 +40,7 @@ void mint(KernelSurface &surface, std::uint64_t id)
     CHECK_STATUS(record.encode(record_bytes, SharedObjectRecord::encoded_size), Status::ok);
 }
 
-}  // namespace
+}
 
 TEST(kernel_surface, a_b8g8r8a8_buffer_is_a_surface_of_its_rows_rounded_to_pages_asking_an_identity)
 { KernelSurface surface(100u, 10u, b8g8r8a8);
@@ -69,7 +63,6 @@ TEST(kernel_surface, a_b8g8r8a8_buffer_is_a_surface_of_its_rows_rounded_to_pages
   CHECK(!asked.assigned());
   CHECK_EQ(asked.kind().value(), SharedObjectKind::memory);
   CHECK_EQ(asked.size(), 4096u);
-  /* Asked for, not minted: no key yet. */
   CHECK_EQ(surface.key(), 0u); }
 
 TEST(kernel_surface, a_primary_is_described_with_its_scanout_even_one_naming_source_0_at_no_rate)
@@ -93,7 +86,6 @@ TEST(kernel_surface, the_identity_the_miniport_mints_is_the_key_and_what_an_open
                            KernelSurface::allocation_bytes),
                Status::ok);
   CHECK_EQ(opened.key(), 0x1234u);
-  /* Opened before the miniport minted anything: nothing to find by. */
   KernelSurface unminted(64u, 32u, b8g8r8a8);
   CHECK_STATUS(unminted.make(), Status::ok);
   KernelSurface early;
@@ -118,21 +110,18 @@ TEST(kernel_surface, a_format_with_no_fixed_size_is_laid_out_as_a_32_bit_one)
   KernelSurface wide(10u, 1u, r32g32b32a32);
   CHECK_EQ(wide.pitch(), 160u); }
 
-/* A block-compressed surface is rows of blocks: a 2048x2048 BC1 texture is
- * 512 rows of 512 eight-byte blocks, 2 MiB - not 32 MiB at a block a texel -
- * and a BC3 surface smaller than its blocks rounds up to whole ones. */
 TEST(kernel_surface, a_block_compressed_surface_is_sized_in_rows_of_blocks)
 { KernelSurface bc1(2048u, 2048u, 71u);
   CHECK_EQ(bc1.pitch(), 4096u);
   CHECK_EQ(bc1.bytes(), 2u * 1024u * 1024u);
   CHECK_STATUS(bc1.make(), Status::ok);
-  const AllocationDescriptor kernel_view = described(bc1);   /* decodes as the miniport does: rows x pitch fits */
+  const AllocationDescriptor kernel_view = described(bc1);
   CHECK_EQ(kernel_view.layout().height(), 512u);
   CHECK(kernel_view.layout().bytes() <= kernel_view.size());
   KernelSurface bc3(6u, 6u, 77u);
   CHECK_EQ(bc3.pitch(), 32u);
   CHECK_EQ(bc3.bytes(), 4096u);
-  KernelSurface tall(4u, 4096u * 4u + 1u, 71u);   /* one block wide: 4097 rows of 8 bytes, nine pages */
+  KernelSurface tall(4u, 4096u * 4u + 1u, 71u);
   CHECK_EQ(tall.pitch(), 8u);
   CHECK_EQ(tall.bytes(), 9u * 4096u); }
 
@@ -141,11 +130,9 @@ TEST(kernel_surface, a_surface_of_no_texels_or_a_row_past_32_bits_of_bytes_is_re
   CHECK_STATUS(no_width.make(), Status::invalid_parameter);
   KernelSurface no_height(16u, 0u, b8g8r8a8);
   CHECK_STATUS(no_height.make(), Status::invalid_parameter);
-  /* 2^28 texels of 16 bytes is a row of exactly 2^32 bytes. */
   KernelSurface too_wide(1u << 28u, 1u, r32g32b32a32);
   CHECK_EQ(too_wide.pitch(), 0u);
   CHECK_STATUS(too_wide.make(), Status::invalid_parameter);
-  /* One byte less wide fits. */
   KernelSurface widest((1u << 28u) - 1u, 1u, r32g32b32a32);
   CHECK_EQ(widest.pitch(), 0xfffffff0u); }
 
@@ -167,14 +154,11 @@ TEST(kernel_surface, an_open_of_anything_but_this_driver_s_shared_surface_finds_
   CHECK_STATUS(opened.open(resource, KernelSurface::resource_bytes, allocation, KernelSurface::allocation_bytes - 1u),
                Status::malformed);
   CHECK_EQ(opened.key(), 0u);
-  /* This driver's mark over an identity that is no record: no key. */
   std::uint8_t garbage[KernelSurface::allocation_bytes];
   std::memset(garbage, 0xff, sizeof garbage);
   CHECK_STATUS(opened.open(resource, KernelSurface::resource_bytes, garbage, sizeof garbage), Status::malformed);
   CHECK_EQ(opened.key(), 0u); }
 
-/* The allocation of a primary is scanned out at its source; any other
- * surface is no primary and names source 0. */
 TEST(kernel_surface, a_primary_says_where_it_is_scanned_out_and_any_other_is_none)
 { const KernelSurface primary(64u, 64u, b8g8r8a8, ScanoutTarget(2u, 60u, 1u));
   CHECK(primary.primary());

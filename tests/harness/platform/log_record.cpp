@@ -22,4 +22,4 @@ const char *LogRecord::last() const
     return last_;
 }
 
-}  // namespace av
+}

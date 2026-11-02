@@ -1,5 +1,3 @@
-/* Reaches into an ExtensionList so invariant tests can corrupt it. Declared a
- * friend by ExtensionList; nothing outside the tests uses it. */
 #ifndef AV_EXTENSION_LIST_PROBE_HPP
 #define AV_EXTENSION_LIST_PROBE_HPP
 
@@ -17,6 +15,6 @@ struct ExtensionListProbe {
     ExtensionList &list;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_EXTENSION_LIST_PROBE_HPP
+#endif

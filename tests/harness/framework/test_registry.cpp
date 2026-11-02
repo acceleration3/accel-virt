@@ -72,5 +72,5 @@ int TestRegistry::run(int argc, char **argv)
     return failures_ != 0 ? 1 : 0;
 }
 
-}  // namespace av
+}
 

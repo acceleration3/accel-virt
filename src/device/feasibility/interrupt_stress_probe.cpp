@@ -67,9 +67,6 @@ void InterruptStressProbe::acknowledged(uint64_t seen, uint64_t nanoseconds)
     host_.unlock_mutex(lock_);
 }
 
-/* Three questions, in the order that tells the most about what went wrong: was
- * the guest interrupted while it was not listening, did it see the end of the
- * run, and did it see more than the device ever sent. */
 void InterruptStressProbe::finish()
 {
     AV_SCOPE("InterruptStressProbe::finish");
@@ -102,4 +99,4 @@ const ProbeResult &InterruptStressProbe::verdict() const
     return result_;
 }
 
-}  // namespace av
+}

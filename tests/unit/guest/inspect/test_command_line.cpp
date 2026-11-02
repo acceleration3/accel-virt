@@ -17,13 +17,13 @@ struct CommandLineProbe {
     static void overcount(CommandLine &line) { line.count_ = CommandLine::max_arguments + 1u; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
 const std::uint16_t *wide(const char16_t *text) { return reinterpret_cast<const std::uint16_t *>(text); }
 
-}  // namespace
+}
 
 TEST(command_line_parse, splits_arguments_after_the_program_name)
 { CommandLine line;
@@ -71,7 +71,6 @@ TEST(command_line_parse, refuses_what_is_not_a_plain_ascii_line_and_keeps_nothin
   CHECK_STATUS(line.parse(wide(u"p 1 2 3 4 5 6 7 8")), Status::ok);
   CHECK_EQ(line.count(), 8u);
   CHECK(std::strcmp(line.argument(7u), "8") == 0);
-  /* A ninth argument that starts with a quote is refused the same way. */
   CHECK_STATUS(line.parse(wide(u"p 1 2 3 4 5 6 7 8 \"9\"")), Status::malformed); }
 
 TEST(command_line_parse, the_whole_line_holds_at_most_1024_characters)
@@ -85,7 +84,6 @@ TEST(command_line_parse, the_whole_line_holds_at_most_1024_characters)
   CHECK_STATUS(line.parse(wide(text)), Status::ok);
   text[1026] = u'y';
   CHECK_STATUS(line.parse(wide(text)), Status::malformed);
-  /* Eight long arguments with their terminators still fit. */
   char16_t spread[1100] = {};
   int      at = 0;
   spread[at++] = u'p';

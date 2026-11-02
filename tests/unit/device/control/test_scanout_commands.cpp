@@ -1,5 +1,3 @@
-/* The scanout commands the core answers, request byte by request byte: every
- * refusal of contracts/scanout_blob.md, and what the base class is left. */
 #include "core/support/status.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/context/local_context_plane.hpp"
@@ -39,7 +37,6 @@ constexpr std::uint32_t ok_nodata = 0x1100u, err_unspec = 0x1200u, err_invalid_r
 constexpr std::uint32_t width = 64u, height = 16u;
 constexpr std::uint64_t blob_bytes = 4096u;
 
-/* SET_SCANOUT_BLOB showing the whole of blob `blob` on head `head`. */
 class Scanout {
 public:
     Scanout(std::uint32_t head, std::uint32_t blob)
@@ -102,7 +99,6 @@ public:
         CHECK_STATUS(blobs_.create_guest(id, blob_bytes, request, 24u, 1u), Status::ok);
     }
 
-    /* The response type, or 0 when the core left the request to the base class. */
     std::uint32_t send(const GpuRequestBuilder &builder)
     {
         MockRequest    mock(builder.bytes(), builder.size());
@@ -123,7 +119,7 @@ private:
     ScanoutCommands commands_;
 };
 
-}  // namespace
+}
 
 TEST(scanout_commands, a_head_shows_a_blob_and_a_flush_reaches_the_display)
 { Fixture fixture(1u);
@@ -131,7 +127,6 @@ TEST(scanout_commands, a_head_shows_a_blob_and_a_flush_reaches_the_display)
   CHECK_EQ(fixture.send(Scanout(0u, 1u).build()), ok_nodata);
   CHECK_EQ(fixture.heads().showing(), 1u);
   CHECK_EQ(fixture.host().head(0u).plane.fourcc, ScanoutFormat(ScanoutFormat::b8g8r8a8).fourcc());
-  /* The display reads the blob's own pages. */
   CHECK(fixture.host().head(0u).blob != nullptr);
   CHECK_EQ(fixture.host().head(0u).blob[blob_bytes - 1u], 0x3Cu);
   CHECK_EQ(fixture.send(flush_of(1u, 0u, 0u, width, height)), ok_nodata);
@@ -147,7 +142,6 @@ TEST(scanout_commands, resource_zero_hides_the_head_and_hiding_twice_is_not_an_e
   CHECK_EQ(fixture.heads().showing(), 0u);
   CHECK_EQ(fixture.send(Scanout(0u, 0u).size(0u, 0u).rect(0u, 0u, 0u, 0u).format(0u).stride(0u).build()),
            ok_nodata);
-  /* A disable of a head virtio-gpu does not have is the guest's mistake. */
   CHECK_EQ(fixture.send(Scanout(DisplayHeads::max_heads, 0u).size(0u, 0u).rect(0u, 0u, 0u, 0u).format(0u)
                             .stride(0u).build()),
            err_invalid_parameter);
@@ -163,8 +157,6 @@ TEST(scanout_commands_show, a_short_request_and_the_structural_refusals_of_the_r
 TEST(scanout_commands_show, a_resource_that_is_not_a_blob_is_an_unknown_resource)
 { Fixture fixture(1u);
   CHECK_EQ(fixture.send(Scanout(0u, 9u).build()), err_invalid_resource_id);
-  /* Including one the base class holds: a 2D resource is not scanned out this
-   * way, and saying "unknown" is what tells the guest so. */
   CHECK_EQ(fixture.send(Scanout(0u, 50u).build()), err_invalid_resource_id); }
 
 TEST(scanout_commands_show, every_framebuffer_that_does_not_fit_the_blob_is_the_guests_mistake)
@@ -179,14 +171,11 @@ TEST(scanout_commands_show, every_framebuffer_that_does_not_fit_the_blob_is_the_
   CHECK_EQ(fixture.send(Scanout(0u, 1u).rect(1u, 0u, width, height).build()), err_invalid_parameter);
   CHECK_EQ(fixture.send(Scanout(0u, 1u).rect(0u, 0u, 0u, height).build()), err_invalid_parameter);
   CHECK_EQ(fixture.heads().showing(), 0u);
-  /* No refusal took a pin. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok); }
 
 TEST(scanout_commands_show, a_head_past_the_sixteen_is_the_guests_mistake_and_a_host_refusal_is_not)
 { Fixture fixture(1u);
   CHECK_EQ(fixture.send(Scanout(DisplayHeads::max_heads, 1u).build()), err_invalid_parameter);
-  /* Head 1 exists in virtio-gpu but not on this host: the display refused, not
-   * the guest. */
   CHECK_EQ(fixture.send(Scanout(1u, 1u).build()), err_unspec);
   CHECK(fixture.heads().invariants_hold()); }
 
@@ -201,8 +190,6 @@ TEST(scanout_commands_show, a_host_whose_display_has_no_head_refuses_every_scano
 
 TEST(scanout_commands_flush, a_request_the_core_does_not_own_is_left_to_the_base_class)
 { Fixture fixture(1u);
-  /* A 2D resource's flush, a flush too short to decode, and a command that is
-   * neither of the two the core answers. */
   CHECK_EQ(fixture.send(flush_of(50u, 0u, 0u, 16u, 16u)), 0u);
   CHECK_EQ(fixture.send(flush_of(1u, 0u, 0u, 16u, 16u).truncate(47u)), 0u);
   GpuRequestBuilder display_info(0x0100u);

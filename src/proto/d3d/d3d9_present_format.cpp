@@ -11,7 +11,7 @@ constexpr uint32_t dxgi_b8g8r8a8_unorm = 87u;
 constexpr uint32_t dxgi_b8g8r8x8_unorm = 88u;
 constexpr uint32_t ddi_a8b8g8r8 = 32u;
 
-}  // namespace
+}
 
 D3d9PresentFormat::D3d9PresentFormat(uint32_t dxgi) : dxgi_(dxgi)
 {
@@ -50,4 +50,4 @@ uint32_t D3d9PresentFormat::viewed() const
     return dxgi_ == dxgi_b8g8r8x8_unorm ? dxgi_b8g8r8a8_unorm : dxgi_;
 }
 
-}  // namespace av
+}

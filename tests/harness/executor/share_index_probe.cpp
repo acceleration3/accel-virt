@@ -12,4 +12,4 @@ uint32_t ShareIndexProbe::buckets(uint32_t domain) const
 
 uint32_t ShareIndexProbe::domains() const { return index.domains_.count(); }
 
-}  // namespace av
+}

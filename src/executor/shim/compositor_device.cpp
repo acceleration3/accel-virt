@@ -8,20 +8,15 @@
 namespace av {
 
 namespace {
-
-/* The modifier extension because the images shared from here are laid out by
- * one (ExportableImageInfo). */
 const char *const device_extensions[] = {VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
                                           VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
                                           VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME,
                                           VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME};
 constexpr uint32_t device_extension_count = sizeof device_extensions / sizeof device_extensions[0];
 constexpr uint32_t most_physical_devices = 16u;
-/* VK_API_VERSION_1_2, whose macro casts as C does: timeline semaphores are
- * core from it. */
 constexpr uint32_t api_version_1_2 = (1u << 22u) | (2u << 12u);
 
-}  // namespace
+}
 
 CompositorDevice::CompositorDevice() : instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE)
 {
@@ -93,4 +88,4 @@ const VulkanDeviceTable &CompositorDevice::table() const
     return table_;
 }
 
-}  // namespace av
+}

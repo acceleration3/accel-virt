@@ -1,9 +1,3 @@
-/* The pixels a present moves (feature 046), over attacker-chosen layouts,
- * page counts, rectangles and sub-rectangles. Both surfaces are guest pages the
- * miniport did not write, and the rectangles come from a user-mode present, so
- * every one of them is hostile. Whatever is refused, nothing may be written
- * outside the destination's own pages, no page may be left mapped, and no IRQL
- * rule may break. */
 #include "miniport/ddi/rect_record.hpp"
 #include "miniport/present/mapped_pixels.hpp"
 #include "miniport/present/present_blit.hpp"
@@ -21,8 +15,6 @@
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size);
 
 namespace {
-
-/* Two pages a surface may use, and a third the present must never reach. */
 constexpr std::uint32_t pages = 2u;
 constexpr std::uint32_t block_pages = pages + 1u;
 constexpr std::uint64_t block_bytes = block_pages * av::GuestPageList::page_bytes;
@@ -46,7 +38,7 @@ av::SurfaceLayout read_layout(av::WireReader &reader)
     return av::SurfaceLayout(width, height, 21u, pitch);
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {
@@ -89,10 +81,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
                                                  : blit.blit(from, into, count != 0u ? rects : nullptr, count);
     static_cast<void>(moved);
     if (!blit.invariants_hold()) __builtin_trap();
-    /* The page past the ones the surface was given is nobody's, on either side. */
     for (std::uint64_t at = pages * av::GuestPageList::page_bytes; at < block_bytes; at++)
         if (destination_block[at] != guard || source_block[at] != guard) __builtin_trap();
-    /* A present leaves nothing mapped, whatever it refused. */
     if (platform.mapped_frames() != 0u) __builtin_trap();
     platform.release_contiguous(source_block, block_bytes);
     platform.release_contiguous(destination_block, block_bytes);

@@ -1,9 +1,3 @@
-/* The kernel objects one scenario creates on the adapter - a device, its
- * allocations with their GPU virtual addresses and CPU views, a paging queue
- * and a context - each step refused until the object it needs exists, and all
- * of them released in reverse by tear_down() or the destructor whatever
- * failed. A handle, address or view of 0 answered as success is malformed and
- * not kept. */
 #ifndef AV_GUEST_SESSION_HPP
 #define AV_GUEST_SESSION_HPP
 
@@ -26,34 +20,21 @@ public:
     GuestSession &operator=(const GuestSession &) = delete;
 
     [[nodiscard]] Status open_device();
-    /* The slot the allocation took, in `index`. */
     [[nodiscard]] Status allocate(const uint8_t *descriptor, uint32_t size, uint32_t &index);
-    /* The CPU view of the allocation in that slot, held until unlock() or the
-     * teardown gives it back. */
     [[nodiscard]] Status lock(uint32_t index, void *&view);
     [[nodiscard]] Status unlock(uint32_t index);
     [[nodiscard]] Status open_paging_queue();
-    /* Resident, then mapped over `pages`, each paging fence awaited. */
     [[nodiscard]] Status map(uint32_t index, uint64_t pages, uint64_t &address);
     [[nodiscard]] Status open_context();
     [[nodiscard]] Status submit(uint64_t commands, uint64_t length);
     [[nodiscard]] Status wait();
-    /* Until the next vertical blank of `source` on this device. */
     [[nodiscard]] Status await_vertical_blank(uint32_t source);
-    /* The first failure among the destructions; every one is attempted. */
     [[nodiscard]] Status tear_down();
-    /* The NTSTATUS of that first failure. */
     uint32_t             teardown_code() const;
 
     bool invariants_hold() const;
 
 private:
-    /* The handle is taken by reference and read here, not at the call site: a
-     * call that fills an out parameter and a read of that same parameter are
-     * indeterminately sequenced as arguments of one call, and clang-cl read the
-     * handle before the call that filled it - every handle step failed in the
-     * guest while the same code passed on Linux. Reading inside the callee is
-     * sequenced after every argument is evaluated. */
     template <typename Handle>
     [[nodiscard]] Status accept(Status status, const Handle &value) const
     {
@@ -78,6 +59,6 @@ private:
     friend struct GuestSessionProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_GUEST_SESSION_HPP
+#endif

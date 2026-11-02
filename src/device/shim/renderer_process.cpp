@@ -17,9 +17,6 @@ RendererProcess::RendererProcess()
     AV_SCOPE("RendererProcess::RendererProcess");
 }
 
-/* A renderer outliving QEMU would hold the GPU and guest memory for nobody:
- * it dies with its parent, and one whose parent already died before the
- * request took effect leaves at once. */
 int RendererProcess::run()
 {
     AV_SCOPE("RendererProcess::run");
@@ -39,9 +36,6 @@ int RendererProcess::run()
     return 0;
 }
 
-/* A message the service refuses is logged and answered with nothing; QEMU's
- * wait for an answer that never comes is what ends a renderer QEMU no longer
- * trusts. */
 bool RendererProcess::serve_message()
 {
     AV_SCOPE("RendererProcess::serve_message");
@@ -63,4 +57,4 @@ bool RendererProcess::serve_message()
     return answer_length == 0u || channel_.send(answer_, answer_length, &answer_descriptor, attached) == Status::ok;
 }
 
-}  // namespace av
+}

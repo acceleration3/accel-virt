@@ -111,4 +111,4 @@ Status BindContextMessage::decode(const uint8_t *bytes, size_t length, uint32_t 
     return Status::ok;
 }
 
-}  // namespace av
+}

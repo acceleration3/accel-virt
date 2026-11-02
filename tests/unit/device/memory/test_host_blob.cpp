@@ -1,7 +1,3 @@
-/* One host blob: host GPU memory the executor library allocated, as a dma-buf
- * the blob owns, placed in the hostmem region where the guest reaches it. The
- * descriptor is closed exactly once, with the blob, and the blob is never left
- * placed behind itself. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/memory/host_blob.hpp"
@@ -22,7 +18,6 @@ namespace {
 
 constexpr std::uint64_t page = 0x1000u;
 
-/* What the library answers: a descriptor of `size` bytes the blob owns. */
 AvHostMemory memory(std::uint64_t size, std::uint32_t caching = AV_MEMORY_WRITE_BACK)
 {
     const int fd = memfd_create("host blob", MFD_CLOEXEC);
@@ -30,7 +25,7 @@ AvHostMemory memory(std::uint64_t size, std::uint32_t caching = AV_MEMORY_WRITE_
     return AvHostMemory{fd, caching, size};
 }
 
-}  // namespace
+}
 
 TEST(host_blob, says_what_it_was_made_with_and_closes_its_descriptor_once)
 { MockHost host;
@@ -45,7 +40,6 @@ TEST(host_blob, says_what_it_was_made_with_and_closes_its_descriptor_once)
   CHECK(!host.descriptor_open(made.fd));
   CHECK_EQ(host.unclaimed_violations(), 0u); }
 
-/* The guest reads, at the offset, the very memory the library allocated. */
 TEST(host_blob_map, places_the_memory_where_the_guest_reads_it)
 { MockHost host;
   host.set_hostmem_size(16u * page);
@@ -63,17 +57,17 @@ TEST(host_blob_map, places_the_memory_where_the_guest_reads_it)
     auto *const guest = static_cast<std::uint8_t *>(host.placed_at(4u * page));
     CHECK(guest != nullptr);
     CHECK_EQ(guest[page + 3u], 0x6Cu);
-    CHECK_STATUS(blob.map(8u * page), Status::invalid_state);   /* placed once */
+    CHECK_STATUS(blob.map(8u * page), Status::invalid_state);
     CHECK_EQ(host.live_placements(), 1u);
     CHECK_STATUS(blob.unmap(), Status::ok);
     CHECK(!blob.mapped());
     CHECK_EQ(blob.offset(), 0u);
     CHECK_EQ(host.live_placements(), 0u);
     CHECK_STATUS(blob.unmap(), Status::invalid_state);
-    CHECK_STATUS(blob.map(0u), Status::ok);   /* placed again elsewhere */
+    CHECK_STATUS(blob.map(0u), Status::ok);
     CHECK_EQ(blob.offset(), 0u);
     CHECK(blob.mapped()); }
-  CHECK_EQ(host.live_placements(), 0u);   /* the blob took itself out first */
+  CHECK_EQ(host.live_placements(), 0u);
   CHECK(!host.descriptor_open(made.fd));
   munmap(library, 2u * page); }
 
@@ -89,7 +83,6 @@ TEST(host_blob_map, a_host_that_cannot_place_it_leaves_it_unplaced)
   CHECK_EQ(host.live_placements(), 0u);
   CHECK_STATUS(blob.map(page), Status::ok); }
 
-/* A descriptor shorter than the blob says it is cannot be placed whole. */
 TEST(host_blob_map, memory_smaller_than_the_blob_is_refused)
 { MockHost host;
   AvHostMemory made = memory(page);
@@ -101,15 +94,15 @@ TEST(host_blob_map, memory_smaller_than_the_blob_is_refused)
 TEST(host_blob_overlaps, only_a_placed_blob_covers_bytes_and_only_its_own)
 { MockHost host;
   HostBlob blob(host, 1u, memory(2u * page));
-  CHECK(!blob.overlaps(4u * page, page));   /* not placed: covers nothing */
+  CHECK(!blob.overlaps(4u * page, page));
   CHECK_STATUS(blob.map(4u * page), Status::ok);
   CHECK(blob.overlaps(4u * page, 1u));
   CHECK(blob.overlaps(6u * page - 1u, 1u));
-  CHECK(!blob.overlaps(6u * page, page));   /* ends where the blob ends */
-  CHECK(!blob.overlaps(3u * page, page));   /* ends where the blob starts */
+  CHECK(!blob.overlaps(6u * page, page));
+  CHECK(!blob.overlaps(3u * page, page));
   CHECK(blob.overlaps(3u * page, page + 1u));
-  CHECK(blob.overlaps(0u, 16u * page));     /* around it */
-  CHECK(blob.overlaps(5u * page, 1u));      /* inside it */
+  CHECK(blob.overlaps(0u, 16u * page));
+  CHECK(blob.overlaps(5u * page, 1u));
   CHECK_STATUS(blob.unmap(), Status::ok); }
 
 TEST(host_blob, is_placed_and_taken_down_on_the_main_loop_only)
@@ -133,13 +126,11 @@ TEST(host_blob, is_placed_and_taken_down_on_the_main_loop_only)
   host.join_thread(thread);
   CHECK(host.claim(HostViolation::main_loop_required));
   CHECK(host.claim(HostViolation::main_loop_required));
-  while (host.claim(HostViolation::main_loop_required)) {}   /* what the mock's own placement asserts */
+  while (host.claim(HostViolation::main_loop_required)) {}
   CHECK_STATUS(call.unmapped, Status::invalid_state);
   CHECK_STATUS(call.mapped, Status::ok);
   CHECK_STATUS(blob.unmap(), Status::ok); }
 
-/* A blob over lent pages waits with no memory until the first piece of them
- * decides what it is; the entries it has laid are counted as they come. */
 TEST(host_blob_waiting, holds_no_memory_and_counts_the_entries_it_is_laid_over)
 { MockHost host;
   const av::HostMemoryRequest readback(av::HostMemoryRequest::Kind::readback, 0u);

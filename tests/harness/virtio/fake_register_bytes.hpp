@@ -1,5 +1,3 @@
-/* A fake register region backed by bytes: the device configuration of the fake
- * virtio device, and a recorder for notifications. */
 #ifndef AV_FAKE_REGISTER_BYTES_HPP
 #define AV_FAKE_REGISTER_BYTES_HPP
 
@@ -40,6 +38,6 @@ private:
     std::uint64_t last_write_value_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FAKE_REGISTER_BYTES_HPP
+#endif

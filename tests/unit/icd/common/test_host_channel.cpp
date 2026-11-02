@@ -1,9 +1,3 @@
-/* One driver context's way to the host (HostChannel): the staging a command
- * is written in, the transport and the block it holds commands in, the send
- * lock and the blob arena, opened all or nothing and closed in the one order
- * that is safe. What every OpenGL,
- * OpenCL, Direct3D and Vulkan context is opened over, so each answer here is
- * one all four give. */
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/kmt/pci_identity.hpp"
@@ -32,9 +26,6 @@
 #include <cstring>
 
 namespace av {
-
-/* A transport whose established context has lost its name: what its
- * invariant is there to catch. */
 struct KmtTransportProbe {
     static std::uint32_t forget_name(KmtTransport &t)
     {
@@ -45,7 +36,7 @@ struct KmtTransportProbe {
     static void restore_name(KmtTransport &t, std::uint32_t name) { t.allocations_[0] = name; }
 };
 
-}  // namespace av
+}
 
 using av::GuestConnection;
 using av::HostAllocation;
@@ -70,19 +61,16 @@ constexpr std::uint8_t  ring_order = 12u;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::size_t   staging_bytes = 4096u;
 constexpr std::uint32_t command_id = 0x10001u;
-/* What the device answers an import it will not take. */
 constexpr std::uint32_t import_refused = 1u;
 constexpr std::uint64_t imported_memory = 0x0000600000000077ull;
 constexpr std::uint64_t first_memory_of_lock_test = 0x0000600000000099ull;
 
-/* OpenGL's and OpenCL's shape: batched, with an arena twice the least. */
 ChannelShape batching()
 {
     return ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, 2u * staging_bytes,
                         2u * KmtBlobArena::default_bytes);
 }
 
-/* Vulkan's: each command alone, and no arena. */
 ChannelShape plain()
 {
     return ChannelShape(SubApi::vulkan, ring_order, reply_bytes, staging_bytes, 0u, 0u);
@@ -107,7 +95,6 @@ public:
     av::ScriptedHost     &host() { return host_; }
     av::RecordingLog     &log() { return log_; }
     av::RecordingThreadLock &lock() { return lock_; }
-    /* Every acquire and release of the send lock since the last read. */
     const char *locked()
     {
         static char kept[64];
@@ -116,8 +103,6 @@ public:
         return kept;
     }
 
-    /* Only the device link is left: no transport object, no chunk and no
-     * block of the channel's. */
     void check_nothing_held(const HostChannel &channel)
     {
         CHECK(!channel.opened());
@@ -129,7 +114,6 @@ public:
         CHECK(channel.invariants_hold());
     }
 
-    /* A command of a few bytes through `wire` that wants no answer. */
     TransportResult send(av::ClientTransport &wire)
     {
         WireWriter writer = wire.request_writer();
@@ -156,7 +140,7 @@ const char *report_of(const HostChannel &channel, char *bytes, std::size_t size)
     return writer.dump();
 }
 
-}  // namespace
+}
 
 TEST(host_channel, a_closed_channel_holds_nothing_and_closing_it_again_is_nothing)
 { Rig rig;
@@ -180,13 +164,11 @@ TEST(host_channel, opening_holds_the_transport_the_batch_and_the_arena_at_the_sh
   CHECK(!channel.faulted());
   CHECK_EQ(channel.arena_bytes(), 2u * KmtBlobArena::default_bytes);
   CHECK(channel.arena_view() != nullptr);
-  /* Bulk data is lent from the arena through the transport it was opened on. */
   CHECK(channel.transport().blobs().ready());
   CHECK(channel.invariants_hold());
   char bytes[128];
   CHECK(std::strcmp(report_of(channel, bytes, sizeof bytes),
                     "channel/0 opened=true faulted=false arena_bytes=33554432") == 0);
-  /* A second open is refused and leaves the first as it was. */
   CHECK_STATUS(channel.open(rig.device()), Status::invalid_state);
   CHECK(channel.opened());
   CHECK_EQ(channel.arena_bytes(), 2u * KmtBlobArena::default_bytes);
@@ -195,8 +177,6 @@ TEST(host_channel, opening_holds_the_transport_the_batch_and_the_arena_at_the_sh
   rig.check_nothing_held(channel);
   CHECK_EQ(rig.log().lines(), 0u); }
 
-/* The host writes its error word in the arena's last bytes, which it never
- * lends; the channel reads it from there. */
 TEST(host_channel, the_host_error_word_is_the_arenas_tail)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.log(), "avtest: ", batching(), rig.lock());
@@ -219,13 +199,10 @@ TEST(host_channel, what_is_batched_reaches_the_host_before_its_context_goes)
   CHECK_EQ(rig.kmt().commands(), sent);
   rig.host().nop();
   channel.close(false);
-  /* The held command first, then the arena's release. */
   CHECK(rig.kmt().commands() > sent + 1u);
   CHECK_EQ(rig.kmt().command_id(sent), command_id);
   rig.check_nothing_held(channel); }
 
-/* A lost context's device frees what it held with the context: asking a
- * faulted transport would only fail, so nothing is sent. */
 TEST(host_channel, a_lost_channel_closes_without_asking_the_host_anything)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.log(), "avtest: ", batching(), rig.lock());
@@ -240,7 +217,6 @@ TEST(host_channel, a_lost_channel_closes_without_asking_the_host_anything)
   rig.check_nothing_held(channel);
   CHECK_EQ(rig.log().lines(), 0u); }
 
-/* An arena the device refuses is asked again at half the size. */
 TEST(host_channel, an_arena_the_device_refuses_is_asked_again_at_half_the_size)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.log(), "avtest: ", batching(), rig.lock());
@@ -255,8 +231,6 @@ TEST(host_channel, an_arena_the_device_refuses_is_asked_again_at_half_the_size)
   channel.close(false);
   rig.check_nothing_held(channel); }
 
-/* Never below the least an arena is opened at: past it the channel opens
- * without one, and its bulk data crosses inline. */
 TEST(host_channel, a_device_that_will_not_import_at_the_least_size_leaves_a_channel_without_an_arena)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.log(), "avtest: ", batching(), rig.lock());
@@ -274,9 +248,6 @@ TEST(host_channel, a_device_that_will_not_import_at_the_least_size_leaves_a_chan
   channel.close(false);
   rig.check_nothing_held(channel); }
 
-/* A host that says nothing to the import faults the transport: a context
- * whose every call is already lost is not one to hand back - whether that is
- * the first ask or the one at half the size. */
 TEST(host_channel, a_transport_that_faults_opening_the_arena_opens_nothing)
 { for (std::uint32_t refusals = 0u; refusals < 2u; refusals++) {
       Rig rig;
@@ -304,7 +275,6 @@ TEST(host_channel, a_driver_that_refuses_the_context_opens_nothing)
   CHECK_EQ(rig.log().holding("avtest: the driver refused the context"), 1u);
   rig.check_nothing_held(channel); }
 
-/* Vulkan's shape: nothing held between calls, and nothing to import. */
 TEST(host_channel, a_shape_that_neither_batches_nor_lends_opens_the_transport_alone)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.log(), "avtest: ", plain(), rig.lock());
@@ -328,8 +298,6 @@ TEST(host_channel, a_transport_the_host_failed_is_a_faulted_channel)
   channel.close(true);
   rig.check_nothing_held(channel); }
 
-/* A host that never answers the arena's release is asked nothing more: what
- * the channel still holds goes with the context. */
 TEST(host_channel, an_arena_that_does_not_close_whole_is_logged_and_closed_anyway)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.log(), "avtest: ", batching(), rig.lock());
@@ -345,7 +313,6 @@ TEST(host_channel, the_invariant_catches_every_state_the_channel_never_builds)
   HostChannel      channel(rig.platform(), rig.log(), "avtest: ", batching(), rig.lock());
   HostChannelProbe probe(channel);
   std::uint8_t     stray = 0u;
-  /* Closed, holding a block of either kind. */
   CHECK(probe.swap_staging(&stray) == nullptr);
   CHECK(!channel.invariants_hold());
   CHECK(probe.swap_staging(nullptr) == &stray);
@@ -353,9 +320,6 @@ TEST(host_channel, the_invariant_catches_every_state_the_channel_never_builds)
   CHECK(!channel.invariants_hold());
   CHECK(probe.swap_batch_block(nullptr) == &stray);
   CHECK(channel.invariants_hold());
-  /* Open, with no staging, no lock around the transport, a batching shape
-   * whose transport holds nothing, a batch without its block, and a
-   * transport that is unsound. */
   rig.host().blob_import(0u, imported_memory);
   CHECK_STATUS(channel.open(rig.device()), Status::ok);
   std::uint8_t *const staging = probe.swap_staging(nullptr);
@@ -382,7 +346,6 @@ TEST(host_channel, the_invariant_catches_every_state_the_channel_never_builds)
   channel.close(false);
   rig.check_nothing_held(channel); }
 
-/* What a closed channel can be found holding: a transport no open made. */
 TEST(host_channel, a_transport_no_open_made_is_an_open_channel_with_no_staging)
 { Rig rig;
   HostChannel      channel(rig.platform(), rig.log(), "avtest: ", plain(), rig.lock());
@@ -393,9 +356,6 @@ TEST(host_channel, a_transport_no_open_made_is_an_open_channel_with_no_staging)
   probe.drop_transport();
   rig.check_nothing_held(channel); }
 
-/* A window with no room for the shape's size holds half of it; a device with
- * no window at all, or none with room for the least, opens the channel with
- * its bulk data inline - nothing falls back to guest RAM. */
 TEST(host_channel, the_window_decides_the_arena_and_none_leaves_bulk_data_inline)
 { { Rig rig;
     rig.kmt().open_host_window(KmtBlobArena::default_bytes);
@@ -414,7 +374,7 @@ TEST(host_channel, the_window_decides_the_arena_and_none_leaves_bulk_data_inline
       HostChannel channel(rig.platform(), rig.log(), "avtest: ", batching(), rig.lock());
       CHECK_STATUS(channel.open(rig.device()), Status::ok);
       CHECK(channel.arena_view() == nullptr);
-      CHECK_EQ(rig.kmt().commands(), 0u);   /* nothing was imported */
+      CHECK_EQ(rig.kmt().commands(), 0u);
       CHECK_EQ(rig.log().holding("avtest: no blob arena for the context; bulk data crosses inline"), 1u);
       CHECK(rig.send(channel.wire()) == TransportResult::ok);
       channel.close(false);
@@ -427,11 +387,8 @@ constexpr std::uint64_t first_memory = 0x0000700000000001ull;
 constexpr std::uint64_t second_memory = 0x0000700000000002ull;
 const HostMemoryRequest upload(HostMemoryRequest::Kind::upload, 0u);
 
-}  // namespace
+}
 
-/* Each object's host memory is an allocation of its own the channel keeps:
- * opened and imported on the channel's context, found by the handle the host
- * named it, and closed import first. */
 TEST(host_channel_memory, opens_finds_and_closes_an_allocation_per_object)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.log(), "avtest: ", plain(), rig.lock());
@@ -461,22 +418,15 @@ TEST(host_channel_memory, opens_finds_and_closes_an_allocation_per_object)
   CHECK_EQ(channel.memories(), 1u);
   CHECK(channel.find_memory(first_memory) == nullptr);
   CHECK_EQ(rig.kmt().window_chunks(), 1u);
-  /* What the channel does not keep is not its to close. */
   HostAllocation stranger(rig.device(), channel.transport());
   CHECK_STATUS(channel.close_memory(stranger), Status::invalid_parameter);
   CHECK_EQ(channel.memories(), 1u);
-  /* The channel's own close lets go of what is left, import first. */
   rig.host().nop();
   channel.close(false);
   CHECK_EQ(rig.kmt().window_chunks(), 0u);
   CHECK_EQ(rig.log().lines(), 0u);
   rig.check_nothing_held(channel); }
 
-/* Nothing is kept of an allocation that did not open, and a channel that is
- * closed or faulted opens none. */
-/* The process's own pages lent are kept, found and closed as an allocation
- * the channel opened is; a refusal keeps nothing, and a closed channel lends
- * none (docs/host-memory.md, "Application memory"). */
 TEST(host_channel_memory, adopts_the_processs_own_pages_as_an_allocation_it_keeps)
 { Rig rig;
   HostChannel     channel(rig.platform(), rig.log(), "avtest: ", plain());
@@ -519,7 +469,7 @@ TEST(host_channel_memory, a_refusal_keeps_nothing_and_a_closed_or_faulted_channe
   CHECK_EQ(channel.memories(), 0u);
   rig.platform().fail_allocation_at(1u);
   CHECK_STATUS(channel.open_memory(4096u, upload, made), Status::no_memory);
-  CHECK_EQ(rig.kmt().window_opens(), 1u);   /* only the refused import's chunk was ever opened */
+  CHECK_EQ(rig.kmt().window_opens(), 1u);
   WireWriter writer = channel.transport().request_writer();
   WireReader reply(nullptr, 0u);
   CHECK(channel.transport().send_sync(command_id, writer, reply) != TransportResult::ok);
@@ -528,9 +478,6 @@ TEST(host_channel_memory, a_refusal_keeps_nothing_and_a_closed_or_faulted_channe
   channel.close(true);
   rig.check_nothing_held(channel); }
 
-/* A lost channel abandons what it keeps - the host frees it with the context
- * - and so does closing one allocation on a faulted channel: no release is
- * sent, and the kernel's refusal of a chunk's close is logged. */
 TEST(host_channel_memory, a_lost_channel_abandons_its_memory_without_asking_the_host)
 { { Rig rig;
     HostChannel channel(rig.platform(), rig.log(), "avtest: ", plain(), rig.lock());
@@ -565,13 +512,8 @@ TEST(host_channel_memory, a_lost_channel_abandons_its_memory_without_asking_the_
     CHECK(!channel.opened()); } }
 
 
-/* The channel's send lock is every sender's: the wire takes it per command,
- * and what the channel sends itself takes it whole - a held batch, framed
- * commands, the publish barrier and a long recorded command - each in order
- * behind what the channel's transport holds. */
 TEST(host_channel, what_the_channel_sends_goes_under_its_send_lock_behind_what_is_held)
 { Rig rig;
-  /* A ring that takes a full batch, as every driver's does. */
   const ChannelShape shape(SubApi::opengl, 16u, reply_bytes, staging_bytes, 2u * staging_bytes,
                            2u * KmtBlobArena::default_bytes);
   HostChannel channel(rig.platform(), rig.log(), "avtest: ", shape, rig.lock());
@@ -585,7 +527,6 @@ TEST(host_channel, what_the_channel_sends_goes_under_its_send_lock_behind_what_i
   CHECK(channel.flush() == TransportResult::ok);
   CHECK(std::strcmp(rig.locked(), "Ss") == 0);
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
-  /* Framed elsewhere - a Vulkan command buffer's - after what is held. */
   CHECK(rig.send(channel.wire()) == TransportResult::ok);
   std::uint8_t framed[av::CommandHeader::encoded_size + 8u] = {};
   CHECK_STATUS(av::CommandHeader(command_id + 1u, sizeof framed, 0u).encode(framed, sizeof framed), Status::ok);
@@ -594,7 +535,6 @@ TEST(host_channel, what_the_channel_sends_goes_under_its_send_lock_behind_what_i
   CHECK(std::strcmp(rig.locked(), "Ss") == 0);
   CHECK_EQ(rig.kmt().command_id(sent + 1u), command_id);
   CHECK_EQ(rig.kmt().command_id(sent + 2u), command_id + 1u);
-  /* The barrier: what is held goes, and the host answers behind it. */
   CHECK(rig.send(channel.wire()) == TransportResult::ok);
   static_cast<void>(rig.locked());
   rig.host().nop();
@@ -602,7 +542,6 @@ TEST(host_channel, what_the_channel_sends_goes_under_its_send_lock_behind_what_i
   CHECK(std::strcmp(rig.locked(), "Ss") == 0);
   CHECK_EQ(rig.kmt().command_id(sent + 3u), command_id);
   CHECK_EQ(rig.kmt().command_id(sent + 4u), av::CommandHeader::nop_id);
-  /* A command longer than any batch, its pieces one run under one hold. */
   std::uint8_t spill_room[64] = {};
   av::SpillBlock spill(rig.platform());
   WireWriter long_command(spill_room, sizeof spill_room, spill);
@@ -616,7 +555,6 @@ TEST(host_channel, what_the_channel_sends_goes_under_its_send_lock_behind_what_i
   for (std::uint32_t index = sent + 5u; index < last; index++)
       CHECK_EQ(rig.kmt().command_id(index), av::CommandHeader::piece_id);
   spill.release();
-  /* Memory is opened and found under the lock too. */
   HostAllocation *made = nullptr;
   rig.host().blob_import(0u, first_memory_of_lock_test);
   CHECK_STATUS(channel.open_memory(4096u, HostMemoryRequest(HostMemoryRequest::Kind::upload, 0u), made), Status::ok);
@@ -628,7 +566,6 @@ TEST(host_channel, what_the_channel_sends_goes_under_its_send_lock_behind_what_i
   channel.close(false);
   rig.check_nothing_held(channel); }
 
-/* A channel not open sends nothing, and takes no lock to find that out. */
 TEST(host_channel, a_closed_channel_sends_nothing_of_its_own)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.log(), "avtest: ", batching(), rig.lock());

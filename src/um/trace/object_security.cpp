@@ -13,12 +13,10 @@ extern "C" LONG NTAPI RtlSetDaclSecurityDescriptor(PSECURITY_DESCRIPTOR descript
 namespace av {
 
 namespace {
-
-/* S-1-5-18 and S-1-5-32-544, as SID structures. */
 constexpr BYTE local_system[] = {1, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0};
 constexpr BYTE administrators[] = {1, 2, 0, 0, 0, 0, 0, 5, 32, 0, 0, 0, 0x20, 0x02, 0, 0};
 
-}  // namespace
+}
 
 ObjectSecurity::ObjectSecurity() : built_(false), acl_{}, descriptor_{}, attributes_{}
 {
@@ -47,4 +45,4 @@ void *ObjectSecurity::attributes()
     return built_ ? attributes_ : nullptr;
 }
 
-}  // namespace av
+}

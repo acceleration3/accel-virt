@@ -9,15 +9,13 @@ namespace {
 constexpr uint16_t first_printable = 0x20u;
 constexpr uint16_t last_printable = 0x7Eu;
 
-}  // namespace
+}
 
 CommandLine::CommandLine() : text_{}, starts_{}, count_(0u)
 {
     AV_SCOPE("CommandLine::CommandLine");
 }
 
-/* The program's name is the first word like any other and is dropped at the
- * end, so a quoted path with spaces needs no rule of its own. */
 Status CommandLine::parse(const uint16_t *line)
 {
     AV_SCOPE("CommandLine::parse");
@@ -88,7 +86,6 @@ bool CommandLine::number(uint32_t index, uint32_t &value) const
     return true;
 }
 
-/* Every argument starts inside the text and is terminated inside it. */
 bool CommandLine::invariants_hold() const
 {
     AV_SCOPE("CommandLine::invariants_hold");
@@ -108,4 +105,4 @@ void CommandLine::clear()
     count_ = 0u;
 }
 
-}  // namespace av
+}

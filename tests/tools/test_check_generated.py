@@ -1,8 +1,3 @@
-"""The committed generated tree is what the generator writes, or the gate says so.
-
-Never hand-edit a file under `generated/`: fix the emitter and regenerate. That
-rule is only worth stating if something enforces it, which is this.
-"""
 import pathlib
 import shutil
 import tempfile
@@ -23,8 +18,6 @@ class CheckGenerated(unittest.TestCase):
         (self.registries / "toy.xml").write_text("<registry/>\n")
         self.out = self.scratch / "generated" / "toy"
         self.out.mkdir(parents=True)
-        # A stand-in generator: writes one file whose text comes from the
-        # registry, and implements --check the way av_codegen does.
         self.generator = self.scratch / "toy_generator.py"
         self.generator.write_text(textwrap.dedent('''
             import argparse, filecmp, pathlib, sys, tempfile
@@ -70,8 +63,6 @@ class CheckGenerated(unittest.TestCase):
         self.assertIn("toy.h", result.stdout + result.stderr)
 
     def test_a_file_the_generator_would_not_write_fails_too(self):
-        """Nothing hand-written hides in a generated directory: the gates that
-        exclude those directories would stop judging it."""
         self.assertEqual(self.generate().returncode, 0)
         (self.out / "extra.cpp").write_text("// smuggled in\n")
         result = self.check()
@@ -87,7 +78,6 @@ class CheckGenerated(unittest.TestCase):
         self.assertIn("fetch", result.stdout)
 
     def test_the_repository_s_own_plan_names_every_api_it_generates(self):
-        """What ships: a plan whose generators and profiles all exist."""
         plan = (ROOT / "tools" / "generated_sources.txt").read_text()
         named = [line.split() for line in plan.splitlines()
                  if line.strip() and not line.startswith("#")]
@@ -98,12 +88,7 @@ class CheckGenerated(unittest.TestCase):
             for path in entry[2:]:
                 if path.startswith("--"):
                     continue
-                # `@` stands for the repository root in the plan's extra
-                # arguments, which is how a path reaches the generator without
-                # the plan naming a machine.
                 path = path.removeprefix("@")
-                # Registry paths live under third_party and may not be fetched;
-                # everything else is committed and must be there.
                 if "third_party" in path:
                     continue
                 self.assertTrue((ROOT / path).exists(), f"{api}: {path} is not in the repository")

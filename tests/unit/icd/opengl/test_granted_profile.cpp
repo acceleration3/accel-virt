@@ -1,11 +1,3 @@
-/* What the host granted a context, as opposed to what was asked for (051).
- *
- * The profile is read from GL_CONTEXT_PROFILE_MASK, never from GL_VERSION:
- * NVIDIA's compatibility string is identical to its core one (research.md §1).
- * What rests on the answer is whether the 274 legacy entry points of the proc
- * table forward or refuse, so a mask nobody defines, a host that answered
- * nothing, and a driver's pre-profile default context each have to land
- * somewhere deliberate. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/opengl/granted_profile.hpp"
 
@@ -20,10 +12,8 @@ struct GrantedProfileProbe {
     static void set_mask(GrantedProfile &profile, std::uint32_t mask) { profile.mask_ = mask; }
 };
 
-}  // namespace av::glicd
+}
 
-/* A mask that is neither bit is one learn() never keeps, and the invariant is
- * what says so. */
 TEST(granted_profile_invariants, a_mask_no_profile_defines_is_caught)
 { GrantedProfile profile;
   av::glicd::GrantedProfileProbe::set_mask(profile, 0x3u);
@@ -57,13 +47,11 @@ TEST(granted_profile, a_core_context_refuses_them)
 { GrantedProfile profile;
   profile.granted(Rung::core_46);
   profile.learn(4u, 6u, GrantedProfile::core_bit);
-  CHECK(profile.invariants_hold());   /* the core bit is a mask this holds */
+  CHECK(profile.invariants_hold());
   CHECK_EQ(profile.mask(), 1u);
   CHECK(profile.known());
   CHECK(!profile.legacy_calls_live()); }
 
-/* A driver's own default context predates profiles: it answers no mask at all,
- * and every GL 1.1 entry point is part of it. */
 TEST(granted_profile, a_pre_profile_default_context_runs_them_too)
 { GrantedProfile profile;
   profile.granted(Rung::host_default);
@@ -72,15 +60,12 @@ TEST(granted_profile, a_pre_profile_default_context_runs_them_too)
   CHECK_EQ(profile.mask(), 0u);
   CHECK(profile.known());
   CHECK(profile.legacy_calls_live());
-  /* A 3.2 or later context with no mask is core by GL's own default, so the
-   * legacy calls are not there. */
   GrantedProfile modern;
   modern.granted(Rung::host_default);
   modern.learn(3u, 2u, 0u);
   CHECK(modern.known());
   CHECK(!modern.legacy_calls_live()); }
 
-/* Hostile: the host is not this driver, and what it answers is bytes. */
 TEST(granted_profile, a_mask_no_profile_defines_is_no_profile_at_all)
 { const std::uint32_t nonsense[] = {0x3u, 0x4u, 0xFFFFFFFFu, 0x80000002u};
   for (const std::uint32_t mask : nonsense) {
@@ -89,9 +74,8 @@ TEST(granted_profile, a_mask_no_profile_defines_is_no_profile_at_all)
       profile.learn(4u, 6u, mask);
       CHECK(profile.invariants_hold());
       CHECK_EQ(profile.mask(), 0u);
-      CHECK(!profile.legacy_calls_live());   /* 4.6 with no profile is core */
+      CHECK(!profile.legacy_calls_live());
   }
-  /* A version past anything GL defines is still what the host said. */
   GrantedProfile future;
   future.granted(Rung::compatibility_46);
   future.learn(99u, 99u, GrantedProfile::compatibility_bit);
@@ -99,8 +83,6 @@ TEST(granted_profile, a_mask_no_profile_defines_is_no_profile_at_all)
   CHECK_EQ(future.major(), 99u);
   CHECK(future.legacy_calls_live()); }
 
-/* A host that answered nothing leaves the context unknown, and unknown never
- * unlocks an entry point (constitution VI). */
 TEST(granted_profile, a_host_that_answered_nothing_unlocks_nothing)
 { GrantedProfile profile;
   profile.granted(Rung::host_default);

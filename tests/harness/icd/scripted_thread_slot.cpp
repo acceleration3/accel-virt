@@ -27,4 +27,4 @@ void          ScriptedThreadSlot::set(void *value) { values_[current_ - first_th
 std::uint32_t ScriptedThreadSlot::thread_id() { return current_; }
 void          ScriptedThreadSlot::set_last_error(std::uint32_t code) { errors_[current_ - first_thread] = code; }
 
-}  // namespace av
+}

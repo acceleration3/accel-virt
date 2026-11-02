@@ -18,8 +18,6 @@ TEST(present_count, each_present_publishes_the_next_point)
   CHECK_EQ(count.next(), 3u);
   CHECK_EQ(count.last(), 3u); }
 
-/* Point 0 names no frame: a surface presented 2^32 - 1 times goes on at 1,
- * never through 0, where the miniport would stage nothing. */
 TEST(present_count, wraps_past_the_last_point_to_one_never_to_zero)
 { static_assert(sizeof(PresentCount) == sizeof(std::uint32_t), "the count is the point it last published");
   PresentCount count;
@@ -29,9 +27,6 @@ TEST(present_count, wraps_past_the_last_point_to_one_never_to_zero)
   CHECK_EQ(count.next(), 1u);
   CHECK_EQ(count.next(), 2u); }
 
-/* The count lives in records the runtime owns and the driver moves by
- * assignment (RotateResourceIdentities): a copy goes on from where the
- * original was. */
 TEST(present_count, a_copy_goes_on_from_the_original_s_point)
 { PresentCount count;
   static_cast<void>(count.next());

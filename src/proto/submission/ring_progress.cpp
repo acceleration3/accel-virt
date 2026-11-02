@@ -57,4 +57,4 @@ bool RingProgress::invariants_hold() const
     return !started_ || consistent(order_, tail_, head_);
 }
 
-}  // namespace av
+}

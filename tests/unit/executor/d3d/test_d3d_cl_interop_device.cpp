@@ -1,13 +1,3 @@
-/* A Direct3D 11 texture a guest shares, opened by OpenCL on the same GPU as
- * the image it is (docs/d3d11-sharing.md, stage 2): Direct3D 11 makes the
- * texture over exportable memory and says what image it is
- * (SharedImageShape), the session publishes the memory, and an OpenCL
- * session's open of it is an image over that memory - read back texel for
- * texel where Direct3D wrote it, with nothing copied. An OpenCL without
- * cl_khr_image2d_from_buffer (rusticl on radeonsi) can name no image over a
- * buffer, and the open is the bytes themselves, read at the pitch Direct3D
- * laid them out with. A host without DXVK, OpenGL or OpenCL on one GPU
- * returns without judging. */
 #include "proto/d3d/dxgi_format.hpp"
 #include "proto/d3d/resource_misc.hpp"
 #include "executor/d3d/d3d_backend.hpp"
@@ -39,8 +29,6 @@ constexpr std::uint32_t format_b8g8r8a8 = 87u;
 constexpr std::uint32_t format_r8g8b8a8_srgb = 29u;
 constexpr std::uint32_t bind_shader_resource = 0x8u;
 constexpr std::uint32_t bind_render_target = 0x20u;
-/* Shared and asked for as rows, as the code of ours that makes a texture
- * another API reads asks for it (SharedRowsScope). */
 constexpr std::uint32_t misc_shared = av::ResourceMisc::shared_bit | av::ResourceMisc::rows_bit;
 constexpr std::uint64_t key = 0x5100000000000041ull;
 constexpr std::uint32_t domain = 1u;
@@ -56,8 +44,6 @@ cl_context guest_context(av::OpenClBackend &backend, const av::OpenClDevice &dev
     return context;
 }
 
-/* Whether `device` makes an image over a buffer's memory, an optional
- * feature of OpenCL 3.0. */
 bool images_over_buffers(cl_device_id device)
 {
     std::size_t length = 0u;
@@ -70,7 +56,6 @@ bool images_over_buffers(cl_device_id device)
     return std::strstr(names, "cl_khr_image2d_from_buffer") != nullptr;
 }
 
-/* The pitch Direct3D laid the shared texture's rows out with. */
 std::uint32_t texture_pitch(av::HostShares &shares, av::D3d11HostDevice &device)
 {
     IUnknown *const held = shares.resource(domain, key);
@@ -88,9 +73,6 @@ std::uint32_t texture_pitch(av::HostShares &shares, av::D3d11HostDevice &device)
     return pitch;
 }
 
-/* A shared texture of `dxgi` opened by an OpenCL session: the image over
- * its memory where the host views the format as one, else its bytes - and
- * either way texel for texel what Direct3D wrote. */
 void opened_by_opencl(std::uint32_t dxgi)
 {
     if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
@@ -124,8 +106,6 @@ void opened_by_opencl(std::uint32_t dxgi)
     shared.bind_flags = bind_shader_resource | bind_render_target;
     shared.misc_flags = misc_shared;
     CHECK(av_d3d_CreateResource(wire, 1u, shared, key, 0u, 0u));
-    /* Every texel its own bytes, so a pitch or an order OpenCL read the
-     * memory with that Direct3D did not lay it out by moves them. */
     static std::uint8_t pattern[size * size * 4u];
     for (std::uint32_t at = 0u; at < size * size; at++) {
         pattern[at * 4u] = static_cast<std::uint8_t>(at % size);
@@ -136,8 +116,6 @@ void opened_by_opencl(std::uint32_t dxgi)
     const Box whole = {0u, 0u, 0u, size, size, 1u};
     CHECK(av_d3d_UpdateSubresource(wire, 1u, 0u, 1u, whole, size * 4u, 0u, 0u, pattern, sizeof pattern));
     CHECK(av_d3d_Finish11(wire, &hresult));
-    /* The memory is published as the guest's SHARE_OBJECT would: by the
-     * session that made it, its size what the dma-buf is. */
     std::uint32_t handle_kind = 0u;
     int           fd = -1;
     CHECK(direct3d.export_object(AV_SHARED_MEMORY, 1u, handle_kind, fd));
@@ -191,14 +169,11 @@ void opened_by_opencl(std::uint32_t dxgi)
     direct3d.shut_down();
     shares->release(domain, 0u);
 }
-}  // namespace
+}
 
 TEST(d3d_cl_interop_device, a_shared_texture_opened_by_opencl_is_the_image_direct3d_wrote)
 { opened_by_opencl(format_b8g8r8a8); }
 
-/* OpenCL would decode an sRGB image's texels where Direct3D did not encode
- * them, so the host opens one as its bytes - which the guest's driver knows
- * from the same row, and copies through instead of taking it for an image. */
 TEST(d3d_cl_interop_device, an_srgb_texture_opened_by_opencl_is_its_bytes_never_an_image)
 { CHECK(!av::DxgiFormat(format_r8g8b8a8_srgb).cl_image_on_host());
   opened_by_opencl(format_r8g8b8a8_srgb); }

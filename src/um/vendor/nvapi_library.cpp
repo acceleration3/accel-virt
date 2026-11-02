@@ -3,12 +3,9 @@
 #include "core/trace/function_scope.hpp"
 
 namespace av {
-
-/* A process whose first call could not be run has no root: NVAPI's answer
- * where its support library is missing. */
 namespace {
-constexpr int no_library = -2;   /* NVAPI_LIBRARY_NOT_FOUND */
-}  // namespace
+constexpr int no_library = -2;
+}
 
 int NvapiLibrary::initialize()
 {
@@ -104,4 +101,4 @@ int NvapiLibrary::gpus_from_display(const void *display, void **gpus, uint32_t *
     return answering != nullptr ? answering->gpus_from_display(display, gpus, count) : no_library;
 }
 
-}  // namespace av
+}

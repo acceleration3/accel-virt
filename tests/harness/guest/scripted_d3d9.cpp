@@ -3,11 +3,9 @@
 #include "harness/framework/test_registry.hpp"
 
 namespace {
-
-/* No channel: what a frame that comes back whole is asked for. */
 constexpr unsigned no_channel = 4u;
 
-}  // namespace
+}
 
 namespace av {
 
@@ -118,4 +116,4 @@ void ScriptedD3d9::release()
     cleared_once_ = false;
 }
 
-}  // namespace av
+}

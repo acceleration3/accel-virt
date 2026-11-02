@@ -1,8 +1,3 @@
-/* The av context a scenario runs over (features 043 and 044): a connection on
- * the adapter the search found and one transport of a sub-API on it, set up
- * with each step reported - adapter, connection, initialize - and torn down by
- * close() or the destructor whatever failed. A scenario that needs more
- * contexts opens them on the same connection, as one process does. */
 #ifndef AV_SCENARIO_TRANSPORT_HPP
 #define AV_SCENARIO_TRANSPORT_HPP
 
@@ -22,11 +17,7 @@ class ScenarioSteps;
 
 class ScenarioTransport {
 public:
-    /* The smallest ring an AvContextRecord accepts: one command at a time
-     * never needs more. */
     static constexpr uint8_t  ring_order = 12u;
-    /* The largest command the suite sends, header included, and its reply slot
-     * (feature 044): an array larger than a command crosses as a blob. */
     static constexpr size_t   command_bytes = 1024u;
     static constexpr uint32_t reply_bytes = 4096u;
 
@@ -35,9 +26,7 @@ public:
     ScenarioTransport(const ScenarioTransport &) = delete;
     ScenarioTransport &operator=(const ScenarioTransport &) = delete;
 
-    /* The first step that failed, with nothing after it attempted. */
     [[nodiscard]] Status open();
-    /* Tears the transport down, then the connection; nothing if never opened. */
     void                 close();
     KmtTransport        &transport();
     GuestConnection     &connection();
@@ -50,6 +39,6 @@ private:
     KmtTransport         transport_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCENARIO_TRANSPORT_HPP
+#endif

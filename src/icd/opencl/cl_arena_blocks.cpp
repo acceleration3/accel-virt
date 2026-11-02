@@ -11,8 +11,6 @@ ClArenaBlocks::ClArenaBlocks(BlockSource &memory, ThreadLock &lock)
     AV_SCOPE("ClArenaBlocks::ClArenaBlocks");
 }
 
-/* Every block of the old arena goes with it: memory that is gone must not
- * still be named by a row. */
 void ClArenaBlocks::lend(uint8_t *base, uint64_t bytes)
 {
     AV_SCOPE("ClArenaBlocks::lend");
@@ -37,8 +35,6 @@ bool ClArenaBlocks::take(uint64_t bytes, uint64_t &offset)
     return base_ != nullptr && blocks_.place(bytes, offset) == Status::ok;
 }
 
-/* An offset no block holds is a buffer that was staged, not backed here:
- * nothing to give back. */
 void ClArenaBlocks::give_back(uint64_t offset)
 {
     AV_SCOPE("ClArenaBlocks::give_back");
@@ -76,8 +72,6 @@ uint32_t ClArenaBlocks::live() const
     return blocks_.placed();
 }
 
-/* No arena is no capacity and no blocks: a block over memory that is gone
- * would be a buffer writing into nothing. */
 bool ClArenaBlocks::invariants_hold() const
 {
     AV_SCOPE("ClArenaBlocks::invariants_hold");
@@ -86,4 +80,4 @@ bool ClArenaBlocks::invariants_hold() const
     return blocks_.end() <= bytes_ && blocks_.invariants_hold();
 }
 
-}  // namespace av::clicd
+}

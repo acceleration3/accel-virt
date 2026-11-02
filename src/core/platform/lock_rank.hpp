@@ -1,7 +1,3 @@
-/* The lock order, declared once. A thread may only acquire a lock whose rank is
- * strictly greater than every lock it already holds, so no two locks can ever
- * be taken in opposite orders. Each named rank is added here by the feature
- * that introduces its lock, in acquisition order. */
 #ifndef AV_LOCK_RANK_HPP
 #define AV_LOCK_RANK_HPP
 
@@ -10,41 +6,32 @@
 namespace av {
 
 enum class LockRank : uint16_t {
-    doorbell_table = 70u,     /* DoorbellTable, taken before the queues it names (feature 049) */
-    native_fence_table = 75u,  /* NativeFenceTable, a leaf above the queues it is asked beside (feature 049) */
-    hw_queue_table = 80u,     /* HwQueueTable, which looks contexts up in ContextTable */
-    context_table = 90u,      /* ContextTable, which looks devices up in DeviceTable */
-    device_table = 100u,       /* DeviceTable, which calls into AllocationTable */
-    av_control_requests = 105u, /* wait mutex: an av context's setup, teardown or chunk request sequence,
-                                    which resolves its allocations in AllocationTable */
-    host_window = 107u,        /* HostWindow's page map: a leaf, taken inside a window chunk's request sequence */
+    doorbell_table = 70u,
+    native_fence_table = 75u,
+    hw_queue_table = 80u,
+    context_table = 90u,
+    device_table = 100u,
+    av_control_requests = 105u,
+    host_window = 107u,
     allocation_table = 110u,
-    shared_objects = 115u,     /* SharedObjectTable: minted inside the allocation table's create,
-                                  and opened beside it from the device table (feature 053) */
-    present_payload = 117u,    /* wait mutex: PresentCopier's payload, held while the request carrying
-                                  it waits for the device's answer */
-    present_queue = 118u,      /* wait mutex: PresentQueue's next ticket and its payloads, held while one
-                                  present is written and sent, never while it is moved */
-    control_exchanges = 120u,  /* wait mutex: one control request and its answer at a time, whoever
-                                  asks - a present's copy beside an av context's request sequence */
-    dpc = 150u,                /* spin lock: the adapter's DPC, which KeInsertQueueDpc may run on two
-                                  processors at once; completions must reach dxgkrnl one at a time, in order */
-    av_context_slots = 190u,  /* spin lock: which av contexts are live, around a submission and the DPC's serve */
-    present_reads = 193u,      /* spin lock: one allocation's open reads of presented pages, around the
-                                  gate's look and the write it admits */
-    present_waiters = 195u,    /* spin lock: which readers of presented pages sleep in which slot, around a
-                                  wait's look and the DPC's and the present's wake */
-    execution_node = 200u,     /* spin lock: SubmitCommand, PreemptCommand and the DPC */
-    hw_queue_contexts = 205u,  /* spin lock: what each hardware queue runs on, read at DISPATCH (feature 049) */
-    hw_queue_submissions = 210u, /* spin lock: SubmitCommandToHwQueue, DestroyHwQueue, ResetHwEngine and the DPC */
-    scanout = 215u,            /* spin lock: DisplayScanout, between a VidPn commit's configure and the DPC's
-                                  refresh, which sends under it */
-    control_queue = 220u,      /* spin lock: virtio-gpu control requests and the DPC's harvest */
-    cursor_queue = 230u,       /* spin lock: virtio-gpu cursor requests and the DPC's harvest */
-    av_context = 240u,        /* spin lock: an av context's submission, answers and the DPC's serve */
-    log_budget = 250u,         /* spin lock: a leaf, taken while the DPC already holds the locks above */
+    shared_objects = 115u,
+    present_payload = 117u,
+    present_queue = 118u,
+    control_exchanges = 120u,
+    dpc = 150u,
+    av_context_slots = 190u,
+    present_reads = 193u,
+    present_waiters = 195u,
+    execution_node = 200u,
+    hw_queue_contexts = 205u,
+    hw_queue_submissions = 210u,
+    scanout = 215u,
+    control_queue = 220u,
+    cursor_queue = 230u,
+    av_context = 240u,
+    log_budget = 250u,
 };
 
-}  // namespace av
+}
 
-#endif  // AV_LOCK_RANK_HPP
+#endif

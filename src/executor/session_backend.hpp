@@ -1,13 +1,3 @@
-/* One host API, as a session sees it.
- *
- * Virtual because there are four real implementations and they have nothing
- * in common below this line: Vulkan, OpenCL and Direct3D each derive from a
- * generated abstract dispatch of their own, and OpenGL has no dispatch object
- * at all - its generated decoder takes a table of function pointers. A session
- * must not know which of those it is holding, so this is where the four become
- * one thing (feature 042).
- *
- * Everything here runs on the context's worker, one call at a time. */
 #ifndef AV_SESSION_BACKEND_HPP
 #define AV_SESSION_BACKEND_HPP
 
@@ -27,85 +17,26 @@ public:
     SessionBackend(const SessionBackend &) = delete;
     SessionBackend &operator=(const SessionBackend &) = delete;
 
-    /* Whether this backend decodes `command_id` at all. An id the profile did
-     * not select is skipped by the device, not faulted, so the two answers must
-     * not be confused. */
     virtual bool knows(uint32_t command_id) const = 0;
-    /* Decodes one command and runs it, writing whatever answer it has into
-     * `reply`. False for a payload that does not decode - including one the
-     * arena would not give room for, which is the caller's to tell apart. */
     [[nodiscard]] virtual bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                                    WireArena &arena) = 0;
-    /* Whether the host API has lost the device this backend runs on. Asked
-     * after every command, because nothing else would notice, and at every
-     * poll, because a session on a device another one lost is woken to ask
-     * (DeviceTenants). */
     virtual bool lost() const = 0;
-    /* For tests: the host device this backend runs on made lost, as a GPU
-     * fault would lose it (AvExecutorOps::lose_device). False where the host
-     * cannot - no device, an API that is not Vulkan underneath, or no layer
-     * that loses one on request (tests/gpu_fault). */
     [[nodiscard]] virtual bool lose_device() = 0;
-    /* The batch's last command has run: what was held across it goes. */
     virtual void end_batch() = 0;
-    /* Between batches, on the worker: publishes what the host now has for the
-     * guest to read without asking; true while it still waits on the GPU. */
     virtual bool poll() = 0;
-    /* The mark the latest GPU work was given and the highest mark everything
-     * up to which the GPU has finished; both 0 for an API whose commands have
-     * finished when they return. A batch completes only once reached passes
-     * the mark it left (RingConsumer). */
     virtual void gpu_progress(uint64_t &marked, uint64_t &reached) const = 0;
-    /* What the device gives the library to call when a host thread finishes
-     * work (executor ABI version 5), so the worker polls again rather than
-     * waiting for the next batch. Kept by an API whose work finishes after
-     * its command returns; nothing for one whose work finishes with it. */
     virtual void bind_signal(void (*signal)(void *context), void *context) = 0;
 
-    /* Makes `memory`, imported, into whatever this API holds memory as,
-     * answering the number the guest names it by in this API's commands -
-     * not 0, and no other live import's - which the session's ImportTable
-     * finds it by from then on. False for memory this API cannot take, which
-     * is not a fault, only memory the guest will have to be copied through. */
     [[nodiscard]] virtual bool adopt(const SourceMemory &memory, uint64_t &handle) = 0;
-    /* Gives back what adopt made of `memory` and answered as `handle`. Called
-     * for every import still named when a session ends, so a guest that never
-     * releases leaks nothing. */
     virtual void abandon(const SourceMemory &memory, uint64_t handle) = 0;
 
-    /* A descriptor for the object `wire_handle` names in this API's commands,
-     * so HostShares can publish it for every context to open (feature 053):
-     * false for a handle this backend did not make or a kind it cannot
-     * export. The descriptor is held in `descriptor` on true, and `handle_kind` says
-     * which AV_SHARED_HANDLE_* kind it is, because OpenGL and OpenCL import
-     * only a dma-buf while Vulkan takes either.
-     *
-     * Every backend answers all three for itself, because an API that shares
-     * nothing has to say so rather than inherit a silence: OpenGL and OpenCL
-     * export no descriptor at all, and a guest's export through them fails
-     * with that API's own error rather than with a host object nobody made. */
     [[nodiscard]] virtual bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                              OwnedFd &descriptor) = 0;
-    /* That descriptor made into an object of this API's, into what `into`
-     * names in its commands - for Vulkan the device memory is imported on, or
-     * the semaphore whose payload a fence replaces; 0 for an API with nothing
-     * to choose, which refuses any other - with `wire_handle` what the guest
-     * names it by and `detail` whatever else releasing it will take.
-     * HostShares keeps both with the hold, so no backend keeps a table of
-     * what it imported. `fd` stays the caller's whatever the answer: it is
-     * HostShares', and a backend that keeps one duplicates it. */
     [[nodiscard]] virtual bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
                                              const SharedImageShape &shape, uint64_t into,
                                              uint64_t &wire_handle, uint64_t &detail) = 0;
-    /* What import_object made, destroyed: called by HostShares alone, with
-     * what that import answered, on this session's thread - as the guest
-     * closes it, or as the session ends, before the backend shuts down. */
     virtual void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) = 0;
 
-    /* The context is gone: whatever the guest never destroyed is destroyed,
-     * so a guest cannot leak host objects by dying, and the backend is ready
-     * for the next context of its slot. The last call of a session, made by
-     * ContextSession::release on the backend it ran and on no other. */
     virtual void shut_down() = 0;
 
 protected:
@@ -113,6 +44,6 @@ protected:
     ~SessionBackend() = default;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SESSION_BACKEND_HPP
+#endif

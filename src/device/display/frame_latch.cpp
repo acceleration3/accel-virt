@@ -52,11 +52,10 @@ void FrameLatch::clear()
     unshown_ = false;
 }
 
-/* Something waiting to be shown was latched; a frame of 0 is none. */
 bool FrameLatch::invariants_hold() const
 {
     AV_SCOPE("FrameLatch::invariants_hold");
     return (!unshown_ || latched_frame_ != 0u) && (pending_frame_ != 0u || pending_key_ == 0u);
 }
 
-}  // namespace av
+}

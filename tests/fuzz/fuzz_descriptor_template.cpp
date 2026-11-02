@@ -1,8 +1,3 @@
-/* A descriptor update template's entries, from attacker-chosen bytes (feature
- * 047). An application describes a template once and then sends blobs sized by
- * it, so a length this answers is a length something else will read: it may
- * never wrap, never exceed what the entries say, and never be answered for a
- * template it refused. */
 #include "proto/vulkan/descriptor_template_layout.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -12,11 +7,9 @@
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size);
 
 namespace {
-
-/* As many entries as one byte counts: the layout keeps nothing per entry. */
 constexpr std::uint32_t max_read = 255u;
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {
@@ -36,13 +29,10 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     const av::Status             taken = layout.take(count != 0u ? entries : nullptr, count);
     if (!layout.invariants_hold()) __builtin_trap();
     if (taken != av::Status::ok) {
-        /* A refused template is the one it had: the empty one. */
         if (layout.bytes() != 0u || layout.entries() != 0u) __builtin_trap();
         return 0;
     }
     if (layout.entries() != count) __builtin_trap();
-    /* Every accepted entry ends inside the length it answered, computed the
-     * other way round: in a wider type, without the overflow checks. */
     for (std::uint32_t index = 0u; index < count; index++) {
         const VkDescriptorUpdateTemplateEntry &entry = entries[index];
         if (entry.descriptorCount == 0u) continue;

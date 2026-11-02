@@ -33,4 +33,4 @@ bool LendingLife::given_back() const
     return __atomic_load_n(&given_back_, __ATOMIC_SEQ_CST) != 0u;
 }
 
-}  // namespace av
+}

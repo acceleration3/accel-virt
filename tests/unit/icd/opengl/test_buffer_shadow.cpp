@@ -1,7 +1,3 @@
-/* One range of a buffer as the host holds it: a copy of its own of the bytes
- * it was given, what it covers - its edges and just past them, and another
- * buffer - the byte a position names and when it was last used, an overwrite
- * overlapping it on either side or not at all, and every refusal. */
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -25,7 +21,7 @@ struct BufferShadowProbe {
     static void set_length(BufferShadow &shadow, std::uint64_t length) { shadow.length_ = length; }
 };
 
-}  // namespace av::glicd
+}
 
 namespace {
 
@@ -36,7 +32,7 @@ void pattern(std::uint8_t *bytes, std::size_t size, std::uint8_t seed)
     for (std::size_t at = 0u; at < size; at++) bytes[at] = static_cast<std::uint8_t>(at * 5u + seed);
 }
 
-}  // namespace
+}
 
 TEST(buffer_shadow, holds_a_copy_of_its_own_of_the_bytes_it_is_given)
 { MockPlatform platform;
@@ -63,7 +59,6 @@ TEST(buffer_shadow, holds_a_copy_of_its_own_of_the_bytes_it_is_given)
 TEST(buffer_shadow, covers_only_its_own_buffer_inside_its_range)
 { MockPlatform platform;
   BufferShadow shadow{platform};
-  /* Nothing held covers nothing, not even buffer 0. */
   CHECK(!shadow.covers(0u, 0u, 0u));
   std::uint8_t bytes[32] = {};
   CHECK_STATUS(shadow.hold(7u, 100u, sizeof bytes, bytes, 1u), Status::ok);
@@ -86,7 +81,6 @@ TEST(buffer_shadow, an_overwrite_takes_only_what_overlaps_it)
   CHECK_STATUS(shadow.hold(7u, 100u, sizeof zeros, zeros, 1u), Status::ok);
   std::uint8_t source[8];
   pattern(source, sizeof source, 40u);
-  /* Starting before it, ending after it, wholly before, from its end, inside. */
   shadow.overwrite(96u, 8u, source);
   shadow.overwrite(112u, 8u, source);
   shadow.overwrite(90u, 4u, source);

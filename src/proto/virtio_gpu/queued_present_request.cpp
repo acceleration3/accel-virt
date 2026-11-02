@@ -71,8 +71,6 @@ Status QueuedPresentRequest::decode(WireReader &reader)
     return Status::ok;
 }
 
-/* A page source follows the present copy's rules; an image is a blt's source
- * with nothing of the source in the request but its surface and point. */
 bool QueuedPresentRequest::holds() const
 {
     AV_SCOPE("QueuedPresentRequest::holds");
@@ -134,4 +132,4 @@ size_t QueuedPresentRequest::size() const
     return regions_offset() + size_t{copy_.regions()} * PresentRegion::encoded_size;
 }
 
-}  // namespace av
+}

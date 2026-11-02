@@ -94,4 +94,4 @@ void StagedFrame::readmit()
     __atomic_store_n(&forsaken_, false, __ATOMIC_RELEASE);
 }
 
-}  // namespace av
+}

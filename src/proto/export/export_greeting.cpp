@@ -63,8 +63,6 @@ uint8_t ExportGreeting::function() const
     return function_;
 }
 
-/* Off PCI, no constructor sets an address field, so the UUID is all there is
- * to check. */
 bool ExportGreeting::valid() const
 {
     AV_SCOPE("ExportGreeting::valid");
@@ -79,4 +77,4 @@ bool ExportGreeting::empty() const
     return !on_pci_ && !valid();
 }
 
-}  // namespace av
+}

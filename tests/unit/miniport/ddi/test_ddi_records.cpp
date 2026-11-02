@@ -1,6 +1,3 @@
-/* The kernel build proves each record against the WDK. These prove the Linux
- * harness lays the same records out the same way, so a test that fills a
- * record fills the bytes dxgkrnl would read. */
 #include "miniport/ddi/d3dddi_patch_location_list_record.hpp"
 #include "miniport/ddi/d3dkmdt_gdi_surface_data_record.hpp"
 #include "miniport/ddi/d3dkmdt_monitor_source_mode_record.hpp"
@@ -107,7 +104,7 @@ using av::DxgkrnlInterfaceRecord;
 using av::LinkedDeviceRecord;
 
 TEST(ddi_records, dxgkrnl_interface_record_is_the_wddm_3_2_table)
-{ CHECK_EQ(sizeof(DxgkrnlInterfaceRecord), 0x240u);   /* DpiFdoStartAdapter builds 0x240 bytes */
+{ CHECK_EQ(sizeof(DxgkrnlInterfaceRecord), 0x240u);
   CHECK_EQ(offsetof(DxgkrnlInterfaceRecord, DeviceHandle), 8u);
   CHECK_EQ(offsetof(DxgkrnlInterfaceRecord, DxgkCbGetDeviceInformation), 24u);
   CHECK_EQ(offsetof(DxgkrnlInterfaceRecord, DxgkCbMapMemory), 40u);
@@ -140,8 +137,6 @@ TEST(ddi_records, dxgkarg_query_adapter_info_record_matches_basicrender_reads)
   CHECK_EQ(offsetof(DxgkargQueryAdapterInfoRecord, OutputDataSize), 0x20u);
   CHECK_EQ(offsetof(DxgkargQueryAdapterInfoRecord, Flags), 0x24u); }
 
-/* DXGADAPTER::Initialize copies the answer to DXGADAPTER+0x978 and reads these
- * fields back at +0x9b8, +0x9bc, +0xac8, +0xb92, +0xb97 and +0xbb8. */
 TEST(ddi_records, dxgk_driver_caps_record_matches_the_offsets_dxgkrnl_validates)
 { CHECK_EQ(sizeof(DxgkDriverCapsRecord), 0x250u);
   CHECK_EQ(offsetof(DxgkDriverCapsRecord, SchedulingCaps), 0x40u);
@@ -162,10 +157,6 @@ TEST(ddi_records, dxgkarg_escape_and_collect_dbg_info_records)
   CHECK_EQ(offsetof(DxgkargCollectDbgInfoRecord, pExtension), 0x18u);
   CHECK_EQ(sizeof(DxgkargCollectDbgInfoExtRecord), 0x20u); }
 
-/* The device and allocation records (feature 008). WARP's OpenAllocation steps
- * DXGK_OPENALLOCATIONINFO by 0x20 and writes hDeviceSpecificAllocation at 0x18;
- * VidMm's stride for DXGK_SEGMENTDESCRIPTOR4 is 0x68, wider than the 0x60 a
- * WDDM 3.2 driver writes. */
 TEST(ddi_records, device_and_allocation_records_match_the_x64_layout)
 { CHECK_EQ(sizeof(av::DxgkargCreateDeviceRecord), 0x20u);
   CHECK_EQ(offsetof(av::DxgkargCreateDeviceRecord, hKmdProcess), 0x18u);
@@ -192,7 +183,6 @@ TEST(ddi_records, device_and_allocation_records_match_the_x64_layout)
   CHECK_EQ(sizeof(av::D3dkmdtStagingSurfaceDataRecord), 0x0Cu);
   CHECK_EQ(sizeof(av::D3dkmdtGdiSurfaceDataRecord), 0x18u); }
 
-/* The context and submission records (feature 009). */
 TEST(ddi_records, context_and_submission_records_match_the_x64_layout)
 { CHECK_EQ(sizeof(av::DxgkargCreateContextRecord), 0x48u);
   CHECK_EQ(offsetof(av::DxgkargCreateContextRecord, ContextInfoDmaBufferSize), 0x24u);
@@ -212,7 +202,6 @@ TEST(ddi_records, context_and_submission_records_match_the_x64_layout)
   CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, FenceId), 0x08u);
   CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, Flags), 0x48u); }
 
-/* The VidPn records (feature 011), at the offsets basicdisplay.sys reads. */
 TEST(ddi_records, vidpn_records_match_the_offsets_basicdisplay_reads)
 { CHECK_EQ(sizeof(av::D3dkmdtVidPnSourceModeRecord), 0x28u);
   CHECK_EQ(offsetof(av::D3dkmdtVidPnSourceModeRecord, PixelFormat), 0x1Cu);
@@ -237,7 +226,6 @@ TEST(ddi_records, vidpn_records_match_the_offsets_basicdisplay_reads)
   CHECK_EQ(sizeof(av::DxgkargGetScanLineRecord), 0x0Cu);
   CHECK_EQ(sizeof(av::DxgkDeviceDescriptorRecord), 0x10u); }
 
-/* The present and scanout records (feature 012), at the x64 offsets basicrender.sys reads. */
 TEST(ddi_records, present_and_scanout_records_match_the_x64_layout)
 { CHECK_EQ(sizeof(av::RectRecord), 0x10u);
   CHECK_EQ(sizeof(av::DxgkargPresentRecord), 0xA8u);
@@ -259,7 +247,6 @@ TEST(ddi_records, present_and_scanout_records_match_the_x64_layout)
   CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, Argument2), 0x10u);
   CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, UnionRemainder), 0x18u); }
 
-/* The pointer records (feature 013). */
 TEST(ddi_records, pointer_records_match_the_x64_layout)
 { CHECK_EQ(sizeof(av::DxgkargSetPointerShapeRecord), 0x28u);
   CHECK_EQ(offsetof(av::DxgkargSetPointerShapeRecord, pPixels), 0x18u);
@@ -267,13 +254,11 @@ TEST(ddi_records, pointer_records_match_the_x64_layout)
   CHECK_EQ(sizeof(av::DxgkargSetPointerPositionRecord), 0x10u);
   CHECK_EQ(offsetof(av::DxgkargSetPointerPositionRecord, Flags), 0x0Cu); }
 
-/* WDDM 1.1 (feature 014). */
 TEST(ddi_records, query_vidpn_hw_capability_record_matches_the_x64_layout)
 { CHECK_EQ(sizeof(av::DxgkargQueryVidPnHwCapabilityRecord), 0x18u);
   CHECK_EQ(offsetof(av::DxgkargQueryVidPnHwCapabilityRecord, TargetId), 0x0Cu);
   CHECK_EQ(offsetof(av::DxgkargQueryVidPnHwCapabilityRecord, VidPnHWCaps), 0x10u); }
 
-/* WDDM 1.2 (feature 015). */
 TEST(ddi_records, win8_records_match_the_x64_layout)
 { CHECK_EQ(sizeof(av::DxgkargQueryDependentEngineGroupRecord), 0x10u);
   CHECK_EQ(offsetof(av::DxgkargQueryDependentEngineGroupRecord, DependentNodeOrdinalMask), 0x08u);
@@ -288,15 +273,13 @@ TEST(ddi_records, win8_records_match_the_x64_layout)
   CHECK_EQ(sizeof(av::DxgkDisplayInformationRecord), 0x20u);
   CHECK_EQ(offsetof(av::DxgkDisplayInformationRecord, TargetId), 0x18u); }
 
-/* WDDM 1.3 (feature 016). */
 TEST(ddi_records, wddm_1_3_records_match_the_x64_layout)
-{ CHECK_EQ(sizeof(av::DxgkNodeMetadataRecord), 0x4Au);   /* pack(1): basicrender.sys zeroes 0x4a bytes */
+{ CHECK_EQ(sizeof(av::DxgkNodeMetadataRecord), 0x4Au);
   CHECK_EQ(offsetof(av::DxgkNodeMetadataRecord, Flags), 0x44u);
   CHECK_EQ(offsetof(av::DxgkNodeMetadataRecord, IoMmuSupported), 0x49u);
   CHECK_EQ(sizeof(av::DxgkGpuClockDataRecord), 0x1Cu);
   CHECK_EQ(sizeof(av::DxgkargControlInterrupt2Record), 0x08u); }
 
-/* WDDM 2.0 (feature 017). */
 TEST(ddi_records, wddm_2_0_records_match_the_x64_layout)
 { CHECK_EQ(sizeof(av::DxgkGpuMmuCapsRecord), 0x18u);
   CHECK_EQ(sizeof(av::DxgkPageTableLevelDescRecord), 0x14u);

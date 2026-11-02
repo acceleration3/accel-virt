@@ -1,18 +1,3 @@
-/* The OpenCL server dispatch with no OpenCL behind it.
- *
- * Holds handles the way OpenClBackend does - a ClHandleRegistry answering the
- * decoder's lookups - and makes objects out of its own storage, so a test or a
- * fuzz target can drive the generated decoder with a real object chain and no
- * GPU. What it records is what the decoder must never do: hand a call an
- * object this dispatch did not make (a stranger), or a span that runs outside
- * what the decode arena gave out (a stray).
- *
- * Its kernels declare their arguments by index, so a test or a fuzz input
- * reaches every kind the decoder tells apart by choosing an index: see
- * argument_declared. Setting an argument the kernel reads as an object with
- * bytes that are not one this dispatch made is a stranger too.
- *
- * And it can answer the way a careless ICD does: see answer_next_with. */
 #ifndef AV_RECORDING_CL_DISPATCH_HPP
 #define AV_RECORDING_CL_DISPATCH_HPP
 
@@ -30,56 +15,28 @@ class WireArena;
 
 class RecordingClDispatch final : public clproto::DefaultDispatch {
 public:
-    /* Enough for any test, and few enough that a fuzz input exhausts them. */
     static constexpr std::size_t max_objects = 256u;
-    /* The same, for shared virtual memory. */
     static constexpr std::size_t max_shared = 4096u;
 
-    /* `block` is the start of the memory `arena` hands out from. */
     RecordingClDispatch(const std::uint8_t *block, const WireArena &arena);
     RecordingClDispatch(const RecordingClDispatch &) = delete;
     RecordingClDispatch &operator=(const RecordingClDispatch &) = delete;
 
-    /* What the kernel at an index declares, repeating every
-     * `declared_arguments` indices. */
-    /* `untyped_global` says its address space and no more, as a host keeps
-     * of a program from IL; `untyped_private` the same of a private one,
-     * which declared_argument then says is a sampler - what the server
-     * reads off a module. */
     enum class Declared : std::uint8_t { buffer, image, sampler, scalar, local, undeclared, pipe,
                                          constant, untyped_global, untyped_private };
     static constexpr std::uint32_t declared_arguments = 10u;
 
-    /* What a careless ICD leaves in an output it did not write. */
     static constexpr std::uint8_t garbage = 0xA5u;
-    /* What an info query that answers writes into the bytes it reports. */
     static constexpr std::uint8_t answered = 0x6Bu;
 
-    /* The next ID query, device info query or buffer read answers `result`,
-     * as an ICD that failed or wrote less than its room and cleared nothing:
-     * a query reports `reported` ids or bytes and leaves every output past
-     * those it wrote as garbage - all of them, for a result that is not
-     * CL_SUCCESS - and a read leaves its bytes and its event as garbage. */
     void answer_next_with(cl_int result, std::size_t reported);
 
     void *handle_for(clproto::HandleKind kind, std::uint64_t wire) const override;
-    /* A sampler for untyped_private, nothing for any other. */
     bool  declared_argument(cl_kernel kernel, cl_uint index, clproto::KernelArgument &argument) override;
-    /* As handle_for, for an address: a pointer only for one inside something
-     * this dispatch allocated, with room for `bytes` after it, and null
-     * otherwise - which the decoder reads as a refusal. An address that
-     * reaches a call without being one of these is the stranger, and each
-     * call below is where that is judged. */
     void *svm_for(std::uint64_t address, std::uint64_t bytes) const override;
-    /* `bytes` at `offset` of the memory `lend` named, or null for none lent
-     * or a span not wholly inside it. A span a call is handed there is no
-     * stray: it is guest memory the decoder resolved, as an arena's would be. */
     void *lent_for(std::uint64_t offset, std::uint64_t bytes) const override;
-    /* What a guest's blob arena is to the decoder from now on. */
     void  lend(std::uint8_t *block, std::size_t bytes);
 
-    /* Makes `bytes` of shared virtual memory a guest may then name, and
-     * answers the address of it, or 0 when there is no room left. */
     std::uint64_t make_svm(std::size_t bytes);
     cl_int on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms) override;
     cl_int on_clGetDeviceIDs(cl_platform_id platform, cl_device_type device_type, cl_uint num_entries,
@@ -92,8 +49,6 @@ public:
     cl_int on_clGetKernelArgInfo(cl_kernel kernel, cl_uint arg_index, cl_kernel_arg_info param_name,
                                  std::size_t param_value_size, void *param_value,
                                  std::size_t *param_value_size_ret) override;
-    /* Every call the decoder hands a resolved address: the pointer it got is
-     * one this dispatch allocated, or a decoder let a guest name host memory. */
     cl_int on_clEnqueueUnmapMemObject(cl_command_queue command_queue, cl_mem memobj, void *mapped_ptr,
                                       cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
                                       cl_event *event) override;
@@ -112,7 +67,6 @@ public:
                                   cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
                                   cl_event *event) override;
     cl_int on_clSetKernelArgSVMPointer(cl_kernel kernel, cl_uint arg_index, const void *arg_value) override;
-    /* Each SVM pointer the call is handed is one this dispatch allocated. */
     cl_int on_clSetKernelExecInfo(cl_kernel kernel, cl_kernel_exec_info param_name, std::size_t param_value_size,
                                   const void *param_value) override;
     cl_int on_clSetKernelArg(cl_kernel kernel, cl_uint arg_index, std::size_t arg_size,
@@ -128,26 +82,18 @@ public:
     void  retained(clproto::HandleKind kind, void *object) override;
     void  released(clproto::HandleKind kind, void *object) override;
 
-    /* The number a guest names `object` by. */
     std::uint64_t wire_of(const void *object) const;
-    /* The number of the `index`th object this dispatch made, or 0 for one it
-     * has not made yet: what a fuzz target writes where a guest would have
-     * written a number it was answered. */
     std::uint64_t wire_of_made(std::size_t index) const;
 
     std::uint32_t calls() const;
     std::uint32_t last_called() const;
     std::uint32_t strangers() const;
     std::uint32_t strays() const;
-    /* Objects made that the registry would not hold. */
     std::uint32_t refused() const;
-    /* Builds whose options did not ask the ICD to keep argument information. */
     std::uint32_t builds_without_argument_info() const;
     Declared      argument_declared(cl_uint index) const;
     const ClHandleRegistry &handles() const;
-    /* What the tables grow from, so a test can make one fail to. */
     MockPlatform           &platform();
-    /* The id of the `index`th call, or 0 past the calls made or the log. */
     std::uint32_t called_at(std::size_t index) const;
 
 protected:
@@ -157,21 +103,13 @@ protected:
     void *produce(clproto::HandleKind kind) override;
 
 private:
-    /* Counts a build whose options lack -cl-kernel-arg-info. */
     void built(const char *options);
-    /* Counts a stranger unless `pointer` is inside something this dispatch
-     * allocated, with room for `bytes` after it. Null is no address at all,
-     * which is what the guest asked for. */
     void from_svm(const void *pointer, std::uint64_t bytes) const;
-    /* Whether answer_next_with is waiting for a call; the call takes it. */
     bool take_answer();
-    /* An ID query's answer: garbage past the ids reported, and the count. */
     cl_int scribble_ids(void *ids, cl_uint room, cl_uint *count);
 
-    /* Whether all `length` bytes at `bytes` are inside what was lent. */
     bool inside_lent(const void *bytes, std::size_t length) const;
 
-    /* What the tables grow from: first, so it outlives them. */
     MockPlatform        platform_;
     const std::uint8_t *block_;
     const WireArena    &arena_;
@@ -179,8 +117,6 @@ private:
     std::size_t         lent_bytes_;
     ClHandleRegistry    handles_;
     HostSvmRanges       svm_;
-    /* What make_svm hands out of: real storage, so a decoder that writes
-     * through a resolved address writes somewhere it may. */
     unsigned char       shared_[max_shared];
     std::size_t         shared_used_;
     unsigned char       objects_[max_objects];
@@ -199,6 +135,6 @@ private:
     std::uint32_t                logged_[max_logged];
 };
 
-}  // namespace av
+}
 
-#endif  // AV_RECORDING_CL_DISPATCH_HPP
+#endif

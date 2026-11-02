@@ -1,6 +1,3 @@
-/* The device link one driver context holds (ContextLink): acquired at its
- * make, released at its teardown, and lost - for every context on it - the
- * first time one of them finds its channel faulted. */
 #include "core/support/status.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -35,7 +32,6 @@ ChannelShape plain()
     return ChannelShape(SubApi::opencl, 12u, 4096u, 4096u, 0u, 0u);
 }
 
-/* A command no answer was queued for: the transport faults waiting on it. */
 void fault(HostChannel &channel)
 {
     WireWriter writer = channel.transport().request_writer();
@@ -44,7 +40,7 @@ void fault(HostChannel &channel)
     CHECK(channel.faulted());
 }
 
-}  // namespace
+}
 
 TEST(context_link, an_unheld_link_names_nothing_and_loses_nothing)
 { ClContextRig rig;
@@ -66,8 +62,6 @@ TEST(context_link, acquiring_holds_a_device_until_it_is_released)
   CHECK(link.device().device() != 0u);
   CHECK_EQ(rig.connection().users(), 1u);
   CHECK_EQ(rig.kmt().open_objects(), ClContextRig::link_objects);
-  /* A held link is not acquired twice: the second would be a user the
-   * connection counts and nothing ever releases. */
   CHECK_STATUS(link.acquire(), Status::invalid_state);
   CHECK_EQ(rig.connection().users(), 1u);
   link.release();
@@ -91,9 +85,6 @@ TEST(context_link, without_a_device_nothing_is_held)
   CHECK(!link.held());
   CHECK_EQ(rig.connection().users(), 0u); }
 
-/* One context's faulted channel loses the device for the other context on
- * the same link, which finds out with a channel that never faulted; the next
- * context made gets a device of its own. */
 TEST(context_link, a_faulted_channel_loses_the_device_for_every_context_on_it)
 { ClContextRig rig;
   ContextLink  first(rig.connection());

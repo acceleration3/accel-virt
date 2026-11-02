@@ -13,7 +13,7 @@ constexpr char   sysfs_devices[] = "/sys/bus/pci/devices/";
 constexpr size_t path_bytes      = 64u;
 constexpr size_t message_bytes   = 96u;
 
-}  // namespace
+}
 
 HostPciIdentity::HostPciIdentity(Host &host)
     : host_(host), vendor_id_(0u), device_id_(0u), revision_(0u), present_(false)
@@ -104,4 +104,4 @@ void HostPciIdentity::report(const PciAddress &address)
     host_.log(message.text());
 }
 
-}  // namespace av
+}

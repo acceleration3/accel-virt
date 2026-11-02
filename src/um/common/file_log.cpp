@@ -10,13 +10,11 @@ namespace {
 
 constexpr wchar_t suffix[] = L".log";
 constexpr size_t stem_chars = 32u;
-/* The directory, the stem, a dash, ten digits of a DWORD, a dash and ten of a
- * tick where the first name cannot be opened, the suffix and the NUL. */
 constexpr size_t path_chars =
     DiagnosticsDirectory::prefix_chars + stem_chars + 1u + 10u + 1u + 10u + sizeof suffix / sizeof suffix[0];
 constexpr size_t line_bytes = 256u;
 
-}  // namespace
+}
 
 FileLog::FileLog(const wchar_t *stem) : directory_(), stem_(stem), file_(INVALID_HANDLE_VALUE)
 {
@@ -47,10 +45,6 @@ void FileLog::open()
     file_ = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
                         FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file_ != INVALID_HANDLE_VALUE) return;
-    /* A process id is reused across boots, and the file an earlier process of
-     * another account left - DWM's, say - may not be this one's to append to:
-     * the log is not lost for that, it goes beside it, named for this boot's
-     * moment as well. */
     length -= sizeof suffix / sizeof suffix[0] - 1u;
     path[length++] = L'-';
     count = 0u;
@@ -76,4 +70,4 @@ void FileLog::write(const char *line)
     static_cast<void>(WriteFile(file_, bytes, static_cast<DWORD>(length), &written, nullptr));
 }
 
-}  // namespace av
+}

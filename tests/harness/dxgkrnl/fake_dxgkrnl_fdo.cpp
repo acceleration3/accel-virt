@@ -23,19 +23,17 @@ using QueryDeviceDescriptor = std::int32_t (*)(void *, std::uint32_t, DxgkDevice
 using SetPowerState = std::int32_t (*)(void *, std::uint32_t, std::int32_t, std::int32_t);
 using LinkDevice = std::int32_t (*)(void *, void *, LinkedDeviceRecord *);
 
-/* DpiAddDevice answers a chain longer than 0x100 links with STATUS_QUOTA_EXCEEDED. */
 constexpr std::int32_t  status_quota_exceeded = static_cast<std::int32_t>(0xC0000044u);
 constexpr std::int32_t  status_invalid_parameter = static_cast<std::int32_t>(0xC000000Du);
 constexpr std::int32_t  status_connection = 1;
 constexpr std::uint32_t adapter_uid = 0xFFFFFFFFu;
 constexpr std::int32_t  power_action_none = 0;
 
-/* DXGK_START_INFO: RequiredDmaQueueEntry, AdapterGuid, AdapterLuid. */
 struct StartInfo {
     std::uint8_t bytes[32];
 };
 
-}  // namespace
+}
 
 FakeDxgkrnlFdo::FakeDxgkrnlFdo(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlAdapter &adapter)
     : platform_(platform), table_(table), adapter_(adapter), dxgadapter_(platform, table), context_(nullptr), started_(false), sources_(0u),
@@ -181,4 +179,4 @@ std::uint32_t FakeDxgkrnlFdo::sources() const { return sources_; }
 std::uint32_t FakeDxgkrnlFdo::children() const { return children_; }
 std::uint32_t FakeDxgkrnlFdo::connected_children() const { return connected_; }
 
-}  // namespace av
+}

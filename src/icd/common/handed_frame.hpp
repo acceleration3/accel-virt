@@ -1,10 +1,3 @@
-/* One frame a presenter handed its present queue (WindowPresentQueue): the
- * `Source` that handed it and the slot of its own the frame is drawn into -
- * of its room in guest memory, or of its window's chain - the window it goes
- * on and its size, how its rows lie, and the `Mark` its readiness policy waits
- * on before it is shown: an OpenGL batch (BatchMark), a Vulkan copy's fence.
- * An empty record names no source. Trivially copyable, as the queue's rows
- * are. */
 #ifndef AV_ICD_HANDED_FRAME_HPP
 #define AV_ICD_HANDED_FRAME_HPP
 
@@ -17,13 +10,9 @@ namespace av::icd {
 template <typename Source, typename Mark>
 class HandedFrame {
 public:
-    /* How the pixels lie: OpenGL reads its frames back bottom row first,
-     * Vulkan copies them top row first in the image's own channel order. */
     enum class Rows : uint8_t { bgra_bottom_up, bgra_top_down, rgba_top_down };
 
     HandedFrame();
-    /* `pixels` null for a frame drawn into slot `slot` of its window's chain
-     * instead. */
     HandedFrame(Source &owner, uint32_t slot, const uint8_t *pixels, Rows rows, uint32_t width, uint32_t height,
                 void *window, const Mark &mark);
 
@@ -128,6 +117,6 @@ const Mark &HandedFrame<Source, Mark>::mark() const
     return mark_;
 }
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_HANDED_FRAME_HPP
+#endif

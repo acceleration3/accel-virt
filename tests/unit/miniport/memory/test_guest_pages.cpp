@@ -1,5 +1,3 @@
-/* Guest RAM the driver owns: the pages a device is handed and a process maps,
- * which nothing but the driver ever moves or frees. */
 #include "miniport/memory/guest_pages.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -24,7 +22,7 @@ std::uint8_t *at(std::uint64_t view)
     return reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(view));
 }
 
-}  // namespace
+}
 
 TEST(guest_pages, holds_nothing_until_allocated)
 { MockPlatform platform;
@@ -35,7 +33,6 @@ TEST(guest_pages, holds_nothing_until_allocated)
   CHECK_EQ(pages.view(), 0u);
   CHECK(pages.invariants_hold()); }
 
-/* The frames the device is handed are the pages the process writes. */
 TEST(guest_pages, a_process_view_writes_the_pages_the_device_is_handed)
 { MockPlatform platform;
   GuestPages pages(platform);
@@ -83,8 +80,6 @@ TEST(guest_pages, a_second_allocation_or_mapping_is_refused)
   CHECK_EQ(platform.process_mappings(), 1u);
   CHECK(pages.invariants_hold()); }
 
-/* A read-only view is the same pages, refused where a writable one is, and
- * counted read-only; one view at a time either way. */
 TEST(guest_pages, a_read_only_view_is_the_same_pages_and_one_view_at_a_time)
 { MockPlatform platform;
   GuestPages pages(platform);
@@ -102,8 +97,6 @@ TEST(guest_pages, a_read_only_view_is_the_same_pages_and_one_view_at_a_time)
   CHECK_EQ(platform.read_only_process_mappings(), 0u);
   CHECK(pages.invariants_hold()); }
 
-/* Neither missing pages nor missing room for their frames leaves anything
- * held, or anything behind for the platform to count. */
 TEST(guest_pages, a_failed_allocation_holds_nothing)
 { MockPlatform platform;
   GuestPages pages(platform);
@@ -129,8 +122,6 @@ TEST(guest_pages, a_process_that_cannot_map_them_keeps_the_pages_unmapped)
   CHECK(pages.invariants_hold());
   CHECK_STATUS(pages.map_into_process(), Status::ok); }
 
-/* The view goes before the pages, so the platform never sees pages released
- * under a mapping, and a second release has nothing left to do. */
 TEST(guest_pages, release_takes_the_view_then_the_pages)
 { MockPlatform platform;
   GuestPages pages(platform);
@@ -147,8 +138,6 @@ TEST(guest_pages, release_takes_the_view_then_the_pages)
   CHECK_STATUS(pages.allocate(page), Status::ok);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
-/* Abandoned pages lose their view but are never freed: a device may still write
- * them. */
 TEST(guest_pages, abandon_takes_the_view_and_keeps_the_pages_out_of_use)
 { MockPlatform platform;
   GuestPages pages(platform);
@@ -181,12 +170,9 @@ TEST(guest_pages, is_passive_only)
   pages.release();
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::allocation_at_dispatch));
-  /* allocate, map_into_process, and abandon and release each with the unmap
-   * inside it. */
   for (int ceiling = 0; ceiling < 6; ceiling++) CHECK(platform.claim(Violation::irql_ceiling));
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
-/* Each half of the invariant, broken on its own. */
 namespace av {
 struct GuestPagesProbe {
     static void forget_frames(GuestPages &pages) { pages.frames_ = nullptr; }
@@ -196,7 +182,7 @@ struct GuestPagesProbe {
     static void set_mapping(GuestPages &pages, void *mapping) { pages.mapping_ = mapping; }
     static void set_bytes(GuestPages &pages, std::uint64_t bytes) { pages.bytes_ = bytes; }
 };
-}  // namespace av
+}
 
 TEST(guest_pages, invariants_catch_parts_out_of_step)
 { MockPlatform platform;

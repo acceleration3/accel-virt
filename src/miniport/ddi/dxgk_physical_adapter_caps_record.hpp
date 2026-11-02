@@ -1,6 +1,3 @@
-/* DXGK_PHYSICALADAPTERCAPS, as DXGKQAITYPE_PHYSICALADAPTERCAPS answers it. A DDI
- * record: Flags is DXGK_PHYSICALADAPTERFLAGS' UINT; src/km/ddi_record_layout.cpp
- * proves each offset. */
 #ifndef AV_DXGK_PHYSICAL_ADAPTER_CAPS_RECORD_HPP
 #define AV_DXGK_PHYSICAL_ADAPTER_CAPS_RECORD_HPP
 
@@ -19,6 +16,6 @@ struct DxgkPhysicalAdapterCapsRecord {
     uint32_t VirtualCopyNodeIndexPadding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_PHYSICAL_ADAPTER_CAPS_RECORD_HPP
+#endif

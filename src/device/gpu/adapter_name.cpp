@@ -9,7 +9,7 @@ namespace {
 constexpr unsigned char continuation_mask = 0xC0u;
 constexpr unsigned char continuation_bits = 0x80u;
 
-}  // namespace
+}
 
 AdapterName::AdapterName(const char *vulkan_name) : text_{}
 {
@@ -42,7 +42,6 @@ size_t AdapterName::without_suffix(const char *name, size_t length) const
     if (depth != 0u) return length;
     size_t kept = open;
     while (kept > 0u && name[kept - 1u] == ' ') kept--;
-    /* "Arc(tm)" is part of a name; only a group set off by a space is a suffix. */
     return kept == 0u || kept == open ? length : kept;
 }
 
@@ -55,4 +54,4 @@ size_t AdapterName::fitted(const char *name, size_t length) const
     return cut;
 }
 
-}  // namespace av
+}

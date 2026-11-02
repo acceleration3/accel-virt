@@ -15,7 +15,7 @@ graphics::Color StateColor(ThreadState state) {
     return palette::kMuted;
 }
 
-} // namespace
+}
 
 void Inspector::ThreadsPanel(ui::Context& ctx) {
     if (!ui::BeginWindow(ctx, "Threads", &m_show_threads)) {
@@ -53,8 +53,6 @@ void Inspector::ThreadsPanel(ui::Context& ctx) {
     ui::Checkbox(ctx, "Only active", m_only_active);
     ui::SliderFloat(ctx, "Stall after", m_stall_seconds, 0.5f, 30.f, "{:.1f} s");
     ui::EndRow(ctx);
-    // A table no thread ever claimed a slot in is one nothing records into: the host binaries bind
-    // theirs only when asked (docs/trace.md).
     if (table.slots.IsEmpty() && process->source.alive) {
         ui::TextColored(ctx, palette::kWarn,
                         "No thread has ever entered a traced function: this binary's scopes are not bound.");
@@ -131,7 +129,6 @@ void Inspector::ThreadsPanel(ui::Context& ctx) {
         ui::EndTable(ctx);
     }
 
-    // The chosen thread's whole stack, outermost first, each frame with how long it has been open.
     const ThreadView* chosen = nullptr;
     for (const ThreadView& view : all) {
         if (view.thread == m_selected_thread) {
@@ -171,4 +168,4 @@ void Inspector::ThreadsPanel(ui::Context& ctx) {
     ui::EndWindow(ctx);
 }
 
-} // namespace inspector
+}

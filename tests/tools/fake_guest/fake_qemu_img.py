@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""qemu-img create for the runner's tests: an overlay file naming its backing
-image, which must exist; $FAKE_QEMU_IMG_FAIL makes it refuse."""
 import os
 import sys
 

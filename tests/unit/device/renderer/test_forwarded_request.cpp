@@ -1,5 +1,3 @@
-/* A forwarded control request is read as a virtqueue request is: never past
- * its end, and nothing at all from the end on. */
 #include "device/renderer/forwarded_request.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -31,7 +29,7 @@ TEST(forwarded_request_read, stops_at_the_end_and_reads_nothing_past_it)
   CHECK_EQ(buffer[0], 7u);
   CHECK_EQ(buffer[1], 8u);
   CHECK_EQ(buffer[2], 0xEEu);
-  CHECK_EQ(request.read(7u, buffer, SIZE_MAX), 1u);   /* a size that would wrap */
+  CHECK_EQ(request.read(7u, buffer, SIZE_MAX), 1u);
   CHECK_EQ(buffer[0], 8u);
   CHECK_EQ(request.read(8u, buffer, sizeof buffer), 0u);
   CHECK_EQ(request.read(9u, buffer, sizeof buffer), 0u);

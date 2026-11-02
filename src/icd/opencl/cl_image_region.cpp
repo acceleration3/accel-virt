@@ -24,8 +24,6 @@ bool ClImageRegion::valid() const
     size_t packed_slice = 0u;
     if (__builtin_mul_overflow(row_pitch(), region_[1], &packed_slice)) return false;
     if (slice_pitch_ != 0u && slice_pitch_ < packed_slice) return false;
-    /* The furthest byte the application named has to be a size_t too, or a
-     * later offset would wrap. */
     size_t reach = 0u;
     return !__builtin_mul_overflow(slice_pitch(), region_[2], &reach);
 }
@@ -111,4 +109,4 @@ bool ClImageRegion::slices_are_whole_rows() const
     return row != 0u && slice_pitch() % row == 0u;
 }
 
-}  // namespace av::clicd
+}

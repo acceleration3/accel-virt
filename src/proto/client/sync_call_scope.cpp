@@ -16,4 +16,4 @@ SyncCallScope::~SyncCallScope()
     transport_.end_call();
 }
 
-}  // namespace av
+}

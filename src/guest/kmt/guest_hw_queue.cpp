@@ -39,4 +39,4 @@ bool GuestHwQueue::established() const
     return handle_ != 0u;
 }
 
-}  // namespace av
+}

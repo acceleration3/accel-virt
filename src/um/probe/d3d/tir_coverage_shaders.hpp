@@ -1,17 +1,3 @@
-/* The target-independent rasterization probe's shaders (TirCoverageWork),
- * as DXBC containers the runtime takes: no shader compiler is pinned here,
- * so the token streams are assembled by hand and the containers built
- * around them - ISGN, OSGN and the code chunk, as Direct2D's own shaders
- * carry, and the checksum D3D computes over everything past it (DXBC's MD5
- * variant; DxbcDigest computes the same on the host). dxbc-spirv's
- * disassembler reads them back as the listings say.
- *
- * vs_4_0                                  ps_5_0
- *   dcl_input v0.xy        (POSITION)       dcl_input vCoverage
- *   dcl_output_siv o0.xyzw, position        dcl_output o0.x   (SV_TARGET: uint)
- *   mov o0.xy, v0.xyxx                      mov o0.x, vCoverage
- *   mov o0.zw, l(0, 0, 0, 1.0)              ret
- *   ret */
 #ifndef AV_TIR_COVERAGE_SHADERS_HPP
 #define AV_TIR_COVERAGE_SHADERS_HPP
 
@@ -39,6 +25,6 @@ inline constexpr uint32_t tir_coverage_ps[] = {
     0x00023001u, 0x0100003eu,
 };
 
-}  // namespace av
+}
 
-#endif  // AV_TIR_COVERAGE_SHADERS_HPP
+#endif

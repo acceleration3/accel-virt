@@ -12,7 +12,7 @@ uint64_t key_of(const void *mem)
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(mem));
 }
 
-}  // namespace
+}
 
 ClGlMirrors::ClGlMirrors(BlockSource &blocks) : mirrors_(blocks, Pool::paged)
 {
@@ -71,4 +71,4 @@ bool ClGlMirrors::invariants_hold() const
     return holds;
 }
 
-}  // namespace av
+}

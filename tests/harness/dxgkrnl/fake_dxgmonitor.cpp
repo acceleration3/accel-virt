@@ -43,4 +43,4 @@ std::uint32_t FakeDxgmonitor::capabilities() const { return capabilities_; }
 
 std::uint32_t FakeDxgmonitor::dithering_support() const { return dithering_support_; }
 
-}  // namespace av
+}

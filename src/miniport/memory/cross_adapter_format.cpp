@@ -19,4 +19,4 @@ uint32_t CrossAdapterFormat::bytes_per_pixel() const
     return PixelFormat(format_).bytes_per_pixel();
 }
 
-}  // namespace av
+}

@@ -91,4 +91,4 @@ bool AperturePages::invariants_hold() const
     return capacity_ != 0u && (frames_ != nullptr || base_page_ == 0u);
 }
 
-}  // namespace av
+}

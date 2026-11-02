@@ -59,4 +59,4 @@ bool WrittenRuns::invariants_hold() const
     return true;
 }
 
-}  // namespace av::icd
+}

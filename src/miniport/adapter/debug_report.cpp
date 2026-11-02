@@ -30,4 +30,4 @@ size_t DebugReport::write(uint8_t *buffer, size_t capacity) const
     return writer.offset();
 }
 
-}  // namespace av
+}

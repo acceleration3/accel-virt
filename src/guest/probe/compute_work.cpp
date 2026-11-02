@@ -12,7 +12,7 @@ namespace {
 
 constexpr VkDeviceSize element_bytes = sizeof(uint32_t);
 
-}  // namespace
+}
 
 ComputeWork::ComputeWork(ProbeDevice &device)
     : device_(device), elements_(device), commands_(device), shader_(VK_NULL_HANDLE), set_layout_(VK_NULL_HANDLE),
@@ -21,7 +21,6 @@ ComputeWork::ComputeWork(ProbeDevice &device)
           AV_SCOPE("ComputeWork::ComputeWork");
       }
 
-/* Vulkan makes destroying VK_NULL_HANDLE a no-op; the set is the pool's. */
 ComputeWork::~ComputeWork()
 {
     AV_SCOPE("ComputeWork::~ComputeWork");
@@ -132,4 +131,4 @@ bool ComputeWork::invariants_hold() const
     return set_ == VK_NULL_HANDLE || pool_ != VK_NULL_HANDLE;
 }
 
-}  // namespace av
+}

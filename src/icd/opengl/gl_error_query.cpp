@@ -26,4 +26,4 @@ uint32_t GlErrorQuery::ask()
     return reply.read_varint(error) ? static_cast<uint32_t>(error) : 0u;
 }
 
-}  // namespace av::glicd
+}

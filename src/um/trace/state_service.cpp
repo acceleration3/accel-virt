@@ -14,7 +14,6 @@ namespace {
 constexpr const char *scopes[] = {"Global", "Local"};
 constexpr size_t      length_bytes = 4u;
 
-/* CreateThread's entry has no `this`; the service is its argument. */
 DWORD WINAPI state_service_thread(LPVOID service)
 {
     AV_SCOPE("state_service_thread");
@@ -22,7 +21,7 @@ DWORD WINAPI state_service_thread(LPVOID service)
     return 0u;
 }
 
-}  // namespace
+}
 
 namespace av {
 
@@ -52,8 +51,6 @@ Status StateService::start(const char *module, uint32_t pid, StateReporter &repo
 void StateService::serve()
 {
     AV_SCOPE("StateService::serve");
-    /* The wait is marked so a reader sees this thread parked on its doorbell,
-     * not stuck inside serve. */
     const LockMarks doorbell(dump_);
     for (;;) {
         doorbell.waiting();
@@ -100,4 +97,4 @@ void StateService::close()
     dump_ = nullptr;
 }
 
-}  // namespace av
+}

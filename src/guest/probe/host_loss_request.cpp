@@ -34,4 +34,4 @@ Status HostLossRequest::send()
     return lost;
 }
 
-}  // namespace av
+}

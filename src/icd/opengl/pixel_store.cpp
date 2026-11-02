@@ -31,7 +31,7 @@ enum : uint32_t {
 
 constexpr int32_t default_alignment = 4;
 
-}  // namespace
+}
 
 PixelStore::PixelStore() : values_{default_alignment, 0, 0, 0, 0, 0}
 {
@@ -60,17 +60,12 @@ size_t PixelStore::span(uint32_t format, uint32_t type, int32_t width, int32_t h
     const size_t value = packed != 0u ? packed : value_bytes(type);
     if (count == 0u || value == 0u || width <= 0 || height <= 0 || depth <= 0) return 0u;
     if (packed != 0u ? !packed_fits(format, type) : format == gl_depth_stencil) return 0u;
-    /* Every input is below 2^31 and a pixel at most 8 bytes, so a row, the
-     * pixels of the last one and a count of rows or images fit in 64 bits;
-     * only the products of those and their sums can wrap. */
     const size_t values_per_pixel = packed != 0u ? 1u : count;
     const size_t pixel = values_per_pixel * value;
     const size_t alignment = static_cast<size_t>(get(Field::alignment));
     const uint64_t row_pixels = static_cast<uint64_t>(get(Field::row_length) > 0 ? get(Field::row_length) : width);
     uint64_t       row = row_pixels * pixel;
-    /* Rows are padded to the alignment only when one value is narrower than it. */
     if (value < alignment) row = (row + alignment - 1u) / alignment * alignment;
-    /* Images are skipped, and their height counts, only for a 3D image. */
     const uint64_t image_rows = static_cast<uint64_t>(get(Field::image_height) > 0 ? get(Field::image_height) : height);
     const uint64_t skipped_images = depth == 1 ? 0u : static_cast<uint64_t>(get(Field::skip_images));
     uint64_t       image = 0u, start = 0u, end = 0u;
@@ -97,9 +92,6 @@ bool PixelStore::invariants_hold() const
 size_t PixelStore::components(uint32_t format) const
 {
     AV_SCOPE("PixelStore::components");
-    /* Every format the host's decoder sizes, the compatibility profile's
-     * among them: a transfer sized 0 here crosses with no pixels, and the host
-     * refuses the batch it is in. */
     switch (format) {
     case gl_color_index:
     case gl_luminance:
@@ -183,8 +175,6 @@ size_t PixelStore::value_bytes(uint32_t type) const
     }
 }
 
-/* The depth/stencil packings go only with GL_DEPTH_STENCIL, and the colour
- * packings only with the colour formats of as many components (§8.4.2). */
 bool PixelStore::packed_fits(uint32_t format, uint32_t type) const
 {
     AV_SCOPE("PixelStore::packed_fits");
@@ -204,4 +194,4 @@ bool PixelStore::packed_fits(uint32_t format, uint32_t type) const
     }
 }
 
-}  // namespace av::glicd
+}

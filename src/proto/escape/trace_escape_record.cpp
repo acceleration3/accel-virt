@@ -112,4 +112,4 @@ Status TraceEscapeRecord::read(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-}  // namespace av
+}

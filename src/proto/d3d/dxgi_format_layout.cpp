@@ -18,4 +18,4 @@ bool DxgiFormatLayout::known() const
     return DxgiFormat(format_).known();
 }
 
-}  // namespace av
+}

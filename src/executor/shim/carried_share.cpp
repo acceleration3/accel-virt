@@ -79,8 +79,6 @@ bool CarriedShare::record(IUnknown *resource, ExportableImages &images)
     return dimension_ != Dimension::none;
 }
 
-/* Over the same memory where there is some, so what was drawn there is still
- * there; a texture whose memory will not be taken again is made anew. */
 IUnknown *CarriedShare::remake_texture2d(ID3D11Device5 *device, ExportableImages &images)
 {
     AV_SCOPE("CarriedShare::remake_texture2d");
@@ -148,11 +146,10 @@ uint64_t CarriedShare::id() const
     return id_;
 }
 
-/* Only a texture's memory is carried, and only one recorded has a kind. */
 bool CarriedShare::invariants_hold() const
 {
     AV_SCOPE("CarriedShare::invariants_hold");
     return (!fd_.held() || dimension_ == Dimension::texture2d) && id_ != 0u;
 }
 
-}  // namespace av
+}

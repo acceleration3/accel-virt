@@ -1,22 +1,3 @@
-"""A Direct3D runtime's device-function table, read from the WDK's own header,
-and the thunks and methods a user-mode driver fills it with.
-
-The runtime hands a user-mode driver a table of function pointers, each typed
-by a PFN typedef. Writing a hundred thunks by hand is a hundred chances to get
-a signature subtly wrong, and a wrong signature is a stack the runtime and the
-driver disagree about. So clang reads the kit's header for the Windows target,
-and DdiTable writes, from the types it reports:
-
-  <out>/<prefix>_device_thunks.cpp   one ABI thunk per slot, each one line into
-                                     the device, and the function that fills
-                                     the table
-  <out>/<prefix>_device_ddi.inc      the device methods they call, included in
-                                     its class
-
-Direct3D 9's and 11's tables differ only in what DdiTable is told: the header,
-the table, how a slot's first parameter names the device, which slots the root
-answers and which stay empty (tools/gen_d3d9_ddi.py, tools/gen_d3d11_ddi.py).
-"""
 import argparse
 import json
 import pathlib
@@ -58,25 +39,6 @@ def ret_type(ret):
 
 
 class DdiTable:
-    """One runtime's table: what clang is asked, and what is written from it.
-
-    script        the generator, named in every file's banner
-    header        the WDK header the table is in, also named there
-    probe         the source clang compiles to find the table
-    table         the table's type; record its struct's name in the AST
-    device_type   the type of every slot's first parameter, the device
-    skip          slot names left out of the table on purpose
-    root_slots    slot name -> the root's method that answers it instead
-    root_argument the expression a root slot passes the root
-    device        the expression that is the device a slot's call goes to
-    device_class  the class the methods are declared in
-    namespace     the namespace the thunks are in
-    prefix        what every file and thunk is named with ("d3d9")
-    fill          the function that fills the table
-    includes      the thunks' includes
-    preamble      the thunks file's opening comment, as lines
-    """
-
     def __init__(self, *, script, header, probe, table, record, device_type, skip, root_slots, root_argument,
                  device, device_class, namespace, prefix, fill, includes, preamble, note_failures=False,
                  trace_calls=False):
@@ -96,12 +58,7 @@ class DdiTable:
         self.fill = fill
         self.includes = includes
         self.preamble = preamble
-        # Each HRESULT slot hands its result to DeviceCall::noted, which has
-        # the device say which call failed and how.
         self.note_failures = note_failures
-        # Each thunk names its slot and arguments to DeviceCall::traced, which
-        # makes the call and then hands them to the device's trace_call - or,
-        # for a destroy, which forgets the id, to DeviceCall::announced first.
         self.trace_calls = trace_calls
 
     def dump(self):

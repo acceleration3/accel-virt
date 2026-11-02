@@ -118,4 +118,4 @@ uint32_t D3dShares::take_retired(IUnknown **objects, uint32_t capacity)
     return taken;
 }
 
-}  // namespace av
+}

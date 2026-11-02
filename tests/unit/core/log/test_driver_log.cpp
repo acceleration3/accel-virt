@@ -1,4 +1,3 @@
-/* DriverLog: every line carries its driver's prefix. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "core/log/driver_log.hpp"
@@ -13,7 +12,7 @@ namespace {
 
 const char entry[] = "vkQueueSubmit";
 
-}  // namespace
+}
 
 TEST(driver_log, every_line_carries_the_driver_s_prefix)
 { RecordingLog log;

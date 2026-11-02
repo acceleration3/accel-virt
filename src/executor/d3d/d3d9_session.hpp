@@ -1,23 +1,3 @@
-/* One session's Direct3D 9, run on the host's DXVK d3d9.
- *
- * The Direct3D 9 half of a Direct3D session (D3dBackend routes the commands of
- * d3d9.toml's range here): the session's devices, each a host device of its
- * own (D3d9HostDevice::make_device), the one selected, and every object they
- * made by the id the guest named it with. The wire is generated from
- * tools/codegen/registry/d3d9.toml; what the values mean - an id of the wrong
- * kind, another device's object, a size no device makes - is judged here
- * before DXVK sees it, because DXVK trusts its caller and a guest is not a
- * caller to trust.
- *
- * A refused asynchronous command does nothing and removes the selected
- * device: Finish9 answers D3DERR_DRIVERINTERNALERROR for it from then on, and
- * the session's other devices go on. A refused synchronous command has no
- * answer to give the guest waiting on it, and fails the session.
- *
- * Its handlers are in three files by what they touch: this one's .cpp (devices,
- * adapter questions, lifetime), _resources.cpp (surfaces, textures, buffers
- * and what is written into and copied between them) and _pipeline.cpp
- * (shaders, state, draws and queries). */
 #ifndef AV_D3D9_SESSION_HPP
 #define AV_D3D9_SESSION_HPP
 
@@ -50,37 +30,19 @@ class WireWriter;
 
 class D3d9Session final : public d3d9proto::ServerDispatch {
 public:
-    /* The largest surface edge any Direct3D 9 device makes. */
     static constexpr uint32_t max_dimension = 16384u;
 
-    /* `guest` is the session's blob arena, which D3dBackend adopts, and
-     * `objects` the session's object table: the guest names every object of
-     * a session from one id space, so Direct3D 9's share Direct3D 11's table.
-     * `blocks` is what the session's tables grow in. */
-    /* `lines` is where the host log is read when a guest's command fails. */
     D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks, DriverLog &lines);
     ~D3d9Session();
     D3d9Session(const D3d9Session &) = delete;
     D3d9Session &operator=(const D3d9Session &) = delete;
 
-    /* Binds the session to its GPU's Direct3D 9, which must outlive it; null
-     * is a GPU with none, on which every device create fails. */
-    /* `surfaces` is where a present point's frame is kept for the present
-     * engine; null where the device has none, and a present point stages
-     * nothing. `device11` and `shares` are where a fullscreen primary's flips
-     * are kept under its key (D3d9FlipShares); null shares none. */
     void initialize(D3d9HostDevice *host, SharedSurfaces *surfaces, D3d11HostDevice *device11,
                     SessionShares *shares);
-    /* Every device and object let go. */
     void shut_down();
 
     bool               knows(uint32_t command_id) const;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena);
-    /* Whether a host device of the session's was lost - each guest device
-     * has one of its own, a DXVK Direct3D 9 device on its own Vulkan device -
-     * as its own command found it once it ran (TestCooperativeLevel, which
-     * tools/dxvk-patches/0007 makes say so). The session goes with it: the
-     * guest's driver removes its devices as one, from the context's fault. */
     bool               lost() const;
 
 
@@ -155,29 +117,14 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* The selected device, when its commands may run: null with none
-     * selected, or once it is removed, which refuses them until the guest
-     * makes another. */
     IDirect3DDevice9 *device() const;
-    /* The selected device's object `id` if it is of `kind`; null for another
-     * kind, another device's, or none. No reference is taken. */
     IUnknown *owned(uint32_t id, D3dObjectKind kind) const;
-    /* The same, as the interface `kind` is kept as. */
     template <typename T>
     T                 *mine(uint32_t id, D3dObjectKind kind) const;
-    /* `id` as a surface of the selected device's to draw into, read or copy:
-     * the surface itself, or subresource `subresource` of a 2D texture (its
-     * level) or a cube (face * levels + level); with a reference the caller
-     * owns, null for anything else. */
     IDirect3DSurface9 *surface(uint32_t id, uint32_t subresource) const;
-    /* `made` kept under `id`; false, with it released, where the id is taken. */
     [[nodiscard]] bool keep(uint32_t id, D3dObjectKind kind, IUnknown *made);
-    /* Reads `surface` into `pixels` as ReadSurface9 answers, from memory the
-     * CPU can lock: a render target goes through a system-memory copy. */
     int32_t            read(IDirect3DSurface9 *surface, uint32_t &pitch, uint8_t *pixels, uint64_t capacity,
                             uint64_t &written);
-    /* WriteTexture9's copy into one 2D or cube level, into a volume's, and
-     * into a surface. */
     bool               write_level(uint32_t texture, uint32_t subresource, const d3d9proto::Box &box,
                                    uint32_t row_pitch, uint32_t flags, const uint8_t *data, uint64_t data_size);
     bool               write_volume(uint32_t texture, uint32_t subresource, const d3d9proto::Box &box,
@@ -185,13 +132,8 @@ private:
                                     uint64_t data_size);
     bool               write_surface(uint32_t id, uint32_t subresource, const d3d9proto::Box &box,
                                      uint32_t row_pitch, const uint8_t *data, uint64_t data_size);
-    /* `write` into `target`, a surface of `format` the host cannot lock - a
-     * render target, a default texture's level - through a system-memory
-     * surface of the box's size and UpdateSurface. */
     bool               write_through_memory(IDirect3DSurface9 *target, uint32_t format, const d3d9proto::Box &box,
                                             const D3d9TextureWrite &write, uint32_t row_pitch, const uint8_t *data);
-    /* A shader's tokens copied out of the arena with end tokens past them, for
-     * DXVK to read; null where the arena has no room. */
     const uint32_t    *padded(const uint8_t *code, uint64_t code_size);
 
     D3d9HostDevice *host_;
@@ -199,13 +141,9 @@ private:
     D3d9FlipShares  flips_;
     D3dObjectTable &objects_;
     WatchedBlocks  &blocks_;
-    /* d3d9.dll makes a device for each DirectDraw object it opens - to
-     * enumerate, to validate a create, to create, to ask multisample levels -
-     * and a process may hold any number at once. */
     GuestDevices<IDirect3DDevice9> devices_;
     DriverLog      &lines_;
     CommandRefusal  refusal_;
-    /* The decode arena of the command running; null between commands. */
     WireArena      *arena_;
     bool            lost_;
 };
@@ -217,6 +155,6 @@ T *D3d9Session::mine(uint32_t id, D3dObjectKind kind) const
     return static_cast<T *>(static_cast<void *>(owned(id, kind)));
 }
 
-}  // namespace av
+}
 
-#endif  // AV_D3D9_SESSION_HPP
+#endif

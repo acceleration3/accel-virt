@@ -1,6 +1,3 @@
-/* Which guest pages lie under a host blob now: a page lent once is refused a
- * second time until given back, whichever ranges the two claims were, and the
- * set grows past any first size without losing a page. */
 #include "core/support/status.hpp"
 #include "device/memory/lent_pages.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -26,13 +23,13 @@ struct LentPagesProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
 
 constexpr std::uint64_t page = 4096u;
 
-}  // namespace
+}
 
 TEST(lent_pages, a_claimed_range_is_lent_page_by_page_and_released_whole)
 { MockHost  host;
@@ -51,8 +48,6 @@ TEST(lent_pages, a_claimed_range_is_lent_page_by_page_and_released_whole)
   CHECK_EQ(lent.count(), 0u);
   CHECK(lent.invariants_hold()); }
 
-/* A second claim touching any page of the first is refused and claims none of
- * its own pages: those stay free for a claim that does not overlap. */
 TEST(lent_pages, a_claim_over_a_lent_page_is_refused_and_claims_nothing)
 { MockHost  host;
   LentPages lent(host);
@@ -63,13 +58,10 @@ TEST(lent_pages, a_claim_over_a_lent_page_is_refused_and_claims_nothing)
   CHECK(!lent.lent(0x20000u + 2u * page));
   CHECK_EQ(lent.count(), 2u);
   CHECK_STATUS(lent.claim(0x20000u + 2u * page, page), Status::ok);
-  /* Released, the page is lendable again. */
   lent.release(0x20000u, 2u * page);
   CHECK_STATUS(lent.claim(0x20000u - page, 2u * page), Status::ok);
   CHECK(lent.invariants_hold()); }
 
-/* Thousands of pages, released in a different order from the claims, then
- * claimed again in the slots the releases left: every one is found. */
 TEST(lent_pages, the_set_grows_and_reuses_released_slots_without_losing_a_page)
 { MockHost  host;
   LentPages lent(host);
@@ -85,11 +77,9 @@ TEST(lent_pages, the_set_grows_and_reuses_released_slots_without_losing_a_page)
       CHECK_STATUS(lent.claim(run * 1024u * page, 100u * page), Status::ok);
   CHECK_EQ(lent.count(), 6400u);
   CHECK(lent.invariants_hold());
-  /* Releasing pages never lent changes nothing. */
   lent.release(0xF0000000u, 4u * page);
   CHECK_EQ(lent.count(), 6400u); }
 
-/* A set that cannot grow refuses the claim and keeps every page it had. */
 TEST(lent_pages, a_set_that_cannot_grow_refuses_and_keeps_what_it_had)
 { MockHost  host;
   LentPages lent(host);
@@ -116,7 +106,6 @@ TEST(lent_pages_invariants, counts_that_are_not_the_tables_break_them)
   LentPagesProbe::overuse(lent);
   CHECK(!lent.invariants_hold());
   LentPagesProbe::repair(lent, 2u, 2u);
-  /* A page moved out of the slot its probe lands in is lost to a lookup. */
   std::uint64_t *const slots = LentPagesProbe::slots(lent);
   std::uint64_t        moved = 0u;
   for (std::uint64_t slot = 0u; slot < 256u; slot++) {

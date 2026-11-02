@@ -1,9 +1,3 @@
-/* The body of SHARE_OBJECT, OPEN_SHARED_OBJECT and RELEASE_SHARED_OBJECT as a
- * guest frames it and the device reads it: a length other than 32 bytes is
- * framing, and every field the bytes alone can judge is judged here - a fence
- * carries no length and memory carries whole pages.
- * The wire handle is deliberately not judged: which command may carry one is
- * the command's rule, and the command's test is where that lives. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -48,7 +42,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(shared_object_request_encode, lays_out_the_fields_with_the_reserved_word_zero)
 { std::uint8_t bytes[SharedObjectRequest::encoded_size];
@@ -99,17 +93,17 @@ TEST(shared_object_request_decode, any_length_but_its_own_is_framing_and_leaves_
 TEST(shared_object_request_decode, a_field_no_request_can_have_is_an_invalid_parameter_left_unread)
 { struct Case { std::size_t offset; std::size_t width; std::uint64_t value; };
   const Case cases[] = {
-      {0u, 8u, 0u},                        /* no object */
-      {8u, 4u, 0u},                        /* no kind */
-      {8u, 4u, 4u},                        /* the kind after the last one */
+      {0u, 8u, 0u},
+      {8u, 4u, 0u},
+      {8u, 4u, 4u},
       {8u, 4u, 0xFFFFFFFFu},
-      {12u, 4u, 1u},                       /* reserved */
+      {12u, 4u, 1u},
       {12u, 4u, 0x80000000u},
-      {24u, 8u, 0u},                       /* memory with no length */
-      {24u, 8u, 1u},                       /* a length that is not whole pages */
+      {24u, 8u, 0u},
+      {24u, 8u, 1u},
       {24u, 8u, page - 1u},
       {24u, 8u, page + 1u},
-      {8u, 4u, SharedObjectKind::monitored_fence},  /* a fence carrying a length */
+      {8u, 4u, SharedObjectKind::monitored_fence},
       {8u, 4u, SharedObjectKind::native_fence},
   };
   for (const Case &c : cases) {
@@ -139,18 +133,5 @@ TEST(shared_object_request_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 256u);
-  /* The object id is 64 free bits - no single flip of an id with many bits set
-   * reaches zero - and the wire handle is 64 more, which nothing validates. Of
-   * the size's 64, the three above the page shift and the 48 above the one bit
-   * it has set keep it a non-zero whole number of pages; the twelve below the
-   * shift do not, and flipping its only set bit leaves nothing. Every flip of
-   * the kind leaves 0 or something above native_fence, save the one that
-   * leaves a fence - which may not carry a size. Every flip of the four
-   * reserved bytes makes them non-zero, all-zero has no object id, all-ones
-   * has reserved bytes set, and every other length is refused outright.
-   *
-   * The count is exact, not a bound: it was checked as an equality before
-   * being written as a floor, so a decoder that starts refusing one of these
-   * has changed its format. */
   const std::uint32_t acceptable = 64u + 64u + 51u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

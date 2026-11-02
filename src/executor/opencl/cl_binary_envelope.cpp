@@ -22,9 +22,6 @@ bool ClBinaryEnvelope::identify(cl_platform_id platform, cl_device_id device)
     if (clGetDeviceInfo(device, CL_DEVICE_UUID_KHR, uuid_bytes, device_uuid_, nullptr) != CL_SUCCESS ||
         clGetDeviceInfo(device, CL_DRIVER_UUID_KHR, uuid_bytes, driver_uuid_, nullptr) != CL_SUCCESS)
         return false;
-    /* The UUIDs say which GPU and which build of its driver; the names and
-     * versions are in the digest too, for a driver whose UUID outlives a
-     * change of its compiler. */
     static constexpr cl_platform_info platform_texts[] = {CL_PLATFORM_NAME, CL_PLATFORM_VERSION};
     static constexpr cl_device_info   device_texts[] = {CL_DEVICE_NAME, CL_DEVICE_VERSION, CL_DRIVER_VERSION};
     Fnv1aDigest digest;
@@ -99,8 +96,6 @@ bool ClBinaryEnvelope::open(const uint8_t *sealed, size_t sealed_size, const uin
     for (uint32_t index = 0u; index < uuid_bytes; ++index) {
         same = same && read_device[index] == device_uuid_[index] && read_driver[index] == driver_uuid_[index];
     }
-    /* Every byte the header promised, and nothing after it: a binary cut
-     * short or run on is not the one that was sealed. */
     if (!same || payload_bytes != sealed_size - header_bytes) return false;
     Fnv1aDigest payload;
     payload.add(sealed + header_bytes, static_cast<size_t>(payload_bytes));
@@ -110,4 +105,4 @@ bool ClBinaryEnvelope::open(const uint8_t *sealed, size_t sealed_size, const uin
     return true;
 }
 
-}  // namespace av
+}

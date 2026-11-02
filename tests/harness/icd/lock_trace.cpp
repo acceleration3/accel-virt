@@ -21,4 +21,4 @@ void LockTrace::clear()
     length_ = 0u;
 }
 
-}  // namespace av
+}

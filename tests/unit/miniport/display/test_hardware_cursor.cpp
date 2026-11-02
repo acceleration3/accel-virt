@@ -38,7 +38,6 @@ std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
 
 const std::uint8_t arrow[4 * 4u] = {1, 2, 3, 0xFF, 4, 5, 6, 0xFF, 7, 8, 9, 0xFF, 1, 1, 1, 0x80};
 
-/* A started virtio-gpu device the cursor sends on, and a cursor with its backing. */
 class Fixture {
 public:
     Fixture() : mapped_(), storage_(), sources_(mapped_.platform()), cursor_(mapped_.platform(), sources_, storage_)
@@ -71,7 +70,7 @@ DxgkargSetPointerShapeRecord shape(std::uint32_t hot_x = 1u, std::uint32_t hot_y
     return DxgkargSetPointerShapeRecord{color, 2u, 2u, 8u, 0u, 0u, arrow, hot_x, hot_y};
 }
 
-}  // namespace
+}
 
 TEST(hardware_cursor_set_shape, creates_the_resource_once_then_transfers_each_shape)
 { Fixture fixture;
@@ -82,7 +81,7 @@ TEST(hardware_cursor_set_shape, creates_the_resource_once_then_transfers_each_sh
   CHECK_EQ(control.respond_all(ok_nodata), 4u);
   CHECK_EQ(control.request_type(0u), create_2d);
   CHECK_EQ(u32(control.request(0u), 24u), HardwareCursor::resource_id);
-  CHECK_EQ(u32(control.request(0u), 28u), 1u);    /* B8G8R8A8 */
+  CHECK_EQ(u32(control.request(0u), 28u), 1u);
   CHECK_EQ(u32(control.request(0u), 32u), 64u);
   CHECK_EQ(control.request_type(1u), attach);
   CHECK_EQ(u32(control.request(1u), 40u), 64u * 64u * 4u);
@@ -114,7 +113,7 @@ TEST(hardware_cursor_set_position, shows_moves_hides_and_shows_again)
   CHECK_EQ(u32(cursor.request(0u), 48u), 1u);
   CHECK_EQ(cursor.request_type(1u), move);
   CHECK_EQ(u32(cursor.request(1u), 28u), 0xFFFFFFFBu);
-  CHECK_EQ(u32(cursor.request(1u), 40u), HardwareCursor::resource_id);   /* a move that named 0 hid it in SDL */
+  CHECK_EQ(u32(cursor.request(1u), 40u), HardwareCursor::resource_id);
   CHECK_EQ(cursor.request_type(2u), update);
   CHECK_EQ(u32(cursor.request(2u), 40u), 0u);
   CHECK_EQ(cursor.request_type(3u), update);

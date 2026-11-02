@@ -1,6 +1,3 @@
-/* WatchedBlocks: every request passed to the source under it, and a command
- * that failed because one was refused told apart from one that failed for
- * any other reason - the guest learns E_OUTOFMEMORY for the first. */
 #include "core/support/growable_array.hpp"
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/shim/d3d_headers.hpp"
@@ -22,7 +19,7 @@ namespace {
 
 constexpr std::uint32_t internal = static_cast<std::uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR);
 
-}  // namespace
+}
 
 TEST(watched_blocks_allocate, passes_requests_and_releases_to_the_source_under_it)
 { MockPlatform  platform;

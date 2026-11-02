@@ -1,13 +1,3 @@
-/* The adapter's doorbells (feature 049, US1 and US2): one per hardware queue a
- * process asked for, each naming the device page that queue's context was
- * bound to, connected or not.
- *
- * A doorbell is the one object in the driver whose whole purpose is to be used
- * without the driver: once connected, the process stores to the page and the
- * kernel never hears of it again. So what these tests judge is the states
- * around that - who may have one, what a disconnect leaves, and what a process
- * would read out of its status.
- */
 #include "miniport/adapter/adapter.hpp"
 #include "miniport/ddi/dxgkarg_create_context_record.hpp"
 #include "miniport/ddi/dxgkarg_create_device_record.hpp"
@@ -49,8 +39,6 @@ namespace {
 constexpr std::uint32_t page_bytes = 4096u;
 constexpr std::uint32_t pages = 64u;
 
-/* A doorbell BAR of `pages` pages as the adapter maps one, and two hardware
- * queues to hold doorbells on. */
 class Doorbells {
 public:
     Doorbells()
@@ -68,7 +56,6 @@ public:
     MockPlatform  &platform() { return platform_; }
     HwQueue       &first() { return *first_; }
     HwQueue       &second() { return *second_; }
-    /* Where page `index` begins in this mapping: what a connect answers. */
     const void    *page(std::uint32_t index) { return window_.address_at(index * page_bytes); }
 
 private:
@@ -76,8 +63,6 @@ private:
     {
         av::DxgkargCreateDeviceRecord device = {};
         av::DxgkargCreateContextRecord context = {};
-        /* A context made for hardware queues, which is the only kind a queue
-         * runs on. */
         context.Flags = 0x14u;
         av::DxgkargCreateHwQueueRecord queue = {};
         queue.HwQueueProgressFenceCPUVirtualAddress = &fence_;
@@ -108,7 +93,7 @@ private:
     HwQueue               *second_;
 };
 
-}  // namespace
+}
 
 TEST(doorbell_table, a_doorbell_connected_answers_the_page_its_context_was_bound_to)
 { Doorbells held;
@@ -120,8 +105,6 @@ TEST(doorbell_table, a_doorbell_connected_answers_the_page_its_context_was_bound
   CHECK_EQ(held.table().live(), 1u);
   CHECK(held.table().invariants_hold());
 
-  /* Created is not connected: a process that never connected has nowhere to
-   * store, and the status says which way to submit. */
   CHECK(held.table().status_of(made) == DoorbellStatus::disconnected_retry);
   void          *address = nullptr;
   DoorbellStatus status = DoorbellStatus::disconnected_abort;
@@ -129,14 +112,10 @@ TEST(doorbell_table, a_doorbell_connected_answers_the_page_its_context_was_bound
   CHECK_STATUS(held.table().connect(made, address, status, queue), Status::ok);
   CHECK(address == held.page(3u));
   CHECK(status == DoorbellStatus::connected);
-  /* The queue it hangs off, which is what tells the driver whose context has
-   * moved its submissions into user mode. */
   CHECK(queue == &held.first());
   CHECK(held.table().status_of(made) == DoorbellStatus::connected);
   CHECK(held.table().invariants_hold());
 
-  /* Disconnected, it answers no address at all, and a process reading its
-   * status is told to submit the other way (research.md §10). */
   CHECK_STATUS(held.table().disconnect(made), Status::ok);
   CHECK(held.table().status_of(made) == DoorbellStatus::disconnected_retry);
   void *again = nullptr;
@@ -144,10 +123,6 @@ TEST(doorbell_table, a_doorbell_connected_answers_the_page_its_context_was_bound
   CHECK(again == held.page(3u));
   CHECK(status == DoorbellStatus::connected);
 
-  /* The handle is the QueueDoorbell itself, as a hardware queue's handle is
-   * its HwQueue: what dxgkrnl passes back is what the driver made, and the
-   * queue it names is what tells the driver whose context has moved its
-   * submissions into user mode (feature 049). */
   CHECK(&static_cast<QueueDoorbell *>(made)->queue() == &held.first());
   CHECK(held.table().queue_of(made) == &held.first());
   int outside = 0;
@@ -159,11 +134,9 @@ TEST(doorbell_table, a_doorbell_connected_answers_the_page_its_context_was_bound
   CHECK_EQ(held.table().live(), 0u);
   CHECK(held.table().invariants_hold()); }
 
-/* Everything a doorbell is refused for. */
 TEST(doorbell_table, a_doorbell_nobody_made_is_no_doorbell)
 { Doorbells held;
   void     *made = nullptr;
-  /* A page past the BAR is a page no store could reach. */
   CHECK_STATUS(held.table().create(held.first(), pages, made), Status::invalid_parameter);
   CHECK_STATUS(held.table().create(held.first(), pages + 4u, made), Status::invalid_parameter);
   CHECK_EQ(held.table().live(), 0u);
@@ -178,16 +151,12 @@ TEST(doorbell_table, a_doorbell_nobody_made_is_no_doorbell)
   CHECK_STATUS(held.table().disconnect(&stack), Status::invalid_parameter);
   CHECK_STATUS(held.table().destroy(&stack), Status::invalid_parameter);
   CHECK_STATUS(held.table().connect(nullptr, address, status, queue), Status::invalid_parameter);
-  /* And a handle destroyed is one nobody made. */
   CHECK_STATUS(held.table().destroy(made), Status::ok);
   CHECK_STATUS(held.table().destroy(made), Status::invalid_parameter);
   CHECK_STATUS(held.table().connect(made, address, status, queue), Status::invalid_parameter);
   CHECK(held.table().status_of(made) == DoorbellStatus::disconnected_abort);
   CHECK(held.table().invariants_hold()); }
 
-/* A queue destroyed takes its doorbells with it: dxgkrnl destroys the queue
- * and a doorbell that outlived it would name a page of a context that is
- * gone. */
 TEST(doorbell_table, a_queue_destroyed_takes_its_doorbells)
 { Doorbells held;
   void     *first = nullptr;
@@ -205,22 +174,17 @@ TEST(doorbell_table, a_queue_destroyed_takes_its_doorbells)
   CHECK(!held.table().serves(&held.first()));
   CHECK(held.table().serves(&held.second()));
   CHECK(held.table().status_of(first) == DoorbellStatus::disconnected_abort);
-  /* The other queue's doorbell is untouched. */
   void          *address = nullptr;
   DoorbellStatus status = DoorbellStatus::disconnected_abort;
   HwQueue       *queue = nullptr;
   CHECK_STATUS(held.table().connect(other, address, status, queue), Status::ok);
   CHECK(queue == &held.second());
   CHECK(address == held.page(2u));
-  /* Forgetting a queue with no doorbells, and the null one, is no-one's
-   * error. */
   held.table().forget_queue(&held.first());
   held.table().forget_queue(nullptr);
   CHECK_EQ(held.table().live(), 1u);
   CHECK(held.table().invariants_hold()); }
 
-/* The 128 doorbells the table once held are no bound: doorbells well past
- * them are made, each its own handle, and a queue forgotten takes its own. */
 TEST(doorbell_table, holds_doorbells_well_past_the_old_table)
 { Doorbells held;
   void     *made = nullptr;
@@ -235,8 +199,6 @@ TEST(doorbell_table, holds_doorbells_well_past_the_old_table)
   CHECK_EQ(held.table().live(), 1u);
   CHECK(held.table().invariants_hold()); }
 
-/* A doorbell the platform cannot find memory for is no doorbell, and the table
- * is left as it was. */
 TEST(doorbell_table, a_doorbell_with_no_memory_behind_it_is_refused)
 { Doorbells held;
   held.platform().fail_allocation_at(1u);
@@ -247,9 +209,6 @@ TEST(doorbell_table, a_doorbell_with_no_memory_behind_it_is_refused)
   CHECK(held.table().invariants_hold());
   CHECK_STATUS(held.table().create(held.first(), 1u, made), Status::ok); }
 
-/* What av-inspect reads out of a running driver (docs/trace.md): a line for
- * the table and one per doorbell, and nothing but `busy` while another thread
- * holds it - a report must never wait on the path a submission takes. */
 TEST(doorbell_table_report, writes_each_doorbell_and_says_when_it_cannot)
 { Doorbells held;
   void     *made = nullptr;
@@ -277,7 +236,7 @@ TEST(doorbell_table_report, writes_each_doorbell_and_says_when_it_cannot)
   held.platform().set_irql(av::Irql::dispatch);
   held.table().report(busy);
   CHECK(held.platform().claim(av::Violation::irql_ceiling));
-  CHECK(held.platform().claim(av::Violation::irql_ceiling));   /* the try-acquire inside it */
+  CHECK(held.platform().claim(av::Violation::irql_ceiling));
   held.platform().set_irql(av::Irql::passive);
   held.platform().released_elsewhere();
   CHECK_STATUS(held.table().destroy(made), Status::ok); }

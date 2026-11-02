@@ -46,8 +46,6 @@ void CrossAdapterWaits::waited_long()
                 "device's context that only the application's own thread satisfies later");
 }
 
-/* The packet's commands are the transport's marker: dxgkrnl wants a GPU VA to
- * submit, and the miniport reads only the private data. */
 Status CrossAdapterWaits::release(const uint8_t *record, uint32_t size)
 {
     AV_SCOPE("CrossAdapterWaits::release");
@@ -65,4 +63,4 @@ Status CrossAdapterWaits::release(const uint8_t *record, uint32_t size)
     return Status::invalid_state;
 }
 
-}  // namespace av::d3d
+}

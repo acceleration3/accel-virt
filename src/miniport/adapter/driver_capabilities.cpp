@@ -28,30 +28,12 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
     DxgkDriverCapsRecord caps = {};
     caps.HighestAcceptableAddress = highest_acceptable_address_;
     caps.WDDMVersion = wddm_version_;
-    /* NativeGpuFence only where the OS allowed the feature: claiming it while
-     * the OS has it disabled fails the adapter start (research.md §17). */
     caps.SchedulingCaps = scheduling_multi_engine_aware | (native_fences_ ? scheduling_native_gpu_fence : 0u);
     caps.MemoryManagementCaps = memory_cross_adapter_resource | memory_virtual_addressing | memory_gpu_mmu;
     caps.GpuEngineTopologyNbAsymetricProcessingNodes = node_count;
     caps.FlipCaps = flip_on_vsync_mmio;
-    /* With 0, dxgkrnl presents a windowed blt-model application through its
-     * blt-via-GDI fallback: a CPU copy into the window's redirection DIB that
-     * DWM reads with no handshake, so a frame is composed half written
-     * (docs/stale-blt-frames.md). With software device bitmaps CDD makes that
-     * surface a GDI standard allocation, d3d9.dll opens it into the
-     * application's device - which maps a GPU virtual address for it, as
-     * dxgkrnl rejects the present of a GPU-VA context whose destination has
-     * none - and every present names it, so dxgkrnl hands the redirected blt
-     * to DxgkDdiPresent, where the present engine moves the pixels. DWM composes
-     * from those pages lent to the host (open_cross_adapter): read on the CPU
-     * in every compose, this bit cost its render thread 5 ms a frame at
-     * 2560x1440 (docs/frame-pacing.md). */
     caps.PresentationCaps = presentation_software_device_bitmaps | presentation_gdi_software_limits;
     caps.SupportPerEngineTDR = 1u;
-    /* Overlay planes, which dxgkrnl takes only beside DirectFlip and from one
-     * to ten of them (DXGADAPTER::Initialize); it then clears both again unless
-     * the DirectFlip segments hold 200 MB (VidMmUseDirectFlip), which the
-     * aperture does (ApertureSegment). The host composes the planes. */
     caps.SupportDirectFlip = 1u;
     caps.SupportMultiPlaneOverlay = 1u;
     caps.MaxOverlayPlanes = OverlayPlane::max_planes;
@@ -93,8 +75,6 @@ Status DriverCapabilities::report_native_fence_caps(const AdapterInfoQuery &quer
     AV_SCOPE("DriverCapabilities::report_native_fence_caps");
     platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::report_native_fence_caps");
     DxgkNativeFenceCapsRecord caps = {};
-    /* One monitored value to a fence: this driver packs none of them together,
-     * so the OS may place each where it likes. */
     caps.MonitoredValueStride = sizeof(uint64_t);
     caps.MapToGpuSystemProcess = 0u;
     return query.write_output(&caps, sizeof caps);
@@ -137,4 +117,4 @@ void DriverCapabilities::answer_mode_behavior(DxgkargControlModeBehaviorRecord &
     request.NotSatisfied = request.Request & ~mode_behaviors_;
 }
 
-}  // namespace av
+}

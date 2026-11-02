@@ -1,8 +1,3 @@
-/* The clock page as the device holds it: a page of guest RAM, headed with its
- * head count, each head's record written whole under a generation that is
- * even again once it is, and the guest's interrupt_every read back as it
- * wrote it. Memory that is not a whole page of guest RAM is refused, and
- * nothing stays mapped after a refusal or a release. */
 #include "device/display/clock_page_window.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
@@ -32,7 +27,7 @@ std::uint32_t word_at(MockHost &host, std::uint64_t address)
 
 std::uint64_t record_of(std::uint32_t head) { return page + 32u + 64u * head; }
 
-}  // namespace
+}
 
 TEST(clock_page_window, a_page_of_guest_ram_is_headed_and_its_records_zeroed)
 { MockHost host;
@@ -70,9 +65,9 @@ TEST(clock_page_window, a_blank_is_written_whole_under_an_even_generation)
   CHECK_EQ(read.refresh_millihz(), 60000u);
   window.publish(3u, VblankRecord(10u, 78u, 140123456u, 60000u));
   CHECK_EQ(word_at(host, record_of(3u)), 4u);
-  CHECK_EQ(word_at(host, record_of(2u)), 0u);   /* its neighbours untouched */
+  CHECK_EQ(word_at(host, record_of(2u)), 0u);
   CHECK_EQ(word_at(host, record_of(3u) + 64u), 0u);
-  window.publish(4u, VblankRecord(1u, 1u, 1u, 60000u));   /* past the page's heads */
+  window.publish(4u, VblankRecord(1u, 1u, 1u, 60000u));
   CHECK_EQ(word_at(host, record_of(4u)), 0u);
   CHECK(window.invariants_hold()); }
 
@@ -80,7 +75,7 @@ TEST(clock_page_window, the_guest_s_interrupt_every_is_read_as_it_wrote_it)
 { MockHost host;
   host.add_guest_ram(ram, 0x10000u);
   ClockPageWindow window(host);
-  CHECK_EQ(window.interrupt_every(0u), 0u);   /* no page yet */
+  CHECK_EQ(window.interrupt_every(0u), 0u);
   CHECK_STATUS(window.map(page, 2u), Status::ok);
   CHECK_EQ(window.interrupt_every(1u), 0u);
   const std::uint32_t every = 0xFFFFFFFFu;
@@ -88,9 +83,9 @@ TEST(clock_page_window, the_guest_s_interrupt_every_is_read_as_it_wrote_it)
   CHECK_EQ(window.interrupt_every(1u), 0xFFFFFFFFu);
   CHECK_EQ(window.interrupt_every(0u), 0u);
   std::memcpy(host.guest_ram(record_of(2u) + VblankRecord::interrupt_every_at), &every, sizeof every);
-  CHECK_EQ(window.interrupt_every(2u), 0u);   /* past the page's heads */
+  CHECK_EQ(window.interrupt_every(2u), 0u);
   window.publish(1u, VblankRecord(1u, 2u, 3u, 60000u));
-  CHECK_EQ(window.interrupt_every(1u), 0xFFFFFFFFu);   /* a publish leaves it alone */
+  CHECK_EQ(window.interrupt_every(1u), 0xFFFFFFFFu);
   window.release();
   CHECK_EQ(window.interrupt_every(1u), 0u); }
 
@@ -102,14 +97,14 @@ TEST(clock_page_window, memory_that_is_not_a_page_of_guest_ram_is_refused_and_no
   ClockPageWindow window(host);
   CHECK_STATUS(window.map(0x80000000u, 1u), Status::not_found);
   CHECK_STATUS(window.map(0x40000000u, 1u), Status::not_supported);
-  CHECK_STATUS(window.map(ram + 0x5000u, 1u), Status::not_supported);   /* split inside the page */
+  CHECK_STATUS(window.map(ram + 0x5000u, 1u), Status::not_supported);
   CHECK_STATUS(window.map(page, 0u), Status::invalid_parameter);
   CHECK_STATUS(window.map(page, 17u), Status::invalid_parameter);
   host.empty_mapping_at(1u);
   CHECK_STATUS(window.map(page, 1u), Status::not_found);
   CHECK(!window.mapped());
   CHECK_EQ(host.live_guest_mappings(), 0u);
-  window.publish(0u, VblankRecord(1u, 1u, 1u, 60000u));   /* unmapped: nothing */
+  window.publish(0u, VblankRecord(1u, 1u, 1u, 60000u));
   CHECK(window.invariants_hold()); }
 
 TEST(clock_page_window, a_page_mapped_again_lets_the_first_go)
@@ -121,6 +116,6 @@ TEST(clock_page_window, a_page_mapped_again_lets_the_first_go)
   CHECK_EQ(host.live_guest_mappings(), 1u);
   window.publish(1u, VblankRecord(3u, 3u, 3u, 60000u));
   CHECK_EQ(word_at(host, page + 0x1000u + 96u), 2u);
-  CHECK_STATUS(window.map(0x80000000u, 1u), Status::not_found);   /* a refused one lets it go too */
+  CHECK_STATUS(window.map(0x80000000u, 1u), Status::not_found);
   CHECK_EQ(host.live_guest_mappings(), 0u);
   CHECK(!window.mapped()); }

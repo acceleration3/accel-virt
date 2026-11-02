@@ -27,7 +27,6 @@ Status HostSvmRanges::remember(void *base, uint64_t bytes, uint64_t owner)
     AV_SCOPE("HostSvmRanges::remember");
     const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(base));
     if (address == 0u || bytes == 0u) return Status::invalid_parameter;
-    /* A range that wraps could be resolved through either end of it. */
     if (bytes > ~uint64_t{0} - address) return Status::invalid_parameter;
     const uint32_t after = above(address);
     if (after != 0u && ranges_.at(after - 1u).base_ == address) {
@@ -81,9 +80,6 @@ void *HostSvmRanges::resolve(uint64_t address, uint64_t bytes) const
     for (uint32_t index = above(address); index != 0u; index--) {
         const Range &range = ranges_.at(index - 1u);
         if (address - range.base_ >= widest_) break;
-        /* The address itself has to be a byte of the range, even when nothing
-         * is read from it: one past the end is not a place a command may name,
-         * and it is also the first byte of whatever comes next. */
         if (address - range.base_ < range.size_ && last - range.base_ <= range.size_)
             return reinterpret_cast<void *>(static_cast<uintptr_t>(address));
     }
@@ -109,4 +105,4 @@ bool HostSvmRanges::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

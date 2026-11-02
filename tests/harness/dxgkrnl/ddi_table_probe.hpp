@@ -1,6 +1,3 @@
-/* Reaches into a DdiTable so tests can build tables core never would - an old
- * version for the registration rules, corrupted padding for the invariants.
- * Declared a friend by DdiTable; nothing outside the tests uses it. */
 #ifndef AV_DDI_TABLE_PROBE_HPP
 #define AV_DDI_TABLE_PROBE_HPP
 
@@ -19,6 +16,6 @@ struct DdiTableProbe {
     DdiTable &table;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DDI_TABLE_PROBE_HPP
+#endif

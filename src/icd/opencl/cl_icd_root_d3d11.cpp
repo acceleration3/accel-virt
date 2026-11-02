@@ -1,5 +1,3 @@
-/* ClIcdRoot's cl_khr_d3d11_sharing (docs/d3d11-sharing.md), and the device's
- * retain and release, which an application sharing with Direct3D 11 makes. */
 #include "icd/opencl/cl_icd_root.hpp"
 
 #include "core/platform/thread_lock.hpp"
@@ -16,8 +14,6 @@
 namespace av::clicd {
 
 namespace {
-
-/* The three flags an object over a Direct3D 11 resource may be made with. */
 constexpr cl_mem_flags access_flags = CL_MEM_READ_WRITE | CL_MEM_WRITE_ONLY | CL_MEM_READ_ONLY;
 
 void report_d3d11_error(cl_int *error, cl_int value)
@@ -26,7 +22,7 @@ void report_d3d11_error(cl_int *error, cl_int value)
     if (error != nullptr) *error = value;
 }
 
-}  // namespace
+}
 
 cl_int ClIcdRoot::device_reference(cl_device_id device)
 {
@@ -43,8 +39,6 @@ cl_int ClIcdRoot::device_ids_from_d3d11(cl_platform_id platform, cl_uint source,
         (set != d3d11_preferred_devices && set != d3d11_all_devices) ||
         (devices == nullptr && num_devices == nullptr) || (devices != nullptr && num_entries == 0u))
         return CL_INVALID_VALUE;
-    /* An ID3D11Device is an IDXGIDevice too, which is what the device's
-     * adapter is asked through. */
     const uint64_t luid =
         source == d3d11_device_source ? d3d_adapters_.device_luid(object) : d3d_adapters_.adapter_luid(object);
     return device_ids_for_luid(luid, devices, num_devices);
@@ -54,13 +48,10 @@ cl_int ClIcdRoot::d3d11_device_for(const ClPropertyList &list, const ClDevice &o
 {
     AV_SCOPE("ClIcdRoot::d3d11_device_for");
     device = nullptr;
-    /* A null device names none, which the extension allows. */
     uint64_t named = 0u;
     if (!list.names(static_cast<uint64_t>(d3d11_context_device), named) || named == 0u) return CL_SUCCESS;
     void *const candidate = reinterpret_cast<void *>(static_cast<uintptr_t>(named));
     if (!d3d11_.device(candidate)) return invalid_d3d11_device;
-    /* A device on another adapter is one whose resources this device cannot
-     * copy: its commands run on another GPU. */
     if (d3d_adapters_.device_luid(candidate) != on.luid()) return invalid_d3d11_device;
     device = candidate;
     return CL_SUCCESS;
@@ -104,8 +95,6 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
         return nullptr;
     }
     void        *twin = nullptr;
-    /* A twin is opened on the host as the image it is only where the host
-     * views its format as one; any other is opened as bytes there. */
     const cl_mem twinned = kind == D3d11Resource::Kind::texture2d && mapped.cl_image_on_host()
                                ? d3d11_twin(context, *owner, resource, subresource, twin)
                                : nullptr;
@@ -135,8 +124,6 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
     return d3d11_object(made, *owner, resource, subresource, described, flags, error);
 }
 
-/* The size the open names is the one avumd published the twin as, read back
- * with it (SharedRowsTexture). */
 cl_mem ClIcdRoot::d3d11_twin(cl_context context, GuestClContext &owner, void *resource, uint32_t subresource,
                              void *&twin)
 {
@@ -173,7 +160,6 @@ cl_int ClIcdRoot::d3d11_resource(cl_context context, cl_mem_flags flags, void *r
     AV_SCOPE("ClIcdRoot::d3d11_resource");
     ClObject *const held = judged(context, ClObject::Kind::context);
     if (held == nullptr) return CL_INVALID_CONTEXT;
-    /* Every object of a context has its context. */
     owner = context_of(*held);
     if (owner->d3d11().device() == nullptr) return CL_INVALID_CONTEXT;
     if ((flags & ~access_flags) != 0u) return CL_INVALID_VALUE;
@@ -221,8 +207,6 @@ cl_int ClIcdRoot::enqueue_acquire_d3d11(cl_command_queue queue, cl_uint count, c
     if (taken != CL_SUCCESS) return taken;
     cl_int done = d3d11_copy_in(queue, *context, objects, count);
     if (done == CL_SUCCESS) done = marker_event(*wire, *held, event);
-    /* An acquire that failed leaves every object Direct3D's, to be acquired
-     * again. */
     if (done != CL_SUCCESS) {
         const ThreadLockHold locked(lock_);
         context->d3d11().untake(objects, count);
@@ -245,13 +229,9 @@ cl_int ClIcdRoot::enqueue_release_d3d11(cl_command_queue queue, cl_uint count, c
         given = context->d3d11().give(objects, count);
     }
     if (given != CL_SUCCESS) return given;
-    /* Every command that used the objects has run before a byte is copied
-     * back: the copy is what Direct3D sees next. */
     cl_int done = finish(queue);
     if (done == CL_SUCCESS) done = d3d11_copy_out(queue, *context, objects, count);
     if (done == CL_SUCCESS) done = marker_event(*wire, *held, event);
-    /* A release that failed leaves every object OpenCL's, to be released
-     * again. */
     if (done != CL_SUCCESS) {
         const ThreadLockHold locked(lock_);
         context->d3d11().ungive(objects, count);
@@ -265,7 +245,6 @@ cl_int ClIcdRoot::d3d11_queue(cl_command_queue queue, cl_uint waits, const cl_ev
     AV_SCOPE("ClIcdRoot::d3d11_queue");
     held = judged(queue, ClObject::Kind::command_queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
-    /* Every object of a context has its context. */
     context = context_of(*held);
     if (context->d3d11().device() == nullptr) return CL_INVALID_CONTEXT;
     ClHostNumbers handles_room(memory_);
@@ -284,7 +263,6 @@ cl_int ClIcdRoot::d3d11_copy_in(cl_command_queue queue, GuestClContext &context,
     AV_SCOPE("ClIcdRoot::d3d11_copy_in");
     for (cl_uint index = 0u; index < count; ++index) {
         const D3d11Object *const object = d3d11_object_in(context, objects[index]);
-        /* OpenCL only writes this one, and is never shown its bytes. */
         if (!object->reads_resource()) continue;
         if (object->twin() != nullptr) {
             const cl_int moved =
@@ -305,7 +283,6 @@ cl_int ClIcdRoot::d3d11_copy_out(cl_command_queue queue, GuestClContext &context
     AV_SCOPE("ClIcdRoot::d3d11_copy_out");
     for (cl_uint index = 0u; index < count; ++index) {
         const D3d11Object *const object = d3d11_object_in(context, objects[index]);
-        /* OpenCL only read this one, and changed nothing to copy back. */
         if (!object->writes_resource()) continue;
         if (object->twin() != nullptr) {
             const cl_int moved = d3d11_.from_twin(context.d3d11().device(), object->twin(), object->resource(),
@@ -333,4 +310,4 @@ D3d11Object *ClIcdRoot::d3d11_object_in(GuestClContext &owner, const void *mem)
     return owner.d3d11().find(mem);
 }
 
-}  // namespace av::clicd
+}

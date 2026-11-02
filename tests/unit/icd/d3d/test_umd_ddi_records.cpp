@@ -1,11 +1,3 @@
-/* The mirror records of the structures the Direct3D runtimes pass
- * (data-model.md, "The DDI mirror records"). These overlay memory the runtime
- * owns, so a field at the wrong offset reads someone else's bytes; the real
- * proof is src/um/d3d/umd_record_layout.cpp, which static_asserts each against
- * the WDK header in the guest cross-build. This test is what runs on Linux,
- * where the WDK headers cannot be included: it pins the layout these records
- * were written to have, so a field added, removed or reordered on this side
- * fails here rather than silently disagreeing with the header. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/ddi/d3d10_2ddi_adapter_funcs_record.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
@@ -40,9 +32,6 @@ TEST(umd_ddi_records, the_open_adapter_arguments_are_laid_out_as_the_runtimes_pa
   CHECK_EQ(offsetof(D3d12ddiargOpenAdapterRecord, pAdapterCallbacks), 16u);
   CHECK_EQ(offsetof(D3d12ddiargOpenAdapterRecord, pAdapterFuncs), 24u); }
 
-/* D3D12Core zeroes the whole table and then refuses the driver unless slots
- * two through seven came back non-null (research.md §12), so its size is not
- * incidental: 0x40 is the region it clears. */
 TEST(umd_ddi_records, the_adapter_tables_have_the_slot_counts_the_runtimes_clear)
 { CHECK_EQ(sizeof(D3d102ddiAdapterFuncsRecord), 5u * sizeof(void *));
   CHECK_EQ(offsetof(D3d102ddiAdapterFuncsRecord, pfnGetCaps), 32u);

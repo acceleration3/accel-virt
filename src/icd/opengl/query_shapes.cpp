@@ -30,7 +30,6 @@ size_t QueryShapes::block_values(uint32_t pname) const
     return pname == active_uniform_indices ? 0u : 1u;
 }
 
-/* A learned length is at most what a GLint can say. */
 bool QueryShapes::invariants_hold() const
 {
     AV_SCOPE("QueryShapes::invariants_hold");
@@ -39,4 +38,4 @@ bool QueryShapes::invariants_hold() const
     return true;
 }
 
-}  // namespace av::glicd
+}

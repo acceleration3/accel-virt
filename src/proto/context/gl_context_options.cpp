@@ -8,12 +8,10 @@
 namespace av {
 
 namespace {
-
-/* The highest minor each major version of OpenGL has, from 1 to 4. */
 constexpr uint8_t highest_minor[] = {5u, 1u, 3u, 6u};
 constexpr uint8_t highest_major = sizeof highest_minor / sizeof highest_minor[0];
 
-}  // namespace
+}
 
 GlContextOptions::GlContextOptions() : major_(0u), minor_(0u), profile_(0u), flags_(0u), share_context_(0u)
 {
@@ -110,4 +108,4 @@ void GlContextOptions::read(WireReader &reader)
     share_context_ = reader.read_u32();
 }
 
-}  // namespace av
+}

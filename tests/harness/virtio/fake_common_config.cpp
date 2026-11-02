@@ -12,7 +12,7 @@ constexpr std::uint8_t  features_ok = 8u;
 constexpr std::uint8_t  device_needs_reset = 0x40u;
 constexpr std::uint16_t no_vector = 0xFFFFu;
 
-}  // namespace
+}
 
 FakeCommonConfig::FakeCommonConfig()
     : offered_(0u), device_feature_select_(0u), driver_feature_select_(0u), driver_features_(0u),
@@ -170,4 +170,4 @@ const FakeCommonConfig::Queue &FakeCommonConfig::queue(std::uint16_t index) cons
     return queues_[index];
 }
 
-}  // namespace av
+}

@@ -12,7 +12,7 @@ namespace {
 constexpr uint64_t command_buffer_bytes = 4096u;
 constexpr uint64_t command_bytes = 64u;
 
-}  // namespace
+}
 
 TimeoutScenario::TimeoutScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : kmt_(kmt), search_(search), steps_(kmt, report, "timeout")
@@ -28,14 +28,10 @@ void TimeoutScenario::run()
     GuestSession other(kmt_, search_.adapter());
     uint64_t     held_address = 0u;
     uint64_t     other_address = 0u;
-    /* The held context first: the run aims the host's stall at the first
-     * context it is asked to make. */
     if (steps_.check("held_set_up", prepare(held, held_address)) != Status::ok) return;
     if (steps_.check("other_set_up", prepare(other, other_address)) != Status::ok) return;
     if (steps_.check("held_submit", held.submit(held_address, command_bytes)) != Status::ok) return;
     if (steps_.check("other_submit", other.submit(other_address, command_bytes)) != Status::ok) return;
-    /* The held wait outlives the timeout: dxgkrnl resets the node under it and
-     * the wait comes back refused. */
     const Status held_wait = held.wait();
     const Status other_wait = other.wait();
     steps_.check_refused("held_lost", held_wait);
@@ -57,4 +53,4 @@ Status TimeoutScenario::prepare(GuestSession &session, uint64_t &address)
     return status;
 }
 
-}  // namespace av
+}

@@ -1,42 +1,20 @@
-# What the OpenGL registry does not say.
-#
-# Tiers are the plan. Three thousand commands exist and no application
-# calls more than a few hundred, so they are taken in order and each
-# tier is finished — annotated, generated, and tested — before the next
-# one starts. A tier names features; everything they require is in,
-# minus everything any of them removed, which is how the core profile
-# is written in the registry.
-#
-#   boot   what it takes to draw a triangle and read it back
-#   core   GL 3.3 core, which is what zink targets and most modern
-#          applications use
-#   later  4.0 through 4.6, then the compatibility profile
-#
-# Only the tiers listed under [tiers] are generated. Moving a tier from
-# a comment into the table is the whole act of widening the driver.
-
 extra = [
-    # Strings and the error queue
     "glGetString", "glGetStringi", "glGetError",
     "glGetIntegerv", "glGetFloatv", "glGetBooleanv",
 
-    # The framebuffer as it is found
     "glViewport", "glScissor", "glClearColor", "glClearDepth", "glClear",
     "glEnable", "glDisable", "glIsEnabled", "glBlendFunc", "glDepthFunc",
     "glDepthMask", "glColorMask", "glCullFace", "glFrontFace",
     "glPixelStorei", "glFinish", "glFlush", "glReadPixels", "glReadBuffer",
     "glDrawBuffer", "glDrawBuffers",
 
-    # Buffers
     "glGenBuffers", "glDeleteBuffers", "glBindBuffer", "glBufferData",
     "glBufferSubData", "glGetBufferParameteriv", "glIsBuffer",
 
-    # Vertex arrays
     "glGenVertexArrays", "glDeleteVertexArrays", "glBindVertexArray",
     "glVertexAttribPointer", "glEnableVertexAttribArray",
     "glDisableVertexAttribArray", "glVertexAttrib4f",
 
-    # Shaders and programs
     "glCreateShader", "glDeleteShader", "glShaderSource", "glCompileShader",
     "glGetShaderiv", "glGetShaderInfoLog", "glCreateProgram",
     "glDeleteProgram", "glAttachShader", "glDetachShader", "glLinkProgram",
@@ -45,84 +23,35 @@ extra = [
     "glUniform1i", "glUniform1f", "glUniform2f", "glUniform3f",
     "glUniform4f", "glUniform1fv", "glUniform4fv", "glUniformMatrix4fv",
 
-    # Textures
     "glGenTextures", "glDeleteTextures", "glBindTexture", "glActiveTexture",
     "glTexImage2D", "glTexSubImage2D", "glTexParameteri", "glTexParameterf",
     "glGetTexImage", "glGenerateMipmap", "glIsTexture",
 
-    # Framebuffer objects
     "glGenFramebuffers", "glDeleteFramebuffers", "glBindFramebuffer",
     "glFramebufferTexture2D", "glCheckFramebufferStatus",
     "glGenRenderbuffers", "glDeleteRenderbuffers", "glBindRenderbuffer",
     "glRenderbufferStorage", "glFramebufferRenderbuffer", "glBlitFramebuffer",
 
-    # Drawing
     "glDrawArrays", "glDrawElements", "glDrawArraysInstanced",
     "glDrawElementsInstanced",
 
-    # GL_ARB_shader_objects, where it is not the core object model
-    # under another name. The extension had one handle type for shaders
-    # and programs both, so these six have no core spelling to alias:
-    # deleting an object without knowing which kind it is, asking which
-    # program is current, an object's parameters, its log, and what is
-    # attached to it.
-    #
-    # They are here because an application of that era resolves the
-    # whole table and refuses the extension if any of it is missing,
-    # and Photoshop's is one — its shading language support is a table
-    # of ARB entry points, and one null in it turns the feature off.
     "glDeleteObjectARB", "glGetHandleARB", "glGetObjectParameterfvARB",
     "glGetObjectParameterivARB", "glGetInfoLogARB",
     "glGetAttachedObjectsARB",
 
-    # Extensions the host has had all along and this driver was not
-    # asking for.
-    #
-    # None of these is new machinery: every one is an ordinary command
-    # with an ordinary length. What kept them out is the rule in
-    # lower.py that an extension may be claimed only when every command
-    # it needs is generated, so a command left out here is an extension
-    # the guest is told it does not have however much the card can do.
-    # Six samples in the pack stop at exactly that sentence, on a
-    # 3070 Ti that offers all of it.
-    #
-    # Sparse textures: one command, and three extension names. The two
-    # "2" spellings add no entry points of their own and reach this one
-    # through [extension_requires].
     "glTexPageCommitmentARB",
 
-    # Sparse buffers.
     "glBufferPageCommitmentARB", "glNamedBufferPageCommitmentEXT",
     "glNamedBufferPageCommitmentARB",
 
-    # Committing a page of a texture by name rather than by binding.
-    # The registry declares it under GL_EXT_direct_state_access and
-    # nowhere else, and it was never promoted to core the way the rest
-    # of that extension's texture commands were — so an application
-    # doing 4.5 direct state access on a sparse texture, which
-    # gl-500-texture-sparse-ext is, reaches for this one EXT name in
-    # the middle of otherwise core code. Generating the entry point
-    # does not claim the extension: that still needs all 255 of it.
     "glTexturePageCommitmentEXT",
 
-    # How many threads the host may compile shaders on: a hint, and the
-    # whole of GL_ARB_parallel_shader_compile.
     "glMaxShaderCompilerThreadsARB", "glMaxShaderCompilerThreadsKHR",
 
-    # An exclusive scissor rectangle, and where inside a pixel the
-    # samples are taken.
     "glScissorExclusiveNV", "glScissorExclusiveArrayvNV",
     "glFramebufferSampleLocationsfvNV",
     "glNamedFramebufferSampleLocationsfvNV", "glResolveDepthValuesNV",
 
-    # Bindless textures, both spellings.
-    #
-    # A handle is a 64-bit number the host driver makes up and nothing
-    # here needs to understand: it is asked for by texture name, which
-    # is a name this side already translates, and every later use of it
-    # is the number going back the way it came. So these cross as
-    # ordinary commands and the handle is opaque on the wire — no table
-    # and no translation, unlike a texture or a buffer.
     "glGetTextureHandleARB", "glGetTextureSamplerHandleARB",
     "glMakeTextureHandleResidentARB", "glMakeTextureHandleNonResidentARB",
     "glGetImageHandleARB",
@@ -141,27 +70,10 @@ extra = [
     "glProgramUniformHandleui64NV", "glProgramUniformHandleui64vNV",
     "glIsTextureHandleResidentNV", "glIsImageHandleResidentNV",
 
-    # External memory objects and semaphores (feature 053), less the four
-    # the guest never sends.
-    #
-    # A memory object and a semaphore are made by the *device*, inside
-    # OPEN_SHARED_OBJECT, and their names are what it answers - so
-    # glCreateMemoryObjectsEXT and glGenSemaphoresEXT never cross, and
-    # neither do the two glImport*Win32HandleEXT, whose HANDLE is a value
-    # only the guest kernel resolves. What does cross is every use of the
-    # name afterwards: binding memory under a buffer or a texture,
-    # signalling and waiting on a semaphore, and deleting either.
     "glBufferStorageMemEXT", "glTextureStorageMem2DEXT",
     "glDeleteMemoryObjectsEXT", "glDeleteSemaphoresEXT",
     "glSignalSemaphoreEXT", "glWaitSemaphoreEXT",
 
-    # The rest of GL_EXT_memory_object's storage commands, and the two
-    # queries both extensions share (feature 053, T037). A row promises
-    # every command in its extension, so the ten storage entry points and
-    # the device's UUIDs have to cross before GL_EXT_memory_object or
-    # GL_EXT_semaphore can be reported at all; the six that do not cross
-    # are answered by the ICD itself, because they name an object the host
-    # has not been told about yet or ask something only the ICD knows.
     "glTexStorageMem1DEXT", "glTexStorageMem2DEXT",
     "glTexStorageMem2DMultisampleEXT", "glTexStorageMem3DEXT",
     "glTexStorageMem3DMultisampleEXT",
@@ -170,9 +82,6 @@ extra = [
     "glNamedBufferStorageMemEXT",
     "glGetUnsignedBytevEXT", "glGetUnsignedBytei_vEXT",
 
-    # A buffer's memory addressed by its GPU address rather than by a
-    # binding. Same shape as the handles above: the address is the
-    # host's and travels as a number.
     "glMakeBufferResidentNV", "glMakeBufferNonResidentNV",
     "glIsBufferResidentNV",
     "glMakeNamedBufferResidentNV", "glMakeNamedBufferNonResidentNV",
@@ -182,10 +91,6 @@ extra = [
     "glUniformui64NV", "glUniformui64vNV", "glGetUniformui64vNV",
     "glProgramUniformui64NV", "glProgramUniformui64vNV",
 
-    # And the vertex arrays that go with those addresses: the format of
-    # an attribute said once, and the memory it comes from given as a
-    # range rather than as a bound buffer. This is what
-    # gl-500-primitive-bindless-nv draws with.
     "glBufferAddressRangeNV",
     "glVertexFormatNV", "glNormalFormatNV", "glColorFormatNV",
     "glIndexFormatNV", "glTexCoordFormatNV", "glEdgeFlagFormatNV",
@@ -193,10 +98,6 @@ extra = [
     "glVertexAttribFormatNV", "glVertexAttribIFormatNV",
     "glGetIntegerui64i_vNV",
 
-    # 64-bit integer uniforms. GL_NV_gpu_shader5 is mostly a shading
-    # language extension — what it adds to the API is one setter per
-    # width per signedness, the same shape as every other glUniform,
-    # and a query to read one back.
     "glUniform1i64NV", "glUniform2i64NV", "glUniform3i64NV",
     "glUniform4i64NV",
     "glUniform1i64vNV", "glUniform2i64vNV", "glUniform3i64vNV",
@@ -215,14 +116,6 @@ extra = [
     "glProgramUniform1ui64vNV", "glProgramUniform2ui64vNV",
     "glProgramUniform3ui64vNV", "glProgramUniform4ui64vNV",
 
-    # GL_EXT_direct_state_access.
-    #
-    # 255 commands, which is most of the API again with the binding
-    # taken out of it: every one names the object it acts on instead of
-    # acting on whatever is bound. It is claimed here because
-    # applications of a certain age ask for it and fall back badly when
-    # told no, and because nine of its commands are the only spelling
-    # of what they do — see the [excluded] block for those.
     "glMatrixLoadfEXT", "glMatrixLoaddEXT", "glMatrixMultfEXT",
     "glMatrixMultdEXT", "glMatrixLoadIdentityEXT", "glMatrixRotatefEXT",
     "glMatrixRotatedEXT", "glMatrixScalefEXT", "glMatrixScaledEXT",
@@ -307,45 +200,11 @@ extra = [
     "glVertexArrayVertexAttribLOffsetEXT", "glVertexArrayVertexAttribDivisorEXT",
 ]
 
-# Commands whose two sides are written by hand. The generated code
-# declares them and routes to them; it does not define them.
 handwritten = []
 
-# Commands the guest answers without asking.
-#
-# glGetError is a query, so it was a blocking round trip, and an
-# application asks after everything: SuperTuxKart asks eleven times a
-# frame, which came to 14,537 round trips and 5,929 ms of a benchmark —
-# more than anything else in the guest. It does not need the wire. The
-# server is the only side that can see an error, it already reads them
-# as it replays, and reading is what clears them, so the guest's error
-# queue is a word in the shared region that the server publishes into
-# and the guest takes from. See RegionHeader::gl_error.
-#
-# The definition is in gl_helpers.cpp.
 answered_by_guest = ["glGetError"]
 
-# What the guest driver implements rather than carries.
-#
-# These are excluded above — a pointer is an address the host has never
-# seen, and a mapping is a shadow copy in the guest — but the
-# application still gets a working entry point, so an extension that
-# needs one is an extension this driver can offer. Naming them here is
-# what keeps the two facts from disagreeing.
 driver_implemented = [
-    # GL_EXT_memory_object and GL_EXT_semaphore, the twelve this ICD answers
-    # itself (feature 053, T037). Four of them make or name an object before
-    # the host has one: the device makes the memory object and the semaphore
-    # inside OPEN_SHARED_OBJECT, so the create, the import and the two queries
-    # are about a name only the ICD holds. The two parameter pairs are recorded
-    # on the ICD's row, because they are set *before* the import and there is
-    # nothing on the host to set them on. The two Win32 name imports are
-    # answered in order to refuse them: a named section is what another process
-    # opens by name, and this path shares by handle.
-    #
-    # They are here rather than merely absent so that the two facts agree - an
-    # application gets a working entry point for every one of them, so the
-    # extension is one this driver may offer.
     "glCreateMemoryObjectsEXT", "glGenSemaphoresEXT",
     "glImportMemoryWin32HandleEXT", "glImportSemaphoreWin32HandleEXT",
     "glImportMemoryWin32NameEXT", "glImportSemaphoreWin32NameEXT",
@@ -353,9 +212,6 @@ driver_implemented = [
     "glMemoryObjectParameterivEXT", "glGetMemoryObjectParameterivEXT",
     "glSemaphoreParameterui64vEXT", "glGetSemaphoreParameterui64vEXT",
 
-    # The direct-state-access spellings the guest answers itself. An
-    # extension is claimed only when every command it needs is answered,
-    # and these are answered here rather than on the wire.
     "glMapNamedBufferEXT",
     "glMapNamedBufferRangeEXT",
     "glUnmapNamedBufferEXT",
@@ -372,54 +228,19 @@ driver_implemented = [
     "glGetBufferPointerv", "glGetNamedBufferPointerv",
     "glGetVertexAttribPointerv", "glGetPointerv",
 
-    # And under the names the extensions that introduced them used. The
-    # driver's entry point is the same one; what changes is which
-    # extension may be claimed because of it — GL_ARB_vertex_shader
-    # needs glGetVertexAttribPointervARB, and GL_ARB_vertex_buffer_object
-    # needs the mapping family's ARB spellings.
     "glMapBufferARB", "glUnmapBufferARB", "glGetBufferPointervARB",
     "glGetVertexAttribPointervARB", "glGetPointervEXT",
 ]
 
-# Commands that answer with nothing and must be waited for anyway.
-#
-# The rule everywhere else is that a command with no return value and
-# no out parameter does not wait — ordering comes from the ring, so a
-# caller has nothing to learn by blocking. glFinish is the exception
-# that the signature cannot show: what it returns is nothing and what
-# it means is "do not come back until the GPU has finished". Sent
-# one-way it becomes a no-op, and anything timed around it measures how
-# fast this driver can fill a queue.
-#
-# glFlush is deliberately not here. It asks that work be started, not
-# that it be finished, and the ring has already started it.
 synchronous = ["glFinish"]
 
-# Reads that may also go one-way, the host writing the pixels at an offset
-# of the blob arena the caller set aside (av_<name>_into_blob). A swap's
-# read-back of the window is sent this way so that the application's render
-# thread does not wait for its own frame to finish: the present thread waits
-# for the batch instead, and shows the frame the moment it is there.
 read_into_blob = ["glGetTextureSubImage"]
 
-# What a pointer query would answer with is a pointer in the guest,
-# which the host has never seen: the guest kept it when the application
-# passed it and answers from there. These never cross.
 excluded = [
-    # A pointer query answers with a pointer in the guest, which the
-    # host has never seen: the guest kept it when the application
-    # passed it and answers from there.
     "glGetBufferPointerv",
     "glGetVertexAttribPointerv",
     "glGetPointerv",
 
-    # Mapping hands the application a pointer into the driver's memory,
-    # and there is no such pointer to hand across a VM boundary. What
-    # it becomes is a shadow copy in the guest, filled at map and
-    # written back at unmap — the shape the OpenCL side already has for
-    # clEnqueueMapBuffer. That belongs in the guest driver, so these
-    # wait for it rather than being generated into something that
-    # cannot work.
     "glMapBuffer",
     "glMapBufferRange",
     "glUnmapBuffer",
@@ -430,51 +251,20 @@ excluded = [
     "glFlushMappedNamedBufferRange",
     "glGetNamedBufferPointerv",
 
-    # The robustness forms of the evaluator and pixel-map queries. Both
-    # are fixed-function: an evaluator is a Bezier patch from 1.0 and a
-    # pixel map is the colour table that went with it. They are in 4.5
-    # only because the robustness extension gave every query a sized
-    # form, and there is no core-profile context that will answer one.
     "glGetnMapdv", "glGetnMapfv", "glGetnMapiv",
     "glGetnPixelMapfv", "glGetnPixelMapuiv", "glGetnPixelMapusv",
     "glGetnPolygonStipple", "glGetnColorTable", "glGetnConvolutionFilter",
     "glGetnSeparableFilter", "glGetnHistogram", "glGetnMinmax",
 
-    # The direct-state-access spellings of the two things that cannot
-    # cross. Mapping hands back an address, and a pointer query answers
-    # with one; the guest already answers both for the core spellings
-    # and these forward to that. They are named here so they are not
-    # generated, and in [driver_implemented] so the extension may still
-    # be claimed.
     "glMapNamedBufferEXT", "glMapNamedBufferRangeEXT", "glUnmapNamedBufferEXT",
     "glFlushMappedNamedBufferRangeEXT", "glGetNamedBufferPointervEXT", "glGetPointerIndexedvEXT",
     "glGetPointeri_vEXT", "glGetVertexArrayPointervEXT", "glGetVertexArrayPointeri_vEXT",
 ]
 
-# Other spellings the registry does not write down.
-#
-# gl.xml gives most extension commands an <alias> to the core one they
-# became, and the driver answers to both. Two of the framebuffer
-# family have none: glBindFramebufferEXT and glBindRenderbufferEXT.
-# The registry is being careful — EXT_framebuffer_object lets an
-# application bind a name it never generated and the core profile does
-# not — and every desktop driver has implemented them as the same
-# entry point regardless.
-#
-# It matters because of what depends on it. An application that asks
-# for GL_EXT_framebuffer_object and is told no turns its graphics
-# processor off, which is exactly what Photoshop's sniffer does; and
-# an extension is only claimed here when every command it needs can be
-# answered. These two can be.
 [aliases]
 glBindFramebufferEXT = "glBindFramebuffer"
 glBindRenderbufferEXT = "glBindRenderbuffer"
 
-# Tiers named by feature. None yet: the boot tier above is named one
-# command at a time, because its point is a path that works end to end
-# before the surface is widened. "core" comes next and is written here
-# as the features GL_VERSION_1_0 through GL_VERSION_3_3, whose removals
-# leave the core profile.
 [tiers]
 core = [
     "GL_VERSION_1_0", "GL_VERSION_1_1", "GL_VERSION_1_2", "GL_VERSION_1_3",
@@ -483,39 +273,14 @@ core = [
     "GL_VERSION_4_0", "GL_VERSION_4_1", "GL_VERSION_4_2", "GL_VERSION_4_3",
     "GL_VERSION_4_4", "GL_VERSION_4_5", "GL_VERSION_4_6",
 ]
-# The compatibility profile: everything 1.0 and 1.1 asked for and 3.2
-# took away again. It is written as the two features on their own
-# because a removal only applies where the tier names the feature that
-# wrote it — core lists 3.2 and loses immediate mode, this one does not
-# list it and keeps it.
-#
-# It stops at 3.1 because 3.2 is the only feature in the registry that
-# declares removals: listing it would take the fixed-function half of
-# every earlier version away again, which is exactly what the core
-# tier above is. Everything from 1.2 to 3.0 has a compatibility half
-# too — fog coordinates, secondary colours, window positions — and
-# Photoshop resolves all three.
-#
-# Nothing here is new work for the wire: these are ordinary commands
-# with ordinary lengths. What they need is a context that will accept
-# them, which is what profile_mask 2 asks the server for.
 compat = [
     "GL_VERSION_1_0", "GL_VERSION_1_1", "GL_VERSION_1_2", "GL_VERSION_1_3",
     "GL_VERSION_1_4", "GL_VERSION_1_5", "GL_VERSION_2_0", "GL_VERSION_2_1",
     "GL_VERSION_3_0", "GL_VERSION_3_1",
 ]
 
-# What the registry writes as COMPSIZE, said plainly.
-#
-# COMPSIZE is the registry saying "ask the API". Where the answer is a
-# fixed rule it is written here as C; where only the driver knows it,
-# the C names a helper in av::glproto that asks — the transport is in
-# scope at the point the length is needed, so a helper may cross the
-# wire to work it out. See src/apis/opengl/proto/include/gl_helpers.h.
 [params]
 
-# A name is a name: null-terminated, and the registry's COMPSIZE(name)
-# says nothing more than that.
 [params."glBindFragDataLocation.name"]
 role = "string_in"
 
@@ -532,71 +297,21 @@ len = "uniformCount"
 [params."glGetUniformIndices.uniformIndices"]
 len = "uniformCount"
 
-# Which buffer of the framebuffer is being cleared decides how many
-# values the colour is: GL_COLOR takes four, depth and stencil one.
-# glGetSynciv, where `count` is the caller's room and `length` is what
-# was written.
-#
-# Same shape as the internal-format queries below, and the same bite.
-# Every pname a sync object answers — GL_OBJECT_TYPE, GL_SYNC_STATUS,
-# GL_SYNC_CONDITION, GL_SYNC_FLAGS — is a single value, and the call
-# reports through `length` how many it wrote. ogl-samples passes 4 as
-# the count for one GLint on the stack:
-#
-#   glGetSynciv(Fence, GL_SYNC_STATUS, 4, &Length, &Status);
-#
-# Taking that at its word writes sixteen bytes into four, and what was
-# next to it in gl-320-fbo-readpixels-staging was the GLsync handle
-# itself — so the corruption did not show as a wrong status, it showed
-# as the glDeleteSync on the following line failing with
-# GL_INVALID_VALUE on a fence that had been valid a moment earlier.
 [params."glGetSynciv.values"]
 len = "1"
 
-# glGetProgramResourceiv, where `count` is again the caller's room.
-#
-# The answer is one value per property asked for, which is propCount of
-# them, and the call reports through `length` how many it wrote.
-# ogl-samples asks for fourteen properties into a fourteen-int struct
-# and passes sizeof(that struct) — fifty-six — as the count, meaning
-# "room for fifty-six values", which against a real driver is a
-# harmless overstatement because it writes fourteen.
-#
-# Taking it at its word writes two hundred and twenty-four bytes into
-# fifty-six. What was next to it on the stack in gl-430-buffer-uniform
-# was the shader compiler the program was still using, so the crash
-# came later and somewhere else: a page fault inside compiler::clear(),
-# a hundred lines from the call that caused it.
 [params."glGetProgramResourceiv.params"]
 len = "static_cast<size_t>(propCount) < static_cast<size_t>(count) ? static_cast<size_t>(propCount) : static_cast<size_t>(count)"
 
-# The same call under its Apple name, for the same reason.
 [params."glGetSyncivAPPLE.values"]
 len = "1"
 
-# The internal-format queries, where `count` is the caller's room and
-# not the answer's size.
-#
-# gl.xml gives these params len="count", and count is a maximum the
-# caller declares. Every pname but GL_SAMPLES defines exactly one
-# value, so a driver writes one and leaves the rest of the caller's
-# buffer alone — and a caller may quite legally declare more room than
-# it has values for. ogl-samples does exactly that: it passes
-# sizeof(GLint64) as the count, meaning "eight", for a single GLint64
-# on the stack. Natively that is harmless. Taking len at its word here
-# is not: the host writes one value, this side returns eight elements'
-# worth, and the memcpy that lands them puts sixty-four bytes into
-# eight bytes of the caller's stack.
-#
-# GL_SAMPLES is the one pname that really does return `count` of them —
-# that is what GL_NUM_SAMPLE_COUNTS is asked for first.
 [params."glGetInternalformativ.params"]
 len = "(pname == 0x80A9 ? count : 1)"
 
 [params."glGetInternalformati64v.params"]
 len = "(pname == 0x80A9 ? count : 1)"
 
-# And the NV variant, which asks the same question per sample count.
 [params."glGetInternalformatSampleivNV.params"]
 len = "(pname == 0x80A9 ? count : 1)"
 
@@ -609,8 +324,6 @@ len = "(buffer == 0x1800 ? 4 : 1)"
 [params."glClearBufferuiv.value"]
 len = "(buffer == 0x1800 ? 4 : 1)"
 
-# The indexed queries answer with as many values as the query itself
-# does, indexed or not.
 [params."glGetIntegeri_v.data"]
 len = "::av::glproto::pname_count(av_t, target)"
 
@@ -620,19 +333,12 @@ len = "::av::glproto::pname_count(av_t, target)"
 [params."glGetBooleani_v.data"]
 len = "::av::glproto::pname_count(av_t, target)"
 
-# COMPSIZE(value) here is COMPSIZE(pname) under another parameter name:
-# how many values this particular query answers with.
 [params."glGetIntegerui64vNV.result"]
 len = "::av::glproto::pname_count(av_t, value)"
 
-# The indexed form of the same query: the index picks which attribute
-# or binding is being asked about and does not change how many values
-# come back.
 [params."glGetIntegerui64i_vNV.result"]
 len = "::av::glproto::pname_count(av_t, value)"
 
-# How many values a uniform holds is the uniform's type, which only the
-# program knows. The helper asks it.
 [params."glGetUniformfv.params"]
 len = "::av::glproto::uniform_value_count(av_t, program, location)"
 
@@ -642,41 +348,22 @@ len = "::av::glproto::uniform_value_count(av_t, program, location)"
 [params."glGetUniformuiv.params"]
 len = "::av::glproto::uniform_value_count(av_t, program, location)"
 
-# COMPSIZE(program,location) is the registry saying the same thing the
-# three above say: ask the program what the uniform's type is.
 [params."glGetUniformui64vNV.params"]
 len = "::av::glproto::uniform_value_count(av_t, program, location)"
 
 [params."glGetUniformi64vNV.params"]
 len = "::av::glproto::uniform_value_count(av_t, program, location)"
 
-# One value per uniform asked about, whatever the property is.
 [params."glGetActiveUniformsiv.params"]
 len = "uniformCount"
 
-# All but one of the block properties answer with a single value; the
-# exception lists the block's active uniforms, and how many that is is
-# a question for the program.
 [params."glGetActiveUniformBlockiv.params"]
 len = "::av::glproto::uniform_block_value_count(av_t, program, uniformBlockIndex, pname)"
 
-# A compressed image's size is not computable from its extent: the
-# driver is asked, through the texture level's own parameter. It is a
-# pixel transfer like the rest of the family — a pack buffer bound
-# makes its pointer an offset, and the pack state decides where in the
-# caller's memory the host writes — so it is read as one, and the byte
-# count comes from the driver rather than from here.
 [params."glGetCompressedTexImage.img"]
 role = "pixels_out"
 len = "::av::glproto::compressed_image_size(av_t, target, level)"
 
-
-# An index array is an offset into whatever is bound to
-# GL_ELEMENT_ARRAY_BUFFER, not an address. The registry writes it as a
-# length because in the compatibility profile, with no buffer bound, it
-# can be one — client-side arrays. The core profile forbids those, and
-# the compatibility tier will have to gather them; here the pointer is
-# the offset it is in every core-profile application.
 
 [params."glDrawElements.indices"]
 role = "buffer_offset"
@@ -696,26 +383,12 @@ role = "buffer_offset"
 [params."glDrawElementsInstancedBaseVertex.indices"]
 role = "buffer_offset"
 
-# The base-instance draws are the same offset. The registry gives them
-# len="count", which made them `count` bytes copied from the pointer - a
-# read of the guest's own memory at the offset, and on the host a count of
-# indices several bytes wide each read from a run a byte each.
 [params."glDrawElementsInstancedBaseInstance.indices"]
 role = "buffer_offset"
 
 [params."glDrawElementsInstancedBaseVertexBaseInstance.indices"]
 role = "buffer_offset"
 
-# The vertex attribute queries answer with one value for every pname
-# except GL_CURRENT_VERTEX_ATTRIB, which is four.
-#
-# The registry writes four for the float and double forms and one for
-# the integer forms, which is the maximum in one case and the minimum
-# in the other, and neither is the count. Writing back four values for
-# a query the application asked one value of overruns its buffer — on
-# a guest that smashed the caller's stack and turned a vertex array
-# name into zero, several calls later. So the count is written here
-# exactly, for every form.
 [params."glGetVertexAttribiv.params"]
 len = "(pname == 0x8626 ? 4 : 1)"
 
@@ -734,17 +407,12 @@ len = "(pname == 0x8626 ? 4 : 1)"
 [params."glGetVertexAttribLdv.params"]
 len = "(pname == 0x8626 ? 4 : 1)"
 
-# The bindless spelling of the same query, and the same answer: four
-# values for GL_CURRENT_VERTEX_ATTRIB and one for everything else.
 [params."glGetVertexAttribLui64vARB.params"]
 len = "(pname == 0x8626 ? 4 : 1)"
 
-# One attribute, one 64-bit handle.
 [params."glVertexAttribL1ui64vARB.v"]
 len = "1"
 
-# An array of offsets into the bound element buffer, not an array of
-# addresses.
 [params."glMultiDrawElements.indices"]
 role = "offset_array"
 len = "drawcount"
@@ -753,26 +421,6 @@ len = "drawcount"
 role = "offset_array"
 len = "drawcount"
 
-# glGetString and glGetStringi answer with a pointer to storage the
-# driver owns. There is no such pointer to hand across, so the guest
-# keeps its own copy — see the ICD. Nothing to annotate here, but the
-# emitters need to know the return is text rather than an address, and
-# that is decided by the return type.
-
-# The queries whose length is the number of values the enum answers
-# with. COMPSIZE(pname) is handled by the pname table below.
-
-# glBindAttribLocation and glGetAttribLocation take a name with no len
-# in the registry; they are null-terminated strings.
-
-
-# ---------------------------------------------------------------------
-# 4.0 through 4.6
-# ---------------------------------------------------------------------
-
-# The direct-state-access getters are the bound ones with the object
-# named instead of bound, and their lengths are the same question:
-# how many values does that pname answer with.
 
 [params."glGetTextureParameterfv.params"]
 len = "::av::glproto::pname_count(av_t, pname)"
@@ -822,9 +470,6 @@ len = "::av::glproto::pname_count(av_t, pname)"
 [params."glGetVertexArrayIndexediv.param"]
 len = "::av::glproto::pname_count(av_t, pname)"
 
-# Direct state access asks every one of these questions again with the
-# object named instead of bound, and the answers are the same answers.
-
 [params."glGetVertexArrayIntegervEXT.param"]
 len = "::av::glproto::pname_count(av_t, pname)"
 
@@ -843,8 +488,6 @@ len = "::av::glproto::pname_count(av_t, target)"
 [params."glGetBooleanIndexedvEXT.data"]
 len = "::av::glproto::pname_count(av_t, target)"
 
-# A compressed level is as long as the driver says it is, which is the
-# same question glGetCompressedTexImage already asks.
 [params."glGetCompressedTextureImageEXT.img"]
 role = "pixels_out"
 len = "::av::glproto::compressed_image_size(av_t, target, lod)"
@@ -853,8 +496,6 @@ len = "::av::glproto::compressed_image_size(av_t, target, lod)"
 role = "pixels_out"
 len = "::av::glproto::compressed_image_size(av_t, target, lod)"
 
-# COMPSIZE(size) is the registry being careful about a parameter that
-# is already the answer.
 [params."glNamedBufferDataEXT.data"]
 len = "(size < 0 ? 0 : static_cast<size_t>(size))"
 
@@ -864,29 +505,20 @@ len = "(size < 0 ? 0 : static_cast<size_t>(size))"
 [params."glGetNamedBufferSubDataEXT.data"]
 len = "(size < 0 ? 0 : static_cast<size_t>(size))"
 
-# How long an assembly program's source is, asked of the program.
 [params."glGetNamedProgramStringEXT.string"]
 len = "::av::glproto::named_program_string_bytes(av_t, program, target)"
 
-# The old multitexture spelling of glTexCoordPointer: a pointer that is
-# an offset when a buffer is bound, and this file's problem when not.
 [params."glMultiTexCoordPointerEXT.pointer"]
 role = "buffer_offset"
 
 [params."glGetVertexArrayIndexed64iv.param"]
 len = "::av::glproto::pname_count(av_t, pname)"
 
-# The indexed forms of the ordinary state queries, whose length is the
-# query's own count as everywhere else.
-
 [params."glGetDoublei_v.data"]
 len = "::av::glproto::pname_count(av_t, target)"
 
 [params."glGetFloati_v.data"]
 len = "::av::glproto::pname_count(av_t, target)"
-
-# Clearing one buffer of a framebuffer by name: a colour takes four
-# values, a depth or a stencil one, exactly as the bound form does.
 
 [params."glClearNamedFramebufferfv.value"]
 len = "(buffer == 0x1800 ? 4 : 1)"
@@ -896,9 +528,6 @@ len = "(buffer == 0x1800 ? 4 : 1)"
 
 [params."glClearNamedFramebufferuiv.value"]
 len = "(buffer == 0x1800 ? 4 : 1)"
-
-# The debug messages and object labels: text with a length beside it,
-# where a negative length means the text is terminated instead.
 
 [params."glDebugMessageInsert.buf"]
 len = "(length < 0 ? __builtin_strlen(reinterpret_cast<const char*>(buf)) : static_cast<size_t>(length))"
@@ -912,9 +541,6 @@ len = "(length < 0 ? __builtin_strlen(reinterpret_cast<const char*>(label)) : st
 [params."glPushDebugGroup.message"]
 len = "(length < 0 ? __builtin_strlen(reinterpret_cast<const char*>(message)) : static_cast<size_t>(length))"
 
-# The viewport arrays: one viewport is four values, one depth range is
-# two, and the count says how many of them there are.
-
 [params."glViewportArrayv.v"]
 len = "(static_cast<size_t>(count) * 4)"
 
@@ -923,9 +549,6 @@ len = "(static_cast<size_t>(count) * 4)"
 
 [params."glDepthRangeArrayv.v"]
 len = "(static_cast<size_t>(count) * 2)"
-
-# One exclusive scissor rectangle is four values, and one sample
-# location is two — an x and a y inside the pixel.
 
 [params."glScissorExclusiveArrayvNV.v"]
 len = "(static_cast<size_t>(count) * 4)"
@@ -936,8 +559,6 @@ len = "(static_cast<size_t>(count) * 2)"
 [params."glNamedFramebufferSampleLocationsfvNV.v"]
 len = "(static_cast<size_t>(count) * 2)"
 
-# A resource is looked up by a name, which is a name.
-
 [params."glGetProgramResourceIndex.name"]
 role = "string_in"
 
@@ -947,16 +568,8 @@ role = "string_in"
 [params."glGetProgramResourceLocationIndex.name"]
 role = "string_in"
 
-# A double uniform holds as many values as its type, like the others.
-
 [params."glGetUniformdv.params"]
 len = "::av::glproto::uniform_value_count(av_t, program, location)"
-
-# The named texture uploads carry pixels, exactly as their bound forms
-# do. The registry gives them no length at all — the bound ones say
-# COMPSIZE(format,type,width,height) — so without this they would be
-# read as an offset into a pixel buffer, which is what a void* with no
-# length means everywhere else.
 
 [params."glTextureSubImage1D.pixels"]
 role = "pixels_in"
@@ -967,13 +580,6 @@ role = "pixels_in"
 [params."glTextureSubImage3D.pixels"]
 role = "pixels_in"
 
-# The transfers that carry their own byte count. The registry gives
-# these a plain length — bufSize, or imageSize — and read that way they
-# are ordinary arrays, which is right until a pixel buffer is bound and
-# the pointer stops being an address. They are pixels like the rest of
-# the family; the difference is only that the caller has already said
-# how many bytes, so nothing has to be worked out from the format.
-
 [params."glGetCompressedTextureImage.pixels"]
 role = "pixels_out"
 
@@ -982,16 +588,6 @@ role = "pixels_out"
 
 [params."glGetTextureImage.pixels"]
 role = "pixels_out"
-
-# A query result goes where a query buffer is bound, if one is.
-#
-# GL_ARB_query_buffer_object gives glGetQueryObject the same double
-# meaning a pixel transfer has: with a buffer bound to GL_QUERY_BUFFER
-# the pointer is an offset into it and the host writes the result
-# there, and with nothing bound it is an address in the caller. Read as
-# an address either way, an application that binds one has this driver
-# writing the answer to whatever address the offset happens to be —
-# which for the usual offset of zero is a store through null.
 
 [params."glGetQueryObjectiv.params"]
 role = "pixels_out"
@@ -1044,24 +640,14 @@ role = "pixels_in"
 [params."glCompressedTextureSubImage3D.data"]
 role = "pixels_in"
 
-# A pointer used as a name. glObjectPtrLabel labels a sync object, and
-# glGetObjectPtrLabel asks about one: what crosses is the server's own
-# pointer, as everywhere a GLsync does.
-
 [params."glObjectPtrLabel.ptr"]
 role = "sync"
 
 [params."glGetObjectPtrLabel.ptr"]
 role = "sync"
 
-# The debug callback's user data belongs to the guest, which is the
-# side that will call the callback: see docs/OPENGL.md.
-
 [params."glDebugMessageCallback.userParam"]
 role = "ignored"
-
-# An indirect draw reads its parameters out of the bound buffer: what
-# crosses is where in it to start, not what is there.
 
 [params."glMultiDrawArraysIndirect.indirect"]
 role = "buffer_offset"
@@ -1069,30 +655,15 @@ role = "buffer_offset"
 [params."glMultiDrawElementsIndirect.indirect"]
 role = "buffer_offset"
 
-# The compatibility profile, which the registry writes as COMPSIZE in
-# five different voices.
-#
-# Immediate mode, the matrix stack and display lists need nothing said
-# here — their lengths are ordinary. What is left is the handful whose
-# size is either pixel-store state or a question for the driver, and
-# each of those is a helper in av::glproto that asks.
-
-# A bitmap is one bit per pixel, in rows padded to the unpack
-# alignment. Nothing in the call says how many bytes that is.
 [params."glBitmap.bitmap"]
 len = "::av::glproto::bitmap_bytes(av_t, width, height)"
 
-# The stipple pattern is 32 by 32 bits. That is four bytes a row before
-# the alignment is applied, and the alignment is the only thing that
-# can make it more.
 [params."glPolygonStipple.mask"]
 len = "::av::glproto::stipple_bytes(av_t, false)"
 
 [params."glGetPolygonStipple.mask"]
 len = "::av::glproto::stipple_bytes(av_t, true)"
 
-# A pixel map is as long as the driver was told to make it, which is a
-# query of its own.
 [params."glGetPixelMapfv.values"]
 len = "::av::glproto::pixel_map_size(av_t, map)"
 
@@ -1102,12 +673,6 @@ len = "::av::glproto::pixel_map_size(av_t, map)"
 [params."glGetPixelMapusv.values"]
 len = "::av::glproto::pixel_map_size(av_t, map)"
 
-# An evaluator is given its control points with a stride between them,
-# so the array is as long as the last point's last value: the points
-# before it, times the stride, plus the values the target says a point
-# holds. The values are a table — GL_MAP1_VERTEX_3 is three of them —
-# and the table is in the helpers rather than here because glGetMap
-# needs it too.
 [params."glMap1d.points"]
 len = "::av::glproto::map_point_values(target) + static_cast<size_t>(stride) * static_cast<size_t>(order - 1)"
 
@@ -1120,9 +685,6 @@ len = "::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * 
 [params."glMap2f.points"]
 len = "::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * static_cast<size_t>(uorder - 1) + static_cast<size_t>(vstride) * static_cast<size_t>(vorder - 1)"
 
-# An evaluator answers with its control points, and how many that is
-# depends on the map's order and on how many values each point holds —
-# both of which only the driver knows.
 [params."glGetMapdv.v"]
 len = "::av::glproto::map_value_count(av_t, target, query)"
 
@@ -1132,13 +694,6 @@ len = "::av::glproto::map_value_count(av_t, target, query)"
 [params."glGetMapiv.v"]
 len = "::av::glproto::map_value_count(av_t, target, query)"
 
-# The client-array pointers, which are the compatibility profile's
-# version of glVertexAttribPointer and are read the same way: an offset
-# into whatever is bound to GL_ARRAY_BUFFER. With no buffer bound they
-# are addresses in the application's memory and the draw would have to
-# gather them — that is the one thing this tier does not do yet, and
-# the driver says so when it sees it rather than sending an address the
-# host would read as an offset. See av::glicd::note_client_array.
 [params."glVertexPointer.pointer"]
 role = "buffer_offset"
 
@@ -1166,13 +721,6 @@ role = "buffer_offset"
 [params."glSecondaryColorPointer.pointer"]
 role = "buffer_offset"
 
-# How many values a query answers with, where it is not one. Anything
-# not named here answers with one value, which is true of the great
-# majority of enums and is what the guest assumes.
-# GL_EXT_semaphore's barrier lists (feature 053). The registry writes all
-# three as COMPSIZE, which here means nothing more than the count that
-# precedes them: how many buffers this signal or wait is a barrier for,
-# and how many textures - the layouts running one per texture.
 [params."glSignalSemaphoreEXT.buffers"]
 len = "numBufferBarriers"
 
@@ -1191,22 +739,10 @@ len = "numTextureBarriers"
 [params."glWaitSemaphoreEXT.srcLayouts"]
 len = "numTextureBarriers"
 
-# glGetUnsignedBytei_vEXT's only defined target is GL_DEVICE_UUID_EXT, and a
-# device UUID is GL_UUID_SIZE_EXT bytes - the registry writes COMPSIZE(target)
-# because the entry point is shaped for targets it never gained. Sixteen is
-# therefore the whole of what this command can answer, and a target that is not
-# that one is refused by the driver rather than sized here (feature 053, T037).
 [params."glGetUnsignedBytei_vEXT.data"]
 len = "16"
 
 [pname_counts]
-# The device and driver identity GL_EXT_memory_object and GL_EXT_semaphore are
-# matched to a Vulkan device by. `glGetUnsignedBytevEXT.data` is COMPSIZE(pname)
-# - a length the rules *can* read, and would read as one byte without these
-# four lines, which is how a sixteen-byte UUID becomes a one-byte read and
-# fifteen bytes of the driver's answer written past what the decode arena gave
-# out. The generator cannot catch this one: it refuses only what it cannot
-# read (feature 053, research.md §12).
 GL_DEVICE_UUID_EXT = 16
 GL_DRIVER_UUID_EXT = 16
 GL_DEVICE_LUID_EXT = 8
@@ -1226,32 +762,11 @@ GL_COMPRESSED_TEXTURE_FORMATS = 128
 GL_PROGRAM_BINARY_FORMATS = 16
 GL_SHADER_BINARY_FORMATS = 16
 
-# Texture and sampler parameters that are a colour or a swizzle rather
-# than a single value. A pname missing from this table is read as one
-# value, which for these would send one quarter of what was meant and
-# leave the rest of the driver's copy zero — an enum of zero, which is
-# not one.
-# A compute program's local size is three numbers, and the host writes
-# all three into whatever it was given: asking for one is a buffer
-# overrun on the side that allocated it.
 GL_COMPUTE_WORK_GROUP_SIZE = 3
 
-# The tessellation levels a patch is given when there is no control
-# shader to set them: four along the edges and two inside. Read as one
-# value each, three of the outer levels and one of the inner never
-# crossed, and the host read them out of a buffer sized for one — so
-# what a patch was tessellated by was whatever followed that float on
-# the server's heap. gl-450-primitive-tessellation-eval drew a fan of
-# lines from the corners where the host drew a grid.
 GL_PATCH_DEFAULT_OUTER_LEVEL = 4
 GL_PATCH_DEFAULT_INNER_LEVEL = 2
 
-# The compatibility profile's state, which is where the many-valued
-# queries mostly live. A matrix is sixteen floats; a colour, a plane and
-# a raster position are four; a normal is three. Every one of these was
-# read as one value before the tier carried them, and the host writes
-# the real number regardless — see kQuerySlack in the generated server
-# for why that stopped being a corrupted heap.
 GL_MODELVIEW_MATRIX = 16
 GL_PROJECTION_MATRIX = 16
 GL_TEXTURE_MATRIX = 16
@@ -1284,18 +799,6 @@ GL_POINT_SIZE_IMPLEMENTATION_DEPENDENT = 2
 GL_TEXTURE_SWIZZLE_RGBA = 4
 GL_TEXTURE_BORDER_COLOR = 4
 
-# Extensions written on top of another extension.
-#
-# The registry does not record that GL_ARB_sparse_texture2 is
-# meaningless without GL_ARB_sparse_texture: the second one carries the
-# entry points and the first is a set of GLSL functions and a promise
-# about them. An extension with no commands of its own passes the
-# "every command is carried" test by having no commands, so without
-# this it would be offered by a driver that cannot do any of it.
-#
-# gl-500-texture-sparse-ext is what that costs: it asked for
-# GL_EXT_sparse_texture2, was told yes, resolved
-# glTexPageCommitmentARB to null and called it.
 [extension_requires]
 GL_ARB_sparse_texture2 = "GL_ARB_sparse_texture"
 GL_ARB_sparse_texture_clamp = "GL_ARB_sparse_texture2"

@@ -1,5 +1,3 @@
-/* The harness's GPU MMU checks, proven against crafted answers so the driver's
- * geometry fails for the reason dxgkrnl or VidMm would give. */
 #include "miniport/ddi/dxgk_driver_caps_record.hpp"
 #include "miniport/ddi/dxgk_gpu_mmu_caps_record.hpp"
 #include "miniport/ddi/dxgk_node_metadata_record.hpp"
@@ -39,7 +37,6 @@ constexpr std::int32_t invalid_parameter = static_cast<std::int32_t>(0xC000000Du
 constexpr std::int32_t configuration_error = static_cast<std::int32_t>(0xC0000182u);
 constexpr std::int32_t no_memory = static_cast<std::int32_t>(0xC0000017u);
 
-/* A WDDM 2.0 GPU MMU miniport with x86-64's four-level geometry, adjustable. */
 class GpuMmuMiniport {
 public:
     GpuMmuMiniport() : caps_{}, physical_{}, mmu_{}, levels_{}, metadata_{}, fail_type_(0), fail_node_(false)
@@ -105,14 +102,13 @@ private:
     bool                              fail_node_;
 };
 
-/* Initialize, then the GPU MMU queries; answers query()'s status. */
 std::int32_t start(GpuMmuMiniport &miniport, FakeDxgadapter &adapter, FakeGpuMmu &mmu)
 {
     CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
     return mmu.query(&miniport);
 }
 
-}  // namespace
+}
 
 TEST(fake_gpu_mmu_query, accepts_a_four_level_48_bit_geometry_and_vidmm_its_segments)
 { MockPlatform platform; GpuMmuMiniport miniport;

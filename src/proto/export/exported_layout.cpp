@@ -52,8 +52,6 @@ uint64_t ExportedLayout::modifier() const
     return modifier_;
 }
 
-/* A row holds at least one byte a pixel, so a stride narrower than the
- * picture is no layout of it. */
 bool ExportedLayout::describes_a_picture() const
 {
     AV_SCOPE("ExportedLayout::describes_a_picture");
@@ -66,4 +64,4 @@ bool ExportedLayout::empty() const
     return width_ == 0u && height_ == 0u && fourcc_ == 0u && stride_ == 0u && offset_ == 0u && modifier_ == 0u;
 }
 
-}  // namespace av
+}

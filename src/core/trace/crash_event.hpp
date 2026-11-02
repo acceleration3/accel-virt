@@ -1,6 +1,3 @@
-/* What a process knows when it crashes, before anything is formatted: which
- * binary's handler caught it, the process, the exception and where it
- * happened. */
 #ifndef AV_CRASH_EVENT_HPP
 #define AV_CRASH_EVENT_HPP
 
@@ -24,6 +21,6 @@ private:
     uint64_t    address_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_CRASH_EVENT_HPP
+#endif

@@ -45,8 +45,7 @@ void TraceEscape::reply(uint8_t *bytes, size_t length, const TraceEscapeRecord &
     const uint32_t filled = left < request.window() ? static_cast<uint32_t>(left) : request.window();
     if (filled != 0u)
         platform_.copy(bytes + TraceEscapeRecord::encoded_size, source + request.offset(), filled);
-    /* The request was decoded from these bytes, so they hold a record. */
     static_cast<void>(request.answered(total, filled, platform_.interrupt_time()).encode(bytes, length));
 }
 
-}  // namespace av
+}

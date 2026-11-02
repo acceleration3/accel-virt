@@ -1,16 +1,3 @@
-/* The kernels and the transfers, and the event each of them may be asked for.
- *
- * Every enqueue has two shapes: one the application wants an event back from
- * and one it does not. They are different paths - an event asked for is one
- * more guest object to make and hand over, and an event not asked for is one
- * the ICD may still have made for itself and has to give back - so both are
- * driven here for every enqueue that has them.
- *
- * A kernel argument is the other thing worth its own case: an argument the
- * size of a cl_mem may be one, in which case what crosses is the number the
- * host knows that object by rather than the guest's pointer, and anything
- * else is bytes. Getting that backwards would send a guest address to a host
- * that would use it. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
@@ -38,9 +25,6 @@ constexpr std::uint64_t host_program = 0x6700u;
 constexpr std::uint64_t host_kernel = 0x6800u;
 constexpr std::uint64_t host_event = 0x6900u;
 
-/* Whether the clEnqueueReadBuffer at `index` of the journal asked the host to
- * block. Its payload is the queue and the buffer as handles and then the flag,
- * which is the one field of it this ICD decides rather than passes on. */
 bool read_asks_the_host_to_block(const av::MockKmt &kmt, std::uint32_t index)
 {
     const std::uint8_t *const frame = kmt.command_bytes(index);
@@ -61,8 +45,6 @@ const cl_icd_dispatch *table_of(const void *object)
     return object != nullptr ? *reinterpret_cast<const cl_icd_dispatch *const *>(object) : nullptr;
 }
 
-/* A context, a queue, a buffer, a program and a kernel: everything an enqueue
- * needs, so each test below is about the enqueue and not the setup. */
 class Running {
 public:
     explicit Running(ClIcdRig &rig)
@@ -97,9 +79,6 @@ public:
     }
 
     bool             made() const { return kernel_ != nullptr && buffer_ != nullptr; }
-    /* Something left on the queue - a marker - so that the next transfer has
-     * a queue to drain: a queue nothing was sent to is known idle, and a
-     * transfer to it drains nothing. */
     void leaves_work()
     {
         rig_.host().cl_enqueued(CL_SUCCESS, host_event);
@@ -123,11 +102,9 @@ private:
     cl_kernel        kernel_;
 };
 
-/* A callback that is never run: what is being tested is the registration, not
- * what it does. */
 void nothing_happened(cl_event, cl_int, void *) {}
 
-}  // namespace
+}
 
 TEST(cl_enqueue_paths, a_kernel_of_no_name_or_of_something_that_is_not_a_program_is_refused)
 { ClIcdRig rig;
@@ -144,9 +121,6 @@ TEST(cl_enqueue_paths, a_kernel_of_no_name_or_of_something_that_is_not_a_program
   CHECK_EQ(error, CL_INVALID_VALUE);
   CHECK_EQ(rig.kmt().commands(), sent);
 
-  /* A host that has no such kernel says so; one that answers success with no
-   * kernel has contradicted itself, and the API's word for a kernel that is
-   * not there is what the application gets. */
   rig.host().cl_handle(0u, CL_INVALID_KERNEL_NAME);
   error = CL_SUCCESS;
   CHECK(rig.root().create_kernel(run.program(), "absent", &error) == nullptr);
@@ -157,7 +131,6 @@ TEST(cl_enqueue_paths, a_kernel_of_no_name_or_of_something_that_is_not_a_program
   CHECK_EQ(error, CL_INVALID_KERNEL_NAME);
   CHECK(rig.root().invariants_hold()); }
 
-/* Whether `value`'s eight bytes appear in the journalled command at `index`. */
 bool carries(const av::MockKmt &kmt, std::uint32_t index, std::uint64_t value)
 {
     const std::uint8_t *const frame = kmt.command_bytes(index);
@@ -175,30 +148,20 @@ TEST(cl_enqueue_paths, an_argument_the_size_of_a_buffer_crosses_as_the_host_s_nu
   CHECK(run.made());
   if (!run.made()) return;
 
-  /* The application passes the address of its own cl_mem, and what crosses
-   * is the number the host knows that buffer by - never the guest pointer,
-   * which the host would happily use as an address. An argument goes without
-   * waiting for its answer, so each is held until a command that is answered. */
   const cl_mem        named = run.buffer();
   const std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 0u, sizeof named, &named), CL_SUCCESS);
   CHECK_EQ(rig.kmt().commands(), sent);
 
-  /* The same size, but not a buffer this ICD made: it is bytes, and they
-   * cross as bytes. A pointer-shaped value the application invented must not
-   * be mistaken for an object. */
   void *const invented = reinterpret_cast<void *>(std::uintptr_t{0x1234});
   CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 1u, sizeof invented, &invented),
            CL_SUCCESS);
 
-  /* A local-memory argument: a size and no value at all. */
   CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 2u, 64u, nullptr), CL_SUCCESS);
 
-  /* And a scalar, which is neither. */
   const std::uint32_t scalar = 7u;
   CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 3u, sizeof scalar, &scalar), CL_SUCCESS);
 
-  /* The launch that wants an event is answered, and takes the four with it. */
   const std::size_t global = 64u;
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
   cl_event event = nullptr;
@@ -213,7 +176,6 @@ TEST(cl_enqueue_paths, an_argument_the_size_of_a_buffer_crosses_as_the_host_s_nu
   CHECK(carries(rig.kmt(), sent + 1u, 0x1234u));
   CHECK(!carries(rig.kmt(), sent + 1u, host_buffer));
 
-  /* Something that is not a kernel is refused before any of that. */
   CHECK_EQ(rig.root().set_kernel_argument(reinterpret_cast<cl_kernel>(run.queue()), 0u,
                                           sizeof named, &named),
            CL_INVALID_KERNEL);
@@ -227,7 +189,6 @@ TEST(cl_enqueue_paths, a_kernel_enqueued_with_an_event_hands_one_back_and_withou
   if (!run.made()) return;
   const std::size_t global = 64u;
 
-  /* Not a queue, and not a kernel. */
   CHECK_EQ(rig.root().enqueue_kernel(reinterpret_cast<cl_command_queue>(run.context()),
                                      run.kernel(), 1u, nullptr, &global, nullptr, nullptr),
            CL_INVALID_COMMAND_QUEUE);
@@ -235,7 +196,6 @@ TEST(cl_enqueue_paths, a_kernel_enqueued_with_an_event_hands_one_back_and_withou
                                      nullptr, &global, nullptr, nullptr),
            CL_INVALID_KERNEL);
 
-  /* Asked for: the application is handed an object of its own. */
   rig.host().cl_enqueued(CL_SUCCESS, host_event);
   cl_event event = nullptr;
   CHECK_EQ(rig.root().enqueue_kernel(run.queue(), run.kernel(), 1u, nullptr, &global, nullptr,
@@ -243,14 +203,10 @@ TEST(cl_enqueue_paths, a_kernel_enqueued_with_an_event_hands_one_back_and_withou
            CL_SUCCESS);
   CHECK(event != nullptr);
 
-  /* Not asked for: the launch goes without waiting for an answer, nothing is
-   * handed over, and nothing is left behind. */
   CHECK_EQ(rig.root().enqueue_kernel(run.queue(), run.kernel(), 1u, nullptr, &global, nullptr,
                                      nullptr),
            CL_SUCCESS);
 
-  /* A host that refuses the enqueue makes no event whether one was asked for
-   * or not, and the application's own is left as it was. */
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   cl_event refused = nullptr;
   CHECK_EQ(rig.root().enqueue_kernel(run.queue(), run.kernel(), 1u, nullptr, &global, nullptr,
@@ -268,7 +224,6 @@ TEST(cl_enqueue_paths, a_transfer_of_nothing_or_to_nowhere_is_refused_before_it_
   unsigned char bytes[8] = {};
   const std::uint32_t sent = rig.kmt().commands();
 
-  /* Not a queue, not a buffer, and nowhere to read into or write from. */
   CHECK_EQ(rig.root().enqueue_read(reinterpret_cast<cl_command_queue>(run.context()), run.buffer(),
                                    CL_TRUE, 0u, sizeof bytes, bytes, nullptr),
            CL_INVALID_COMMAND_QUEUE);
@@ -290,8 +245,6 @@ TEST(cl_enqueue_paths, a_transfer_of_nothing_or_to_nowhere_is_refused_before_it_
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
 
-/* What a drain of the queue answers: its marker, the flush, a status that
- * says complete, and the marker given back. */
 void drains(ClIcdRig &rig)
 {
     rig.host().cl_enqueued(CL_SUCCESS, host_event);
@@ -301,8 +254,6 @@ void drains(ClIcdRig &rig)
     rig.host().cl_result(CL_SUCCESS);
 }
 
-/* Whether the command at `index` of the journal asked the host to block, for
- * a write: the queue and the buffer as handles, then the flag. */
 bool write_asks_the_host_to_block(const av::MockKmt &kmt, std::uint32_t index)
 {
     const std::uint8_t *const frame = kmt.command_bytes(index);
@@ -314,10 +265,6 @@ bool write_asks_the_host_to_block(const av::MockKmt &kmt, std::uint32_t index)
     return blocking != 0u;
 }
 
-/* A write's pieces go unanswered, behind the drain that emptied its queue:
- * the host makes every write blocking and in order, so the next command the
- * queue answers is the answer for it, and the write reaches the host with that
- * command's batch. */
 TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_whatever_it_was_asked)
 { ClIcdRig rig;
   Running  run(rig);
@@ -326,9 +273,6 @@ TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_w
   run.leaves_work();
   unsigned char bytes[8] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
 
-  /* Non-blocking, no event: the drain, and the write held behind it. The
-   * bytes cross into the device's decode arena, which the next command
-   * reuses, so the host must have copied them before it takes another. */
   drains(rig);
   std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(rig.root().enqueue_write(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof bytes, bytes,
@@ -338,9 +282,6 @@ TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_w
   CHECK_EQ(rig.kmt().command_id(sent),
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
 
-  /* With an event: the write goes with the marker after it, which is what the
-   * application holds. The write held from before went with the work left
-   * on the queue, which the next answered command sends. */
   sent = rig.kmt().commands();
   run.leaves_work();
   CHECK(write_asks_the_host_to_block(rig.kmt(), sent));
@@ -359,8 +300,6 @@ TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_w
   CHECK_EQ(rig.kmt().command_id(sent + 5u),
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueMarkerWithWaitList));
 
-  /* A marker the host would not make for the event is the application's
-   * error, after the bytes were written. */
   run.leaves_work();
   drains(rig);
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
@@ -370,7 +309,6 @@ TEST(cl_enqueue_paths, a_write_waits_for_its_queue_then_asks_the_host_to_block_w
            CL_OUT_OF_RESOURCES);
   CHECK(event == nullptr);
 
-  /* A drain the host refuses sends no write at all. */
   run.leaves_work();
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   sent = rig.kmt().commands();
@@ -390,24 +328,12 @@ TEST(cl_enqueue_paths, a_non_blocking_read_the_marker_fails_for_never_becomes_a_
   if (!run.made()) return;
   unsigned char into[8] = {};
 
-  /* The marker is what a deferred read is named by. A host that will not
-   * make one leaves nothing to record against, so the call fails rather than
-   * recording a read nobody could ever deliver. */
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into, into,
                                    nullptr),
            CL_OUT_OF_RESOURCES);
   CHECK(rig.root().invariants_hold()); }
 
-/* A blocking read is three commands the host may refuse - the marker that
- * drains the queue, the wait on it, and the read itself - and each has to
- * answer with its own error and stop there. They are one test each rather
- * than one test with three scripts, because a single refusal scripted once
- * lands on whichever command happens to go first, and a test that does not
- * say which one it refused stops meaning anything the moment the order
- * changes. This one did: it scripted one refusal, the reordering put the
- * marker in front of the read, and it went on passing while testing the
- * marker under a name that says read. */
 TEST(cl_enqueue_paths, a_blocking_read_whose_drain_marker_the_host_refuses_answers_its_error)
 { ClIcdRig rig;
   Running  run(rig);
@@ -421,8 +347,6 @@ TEST(cl_enqueue_paths, a_blocking_read_whose_drain_marker_the_host_refuses_answe
   CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof into, into,
                                    nullptr),
            CL_OUT_OF_RESOURCES);
-  /* The marker alone: there is nothing to wait for and nothing to read from a
-   * queue the host would not mark. */
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
   CHECK(rig.root().invariants_hold()); }
@@ -436,14 +360,12 @@ TEST(cl_enqueue_paths, a_blocking_read_whose_drain_the_host_will_not_flush_answe
   unsigned char into[8] = {};
 
   const std::uint32_t sent = rig.kmt().commands();
-  rig.host().cl_enqueued(CL_SUCCESS, host_event);   /* the marker */
-  rig.host().cl_result(CL_OUT_OF_RESOURCES);        /* which the host will not flush */
-  rig.host().cl_result(CL_SUCCESS);                 /* the marker is given back anyway */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  rig.host().cl_result(CL_OUT_OF_RESOURCES);
+  rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof into, into,
                                    nullptr),
            CL_OUT_OF_RESOURCES);
-  /* Marker, flush, release - and no read: the queue never drained, so reading
-   * it would answer bytes from before the work the application waited for. */
   CHECK_EQ(rig.kmt().commands(), sent + 3u);
   CHECK_EQ(rig.kmt().command_id(sent + 2u), av::clproto::kCmd_clReleaseEvent);
   CHECK(rig.root().invariants_hold()); }
@@ -457,29 +379,20 @@ TEST(cl_enqueue_paths, a_blocking_read_the_host_refuses_answers_its_error)
   unsigned char into[8] = {};
 
   const std::uint32_t sent = rig.kmt().commands();
-  rig.host().cl_enqueued(CL_SUCCESS, host_event);   /* the marker */
-  rig.host().cl_result(CL_SUCCESS);                 /* the queue flushed */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  rig.host().cl_result(CL_SUCCESS);
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
-  rig.host().cl_result(CL_SUCCESS);                 /* the marker released */
-  /* The queue drained, and the read of it refused. */
+  rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_bytes(CL_OUT_OF_RESOURCES, nullptr, 0u);
   CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof into, into,
                                    nullptr),
            CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.kmt().commands(), sent + 5u);
   CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clEnqueueReadBuffer);
-  /* And nothing was written into what the application gave. */
   for (const unsigned char byte : into) CHECK_EQ(byte, 0u);
   CHECK(rig.root().invariants_hold()); }
 
-/* ---- events, and the delivery a status query triggers -------------------- */
-
-/* A read the application polls for rather than waits on: asking the event's
- * status is where it learns the read is done, so it is where the bytes have
- * to be there. Every other query, and every other answer, leaves the read
- * where it was - delivering on a status of 'running' would write into the
- * application's memory while it is still entitled to use it. */
 TEST(cl_enqueue_paths, only_a_completed_execution_status_delivers_a_deferred_read)
 { ClIcdRig rig;
   Running  run(rig);
@@ -495,29 +408,22 @@ TEST(cl_enqueue_paths, only_a_completed_execution_status_delivers_a_deferred_rea
   CHECK(event != nullptr);
   if (event == nullptr) return;
 
-  /* Another query entirely: the read is not delivered. */
   cl_command_queue named = nullptr;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&named), sizeof named);
   CHECK_EQ(rig.root().event_info(event, CL_EVENT_COMMAND_QUEUE, sizeof named, &named, nullptr),
            CL_SUCCESS);
 
-  /* The right query, asked only for its size: there is nothing to read the
-   * status out of, so nothing is delivered. */
   std::size_t bytes = 0u;
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   CHECK_EQ(rig.root().event_info(event, CL_EVENT_COMMAND_EXECUTION_STATUS, 0u, nullptr, &bytes),
            CL_SUCCESS);
 
-  /* The right query with too little room: refused by the host rather than
-   * read past. */
   cl_int status = 0;
   rig.host().cl_info(CL_INVALID_VALUE, nullptr, 0u);
   CHECK_EQ(rig.root().event_info(event, CL_EVENT_COMMAND_EXECUTION_STATUS, 1u, &status, nullptr),
            CL_INVALID_VALUE);
 
-  /* The right query, answered 'still running': the application may still be
-   * using that memory, so nothing is written into it. */
   const cl_int running = CL_RUNNING;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&running), sizeof running);
   CHECK_EQ(rig.root().event_info(event, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status,
@@ -525,7 +431,6 @@ TEST(cl_enqueue_paths, only_a_completed_execution_status_delivers_a_deferred_rea
            CL_SUCCESS);
   for (const unsigned char byte : into) CHECK_EQ(byte, 0u);
 
-  /* And completed, which is the one that delivers. */
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   const unsigned char answered[8] = {5u, 5u, 5u, 5u, 5u, 5u, 5u, 5u};
   rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
@@ -535,9 +440,6 @@ TEST(cl_enqueue_paths, only_a_completed_execution_status_delivers_a_deferred_rea
   for (const unsigned char byte : into) CHECK_EQ(byte, 5u);
   CHECK(rig.root().invariants_hold()); }
 
-/* A delivery the host refuses is the answer the caller gets, and the row goes
- * back either way: a read that can never be delivered must not be kept
- * forever, and the application is told rather than left waiting. */
 TEST(cl_enqueue_paths, a_delivery_the_host_refuses_is_answered_and_the_row_is_still_given_back)
 { ClIcdRig rig;
   Running  run(rig);
@@ -553,19 +455,14 @@ TEST(cl_enqueue_paths, a_delivery_the_host_refuses_is_answered_and_the_row_is_st
   CHECK(event != nullptr);
   if (event == nullptr) return;
 
-  /* The wait says it is done and the fetch behind it fails. */
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   rig.host().cl_bytes(CL_OUT_OF_RESOURCES, nullptr, 0u);
   CHECK_EQ(rig.root().wait_for_events(1u, &event), CL_OUT_OF_RESOURCES);
-  /* Asked again, there is nothing left to deliver: the row went back. */
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   CHECK_EQ(rig.root().wait_for_events(1u, &event), CL_SUCCESS);
   CHECK(rig.root().invariants_hold()); }
 
-/* Waits name events, and events belong to contexts. A wait over two contexts
- * is a wait this ICD cannot make, because it has one transport to ask over
- * per context and no way to wait on both at once. */
 TEST(cl_enqueue_paths, a_wait_over_two_contexts_or_too_many_events_is_refused)
 { ClIcdRig rig;
   Running  run(rig);
@@ -577,15 +474,12 @@ TEST(cl_enqueue_paths, a_wait_over_two_contexts_or_too_many_events_is_refused)
   CHECK(mine != nullptr);
   if (mine == nullptr) return;
 
-  /* A second context, and an event of its own. */
   rig.host().blob_import(0u, 0x79u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(0x6405u, CL_SUCCESS);
   cl_context second = rig.loader().create_context(nullptr, nullptr);
   if (second == nullptr) {
-      /* The rig's loader makes a context on the device it found; if it
-       * cannot, there is nothing to cross contexts with. */
       CHECK(rig.root().invariants_hold());
       return;
   }
@@ -600,11 +494,6 @@ TEST(cl_enqueue_paths, a_wait_over_two_contexts_or_too_many_events_is_refused)
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
 
-/* More non-blocking reads outstanding than the ICD can remember.
- *
- * A read it cannot record is one it could never deliver, so that read is made
- * blocking instead - slower, and never wrong. Dropping it would lose bytes an
- * application was told it would get. */
 TEST(cl_enqueue_paths, a_read_the_icd_cannot_remember_is_made_blocking_instead)
 { ClIcdRig rig;
   Running  run(rig);
@@ -612,38 +501,30 @@ TEST(cl_enqueue_paths, a_read_the_icd_cannot_remember_is_made_blocking_instead)
   if (!run.made()) return;
   unsigned char into[8] = {};
 
-  /* Fill the table. Each read is a marker the ICD keeps until it delivers. */
   for (std::uint32_t index = 0u; index < 64u; ++index) {
       rig.host().cl_enqueued(CL_SUCCESS, host_event + index);
       CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into, into,
                                        nullptr),
                CL_SUCCESS);
   }
-  /* The next one has nowhere to be recorded. The marker it made is given
-   * back and the read is taken as a blocking one: the queue is drained by a
-   * marker of its own and the read is sent last, blocking. */
   const std::uint32_t sent = rig.kmt().commands();
-  rig.host().cl_enqueued(CL_SUCCESS, host_event + 64u);   /* the marker it recorded against */
-  rig.host().cl_result(CL_SUCCESS);                       /* it is released */
-  rig.host().cl_enqueued(CL_SUCCESS, host_event + 65u);   /* the marker that drains the queue */
-  rig.host().cl_result(CL_SUCCESS);                       /* the queue flushed */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 64u);
+  rig.host().cl_result(CL_SUCCESS);
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 65u);
+  rig.host().cl_result(CL_SUCCESS);
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
-  rig.host().cl_result(CL_SUCCESS);                       /* the drain marker released */
+  rig.host().cl_result(CL_SUCCESS);
   const unsigned char answered[8] = {7u, 7u, 7u, 7u, 7u, 7u, 7u, 7u};
   rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
   CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into, into,
                                    nullptr),
            CL_SUCCESS);
-  /* The bytes are here, which is what makes a blocking read right. */
   for (const unsigned char byte : into) CHECK_EQ(byte, 7u);
   CHECK(rig.kmt().commands() > sent);
   CHECK_EQ(rig.log().holding("too many reads outstanding"), 1u);
   CHECK(rig.root().invariants_hold()); }
 
-/* clFinish says everything queued has run, so it is where every read still
- * outstanding on that queue is delivered - and a delivery that fails is the
- * finish's answer rather than something to swallow. */
 TEST(cl_enqueue_paths, a_finish_delivers_every_read_outstanding_on_its_queue)
 { ClIcdRig rig;
   Running  run(rig);
@@ -661,8 +542,6 @@ TEST(cl_enqueue_paths, a_finish_delivers_every_read_outstanding_on_its_queue)
                                    nullptr),
            CL_SUCCESS);
 
-  /* The finish: its own marker, the flush, the wait, the marker released,
-   * then the two deliveries with their markers released behind them. */
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 2u);
   rig.host().cl_result(CL_SUCCESS);
   const cl_int complete = CL_COMPLETE;
@@ -671,15 +550,12 @@ TEST(cl_enqueue_paths, a_finish_delivers_every_read_outstanding_on_its_queue)
   const unsigned char ones[8] = {1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u};
   rig.host().cl_bytes(CL_SUCCESS, ones, sizeof ones);
   rig.host().cl_result(CL_SUCCESS);
-  /* The second delivery is refused, which is what the finish answers. */
   rig.host().cl_bytes(CL_OUT_OF_RESOURCES, nullptr, 0u);
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.loader().finish(run.queue()), CL_OUT_OF_RESOURCES);
-  /* The one that worked still delivered, and both rows went back. */
   for (const unsigned char byte : first) CHECK_EQ(byte, 1u);
   CHECK(rig.root().invariants_hold()); }
 
-/* A user event the host will not make, and a callback it will not register. */
 TEST(cl_enqueue_paths, a_user_event_and_a_callback_the_host_refuses_are_answered)
 { ClIcdRig rig;
   Running  run(rig);
@@ -690,13 +566,11 @@ TEST(cl_enqueue_paths, a_user_event_and_a_callback_the_host_refuses_are_answered
   cl_int error = CL_SUCCESS;
   CHECK(rig.loader().create_user_event(run.context(), &error) == nullptr);
   CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
-  /* And the contradiction: success with no event. */
   rig.host().cl_handle(0u, CL_SUCCESS);
   error = CL_SUCCESS;
   CHECK(rig.loader().create_user_event(run.context(), &error) == nullptr);
   CHECK_EQ(error, CL_OUT_OF_RESOURCES);
 
-  /* A real one, and a callback the host refuses to register on it. */
   rig.host().cl_handle(0x6902u, CL_SUCCESS);
   cl_event user = rig.loader().create_user_event(run.context(), nullptr);
   CHECK(user != nullptr);
@@ -706,9 +580,6 @@ TEST(cl_enqueue_paths, a_user_event_and_a_callback_the_host_refuses_are_answered
            CL_INVALID_EVENT);
   CHECK(rig.root().invariants_hold()); }
 
-/* A finish whose wait fails answers that rather than going on to deliver:
- * the queue has not reached the marker, so nothing on it is finished and
- * delivering would hand the application bytes that are not there yet. */
 TEST(cl_enqueue_paths, a_finish_whose_wait_fails_delivers_nothing)
 { ClIcdRig rig;
   Running  run(rig);
@@ -721,24 +592,18 @@ TEST(cl_enqueue_paths, a_finish_whose_wait_fails_delivers_nothing)
                                    nullptr),
            CL_SUCCESS);
 
-  /* The marker is made, the flush works, and the host will not say how the
-   * marker is doing. */
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
   rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_info(CL_INVALID_EVENT, nullptr, 0u);
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.loader().finish(run.queue()), CL_INVALID_EVENT);
-  /* Nothing was delivered: the buffer is as the application left it. */
   for (const unsigned char byte : into) CHECK_EQ(byte, 0u);
   CHECK(rig.root().invariants_hold());
 
-  /* And a finish whose marker the host will not even make. */
   rig.host().cl_enqueued(CL_OUT_OF_RESOURCES, 0u);
   CHECK_EQ(rig.loader().finish(run.queue()), CL_OUT_OF_RESOURCES);
   CHECK(rig.root().invariants_hold()); }
 
-/* A local-memory argument of exactly the size of a cl_mem: the size is what
- * makes it look like one, and the missing value is what says it is not. */
 TEST(cl_enqueue_paths, a_local_argument_the_size_of_a_buffer_is_still_local)
 { ClIcdRig rig;
   Running  run(rig);
@@ -748,16 +613,6 @@ TEST(cl_enqueue_paths, a_local_argument_the_size_of_a_buffer_is_still_local)
   CHECK_EQ(rig.root().set_kernel_argument(run.kernel(), 0u, sizeof(cl_mem), nullptr), CL_SUCCESS);
   CHECK(rig.root().invariants_hold()); }
 
-/* A blocking read that was asked for an event: the application gets both the
- * bytes and something to release.
- *
- * And the order the four commands go out in is the whole of what makes a
- * blocking read right. The bytes come back inside the read's own reply, which
- * the device writes as soon as the host's call returns - so a read the host
- * was not asked to block on answers with whatever the device's decode arena
- * last held. The queue is therefore drained first, by a marker this side
- * waits out, and the read is sent last and blocking, with nothing left for
- * the host to wait on. */
 TEST(cl_enqueue_paths, a_blocking_read_is_sent_last_and_asks_the_host_to_block)
 { ClIcdRig rig;
   Running  run(rig);
@@ -768,13 +623,13 @@ TEST(cl_enqueue_paths, a_blocking_read_is_sent_last_and_asks_the_host_to_block)
   const unsigned char answered[8] = {3u, 3u, 3u, 3u, 3u, 3u, 3u, 3u};
 
   const std::uint32_t sent = rig.kmt().commands();
-  rig.host().cl_enqueued(CL_SUCCESS, host_event);         /* the marker that drains the queue */
-  rig.host().cl_result(CL_SUCCESS);                       /* the queue flushed */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event);
+  rig.host().cl_result(CL_SUCCESS);
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
-  rig.host().cl_result(CL_SUCCESS);                       /* the drain marker released */
+  rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_bytes(CL_SUCCESS, answered, sizeof answered);
-  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);    /* the marker the event is */
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
   cl_event event = nullptr;
   CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_TRUE, 0u, sizeof into, into,
                                    &event),
@@ -782,8 +637,6 @@ TEST(cl_enqueue_paths, a_blocking_read_is_sent_last_and_asks_the_host_to_block)
   CHECK(event != nullptr);
   for (const unsigned char byte : into) CHECK_EQ(byte, 3u);
 
-  /* The read asks for no event of its own: it may be several reads, and the
-   * one event the application holds is a marker behind all of them. */
   CHECK_EQ(rig.kmt().commands(), sent + 6u);
   CHECK_EQ(rig.kmt().command_id(sent), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
   CHECK_EQ(rig.kmt().command_id(sent + 4u), av::clproto::kCmd_clEnqueueReadBuffer);
@@ -791,8 +644,6 @@ TEST(cl_enqueue_paths, a_blocking_read_is_sent_last_and_asks_the_host_to_block)
   CHECK_EQ(rig.kmt().command_id(sent + 5u), av::clproto::kCmd_clEnqueueMarkerWithWaitList);
   CHECK(rig.root().invariants_hold()); }
 
-/* A finish delivers the reads of its own queue and leaves every other
- * queue's, because only its own queue has reached the marker. */
 TEST(cl_enqueue_paths, a_finish_leaves_the_reads_of_every_other_queue_alone)
 { ClIcdRig rig;
   Running  run(rig);
@@ -813,7 +664,6 @@ TEST(cl_enqueue_paths, a_finish_leaves_the_reads_of_every_other_queue_alone)
                                    nullptr),
            CL_SUCCESS);
 
-  /* The first queue finishes: its own read delivers and the other's does not. */
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 2u);
   rig.host().cl_result(CL_SUCCESS);
   const cl_int complete = CL_COMPLETE;
@@ -827,9 +677,6 @@ TEST(cl_enqueue_paths, a_finish_leaves_the_reads_of_every_other_queue_alone)
   for (const unsigned char byte : theirs) CHECK_EQ(byte, 0u);
   CHECK(rig.root().invariants_hold()); }
 
-/* Two deliveries that both fail: the first error is the one answered, and a
- * later one must not overwrite it - the first is where the application's
- * memory stopped being filled. */
 TEST(cl_enqueue_paths, the_first_delivery_that_fails_is_the_error_a_wait_answers)
 { ClIcdRig rig;
   Running  run(rig);
@@ -847,7 +694,6 @@ TEST(cl_enqueue_paths, the_first_delivery_that_fails_is_the_error_a_wait_answers
                                    nullptr),
            CL_SUCCESS);
 
-  /* The finish reaches both, and both fetches are refused. */
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 2u);
   rig.host().cl_result(CL_SUCCESS);
   const cl_int complete = CL_COMPLETE;
@@ -858,8 +704,6 @@ TEST(cl_enqueue_paths, the_first_delivery_that_fails_is_the_error_a_wait_answers
   rig.host().cl_bytes(CL_OUT_OF_RESOURCES, nullptr, 0u);
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.loader().finish(run.queue()), CL_MEM_OBJECT_ALLOCATION_FAILURE);
-  /* Both rows went back even so: a read that can never deliver must not be
-   * kept forever. */
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 3u);
   rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
@@ -867,9 +711,6 @@ TEST(cl_enqueue_paths, the_first_delivery_that_fails_is_the_error_a_wait_answers
   CHECK_EQ(rig.loader().finish(run.queue()), CL_SUCCESS);
   CHECK(rig.root().invariants_hold()); }
 
-/* A wait naming two events whose reads both fail to deliver: the first error
- * is what the wait answers, because it is where the application's memory
- * stopped being filled. */
 TEST(cl_enqueue_paths, a_wait_over_two_failed_deliveries_answers_the_first)
 { ClIcdRig rig;
   Running  run(rig);
@@ -891,7 +732,6 @@ TEST(cl_enqueue_paths, a_wait_over_two_failed_deliveries_answers_the_first)
   CHECK(one != nullptr && two != nullptr);
   if (one == nullptr || two == nullptr) return;
 
-  /* Both complete, and both fetches are refused in the same wait. */
   const cl_int complete = CL_COMPLETE;
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
@@ -901,9 +741,6 @@ TEST(cl_enqueue_paths, a_wait_over_two_failed_deliveries_answers_the_first)
   CHECK_EQ(rig.root().wait_for_events(2u, both), CL_MEM_OBJECT_ALLOCATION_FAILURE);
   CHECK(rig.root().invariants_hold()); }
 
-/* A finish with every row the ICD can hold outstanding on its queue: the
- * walk that delivers them runs to its own bound, which is what stops it
- * looping forever on a table it is changing as it goes. */
 TEST(cl_enqueue_paths, a_finish_delivers_every_row_the_icd_can_hold)
 { ClIcdRig rig;
   Running  run(rig);
@@ -918,8 +755,6 @@ TEST(cl_enqueue_paths, a_finish_delivers_every_row_the_icd_can_hold)
                CL_SUCCESS);
   }
 
-  /* The finish: its marker, the flush, the wait, the marker released, then
-   * sixty-four fetches each with its marker released behind it. */
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 100u);
   rig.host().cl_result(CL_SUCCESS);
   const cl_int complete = CL_COMPLETE;

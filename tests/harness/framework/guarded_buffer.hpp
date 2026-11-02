@@ -1,5 +1,3 @@
-/* A buffer with poisoned guard bands, so a test can prove a parser wrote
- * nothing outside the destination it was given. */
 #ifndef AV_GUARDED_BUFFER_HPP
 #define AV_GUARDED_BUFFER_HPP
 
@@ -18,7 +16,6 @@ public:
     std::uint8_t *data();
     std::size_t   size() const;
 
-    /* Records a test failure if either guard band was disturbed. */
     bool guards_intact() const;
 
 private:
@@ -29,6 +26,6 @@ private:
     std::size_t   size_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_GUARDED_BUFFER_HPP
+#endif

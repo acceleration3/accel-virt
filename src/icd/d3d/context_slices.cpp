@@ -41,4 +41,4 @@ void ContextSlices::leave(BufferSlices::Slice &slice)
     slice = BufferSlices::Slice{0u, 0u};
 }
 
-}  // namespace av::d3d
+}

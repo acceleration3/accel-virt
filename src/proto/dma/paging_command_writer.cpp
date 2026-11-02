@@ -100,4 +100,4 @@ size_t PagingCommandWriter::length() const
     return length_;
 }
 
-}  // namespace av
+}

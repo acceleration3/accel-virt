@@ -16,4 +16,4 @@ size_t EventRingLayout::bytes() const
                (EventRing::slot_header_bytes + static_cast<size_t>(events_per_slot_) * EventRing::event_bytes);
 }
 
-}  // namespace av
+}

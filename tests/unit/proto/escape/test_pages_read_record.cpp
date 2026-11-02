@@ -1,7 +1,3 @@
-/* The escape a reader of an allocation's pages sends around its read
- * (docs/protocol.md, "Pages read record"). The kernel decodes the request from
- * memory the process wrote, so every field is judged as hostile input; the
- * process reads the answer back from the same bytes. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/escape/pages_read_record.hpp"
@@ -31,7 +27,7 @@ private:
     Status       status_ = Status::ok;
 };
 
-}  // namespace
+}
 
 TEST(pages_read_record, a_begin_round_trips_with_every_field_where_the_contract_puts_it)
 { Bytes bytes{PagesReadRecord(PagesReadRecord::Action::begin, allocation, wait)};
@@ -73,8 +69,6 @@ TEST(pages_read_record, the_answer_carries_the_writes_and_whether_they_had_moved
   CHECK_STATUS(read.read_answer(incomplete.data(), PagesReadRecord::encoded_size), Status::ok);
   CHECK_EQ(read.writes(), 9u);
   CHECK(!read.complete());
-  /* The kernel refuses a request that arrives answered: the process wrote
-   * what only the driver writes. */
   PagesReadRecord request;
   CHECK_STATUS(request.decode(complete.data(), PagesReadRecord::encoded_size), Status::malformed);
   CHECK_STATUS(request.decode(incomplete.data(), PagesReadRecord::encoded_size), Status::malformed); }
@@ -82,7 +76,7 @@ TEST(pages_read_record, the_answer_carries_the_writes_and_whether_they_had_moved
 TEST(pages_read_record, every_field_is_judged)
 { struct Case { const char *what; std::size_t at; std::uint8_t width; std::uint64_t value; };
   const Case cases[] = {
-      {"magic", 0u, 4u, 0x004E5641u},   /* AVN, the point's */
+      {"magic", 0u, 4u, 0x004E5641u},
       {"version 0", 4u, 2u, 0u},
       {"version 2", 4u, 2u, 2u},
       {"action 0", 6u, 2u, 0u},

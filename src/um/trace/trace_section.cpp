@@ -13,7 +13,7 @@ namespace {
 
 constexpr const char *scopes[] = {"Global", "Local"};
 
-}  // namespace
+}
 
 TraceSection::TraceSection() : mapping_(nullptr), view_(nullptr)
 {
@@ -55,4 +55,4 @@ size_t TraceSection::bytes() const
     return TraceLayout(slots).bytes();
 }
 
-}  // namespace av
+}

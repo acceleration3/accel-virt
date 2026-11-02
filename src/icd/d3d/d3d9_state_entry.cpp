@@ -9,7 +9,6 @@ D3d9StateEntry::D3d9StateEntry() : kind_(Kind::none), a_(0u), b_(0u), value_{}
     AV_SCOPE("D3d9StateEntry::D3d9StateEntry");
 }
 
-/* Words past `words`, or past four, are left zero. */
 D3d9StateEntry::D3d9StateEntry(Kind kind, uint32_t a, uint32_t b, const uint32_t *value, uint32_t words)
     : kind_(kind), a_(a), b_(b), value_{}
 {
@@ -18,8 +17,6 @@ D3d9StateEntry::D3d9StateEntry(Kind kind, uint32_t a, uint32_t b, const uint32_t
         value_[index] = value[index];
 }
 
-/* The handle is kept as 64 bits whatever the process's pointer size, so an
- * entry is laid out the same in a 32-bit process. */
 D3d9StateEntry::D3d9StateEntry(Kind kind, uint32_t a, const void *handle, uint32_t second, uint32_t third)
     : kind_(kind), a_(a), b_(0u), value_{}
 {
@@ -74,4 +71,4 @@ void D3d9StateEntry::take_value(const D3d9StateEntry &other)
     for (uint32_t index = 0u; index < value_words; index++) value_[index] = other.value_[index];
 }
 
-}  // namespace av::d3d
+}

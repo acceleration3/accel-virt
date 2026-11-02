@@ -1,7 +1,3 @@
-/* The windows one context draws on (research.md §6): the first make-current
- * binds the window as a new context finds it, a later one moves only the
- * bindings the application left on the window, framebuffer 0 and the
- * window's buffers are translated both ways, and gone windows are given up. */
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -53,13 +49,11 @@ struct WindowFramebuffersProbe {
     {
         return **windows.presenters_.at(slot);
     }
-    /* A presenter made and named by no window. */
     static void unnamed(WindowFramebuffers &windows, BlockSource &memory, LogSink &log)
     {
         BackBufferPresenter *made = nullptr;
         static_cast<void>(windows.pool_.create(made, memory, log));
     }
-    /* A presenter drawing on `window` named by `other` as well. */
     static void copy_window(WindowFramebuffers &windows, BlockSource &memory, LogSink &log, void *window, void *other)
     {
         BackBufferPresenter *made = nullptr;
@@ -70,7 +64,7 @@ struct WindowFramebuffersProbe {
     }
 };
 
-}  // namespace av::glicd
+}
 
 namespace {
 
@@ -94,8 +88,6 @@ struct Rig {
         for (int index = 0; index < 10; index++) surface.add_dc(&dcs[index], &windows[index], 8u, 4u);
     }
     av::ClientTransport &wire() { return *context.wire(); }
-    /* What reached the host: the context holds its calls in a batch until a
-     * flush, so the held ones are sent first. */
     std::uint32_t        commands()
     {
         context.flush();
@@ -114,8 +106,7 @@ struct Rig {
     {
         context_rig.host().gl_window(1u, 1u, first);
         return framebuffers.make_current_on(wire(), &windows[index], format, surface);
-    }    /* A swap as the root makes one with no present thread: the frame onto
-     * the window, then the window's new size followed. */
+    }
     bool swap(int index)
     {
         const bool shown = framebuffers.present(wire(), state, &dcs[index], &windows[index], surface, nullptr, 0u);
@@ -124,7 +115,7 @@ struct Rig {
     }
 };
 
-}  // namespace
+}
 
 TEST(window_framebuffers, the_first_window_is_bound_with_its_viewport_as_a_new_context_finds_it)
 { Rig rig;
@@ -146,13 +137,10 @@ TEST(window_framebuffers, the_first_window_is_bound_with_its_viewport_as_a_new_c
   CHECK_EQ(rig.argument(bound + 1u, 2u), 8u);
   CHECK_EQ(rig.argument(bound + 1u, 3u), 4u);
   CHECK_EQ(rig.id(bound + 2u), ids::kCmd_glScissor);
-  /* The same window again sends nothing. */
   const std::uint32_t again = rig.commands();
   CHECK_STATUS(rig.framebuffers.make_current_on(rig.wire(), &rig.windows[0], doubled, rig.surface), Status::ok);
   CHECK_EQ(rig.commands(), again); }
 
-/* A later window takes the bindings the application left on the window, and
- * only those; the viewport is the application's by then. */
 TEST(window_framebuffers, a_later_window_moves_only_the_bindings_left_on_the_window)
 { Rig rig;
   CHECK_STATUS(rig.current_on(0, 100u), Status::ok);
@@ -178,8 +166,6 @@ TEST(window_framebuffers, a_later_window_moves_only_the_bindings_left_on_the_win
   CHECK_EQ(rig.commands(), moved);
   CHECK(rig.framebuffers.invariants_hold()); }
 
-/* Past the 8 windows a context once held: every window keeps its presenter,
- * and one there is no memory for is refused with the current window kept. */
 TEST(window_framebuffers, windows_past_the_old_bound_and_one_with_no_memory)
 { Rig rig;
   for (int index = 0; index < 10; index++)
@@ -203,7 +189,6 @@ TEST(window_framebuffers, windows_past_the_old_bound_and_one_with_no_memory)
                Status::invalid_parameter);
   CHECK_EQ(refused.framebuffers.held(), 1u);
   CHECK(refused.framebuffers.window() == &refused.windows[0]);
-  /* A window already held keeps its presenter when a remake is refused. */
   refused.surface.resize(&refused.windows[0], 16000u, 4u);
   CHECK_STATUS(refused.framebuffers.make_current_on(refused.wire(), &refused.windows[0], doubled, refused.surface),
                Status::invalid_parameter);
@@ -230,7 +215,6 @@ TEST(window_framebuffers, the_windows_buffers_are_its_colour_attachment_while_it
   rig.framebuffers.bound(Windows::gl_read_framebuffer, 3u);
   CHECK_EQ(rig.framebuffers.buffer_for(Windows::gl_back, false), Windows::gl_back); }
 
-/* What a query answers is what a window would: binding 0, GL_BACK or GL_FRONT. */
 TEST(window_framebuffers, a_query_answers_as_the_window_would)
 { Rig rig;
   const auto attachment = static_cast<std::int32_t>(Windows::gl_color_attachment0);
@@ -248,11 +232,9 @@ TEST(window_framebuffers, a_query_answers_as_the_window_would)
   CHECK_EQ(rig.framebuffers.answer(Windows::gl_read_framebuffer_binding, 9), 9);
   CHECK_EQ(rig.framebuffers.answer(Windows::gl_draw_buffer, attachment), attachment);
   CHECK_EQ(rig.framebuffers.answer(Windows::gl_read_buffer, attachment), attachment);
-  /* A single-buffered window's buffer is its front one. */
   Rig front;
   CHECK_STATUS(front.current_on(0, 100u, single), Status::ok);
   CHECK_EQ(front.framebuffers.answer(Windows::gl_draw_buffer, attachment), static_cast<std::int32_t>(Windows::gl_front));
-  /* With the window gone the answer is the host's. */
   front.surface.close_window(&front.windows[0]);
   front.framebuffers.drop_gone(front.wire(), front.surface);
   CHECK_EQ(front.framebuffers.answer(Windows::gl_read_buffer, attachment), attachment); }
@@ -270,7 +252,6 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   CHECK(rig.swap(1));
   CHECK_EQ(rig.commands() - swapped, 1u);
   CHECK_EQ(rig.surface.blits(), 1u);
-  /* The current window grows: made again, and both bindings follow it. */
   rig.surface.resize(&rig.windows[1], 16u, 8u);
   rig.context_rig.host().gl_bytes(nullptr, 0u);
   rig.context_rig.host().gl_window(1u, 1u, 300u);
@@ -280,7 +261,6 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   CHECK_EQ(rig.argument(swapped + 11u, 1u), 300u);
   CHECK_EQ(rig.argument(swapped + 12u, 0u), Windows::gl_read_framebuffer);
   CHECK_EQ(rig.framebuffers.name_of(0u), 300u);
-  /* A window the application moved off, or one not current, is only made again. */
   rig.framebuffers.bound(Windows::gl_draw_framebuffer, 4u);
   rig.surface.resize(&rig.windows[1], 8u, 8u);
   rig.context_rig.host().gl_bytes(nullptr, 0u);
@@ -296,7 +276,6 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   swapped = rig.commands();
   CHECK(rig.swap(0));
   CHECK_EQ(rig.commands() - swapped, 1u + 3u + 7u);
-  /* The current window, drawn on there and read elsewhere. */
   rig.framebuffers.bound(Windows::gl_framebuffer, 0u);
   rig.framebuffers.bound(Windows::gl_read_framebuffer, 6u);
   rig.surface.resize(&rig.windows[1], 6u, 6u);
@@ -307,16 +286,12 @@ TEST(window_framebuffers, a_swap_presents_the_window_and_a_resize_rebinds_what_w
   CHECK_EQ(rig.commands() - swapped, 1u + 3u + 7u + 1u);
   CHECK_EQ(rig.argument(swapped + 11u, 0u), Windows::gl_draw_framebuffer);
   rig.framebuffers.bound(Windows::gl_read_framebuffer, 0u);
-  /* A window whose remake is refused keeps presenting what it had. */
   rig.surface.resize(&rig.windows[1], 16000u, 8u);
   rig.context_rig.host().gl_bytes(nullptr, 0u);
   CHECK(rig.swap(1));
   CHECK_EQ(rig.framebuffers.name_of(0u), 600u);
   CHECK(rig.framebuffers.invariants_hold()); }
 
-/* The host reuses the names of what it deleted, so a window made again at a
- * new size can come back under the very names it had - while deleting the old
- * framebuffer bound 0 in its place. It is bound again all the same. */
 TEST(window_framebuffers, a_window_made_again_under_its_old_names_is_bound_again)
 { Rig rig;
   CHECK_STATUS(rig.current_on(1, 200u), Status::ok);
@@ -333,18 +308,11 @@ TEST(window_framebuffers, a_window_made_again_under_its_old_names_is_bound_again
   CHECK_EQ(rig.argument(swapped + 11u, 1u), 200u);
   CHECK_EQ(rig.argument(swapped + 12u, 0u), Windows::gl_read_framebuffer);
   CHECK_EQ(rig.argument(swapped + 12u, 1u), 200u);
-  /* The same size again makes nothing and binds nothing. */
   rig.context_rig.host().gl_bytes(nullptr, 0u);
   const std::uint32_t steady = rig.commands();
   CHECK(rig.swap(1));
   CHECK_EQ(rig.commands() - steady, 1u); }
 
-/* An application with a context per widget (DaVinci Resolve's Qt) makes
- * another context current between frames, so the window's new size is first
- * seen by the next make-current, not by a swap. The window is made again
- * there, and what the application left on it is bound to it again: the host
- * bound 0 when the old framebuffer was deleted, and every frame after went
- * nowhere. */
 TEST(window_framebuffers, a_window_resized_while_another_context_was_current_is_bound_again)
 { Rig rig;
   CHECK_STATUS(rig.current_on(1, 200u), Status::ok);
@@ -359,7 +327,6 @@ TEST(window_framebuffers, a_window_resized_while_another_context_was_current_is_
   CHECK_EQ(rig.argument(made + 11u, 0u), Windows::gl_read_framebuffer);
   CHECK_EQ(rig.argument(made + 11u, 1u), 300u);
   CHECK_EQ(rig.framebuffers.name_of(0u), 300u);
-  /* Under its old name, and with drawing moved off the window: only the read binding follows. */
   rig.framebuffers.bound(Windows::gl_draw_framebuffer, 4u);
   rig.surface.resize(&rig.windows[1], 8u, 8u);
   rig.context_rig.host().gl_window(1u, 1u, 300u);
@@ -370,44 +337,32 @@ TEST(window_framebuffers, a_window_resized_while_another_context_was_current_is_
   CHECK_EQ(rig.argument(made + 10u, 1u), 300u);
   CHECK(rig.framebuffers.invariants_hold()); }
 
-/* Feature 051: the host has no front buffer - the window is a framebuffer
- * object there - so GL_FRONT names the frame the swap put on the window, which
- * the guest still holds. A read of it is answered from there; a read of
- * anything else is the host's. */
 TEST(window_framebuffers, a_read_of_the_windows_front_buffer_is_answered_without_the_host)
 { Rig rig;
   CHECK_STATUS(rig.current_on(0, 100u), Status::ok);
   std::uint8_t pixels[64] = {};
-  /* Nothing presented yet, and the read buffer is GL_BACK. */
   CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
   rig.context_rig.host().gl_bytes(nullptr, 0u);
   CHECK(rig.swap(0));
-  /* Still the back buffer: that read is the host's. */
   CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
-  rig.framebuffers.reading(0x0404u /* GL_FRONT */);
+  rig.framebuffers.reading(0x0404u );
   const std::uint32_t commands = rig.commands();
   CHECK(rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
   CHECK_EQ(rig.commands(), commands);
-  /* A rectangle past the frame, and a format no present produced, are the
-   * host's too. */
   CHECK(!rig.framebuffers.read_front(0, 0, 4096, 4096, 0x80E1u, 0x1401u, pixels));
-  CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x1907u /* GL_RGB */, 0x1401u, pixels));
-  rig.framebuffers.reading(0x0405u /* GL_BACK */);
+  CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x1907u , 0x1401u, pixels));
+  rig.framebuffers.reading(0x0405u );
   CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
-  /* A read the application moved off the window is the host's, whatever the
-   * read buffer is called. */
-  rig.framebuffers.reading(0x0400u /* GL_FRONT_LEFT */);
+  rig.framebuffers.reading(0x0400u );
   CHECK(rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
   rig.framebuffers.bound(Windows::gl_read_framebuffer, 4u);
   CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
   CHECK(rig.framebuffers.invariants_hold()); }
 
-/* With no window current at all there is no frame to read - including for an
- * application that bound framebuffer 0 before it had one. */
 TEST(window_framebuffers, a_front_read_with_no_window_current_is_the_hosts)
 { Rig rig;
   std::uint8_t pixels[16] = {};
-  rig.framebuffers.reading(0x0404u /* GL_FRONT */);
+  rig.framebuffers.reading(0x0404u );
   CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
   rig.framebuffers.bound(Windows::gl_read_framebuffer, 0u);
   CHECK(!rig.framebuffers.read_front(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels));
@@ -468,9 +423,6 @@ TEST(window_framebuffers_invariants, fail_for_a_current_window_not_held_a_window
   av::glicd::BackBufferPresenterProbe::drop_texture(Probe::presenter(broken.framebuffers, 0u));
   CHECK(!broken.framebuffers.invariants_hold()); }
 
-/* The frame a present read for the thread is handed over once, with the
- * batch named; a window gone in between hands nothing, and neither does a
- * hand-over with no present before it. */
 TEST(window_framebuffers, a_frame_read_for_the_thread_is_handed_over_once)
 { Rig                      rig;
   av::ScriptedThread       thread;

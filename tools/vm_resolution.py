@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""The resolutions of a running VM's display, set from the host.
-
-The device's `modes` property is the list the guest's display offers: WxH
-entries between commas, any sizes, the first preferred. Empty, it is the modes
-of the monitors connected to the host. Changing it while the guest runs has the
-guest read its monitor again; a list without the mode it shows makes Windows
-switch to the preferred one - so one size alone sets the resolution. Windows
-takes nothing under 100 pixels on an edge; the driver leaves such sizes out.
-
-    tools/vm_resolution.py                    # what the display offers now
-    tools/vm_resolution.py 1920x1080          # exactly 1920x1080
-    tools/vm_resolution.py 1000x600 1920x1080 # both, 1000x600 preferred
-    tools/vm_resolution.py host               # the host monitors' modes again
-
-Before the VM starts, give the same text on QEMU's command line:
-    -device virtio-gpu-av-pci,...,modes=2560x1440,1920x1080
-"""
+"""The resolutions of a running VM's display, set from the host."""
 import argparse
 import json
 import pathlib
@@ -28,8 +12,6 @@ MODE = re.compile(r"^[0-9]{1,5}[xX][0-9]{1,5}$")
 
 
 class Qmp:
-    """One QMP session over QEMU's socket."""
-
     def __init__(self, path):
         self.sock = socket.socket(socket.AF_UNIX)
         self.sock.settimeout(10)

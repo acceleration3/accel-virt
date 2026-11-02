@@ -1,6 +1,3 @@
-/* The escape a process sends to publish its own ring's tail, fed
- * attacker-chosen bytes: every escape's private data is tried as one. What
- * decodes must be exactly the record the encoder writes. */
 #include "core/support/status.hpp"
 #include "proto/escape/tail_publish_record.hpp"
 

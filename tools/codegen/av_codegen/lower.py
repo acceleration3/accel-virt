@@ -1,18 +1,3 @@
-"""Lower a parsed vk.xml DOM into our IR.
-
-Driven by ``profile.toml``: the command set is computed by walking
-``<feature>`` blocks (every core API version up to and including
-``profile.api_version``) plus the requested ``<extension>`` blocks
-(transitively, via ``depends="..."``). Anything in
-``[commands].exclude`` is dropped — those are typically platform-tied
-entry points hand-written in ``src/client``.
-
-If a command's parameter list contains shapes the codegen doesn't know
-how to serialize yet (function pointers, untagged unions, certain
-external-handle types), it's logged and skipped instead of failing the
-whole build. The summary at the end tells you what got dropped.
-"""
-
 from __future__ import annotations
 
 import sys
@@ -31,7 +16,6 @@ def lower(root: ET.Element, profile: Profile,
 
     api_consts = parse.parse_api_constants(root)
 
-    # Pull in handles up front; we need them for parameter typing.
     raw_handles = parse.find_handles(root)
     for name, info in raw_handles.items():
         reg.handles[name] = Handle(
@@ -40,14 +24,12 @@ def lower(root: ET.Element, profile: Profile,
             parent=info["parent"],
         )
 
-    # ---- Resolve which commands are in scope ------------------------------
     implemented_extensions: dict[str, str] = {}
     extension_commands: dict[str, set[str]] = {}
     selected = _select_commands(root, profile, implemented_extensions, extension_commands)
     reg.implemented_extensions = implemented_extensions
     reg.manual_commands = set(profile.excluded_commands)
 
-    # Validate / assign protocol IDs.
     sorted_selected = sorted(selected)
     new_ids = assign_missing_ids(profile, sorted_selected)
     if new_ids:
@@ -56,16 +38,12 @@ def lower(root: ET.Element, profile: Profile,
             file=sys.stderr,
         )
 
-    # Commands any core <feature> block introduces. Everything else is
-    # extension-only: the loader exports no symbol for it, so the server
-    # has to resolve it at runtime instead of linking against it.
     core_commands: set[str] = set()
     for feat_name, cmds in parse.parse_features(root).items():
         version = parse.parse_feature_number(feat_name)
         if version is not None and version <= profile.api_version:
             core_commands.update(cmds)
 
-    # ---- Lower each command (skip on unsupported shape) -------------------
     skipped: list[tuple[str, str]] = []
     for cmd_name in sorted_selected:
         cmd_el = parse.find_command(root, cmd_name)
@@ -74,9 +52,6 @@ def lower(root: ET.Element, profile: Profile,
             continue
         try:
             cmd = _lower_command(cmd_el, cmd_name, api_consts, profile)
-            # An alias of a core command resolves to the core symbol,
-            # which the loader does export — so it is not extension-only
-            # even though an extension is what named it.
             cmd.extension_only = (
                 cmd_name not in core_commands
                 and (cmd.alias_of or cmd_name) not in core_commands
@@ -94,7 +69,6 @@ def lower(root: ET.Element, profile: Profile,
         for name, why in skipped:
             print(f"  {name}: {why}", file=sys.stderr)
 
-    # ---- Walk the struct closure ------------------------------------------
     raw_structs = parse.find_structs(root)
     needed: set[str] = set()
     queue: list[str] = []
@@ -124,16 +98,6 @@ def lower(root: ET.Element, profile: Profile,
 
     drain_queue()
 
-    # ---- Pull in pNext chain extensions -----------------------------------
-    # Nothing points at a chain struct: it attaches at runtime through
-    # pNext, so the parameter closure above cannot see it. Leaving them
-    # out is why every extended feature query came back zero-filled and
-    # applications concluded the feature was unsupported.
-    #
-    # Gated to what the profile targets. Taking every ``structextends``
-    # struct in vk.xml would drag in provisional extensions and
-    # platform-specific ones whose types the headers do not declare on
-    # this build, which is a compile error rather than a missing feature.
     chain_allowed = _chain_struct_allowlist(root, profile)
     if reg.declared_names:
         chain_allowed &= reg.declared_names
@@ -194,8 +158,6 @@ def lower(root: ET.Element, profile: Profile,
             is_union=(s_el.get("category") == "union"),
         )
 
-    # Profile-declared chain nodes: mark them as extending their target
-    # so the chain codec treats them like any other pNext struct.
     for name, target in profile.chain_extras.items():
         st = reg.structs.get(name)
         if st is not None and target not in st.extends:
@@ -203,12 +165,6 @@ def lower(root: ET.Element, profile: Profile,
 
     reg.struct_order = _topo_sort(reg.structs)
 
-    # Final validation pass: emitters classify each parameter into one of
-    # a fixed set of shapes. Anything that fails to classify (function
-    # pointers, untagged unions, exotic pointer-of-pointer-of-X) gets
-    # dropped here so codegen emit stages can assume every Command is
-    # emit-friendly. Done AFTER struct closure so the classifier sees
-    # the full struct registry.
     from .emit.classify import classify, is_count_array_pair
 
     classify_failed: list[tuple[str, str]] = []
@@ -240,37 +196,10 @@ def _withdraw_unbacked_extensions(
     implemented: dict[str, str],
     extension_commands: dict[str, set[str]],
 ) -> None:
-    """Stop claiming any extension whose commands were not all emitted.
-
-    Advertising an extension with a command missing behind it is the
-    worst failure this generator can produce, because nothing downstream
-    catches it. The application enables what it was offered, asks
-    vkGetDeviceProcAddr for an entry point that was never generated,
-    gets null, and calls it. That is a jump to address zero with no
-    Vulkan error raised anywhere — it took a D3D8 title down inside
-    DXVK, four frames deep, with `vkCmdSetSampleMaskEXT` the only clue
-    and it not in any backtrace.
-
-    This runs LAST, and against ``reg.commands`` rather than against a
-    list of what was skipped. That is the whole correction: commands are
-    dropped in two phases — once when a parameter shape cannot be
-    lowered, and again when classification rejects one — and the check
-    used to run between them. Every extension withdrawn for the first
-    reason was caught; every extension withdrawn for the second was
-    claimed anyway. Asking what actually survived cannot go out of step
-    with the phases the way a skip list does.
-    """
     withdrawn: list[tuple[str, str]] = []
     for ext_name, commands in extension_commands.items():
         if ext_name not in implemented:
             continue
-        # Hand-written entry points count as implemented. They are
-        # exactly what ``[commands].exclude`` declares: commands the
-        # generator must not emit because they carry something that
-        # cannot cross the wire — a window handle, a mapped pointer, a
-        # surface naming a window in this process. Treating them as
-        # missing withdrew VK_KHR_surface and VK_KHR_map_memory2, which
-        # this build implements in full.
         missing = sorted(commands - set(reg.commands) - profile.excluded_commands)
         if missing:
             withdrawn.append((ext_name, missing[0]))
@@ -286,37 +215,15 @@ def _withdraw_unbacked_extensions(
             print(f"  {ext_name}: needs {first}", file=sys.stderr)
 
 
-# Unions reached only from a struct that serialize.py encodes by hand.
 _BESPOKE_UNIONS = {"VkDescriptorDataEXT"}
 
 
 def _is_address_union(s) -> bool:
-    """The ``{deviceAddress, hostAddress}`` unions from ray tracing.
-
-    Both arms describe the same buffer; which one is live depends on
-    whether the build runs on the device or the host, and the device path
-    is the only one that can cross a process boundary — a host pointer is
-    meaningless to the server. Encoding these as their 64-bit device
-    address is therefore correct for every command the proxy can support,
-    and the host-side build commands stay rejected for other reasons.
-    """
     names = {m.name for m in s.members}
     return s.is_union and names == {"deviceAddress", "hostAddress"}
 
 
 def _pointer_union(reg, type_name: str, seen: set[str] | None = None) -> str | None:
-    """Name of a pointer-carrying union reachable from ``type_name``.
-
-    Unions are encoded as raw bytes, which is correct for a union of
-    values (VkClearValue) and actively dangerous for a union of pointers
-    (VkDescriptorDataEXT). Memcpy'ing the latter ships client-side
-    addresses to the server, which hands them to the driver and
-    segfaults inside it — a client can crash the render server this way.
-
-    Encoding one properly needs its discriminator, which lives in the
-    enclosing struct and differs per union, so it is bespoke work rather
-    than something the generic emitter can infer.
-    """
     seen = seen if seen is not None else set()
     if type_name in seen:
         return None
@@ -324,8 +231,6 @@ def _pointer_union(reg, type_name: str, seen: set[str] | None = None) -> str | N
     s = reg.structs.get(type_name)
     if s is None:
         return None
-    # Unions with a hand-written encoding in serialize.py are fine; the
-    # generic raw-byte path is what is unsafe.
     if type_name in _BESPOKE_UNIONS:
         return None
     if s.is_union and any(m.type.pointer_depth > 0 for m in s.members) \
@@ -339,8 +244,6 @@ def _pointer_union(reg, type_name: str, seen: set[str] | None = None) -> str | N
 
 
 def _validation_reason(reg, cmd, classify, is_count_array_pair) -> str | None:
-    """Return a string explaining why ``cmd`` can't be emitted, or None
-    if every param is in a shape the codegen handles."""
     for p in cmd.params:
         union = _pointer_union(reg, p.type.base)
         if union is not None:
@@ -350,9 +253,6 @@ def _validation_reason(reg, cmd, classify, is_count_array_pair) -> str | None:
                 "the server. Needs a discriminator-aware serializer"
             )
 
-    # count_array_pair edge cases the emitters can't yet express:
-    #   * size_t counts (only uint32_t handled)
-    #   * void* element arrays (vkGetPipelineCacheData et al.)
     i = 0
     while i < len(cmd.params):
         if is_count_array_pair(cmd.params, i):
@@ -372,15 +272,6 @@ def _validation_reason(reg, cmd, classify, is_count_array_pair) -> str | None:
         else:
             i += 1
 
-    # Output ``void*`` byte buffers. Encodable when the size is a
-    # by-value sibling parameter (vkGetQueryPoolResults dataSize,
-    # vkGetRayTracingShaderGroupHandlesKHR dataSize) — that is just a
-    # byte array going the other way.
-    #
-    # Without such a sibling the size is only knowable from a property
-    # the caller queried earlier (the opaque-capture-descriptor calls
-    # work this way), and there is nothing here to derive a length from.
-    # Those stay rejected rather than guessed at.
     for p in cmd.params:
         if p.direction == "out" and p.type.pointer_depth == 1 and p.type.base == "void":
             has_size_sibling = p.len_expr is not None and any(
@@ -395,7 +286,6 @@ def _validation_reason(reg, cmd, classify, is_count_array_pair) -> str | None:
                     "parameter; needs bespoke serialization"
                 )
 
-    # Per-param classification.
     try:
         for p in cmd.params:
             classify(reg, p, cmd.params)
@@ -404,24 +294,7 @@ def _validation_reason(reg, cmd, classify, is_count_array_pair) -> str | None:
     return None
 
 
-# ---- Command selection -----------------------------------------------------
-
-
 def _chain_struct_allowlist(root: ET.Element, profile: Profile) -> set[str]:
-    """Struct names a pNext chain is allowed to carry.
-
-    A struct qualifies when it was introduced by a core version at or
-    below the profile's ``api_version``, or by an extension that targets
-    the Vulkan API, is not disabled, and whose platform the profile
-    builds for.
-
-    Deliberately wider than ``[extensions].include``: device extensions
-    are enumerated from the *host* driver at runtime, so an application
-    can legitimately enable one this profile never listed and then chain
-    its feature struct onto ``vkGetPhysicalDeviceFeatures2``. Refusing to
-    encode that struct would report the feature as missing on a host that
-    supports it. The gate here is only about what the headers declare.
-    """
     allowed: set[str] = set()
 
     for feat_name, types in parse.parse_feature_types(root).items():
@@ -437,21 +310,11 @@ def _chain_struct_allowlist(root: ET.Element, profile: Profile) -> set[str]:
         supported = info["supported"]
         if supported == "disabled" or "vulkan" not in supported.split(","):
             continue
-        # ``platform`` is None for portable extensions; otherwise it must
-        # be one the profile builds for ("linux" covers xcb/xlib/wayland).
         platform = info["platform"]
         if platform is not None and platform not in profile.platforms:
             continue
         allowed.update(types)
 
-    # Follow struct aliases. An extension's <require> names its own
-    # spelling — VkPhysicalDeviceLineRasterizationFeaturesEXT — while the
-    # struct that actually carries ``structextends`` is the unsuffixed
-    # one, named only by a core <feature> that may be newer than the
-    # profile targets. Without this the chain codec silently omits the
-    # struct, the feature query comes back zero-filled, and the
-    # application reports a feature the host genuinely supports as
-    # missing.
     for t in root.findall("types/type"):
         if t.get("category") != "struct":
             continue
@@ -470,7 +333,6 @@ def _select_commands(root: ET.Element, profile: Profile,
 
     selected: set[str] = set()
 
-    # Core features: include every <feature> with version ≤ profile.api_version.
     for feat_name, cmds in features.items():
         version = parse.parse_feature_number(feat_name)
         if version is None:
@@ -478,7 +340,6 @@ def _select_commands(root: ET.Element, profile: Profile,
         if version <= profile.api_version:
             selected.update(cmds)
 
-    # Extensions: requested + transitive via ``depends``.
     visited: set[str] = set()
     queue: list[str] = list(profile.extensions)
     while queue:
@@ -500,10 +361,6 @@ def _select_commands(root: ET.Element, profile: Profile,
             )
             continue
         selected.update(info["commands"])
-        # Record it as implemented, with the type the runtime needs to
-        # know: a device extension is the one an application can be
-        # offered by the host driver without this generator ever having
-        # heard of it.
         if implemented is not None and info["type"]:
             implemented[ext_name] = info["type"]
         if extension_commands is not None:
@@ -511,33 +368,23 @@ def _select_commands(root: ET.Element, profile: Profile,
         for dep in _split_depends(info["depends"]):
             queue.append(dep)
 
-    # Apply the explicit exclude list (hand-written entry points).
     selected -= profile.excluded_commands
     return selected
 
 
 def _split_depends(depends: str) -> Iterable[str]:
-    """Split a ``depends="A+B,C"`` attribute into individual extension names.
-
-    The vk.xml grammar uses ``,`` for OR and ``+`` for AND; for our
-    selection purpose we just want the union of mentioned extensions, so
-    we treat both delimiters the same.
-    """
     if not depends:
         return ()
     out: list[str] = []
     for part in depends.replace(",", "+").split("+"):
         p = part.strip()
-        if p and not parse.parse_feature_number(p):  # ignore version deps
+        if p and not parse.parse_feature_number(p):
             out.append(p)
     return out
 
 
-# ---- Per-command lowering --------------------------------------------------
-
-
 class _UnsupportedShape(Exception):
-    """Raised by ``_lower_command`` when a parameter cannot be lowered."""
+    pass
 
 
 def _lower_command(cmd_el: ET.Element, cmd_name: str,
@@ -573,9 +420,6 @@ def _lower_command(cmd_el: ET.Element, cmd_name: str,
         cmd_name, _default_sync_mode(return_type, params)
     )
 
-    # ``find_command`` follows aliases, so ``cmd_el`` is always the core
-    # element: its proto name is the symbol that actually exists in the
-    # loader, which is not necessarily the name we were asked for.
     real_name = proto.findtext("name")
 
     return Command(
@@ -588,9 +432,6 @@ def _lower_command(cmd_el: ET.Element, cmd_name: str,
         success_codes=parse.parse_codes(cmd_el.get("successcodes")),
         error_codes=parse.parse_codes(cmd_el.get("errorcodes")),
     )
-
-
-# ---- Helpers ---------------------------------------------------------------
 
 
 def _topo_sort(structs: dict[str, Struct]) -> list[str]:

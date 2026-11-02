@@ -56,7 +56,6 @@ uint32_t CurrentContexts::thread() const
     return slot_.thread_id();
 }
 
-/* This thread's context is current on this thread. */
 bool CurrentContexts::invariants_hold() const
 {
     AV_SCOPE("CurrentContexts::invariants_hold");
@@ -65,4 +64,4 @@ bool CurrentContexts::invariants_hold() const
     return anywhere_ != 0u && held->owner() == slot_.thread_id();
 }
 
-}  // namespace av::glicd
+}

@@ -19,9 +19,6 @@ uint64_t greatest_common_divisor(uint64_t first, uint64_t second)
     return first;
 }
 
-/* A rate as the lowest fraction D3DDDI_RATIONAL's two 32-bit words hold. A
- * numerator past them - a line rate of a very tall mode at a very high refresh
- * - gives up precision, never range: both halves shrink together. */
 void rational(uint64_t numerator, uint64_t denominator, uint32_t &numerator_out, uint32_t &denominator_out)
 {
     const uint64_t divisor = greatest_common_divisor(numerator, denominator);
@@ -35,7 +32,7 @@ void rational(uint64_t numerator, uint64_t denominator, uint32_t &numerator_out,
     denominator_out = static_cast<uint32_t>(denominator);
 }
 
-}  // namespace
+}
 
 DisplayMode::DisplayMode(uint32_t width, uint32_t height, uint32_t refresh_millihz)
     : width_(width), height_(height), refresh_millihz_(refresh_millihz)
@@ -154,8 +151,6 @@ bool DisplayMode::matches(const D3dkmdtVideoSignalInfoRecord &signal) const
 {
     AV_SCOPE("DisplayMode::matches");
     if (signal.ActiveSizeCx != width_ || signal.ActiveSizeCy != height_) return false;
-    /* The rate it was offered at and no other: a saved configuration at
-     * another is not this mode. */
     D3dkmdtVideoSignalInfoRecord own = {};
     describe(own);
     return signal.VSyncFreqNumerator == own.VSyncFreqNumerator && signal.VSyncFreqDenominator == own.VSyncFreqDenominator;
@@ -169,7 +164,6 @@ uint32_t DisplayMode::scan_line_within(uint64_t since, uint64_t period) const
     return static_cast<uint32_t>((height_ + into) % total_height());
 }
 
-/* Reduced modulo one second first, so no interrupt time overflows. */
 uint32_t DisplayMode::scan_line(uint64_t interrupt_time) const
 {
     AV_SCOPE("DisplayMode::scan_line");
@@ -178,4 +172,4 @@ uint32_t DisplayMode::scan_line(uint64_t interrupt_time) const
     return static_cast<uint32_t>(frame_position * total_height() / interrupt_ticks_per_second);
 }
 
-}  // namespace av
+}

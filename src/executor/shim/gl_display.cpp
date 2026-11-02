@@ -10,28 +10,20 @@
 #include <EGL/eglext.h>
 #include <stdlib.h>
 
-/* libstdc++'s <stdlib.h> is its freestanding one under -ffreestanding, which
- * declares none of POSIX; the executor links glibc's all the same. */
 extern "C" int setenv(const char *name, const char *value, int overwrite);
 
 namespace av {
 
 namespace {
-
-/* This host reports four EGL devices for two GPUs, two of which name the same
- * render node and one of which will not initialise. Neither number is one
- * anybody will meet. */
 constexpr EGLint max_devices = 16;
 
-/* glGetUnsignedBytevEXT, which GL_EXT_memory_object defines and which is the
- * only way to ask a GL context which GPU it is on in the terms Vulkan uses. */
 constexpr unsigned gl_device_uuid = 0x9597u;
 
 using QueryDevices = EGLBoolean (*)(EGLint, EGLDeviceEXT *, EGLint *);
 using PlatformDisplay = EGLDisplay (*)(EGLenum, void *, const EGLAttrib *);
 using GetUnsignedBytev = void (*)(unsigned, unsigned char *);
 
-}  // namespace
+}
 
 GlDisplay::GlDisplay() : display_(nullptr)
 {
@@ -54,21 +46,7 @@ bool GlDisplay::open(const uint8_t *uuid)
 {
     AV_SCOPE("GlDisplay::open");
     if (display_ != nullptr || uuid == nullptr) return false;
-    /* Mesa runs an application's GL on a second thread (glthread) by
-     * default, and any call that answers - the draw checks' glGetIntegerv,
-     * every query the guest makes - waits for that thread to catch up. A
-     * server answers a guest's queries all the time, and with it on spent a
-     * third of its time in those waits: pushconstants ran at 81% of native
-     * with it and 98% without. Read when a display initialises, so set before
-     * the first; a host that chose for itself is left its choice. */
     setenv("mesa_glthread", "false", 0);
-    /* rusticl finds EGL with dlsym(RTLD_DEFAULT, "eglGetProcAddress"), which
-     * searches the global scope and rusticl's own dependencies. Inside QEMU
-     * libEGL is nobody's global: this library, a module, loaded it locally,
-     * and so did libepoxy for the window. So every OpenCL context naming a GL
-     * context answered CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR there while the
-     * same calls passed in a test that links EGL (research.md §21). Promoting
-     * the copy already loaded makes the lookup find it. */
     static_cast<void>(dlopen("libEGL.so.1", RTLD_NOW | RTLD_NOLOAD | RTLD_GLOBAL));
 
     auto *const query = reinterpret_cast<QueryDevices>(eglGetProcAddress("eglQueryDevicesEXT"));
@@ -82,19 +60,12 @@ bool GlDisplay::open(const uint8_t *uuid)
 
     for (EGLint i = 0; i < found && display_ == nullptr; i++) {
         EGLDisplay display = platform_display(EGL_PLATFORM_DEVICE_EXT, devices[i], nullptr);
-        /* A device that will not initialise is stepped over: this host has one
-         * that answers EGL_NOT_INITIALIZED every time. One that does and is
-         * another GPU is left initialised - it may be the display another
-         * GlDisplay already holds, and terminating it would end that one. */
         if (display == EGL_NO_DISPLAY || eglInitialize(display, nullptr, nullptr) != EGL_TRUE) continue;
         display_ = display;
         void *const context = create_context(GlContextAttributes(nullptr), nullptr);
         uint8_t mine[DeviceUuid::bytes] = {};
         bool    told = false;
         if (make_current(context)) {
-            /* Resolved with a context current, where every EGL resolves a GL
-             * name. A driver without GL_EXT_memory_object cannot say which GPU
-             * it is, so it is not claimed for any rather than guessed at. */
             auto *const unsigned_bytev =
                 reinterpret_cast<GetUnsignedBytev>(eglGetProcAddress("glGetUnsignedBytevEXT"));
             if (unsigned_bytev != nullptr) unsigned_bytev(gl_device_uuid, mine);
@@ -144,4 +115,4 @@ void GlDisplay::destroy_context(void *context) const
     (void)eglDestroyContext(display_, context);
 }
 
-}  // namespace av
+}

@@ -60,4 +60,4 @@ void ScenarioSteps::check_teardown(GuestSession &session)
     report_.check(scenario_, "teardown", status, session.teardown_code());
 }
 
-}  // namespace av
+}

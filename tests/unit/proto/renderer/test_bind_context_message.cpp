@@ -39,7 +39,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(bind_context_message_encode, is_the_context_flags_doorbell_setup_length_then_the_setup)
 { GuardedBuffer bytes(bind_length);
@@ -68,8 +68,6 @@ TEST(bind_context_message, a_doorbell_round_trips_with_its_eventfd)
   CHECK_EQ(decoded.setup_length(), static_cast<std::uint32_t>(sizeof setup));
   CHECK(decoded.setup() == bytes + BindContextMessage::fixed_size); }
 
-/* Index 0 is a doorbell like any other, so without the flag a context with
- * doorbell 0 and one with none would be the same bytes. */
 TEST(bind_context_message, no_doorbell_is_the_flag_clear_and_no_eventfd)
 { std::uint8_t bytes[bind_length] = {};
   const BindContextMessage bind(7u, setup, sizeof setup);
@@ -112,11 +110,11 @@ TEST(bind_context_message_encode, a_short_or_missing_destination_is_too_large)
 TEST(bind_context_message_decode, refuses_bad_fields_and_stays_unchanged)
 { struct Case { std::size_t offset; std::uint32_t value; std::uint32_t descriptors; };
   const Case cases[] = {
-      {0u, 0u, 1u},    /* context 0 */
-      {4u, 3u, 1u},    /* an unknown flag */
-      {4u, 0u, 0u},    /* a doorbell index without the flag */
-      {8u, 5u, 2u},    /* two eventfds for one doorbell */
-      {8u, 5u, 0u},    /* a doorbell without its eventfd */
+      {0u, 0u, 1u},
+      {4u, 3u, 1u},
+      {4u, 0u, 0u},
+      {8u, 5u, 2u},
+      {8u, 5u, 0u},
   };
   for (const Case &c : cases) {
       std::uint8_t bytes[bind_length] = {};
@@ -128,8 +126,6 @@ TEST(bind_context_message_decode, refuses_bad_fields_and_stays_unchanged)
       CHECK_EQ(decoded.setup_length(), 2u);
   } }
 
-/* A setup the length alone makes consistent: an empty one, and one longer than
- * any ContextSetup that did arrive in full. */
 TEST(bind_context_message_decode, refuses_an_empty_or_overlong_setup_that_arrived)
 { std::uint8_t bytes[BindContextMessage::fixed_size + ContextSetup::encoded_size + 1u] = {};
   put(bytes, 0u, 7u);
@@ -155,10 +151,5 @@ TEST(bind_context_message_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 128u);
-  /* Context 3 has two bits set, so its 32 flips keep it non-zero. Clearing
-   * the flag leaves doorbell 5 named without one, and any other flag bit is
-   * unknown. With the flag set the doorbell is free: 32 flips. A setup length
-   * flip claims bytes that did not arrive; the setup is opaque: 32 flips. With
-   * the untouched message, 32 + 32 + 32 + 1. */
   const std::uint32_t acceptable = 32u + 32u + 32u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

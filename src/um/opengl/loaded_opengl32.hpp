@@ -1,5 +1,3 @@
-/* The opengl32.dll that loaded this ICD, as the ICD calls back into it: its
- * wglCreateContext, looked up in the module already loaded. */
 #ifndef AV_UM_LOADED_OPENGL32_HPP
 #define AV_UM_LOADED_OPENGL32_HPP
 
@@ -17,6 +15,6 @@ private:
     const char *export_ = "wglCreateContext";
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_LOADED_OPENGL32_HPP
+#endif

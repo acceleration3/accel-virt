@@ -99,7 +99,6 @@ Status DisplayClock::retime(uint32_t head, uint32_t millihz)
     host_.lock_mutex(lock_);
     schedules_[head].retime(millihz, host_.monotonic_nanoseconds());
     host_.unlock_mutex(lock_);
-    /* The thread sleeps toward the old rate's deadline. */
     host_.signal_event(wake_);
     return Status::ok;
 }
@@ -110,12 +109,10 @@ Status DisplayClock::retime_all(uint32_t millihz)
     host_.require_main_loop("DisplayClock::retime_all");
     if (millihz < VblankRecord::least_millihz || millihz > VblankRecord::most_millihz)
         return Status::invalid_parameter;
-    /* Without the lock no thread runs: nothing else reads the schedules. */
     if (lock_ != nullptr) host_.lock_mutex(lock_);
     const uint64_t now = host_.monotonic_nanoseconds();
     for (VblankSchedule &schedule : schedules_) schedule.retime(millihz, now);
     if (lock_ != nullptr) host_.unlock_mutex(lock_);
-    /* The thread sleeps toward the old rate's deadline. */
     if (wake_ != nullptr) host_.signal_event(wake_);
     return Status::ok;
 }
@@ -138,7 +135,6 @@ Status DisplayClock::align(int64_t shift)
     const uint64_t now = host_.monotonic_nanoseconds();
     for (VblankSchedule &schedule : schedules_) schedule.align(schedule.microhz(), shift, now);
     host_.unlock_mutex(lock_);
-    /* The thread sleeps toward the old phase's deadline. */
     host_.signal_event(wake_);
     return Status::ok;
 }
@@ -188,8 +184,6 @@ void DisplayClock::run()
     while (tick(host_.monotonic_nanoseconds(), next)) static_cast<void>(host_.wait_event_until(wake_, next));
 }
 
-/* A blank that passed while the thread slept is counted and published with the
- * rest; the display line is raised once for all of them. */
 bool DisplayClock::pass(uint32_t head, uint64_t now)
 {
     AV_SCOPE("DisplayClock::pass");
@@ -235,4 +229,4 @@ bool DisplayClock::invariants_hold() const
     return thread_ == nullptr || (lock_ != nullptr && wake_ != nullptr);
 }
 
-}  // namespace av
+}

@@ -1,57 +1,3 @@
-// d3d9_dirty_present.exe: a windowed Direct3D 9 swap chain presented the way
-// Affinity's canvas and Half-Life 2's window are (docs/testing.md, "Probes
-// from an application's calls"), and every frame it shows read back off the
-// desktop and judged against the frame that was presented.
-//
-// Affinity (traced at its DDI: avumd-calls, Oct 2026) keeps one X8R8G8B8 back
-// buffer it never locks, under D3DSWAPEFFECT_COPY, and redraws only what
-// changed: a Clear of one rectangle, a few draws under small viewports, and a
-// Present every few milliseconds whose dirty region is those rectangles. What
-// it shows is therefore the back buffer as every present before left it. The
-// `partial` mode does the same with a "handle" that moves across the window
-// each frame, as a dragged gradient's does, and a bar code of the frame's
-// number in the corner. The `full` mode clears and redraws the whole frame
-// under D3DSWAPEFFECT_DISCARD, as a game does.
-//
-// What the window shows is read three ways, each a step further along the
-// path to the user's eye:
-//   - through DWM on request (PrintWindow with PW_RENDERFULLCONTENT), the
-//     default: the window as DWM would render it now;
-//   - off the screen (--screen: a BitBlt from the desktop's DC, which has DWM
-//     compose that region): the composed desktop;
-//   - as the compositor composes it, frame by frame (--wgc: a
-//     Windows.Graphics.Capture of the window on a thread of its own): the
-//     frames a window mirror and the scanout take, at DWM's own pace, with
-//     nothing waiting for anything.
-// Each picture's bar code is decoded into the frame number shown, and the
-// probe fails when
-//   - the number shown goes backwards: a frame presented earlier shows after a
-//     later one did ("past frames");
-//   - the frame shown holds a handle other than its own: the handle of an
-//     earlier frame is still there, or the present mixed two frames ("past
-//     rectangles").
-// The lag between the frame presented and the frame shown is reported, not
-// judged: composition is allowed to be behind, never to go back.
-//
-//   d3d9_dirty_present.exe [partial|full] [--ex] [--frames N] [--interval-ms N]
-//                          [--width W --height H] [--source-rect] [--settle-ms N]
-//                          [--screen] [--wgc] [--read-every N] [--rect-order N]
-//                          [--settle-capture-ms N] [--no-read] [--verbose]
-//
-// --ex           makes the device through Direct3D9Ex, as a few applications do.
-// --source-rect  presents the dirty rectangles' bound as pSourceRect/pDestRect
-//                rather than as a dirty region.
-// --rect-order N the order of the three dirty rectangles - the old handle's,
-//                the new handle's and the bar code's: 0 old,new,code (the
-//                default); 1 new,old,code; 2 code,old,new; 3 code,new,old.
-// --read-every N reads after every Nth frame only, so presents outrun the
-//                reads between, as an application's do.
-// --settle-capture-ms N
-//                waits N ms after a compositor frame arrives before reading it,
-//                and reads it twice: a frame that reads differently the second
-//                time was still being written when it arrived - a tear of the
-//                capture's own, not of the window.
-// --no-read      only presents, for a trace of the calls alone.
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0A00
 #endif
@@ -67,8 +13,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
-// llvm-mingw's windows.foundation.h specializes IReference for boolean and for
-// BYTE, which are one type there (unsigned char); the probe uses neither.
 #define ____FIReference_1_boolean_INTERFACE_DEFINED__
 #include <windows.graphics.capture.h>
 #include <windows.graphics.capture.interop.h>
@@ -112,16 +56,11 @@ struct Options {
     uint32_t height = 800u;
 };
 
-/* The picture: a grey background, a handle that walks a diagonal as a drag
- * does, and a bar code of the frame number: `code_bits` cells of `cell` pixels
- * along the top-left edge, a white guard cell at either end. */
 constexpr uint32_t handle_size = 24u;
 constexpr uint32_t cell = 8u;
 constexpr uint32_t code_bits = 16u;
 constexpr uint32_t code_cells = code_bits + 2u;
 constexpr int32_t  code_x = 8, code_y = 8;
-/* A second copy of the bar code along the bottom edge: a frame whose two
- * codes differ was composed from a surface only partly written. */
 int32_t bottom_code_y(const Options &options) { return static_cast<int32_t>(options.height) - 8 - static_cast<int32_t>(cell); }
 constexpr D3DCOLOR background = D3DCOLOR_XRGB(96, 96, 96);
 constexpr D3DCOLOR handle_colour = D3DCOLOR_XRGB(255, 160, 0);
@@ -134,10 +73,8 @@ struct Vertex {
 
 RECT handle_rect(const Options &options, uint32_t frame)
 {
-    /* Back and forth across the window, never under the bar code, a new
-     * place every frame so no two nearby frames share one. */
     const uint32_t span_x = options.width - handle_size - 40u;
-    const uint32_t span_y = options.height - handle_size - 80u;   /* clear of the bottom bar code */
+    const uint32_t span_y = options.height - handle_size - 80u;
     const uint32_t step = 7u;
     const uint32_t tx = (frame * step) % (2u * span_x);
     const uint32_t ty = (frame * (step + 4u)) % (2u * span_y);
@@ -168,7 +105,6 @@ RECT bound(const RECT *rectangles, uint32_t count)
     return all;
 }
 
-/* A dirty region of up to four rectangles as RGNDATA lays it out. */
 struct Region {
     RGNDATAHEADER header;
     RECT          rectangles[4];
@@ -202,7 +138,6 @@ public:
             const int32_t x = code_x + static_cast<int32_t>(index * cell);
             cells[index] = D3DRECT{x, y, x + static_cast<int32_t>(cell), y + static_cast<int32_t>(cell)};
         }
-        /* Guards, then the bits most significant first. */
         device_->Clear(1u, &cells[0], D3DCLEAR_TARGET, D3DCOLOR_XRGB(255, 255, 255), 1.0f, 0u);
         device_->Clear(1u, &cells[code_cells - 1u], D3DCLEAR_TARGET, D3DCOLOR_XRGB(255, 255, 255), 1.0f, 0u);
         for (uint32_t bit = 0; bit < code_bits; bit++) {
@@ -218,8 +153,6 @@ public:
         device_->Clear(1u, &area, D3DCLEAR_TARGET, colour, 1.0f, 0u);
     }
 
-    /* The handle drawn as Affinity draws its small things: a viewport of its
-     * rectangle and a pretransformed quad. */
     void draw_handle(const RECT &rectangle)
     {
         D3DVIEWPORT9 viewport = {};
@@ -249,8 +182,6 @@ private:
     const Options    &options_;
 };
 
-/* A picture of the window's client area, BGRX rows top-down, however it was
- * taken; `origin` is where the client's top-left is in it. */
 class Pixels {
 public:
     Pixels(uint32_t width, uint32_t height) : width_(width), height_(height), pixels_(new uint32_t[size_t{width} * height]) {}
@@ -271,8 +202,6 @@ public:
         return pixels_[static_cast<size_t>(y) * width_ + x] & 0xFFFFFFu;
     }
 
-    /* The frame number the bar code shows, or -1 when its guards are not
-     * both white (a frame mid-change, or not ours). */
     int64_t code() const { return code_at(code_y); }
 
     int64_t code_at(int32_t top) const
@@ -291,7 +220,6 @@ public:
         return value;
     }
 
-    /* How many of the rectangle's sampled pixels are the handle's colour. */
     uint32_t handle_pixels(const RECT &rectangle) const
     {
         uint32_t count = 0u;
@@ -343,9 +271,6 @@ private:
     uint32_t *pixels_;
 };
 
-/* The window's client area as the desktop composes it: through DWM on
- * request (PrintWindow with PW_RENDERFULLCONTENT renders the window as it
- * shows it, whichever way its frames arrive), or off the screen. */
 class WindowReader {
 public:
     WindowReader(HWND window, uint32_t width, uint32_t height, bool screen)
@@ -360,7 +285,7 @@ public:
         BITMAPINFO info = {};
         info.bmiHeader.biSize = sizeof info.bmiHeader;
         info.bmiHeader.biWidth = static_cast<LONG>(pixels_.width());
-        info.bmiHeader.biHeight = -static_cast<LONG>(pixels_.height());   /* top-down */
+        info.bmiHeader.biHeight = -static_cast<LONG>(pixels_.height());
         info.bmiHeader.biPlanes = 1;
         info.bmiHeader.biBitCount = 32;
         info.bmiHeader.biCompression = BI_RGB;
@@ -400,7 +325,6 @@ class Judge {
 public:
     Judge(const Options &options, const wchar_t *who) : options_(options), who_(who) {}
 
-    /* `shown` is what the window shows after frame `presented` was presented. */
     void judge(const Pixels &picture, int64_t shown, uint32_t presented, bool final)
     {
         reads_++;
@@ -442,8 +366,6 @@ public:
             fail(L"frame %u shows %u of %u of its own handle's pixels", shown, own_found, own_samples);
             save_once(picture, L"own-handle");
         }
-        /* The handles of the frames before: those not under this frame's must be
-         * gone. The first frame of the picture has nothing before it. */
         const uint32_t back = lesser(shown, 24u);
         for (uint32_t earlier = 1u; earlier <= back; earlier++) {
             const RECT old = handle_rect(options_, shown - earlier);
@@ -475,7 +397,7 @@ private:
     void fail(const wchar_t *format, ...)
     {
         failures_++;
-        if (failures_ > 40u) return;   /* enough said */
+        if (failures_ > 40u) return;
         va_list arguments;
         va_start(arguments, format);
         wprintf(L"FAIL %ls: ", who_);
@@ -509,12 +431,6 @@ template <class T> HRESULT activation_factory(const wchar_t *runtime_class, T **
     return made;
 }
 
-/* The window as the compositor composes it, frame by frame
- * (Windows.Graphics.Capture, as a window mirror takes it), on a thread of its
- * own: every frame copied to a staging texture, read, and judged against the
- * frame presented at the time. The capture is of the whole window, DWM's
- * frame included; the client's offset in it is DWM's extended frame bounds
- * against the client's origin. */
 class CompositorWatcher {
 public:
     CompositorWatcher(HWND window, const Options &options, const volatile LONG &presented)
@@ -526,7 +442,6 @@ public:
     {
         thread_ = CreateThread(nullptr, 0, &CompositorWatcher::run, this, 0, nullptr);
         if (thread_ == nullptr) return false;
-        /* Started, or failed to: either way the frame loop may begin. */
         while (!started_ && !stopped_) Sleep(5);
         return started_;
     }
@@ -590,7 +505,6 @@ private:
                                         ABI::Windows::Graphics::DirectX::DirectXPixelFormat_B8G8R8A8UIntNormalized, 3,
                                         size, &pool));
         WATCH(pool->CreateCaptureSession(item, &session));
-        /* Without the yellow capture border Windows 11 draws otherwise. */
         wgc::IGraphicsCaptureSession3 *session3 = nullptr;
         if (SUCCEEDED(session->QueryInterface(__uuidof(wgc::IGraphicsCaptureSession3), reinterpret_cast<void **>(&session3)))) {
             session3->put_IsBorderRequired(false);
@@ -620,9 +534,6 @@ private:
                 Sleep(1);
                 continue;
             }
-            /* Which frame had been presented when this one was composed: read
-             * before the frame is, so a frame shown can never be a frame not yet
-             * presented by this reckoning except by being truly ahead. */
             const uint32_t presented = static_cast<uint32_t>(presented_);
             ID3D11Texture2D *texture = texture_of(captured);
             if (texture != nullptr) {
@@ -645,8 +556,6 @@ private:
                     frames_++;
                     const int64_t code = picture->code();
                     const int64_t bottom = picture->code_at(bottom_code_y(options_));
-                    /* Read again: a frame that changed under the first read was
-                     * still being written by the compositor when it arrived. */
                     if (options_.settle_capture_ms != 0u && read_into(context, staging, texture, description, *picture) &&
                         (picture->code() != code || picture->code_at(bottom_code_y(options_)) != bottom)) {
                         rereads_differed_++;
@@ -805,7 +714,7 @@ HRESULT make_device(const Options &options, HWND window, IDirect3D9 *&direct3d, 
     return direct3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, window, behaviour, &present, &device);
 }
 
-}  // namespace
+}
 
 int wmain(int argc, wchar_t **argv)
 {
@@ -817,8 +726,6 @@ int wmain(int argc, wchar_t **argv)
         return 1;
     }
     setvbuf(stdout, nullptr, _IONBF, 0);
-    /* Physical pixels throughout: a screen read at the client's origin must
-     * land on the client. */
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     WNDCLASSW window_class = {};
@@ -832,14 +739,10 @@ int wmain(int argc, wchar_t **argv)
     HWND window = CreateWindowW(L"d3d9_dirty_present", L"d3d9_dirty_present", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 60, 60,
                                 rectangle.right - rectangle.left, rectangle.bottom - rectangle.top, nullptr, nullptr,
                                 window_class.hInstance, nullptr);
-    /* In front of whatever else is open: a screen read sees only this window. */
     SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
     SetForegroundWindow(window);
     pump();
 
-    /* The capture first: DWM gives a captured window a new redirection
-     * surface, and a Direct3D 9 device that opened the old one at its creation
-     * reports the change as a lost device. */
     volatile LONG presented_count = 0;
     CompositorWatcher watcher(window, options, presented_count);
     if (options.wgc && !watcher.start()) {
@@ -867,7 +770,6 @@ int wmain(int argc, wchar_t **argv)
     device->SetRenderState(D3DRS_ZENABLE, FALSE);
     device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
-    /* Frame 0: the whole picture, presented whole. */
     device->BeginScene();
     picture.erase(RECT{0, 0, static_cast<LONG>(options.width), static_cast<LONG>(options.height)},
                   options.mode == Mode::partial ? background : full_background);
@@ -919,8 +821,6 @@ int wmain(int argc, wchar_t **argv)
         picture.draw_code(frame);
         picture.draw_handle(now);
         device->EndScene();
-        /* Counted as presented before the present: a compositor frame that
-         * shows it was composed after this, never before. */
         InterlockedExchange(&presented_count, static_cast<LONG>(frame));
         if (options.mode == Mode::partial) {
             const RECT code = code_rect_at(code_y), bottom = code_rect_at(bottom_code_y(options));
@@ -939,9 +839,6 @@ int wmain(int argc, wchar_t **argv)
             shown = device->Present(nullptr, nullptr, nullptr, nullptr);
         }
         if (shown == D3DERR_DEVICELOST) {
-            /* As a game does: wait for the device to be resettable, reset it
-             * with the same chain, and go on; frame 0's picture is redrawn
-             * whole since a reset empties the back buffer. */
             resets++;
             wprintf(L"device lost at frame %u, resetting\n", frame);
             for (uint32_t waited = 0; waited < 200u && device->TestCooperativeLevel() == D3DERR_DEVICELOST; waited++) {
@@ -978,7 +875,6 @@ int wmain(int argc, wchar_t **argv)
         }
         if (options.interval_ms != 0u) Sleep(options.interval_ms);
     }
-    /* Settled: the last frame, and nothing but it. */
     Sleep(options.settle_ms);
     pump();
     if (options.read && reader.read()) {

@@ -12,7 +12,6 @@ LocalContextPlane::LocalContextPlane(Host &host, BlobTable &blobs, HostBlobOwner
     AV_SCOPE("LocalContextPlane::LocalContextPlane");
 }
 
-/* The contexts first: none may share in a domain that is closing. */
 LocalContextPlane::~LocalContextPlane()
 {
     AV_SCOPE("LocalContextPlane::~LocalContextPlane");
@@ -26,18 +25,12 @@ Status LocalContextPlane::accept(const AvExecutorOps *executor)
     return library_.accept(executor);
 }
 
-/* A realize that failed before may already hold the locks: only no_memory is
- * a failure. */
 Status LocalContextPlane::initialize()
 {
     AV_SCOPE("LocalContextPlane::initialize");
     return contexts_.initialize() == Status::no_memory ? Status::no_memory : Status::ok;
 }
 
-/* The library was loaded with QEMU and runs in it: all there is to start is
- * this device's domain in it. A GPU the library has not got is a device whose
- * every context is refused, as one whose capset offers nothing is, not one
- * that fails to realize; a device restarted keeps the domain it has. */
 Status LocalContextPlane::start(const uint8_t *gpu_uuid, const CapsetInfo &)
 {
     AV_SCOPE("LocalContextPlane::start");
@@ -45,7 +38,6 @@ Status LocalContextPlane::start(const uint8_t *gpu_uuid, const CapsetInfo &)
     return Status::ok;
 }
 
-/* The contexts read QEMU's own blob table and raise QEMU's own interrupts. */
 void LocalContextPlane::blob_created(uint32_t)
 {
     AV_SCOPE("LocalContextPlane::blob_created");
@@ -56,7 +48,6 @@ void LocalContextPlane::blob_released(uint32_t)
     AV_SCOPE("LocalContextPlane::blob_released");
 }
 
-/* Object 0 is every one: a reset, after which the guest's ids start again. */
 void LocalContextPlane::shared_released(const uint8_t *, uint64_t object_id)
 {
     AV_SCOPE("LocalContextPlane::shared_released");
@@ -155,8 +146,6 @@ uint32_t LocalContextPlane::live() const
     return contexts_.live();
 }
 
-/* The device's own domain answers for every GPU named here: one device is
- * on one GPU. */
 bool LocalContextPlane::export_image(const uint8_t *, uint64_t key, AvExportedImage &image)
 {
     AV_SCOPE("LocalContextPlane::export_image");
@@ -240,4 +229,4 @@ bool LocalContextPlane::invariants_hold() const
     return contexts_.invariants_hold();
 }
 
-}  // namespace av
+}

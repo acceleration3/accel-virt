@@ -59,8 +59,6 @@ Status GuestPageMapping::map_entry(uint64_t address, uint64_t length)
     return Status::ok;
 }
 
-/* Moves the extents into one host block of `capacity` pointers then as many
- * lengths; the old block is released. */
 Status GuestPageMapping::reserve(uint32_t capacity)
 {
     AV_SCOPE("GuestPageMapping::reserve");
@@ -79,7 +77,6 @@ Status GuestPageMapping::reserve(uint32_t capacity)
     return Status::ok;
 }
 
-/* An entry that crosses region boundaries needs more extents than entries. */
 Status GuestPageMapping::add_extent(void *pointer, uint64_t length)
 {
     AV_SCOPE("GuestPageMapping::add_extent");
@@ -123,7 +120,6 @@ BlobWindow GuestPageMapping::window() const
     return BlobWindow(pointers_, lengths_, count_, length_);
 }
 
-/* The length is the extents' sum; nothing is held without a table. */
 bool GuestPageMapping::invariants_hold() const
 {
     AV_SCOPE("GuestPageMapping::invariants_hold");
@@ -133,4 +129,4 @@ bool GuestPageMapping::invariants_hold() const
     return sum == length_;
 }
 
-}  // namespace av
+}

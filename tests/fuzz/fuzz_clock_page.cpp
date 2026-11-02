@@ -1,8 +1,3 @@
-/* The display clock page as a hostile device writes it: the header and one
- * head's blank decoded from the same bytes. What the guest accepts is what the
- * bytes say - a magic, version and head count it knows, a rate in range and
- * the period that rate has - and encodes back to the same bytes; what it
- * refuses leaves the reader as it was. */
 #include "core/support/status.hpp"
 #include "proto/pages/clock_page_header.hpp"
 #include "proto/pages/vblank_record.hpp"

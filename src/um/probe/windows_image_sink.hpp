@@ -1,5 +1,3 @@
-/* A probe's pictures as C:\av\<name>.bmp, beside the probe, for the runner
- * to pull into the run's directory. */
 #ifndef AV_WINDOWS_IMAGE_SINK_HPP
 #define AV_WINDOWS_IMAGE_SINK_HPP
 
@@ -20,6 +18,6 @@ private:
     uint8_t bytes_[max_bytes];
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WINDOWS_IMAGE_SINK_HPP
+#endif

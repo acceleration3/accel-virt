@@ -35,11 +35,8 @@ GUEST_BUILD = ROOT / "build-vulkan-samples" / "guest" / "avvksamples.exe"
 LOADER = ROOT / "third_party" / "vulkan-runtime" / "vulkan-1.dll"
 GUEST_DIR = "C:\\av\\vksamples"
 GUEST_EXE = GUEST_DIR + "\\avvksamples.exe"
-# The runner's own watchdog ends a stuck sample first; this is for one that
-# cannot even do that.
 SAMPLE_TIMEOUT = 600
 FIELDS = 6
-# What makes a sample's two pictures differ that is the sample's own doing.
 NOTES = {
     "computeparticles": "Differs between two runs on one machine: upstream's compute shader runs 16 invocations "
                         "per particle (local_size_y 16 over a one-dimensional dispatch), racing on its position.",
@@ -68,7 +65,6 @@ def runner_arguments(args):
 
 
 def result_lines(text):
-    """The runner's per-sample lines - name, status, init ms, frames, ms, fps - out of a log."""
     rows = {}
     for line in text.splitlines():
         fields = line.split("\t")
@@ -83,7 +79,6 @@ def result_lines(text):
 
 
 def write_metrics(path, names, rows, exits):
-    """metrics.tsv as the D3D11 runner writes it, with a row for every sample that ended without one."""
     lines = ["sample\tstatus\tinit_ms\tframes\tms\tfps"]
     for name in names:
         row = rows.get(name) or {"status": f"crashed ({exits.get(name, '?')})", "init_ms": 0.0, "frames": 0,
@@ -119,7 +114,6 @@ def run_host(args, out, names):
 
 
 def data_archive(out):
-    """The examples' data directory as one file: the guest agent moves files, not trees."""
     archive = out / "vksamples-data.zip"
     if archive.exists() and archive.stat().st_mtime >= DATA.stat().st_mtime:
         return archive
@@ -131,12 +125,10 @@ def data_archive(out):
 
 
 def run_guest(args, out, names):
-    """The guest's run - each sample its own process, from one batch file - and its results brought back."""
     work = args.work
     guest_shell(work, "ps", f"Remove-Item -Recurse -Force {GUEST_DIR} -ErrorAction SilentlyContinue; "
                             f"New-Item -ItemType Directory -Force {GUEST_DIR}\\out, {GUEST_DIR}\\data | Out-Null")
     guest_shell(work, "push", str(GUEST_BUILD), GUEST_EXE)
-    # The pinned loader beside the program: the application directory is searched first.
     guest_shell(work, "push", str(LOADER), GUEST_DIR + "\\vulkan-1.dll")
     print("guest: pushing the examples' data", flush=True)
     guest_shell(work, "push", str(data_archive(out)), GUEST_DIR + "\\data.zip", timeout=3600)
@@ -150,7 +142,6 @@ def run_guest(args, out, names):
         batch.append(f"echo == {name} (exit %errorlevel%) >> {GUEST_DIR}\\run.txt")
     guest_shell(work, "ps", f"Set-Content -Encoding ascii {GUEST_DIR}\\run.cmd @'\n" + "\r\n".join(batch) + "\n'@")
     print("guest: rendering", flush=True)
-    # The user's interactive session, where the loader finds the display adapter's ICD.
     output = guest_shell(work, "ps", f"""
 Unregister-ScheduledTask -TaskName avvksamples -Confirm:$false -ErrorAction SilentlyContinue
 $a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c {GUEST_DIR}\\run.cmd'
@@ -175,7 +166,6 @@ Get-Content {GUEST_DIR}\\run.txt -ErrorAction SilentlyContinue""", timeout=7200)
 
 
 def bring_back(work, out):
-    """The guest's frames in one zip, pulled and unpacked into out/guest."""
     bundle = f"{GUEST_DIR}\\frames.zip"
     guest_shell(work, "ps", f"Remove-Item {bundle} -ErrorAction SilentlyContinue; "
                             f"Compress-Archive -Path {GUEST_DIR}\\out\\* -DestinationPath {bundle} -CompressionLevel Fastest",
@@ -228,9 +218,6 @@ def report(args, out, names):
 
 
 def picture_verdict(row):
-    """A sample NOTES says differs by its own doing cannot be held to its
-    picture: two runs of it on one machine differ, so a difference is a
-    warning there and never a failure."""
     if not row.get("stats"):
         return "missing", "bad"
     label, tone = verdict(row["stats"])

@@ -1,5 +1,3 @@
-/* The creation slots: every object the runtime makes is made on the host under
- * an id this device hands out, and its record kept in the runtime's block. */
 #include "core/platform/block_source.hpp"
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
@@ -19,15 +17,12 @@
 namespace av::d3d11 {
 
 namespace {
-
-/* D3D11_RESOURCE_MISC_* the host keeps, by the DDI's bit. */
 constexpr uint32_t api_generate_mips = 0x1u;
 constexpr uint32_t api_texture_cube = 0x4u;
-constexpr uint32_t misc_same_bits = 0xF0u; /* draw-indirect, raw views, structured, clamp */
+constexpr uint32_t misc_same_bits = 0xF0u;
 constexpr uint32_t api_bind_uav = 0x80u;
 constexpr uint32_t api_bind_pipeline = 0x7Fu;
 
-/* D3D11_{SRV,RTV,DSV,UAV}_DIMENSION values. */
 constexpr uint32_t view_buffer = 1u;
 constexpr uint32_t view_1d = 2u;
 constexpr uint32_t view_1d_array = 3u;
@@ -54,9 +49,7 @@ constexpr uint32_t stage_pixel = 4u;
 constexpr uint32_t stage_compute = 5u;
 constexpr uint32_t no_stream = 0xffffffffu;
 
-}  // namespace
-
-/* ---------------------------------------------------------------- resources */
+}
 
 SIZE_T D3d11Device::calc_private_resource_size(const D3D11DDIARG_CREATERESOURCE *)
 {
@@ -89,10 +82,6 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     resource.depth = args->pMipInfoList[0].TexelDepth;
     resource.mips = args->MipLevels;
     const bool cube = args->ResourceDimension == D3D10DDIRESOURCE_TEXTURECUBE;
-    /* A cube's ArraySize already counts its faces, six a cube, as the
-     * application's TEXTURE2D_DESC did: counted again, a cube's initial data
-     * was read for 36 faces from the runtime's six, and Dark Souls
-     * Remastered's first environment map faulted in the copy. */
     resource.layers = args->ArraySize;
     resource.samples = args->SampleDesc.Count;
     resource.runtime_resource = runtime.handle;
@@ -113,23 +102,14 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
                       ((args->MiscFlags & D3D10_DDI_RESOURCE_AUTO_GEN_MIP_MAP) != 0u ? api_generate_mips : 0u) |
                       (cube ? api_texture_cube : 0u);
     desc.structure_stride = args->ByteStride;
-    /* Exactly the buffers a present refreshes a copy of (show_flip). */
     const d3d::SwapChainBuffer::Model buffer_model =
         d3d::SwapChainBuffer(args->pPrimaryDesc != nullptr, args->MiscFlags).model();
     if (resource.dimension == D3D10DDIRESOURCE_TEXTURE2D &&
         (buffer_model == d3d::SwapChainBuffer::Model::scanout ||
          (buffer_model == d3d::SwapChainBuffer::Model::flip && (args->BindFlags & D3D10_DDI_BIND_PRESENT) != 0u)))
         desc.misc_flags |= ResourceMisc::presented_bit;
-    /* Every resource the kernel will know - scanned out, presented or shared -
-     * is made under a host key, so any session on the GPU can name it: DWM
-     * opening an application's buffer, and the scanout showing a primary
-     * (docs/d3d-desktop.md §3.1). */
     const bool kernel_visible = args->pPrimaryDesc != nullptr || (args->BindFlags & D3D10_DDI_BIND_PRESENT) != 0u ||
                                 (args->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u;
-    /* A shared texture with no present or scanout in it is one another API
-     * may open (feature 053): the host is told it is shared, and makes it over
-     * memory they can import - as rows when the thread making it asked
-     * (ResourceMisc), in the GPU's own tiling otherwise. */
     const bool interop = (args->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u && args->pPrimaryDesc == nullptr &&
                          (args->BindFlags & D3D10_DDI_BIND_PRESENT) == 0u &&
                          resource.dimension == D3D10DDIRESOURCE_TEXTURE2D && resource.mips == 1u &&
@@ -151,14 +131,10 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
             .write();
     const bool as_rows = interop && !across && rows_.asked_by(caller_.thread_id());
     if (interop && !across) desc.misc_flags |= ResourceMisc::shared_bit | (as_rows ? ResourceMisc::rows_bit : 0u);
-    /* Allocated first: the key is the identity the miniport mints over the
-     * allocation, and the host resource is made under it. */
     if (kernel_visible) {
         const HRESULT allocated = allocate(resource, *args, runtime);
         if (FAILED(allocated)) set_error(allocated);
     }
-    /* A cross-adapter texture is made over the pages lent beneath it, as rows
-     * of the allocation's pitch; any other, over memory of the host's own. */
     const uint64_t lent_name = resource.lent != nullptr ? resource.lent->handle() : 0u;
     const uint32_t lent_pitch = resource.lent != nullptr ? resource.allocation_pitch : 0u;
     if (!d3dproto::av_d3d_CreateResource(wire(), resource.stamp.id(), desc, resource.shared_key, lent_name,
@@ -166,16 +142,11 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
         set_error(E_OUTOFMEMORY);
         return;
     }
-    /* Only rows are memory another API can lay an image over. */
     if (as_rows && resource.shared_key != 0u) publish_shared(resource);
 
     if (args->Usage == D3D10_DDI_USAGE_DYNAMIC || args->Usage == D3D10_DDI_USAGE_STAGING || args->MapFlags != 0u) {
         size_t bytes = 0u;
         for (uint32_t sub = 0u; sub < subresource_count(resource); sub++) bytes += subresource_bytes(resource, sub);
-        /* A dynamic buffer is a slice the host draws in place, where the
-         * session has them; any other buffer's writes are watched, so an
-         * unmap sends only what changed; one subresource, so no page is
-         * shared with another's. */
         bool watched = false;
         if (!(args->Usage == D3D10_DDI_USAGE_DYNAMIC && !kernel_visible && place_on_slice(resource, bytes)))
             resource.shadow = resource.dimension == D3D10DDIRESOURCE_BUFFER
@@ -188,11 +159,9 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
     if (args->pInitialDataUP != nullptr) {
         for (uint32_t sub = 0u; sub < subresource_count(resource); sub++) {
             const D3D10_DDIARG_SUBRESOURCE_UP &initial = args->pInitialDataUP[sub];
-            /* A slice is read in place: the copy into it below is the upload. */
             if (resource.on_slice == 0u)
                 upload(resource, sub, nullptr, initial.pSysMem, initial.SysMemPitch, initial.SysMemSlicePitch, 0u);
             if (resource.shadow == nullptr) continue;
-            /* The shadow is packed; the application's rows are at its pitch. */
             uint32_t width = 0u, height = 0u, depth = 0u;
             extent(resource, sub, width, height, depth);
             const uint32_t line = row_bytes(resource, width), lines = rows(resource, height);
@@ -205,21 +174,13 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
                                          static_cast<size_t>(row) * initial.SysMemPitch,
                                      line);
         }
-        /* The host was made with this data: it is not a write to send. */
         if (resource.shadow_watched != 0u) shadows_.forget_writes(resource.shadow, resource.shadow_bytes);
     }
-    /* Bound once its first contents are in the slice. */
     if (resource.on_slice != 0u && !bind_slice(resource)) lost(__func__);
 
-    /* Another process - DWM - may open the key as soon as the kernel hands
-     * it the handle, on its own stream: the host must have made the resource
-     * by then, contents included. */
     if (kernel_visible && wire().run_held() != Status::ok) lost(__func__);
 }
 
-/* Published under the key the miniport minted, as the size its allocation
- * descriptor carries - which is what an opener reads back and names. A texture
- * the host could not make shareable is refused, and stays a Direct3D one. */
 void D3d11Device::publish_shared(const ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::publish_shared");
@@ -244,9 +205,6 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
     resource.stamp = d3d::RecordStamp(ResourceRecord::tag, next_id());
     resource.runtime_resource = runtime.handle;
     if (args->NumAllocations != 0u) resource.allocation = args->pOpenAllocationInfo2[0].hAllocation;
-    /* The key is the identity the miniport minted over the creator's
-     * allocation, which dxgkrnl hands every process that opens it - whichever
-     * of this driver's devices made it, Direct3D 11's or 12's. */
     d3d::KernelSurface opened;
     const bool         surface =
         args->NumAllocations != 0u &&
@@ -257,8 +215,6 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
     d3dproto::ResourceDesc desc = {};
     if (key == 0u && open_cross_adapter(resource, *args)) return;
     if (key == 0u && open_guest_surface(resource, *args)) return;
-    /* The creator's stream is another queue on the host: a key it has just
-     * shared can still be on its way there, so a miss is asked again. */
     constexpr uint32_t open_attempts = 64u;
     bool sent = key != 0u;
     for (uint32_t attempt = 0u; sent && found == 0u && attempt < open_attempts; attempt++)
@@ -308,20 +264,14 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
     allocations_.release_address(resource.gpu_address, resource.gpu_pages);
     forget_maps(resource.stamp.id());
     destroy_object(resource.stamp.id());
-    /* Behind the destroy: the host's draws over the texture may be queued still. */
     if (resource.lent != nullptr) lender_.retire(*resource.lent);
     session_.reclaim_retired();
     if (resource.slice.bytes_ != 0u) leave_slice(resource);
     else if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
-    /* Keyed or not: a presented, scanned-out or shared resource's allocation
-     * was this device's to make and is its to give back. Kept, every swap
-     * chain DWM remade leaked its primaries. An opened one is its maker's. */
     if (resource.allocation_owned != 0u)
         allocations_.give_back(resource.allocation, static_cast<HANDLE>(resource.runtime_resource));
     resource = ResourceRecord{};
 }
-
-/* ---------------------------------------------------------------- views */
 
 SIZE_T D3d11Device::calc_private_shader_resource_view_size(const D3DWDDM2_0DDIARG_CREATESHADERRESOURCEVIEW *)
 {
@@ -395,7 +345,6 @@ VOID D3d11Device::create_shader_resource_view(const D3DWDDM2_0DDIARG_CREATESHADE
 VOID D3d11Device::destroy_shader_resource_view(D3D10DDI_HSHADERRESOURCEVIEW handle)
 {
     AV_SCOPE("D3d11Device::destroy_shader_resource_view");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
@@ -437,8 +386,6 @@ VOID D3d11Device::create_render_target_view(const D3DWDDM2_0DDIARG_CREATERENDERT
         desc.args[2] = args->Tex3D.WSize;
         break;
     default: {
-        /* Texture2D and TextureCube: a cube's faces are array slices of a 2D
-         * texture on the host. */
         const bool faces = args->ResourceDimension == D3D10DDIRESOURCE_TEXTURECUBE;
         const UINT mip = faces ? args->TexCube.MipSlice : args->Tex2D.MipSlice;
         const UINT first = faces ? args->TexCube.FirstArraySlice : args->Tex2D.FirstArraySlice;
@@ -462,7 +409,6 @@ VOID D3d11Device::create_render_target_view(const D3DWDDM2_0DDIARG_CREATERENDERT
 VOID D3d11Device::destroy_render_target_view(D3D10DDI_HRENDERTARGETVIEW handle)
 {
     AV_SCOPE("D3d11Device::destroy_render_target_view");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
@@ -507,7 +453,6 @@ VOID D3d11Device::create_depth_stencil_view(const D3D11DDIARG_CREATEDEPTHSTENCIL
 VOID D3d11Device::destroy_depth_stencil_view(D3D10DDI_HDEPTHSTENCILVIEW handle)
 {
     AV_SCOPE("D3d11Device::destroy_depth_stencil_view");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
@@ -562,12 +507,9 @@ VOID D3d11Device::create_unordered_access_view(const D3DWDDM2_0DDIARG_CREATEUNOR
 VOID D3d11Device::destroy_unordered_access_view(D3D11DDI_HUNORDEREDACCESSVIEW handle)
 {
     AV_SCOPE("D3d11Device::destroy_unordered_access_view");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
-
-/* ---------------------------------------------------------------- shaders */
 
 void D3d11Device::create_shader(uint32_t stage, const UINT *code, D3D10DDI_HSHADER shader,
                                 const D3D11_1DDIARG_SIGNATURE_ENTRY2 *inputs, UINT input_count,
@@ -605,7 +547,6 @@ void D3d11Device::create_shader(uint32_t stage, const UINT *code, D3D10DDI_HSHAD
         strides = stream_out->BufferStridesInBytes;
         rasterized = stream_out->RasterizedStream;
     }
-    /* The second token is the stream's length in tokens. */
     const size_t bytes = static_cast<size_t>(code[1]) * sizeof(UINT);
     if (!wire().make_room_for_blobs(bytes))
         lines_.write("a shader larger than the arena");
@@ -676,10 +617,6 @@ VOID D3d11Device::create_geometry_shader_with_stream_output(const D3D11DDIARG_CR
                   signatures->NumOutputSignatureEntries, nullptr, 0u, args);
 }
 
-/* A declaration with no shader streams the vertex shader's output: the
- * runtime hands no code then, only what the stage reads, so the shader it
- * stands for is written here (PassthroughGeometryShader) and writes out what
- * it read. */
 void D3d11Device::stream_vertex_output(const D3D11DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT &args,
                                        D3D10DDI_HSHADER shader, const D3D11_1DDIARG_STAGE_IO_SIGNATURES &signatures)
 {
@@ -730,12 +667,9 @@ VOID D3d11Device::create_compute_shader(const UINT *code, D3D10DDI_HSHADER shade
 VOID D3d11Device::destroy_shader(D3D10DDI_HSHADER handle)
 {
     AV_SCOPE("D3d11Device::destroy_shader");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
-
-/* ---------------------------------------------------------------- layouts and states */
 
 SIZE_T D3d11Device::calc_private_element_layout_size(const D3D10DDIARG_CREATEELEMENTLAYOUT *)
 {
@@ -766,7 +700,6 @@ VOID D3d11Device::create_element_layout(const D3D10DDIARG_CREATEELEMENTLAYOUT *a
 VOID D3d11Device::destroy_element_layout(D3D10DDI_HELEMENTLAYOUT handle)
 {
     AV_SCOPE("D3d11Device::destroy_element_layout");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
@@ -802,7 +735,6 @@ VOID D3d11Device::create_blend_state(const D3D11_1_DDI_BLEND_DESC *args, D3D10DD
 VOID D3d11Device::destroy_blend_state(D3D10DDI_HBLENDSTATE handle)
 {
     AV_SCOPE("D3d11Device::destroy_blend_state");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
@@ -841,7 +773,6 @@ VOID D3d11Device::create_depth_stencil_state(const D3D10_DDI_DEPTH_STENCIL_DESC 
 VOID D3d11Device::destroy_depth_stencil_state(D3D10DDI_HDEPTHSTENCILSTATE handle)
 {
     AV_SCOPE("D3d11Device::destroy_depth_stencil_state");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
@@ -877,7 +808,6 @@ VOID D3d11Device::create_rasterizer_state(const D3DWDDM2_0DDI_RASTERIZER_DESC *a
 VOID D3d11Device::destroy_rasterizer_state(D3D10DDI_HRASTERIZERSTATE handle)
 {
     AV_SCOPE("D3d11Device::destroy_rasterizer_state");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
@@ -911,7 +841,6 @@ VOID D3d11Device::create_sampler(const D3D10_DDI_SAMPLER_DESC *args, D3D10DDI_HS
 VOID D3d11Device::destroy_sampler(D3D10DDI_HSAMPLER handle)
 {
     AV_SCOPE("D3d11Device::destroy_sampler");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
@@ -927,9 +856,6 @@ VOID D3d11Device::create_query(const D3DWDDM2_0DDIARG_CREATEQUERY *args, D3D10DD
     AV_SCOPE("D3d11Device::create_query");
     if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(QueryRecord))) return;
     QueryRecord &query = *static_cast<QueryRecord *>(handle.pDrvPrivate);
-    /* The answer's size by D3D10DDI_QUERY: an event's BOOL, an occlusion
-     * count, a timestamp, the disjoint pair, the pipeline statistics, a
-     * predicate's BOOL, the stream-output statistics. */
     constexpr uint32_t sizes[] = {4u, 8u, 8u, 16u, 88u, 4u, 16u, 4u, 16u, 16u, 16u, 16u, 4u, 4u, 4u, 4u};
     const uint32_t type = static_cast<uint32_t>(args->Query);
     query = QueryRecord{d3d::RecordStamp(QueryRecord::tag, next_id()), type, type < sizeof(sizes) / sizeof(sizes[0]) ? sizes[type] : 0u,
@@ -944,9 +870,8 @@ VOID D3d11Device::create_query(const D3DWDDM2_0DDIARG_CREATEQUERY *args, D3D10DD
 VOID D3d11Device::destroy_query(D3D10DDI_HQUERY handle)
 {
     AV_SCOPE("D3d11Device::destroy_query");
-    /* A deferred context's handle is a copy: the object is the immediate one's. */
     if (parent_ != nullptr) return;
     destroy_object(id_of(handle.pDrvPrivate));
 }
 
-}  // namespace av::d3d11
+}

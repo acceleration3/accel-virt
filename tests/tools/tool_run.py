@@ -1,5 +1,3 @@
-"""What every gate-script test needs: where the repository is, and how to run a
-tool and capture everything it printed."""
 import pathlib
 import subprocess
 import sys

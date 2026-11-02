@@ -19,7 +19,6 @@ constexpr uint16_t opengl_commands = 3u;
 constexpr uint16_t d3d_commands = 4u;
 constexpr const char *unknown = "unknown";
 
-/* Each API's wire half, the SubApi bit that sends it, and its name. */
 struct ApiRow {
     uint16_t    api;
     uint32_t    sub_api;
@@ -34,7 +33,7 @@ constexpr ApiRow rows[] = {
     {d3d_commands, static_cast<uint32_t>(SubApi::d3d), "d3d"},
 };
 
-}  // namespace
+}
 
 CommandApi::CommandApi(uint16_t api) : api_(api)
 {
@@ -106,4 +105,4 @@ const char *CommandApi::command_name(uint32_t id) const
     }
 }
 
-}  // namespace av
+}

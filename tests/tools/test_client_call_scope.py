@@ -1,13 +1,3 @@
-"""The generated Vulkan and OpenCL clients end every synchronous call on its
-transport (tools/codegen/av_codegen/emit/client_dispatch.py and
-tools/codegen/av_codegen/opencl/emit.py, feature 045 T046).
-
-A synchronous call's reply is decoded from the transport's reply slot after
-send_sync returns, so the transport has to learn when the decode is over: the
-ICD's LockedTransport holds its connection's lock until then. Every return path
-after the send - the refused send, a short reply, the decoded answer - must end
-the call exactly once, which is what a scope object declared just before the
-send gives; an asynchronous call has nothing to decode and ends at its send."""
 import pathlib
 import re
 import shutil

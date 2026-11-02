@@ -17,7 +17,6 @@ namespace {
 constexpr const char directory[] = "/dev/shm";
 constexpr const char *const swept_prefixes[] = {"av-trace-", "av-state-", "av-events-"};
 
-/* The pid a swept file names: the digits after its last '-', before any '.'. */
 uint32_t pid_of(const char *name)
 {
     AV_SCOPE("pid_of");
@@ -38,7 +37,7 @@ bool starts_with(const char *name, const char *prefix)
     return true;
 }
 
-}  // namespace
+}
 
 ShmTraceRegion::~ShmTraceRegion()
 {
@@ -64,7 +63,6 @@ Status ShmTraceRegion::open(const char *prefix, const char *module, size_t bytes
     text.append(module);
     text.append("-");
     text.append_decimal(process);
-    /* A pid is reused: what a dead process of this number left is not ours. */
     static_cast<void>(shm_unlink(name));
     const int file = shm_open(name, O_CREAT | O_EXCL | O_RDWR, 0600);
     if (file < 0) return Status::no_memory;
@@ -109,12 +107,10 @@ void ShmTraceRegion::sweep() const
         bool ours = false;
         for (const char *const prefix : swept_prefixes) ours = ours || starts_with(entry->d_name, prefix);
         const uint32_t pid = pid_of(entry->d_name);
-        /* Only a process that does not exist: another user's live one refuses
-         * the probe with EPERM. */
         if (!ours || pid == 0u || kill(static_cast<pid_t>(pid), 0) == 0 || errno != ESRCH) continue;
         static_cast<void>(unlinkat(dirfd(listing), entry->d_name, 0));
     }
     static_cast<void>(closedir(listing));
 }
 
-}  // namespace av
+}

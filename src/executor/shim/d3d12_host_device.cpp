@@ -107,8 +107,6 @@ bool D3d12HostDevice::renew(uint32_t wait_ms)
     return runtime_ != nullptr && renewal_.renew(*this, wait_ms);
 }
 
-/* The old device's objects outlive this where something still holds them:
- * vkd3d-proton keeps a device alive for its objects. */
 bool D3d12HostDevice::remake()
 {
     AV_SCOPE("D3d12HostDevice::remake");
@@ -207,4 +205,4 @@ StagedFrame *D3d12HostDevice::stage_frame(ID3D12CommandQueue *queue, ID3D12Resou
     return frames_.stage(queue, source);
 }
 
-}  // namespace av
+}

@@ -69,4 +69,4 @@ PresentArea PresentArea::intersected_with(const PresentArea &other) const
     return PresentArea(left, top, right > left ? right : left, bottom > top ? bottom : top);
 }
 
-}  // namespace av
+}

@@ -1,14 +1,3 @@
-/* avumd.dll's entry points (contracts/umd_interface.md): the three names the
- * Direct3D runtimes resolve out of the export table - `OpenAdapter10_2` for
- * d3d11.dll, `OpenAdapter12` for D3D12Core.dll and `OpenAdapter` for
- * d3d9.dll - and the two our other drivers resolve around a shared texture
- * they will read as rows (SharedRowsRequest) - each one line into the
- * library in this translation unit's storage, the D3D user-mode driver's
- * process-lifetime state (constitution III), and a DLL entry that does nothing
- * at attach or detach, where the loader lock allows nothing. No C runtime runs
- * constructors, so the storage is constinit and the library constructs itself
- * on the first call.
- */
 #include "core/trace/function_scope.hpp"
 #include "um/d3d/umd_library.hpp"
 
@@ -18,7 +7,6 @@ static long WINAPI avumd_crashed(void *pointers);
 
 static constinit av::UmdLibrary avumd_library{&avumd_crashed};
 
-/* The process's unhandled-exception filter while avumd traces it. */
 static long WINAPI avumd_crashed(void *pointers)
 {
     AV_SCOPE("avumd_crashed");

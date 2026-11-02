@@ -28,8 +28,6 @@ TEST(device_allocation, joins_one_device_to_one_allocation_and_names_no_shared_o
   CHECK(&open.allocation() == &allocation);
   CHECK(open.shared() == nullptr); }
 
-/* An open of a shared allocation counts the object, and the close has to
- * uncount exactly that one: the allocation alone cannot say which (053). */
 TEST(device_allocation, carries_the_shared_object_its_open_counted)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
@@ -42,8 +40,6 @@ TEST(device_allocation, carries_the_shared_object_its_open_counted)
   const DeviceAllocation open(device, allocation, &object);
   CHECK(open.shared() == &object); }
 
-/* A point named for the next present from the open is kept until forgotten,
- * and a later name replaces it (NextPointRecord). */
 TEST(device_allocation, keeps_the_point_named_for_its_next_present_until_forgotten)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);

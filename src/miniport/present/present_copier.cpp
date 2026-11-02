@@ -94,4 +94,4 @@ void PresentCopier::log_refusal()
     platform_.log("avgpu: the host would not move a present's pixels; the miniport moves them itself");
 }
 
-}  // namespace av
+}

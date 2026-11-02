@@ -20,8 +20,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 class RatchetCheck:
-    """One run against one record."""
-
     def __init__(self, results, record, write):
         self.results = results
         self.record = record

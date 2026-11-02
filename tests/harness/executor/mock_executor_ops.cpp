@@ -23,7 +23,7 @@ private:
     pthread_mutex_t &mutex_;
 };
 
-}  // namespace
+}
 
 MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
     : table_{}, sub_apis_(sub_apis), imported_(0u), released_blobs_(0u), lock_(), released_(),
@@ -54,9 +54,6 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         memory->held = false;
         mock.settle(*memory);
     };
-    /* An import names memory of the executor's own domain the device still
-     * holds: memory it already freed is gone to a new import, as the
-     * library's own source refuses it. */
     table_.import_blob = [](void *opaque, AvExecutor *handle, std::uint64_t blob_id,
                             std::uint64_t memory_key) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
@@ -118,9 +115,6 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         for (Share &share : mock.shares_)
             if (share.domain == domain) share.live = false;
     };
-    /* One host object shared between executors (feature 053), kept as the
-     * library keeps it: an id per domain, its kind and size, and who opened
-     * it with what handle. */
     table_.share_object = [](void *opaque, AvExecutor *handle, std::uint64_t object_id, std::uint32_t kind,
                              std::uint64_t size, std::uint64_t wire_handle) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
@@ -259,7 +253,6 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
             while (mock.creates_held_) pthread_cond_wait(&mock.released_, &mock.lock_);
             mock.creates_waiting_--;
         }
-        /* Read after the hold: the share must still be alive when a create using it returns. */
         const bool live = mock.alive(share);
         Lock       lock(mock.lock_);
         mock.last_share_live_ = live;
@@ -280,7 +273,6 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         Lock lock(mock.lock_);
         executor->live = false;
         mock.destroyed_++;
-        /* Destroy releases whatever the device never did (av_executor.h). */
         for (Import &import : mock.imports_)
             if (import.live && import.executor == handle) mock.release_import(import);
         for (Open &open : mock.opens_)
@@ -396,8 +388,6 @@ AvContextOptions MockExecutorOps::last_options() { Lock lock(lock_); return last
 AvExecutor      *MockExecutorOps::last_share() { Lock lock(lock_); return last_share_; }
 bool              MockExecutorOps::last_share_live() { Lock lock(lock_); return last_share_live_; }
 
-/* Whether `handle` is a live executor of this table, asked from any thread:
- * sharing reads another context's executor without calling into it. */
 bool MockExecutorOps::alive(AvExecutor *handle)
 {
     Lock lock(lock_);
@@ -447,9 +437,6 @@ void MockExecutorOps::release_import(Import &import)
     settle(*import.memory);
 }
 
-/* A real allocation, so a test reads through it what the guest wrote into
- * the window: the device is handed its own duplicate of the descriptor, as
- * the library's source hands one, and closes it with the blob. */
 std::uint32_t MockExecutorOps::allocate(std::uint32_t domain, std::uint64_t key, std::uint64_t size,
                                         std::uint32_t request, AvHostMemory &answer)
 {
@@ -510,8 +497,6 @@ std::uint32_t MockExecutorOps::live_memory()
 
 MockExecutorOps::MemoryRequest MockExecutorOps::last_memory_request() { Lock lock(lock_); return last_memory_request_; }
 
-/* The held allocation under the key, else the newest one an import still
- * keeps alive after the device let the key go. */
 std::uint8_t *MockExecutorOps::memory_bytes(std::uint32_t domain, std::uint64_t key)
 {
     Lock lock(lock_);
@@ -540,7 +525,7 @@ std::uint32_t MockExecutorOps::released()
     return released_blobs_;
 }
 
-}  // namespace av
+}
 
 namespace av {
 
@@ -595,8 +580,6 @@ bool MockExecutorOps::fire_signal()
         context = signal_context_;
     }
     if (signal == nullptr) return false;
-    /* Outside the lock, as a host API's own thread would call it: the pad it
-     * reaches takes no lock of this library's. */
     signal(context);
     return true;
 }
@@ -657,4 +640,4 @@ std::uint32_t MockExecutorOps::last_domain() const { return last_domain_; }
 std::uint32_t MockExecutorOps::shared_releases() { Lock lock(lock_); return shared_releases_; }
 std::uint64_t MockExecutorOps::last_shared_release() { Lock lock(lock_); return last_shared_release_; }
 
-}  // namespace av
+}

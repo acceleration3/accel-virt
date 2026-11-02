@@ -1,8 +1,3 @@
-/* The table a WDDM miniport registers with dxgkrnl: DRIVER_INITIALIZATION_DATA
- * at DXGKDDI_INTERFACE_VERSION_WDDM3_2, rebuilt from fixed-width types so core
- * can fill it and a Linux test can drive it. src/km/ddi_table_layout.cpp proves
- * at compile time that the layout is byte-for-byte the WDK's; do not add, remove
- * or reorder members. */
 #ifndef AV_DDI_TABLE_HPP
 #define AV_DDI_TABLE_HPP
 
@@ -16,8 +11,6 @@ namespace av {
 
 struct DdiTableProbe;
 
-/* Every slot after the version is a pointer - 187 DDI routines and 5 Reserved
- * fields - and its real signature belongs to the caller. */
 using DdiRoutine = void (*)();
 
 class DdiTable {
@@ -46,6 +39,6 @@ private:
     friend struct DdiTableProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DDI_TABLE_HPP
+#endif

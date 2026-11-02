@@ -81,4 +81,4 @@ uint32_t PresentRegion::height() const
     return height_;
 }
 
-}  // namespace av
+}

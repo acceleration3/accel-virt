@@ -1,4 +1,3 @@
-// The host build's platform: Linux, vkd3d-proton native, the guest's DXIL.
 #include "framework.h"
 
 #include <dlfcn.h>
@@ -57,7 +56,6 @@ bool read_file(const char *path, Blob &blob)
 
 void set_shader_directory(const char *directory) { copy_text(shader_directory, sizeof shader_directory, directory); }
 
-// The guest compiled it: the same DXIL runs on both machines.
 bool shader(const char *name, const char *, const char *, const char *, Blob &bytecode)
 {
     char path[1400] = {};
@@ -100,7 +98,7 @@ void *thread_main(void *thread)
     t->entry(t->argument);
     return nullptr;
 }
-}  // namespace
+}
 
 Thread *start_thread(void (*entry)(void *), void *argument)
 {
@@ -165,7 +163,6 @@ bool create_device(ID3D12Device **device)
     setenv("VKD3D_SHADER_DEBUG", "none", 0);
     const char *directory = getenv("AV_D3D_PATH");
     char path[1024] = {};
-    // d3d12core first: d3d12 finds it by its soname, and it is not on the library path.
     snprintf(path, sizeof path, "%s/libvkd3d-proton-d3d12core.so", directory != nullptr ? directory : "build-d3d/lib");
     dlopen(path, RTLD_NOW | RTLD_GLOBAL);
     snprintf(path, sizeof path, "%s/libvkd3d-proton-d3d12.so", directory != nullptr ? directory : "build-d3d/lib");
@@ -180,6 +177,6 @@ bool create_device(ID3D12Device **device)
            SUCCEEDED(create(nullptr, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), reinterpret_cast<void **>(device)));
 }
 
-}  // namespace samples
+}
 
 int main(int argc, char **argv) { return samples::run(argc, argv); }

@@ -1,33 +1,8 @@
-# The Direct3D commands the user-mode driver (avumd.dll) sends and the
-# executor runs on the host's Direct3D - DXVK for 11, vkd3d-proton for 12.
-#
-# This is a registry this project writes, because Direct3D has none: every
-# line here is a command the guest can send, and the generator
-# (tools/codegen/av_codegen/d3d) emits both ends from it. Values on the wire
-# are the Direct3D *API*'s - DXGI_FORMAT, D3D11_BIND_*, D3D11_RESOURCE_MISC_*,
-# D3D11_*_DIMENSION, D3D11_BLEND - not the DDI's, where they differ: the guest
-# translates from the DDI once, and the host hands the values to DXVK as they
-# are after judging them.
-#
-# Objects are named by a 32-bit id the guest chooses, unique within its
-# session; 0 is "none" wherever a binding may be empty. The host accepts only
-# ids it made for that session.
-#
-# Parameter grammar: "<type> <name>" or "<type> <name>[<count>] max <n>",
-# where <count> is an earlier u32 parameter. `bytes` is bulk data, inline or
-# through the context's blob arena; `out_bytes` (reply only) is bulk data the
-# host writes back.
-#
-# Ids are stable: a command keeps its id for as long as the wire does. 0x0001-
-# 0x0fff are Direct3D 11's, 0x1000-0x1fff Direct3D 12's.
-
 [meta]
 api = 4
 prefix = "d3d"
 first_id = 0x0001
 last_id = 0x0fff
-
-# ---------------------------------------------------------------- structs
 
 [structs.Float4]
 fields = ["f32 v[4]"]
@@ -44,40 +19,21 @@ fields = ["i32 left", "i32 top", "i32 right", "i32 bottom"]
 [structs.Viewport]
 fields = ["f32 x", "f32 y", "f32 width", "f32 height", "f32 min_depth", "f32 max_depth"]
 
-# One resource, as D3D11_BUFFER_DESC / D3D11_TEXTURE{1,2,3}D_DESC1 flattened.
-# dimension: 1 buffer, 2 texture 1D, 3 texture 2D, 4 texture 3D
-# (D3D11_RESOURCE_DIMENSION). depth_or_array is the depth of a 3D texture and
-# the array size of the others. usage is D3D11_USAGE; the host makes every
-# resource that is not staging as default usage and uploads through
-# UpdateSubresource, so a dynamic resource's map is the guest's.
 [structs.ResourceDesc]
 fields = ["u32 dimension", "u32 width", "u32 height", "u32 depth_or_array", "u32 mip_levels", "u32 format",
           "u32 sample_count", "u32 sample_quality", "u32 usage", "u32 bind_flags", "u32 cpu_access",
           "u32 misc_flags", "u32 structure_stride", "u32 reserved"]
 
-# A view of any kind. dimension is the kind's own D3D11_*_DIMENSION; args are
-# that dimension's union members in declaration order (SRV: FirstElement,
-# NumElements | MostDetailedMip, MipLevels, FirstArraySlice, ArraySize ...;
-# BufferEx's Flags go in flags). flags is D3D11_DSV_FLAG for a depth-stencil
-# view, D3D11_BUFFER_UAV_FLAG for an unordered-access view.
 [structs.ViewDesc]
 fields = ["u32 resource", "u32 format", "u32 dimension", "u32 flags", "u32 args[5]", "u32 reserved"]
 
-# One element of a shader's input, output or patch-constant signature, as the
-# DDI gives it: a register and mask, the D3D_NAME system value (0 for none),
-# the D3D_REGISTER_COMPONENT_TYPE and the D3D_MIN_PRECISION. The DDI carries
-# no semantic names, so the host names every element after its register.
 [structs.SignatureEntry]
 fields = ["u32 system_value", "u32 register_index", "u32 mask", "u32 component_type", "u32 min_precision",
           "u32 stream"]
 
-# D3D11DDIARG_STREAM_OUTPUT_DECLARATION_ENTRY: a register's components into a
-# stream's output slot. A register of 0xffffffff is a gap of `mask`'s width.
 [structs.StreamOutEntry]
 fields = ["u32 stream", "u32 output_slot", "u32 register_index", "u32 mask"]
 
-# D3D10DDIARG_INPUT_ELEMENT_DESC: the DDI names each element's shader input
-# register rather than a semantic.
 [structs.InputElement]
 fields = ["u32 input_slot", "u32 aligned_byte_offset", "u32 format", "u32 classification", "u32 step_rate",
           "u32 input_register"]
@@ -118,8 +74,6 @@ fields = ["u32 view", "u32 initial_count"]
 [structs.StreamOutTarget]
 fields = ["u32 buffer", "u32 offset"]
 
-# What a device on this host GPU can do, asked once per adapter: the feature
-# level and the D3D11_FEATURE_DATA_* answers the DDI's GetCaps reports.
 [structs.Caps11]
 fields = ["u32 feature_level", "u32 driver_concurrent_creates", "u32 driver_command_lists",
           "u32 double_precision_float_shader_ops", "u32 compute_shaders_on_10x",
@@ -136,14 +90,8 @@ fields = ["u32 feature_level", "u32 driver_concurrent_creates", "u32 driver_comm
           "u32 unified_memory_architecture", "u32 vp_and_rt_array_index_from_any_shader",
           "u32 extended_nv12_shared_texture", "u32 shared_resource_tier", "u32 reserved[6]"]
 
-# One DXGI_FORMAT as a host device answers it, for Direct3D 11 (QueryCaps11) and
-# Direct3D 12 (d3d12.toml's QueryCaps12) alike: D3D11_FORMAT_SUPPORT and _SUPPORT2,
-# whose bits D3D12_FORMAT_SUPPORT1 and 2 repeat, and its quality level count at 2,
-# 4, 8 and 16 samples, 0 at a count it does not render at.
 [structs.FormatCaps]
 fields = ["u32 support", "u32 support2", "u32 quality_levels[4]"]
-
-# ---------------------------------------------------------------- device
 
 [[command]]
 name = "CreateDevice11"
@@ -205,8 +153,6 @@ first's, and every view of a rotated texture is made again on the texture its re
 same description. A swap chain's views are made once and rotated under it, so without this the device draws into
 one texture and presents another. The ids must be resources, none twice."""
 params = ["u32 count", "u32 resources[count] max 16"]
-
-# ---------------------------------------------------------------- creation
 
 [[command]]
 name = "CreateResource"
@@ -288,8 +234,6 @@ name = "CreateQuery"
 id = 0x010c
 doc = "A query or predicate of D3D11_QUERY type `type`."
 params = ["u32 query", "u32 type", "u32 misc_flags"]
-
-# ---------------------------------------------------------------- binding
 
 [[command]]
 name = "SetShader"
@@ -384,8 +328,6 @@ name = "SetResourceMinLod"
 id = 0x0211
 params = ["u32 resource", "f32 min_lod"]
 
-# ---------------------------------------------------------------- work
-
 [[command]]
 name = "Draw"
 id = 0x0300
@@ -430,8 +372,6 @@ params = ["u32 x", "u32 y", "u32 z"]
 name = "DispatchIndirect"
 id = 0x0308
 params = ["u32 buffer", "u32 offset"]
-
-# ---------------------------------------------------------------- clears, copies, data
 
 [[command]]
 name = "ClearRenderTargetView"
@@ -535,8 +475,6 @@ which the guest writes and the host GPU reads in place: commands before this one
 it, commands after it this slice (docs/mapped-buffers-plan.md, 3.2). `bytes` covers at least the buffer; a slice
 outside the store, a resource that is no buffer, or a host QueryBufferSlices11 answered 0 for, is refused."""
 params = ["u32 resource", "u64 memory", "u64 offset", "u64 bytes"]
-
-# ---------------------------------------------------------------- queries
 
 [[command]]
 name = "BeginQuery"

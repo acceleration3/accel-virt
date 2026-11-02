@@ -1,6 +1,3 @@
-/* The destructor callbacks kept for objects, on their own: what is taken for
- * the objects that went, in which order a Due runs them, and what the room
- * holds. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/opencl/cl_destructor_callbacks.hpp"
 
@@ -44,7 +41,7 @@ void CL_CALLBACK context_went(cl_context object, void *user_data)
     tag.ran->note(tag.which, object);
 }
 
-}  // namespace
+}
 
 TEST(cl_destructor_callbacks, only_the_objects_that_went_are_taken_and_a_due_runs_them_latest_first)
 { ClDestructorCallbacks callbacks;
@@ -67,16 +64,12 @@ TEST(cl_destructor_callbacks, only_the_objects_that_went_are_taken_and_a_due_run
   callbacks.take(gone, 2u, due);
   CHECK_EQ(due.count(), 3u);
   CHECK_EQ(callbacks.kept(), 1u);
-  /* Taken is not run: the owner runs them once its lock is let go. */
   CHECK_EQ(std::strcmp(ran.order(), ""), 0);
   due.run();
-  /* The buffer's two before the context, as they went; each object's
-   * latest first. */
   CHECK_EQ(std::strcmp(ran.order(), "dac"), 0);
   CHECK(ran.last() == &context);
   CHECK(callbacks.invariants_hold());
 
-  /* Nothing went: nothing is taken. */
   ClDestructorCallbacks::Due none;
   callbacks.take(gone, 0u, none);
   CHECK_EQ(none.count(), 0u);

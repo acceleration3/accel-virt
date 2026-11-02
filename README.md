@@ -25,12 +25,11 @@ dedicated video memory.
 | `virtio-gpu-av-pci` | A QEMU device, built into a patched QEMU 11.1.1 | `src/device/` |
 | `libav_executor.so` | The host library that runs guest commands on the host GPU | `src/executor/` |
 | `av-renderer` | An optional separate process for the executor, so that a host driver crash cannot take the VM | `src/device/renderer/`, `src/device/isolation/` |
-| the av protocol | Shared by both sides, specified in [`docs/protocol.md`](docs/protocol.md) | `src/proto/` |
+| the av protocol | Shared by both sides | `src/proto/` |
 
 Everything is written from the WDK headers and from reverse engineering
 Microsoft's shipping binaries (`dxgkrnl.sys`, `dxgmms2.sys`, `cdd.dll`,
-`basicrender.sys`, ...) against their public symbols. The findings are in
-[`docs/kb/`](docs/kb/) and in comments beside the code they shaped.
+`basicrender.sys`, ...) against their public symbols.
 
 **Contents:**
 [How it works](#how-it-works) ·
@@ -111,7 +110,7 @@ context's host API imports it. Upload heaps, readback heaps, API arenas and
 `HOST_VISIBLE` Vulkan allocations all live there. Guest RAM is never handed to
 a host GPU. The host GPU's VRAM is reported to Windows as dedicated video
 memory. Nothing is ever placed in that segment; it is a budget, and what lives
-there stays on the host ([`docs/host-memory.md`](docs/host-memory.md)).
+there stays on the host.
 
 **Display.** The host decides the resolutions ([Resolutions](#resolutions)).
 The desktop's primary surface is a blob the host shows directly, as a display
@@ -123,7 +122,7 @@ the `refresh` property says another), and the cursor is a 64x64 hardware cursor.
 **Isolation.** With `renderer=`, the whole host GPU stack runs in
 `av-renderer`. A crash there loses the device's contexts, which the guest sees
 as a device reset that Windows already recovers from, and QEMU starts a new
-renderer ([`docs/renderer.md`](docs/renderer.md)).
+renderer.
 
 ## Status
 
@@ -217,7 +216,7 @@ Tested beyond the probes and sample suites:
   - EGL with desktop OpenGL;
   - an OpenCL ICD (Mesa rusticl or a vendor's).
 
-  An API the host lacks is simply not offered.
+  An API the host lacks is not offered.
 - clang and clang++ (C++23), clang-cl, lld (`lld-link`), `llvm-lib`,
   `llvm-rc`, `llvm-mt`, CMake 3.24 or later, Ninja, and Python 3.11 or later
   (standard library only).
@@ -460,7 +459,7 @@ interrupts an automated run, which you may not want on a VM you use.
 - **As an update would arrive, with no reboot.** Put the new files in
   `C:\av\package`, run `-Stage sign` (it signs `avgpu.sys` and the catalog),
   then `-Stage upgrade -Minutes 1`. That raises `DriverVer`'s build number by
-  1, installs over the running driver, and checks the adapter now runs the new
+  1, installs over the running driver, and checks the adapter runs the new
   version. The count starts from the INF in `C:\av\package`, which each
   upgrade rewrites. Copying the repository's INF over it resets the count, and
   an upgrade to a version already installed keeps the old files without saying
@@ -498,7 +497,7 @@ Stock virtio-gpu properties that matter here:
 
 | Property | Use | Why |
 |---|---|---|
-| `hostmem` | `8192M` | The host window's size: where every byte the guest CPU and the host GPU share is mapped. `0` (virtio-gpu's default) means no window and no host-visible memory at all: Vulkan allocations of a host-visible type fail with `VK_ERROR_OUT_OF_DEVICE_MEMORY`, Direct3D 12 CPU-visible heaps fail, and arenas' bulk data crosses inline in the ring (`docs/host-memory.md`). |
+| `hostmem` | `8192M` | The host window's size: where every byte the guest CPU and the host GPU share is mapped. `0` (virtio-gpu's default) means no window and no host-visible memory at all: Vulkan allocations of a host-visible type fail with `VK_ERROR_OUT_OF_DEVICE_MEMORY`, Direct3D 12 CPU-visible heaps fail, and arenas' bulk data crosses inline in the ring. |
 | `max_outputs` | `1` | Display heads. The driver drives one. |
 | `vectors` | `11` | MSI-X vectors: 3 for the device's own sources (control, cursor, configuration) and 8 the contexts' fence queues share. This matches the INF's `MessageNumberLimit`. |
 | `xres`, `yres` | `1280`, `800` | The scanout size. The driver's standard list is clipped to it when the host offers no modes at all. |
@@ -529,7 +528,7 @@ works, not only the standard ones. The rules:
 On a running VM, over QMP:
 
 ```bash
-tools/vm_resolution.py                        # what the display offers now
+tools/vm_resolution.py                        # what the display offers
 tools/vm_resolution.py 1920x1080              # exactly 1920x1080: Windows switches to it
 tools/vm_resolution.py 1000x600 1920x1080     # both, 1000x600 preferred
 tools/vm_resolution.py host                   # the host monitors' modes again
@@ -561,7 +560,7 @@ What the driver does with the list:
   R8G8B8, A8R8G8B8, R5G6B5 and P8 modes. Any other format leaves Windows a
   single made-up 800x600 and a greyed-out resolution setting.
 - **Saved configurations.** A configuration Windows saved for a mode the host
-  no longer offers is refused before it is committed, so Windows falls back to
+  does not offer is refused before it is committed, so Windows falls back to
   the preferred mode rather than failing at boot.
 
 ## Environment variables
@@ -621,7 +620,7 @@ writes `C:\ProgramData\av\crash-<module>-<pid>.txt`.
 **Live state, without stopping anything.** Every function opens with
 `AV_SCOPE("Class::method")`. Each binary keeps a table of which thread is in
 which function, since when, and which lock it holds or waits for, and a reader
-maps that table from outside ([`docs/trace.md`](docs/trace.md)):
+maps that table from outside:
 
 | Binary | Where its table is | Reader |
 |---|---|---|
@@ -644,8 +643,7 @@ threads, driver and device state, crash reports and the driver log. Add it with
 - `tools/frame_pacing.py run` records one WPR trace of the guest - scheduling,
   CPU samples with stacks, DPCs and ISRs, dxgkrnl, DWM and the flip manager -
   under a Windows.Graphics.Capture workload, and accounts for every DWM frame:
-  the capture rule, and where the render thread's time went in the slow ones
-  ([`docs/frame-pacing.md`](docs/frame-pacing.md)).
+  the capture rule, and where the render thread's time went in the slow ones.
 - `tools/guest_cpu_profile.py <process>` names a guest process's hottest
   functions, the kernel's included.
 
@@ -682,7 +680,6 @@ tools/guest/guest_shell.py --work build-guest-render pull 'C:\ProgramData\av\avv
 A display miniport can be unit tested thoroughly on Linux, without booting
 Windows, if it is built for that from the first commit. That is the point of
 splitting `src/core`, which is portable, from `src/km`, which only translates.
-[`docs/testing.md`](docs/testing.md) has the details.
 
 ```
  L5  in-guest integration      real Windows, real dxgkrnl        run_guest_suite.py
@@ -726,8 +723,7 @@ guest, and write the frames, their difference and the timings to HTML:
 
 Read these before writing code:
 - [`CLAUDE.md`](CLAUDE.md): the C++ rules;
-- [`docs/constitution.md`](docs/constitution.md): the principles;
-- [`docs/testing.md`](docs/testing.md).
+- [`docs/constitution.md`](docs/constitution.md): the principles.
 
 The short version:
 
@@ -749,17 +745,12 @@ The short version:
 - **Every function opens with `AV_SCOPE`.** `tools/scope_marks.py --apply`
   writes the marks.
 - **Never hand-edit `src/proto/generated/`.** Fix the generator
-  (`tools/codegen/`) and regenerate. A protocol ID change is a wire change and
-  updates `docs/protocol.md` in the same commit.
+  (`tools/codegen/`) and regenerate. A protocol ID change is a wire change.
 
 `tools/check_design.py` and `tools/check_symbol_tests.py` enforce the rules,
 and `tools/gate.sh` runs every gate.
 
 ## Source layout
-
-[`docs/architecture.md`](docs/architecture.md) is the code map: which binary
-each directory builds, what each subsystem directory holds, which directories
-may include which, and where new code goes.
 
 ```
 src/core/                     the foundation every binary links: support/, trace/, log/, platform/
@@ -796,21 +787,3 @@ tools/                        gates, fetches, generators, reports, profilers
 cmake/                        the Windows kernel and user-mode cross toolchains (clang-cl, lld-link; user mode x64 or x86)
 third_party/                  fetched and pinned: windows-kit, khronos, qemu, dxvk, vkd3d-proton, loaders, CTS
 ```
-
-## Documentation
-
-| | |
-|---|---|
-| [`docs/architecture.md`](docs/architecture.md) | The code map: binaries, layers, every source directory, where new code goes |
-| [`docs/protocol.md`](docs/protocol.md) | The av wire protocol, normative: the capset, context setup, rings, batches, fence pages, the executor ABI, recordings |
-| [`docs/ddi-sequences.md`](docs/ddi-sequences.md) | What each DDI does and answers, and the sequences dxgkrnl drives them in |
-| [`docs/d3d-desktop.md`](docs/d3d-desktop.md) | The desktop on Direct3D: the design, from guest evidence, dxgkrnl's code and prior art |
-| [`docs/host-memory.md`](docs/host-memory.md) | Host memory: the one source of every byte the guest CPU and a host GPU share, the hostmem window, and dedicated video memory |
-| [`docs/renderer.md`](docs/renderer.md) | The renderer process: where the line is, what crosses it, recovery |
-| [`docs/trace.md`](docs/trace.md) | Thread and state tracking, crash reports, the trace table format |
-| [`docs/frame-pacing.md`](docs/frame-pacing.md) | Why a guest frame came late: the frame-pacing recording and report, and the WGC capture rule |
-| [`docs/stale-blt-frames.md`](docs/stale-blt-frames.md) | Why a blt-model window flickers to an older frame: the legacy redirection path's kernel copy racing the present engine, what was measured not to fix it, and the present path that does |
-| [`docs/testing.md`](docs/testing.md) | The five test layers, and preparing and debugging a guest image |
-| [`docs/kb/`](docs/kb/) | The WDDM 3.2 knowledge base: the architecture, the kernel-mode contract, memory, scheduling, display, user mode, the 3.x changes, Microsoft's GPU-PV and WARP drivers as case studies |
-| [`docs/kb/12-re-cookbook.md`](docs/kb/12-re-cookbook.md) | How to keep reverse engineering: fetching binaries and PDBs, Ghidra, symbols |
-| [`tools/codegen/README.md`](tools/codegen/README.md) | The generator: what it guarantees and what it does not |

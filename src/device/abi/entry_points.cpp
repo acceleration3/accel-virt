@@ -14,14 +14,11 @@
 namespace av {
 
 constinit DeviceModule device_module;
-/* The module's trace services: its table, crash file and state socket. */
 constinit DeviceTraceRoot device_trace;
 
-}  // namespace av
+}
 
 extern "C" {
-
-/* The fatal signals' handler: sigaction hands it no context. */
 static void av_device_crashed(int signal, siginfo_t *info, void *context)
 { av::device_trace.crashed(signal, info, context); }
 

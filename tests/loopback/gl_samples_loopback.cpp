@@ -1,11 +1,3 @@
-/* The OpenGL samples (samples/opengl) through the OpenGL ICD on this
- * machine's GPU, with no guest: FakeOpengl32 loads the ICD as the system
- * opengl32 would, and the ICD root, over DdiKmt, carries every command through
- * the real driver and device core to the executor library - the same path
- * avglsamples.exe takes in the VM, less the VM. Its frames and metrics are
- * the guest run's in shape, so tools/opengl_report.py can set them beside the
- * host's (--loopback). It is a tool, not a test: a sample the ICD cannot run
- * is reported, not failed. */
 #include "device/abi/av_executor.h"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
@@ -31,8 +23,6 @@
 #include <cstring>
 #include <ctime>
 
-/* The executor opens every host API when it loads, and those drivers keep
- * what they allocate until exit. */
 extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
 {
@@ -44,12 +34,9 @@ namespace {
 
 constexpr std::uint32_t window_side = 64u;
 constexpr std::uint32_t max_slots = av::FakeOpengl32::full_table;
-/* WGL_ARB_create_context and WGL_ARB_create_context_profile. */
 constexpr std::int32_t wgl_context_major_version = 0x2091, wgl_context_minor_version = 0x2092,
                        wgl_context_profile_mask = 0x9126, wgl_context_core_profile_bit = 0x0001;
 
-/* The ICD as one guest process holds it, as test_fullstack_opengl_icd builds
- * it. */
 class GlProcess {
 public:
     explicit GlProcess(av::DdiKmt &kmt)
@@ -58,8 +45,6 @@ public:
           root_(memory_, kmt, lock_, send_lock_, log_, surface_, threads_, opengl32_, presents_,
                 av::glicd::gl_icd_binding)
     {
-        /* Swaps read back and blit on the calling thread, as the loopback
-         * checks them. */
         presents_.refuse();
         surface_.add_dc(&dc_, &window_, window_side, window_side);
     }
@@ -88,7 +73,6 @@ private:
     int                       window_ = 0;
 };
 
-/* opengl32's own table: the GL 1.1 names are its exports, found by slot. */
 char slot_names[max_slots][48];
 
 void read_slot_names()
@@ -105,16 +89,13 @@ void read_slot_names()
     std::fclose(file);
 }
 
-/* --kernel-submits: the process never publishes its own ring tail, and every
- * batch goes through the kernel - the path a driver that refuses the escape
- * gives, and the one to compare the shared tail's against. */
 bool                       kernel_submits = false;
 av::WidestHostGpu         *gpu = nullptr;
 av::ExecutorLibraryFile   *library = nullptr;
 av::FullStackRig          *rig = nullptr;
 GlProcess                 *process = nullptr;
 
-}  // namespace
+}
 
 namespace samples {
 
@@ -158,7 +139,6 @@ bool read_file(const char *path, Blob &blob)
     return ok;
 }
 
-/* The GPU is the one the rig's executor runs the most sub-APIs on. */
 bool create_context(const char *)
 {
     read_slot_names();
@@ -194,7 +174,7 @@ void *gl_proc(const char *name)
     return process->opengl32().get_proc_address(name);
 }
 
-}  // namespace samples
+}
 
 int main(int argc, char **argv)
 {
@@ -207,9 +187,6 @@ int main(int argc, char **argv)
     if (process != nullptr)
         for (std::uint32_t index = 0u; index < process->log().lines(); index++)
             std::fprintf(stderr, "icd: %s\n", process->log().line(index));
-    /* The rig and the ICD are left to the process's end: taking them down in
-     * order is the fullstack tests' business, and a tool that has written
-     * its results has nothing left to prove. */
     std::fflush(stdout);
     std::_Exit(status);
 }

@@ -1,6 +1,3 @@
-/* One context's setup and teardown as the requests the device reads, in order,
- * and every answer it might give. The device core itself answers in the
- * loopback suite; here each answer is written by hand. */
 #include "miniport/av_context/context_pages.hpp"
 #include "miniport/av_context/context_request_sequence.hpp"
 #include "core/support/status.hpp"
@@ -43,7 +40,7 @@ struct ContextRequestSequenceProbe {
     static void blob_without_context(ContextRequestSequence &sequence) { sequence.blobs_created_ = 1u; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -57,15 +54,13 @@ ContextSetup setup()
     return ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, 70u, 12u, 71u, 3u, 72u);
 }
 
-/* A process's allocations as VidMm scatters them: a three-page ring in two runs
- * - a pair, then a lone page far away - and a page each for fence and reply. */
 constexpr std::uint64_t ring_frames[] = {0x81000u, 0x82000u, 0x2A000u};
 constexpr std::uint64_t fence_frame[] = {0x44000u};
 constexpr std::uint64_t reply_frame[] = {0x9F000u};
 
 struct Sent {
     std::uint32_t type = 0u;
-    std::uint32_t id = 0u;       /* context or resource */
+    std::uint32_t id = 0u;
     std::uint64_t size = 0u;
     std::uint32_t entries = 0u;
     std::uint64_t addresses[max_entries] = {};
@@ -83,7 +78,6 @@ public:
     const ContextPages     &pages() const { return pages_; }
     ContextRequestSequence &sequence() { return sequence_; }
 
-    /* The next request, read back as the device reads it. */
     Status next(Sent &sent)
     {
         std::uint8_t bytes[request_capacity] = {};
@@ -118,7 +112,6 @@ public:
     }
 
 private:
-    /* Every memory entry, and a request exactly as long as its entries say. */
     void decode_blob(CreateBlobRequest &blob, WireReader &reader, const std::uint8_t *bytes, std::size_t length,
                      Sent &sent) const
     {
@@ -142,7 +135,6 @@ private:
     ContextPages           pages_;
 };
 
-/* Answers the setup's requests OK until `steps` have been sent. */
 void answer_setup(Fixture &fixture, std::uint32_t steps)
 {
     for (std::uint32_t step = 0u; step < steps; step++) {
@@ -152,7 +144,7 @@ void answer_setup(Fixture &fixture, std::uint32_t steps)
     }
 }
 
-}  // namespace
+}
 
 TEST(context_request_sequence_setup, creates_the_context_its_three_blobs_then_sets_it_up)
 { Fixture fixture;
@@ -179,9 +171,6 @@ TEST(context_request_sequence_setup, creates_the_context_its_three_blobs_then_se
   CHECK_STATUS(fixture.next(after), Status::invalid_state);
   CHECK_STATUS(fixture.answer(GpuResponse::ok_nodata), Status::invalid_state); }
 
-/* Each blob carries its allocation's own frames, in order, one entry per run:
- * the scattered ring as its pair then its lone page, the fence and reply as
- * one page each. */
 TEST(context_request_sequence_setup, each_blob_names_its_pages_one_entry_per_run)
 { Fixture fixture;
   CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.pages()), Status::ok);
@@ -210,8 +199,6 @@ TEST(context_request_sequence_setup, each_blob_names_its_pages_one_entry_per_run
   CHECK_EQ(reply.lengths[0], page);
   CHECK(fixture.sequence().invariants_hold()); }
 
-/* The pages are the caller's: a setup begun on them keeps what it was handed
- * even once the caller's own copy is gone. */
 TEST(context_request_sequence_setup, keeps_the_pages_it_was_handed)
 { Fixture fixture;
   {
@@ -226,7 +213,7 @@ TEST(context_request_sequence_setup, keeps_the_pages_it_was_handed)
 
 TEST(context_request_sequence_teardown, destroys_the_context_then_releases_its_blobs)
 { Fixture fixture;
-  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::invalid_state);   /* nothing set up */
+  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::invalid_state);
   CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.pages()), Status::ok);
   for (std::uint32_t step = 0u; step < 5u; step++) {
       Sent sent;
@@ -262,8 +249,6 @@ TEST(context_request_sequence_setup, a_refusal_stops_the_setup_and_teardown_rele
       CHECK_EQ(fixture.sequence().refusal(), GpuResponse::err_invalid_parameter);
       Sent none;
       CHECK_STATUS(fixture.next(none), Status::invalid_state);
-      /* A refused setup still releases what the device holds: the context once
-       * created, and every blob created. */
       const std::uint32_t expected = (refused_step > 0u ? 1u : 0u) + (refused_step > 3u ? 3u : refused_step > 0u ? refused_step - 1u : 0u);
       if (expected == 0u) {
           CHECK_STATUS(fixture.sequence().begin_teardown(), Status::invalid_state);
@@ -308,7 +293,7 @@ TEST(context_request_sequence_abandon, a_device_reset_forgets_every_created_reso
       CHECK_STATUS(fixture.next(sent), Status::ok);
       CHECK_STATUS(fixture.answer(GpuResponse::ok_nodata), Status::ok);
   }
-  CHECK_STATUS(fixture.next(sent), Status::ok);   /* an answer outstanding */
+  CHECK_STATUS(fixture.next(sent), Status::ok);
   fixture.sequence().abandon();
   CHECK(fixture.sequence().finished());
   CHECK(fixture.sequence().invariants_hold());
@@ -343,7 +328,7 @@ TEST(context_request_sequence_accept, a_short_answer_is_malformed_and_ends_the_s
   CHECK_STATUS(fixture.sequence().accept(bytes, sizeof bytes), Status::malformed);
   CHECK(fixture.sequence().finished());
   CHECK(fixture.sequence().refused());
-  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::ok);   /* the context may exist */
+  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::ok);
   CHECK_STATUS(fixture.next(sent), Status::ok);
   CHECK_EQ(sent.type, 0x0201u); }
 
@@ -356,12 +341,9 @@ TEST(context_request_sequence_begin_setup, pages_not_complete_are_refused)
   CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), ContextPages()), Status::invalid_parameter);
   CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), hole), Status::invalid_parameter);
   Sent none;
-  CHECK_STATUS(fixture.next(none), Status::invalid_state);   /* nothing begun */
+  CHECK_STATUS(fixture.next(none), Status::invalid_state);
   CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.pages()), Status::ok); }
 
-/* Both the fixed-size CTX_CREATE and the ring's two-entry blob (88 bytes) are
- * refused by a destination one byte short, write nothing, and are sent intact
- * once there is room. */
 TEST(context_request_sequence_next_request, a_destination_too_small_writes_nothing)
 { Fixture fixture;
   CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.pages()), Status::ok);
@@ -406,20 +388,18 @@ TEST(context_request_sequence_begin_teardown, waits_for_a_running_sequence)
   CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.pages()), Status::ok);
   Sent sent;
   CHECK_STATUS(fixture.next(sent), Status::ok);
-  CHECK(!fixture.sequence().finished());   /* an answer is awaited */
+  CHECK(!fixture.sequence().finished());
   CHECK_STATUS(fixture.answer(GpuResponse::ok_nodata), Status::ok);
-  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::invalid_state);   /* still setting up */
+  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::invalid_state);
   while (fixture.next(sent) == Status::ok) CHECK_STATUS(fixture.answer(GpuResponse::ok_nodata), Status::ok);
   CHECK_STATUS(fixture.sequence().begin_teardown(), Status::ok);
-  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::invalid_state);   /* already tearing down */
+  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::invalid_state);
   CHECK_STATUS(fixture.next(sent), Status::ok);
   CHECK_STATUS(fixture.answer(GpuResponse::err_invalid_context_id), Status::not_supported);
   CHECK_STATUS(fixture.next(sent), Status::ok);
   CHECK_STATUS(fixture.answer(GpuResponse::err_invalid_resource_id), Status::not_supported);
-  CHECK_EQ(fixture.sequence().refusal(), GpuResponse::err_invalid_context_id);   /* the first one kept */ }
+  CHECK_EQ(fixture.sequence().refusal(), GpuResponse::err_invalid_context_id);   }
 
-/* A refusal belongs to the setup it ended: once what it created is released,
- * the next setup starts unrefused and runs to the end. */
 TEST(context_request_sequence_begin_setup, a_new_setup_forgets_the_last_refusal)
 { Fixture fixture;
   CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.pages()), Status::ok);

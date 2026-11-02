@@ -43,9 +43,6 @@ Status MemoryTypeTable::build(const VkPhysicalDeviceMemoryProperties &host)
 
     properties_.memoryTypeCount = host.memoryTypeCount;
     for (uint32_t type = 0u; type < host.memoryTypeCount; type++) properties_.memoryTypes[type] = host.memoryTypes[type];
-    /* An adapter with a local segment is given no non-local budget by VidMm,
-     * and a heap of none is one VMA will not place a mapped buffer in: the
-     * host's own size stands in for it. */
     uint64_t system_heap = memory_.budget(MemorySegmentGroup::non_local);
     for (uint32_t heap = 0u; heap < host.memoryHeapCount && system_heap == 0u; heap++)
         if (group_of(host.memoryHeaps[heap]) == MemorySegmentGroup::non_local)
@@ -110,4 +107,4 @@ bool MemoryTypeTable::invariants_hold() const
     return true;
 }
 
-}  // namespace av::icd
+}

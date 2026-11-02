@@ -1,9 +1,3 @@
-/* One of dxgkrnl's mode sets - source, target or monitor - as a fixed array of
- * mode records: CreateNewModeInfo hands out a scratch record with a fresh id,
- * AddMode copies it in (a duplicate answers
- * STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET), PinMode pins by id. Every mode info
- * acquired or created must be released; a set destroyed with one outstanding
- * fails the test. */
 #ifndef AV_FAKE_MODE_SET_HPP
 #define AV_FAKE_MODE_SET_HPP
 
@@ -16,9 +10,6 @@
 #include <cstring>
 
 namespace av {
-
-/* What AddMode treats as the same mode: a source by surface size and format, a
- * target or monitor mode by active size and refresh rate. */
 inline bool same_mode(const D3dkmdtVidPnSourceModeRecord &a, const D3dkmdtVidPnSourceModeRecord &b)
 {
     return a.PrimSurfSizeCx == b.PrimSurfSizeCx && a.PrimSurfSizeCy == b.PrimSurfSizeCy &&
@@ -41,12 +32,6 @@ inline bool same_mode(const D3dkmdtMonitorSourceModeRecord &a, const D3dkmdtMoni
     return same_signal(a.VideoSignalInfo, b.VideoSignalInfo);
 }
 
-/* What dxgkrnl stamps into a mode info it hands out, and checks on the way back
- * in. DXGK_VIDPNTARGETMODESET_INTERFACE_V1_IMPL::AddModeImpl (dxgkrnl.sys
- * @1403b38ec, the call at @1403b40a1) bugchecks with VIDEO_DXGKRNL_FATAL_ERROR
- * (0x113, subcode 7) - not a returned status - when a target mode comes back
- * with MinimumVSyncFreq other than the all-ones CreateNewModeInfo wrote. Source
- * and monitor modes carry no such field. */
 constexpr std::uint32_t unspecified_vsync = 0xFFFFFFFFu;
 
 inline void stamp_created(D3dkmdtVidPnSourceModeRecord &) {}
@@ -92,7 +77,6 @@ public:
         pinned_ = capacity;
     }
 
-    /* A test builds a set directly: the mode is added, and pinned if asked. */
     void seed(const Mode &mode, bool pin)
     {
         if (count_ == capacity) return;
@@ -152,11 +136,8 @@ public:
         return 0;
     }
 
-    /* On success the new mode info is released, as dxgkrnl documents. */
     std::int32_t add(const Mode *mode)
     {
-        /* dxgkrnl bugchecks here rather than refusing, so the harness fails the
-         * test rather than answering a status the driver could handle. */
         if (!stamp_intact(*mode))
             TestRegistry::instance().record_failure(
                 __FILE__, __LINE__,
@@ -200,6 +181,6 @@ private:
     std::uint32_t outstanding_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FAKE_MODE_SET_HPP
+#endif

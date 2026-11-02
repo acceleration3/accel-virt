@@ -125,11 +125,10 @@ bool ExtensionRows::invariants_hold() const
     if (prefix_ == nullptr) return false;
     for (uint32_t index = 0u; index < count_; ++index) {
         if (!row_holds(rows_[index])) return false;
-        /* A name twice would be a list no application can read as a set. */
         for (uint32_t earlier = 0u; earlier < index; ++earlier)
             if (same(rows_[earlier].name_, rows_[index].name_)) return false;
     }
     return true;
 }
 
-}  // namespace av::icd
+}

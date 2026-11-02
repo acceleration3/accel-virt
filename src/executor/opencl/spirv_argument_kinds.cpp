@@ -5,8 +5,6 @@
 namespace av {
 
 namespace {
-
-/* The SPIR-V numbers this reads (the SPIR-V specification, 3.32 and 3.7). */
 enum : uint32_t {
     op_entry_point = 15u,
     op_type_image = 25u,
@@ -31,7 +29,7 @@ enum : uint32_t {
 
 constexpr uint32_t execution_model_kernel = 6u;
 
-}  // namespace
+}
 
 SpirvArgumentKinds::SpirvArgumentKinds() : types_(), bound_(0u)
 {
@@ -73,8 +71,6 @@ void SpirvArgumentKinds::record_type(const uint32_t *instruction, uint32_t lengt
     case op_type_image: kind = clproto::KernelArgument::image; break;
     case op_type_sampler: kind = clproto::KernelArgument::sampler; break;
     case op_type_pipe: kind = clproto::KernelArgument::memory; break;
-    /* Device-side enqueue's objects and a sampled image are nothing a guest
-     * can set: whatever bytes it sends for one are refused. */
     case op_type_sampled_image:
     case op_type_event:
     case op_type_device_event:
@@ -123,4 +119,4 @@ bool SpirvArgumentKinds::kind(const uint32_t *words, size_t count, const char *k
     return false;
 }
 
-}  // namespace av
+}

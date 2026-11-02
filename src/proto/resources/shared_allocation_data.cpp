@@ -8,15 +8,13 @@ namespace {
 
 constexpr size_t record_offset = AllocationDescriptor::encoded_size;
 
-}  // namespace
+}
 
 SharedAllocationData::SharedAllocationData() : bytes_{}, descriptor_(), record_(), read_(false)
 {
     AV_SCOPE("SharedAllocationData::SharedAllocationData");
 }
 
-/* Both parts are encoded into exactly their encoded sizes, which is the only
- * way either encode fails. */
 SharedAllocationData::SharedAllocationData(const AllocationDescriptor &descriptor, const SharedObjectKind &kind,
                                            uint64_t size)
     : bytes_{}, descriptor_(descriptor), record_(0u, kind, 0u, size), read_(true)
@@ -127,4 +125,4 @@ bool SharedAllocationData::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

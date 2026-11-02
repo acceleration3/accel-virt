@@ -21,4 +21,4 @@ uint64_t PageTableEntry::encoded() const
            ((flags_ & pte_cache_coherent) != 0u ? entry_cache_coherent : 0u);
 }
 
-}  // namespace av
+}

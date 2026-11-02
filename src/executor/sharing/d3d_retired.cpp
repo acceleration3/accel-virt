@@ -50,4 +50,4 @@ uint32_t D3dRetired::live() const
     return retired_.live();
 }
 
-}  // namespace av
+}

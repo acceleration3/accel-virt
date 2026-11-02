@@ -25,7 +25,7 @@ Status FenceReporter::prepare(const FenceWindow &page, uint32_t line)
     host_.require_main_loop("FenceReporter::prepare");
     if (prepared_) return Status::invalid_state;
     if (!page.invariants_hold() || line >= Doorbell::pages) return Status::invalid_parameter;
-    static_cast<void>(page.publish(FencePage(0u, 0u)));   /* the window holds a page */
+    static_cast<void>(page.publish(FencePage(0u, 0u)));
     static_cast<void>(page.publish_beat(0u));
     page_ = page;
     line_ = line;
@@ -58,7 +58,7 @@ void FenceReporter::complete(uint64_t fence)
     completed_ = fence;
     progress_++;
     pending_ = true;
-    static_cast<void>(page_.publish(FencePage(completed_, progress_).raising(raised_)));   /* checked when prepared */
+    static_cast<void>(page_.publish(FencePage(completed_, progress_).raising(raised_)));
     recorder_.record_fence(context_, fence);
 }
 
@@ -68,11 +68,9 @@ void FenceReporter::heartbeat()
     host_.require_worker("FenceReporter::heartbeat");
     if (!prepared_ || faulted_) return;
     progress_++;
-    static_cast<void>(page_.publish(FencePage(completed_, progress_).raising(raised_)));   /* checked when prepared */
+    static_cast<void>(page_.publish(FencePage(completed_, progress_).raising(raised_)));
 }
 
-/* The guest's FenceProgress accepts progress and raised advancing on their own
- * and nothing else out of band, so completed_ is what this must not touch. */
 void FenceReporter::raise()
 {
     AV_SCOPE("FenceReporter::raise");
@@ -81,7 +79,7 @@ void FenceReporter::raise()
     progress_++;
     raised_++;
     pending_ = true;
-    static_cast<void>(page_.publish(FencePage(completed_, progress_).raising(raised_)));   /* checked when prepared */
+    static_cast<void>(page_.publish(FencePage(completed_, progress_).raising(raised_)));
 }
 
 void FenceReporter::fault(FaultCode code)
@@ -125,14 +123,12 @@ bool FenceReporter::working() const
     return __atomic_load_n(&working_, __ATOMIC_SEQ_CST);
 }
 
-/* The page is the main loop's to replace, and the pulse holds its lock across
- * this; a fault on the worker meanwhile may still see one beat after it. */
 void FenceReporter::beat()
 {
     AV_SCOPE("FenceReporter::beat");
     if (__atomic_load_n(&quiet_, __ATOMIC_ACQUIRE)) return;
     beats_++;
-    static_cast<void>(page_.publish_beat(beats_));   /* checked when prepared */
+    static_cast<void>(page_.publish_beat(beats_));
 }
 
 uint64_t FenceReporter::beats() const
@@ -162,9 +158,6 @@ uint64_t FenceReporter::raised() const
     return raised_;
 }
 
-/* Nothing completes, faults or beats before the page exists, every completion
- * moved progress, a fault always has a reason, and a faulted page is beaten no
- * more. */
 bool FenceReporter::invariants_hold() const
 {
     AV_SCOPE("FenceReporter::invariants_hold");
@@ -174,4 +167,4 @@ bool FenceReporter::invariants_hold() const
            (!faulted_ || (fault_ != FaultCode::none && quiet));
 }
 
-}  // namespace av
+}

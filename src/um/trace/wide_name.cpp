@@ -44,4 +44,4 @@ const wchar_t *WideName::text() const
     return chars_;
 }
 
-}  // namespace av
+}

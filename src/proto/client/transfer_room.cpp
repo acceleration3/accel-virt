@@ -45,4 +45,4 @@ size_t TransferRoom::read_piece(ClientTransport &wire) const
     return wire.blobs().ready() ? lent_bytes : inline_read();
 }
 
-}  // namespace av
+}

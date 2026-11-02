@@ -36,4 +36,4 @@ uint32_t SyncWaitProbe::result() const
     return result_;
 }
 
-}  // namespace av::glicd
+}

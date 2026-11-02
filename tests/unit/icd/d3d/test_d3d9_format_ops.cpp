@@ -7,8 +7,6 @@ using av::d3d::D3d9FormatOps;
 using Op = av::d3d::D3d9FormatOps::Op;
 
 namespace {
-
-/* QueryFormats9's bits (tools/codegen/registry/d3d9.toml). */
 constexpr std::uint32_t texture = 1u << 0u;
 constexpr std::uint32_t cube = 1u << 1u;
 constexpr std::uint32_t volume = 1u << 2u;
@@ -26,7 +24,6 @@ constexpr std::uint32_t offscreen = 1u << 13u;
 constexpr std::uint32_t bump = 1u << 14u;
 constexpr std::uint32_t depth_texture = 1u << 15u;
 
-/* FORMATOP_* (d3dumddi.h). */
 constexpr std::uint32_t op_texture = 0x1u;
 constexpr std::uint32_t op_offscreen_rt = 0x8u;
 constexpr std::uint32_t op_same_format_rt = 0x10u;
@@ -61,10 +58,8 @@ const Op *find(const D3d9FormatOps &ops, std::uint32_t format)
     return nullptr;
 }
 
-}  // namespace
+}
 
-/* Before the host answers nothing is offered: a runtime told of formats the
- * host cannot make would make them. */
 TEST(d3d9_format_ops, offers_nothing_the_host_has_not_answered)
 {
     D3d9FormatOps ops;
@@ -73,8 +68,6 @@ TEST(d3d9_format_ops, offers_nothing_the_host_has_not_answered)
     CHECK(ops.invariants_hold());
 }
 
-/* The desktop formats are what the runtime pairs display modes with: offered as
- * display modes, and X8R8G8B8 is the windowed back buffer's. */
 TEST(d3d9_format_ops, the_back_buffer_formats_are_display_modes)
 {
     D3d9FormatOps ops;
@@ -94,13 +87,11 @@ TEST(d3d9_format_ops, the_back_buffer_formats_are_display_modes)
     CHECK((x8->operations_ & (op_srgb_read | op_srgb_write | op_autogen | op_vertex_texture)) ==
           (op_srgb_read | op_srgb_write | op_autogen | op_vertex_texture));
     CHECK((x8->operations_ & (op_no_filter | op_no_blend)) == 0u);
-    /* 4 and 2 samples, as 1 << (type - 1), and NONMASKABLE with them. */
     CHECK_EQ(x8->multisample_, 0xbu);
     const Op *const a8 = find(ops, a8r8g8b8);
     CHECK(a8 != nullptr);
     CHECK((a8->operations_ & op_display) == 0u);
     CHECK((a8->operations_ & op_up_to_alpha_rt) != 0u);
-    /* A format the host said nothing of is not offered at all. */
     CHECK(find(ops, d24s8) == nullptr);
 }
 
@@ -131,8 +122,6 @@ TEST(d3d9_format_ops, depth_bump_and_unfiltered_formats_say_so)
     CHECK(ops.invariants_hold());
 }
 
-/* A format answered twice keeps the later answer, and offering it again does
- * not list it twice. */
 TEST(d3d9_format_ops, a_second_answer_replaces_the_first)
 {
     D3d9FormatOps ops;
@@ -142,16 +131,11 @@ TEST(d3d9_format_ops, a_second_answer_replaces_the_first)
     CHECK((find(ops, x8r8g8b8)->operations_ & op_display) != 0u);
     ops.record(x8r8g8b8, 0u, 0u);
     CHECK_EQ(ops.count(), 0u);
-    /* A format this does not ask about is not taken. */
     ops.record(7777u, texture, 0u);
     CHECK_EQ(ops.count(), 0u);
     CHECK(ops.invariants_hold());
 }
 
-/* The rules d3d9.dll disables the whole driver over (reverse-engineering.md
- * §2.4): an alpha format as a display mode, both 16-bit formats as modes, the
- * ARGB group on a format outside the runtime's list, and a multisample mask
- * without NONMASKABLE. */
 TEST(d3d9_format_ops, nothing_offered_breaks_a_rule_the_runtime_disables_the_driver_over)
 {
     D3d9FormatOps ops;

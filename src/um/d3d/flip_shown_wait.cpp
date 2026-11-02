@@ -10,23 +10,12 @@
 namespace av::d3d {
 
 namespace {
-
-/* Two refreshes of the slowest mode a desktop runs: a source whose blanks
- * stopped costs this much a frame, not the device. */
 constexpr uint64_t bound_ms = 40u;
-/* Longer than a refresh of any mode from 48 Hz up: once this has passed since
- * the flip, a blank came between whatever the scan line reads - and the scan
- * line can only tell within one refresh (BeamPosition::earlier_than). */
 constexpr uint64_t past_a_refresh_ms = 21u;
-/* How long after the blank that shows a flip DWM takes to compose from the
- * flipped buffer and let go of the one before. A copy at the blank itself -
- * a game that presents as its vsync allows writes just then - still landed
- * ahead of DWM's last compose of the old buffer as often as without a wait;
- * 20 ms after the flip, never. */
 constexpr uint64_t settle_ms = 4u;
 constexpr uint64_t ms_per_second = 1000u;
 
-}  // namespace
+}
 
 FlipShownWait::FlipShownWait(D3dSession &session, KeyedLog &lines)
     : session_(session), lines_(lines), source_(0u), pending_(false), flipped_(), flipped_at_(0u), frequency_(0u),
@@ -54,8 +43,6 @@ void FlipShownWait::flipped(uint32_t source)
     flipped_at_ = milliseconds();
 }
 
-/* A blank that cannot be waited for leaves the write to go, as it did before:
- * a frame shown early is better than a device that stops. */
 void FlipShownWait::await()
 {
     AV_SCOPE("FlipShownWait::await");
@@ -90,4 +77,4 @@ Status FlipShownWait::await_blank()
     }
 }
 
-}  // namespace av::d3d
+}

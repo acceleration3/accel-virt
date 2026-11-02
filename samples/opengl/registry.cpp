@@ -12,11 +12,9 @@ void register_lighting(Sample **all, uint32_t &made);
 void register_textures(Sample **all, uint32_t &made);
 
 namespace {
-// Made at the first call: the guest build has no C runtime to run static
-// constructors, so a sample object at namespace scope would have no vtable.
 Sample  *all[64];
 uint32_t made = 0;
-}  // namespace
+}
 
 Sample **registry(uint32_t &count)
 {
@@ -32,4 +30,4 @@ Sample **registry(uint32_t &count)
     return all;
 }
 
-}  // namespace samples
+}

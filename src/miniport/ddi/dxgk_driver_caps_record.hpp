@@ -1,7 +1,3 @@
-/* DXGK_DRIVERCAPS at DXGKDDI_INTERFACE_VERSION_WDDM3_2, the 0x250 bytes
- * DXGADAPTER::Initialize asks for. A DDI record: each bitfield union is its
- * UINT Value, and a nested structure's fields are prefixed with its name;
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGK_DRIVER_CAPS_RECORD_HPP
 #define AV_DXGK_DRIVER_CAPS_RECORD_HPP
 
@@ -30,9 +26,7 @@ struct DxgkDriverCapsRecord {
     uint32_t GpuEngineTopologyNbAsymetricProcessingNodes;
     uint32_t GpuEngineTopologyReserved[64];
     int32_t  WDDMVersion;
-    /* DXGK_VIRTUALADDRESSCAPS_DEPRECATED, seven UINTs. */
     uint32_t Reserved[7];
-    /* DXGK_DMABUFFERCAPS_DEPRECATED, two twenty-UINT structures. */
     uint32_t Reserved1[40];
     int32_t  PreemptionCapsGraphicsPreemptionGranularity;
     int32_t  PreemptionCapsComputePreemptionGranularity;
@@ -60,6 +54,6 @@ struct DxgkDriverCapsRecord {
     uint32_t Padding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_DRIVER_CAPS_RECORD_HPP
+#endif

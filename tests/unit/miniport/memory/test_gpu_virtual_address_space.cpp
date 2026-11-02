@@ -1,5 +1,3 @@
-/* Every branch of GpuVirtualAddressSpace and VirtualRange, the invariants after
- * every mutation, and hostile input. Constitution Principles III and IV. */
 #include "harness/framework/hostile_sweep.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/violation.hpp"
@@ -23,12 +21,9 @@ static constexpr std::uint64_t kBase = AddressSpaceFixture::base;
 static constexpr std::uint64_t kSize = AddressSpaceFixture::size;
 static constexpr std::uint64_t kPage = AddressSpaceFixture::page;
 
-/* Every mutation is followed by an invariant check, per the constitution. */
 #define MUTATE(fixture, expression, expected)                                  \
     do { CHECK_STATUS(expression, expected);                                   \
          CHECK((fixture).space().invariants_hold()); } while (0)
-
-/* ---------------------------------------------------------------- initialize */
 
 TEST(address_space_initialize, rejects_an_unrepresentable_bounds)
 { MockPlatform platform; GpuVirtualAddressSpace space(platform);
@@ -47,8 +42,6 @@ TEST(address_space_initialize, accepts_an_aligned_bounds_and_starts_empty)
 { AddressSpaceFixture fixture;
   CHECK_EQ(fixture.space().range_count(), 0u);
   CHECK(fixture.space().invariants_hold()); }
-
-/* ------------------------------------------------------------------- reserve */
 
 TEST(address_space_reserve, rejects_an_invalid_alignment)
 { AddressSpaceFixture fixture; std::uint64_t out = 0u;
@@ -183,8 +176,6 @@ TEST(address_space_reserve, grows_the_table_past_its_initial_capacity)
   GpuVirtualAddressSpaceProbe probe(fixture.space());
   CHECK(probe.capacity() >= 20u); }
 
-/* No count of ranges refuses a reservation, only the space: every page of the
- * fixture's megabyte is reserved one at a time, and the next has nowhere to go. */
 TEST(address_space_reserve, fills_the_whole_space_and_refuses_only_when_it_is_full)
 { AddressSpaceFixture fixture; std::uint64_t out = 0u;
   for (std::uint64_t i = 0u; i < kSize / kPage; i++) {
@@ -194,8 +185,6 @@ TEST(address_space_reserve, fills_the_whole_space_and_refuses_only_when_it_is_fu
   CHECK_EQ(fixture.space().range_count(), kSize / kPage);
   MUTATE(fixture, fixture.space().reserve(kPage, Alignment(kPage), out), Status::no_space); }
 
-/* Reserving after a packed run starts past it, and a range released inside
- * the run is the first gap the next reservation takes. */
 TEST(address_space_reserve, takes_the_first_gap_whether_inside_or_after_the_packed_run)
 { AddressSpaceFixture fixture; std::uint64_t out = 0u;
   const std::uint64_t first = fixture.reserve_page();
@@ -214,8 +203,6 @@ TEST(address_space_reserve, takes_the_first_gap_whether_inside_or_after_the_pack
   MUTATE(fixture, fixture.space().reserve(kPage, Alignment(kPage), out), Status::ok);
   CHECK_EQ(out, third + kPage);
   CHECK_EQ(probe.packed(), 5u); }
-
-/* ----------------------------------------------------------------------- map */
 
 TEST(address_space_map, rejects_an_unreserved_base)
 { AddressSpaceFixture fixture;
@@ -260,8 +247,6 @@ TEST(address_space_map, binds_the_object_and_offset)
   CHECK_STATUS(fixture.space().translate(reserved, object, offset), Status::ok);
   CHECK_EQ(object, 7u); CHECK_EQ(offset, 0x2000u); }
 
-/* --------------------------------------------------------------------- unmap */
-
 TEST(address_space_unmap, rejects_an_unknown_base)
 { AddressSpaceFixture fixture;
   MUTATE(fixture, fixture.space().unmap(kBase), Status::not_found); }
@@ -277,8 +262,6 @@ TEST(address_space_unmap, clears_the_binding_and_allows_a_remap)
   MUTATE(fixture, fixture.space().map(reserved, kPage, 7u, 0u), Status::ok);
   MUTATE(fixture, fixture.space().unmap(reserved), Status::ok);
   MUTATE(fixture, fixture.space().map(reserved, kPage, 9u, 0u), Status::ok); }
-
-/* ------------------------------------------------------------------- release */
 
 TEST(address_space_release, rejects_an_unknown_base)
 { AddressSpaceFixture fixture;
@@ -316,8 +299,6 @@ TEST(address_space_release, removes_a_middle_range_and_keeps_the_order)
   GpuVirtualAddressSpaceProbe probe(fixture.space());
   CHECK_EQ(probe.range_at(0u).span().base(), first);
   CHECK_EQ(probe.range_at(1u).span().base(), third); }
-
-/* ----------------------------------------------------------------- translate */
 
 TEST(address_space_translate, rejects_an_empty_space)
 { AddressSpaceFixture fixture;
@@ -370,8 +351,6 @@ TEST(address_space_translate, adds_the_offset_within_the_range)
                Status::ok);
   CHECK_EQ(offset, 0x1000u + kPage * 2u - 1u); }
 
-/* ---------------------------------------------------------------------- IRQL */
-
 TEST(address_space_translate, is_callable_at_dispatch_level)
 { AddressSpaceFixture fixture;
   const std::uint64_t reserved = fixture.reserve_page();
@@ -386,12 +365,10 @@ TEST(address_space_reserve, is_rejected_at_dispatch_level)
 { AddressSpaceFixture fixture; std::uint64_t out = 0u;
   fixture.platform().set_irql(Irql::dispatch);
   CHECK_STATUS(fixture.space().reserve(kPage, Alignment(kPage), out), Status::no_memory);
-  CHECK(fixture.platform().claim(Violation::irql_ceiling));   /* the space's own ceiling */
-  CHECK(fixture.platform().claim(Violation::irql_ceiling));   /* and the table's */
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
   CHECK(fixture.platform().claim(Violation::allocation_at_dispatch));
   fixture.platform().set_irql(Irql::passive); }
-
-/* --------------------------------------------------------- virtual range ---- */
 
 TEST(virtual_range, default_construction_is_unmapped)
 { const VirtualRange range;
@@ -412,8 +389,6 @@ TEST(virtual_range_unbind, refuses_when_not_bound)
 { VirtualRange range{ByteRange(kBase, kPage)};
   CHECK_STATUS(range.unbind(), Status::invalid_state); }
 
-/* ---------------------------------------------------------------- invariants */
-
 TEST(address_space_invariants, reject_a_corrupted_table)
 { AddressSpaceFixture fixture;
   const std::uint64_t first = fixture.reserve_page();
@@ -422,49 +397,49 @@ TEST(address_space_invariants, reject_a_corrupted_table)
   GpuVirtualAddressSpace &space = fixture.space();
 
   probe.set_span(1u, ByteRange(first, kPage));
-  CHECK(!space.invariants_hold());                       /* out of order */
+  CHECK(!space.invariants_hold());
   probe.set_span(1u, ByteRange(second, kPage));
   CHECK(space.invariants_hold());
 
   probe.set_span(0u, ByteRange(first, 0u));
-  CHECK(!space.invariants_hold());                       /* empty span */
+  CHECK(!space.invariants_hold());
   probe.set_span(0u, ByteRange(first + 1u, kPage));
-  CHECK(!space.invariants_hold());                       /* unaligned base */
+  CHECK(!space.invariants_hold());
   probe.set_span(0u, ByteRange(first, kPage + 1u));
-  CHECK(!space.invariants_hold());                       /* unaligned size */
+  CHECK(!space.invariants_hold());
   probe.set_span(0u, ByteRange(first, kSize + kPage));
-  CHECK(!space.invariants_hold());                       /* escapes bounds */
+  CHECK(!space.invariants_hold());
   probe.set_span(0u, ByteRange(first, kPage));
   CHECK(space.invariants_hold());
 
   probe.set_object(0u, 5u);
-  CHECK(!space.invariants_hold());                       /* object without map */
+  CHECK(!space.invariants_hold());
   probe.set_object(0u, 0u);
   probe.set_mapped(0u, true);
-  CHECK(!space.invariants_hold());                       /* map without object */
+  CHECK(!space.invariants_hold());
   probe.set_mapped(0u, false);
   CHECK(space.invariants_hold());
 
   probe.set_object_offset(0u, 8u);
-  CHECK(!space.invariants_hold());                       /* offset while unmapped */
+  CHECK(!space.invariants_hold());
   probe.set_object_offset(0u, 0u);
   CHECK(space.invariants_hold());
 
   probe.set_object(0u, 1u);
   probe.set_mapped(0u, true);
   probe.set_object_offset(0u, UINT64_MAX);
-  CHECK(!space.invariants_hold());                       /* offset + size wraps */
+  CHECK(!space.invariants_hold());
   probe.set_object_offset(0u, 0u);
   probe.set_object(0u, 0u);
   probe.set_mapped(0u, false);
   CHECK(space.invariants_hold());
 
   probe.set_packed(3u);
-  CHECK(!space.invariants_hold());                       /* packed past the ranges */
+  CHECK(!space.invariants_hold());
   probe.set_packed(2u);
   CHECK(space.invariants_hold());
   probe.set_span(1u, ByteRange(second + kPage, kPage));
-  CHECK(!space.invariants_hold());                       /* a gap inside the packed run */
+  CHECK(!space.invariants_hold());
   probe.set_span(1u, ByteRange(second, kPage));
   CHECK(space.invariants_hold());
 
@@ -479,9 +454,8 @@ TEST(address_space, reports_a_broken_invariant_from_a_mutating_call)
   CHECK_EQ(fixture.platform().unclaimed_violations(), 0u);
 
   GpuVirtualAddressSpaceProbe probe(fixture.space());
-  probe.set_object(0u, 5u);                 /* object set without mapped_ */
-  (void)fixture.space().unmap(reserved);    /* the scope guard must notice */
-  /* once on entry, once on exit: the call left it broken too */
+  probe.set_object(0u, 5u);
+  (void)fixture.space().unmap(reserved);
   CHECK(fixture.platform().claim(Violation::broken_invariant));
   CHECK(fixture.platform().claim(Violation::broken_invariant));
 
@@ -513,10 +487,8 @@ TEST(address_space_invariants, hold_across_a_pseudorandom_operation_sequence)
               held[index] = held[--held_count];
           }
       }
-      CHECK(fixture.space().invariants_hold());   /* after EVERY mutation */
+      CHECK(fixture.space().invariants_hold());
   } }
-
-/* -------------------------------------------------- allocation failure ----- */
 
 TEST(address_space, survives_failure_at_every_allocation_site)
 { for (std::uint32_t nth = 1u; nth <= 8u; nth++) {
@@ -529,8 +501,6 @@ TEST(address_space, survives_failure_at_every_allocation_site)
       }
       CHECK(fixture.space().invariants_hold());
   } }
-
-/* ------------------------------------------------------- hostile input ----- */
 
 namespace {
 
@@ -548,7 +518,7 @@ bool reject_hostile_address(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(address_space_translate, hostile_addresses_never_translate_out_of_bounds)
 { AddressSpaceFixture fixture; std::uint64_t base = 0u;
@@ -563,13 +533,6 @@ TEST(address_space_translate, hostile_addresses_never_translate_out_of_bounds)
   const av::HostileSweep sweep(reject_hostile_address, valid, sizeof valid);
   sweep.run();
   CHECK(sweep.cases_run() > 64u);
-  /* The one mapped range is four pages - 16 KiB - at a base whose only set bit
-   * is bit 36, so an address survives a flip exactly where the flip lands
-   * inside that range: the fourteen bits below 16 KiB. Every other flip leaves
-   * the range or, for bit 36 itself, leaves address zero. The base's top three
-   * bytes are zero, so the 5-, 6- and 7-byte truncations rebuild the same
-   * address and translate; every shorter one is address zero. All-zero is
-   * unmapped and all-ones is past every range. */
   const std::uint32_t acceptable = 14u + 3u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable);
 

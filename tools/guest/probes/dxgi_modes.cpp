@@ -1,15 +1,8 @@
-// dxgi_modes.exe: what DXGI answers a game asking for display modes - every
-// adapter's outputs, and for each the count of modes GetDisplayModeList gives
-// in the formats games ask for, with the largest. Dark Souls Remastered takes
-// the last mode of its format's list without looking at the count.
-//
-//   dxgi_modes.exe
 #include <cstdio>
 #include <dxgi.h>
 
 int wmain()
 {
-    /* A probe that crashes must have printed what it had. */
     setvbuf(stdout, nullptr, _IONBF, 0);
     IDXGIFactory1 *factory = nullptr;
     if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void **>(&factory)))) {

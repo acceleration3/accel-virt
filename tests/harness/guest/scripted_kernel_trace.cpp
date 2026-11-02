@@ -9,7 +9,7 @@ namespace {
 constexpr std::uint32_t status_invalid_parameter = 0xC000000Du;
 constexpr std::uint32_t status_unsuccessful = 0xC0000001u;
 
-}  // namespace
+}
 
 ScriptedKernelTrace::ScriptedKernelTrace()
     : table_(nullptr), table_length_(0u), state_(nullptr), state_length_(0u), claimed_(0u), claiming_(false),
@@ -70,4 +70,4 @@ void ScriptedKernelTrace::fault_at(std::uint32_t nth, Fault fault)
 
 std::uint32_t ScriptedKernelTrace::answers() const { return answers_; }
 
-}  // namespace av
+}

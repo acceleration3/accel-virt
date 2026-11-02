@@ -25,7 +25,7 @@ namespace {
 
 constexpr std::int32_t  no_memory = static_cast<std::int32_t>(0xC0000017u);
 constexpr std::uint32_t invalid_parameter = 0xC000000Du;
-constexpr std::uint32_t invalid_source_mode = 0xC01E0310u;   /* STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE */
+constexpr std::uint32_t invalid_source_mode = 0xC01E0310u;
 constexpr std::uint32_t path_powered_off = 2u;
 
 D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t height)
@@ -60,7 +60,7 @@ private:
     DxgkargCommitVidPnRecord request_;
 };
 
-}  // namespace
+}
 
 TEST(vidpn_commit_apply, records_the_pinned_source_mode)
 { Commit commit;
@@ -77,7 +77,7 @@ TEST(vidpn_commit_apply, a_mode_or_format_the_adapter_lacks_is_an_invalid_source
   CHECK(size.sources().committed_mode(0u) == nullptr);
   Commit format;
   D3dkmdtVidPnSourceModeRecord mode = source_mode(1024u, 768u);
-  mode.PixelFormat = 22;   /* D3DDDIFMT_X8R8G8B8 */
+  mode.PixelFormat = 22;
   format.vidpn().source_modes(0u).seed(mode, true);
   CHECK_EQ(format.apply(), invalid_source_mode); }
 

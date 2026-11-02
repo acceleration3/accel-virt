@@ -1,7 +1,3 @@
-/* One Direct3D device's commands on its process's stream (D3dDeviceSelection):
- * each is preceded by the device's selection when another device spoke last,
- * and everything else is the stream's. What the host received is read off
- * MockKmt's ring. */
 #include "core/support/status.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -69,11 +65,8 @@ private:
     D3dDeviceSelection twelve_;
 };
 
-}  // namespace
+}
 
-/* The host runs a command on the pipeline state of the device selected when
- * it runs: a device's command after another's goes behind its selection, and
- * one after its own does not; a Direct3D 12 device selects nothing. */
 TEST(d3d_device_selection, a_command_goes_behind_its_devices_selection_when_another_spoke_last)
 { Fixture fixture;
   CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
@@ -87,8 +80,6 @@ TEST(d3d_device_selection, a_command_goes_behind_its_devices_selection_when_anot
   for (std::uint32_t index = 0u; index < 6u; index++) CHECK_EQ(fixture.kmt().command_id(index), expected[index]);
   CHECK(fixture.stream().invariants_hold()); }
 
-/* A call answered through the selection is the stream's: its reply, its end,
- * and the arenas it decodes in and lends from. */
 TEST(d3d_device_selection, an_answered_call_and_the_arenas_are_the_streams)
 { Fixture fixture;
   const std::uint32_t removed = 0x887A0005u;

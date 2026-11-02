@@ -52,4 +52,4 @@ uint32_t CapsetRequest::capset_version() const
     return capset_version_;
 }
 
-}  // namespace av
+}

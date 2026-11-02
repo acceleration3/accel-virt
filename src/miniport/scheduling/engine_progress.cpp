@@ -23,4 +23,4 @@ bool EngineProgress::responsive()
     return moved;
 }
 
-}  // namespace av
+}

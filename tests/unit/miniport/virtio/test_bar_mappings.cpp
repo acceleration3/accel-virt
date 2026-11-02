@@ -22,7 +22,7 @@ struct BarMappingsProbe {
     BarMappings &mappings;
 };
 
-}  // namespace av
+}
 
 using av::BarMappings;
 using av::BarMappingsProbe;
@@ -41,9 +41,6 @@ using av::VirtioPciLayout;
 using av::VirtioRegion;
 
 namespace {
-
-/* One started adapter's discovery: dxgkrnl, its interface, the function's
- * resources, BARs and virtio layout. */
 class Discovery {
 public:
     Discovery() : dxgkrnl_(platform_, function_), interface_(platform_), resources_(platform_) {}
@@ -75,7 +72,7 @@ private:
     VirtioPciLayout       layout_;
 };
 
-}  // namespace
+}
 
 TEST(bar_mappings, starts_with_nothing_mapped)
 { Discovery discovery;
@@ -133,7 +130,7 @@ TEST(bar_mappings_map, a_resource_too_short_for_a_structure_is_malformed)
 TEST(bar_mappings_map, an_unassigned_or_io_bar_propagates)
 { Discovery discovery;
   CHECK_STATUS(discovery.discover(), Status::ok);
-  discovery.function().config_space()[0x20u] = 0x01u;   /* BAR 4 becomes I/O */
+  discovery.function().config_space()[0x20u] = 0x01u;
   BarMappings mappings(discovery.platform(), discovery.interface());
   CHECK_STATUS(mappings.map(discovery.bars(), discovery.resources(), discovery.layout()), Status::not_supported); }
 
@@ -151,7 +148,7 @@ TEST(bar_mappings_map, a_bar_larger_than_one_mapping_is_too_large)
 { Discovery discovery;
   CHECK_STATUS(discovery.discover(), Status::ok);
   av::FakeResourceList huge;
-  huge.add_large_memory(FakeVirtioGpuFunction::virtio_bar_address, 0x0800u, 1u);  /* 4 GiB */
+  huge.add_large_memory(FakeVirtioGpuFunction::virtio_bar_address, 0x0800u, 1u);
   CHECK_STATUS(discovery.resources().initialize(huge.bytes(), huge.size()), Status::ok);
   BarMappings mappings(discovery.platform(), discovery.interface());
   CHECK_STATUS(mappings.map(discovery.bars(), discovery.resources(), discovery.layout()), Status::too_large); }
@@ -209,7 +206,7 @@ TEST(bar_mappings_map, is_passive_only)
   CHECK_STATUS(mappings.map(discovery.bars(), discovery.resources(), discovery.layout()), Status::ok);
   discovery.platform().set_irql(Irql::passive);
   CHECK(discovery.platform().claim(Violation::irql_ceiling));
-  while (discovery.platform().claim(Violation::irql_ceiling)) {}  /* and each callee's */
+  while (discovery.platform().claim(Violation::irql_ceiling)) {}
   mappings.unmap_all(); }
 
 TEST(bar_mappings_invariants, a_length_without_a_mapping_is_detected)
@@ -219,8 +216,6 @@ TEST(bar_mappings_invariants, a_length_without_a_mapping_is_detected)
   CHECK(!mappings.invariants_hold());
   BarMappingsProbe(mappings).set_length(3u, 0u); }
 
-/* Feature 043: the doorbell pages are a region of their own on BAR 0, mapped
- * once the virtio structures are, and released with them. */
 TEST(bar_mappings_map_region, maps_the_doorbell_bar_after_the_structures)
 { Discovery discovery;
   discovery.function().add_doorbell_region();
@@ -238,7 +233,7 @@ TEST(bar_mappings_map_region, maps_the_doorbell_bar_after_the_structures)
   auto *const page_one = static_cast<std::uint8_t *>(mappings.address_of(doorbells)) + 0x1000u;
   discovery.platform().write_register_u32(page_one, 1u);
   CHECK_EQ(discovery.function().doorbells().rings(1u), 1u);
-  CHECK_STATUS(mappings.map_region(discovery.bars(), discovery.resources(), doorbells), Status::ok);   /* already */
+  CHECK_STATUS(mappings.map_region(discovery.bars(), discovery.resources(), doorbells), Status::ok);
   CHECK_EQ(discovery.dxgkrnl().live_mappings(), 2u);
   mappings.unmap_all();
   CHECK_EQ(discovery.dxgkrnl().live_mappings(), 0u); }

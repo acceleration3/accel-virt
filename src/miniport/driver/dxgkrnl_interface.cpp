@@ -149,7 +149,7 @@ void DxgkrnlInterface::replug(uint32_t child)
     AV_SCOPE("DxgkrnlInterface::replug");
     platform_.require_irql_at_most(Irql::dispatch, "DxgkrnlInterface::replug");
     if (!initialized_ || record_.DxgkCbIndicateChildStatus == nullptr) return;
-    constexpr int32_t     status_connection = 1;   /* StatusConnection */
+    constexpr int32_t     status_connection = 1;
     DxgkChildStatusRecord status = {};
     status.Type = status_connection;
     status.ChildUid = child;
@@ -204,4 +204,4 @@ bool DxgkrnlInterface::invariants_hold() const
     return !initialized_ || has_callbacks(record_);
 }
 
-}  // namespace av
+}

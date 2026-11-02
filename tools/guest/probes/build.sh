@@ -1,25 +1,4 @@
 #!/usr/bin/env bash
-# The guest probes tools/frame_pacing.py pushes and runs: wgc_probe.exe (a
-# Windows.Graphics.Capture workload that reports every frame it gets) and
-# etw_schema.exe (a manifest provider's events and maps, as the guest's TDH
-# describes them); and d3d9_probe.exe, a 32-bit Direct3D 9 device made the way
-# a Source engine game makes one, presenting a known colour (docs/shared-surfaces.md); and
-# dxgi_modes.exe, the display modes DXGI lists each output in, format by format; and
-# d3d11_cube.exe, a cube map made with each face's initial data and read back; and
-# gl_window.exe, an OpenGL window swapping a frame whose orientation shows; and
-# d3d11_flip.exe, a window shown through an R8G8B8A8 flip chain, as a window chain is; and
-# shared_id_probe.exe, shared textures and the ids avgpu minted for them, read
-# in user mode as docs/external-export.md tells a mirror to; and
-# cross_adapter_probe.exe, row-major memory made on one avgpu adapter and opened on another (docs/host-memory.md); and
-# vk_window.exe, a Vulkan window presenting a frame whose orientation and channel order show,
-# its swapchain made again when it resizes; and
-# d3d9_dirty_present.exe, a windowed Direct3D 9 chain presented as Affinity's canvas and
-# Half-Life 2's window are, every frame it shows read back off the desktop and judged. llvm-mingw (https://github.com/mstorsjo/llvm-mingw, found on
-# PATH or in /opt/llvm-mingw): its MinGW-w64 headers carry the WinRT capture,
-# Direct3D11 interop and TDH declarations the Windows kit here does not, and a
-# distribution's GCC MinGW lacks the interop one.
-#
-#   tools/guest/probes/build.sh [output directory]
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 source_dir=$root/tools/guest/probes

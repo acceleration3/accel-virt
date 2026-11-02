@@ -33,29 +33,17 @@ Status SubmissionPath::submit(uint32_t context, uint64_t dma_address, const uint
         if (released != Status::not_supported) return released;
     }
     if (route_ == nullptr && doorbell_.established()) {
-        /* The tail is published before the store, because the store is what
-         * tells the device to read it. */
         const Status published = ring_.publish_tail();
         if (published != Status::ok) return published;
         if (doorbell_.ring(fence)) {
             doorbell_submissions_++;
             return Status::ok;
         }
-        /* Refused: this submission goes through the kernel, and the doorbell
-         * is put back the way the status asked - connected again, or made
-         * anew - so the next one need not (US2 scenario 1). */
         static_cast<void>(doorbell_.recover());
     }
-    /* Disconnected, never connected, or a machine that gives out no doorbell
-     * at all: the same batch at the same tail, through the kernel - and where
-     * there is a hardware queue, through that, because a hardware-scheduled
-     * context refuses D3DKMTSubmitCommand outright (research.md §13). */
     if (route_ == nullptr && publishes_tail_ && doorbell_.queue() == 0u) {
         const Status published = ring_.publish_tail();
         if (published != Status::ok) return published;
-        /* The worker clears its flag before it looks at the tail a last time,
-         * so seeing it set after the tail is stored means the batch is seen:
-         * the kernel is needed only to wake a worker that is asleep. */
         if (ring_.consumer_awake()) {
             user_submissions_++;
             return Status::ok;
@@ -116,10 +104,7 @@ uint64_t SubmissionPath::through_kernel() const
 bool SubmissionPath::invariants_hold() const
 {
     AV_SCOPE("SubmissionPath::invariants_hold");
-    /* Every submission counted is a batch this process wrote into its ring,
-     * whichever way it went: nothing is counted for a ring nothing was
-     * published into. */
     return (doorbell_submissions_ == 0u && kernel_submissions_ == 0u && release_submissions_ == 0u) || ring_.tail() != 0u;
 }
 
-}  // namespace av
+}

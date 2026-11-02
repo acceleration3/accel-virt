@@ -1,22 +1,4 @@
 #!/usr/bin/env python3
-"""Gate for feature 047's FR-001: every extension a pinned translation layer
-says it requires is one this ICD reports.
-
-The layer's list is read out of its own pinned source
-(tools/layer_requirements.py), never copied here, so a release that starts
-requiring one more fails this rather than failing in a game. What the ICD
-reports is read out of its policy table, the same table
-tools/check_extension_policy.py holds to a test each - so the two halves of the
-promise are checked against each other and neither against a list kept by hand.
-
-A layer whose pins are not fetched cannot be checked, and this says so and
-passes, the way the gate skips the guest when no image is named. What it never
-does is pass quietly on an empty list: a layer directory that is there but holds
-no requirements at all is a failure, because that is what a broken extractor
-looks like.
-
-  check_layer_requirements.py [repository root]
-"""
 import json
 import os
 import re
@@ -30,9 +12,6 @@ DEVICE_ROWS = re.compile(r"ExtensionPolicy::Row\s+reported_extensions\s*\[\s*\]\
 INSTANCE_ROWS = re.compile(r"InstanceExtension\s+reported_instance_extensions\s*\[\s*\]\s*=\s*\{(?P<rows>.*?)\}\s*;",
                            re.S)
 NAME = re.compile(r'\{\s*"(?P<name>[^"]+)"')
-# What the ICD answers itself rather than reporting, and what a layer requires
-# of the loader rather than of a driver: neither is a policy row, and neither
-# is missing when it is absent from one.
 NOT_A_DRIVER_S = ("VK_KHR_surface", "VK_KHR_win32_surface", "VK_EXT_debug_utils", "VK_EXT_debug_report",
                   "VK_KHR_display", "VK_KHR_xlib_surface", "VK_KHR_xcb_surface", "VK_KHR_wayland_surface",
                   "VK_KHR_get_surface_capabilities2", "VK_KHR_surface_protected_capabilities",
@@ -40,8 +19,6 @@ NOT_A_DRIVER_S = ("VK_KHR_surface", "VK_KHR_win32_surface", "VK_EXT_debug_utils"
 
 
 class ReportedExtensions:
-    """What the Vulkan ICD's policy tables report, by name."""
-
     def __init__(self, root):
         self.root = root
 
@@ -58,8 +35,6 @@ class ReportedExtensions:
 
 
 class LayerVerdict:
-    """One layer: what it requires, and what of that the ICD does not report."""
-
     def __init__(self, root, layer):
         self.root = root
         self.layer = layer
@@ -72,8 +47,6 @@ class LayerVerdict:
         return os.path.join(self.root, "third_party", self.layer, "source")
 
     def required(self):
-        """The layer's own required list, or None when its pins are not
-        fetched."""
         source = self.source()
         if not os.path.isdir(source):
             return None

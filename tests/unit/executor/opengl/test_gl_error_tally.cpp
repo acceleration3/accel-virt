@@ -1,7 +1,3 @@
-/* The host's count of one context's OpenGL errors as the word the guest reads
- * (docs/protocol.md, "Error word"): byte k counts GL_INVALID_ENUM + k modulo
- * 256, byte 7 carries the marker, and a code outside the seven kinds is not
- * counted. */
 #include "executor/opengl/gl_error_tally.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -21,7 +17,6 @@ TEST(gl_error_tally, counts_each_kind_in_its_own_byte)
   tally.record(0x0502u);
   tally.record(0x0506u);
   CHECK_EQ(tally.word(), 0x8001000000020001ull);
-  /* GL_CONTEXT_LOST, GL_NO_ERROR and codes that are no error: nothing. */
   tally.record(0x0507u);
   tally.record(0u);
   tally.record(0x04FFu);

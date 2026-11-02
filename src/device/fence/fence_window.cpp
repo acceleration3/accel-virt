@@ -19,7 +19,7 @@ Status FenceWindow::publish(const FencePage &page) const
 {
     AV_SCOPE("FenceWindow::publish");
     uint8_t bytes[FencePage::encoded_size] = {};
-    static_cast<void>(page.encode(bytes, sizeof bytes));   /* sized for it */
+    static_cast<void>(page.encode(bytes, sizeof bytes));
     if (!invariants_hold()) return Status::invalid_parameter;
     return blob_.write(0u, bytes, FencePage::beat_at);
 }
@@ -46,4 +46,4 @@ bool FenceWindow::invariants_hold() const
     return blob_.length() >= FencePage::encoded_size;
 }
 
-}  // namespace av
+}

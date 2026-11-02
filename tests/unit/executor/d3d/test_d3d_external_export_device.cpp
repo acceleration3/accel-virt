@@ -1,13 +1,3 @@
-/* A Direct3D 11 texture a guest shares, handed to a process outside QEMU as
- * its own memory (docs/external-export.md): the guest's copy into it is
- * counted, a sync_file covers it, and an EGL consumer on the same GPU imports
- * the dma-buf with the layout it is told - the GPU's own tiling and its
- * modifier, or rows for a texture the guest asked for as rows - waits on the
- * sync_file on its own GPU queue and reads every texel where Direct3D put it -
- * no copy on the host. The same frame staged into a linear image instead
- * (HostImageExport, the scanout's path) is timed beside it, which is what
- * chose the direct export. A host without DXVK or EGL on one GPU returns
- * without judging. */
 #include "device/abi/av_executor.h"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/executor_root.hpp"
@@ -23,7 +13,6 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
-/* The consumer reaches GL through eglGetProcAddress, as libEGL alone is linked. */
 #define GL_GLES_PROTOTYPES 0
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
@@ -65,7 +54,7 @@ constexpr std::uint32_t misc_shared_rows = av::ResourceMisc::shared_bit | av::Re
 constexpr std::uint64_t drm_format_mod_linear = 0u;
 constexpr std::uint64_t drm_format_mod_invalid = 0x00ffffffffffffffull;
 constexpr std::uint64_t surface = 0x5100000000000077ull;
-constexpr std::uint32_t drm_argb8888 = 0x34325241u;   /* AR24 */
+constexpr std::uint32_t drm_argb8888 = 0x34325241u;
 constexpr std::uint32_t uuid_bytes = 16u;
 
 ResourceDesc texture(std::uint32_t across, std::uint32_t down, std::uint32_t misc)
@@ -83,15 +72,12 @@ ResourceDesc texture(std::uint32_t across, std::uint32_t down, std::uint32_t mis
     return desc;
 }
 
-/* Every texel its own value, so a layout the two sides disagree on moves
- * texels where a clear would not show it. B8G8R8A8 in memory, texel `texel`
- * of a picture `across` wide. */
 std::uint8_t pattern_byte(std::uint32_t texel, std::uint32_t across, std::uint32_t channel)
 {
     switch (channel) {
-    case 0u: return static_cast<std::uint8_t>(texel * 7u + texel / 251u);   /* blue */
-    case 1u: return static_cast<std::uint8_t>(texel / across);              /* green */
-    case 2u: return static_cast<std::uint8_t>(texel % across);              /* red */
+    case 0u: return static_cast<std::uint8_t>(texel * 7u + texel / 251u);
+    case 1u: return static_cast<std::uint8_t>(texel / across);
+    case 2u: return static_cast<std::uint8_t>(texel % across);
     default: return 0xffu;
     }
 }
@@ -103,8 +89,6 @@ double milliseconds_since(const timespec &start)
     return static_cast<double>(now.tv_sec - start.tv_sec) * 1e3 + static_cast<double>(now.tv_nsec - start.tv_nsec) / 1e6;
 }
 
-/* The consumer: a GLES context of its own on the GPU's EGL display, which
- * imports the dma-buf as an EGLImage and the sync_file as a native fence. */
 class EglConsumer {
 public:
     explicit EglConsumer(void *display)
@@ -151,8 +135,6 @@ public:
 
     bool usable() const { return context_ != EGL_NO_CONTEXT; }
 
-    /* The sync_file waited for on this context's GPU queue; it is EGL's once
-     * the sync is made. */
     bool wait(int fd)
     {
         const EGLint attributes[] = {EGL_SYNC_NATIVE_FENCE_FD_ANDROID, fd, EGL_NONE};
@@ -163,9 +145,6 @@ public:
         return waited;
     }
 
-    /* The image as the answer described it, read back as RGBA rows: laid out
-     * by the modifier it names, which is given whenever it is not linear,
-     * the one layout an importer may assume. */
     bool read(const AvExportedImage &image, std::uint8_t *pixels)
     {
         const bool tiled = image.modifier != drm_format_mod_linear;
@@ -231,7 +210,6 @@ private:
     PFNGLGETERRORPROC                   error_;
 };
 
-/* A sync_file signals by becoming readable. */
 bool signalled(int fd, int timeout_ms)
 {
     pollfd watched = {fd, POLLIN, 0};
@@ -246,8 +224,6 @@ bool find_gpu(av::LoaderHostApis &apis, std::uint32_t &gpu)
     return false;
 }
 
-/* One GPU's executor root and a Direct3D 11 session on it, driven over the
- * wire as the guest drives it. */
 class ExportRig {
 public:
     ExportRig() : apis_(), gpu_(0u), uuid_{}, domain_(0u), held_(), direct3d_(), session_(), wire_(direct3d_), usable_(false)
@@ -276,14 +252,11 @@ public:
 
     bool               usable() const { return usable_; }
     av::ExecutorRoot  &root() { return *held_; }
-    /* The guest device the rig's session is in. */
     std::uint32_t      domain() const { return domain_; }
     av::D3dLoopback   &wire() { return wire_; }
     av::D3dBackend    &backend() { return direct3d_; }
     void              *display() { return apis_.gl_display(gpu_)->handle(); }
 
-    /* Texture `id`, `across` by `down`, filled with the pattern a strip of
-     * rows at a time: the loopback carries a megabyte a command. */
     void fill(std::uint32_t id, std::uint32_t across, std::uint32_t down)
     {
         static std::uint8_t frame[largest_texels * 4u];
@@ -308,13 +281,10 @@ private:
     av::RootUnderTest  held_;
     av::D3dBackend     direct3d_;
     av::SessionShares  session_;
-    /* Holds only the backend until a command is sent. */
     av::D3dLoopback    wire_;
     bool               usable_;
 };
 
-/* The texels of `image` the consumer read back, as RGBA rows, compared with
- * the pattern: the count that differ. */
 std::uint32_t texels_wrong(const std::uint8_t *pixels, std::uint32_t across, std::uint32_t down)
 {
     std::uint32_t wrong = 0u;
@@ -326,11 +296,8 @@ std::uint32_t texels_wrong(const std::uint8_t *pixels, std::uint32_t across, std
     return wrong;
 }
 
-}  // namespace
+}
 
-/* What the device asks of the executor, at a small size: copies are counted
- * once they ran and only into the shared surface, a sync_file comes with
- * every answer, and what nobody shares is refused. */
 TEST(d3d_external_export_device, copies_into_the_surface_are_counted_and_covered_by_a_sync_file)
 {
     constexpr std::uint32_t across = 256u, down = 128u;
@@ -349,12 +316,12 @@ TEST(d3d_external_export_device, copies_into_the_surface_are_counted_and_covered
     close(fence);
     CHECK(!root.sync_surface(rig.domain(), surface + 1u, 0u, writes, fence));
     CHECK_EQ(fence, -1);
-    const std::uint32_t absent = rig.domain() + 1u;   /* a domain never opened */
+    const std::uint32_t absent = rig.domain() + 1u;
     CHECK(!root.sync_surface(absent, surface, 0u, writes, fence));
     CHECK(!root.sync_surface(0u, surface, 0u, writes, fence));
 
     CHECK(av_d3d_CopyResource(rig.wire(), 1u, 2u));
-    CHECK(av_d3d_CopyResource(rig.wire(), 2u, 1u));   /* into a texture nobody shares */
+    CHECK(av_d3d_CopyResource(rig.wire(), 2u, 1u));
     const Box corner = {0u, 0u, 0u, 16u, 16u, 1u};
     CHECK(av_d3d_CopySubresourceRegion(rig.wire(), 1u, 0u, 8u, 8u, 0u, 2u, 0u, 1u, corner, 0u));
     CHECK(root.sync_surface(rig.domain(), surface, 0u, writes, fence));
@@ -372,21 +339,15 @@ TEST(d3d_external_export_device, copies_into_the_surface_are_counted_and_covered
     CHECK_EQ(image.width, across);
     CHECK_EQ(image.height, down);
     CHECK_EQ(image.fourcc, drm_argb8888);
-    /* Laid out by a modifier it names: the GPU's own tiling, or rows on a GPU
-     * that exports none. */
     CHECK(image.modifier != drm_format_mod_invalid);
     CHECK(image.stride >= across * 4u);
     CHECK(lseek(image.fd, 0, SEEK_END) >= static_cast<off_t>(std::uint64_t{image.stride} * down));
     close(image.fd);
-    /* The guest let go of it: nothing is shared under it any more. */
     root.release_shared(rig.domain(), surface);
     CHECK(!root.export_surface(rig.domain(), surface, 0u, image));
     CHECK(!root.sync_surface(rig.domain(), surface, 0u, writes, fence));
 }
 
-/* What the device reads of a shared surface when it has to have pixels: the
- * texels as the session left them, in the surface's own B8G8R8A8 order, and
- * nothing for an id the domain does not share. */
 TEST(d3d_external_export_device, a_shared_surface_reads_back_as_the_session_drew_it)
 {
     constexpr std::uint32_t across = 64u, down = 32u;
@@ -407,10 +368,6 @@ TEST(d3d_external_export_device, a_shared_surface_reads_back_as_the_session_drew
     CHECK(!root.read_image(rig.domain(), surface, pixels, across * 4u, across, down));
 }
 
-/* The consumer's whole path, at a window's odd size and a desktop's, tiled and
- * as rows: a sync_file waited for on its own GPU queue, the dma-buf imported
- * with the layout it was told, and every texel read back where Direct3D put
- * it - which a pitch or a tiling the two drivers disagreed on would shear. */
 TEST(d3d_external_export_device, every_texel_reaches_an_egl_consumer_through_the_surface_s_own_memory)
 {
     struct Size {
@@ -454,11 +411,6 @@ TEST(d3d_external_export_device, every_texel_reaches_an_egl_consumer_through_the
     }
 }
 
-/* Another API opens a shared texture's memory as an image of rows it lays out
- * itself (feature 053): a texture asked for as rows is handed over, one in the
- * GPU's own tiling - which only an importer told its modifier reads - is not.
- * What DWM composes from and into is tiled; a window chain's slot and an
- * OpenCL twin are rows. */
 TEST(d3d_external_export_device, only_a_texture_asked_for_as_rows_is_opened_by_an_api_reading_rows)
 {
     constexpr std::uint32_t across = 614u, down = 289u;
@@ -477,7 +429,6 @@ TEST(d3d_external_export_device, only_a_texture_asked_for_as_rows_is_opened_by_a
     close(image.fd);
     fd = -1;
     const bool handed = rig.backend().export_object(AV_SHARED_MEMORY, 2u, handle_kind, fd);
-    /* Where the GPU exports no tiling the texture is rows after all. */
     CHECK_EQ(handed, image.modifier == drm_format_mod_linear);
     if (handed) close(fd);
     CHECK_EQ(fd >= 0, handed);
@@ -485,11 +436,6 @@ TEST(d3d_external_export_device, only_a_texture_asked_for_as_rows_is_opened_by_a
                  static_cast<unsigned long long>(image.modifier));
 }
 
-/* What a mirror pays per frame at 2560x1440, the guest's copy included: the
- * direct export's sync_file waited for, against the same frame staged into a
- * linear exportable image and waited for (HostImageExport, the copy the
- * direct export saves). Printed, not judged - the machine's load decides the
- * numbers - beyond each path answering. */
 TEST(d3d_external_export_device, the_direct_export_and_a_linear_copy_are_timed_at_a_desktop_s_size)
 {
     constexpr std::uint32_t across = 2560u, down = 1440u, frames = 240u;

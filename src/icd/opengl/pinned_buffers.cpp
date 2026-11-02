@@ -25,7 +25,6 @@ uint32_t PinnedBuffers::bound() const
     return bound_;
 }
 
-/* The whole pages under the bytes are lent: the device lends whole pages. */
 Status PinnedBuffers::pin(const void *address, uint64_t bytes, HostAllocation *&lent, uint64_t &offset)
 {
     AV_SCOPE("PinnedBuffers::pin");
@@ -63,4 +62,4 @@ void PinnedBuffers::reclaim()
     channel_.reclaim_retired();
 }
 
-}  // namespace av::glicd
+}

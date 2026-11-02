@@ -16,8 +16,6 @@ bool same(const char *left, const char *right)
     }
 }
 
-/* A decimal number, refusing anything that is not one and anything that would
- * pass what 64 bits hold. */
 bool number(const char *text, uint64_t &value)
 {
     AV_SCOPE("number");
@@ -32,7 +30,6 @@ bool number(const char *text, uint64_t &value)
     return true;
 }
 
-/* One hexadecimal digit's value, or 16. */
 uint8_t digit_of(char text)
 {
     AV_SCOPE("digit_of");
@@ -42,7 +39,7 @@ uint8_t digit_of(char text)
     return 16u;
 }
 
-}  // namespace
+}
 
 RecordingToolRequest::RecordingToolRequest()
     : action_(Action::none),
@@ -105,7 +102,6 @@ Status RecordingToolRequest::take_flag(const char *flag, const char *value, Reco
     return refuse("a flag this tool does not know");
 }
 
-/* `A` or `A:B`, both decimal. */
 Status RecordingToolRequest::take_fences(const char *value, RecordingFilter &filter)
 {
     AV_SCOPE("RecordingToolRequest::take_fences");
@@ -190,4 +186,4 @@ bool RecordingToolRequest::invariants_hold() const
            && (action_ == Action::print || executor_ != nullptr);
 }
 
-}  // namespace av
+}

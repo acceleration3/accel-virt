@@ -28,7 +28,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(export_image_message_encode, is_the_key)
 { GuardedBuffer bytes(ExportImageMessage::encoded_size);
@@ -38,7 +38,6 @@ TEST(export_image_message_encode, is_the_key)
   CHECK_EQ(ExportImageMessage::descriptors, 0u);
   CHECK(bytes.guards_intact()); }
 
-/* Every key is a key, the largest and zero among them. */
 TEST(export_image_message, round_trips_every_key_through_its_encoding)
 { const std::uint64_t keys[] = {0u, 1u, 0xFFFFFFFFFFFFFFFFu};
   for (const std::uint64_t key : keys) {
@@ -56,8 +55,6 @@ TEST(export_image_message_encode, a_short_or_missing_destination_is_too_large)
   CHECK(buffer.guards_intact());
   CHECK_STATUS(ExportImageMessage(1u).encode(nullptr, ExportImageMessage::encoded_size), Status::too_large); }
 
-/* A descriptor on a message that takes none would be leaked by a receiver
- * that trusted the kind. */
 TEST(export_image_message_decode, any_descriptor_other_length_or_no_bytes_is_malformed_and_changes_nothing)
 { std::uint8_t bytes[ExportImageMessage::encoded_size + 1u] = {};
   CHECK_STATUS(ExportImageMessage(9u).encode(bytes, sizeof bytes), Status::ok);
@@ -69,8 +66,6 @@ TEST(export_image_message_decode, any_descriptor_other_length_or_no_bytes_is_mal
   CHECK_STATUS(decoded.decode(nullptr, ExportImageMessage::encoded_size, 0u), Status::malformed);
   CHECK_EQ(decoded.key(), 4u); }
 
-/* Only the length and the descriptors can be wrong: every flip of a valid
- * message is another key, and only the truncations and extensions refuse. */
 TEST(export_image_message_decode, survives_the_hostile_sweep)
 { std::uint8_t bytes[ExportImageMessage::encoded_size] = {};
   CHECK_STATUS(ExportImageMessage(3u).encode(bytes, sizeof bytes), Status::ok);

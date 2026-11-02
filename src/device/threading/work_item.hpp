@@ -1,6 +1,3 @@
-/* One unit of a context's work: its routine runs on the context's worker, and
- * its completion routine, if it has one, runs afterwards on the main loop,
- * where virtqueue state may be touched. */
 #ifndef AV_WORK_ITEM_HPP
 #define AV_WORK_ITEM_HPP
 
@@ -22,6 +19,6 @@ private:
     void       *context_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WORK_ITEM_HPP
+#endif

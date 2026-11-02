@@ -12,10 +12,9 @@ namespace {
 constexpr GLenum   pixel_pack_buffer = 0x88EBu;
 constexpr GLenum   gpu_commands_complete = 0x9117u;
 constexpr GLbitfield flush_commands = 0x1u;
-/* A read-back not written in a second is a GPU that is gone. */
 constexpr GLuint64 most_wait_nanoseconds = 1000000000u;
 
-}  // namespace
+}
 
 GlPackBuffer::GlPackBuffer(const glproto::RealGl &gl, GlSharedBuffer &buffers)
     : gl_(gl), buffers_(buffers), fd_(), size_(0u), memory_(0u), buffer_(0u), refused_(false), stale_(false)
@@ -82,9 +81,6 @@ void GlPackBuffer::release()
     stale_ = false;
 }
 
-/* A driver that will not make one is not asked again for this region. The
- * transfer itself is the table's: a context without what binding, fencing and
- * waiting take packs nothing. */
 bool GlPackBuffer::make()
 {
     AV_SCOPE("GlPackBuffer::make");
@@ -93,4 +89,4 @@ bool GlPackBuffer::make()
     return !refused_;
 }
 
-}  // namespace av
+}

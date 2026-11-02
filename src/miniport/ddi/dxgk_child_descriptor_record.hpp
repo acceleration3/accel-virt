@@ -1,6 +1,3 @@
-/* DXGK_CHILD_DESCRIPTOR, one element of the array DxgkDdiQueryChildRelations
- * fills. A DDI record: ChildCapabilities is flattened to its VideoOutput and
- * HpdAwareness fields; src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGK_CHILD_DESCRIPTOR_RECORD_HPP
 #define AV_DXGK_CHILD_DESCRIPTOR_RECORD_HPP
 
@@ -19,6 +16,6 @@ struct DxgkChildDescriptorRecord {
     uint32_t ChildUid;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_CHILD_DESCRIPTOR_RECORD_HPP
+#endif

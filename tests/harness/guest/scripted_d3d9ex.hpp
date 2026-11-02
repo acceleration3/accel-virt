@@ -1,7 +1,3 @@
-/* A Direct3D 9Ex the WPF scenario's tests drive: every call recorded, every
- * call refusable, and a present that puts the drawn colour on a scripted
- * window - at once, after some blanks, or never, as a driver that loses the
- * frame does. */
 #ifndef AV_SCRIPTED_D3D9EX_HPP
 #define AV_SCRIPTED_D3D9EX_HPP
 
@@ -22,9 +18,7 @@ public:
     ScriptedD3d9Ex &operator=(const ScriptedD3d9Ex &) = delete;
 
     void          fail(Call call, std::uint32_t nth, std::int32_t result);
-    /* The presented frame reaches the window only after `count` blanks. */
     void          arrive_after(std::uint32_t count);
-    /* The presented frame never reaches the window. */
     void          lose_the_frame();
     std::uint32_t calls(Call call) const;
     bool          live() const;
@@ -57,6 +51,6 @@ private:
     bool                 live_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_D3D9EX_HPP
+#endif

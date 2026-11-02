@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""Runs one shard of a unittest module, so ctest can run a long module's tests
-in parallel: the module's test ids, sorted, and every `count`th of them from
-`index`.
-
-  run_test_shard.py DIRECTORY MODULE INDEX COUNT
-
-Exits as unittest does: 0 when every test in the shard passed, 1 otherwise.
-A shard that selects no test fails, since a count larger than the module's
-tests would otherwise hide that nothing ran.
-"""
 import sys
 import unittest
 

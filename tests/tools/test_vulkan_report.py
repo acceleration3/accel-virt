@@ -1,6 +1,3 @@
-"""The Vulkan report's picture verdict (tools/vulkan_report.py): a sample whose
-two runs differ by its own doing (NOTES) is a warning when its pictures
-differ, and every other sample is judged as d3d11_report judges it."""
 import pathlib
 import sys
 import unittest

@@ -32,16 +32,11 @@ uint32_t GuestSuite::run_av()
     AV_SCOPE("GuestSuite::run_av");
     adapter_.run();
     transport_.run();
-    /* What user-mode submission bought, on the boot it ran on (feature 049,
-     * US3): before anything that faults a context, since it measures a context
-     * of its own that must be healthy. */
     submit_.run();
     vulkan_.run();
     opencl_.run();
     host_import_.run();
     opengl_.run();
-    /* Last: the context it faults is its own, and a scenario after it would
-     * be judging the recovery rather than its own work. */
     isolation_.run();
     report_.check("suite", "close_adapter", search_.close(), kmt_.last_code());
     report_.finish();
@@ -58,14 +53,10 @@ uint32_t GuestSuite::run_host_loss()
     return report_.failed();
 }
 
-/* How long one answered command takes from the guest's side, alone: what
- * every synchronous call any ICD makes pays on top of its work. */
 uint32_t GuestSuite::run_round_trip()
 {
     AV_SCOPE("GuestSuite::run_round_trip");
     adapter_.run();
-    /* Which adapter answered: with two avgpu adapters, each is its own device
-     * and worker on the host. */
     uint64_t luid = 0u;
     static_cast<void>(kmt_.adapter_luid(search_.adapter(), luid));
     report_.measure("trip", "adapter_luid", Status::ok, static_cast<uint32_t>(luid));
@@ -83,9 +74,6 @@ uint32_t GuestSuite::run()
     mapping_.run();
     submission_.run();
     vsync_.run();
-    /* After every scenario of the driver's own calls: a transport that fails
-     * rolls back before its step is reported, which would stand between a
-     * refused call and the NTSTATUS those scenarios report for it. */
     transport_.run();
     stress_.run();
     report_.check("suite", "close_adapter", search_.close(), kmt_.last_code());
@@ -93,4 +81,4 @@ uint32_t GuestSuite::run()
     return report_.failed();
 }
 
-}  // namespace av
+}

@@ -1,6 +1,3 @@
-/* The avgpu adapters a process holds, one connection per adapter a runtime
- * opened: a guest has one per host GPU, and an application choosing among
- * them opens each. */
 #include "core/trace/state_writer.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
@@ -31,8 +28,6 @@ const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_de
 constexpr std::uint64_t first_luid = 0x0000000200001234ull;
 constexpr std::uint64_t second_luid = 0x0000000300005678ull;
 
-/* `count` avgpu adapters, the first two under the LUIDs above and the rest
- * under first_luid + index. */
 void add_adapters(MockKmt &kmt, std::uint32_t count)
 {
     for (std::uint32_t index = 0u; index < count; index++) {
@@ -47,10 +42,8 @@ std::uint64_t luid_of(MockKmt &kmt, const UmdConnection &connection)
     return kmt.adapter_luid(connection.adapter(), luid) == Status::ok ? luid : 0u;
 }
 
-}  // namespace
+}
 
-/* An open holds the adapter its runtime named. Another LUID is another
- * adapter: this connection neither holds it nor counts an open of it. */
 TEST(umd_connection, counts_opens_of_its_own_adapter_only)
 { MockKmt kmt;
   add_adapters(kmt, 2u);
@@ -74,7 +67,7 @@ TEST(umd_connection, shares_an_adapter_only_with_one_open_on_its_luid)
   UmdConnection other(kmt);
   CHECK(!first.shares_adapter(other));
   CHECK_STATUS(first.acquire(first_luid), Status::ok);
-  CHECK(!first.shares_adapter(other));   /* the other holds nothing */
+  CHECK(!first.shares_adapter(other));
   CHECK_STATUS(other.acquire(second_luid), Status::ok);
   CHECK(!first.shares_adapter(other));
   CHECK_STATUS(other.release(), Status::ok);
@@ -84,9 +77,6 @@ TEST(umd_connection, shares_an_adapter_only_with_one_open_on_its_luid)
   CHECK_STATUS(other.release(), Status::ok);
   CHECK_STATUS(first.release(), Status::ok); }
 
-/* A second LUID is a second kernel adapter; a LUID opened again - Direct3D 11
- * and 12 in one process, on one GPU - shares the first open's, and each goes
- * with its own last release. */
 TEST(umd_connections, hold_one_kernel_adapter_per_luid)
 { MockKmt kmt;
   add_adapters(kmt, 2u);
@@ -117,9 +107,6 @@ TEST(umd_connections, hold_one_kernel_adapter_per_luid)
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK(connections.invariants_hold()); }
 
-/* Every connection holding another adapter leaves none for a new one, whether
- * or not it exists; with room, one that is not there is not_supported. Either
- * way nothing is handed back and nothing more is held. */
 TEST(umd_connections, refuse_past_the_last_connection_and_an_adapter_not_there)
 { MockKmt kmt;
   UmdConnections connections(kmt);

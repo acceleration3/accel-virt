@@ -9,10 +9,6 @@
 namespace av {
 
 namespace {
-
-/* The kernel the run builds, which is the smallest thing that proves a GPU
- * ran something: every element of the output is the sum of two inputs, so an
- * output that was never written, or written by the wrong work item, shows. */
 constexpr const char *vector_add =
     "__kernel void vector_add(__global const float *a, __global const float *b,\n"
     "                        __global float *c)\n"
@@ -21,9 +17,6 @@ constexpr const char *vector_add =
     "    c[i] = a[i] + b[i];\n"
     "}\n";
 
-/* A 4 KiB comment, a string of its own many times over in the long program:
- * the probe has no heap for a megabyte of source, and the API takes many
- * strings as one program. */
 constexpr size_t padding_bytes = 4096u;
 
 struct Padding {
@@ -34,8 +27,6 @@ constexpr Padding padding_text()
 {
     constexpr char line[] = "/* avclprobe: a program longer than every room on its way to the host compiler */\n";
     constexpr size_t line_bytes = sizeof line - 1u;
-    /* Whole comments, then blanks: a comment cut short would run on into the
-     * kernel's neighbour, and the last one off the end of the program. */
     constexpr size_t whole = (padding_bytes - 1u) / line_bytes * line_bytes;
     Padding padding{};
     for (size_t at = 0u; at < padding_bytes; at++) padding.text[at] = at < whole ? line[at % line_bytes] : ' ';
@@ -46,8 +37,6 @@ constexpr Padding padding_text()
 
 constexpr Padding padding = padding_text();
 
-/* The link step's two halves: a helper alone, and the vector add calling it
- * through a header program it includes by name. */
 constexpr const char *added_helper = "float added(float a, float b) { return a + b; }\n";
 constexpr const char *added_header = "float added(float a, float b);\n";
 constexpr const char *added_header_name = "added.h";
@@ -60,8 +49,6 @@ constexpr const char *added_kernel =
     "    c[i] = added(a[i], b[i]);\n"
     "}\n";
 
-/* cl.h's, spelled here because this half of the probe is portable and does not
- * include the API's headers. */
 enum : uint32_t {
     platform_name = 0x0902u,
     platform_icd_suffix = 0x0920u,
@@ -76,10 +63,8 @@ enum : uint64_t { mem_read_only = 4u, mem_write_only = 2u, mem_read_write = 1u }
 enum : uint64_t { map_read = 1u, map_write = 2u };
 enum : int32_t { complete = 0 };
 
-}  // namespace
+}
 
-/* An ABI boundary C requires: clSetEventCallback takes a bare function and one
- * argument, so the probe is the argument and this forwards straight into it. */
 void AV_RUNTIME_CALL callback_ran(void *, int32_t status, void *user_data)
 {
     AV_SCOPE("callback_ran");
@@ -96,9 +81,6 @@ ClProbe::ClProbe(Kmt &kmt, GuestReport &report, ClEntry &cl)
     AV_SCOPE("ClProbe::ClProbe");
     for (uint32_t index = 0u; index < elements; ++index) {
         first_[index] = static_cast<float>(index);
-        /* Distinct per element and distinct from both inputs, so a kernel
-         * that wrote one constant everywhere, or transposed its work-item
-         * index, fails the sum rather than passing it. */
         second_[index] = static_cast<float>(2u * index + 1u);
         sum_[index] = first_[index] + second_[index];
     }
@@ -108,9 +90,6 @@ void ClProbe::run()
 {
     AV_SCOPE("ClProbe::run");
     static_cast<void>(scenarios());
-    /* However far the run got, everything it made goes back: what a run
-     * leaves behind is what a process leaks, and a run that stopped at the
-     * build made as much as one that reached the end. */
     release_all();
 }
 
@@ -147,8 +126,6 @@ Status ClProbe::platform_step()
     if (steps_.check_result("platforms", cl_.platforms(found, 8u, written)) != Status::ok) {
         return Status::not_found;
     }
-    /* This driver's platform is the one whose suffix is AV. A machine may
-     * have others, and the loader lists them all. */
     for (uint32_t index = 0u; index < written && index < 8u; ++index) {
         char   suffix[16] = {};
         size_t bytes = 0u;
@@ -177,8 +154,6 @@ Status ClProbe::device_step()
                               written) != Status::ok) {
         return Status::not_found;
     }
-    /* The name is the host GPU's, and the runner reads it: a software device
-     * here means the guest never reached one. */
     char   name[128] = {};
     size_t bytes = 0u;
     if (cl_.device_text(device_, device_name, name, sizeof name, bytes) == 0) {
@@ -194,12 +169,7 @@ void ClProbe::luid_step()
     uint64_t luid = 0u;
     const int32_t asked_vendor = cl_.device_number(device_, device_vendor_id, vendor);
     const int32_t asked_luid = cl_.device_number(device_, device_luid, luid);
-    /* Both are the avgpu adapter's rather than the host GPU's. A LUID of
-     * zero is what a device on no adapter would answer. */
     const bool named = asked_vendor == 0 && asked_luid == 0 && luid != 0u && vendor != 0u;
-    /* Measured rather than checked: this step makes no D3DKMT call, so the
-     * code a plain check would print is always zero. The LUID's low half is
-     * what a reader can match against the adapter's. */
     steps_.check_measured("luid", named ? Status::ok : Status::not_found,
                           static_cast<uint32_t>(luid));
 }
@@ -222,9 +192,6 @@ Status ClProbe::queue_step()
     }
     const size_t   bytes = sizeof(float) * elements;
     const uint64_t flags[3] = {mem_read_only, mem_read_only, mem_read_write};
-    /* The first failure is what is reported. A later buffer that succeeded
-     * overwrites `error` with CL_SUCCESS, which would otherwise turn a failed
-     * creation into an "ok" line and leave a null buffer to be written to. */
     int32_t refused = 0;
     for (uint32_t index = 0u; index < 3u; ++index) {
         error = 0;
@@ -250,8 +217,6 @@ Status ClProbe::program_step()
     }
     const int32_t built = cl_.build_program(program_, device_, nullptr);
     if (built != 0) {
-        /* What the compiler said, which is the only thing that makes a failed
-         * build worth reading. */
         char   log[512] = {};
         size_t bytes = 0u;
         if (cl_.program_build_text(program_, device_, log, sizeof log, bytes) == 0) {
@@ -289,8 +254,6 @@ Status ClProbe::read_step()
         Status::ok) {
         return Status::not_found;
     }
-    /* Exactly, not nearly: a sum of whole numbers this size is exact in a
-     * float, so anything else is the wrong answer rather than a rounding. */
     uint32_t wrong = 0u;
     for (uint32_t index = 0u; index < elements; ++index) {
         if (read[index] != sum_[index]) ++wrong;
@@ -309,8 +272,6 @@ void ClProbe::map_step()
         steps_.check_result("map", error != 0 ? error : -1);
         return;
     }
-    /* What the kernel wrote, seen through the mapping rather than through a
-     * read. */
     uint32_t wrong = 0u;
     for (uint32_t index = 0u; index < elements; ++index) {
         if (mapped[index] != sum_[index]) ++wrong;
@@ -325,8 +286,6 @@ void ClProbe::svm_step()
     uint64_t capabilities = 0u;
     if (cl_.device_number(device_, device_svm_capabilities, capabilities) != 0 ||
         capabilities == 0u) {
-        /* A device that offers none is not a failure; it is a device without
-         * shared memory, and the run says so. */
         report_.note("opencl", "svm", "not offered");
         return;
     }
@@ -335,11 +294,7 @@ void ClProbe::svm_step()
         steps_.check_result("svm", -1);
         return;
     }
-    /* A kernel argument that is an address rather than an object: what the
-     * ICD translates, and the device bounds-checks. */
     steps_.check_result("svm", cl_.set_kernel_svm(kernel_, 2u, shared));
-    /* And the output buffer goes back into the slot this borrowed, so a step
-     * added after this one dispatches against what every other step set. */
     static_cast<void>(cl_.set_kernel_buffer(kernel_, 2u, buffers_[2]));
     cl_.svm_free(context_, shared);
 }
@@ -353,9 +308,6 @@ void ClProbe::callback_step()
         steps_.check_result("callback", error != 0 ? error : -1);
         return;
     }
-    /* A member, not a local: a real ICD delivers on its own thread, and a
-     * callback that arrives after this frame has gone would otherwise write
-     * into a dead stack. */
     callbacks_ = 0u;
     callback_status_ = 0;
     if (cl_.watch_event(event, complete, &callback_ran, this) != 0) {
@@ -363,9 +315,6 @@ void ClProbe::callback_step()
         cl_.release_event(event);
         return;
     }
-    /* Set from this thread, which is the scenario the specification's US3
-     * names: a callback on an event the same guest thread completes later
-     * must not need that thread to be anywhere in particular. */
     steps_.check_result("user_event", cl_.set_user_event_status(event, complete));
     steps_.check_result("wait", cl_.wait_for_event(event));
     const uint32_t arrived = callbacks_seen();
@@ -376,9 +325,6 @@ void ClProbe::callback_step()
 void ClProbe::long_program_step()
 {
     AV_SCOPE("ClProbe::long_program_step");
-    /* The kernel first, so the comments that make the bulk follow it: the
-     * same vector add, built afresh from a program twenty thousand times its
-     * size. */
     const char *sources[long_strings + 1u] = {};
     sources[0] = vector_add;
     for (uint32_t index = 1u; index <= long_strings; ++index) sources[index] = padding.text;
@@ -406,7 +352,6 @@ uint32_t ClProbe::wrong_from(void *kernel, int32_t &ran)
         const int32_t one = cl_.set_kernel_buffer(kernel, index, buffers_[index]);
         if (one != 0) ran = one;
     }
-    /* The output cleared first, so a sum read back is this kernel's. */
     float cleared[elements] = {};
     if (ran == 0) ran = cl_.write_buffer(queue_, buffers_[2], sizeof cleared, cleared);
     if (ran == 0) ran = cl_.run_kernel(queue_, kernel, elements);
@@ -450,9 +395,6 @@ void ClProbe::binary_step()
     const uint32_t wrong = wrong_from(kernel, ran);
     steps_.check_measured("binary_sum", ran == 0 && wrong == 0u ? Status::ok : Status::conflict,
                           ran == 0 ? wrong : static_cast<uint32_t>(ran));
-    /* Its last byte flipped, as a cache damaged on disk would have it: what
-     * a driver must not run, and what the application rebuilds its source
-     * for. */
     binary[bytes - 1u] = static_cast<uint8_t>(binary[bytes - 1u] ^ 0x5Au);
     void *const refused = cl_.create_program_with_binary(context_, device_, binary, bytes, status, error);
     keep(refused, nullptr);
@@ -501,8 +443,6 @@ void ClProbe::il_step()
     void *const program = cl_.create_program_with_il(context_, vector_add_spv, sizeof vector_add_spv, error);
     keep(program, nullptr);
     if (!offered) {
-        /* A device without IL refuses it as the API says it must, and the
-         * run says which. */
         const bool refused = program == nullptr && error == invalid_operation;
         steps_.check_measured("il", refused ? Status::ok : Status::conflict, static_cast<uint32_t>(error));
         return;
@@ -518,11 +458,6 @@ void ClProbe::il_step()
                           ran == 0 ? wrong : static_cast<uint32_t>(ran));
 }
 
-/* The wait on an event says the host has reached it. It says nothing about
- * the ICD's own thread having run the callback yet - OpenCL orders neither
- * against the other, and the conformance suite waits for a callback for the
- * same reason. Judging the count the moment the wait returned would be
- * judging which of two threads got there first. */
 uint32_t ClProbe::callbacks_seen() const
 {
     AV_SCOPE("ClProbe::callbacks_seen");
@@ -539,8 +474,6 @@ uint32_t ClProbe::callbacks_seen() const
 void ClProbe::release_all()
 {
     AV_SCOPE("ClProbe::release_all");
-    /* In reverse, as a program unwinds: what a run leaves behind is what a
-     * process leaks. */
     while (kernels_kept_ != 0u) cl_.release_kernel(kept_kernels_[--kernels_kept_]);
     while (programs_kept_ != 0u) cl_.release_program(kept_programs_[--programs_kept_]);
     if (long_kernel_ != nullptr) cl_.release_kernel(long_kernel_);
@@ -558,11 +491,8 @@ void ClProbe::release_all()
 void ClProbe::callback_arrived(int32_t status)
 {
     AV_SCOPE("ClProbe::callback_arrived");
-    /* Read and written rather than incremented: the count is volatile, and a
-     * read-modify-write of one is what C++23 deprecates. Only the ICD's own
-     * thread writes it, so the two halves cannot interleave with each other. */
     callbacks_ = callbacks_ + 1u;
     callback_status_ = status;
 }
 
-}  // namespace av
+}

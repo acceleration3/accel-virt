@@ -15,7 +15,6 @@ TEST(surface_layout_pages, round_a_part_page_up_and_a_whole_one_not)
   CHECK(SurfaceLayout(1u, 1u, 21u, 1u).pages() == 1u);
   CHECK(SurfaceLayout(1024u, 1u, 21u, 4096u).pages() == 1u);
   CHECK(SurfaceLayout(1024u, 2u, 21u, 4097u).pages() == 3u);
-  /* A 1298x847 window surface at 4 bytes a pixel, as a redirection surface is. */
   CHECK(SurfaceLayout(1298u, 847u, 22u, 5192u).pages() == 1074u);
   CHECK(SurfaceLayout(1u, 0xFFFFFFFFu, 21u, 0xFFFFFFFFu).pages() == 0xFFFFFFFE00000001ull / 4096u + 1u); }
 
@@ -30,7 +29,6 @@ TEST(surface_layout_is_surface, needs_width_height_and_pitch)
   CHECK(!SurfaceLayout(1u, 1u, 0u, 0u).is_surface());
   CHECK(!SurfaceLayout().is_surface()); }
 
-/* Direct3D's R8G8B8A8 surfaces run red first, the desktop's blue first. */
 TEST(surface_layout_red_first, is_the_two_red_first_formats_and_no_other)
 { CHECK(SurfaceLayout(1u, 1u, 32u, 4u).red_first());
   CHECK(SurfaceLayout(1u, 1u, 33u, 4u).red_first());

@@ -30,7 +30,6 @@ uint32_t GlProbeProgram::run()
     return report_.failed();
 }
 
-/* A report the console does not take is still the exit code. */
 void GlProbeProgram::write_report() const
 {
     AV_SCOPE("GlProbeProgram::write_report");
@@ -39,4 +38,4 @@ void GlProbeProgram::write_report() const
                                 &written, nullptr));
 }
 
-}  // namespace av
+}

@@ -11,4 +11,4 @@ std::uint32_t ServiceValue::read(const char *name, std::uint32_t fallback) const
     return std::strcmp(name, name_) == 0 ? number_ : fallback;
 }
 
-}  // namespace av
+}

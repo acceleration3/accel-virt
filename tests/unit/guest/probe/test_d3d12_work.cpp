@@ -1,7 +1,3 @@
-/* The D3D12 proof over a scripted D3D12 (feature 047, US2): every step in
- * order, the frame judged against the colour the list cleared it to, a
- * refusal at each call kept as the HRESULT it is, and the device released
- * whatever happened. */
 #include "guest/probe/d3d12_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
@@ -26,7 +22,7 @@ struct D3d12WorkProbe {
     static std::uint32_t coloured(const D3d12Work &work) { return work.coloured(); }
 };
 
-}  // namespace av
+}
 
 using av::D3d12Work;
 using av::D3d12WorkProbe;
@@ -79,7 +75,7 @@ private:
     std::uint32_t     serialized_library_ = 0u;
 };
 
-}  // namespace
+}
 
 TEST(d3d12_work, every_step_passes_and_the_target_is_the_colour_the_list_cleared_it_to)
 { D3d12Rig    rig;
@@ -100,7 +96,6 @@ TEST(d3d12_work, every_step_passes_and_the_target_is_the_colour_the_list_cleared
   CHECK(std::strstr(report, "ok d3d12.write_watch") != nullptr);
   CHECK(std::strstr(report, "ok d3d12.write_watch_pages 2") != nullptr);
   CHECK(std::strstr(report, "avd3d12probe: 15 passed, 0 failed") != nullptr);
-  /* The library before the queue, as the engine that needed it asks. */
   CHECK(std::strstr(report, "ok d3d12.pipeline_library") < std::strstr(report, "ok d3d12.queue"));
   CHECK_EQ(rig.serialized_library(), ScriptedD3d12::library_bytes);
   CHECK_EQ(rig.adapter(), ScriptedD3d12::adapter);
@@ -109,7 +104,6 @@ TEST(d3d12_work, every_step_passes_and_the_target_is_the_colour_the_list_cleared
   CHECK_EQ(rig.d3d12().calls(Call::release), 1u);
   CHECK(rig.images().size("d3d12-clear") > 0u); }
 
-/* A target that came back the wrong colour is the failure, with the count. */
 TEST(d3d12_work, a_target_of_the_wrong_colour_fails_with_the_count)
 { for (unsigned channel = 0u; channel < 3u; channel++) {
       D3d12Rig rig;
@@ -123,9 +117,6 @@ TEST(d3d12_work, a_target_of_the_wrong_colour_fails_with_the_count)
   alpha.d3d12().miscolour(3u);
   CHECK(std::strstr(alpha.run(), "ok d3d12.pixels 4096") != nullptr); }
 
-/* The application's memory: a Map that is not the probe's own pointer, a
- * copy that lost a byte and a write watch that saw other than the two pages
- * written are each the failure, with what was measured. */
 TEST(d3d12_work, application_memory_that_is_not_the_applications_fails_each_step)
 { { D3d12Rig rig;
     rig.d3d12().map_elsewhere();
@@ -146,8 +137,6 @@ TEST(d3d12_work, application_memory_that_is_not_the_applications_fails_each_step
       CHECK(std::strstr(report, "avd3d12probe: 14 passed, 1 failed") != nullptr);
   } }
 
-/* A refused existing heap judges nothing of it, and the write watch still
- * runs; a refused write-watched buffer measures no pages. */
 TEST(d3d12_work, a_refused_existing_heap_or_write_watch_is_the_one_failure)
 { constexpr std::int32_t unsupported = static_cast<std::int32_t>(0x887A0004);
   { D3d12Rig rig;
@@ -165,7 +154,6 @@ TEST(d3d12_work, a_refused_existing_heap_or_write_watch_is_the_one_failure)
   CHECK(std::strstr(report, "write_watch_pages") == nullptr);
   CHECK(std::strstr(report, "avd3d12probe: 13 passed, 1 failed") != nullptr); }
 
-/* Every call refused, one at a time. */
 TEST(d3d12_work, a_refusal_at_each_call_stops_the_run_there)
 { constexpr std::int32_t e_fail = static_cast<std::int32_t>(0x80004005);
   struct Refusal {
@@ -193,16 +181,11 @@ TEST(d3d12_work, a_refusal_at_each_call_stops_the_run_there)
       CHECK_EQ(rig.report().failed(), 1u);
       const bool made = refusal.call != Call::create_device;
       CHECK_EQ(rig.d3d12().calls(Call::release), made ? 1u : 0u);
-      /* Nothing after the refused step ran: a device the library removed
-       * makes no queue. */
       CHECK_EQ(rig.d3d12().calls(Call::create_queue), refusal.call >= Call::create_queue ? 1u : 0u);
-      /* Nothing after the refused step ran. */
       CHECK_EQ(rig.d3d12().calls(Call::read_back), refusal.call == Call::read_back ? 1u : 0u);
   }
 }
 
-/* A driver that rounds the clear colour the other way is still the colour, and
- * a read back without a device is a state no run can leave it in. */
 TEST(d3d12_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
 { { ScriptedD3d12     d3d12;
     ScriptedImageSink images;
@@ -228,7 +211,6 @@ TEST(d3d12_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
   CHECK(work.invariants_hold());
   D3d12WorkProbe::read_without_a_device(work);
   CHECK(!work.invariants_hold());
-  /* The others: something learnt from a device that was never made. */
   D3d12Work adapter(d3d12, images);
   D3d12WorkProbe::adapter_without_a_device(adapter);
   CHECK(!adapter.invariants_hold());

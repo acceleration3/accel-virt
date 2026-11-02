@@ -6,21 +6,15 @@
 namespace av::icd {
 
 namespace {
-
-/* DXGI_FORMAT values. */
 constexpr uint32_t dxgi_r8g8b8a8_unorm = 28u;
 constexpr uint32_t dxgi_b8g8r8a8_unorm = 87u;
-/* D3D11_BIND_SHADER_RESOURCE and D3D11_BIND_RENDER_TARGET. */
 constexpr uint32_t bind_shader_resource = 0x8u;
 constexpr uint32_t bind_render_target = 0x20u;
-/* GL_RGBA8 and GL_SRGB8_ALPHA8. */
 constexpr uint32_t gl_rgba8 = 0x8058u;
 constexpr uint32_t gl_srgb8_alpha8 = 0x8C43u;
-/* The slots a Vulkan image is copied into, top row first as an image holds
- * its rows. */
 constexpr SlotLayout vulkan_layouts[] = {SlotLayout::bgra_top_down, SlotLayout::rgba_top_down};
 
-}  // namespace
+}
 
 SlotFormat::SlotFormat(SlotLayout layout) : layout_(layout)
 {
@@ -83,4 +77,4 @@ uint32_t SlotFormat::gl_storage(bool srgb) const
     return srgb ? gl_srgb8_alpha8 : gl_rgba8;
 }
 
-}  // namespace av::icd
+}

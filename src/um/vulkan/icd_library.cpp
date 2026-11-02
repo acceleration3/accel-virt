@@ -13,9 +13,6 @@ IcdLibrary::Seams::Seams()
            present_thread, present_handed, present_shown, present_lock)
 {
     AV_SCOPE("IcdLibrary::Seams::Seams");
-    /* Without the wake events frames are shown on the presenting thread, which
-     * costs the process nothing else. Made on the first call, never under the
-     * loader lock. */
     if (present_handed.initialize() != Status::ok || present_shown.initialize() != Status::ok) {
         process.log().write("no present thread: its wake events could not be made");
         root.presentation().refuse_presents();
@@ -42,4 +39,4 @@ long IcdLibrary::crashed(void *pointers)
     return driver_.crashed(pointers);
 }
 
-}  // namespace av
+}

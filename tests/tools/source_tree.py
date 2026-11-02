@@ -1,4 +1,3 @@
-"""A throwaway repository-shaped directory for feeding gate scripts violations."""
 import pathlib
 import shutil
 import tempfile

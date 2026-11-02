@@ -1,7 +1,3 @@
-/* Reaches into an ImportedBlob so invariant tests can corrupt it: a free slot
- * left with an id, an object or a wire handle of an import it no longer
- * holds. Declared a friend by ImportedBlob; nothing outside the tests uses
- * it. */
 #ifndef AV_IMPORTED_BLOB_PROBE_HPP
 #define AV_IMPORTED_BLOB_PROBE_HPP
 
@@ -21,6 +17,6 @@ struct ImportedBlobProbe {
     ImportedBlob &blob;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_IMPORTED_BLOB_PROBE_HPP
+#endif

@@ -1,21 +1,3 @@
-/* One Direct3D 11 device, run on the host: every slot of the runtime's device
- * table (D3DWDDM2_6DDI_DEVICEFUNCS) and the DXGI slots that present.
- *
- * The device speaks the Direct3D wire (tools/codegen/registry/d3d.toml) on the
- * process's session for its adapter (d3d::D3dSession), as a host device of its
- * own on the session's stream (D3dDeviceChannel): the host makes the
- * resources, compiles the shaders and draws, on its GPU's shared Direct3D 11
- * device (src/executor/d3d/d3d_backend.hpp). The guest keeps only what the
- * runtime must see - a kernel allocation for a resource that is presented,
- * scanned out or shared, and a shadow in guest memory for one the CPU maps.
- *
- * Presenting reads the host's pixels back into the presented resource's
- * allocation and hands it to the kernel through DXGI's present callback; the
- * miniport scans out or blits from there.
- *
- * Written against the WDK's own DDI types, so it builds for Windows only; what
- * does not need them - the wire, the batch, the transport - is portable and
- * tested on Linux. */
 #ifndef AV_UM_D3D11_DEVICE_HPP
 #define AV_UM_D3D11_DEVICE_HPP
 
@@ -52,13 +34,13 @@
 namespace av {
 class BlockSource;
 class KeyedLog;
-}  // namespace av
+}
 
 
 namespace av::d3d {
 class D3dSession;
 class SharedRowsRequest;
-}  // namespace av::d3d
+}
 
 namespace av::d3d11 {
 
@@ -72,29 +54,16 @@ public:
     D3d11Device(const D3d11Device &) = delete;
     D3d11Device &operator=(const D3d11Device &) = delete;
 
-    /* Joins the session, opening it on `adapter` (a D3DKMT adapter handle)
-     * for a process's first device, makes the device on the host and keeps
-     * what the runtime handed over. The HRESULT the runtime is answered with:
-     * anything but S_OK leaves the device out of the session. */
     HRESULT initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE &create);
-    /* A deferred context of `parent`: its calls record commands for the
-     * parent's host device into a block of its own, which a command list
-     * takes, and nothing reaches the host until the list is executed. */
     HRESULT initialize_deferred(D3d11Device &parent, const D3D11DDIARG_CREATEDEFERREDCONTEXT &create);
-    /* The runtime is done with this deferred context. */
     void    retire();
-    /* One runtime call at a time into this object (d3d::DeviceCall). */
     void    lock_calls();
     void    unlock_calls();
-    /* The runtime's call to `slot`, as the process's call trace writes it. */
     template <typename... Arguments>
     void    trace_call(const char *slot, const Arguments &...arguments);
 
-    /* DXGI's slots, over the table the root already published. */
     HRESULT present(DXGI_DDI_ARG_PRESENT *args);
     HRESULT present1(DXGI1_6_1_DDI_ARG_PRESENT *args);
-    /* DWM's DisplayCore presents its planes here, which dxgkrnl then flips
-     * through the MPO3 DDI: the older entry for runtimes below DXGI DDI 4. */
     HRESULT present_multiplane_overlay(DXGI_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args);
     HRESULT present_multiplane_overlay1(DXGI1_6_1_DDI_ARG_PRESENTMULTIPLANEOVERLAY *args);
     HRESULT blt(DXGI_DDI_ARG_BLT *args);
@@ -107,9 +76,6 @@ public:
 #include "um/d3d/generated/d3d11_device_ddi.inc"
 
 private:
-    /* An upload's pieces as UpdateSubresource commands (TextureUpload): the
-     * resource, the subresource and the copy flags, of which only the first
-     * piece keeps DISCARD. */
     class UpdateWriter final : public d3d::UploadSink {
     public:
         UpdateWriter(D3d11Device &device, uint32_t resource, uint32_t subresource, uint32_t flags);
@@ -124,46 +90,21 @@ private:
     };
 
     static constexpr uint32_t stage_count = 6u;
-    /* D3DWDDM2_0DDI's MipLevelSwizzleTransition for a layout with no swizzled
-     * levels, as the runtime's own removed-device answer writes it. */
     static constexpr UINT     no_swizzle_transition = 0xFFu;
 
-    /* The record in a runtime handle's block. */
     ResourceRecord &record(D3D10DDI_HRESOURCE handle) const;
     ResourceRecord &record(DXGI_DDI_HRESOURCE handle) const;
     uint32_t        id_of(const void *object_block) const;
     uint32_t        next_id();
-    /* An error the runtime learns of through the core layer's callback: the
-     * only way a slot that returns nothing reports one. */
     void            set_error(HRESULT result);
-    /* The device is lost, as the session's fault code says why
-     * (icd::LossLatch): the runtime is told through the core layer's callback,
-     * `entry` is logged once, and the answer is DXGI's spelling of the cause -
-     * DEVICE_RESET for a context the host faulted for its own commands,
-     * DEVICE_REMOVED for any other - which a slot that returns nothing
-     * drops. */
     HRESULT         lost(const char *entry);
-    /* E_NOTIMPL for the DDI named `call`, which the log names: a void DDI's
-     * refusal otherwise reaches the application only as a device error, and a
-     * program that does not check for one fails later somewhere else. */
     void            not_implemented(const char *call);
-    /* The work an asynchronous read waits on is not done yet: a status the
-     * application polls on, reported without the error log's write. */
     void            still_drawing();
-    /* On a deferred context, a create names an object the immediate context
-     * made (the runtime handle is its block): the context-local handle is a
-     * copy of that block, and nothing reaches the host. False on the
-     * immediate context, which makes the object. */
     bool            context_local(void *handle, const void *immediate, size_t bytes) const;
     SIZE_T          context_handle_bytes(uint32_t type) const;
-    /* Whether the host removed this device, or the session is gone: asked
-     * with a round trip after a call failed, since a command the host refuses
-     * removes the device that sent it and says so only when asked. */
     bool            removed_on_host();
-    /* Asks the runtime to bind every view again, after the host remade them. */
     d3d::D3dDeviceChannel &wire();
 
-    /* The subresource's size and its layout in the shadow. */
     void     extent(const ResourceRecord &resource, uint32_t subresource, uint32_t &width, uint32_t &height,
                     uint32_t &depth) const;
     uint32_t row_bytes(const ResourceRecord &resource, uint32_t width) const;
@@ -175,83 +116,34 @@ private:
     [[nodiscard]] bool upload_written(const ResourceRecord &resource, uint32_t flags);
     [[nodiscard]] bool open_map(const ResourceRecord &resource, uint32_t subresource, size_t offset, size_t bytes,
                                 uint32_t flags);
-    /* Every map of the resource `id` names forgotten: it is destroyed mapped. */
     void               forget_maps(uint32_t id);
-    /* A dynamic buffer the CPU writes, made on a slice of the session's slice
-     * store the host draws from in place; false, nothing taken, where the
-     * session has none or this is a deferred context. */
     [[nodiscard]] bool place_on_slice(ResourceRecord &resource, size_t bytes);
-    /* A discarding map: a fresh slice, the old retired behind what was
-     * recorded so far, and the host told. */
     [[nodiscard]] bool rename_slice(ResourceRecord &resource);
     [[nodiscard]] bool bind_slice(const ResourceRecord &resource);
-    /* The slice, if any, left (ContextSlices::leave): retired behind what was
-     * recorded so far, or on a deferred context only forgotten. */
     void               leave_slice(ResourceRecord &resource);
-    /* A buffer on a slice moved to the copy path: its bytes in a shadow of
-     * its own, the slice left (leave_slice). False, nothing changed, with no
-     * memory. */
     [[nodiscard]] bool leave_slice_for_copies(ResourceRecord &resource);
-    /* On a deferred context, the copy of a record given a shadow of this
-     * context's own to map, any slice it named forgotten. False, nothing
-     * changed, with no memory. */
     [[nodiscard]] bool own_shadow(ResourceRecord &resource);
-    /* A deferred context's copy of a record, destroyed by the runtime: its
-     * own shadow given back. */
     void               forget_copy(ResourceRecord &resource);
-    /* `box` (or the whole subresource) of one subresource from `data` at
-     * these pitches, as UpdateSubresource1 takes it, in as many pieces as one
-     * command of this context carries (TextureUpload). */
     void upload(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,
                 uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags);
     void publish_shared(const ResourceRecord &resource);
     size_t piece_bytes() const;
-    /* One piece, sent; false when the encoder refused it. */
     [[nodiscard]] bool upload_piece_of(uint32_t resource, uint32_t subresource, const d3dproto::Box &box,
                                        const void *data, size_t bytes, uint32_t row_pitch, uint32_t depth_pitch,
                                        uint32_t copy_flags);
-    /* A subresource read back from the host, tightly packed, into `out`. */
     bool   read_back(const ResourceRecord &resource, uint32_t subresource, uint8_t *out, size_t capacity);
     void   map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP type, UINT flags,
                D3D10DDI_MAPPED_SUBRESOURCE *mapped);
     void   unmap(D3D10DDI_HRESOURCE handle, UINT subresource);
 
-    /* The kernel allocation a presented, scanned-out or shared resource
-     * needs. */
     HRESULT allocate(ResourceRecord &resource, const D3D11DDIARG_CREATERESOURCE &create,
                      D3D10DDI_HRTRESOURCE runtime);
-    /* The device's kernel context, made with it through the runtime so the
-     * runtime knows it: presents are made on it, and Direct3D 11's fences are
-     * the runtime's own, signaled on the contexts a driver made - with none, a
-     * signal is refused, and a compositor waiting on the fence (DWM, taking a
-     * frame from another adapter) waits for good. */
-    /* The host's pixels of `resource` into its allocation, for the kernel. */
     HRESULT publish(ResourceRecord &resource, uint32_t subresource);
-    /* A surface GDI draws into from the guest's CPU (a window's redirection
-     * surface), which no host session made: DWM opens it to compose the
-     * window. It gets a host texture of its own, refreshed from the guest's
-     * pages at each present wherever they changed. */
     bool open_guest_surface(ResourceRecord &resource, const D3D10DDIARG_OPENRESOURCE &args);
-    /* An allocation a present names - the buffer it reads or the surface it
-     * writes - asked to be resident for this device, once: dxgkrnl fails a
-     * present naming one this device never asked for (VidSchError
-     * SubmittingRenderForNonResidentAllocation). */
     HRESULT keep_present_resident(ResourceRecord &named);
-    /* An opened window surface a present names as its destination, resident
-     * and given a GPU virtual address in this process, which dxgkrnl needs
-     * before it hands the present to the miniport; resident only, for a
-     * destination that has no pages to map. */
     HRESULT address_destination(ResourceRecord &destination);
     void    log_presented_allocation(const ResourceRecord &named);
-    /* Whether the runtime asks for a texture two adapters' devices share as
-     * rows (D3DWDDM1_3DDI_RESOURCE_MISC_CROSS_ADAPTER): the kernel then makes
-     * it of pages the host lays its memory under, and the other adapter's
-     * device opens the very pages. */
     bool is_cross_adapter(const D3D11DDIARG_CREATERESOURCE &args, const ResourceRecord &resource) const;
-    /* The allocation the other adapter's device made, opened here: its pages
-     * lent, the texture made over them (a cross-adapter allocation arrives
-     * with the layout the kernel gave it). False for an allocation that is
-     * not one; then error is set when it was one and could not be opened. */
     bool open_cross_adapter(ResourceRecord &resource, const D3D10DDIARG_OPENRESOURCE &args);
     void refresh_guest_surfaces();
     void refresh_bound_guest_surfaces(const D3D10DDI_HSHADERRESOURCEVIEW *views, UINT count);
@@ -267,34 +159,18 @@ private:
     void end_gdi_watch(ResourceRecord &resource);
     void forget_gdi_rows(ResourceRecord &resource);
     HRESULT show_flip(const ResourceRecord &source, uint32_t subresource);
-    /* What a multiplane present shows of `source` is the host's frame of it as
-     * it is now: in its pages for one no host texture is shared from, under
-     * its key otherwise, with the batch that drew it on its way. */
     HRESULT stage_plane(ResourceRecord &source, uint32_t subresource);
-    /* Stages each enabled plane of a multiplane present, in the order it came,
-     * and answers each plane's allocation (0 for a turned-off one) and whether
-     * any is a flip-model buffer. `Plane` is either DDI's plane description. */
     template <typename Plane>
     HRESULT stage_planes(const Plane *planes, UINT count, D3DKMT_HANDLE *allocations, bool &flipped);
     HRESULT present_surface(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
                             void *dxgi_context);
     HRESULT present_pages(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
                           void *dxgi_context);
-    /* A blt-model present of a shared buffer the host stages in the buffer's
-     * command order instead of the buffer being read back: the kernel is
-     * handed the point (docs/shared-surfaces.md). */
     HRESULT present_point(ResourceRecord &source, uint32_t subresource, ResourceRecord *destination,
                           void *dxgi_context);
-    /* `point` the present's point on its source, which the kernel moves the
-     * pixels from the host's frame of; 0 for the source's pages. */
     HRESULT present_to_kernel(ResourceRecord &source, ResourceRecord *destination, void *dxgi_context,
                               uint32_t point);
-    /* The kernel context's next packet - a present, a fence the runtime
-     * signals - waits for the batches the ring carried: the kernel's refusal
-     * otherwise, logged the first time. */
     HRESULT follow_host();
-    /* A line naming what the kernel was handed: a refusal, a mode set, a
-     * change in how presents are flagged. */
     void    log_present(const char *what, uint32_t value, const ResourceRecord &source);
 
     void set_shader(uint32_t stage, D3D10DDI_HSHADER shader);
@@ -314,13 +190,7 @@ private:
     d3d::D3dSession          &session_;
     BlockSource           &memory_;
     WatchedShadows         shadows_;
-    /* The subresources mapped for writing, each with the copy flags its own
-     * map gave - DISCARD or NO_OVERWRITE, which the upload at the unmap
-     * carries to the host's UpdateSubresource1 - over the shadow, which
-     * outlives them. Kept per subresource: a cube's faces or a texture's
-     * mips may be open at once with different maps. */
     icd::OpenMappings<icd::StagedMapping> maps_;
-    /* The runs of a watched shadow an unmap sends, kept off the stack. */
     icd::WrittenRuns       written_;
     KeyedLog        &lines_;
     icd::RefusedCalls refused_;
@@ -329,23 +199,17 @@ private:
     D3D10DDI_HRTDEVICE     runtime_;
     D3D10DDI_HRTCORELAYER  core_layer_;
     d3d::KernelDevice                           kernel_;
-    /* Lends the pages of a cross-adapter resource's allocation to the host. */
     d3d::AllocationLender                       lender_;
     PerformanceClock                            clock_;
     d3d::PresentedAllocations                   allocations_;
     const D3D11DDI_CORELAYER_DEVICECALLBACKS   *core_;
     const DXGI_DDI_BASE_CALLBACKS              *dxgi_;
     ObjectStorage<d3d::D3dDeviceChannel> channel_;
-    /* The session's slices on an immediate context, none on a deferred one. */
     d3d::ContextSlices                   slices_;
-    /* A deferred context's: the device it records for, and its recording,
-     * which grows from its first size to its largest as a list needs. */
     static constexpr size_t recording_bytes = 4u << 20u;
     static constexpr size_t most_recording_bytes = 256u << 20u;
     D3d11Device                          *parent_;
     SrwLock                               recording_lock_;
-    /* The runtime answers some calls by calling the same device back on the
-     * same thread (a rotate asks it to bind its state again). */
     WindowsCallingThread                  caller_;
     SrwLock                               call_mutex_;
     d3d::ReentrantCallLock                 calls_;
@@ -353,19 +217,11 @@ private:
     ObjectStorage<d3d::CommandRecording>  recorded_;
     HANDLE    context_;
     ObjectStorage<d3d::PresentOrder> present_order_;
-    /* Holds the transport behind the kernel context once the device shares a
-     * cross-adapter resource (CrossAdapterWaits). */
     ObjectStorage<d3d::CrossAdapterWaits> waits_;
     uint32_t  feature_level_;
-    /* Every window surface DWM opened on this device. */
     GrowableArray<ResourceRecord *> guest_surfaces_;
     GrowableArray<ResourceRecord *> gdi_watched_;
     bool                            taking_gdi_writes_;
-    /* A runtime resolves a texture for sharing and Flushes at once (the
-     * measured keyed-mutex ReleaseSync); GDI's GetDC resolves and flushes
-     * nothing, until the application's own Flush. What the last call
-     * resolved, when it returned and on which thread; the next call on that
-     * thread then holds it as the flush candidate if it is a Flush. */
     ResourceRecord                 *resolved_;
     uint64_t                        resolved_returned_ns_;
     uint32_t                        resolved_thread_;
@@ -376,17 +232,12 @@ private:
     icd::OnceLatch  pages_read_refused_;
     icd::OnceLatch  pages_read_late_;
     icd::OnceLatch  present_refused_;
-    /* The flags of the last present, ~0 before any: a fullscreen change shows
-     * in the log as a change of these. */
     uint32_t        present_flags_;
     icd::OnceLatch  follow_refused_;
     icd::OnceLatch  token_refused_;
-    /* Presents so far: a GDI surface is refreshed once a frame, when first bound. */
     uint32_t        frame_;
     d3d::D3dCallTrace &trace_;
-    /* Which threads make shared textures another API reads as rows. */
     const d3d::SharedRowsRequest &rows_;
-    /* What the call trace calls this device or deferred context. */
     uint32_t        context_number_;
 };
 
@@ -397,6 +248,6 @@ void D3d11Device::trace_call(const char *slot, const Arguments &...arguments)
     trace_.call(context_number_, slot, arguments...);
 }
 
-}  // namespace av::d3d11
+}
 
-#endif  // AV_UM_D3D11_DEVICE_HPP
+#endif

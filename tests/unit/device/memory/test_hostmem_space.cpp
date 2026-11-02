@@ -1,6 +1,3 @@
-/* The hostmem region host blobs are placed in: a placement fits only page
- * aligned, of at least one byte, and wholly inside the region the host says it
- * has - asked at each placement, since the host answers it. */
 #include "device/memory/hostmem_space.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
@@ -15,7 +12,7 @@ namespace {
 constexpr std::uint64_t page = HostmemSpace::page_size;
 constexpr std::uint64_t region = 16u * page;
 
-}  // namespace
+}
 
 TEST(hostmem_space_admits, the_whole_region_and_a_last_page_that_ends_on_its_end)
 { MockHost host;
@@ -48,7 +45,6 @@ TEST(hostmem_space_admits, refuses_a_placement_of_no_bytes_even_inside)
   CHECK(!space.admits(0u, 0u));
   CHECK(!space.admits(region, 0u)); }
 
-/* offset + size would wrap: the comparison is done without adding them. */
 TEST(hostmem_space_admits, refuses_a_size_that_would_wrap_past_the_offset)
 { MockHost host;
   host.set_hostmem_size(region);
@@ -63,7 +59,6 @@ TEST(hostmem_space_admits, a_host_with_no_region_admits_nothing)
   CHECK(!space.admits(0u, page));
   CHECK(!space.admits(0u, 0u)); }
 
-/* The region is the host's answer at the time of asking, not a copy. */
 TEST(hostmem_space_admits, follows_the_region_the_host_reports_now)
 { MockHost host;
   host.set_hostmem_size(region);

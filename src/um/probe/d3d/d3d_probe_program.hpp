@@ -1,17 +1,3 @@
-/* The three D3D probes (feature 047, T028): each makes its API's work over the
- * DLL beside it - DXVK's d3d9.dll and d3d11.dll, vkd3d-proton's d3d12.dll -
- * runs every step, writes the report to standard output for the guest agent to
- * carry back, and answers the failures as the exit code. Translation only:
- * what each probe decides is in src/guest/suite.
- *
- * Three classes rather than one with a switch: each holds its own API's seam
- * and the window that API needs, and D3D12 needs none. The D3D9 probe runs
- * WPF's presentation on its window after the clear (WpfPresentWork), reading
- * the window back through GDI; the D3D11 probe runs Dark Souls Remastered's
- * deferred-context frames on its window after the clear (DeferredMapWork),
- * then clears render targets shared between processes the size of a captured
- * window (SharedClearWork) and draws Direct2D's hairlines with
- * target-independent rasterization (TirCoverageWork). */
 #ifndef AV_D3D_PROBE_PROGRAM_HPP
 #define AV_D3D_PROBE_PROGRAM_HPP
 
@@ -40,7 +26,6 @@ public:
     D3d9ProbeProgram(const D3d9ProbeProgram &) = delete;
     D3d9ProbeProgram &operator=(const D3d9ProbeProgram &) = delete;
 
-    /* The process exit code: how many steps failed. */
     uint32_t run();
 
 private:
@@ -72,7 +57,6 @@ private:
     WindowsD3d11DeferredEntry deferred_;
     WindowsD3d11SharedEntry   shared_;
     WindowsD3d11TirEntry      tir_;
-    /* The device the host is asked to lose, and the one made after it. */
     WindowsD3d11SharedEntry   lost_;
     WindowsD3d11SharedEntry   remade_;
     HostLossRequest           loss_;
@@ -94,6 +78,6 @@ private:
     WindowsD3d12Entry d3d12_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_D3D_PROBE_PROGRAM_HPP
+#endif

@@ -69,7 +69,6 @@ Status ContextRequestSequence::write_setup_request(uint8_t *bytes, size_t capaci
     return status;
 }
 
-/* Step 0 destroys the context; steps 1 to blobs_created_ release the blobs. */
 Status ContextRequestSequence::write_teardown_request(uint8_t *bytes, size_t capacity, size_t &length)
 {
     AV_SCOPE("ContextRequestSequence::write_teardown_request");
@@ -103,8 +102,6 @@ Status ContextRequestSequence::accept(const uint8_t *bytes, size_t length)
     return Status::not_supported;
 }
 
-/* A step that took effect, or may have, is counted for teardown; a refused
- * setup ends. */
 void ContextRequestSequence::finish_setup_step(bool done)
 {
     AV_SCOPE("ContextRequestSequence::finish_setup_step");
@@ -132,7 +129,6 @@ void ContextRequestSequence::refuse(uint32_t type)
     platform_.log("av: the device refused a context request");
 }
 
-/* The context itself, and each blob. */
 uint32_t ContextRequestSequence::teardown_steps() const
 {
     AV_SCOPE("ContextRequestSequence::teardown_steps");
@@ -162,4 +158,4 @@ bool ContextRequestSequence::invariants_hold() const
     return blobs_created_ <= blob_count && (context_created_ || blobs_created_ == 0u);
 }
 
-}  // namespace av
+}

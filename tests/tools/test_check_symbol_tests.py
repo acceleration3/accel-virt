@@ -102,10 +102,6 @@ if __name__ == "__main__":
 
 
 class ShimDirectories(unittest.TestCase):
-    """Constitution II again: a class that only calls the host's own loaders
-    cannot be named by a unit test on a machine that may have no GPU, and the
-    L3 and L5 layers are where it is proven (feature 042)."""
-
     def setUp(self):
         self.tree = SourceTree()
         self.addCleanup(self.tree.remove)

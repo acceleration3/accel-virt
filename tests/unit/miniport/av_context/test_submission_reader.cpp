@@ -1,7 +1,3 @@
-/* Reading the batch a guest left in a DMA buffer. The buffer is the guest's, so
- * it is copied before it is trusted, and every field is judged: a short buffer,
- * bytes no descriptor could be, and a batch longer than the ring are each
- * refused rather than acted on (feature 043). */
 #include "miniport/av_context/submission_reader.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -17,11 +13,9 @@ using av::SubmissionDescriptor;
 using av::SubmissionReader;
 
 namespace {
-
-/* A ring of order 12 = 4096 data bytes, empty. */
 RingHeader ring() { return RingHeader(12u, 0u, 0u); }
 
-}  // namespace
+}
 
 TEST(submission_reader, reads_a_valid_batch)
 { MockPlatform platform;
@@ -50,11 +44,10 @@ TEST(submission_reader, bytes_no_descriptor_could_be_are_refused)
   SubmissionReader reader(platform);
   std::uint8_t dma[SubmissionDescriptor::encoded_size] = {};
   CHECK_STATUS(SubmissionDescriptor(1u, 0u, 64u).encode(dma, sizeof dma), Status::ok);
-  dma[0] ^= 0xFFu;  /* the magic */
+  dma[0] ^= 0xFFu;
   SubmissionDescriptor got;
   CHECK_STATUS(reader.read(dma, sizeof dma, ring(), got), Status::malformed); }
 
-/* A batch longer than the ring cannot have been written into it. */
 TEST(submission_reader, a_batch_larger_than_the_ring_is_refused)
 { MockPlatform platform;
   SubmissionReader reader(platform);

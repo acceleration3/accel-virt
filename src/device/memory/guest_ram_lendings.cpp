@@ -50,8 +50,6 @@ Status GuestRamLendings::locate(ControlRequest &request, size_t offset, uint32_t
         WireReader     reader(entry, sizeof entry);
         const uint64_t address = reader.read_u64();
         const uint64_t length = reader.read_u32();
-        /* Whole pages, as every entry a lending lays is: the offset a copy
-         * lands at is then as aligned as the pages. */
         if (address % LentPages::page_size != 0u || length % LentPages::page_size != 0u)
             return Status::not_supported;
         if (index == 0u) {
@@ -74,8 +72,6 @@ void GuestRamLendings::leave(Host &host, GuestRamLending &lending, const Context
 {
     AV_SCOPE("GuestRamLendings::leave");
     if (lending.leave(plane, key) != 0u) return;
-    /* Said before the RAM is given back, so a present that finds it clear is
-     * copying into pages the guest still has. */
     LendingLife &life = lending.life();
     life.give_back();
     lending.give_back(host);
@@ -132,4 +128,4 @@ bool GuestRamLendings::invariants_hold() const
     return held;
 }
 
-}  // namespace av
+}

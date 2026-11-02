@@ -10,7 +10,7 @@ namespace {
 constexpr uint8_t opaque = 0xFFu;
 constexpr uint32_t bits_per_byte = 8u;
 
-}  // namespace
+}
 
 CursorImage::CursorImage(Platform &platform, const DxgkargSetPointerShapeRecord &shape)
     : platform_(platform), shape_(shape)
@@ -43,8 +43,6 @@ Status CursorImage::draw(uint8_t *pixels) const
     return Status::ok;
 }
 
-/* The AND mask's rows, then the XOR mask's; a set AND bit keeps the screen,
- * which with a set XOR bit inverts it. */
 void CursorImage::draw_monochrome(uint8_t *pixels) const
 {
     AV_SCOPE("CursorImage::draw_monochrome");
@@ -66,8 +64,6 @@ void CursorImage::draw_monochrome(uint8_t *pixels) const
     }
 }
 
-/* Masked colour: a non-zero mask over black keeps the screen; over a colour
- * it inverts, shown as the colour. */
 void CursorImage::draw_color(uint8_t *pixels) const
 {
     AV_SCOPE("CursorImage::draw_color");
@@ -86,4 +82,4 @@ void CursorImage::draw_color(uint8_t *pixels) const
     }
 }
 
-}  // namespace av
+}

@@ -13,7 +13,6 @@ ProbeCommands::ProbeCommands(ProbeDevice &device)
         AV_SCOPE("ProbeCommands::ProbeCommands");
     }
 
-/* Vulkan makes destroying VK_NULL_HANDLE a no-op; the buffer is the pool's. */
 ProbeCommands::~ProbeCommands()
 {
     AV_SCOPE("ProbeCommands::~ProbeCommands");
@@ -70,4 +69,4 @@ bool ProbeCommands::invariants_hold() const
     return pool_ != VK_NULL_HANDLE || (buffer_ == VK_NULL_HANDLE && fence_ == VK_NULL_HANDLE);
 }
 
-}  // namespace av
+}

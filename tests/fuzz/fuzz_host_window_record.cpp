@@ -1,9 +1,3 @@
-/* The escape record a process hands the kernel to take or give back a chunk of
- * its device's host window, fed attacker-chosen bytes (docs/host-memory.md).
- * What decodes must re-encode to exactly the bytes read, and the kernel's
- * answer to an open must never decode as a request. The same bytes are then a
- * kernel's answer the process reads back: what an open or a close accepts must
- * re-encode to exactly those bytes too. */
 #include "core/support/status.hpp"
 #include "proto/escape/host_window_record.hpp"
 

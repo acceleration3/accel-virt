@@ -41,9 +41,6 @@ ConstantRing::DeviceBindings *ConstantRing::bindings_of(uint32_t device_id)
     return devices_.find(device_id);
 }
 
-/* The window a binding sees of a kept buffer: the guest's own window of it,
- * moved to where the buffer is in the ring. Both ends in whole 16-constant
- * blocks, which is what SetConstantBuffers1 takes. */
 void ConstantRing::window(const Kept &kept, const Binding &binding, uint32_t &first, uint32_t &count) const
 {
     AV_SCOPE("ConstantRing::window");
@@ -53,9 +50,6 @@ void ConstantRing::window(const Kept &kept, const Binding &binding, uint32_t &fi
     count = binding.count_ == 0u || binding.count_ > whole ? whole : binding.count_;
 }
 
-/* The buffer's shadow, appended to the ring. A full ring is discarded and
- * every kept buffer written again from its start, since the windows onto the
- * old contents read the new storage from then on. */
 bool ConstantRing::write(ID3D11Device5 *device, ID3D11DeviceContext4 *context, Kept &kept)
 {
     AV_SCOPE("ConstantRing::write");
@@ -124,8 +118,6 @@ bool ConstantRing::update(ID3D11Device5 *device, ID3D11DeviceContext4 *context, 
         rebind(context, *current);
         return true;
     }
-    /* Only this buffer moved: its slots are found by id, without a search of
-     * the kept list per slot. */
     for (uint32_t stage = 0u; stage < stage_count; stage++) {
         for (uint32_t slot = 0u; slot < slot_count; slot++) {
             Binding &binding = current->slots_[stage][slot];
@@ -166,8 +158,6 @@ Status ConstantRing::bind(uint32_t device_id, uint32_t stage, uint32_t start, ui
     return Status::ok;
 }
 
-/* Every slot of `device` whose window is not where its buffer is now: onto
- * the ring where it moved, or back to its own storage once let go. */
 void ConstantRing::rebind(ID3D11DeviceContext4 *context, DeviceBindings &device)
 {
     AV_SCOPE("ConstantRing::rebind");
@@ -254,4 +244,4 @@ void ConstantRing::forget_device(uint32_t device_id)
     static_cast<void>(devices_.erase(device_id));
 }
 
-}  // namespace av
+}

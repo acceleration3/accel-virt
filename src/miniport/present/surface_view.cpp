@@ -33,4 +33,4 @@ uint8_t *SurfaceView::pixel(uint32_t x, uint32_t y) const
     return view_ + uint64_t{y} * layout.pitch() + uint64_t{x} * PresentSurface::pixel_bytes;
 }
 
-}  // namespace av
+}

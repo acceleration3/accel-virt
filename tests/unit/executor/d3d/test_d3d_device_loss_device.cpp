@@ -1,18 +1,3 @@
-/* A host GPU fault that loses the Direct3D 11 device every session on the GPU
- * shares, on this machine's GPU through DXVK, with the loss made by the layer
- * that loses a Vulkan device on request (tests/gpu_fault, loaded through
- * VK_INSTANCE_LAYERS for this test alone):
- *
- * - every session on the device is woken and says it is lost, idle or not;
- * - nothing a session or the scanout asks of the lost device waits for it -
- *   a read back answers removed at once, and DXVK's own Map of what a lost
- *   submission used returns, under a watchdog that ends the run if not;
- * - DXVK's own report of the loss, from a submission that failed, is seen as
- *   one, not only a loss a test declared;
- * - the device is made again only once the last session on it is gone, and
- *   a new session then draws and reads back on it.
- *
- * A host without DXVK, or without the layer, returns without judging. */
 #include "core/support/object_storage.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/sharing/host_shares.hpp"
@@ -81,8 +66,6 @@ struct Pad {
 
 void raise_pad(void *context) { static_cast<Pad *>(context)->raised++; }
 
-/* The wakes a drawing session's batches raised as the GPU reached them,
- * once they have all come: what a wake for anything else is counted past. */
 std::uint32_t settled(Pad &pad)
 {
     std::uint32_t seen = pad.raised.load();
@@ -96,8 +79,6 @@ std::uint32_t settled(Pad &pad)
     return seen;
 }
 
-/* The render target (1) and its view (2) of a device (id `device`) of the
- * session, cleared to `colour`. */
 void make_cleared_target(av::D3dLoopback &wire, std::uint32_t device, const Float4 &colour)
 {
     std::uint32_t hresult = 1u, level = 0u;
@@ -121,7 +102,6 @@ void make_cleared_target(av::D3dLoopback &wire, std::uint32_t device, const Floa
     CHECK(av_d3d_ClearRenderTargetView(wire, 2u, colour));
 }
 
-/* The target read back: its HRESULT, and its first texel in `texel`. */
 std::uint32_t read_target(av::D3dLoopback &wire, std::uint32_t &texel, std::uint32_t resource = 1u)
 {
     static std::uint8_t pixels[size * size * 4u];
@@ -133,7 +113,6 @@ std::uint32_t read_target(av::D3dLoopback &wire, std::uint32_t &texel, std::uint
     return hresult;
 }
 
-/* Three backends, each several megabytes: in static storage. */
 av::ObjectStorage<av::D3dBackend> first_backend, second_backend, third_backend;
 av::SessionShares                 first_shares, second_shares, third_shares;
 
@@ -153,8 +132,6 @@ private:
     av::ObjectStorage<av::D3dBackend> &storage_;
 };
 
-/* A Map that does not return within its time is a hang: the test fails and
- * the process ends rather than wait for ever. */
 struct Watchdog {
     std::atomic<bool> done{false};
     std::uint32_t     seconds = 0u;
@@ -172,7 +149,7 @@ void *watch(void *argument)
     _exit(1);
 }
 
-}  // namespace
+}
 
 TEST(d3d_device_loss_device, a_lost_device_wakes_every_session_answers_at_once_and_is_made_again)
 {
@@ -195,7 +172,7 @@ TEST(d3d_device_loss_device, a_lost_device_wakes_every_session_answers_at_once_a
     CHECK(!drawing.lost());
     CHECK(!idle.lost());
     const std::uint32_t drawn = settled(drawing_pad);
-    CHECK(drawn >= 1u);   /* the batches the GPU finished woke their worker */
+    CHECK(drawn >= 1u);
 
     if (!drawing.lose_device()) {
         std::fprintf(stderr, "the device-loss layer is not loaded: nothing judged\n");
@@ -203,21 +180,16 @@ TEST(d3d_device_loss_device, a_lost_device_wakes_every_session_answers_at_once_a
         idle.shut_down();
         return;
     }
-    /* Both woken once, the one that sent nothing as much as the one that did. */
     CHECK_EQ(drawing_pad.raised.load(), drawn + 1u);
     CHECK_EQ(idle_pad.raised.load(), 1u);
     CHECK(drawing.lost());
     CHECK(idle.lost());
     CHECK(device->lost());
-    /* A read back of the lost device answers removed, and at once. */
     const std::uint64_t asked = now_ms();
     CHECK_EQ(read_target(wire, texel), dxgi_error_device_removed);
     CHECK(now_ms() - asked < 1000u);
-    /* The scanout's reads refuse too, rather than wait on it. */
     static std::uint8_t pixels[size * size * 4u];
     CHECK(!device->read_image(1u, 1u, pixels, size * 4u, size, size));
-    /* Nobody joins the lost device, and it is not made again under the two
-     * sessions still on it. */
     av::D3dBackend &next = held_third.backend();
     CHECK(!next.initialize(third_shares, device));
     CHECK(!device->renew(50u));
@@ -227,7 +199,6 @@ TEST(d3d_device_loss_device, a_lost_device_wakes_every_session_answers_at_once_a
     CHECK(device->renew(50u));
     CHECK(!device->lost());
 
-    /* The device made again draws for a new session. */
     CHECK(next.initialize(third_shares, device));
     av::D3dLoopback again(next);
     make_cleared_target(again, 7u, Float4{{1.0f, 0.0f, 0.0f, 1.0f}});
@@ -238,10 +209,6 @@ TEST(d3d_device_loss_device, a_lost_device_wakes_every_session_answers_at_once_a
     next.shut_down();
 }
 
-/* The loss as DXVK finds it: the GPU fails a submission, and nothing is
- * declared by anyone. The first look at the device after - a session's
- * command - sees it, and wakes the others; a Map of what that submission
- * used returns. */
 TEST(d3d_device_loss_device, a_submission_dxvk_saw_fail_is_a_lost_device_and_its_map_returns)
 {
     av::LoaderHostApis         apis;
@@ -269,11 +236,9 @@ TEST(d3d_device_loss_device, a_submission_dxvk_saw_fail_is_a_lost_device_and_its
         idle.shut_down();
         return;
     }
-    /* Nothing said yet: DXVK has not submitted since. */
     CHECK(!device->lost());
     CHECK_EQ(idle_pad.raised.load(), 0u);
 
-    /* What a lost submission used, mapped by DXVK itself under the lock. */
     Watchdog  dog;
     dog.seconds = 20u;
     pthread_t watcher;
@@ -298,7 +263,6 @@ TEST(d3d_device_loss_device, a_submission_dxvk_saw_fail_is_a_lost_device_and_its
     dog.done.store(true);
     pthread_join(watcher, nullptr);
 
-    /* DXVK says the device is removed, and the first look declares it. */
     CHECK(av_d3d_Finish11(wire, &removed));
     CHECK(removed != 0u);
     CHECK(drawing.lost());
@@ -311,13 +275,6 @@ TEST(d3d_device_loss_device, a_submission_dxvk_saw_fail_is_a_lost_device_and_its
     CHECK(!device->lost());
 }
 
-/* What the guest shared before the loss is its own still: its allocations
- * outlive the host device, and DWM, making its device again, opens every
- * client's surface again - a refusal it took for its new device failing,
- * which it made again, and again, until Windows restarted it, while the
- * taskbar stayed black. So a surface shared before the loss opens after it,
- * as what the client drew where it was made over memory other APIs share,
- * and a shared resource of another kind opens too, made anew. */
 TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
 {
     av::LoaderHostApis         apis;
@@ -356,7 +313,7 @@ TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
     ResourceDesc buffer = {};
     buffer.dimension = 1u;
     buffer.width = 256u;
-    buffer.bind_flags = 0x8u;   /* shader resource */
+    buffer.bind_flags = 0x8u;
     CHECK(av_d3d_CreateResource(made, 3u, buffer, buffer_key, 0u, 0u));
     std::uint32_t texel = 0u;
     CHECK_EQ(read_target(made, texel), 0u);
@@ -367,8 +324,6 @@ TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
         creator.shut_down();
         return;
     }
-    /* The creator's context is faulted and its session goes; the guest still
-     * holds both allocations. */
     first_shares.end();
     creator.shut_down();
     CHECK(device->renew(1000u));
@@ -382,7 +337,7 @@ TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
     CHECK_EQ(found, 1u);
     CHECK_EQ(opened.width, size);
     CHECK_EQ(read_target(opening, texel, 5u), 0u);
-    CHECK_EQ(texel, 0xff00ffffu);   /* what was drawn before the loss */
+    CHECK_EQ(texel, 0xff00ffffu);
     CHECK(av_d3d_OpenResource(opening, 6u, buffer_key, &found, &opened));
     CHECK_EQ(found, 1u);
     CHECK_EQ(opened.width, 256u);
@@ -394,10 +349,6 @@ TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
     device->retire_shares();
 }
 
-/* What a renewal carries of a resource (CarriedShare), on this machine's
- * DXVK: a buffer's and a texture's description read off them and made again,
- * marked as the guest's surface; what records nothing - no resource - is
- * refused. */
 TEST(carried_share, a_recorded_resource_is_made_again_as_it_was_and_marked_as_the_surface)
 {
     av::LoaderHostApis         apis;

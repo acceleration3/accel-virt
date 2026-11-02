@@ -40,4 +40,4 @@ uint64_t VblankClock::period()
     return ticks;
 }
 
-}  // namespace av
+}

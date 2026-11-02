@@ -68,4 +68,4 @@ bool DeviceTable::invariants_hold() const
     return devices_.all_of([](const UmdDevice &device) { return device.invariants_hold(); });
 }
 
-}  // namespace av::d3d
+}

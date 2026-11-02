@@ -60,4 +60,4 @@ VirtioRegion VirtioPciLayout::shared_memory(uint8_t id) const
     return VirtioRegion();
 }
 
-}  // namespace av
+}

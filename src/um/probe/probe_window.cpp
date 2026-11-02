@@ -16,7 +16,7 @@ LRESULT CALLBACK probe_window_procedure(HWND window, UINT message, WPARAM wide, 
     return DefWindowProcW(window, message, wide, lengthy);
 }
 
-}  // namespace
+}
 
 ProbeWindow::ProbeWindow()
     : instance_(GetModuleHandleW(nullptr)), window_(nullptr), dc_(nullptr), atom_(0u), last_error_(0u)
@@ -101,4 +101,4 @@ uint32_t ProbeWindow::last_error() const
     return last_error_;
 }
 
-}  // namespace av
+}

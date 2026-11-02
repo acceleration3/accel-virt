@@ -17,11 +17,9 @@ namespace {
 constexpr uint32_t pixel_bytes = 4u;
 constexpr uint32_t triangle_vertices = 3u;
 constexpr float    unorm_max = 255.0f;
-/* The window's format: what a desktop's DIB holds, so the driver's present
- * copies it out without turning the channels around. */
 constexpr VkFormat window_format = VK_FORMAT_B8G8R8A8_UNORM;
 
-}  // namespace
+}
 
 PresentWork::PresentWork(ProbeDevice &device, WindowFrame &windows, ImageSink &pictures, void *module, void *window)
     : device_(device), windows_(windows), pictures_(pictures), module_(module), window_(window),
@@ -109,10 +107,6 @@ bool PresentWork::make_swapchain(VkPresentModeKHR mode, ProbeOutcome &outcome)
     info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     info.presentMode = mode;
     info.clipped = VK_TRUE;
-    /* The swapchain this one replaces, as an application names it: the driver
-     * retires it, and what it holds is still there until it is destroyed - so
-     * the new swapchain's memory is found while the old one's is still in
-     * place, which is what a resize does. */
     info.oldSwapchain = swapchain_;
     VkSwapchainKHR made = VK_NULL_HANDLE;
     if (!outcome.accept(vulkan.create_swapchain(device_.device(), &info, &made))) return false;
@@ -131,7 +125,6 @@ bool PresentWork::make_swapchain(VkPresentModeKHR mode, ProbeOutcome &outcome)
            make_framebuffers(outcome);
 }
 
-/* The swapchain's images are left where a present takes them from. */
 bool PresentWork::make_render_pass(ProbeOutcome &outcome)
 {
     AV_SCOPE("PresentWork::make_render_pass");
@@ -201,8 +194,6 @@ VkResult PresentWork::present_frames(uint32_t count, ProbeOutcome &outcome)
     return VK_SUCCESS;
 }
 
-/* One frame: the triangle into the acquired image, then the present that puts
- * it on the window. */
 VkResult PresentWork::draw_and_present(uint32_t index, ProbeOutcome &outcome)
 {
     AV_SCOPE("PresentWork::draw_and_present");
@@ -241,13 +232,10 @@ uint32_t PresentWork::drawn_on_the_window(const char *name, ProbeOutcome &outcom
         outcome.missing();
         return 0u;
     }
-    /* A window's DIB is bottom row first, which is how it is kept. */
     pictures_.save(name, BmpImage(frame_, width_, height_, BmpImage::Rows::bottom_first, BmpImage::Order::blue_first));
     return matched_frame();
 }
 
-/* The alpha a window keeps is the desktop's, not the frame's. The rows are
- * bottom first, so the triangle's are the last `side` of them. */
 uint32_t PresentWork::matched_frame() const
 {
     AV_SCOPE("PresentWork::matched_frame");
@@ -267,7 +255,6 @@ uint32_t PresentWork::matched_frame() const
     return matched;
 }
 
-/* Everything of the swapchain that was there before this one. */
 void PresentWork::release_swapchain()
 {
     AV_SCOPE("PresentWork::release_swapchain");
@@ -322,4 +309,4 @@ bool PresentWork::invariants_hold() const
     return width_ <= max_side && height_ <= max_side;
 }
 
-}  // namespace av
+}

@@ -11,7 +11,7 @@ namespace {
 
 constexpr std::uint16_t flag_next = 1u;
 
-}  // namespace
+}
 
 FakeVirtqueueDevice::FakeVirtqueueDevice(MockPlatform &platform, std::uint64_t descriptors,
                                          std::uint64_t driver_area, std::uint64_t device_area,
@@ -222,4 +222,4 @@ void FakeVirtqueueDevice::set_used_index(std::uint16_t index)
 const FakeVirtqueueDevice::Seen &FakeVirtqueueDevice::seen(std::uint32_t index) const { return seen_[index]; }
 std::uint32_t FakeVirtqueueDevice::seen_count() const { return seen_count_; }
 
-}  // namespace av
+}

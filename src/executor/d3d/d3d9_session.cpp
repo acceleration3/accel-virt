@@ -36,8 +36,6 @@ void D3d9Session::initialize(D3d9HostDevice *host, SharedSurfaces *surfaces, D3d
     flips_.bind(device11, shares);
 }
 
-/* Objects first: each holds a reference to the device that made it. Only
- * Direct3D 9's: the table is the whole session's. */
 void D3d9Session::shut_down()
 {
     AV_SCOPE("D3d9Session::shut_down");
@@ -75,10 +73,6 @@ IDirect3DDevice9 *D3d9Session::device() const
     return devices_.ready() ? devices_.selected() : nullptr;
 }
 
-/* A device id is in the session's id space too, so no object may already
- * have it: the guest names both from one counter. A device is always inside a
- * scene, so a draw never needs the guest to say BeginScene, and Flush9 ends
- * one and begins the next. */
 bool D3d9Session::on_CreateDevice9(uint32_t device, uint32_t, uint32_t &hresult)
 {
     AV_SCOPE("D3d9Session::on_CreateDevice9");
@@ -93,14 +87,11 @@ bool D3d9Session::on_CreateDevice9(uint32_t device, uint32_t, uint32_t &hresult)
     hresult = static_cast<uint32_t>(host_->make_device(made));
     if (made == nullptr) return true;
     made->BeginScene();
-    /* The id is free and there is room: both were asked above. */
     static_cast<void>(devices_.add(device, made));
     static_cast<void>(devices_.select(device));
     return true;
 }
 
-/* A guest that makes too little room for the rows it asked for is refused:
- * its own driver sizes them. */
 bool D3d9Session::on_QueryCaps9(uint32_t count, const uint32_t *formats, uint32_t &hresult, uint8_t *caps,
                                 uint64_t caps_capacity, uint64_t &caps_size, uint8_t *rows, uint64_t rows_capacity,
                                 uint64_t &rows_size)
@@ -124,9 +115,6 @@ bool D3d9Session::on_QueryCaps9(uint32_t count, const uint32_t *formats, uint32_
     return true;
 }
 
-/* With no device selected - the one that was is destroyed - there is nothing
- * to flush, which is no reason to fault the session (the guest flushes as
- * its devices go). */
 bool D3d9Session::on_Flush9()
 {
     AV_SCOPE("D3d9Session::on_Flush9");
@@ -144,8 +132,6 @@ bool D3d9Session::on_SelectDevice9(uint32_t device)
     return true;
 }
 
-/* Every command ran as it arrived; what is left is DXVK's, which a read of
- * the results waits for itself. */
 bool D3d9Session::on_Finish9(uint32_t &hresult)
 {
     AV_SCOPE("D3d9Session::on_Finish9");
@@ -163,8 +149,6 @@ bool D3d9Session::on_Destroy9(uint32_t object)
         device->Release();
         return true;
     }
-    /* The session's table holds every runtime's objects: only Direct3D 9's
-     * are Destroy9's to remove. */
     D3dObjectKind kind = D3dObjectKind::none;
     if (objects_.find_any(object, kind) == nullptr || kind < D3dObjectKind::surface9) return false;
     objects_.remove(object);
@@ -174,7 +158,6 @@ bool D3d9Session::on_Destroy9(uint32_t object)
 bool D3d9Session::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
 {
     AV_SCOPE("D3d9Session::keep");
-    /* A device's id is in the objects' space too. */
     if (made != nullptr && devices_.find(id) != nullptr) {
         made->Release();
         return false;
@@ -182,8 +165,6 @@ bool D3d9Session::keep(uint32_t id, D3dObjectKind kind, IUnknown *made)
     return objects_.keep(id, kind, made) == Status::ok;
 }
 
-/* Each kind asks its own interface which device made it: every Direct3D 9
- * object has GetDevice, but not on a common base. */
 IUnknown *D3d9Session::owned(uint32_t id, D3dObjectKind kind) const
 {
     AV_SCOPE("D3d9Session::owned");
@@ -217,4 +198,4 @@ bool D3d9Session::invariants_hold() const
     return devices_.invariants_hold() && objects_.invariants_hold();
 }
 
-}  // namespace av
+}

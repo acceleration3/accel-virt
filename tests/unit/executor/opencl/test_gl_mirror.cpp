@@ -1,5 +1,3 @@
-/* One cl_mem standing in for a GL object (GlMirror): what it says it is, and
- * the turn OpenCL holds between an acquire and a release. */
 #include "executor/opencl/gl_mirror.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -13,7 +11,7 @@ namespace {
 
 const void *mem_at(std::uintptr_t at) { return reinterpret_cast<const void *>(at); }
 
-}  // namespace
+}
 
 TEST(gl_mirror, an_empty_mirror_describes_nothing)
 { const GlMirror empty;
@@ -36,14 +34,11 @@ TEST(gl_mirror, a_buffer_s_mirror_is_its_bytes_and_no_texture)
   CHECK_EQ(mirror.bytes(), 4096u);
   CHECK(mirror.image() == nullptr);
   CHECK(mirror.written_back());
-  /* OpenCL's turn, taken and given back. */
   CHECK(!mirror.acquired());
   mirror.acquire();
   CHECK(mirror.acquired());
   mirror.release();
   CHECK(!mirror.acquired());
-  /* Read-only is never copied back; no name, no bytes or no mem is a mirror
-   * of nothing. */
   CHECK(!GlMirror(mem_at(0x1000u), 7u, 4096u, false).written_back());
   CHECK(!GlMirror(mem_at(0x1000u), 0u, 4096u, true).described());
   CHECK(!GlMirror(mem_at(0x1000u), 7u, 0u, true).described());
@@ -77,5 +72,4 @@ TEST(gl_mirror, a_texture_s_and_a_renderbuffer_s_mirror_keep_their_level_and_ima
   CHECK_EQ(renderbuffer.name(), 9u);
   CHECK_EQ(renderbuffer.level().texture(), 44u);
   CHECK(renderbuffer.image() == &image);
-  /* A type of nothing is a mirror of nothing. */
   CHECK(!GlMirror(mem_at(0x3000u), 0u, 9u, 0u, over, 64u, nullptr, true).described()); }

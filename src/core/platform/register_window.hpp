@@ -1,7 +1,3 @@
-/* One mapped register region of a device - a BAR range holding a virtio
- * structure. Two implementations exist: MappedRegisterWindow over a mapped BAR,
- * and the fake device's regions (tests/harness). Callers stay
- * within length(); the implementation does not check. */
 #ifndef AV_REGISTER_WINDOW_HPP
 #define AV_REGISTER_WINDOW_HPP
 
@@ -29,6 +25,6 @@ protected:
     ~RegisterWindow() = default;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_REGISTER_WINDOW_HPP
+#endif

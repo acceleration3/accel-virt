@@ -5,8 +5,6 @@
 #include "guest/suite/scenario_steps.hpp"
 
 namespace av {
-
-/* Nothing measured is not a pass: one expected value was never read. */
 ProbeOutcome::ProbeOutcome() : result_(VK_SUCCESS), missing_(false), matched_(0u), expected_(1u)
 {
     AV_SCOPE("ProbeOutcome::ProbeOutcome");
@@ -53,4 +51,4 @@ bool ProbeOutcome::invariants_hold() const
     return !(missing_ && result_ != VK_SUCCESS) && matched_ <= expected_;
 }
 
-}  // namespace av
+}

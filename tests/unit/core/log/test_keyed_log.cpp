@@ -1,6 +1,3 @@
-/* KeyedLog: a key written once per code and never again, however many keys
- * there are - the lines a driver would otherwise write on every call of an
- * application that keeps calling. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -18,10 +15,8 @@ namespace {
 const char entry[] = "vkQueueSubmit";
 const char other[] = "vkQueuePresentKHR";
 
-}  // namespace
+}
 
-/* A key is its pointer and its code: one key failing two ways is two lines,
- * and the same failure again is none. */
 TEST(keyed_log, a_key_is_first_once_for_each_code)
 { MockPlatform platform;
   RecordingLog log;
@@ -48,8 +43,6 @@ TEST(keyed_log, once_writes_a_line_the_first_time_only)
   CHECK(std::strcmp(log.line(1u), "avcl: slot not implemented: vkQueueSubmit") == 0);
   CHECK(std::strcmp(log.line(2u), "avcl: slot not implemented: vkQueuePresentKHR") == 0); }
 
-/* Every key is remembered, well past the 256 the table once held: a key
- * met again is not first, however many came between. */
 TEST(keyed_log, remembers_every_key_past_the_old_bound)
 { MockPlatform platform;
   RecordingLog log;
@@ -61,9 +54,6 @@ TEST(keyed_log, remembers_every_key_past_the_old_bound)
   for (std::uint32_t index = 0u; index < many; ++index) CHECK(!lines.first(keys[index], 0));
   CHECK_EQ(lines.keys(), many); }
 
-/* A key that cannot be remembered for want of memory is not first: no line,
- * rather than a line on every call while memory is short. Once memory is
- * back it is first again. */
 TEST(keyed_log, a_key_that_cannot_be_remembered_writes_nothing)
 { MockPlatform platform;
   RecordingLog log;

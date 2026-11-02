@@ -1,6 +1,3 @@
-/* The recording half of D3d12Session: every command that names a command list
- * and adds to it. Each runs on the host's list as the guest recorded it on
- * its own, with its ids, descriptor references and addresses translated. */
 #include "executor/d3d/d3d12_session.hpp"
 
 #include "core/log/log_line.hpp"
@@ -26,13 +23,11 @@ constexpr uint32_t view_shader_resource = 1u;
 constexpr uint32_t view_unordered = 2u;
 constexpr uint32_t copy_subresource = 0u;
 constexpr uint32_t copy_footprint = 1u;
-/* D3D_PRIMITIVE_TOPOLOGY runs to the 32-control-point patch list. */
 constexpr uint32_t most_topology = 64u;
-/* PIX: 0 a UTF-16 string, 1 an ANSI one, 2 PIX3's own encoding. */
 constexpr uint32_t most_event_metadata = 2u;
 constexpr uint32_t most_query_type = 7u;
 
-}  // namespace
+}
 
 bool D3d12Session::on_ResourceBarrier12(uint32_t id, uint32_t count, const d3d12proto::Barrier *barriers)
 {
@@ -126,7 +121,6 @@ bool D3d12Session::on_SetRootView12(uint32_t id, uint32_t compute, uint32_t para
 {
     AV_SCOPE("D3d12Session::on_SetRootView12");
     ID3D12GraphicsCommandList *const recorded = list(id);
-    /* A root view has no size: only its first byte is known to be in a buffer. */
     const uint64_t host = address == 0u ? 0u : addresses_.translate(address, 0u);
     if (recorded == nullptr || (address != 0u && host == 0u)) return false;
     if (kind == view_constant) {
@@ -316,9 +310,6 @@ bool D3d12Session::on_Dispatch12(uint32_t id, uint32_t x, uint32_t y, uint32_t z
     return true;
 }
 
-/* The argument buffer is bounded by the stride kept on the signature
- * (D3d12IndirectStride): the host GPU reads max_count commands of it, and
- * nothing past the buffer may be one. */
 bool D3d12Session::on_ExecuteIndirect12(uint32_t id, uint32_t signature, uint32_t max_count, uint32_t argument_buffer,
                                         uint64_t argument_offset, uint32_t count_buffer, uint64_t count_offset)
 {
@@ -380,10 +371,6 @@ bool D3d12Session::on_CopyTextureRegion12(uint32_t id, const d3d12proto::CopyLoc
     const D3d12CopyExtent extent(from, has_box != 0u ? &box : nullptr);
     d3d12proto::Box       written = {};
     if (!extent.known() || !extent.written_at(x, y, z, written)) return false;
-    /* A footprint's bytes are guest memory the host GPU reads or writes: only
-     * the region the copy touches must lie in its buffer - Direct3D 9 on 12
-     * names a whole texture's footprint and copies a box of it from a buffer
-     * holding that box. */
     if (!footprint_holds(destination, written) || !footprint_holds(source, extent.read())) return false;
     const D3D12_BOX made_box = {box.left, box.top, box.front, box.right, box.bottom, box.back};
     recorded->CopyTextureRegion(&to, x, y, z, &from, has_box != 0u ? &made_box : nullptr);
@@ -467,7 +454,6 @@ bool D3d12Session::on_ResolveQueryData12(uint32_t id, uint32_t heap, uint32_t ty
                                          uint32_t destination, uint64_t offset)
 {
     AV_SCOPE("D3d12Session::on_ResolveQueryData12");
-    /* Each type's result: a counter, pipeline statistics, stream-output statistics. */
     constexpr uint64_t result_bytes[most_query_type + 1u] = {8u, 8u, 8u, 88u, 16u, 16u, 16u, 16u};
     ID3D12GraphicsCommandList *const recorded = list(id);
     ID3D12QueryHeap *const queries = objects_.find_as<ID3D12QueryHeap>(heap, D3dObjectKind::query_heap12);
@@ -510,4 +496,4 @@ bool D3d12Session::on_SetMarker12(uint32_t id, uint32_t metadata, const uint8_t 
     return true;
 }
 
-}  // namespace av
+}

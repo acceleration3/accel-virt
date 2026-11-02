@@ -1,8 +1,3 @@
-/* What one host GPU's Direct3D 11 device can do, asked once when it is made:
- * the answers the guest's user-mode driver reports through GetCaps, and every
- * DXGI format's support, sample counts and quality levels. Asked of the
- * device itself rather than assumed, so a guest on a host whose driver lacks
- * a feature is told it lacks it. */
 #ifndef AV_D3D11_CAPABILITIES_HPP
 #define AV_D3D11_CAPABILITIES_HPP
 
@@ -32,6 +27,6 @@ private:
     FormatCapsRows   formats_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_D3D11_CAPABILITIES_HPP
+#endif

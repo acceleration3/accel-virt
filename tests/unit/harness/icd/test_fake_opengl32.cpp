@@ -1,6 +1,3 @@
-/* The fake opengl32 holds the ICD to what the real one checks
- * (research.md §1): the required exports, the Flags & 1 exports, the version,
- * the nine callbacks, and a proc table of 336 or 306 entries. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/fake_opengl32.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
@@ -54,7 +51,6 @@ TEST(fake_opengl32, refuses_an_icd_that_does_not_validate_the_version)
 TEST(fake_opengl32, takes_a_proc_table_per_thread_and_answers_contexts_by_hglrc)
 { GlIcdRig rig;
   rig.load_with_format();
-  /* It is the SystemOpengl the ICD creates HGLRCs through. */
   av::glicd::SystemOpengl &system = rig.opengl32();
   CHECK(system.create_context(rig.memory_dc()) == nullptr);
   CHECK(rig.opengl32().slot(0u) == nullptr);
@@ -76,9 +72,6 @@ TEST(fake_opengl32, takes_a_proc_table_per_thread_and_answers_contexts_by_hglrc)
   CHECK(rig.opengl32().delete_context(context));
   CHECK(!rig.opengl32().make_current(rig.dc(), context)); }
 
-/* opengl32's wglGetProcAddress names a function only to a thread with a
- * context current - the live guest's probe met exactly this - while the
- * driver's own DrvGetProcAddress answers regardless. */
 TEST(fake_opengl32, names_a_function_only_to_a_thread_with_a_context_current)
 { GlIcdRig rig;
   rig.load_with_format();

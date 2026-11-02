@@ -1,6 +1,3 @@
-/* A present's allocations addressed by GPU virtual address: each reference's
- * address field gets AllocationVirtualAddress from the DXGK_PRESENTALLOCATIONINFO
- * dxgkrnl passes (source at index 1, destination at 2), and nothing is patched. */
 #ifndef AV_VIRTUAL_PRESENT_ADDRESSES_HPP
 #define AV_VIRTUAL_PRESENT_ADDRESSES_HPP
 
@@ -28,6 +25,6 @@ private:
     const DxgkargPresentRecord &request_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VIRTUAL_PRESENT_ADDRESSES_HPP
+#endif

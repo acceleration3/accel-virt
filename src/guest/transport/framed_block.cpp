@@ -49,7 +49,6 @@ bool FramedBlock::frame(uint32_t command_id, const WireWriter &writer, uint8_t f
     AV_SCOPE("FramedBlock::frame");
     const size_t size = header_bytes + writer.offset();
     if (writer.status() != Status::ok || !fits(size)) return false;
-    /* The room lent is far below the largest size a header carries. */
     static_cast<void>(CommandHeader(command_id, static_cast<uint32_t>(size), flags).encode(block_ + used_, header_bytes));
     used_ += size;
     return true;
@@ -107,4 +106,4 @@ bool FramedBlock::invariants_hold() const
     return used_ <= capacity_ && (block_ != nullptr || capacity_ == 0u);
 }
 
-}  // namespace av
+}

@@ -1,6 +1,3 @@
-/* An ICD connection opened on MockKmt's avgpu adapter, for the classes that
- * work over one: its lock records into a trace under 'S', and the host behind
- * its context is played through ScriptedHost. */
 #ifndef AV_OPEN_CONNECTION_HPP
 #define AV_OPEN_CONNECTION_HPP
 
@@ -18,8 +15,6 @@ namespace av {
 
 class OpenConnection {
 public:
-    /* Adapters, device, queue, the transport's name and DMA allocations, its
-     * mapping and its context. */
     static constexpr std::uint32_t link_objects = 7u;
 
     OpenConnection();
@@ -44,6 +39,6 @@ private:
     icd::Connection     connection_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_OPEN_CONNECTION_HPP
+#endif

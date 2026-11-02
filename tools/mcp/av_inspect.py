@@ -1,16 +1,4 @@
 #!/usr/bin/env python3
-"""An MCP server (stdio, JSON-RPC 2.0, one message per line) over the thread
-and state tracking of docs/trace.md: which guest and host threads are inside
-av code and where, what each process, the driver and the device hold, and
-what a crash left behind.
-
-The guest is reached through a run's agent relay (<work>/agent-relay.sock) or,
-when no run holds the agent, its socket; everything large comes back as a
-guest file that is pulled, because output the agent captured stalled
-vulkaninfo on a live guest. Host tables are read from /dev/shm directly.
-
-  claude mcp add av-inspect -- python3 tools/mcp/av_inspect.py
-"""
 import json
 import os
 import pathlib
@@ -45,7 +33,7 @@ HOST_MODULES = ("device", "executor")
 
 
 class ToolError(Exception):
-    """A tool could not answer; the text says why, and the call is isError."""
+    pass
 
 
 def shm_directory():
@@ -70,10 +58,6 @@ def host_clock():
 
 
 class ScopeNames:
-    """Name ids back to names: tools/scope_marks.py --names when it answers,
-    else every AV_SCOPE literal under src/ hashed here. Either way a pair is
-    kept only when the name hashes to the id, so no output format is trusted."""
-
     def __init__(self):
         self.names = None
 
@@ -122,8 +106,6 @@ class ScopeNames:
 
 
 class Guest:
-    """One guest's agent: the run's relay when it serves, the socket otherwise."""
-
     def __init__(self, work):
         self.work = work
         relay = work / "agent-relay.sock"
@@ -160,7 +142,6 @@ class Guest:
             raise ToolError(f"{path}: {error}") from error
 
     def read(self, guest_path):
-        """A guest file's bytes."""
         with tempfile.TemporaryDirectory() as scratch:
             local = pathlib.Path(scratch) / "pulled"
             try:
@@ -176,7 +157,6 @@ class Guest:
             raise ToolError(f"cannot write {guest_path}: {error}") from error
 
     def inspect(self, command, *arguments):
-        """avinspect.exe COMMAND ARGS --out F, and F's bytes."""
         out = f"{GUEST_DIRECTORY}\\inspect-{command}.bin"
         code, _out, error = self.run(INSPECTOR, [command, *map(str, arguments), "--out", out])
         if code != 0:
@@ -185,7 +165,6 @@ class Guest:
         return self.read(out)
 
     def powershell(self, script, timeout=INSPECT_TIMEOUT):
-        """Runs a script with its output in a file that is pulled: (exit code, text)."""
         stem = f"{GUEST_DIRECTORY}\\inspect-ps-{os.getpid()}-{time.monotonic_ns()}"
         self.write(stem + ".ps1", script.encode("utf-8-sig"))
         command = f"{POWERSHELL} -NoProfile -ExecutionPolicy Bypass -File {stem}.ps1 > {stem}.txt 2>&1"
@@ -221,7 +200,6 @@ def table_of(payload):
 
 
 def thread_listing(text):
-    """PowerShell's `Id|State|WaitReason|CpuMs` lines."""
     threads = {}
     for line in text.splitlines():
         parts = line.strip().split("|")
@@ -248,8 +226,6 @@ foreach ($p in Get-Process -Id {pids}) {{
 
 
 class Inspector:
-    """The tools, each a method answering a JSON-able value or raising ToolError."""
-
     def __init__(self):
         self.scopes = ScopeNames()
 
@@ -517,7 +493,6 @@ class Inspector:
         except OSError as error:
             raise ToolError(f"cannot read the {module}'s state from {path}: {error}") from error
         text = received.decode(errors="replace")
-        # A binary that cannot dump says why on one line of its own.
         if text.startswith("error "):
             raise ToolError(text.strip())
         return trace_format.parse_state(text)
@@ -546,7 +521,6 @@ def tool(name, description, properties, required=()):
 
 
 def qemu_pids(work):
-    """QEMU processes whose command line names this work directory's sockets."""
     pids = []
     marker = str(work / "qmp.sock").encode()
     for entry in pathlib.Path("/proc").iterdir():
@@ -561,8 +535,6 @@ def qemu_pids(work):
 
 
 class Server:
-    """JSON-RPC 2.0 over newline-delimited stdio, as MCP's stdio transport has it."""
-
     def __init__(self, inspector, reader, writer):
         self.inspector = inspector
         self.reader = reader
@@ -620,7 +592,7 @@ class Server:
             value = getattr(self.inspector, name)(**arguments)
         except ToolError as error:
             return reply(identity, content(str(error), True))
-        except Exception as error:  # a tool's bug is the caller's answer, not the server's end
+        except Exception as error:
             return reply(identity, content(f"{name} failed: {type(error).__name__}: {error}", True))
         text = value if isinstance(value, str) else json.dumps(value, indent=1)
         return reply(identity, content(text, False))

@@ -18,4 +18,4 @@ void ScanoutFramebufferProbe::set_offset(uint32_t offset) { framebuffer.offset_ 
 
 void ScanoutFramebufferProbe::set_blob_size(uint64_t size) { framebuffer.blob_size_ = size; }
 
-}  // namespace av
+}

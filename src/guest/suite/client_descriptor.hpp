@@ -1,6 +1,3 @@
-/* The allocation descriptor of one client allocation the suite asks for
- * (docs/protocol.md): CPU visible, no surface, `bytes` long - encoded, and
- * corruptible into one the driver must refuse. */
 #ifndef AV_CLIENT_DESCRIPTOR_HPP
 #define AV_CLIENT_DESCRIPTOR_HPP
 
@@ -17,10 +14,8 @@ public:
     static constexpr uint64_t page_bytes = 4096u;
 
     explicit ClientDescriptor(uint64_t bytes);
-    /* The same for an allocation of `kind` rather than a client one. */
     ClientDescriptor(uint64_t bytes, AllocationKind kind);
 
-    /* A magic no driver accepts. */
     void           corrupt_magic();
     const uint8_t *bytes() const;
     uint32_t       size() const;
@@ -31,6 +26,6 @@ private:
     uint64_t pages_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_CLIENT_DESCRIPTOR_HPP
+#endif

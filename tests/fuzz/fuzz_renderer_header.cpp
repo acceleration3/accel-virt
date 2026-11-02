@@ -1,7 +1,3 @@
-/* The header of every datagram QEMU and av-renderer send each other, fed
- * attacker-chosen bytes: a renderer running guest shaders may be compromised,
- * so QEMU reads what it sends as hostile. What decodes must re-encode to the
- * bytes read and describe exactly the body that arrived. */
 #include "core/support/status.hpp"
 #include "proto/renderer/renderer_message_header.hpp"
 

@@ -9,12 +9,9 @@
 namespace av::d3d {
 
 namespace {
-
-/* What the variable holds when it names no count: enough for a game's first
- * frames after it loads. */
 constexpr uint64_t default_count = 200000u;
 
-}  // namespace
+}
 
 D3dCallTrace::D3dCallTrace()
     : file_(L"avumd-calls"), clock_(), caller_(), on_(false), skip_(0u), count_(0u), calls_(0u), contexts_(0u), started_(0u)
@@ -107,11 +104,9 @@ void D3dCallTrace::Line::signed_number(int64_t value)
     body_.append_decimal(value < 0 ? 0u - static_cast<uint64_t>(value) : static_cast<uint64_t>(value));
 }
 
-/* Every record starts with its stamp (d3d11_records.hpp). */
 void D3dCallTrace::Line::object(const void *block)
 {
     AV_SCOPE("D3dCallTrace::Line::object");
-    /* An array the runtime passes with a count of 0 may point anywhere (SetDescriptorHeaps). */
     MEMORY_BASIC_INFORMATION memory = {};
     if (block != nullptr && (VirtualQuery(block, &memory, sizeof memory) == 0u || memory.State != MEM_COMMIT ||
                              (memory.Protect & (PAGE_NOACCESS | PAGE_GUARD)) != 0u)) {
@@ -178,4 +173,4 @@ void D3dCallTrace::Line::box(const D3D10_DDI_BOX &box)
     body_.append_decimal(static_cast<uint32_t>(box.back));
 }
 
-}  // namespace av::d3d
+}

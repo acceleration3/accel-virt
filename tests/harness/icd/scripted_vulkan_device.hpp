@@ -1,8 +1,3 @@
-/* The Vulkan functions a swapchain calls on the application's device, as a
- * test scripts them (feature 046): images and a read-back buffer of bytes the
- * test paints and reads, the commands a copy records, and a refusal at any
- * call. The entry points are bare functions, as a driver's are, and each is one
- * line into the bound device - the shape of the ICD's own binding. */
 #ifndef AV_SCRIPTED_VULKAN_DEVICE_HPP
 #define AV_SCRIPTED_VULKAN_DEVICE_HPP
 
@@ -16,10 +11,8 @@ namespace av {
 
 class ScriptedVulkanDevice final : public icd::EntryLookup {
 public:
-    /* Room for every swapchain a process may hold, of two images each. */
     static constexpr std::uint32_t max_images = 32u;
     static constexpr std::uint32_t max_memories = 64u;
-    /* The largest frame a test paints: 64x64 in four bytes a pixel. */
     static constexpr std::uint32_t max_image_bytes = 64u * 64u * 4u;
     static constexpr std::uint32_t max_barriers = 16u;
 
@@ -27,31 +20,20 @@ public:
         VkImage       image;
         VkImageLayout from;
         VkImageLayout to;
-        /* The queue family the image is handed to; IGNORED for none. */
         std::uint32_t to_family;
     };
-    /* What an image was made as, and the memory bound to it. */
     struct Described {
         VkFormat                         format;
         VkImageCreateFlags               flags;
         VkImageTiling                    tiling;
         VkImageUsageFlags                usage;
-        /* The handle types its VkExternalMemoryImageCreateInfo names; 0 for
-         * none. */
         VkExternalMemoryHandleTypeFlags  external;
-        /* The formats its VkImageFormatListCreateInfo lists. */
         std::uint32_t                    view_formats;
-        /* The modifier its VkImageDrmFormatModifierExplicitCreateInfoEXT lays
-         * it out by (~0 for none), and the bytes between the rows of its one
-         * plane (0 for none). */
         std::uint64_t                    modifier;
         VkDeviceSize                     row_pitch;
         VkDeviceMemory                   bound;
     };
 
-    /* The newest device is the bound one: the entry points have nowhere to put
-     * a `this`, as a loader's do not, and its destruction binds the one it was
-     * constructed under again. */
     ScriptedVulkanDevice();
     ~ScriptedVulkanDevice();
     ScriptedVulkanDevice(const ScriptedVulkanDevice &) = delete;
@@ -63,21 +45,14 @@ public:
     VkPhysicalDevice physical();
     VkQueue          queue();
 
-    /* The `nth` call of `name` answers `code`; nth counts from 1. */
     void refuse(const char *name, std::uint32_t nth, VkResult code);
-    /* No memory type has the device-local property, or none has host-visible,
-     * or the requirements allow no type at all. */
     void without_device_local();
     void without_host_visible();
     void allow_no_memory_type();
-    /* A host that names more memory types than Vulkan has. */
     void overcount_memory_types();
-    /* A copy that never finishes. */
     void stall_copy();
 
-    /* Every byte of `image` set to one RGBA pixel repeated. */
     void paint(VkImage image, std::uint8_t red, std::uint8_t green, std::uint8_t blue, std::uint8_t alpha);
-    /* Row `row` alone, of an image `row_bytes` a row, one colour. */
     void paint_row(VkImage image, std::uint32_t row, std::uint32_t row_bytes, std::uint8_t red, std::uint8_t green,
                    std::uint8_t blue, std::uint8_t alpha);
 
@@ -89,21 +64,15 @@ public:
     std::uint32_t       barriers() const;
     const Barrier      &barrier(std::uint32_t index) const;
     std::uint32_t       copies() const;
-    /* Image-to-image copies the last recording held. */
     std::uint32_t       image_copies() const;
     Described           described(VkImage image) const;
-    /* An image's bytes, as paints and copies left them; null for none. */
     const std::uint8_t *bytes(VkImage image) const;
-    /* The read-back buffer's bytes, as the copy left them. */
     const std::uint8_t *readback() const;
     std::uint32_t       mappings() const;
     std::uint32_t       pools() const;
-    /* The queue family the command pool was made on. */
     std::uint32_t       pool_family() const;
     std::uint32_t       fences() const;
 
-    /* What a bound entry point calls; public because the entry points are
-     * free functions of the harness's translation unit. */
     VkResult make_image(const VkImageCreateInfo *info, VkImage *image);
     void     destroy_image(VkImage image);
     void     image_requirements(VkImage image, VkMemoryRequirements *needs);
@@ -159,7 +128,6 @@ private:
         VkResult      code;
     };
 
-    /* VK_SUCCESS, or what a test scripted for this call. */
     VkResult      judge(const char *name);
     Image        *image_of(VkImage image);
     const Image  *image_of(VkImage image) const;
@@ -196,6 +164,6 @@ private:
     std::uint32_t image_copy_count_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_VULKAN_DEVICE_HPP
+#endif

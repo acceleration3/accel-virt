@@ -11,8 +11,6 @@ VblankSchedule::VblankSchedule()
     AV_SCOPE("VblankSchedule::VblankSchedule");
 }
 
-/* The period's whole nanoseconds, and its remainder spread over the blanks, so
- * that blank n lands where n exact periods put it. */
 uint64_t VblankSchedule::due(uint64_t sequence) const
 {
     AV_SCOPE("VblankSchedule::due");
@@ -55,7 +53,6 @@ void VblankSchedule::align(uint32_t microhz, int64_t shift, uint64_t now)
 {
     AV_SCOPE("VblankSchedule::align");
     const uint64_t last_blank = last();
-    /* The consumer measured its shift against the grid it saw, the old one. */
     const uint64_t scheduled = due(sequence_ + 1u);
     microhz_ = microhz;
     if (!running_) return;
@@ -63,7 +60,6 @@ void VblankSchedule::align(uint32_t microhz, int64_t shift, uint64_t now)
     const uint64_t earlier = shift > 0 ? static_cast<uint64_t>(shift) : 0u;
     const uint64_t later = shift < 0 ? static_cast<uint64_t>(-(shift + 1)) + 1u : 0u;
     uint64_t       next = scheduled + later;
-    /* A shift past the whole time since the epoch keeps the phase it asks for. */
     if (earlier > next) next += ((earlier - next) / period + 1u) * period;
     next -= earlier;
     const uint64_t earliest = last_blank + period / 2u > now ? last_blank + period / 2u : now + 1u;
@@ -120,8 +116,6 @@ uint64_t VblankSchedule::last() const
     return last_;
 }
 
-/* The epoch's place in the sequence is one the count has reached, and the
- * rate is one the protocol allows. */
 bool VblankSchedule::invariants_hold() const
 {
     AV_SCOPE("VblankSchedule::invariants_hold");
@@ -130,4 +124,4 @@ bool VblankSchedule::invariants_hold() const
            microhz_ <= VblankRecord::most_millihz * VblankRecord::microhz_per_millihz;
 }
 
-}  // namespace av
+}

@@ -14,7 +14,7 @@ struct WireReaderProbe {
     WireReader &reader;
 };
 
-}  // namespace av
+}
 
 using av::Status;
 using av::WireReader;
@@ -23,13 +23,13 @@ using av::WireReaderProbe;
 namespace {
 
 const std::uint8_t sample[] = {
-    0x01,                                           /* u8  */
-    0x34, 0x12,                                     /* u16 0x1234 */
-    0x78, 0x56, 0x34, 0x12,                         /* u32 0x12345678 */
-    0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01, /* u64 0x0123456789ABCDEF */
+    0x01,
+    0x34, 0x12,
+    0x78, 0x56, 0x34, 0x12,
+    0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01,
 };
 
-}  // namespace
+}
 
 TEST(wire_reader, reads_little_endian_fields_in_order)
 { WireReader reader(sample, sizeof sample);
@@ -142,10 +142,6 @@ TEST(wire_reader, nothing_remains_after_a_failure_so_read_loops_end)
   CHECK_STATUS(reader.status(), Status::malformed);
   CHECK_EQ(reader.remaining(), 0u); }
 
-/* What the generated deserializers call. A command's fields are plain data of
- * the registry's own types, so the reader takes them by size rather than by
- * name, and a varint is how a length that is usually small is spelt on the
- * wire (feature 063). */
 TEST(wire_reader_read_pod, reads_a_field_of_the_registry_s_own_type)
 { struct Extent { std::uint32_t width; std::uint32_t height; };
   const std::uint8_t bytes[] = {0x40, 0x06, 0, 0, 0xB0, 0x04, 0, 0};
@@ -162,8 +158,6 @@ TEST(wire_reader_read_pod, a_field_that_is_not_there_is_refused_and_latched)
   std::uint32_t value = 0xEEEEEEEEu;
   CHECK(!reader.read_pod(value));
   CHECK_STATUS(reader.status(), Status::malformed);
-  /* Zeroed, not half-read: the reader's own rule, so a decoder that ignores
-   * one answer cannot go on to use bytes that were never on the wire. */
   CHECK_EQ(value, 0u); }
 
 TEST(wire_reader_read, takes_a_run_of_bytes_or_none_at_all)
@@ -176,8 +170,6 @@ TEST(wire_reader_read, takes_a_run_of_bytes_or_none_at_all)
   CHECK(!reader.read(into, 3u));
   CHECK_STATUS(reader.status(), Status::malformed); }
 
-/* A varint is seven bits a byte, low group first; ten bytes is the most a
- * 64-bit value can take, and an eleventh is a frame lying about its length. */
 TEST(wire_reader_read_varint, reads_what_the_writer_wrote)
 { const std::uint8_t bytes[] = {0x00, 0x7F, 0x80, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F};
   WireReader reader(bytes, sizeof bytes);
@@ -199,22 +191,18 @@ TEST(wire_reader_read_varint, refuses_one_that_never_ends_or_does_not_fit)
   CHECK(!running.read_varint(wide));
   CHECK_STATUS(running.status(), Status::malformed);
 
-  /* A value that needs more bits than the destination has. */
   const std::uint8_t wider[] = {0xFF, 0xFF, 0xFF, 0xFF, 0x1F};
   WireReader narrow(wider, sizeof wider);
   std::uint32_t small = 0u;
   CHECK(!narrow.read_varint(small));
   CHECK_STATUS(narrow.status(), Status::malformed);
 
-  /* And one that simply runs out of frame. */
   const std::uint8_t cut[] = {0x80};
   WireReader truncated(cut, sizeof cut);
   std::uint32_t value = 0u;
   CHECK(!truncated.read_varint(value));
   CHECK_STATUS(truncated.status(), Status::malformed); }
 
-/* More groups than the destination has bits at all, rather than a last group
- * that overflows it: a 32-bit field cannot be reached from the sixth byte. */
 TEST(wire_reader_read_varint, refuses_a_group_past_the_destination_s_last_bit)
 { const std::uint8_t past[] = {0x80, 0x80, 0x80, 0x80, 0x80, 0x01};
   WireReader reader(past, sizeof past);
@@ -222,7 +210,6 @@ TEST(wire_reader_read_varint, refuses_a_group_past_the_destination_s_last_bit)
   CHECK(!reader.read_varint(value));
   CHECK_STATUS(reader.status(), Status::malformed); }
 
-/* Nowhere to put the bytes is a refused frame, not a write through null. */
 TEST(wire_reader_read, refuses_a_destination_that_is_not_there)
 { const std::uint8_t frame[] = {1, 2, 3, 4};
   WireReader reader(frame, sizeof frame);

@@ -36,7 +36,7 @@ struct ContextTableProbe {
     static void corrupt_pool(ContextTable &table) { ObjectPoolProbe::corrupt_live_count(table.contexts_); }
 };
 
-}  // namespace av
+}
 
 using av::Adapter;
 using av::AllocationTable;
@@ -92,12 +92,12 @@ private:
     void            *device_;
 };
 
-}  // namespace
+}
 
 TEST(context_table_create, answers_a_context_on_the_device_for_node_zero)
 { Fixture fixture;
   DxgkargCreateContextRecord request = {};
-  request.Flags = 0x1u;   /* SystemContext */
+  request.Flags = 0x1u;
   request.EngineAffinity = 1u;
   CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
   CHECK(fixture.contexts().invariants_hold());
@@ -115,8 +115,6 @@ TEST(context_table_create, accepts_a_context_with_gpu_virtual_addressing_and_har
   CHECK(fixture.contexts().invariants_hold());
   CHECK_EQ(fixture.contexts().find(request.hContext)->flags(), 0x15u); }
 
-/* Feature 049: the second node is the hardware-scheduled one, and a context
- * lands there only when the process asked for a queue to run it. */
 TEST(context_table_create, accepts_a_context_on_the_hardware_scheduled_node)
 { Fixture fixture;
   DxgkargCreateContextRecord request = {};
@@ -131,14 +129,14 @@ TEST(context_table_create, refuses_what_this_adapter_cannot_run)
       Fixture fixture;
       DxgkargCreateContextRecord request = {};
       void *device = fixture.device();
-      if (knob == 0) device = &fixture;                    /* not a device */
-      if (knob == 1) request.NodeOrdinal = 1u;              /* node 1 runs queued contexts only */
-      if (knob == 7) request.NodeOrdinal = 2u;              /* two nodes */
-      if (knob == 2) request.EngineAffinity = 2u;          /* one engine */
-      if (knob == 3) request.Flags = 0x8u;                 /* SystemProtectedContext: WDDM 2.1 */
-      if (knob == 4) request.PrivateDriverDataSize = 4u;   /* no private data defined */
+      if (knob == 0) device = &fixture;
+      if (knob == 1) request.NodeOrdinal = 1u;
+      if (knob == 7) request.NodeOrdinal = 2u;
+      if (knob == 2) request.EngineAffinity = 2u;
+      if (knob == 3) request.Flags = 0x8u;
+      if (knob == 4) request.PrivateDriverDataSize = 4u;
       if (knob == 5) fixture.platform().fail_allocation_at(1u);
-      if (knob == 6) request.Flags = 0x10u;               /* HwQueueSupported needs VirtualAddressing */
+      if (knob == 6) request.Flags = 0x10u;
       const Status status = fixture.contexts().create(device, request);
       CHECK(status == (knob == 5 ? Status::no_memory : Status::invalid_parameter));
       CHECK_EQ(fixture.contexts().live(), 0u);
@@ -171,22 +169,18 @@ TEST(context_table_invariants, a_broken_pool_is_detected)
   CHECK(!fixture.contexts().invariants_hold()); }
 
 namespace {
-
-/* The private data a process sends to ask for an av context, encoded. */
 std::size_t av_private_data(std::uint8_t *bytes, std::size_t capacity)
 { AvContextRecord record(SubApi::vulkan, 16u, 2u, 4096u);
   if (record.encode(bytes, capacity) != Status::ok) return 0u;
   return AvContextRecord::encoded_size; }
 
-}  // namespace
+}
 
-/* A CreateContext carrying a valid record builds an av context that remembers
- * what it asked for; one carrying no private data is a plain context as before. */
 TEST(context_table_create, a_valid_record_makes_an_av_context)
 { Fixture fixture;
   std::uint8_t data[AvContextRecord::encoded_size] = {};
   DxgkargCreateContextRecord request = {};
-  request.Flags = 0x4u;   /* VirtualAddressing */
+  request.Flags = 0x4u;
   request.pPrivateDriverData = data;
   request.PrivateDriverDataSize = static_cast<std::uint32_t>(av_private_data(data, sizeof data));
   CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
@@ -195,9 +189,6 @@ TEST(context_table_create, a_valid_record_makes_an_av_context)
   CHECK(context->is_av());
   CHECK_EQ(context->av_record().sub_api(), SubApi::vulkan);
   CHECK_EQ(context->av_record().ring(), 2u);
-  /* Its submissions carry their descriptor as private data, which VidSch
-   * refuses past the size the context reports (DXGCONTEXT::SubmitCommand,
-   * dxgkrnl.sys @1402d7720). */
   CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, 32u);
   CHECK(fixture.contexts().invariants_hold()); }
 
@@ -206,17 +197,13 @@ TEST(context_table_create, a_context_with_no_private_data_is_not_av)
   DxgkargCreateContextRecord request = {};
   CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
   CHECK(!fixture.contexts().find(request.hContext)->is_av());
-  /* Room for a FollowRecord, so dxgkrnl hands every packet's private data on
-   * (Adapter::submit_command_virtual). */
   CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, av::ReleaseRecord::encoded_size); }
 
-/* Private data the size of a record but not a valid one is refused, and no
- * context is left behind. */
 TEST(context_table_create, a_record_sized_private_data_that_does_not_decode_is_refused)
 { Fixture fixture;
   std::uint8_t data[AvContextRecord::encoded_size] = {};
   av_private_data(data, sizeof data);
-  data[0] ^= 0xFFu;   /* the magic */
+  data[0] ^= 0xFFu;
   DxgkargCreateContextRecord request = {};
   request.Flags = 0x4u;
   request.pPrivateDriverData = data;
@@ -258,8 +245,6 @@ TEST(context_table_report, writes_each_context_and_its_device)
   fixture.platform().set_irql(av::Irql::passive); }
 
 namespace {
-
-/* A context on `device`: an av one whose ring is allocation 2 when `av`. */
 void *context_on(Fixture &fixture, void *device, bool av_context)
 { std::uint8_t data[AvContextRecord::encoded_size] = {};
   DxgkargCreateContextRecord request = {};
@@ -277,11 +262,8 @@ void *device_in(Fixture &fixture, void *process)
   CHECK_STATUS(fixture.devices().create(fixture.adapter(), request), Status::ok);
   return request.hDevice; }
 
-}  // namespace
+}
 
-/* A packet on an ordinary context that carries a FollowRecord waits for the
- * av context whose ring the record names - its process's own, since a handle
- * names an allocation only in the process that made it. */
 TEST(context_table_followed, finds_the_av_context_of_the_same_process_by_its_ring)
 { Fixture fixture;
   void *const av_context = context_on(fixture, fixture.device(), true);
@@ -297,11 +279,9 @@ TEST(context_table_followed, another_process_s_ring_is_never_followed)
   void *const elsewhere = device_in(fixture, &other_process);
   const Context &follower = *fixture.contexts().find(context_on(fixture, elsewhere, false));
   CHECK(fixture.contexts().followed(follower, 2u) == nullptr);
-  /* The same ring in the follower's own process is found. */
   void *const own = context_on(fixture, elsewhere, true);
   CHECK(fixture.contexts().followed(follower, 2u) == fixture.contexts().find(own)); }
 
-/* An ordinary context has no ring, whatever its record reads as. */
 TEST(context_table_followed, an_ordinary_context_is_never_followed)
 { Fixture fixture;
   const Context &follower = *fixture.contexts().find(context_on(fixture, fixture.device(), false));

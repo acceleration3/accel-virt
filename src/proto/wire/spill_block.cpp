@@ -21,8 +21,6 @@ SpillBlock::~SpillBlock()
     release();
 }
 
-/* Doubled rather than fitted, so a writer that grows a field at a time grows
- * the block a logarithmic number of times. */
 uint8_t *SpillBlock::grow(const uint8_t *written, size_t used, size_t wanted, size_t &capacity)
 {
     AV_SCOPE("SpillBlock::grow");
@@ -78,4 +76,4 @@ bool SpillBlock::invariants_hold() const
     return (block_ == nullptr) == (capacity_ == 0u);
 }
 
-}  // namespace av
+}

@@ -5,9 +5,6 @@
 #include "core/trace/function_scope.hpp"
 
 namespace av {
-
-// A view of rows ordered by a numeric key. The owner keeps them sorted;
-// searches allocate nothing and remain valid when the array grows.
 template <typename Row, auto Key = nullptr>
 class SortedSearch {
 public:
@@ -15,7 +12,6 @@ public:
 
     uint32_t at_or_after(uint64_t key) const;
     uint32_t above(uint64_t key) const;
-    // No predecessor or exact match is represented by rows.size().
     uint32_t at_or_below(uint64_t key) const;
     uint32_t exact(uint64_t key) const;
     bool invariants_hold() const;
@@ -87,6 +83,6 @@ bool SortedSearch<Row, Key>::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}
 
-#endif  // AV_SORTED_SEARCH_HPP
+#endif

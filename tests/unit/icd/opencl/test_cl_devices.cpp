@@ -1,8 +1,3 @@
-/* A guest with an avgpu adapter per host GPU is shown a device per adapter, on
- * the one platform the loader enumerates: the primary display's first, each
- * named and located as its own adapter, each found by the Direct3D adapter it
- * is, and each the only device of the contexts and queues made on it. */
-
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/pci_location.hpp"
@@ -33,15 +28,11 @@ constexpr std::uint64_t host_platform = 0x6200u;
 constexpr std::uint64_t host_device = 0x6300u;
 constexpr std::uint64_t host_context = 0x6400u;
 constexpr std::uint64_t host_queue = 0x6500u;
-/* The integrated GPU's adapter, beside the rig's: the one the primary display
- * is on in the tests that put it first. */
 constexpr std::uint64_t integrated_luid = 0x0000000300005678ull;
 
 const PciIdentity on_radeon(0x1002u, 0x7550u, PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem, 0xC0u);
 const PciIdentity on_raphael(0x1002u, 0x13C0u, PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem, 0xC9u);
 
-/* The rig's adapter as the discrete GPU, and a second as the integrated one,
- * each named and placed as Windows would. */
 void two_gpus(ClIcdRig &rig)
 {
     MockKmt &kmt = rig.kmt();
@@ -52,8 +43,6 @@ void two_gpus(ClIcdRig &rig)
     kmt.describe_adapter(1u, PciLocation(0x7Bu, 0u, 0u), "AMD Radeon(TM) Graphics", 0x0023000000000000ull);
 }
 
-/* What the host answers while one device opens: the arena's import, its
- * platform and device, the versions the ICD caps and its SVM. */
 void device_opens(ClIcdRig &rig)
 {
     rig.host().blob_import(0u, 0x77u);
@@ -78,7 +67,6 @@ void name_of(ClIcdRig &rig, cl_device_id device, char (&name)[64])
     CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_NAME, sizeof name, name, nullptr), CL_SUCCESS);
 }
 
-/* Both devices, opened: the primary display's first. */
 void both_devices(ClIcdRig &rig, cl_device_id (&devices)[2])
 {
     CHECK(rig.loader().load() == FakeClLoader::Load::kept);
@@ -89,8 +77,6 @@ void both_devices(ClIcdRig &rig, cl_device_id (&devices)[2])
     CHECK_EQ(count, 2u);
 }
 
-/* A context on `device`: the arena's import, the host's platform and device
- * again on the new transport, and its context. */
 cl_context context_on(ClIcdRig &rig, cl_device_id device)
 {
     rig.host().blob_import(0u, 0x78u);
@@ -103,7 +89,7 @@ cl_context context_on(ClIcdRig &rig, cl_device_id device)
     return made;
 }
 
-}  // namespace
+}
 
 TEST(cl_devices, a_device_for_each_adapter_the_primary_displays_first)
 { ClIcdRig rig;
@@ -120,7 +106,6 @@ TEST(cl_devices, a_device_for_each_adapter_the_primary_displays_first)
   name_of(rig, devices[1], second);
   CHECK_EQ(std::strcmp(first, "AMD Radeon(TM) Graphics"), 0);
   CHECK_EQ(std::strcmp(second, "AMD Radeon RX 9070 XT"), 0);
-  /* The count alone, and a list with room for one, which is the first. */
   cl_uint count = 0u;
   CHECK_EQ(rig.loader().device_ids(CL_DEVICE_TYPE_ALL, 0u, nullptr, &count), CL_SUCCESS);
   CHECK_EQ(count, 2u);
@@ -130,7 +115,6 @@ TEST(cl_devices, a_device_for_each_adapter_the_primary_displays_first)
   CHECK_EQ(count, 2u);
   CHECK(rig.root().invariants_hold()); }
 
-/* No one GPU's name says what a platform of two is; one GPU's does. */
 TEST(cl_devices, the_platform_is_named_after_its_gpu_only_when_it_has_one)
 { { ClIcdRig rig;
     two_gpus(rig);
@@ -145,9 +129,6 @@ TEST(cl_devices, the_platform_is_named_after_its_gpu_only_when_it_has_one)
     CHECK_EQ(rig.root().platform_info(nullptr, CL_PLATFORM_NAME, sizeof name, name, nullptr), CL_SUCCESS);
     CHECK_EQ(std::strcmp(name, "avgpu OpenCL on AMD Radeon RX 9070 XT"), 0); } }
 
-/* How an application pairs its Direct3D adapter with a device - Affinity
- * looks its compute device up this way for whichever GPU it renders on. Only
- * the asked adapter's device is opened. */
 TEST(cl_devices, each_direct3d_adapter_finds_its_own_device)
 { ClIcdRig rig;
   two_gpus(rig);
@@ -179,8 +160,6 @@ TEST(cl_devices, each_direct3d_adapter_finds_its_own_device)
            CL_DEVICE_NOT_FOUND);
   CHECK_EQ(count, 0u); }
 
-/* A context runs on its device's host GPU and no other: it names that device,
- * and a queue for the other device is refused before anything is sent. */
 TEST(cl_devices, a_context_and_its_queues_are_its_devices_alone)
 { ClIcdRig rig;
   two_gpus(rig);
@@ -203,8 +182,6 @@ TEST(cl_devices, a_context_and_its_queues_are_its_devices_alone)
   CHECK(of_queue == devices[1]);
   CHECK(rig.root().invariants_hold()); }
 
-/* Which adapters become devices: every one with a LUID, in the list's order,
- * up to max_devices. */
 TEST(cl_devices, learns_a_device_for_each_adapter_with_a_luid_once)
 { MockKmt kmt;
   kmt.add_adapter(on_radeon, AdapterScenario::wddm_3_2);
@@ -226,15 +203,12 @@ TEST(cl_devices, learns_a_device_for_each_adapter_with_a_luid_once)
   CHECK(devices.on(0x44u) == nullptr);
   CHECK(devices.on(0u) == nullptr);
   CHECK(devices.invariants_hold());
-  /* Once: a second learn over more adapters changes nothing. */
   kmt.add_adapter(on_radeon, AdapterScenario::wddm_3_2);
   { AvgpuAdapters adapters(kmt);
     CHECK_STATUS(adapters.learn(), Status::ok);
     devices.learn(adapters); }
   CHECK_EQ(devices.count(), 2u); }
 
-/* A device is opened by its adapter's LUID, so an adapter Windows gave none
- * is no device; the rest keep their order. */
 TEST(cl_devices, an_adapter_without_a_luid_is_left_out)
 { MockKmt kmt;
   kmt.add_adapter(on_radeon, AdapterScenario::wddm_3_2);

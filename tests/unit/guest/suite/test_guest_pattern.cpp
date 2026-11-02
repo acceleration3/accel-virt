@@ -1,6 +1,3 @@
-/* The pattern a guest writes for someone else to read: its bytes are the ones
- * tools/guest/run_guest_suite.py looks for, none of them zero, and what a view
- * holds is counted byte by byte. */
 #include "guest/suite/guest_pattern.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -16,10 +13,10 @@ TEST(guest_pattern, writes_one_plus_seven_n_mod_251_and_nothing_past_its_length)
   pattern.write(view);
   CHECK_EQ(view[0], 1u);
   CHECK_EQ(view[1], 8u);
-  CHECK_EQ(view[35], 246u);   /* 1 + 245 */
-  CHECK_EQ(view[36], 2u);     /* 1 + 252 % 251 */
-  CHECK_EQ(view[250], 245u);  /* 1 + 1750 % 251 */
-  CHECK_EQ(view[251], 1u);    /* the period */
+  CHECK_EQ(view[35], 246u);
+  CHECK_EQ(view[36], 2u);
+  CHECK_EQ(view[250], 245u);
+  CHECK_EQ(view[251], 1u);
   CHECK_EQ(view[599], static_cast<unsigned char>(1u + 599u * 7u % 251u));
   CHECK_EQ(view[600], 0u);
   CHECK_EQ(pattern.filled(view), 600u);

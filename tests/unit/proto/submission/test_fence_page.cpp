@@ -28,7 +28,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(fence_page_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[FencePage::encoded_size] = {};
@@ -64,10 +64,10 @@ TEST(fence_page, round_trips_healthy_and_faulted_pages)
 TEST(fence_page_decode, rejects_each_malformed_field)
 { struct Case { std::size_t offset; std::uint8_t value; };
   const Case cases[] = {
-      {0u, 0u},     /* magic */
-      {4u, 2u},     /* unknown flag */
-      {24u, 1u},    /* fault code without the faulted flag */
-      {29u, 1u},    /* reserved */
+      {0u, 0u},
+      {4u, 2u},
+      {24u, 1u},
+      {29u, 1u},
   };
   for (const Case &c : cases) {
       std::uint8_t bytes[FencePage::encoded_size] = {};
@@ -89,12 +89,5 @@ TEST(fence_page_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 256u);
-  /* The page constrains its magic, its flags and its reserved word, and leaves
-   * the values to FenceProgress: the completed fence, the progress counter,
-   * the raises counted and the pulse's beat are 256 free bits, and once the page says faulted the 32 bits of the fault
-   * code are free too. A flipped flag word either names a flag nobody defined
-   * or clears "faulted" while a code stands. Every shorter input is short of
-   * 48 bytes, all-zero and all-ones carry no magic, and the untouched input is
-   * the last acceptance. */
   const std::uint32_t acceptable = 256u + 32u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

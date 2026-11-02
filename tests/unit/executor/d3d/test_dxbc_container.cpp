@@ -1,8 +1,3 @@
-/* The DXBC container the executor writes from what the DDI hands a driver,
- * the checksum over it that DXVK checks, and the input signature a pipeline
- * reads back out of an application's own container. The checksum is judged
- * against one dxc wrote (tests/fixtures/d3d12/triangle_vs.hpp), and what the
- * writer writes is read back through the reader and the header's own fields. */
 #include "executor/d3d/dxbc_container.hpp"
 #include "executor/d3d/dxbc_digest.hpp"
 #include "executor/d3d/dxbc_signature_reader.hpp"
@@ -33,7 +28,6 @@ const std::uint8_t *dxc_container() { return reinterpret_cast<const std::uint8_t
 const std::uint8_t *vs_tokens() { return reinterpret_cast<const std::uint8_t *>(triangle_vs::tokens); }
 const std::uint8_t *dxil_program() { return reinterpret_cast<const std::uint8_t *>(triangle_vs::program); }
 
-/* The chunk of `fourcc` in a container, or the container's size for none. */
 std::size_t chunk_at(const std::uint8_t *container, const char *fourcc)
 {
     const std::uint32_t count = u32(container, 28u);
@@ -44,9 +38,7 @@ std::size_t chunk_at(const std::uint8_t *container, const char *fourcc)
     return u32(container, 24u);
 }
 
-}  // namespace
-
-/* ---- DxbcDigest --------------------------------------------------------- */
+}
 
 TEST(dxbc_digest, is_the_checksum_dxc_wrote_into_its_own_container)
 { std::uint8_t digest[DxbcDigest::digest_bytes] = {};
@@ -57,16 +49,13 @@ TEST(dxbc_digest, a_changed_byte_past_the_checksum_changes_it_and_one_before_doe
 { static std::uint8_t copy[triangle_vs::container_bytes];
   std::memcpy(copy, dxc_container(), sizeof copy);
   std::uint8_t digest[DxbcDigest::digest_bytes] = {};
-  copy[3] ^= 0x01u;   /* the magic is not hashed */
+  copy[3] ^= 0x01u;
   DxbcDigest().compute(copy, sizeof copy, digest);
   CHECK(std::memcmp(digest, dxc_container() + 4u, sizeof digest) == 0);
   copy[DxbcDigest::hashed_from] ^= 0x01u;
   DxbcDigest().compute(copy, sizeof copy, digest);
   CHECK(std::memcmp(digest, dxc_container() + 4u, sizeof digest) != 0); }
 
-/* Every length leaves a different amount of the last block, which moves where
- * DXBC's finalisation puts its words: the same digest object gives a stable
- * answer for each, and no two neighbouring lengths agree. */
 TEST(dxbc_digest, every_tail_length_is_hashed_and_a_reused_digest_starts_over)
 { DxbcDigest digest;
   std::uint8_t previous[DxbcDigest::digest_bytes] = {};
@@ -88,13 +77,10 @@ TEST(dxbc_digest, a_container_too_short_for_a_header_gets_zeroes)
   std::memset(digest, 0xAB, sizeof digest);
   DxbcDigest().compute(nullptr, 4096u, digest);
   for (const std::uint8_t byte : digest) CHECK_EQ(byte, 0u);
-  /* The header alone is a container with nothing past the checksum: hashed. */
   DxbcDigest().compute(dxc_container(), DxbcDigest::hashed_from, digest);
   std::uint32_t nonzero = 0u;
   for (const std::uint8_t byte : digest) nonzero += byte != 0u ? 1u : 0u;
   CHECK(nonzero > 0u); }
-
-/* ---- DxbcContainer ------------------------------------------------------ */
 
 TEST(dxbc_container, writes_a_container_whose_header_chunks_and_checksum_agree)
 { std::uint8_t buffer[4096] = {};
@@ -111,7 +97,6 @@ TEST(dxbc_container, writes_a_container_whose_header_chunks_and_checksum_agree)
   std::uint8_t digest[DxbcDigest::digest_bytes] = {};
   DxbcDigest().compute(buffer, size, digest);
   CHECK(std::memcmp(digest, buffer + 4u, sizeof digest) == 0);
-  /* The tokens unchanged in SHEX, its length the tokens'; every chunk on four bytes. */
   const std::size_t shex = chunk_at(buffer, "SHEX");
   CHECK(shex < size);
   CHECK_EQ(u32(buffer, shex + 4u), static_cast<std::uint32_t>(sizeof triangle_vs::tokens));
@@ -119,9 +104,6 @@ TEST(dxbc_container, writes_a_container_whose_header_chunks_and_checksum_agree)
   CHECK_EQ(chunk_at(buffer, "ISG1") % 4u, 0u);
   CHECK_EQ(chunk_at(buffer, "OSG1") % 4u, 0u); }
 
-/* What the executor names each entry is read back by the reader the pipeline
- * builder uses: AV and the register's first component for a plain register,
- * and an input's mask doubled into the components the shader reads. */
 TEST(dxbc_container, an_input_signature_is_read_back_by_register)
 { std::uint8_t buffer[4096] = {};
   DxbcContainer container(buffer, sizeof buffer);
@@ -135,10 +117,10 @@ TEST(dxbc_container, an_input_signature_is_read_back_by_register)
   CHECK_EQ(index, 0u);
   const char *const second = reader.semantic_at(1u, index);
   CHECK(second != nullptr && std::strcmp(second, "AV") == 0);
-  CHECK_EQ(index, 4u);   /* register 1, component x */
+  CHECK_EQ(index, 4u);
   CHECK(reader.semantic_at(2u, index) == nullptr);
   const std::size_t isg1 = chunk_at(buffer, "ISG1");
-  CHECK_EQ(u32(buffer, isg1 + 8u + 8u + 6u * 4u), 0x0303u);   /* entry 0's masks: xy exists, xy read */ }
+  CHECK_EQ(u32(buffer, isg1 + 8u + 8u + 6u * 4u), 0x0303u);   }
 
 TEST(dxbc_container_add_layout_signature, names_every_register_the_layout_feeds_as_a_whole_float_register)
 { std::uint8_t buffer[4096] = {};
@@ -155,8 +137,8 @@ TEST(dxbc_container_add_layout_signature, names_every_register_the_layout_feeds_
   }
   CHECK(reader.semantic_at(1u, index) == nullptr);
   const std::size_t isg1 = chunk_at(buffer, "ISG1");
-  CHECK_EQ(u32(buffer, isg1 + 8u + 8u + 4u * 4u), 3u);        /* FLOAT32 */
-  CHECK_EQ(u32(buffer, isg1 + 8u + 8u + 6u * 4u), 0x0F0Fu);   /* xyzw */
+  CHECK_EQ(u32(buffer, isg1 + 8u + 8u + 4u * 4u), 3u);
+  CHECK_EQ(u32(buffer, isg1 + 8u + 8u + 6u * 4u), 0x0F0Fu);
   std::uint32_t too_many[33] = {};
   DxbcContainer refused(buffer, sizeof buffer);
   CHECK(!refused.add_layout_signature(too_many, 33u)); }
@@ -171,25 +153,25 @@ TEST(dxbc_container_semantic_of, names_system_values_render_targets_depth_and_te
       std::uint32_t index;
   };
   const Case cases[] = {
-      {0u, 2u, 0x4u, false, "AV", 10u},               /* register 2, component z */
-      {0u, 2u, 0x0u, false, "AV", 8u},                /* no mask: the register's first */
+      {0u, 2u, 0x4u, false, "AV", 10u},
+      {0u, 2u, 0x0u, false, "AV", 8u},
       {1u, 0u, 0xFu, false, "SV_Position", 0u},
       {2u, 1u, 0x2u, false, "SV_ClipDistance", 0u},
       {3u, 1u, 0x1u, false, "SV_CullDistance", 0u},
       {10u, 0u, 0x1u, false, "SV_SampleIndex", 0u},
       {0u, 3u, 0xFu, true, "SV_Target", 3u},
       {0u, 0xFFFFFFFFu, 0x1u, true, "SV_Depth", 0xFFFFFFFFu},
-      {1u, 0u, 0xFu, true, "SV_Position", 0u},         /* a system value is not a target */
-      {11u, 0u, 0x1u, false, "SV_TessFactor", 0u},     /* quad edges 0..3 */
+      {1u, 0u, 0xFu, true, "SV_Position", 0u},
+      {11u, 0u, 0x1u, false, "SV_TessFactor", 0u},
       {14u, 0u, 0x1u, false, "SV_TessFactor", 3u},
       {15u, 0u, 0x1u, false, "SV_InsideTessFactor", 0u},
       {16u, 0u, 0x1u, false, "SV_InsideTessFactor", 1u},
-      {17u, 0u, 0x1u, false, "SV_TessFactor", 0u},     /* triangle edges 0..2 */
+      {17u, 0u, 0x1u, false, "SV_TessFactor", 0u},
       {19u, 0u, 0x1u, false, "SV_TessFactor", 2u},
       {20u, 0u, 0x1u, false, "SV_InsideTessFactor", 0u},
-      {21u, 0u, 0x1u, false, "SV_TessFactor", 1u},     /* line detail */
-      {22u, 0u, 0x1u, false, "SV_TessFactor", 0u},     /* line density */
-      {23u, 5u, 0x1u, false, "AV", 20u},              /* past the names: a register */
+      {21u, 0u, 0x1u, false, "SV_TessFactor", 1u},
+      {22u, 0u, 0x1u, false, "SV_TessFactor", 0u},
+      {23u, 5u, 0x1u, false, "AV", 20u},
   };
   for (const Case &c : cases) {
       SignatureEntry entry = {};
@@ -202,8 +184,6 @@ TEST(dxbc_container_semantic_of, names_system_values_render_targets_depth_and_te
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
   } }
 
-/* Two clip distances in one signature are SV_ClipDistance 0 and 1, and a
- * tessellation factor's D3D_NAME is the container's, not the token format's. */
 TEST(dxbc_container_add_signature, numbers_distances_and_writes_the_container_s_system_values)
 { std::uint8_t buffer[4096] = {};
   DxbcContainer container(buffer, sizeof buffer);
@@ -216,12 +196,12 @@ TEST(dxbc_container_add_signature, numbers_distances_and_writes_the_container_s_
   CHECK(container.finish() > 0u);
   const std::size_t psg1 = chunk_at(buffer, "PSG1");
   const std::size_t table = psg1 + 8u + 8u;
-  CHECK_EQ(u32(buffer, table + 2u * 4u), 0u);            /* first distance, index 0 */
-  CHECK_EQ(u32(buffer, table + 32u + 2u * 4u), 1u);      /* second, index 1 */
-  CHECK_EQ(u32(buffer, table + 32u + 3u * 4u), 2u);      /* D3D_NAME_CLIP_DISTANCE */
-  CHECK_EQ(u32(buffer, table + 64u + 3u * 4u), 13u);     /* D3D_NAME_FINAL_TRI_EDGE_TESSFACTOR */
-  CHECK_EQ(u32(buffer, table + 96u + 0u * 4u), 1u);      /* its stream */
-  CHECK_EQ(u32(buffer, table + 64u + 6u * 4u), 0x1u);    /* not an input: no read mask */ }
+  CHECK_EQ(u32(buffer, table + 2u * 4u), 0u);
+  CHECK_EQ(u32(buffer, table + 32u + 2u * 4u), 1u);
+  CHECK_EQ(u32(buffer, table + 32u + 3u * 4u), 2u);
+  CHECK_EQ(u32(buffer, table + 64u + 3u * 4u), 13u);
+  CHECK_EQ(u32(buffer, table + 96u + 0u * 4u), 1u);
+  CHECK_EQ(u32(buffer, table + 64u + 6u * 4u), 0x1u);    }
 
 TEST(dxbc_container_add_signature, a_pixel_shader_s_outputs_are_targets_and_depth)
 { std::uint8_t buffer[4096] = {};
@@ -230,9 +210,9 @@ TEST(dxbc_container_add_signature, a_pixel_shader_s_outputs_are_targets_and_dept
   CHECK(container.add_signature(DxbcContainer::Role::output, outputs, 2u, true));
   CHECK(container.finish() > 0u);
   const std::size_t table = chunk_at(buffer, "OSG1") + 8u + 8u;
-  CHECK_EQ(u32(buffer, table + 3u * 4u), 64u);          /* D3D_NAME_TARGET */
-  CHECK_EQ(u32(buffer, table + 2u * 4u), 1u);           /* SV_Target1 */
-  CHECK_EQ(u32(buffer, table + 32u + 3u * 4u), 65u); }  /* D3D_NAME_DEPTH */
+  CHECK_EQ(u32(buffer, table + 3u * 4u), 64u);
+  CHECK_EQ(u32(buffer, table + 2u * 4u), 1u);
+  CHECK_EQ(u32(buffer, table + 32u + 3u * 4u), 65u); }
 
 TEST(dxbc_container_add_code, refuses_a_stream_whose_length_token_disagrees_with_its_size)
 { std::uint8_t buffer[4096] = {};
@@ -242,7 +222,7 @@ TEST(dxbc_container_add_code, refuses_a_stream_whose_length_token_disagrees_with
   CHECK(!container.add_code(vs_tokens(), sizeof triangle_vs::tokens - 2u));
   CHECK(!container.add_code(vs_tokens(), sizeof triangle_vs::tokens - 4u));
   CHECK(container.add_code(vs_tokens(), sizeof triangle_vs::tokens));
-  CHECK_EQ(u32(buffer, 0u), 0u);   /* nothing is a container before finish */
+  CHECK_EQ(u32(buffer, 0u), 0u);
   CHECK(container.finish() > 0u);
   CHECK_EQ(u32(buffer, 28u), 1u); }
 
@@ -251,7 +231,7 @@ TEST(dxbc_container_add_dxil, keeps_a_dxil_program_as_it_is_and_refuses_anything
   DxbcContainer container(buffer, sizeof buffer);
   CHECK(!container.add_dxil(nullptr, 16u));
   CHECK(!container.add_dxil(dxil_program(), 8u));
-  CHECK(!container.add_dxil(dxil_program(), triangle_vs::program_bytes - 4u));   /* size disagrees */
+  CHECK(!container.add_dxil(dxil_program(), triangle_vs::program_bytes - 4u));
   static std::uint8_t not_dxil[triangle_vs::program_bytes];
   std::memcpy(not_dxil, dxil_program(), sizeof not_dxil);
   not_dxil[8] = 'X';
@@ -275,14 +255,11 @@ TEST(dxbc_container_finish, a_container_that_did_not_fit_is_nothing)
   DxbcContainer short_of_code(small, sizeof small);
   CHECK(!short_of_code.add_code(vs_tokens(), sizeof triangle_vs::tokens));
   CHECK_EQ(short_of_code.finish(), 0u);
-  /* Six chunks is all a container here has room to list. */
   std::uint8_t buffer[4096] = {};
   DxbcContainer full(buffer, sizeof buffer);
   for (std::uint32_t chunk = 0u; chunk < 6u; chunk++) CHECK(full.add_layout_signature(nullptr, 0u));
   CHECK(!full.add_layout_signature(nullptr, 0u));
   CHECK_EQ(full.finish(), 0u); }
-
-/* ---- DxbcSignatureReader ------------------------------------------------ */
 
 TEST(dxbc_signature_reader, reads_the_application_s_own_semantics_out_of_a_dxc_container)
 { const DxbcSignatureReader reader(dxc_container(), triangle_vs::container_bytes);
@@ -306,7 +283,6 @@ TEST(dxbc_signature_reader, finds_nothing_in_what_is_not_a_container_with_an_inp
   const std::uint32_t too_many = 65u;
   std::memcpy(copy + 28u, &too_many, 4u);
   CHECK(!DxbcSignatureReader(copy, sizeof copy).found());
-  /* A container of code alone. */
   std::uint8_t buffer[4096] = {};
   DxbcContainer code(buffer, sizeof buffer);
   CHECK(code.add_code(vs_tokens(), sizeof triangle_vs::tokens));
@@ -315,8 +291,6 @@ TEST(dxbc_signature_reader, finds_nothing_in_what_is_not_a_container_with_an_inp
   std::uint32_t index = 0u;
   CHECK(reader.semantic_at(0u, index) == nullptr); }
 
-/* The bytes came off the wire: a name running off the chunk's end, an entry
- * table past it and a chunk longer than the container are each nothing. */
 TEST(dxbc_signature_reader, a_signature_running_past_its_chunk_names_nothing)
 { std::uint8_t buffer[4096] = {};
   DxbcContainer container(buffer, sizeof buffer);
@@ -337,5 +311,4 @@ TEST(dxbc_signature_reader, a_signature_running_past_its_chunk_names_nothing)
   const std::uint32_t long_chunk = 0x100000u;
   std::memcpy(spoiled + isg1 + 4u, &long_chunk, 4u);
   CHECK(!DxbcSignatureReader(spoiled, size).found());
-  /* The unspoiled container still reads, so each refusal above was the spoiling. */
   CHECK(DxbcSignatureReader(buffer, size).semantic_at(0u, index) != nullptr); }

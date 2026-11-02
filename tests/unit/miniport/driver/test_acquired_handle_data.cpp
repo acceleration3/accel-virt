@@ -21,22 +21,17 @@ using av::Status;
 using av::Violation;
 
 namespace av {
-
-/* A loan whose data went away but whose release handle did not - the state the
- * destructor must never be left to hand back. */
 struct AcquiredHandleDataProbe {
     static void forget_data(AcquiredHandleData &acquired) { acquired.data_ = nullptr; }
     static void clear_release(AcquiredHandleData &acquired) { acquired.release_handle_ = nullptr; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
 int driver_data = 0;
 
-/* A DxgkrnlInterface over the fake adapter's callbacks, and the handle table
- * they answer from. */
 class Lender {
 public:
     Lender() : platform_(), function_(), dxgkrnl_(platform_, function_), interface_(platform_), handles_()
@@ -56,7 +51,7 @@ private:
     FakeHandleTable       handles_;
 };
 
-}  // namespace
+}
 
 TEST(acquired_handle_data_acquire, lends_the_data_and_hands_the_loan_back)
 { Lender lender;
@@ -70,11 +65,8 @@ TEST(acquired_handle_data_acquire, lends_the_data_and_hands_the_loan_back)
       CHECK(acquired.invariants_hold());
       CHECK_EQ(lender.handles().outstanding(), 1u);
   }
-  /* The destructor released it: the table would fail the test otherwise. */
   CHECK_EQ(lender.handles().outstanding(), 0u); }
 
-/* dxgkrnl knowing no such handle is invalid_parameter, never not_found, and
- * leaves nothing to hand back. */
 TEST(acquired_handle_data_acquire, an_unknown_handle_lends_nothing)
 { Lender lender;
   {
@@ -114,7 +106,6 @@ TEST(acquired_handle_data_invariants, a_loan_with_no_data_to_read_is_detected)
   CHECK_STATUS(acquired.acquire(), Status::ok);
   av::AcquiredHandleDataProbe::forget_data(acquired);
   CHECK(!acquired.invariants_hold());
-  /* Hand the loan back through the table so the fixture stays honest. */
   av::AcquiredHandleDataProbe::clear_release(acquired);
   lender.interface().release_handle_data(&driver_data);
   CHECK(acquired.invariants_hold()); }

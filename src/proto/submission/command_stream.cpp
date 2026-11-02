@@ -40,4 +40,4 @@ bool CommandStream::invariants_hold() const
     return offset_ <= length_;
 }
 
-}  // namespace av
+}

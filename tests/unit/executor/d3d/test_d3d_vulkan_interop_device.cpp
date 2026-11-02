@@ -1,14 +1,3 @@
-/* A Direct3D 11 texture a guest shares, opened by Vulkan on the same GPU
- * (feature 053, docs/shared-surfaces.md step 5): the texture is made over
- * memory the D3D backend exports, a second device imports that memory as the
- * Vulkan backend does - not dedicated, in the first type the dma-buf allows -
- * and binds the image ExportableImageInfo describes to it, a pattern is copied
- * into that image, and Direct3D reads back every texel where Vulkan put it.
- * This is how a Vulkan swapchain's frames reach a DXGI chain, in both channel
- * orders a chain's slot has. The texture is narrower than a whole number of
- * 256-byte rows, so the rows the description places past each row's texels
- * are where both devices must look. A host without DXVK and Vulkan on one GPU
- * returns without judging. */
 #include "proto/d3d/resource_misc.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
@@ -41,9 +30,6 @@ namespace {
 
 using namespace av::d3dproto;
 
-/* 244 bytes a row, which the description pitches 256 apart
- * (ExportableImageInfo): Direct3D's texture and Vulkan's image agree only
- * as both are laid out from it. */
 constexpr std::uint32_t width = 61u;
 constexpr std::uint32_t height = 64u;
 constexpr std::uint32_t texels = width * height;
@@ -51,13 +37,10 @@ constexpr std::uint32_t format_r8g8b8a8 = 28u;
 constexpr std::uint32_t format_b8g8r8a8 = 87u;
 constexpr std::uint32_t bind_shader_resource = 0x8u;
 constexpr std::uint32_t bind_render_target = 0x20u;
-/* Shared and asked for as rows, as the code of ours that makes a texture
- * another API reads asks for it (SharedRowsScope). */
 constexpr std::uint32_t misc_shared = av::ResourceMisc::shared_bit | av::ResourceMisc::rows_bit;
 constexpr std::uint64_t key = 0x5100000000000041ull;
 constexpr std::uint32_t uuid_bytes = VK_UUID_SIZE;
 
-/* One device on the GPU `uuid` names, with what a dma-buf import needs. */
 class HostVulkan {
 public:
     explicit HostVulkan(const std::uint8_t *uuid)
@@ -66,7 +49,7 @@ public:
     {
         VkApplicationInfo application = {};
         application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        application.apiVersion = (1u << 22u) | (3u << 12u);   /* VK_API_VERSION_1_3, whose macro casts as C does */
+        application.apiVersion = (1u << 22u) | (3u << 12u);
         VkInstanceCreateInfo instance = {};
         instance.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         instance.pApplicationInfo = &application;
@@ -121,7 +104,6 @@ public:
     bool     usable() const { return device_ != VK_NULL_HANDLE && pool_ != VK_NULL_HANDLE && fd_properties_ != nullptr; }
     VkDevice device() const { return device_; }
 
-    /* The types `fd` may be imported as, asked of the driver. */
     std::uint32_t dma_buf_types(int fd) const
     {
         VkMemoryFdPropertiesKHR answered = {};
@@ -131,7 +113,6 @@ public:
         return answered.memoryTypeBits;
     }
 
-    /* The lowest type in `mask` with every property in `wanted`; 32 for none. */
     std::uint32_t type_in(std::uint32_t mask, VkMemoryPropertyFlags wanted) const
     {
         VkPhysicalDeviceMemoryProperties memory = {};
@@ -142,7 +123,6 @@ public:
         return 32u;
     }
 
-    /* `bytes` copied into `image`, which is left GENERAL, and waited for. */
     bool upload(VkImage image, const std::uint8_t *bytes, VkDeviceSize length)
     {
         VkBufferCreateInfo created = {};
@@ -225,7 +205,7 @@ private:
     PFN_vkGetMemoryFdPropertiesKHR fd_properties_;
 };
 
-}  // namespace
+}
 
 TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_back_through_direct3d)
 {
@@ -253,8 +233,6 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
 
-    /* Every texel its own value, so a layout the two devices disagree on moves
-     * texels where a clear would not show it. */
     static std::uint8_t pattern[texels * 4u];
     for (std::uint32_t at = 0u; at < texels; at++) {
         pattern[at * 4u] = static_cast<std::uint8_t>(at % width);
@@ -291,8 +269,6 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
         CHECK_EQ(vkCreateImage(vulkan.device(), &described.info(), nullptr, &image), VK_SUCCESS);
         VkMemoryRequirements needs = {};
         vkGetImageMemoryRequirements(vulkan.device(), image, &needs);
-        /* The image fits in what Direct3D exported, or the bind below reads
-         * past the texture. */
         CHECK(needs.size <= static_cast<VkDeviceSize>(bytes));
         const std::uint32_t type = vulkan.type_in(vulkan.dma_buf_types(fd) & needs.memoryTypeBits, 0u);
         CHECK(type < 32u);
@@ -306,7 +282,6 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
         allocate.allocationSize = static_cast<VkDeviceSize>(bytes);
         allocate.memoryTypeIndex = type;
         VkDeviceMemory memory = VK_NULL_HANDLE;
-        /* The driver owns the descriptor once the import succeeds. */
         CHECK_EQ(vkAllocateMemory(vulkan.device(), &allocate, nullptr, &memory), VK_SUCCESS);
         CHECK_EQ(vkBindImageMemory(vulkan.device(), image, memory, 0u), VK_SUCCESS);
         CHECK(vulkan.upload(image, pattern, sizeof pattern));
@@ -319,8 +294,6 @@ TEST(d3d_vulkan_interop_device, a_shared_texture_written_through_vulkan_reads_ba
                                       &read));
         CHECK_EQ(hresult, 0u);
         CHECK_EQ(row_pitch, width * 4u);
-        /* Bytes as Vulkan stored them, in either channel order: a slot is
-         * copied into, never converted. */
         const std::uint32_t probes[] = {0u, 1u, width - 1u, width, width * 3u + 17u, texels / 2u + 9u, texels - 1u};
         for (const std::uint32_t at : probes)
             for (std::uint32_t channel = 0u; channel < 4u; channel++)

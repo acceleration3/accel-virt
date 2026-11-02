@@ -36,4 +36,4 @@ bool RootPageTable::invariants_hold() const
     return entries_ <= GpuMmuGeometry::entries_per_table;
 }
 
-}  // namespace av
+}

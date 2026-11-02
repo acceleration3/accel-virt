@@ -83,9 +83,6 @@ Status CofuncModality::offer_sources(uint32_t source)
     return status != Status::ok ? status : set.assign();
 }
 
-/* A pinned source mode the adapter does not have leaves the target set alone:
- * DMMVIDPNTARGET::SetCofuncModeSet (dxgkrnl.sys @14005004c) refuses an empty
- * cofunctional set with STATUS_GRAPHICS_EMPTY_ADAPTER_MONITOR_MODE_SUPPORT_INTERSECTION. */
 Status CofuncModality::offer_targets(uint32_t target, const D3dkmdtVidPnSourceModeRecord *pinned_source)
 {
     AV_SCOPE("CofuncModality::offer_targets");
@@ -105,21 +102,6 @@ Status CofuncModality::offer_targets(uint32_t target, const D3dkmdtVidPnSourceMo
     return status != Status::ok ? status : set.assign();
 }
 
-/* What the adapter can do with a path is identity scaling and identity rotation
- * at offset zero, and every path is told so on every enumeration, pivot or not.
- *
- * Once per path per enumeration is what dxgkrnl counts: UpdatePathSupportInfo
- * (dxgkrnl.sys @1403ab840) decrements a countdown and only calls
- * DisallowModifyingAction when it reaches zero, which is what closes the
- * enumeration. Skip a path and the topology stays modifiable, and DMM walks its
- * pivots - source, target, scaling, rotation - and then throws the VidPn away
- * and starts again, which is the loop the guest log shows.
- *
- * Offset0 is not optional either: IsDriverSupportPathIndependentRotation
- * (@1403d9d78) answers yes for any driver whose declared interface version is
- * above 0x4002, so always for us, and SetRotationSupport (@14004b80c) then
- * bugchecks 0x113 subcode 0x1C on a test-signed machine when the mask for a
- * primary clone path - the only path we have - lacks it. */
 Status CofuncModality::update_support(const D3dkmdtVidPnPresentPathRecord &path)
 {
     AV_SCOPE("CofuncModality::update_support");
@@ -158,4 +140,4 @@ void CofuncModality::log_path(const D3dkmdtVidPnPresentPathRecord &path,
     platform_.log(line.text());
 }
 
-}  // namespace av
+}

@@ -25,7 +25,6 @@ Status PresentBlit::blit(const Rectangle &source, const Rectangle &destination, 
     if (source_ == nullptr || !reachable()) return Status::not_supported;
     const PresentArea from(source);
     const PresentArea into(destination);
-    /* The desktop presents one to one; nothing here scales. */
     if (from.right() - from.left() != into.right() - into.left() ||
         from.bottom() - from.top() != into.bottom() - into.top())
         return Status::not_supported;
@@ -53,7 +52,6 @@ Status PresentBlit::gather(const PresentArea &source, const PresentArea &destina
     for (uint32_t index = 0u; index < count && added == Status::ok; index++) {
         const RectRecord &sub = sub_rectangles[index];
         const PresentArea piece = PresentArea(sub.left, sub.top, sub.right, sub.bottom).intersected_with(destination);
-        /* The same piece of the source: the two rectangles are the same size. */
         const PresentArea piece_source(source.left() + piece.left() - destination.left(),
                                        source.top() + piece.top() - destination.top(),
                                        source.left() + piece.right() - destination.left(),
@@ -63,9 +61,6 @@ Status PresentBlit::gather(const PresentArea &source, const PresentArea &destina
     return added == Status::ok ? flush() : added;
 }
 
-/* The destination is clipped to its surface first, then the piece of the
- * source it maps to is clipped to the source's, and the destination follows
- * whatever that took away. */
 Status PresentBlit::add(const PresentArea &source, const PresentArea &destination)
 {
     AV_SCOPE("PresentBlit::add");
@@ -126,4 +121,4 @@ bool PresentBlit::invariants_hold() const
     return held_ <= batch;
 }
 
-}  // namespace av
+}

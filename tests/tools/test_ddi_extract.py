@@ -8,9 +8,6 @@ KIT = ROOT / "third_party" / "windows-kit"
 
 
 class DdiExtract(unittest.TestCase):
-    """The slot table drives the generated DdiTable layout; a dropped field
-    shifts every slot after it."""
-
     @unittest.skipUnless((KIT / "VERSION").exists(), "no Windows kit")
     def test_every_driver_initialization_data_field_is_a_row(self):
         tree = SourceTree()

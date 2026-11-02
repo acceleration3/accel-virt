@@ -1,6 +1,3 @@
-/* One GPU's frames that presents stage into (FramePool): a present claims a
- * free frame already of its shape first, else any free one, and nothing once
- * every frame is out or none may be claimed. */
 #include "executor/d3d/frame_claim.hpp"
 #include "executor/d3d/frame_pool.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -11,9 +8,6 @@ using av::FrameClaim;
 using av::FramePool;
 
 namespace {
-
-/* A frame of one size, which may refuse a claim as a frame the GPU is still
- * copying into does. */
 class Frame {
 public:
     Frame() : claim_(), size_(0u), busy_(false) {}
@@ -32,7 +26,7 @@ private:
 
 using Pool = FramePool<Frame>;
 
-}  // namespace
+}
 
 TEST(frame_pool, a_present_takes_the_first_free_frame_when_none_is_its_shape)
 { Pool   pool;
@@ -43,8 +37,6 @@ TEST(frame_pool, a_present_takes_the_first_free_frame_when_none_is_its_shape)
   CHECK(second != nullptr);
   CHECK(second != first); }
 
-/* A frame already of the present's shape is reused before any other, so its
- * surfaces are not made again - unless it is out. */
 TEST(frame_pool, a_free_frame_of_the_shape_is_taken_before_the_rest)
 { Pool          pool;
   std::uint32_t index = 0u;
@@ -63,8 +55,6 @@ TEST(frame_pool, a_free_frame_of_the_shape_is_taken_before_the_rest)
   sized->give_back();
   CHECK(pool.claim([](const Frame &frame) { return frame.fits(128u); }) == sized); }
 
-/* A frame that refuses its claim - still being copied into - is passed over
- * however well it fits. */
 TEST(frame_pool, a_frame_that_refuses_its_claim_is_passed_over)
 { Pool   pool;
   Frame *busy = nullptr;

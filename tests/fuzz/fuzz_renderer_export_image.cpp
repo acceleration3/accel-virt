@@ -1,6 +1,3 @@
-/* A scanout image request QEMU sends av-renderer, fed attacker-chosen bytes:
- * the first byte is how many descriptors arrived beside the message and the
- * rest is its body. What decodes must re-encode to exactly the bytes read. */
 #include "core/support/status.hpp"
 #include "proto/renderer/export_image_message.hpp"
 

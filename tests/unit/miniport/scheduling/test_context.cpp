@@ -49,7 +49,6 @@ TEST(context_report_to, answers_the_context_info_and_the_handle)
   CHECK(request.hContext == &context);
   CHECK_EQ(request.ContextInfoDmaBufferSize, 0x10000u);
   CHECK_EQ(request.ContextInfoDmaBufferSegmentSet, av::ApertureSegment::segment_set);
-  /* An ordinary context may carry a FollowRecord with each packet. */
   CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, av::ReleaseRecord::encoded_size);
   CHECK_EQ(request.ContextInfoAllocationListSize, 256u);
   CHECK_EQ(request.ContextInfoPatchLocationListSize, 1024u);
@@ -87,8 +86,6 @@ TEST(context, is_legal_up_to_dispatch)
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling)); }
 
-/* Becoming an av context is remembering which allocations are its ring, fence
- * and reply; a plain context knows none of that (feature 043). */
 TEST(context, becomes_the_guest_half_of_an_av_context)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);

@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
-"""Gate: no tracked file refers to anything outside this repository.
-
-A path into another checkout makes the build, a spec or a document work on one
-machine only. Flags, in every tracked text file: the external knowledge base
-by name, any home-directory path, and any relative path that climbs out of
-the repository from the file it appears in.
-
-  check_self_contained.py [repository root]
-"""
 import os
 import re
 import subprocess
 import sys
 
-# Built from parts so this file does not report itself.
 FORBIDDEN = re.compile(r"[\w./~-]*(?:" + "claude" + "-scratch" + "|" + "wddm" + "-kb"
                        + r")[\w./-]*|/home/[\w./-]+")
 RELATIVE = re.compile(r"(?<![\w./])(?:\.\./)+[\w.-][\w./-]*")

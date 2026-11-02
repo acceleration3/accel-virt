@@ -109,7 +109,6 @@ Status HelloMessage::decode(const uint8_t *bytes, size_t length, uint32_t descri
     candidate.path_length_ = reader.read_u32();
     candidate.capset_length_ = reader.read_u32();
     if (reader.status() != Status::ok) return reader.status();
-    /* Bounded before they are summed, so the sum cannot wrap a 32-bit size_t. */
     if (candidate.path_length_ > max_path_length || candidate.capset_length_ > max_capset_length ||
         length != candidate.encoded_length())
         return Status::malformed;
@@ -120,4 +119,4 @@ Status HelloMessage::decode(const uint8_t *bytes, size_t length, uint32_t descri
     return Status::ok;
 }
 
-}  // namespace av
+}

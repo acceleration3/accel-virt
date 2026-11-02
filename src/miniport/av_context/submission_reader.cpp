@@ -17,9 +17,6 @@ Status SubmissionReader::read(const uint8_t *dma, size_t size, const RingHeader 
     AV_SCOPE("SubmissionReader::read");
     platform_.require_irql_at_most(Irql::dispatch, "SubmissionReader::read");
     if (dma == nullptr || size < SubmissionDescriptor::encoded_size) return Status::malformed;
-    /* Once, into private storage: what is validated is what is decoded, and the
-     * guest cannot change it in between. Anything past the descriptor is not a
-     * submission and is not copied. */
     platform_.copy(staging_, dma, SubmissionDescriptor::encoded_size);
     SubmissionDescriptor candidate;
     const Status decoded = candidate.decode(staging_, SubmissionDescriptor::encoded_size);
@@ -30,4 +27,4 @@ Status SubmissionReader::read(const uint8_t *dma, size_t size, const RingHeader 
     return Status::ok;
 }
 
-}  // namespace av
+}

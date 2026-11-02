@@ -1,10 +1,3 @@
-/* The host GPU's name on its way to Windows: whatever bytes a Vulkan driver
- * put in deviceName become the capset's name (AdapterName, on the device) and
- * that name becomes the UTF-16 the guest's DeviceDesc and registry values hold
- * (Utf16Text, in the miniport). The name must be a prefix of what the driver
- * said, fit the capset's field, and never end inside a character; the UTF-16
- * must be terminated where bytes() says and hold no unpaired surrogate. Any
- * breach traps. */
 #include "miniport/adapter/utf16_text.hpp"
 #include "device/gpu/adapter_name.hpp"
 #include "proto/context/gpu_identity.hpp"
@@ -40,7 +33,7 @@ bool well_formed(const av::Utf16Text &text)
     return true;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {
@@ -49,8 +42,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     const av::AdapterName adapter(name);
     const std::size_t     kept = std::strlen(adapter.text());
     if (kept >= av::GpuIdentity::name_bytes || std::memcmp(adapter.text(), name, kept) != 0) __builtin_trap();
-    /* A cut lands before a character, never in one; a name of nothing but
-     * continuation bytes is cut to nothing. */
     if (kept != 0u && (static_cast<unsigned char>(name[kept]) & 0xC0u) == 0x80u) __builtin_trap();
     if (!well_formed(av::Utf16Text(adapter.text())) || !well_formed(av::Utf16Text(name))) __builtin_trap();
     return 0;

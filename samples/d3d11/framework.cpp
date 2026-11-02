@@ -2,8 +2,6 @@
 
 namespace samples {
 
-// ---------------------------------------------------------------- text
-
 void copy_text(char *to, size_t capacity, const char *from)
 {
     size_t i = 0;
@@ -53,8 +51,6 @@ bool same_text(const char *a, const char *b)
     return *a == *b;
 }
 
-// ---------------------------------------------------------------- meshes
-
 void Mesh::release()
 {
     release_memory(vertices);
@@ -80,8 +76,6 @@ void push_vertex(Mesh &mesh, float3 p, float3 n, float2 uv, float3 color)
 
 void push_quad(Mesh &mesh, uint32_t a, uint32_t b, uint32_t c, uint32_t d)
 {
-    // Front faces are clockwise as seen: every generator winds its quads to
-    // face the way its normals point, whatever order it listed them in.
     const Vertex *v = mesh.vertices;
     const float3 facing = cross(v[b].position - v[a].position, v[c].position - v[a].position);
     if (dot(facing, v[a].normal + v[b].normal + v[c].normal + v[d].normal) < 0) {
@@ -95,7 +89,7 @@ void push_quad(Mesh &mesh, uint32_t a, uint32_t b, uint32_t c, uint32_t d)
     mesh.index_count += 6;
 }
 
-}  // namespace
+}
 
 Mesh cube_mesh(float size)
 {
@@ -176,8 +170,6 @@ Mesh plane_mesh(float size, uint32_t cells, float uv_scale)
     return mesh;
 }
 
-// The gears sample's gear: a toothed ring with front, back, outer and inner
-// faces, flat shaded, as the old OpenGL gears demo built it.
 Mesh gear_mesh(float inner, float outer, float width, uint32_t teeth, float tooth_depth, float3 color)
 {
     Mesh mesh = allocate_mesh(teeth * 40, teeth * 60);
@@ -185,7 +177,6 @@ Mesh gear_mesh(float inner, float outer, float width, uint32_t teeth, float toot
     const float da = 2.0f * pi / static_cast<float>(teeth) / 4.0f;
     const float hw = width * 0.5f;
     auto quad = [&](float3 a, float3 b, float3 c, float3 d, float3 n) {
-        // Front faces are clockwise as seen: wind every quad to face along its normal.
         if (dot(cross(b - a, c - a), n) < 0) {
             const float3 swap = b;
             b = d;
@@ -206,12 +197,9 @@ Mesh gear_mesh(float inner, float outer, float width, uint32_t teeth, float toot
         for (int side = 0; side < 2; side++) {
             const float z = side == 0 ? hw : -hw;
             const float3 n = {0, 0, side == 0 ? 1.0f : -1.0f};
-            // ring face between the teeth's root and the hole
             quad({r0 * c0, r0 * s0, z}, {r1 * c0, r1 * s0, z}, {r1 * c4, r1 * s4, z}, {r0 * c4, r0 * s4, z}, n);
-            // the tooth's face
             quad({r1 * c0, r1 * s0, z}, {r2 * c1, r2 * s1, z}, {r2 * c2, r2 * s2, z}, {r1 * c3, r1 * s3, z}, n);
         }
-        // outward faces: rising flank, top, falling flank, root
         const float3 p[5] = {{r1 * c0, r1 * s0, 0}, {r2 * c1, r2 * s1, 0}, {r2 * c2, r2 * s2, 0},
                              {r1 * c3, r1 * s3, 0}, {r1 * c4, r1 * s4, 0}};
         for (int k = 0; k < 4; k++) {
@@ -220,14 +208,11 @@ Mesh gear_mesh(float inner, float outer, float width, uint32_t teeth, float toot
             quad({p[k].x, p[k].y, hw}, {p[k].x, p[k].y, -hw}, {p[k + 1].x, p[k + 1].y, -hw},
                  {p[k + 1].x, p[k + 1].y, hw}, n);
         }
-        // the hole
         quad({r0 * c4, r0 * s4, hw}, {r0 * c4, r0 * s4, -hw}, {r0 * c0, r0 * s0, -hw}, {r0 * c0, r0 * s0, hw},
              {-c0, -s0, 0});
     }
     return mesh;
 }
-
-// ---------------------------------------------------------------- GPU helpers
 
 const D3D11_INPUT_ELEMENT_DESC Gpu::mesh_layout[4] = {
     {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -392,4 +377,4 @@ void Gpu::viewport(float x, float y, float w, float h)
     context->RSSetViewports(1, &view);
 }
 
-}  // namespace samples
+}

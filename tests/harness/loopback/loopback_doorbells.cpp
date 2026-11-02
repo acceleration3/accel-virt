@@ -22,4 +22,4 @@ void LoopbackDoorbells::write_u32(std::uint64_t offset, std::uint32_t)
 
 std::uint32_t LoopbackDoorbells::stores() const { return stores_; }
 
-}  // namespace av
+}

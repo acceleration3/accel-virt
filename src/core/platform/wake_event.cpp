@@ -25,4 +25,4 @@ bool WakeEvent::wait(uint64_t ticks)
     return platform_.wait_wake_event(storage_, ticks);
 }
 
-}  // namespace av
+}

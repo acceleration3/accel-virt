@@ -1,10 +1,3 @@
-/* Memory a host API's object was made over, let go of by the application
- * while work the host queued may still read or write it (docs/host-memory.md,
- * "Application memory"): kept here until the API knows that work is done,
- * then handed back. An OpenCL buffer can be released with kernels over it
- * still queued, and its arena block or the pages it was lent are not another
- * buffer's until those kernels finish. The list grows with what is retired;
- * its owner serializes it. */
 #ifndef AV_ICD_RETIRE_LIST_HPP
 #define AV_ICD_RETIRE_LIST_HPP
 
@@ -24,17 +17,10 @@ public:
     RetireList(const RetireList &) = delete;
     RetireList &operator=(const RetireList &) = delete;
 
-    /* Kept until reclaimed: no_memory, keeping nothing, when the list cannot
-     * grow - the caller then waits for the host's work itself. */
     [[nodiscard]] Status add(Entry entry);
-    /* The newest entry out of the list into `entry`; false when it is empty.
-     * For an owner whose give-back takes the lock the list is under. */
     bool                 take_last(Entry &entry);
-    /* The oldest entry for which `matches` holds, taken out of the list into
-     * `entry`; false when none does. */
     template <typename Matches>
     bool                 take_if(Matches matches, Entry &entry);
-    /* Every entry handed to `give_back`, oldest first, and the list emptied. */
     template <typename GiveBack>
     void                 reclaim(GiveBack give_back);
     uint32_t             count() const;
@@ -96,6 +82,6 @@ uint32_t RetireList<Entry>::count() const
     return entries_.size();
 }
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_RETIRE_LIST_HPP
+#endif

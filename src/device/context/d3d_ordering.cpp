@@ -12,10 +12,10 @@ namespace av {
 namespace {
 
 constexpr long     pause_nanoseconds = 20000;
-constexpr uint32_t most_pauses = 1000;          /* 20 ms, on a worker */
-constexpr uint32_t most_settling_pauses = 100;  /* 2 ms, on QEMU's main loop */
+constexpr uint32_t most_pauses = 1000;
+constexpr uint32_t most_settling_pauses = 100;
 
-}  // namespace
+}
 
 D3dOrdering::D3dOrdering(Host &host) : host_(host), mutex_(nullptr), members_{}, count_(0u)
 {
@@ -77,9 +77,6 @@ void D3dOrdering::pause() const
     nanosleep(&wait, nullptr);
 }
 
-/* Held only while looking and waking, so no member is removed - and its worker
- * freed - under the scan, and never while pausing: the stream waited for takes
- * it too. */
 bool D3dOrdering::must_wait(const RingConsumer *ring, uint64_t published_at)
 {
     AV_SCOPE("D3dOrdering::must_wait");
@@ -103,4 +100,4 @@ void D3dOrdering::settle()
     for (uint32_t pauses = 0u; pauses < most_settling_pauses && must_wait(nullptr, UINT64_MAX); pauses++) pause();
 }
 
-}  // namespace av
+}

@@ -18,9 +18,6 @@ void AllocationLender::bind(const D3DDDI_DEVICECALLBACKS *callbacks, HANDLE runt
     runtime_ = runtime;
 }
 
-/* Held until the lend is done: the kernel's address of the pages is good
- * while the allocation is locked, and the device probes and locks the range
- * as it is lent. */
 Status AllocationLender::lend(D3DKMT_HANDLE allocation, uint64_t bytes, HostAllocation *&made) const
 {
     AV_SCOPE("AllocationLender::lend");
@@ -50,4 +47,4 @@ void AllocationLender::retire(HostAllocation &made) const
     session_.retire_memory(made);
 }
 
-}  // namespace av::d3d
+}

@@ -46,4 +46,4 @@ uint64_t TraceSlotView::frame_field(uint32_t frame, uint32_t offset, uint32_t by
     return read(TraceLayout::slot_header_bytes + frame * TraceLayout::frame_bytes + offset, bytes);
 }
 
-}  // namespace av
+}

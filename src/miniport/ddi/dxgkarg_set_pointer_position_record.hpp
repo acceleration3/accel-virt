@@ -1,6 +1,3 @@
-/* DXGKARG_SETPOINTERPOSITION, as DxgkDdiSetPointerPosition receives it. A DDI
- * record: Flags is the DXGK_SETPOINTERPOSITIONFLAGS Value;
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_SET_POINTER_POSITION_RECORD_HPP
 #define AV_DXGKARG_SET_POINTER_POSITION_RECORD_HPP
 
@@ -15,6 +12,6 @@ struct DxgkargSetPointerPositionRecord {
     uint32_t Flags;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_SET_POINTER_POSITION_RECORD_HPP
+#endif

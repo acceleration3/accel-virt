@@ -1,24 +1,3 @@
-/* Entries by an integer key whose count has no fixed bound - the objects a
- * guest named, the handles it holds, the ids it shares - each in a slot of
- * its own: the storage under every keyed table, host and guest.
- *
- * An entry lives in a chunk that never moves, so its address and its slot
- * number hold from insert to erase: a caller keeps a pointer to it, or keeps
- * a side table by slot. Chunks double in size as they are added and are
- * given back only by clear; an erased slot goes on a free list and is the
- * next one used.
- *
- * Keys come from outside and are any value, 0 and all-ones included. A key
- * finds its slot through an open-addressed index of (key, slot) pairs, mixed
- * first - a guest's keys are small and sequential, or strided, and would
- * otherwise fill one run - and kept at most half full, doubling as it fills.
- * An erase shifts the entries after it back along their probe instead of
- * leaving a tombstone, so a guest that makes and erases keys for ever never
- * lengthens a probe or grows the index.
- *
- * Entries are copied in bytewise, so Entry is trivially copyable. The table
- * takes no lock; its owner serializes it. Inserting allocates, so insert and
- * reserve are legal up to APC; finding and erasing never allocate. */
 #ifndef AV_KEYED_SLOTS_HPP
 #define AV_KEYED_SLOTS_HPP
 
@@ -52,26 +31,18 @@ class KeyedSlots {
 
 public:
     static constexpr uint32_t no_slot = 0xFFFFFFFFu;
-    /* The first chunk's rows; chunk n holds first_rows << n, so slots stay
-     * dense from 0 and a slot finds its chunk by its high bit. */
     static constexpr uint32_t first_rows = 16u;
-    /* Chunks, and so slots, a table may have: a chunk's bytes are counted by
-     * a size_t on the 32-bit guest builds as on the host, and no slot reaches
-     * no_slot. */
     static constexpr uint32_t most_chunks =
         (~size_t{0} / 4u / sizeof(Row)) / first_rows >= (size_t{1} << 26u)
             ? 27u
             : uint32_t(64 - __builtin_clzll(static_cast<unsigned long long>((~size_t{0} / 4u / sizeof(Row)) /
                                                                            first_rows)));
     static constexpr uint32_t most_slots = first_rows * ((uint32_t{1} << most_chunks) - 1u);
-    /* The first index's buckets, and the least a rebuilt one has. */
     static constexpr uint32_t first_buckets = 16u;
-    /* An index's buckets at most, by the same rule as a chunk's rows. */
     static constexpr uint32_t most_buckets =
         ~size_t{0} / 4u / sizeof(Bucket) >= size_t{0x80000000u}
             ? 0x80000000u
             : uint32_t{1} << (63 - __builtin_clzll(static_cast<unsigned long long>(~size_t{0} / 4u / sizeof(Bucket))));
-    /* Entries a table may hold: slots for them, and an index at most half full. */
     static constexpr uint32_t most_entries = most_slots < most_buckets / 2u ? most_slots : most_buckets / 2u;
 
     KeyedSlots(BlockSource &blocks, Pool pool);
@@ -81,46 +52,26 @@ public:
     KeyedSlots(KeyedSlots &&) = delete;
     KeyedSlots &operator=(KeyedSlots &&) = delete;
 
-    /* `entry` under `key`, in the slot handed back: conflict when `key` is
-     * already in one, no_memory when the table cannot grow. Nothing changes
-     * unless ok. */
     [[nodiscard]] Status insert(Key key, const Entry &entry, uint32_t &slot);
-    /* Room for `count` entries, so inserts up to it cannot fail: what a caller
-     * does before work it cannot undo. */
     [[nodiscard]] Status reserve(uint32_t count);
-    /* The entry `key` is in, or null. */
     Entry               *find(Key key);
     const Entry         *find(Key key) const;
-    /* The slot `key` is in, or no_slot. */
     uint32_t             slot_of(Key key) const;
-    /* The entry in `slot`, or null for any slot no entry is in - a slot from
-     * outside included. */
     Entry               *at(uint32_t slot);
     const Entry         *at(uint32_t slot) const;
-    /* The key in `slot`; 0 for a slot no entry is in. */
     Key                  key_at(uint32_t slot) const;
-    /* `key`'s entry into `entry` and its slot freed; false, `entry` untouched,
-     * when `key` is in none. */
     bool                 take(Key key, Entry &entry);
-    /* `key`'s slot freed; false when it was in none. */
     bool                 erase(Key key);
-    /* The entry in `slot` gone; nothing for a slot no entry is in. */
     void                 erase_slot(uint32_t slot);
-    /* The first slot at or after `from` an entry is in; no_slot for none. */
     uint32_t             next_live(uint32_t from) const;
-    /* Every entry to `visit(key, entry)`, in slot order. */
     template <typename Visitor>
     void                 for_each(Visitor visit);
     template <typename Visitor>
     void                 for_each(Visitor visit) const;
-    /* Every entry `matches(key, entry)` answers true for gone - `matches` may
-     * let go of what the entry holds first; how many went. */
     template <typename Predicate>
     uint32_t             erase_if(Predicate matches);
-    /* Every entry gone, and every chunk and the index given back. */
     void                 clear();
     uint32_t             count() const;
-    /* Slots ever handed out since the last clear: every live slot is below it. */
     uint32_t             slots() const;
     uint32_t             buckets() const;
 
@@ -130,18 +81,11 @@ private:
     uint32_t chunk_of(uint32_t slot) const;
     Row     *row(uint32_t slot) const;
     uint32_t home_of(Key key) const;
-    /* The bucket `key` is in, or the empty one its probe ends at. */
     uint32_t bucket_of(Key key) const;
-    /* The bucket at `hole` emptied, the buckets after it on their probes
-     * moved back into it. */
     void     unindex(uint32_t hole);
-    /* An index of `buckets` with every entry in it; the old one given back. */
     [[nodiscard]] Status rebuild(uint32_t buckets);
-    /* Rows enough that `count` more slots can be handed out. */
     [[nodiscard]] Status make_rows(uint32_t count);
-    /* Room in the index for `count` entries at most half full. */
     [[nodiscard]] Status make_buckets(uint32_t count);
-    /* Rows past slots_ in the chunks already made. */
     uint32_t spare_rows() const;
     void     free_row(uint32_t slot);
 
@@ -189,7 +133,6 @@ typename KeyedSlots<Key, Entry>::Row *KeyedSlots<Key, Entry>::row(uint32_t slot)
     return &chunks_[chunk][slot - first_rows * ((uint32_t{1} << chunk) - 1u)];
 }
 
-/* splitmix64's finaliser. */
 template <typename Key, typename Entry>
 uint32_t KeyedSlots<Key, Entry>::home_of(Key key) const
 {
@@ -218,8 +161,6 @@ void KeyedSlots<Key, Entry>::unindex(uint32_t hole)
     AV_SCOPE("KeyedSlots::unindex");
     const uint32_t mask = buckets_ - 1u;
     for (uint32_t next = (hole + 1u) & mask; index_[next].slot_ != no_slot; next = (next + 1u) & mask) {
-        /* A pair moves back into the hole only if the hole is on its probe:
-         * between its home and where it is now. */
         const uint32_t home = home_of(index_[next].key_);
         if (((next - home) & mask) < ((next - hole) & mask)) continue;
         index_[hole] = index_[next];
@@ -266,7 +207,6 @@ template <typename Key, typename Entry>
 Status KeyedSlots<Key, Entry>::make_rows(uint32_t count)
 {
     AV_SCOPE("KeyedSlots::make_rows");
-    /* Never past most_chunks: no table holds more than most_entries. */
     while (free_count_ + spare_rows() < count) {
         const size_t rows = size_t{first_rows} << made_chunks_;
         auto *const  chunk = static_cast<Row *>(blocks_.allocate(sizeof(Row) * rows, pool_));
@@ -511,6 +451,6 @@ bool KeyedSlots<Key, Entry>::invariants_hold() const
     return live == count_ && freed == free_count_ && indexed == count_ && live + freed == slots_;
 }
 
-}  // namespace av
+}
 
-#endif  // AV_KEYED_SLOTS_HPP
+#endif

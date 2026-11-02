@@ -8,12 +8,10 @@
 namespace av {
 
 namespace {
-
-/* From drm_fourcc.h. */
 constexpr uint64_t drm_format_mod_linear = 0u;
 constexpr uint64_t drm_format_mod_invalid = 0x00ffffffffffffffull;
 
-}  // namespace
+}
 
 VulkanDeviceTable::VulkanDeviceTable()
     : physical_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), memory_{}, format_properties_(nullptr),
@@ -49,8 +47,6 @@ bool VulkanDeviceTable::load(VkInstance instance, VkPhysicalDevice physical, VkD
     map_ = reinterpret_cast<PFN_vkMapMemory>(entry("vkMapMemory"));
     bind_ = reinterpret_cast<PFN_vkBindImageMemory>(entry("vkBindImageMemory"));
     layout_ = reinterpret_cast<PFN_vkGetImageSubresourceLayout>(entry("vkGetImageSubresourceLayout"));
-    /* Null where the device has no VK_EXT_image_drm_format_modifier: its
-     * shared images are then rows (ExportableImages::make_tiled). */
     image_modifier_ = reinterpret_cast<PFN_vkGetImageDrmFormatModifierPropertiesEXT>(
         entry("vkGetImageDrmFormatModifierPropertiesEXT"));
     memory_fd_ = reinterpret_cast<PFN_vkGetMemoryFdKHR>(entry("vkGetMemoryFdKHR"));
@@ -143,7 +139,6 @@ bool VulkanDeviceTable::supports_exportable(const VkImageCreateInfo &info) const
         }
     }
     if (info.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) return count == 0u && supports_layout(info, views, nullptr);
-    /* A listed layout is the driver's to pick, so every one must do. */
     if (modifiers == nullptr || count == 0u) return false;
     for (uint32_t index = 0u; index < count; index++)
         if (!supports_layout(info, views, &modifiers[index])) return false;
@@ -156,17 +151,12 @@ bool VulkanDeviceTable::supports_layout(const VkImageCreateInfo &info, const VkI
     AV_SCOPE("VulkanDeviceTable::supports_layout");
     VkPhysicalDeviceExternalImageFormatInfo external = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO,
                                                         nullptr, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT};
-    /* The view formats are part of what is asked: a mutable image is
-     * supported only as the formats it is viewed in are. */
     VkImageFormatListCreateInfo listed = {VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO, nullptr, 0u, nullptr};
     if (views != nullptr) {
         listed = *views;
         listed.pNext = external.pNext;
         external.pNext = &listed;
     }
-    /* An image laid out by a modifier is asked about with the modifier: the
-     * query is of that layout, and RADV dereferences the structure naming it
-     * whether or not it was given. */
     VkPhysicalDeviceImageDrmFormatModifierInfoEXT laid = {
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT, nullptr, 0u, VK_SHARING_MODE_EXCLUSIVE, 0u,
         nullptr};
@@ -192,11 +182,6 @@ bool VulkanDeviceTable::supports_layout(const VkImageCreateInfo &info, const VkI
            (exported.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT) != 0u;
 }
 
-/* Of the modifiers the driver lists for the format: one plane, so the whole
- * image is one dma-buf at one pitch an importer is told; not linear; and
- * drawn, blended, sampled and copied wherever the format's optimal tiling is,
- * so a Direct3D texture over it does all a texture DXVK made would. Then each
- * is asked about as the rows' image would be, laid out by it. */
 uint32_t VulkanDeviceTable::tiled_modifiers(const VkImageCreateInfo &rows, uint64_t *modifiers, uint32_t capacity) const
 {
     AV_SCOPE("VulkanDeviceTable::tiled_modifiers");
@@ -242,8 +227,6 @@ uint64_t VulkanDeviceTable::modifier_of(VkImage image) const
     return laid.drmFormatModifier;
 }
 
-/* A device-local type first: the images are drawn into and read by the GPU,
- * never mapped. */
 uint32_t VulkanDeviceTable::memory_type(uint32_t allowed) const
 {
     AV_SCOPE("VulkanDeviceTable::memory_type");
@@ -447,8 +430,6 @@ bool VulkanDeviceTable::memory_fd(VkDeviceMemory memory, VkExternalMemoryHandleT
 VkSubresourceLayout VulkanDeviceTable::row_layout(VkImage image) const
 {
     AV_SCOPE("VulkanDeviceTable::row_layout");
-    /* Every image read here is laid out by a modifier (ExportableImageInfo),
-     * whose layout is its memory planes' - one plane, rows or tiled. */
     const VkImageSubresource first = {VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT, 0u, 0u};
     VkSubresourceLayout      laid = {};
     if (loaded() && layout_ != nullptr) layout_(device_, image, &first, &laid);
@@ -592,4 +573,4 @@ void VulkanDeviceTable::queue_idle(VkQueue queue) const
     if (loaded()) static_cast<void>(queue_idle_(queue));
 }
 
-}  // namespace av
+}

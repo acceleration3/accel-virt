@@ -138,4 +138,4 @@ size_t PresentCopyRequest::size() const
     return regions_offset() + size_t{regions_} * PresentRegion::encoded_size;
 }
 
-}  // namespace av
+}

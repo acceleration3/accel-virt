@@ -1,7 +1,3 @@
-/* The OpenGL entries the ICD writes itself, called as an application calls
- * them - by the addresses opengl32 hands out - on a context made current over
- * MockKmt: what each sends, what each keeps, and what each refuses with no
- * host call. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/allocation_kind.hpp"
@@ -44,7 +40,6 @@ constexpr GLenum array_buffer = 0x8892u, element_array_buffer = 0x8893u, pixel_p
 constexpr GLenum gl_triangles = 0x0004u, gl_unsigned_short = 0x1403u, gl_float = 0x1406u;
 constexpr GLenum gl_read_write = 0x88BAu, gl_buffer_map_pointer = 0x88BDu;
 
-/* GL_BUFFER_SIZE's answer. */
 void answer_size(av::ScriptedHost &host, std::int64_t size)
 {
     host.gl_bytes(reinterpret_cast<const std::uint8_t *>(&size), sizeof size);
@@ -52,8 +47,6 @@ void answer_size(av::ScriptedHost &host, std::int64_t size)
 
 class Current {
 public:
-    /* A device whose host window is `window` bytes: one too small for an
-     * arena leaves the context without one, and its bulk data inline. */
     explicit Current(std::uint64_t window = av::MockKmt::rig_window_bytes)
     {
         rig_.kmt().open_host_window(window);
@@ -66,13 +59,11 @@ public:
     void *handle() const { return handle_; }
     GlIcdRig                  &rig() { return rig_; }
     av::glicd::GuestGlContext &context() { return *rig_.root().current(); }
-    /* The ids sent since the context was made, in order, as one comparable number list. */
     std::uint32_t sent_since(std::uint32_t index)
     {
         context().flush();
         return rig_.kmt().command_id(commands_ + index);
     }
-    /* The `nth` varint argument of the command sent `index`-th since the make. */
     std::uint64_t argument_since(std::uint32_t index, std::uint32_t nth)
     {
         context().flush();
@@ -82,8 +73,6 @@ public:
         for (std::uint32_t at = 0u; at <= nth; at++) CHECK(reader.read_varint(value));
         return value;
     }
-    /* The context holds its calls in a batch until a flush: what reached the
-     * host is read with the held ones sent. */
     std::uint32_t sent()
     {
         context().flush();
@@ -94,7 +83,6 @@ public:
         context().flush();
         return rig_.kmt().command_bytes(commands_ + index);
     }
-    /* glGetError as opengl32's table holds it: the ICD's own entry. */
     std::uint32_t error() { return av::glicd::entry::get_error(); }
 
 private:
@@ -103,8 +91,6 @@ private:
     std::uint32_t commands_ = 0u;
 };
 
-/* The flags a glBufferStorage (a target) or glNamedBufferStorage (a name)
- * with 8 inline bytes sent. */
 std::uint64_t storage_flags(Current &current, std::uint32_t index)
 {
     av::WireReader reader(current.command_since(index) + av::CommandHeader::encoded_size,
@@ -123,39 +109,27 @@ std::uint64_t storage_flags(Current &current, std::uint32_t index)
     return value;
 }
 
-}  // namespace
+}
 
-/* Feature 051: the profile and version a context was granted are learned at
- * the make, so a query for them is answered from what the host already said -
- * one fewer round trip, and one answer whatever a driver does with a repeated
- * query. */
-/* Feature 051: a read of the window's front buffer is answered from the frame
- * the swap put there; every other read goes to the host, and one with nothing
- * current goes nowhere. */
 TEST(manual_calls, a_front_buffer_read_is_answered_and_every_other_is_sent)
 { Current      current;
   ManualCalls &calls = current.rig().root().manual();
   std::uint8_t pixels[64] = {};
   const std::uint32_t before = current.sent();
-  /* Nothing presented and the read buffer is the back one: the host's. */
   current.rig().host().gl_bytes(nullptr, 0u);
-  calls.read_pixels(0, 0, 1, 1, 0x80E1u /* GL_BGRA */, 0x1401u, pixels);
+  calls.read_pixels(0, 0, 1, 1, 0x80E1u , 0x1401u, pixels);
   CHECK_EQ(current.sent(), before + 1u);
 
-  /* A frame on the window, and the front buffer named. */
   current.rig().host().gl_bytes(nullptr, 0u);
   CHECK(current.rig().opengl32().swap_buffers(current.rig().dc()));
-  calls.read_buffer(0x0404u /* GL_FRONT */);
+  calls.read_buffer(0x0404u );
   const std::uint32_t asked = current.sent();
   calls.read_pixels(0, 0, 1, 1, 0x80E1u, 0x1401u, pixels);
   CHECK_EQ(current.sent(), asked);
-  /* A format no present produced is still the host's. */
   current.rig().host().gl_bytes(nullptr, 0u);
-  calls.read_pixels(0, 0, 1, 1, 0x1907u /* GL_RGB */, 0x1401u, pixels);
+  calls.read_pixels(0, 0, 1, 1, 0x1907u , 0x1401u, pixels);
   CHECK(current.sent() > asked); }
 
-/* With a pixel-pack buffer bound the read is an offset into it, and the room
- * it carries is the buffer's, not a count of bytes. */
 TEST(manual_calls, a_read_into_a_pack_buffer_is_sent_as_an_offset)
 { Current      current;
   ManualCalls &calls = current.rig().root().manual();
@@ -177,28 +151,26 @@ TEST(manual_calls, the_granted_profile_is_answered_without_the_host)
   ManualCalls &calls = current.rig().root().manual();
   const std::uint32_t before = current.sent();
   GLint mask = -1, major = -1, minor = -1;
-  calls.integers(0x9126u /* GL_CONTEXT_PROFILE_MASK */, &mask);
-  calls.integers(0x821Bu /* GL_MAJOR_VERSION */, &major);
-  calls.integers(0x821Cu /* GL_MINOR_VERSION */, &minor);
+  calls.integers(0x9126u , &mask);
+  calls.integers(0x821Bu , &major);
+  calls.integers(0x821Cu , &minor);
   CHECK_EQ(mask, 2);
   CHECK_EQ(major, 4);
   CHECK_EQ(minor, 6);
   CHECK_EQ(current.sent(), before);
-  /* A null pointer is a query nobody can be answered into. */
   calls.integers(0x9126u, nullptr);
   CHECK_EQ(current.sent(), before); }
 
 TEST(manual_calls, pixel_store_is_kept_and_sent)
 { Current current;
-  gen::Wrap_glPixelStorei(0x0D05u /* GL_PACK_ALIGNMENT */, 1);
-  gen::Wrap_glPixelStoref(0x0D02u /* GL_PACK_ROW_LENGTH */, 2.6f);
+  gen::Wrap_glPixelStorei(0x0D05u , 1);
+  gen::Wrap_glPixelStoref(0x0D02u , 2.6f);
   gen::Wrap_glPixelStoref(0x0D02u, -5.0f);
   gen::Wrap_glPixelStoref(0x0D02u, 3.0e10f);
   gen::Wrap_glPixelStoref(0x0D02u, -3.0e10f);
   CHECK_EQ(current.sent(), 5u);
   CHECK_EQ(current.sent_since(0u), ids::kCmd_glPixelStorei);
   CHECK_EQ(current.sent_since(1u), ids::kCmd_glPixelStoref);
-  /* Rounded to 3, the -5 and the huge value not kept: a row of 3 pixels. */
   CHECK_EQ(current.context().arrays().pixel_bytes(0x1908u, 0x1401u, 1, 2, 1, true), 12u + 4u); }
 
 TEST(manual_calls, buffer_binds_and_deletes_are_kept_and_sent)
@@ -244,7 +216,6 @@ TEST(manual_calls, names_and_data_are_the_hosts)
                                     ids::kCmd_glNamedBufferStorage};
   CHECK_EQ(current.sent(), 7u);
   for (std::uint32_t index = 0u; index < 7u; index++) CHECK_EQ(current.sent_since(index), expected[index]);
-  /* Immutable storage is dynamic on the host, where a map's bytes are written back. */
   CHECK_EQ(storage_flags(current, 4u), 0x0100u);
   CHECK_EQ(storage_flags(current, 6u), 0x0100u); }
 
@@ -287,7 +258,6 @@ TEST(manual_calls, draws_send_and_client_indices_are_refused)
   gen::Wrap_glDrawElements(gl_triangles, 3, gl_unsigned_short, reinterpret_cast<const void *>(6u));
   gen::Wrap_glDrawElementsInstanced(gl_triangles, 3, gl_unsigned_short, nullptr, 4);
   gen::Wrap_glDrawRangeElements(gl_triangles, 0u, 2u, 3, gl_unsigned_short, nullptr);
-  /* The refusal was answered locally: glGetError sent nothing. */
   const std::uint32_t expected[] = {ids::kCmd_glDrawArrays,       ids::kCmd_glDrawArraysInstanced,
                                     ids::kCmd_glDrawElements,     ids::kCmd_glBindVertexArray,
                                     ids::kCmd_glBindBuffer,       ids::kCmd_glDrawElements,
@@ -298,7 +268,7 @@ TEST(manual_calls, draws_send_and_client_indices_are_refused)
 TEST(manual_calls, flush_wait_and_program_calls_reach_the_host)
 { Current current;
   gen::Wrap_glFlush();
-  current.rig().host().gl_varint(0x911Au /* GL_CONDITION_SATISFIED */);
+  current.rig().host().gl_varint(0x911Au );
   CHECK_EQ(gen::Wrap_glClientWaitSync(reinterpret_cast<GLsync>(0x9u), 1u, 1000u), 0x911Au);
   current.rig().host().gl_varint(3u);
   CHECK_EQ(gen::Wrap_glGetAttribLocation(5u, "position"), 3);
@@ -309,13 +279,11 @@ TEST(manual_calls, flush_wait_and_program_calls_reach_the_host)
   CHECK_EQ(current.sent(), 5u);
   for (std::uint32_t index = 0u; index < 5u; index++) CHECK_EQ(current.sent_since(index), expected[index]); }
 
-/* A location's type is asked at once, so a later glGetUniform sizes its
- * answer; relinking or deleting the program forgets it. */
 TEST(manual_calls, a_uniform_location_learns_its_shape)
 { Current current;
   current.rig().host().gl_varint(4u);
   current.rig().host().gl_varint(0u);
-  current.rig().host().gl_resource_property(0x8B5C /* GL_FLOAT_MAT4 */);
+  current.rig().host().gl_resource_property(0x8B5C );
   CHECK_EQ(gen::Wrap_glGetUniformLocation(5u, "transform"), 4);
   CHECK_EQ(current.context().uniforms().values(5u, 4), 16u);
   const std::uint32_t expected[] = {ids::kCmd_glGetUniformLocation, ids::kCmd_glGetProgramResourceIndex,
@@ -323,7 +291,6 @@ TEST(manual_calls, a_uniform_location_learns_its_shape)
   for (std::uint32_t index = 0u; index < 3u; index++) CHECK_EQ(current.sent_since(index), expected[index]);
   gen::Wrap_glLinkProgram(5u);
   CHECK_EQ(current.context().uniforms().values(5u, 4), 0u);
-  /* No location, an index the host does not have, and a property not written. */
   current.rig().host().gl_varint(static_cast<std::uint64_t>(-1));
   CHECK_EQ(gen::Wrap_glGetUniformLocation(5u, "missing"), -1);
   current.rig().host().gl_varint(6u);
@@ -343,27 +310,22 @@ TEST(manual_calls, a_uniform_location_learns_its_shape)
   gen::Wrap_glDeleteProgram(5u);
   CHECK_EQ(current.context().uniforms().values(5u, 8), 0u); }
 
-/* A location there is no memory to remember the shape of is still answered,
- * the shape unknown - a later glGetUniform writes nothing - and the
- * application told GL_OUT_OF_MEMORY. */
 TEST(manual_calls, a_uniform_shape_with_no_memory_to_keep_it_is_out_of_memory)
 { Current current;
   current.rig().host().gl_varint(4u);
   current.rig().host().gl_varint(0u);
-  current.rig().host().gl_resource_property(0x8B5C /* GL_FLOAT_MAT4 */);
+  current.rig().host().gl_resource_property(0x8B5C );
   current.rig().platform().fail_allocation_at(1u);
   CHECK_EQ(gen::Wrap_glGetUniformLocation(5u, "transform"), 4);
   CHECK_EQ(current.context().uniforms().values(5u, 4), 0u);
-  CHECK_EQ(current.context().take_error(), 0x0505u /* GL_OUT_OF_MEMORY */); }
+  CHECK_EQ(current.context().take_error(), 0x0505u ); }
 
-/* A vertex array there is no memory to keep the element buffer of is still
- * bound on the host, and the application told GL_OUT_OF_MEMORY. */
 TEST(manual_calls, a_vertex_array_with_no_memory_to_keep_is_out_of_memory)
 { Current current;
   const std::uint32_t sent = current.sent();
   current.rig().platform().fail_allocation_at(1u);
   gen::Wrap_glBindVertexArray(9u);
-  CHECK_EQ(current.context().take_error(), 0x0505u /* GL_OUT_OF_MEMORY */);
+  CHECK_EQ(current.context().take_error(), 0x0505u );
   CHECK_EQ(current.sent(), sent + 1u);
   CHECK_EQ(current.sent_since(sent), ids::kCmd_glBindVertexArray); }
 
@@ -380,13 +342,10 @@ TEST(manual_calls, strings_are_the_hosts_and_no_extension_is_listed)
   CHECK_EQ(current.error(), gl_invalid_enum);
   CHECK_EQ(current.sent(), sent); }
 
-/* A target names the buffer the host has bound there; the map is a copy the
- * host filled, and the unmap sends it back. */
 TEST(manual_calls, a_target_map_is_the_hosts_bound_buffer_filled_and_written_back)
 { Current current;
   av::ScriptedHost &host = current.rig().host();
   const std::uint8_t data[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-  /* The guest saw the bind, so the host is not asked what is bound. */
   gen::Wrap_glBindBuffer(array_buffer, 7u);
   answer_size(host, sizeof data);
   host.gl_bytes(data, sizeof data);
@@ -412,7 +371,6 @@ TEST(manual_calls, a_target_map_is_the_hosts_bound_buffer_filled_and_written_bac
   CHECK_EQ(current.sent(), 3u);
   mapped[0] = 0xAAu;
   CHECK(gen::Wrap_glUnmapBuffer(array_buffer) == 1u);
-  /* Only the word that changed from the fill goes back. */
   CHECK_EQ(current.sent(), 4u);
   CHECK_EQ(current.sent_since(3u), ids::kCmd_glNamedBufferSubData);
   CHECK_EQ(current.argument_since(3u, 0u), 7u);
@@ -440,8 +398,6 @@ TEST(manual_calls, an_explicit_range_writes_back_only_what_was_flushed)
   CHECK_EQ(current.argument_since(2u, 2u), 6u);
   CHECK_EQ(current.error(), 0u); }
 
-/* What a persistent map wrote reaches the host before each hand-written draw;
- * a draw with nothing new written sends nothing ahead of it. */
 TEST(manual_calls, a_persistent_write_map_is_sent_before_every_draw)
 { Current current;
   av::ScriptedHost &host = current.rig().host();
@@ -464,7 +420,6 @@ TEST(manual_calls, a_persistent_write_map_is_sent_before_every_draw)
                                     ids::kCmd_glDrawArrays};
   CHECK_EQ(current.sent(), 9u);
   for (std::uint32_t index = 0u; index < 9u; index++) CHECK_EQ(current.sent_since(index), expected[index]);
-  /* Deleting the buffer unmaps it with nothing written. */
   const GLuint deleted[] = {3u};
   gen::Wrap_glDeleteBuffers(1, deleted);
   gen::Wrap_glDrawArrays(gl_triangles, 0, 3);
@@ -472,10 +427,6 @@ TEST(manual_calls, a_persistent_write_map_is_sent_before_every_draw)
   CHECK_EQ(current.sent_since(10u), ids::kCmd_glDrawArrays);
   CHECK_EQ(current.context().mappings().held(), 0u); }
 
-/* A tracer learns what an application wrote by asking, at unmap, how the
- * buffer is mapped: the guest answers, since the host never saw the map. A
- * name that is not map state still goes to the host, and a target is resolved
- * only for a map-state name. */
 TEST(manual_calls, a_maps_state_is_answered_by_the_guest)
 { Current current;
   av::ScriptedHost &host = current.rig().host();
@@ -499,25 +450,20 @@ TEST(manual_calls, a_maps_state_is_answered_by_the_guest)
   CHECK_EQ(wide, 1);
   gen::Wrap_glGetNamedBufferParameterivEXT(7u, access, &value);
   CHECK_EQ(value, static_cast<GLint>(0x88B9u));
-  /* None of them needed a round trip. */
   CHECK_EQ(current.sent(), sent);
-  /* Any other name is the host's, and needs no binding resolved first. */
   const std::int32_t host_size = 64;
   host.gl_bytes(reinterpret_cast<const std::uint8_t *>(&host_size), sizeof host_size);
   gen::Wrap_glGetBufferParameteriv(array_buffer, buffer_size, &value);
   CHECK_EQ(value, 64);
   CHECK_EQ(current.sent() - sent, 1u);
   CHECK_EQ(current.sent_since(sent), ids::kCmd_glGetBufferParameteriv);
-  /* No error of the guest's: the host is asked for its own. */
   host.gl_varint(0u);
   CHECK_EQ(current.error(), 0u);
-  /* A target binding nothing, or no target at all, is refused here. */
   gen::Wrap_glBindBuffer(array_buffer, 0u);
   gen::Wrap_glGetBufferParameteriv(array_buffer, map_length, &value);
   CHECK_EQ(current.error(), gl_invalid_operation);
   gen::Wrap_glGetBufferParameteriv(0x1234u, map_length, &value);
   CHECK_EQ(current.error(), gl_invalid_enum);
-  /* Buffer 0 by name is the host's to refuse. */
   const std::uint32_t before_zero = current.sent();
   const std::int32_t  host_zero = 0;
   host.gl_bytes(reinterpret_cast<const std::uint8_t *>(&host_zero), sizeof host_zero);
@@ -528,7 +474,6 @@ TEST(manual_calls, a_maps_state_is_answered_by_the_guest)
 TEST(manual_calls, map_refusals_are_recorded)
 { Current current;
   av::ScriptedHost &host = current.rig().host();
-  /* A target that binds no buffer: no host call. */
   CHECK(gen::Wrap_glMapBuffer(0x1234u, gl_read_write) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_enum);
   CHECK(!gen::Wrap_glUnmapBuffer(0x1234u));
@@ -538,7 +483,6 @@ TEST(manual_calls, map_refusals_are_recorded)
   CHECK(pointer == reinterpret_cast<void *>(0x1u));
   CHECK_EQ(current.error(), gl_invalid_enum);
   CHECK_EQ(current.sent(), 0u);
-  /* An access that is no enum, with a buffer bound. */
   gen::Wrap_glBindBuffer(array_buffer, 7u);
   CHECK(gen::Wrap_glMapBuffer(array_buffer, 0x1234u) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_enum);
@@ -549,7 +493,6 @@ TEST(manual_calls, map_refusals_are_recorded)
   CHECK(gen::Wrap_glMapNamedBufferRange(7u, 0, -1, 1u) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_value);
   CHECK_EQ(current.sent(), 1u);
-  /* Nothing bound, nothing mapped. */
   gen::Wrap_glBindBuffer(array_buffer, 0u);
   gen::Wrap_glGetBufferPointerv(array_buffer, gl_buffer_map_pointer, &pointer);
   CHECK_EQ(current.error(), gl_invalid_operation);
@@ -567,8 +510,6 @@ TEST(manual_calls, map_refusals_are_recorded)
   gen::Wrap_glFlushMappedNamedBufferRange(7u, 0, 1);
   CHECK_EQ(current.error(), gl_invalid_operation);
   CHECK_EQ(current.sent(), 2u);
-  /* Bound several at once, the uniform target is not the guest's to know:
-   * the host is asked. */
   const GLuint several[] = {7u};
   gen::Wrap_glBindBuffersBase(0x8A11u, 0u, 1, several);
   host.gl_integer(7);
@@ -679,8 +620,6 @@ TEST(manual_calls, with_nothing_current_nothing_is_sent_or_answered)
   calls.refuse();
   calls.buffer_pointer(array_buffer, 0x88BDu, &pointer);
   calls.named_buffer_pointer(1u, 0x88BDu, &pointer);
-  /* No context, no map state to answer: the host would be asked, and there
-   * is no host either. */
   std::int64_t state = 7;
   CHECK(!calls.buffer_map_state(array_buffer, 0x9120u, state));
   CHECK(!calls.named_buffer_map_state(1u, 0x9120u, state));
@@ -739,14 +678,11 @@ TEST(gl_error_query, asks_the_host_and_answers_no_error_when_the_call_fails)
 TEST(manual_calls, the_extension_count_is_answered_without_the_host)
 { Current current;
   GLint count = 9;
-  av::glicd::entry::get_integerv(0x821Du /* GL_NUM_EXTENSIONS */, &count);
+  av::glicd::entry::get_integerv(0x821Du , &count);
   CHECK_EQ(count, 0);
   av::glicd::entry::get_integerv(0x821Du, nullptr);
   CHECK_EQ(current.sent(), 0u); }
 
-/* A context whose host lists a reported extension answers it by count, by
- * index and joined, all without the host; an index past it and any other
- * indexed name are the GL's errors. */
 TEST(manual_calls, the_extensions_answered_are_the_context_s_list)
 { static constexpr av::glicd::GlExtensionPolicy::Row rows[] = {
       {"GL_ARB_debug_output", 1u, "manual_calls.the_extensions_answered_are_the_context_s_list"}};
@@ -759,7 +695,6 @@ TEST(manual_calls, the_extensions_answered_are_the_context_s_list)
                                     av::GlContextOptions());
   CHECK(calls.string_i(0x1F03u, 0u) == nullptr);
   rig.host().gl_make("host gpu", "4.6");
-  /* This context's own policy has rows, and the host lists two. */
   rig.host().gl_policy(2);
   rig.host().gl_string("GL_EXT_host_only");
   rig.host().gl_string("GL_ARB_debug_output");
@@ -779,9 +714,6 @@ TEST(manual_calls, the_extensions_answered_are_the_context_s_list)
   CHECK_EQ(context.take_error(), gl_invalid_enum);
   currents.release(); }
 
-/* bind_framebuffer sends framebuffer 0 as the window's framebuffer object (100
- * in GlIcdRig); draw_buffer and read_buffer send GL_BACK as its colour
- * attachment while the window is bound; a query answers as the window would. */
 TEST(manual_calls, the_window_is_translated_on_the_way_to_the_host_and_back)
 { Current current;
   constexpr GLenum gl_framebuffer = 0x8D40u, gl_draw_framebuffer = 0x8CA9u, gl_back = 0x0405u;
@@ -813,7 +745,6 @@ TEST(manual_calls, the_window_is_translated_on_the_way_to_the_host_and_back)
   current.rig().host().gl_integer(static_cast<std::int32_t>(gl_color_attachment0));
   av::glicd::entry::get_integerv(gl_draw_buffer, &answer);
   CHECK_EQ(answer, static_cast<GLint>(gl_back));
-  /* A query with nowhere to answer is still the host's to answer. */
   current.rig().host().gl_integer(0);
   av::glicd::entry::get_integerv(gl_draw_buffer, nullptr);
   CHECK_EQ(current.rig().kmt().queued_answers(), 0u);
@@ -828,9 +759,6 @@ TEST(manual_calls, window_calls_with_nothing_current_send_nothing)
   gen::Wrap_glReadBuffer(0x0405u);
   CHECK_EQ(rig.kmt().commands(), 0u); }
 
-/* A whole level's download is sized from the host's answer for the level:
- * level_bytes asks its width, height and depth, compressed_level_bytes its
- * compressed size. */
 TEST(manual_calls, a_level_download_is_sized_by_the_hosts_level)
 { Current current;
   av::ScriptedHost &host = current.rig().host();
@@ -840,7 +768,7 @@ TEST(manual_calls, a_level_download_is_sized_by_the_hosts_level)
   const std::uint32_t before = current.sent();
   std::uint8_t pixels[24] = {};
   host.gl_bytes(nullptr, 0u);
-  gen::Wrap_glGetTexImage(0x0DE1u, 1, 0x1908u /* GL_RGBA */, 0x1401u, pixels);
+  gen::Wrap_glGetTexImage(0x0DE1u, 1, 0x1908u , 0x1401u, pixels);
   CHECK_EQ(current.sent() - before, 4u);
   CHECK_EQ(current.sent_since(before), ids::kCmd_glGetTexLevelParameteriv);
   CHECK_EQ(current.argument_since(before, 1u), 1u);
@@ -848,7 +776,6 @@ TEST(manual_calls, a_level_download_is_sized_by_the_hosts_level)
   CHECK_EQ(current.argument_since(before + 1u, 2u), 0x1001u);
   CHECK_EQ(current.argument_since(before + 2u, 2u), 0x8071u);
   CHECK_EQ(current.sent_since(before + 3u), ids::kCmd_glGetTexImage);
-  /* Default pack alignment 4: two rows of 3 RGBA pixels. */
   CHECK_EQ(current.context().arrays().pixel_bytes(0x1908u, 0x1401u, 3, 2, 1, true), 24u);
   host.gl_integer(4);
   host.gl_integer(-1);
@@ -874,35 +801,27 @@ TEST(manual_calls, a_level_download_with_nothing_current_is_sized_nothing)
 TEST(manual_calls, every_map_access_enum_and_refusal_reaches_the_mapping)
 { Current current;
   av::ScriptedHost &host = current.rig().host();
-  /* GL_READ_ONLY through a target: size and fill, the binding the guest's. */
   gen::Wrap_glBindBuffer(array_buffer, 7u);
   answer_size(host, 4);
   host.gl_bytes(nullptr, 0u);
   CHECK(gen::Wrap_glMapBuffer(array_buffer, 0x88B8u) != nullptr);
   CHECK_EQ(current.context().mappings().held(), 1u);
-  /* GL_WRITE_ONLY by name: filled too, since what it does not write is kept. */
   answer_size(host, 4);
   host.gl_bytes(nullptr, 0u);
   CHECK(gen::Wrap_glMapNamedBuffer(8u, 0x88B9u) != nullptr);
   CHECK_EQ(current.sent(), 5u);
   CHECK_EQ(current.sent_since(3u), ids::kCmd_glGetNamedBufferParameteri64v);
   CHECK_EQ(current.sent_since(4u), ids::kCmd_glGetNamedBufferSubData);
-  /* A target that binds no buffer. */
   CHECK(gen::Wrap_glMapBufferRange(0x1234u, 0, 4, 1u) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_enum);
-  /* No access bits, refused by the mapping. */
   CHECK(gen::Wrap_glMapNamedBufferRange(9u, 0, 4, 0u) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_operation);
-  /* The buffer bound at the target is not mapped. */
   gen::Wrap_glBindBuffer(array_buffer, 10u);
   CHECK(!gen::Wrap_glUnmapBuffer(array_buffer));
   CHECK_EQ(current.error(), gl_invalid_operation);
   CHECK_EQ(current.sent(), 6u);
   CHECK_EQ(current.context().mappings().held(), 2u); }
 
-/* The generated entries' hooks: framebuffer 0 is the window's, and a draw
- * sends what persistent maps wrote first - with nothing current, and on a
- * lost context, nothing. */
 TEST(manual_calls, the_generated_entries_hooks_follow_the_current_context)
 { { GlIcdRig rig;
     rig.load_with_format();
@@ -933,13 +852,6 @@ TEST(manual_calls, the_generated_entries_hooks_follow_the_current_context)
   gen::Wrap_glDrawBuffers(1, buffers);
   CHECK_EQ(current.sent(), lost); }
 
-/* Feature 053, T036. A memory object and a semaphore are made by the device
- * inside the import, so a create asks the host nothing and hands out a name of
- * this ICD's own - and every command that names one afterwards has to put the
- * host's name in its place, because a GL name on this wire is the host's and
- * nothing else translates one. A name that was never imported names no host
- * object, so it is refused rather than sent under a number the host holds
- * something else at. */
 TEST(manual_calls, an_imported_objects_name_is_the_hosts_by_the_time_it_crosses)
 { av::GlContextRig rig;
   const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
@@ -952,7 +864,6 @@ TEST(manual_calls, an_imported_objects_name_is_the_hosts_by_the_time_it_crosses)
   CHECK_STATUS(context.make(), av::Status::ok);
   CHECK(currents.make_current(context));
 
-  /* The create sends nothing: there is no host object to name yet. */
   const std::uint32_t quiet = rig.kmt().commands();
   GLuint              memory = 0u;
   calls.create_memory_objects(1, &memory);
@@ -960,17 +871,14 @@ TEST(manual_calls, an_imported_objects_name_is_the_hosts_by_the_time_it_crosses)
   CHECK_EQ(rig.kmt().commands(), quiet);
   CHECK_EQ(context.take_error(), 0u);
 
-  /* Used before it is imported, it names nothing and is refused here. */
   calls.buffer_storage_mem(0x8892u, 4096, memory, 0u);
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
   CHECK_EQ(rig.kmt().commands(), quiet);
 
-  /* A handle this process never held is refused before the device. */
   calls.import_memory_win32(memory, 4096u, 0x9587u, reinterpret_cast<void *>(0xDEADu));
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
   CHECK_EQ(rig.kmt().commands(), quiet);
 
-  /* A semaphore is the other namespace: the same number is not this object. */
   GLuint semaphore = 0u;
   calls.gen_semaphores(1, &semaphore);
   CHECK(semaphore != 0u);
@@ -980,13 +888,11 @@ TEST(manual_calls, an_imported_objects_name_is_the_hosts_by_the_time_it_crosses)
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
   CHECK_EQ(rig.kmt().commands(), quiet);
 
-  /* Deleting a name that was never imported has nothing to release. */
   calls.delete_memory_objects(1, &memory);
   calls.delete_semaphores(1, &semaphore);
   CHECK_EQ(rig.kmt().commands(), quiet);
   CHECK_EQ(context.take_error(), 0u); }
 
-/* With nothing current every one of them does nothing, as OpenGL does. */
 TEST(manual_calls, the_external_object_entries_do_nothing_with_no_context)
 { av::ScriptedThreadSlot slot;
   av::glicd::CurrentContexts currents(slot);
@@ -1004,8 +910,6 @@ TEST(manual_calls, the_external_object_entries_do_nothing_with_no_context)
   calls.texture_storage_mem_2d(1u, 1, 0x8058u, 4, 4, 1u, 0u);
   calls.signal_semaphore(1u, 0u, nullptr, 0u, nullptr, nullptr);
   calls.wait_semaphore(1u, 0u, nullptr, 0u, nullptr, nullptr);
-  /* And the ones T037 added, which an application can reach as soon as the
-   * extension is reported: with nothing current there is no table to ask. */
   CHECK(!calls.is_memory_object(1u));
   CHECK(!calls.is_semaphore(1u));
   const GLint value = 1;
@@ -1031,8 +935,6 @@ TEST(manual_calls, the_external_object_entries_do_nothing_with_no_context)
   calls.texture_storage_mem_3d(1u, 1, 0x8058u, 4, 4, 2, 1u, 0u);
   calls.texture_storage_mem_3d_multisample(1u, 4, 0x8058u, 4, 4, 2, false, 1u, 0u); }
 
-/* The substitution itself: an object imported from a handle this process holds
- * crosses under the *host's* name, never the one the application was given. */
 TEST(manual_calls, an_import_puts_the_hosts_name_on_the_wire_and_a_delete_releases_the_object)
 { av::GlContextRig rig;
   const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
@@ -1045,8 +947,6 @@ TEST(manual_calls, an_import_puts_the_hosts_name_on_the_wire_and_a_delete_releas
   CHECK_STATUS(context.make(), av::Status::ok);
   CHECK(currents.make_current(context));
 
-  /* A handle another process could have sent: an allocation the kernel minted
-   * an identity into, shared, and adopted into this process's table. */
   std::uint32_t adapter = 0u;
   std::uint32_t found = 0u;
   CHECK_STATUS(rig.kmt().enumerate_adapters(&adapter, 1u, found), av::Status::ok);
@@ -1073,10 +973,9 @@ TEST(manual_calls, an_import_puts_the_hosts_name_on_the_wire_and_a_delete_releas
   CHECK_EQ(context.take_error(), 0u);
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::CommandHeader::open_shared_object_id);
 
-  /* Now the use: the body names the host's object, not the application's. */
   calls.buffer_storage_mem(0x8892u, 4096, memory, 0u);
   CHECK_EQ(context.take_error(), 0u);
-  context.flush();   /* the call is held in the context's batch until a flush */
+  context.flush();
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u),
            static_cast<std::uint32_t>(ids::kCmd_glBufferStorageMemEXT));
   { av::WireReader body(rig.kmt().command_bytes(rig.kmt().commands() - 1u) + av::CommandHeader::encoded_size,
@@ -1090,19 +989,13 @@ TEST(manual_calls, an_import_puts_the_hosts_name_on_the_wire_and_a_delete_releas
     CHECK_EQ(named, host_name);
     CHECK(named != memory); }
 
-  /* And the delete releases the object rather than naming it to the host. */
   rig.host().shared_object(0u, 0u);
   calls.delete_memory_objects(1, &memory);
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), av::CommandHeader::release_shared_object_id);
-  /* Released, the name names nothing again. */
   calls.buffer_storage_mem(0x8892u, 4096, memory, 0u);
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation}); }
 
 namespace {
-
-/* A Win32 handle this process may open: an allocation the kernel minted an
- * identity into, shared, and adopted into the ICD's own table - the same three
- * steps a second process's handle arrives through. */
 void *openable_handle(av::GlContextRig &rig)
 {
     std::uint32_t adapter = 0u;
@@ -1125,12 +1018,8 @@ void *openable_handle(av::GlContextRig &rig)
     return reinterpret_cast<void *>(static_cast<std::uintptr_t>(named));
 }
 
-}  // namespace
+}
 
-/* Feature 053, T036. The other half of the substitution: a name that *was*
- * imported names a host object, and every command carrying it must carry the
- * host's number instead of this ICD's. The refusals are tested above; this is
- * what happens when there is nothing to refuse. */
 TEST(manual_calls, an_imported_name_crosses_as_the_hosts_own_on_every_command_that_takes_one)
 { av::GlContextRig rig;
   const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
@@ -1161,14 +1050,11 @@ TEST(manual_calls, an_imported_name_crosses_as_the_hosts_own_on_every_command_th
   calls.import_semaphore_win32(semaphore, opaque_win32, openable_handle(rig));
   CHECK_EQ(context.take_error(), 0u);
 
-  /* Each of the three commands that names one goes out with the host's number,
-   * which is the first argument of each. */
   context.flush();
   std::uint32_t before = rig.kmt().commands();
   CHECK(context.shadows().trusted());
   calls.buffer_storage_mem(array_buffer, 4096, memory, 0u);
   CHECK_EQ(context.take_error(), 0u);
-  /* Another API writes the memory whenever it likes. */
   CHECK(!context.shadows().trusted());
   context.flush();
   CHECK(rig.kmt().commands() > before);
@@ -1194,12 +1080,6 @@ TEST(manual_calls, an_imported_name_crosses_as_the_hosts_own_on_every_command_th
   context.flush();
   CHECK(rig.kmt().commands() > before); }
 
-/* Every storage command GL_EXT_memory_object has, not the two this feature
- * started with: a row promises all of them, so all of them substitute the
- * host's name and none may reach the host under the application's (feature
- * 053, T037). The last of each pair is a name this context never imported,
- * which must be refused rather than sent - the host's number under it belongs
- * to another application's object, or to nothing. */
 TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
 { av::GlContextRig rig;
   const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
@@ -1211,7 +1091,6 @@ TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
   rig.host().gl_make("host gpu", "4.6");
   CHECK_STATUS(context.make(), av::Status::ok);
   CHECK(currents.make_current(context));
-  /* The calls are held in the context's batch until a flush. */
   const auto sent_id = [&](std::uint32_t at) {
       context.flush();
       return rig.kmt().command_id(at);
@@ -1226,9 +1105,6 @@ TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
   CHECK_EQ(context.take_error(), 0u);
   const GLuint stranger = memory + 0x1000u;
 
-  /* Every one of the ten, and the one this feature already had beside them.
-   * Each is checked the same way: the command went out, and the name in it is
-   * the host's rather than the application's. */
   struct Sent {
     const char *what;
     std::uint32_t id;
@@ -1274,8 +1150,6 @@ TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
            static_cast<std::uint32_t>(ids::kCmd_glTextureStorageMem3DMultisampleEXT));
   CHECK_EQ(context.take_error(), 0u);
 
-  /* The host's name is what each carried: read out of the named-buffer one,
-   * whose memory argument is its third - buffer, size, memory, offset. */
   context.flush();
   { av::WireReader body(rig.kmt().command_bytes(named_at) + av::CommandHeader::encoded_size,
                         av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
@@ -1288,7 +1162,6 @@ TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
     CHECK_EQ(named, static_cast<std::uint64_t>(host_memory));
     CHECK(named != memory); }
 
-  /* And a name this context never imported reaches none of them. */
   const std::uint32_t quiet = rig.kmt().commands();
   calls.named_buffer_storage_mem(1u, 4096, stranger, 0u);
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
@@ -1312,9 +1185,6 @@ TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
   CHECK_EQ(rig.kmt().commands(), quiet); }
 
-/* The six entry points that never cross: what an application asks about an
- * object whose host counterpart does not exist yet, answered by the ICD's own
- * table. A row promises these as much as it promises the storage commands. */
 TEST(manual_calls, the_queries_and_parameters_are_answered_without_the_host)
 { av::GlContextRig rig;
   const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
@@ -1333,15 +1203,12 @@ TEST(manual_calls, the_queries_and_parameters_are_answered_without_the_host)
   calls.gen_semaphores(1, &semaphore);
   const std::uint32_t quiet = rig.kmt().commands();
 
-  /* Created, they are objects - before anything is imported, which is what
-   * the extension says and what the host cannot answer. */
   CHECK(calls.is_memory_object(memory));
   CHECK(calls.is_semaphore(semaphore));
   CHECK(!calls.is_memory_object(semaphore));
   CHECK(!calls.is_semaphore(memory));
   CHECK(!calls.is_memory_object(memory + 0x1000u));
 
-  /* The parameters are remembered, and the import is what refuses them. */
   const GLint dedicated = 1;
   calls.memory_object_parameter(memory, av::glicd::GlExternalObjects::dedicated, &dedicated);
   CHECK_EQ(context.take_error(), 0u);
@@ -1353,8 +1220,6 @@ TEST(manual_calls, the_queries_and_parameters_are_answered_without_the_host)
                             openable_handle(rig));
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
 
-  /* A semaphore has no parameter this path can keep, and a pname the
-   * extension does not define is refused for either kind. */
   const GLuint64 value = 7u;
   calls.semaphore_parameter(semaphore, av::glicd::GlExternalObjects::d3d12_fence_value, &value);
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_enum});
@@ -1365,26 +1230,18 @@ TEST(manual_calls, the_queries_and_parameters_are_answered_without_the_host)
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_value});
   calls.memory_object_parameter(memory, 0x1234u, &dedicated);
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_enum});
-  /* And a query with nowhere to write, which the API leaves to the driver. */
   calls.get_memory_object_parameter(memory, av::glicd::GlExternalObjects::dedicated, nullptr);
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_value});
   calls.memory_object_parameter(memory, av::glicd::GlExternalObjects::dedicated, nullptr);
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_value});
 
-  /* A named section is what another process opens by name; this path shares by
-   * handle and says so. */
   calls.import_memory_win32_name(memory, 4096u, av::glicd::GlExternalObjects::opaque_win32, "shared");
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
   calls.import_semaphore_win32_name(semaphore, av::glicd::GlExternalObjects::opaque_win32, "shared");
   CHECK_EQ(context.take_error(), std::uint32_t{ManualCalls::gl_invalid_operation});
 
-  /* Not one of them reached the device. */
   CHECK_EQ(rig.kmt().commands(), quiet); }
 
-/* An argument no GL call can have, on each of the four entries that takes a
- * count: the table refuses it and the context keeps the error, because these
- * entries answer nothing and glGetError is the only way an application hears
- * about it. */
 TEST(manual_calls, a_count_no_call_can_have_is_kept_as_an_error_on_each_entry)
 { av::GlContextRig rig;
   const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
@@ -1407,17 +1264,11 @@ TEST(manual_calls, a_count_no_call_can_have_is_kept_as_an_error_on_each_entry)
   CHECK_EQ(context.take_error(), std::uint32_t{gl_invalid_value});
   calls.delete_semaphores(-1, names);
   CHECK_EQ(context.take_error(), std::uint32_t{gl_invalid_value});
-  /* And a semaphore import of a handle this process never held, which is the
-   * one refusal that entry has of its own. */
   calls.import_semaphore_win32(1u, av::glicd::GlExternalObjects::opaque_win32,
                                reinterpret_cast<void *>(0xDEADu));
   CHECK_EQ(context.take_error(), std::uint32_t{gl_invalid_value});
   CHECK_EQ(rig.kmt().commands(), quiet); }
 
-/* A command the host runs that writes a buffer forgets the guest's copy of
- * it - the buffer named, or bound at the target named - so the next map of it
- * starts from the host's bytes. A target whose binding is not known forgets
- * every copy. */
 TEST(manual_calls, a_command_the_host_runs_forgets_the_copy_of_the_buffer_it_writes)
 { Current                   current;
   ManualCalls              &calls = current.rig().root().manual();
@@ -1438,9 +1289,8 @@ TEST(manual_calls, a_command_the_host_runs_forgets_the_copy_of_the_buffer_it_wri
   CHECK(!kept(4u));
   gen::Wrap_glInvalidateBufferData(5u);
   CHECK(!kept(5u));
-  gen::Wrap_glGetQueryBufferObjectiv(1u, 6u, 0x8866u /* GL_QUERY_RESULT */, 0);
+  gen::Wrap_glGetQueryBufferObjectiv(1u, 6u, 0x8866u , 0);
   CHECK(!kept(6u));
-  /* A download into the pack buffer, by hand and generated. */
   calls.bind_buffer(pixel_pack_buffer, 7u);
   current.rig().host().gl_bytes(nullptr, 0u);
   calls.read_pixels(0, 0, 1, 1, rgba, ubyte, nullptr);
@@ -1449,14 +1299,12 @@ TEST(manual_calls, a_command_the_host_runs_forgets_the_copy_of_the_buffer_it_wri
   current.rig().host().gl_bytes(nullptr, 0u);
   gen::Wrap_glGetCompressedTexImage(0x0DE1u, 0, nullptr);
   CHECK(!kept(7u));
-  /* A query's result into the query buffer. */
-  calls.bind_buffer(0x9192u /* GL_QUERY_BUFFER */, 9u);
+  calls.bind_buffer(0x9192u , 9u);
   current.rig().host().gl_bytes(nullptr, 0u);
   gen::Wrap_glGetQueryObjectiv(1u, 0x8866u, nullptr);
   CHECK(!kept(9u));
   CHECK(kept(1u));
   CHECK(kept(8u));
-  /* Bound several at once, the uniform target is not known. */
   const GLuint several[] = {9u};
   gen::Wrap_glBindBuffersBase(uniform, 0u, 1, several);
   CHECK(shadows.trusted());
@@ -1464,9 +1312,6 @@ TEST(manual_calls, a_command_the_host_runs_forgets_the_copy_of_the_buffer_it_wri
   CHECK_EQ(shadows.held(), 0u);
   CHECK(shadows.trusted()); }
 
-/* glBufferSubData's bytes go into the copy of the buffer bound, whether by
- * glBindBuffer or by an indexed bind; a range OpenGL refuses changes nothing,
- * and a target not known forgets every copy. */
 TEST(manual_calls, buffer_sub_data_goes_into_the_copy_of_the_buffer_bound_or_named)
 { Current                   current;
   ManualCalls              &calls = current.rig().root().manual();
@@ -1480,14 +1325,12 @@ TEST(manual_calls, buffer_sub_data_goes_into_the_copy_of_the_buffer_bound_or_nam
   CHECK(std::memcmp(shadows.covering(3u, 4u, 4u), data, sizeof data) == 0);
   gen::Wrap_glNamedBufferSubData(4u, 8, sizeof data, data);
   CHECK(std::memcmp(shadows.covering(4u, 8u, 4u), data, sizeof data) == 0);
-  /* Refused by OpenGL: nothing written. */
   gen::Wrap_glBufferSubData(uniform, -1, sizeof data, data);
   gen::Wrap_glBufferSubData(uniform, 0, -1, data);
   gen::Wrap_glNamedBufferSubData(4u, -1, sizeof data, data);
   gen::Wrap_glNamedBufferSubData(4u, 0, -1, data);
   CHECK_EQ(shadows.covering(3u, 0u, 1u)[0], 0u);
   CHECK_EQ(shadows.covering(4u, 0u, 1u)[0], 0u);
-  /* An indexed bind binds the target too. */
   gen::Wrap_glBindBufferRange(uniform, 0u, 5u, 0, 16);
   CHECK_EQ(current.context().arrays().bound_buffer(uniform), 5u);
   gen::Wrap_glBufferSubData(uniform, 0, sizeof data, data);
@@ -1500,10 +1343,6 @@ TEST(manual_calls, buffer_sub_data_goes_into_the_copy_of_the_buffer_bound_or_nam
   gen::Wrap_glBufferSubData(uniform, 0, sizeof data, data);
   CHECK_EQ(shadows.held(), 0u); }
 
-/* A buffer a shader can write - storage, atomic counters, transform feedback,
- * an image unit, imported memory - changes out of the guest's sight, so the
- * context keeps no copies from then on. Binding nothing there, or a buffer
- * where shaders only read, keeps them. */
 TEST(manual_calls, a_binding_a_shader_writes_through_ends_the_copies)
 { constexpr GLenum storage = 0x90D2u, atomic = 0x92C0u, feedback = 0x8C8Eu, uniform = 0x8A11u;
   {
@@ -1524,12 +1363,12 @@ TEST(manual_calls, a_binding_a_shader_writes_through_ends_the_copies)
   }
   {
     Current current;
-    gen::Wrap_glBindImageTexture(0u, 1u, 0, 0u, 0, 0x88B9u /* GL_WRITE_ONLY */, 0x8058u);
+    gen::Wrap_glBindImageTexture(0u, 1u, 0, 0u, 0, 0x88B9u , 0x8058u);
     CHECK(!current.context().shadows().trusted());
   }
   {
     Current current;
-    gen::Wrap_glBeginTransformFeedback(0x0000u /* GL_POINTS */);
+    gen::Wrap_glBeginTransformFeedback(0x0000u );
     CHECK(!current.context().shadows().trusted());
   }
   {
@@ -1538,9 +1377,6 @@ TEST(manual_calls, a_binding_a_shader_writes_through_ends_the_copies)
     CHECK(!current.context().shadows().trusted());
   } }
 
-/* New storage drops the copy and, made with no data, is fresh: its first map
- * has nothing to keep. A deletion forgets the copy, and bindings restored out
- * of sight forget every copy. */
 TEST(manual_calls, new_storage_is_fresh_and_a_deleted_buffer_has_no_copy)
 { Current                   current;
   ManualCalls              &calls = current.rig().root().manual();
@@ -1562,7 +1398,6 @@ TEST(manual_calls, new_storage_is_fresh_and_a_deleted_buffer_has_no_copy)
   CHECK(shadows.fresh(5u));
   calls.named_buffer_storage(5u, sizeof data, data, 0u);
   CHECK(!shadows.fresh(5u));
-  /* Storage for a target not known: nothing is known. */
   const GLuint several[] = {6u};
   gen::Wrap_glBindBuffersBase(uniform, 0u, 1, several);
   calls.buffer_data(uniform, sizeof data, nullptr, stream_draw);
@@ -1577,19 +1412,14 @@ TEST(manual_calls, new_storage_is_fresh_and_a_deleted_buffer_has_no_copy)
   CHECK_EQ(shadows.held(), 0u);
   CHECK(shadows.trusted()); }
 
-/* ---- bulk data with no blob arena (docs/host-memory.md) ------------------ */
-
 namespace {
 
 using av::glicd::BufferPieces;
 
-/* A window of one page: no arena fits, and the context's bulk data goes
- * inline. */
 constexpr std::uint64_t no_arena = 4096u;
 
 std::uint8_t bulk[std::size_t{1} << 20u];
 
-/* The ids sent from `first` on, compared with `expected`. */
 bool sent_as(Current &current, std::uint32_t first, const std::uint32_t *expected, std::uint32_t count)
 {
     if (current.sent() != first + count) return false;
@@ -1598,12 +1428,8 @@ bool sent_as(Current &current, std::uint32_t first, const std::uint32_t *expecte
     return true;
 }
 
-}  // namespace
+}
 
-/* With no arena, a buffer's bytes cross in commands each within the room: a
- * write of a byte more than one command carries is two, storage with bytes is
- * made empty and filled after, and a read past one reply is a reply a piece.
- * The same write with an arena is one command, lent whole. */
 TEST(manual_calls, without_an_arena_a_buffers_bytes_cross_in_pieces_each_way)
 { Current current(no_arena);
   CHECK(!current.context().wire()->blobs().ready());
@@ -1616,8 +1442,8 @@ TEST(manual_calls, without_an_arena_a_buffers_bytes_cross_in_pieces_each_way)
                                   ids::kCmd_glNamedBufferSubData,      ids::kCmd_glNamedBufferSubData,
                                   ids::kCmd_glNamedBufferSubDataEXT,   ids::kCmd_glNamedBufferSubDataEXT};
   CHECK(sent_as(current, 0u, writes, 6u));
-  CHECK_EQ(current.argument_since(1u, 1u), BufferPieces::write_room);   /* the second piece's offset */
-  CHECK_EQ(current.argument_since(1u, 2u), 1u);                         /* and its size */
+  CHECK_EQ(current.argument_since(1u, 1u), BufferPieces::write_room);
+  CHECK_EQ(current.argument_since(1u, 2u), 1u);
   calls.buffer_data(array_buffer, over, bulk, 0x88E4u);
   calls.buffer_storage(array_buffer, over, bulk, 0u);
   calls.named_buffer_data(4u, over, bulk, 0x88E4u);
@@ -1643,8 +1469,6 @@ TEST(manual_calls, without_an_arena_a_buffers_bytes_cross_in_pieces_each_way)
   CHECK_EQ(current.argument_since(26u, 1u), 8u + 2u * BufferPieces::read_room);
   CHECK_EQ(current.sent_since(27u), ids::kCmd_glGetNamedBufferSubData);
   CHECK_EQ(current.sent_since(32u), ids::kCmd_glGetNamedBufferSubDataEXT);
-  /* What fits goes whole; a negative size is never cut, and the client
-   * drops the command that cannot hold it, as it always has. */
   current.rig().host().gl_bytes(nullptr, 0u);
   calls.get_buffer_sub_data(array_buffer, 0, static_cast<intptr_t>(BufferPieces::read_room), bulk);
   calls.buffer_sub_data(array_buffer, 0, -1, bulk);
@@ -1657,17 +1481,13 @@ TEST(manual_calls, with_an_arena_a_large_write_is_lent_whole)
                                                bulk);
   CHECK_EQ(current.sent(), 1u); }
 
-/* With no arena, a read of more pixels than a reply holds goes into a pixel
- * buffer the context names on the host, and comes back from it in pieces; the
- * pack binding goes back to none, the buffer stays for the next read, and the
- * context deletes it when it goes. */
 TEST(manual_calls, without_an_arena_a_large_read_pixels_goes_through_the_staging_buffer)
 { Current current(no_arena);
   ManualCalls &calls = current.rig().root().manual();
   const GLuint staged = 21u;
   current.rig().host().gl_bytes(reinterpret_cast<const std::uint8_t *>(&staged), sizeof staged);
   for (std::uint32_t answer = 0u; answer < 3u; answer++) current.rig().host().gl_bytes(nullptr, 0u);
-  calls.read_pixels(0, 0, 200, 100, 0x1908u, 0x1401u, bulk);   /* 80000 bytes: two replies' worth */
+  calls.read_pixels(0, 0, 200, 100, 0x1908u, 0x1401u, bulk);
   const std::uint32_t read[] = {ids::kCmd_glGenBuffers,       ids::kCmd_glBindBuffer,       ids::kCmd_glBufferData,
                                 ids::kCmd_glReadPixels,       ids::kCmd_glGetBufferSubData, ids::kCmd_glGetBufferSubData,
                                 ids::kCmd_glBindBuffer};
@@ -1685,14 +1505,11 @@ TEST(manual_calls, without_an_arena_a_large_read_pixels_goes_through_the_staging
       deleted = deleted || current.rig().kmt().command_id(index) == ids::kCmd_glDeleteBuffers;
   CHECK(deleted); }
 
-/* A generated pixel upload too large for its command, with no arena, is
- * staged the same way: the bytes go into the unpack buffer in pieces and the
- * command names offset 0 in it. One small enough crosses with its command. */
 TEST(manual_calls, without_an_arena_a_large_generated_upload_is_staged)
 { Current current(no_arena);
   const GLuint staged = 22u;
   current.rig().host().gl_bytes(reinterpret_cast<const std::uint8_t *>(&staged), sizeof staged);
-  gen::Wrap_glTexSubImage2D(0x0DE1u, 0, 0, 0, 512, 256, 0x1908u, 0x1401u, bulk);   /* 512 KiB */
+  gen::Wrap_glTexSubImage2D(0x0DE1u, 0, 0, 0, 512, 256, 0x1908u, 0x1401u, bulk);
   const std::uint32_t upload[] = {ids::kCmd_glGenBuffers,    ids::kCmd_glBindBuffer,    ids::kCmd_glBufferData,
                                   ids::kCmd_glBufferSubData, ids::kCmd_glBufferSubData, ids::kCmd_glBufferSubData,
                                   ids::kCmd_glTexSubImage2D, ids::kCmd_glBindBuffer};

@@ -16,10 +16,6 @@
 namespace av {
 
 namespace {
-
-/* Every sub-API bit the ABI defines, and the command-API number each one's
- * command ids carry in their top 16 bits. OpenGL is capset bit 2 and command
- * API 3, which is a remap worth reading twice. */
 struct ApiBit {
     std::uint32_t sub_api;
     std::uint32_t commands;
@@ -29,13 +25,12 @@ constexpr ApiBit api_bits[] = {{AV_EXECUTOR_SUB_API_VULKAN, 1u},
                                {AV_EXECUTOR_SUB_API_OPENGL, 3u},
                                {AV_EXECUTOR_SUB_API_OPENCL, 2u}};
 
-/* A bit no sub-API has, which no library may accept in create. */
 constexpr std::uint32_t unclaimed_sub_api = 0x40u;
 
 constexpr std::uint8_t no_such_gpu[16] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                                           0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-}  // namespace
+}
 
 ExecutorConformance::ExecutorConformance()
     : gpu_{}, real_gpu_(false), domain_(0u), library_(nullptr), ops_(nullptr), findings_{}, skip_reasons_{},
@@ -78,8 +73,6 @@ bool ExecutorConformance::defined_result(std::uint32_t result) const
 
 std::uint32_t ExecutorConformance::impossible_id(std::uint32_t api) const
 {
-    /* Inside the API's range, so the device would deliver it, and past
-     * anything a registry could number. */
     return (api << 16u) | 0xFFFFu;
 }
 
@@ -134,8 +127,6 @@ bool ExecutorConformance::run(const char *path)
 void ExecutorConformance::check_table()
 {
     require(ops_->abi_version == AV_EXECUTOR_ABI_VERSION, "the table's abi_version is not this device's");
-    /* Every operation: a table missing one is found out one call later, on a
-     * worker, with a guest waiting. */
     require(ops_->sub_apis != nullptr && ops_->open_domain != nullptr && ops_->close_domain != nullptr &&
                 ops_->allocate_memory != nullptr && ops_->free_memory != nullptr && ops_->create != nullptr &&
                 ops_->destroy != nullptr &&
@@ -147,8 +138,6 @@ void ExecutorConformance::check_table()
                 ops_->map_frame != nullptr && ops_->unmap_frame != nullptr && ops_->export_surface != nullptr &&
                 ops_->sync_surface != nullptr && ops_->answer_part != nullptr,
             "the table is missing an operation");
-    /* compose_planes alone may be null: a device never offers composing
-     * where it is. */
 }
 
 AvContextOptions ExecutorConformance::in_domain(const AvContextOptions &options) const
@@ -158,9 +147,6 @@ AvContextOptions ExecutorConformance::in_domain(const AvContextOptions &options)
     return placed;
 }
 
-/* No options but the domain is a default context; options belong to OpenGL
- * alone; and on a real GPU, an OpenGL 4.6 core context is made, one sharing it
- * too, and OpenGL 5.0 is refused. */
 void ExecutorConformance::check_options()
 {
     const std::uint32_t    offered = ops_->sub_apis(ops_->opaque);
@@ -201,8 +187,6 @@ void ExecutorConformance::check_options()
 
 void ExecutorConformance::check_sub_apis()
 {
-    /* Asked first, before anything else has happened, because the device asks
-     * it on its main loop during realize with no GPU context in hand. */
     const std::uint32_t offered = ops_->sub_apis(ops_->opaque);
     require((offered & ~15u) == 0u, "sub_apis offers a bit the protocol does not define");
 }
@@ -230,9 +214,6 @@ void ExecutorConformance::check_create_and_destroy()
         }
         AvExecutor *const executor = ops_->create(ops_->opaque, api.sub_api, &options, nullptr);
         if (executor == nullptr) {
-            /* Refusing a GPU nobody has is correct for a library that binds
-             * one, so this is not a finding - but it does mean the statements
-             * below went unchecked for this sub-API. */
             skipped_because("an offered sub-API made no executor for an unknown GPU; "
                             "execute and imports went unchecked for it");
             continue;
@@ -254,8 +235,6 @@ void ExecutorConformance::check_execute(AvExecutor *executor, std::uint32_t api)
     const std::uint8_t payload[8] = {1, 2, 3, 4, 5, 6, 7, 8};
     std::size_t        produced = 0xDEADu;
 
-    /* Every command without the reply flag is handed a null reply and a
-     * capacity of zero, which must not be a failure. */
     const std::uint32_t no_reply =
         ops_->execute(ops_->opaque, executor, impossible_id(api), payload, sizeof payload, nullptr,
                       0u, &produced);
@@ -263,7 +242,6 @@ void ExecutorConformance::check_execute(AvExecutor *executor, std::uint32_t api)
     require(no_reply == AV_UNKNOWN,
             "execute faulted on a command id no profile can carry instead of skipping it");
 
-    /* An empty payload is a frame a guest can send; it must decide, not crash. */
     produced = 0xDEADu;
     const std::uint32_t empty =
         ops_->execute(ops_->opaque, executor, impossible_id(api), nullptr, 0u, nullptr, 0u,
@@ -273,8 +251,6 @@ void ExecutorConformance::check_execute(AvExecutor *executor, std::uint32_t api)
 
 void ExecutorConformance::check_reply_capacity(AvExecutor *executor, std::uint32_t api)
 {
-    /* A guard byte past the capacity: an answer that does not fit writes
-     * nothing, and one that does must not write past what it was given. */
     std::uint8_t reply[64];
     std::memset(reply, 0xAB, sizeof reply);
     const std::size_t capacity = sizeof reply - 1u;
@@ -283,9 +259,6 @@ void ExecutorConformance::check_reply_capacity(AvExecutor *executor, std::uint32
                                                0u, reply, capacity, &produced);
     require(defined_result(result), "execute answered a result the ABI does not define");
     require(reply[sizeof reply - 1u] == 0xABu, "execute wrote past the reply capacity it was given");
-    /* An answer shorter than the capacity must not have written past what it
-     * says it wrote; a longer one may leave a prefix, which the device
-     * discards. */
     require(result != AV_EXECUTED || produced >= capacity ||
                 reply[produced] == 0xABu,
             "an answer wrote more than the length it reported");
@@ -300,7 +273,6 @@ void ExecutorConformance::check_workload(AvExecutor *executor, uint32_t sub_api)
     std::size_t   length = 0u;
 
     if (sub_api == AV_EXECUTOR_SUB_API_VULKAN) {
-        /* The first command of every Vulkan program there has ever been. */
         av::WireWriter writer(frame, sizeof frame);
         VkApplicationInfo application = {};
         application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -320,10 +292,6 @@ void ExecutorConformance::check_workload(AvExecutor *executor, uint32_t sub_api)
         command = av::clproto::kCmd_clGetPlatformIDs;
         length = writer.offset();
     } else {
-        /* An OpenGL clear, which needs a context that is current and a driver
-         * that answers - and asks for nothing back. OpenGL's wire carries
-         * scalars as varints: written as a raw u32 this decoded, from its first
-         * byte, as glClear(0), and passed for the wrong reason. */
         av::WireWriter writer(frame, sizeof frame);
         writer.write_varint<std::uint32_t>(0x4000u);
         command = av::glproto::kCmd_glClear;
@@ -335,10 +303,6 @@ void ExecutorConformance::check_workload(AvExecutor *executor, uint32_t sub_api)
                       &produced);
     require(defined_result(result), "a workload answered a result the ABI does not define");
     if (result == AV_UNKNOWN) {
-        /* A library that offers a sub-API and carries none of its commands is
-         * a stub rather than a wrong implementation - the echo library is
-         * exactly that, on purpose - and the device treats it as one: every
-         * command skipped, no fault. Worth saying, not worth failing. */
         skipped_because("a sub-API is offered whose simplest command this library does not "
                         "carry: a stub rather than an implementation");
         return;
@@ -372,16 +336,11 @@ bool ExecutorConformance::check_usable(const AvHostMemory &memory, std::uint64_t
             "allocate_memory answered a caching the ABI does not define");
     if (memory.fd < 0 || memory.size < size || memory.size == 0u) return false;
 
-    /* The device maps the descriptor at the window offset it chose, as long
-     * as the size answered: a descriptor shorter than that is a mapping that
-     * faults past its end. */
     const off_t end = lseek(memory.fd, 0, SEEK_END);
     (void)lseek(memory.fd, 0, SEEK_SET);
     require(end >= 0 && static_cast<std::uint64_t>(end) >= memory.size,
             "the descriptor allocate_memory answered is shorter than the size it answered");
 
-    /* Two mappings of one descriptor, as QEMU's window and the library's own
-     * are: each sees what the other wrote, at both ends of the memory. */
     const std::size_t bytes = static_cast<std::size_t>(memory.size);
     void *const       first = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, memory.fd, 0);
     void *const       second = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, memory.fd, 0);
@@ -428,9 +387,6 @@ void ExecutorConformance::check_memory()
     check_keys_per_domain();
 }
 
-/* What no GPU answers: memory of no size or of part of a page, and memory in
- * a domain no device opened, which has no GPU to allocate on. Nothing refused
- * is kept, so letting go of its key is letting go of nothing. */
 void ExecutorConformance::check_memory_refusals()
 {
     const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
@@ -448,19 +404,12 @@ void ExecutorConformance::check_memory_refusals()
     require(refuses(0u, page_bytes), "allocate_memory answered memory in domain 0, which open_domain never answers");
     require(refuses(nowhere, page_bytes), "allocate_memory answered memory in a domain no device opened");
 
-    /* The device frees whatever it allocated, and only that; a library must
-     * shrug off the rest. */
     ops_->free_memory(ops_->opaque, home, never_allocated_key);
     ops_->free_memory(ops_->opaque, nowhere, never_allocated_key);
     ops_->free_memory(ops_->opaque, 0u, never_allocated_key);
     require(true, "free_memory tolerated keys and domains that hold nothing");
 }
 
-/* Each class a request can name - upload, readback and every Vulkan type -
- * is answered with memory the device can map, or refused: never half of
- * either. On a real GPU upload and readback are always answered, since every
- * GPU has host-visible memory and every Direct3D, OpenGL and OpenCL arena
- * asks for one or the other. */
 void ExecutorConformance::check_request_classes()
 {
     const HostMemoryRequest classes[] = {HostMemoryRequest(HostMemoryRequest::Kind::upload, 0u),
@@ -473,16 +422,12 @@ void ExecutorConformance::check_request_classes()
         if (answered == 0u) (void)check_usable(memory, page_bytes);
         if (answered == 0u) let_go(domain_, class_key, memory);
     }
-    /* Two pages of readback, so a library that answers one size for every
-     * request is found out. */
     AvHostMemory memory = {-1, 0u, 0u};
     if (allocate(domain_, class_key, 2u * page_bytes, classes[1], memory) == 0u) {
         (void)check_usable(memory, 2u * page_bytes);
         let_go(domain_, class_key, memory);
     }
 
-    /* Which types a GPU has is the Vulkan check's to judge, through the
-     * guest's own view of them; here, only that an answer is usable. */
     for (std::uint32_t type = 0u; type < HostMemoryRequest::memory_types; type++) {
         if (allocate(domain_, class_key, page_bytes, HostMemoryRequest(HostMemoryRequest::Kind::vulkan, type),
                      memory) != 0u)
@@ -491,8 +436,6 @@ void ExecutorConformance::check_request_classes()
         let_go(domain_, class_key, memory);
     }
 
-    /* A key let go is free to be allocated again: the device reuses a
-     * resource id once the guest has unreferenced it. */
     const std::uint32_t first = allocate(domain_, class_key, page_bytes, classes[1], memory);
     if (first == 0u) let_go(domain_, class_key, memory);
     const std::uint32_t again = allocate(domain_, class_key, page_bytes, classes[1], memory);
@@ -502,8 +445,6 @@ void ExecutorConformance::check_request_classes()
     require(true, "free_memory tolerated a key it had already let go of");
 }
 
-/* Keys are the device's resource ids, which two devices mint alike: one key
- * in two domains is two allocations, neither of which sees the other. */
 void ExecutorConformance::check_keys_per_domain()
 {
     const std::uint32_t other = second_domain("a second domain was not opened; keys per domain went unchecked");
@@ -529,8 +470,6 @@ void ExecutorConformance::check_keys_per_domain()
     }
     let_go(domain_, domain_key, mine);
     if (theirs.fd >= 0) (void)close(theirs.fd);
-    /* Closing the domain lets go of what it still holds, and a key of a
-     * closed domain is one more that holds nothing. */
     ops_->close_domain(ops_->opaque, other);
     ops_->free_memory(ops_->opaque, other, domain_key);
     require(true, "free_memory tolerated a key of a domain that was closed");
@@ -538,8 +477,6 @@ void ExecutorConformance::check_keys_per_domain()
 
 void ExecutorConformance::check_memory_channel(AvExecutor *executor, std::uint32_t sub_api)
 {
-    /* Release is idempotent: the device may release an id whose import failed,
-     * and a library that faults on one is a library that hangs a teardown. */
     ops_->release_blob(ops_->opaque, executor, never_imported_blob);
     require(true, "release_blob tolerated an id that was never imported");
     require(ops_->imported_handle(ops_->opaque, executor, never_imported_blob) == 0u,
@@ -551,9 +488,6 @@ void ExecutorConformance::check_memory_channel(AvExecutor *executor, std::uint32
     if (domain_ == 0u) return;
     check_foreign_key(executor, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u));
 
-    /* Real memory of the executor's own domain: an API may take it or not -
-     * Vulkan takes nothing before the guest has made a device - but either
-     * way the answer is one of the two, and an import ends at release. */
     AvHostMemory memory = {-1, 0u, 0u};
     if (allocate(domain_, channel_key, page_bytes, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u),
                  memory) != 0u) {
@@ -567,7 +501,6 @@ void ExecutorConformance::check_memory_channel(AvExecutor *executor, std::uint32
     if (imported == AV_EXECUTED) {
         const std::uint64_t handle = ops_->imported_handle(ops_->opaque, executor, channel_blob);
         check_other_executor(executor, sub_api, channel_blob, handle);
-        /* The import holds the memory, so the key going does not end it. */
         ops_->free_memory(ops_->opaque, domain_, channel_key);
         require(ops_->imported_handle(ops_->opaque, executor, channel_blob) == handle,
                 "free_memory took an import's memory from under it");
@@ -581,7 +514,6 @@ void ExecutorConformance::check_memory_channel(AvExecutor *executor, std::uint32
                 "imported_handle answered a handle for an import that was refused");
         ops_->free_memory(ops_->opaque, domain_, channel_key);
     }
-    /* Once the device lets go of a key nothing more imports it. */
     const std::uint32_t late = ops_->import_blob(ops_->opaque, executor, channel_blob, channel_key);
     require(late == AV_UNDECODABLE, "import_blob took a key after free_memory had let it go");
     if (late == AV_EXECUTED) ops_->release_blob(ops_->opaque, executor, channel_blob);
@@ -642,8 +574,6 @@ bool ExecutorConformance::make_device(ExecutorTransport &wire, std::uint64_t &in
         physical = 0u;
     if (physical == 0u) return false;
 
-    /* The guest names no extension: making the device able to import is the
-     * executor's part, not the guest's. */
     float                   priority = 1.0f;
     VkDeviceQueueCreateInfo queue = {};
     queue.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -661,8 +591,6 @@ bool ExecutorConformance::make_device(ExecutorTransport &wire, std::uint64_t &in
 
 std::uint64_t ExecutorConformance::make_buffer(ExecutorTransport &wire, std::uint64_t device)
 {
-    /* As a guest makes one, with no external-memory chain: that memory comes
-     * from elsewhere is the executor's business. */
     VkBufferCreateInfo create = {};
     create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     create.size = page_bytes;
@@ -680,16 +608,12 @@ void ExecutorConformance::check_vulkan_types(const VkPhysicalDeviceMemoryPropert
         const VkMemoryPropertyFlags flags = properties.memoryTypes[type].propertyFlags;
         if ((flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0u) continue;
         visible++;
-        /* The guest's vkAllocateMemory of a type it was shown host-visible is
-         * exactly this request, and its only way to get the memory. */
         AvHostMemory        memory = {-1, 0u, 0u};
         const std::uint32_t answered =
             allocate(domain_, type_key, page_bytes, HostMemoryRequest(HostMemoryRequest::Kind::vulkan, type), memory);
         require(answered == 0u, "allocate_memory refused a Vulkan type the guest's device shows host-visible");
         if (answered != 0u) continue;
         (void)check_usable(memory, page_bytes);
-        /* A GPU that does not snoop an uncached type reads what a
-         * write-back mapping left in the CPU's caches (docs/host-memory.md). */
         require((flags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) != 0u || memory.caching == AV_MEMORY_WRITE_COMBINED,
                 "memory of a Vulkan type that is not host-cached was answered write-back");
         let_go(domain_, type_key, memory);
@@ -704,7 +628,6 @@ void ExecutorConformance::check_vulkan_types(const VkPhysicalDeviceMemoryPropert
                 "allocate_memory answered a Vulkan memory type the GPU does not have");
         let_go(domain_, type_key, memory);
     }
-    /* Twice everything every heap holds is memory no GPU has to give. */
     std::uint64_t heaps = 0u;
     for (std::uint32_t heap = 0u; heap < properties.memoryHeapCount && heap < VK_MAX_MEMORY_HEAPS; heap++)
         heaps += properties.memoryHeaps[heap].size;
@@ -729,8 +652,6 @@ void ExecutorConformance::check_imported_handle(AvExecutor *executor)
         if (instance != 0u) vkproto::av_vkDestroyInstance(wire, as<VkInstance>(instance), nullptr);
         return;
     }
-    /* The executor's own view of the GPU's memory, which is what a guest
-     * chooses a type by. */
     VkPhysicalDeviceMemoryProperties properties = {};
     vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, as<VkPhysicalDevice>(physical), &properties);
     require(wire.ran(), "a Vulkan executor with a device did not answer its memory properties");
@@ -762,11 +683,9 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
     AvHostMemory            memory = {-1, 0u, 0u};
     const HostMemoryRequest request(HostMemoryRequest::Kind::vulkan, type);
     if (allocate(domain_, imported_key, page_bytes, request, memory) != 0u || memory.fd < 0) {
-        /* check_vulkan_types has already said so. */
         let_go(domain_, imported_key, memory);
         return;
     }
-    /* The window's view of the memory: what QEMU maps and the guest reads. */
     void *const mapped = mmap(nullptr, page_bytes, PROT_READ | PROT_WRITE, MAP_SHARED, memory.fd, 0);
     auto *const window = mapped != MAP_FAILED ? static_cast<volatile std::uint8_t *>(mapped) : nullptr;
     if (window != nullptr)
@@ -778,8 +697,6 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
             "import_blob refused memory allocated for a type the guest's device maps, once it had a device");
     const std::uint64_t handle = ops_->imported_handle(ops_->opaque, executor, imported_blob);
     require(imported != AV_EXECUTED || handle != 0u, "imported_handle answered no handle for an import it took");
-    /* With a device that takes memory of this type, memory of the same type
-     * in another domain is refused for the domain alone. */
     check_foreign_key(executor, request);
 
     const VkDevice vk_device = as<VkDevice>(device);
@@ -807,7 +724,6 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
                             commands[0] != 0u && commands[1] != 0u;
     require(!bound || recordable, "a Vulkan executor with a device made no command buffers");
 
-    /* What the GPU wrote, made visible to the CPU's reads once it is done. */
     VkMemoryBarrier to_host = {};
     to_host.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
     to_host.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -827,9 +743,6 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
     };
 
     if (recordable && window != nullptr) {
-        /* The GPU reads what the CPU wrote through the descriptor and writes
-         * it back further on, which the CPU then reads through the same
-         * mapping: the same bytes, coherent both ways. */
         const VkCommandBuffer copying = as<VkCommandBuffer>(commands[0]);
         const VkBufferCopy    region = {0u, half, half};
         bool                  ran = vkproto::av_vkBeginCommandBuffer(wire, copying, &begin) == VK_SUCCESS;
@@ -845,8 +758,6 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
         require(!ran || copied, "a GPU copy through imported memory did not carry what the CPU wrote through its "
                                 "descriptor, or the CPU did not see what the GPU wrote");
 
-        /* The device letting go of the key leaves the import whole: the GPU
-         * still writes the same memory the descriptor maps. */
         ops_->free_memory(ops_->opaque, domain_, imported_key);
         require(ops_->imported_handle(ops_->opaque, executor, imported_blob) == handle,
                 "free_memory took an import's memory from under it");
@@ -877,4 +788,4 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
     let_go(domain_, imported_key, memory);
 }
 
-}  // namespace av
+}

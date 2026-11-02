@@ -1,6 +1,3 @@
-/* nvapi64.dll's answers (docs/vendor-libraries.md): the avgpu adapters that
- * present an NVIDIA GPU, as NVAPI describes a GPU - the calls DaVinci
- * Resolve's GPU detection makes, each answered from what Windows reports. */
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/pci_location.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -32,8 +29,6 @@ constexpr std::uint32_t memory_v1 = 20u | (1u << 16u);
 constexpr std::uint32_t memory_v2 = 24u | (2u << 16u);
 constexpr std::uint32_t memory_v3 = 32u | (3u << 16u);
 
-/* A discrete NVIDIA card the primary display is on, an AMD iGPU NVAPI has
- * nothing to say of, and an integrated NVIDIA GPU with no display. */
 class Machine {
 public:
     Machine() : kmt_(), trace_(), lock_(trace_, 'N'), root_(kmt_, lock_)
@@ -52,7 +47,6 @@ public:
 
     MockKmt   &kmt() { return kmt_; }
     NvapiRoot &root() { return root_; }
-    /* The handle of the `index`th GPU NVAPI enumerates. */
     void *gpu(std::uint32_t index)
     {
         void         *gpus[NvapiRoot::max_physical_gpus] = {};
@@ -69,7 +63,7 @@ private:
     NvapiRoot               root_;
 };
 
-}  // namespace
+}
 
 TEST(nvapi_root, enumerates_each_nvidia_gpu_with_what_windows_says_of_it)
 { Machine machine;
@@ -105,8 +99,6 @@ TEST(nvapi_root, enumerates_each_nvidia_gpu_with_what_windows_says_of_it)
   CHECK(std::memcmp(luid, expected, sizeof luid) == 0);
   CHECK(machine.unlocked()); }
 
-/* The memory record at each version NVAPI has had, in KiB; a version it never
- * had is refused before anything is written. */
 TEST(nvapi_root, memory_info_answers_each_version_and_refuses_another)
 { Machine machine;
   CHECK_EQ(machine.root().initialize(), NvapiRoot::ok);
@@ -120,7 +112,6 @@ TEST(nvapi_root, memory_info_answers_each_version_and_refuses_another)
   CHECK_EQ(memory.sharedSystemMemory, 16u << 20u);
   CHECK_EQ(memory.curAvailableDedicatedVideoMemory, 24u << 20u);
   CHECK_EQ(memory.dedicatedVideoMemoryEvictionCount, 0u);
-  /* A smaller version's record is no bigger than its fields. */
   NvDisplayDriverMemoryInfoRecord small;
   std::memset(&small, 0xEE, sizeof small);
   small.version = memory_v1;
@@ -137,8 +128,6 @@ TEST(nvapi_root, memory_info_answers_each_version_and_refuses_another)
   CHECK_EQ(future.dedicatedVideoMemory, 0u);
   CHECK_EQ(machine.root().memory_info(gpu, nullptr), NvapiRoot::invalid_argument); }
 
-/* The user-mode driver's version as NVAPI writes a driver's, and the primary
- * display: the one display NVIDIA GPUs drive here, and the GPU driving it. */
 TEST(nvapi_root, the_driver_version_and_the_primary_display_with_its_gpu)
 { Machine machine;
   CHECK_EQ(machine.root().initialize(), NvapiRoot::ok);
@@ -163,15 +152,11 @@ TEST(nvapi_root, the_driver_version_and_the_primary_display_with_its_gpu)
   CHECK_EQ(machine.root().gpus_from_display(display, gpus, nullptr), NvapiRoot::invalid_argument);
   CHECK_EQ(machine.root().driver_and_branch_version(nullptr, branch), NvapiRoot::invalid_argument);
   CHECK_EQ(machine.root().driver_and_branch_version(&driver, nullptr), NvapiRoot::invalid_argument);
-  /* A token for the display of the GPU beside it, which drives none - what
-   * a stale or forged handle is - names no display. */
   void *const beside = static_cast<char *>(display) + 1;
   count = 7u;
   CHECK_EQ(machine.root().gpus_from_display(beside, gpus, &count), NvapiRoot::expected_display_handle);
   CHECK_EQ(count, 7u); }
 
-/* A handle that is no GPU of this library's - a display's, garbage, null - is
- * refused as NVAPI refuses one, and nothing is written. */
 TEST(nvapi_root, a_handle_that_is_no_gpu_is_refused)
 { Machine machine;
   CHECK_EQ(machine.root().initialize(), NvapiRoot::ok);
@@ -211,9 +196,6 @@ TEST(nvapi_root, a_handle_that_is_no_gpu_is_refused)
   CHECK_EQ(machine.root().memory_info(gpu, nullptr), NvapiRoot::invalid_argument);
   CHECK(machine.unlocked()); }
 
-/* Nothing is answered before NvAPI_Initialize or after the unload that ends
- * it; each initialise pairs with one unload. Where no NVIDIA GPU is presented
- * NVAPI says so, as on any machine without one. */
 TEST(nvapi_root, every_call_waits_for_initialisation_and_no_nvidia_gpu_is_not_found)
 { Machine machine;
   void         *gpus[NvapiRoot::max_physical_gpus] = {};
@@ -227,7 +209,6 @@ TEST(nvapi_root, every_call_waits_for_initialisation_and_no_nvidia_gpu_is_not_fo
   CHECK_EQ(machine.root().enum_display(0u, &display), NvapiRoot::not_initialized);
   CHECK_EQ(machine.root().gpus_from_display(&value, gpus, &count), NvapiRoot::not_initialized);
   CHECK_EQ(machine.root().unload(), NvapiRoot::not_initialized);
-  /* A handle from before an unload is no GPU until the next initialise. */
   CHECK_EQ(machine.root().initialize(), NvapiRoot::ok);
   void *const gpu = machine.gpu(0u);
   CHECK_EQ(machine.root().unload(), NvapiRoot::ok);
@@ -258,8 +239,6 @@ TEST(nvapi_root, every_call_waits_for_initialisation_and_no_nvidia_gpu_is_not_fo
   kmt.fail_at(MockKmt::Call::enumerate_adapters, 1u, MockKmt::invalid_parameter);
   CHECK_EQ(root.initialize(), NvapiRoot::error); }
 
-/* With no NVIDIA GPU the primary display is on, there is no display to
- * enumerate. */
 TEST(nvapi_root, a_primary_display_on_no_nvidia_gpu_is_no_display)
 { Machine machine;
   machine.kmt().set_primary_display_luid(0x77u);
@@ -268,10 +247,6 @@ TEST(nvapi_root, a_primary_display_on_no_nvidia_gpu_is_no_display)
   CHECK_EQ(machine.root().enum_display(0u, &display), NvapiRoot::end_enumeration);
   CHECK(display == nullptr); }
 
-/* An initialise that cannot see the GPUs any more - the kernel will not
- * enumerate - fails, and leaves the first open over no GPU: each call then
- * answers as on a machine without one, rather than describing what it can no
- * longer see. */
 TEST(nvapi_root, a_second_initialise_that_finds_no_gpu_leaves_none_to_describe)
 { Machine machine;
   CHECK_EQ(machine.root().initialize(), NvapiRoot::ok);

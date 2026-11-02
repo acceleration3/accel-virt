@@ -27,7 +27,7 @@ void *serve_thread(void *socket)
     return nullptr;
 }
 
-}  // namespace
+}
 
 StateSocket::StateSocket() : source_(nullptr), listener_(-1), path_{}, thread_(), dump_{}
 {
@@ -75,7 +75,6 @@ bool StateSocket::listen_on_socket(const char *module, uint32_t process)
     path.append("-");
     path.append_decimal(process);
     path.append(".sock");
-    /* A path cut short would name some other socket. */
     if (path.length() + 1u >= sizeof path_) return false;
     static_cast<void>(unlink(path_));
     listener_ = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -129,4 +128,4 @@ void StateSocket::send(int client, const char *text, size_t length) const
     }
 }
 
-}  // namespace av
+}

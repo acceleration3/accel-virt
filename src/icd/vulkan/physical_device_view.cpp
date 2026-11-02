@@ -60,9 +60,6 @@ void PhysicalDeviceView::restore()
     }
 }
 
-/* A LUID's bytes are its 64-bit value's, little-endian: LowPart, then
- * HighPart (Kmt::adapter_luid). The ID node and the core 1.1 node both carry
- * it; a client of 1.2 or later reads the latter. */
 void PhysicalDeviceView::write_luid()
 {
     AV_SCOPE("PhysicalDeviceView::write_luid");
@@ -81,8 +78,6 @@ void PhysicalDeviceView::write_luid()
     }
 }
 
-/* The adapter's name is at most AdapterString::bytes, well inside the 256 a
- * device name has room for; written whole with its terminator. */
 void PhysicalDeviceView::write_name(VkPhysicalDeviceProperties &properties) const
 {
     AV_SCOPE("PhysicalDeviceView::write_name");
@@ -101,4 +96,4 @@ bool PhysicalDeviceView::invariants_hold() const
     return remembered_ <= max_chain;
 }
 
-}  // namespace av::icd
+}

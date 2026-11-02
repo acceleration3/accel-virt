@@ -13,8 +13,6 @@ ExportedImageLayout::ExportedImageLayout(const VulkanImage &image, uint32_t widt
     AV_SCOPE("ExportedImageLayout::ExportedImageLayout");
 }
 
-/* Laid out by a modifier, so the one plane's layout is the driver's to report
- * and the importer's to follow under that modifier. */
 bool ExportedImageLayout::describe(int fd, AvExportedImage &described) const
 {
     AV_SCOPE("ExportedImageLayout::describe");
@@ -32,4 +30,4 @@ bool ExportedImageLayout::describe(int fd, AvExportedImage &described) const
     return true;
 }
 
-}  // namespace av
+}

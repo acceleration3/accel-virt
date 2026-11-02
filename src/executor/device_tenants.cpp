@@ -79,7 +79,6 @@ Status DeviceTenants::renew()
     return renewed;
 }
 
-/* Every listed tenant is a signal, listed once. */
 bool DeviceTenants::invariants_hold() const
 {
     AV_SCOPE("DeviceTenants::invariants_hold");
@@ -93,4 +92,4 @@ bool DeviceTenants::invariants_hold() const
     return holds;
 }
 
-}  // namespace av
+}

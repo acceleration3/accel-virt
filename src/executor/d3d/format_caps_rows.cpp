@@ -24,4 +24,4 @@ uint64_t FormatCapsRows::give(uint8_t *into, uint64_t capacity) const
     return whole;
 }
 
-}  // namespace av
+}

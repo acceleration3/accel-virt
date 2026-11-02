@@ -11,7 +11,7 @@ using av::Status;
 namespace {
 
 constexpr std::uint8_t poison = 0xEEu;
-constexpr std::uint32_t magic = 0x004D5641u;   /* "AVM" */
+constexpr std::uint32_t magic = 0x004D5641u;
 
 std::uint64_t u64(const std::uint8_t *bytes, std::size_t offset)
 {
@@ -36,7 +36,7 @@ struct Buffer {
     std::uint8_t bytes[160];
 };
 
-}  // namespace
+}
 
 TEST(paging_command_writer_flush_tlb, names_the_root_table_and_the_range)
 { Buffer buffer;

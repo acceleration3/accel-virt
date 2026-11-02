@@ -1,7 +1,3 @@
-/* One consumer on the export socket, end to end over a real socketpair: its
- * requests answered in turn on the connection's own thread, what it may sync
- * and is told of being what it exported, and its end - leaving, an answer it
- * would not take, or the device closing it - noticed on both sides. */
 #include "device/display/display_clock.hpp"
 #include "device/display/head_planes.hpp"
 #include "device/export/export_connection.hpp"
@@ -39,7 +35,6 @@ const std::uint8_t      gpu[ExportGreeting::uuid_bytes] = {0x5Au};
 const AvExportedImage   picture = {-1, 0u, 64u, 64u, 256u, 0u, 0x34325241u, 0u, 0x00FFFFFFFFFFFFFFull};
 constexpr std::uint64_t first = 0x100u;
 
-/* No page is registered here, so nothing is ever latched to be shown. */
 void unshown(void *) {}
 
 class Fixture {
@@ -56,8 +51,6 @@ public:
     ExportConnection  &connection() { return connection_; }
     av::DisplayClock  &clock() { return clock_; }
 
-    /* One request and its answer, with the answer's descriptor kept by the
-     * consumer. */
     ExportAnswer ask(FakeExportConsumer &consumer, ExportOperation operation, std::uint64_t surface)
     {
         ExportAnswer answer;
@@ -68,7 +61,6 @@ public:
         return answer;
     }
 
-    /* The thread noticed its consumer has gone. */
     bool ended_within(int milliseconds)
     {
         for (int waited = 0; waited < milliseconds; waited++) {
@@ -95,7 +87,7 @@ bool readable(int fd)
     return ::poll(&watched, 1u, 1000) == 1;
 }
 
-}  // namespace
+}
 
 TEST(export_connection, answers_hello_export_sync_and_release_in_turn)
 { Fixture fixture;
@@ -107,7 +99,6 @@ TEST(export_connection, answers_hello_export_sync_and_release_in_turn)
   CHECK_STATUS(answer.status(), Status::ok);
   CHECK(answer.greeting().valid());
   CHECK_EQ(answer.greeting().uuid()[0], 0x5Au);
-  /* Nothing exported yet, so nothing to sync. */
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::sync, first).status(), Status::not_found);
   answer = fixture.ask(consumer, ExportOperation::export_surface, first);
   CHECK_STATUS(answer.status(), Status::ok);
@@ -116,7 +107,7 @@ TEST(export_connection, answers_hello_export_sync_and_release_in_turn)
   CHECK(consumer.descriptor() >= 0 && ::fstat(consumer.descriptor(), &file) == 0 && file.st_size == 4096);
   CHECK_EQ(fixture.connection().held(), 1u);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::export_surface, first).status(), Status::ok);
-  CHECK_EQ(fixture.connection().held(), 1u);   /* the same surface, held once */
+  CHECK_EQ(fixture.connection().held(), 1u);
   answer = fixture.ask(consumer, ExportOperation::sync, first);
   CHECK_STATUS(answer.status(), Status::ok);
   CHECK_EQ(answer.writes(), 3u);
@@ -125,14 +116,9 @@ TEST(export_connection, answers_hello_export_sync_and_release_in_turn)
   CHECK_EQ(fixture.connection().held(), 0u);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::release, first).status(), Status::ok);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::sync, first).status(), Status::not_found);
-  /* The descriptors the device handed over were its copies to close. */
   CHECK_EQ(fixture.host().exports_closed(), 3u);
   CHECK(fixture.connection().invariants_hold()); }
 
-/* The consumer's display times the guest's: refused while the device has no
- * clock to move, taken once it has, and the rate is the device's, not the
- * consumer's: here before the guest registered its page, so the rate is what
- * the page first says. */
 TEST(export_connection, a_timing_moves_the_display_clock_once_there_is_one)
 { Fixture fixture;
   FakeExportConsumer consumer;
@@ -161,8 +147,6 @@ TEST(export_connection, a_timing_moves_the_display_clock_once_there_is_one)
   fixture.clock().detach();
   CHECK(fixture.connection().invariants_hold()); }
 
-/* A request the device cannot read is answered as unreadable and names
- * nothing back; the connection goes on. */
 TEST(export_connection, what_cannot_be_read_is_answered_and_the_connection_goes_on)
 { Fixture fixture;
   FakeExportConsumer consumer;
@@ -191,11 +175,6 @@ TEST(export_connection, what_cannot_be_read_is_answered_and_the_connection_goes_
   CHECK_EQ(fixture.connection().held(), 0u);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::hello, 0u).status(), Status::ok); }
 
-/* No count past which a consumer is refused: a mirror holds a ring of slots
- * for every window it shows. What refuses an export is a host with no memory
- * for the list, and then nothing is handed over that the connection could not
- * revoke; one already held is answered again all the same, and one released
- * makes room. */
 TEST(export_connection, a_consumer_holds_past_its_first_room_and_is_refused_only_for_memory)
 { Fixture fixture;
   FakeExportConsumer consumer;
@@ -217,15 +196,12 @@ TEST(export_connection, a_consumer_holds_past_its_first_room_and_is_refused_only
   CHECK_EQ(fixture.connection().held(), full);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::export_surface, past + 1u).status(), Status::ok);
   CHECK_EQ(fixture.connection().held(), full + 1u);
-  /* A surface the executor does not export is not held. */
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::release, first).status(), Status::ok);
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::export_surface, first + 0x10000u).status(),
                Status::not_found);
   CHECK_EQ(fixture.connection().held(), full);
   CHECK(fixture.connection().invariants_hold()); }
 
-/* Told of a surface it holds, never of one it does not; a reset tells it once
- * of every surface, as 0. */
 TEST(export_connection, a_revocation_is_told_only_to_a_consumer_holding_the_surface)
 { Fixture fixture;
   FakeExportConsumer consumer;
@@ -250,8 +226,6 @@ TEST(export_connection, a_revocation_is_told_only_to_a_consumer_holding_the_surf
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::sync, first + 1u).status(), Status::not_found);
   CHECK(fixture.connection().invariants_hold()); }
 
-/* A consumer that goes ends the thread, which holds nothing more; the main
- * loop closes its descriptor, and the connection serves another. */
 TEST(export_connection, a_consumer_that_leaves_ends_its_thread_and_frees_the_connection)
 { Fixture fixture;
   {
@@ -261,7 +235,7 @@ TEST(export_connection, a_consumer_that_leaves_ends_its_thread_and_frees_the_con
       consumer.leave();
       CHECK(fixture.ended_within(5000));
       CHECK_EQ(fixture.connection().held(), 0u);
-      fixture.connection().revoke(0u, ExportRevocation::reset);   /* gone: told nothing */
+      fixture.connection().revoke(0u, ExportRevocation::reset);
       const std::uint32_t closed = fixture.host().exports_closed();
       fixture.connection().close();
       CHECK_EQ(fixture.host().exports_closed(), closed + 1u);
@@ -274,11 +248,9 @@ TEST(export_connection, a_consumer_that_leaves_ends_its_thread_and_frees_the_con
   CHECK_STATUS(fixture.ask(next, ExportOperation::hello, 0u).status(), Status::ok);
   fixture.connection().close();
   CHECK(next.hung_up());
-  fixture.connection().close();   /* twice is nothing */
+  fixture.connection().close();
   CHECK(fixture.connection().invariants_hold()); }
 
-/* An answer the consumer will not take ends the connection, and so does a
- * revocation it will not take; either way it sees its end shut. */
 TEST(export_connection, a_consumer_that_takes_no_answer_is_shut_out)
 { Fixture fixture;
   {
@@ -298,8 +270,6 @@ TEST(export_connection, a_consumer_that_takes_no_answer_is_shut_out)
   CHECK(consumer.hung_up());
   CHECK(fixture.ended_within(5000)); }
 
-/* A connection serving one takes no other; a host with no mutex or no thread
- * refuses, leaving the descriptor with the caller. */
 TEST(export_connection, open_refuses_a_second_descriptor_and_a_host_with_no_mutex_or_thread)
 { Fixture fixture;
   FakeExportConsumer refused;
@@ -322,18 +292,15 @@ TEST(export_connection, open_refuses_a_second_descriptor_and_a_host_with_no_mute
   second.refused();
   CHECK_STATUS(fixture.ask(consumer, ExportOperation::hello, 0u).status(), Status::ok); }
 
-/* Each invariant is broken on its own and caught: more surfaces than the
- * table holds, a surface or a descriptor with nothing serving, an unnamed
- * surface and one held twice. */
 TEST(export_connection, its_invariants_catch_a_table_no_request_can_make)
 { Fixture fixture;
   ExportConnection &connection = fixture.connection();
   CHECK(connection.invariants_hold());
   av::ExportConnectionProbe::hold(connection, 1u, first);
-  CHECK(!connection.invariants_hold());   /* held, with nothing serving */
+  CHECK(!connection.invariants_hold());
   av::ExportConnectionProbe::hold(connection, 0u, first);
   av::ExportConnectionProbe::describe(connection, 3);
-  CHECK(!connection.invariants_hold());   /* a descriptor, with nothing serving */
+  CHECK(!connection.invariants_hold());
   av::ExportConnectionProbe::describe(connection, -1);
   FakeExportConsumer consumer;
   CHECK_STATUS(connection.open(consumer.device_end()), Status::ok);
@@ -346,7 +313,7 @@ TEST(export_connection, its_invariants_catch_a_table_no_request_can_make)
   av::ExportConnectionProbe::name(connection, 1u, 0u);
   CHECK(!connection.invariants_hold());
   av::ExportConnectionProbe::name(connection, 1u, first);
-  CHECK(!connection.invariants_hold());   /* first, twice */
+  CHECK(!connection.invariants_hold());
   av::ExportConnectionProbe::hold(connection, 0u, first);
   CHECK(connection.invariants_hold()); }
 

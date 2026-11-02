@@ -1,10 +1,3 @@
-/* The live experiment of feature 045 over MockKmt, the test playing the host
- * through ScriptedHost and the host GPU's copy through a callback at the fence
- * wait, which copies between the two locked chunks' views: the whole run
- * passes with the pattern read back; a failure at every step is reported with
- * the later steps skipped and everything made released; the memory type is
- * searched lowest first until the host takes one; a copy that leaves bytes
- * wrong says how many matched; and a fence that never comes fails the copy. */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
@@ -53,8 +46,6 @@ constexpr std::int32_t  vk_error_device_lost = -4;
 constexpr std::int32_t  vk_error_incompatible_driver = -9;
 constexpr std::uint32_t refused = 0xC0000001u;
 constexpr std::uint32_t chunk_pages = static_cast<std::uint32_t>(HostVisibleImportScenario::chunk_bytes / 4096u);
-/* The wait for the command buffer's allocation: after the guest cleared the
- * destination, before it reads it ahead of the submit. */
 constexpr std::uint32_t command_buffer_wait = 15u;
 
 bool has_line(const GuestReport &report, const char *line)
@@ -62,8 +53,6 @@ bool has_line(const GuestReport &report, const char *line)
     return std::strstr(report.text(), line) != nullptr;
 }
 
-/* The host GPU's vkCmdCopyBuffer, played on the two chunks' views in the order
- * they were bound, spoiling the last `spoiled` bytes it wrote. */
 class HostGpu {
 public:
     HostGpu(MockKmt &kmt, std::uint32_t spoiled) : kmt_(kmt), spoiled_(spoiled), copies_(0u) {}
@@ -112,7 +101,6 @@ public:
         scenario.run();
     }
 
-    /* Only the adapter the search owns, every chunk closed, every answer taken. */
     void check_nothing_left_but_the_adapter()
     {
         CHECK_EQ(kmt_.open_objects(), 1u);
@@ -122,7 +110,6 @@ public:
         CHECK_STATUS(search_.close(), Status::ok);
     }
 
-    /* How many commands of `id` the scenario sent. */
     std::uint32_t sent(std::uint32_t id) const
     {
         std::uint32_t count = 0u;
@@ -138,7 +125,6 @@ private:
     HostGpu       gpu_;
 };
 
-/* The answer a passing run's wait at `index` (0-based) finds. */
 void answer(ScriptedHost &host, std::uint32_t index)
 {
     const std::uint32_t side = index >= 9u ? 1u : 0u;
@@ -157,11 +143,10 @@ void answer(ScriptedHost &host, std::uint32_t index)
         case 14u: host.vk_handle(0, ScriptedHost::vk_command_buffer); break;
         case 15u: host.vk_handle(0, ScriptedHost::vk_queue); break;
         case 16u: host.vk_handle(0, ScriptedHost::vk_fence); break;
-        default: host.vk_result(0); break;   /* the binds and the fence wait */
+        default: host.vk_result(0); break;
     }
 }
 
-/* The same wait answered as a host that refuses it. */
 void refuse(ScriptedHost &host, std::uint32_t index)
 {
     switch (index) {
@@ -177,15 +162,13 @@ void refuse(ScriptedHost &host, std::uint32_t index)
     }
 }
 
-/* A passing run's first `answers`, and every wait after them answered empty -
- * what the teardown's releases and no-op wait for. */
 void answer_until(Rig &rig, std::uint32_t answers)
 {
     for (std::uint32_t index = 0u; index < answers; index++) answer(rig.host(), index);
     rig.kmt().answer_waits(nullptr, 0u);
 }
 
-}  // namespace
+}
 
 TEST(host_visible_import_scenario, the_host_gpu_copies_guest_written_pages_into_guest_read_ones)
 { Rig rig;
@@ -219,14 +202,10 @@ TEST(host_visible_import_scenario, the_host_gpu_copies_guest_written_pages_into_
   CHECK_EQ(rig.sent(kCmd_vkDestroyDevice), 1u);
   CHECK_EQ(rig.sent(kCmd_vkDestroyInstance), 1u);
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), CommandHeader::nop_id);
-  /* The context's views, the tail's publishing, two opens and two closes. */
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 6u);
   CHECK(report.invariants_hold());
   rig.check_nothing_left_but_the_adapter(); }
 
-/* Every import is released before any chunk is closed - the device refuses to
- * unreference a blob an import still holds - and before the device it was
- * made on is destroyed. */
 TEST(host_visible_import_scenario, every_import_is_released_before_its_chunk_is_closed)
 { Rig rig;
   rig.host().host_visible_import_run();
@@ -234,7 +213,6 @@ TEST(host_visible_import_scenario, every_import_is_released_before_its_chunk_is_
       MockKmt      *kmt;
       std::uint32_t escapes;
   } seen = {&rig.kmt(), 0u};
-  /* The second release's wait, the run's twentieth. */
   rig.kmt().play_at_wait(ScriptedHost::host_visible_import_waits - 1u, [](void *context) {
       Seen &at_release = *static_cast<Seen *>(context);
       at_release.escapes = at_release.kmt->calls(MockKmt::Call::escape);
@@ -242,20 +220,15 @@ TEST(host_visible_import_scenario, every_import_is_released_before_its_chunk_is_
   av::MockPlatform report_memory;
   GuestReport report(report_memory);
   rig.run(report);
-  CHECK_EQ(seen.escapes, 4u);   /* the views, the tail's publishing and the opens only */
+  CHECK_EQ(seen.escapes, 4u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 6u);
   const std::uint32_t commands = rig.kmt().commands();
-  /* Then the device the imports were made on, and its instance. */
   CHECK_EQ(rig.kmt().command_id(commands - 5u), CommandHeader::release_blob_id);
   CHECK_EQ(rig.kmt().command_id(commands - 4u), CommandHeader::release_blob_id);
   CHECK_EQ(rig.kmt().command_id(commands - 3u), static_cast<std::uint32_t>(kCmd_vkDestroyDevice));
   CHECK_EQ(rig.kmt().command_id(commands - 2u), static_cast<std::uint32_t>(kCmd_vkDestroyInstance));
   rig.check_nothing_left_but_the_adapter(); }
 
-/* What crossed is what the host needs: each import names its chunk's resource,
- * the start of it, the copy's whole pages and the host-visible type; each
- * buffer is the copy's size, source then destination, made to be bound to
- * host memory; the copy is the whole range; the fence wait is a slice. */
 TEST(host_visible_import_scenario, what_crosses_names_the_chunk_the_range_and_the_type)
 { Rig rig;
   rig.host().host_visible_import_run();
@@ -286,9 +259,6 @@ TEST(host_visible_import_scenario, what_crosses_names_the_chunk_the_range_and_th
           CHECK_EQ(buffer.size, HostVisibleImportScenario::copy_bytes);
           CHECK_EQ(buffer.usage, static_cast<VkBufferUsageFlags>(buffers == 0u ? VK_BUFFER_USAGE_TRANSFER_SRC_BIT
                                                                                : VK_BUFFER_USAGE_TRANSFER_DST_BIT));
-          /* Nothing of the guest's own about external memory: which host
-           * handle its pages reach the GPU through is the device's to name,
-           * and it names it on the way past. */
           CHECK(buffer.pNext == nullptr);
           buffers++;
       }
@@ -312,20 +282,12 @@ TEST(host_visible_import_scenario, what_crosses_names_the_chunk_the_range_and_th
   }
   CHECK_EQ(imports, 2u);
   CHECK_EQ(buffers, 2u);
-  /* Each chunk was opened as the host-visible type the buffer lives in: the
-   * lowest of the importable ones, 1. */
   CHECK(rig.kmt().last_window_request().kind() == av::HostMemoryRequest::Kind::vulkan);
   CHECK_EQ(rig.kmt().last_window_request().vulkan_type(), 1u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* The chunk is opened as the lowest host-visible type the buffer can live in
- * and imported once: a host that refuses it, answers what the contract does
- * not allow, or a buffer with no such type to live in fails the step, and the
- * line says with what. */
 TEST(host_visible_import_scenario, an_import_no_type_takes_fails_the_step)
 { struct Case { std::uint32_t script; const char *line; };
-  /* script: 0 the import refused, 1 an empty answer, 2 a cut answer, 3 no
-   * host-visible type, 4 a buffer that lives nowhere */
   const Case cases[] = {
       {0u, "FAIL import.src_import status=1 3\n"},
       {1u, "FAIL import.src_import status=6 0\n"},
@@ -357,12 +319,10 @@ TEST(host_visible_import_scenario, an_import_no_type_takes_fails_the_step)
       CHECK_EQ(report.failed(), 1u);
       CHECK_EQ(rig.sent(CommandHeader::import_blob_id), one.script >= 3u ? 0u : 1u);
       CHECK_EQ(rig.sent(CommandHeader::release_blob_id), 0u);
-      CHECK_EQ(rig.sent(kCmd_vkDestroyBuffer), 2u);   /* the source's, and the destination's null */
+      CHECK_EQ(rig.sent(kCmd_vkDestroyBuffer), 2u);
       rig.check_nothing_left_but_the_adapter();
   } }
 
-/* Each step the host answers, refused: the line, nothing after it, and
- * everything made released - device and instance, buffers, imports and chunks. */
 TEST(host_visible_import_scenario, a_host_refusal_at_each_step_is_reported_and_everything_released)
 { struct Case { std::uint32_t index; const char *line; const char *skipped; std::uint32_t releases; };
   const Case cases[] = {
@@ -404,9 +364,6 @@ TEST(host_visible_import_scenario, a_host_refusal_at_each_step_is_reported_and_e
       rig.check_nothing_left_but_the_adapter();
   } }
 
-/* Each D3DKMT call and each misanswer of the driver's, and a transport the
- * device lost at each kind of send: the line, nothing after it, and nothing
- * left open but the adapter. */
 TEST(host_visible_import_scenario, a_driver_or_transport_failure_at_each_step_is_reported_and_released)
 { enum class Fault { fail, zero_escape, short_pages };
   struct Case {
@@ -436,8 +393,6 @@ TEST(host_visible_import_scenario, a_driver_or_transport_failure_at_each_step_is
       Rig rig;
       answer_until(rig, one.answers);
       if (one.fault == Fault::fail) rig.kmt().fail_at(one.call, one.nth, refused);
-      /* The first two escapes are the transport's own: its context's views,
-       * then publishing its ring tail. */
       if (one.fault == Fault::zero_escape) rig.kmt().zero_at(MockKmt::Call::escape, 3u);
       if (one.fault == Fault::short_pages) rig.kmt().answer_next_chunk_bytes((chunk_pages - 1u) * MockKmt::page_bytes);
       av::MockPlatform report_memory;
@@ -450,8 +405,6 @@ TEST(host_visible_import_scenario, a_driver_or_transport_failure_at_each_step_is
       rig.check_nothing_left_but_the_adapter();
   } }
 
-/* The copy is recorded only once it has begun: a transport lost at the begin
- * sends no copy, one lost at the end has sent it. */
 TEST(host_visible_import_scenario, a_recording_lost_at_its_begin_or_its_end_is_told_apart_by_the_copy_sent)
 { const std::uint32_t lost_at[] = {16u, 18u};
   for (const std::uint32_t nth : lost_at) {
@@ -467,7 +420,6 @@ TEST(host_visible_import_scenario, a_recording_lost_at_its_begin_or_its_end_is_t
       rig.check_nothing_left_but_the_adapter();
   } }
 
-/* A context the transport could not set up is reported and nothing is sent. */
 TEST(host_visible_import_scenario, a_context_that_cannot_be_set_up_sends_nothing)
 { Rig rig;
   rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 1u, refused);
@@ -479,8 +431,6 @@ TEST(host_visible_import_scenario, a_context_that_cannot_be_set_up_sends_nothing
   CHECK_EQ(rig.kmt().commands(), 0u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* The host's bytes are what the guest reads back: a copy with bytes wrong says
- * how many matched, and the guest did not see the host's write. */
 TEST(host_visible_import_scenario, a_copy_that_leaves_bytes_wrong_reports_how_many_matched)
 { Rig rig;
   HostGpu spoiling(rig.kmt(), 5u);
@@ -498,7 +448,6 @@ TEST(host_visible_import_scenario, a_copy_that_leaves_bytes_wrong_reports_how_ma
   CHECK_EQ(rig.sent(CommandHeader::release_blob_id), 2u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* A host that never copies leaves the destination as the guest cleared it. */
 TEST(host_visible_import_scenario, a_host_that_never_copies_matches_nothing)
 { Rig rig;
   rig.host().host_visible_import_run();
@@ -509,8 +458,6 @@ TEST(host_visible_import_scenario, a_host_that_never_copies_matches_nothing)
   CHECK_EQ(report.failed(), 2u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* The destination already holding the pattern before the copy was submitted
- * is no proof of the host's write, even when the bytes end right. */
 TEST(host_visible_import_scenario, a_destination_written_before_the_submit_fails_guest_saw_host_write)
 { Rig rig;
   rig.host().host_visible_import_run();
@@ -523,8 +470,6 @@ TEST(host_visible_import_scenario, a_destination_written_before_the_submit_fails
   CHECK_EQ(report.failed(), 1u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* The fence is waited in slices: one the host is slow to reach passes on the
- * slice it arrives in. */
 TEST(host_visible_import_scenario, a_fence_that_comes_on_a_later_slice_passes)
 { Rig rig;
   answer_until(rig, 17u);
@@ -542,8 +487,6 @@ TEST(host_visible_import_scenario, a_fence_that_comes_on_a_later_slice_passes)
   CHECK_EQ(rig.sent(kCmd_vkWaitForFences), 3u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* Ten slices that time out fail the wait and the copy, however the view reads:
- * a copy whose fence never came is not judged by its bytes. */
 TEST(host_visible_import_scenario, a_fence_wait_that_times_out_ten_times_fails_copied)
 { Rig rig;
   answer_until(rig, 17u);
@@ -560,7 +503,6 @@ TEST(host_visible_import_scenario, a_fence_wait_that_times_out_ten_times_fails_c
   CHECK_EQ(rig.sent(kCmd_vkWaitForFences), HostVisibleImportScenario::fence_slices);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* A lost device ends the wait on its first slice. */
 TEST(host_visible_import_scenario, a_lost_device_fails_the_wait_on_its_first_slice)
 { Rig rig;
   answer_until(rig, 17u);
@@ -573,13 +515,8 @@ TEST(host_visible_import_scenario, a_lost_device_fails_the_wait_on_its_first_sli
   CHECK_EQ(rig.sent(kCmd_vkWaitForFences), 1u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* The releases are the scenario's last word: an import released with bytes in
- * its answer, a close the driver refuses, or a no-op answered with bytes fails
- * release, and everything is still let go. */
 TEST(host_visible_import_scenario, a_release_that_fails_is_reported_and_everything_still_let_go)
 { struct Case { std::uint32_t fault; const char *line; };
-  /* fault: 0 the first release answered with bytes, 1 the first close refused,
-   * 2 the no-op answered with bytes */
   const Case cases[] = {{0u, "FAIL import.release status=9 code=0x00000000\n"},
                         {1u, "FAIL import.release status=7 code=0x00000000\n"},
                         {2u, "FAIL import.release status=9 code=0x00000000\n"}};
@@ -607,8 +544,6 @@ TEST(host_visible_import_scenario, a_release_that_fails_is_reported_and_everythi
       CHECK_EQ(rig.kmt().open_objects(), 1u);
       CHECK_EQ(rig.kmt().queued_answers(), 0u);
       CHECK_EQ(rig.kmt().misuses(), 0u);
-      /* A refused close leaves the chunk held until its context is
-       * destroyed, which closes it as the driver does. */
       CHECK_EQ(rig.kmt().window_chunks(), 0u);
       CHECK_STATUS(rig.search().close(), Status::ok);
   } }

@@ -25,4 +25,4 @@ const std::uint8_t *FixtureFile::bytes() const   { return bytes_; }
 std::uint8_t       *FixtureFile::mutable_bytes() { return bytes_; }
 std::size_t         FixtureFile::size() const    { return size_; }
 
-}  // namespace av
+}

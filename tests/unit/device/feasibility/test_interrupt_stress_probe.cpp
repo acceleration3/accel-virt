@@ -1,5 +1,3 @@
-/* US3: fence interrupts under the guest's own masking. The device counts what
- * it raised and what the guest said it saw; the probe judges the pair. */
 #include "core/support/status.hpp"
 #include "device/feasibility/interrupt_stress_probe.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -23,8 +21,6 @@ TEST(interrupt_stress_probe_verdict, a_run_whose_last_fence_was_acknowledged_pas
   CHECK(probe.verdict().passed());
   CHECK_EQ(probe.verdict().measured(), 250000u); }
 
-/* An interrupt the guest was not listening for is the defect this run exists to
- * find: the guest disabled its interrupt and the device injected anyway. */
 TEST(interrupt_stress_probe_verdict, an_interrupt_raised_while_the_guest_was_disabled_fails)
 { MockHost host;
   InterruptStressProbe probe(host);
@@ -51,8 +47,6 @@ TEST(interrupt_stress_probe_verdict, nothing_raised_while_disabled_is_not_a_fail
   probe.finish();
   CHECK(probe.verdict().passed()); }
 
-/* A lost final interrupt is the classic one: the guest waits forever because
- * the last fence's wakeup never arrived. */
 TEST(interrupt_stress_probe_verdict, a_run_the_guest_did_not_see_the_end_of_fails)
 { MockHost host;
   InterruptStressProbe probe(host);
@@ -74,8 +68,6 @@ TEST(interrupt_stress_probe_verdict, a_guest_that_saw_more_than_was_raised_fails
   CHECK(!probe.verdict().passed());
   CHECK_STATUS(probe.verdict().reason(), Status::malformed); }
 
-/* A run nobody finished has nothing to say, and finishing twice does not
- * change what it said. */
 TEST(interrupt_stress_probe_verdict, a_run_that_was_never_finished_never_ran)
 { MockHost host;
   InterruptStressProbe probe(host);
@@ -103,7 +95,6 @@ TEST(interrupt_stress_probe_acknowledged, keeps_the_worst_delay_of_the_run)
   CHECK(probe.verdict().passed());
   CHECK_EQ(probe.verdict().measured(), 9000u); }
 
-/* Workers raise; the main loop counts what the guest said. */
 TEST(interrupt_stress_probe, raises_from_workers_and_judges_on_the_main_loop)
 { MockHost host;
   InterruptStressProbe probe(host);
@@ -141,8 +132,6 @@ TEST(interrupt_stress_probe, the_guests_own_reports_are_main_loop_only)
   CHECK(host.claim(HostViolation::main_loop_required));
   while (host.claim(HostViolation::main_loop_required)) {} }
 
-/* A probe with no lock has nothing to count with: every call is a no-op rather
- * than a crash, because a host with no mutex still has to run. */
 TEST(interrupt_stress_probe, without_a_lock_it_counts_nothing_and_judges_nothing)
 { MockHost host;
   InterruptStressProbe probe(host);

@@ -29,7 +29,7 @@ std::uint32_t expected_cases()
                                       8u * sizeof valid_input + 2u);
 }
 
-}  // namespace
+}
 
 TEST(hostile_sweep_run, counts_every_case_it_feeds)
 {
@@ -56,9 +56,6 @@ TEST(hostile_sweep_rejections, counts_every_case_when_the_parser_refuses_all)
     CHECK_EQ(sweep.rejections(), sweep.cases_run());
 }
 
-/* The valid input is fed exactly once - as the last truncation - so a parser
- * that accepts only it leaves one accepted case. Every bit flip changes a
- * byte, and neither all-zero nor all-ones equals it. */
 TEST(hostile_sweep_rejections, leaves_one_accepted_case_for_the_valid_input)
 {
     const av::HostileSweep sweep(rejects_all_but_the_valid_input, valid_input,

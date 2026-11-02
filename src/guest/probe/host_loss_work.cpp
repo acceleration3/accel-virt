@@ -10,9 +10,8 @@ namespace av {
 
 namespace {
 
-constexpr int32_t  colour_wrong = static_cast<int32_t>(0x80004005u);   /* E_FAIL */
+constexpr int32_t  colour_wrong = static_cast<int32_t>(0x80004005u);
 constexpr uint32_t milliseconds_per_second = 1000u;
-/* A driver may round a clear colour either way at the half step. */
 constexpr uint8_t  tolerance = 1u;
 
 bool near(uint8_t read, uint8_t asked)
@@ -21,7 +20,7 @@ bool near(uint8_t read, uint8_t asked)
     return read + tolerance >= asked && asked + tolerance >= read;
 }
 
-}  // namespace
+}
 
 HostLossWork::HostLossWork(D3d11SharedEntry &before, D3d11SharedEntry &after, HostLossRequest &request, Kmt &kmt)
     : before_(before), after_(after), request_(request), kmt_(kmt), made_before_(false), made_after_(false)
@@ -45,7 +44,6 @@ int32_t HostLossWork::draw(D3d11SharedEntry &entry, const uint8_t *colour)
     uint8_t       texel[4] = {};
     const int32_t read = entry.read_texel(0u, width - 1u, height - 1u, texel);
     if (read < 0) return read;
-    /* BGRA against the colour's red-first bytes. */
     const bool right = near(texel[0], colour[2]) && near(texel[1], colour[1]) && near(texel[2], colour[0]);
     return right ? 0 : colour_wrong;
 }
@@ -60,8 +58,6 @@ uint32_t HostLossWork::elapsed_ms(uint64_t started) const
     return milliseconds > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(milliseconds);
 }
 
-/* A clear and a read are what tell the runtime: its driver learns the
- * context faulted from the call it makes, and reports the device removed. */
 Status HostLossWork::await_removal(uint32_t &waited_ms)
 {
     AV_SCOPE("HostLossWork::await_removal");
@@ -84,8 +80,6 @@ void HostLossWork::run(ScenarioSteps &steps)
     const int32_t made = before_.create_device();
     made_before_ = made >= 0;
     if (steps.check_result("loss_device", made < 0 ? made : draw(before_, before_colour)) != Status::ok) return;
-    /* A layer's device runs on the guest's Vulkan, on a host device of its
-     * own: the host's Direct3D 11 device is not its to lose. */
     if (before_.layered()) {
         steps.note("loss_lose", "the device is a layer's: the host's Direct3D 11 device is not the one it runs on");
         return;
@@ -113,4 +107,4 @@ bool HostLossWork::invariants_hold() const
     return made_before_ || !made_after_;
 }
 
-}  // namespace av
+}

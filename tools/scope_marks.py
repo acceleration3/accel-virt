@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""Gate and writer for the trace scope marks (docs/trace.md): every function
-definition in src/ opens with AV_SCOPE("<Class::function>") naming itself.
-
-  scope_marks.py [--check] [root]   report unmarked and misnamed definitions
-  scope_marks.py --apply [root]     write the missing marks and fix misnamed ones
-  scope_marks.py --names [root]     print "<id> <name>" for every mark in src/
-
-Definitions are found with libclang rather than a pattern, because the ones a
-pattern misreads - constructors with initializer lists, operators, templates in
-headers, bodies opened on the signature's line - are exactly the ones that
-would go unmarked. The mark itself is read as text: a tree under test need not
-define AV_SCOPE for its body to be judged.
-"""
+"""Gate and writer for the trace scope marks: every function"""
 import argparse
 import concurrent.futures
 import json
@@ -32,15 +20,6 @@ INDENT = "    "
 FNV_OFFSET = 2166136261
 FNV_PRIME = 16777619
 
-# The table's own code, and every TraceHost it calls into (a `*_trace_host.cpp`
-# and the clock one reads), would recurse into itself: a scope's enter asks the
-# host for the thread, whose scope enters again. The layout proofs are data
-# the kernel build checks at compile time; generated code is its generator's.
-# The wire's reads and writes are leaf primitives called once per struct
-# member: they cannot block, so a hang is never inside one, and their scopes
-# tripled the time a bound device took to decode a command.
-# A sample is a standalone test application built without the driver's
-# sources, so it has no trace table to mark.
 EXCLUDED_DIRECTORIES = ("src/core/trace/", "src/proto/generated/", "src/um/sample/")
 EXCLUDED_FILES = ("src/km/ddi_record_layout.cpp", "src/km/ddi_table_layout.cpp",
                   "src/um/d3d/umd_record_layout.cpp",
@@ -58,8 +37,6 @@ SCOPE_KINDS = {
     ci.CursorKind.STRUCT_DECL, ci.CursorKind.CLASS_DECL, ci.CursorKind.UNION_DECL,
     ci.CursorKind.CLASS_TEMPLATE, ci.CursorKind.CLASS_TEMPLATE_PARTIAL_SPECIALIZATION,
 }
-# Descended into for definitions; a function body never is, so a lambda or a
-# local class inside one is never taken for a definition of its own.
 CONTAINER_KINDS = SCOPE_KINDS | {ci.CursorKind.NAMESPACE, ci.CursorKind.LINKAGE_SPEC, ci.CursorKind.UNEXPOSED_DECL}
 
 
@@ -71,7 +48,6 @@ def scope_id(name):
 
 
 def resource_flags():
-    """libclang does not find the compiler's own headers (stddef.h) by itself."""
     try:
         found = subprocess.run(["clang++", "-print-resource-dir"], capture_output=True, text=True, check=True)
     except (OSError, subprocess.CalledProcessError):
@@ -83,14 +59,10 @@ def fallback_flags(root, relative):
     flags = ["-x", "c++", "-std=c++23", "-fsyntax-only", f"-I{root}/src", f"-I{root}/tests",
              f"-I{root}/third_party/khronos/include", f"-I{root}/src/proto/generated/opengl",
              "-DAV_CHECKED=1"]
-    # The Windows shims include the kit through the case-insensitive overlay the
-    # cross-builds use (cmake/windows_*_flags.cmake), with those builds' paths.
     kit = f"{root}/third_party/windows-kit"
     windows = ["--target=x86_64-pc-windows-msvc", "-fms-extensions", "-fms-compatibility",
                "-fms-compatibility-version=19.40", "-nostdlibinc", "-D_AMD64_", "-DAMD64", "-D_WIN64",
                f"-ivfsoverlay{kit}/overlay.yaml", "-isystem/windows-kit/km/crt", "-isystem/windows-kit/sdk-shared"]
-    # The host's Direct3D headers, as DXVK's native build declares them: never
-    # for a Windows shim, whose windows.h they would shadow.
     if not relative.startswith(("src/km/", "src/um/")):
         flags += [f"-isystem{root}/third_party/dxvk/include/native/directx",
                   f"-isystem{root}/third_party/dxvk/include/native/windows"]
@@ -103,7 +75,6 @@ def fallback_flags(root, relative):
 
 
 def compile_flags(root):
-    """Each listed source's own flags, less what names the compiler and the output."""
     database = pathlib.Path(root) / "build" / "compile_commands.json"
     if not database.exists():
         return {}
@@ -138,8 +109,6 @@ def sources(root):
 
 
 def forbidden_marks(root):
-    """A mark in an excluded file - outside the directories the tool leaves to
-    others - is one somebody wrote by hand where none may be."""
     found = []
     base = pathlib.Path(root) / "src"
     for path in sorted(base.rglob("*")):
@@ -155,10 +124,7 @@ def forbidden_marks(root):
 
 
 def qualified_name(cursor):
-    """The name as written at the definition, classes included, namespaces not
-    - anonymous ones neither, so a file's own helper is its bare name."""
     spelling = cursor.spelling
-    # A class template's constructor spells its arguments; the definition does not.
     if cursor.kind in (ci.CursorKind.CONSTRUCTOR, ci.CursorKind.DESTRUCTOR):
         spelling = re.sub(r"<.*>$", "", spelling)
     parts = [spelling]
@@ -179,7 +145,6 @@ def body_of(cursor):
 
 
 def exempt(cursor, text, body_start):
-    """constexpr and constinit, and C linkage: the one-line ABI entry points."""
     head = text[cursor.extent.start.offset:body_start]
     if re.search(r"\b(constexpr|constinit)\b", head):
         return True
@@ -206,9 +171,6 @@ class Definition:
 
 
 def definitions(path, flags):
-    """(Definition, ...) of the file's own function definitions, by byte offset."""
-    # latin-1 maps each byte to one character, so libclang's byte offsets index
-    # the text directly and a write gives back every byte it did not change.
     text = path.read_bytes().decode("latin-1")
     index = ci.Index.create()
     unit = index.parse(str(path), args=flags,
@@ -232,22 +194,18 @@ def definitions(path, flags):
             return
         open_at = body.extent.start.offset
         close_at = body.extent.end.offset - 1
-        # A body a macro expanded has no brace of its own to put a mark after.
         if text[open_at:open_at + 1] != "{" or text[close_at:close_at + 1] != "}":
             return
         found[open_at] = Definition(qualified_name(cursor), cursor.location.line, open_at, close_at,
                                     exempt(cursor, text, open_at))
 
     visit(unit.cursor)
-    # A fatal error ends the parse where it stands, and every definition after
-    # it would pass unseen.
     fatal = [str(diagnostic.spelling) for diagnostic in unit.diagnostics
              if diagnostic.severity >= ci.Diagnostic.Fatal]
     return text, sorted(found.values(), key=lambda definition: definition.open_at), fatal
 
 
 def judge(text, relative, found, fatal):
-    """Findings for one file, and the marks it holds."""
     findings, marks = [f"{relative}: cannot be parsed: {message}" for message in fatal], []
     for definition in found:
         mark = MARK.match(text, definition.open_at + 1)
@@ -278,7 +236,6 @@ def indent_of(text, line_start):
 
 
 def edit(text, definition):
-    """The text with this definition's mark written or corrected."""
     mark = MARK.match(text, definition.open_at + 1)
     literal = f'AV_SCOPE("{definition.name}");'
     if mark:
@@ -293,7 +250,6 @@ def edit(text, definition):
     if after.strip() == "":
         return text[:open_at + 1] + "\n" + indent + INDENT + literal + text[open_at + 1:]
     if close_at < line_end:
-        # A body on one line: brace, mark, statements and brace each on their own.
         before = text[line_start:open_at].rstrip()
         inside = text[open_at + 1:close_at].strip()
         tail = text[close_at + 1:line_end]
@@ -331,7 +287,6 @@ def add_include(text, relative):
             and included.endswith(".hpp")
 
     if not blocks:
-        # No project include yet: before the first system one, or after the guard.
         at = next((n for n, line in enumerate(lines) if line.startswith("#include")), None)
         guard = next((n + 1 for n, line in enumerate(lines) if line.startswith("#define")), None)
         if at is not None:
@@ -373,7 +328,6 @@ def examine(job):
 
 
 def all_marks(root):
-    """Every mark in src/, generated code included, by name."""
     names = set()
     for path in sorted((pathlib.Path(root) / "src").rglob("*")):
         if path.suffix in SOURCE_SUFFIXES + (".h", ".cc") and path.is_file():

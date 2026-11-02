@@ -1,7 +1,3 @@
-/* Every host handle this executor made, and nothing else. What a test asserts
- * here is the property a guest cannot be allowed to break: a number this host
- * did not produce is not a handle - and neither is one whose object, or whose
- * object's parent, the driver has since freed. */
 #include "executor/vulkan/handle_registry.hpp"
 #include "harness/executor/handle_registry_probe.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -24,8 +20,6 @@ constexpr std::uint64_t pool = 0x4000u;
 constexpr std::uint64_t command_buffer = 0x5000u;
 constexpr std::uint64_t buffer = 0x6000u;
 
-/* The chain a guest's context really builds, each made through the last, and
- * a buffer beside the pool. */
 void make_chain(HandleRegistry &registry)
 { CHECK(registry.remember(instance, none) == Status::ok);
   CHECK(registry.invariants_hold());
@@ -40,7 +34,7 @@ void make_chain(HandleRegistry &registry)
   CHECK(registry.remember(buffer, device) == Status::ok);
   CHECK(registry.invariants_hold()); }
 
-}  // namespace
+}
 
 TEST(handle_registry, knows_only_what_it_made)
 { MockPlatform   platform;
@@ -52,8 +46,6 @@ TEST(handle_registry, knows_only_what_it_made)
   CHECK_EQ(registry.count(), 1u);
   CHECK(registry.invariants_hold()); }
 
-/* The null handle is the API's own: a guest may legitimately send it, and
- * owning it would mean refusing every optional parameter. */
 TEST(handle_registry, the_null_handle_is_nobody_s_and_always_known)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -76,7 +68,6 @@ TEST(handle_registry, forgetting_one_takes_it_out_and_leaves_the_rest)
   CHECK(registry.knows(3u));
   CHECK(registry.knows(4u));
   CHECK_EQ(registry.count(), 3u);
-  /* Forgetting one it never made changes nothing. */
   registry.forget(0xFFFFu);
   registry.forget_children(0xFFFFu);
   CHECK_EQ(registry.count(), 3u);
@@ -92,8 +83,6 @@ TEST(handle_registry, remembering_the_same_one_twice_costs_one_slot)
   CHECK(!registry.knows(7u));
   CHECK(registry.invariants_hold()); }
 
-/* A driver that destroys a device frees everything made through it, at any
- * depth; a handle still known after that is a freed pointer a guest can name. */
 TEST(handle_registry, forgetting_a_parent_forgets_everything_made_through_it)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -119,7 +108,6 @@ TEST(handle_registry, forgetting_the_root_forgets_the_whole_chain)
   CHECK_EQ(registry.count(), 0u);
   CHECK(!registry.knows(command_buffer)); }
 
-/* A reset frees what a pool gave out and keeps the pool. */
 TEST(handle_registry, forgetting_children_keeps_the_parent_and_takes_every_depth)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -134,7 +122,6 @@ TEST(handle_registry, forgetting_children_keeps_the_parent_and_takes_every_depth
   CHECK(!registry.knows(buffer));
   CHECK_EQ(registry.count(), 2u); }
 
-/* Forgetting a leaf leaves its parent and siblings. */
 TEST(handle_registry, forgetting_a_child_leaves_its_parent_and_siblings)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -145,9 +132,6 @@ TEST(handle_registry, forgetting_a_child_leaves_its_parent_and_siblings)
   CHECK(registry.knows(buffer));
   CHECK_EQ(registry.count(), 5u); }
 
-/* A parent it does not know - one a guest named through a create info that
- * the decoder let through as null - makes a handle with no parent, which only
- * forgetting it itself takes out. */
 TEST(handle_registry, a_handle_made_through_one_it_does_not_know_has_no_parent)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -157,8 +141,6 @@ TEST(handle_registry, a_handle_made_through_one_it_does_not_know_has_no_parent)
   CHECK(registry.invariants_hold());
   CHECK(registry.knows(buffer)); }
 
-/* Remembering one already known keeps what it was made through: a queue
- * answered again by a second vkGetDeviceQueue is still its device's. */
 TEST(handle_registry, a_handle_answered_again_keeps_its_first_parent)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -168,8 +150,6 @@ TEST(handle_registry, a_handle_answered_again_keeps_its_first_parent)
   CHECK(!registry.knows(buffer));
   CHECK(registry.invariants_hold()); }
 
-/* A freed slot is reused, and a handle made into it is not taken for a child
- * of whatever the slot held before: nothing names a slot once it is free. */
 TEST(handle_registry, a_reused_slot_is_nobody_s_parent_from_before)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -186,8 +166,6 @@ TEST(handle_registry, a_reused_slot_is_nobody_s_parent_from_before)
   CHECK(registry.knows(device));
   CHECK(registry.invariants_hold()); }
 
-/* A child in a lower slot than its parent - slots freed and reused - is still
- * found, which takes more than one pass over the table. */
 TEST(handle_registry, a_grandchild_below_its_parent_is_still_forgotten)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -208,10 +186,6 @@ TEST(handle_registry, a_grandchild_below_its_parent_is_still_forgotten)
   CHECK(registry.knows(1u));
   CHECK_EQ(registry.count(), 1u); }
 
-/* Well past the 65536 handles a context once held - Minecraft's renderer
- * passed 4096 while its world was loading - every one is known, as the kind
- * it was made, and forgetting the device they were made through forgets all
- * of them at once. */
 TEST(handle_registry, holds_a_hundred_thousand_handles_and_forgets_them_through_their_parent)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -228,9 +202,6 @@ TEST(handle_registry, holds_a_hundred_thousand_handles_and_forgets_them_through_
   CHECK(!registry.knows(0x100000u + many * 16u));
   CHECK(registry.invariants_hold()); }
 
-/* Room is made before the driver makes anything, so a guest wanting more than
- * the host can hold is told it is out of memory and nothing it already holds
- * is forgotten; room made is room a remember cannot fail for. */
 TEST(handle_registry, room_is_made_before_and_refused_without_forgetting_anything)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -252,8 +223,6 @@ TEST(handle_registry, room_is_made_before_and_refused_without_forgetting_anythin
   CHECK(registry.knows(handle));
   CHECK(registry.invariants_hold()); }
 
-/* A handle the driver answered again - enumeration answers the same physical
- * device every time - takes no room and cannot fail, however short memory is. */
 TEST(handle_registry, a_handle_answered_again_needs_no_room)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -274,18 +243,11 @@ TEST(handle_registry, forgetting_everything_leaves_a_registry_that_knows_nothing
   CHECK_EQ(registry.count(), 0u);
   CHECK(!registry.knows(buffer));
   CHECK(registry.knows(0u));
-  /* And it takes new handles from the first slot with no parent left over. */
   CHECK(registry.remember(buffer, device) == Status::ok);
   registry.forget(device);
   CHECK(registry.knows(buffer));
   CHECK(registry.invariants_hold()); }
 
-/* A table end past the table is one `knows` would walk off, reading whatever
- * lies beyond as handles this host made. */
-/* The five handles the loader dispatches on are told apart by kind: it reads a
- * dispatchable handle as a pointer to the table it calls through, so a queue
- * where a device belongs aborts the process. A handle made as one kind is no
- * more the other than a number this registry never made. */
 TEST(handle_registry, a_handle_is_known_only_as_the_kind_it_was_made)
 { MockPlatform   platform;
   HandleRegistry registry(platform);
@@ -298,10 +260,6 @@ TEST(handle_registry, a_handle_is_known_only_as_the_kind_it_was_made)
   CHECK(registry.knows(0x2000u, av::HandleKind::queue));
   CHECK(registry.knows(0x3000u, av::HandleKind::other));
   CHECK(!registry.knows(0x3000u, av::HandleKind::device));
-  /* A number nobody made is no kind at all, and neither is the null handle:
-   * it is known - the API defines it - but no dispatchable handle, and no
-   * image made for the memory source, whatever an empty registry or one
-   * holding that kind says. */
   CHECK(!registry.knows(0x4000u, av::HandleKind::device));
   CHECK(registry.knows(0u));
   CHECK(registry.remember(0x6000u, 0u, av::HandleKind::external_image) == Status::ok);
@@ -312,40 +270,31 @@ TEST(handle_registry, a_handle_is_known_only_as_the_kind_it_was_made)
   for (const av::HandleKind kind : kinds) CHECK(!registry.knows(0u, kind));
   HandleRegistry empty(platform);
   CHECK(!empty.knows(0u, av::HandleKind::external_image));
-  /* And a slot reused for another handle carries the new one's kind. */
   registry.forget(0x1000u);
   CHECK(registry.remember(0x5000u, 0u, av::HandleKind::instance) == Status::ok);
   CHECK(registry.knows(0x5000u, av::HandleKind::instance));
   CHECK(!registry.knows(0x5000u, av::HandleKind::device));
   CHECK(registry.invariants_hold()); }
 
-/* Each of these is a table the operations could never leave, and each breaks
- * exactly one rule. */
 TEST(handle_registry_invariants, a_table_the_operations_never_leave_breaks_them)
 { MockPlatform platform;
   { HandleRegistry registry(platform);
     make_chain(registry);
     HandleRegistryProbe probe(registry);
-    /* A handle naming itself as what it was made through. */
     probe.set_parent(pool, probe.slot_of(pool));
     CHECK(!registry.invariants_hold()); }
   { HandleRegistry registry(platform);
     make_chain(registry);
     HandleRegistryProbe probe(registry);
-    /* A parent no handle holds: the freed pointer this registry exists to
-     * refuse, outlived by what was made through it. */
     probe.set_parent(buffer, 4096u);
     CHECK(!registry.invariants_hold()); }
   { HandleRegistry registry(platform);
     make_chain(registry);
     HandleRegistryProbe probe(registry);
-    /* A count of children no handle is: forgetting the device would look
-     * for children that are not there, or skip ones that are. */
     probe.set_children(device, 1u);
     CHECK(!registry.invariants_hold()); }
   { HandleRegistry registry(platform);
     make_chain(registry);
     HandleRegistryProbe probe(registry);
-    /* The null handle held, which every optional parameter names. */
     probe.hold_null();
     CHECK(!registry.invariants_hold()); } }

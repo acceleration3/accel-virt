@@ -27,7 +27,7 @@ private:
     MockPlatform &platform_;
 };
 
-}  // namespace
+}
 
 TEST(spin_lock_guard, holds_dispatch_for_its_scope)
 { MockPlatform platform; SpinLock lock(platform, LockRank{10});

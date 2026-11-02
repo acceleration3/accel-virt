@@ -22,7 +22,7 @@ int count_under(Mutex &mutex, MockPlatform &platform, bool early)
     return static_cast<int>(platform.locks_held()) + 1;
 }
 
-}  // namespace
+}
 
 TEST(mutex_guard, holds_apc_for_its_scope)
 { MockPlatform platform; Mutex mutex(platform, LockRank{10});

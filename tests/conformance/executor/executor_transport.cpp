@@ -27,8 +27,6 @@ void ExecutorTransport::end_call() {}
 
 WireArena &ExecutorTransport::decode_arena()
 {
-    /* Each reply decodes from the start of the block: nothing a decode made
-     * outlives the call that asked for it. */
     arena_.reset();
     return arena_;
 }
@@ -37,8 +35,6 @@ ClientBlobArena &ExecutorTransport::blobs() { return blobs_; }
 
 bool ExecutorTransport::ran() const { return ran_; }
 
-/* An answer longer than the reply room is one the library reported and did
- * not write, so it is a failed call rather than a short answer. */
 TransportResult ExecutorTransport::deliver(std::uint32_t command_id, WireWriter &writer, std::size_t &answered)
 {
     ran_ = false;
@@ -51,4 +47,4 @@ TransportResult ExecutorTransport::deliver(std::uint32_t command_id, WireWriter 
     return ran_ ? TransportResult::ok : TransportResult::failed;
 }
 
-}  // namespace av
+}

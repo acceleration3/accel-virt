@@ -1,6 +1,3 @@
-/* One DxgkCbAcquireHandleData acquisition: the driver's data behind a
- * D3DKMT allocation handle, borrowed until the release handle is handed back.
- * The destructor releases it, so no caller repeats that on every path. */
 #ifndef AV_ACQUIRED_HANDLE_DATA_HPP
 #define AV_ACQUIRED_HANDLE_DATA_HPP
 
@@ -19,12 +16,7 @@ public:
     AcquiredHandleData(const AcquiredHandleData &) = delete;
     AcquiredHandleData &operator=(const AcquiredHandleData &) = delete;
 
-    /* invalid_parameter when dxgkrnl knows no such handle: STATUS_NOT_FOUND is
-     * a status dxgkrnl logs as "Driver returned an invalid NTSTATUS code" and
-     * hands to the caller, which is what made D3DKMTCreateAllocation2 fail with
-     * it (feature 037). */
     [[nodiscard]] Status acquire();
-    /* Null until acquire() answers ok. */
     void                *data() const;
 
     bool invariants_hold() const;
@@ -38,6 +30,6 @@ private:
     friend struct AcquiredHandleDataProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_ACQUIRED_HANDLE_DATA_HPP
+#endif

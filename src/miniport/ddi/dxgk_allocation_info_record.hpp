@@ -1,6 +1,3 @@
-/* DXGK_ALLOCATIONINFO, one allocation of a DxgkDdiCreateAllocation call. A
- * DDI record: each union is its UINT, Flags and Flags2 their Value.
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGK_ALLOCATION_INFO_RECORD_HPP
 #define AV_DXGK_ALLOCATION_INFO_RECORD_HPP
 
@@ -28,6 +25,6 @@ struct DxgkAllocationInfoRecord {
     uint32_t Flags2;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_ALLOCATION_INFO_RECORD_HPP
+#endif

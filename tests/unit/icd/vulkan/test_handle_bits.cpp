@@ -8,18 +8,14 @@
 using av::icd::HandleBits;
 
 namespace {
-
-/* The 32-bit build's shape of a non-dispatchable handle. */
 using Surface = av::NonDispatchableHandle<struct SurfaceTag>;
 
 struct Slot {
     int value;
 };
 
-}  // namespace
+}
 
-/* The 64-bit build's shape: a handle is a pointer, made from a slot's address
- * and read back as it. */
 TEST(handle_bits, a_pointer_becomes_its_address_and_comes_back)
 { Slot slot = {7};
   const HandleBits bits(&slot);
@@ -36,8 +32,6 @@ TEST(handle_bits, a_64_bit_value_becomes_a_handle_of_either_shape_and_back)
   const HandleBits none(Surface{});
   CHECK_EQ(none.value(), 0u); }
 
-/* A 32-bit process's pointer is four bytes: its bits are zero above them, and
- * only its four bytes are written back. */
 TEST(handle_bits, a_narrower_value_widens_without_its_sign_and_narrows_back)
 { const std::uint32_t address = 0x80001000u;
   const HandleBits bits(address);

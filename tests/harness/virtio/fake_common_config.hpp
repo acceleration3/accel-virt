@@ -1,6 +1,3 @@
-/* The common configuration structure of a fake virtio-pci device (virtio 1.2
- * 4.1.4.3), with knobs for every way a device can refuse or misbehave. An
- * access at an offset or width the spec does not define fails the test. */
 #ifndef AV_FAKE_COMMON_CONFIG_HPP
 #define AV_FAKE_COMMON_CONFIG_HPP
 
@@ -12,7 +9,7 @@ namespace av {
 
 class FakeCommonConfig final : public RegisterWindow {
 public:
-    static constexpr std::uint16_t max_queues = 66u;   /* virtio-gpu-av-pci's */
+    static constexpr std::uint16_t max_queues = 66u;
     static constexpr std::uint32_t history_capacity = 16u;
 
     struct Queue {
@@ -37,7 +34,6 @@ public:
     void          write_u32(std::uint64_t offset, std::uint32_t value) override;
     void          write_u64(std::uint64_t offset, std::uint64_t value) override;
 
-    /* Knobs. */
     void offer_features(std::uint64_t features);
     void set_queues(std::uint16_t count, std::uint16_t max_size);
     void set_queue_max_size(std::uint16_t index, std::uint16_t max_size);
@@ -47,12 +43,9 @@ public:
     void refuse_vectors();
     void refuse_queue_enable();
     void need_reset();
-    /* Every status the driver writes from now, after the register holds it: a
-     * device behind the function that follows the driver's status. Null stops it. */
     using StatusSink = void (*)(void *context, std::uint8_t status);
     void on_status(StatusSink sink, void *context);
 
-    /* Observations. */
     std::uint64_t driver_features() const;
     std::uint8_t  status() const;
     std::uint8_t  status_written(std::uint32_t index) const;
@@ -85,6 +78,6 @@ private:
     void         *status_context_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FAKE_COMMON_CONFIG_HPP
+#endif

@@ -5,16 +5,13 @@
 namespace av {
 
 namespace {
-
-/* "BM", the info header's size, one plane, 24 bits a pixel, and 2835 pixels
- * a metre (72 dpi), which viewers ignore but some tools want non-zero. */
 constexpr uint32_t signature = 0x4D42u;
 constexpr uint32_t info_bytes = 40u;
 constexpr uint32_t planes = 1u;
 constexpr uint32_t bits_per_pixel = 24u;
 constexpr uint32_t pixels_per_metre = 2835u;
 
-}  // namespace
+}
 
 BmpImage::BmpImage(const uint8_t *pixels, uint32_t width, uint32_t height, Rows rows, Order order)
     : pixels_(pixels), width_(width), height_(height), rows_(rows), order_(order)
@@ -47,8 +44,6 @@ Status BmpImage::encode(uint8_t *destination, size_t capacity) const
     put(destination, 34u, static_cast<uint32_t>(size - header_bytes), 4u);
     put(destination, 38u, pixels_per_metre, 4u);
     put(destination, 42u, pixels_per_metre, 4u);
-    /* A positive height is a bottom-up file: its first stored row is the
-     * image's bottom one. */
     for (uint32_t stored = 0u; stored < height_; stored++) {
         const uint32_t source_row = rows_ == Rows::bottom_first ? stored : height_ - 1u - stored;
         const size_t   out = header_bytes + static_cast<size_t>(stored) * row_bytes();
@@ -56,7 +51,6 @@ Status BmpImage::encode(uint8_t *destination, size_t capacity) const
         for (uint32_t column = 0u; column < width_; column++) {
             const size_t pixel = in + static_cast<size_t>(column) * rgba_bytes;
             const size_t at = out + static_cast<size_t>(column) * rgb_bytes;
-            /* A BMP's pixel is blue, green, red. */
             const uint32_t red = order_ == Order::red_first ? 0u : 2u;
             destination[at] = pixels_[pixel + 2u - red];
             destination[at + 1u] = pixels_[pixel + 1u];
@@ -86,4 +80,4 @@ void BmpImage::put(uint8_t *destination, size_t offset, uint32_t value, uint32_t
     for (uint32_t byte = 0u; byte < bytes; byte++) destination[offset + byte] = static_cast<uint8_t>(value >> (8u * byte));
 }
 
-}  // namespace av
+}

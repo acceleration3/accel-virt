@@ -1,6 +1,3 @@
-/* Asserts an object's invariants on construction and again on destruction, so
- * a function that mutates state proves it left the object consistent no matter
- * which return it took. Compiled out of release builds. */
 #ifndef AV_INVARIANT_SCOPE_HPP
 #define AV_INVARIANT_SCOPE_HPP
 
@@ -45,6 +42,6 @@ private:
 #endif
 };
 
-}  // namespace av
+}
 
-#endif  // AV_INVARIANT_SCOPE_HPP
+#endif

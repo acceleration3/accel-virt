@@ -1,9 +1,3 @@
-/* The seqlock a reader of presented pages orders itself with: a present
- * opens the count before it is queued or moved and closes it after, naming the
- * ticket and the engine epoch that move the pixels, and a reader that saw the
- * same count with no writer open before and after its read read no present
- * half written. The writers open are counted apart, so that two presents
- * into the same pages at once do not make the count look settled. */
 #include "miniport/memory/present_writes.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -37,7 +31,7 @@ TEST(present_writes, a_present_is_in_progress_from_its_opening_until_it_is_writt
   CHECK(writes.invariants_hold());
   writes.opening();
   CHECK(writes.in_progress(writes.sequence()));
-  CHECK_EQ(writes.ticket(), 5u);   /* the ticket moves only once the present is queued */
+  CHECK_EQ(writes.ticket(), 5u);
   writes.written(6u, 1u);
   CHECK_EQ(writes.sequence(), 4u);
   CHECK_EQ(writes.ticket(), 6u);
@@ -56,7 +50,7 @@ TEST(present_writes, a_present_moved_in_place_counts_a_write_and_leaves_the_tick
   writes.opening();
   writes.written(0u, 0u);
   CHECK_EQ(writes.sequence(), 6u);
-  CHECK_EQ(writes.ticket(), 9u);   /* the engine's present into the pages is still the one to wait for */
+  CHECK_EQ(writes.ticket(), 9u);
   CHECK(writes.invariants_hold()); }
 
 TEST(present_writes, in_progress_is_the_odd_counts_and_only_those)
@@ -90,23 +84,21 @@ TEST(present_writes, the_ticket_is_kept_with_the_epoch_of_the_engine_that_number
   CHECK_EQ(writes.epoch(), 1u);
   writes.opening();
   writes.written(0u, 7u);
-  CHECK_EQ(writes.epoch(), 1u);   /* a write that queued nothing names no epoch */
+  CHECK_EQ(writes.epoch(), 1u);
   CHECK_EQ(writes.ticket(), 40u);
   writes.opening();
-  writes.written(2u, 2u);   /* a new engine counts from the start again */
+  writes.written(2u, 2u);
   CHECK_EQ(writes.ticket(), 2u);
   CHECK_EQ(writes.epoch(), 2u);
   CHECK(writes.invariants_hold()); }
 
-/* Two presents into one allocation at once: the second's opening makes the
- * count even again while both are being written. */
 TEST(present_writes, two_presents_open_at_once_are_both_counted_and_both_must_be_written)
 { MockPlatform  platform;
   PresentWrites writes(platform);
   writes.opening();
   writes.opening();
   CHECK_EQ(writes.sequence(), 2u);
-  CHECK(writes.in_progress(writes.sequence()));   /* even, and still being written */
+  CHECK(writes.in_progress(writes.sequence()));
   writes.written(0u, 0u);
   CHECK_EQ(writes.sequence(), 3u);
   CHECK(writes.in_progress(writes.sequence()));
@@ -114,7 +106,7 @@ TEST(present_writes, two_presents_open_at_once_are_both_counted_and_both_must_be
   writes.written(0u, 0u);
   CHECK_EQ(writes.sequence(), 4u);
   CHECK(!writes.in_progress(writes.sequence()));
-  CHECK(writes.in_progress(writes.sequence() + 1u));   /* an odd sequence read earlier still says a present was open */
+  CHECK(writes.in_progress(writes.sequence() + 1u));
   CHECK(writes.invariants_hold()); }
 
 TEST(present_writes_invariants, a_write_closed_that_was_never_opened_is_detected)

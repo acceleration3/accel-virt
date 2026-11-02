@@ -1,6 +1,3 @@
-"""Builds probe sources with the real kernel toolchain file, so a test proves
-what the driver build accepts and rejects rather than what a copy of its flags
-does."""
 import pathlib
 import shutil
 import tempfile
@@ -13,8 +10,6 @@ TOOLCHAIN = ROOT / "cmake" / "windows_kernel_toolchain.cmake"
 
 class KernelProbeProject:
     def __init__(self, probes, sources=(), include_directories=()):
-        """`sources` are repository files compiled into every probe, so a probe
-        can exercise real core and shim code."""
         self.directory = pathlib.Path(tempfile.mkdtemp())
         self.build = self.directory / "build"
         lines = ["cmake_minimum_required(VERSION 3.24)", "project(probes CXX)",

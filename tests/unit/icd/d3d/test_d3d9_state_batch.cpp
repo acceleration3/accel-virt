@@ -6,8 +6,6 @@
 using av::d3d::D3d9StateBatch;
 
 namespace {
-
-/* D3DDDITSS_* (d3dumddi.h) and what the API calls the same thing. */
 constexpr std::uint32_t ddi_colorop = 1u;
 constexpr std::uint32_t ddi_addressu = 13u;
 constexpr std::uint32_t ddi_minfilter = 17u;
@@ -33,7 +31,7 @@ constexpr std::uint32_t rs_cullmode = 22u;
 constexpr std::uint32_t rs_scenecapture = 62u;
 constexpr std::uint32_t vertex_sampler_0 = 257u;
 
-}  // namespace
+}
 
 TEST(d3d9_state_batch, render_states_wait_until_taken_and_go_once)
 {
@@ -53,8 +51,6 @@ TEST(d3d9_state_batch, render_states_wait_until_taken_and_go_once)
     CHECK(batch.invariants_hold());
 }
 
-/* The host already has a value sent before: setting it again sends nothing,
- * and changing it sends the change. */
 TEST(d3d9_state_batch, a_value_the_host_already_has_is_not_sent_again)
 {
     D3d9StateBatch batch;
@@ -69,12 +65,10 @@ TEST(d3d9_state_batch, a_value_the_host_already_has_is_not_sent_again)
     batch.taken();
     batch.stage_state(0u, ddi_minfilter, 2u);
     CHECK(!batch.pending());
-    /* Set twice before it is taken: the last value is the one sent, once. */
     batch.render_state(rs_zenable, 0u);
     batch.render_state(rs_zenable, 1u);
     CHECK_EQ(batch.render_count(), 2u);
     CHECK_EQ(batch.render_values()[1], 1u);
-    /* After a reset - a new device on the host - everything is sent again. */
     batch.taken();
     batch.forget();
     batch.render_state(rs_zenable, 1u);
@@ -82,8 +76,6 @@ TEST(d3d9_state_batch, a_value_the_host_already_has_is_not_sent_again)
     CHECK(batch.invariants_hold());
 }
 
-/* The DDI sends sampler states through its texture-stage slot, numbered as
- * Direct3D 8 numbered them; the host is given each where the API keeps it. */
 TEST(d3d9_state_batch, the_ddis_stage_states_split_into_sampler_and_stage_states)
 {
     D3d9StateBatch batch;
@@ -121,8 +113,6 @@ TEST(d3d9_state_batch, the_legacy_address_state_sets_both_axes)
     CHECK_EQ(batch.sampler_values()[5], 3u);
 }
 
-/* A vertex texture's sampler state arrives on its stage number, 257-260,
- * which the host takes as a sampler; no stage state exists past 7. */
 TEST(d3d9_state_batch, vertex_samplers_keep_their_numbers_and_stages_stop_at_seven)
 {
     D3d9StateBatch batch;
@@ -132,15 +122,12 @@ TEST(d3d9_state_batch, vertex_samplers_keep_their_numbers_and_stages_stop_at_sev
     batch.stage_state(8u, ddi_colorop, 2u);
     batch.stage_state(vertex_sampler_0, ddi_colorop, 2u);
     CHECK_EQ(batch.stage_count(), 0u);
-    /* Samplers past 15 that are not vertex samplers name nothing. */
     batch.stage_state(16u, ddi_minfilter, 1u);
     batch.stage_state(261u, ddi_minfilter, 1u);
     CHECK_EQ(batch.sampler_count(), 3u);
     CHECK(batch.invariants_hold());
 }
 
-/* What the API has no state for is dropped, not passed on: texture handles,
- * colour keys, the scene-capture state, and values past what a device keeps. */
 TEST(d3d9_state_batch, ddi_only_states_go_nowhere)
 {
     D3d9StateBatch batch;

@@ -1,7 +1,3 @@
-/* Guest pages lent through two adapters' devices of one process: the second
- * device finds the very pages the first lent and holds the same lending
- * instead of laying memory of its own, the pages go back to the guest only
- * once neither holds them, and a lending is joined only by the very pages. */
 #include "core/support/status.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/guest_ram_lendings.hpp"
@@ -32,7 +28,6 @@ constexpr std::uint64_t ram = 0x100000u;
 constexpr std::uint64_t page = 4096u;
 constexpr std::size_t   header = 32u;
 
-/* An ATTACH_BACKING's entries, from byte 32. */
 class EntryList {
 public:
     explicit EntryList(std::uint32_t capacity)
@@ -55,7 +50,6 @@ private:
     std::uint32_t count_;
 };
 
-/* The memory a lender's blob was made of: a file, as the executor's dma-buf. */
 int make_memory(std::uint64_t size)
 {
     const int fd = memfd_create("lent", MFD_CLOEXEC);
@@ -70,7 +64,6 @@ public:
     GuestRamLendings      &lendings() { return lendings_; }
     RecordingContextPlane &first() { return first_; }
     RecordingContextPlane &second() { return second_; }
-    /* The lender's pieces: the pages from ram + 2 pages, laid whole. */
     GuestRamLending *lend_two_pages()
     {
         GuestRamLending *const lending = lendings_.lend(host_, 2u * page, make_memory(2u * page), first_, 7u);
@@ -90,10 +83,8 @@ private:
     RecordingContextPlane second_;
 };
 
-}  // namespace
+}
 
-/* The other adapter's device lends the same pages: one lending, two holders,
- * and the pages stay under it however the two leave. */
 TEST(guest_ram_lendings_join, the_same_pages_lent_through_another_plane_are_one_lending)
 { Fixture fixture;
   GuestRamLending *const lender = fixture.lend_two_pages();
@@ -102,12 +93,10 @@ TEST(guest_ram_lendings_join, the_same_pages_lent_through_another_plane_are_one_
   CHECK(joined == lender);
   CHECK_EQ(lender->holders(), 2u);
   CHECK_EQ(fixture.lendings().live(), 1u);
-  /* The lender goes first: nothing is given back while the joiner holds. */
   fixture.lendings().leave(fixture.host(), *lender, fixture.first(), 7u);
   CHECK_EQ(fixture.lendings().live(), 1u);
   CHECK_EQ(fixture.lendings().pages(), 2u);
   CHECK_EQ(fixture.host().overlaid_bytes(), 2u * page);
-  /* A third plane still finds it, through the joiner's memory. */
   av::ContextPlane *holder = nullptr;
   std::uint64_t     key = 0u;
   CHECK(lender->holder_at(0u, holder, key));
@@ -118,9 +107,6 @@ TEST(guest_ram_lendings_join, the_same_pages_lent_through_another_plane_are_one_
   CHECK_EQ(fixture.host().overlaid_bytes(), 0u);
   CHECK(fixture.lendings().invariants_hold()); }
 
-/* Joined only by the very pages: another address, another size, pages not
- * laid whole yet, and the same plane's second lending are all new memory (or
- * the refusal they always were). */
 TEST(guest_ram_lendings_join, anything_but_the_very_pages_from_another_plane_is_not_joined)
 { Fixture fixture;
   GuestRamLending *const lender = fixture.lend_two_pages();
@@ -129,13 +115,11 @@ TEST(guest_ram_lendings_join, anything_but_the_very_pages_from_another_plane_is_
   CHECK(fixture.lendings().join(ram + 2u * page, 2u * page, fixture.first(), 8u) == nullptr);
   CHECK(fixture.lendings().join(ram + 9u * page, 2u * page, fixture.second(), 9u) == nullptr);
   CHECK_EQ(lender->holders(), 1u);
-  /* Held by no plane but the asking one is not held beyond it. */
   CHECK(!lender->held_beyond(fixture.first()));
   CHECK(lender->held_beyond(fixture.second()));
   fixture.lendings().leave(fixture.host(), *lender, fixture.first(), 7u);
   CHECK_EQ(fixture.lendings().live(), 0u); }
 
-/* A lending whose pieces are still coming is not joined. */
 TEST(guest_ram_lendings_join, a_lending_not_yet_whole_is_not_joined)
 { Fixture fixture;
   GuestRamLending *const lender = fixture.lendings().lend(fixture.host(), 2u * page, make_memory(2u * page),
@@ -150,7 +134,6 @@ TEST(guest_ram_lendings_join, a_lending_not_yet_whole_is_not_joined)
   fixture.lendings().leave(fixture.host(), *lender, fixture.first(), 7u);
   CHECK_EQ(fixture.lendings().pages(), 0u); }
 
-/* The joiner's pieces are the lender's entries, in order, or nothing. */
 TEST(guest_ram_lending_verify, a_joiners_entries_must_be_the_ones_the_lender_laid)
 { Fixture fixture;
   GuestRamLending *const lender = fixture.lend_two_pages();
@@ -161,7 +144,6 @@ TEST(guest_ram_lending_verify, a_joiners_entries_must_be_the_ones_the_lender_lai
   std::uint32_t  next = 0u;
   CHECK_STATUS(lender->verify(same_request, header, 1u, next), Status::ok);
   CHECK_EQ(next, 1u);
-  /* A second entry past what the lender laid. */
   CHECK_STATUS(lender->verify(same_request, header, 1u, next), Status::invalid_parameter);
   EntryList other(1u);
   other.add(ram + 2u * page, static_cast<std::uint32_t>(page));
@@ -172,10 +154,6 @@ TEST(guest_ram_lending_verify, a_joiners_entries_must_be_the_ones_the_lender_lai
   CHECK_EQ(next, 0u);
   fixture.lendings().leave(fixture.host(), *lender, fixture.first(), 7u); }
 
-/* Where a present's destination lies in a lending: an entry inside the pages
- * lent, entries that follow each other as the pages do, and across two
- * entries of the lender's that are adjacent in guest memory; but not entries
- * out of order, pages of another place, or pages not laid whole. */
 TEST(guest_ram_lendings_locate, finds_the_lending_and_the_offset_of_a_run_in_order)
 { Fixture fixture;
   GuestRamLending *const lender = fixture.lend_two_pages();
@@ -199,19 +177,14 @@ TEST(guest_ram_lendings_locate, finds_the_lending_and_the_offset_of_a_run_in_ord
                Status::ok);
   CHECK_EQ(run.offset(), 0u);
   CHECK_EQ(run.length(), 2u * page);
-  /* Out of order, or leaving the pages lent. */
   CHECK_STATUS(locate(EntryList(2u).add(first + page, static_cast<std::uint32_t>(page)).add(first, static_cast<std::uint32_t>(page)), run),
                Status::not_supported);
   CHECK_STATUS(locate_one(EntryList(1u).add(first + page, static_cast<std::uint32_t>(2u * page)), run), Status::not_supported);
   CHECK_STATUS(locate_one(EntryList(1u).add(ram + 8u * page, static_cast<std::uint32_t>(page)), run), Status::not_found);
-  CHECK_STATUS(locate(EntryList(1u).add(first, static_cast<std::uint32_t>(page)), run), Status::invalid_parameter);   /* a short list */
+  CHECK_STATUS(locate(EntryList(1u).add(first, static_cast<std::uint32_t>(page)), run), Status::invalid_parameter);
   fixture.lendings().leave(fixture.host(), *lender, fixture.first(), 7u);
   CHECK(fixture.lendings().invariants_hold()); }
 
-/* A lend and a give-back each hold the writers still once - the engines out of
- * the pages and the guest's processors - however many runs they swap; and the
- * lending's life, which a present on another thread reads, says it is given
- * back before the RAM is. */
 TEST(guest_ram_lendings_swaps, hold_the_writers_still_once_for_each_lay_and_each_give_back)
 { Fixture fixture;
   CHECK_EQ(fixture.host().guest_pauses(), 0u);
@@ -224,7 +197,7 @@ TEST(guest_ram_lendings_swaps, hold_the_writers_still_once_for_each_lay_and_each
   fixture.lendings().leave(fixture.host(), *lender, fixture.first(), 7u);
   CHECK_EQ(fixture.host().guest_pauses(), 2u);
   CHECK_EQ(fixture.host().guest_resumes(), 2u);
-  CHECK(watched->given_back());   /* still readable: the watcher holds it */
+  CHECK(watched->given_back());
   CHECK_EQ(fixture.lendings().oldest_live(), 0u);
   fixture.lendings().unwatch(watched);
   CHECK(fixture.lendings().invariants_hold()); }

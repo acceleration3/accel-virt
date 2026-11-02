@@ -20,7 +20,7 @@ private:
     int  value_;
 };
 
-}  // namespace
+}
 
 TEST(object_storage, starts_empty)
 { const ObjectStorage<Counted> storage;
@@ -54,8 +54,6 @@ TEST(object_storage, is_aligned_for_its_object)
 { ObjectStorage<long double> storage;
   CHECK((reinterpret_cast<unsigned long>(storage.address()) % alignof(long double)) == 0u); }
 
-/* An interrupt can ask while a device is being torn down: what it must never
- * be handed is an object whose destructor has already run. */
 TEST(object_storage_destroy, is_not_constructed_while_the_destructor_runs)
 { struct Asker {
       ObjectStorage<Asker> *storage;

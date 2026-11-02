@@ -46,9 +46,8 @@ std::uint32_t depth_inside_marked_function(const BoundTable &bound)
     return bound.snapshot().slot(0u).depth();
 }
 
-}  // namespace
+}
 
-/* FNV-1a 32's published vectors: the ids a reader recomputes from source. */
 TEST(scope_name, its_id_is_fnv1a_of_the_name_and_computed_while_compiling)
 { constexpr ScopeName empty("");
   constexpr ScopeName a("a");
@@ -61,7 +60,6 @@ TEST(scope_name, its_id_is_fnv1a_of_the_name_and_computed_while_compiling)
   CHECK_EQ(none.id(), 0x811C9DC5u);
   CHECK(std::strcmp(foobar.text(), "foobar") == 0);
   CHECK(none.text() == nullptr);
-  /* The same names made while running, as a name from a variable would be. */
   const char *volatile_names[] = {nullptr, "foobar"};
   const ScopeName runtime_none(volatile_names[0]);
   const ScopeName runtime_foobar(volatile_names[1]);
@@ -109,8 +107,6 @@ TEST(function_scope, nested_scopes_pop_in_order)
   CHECK_EQ(bound.snapshot().slot(0u).depth(), 0u);
   CHECK_EQ(bound.snapshot().slot(0u).last_left(), ScopeName("Outer::run").id()); }
 
-/* A scope that got no slot leaves nothing on the way out, even once a slot is
- * free again: its leave would pop another function's frame. */
 TEST(function_scope, a_scope_without_a_slot_pops_nothing)
 { BoundTable bound;
   bound.host.run_as(0x10u, 1u);

@@ -1,18 +1,3 @@
-/* The Direct3D runtimes' calls into this driver - 9's, 11's and 12's - one
- * line each, written to C:\ProgramData\av\avumd-calls-<pid>.log while
- * AV_D3D_TRACE is set in the process's environment: when, on which thread,
- * into which context (each device, deferred context and Direct3D 9 device
- * numbered as it is made), the slot, and its arguments - a number as it is, an
- * object by the id its record's stamp holds, the first of an array of them,
- * and a resource or a view by what it is made of. What an application does at
- * the DDI, for a probe to be written from (docs/testing.md, "Probes from an
- * application's calls"). A Direct3D 9 device writes its frame, wait and state
- * lines among them.
- *
- * The variable's value is how many calls to write, after how many to pass
- * over: "20000", or "300000+20000" for the twenty thousand after the first
- * three hundred thousand. One per process, which UmdDrivers owns and hands
- * every runtime's half; while it is off a call costs a load and a branch. */
 #ifndef AV_UM_D3D_CALL_TRACE_HPP
 #define AV_UM_D3D_CALL_TRACE_HPP
 
@@ -33,16 +18,13 @@ public:
     D3dCallTrace(const D3dCallTrace &) = delete;
     D3dCallTrace &operator=(const D3dCallTrace &) = delete;
 
-    /* Reads the environment once, and opens the file if it asks for calls. */
     void     open();
     bool     on() const;
-    /* The number the next device or deferred context is called by. */
     uint32_t number_context();
     template <typename... Arguments>
     void     call(uint32_t context, const char *slot, const Arguments &...arguments);
 
 private:
-    /* One call's line, cut at what one log line holds. */
     class Line {
     public:
         Line(uint64_t microseconds, uint32_t thread, uint32_t context, const char *slot);
@@ -68,7 +50,6 @@ private:
         TextBuffer body_;
     };
 
-    /* Whether this call is one to write, counting it either way. */
     bool     take();
     uint64_t microseconds() const;
     uint32_t thread();
@@ -81,7 +62,6 @@ private:
     uint64_t count_;
     uint64_t calls_;
     uint32_t contexts_;
-    /* The clock's microseconds when the trace opened. */
     uint64_t started_;
 };
 
@@ -118,7 +98,6 @@ void D3dCallTrace::Line::put(const Argument &argument)
         if (argument == nullptr) pointer(nullptr);
         else box(*argument);
     } else if constexpr (requires { argument->pDrvPrivate; }) {
-        /* An array of objects: its first, which is what a one-slot bind is. */
         if (argument == nullptr) pointer(nullptr);
         else object(argument->pDrvPrivate);
     } else if constexpr (__is_pointer(Argument)) {
@@ -138,6 +117,6 @@ void D3dCallTrace::Line::view(const View &view)
     body_.append_decimal(static_cast<uint64_t>(view.Format));
 }
 
-}  // namespace av::d3d
+}
 
-#endif  // AV_UM_D3D_CALL_TRACE_HPP
+#endif

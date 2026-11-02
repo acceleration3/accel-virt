@@ -24,4 +24,4 @@ cl_int *ClNotedError::pointer()
     return &error_;
 }
 
-}  // namespace av::clicd
+}

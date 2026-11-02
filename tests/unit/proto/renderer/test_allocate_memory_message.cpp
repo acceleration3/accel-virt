@@ -1,8 +1,3 @@
-/* QEMU -> renderer: host memory for a host blob (docs/host-memory.md), which
- * the renderer's library allocates under a key for one context. The renderer
- * reads it from a socket, so it is judged as hostile: every field the
- * renderer keeps is one it needs - a context to own it, a key to free it by,
- * some bytes - and the request is the library's to judge. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -40,7 +35,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(allocate_memory_message_encode, is_the_context_the_request_the_key_and_the_size)
 { GuardedBuffer bytes(AllocateMemoryMessage::encoded_size);
@@ -69,8 +64,6 @@ TEST(allocate_memory_message, round_trips_through_its_encoding)
   CHECK_EQ(decoded.key(), ~std::uint64_t{0});
   CHECK_EQ(decoded.size(), ~std::uint64_t{0}); }
 
-/* The request is carried as it is - the library judges it, and refuses one no
- * GPU answers - so a request no driver makes still crosses. */
 TEST(allocate_memory_message, carries_any_request_for_the_library_to_judge)
 { std::uint8_t bytes[AllocateMemoryMessage::encoded_size] = {};
   CHECK_STATUS(AllocateMemoryMessage(context, 0u, key, size).encode(bytes, sizeof bytes), Status::ok);
@@ -78,8 +71,6 @@ TEST(allocate_memory_message, carries_any_request_for_the_library_to_judge)
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes, 0u), Status::ok);
   CHECK_EQ(decoded.request(), 0u); }
 
-/* No context, no key or no bytes is a message the renderer could not keep:
- * refused on the way out as on the way in. */
 TEST(allocate_memory_message_encode, refuses_what_decode_would)
 { std::uint8_t bytes[AllocateMemoryMessage::encoded_size] = {};
   CHECK_STATUS(AllocateMemoryMessage(0u, readback.encoded(), key, size).encode(bytes, sizeof bytes),
@@ -129,10 +120,5 @@ TEST(allocate_memory_message_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 192u);
-  /* Every field is free but for zero, which only a flip of a lone set bit
-   * reaches: context 7 has three bits set, the key two, the size one - so of
-   * the 192 flips (the request's 32 among them, all free) only the size's
-   * one set bit refuses. All zero refuses; all ones is a message, and so is
-   * the untouched one: 191 + 1 + 1. */
   const std::uint32_t acceptable = 191u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

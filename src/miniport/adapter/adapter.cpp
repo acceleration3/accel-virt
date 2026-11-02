@@ -117,33 +117,24 @@
 namespace av {
 
 namespace {
-
-/* STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER: a present asking for more room, not a refusal. */
 constexpr int32_t more_dma_buffer = static_cast<int32_t>(0xC01E0001u);
 
-/* Platform::interrupt_time counts 100 ns. */
 constexpr uint64_t ticks_per_microsecond = 10u;
 
-/* How long a reader's begin may be told to wait for a present in flight, whatever
- * the process asked: the escape's field is the process's to set. */
 constexpr uint32_t longest_read_wait_microseconds = 100000u;
 
-/* How long a present is held for a read open on its destination. A read is
- * about a millisecond, so this is a reader that is gone or stuck; the present
- * goes ahead and the reader sees the write sequence move. */
-constexpr uint64_t present_hold_ticks = 200000u;   /* 20 ms */
+constexpr uint64_t present_hold_ticks = 200000u;
 
-/* What basicdisplay.sys reports for its one output (docs/ddi-sequences.md). */
 enum : int32_t {
-    type_video_output         = 1,   /* TypeVideoOutput */
-    output_technology_other   = -1,  /* D3DKMDT_VOT_OTHER */
-    orientation_awareness_none = 1,  /* D3DKMDT_MOA_NONE */
-    hpd_interruptible         = 4,   /* HpdAwarenessInterruptible */
-    status_connection         = 1,   /* StatusConnection */
-    status_rotation           = 2,   /* StatusRotation */
+    type_video_output         = 1,
+    output_technology_other   = -1,
+    orientation_awareness_none = 1,
+    hpd_interruptible         = 4,
+    status_connection         = 1,
+    status_rotation           = 2,
 };
 
-}  // namespace
+}
 
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
@@ -178,23 +169,14 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
 {
     AV_SCOPE("Adapter::discover_and_map");
     Status status = dxgkrnl_.initialize(dxgkrnl_interface);
-    /* What this OS allows before anything is reported: the queue DDIs are
-     * implemented and tested, and whether a node may say so is the OS's to
-     * answer (research.md §15). */
     if (status == Status::ok) {
         hardware_scheduling_ = dxgkrnl_.feature_enabled(feature_hwsch, feature_support_stable);
-        /* The capability is reportable only where the OS allowed the feature:
-         * claiming it otherwise fails the adapter start (research.md §17). */
         if (dxgkrnl_.feature_enabled(feature_native_fence, feature_support_stable)) {
             capabilities_.native_fences_allowed();
             log_status("avgpu: native fences", 1);
         } else {
             log_status("avgpu: native fences", 0);
         }
-        /* And only where the fence half of WDDM 3.1 is live beside it: a node
-         * that reports user-mode submission without the NativeGpuFence
-         * capability fails the adapter start (research.md §14), and this OS
-         * build refuses the native fence feature outright (§20). */
         user_mode_submission_ = hardware_scheduling_ && capabilities_.native_fences_reportable() &&
                                 dxgkrnl_.feature_enabled(feature_user_mode_submission, feature_support_stable);
         log_status("avgpu: hardware scheduling", hardware_scheduling_ ? 1 : 0);
@@ -203,9 +185,6 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
     DxgkDeviceInfoRecord info = {};
     if (status == Status::ok) status = dxgkrnl_.get_device_information(info);
     if (status == Status::ok) status = segment_.initialize(info.SystemMemorySize);
-    /* The number this adapter stamps into every shared object it mints, so a
-     * record another adapter of this kernel wrote is one it refuses (053). A
-     * start that follows a stop keeps the one it already has. */
     if (status == Status::ok && shared_.adapter() == 0u) status = shared_.initialize();
     if (status == Status::ok) status = resources_.initialize(info.TranslatedResourceList, ResourceList::max_bytes);
     uint8_t config[config_space_bytes] = {};
@@ -214,8 +193,6 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
     if (status == Status::ok)
         status = mappings_.map(PciBaseAddresses(config, config_space_bytes), resources_, layout_);
     if (status == Status::ok) status = map_doorbells(PciBaseAddresses(config, config_space_bytes));
-    /* Where the device's host-visible region is, if it presents one; whether it
-     * is offered waits for the capset (feature 041, FR-001). */
     if (status == Status::ok) host_visible_.discover(PciBaseAddresses(config, config_space_bytes), layout_);
     return status;
 }
@@ -227,9 +204,6 @@ Status Adapter::map_doorbells(const PciBaseAddresses &bars)
     if (!region.present()) return Status::ok;
     const Status mapped = mappings_.map_region(bars, resources_, region);
     if (mapped != Status::ok) return mapped;
-    /* Neither storage can already hold one: a start runs only on a stopped
-     * adapter, and both are destroyed on the way out of a failed start and on
-     * stop, so the only way construct answers anything else is unreachable. */
     static_cast<void>(doorbells_.construct(platform_, mappings_.address_of(region), region.length()));
     return doorbell_table_.construct(platform_, doorbells_.object());
 }
@@ -247,21 +221,15 @@ void Adapter::remember_device()
         memory_.offer_local(capset);
         scanout_.offer(capset);
         overlays_.offer(capset);
-        /* A window this driver cannot place chunks in is logged, never a
-         * failed start: every chunk is then refused. */
         if (host_visible_.offered())
             log_status("avgpu: host window",
                        NtStatus(window_.initialize(host_visible_.base(), host_visible_.size())).value());
-        /* A name that did not reach the registry is the INF's name standing,
-         * which is a working adapter: logged, never a failed start. */
         log_status("avgpu: adapter description",
                    NtStatus(description_.publish(physical_device_object_, capset.gpu())).value());
     }
     log_status("avgpu: device capset", NtStatus(read).value());
 }
 
-/* Chunks already placed stay recorded, and are given back into the window as
- * their contexts close them. */
 void Adapter::withdraw_window()
 {
     AV_SCOPE("Adapter::withdraw_window");
@@ -279,17 +247,7 @@ void Adapter::judge_device()
         withdraw_window();
         return;
     }
-    /* The same device, built again: its window is empty, and the contexts the
-     * reset abandoned let go of their chunks as they are destroyed. */
     if (identity_.accept(capset)) return;
-    /* Nothing runs on a device that changed, and its region is not the one
-     * VidMm was told about. What an av context queued for it stays on the
-     * node and never completes: the engine stops moving, and dxgkrnl's timeout
-     * detection resets it through ResetEngine. Dropping it here would leave an
-     * idle engine answering responsive while VidSch still waits on it, and
-     * telling dxgkrnl would mean DMA_FAULTED, which bugchecks this adapter
-     * (docs/kb/05-scheduling.md). The display is the scanout the transition
-     * restored, none of this, and keeps working. */
     withdraw_window();
     av_contexts_.abandon_all();
 }
@@ -297,7 +255,6 @@ void Adapter::judge_device()
 Status Adapter::power_up()
 {
     AV_SCOPE("Adapter::power_up");
-    /* The only refusal is storage already holding a device: already powered. */
     if (device_.construct(platform_, mappings_, layout_) != Status::ok) return Status::ok;
     const Status status = device_.object().start(resources_.message_interrupts());
     if (status != Status::ok) device_.destroy();
@@ -309,13 +266,10 @@ Status Adapter::power_up()
     return status;
 }
 
-/* A removed device cannot acknowledge a reset; destruction still abandons it. */
 Status Adapter::power_down()
 {
     AV_SCOPE("Adapter::power_down");
     if (!device_.constructed()) return Status::ok;
-    /* A reset destroys every host context and blob, and the device object goes
-     * with it. The window stays offered for whatever brings the device back. */
     av_contexts_.abandon_all();
     presents_.destroy();
     copier_.destroy();
@@ -324,9 +278,6 @@ Status Adapter::power_down()
     return status;
 }
 
-/* A device that will not keep the display's clock leaves dxgkrnl with no
- * vertical blank from it, which stalls every flip; the start carries on, and
- * the line is the only trace of why. */
 void Adapter::attach_clock()
 {
     AV_SCOPE("Adapter::attach_clock");
@@ -339,10 +290,6 @@ void Adapter::attach_clock()
     platform_.log(message.text());
 }
 
-/* A device that does not offer the engine, or will not take its page, has
- * its presents moved before DdiPresent returns, as before the engine; the
- * line says which. The capset is the one StartDevice read: a power-up before
- * it knows nothing yet, and StartDevice starts the engine once it does. */
 void Adapter::start_presents()
 {
     AV_SCOPE("Adapter::start_presents");
@@ -363,8 +310,6 @@ void Adapter::start_presents()
     platform_.log(message.text());
 }
 
-/* Without contiguous memory for its payload the host cannot be handed a
- * present, and the miniport moves every one itself. */
 void Adapter::start_copier()
 {
     AV_SCOPE("Adapter::start_copier");
@@ -381,7 +326,7 @@ int32_t Adapter::start_device(void *start_info, const DxgkrnlInterfaceRecord *dx
     platform_.require_irql_at_most(Irql::passive, "Adapter::start_device");
     InvariantScope<Adapter> guard(platform_, *this, "start_device");
     if (started_) return NtStatus(Status::invalid_state).value();
-    constexpr size_t start_info_luid_offset = 20u;   /* after RequiredDmaQueueEntry and AdapterGuid */
+    constexpr size_t start_info_luid_offset = 20u;
     if (start_info != nullptr) {
         uint32_t luid[2] = {};
         __builtin_memcpy(luid, static_cast<const uint8_t *>(start_info) + start_info_luid_offset, sizeof(luid));
@@ -412,10 +357,6 @@ int32_t Adapter::start_device(void *start_info, const DxgkrnlInterfaceRecord *dx
     }
     undo.dismiss();
     follow_output_count(device_.object().scanouts());
-    /* A device that will not say what its displays are leaves the standard
-     * mode list standing, which is a working display, so this never fails the
-     * start - but it is logged, because the modes offered are then not the
-     * host's. */
     log_status("avgpu: display info", NtStatus(follow_display_info()).value());
     remember_device();
     *sources = sources_.count();
@@ -430,7 +371,6 @@ int32_t Adapter::stop_device()
     AV_SCOPE("Adapter::stop_device");
     platform_.require_irql_at_most(Irql::passive, "Adapter::stop_device");
     InvariantScope<Adapter> guard(platform_, *this, "stop_device");
-    /* The device first: its clock writes the page until it is reset. */
     const Status status = power_down();
     vsync_.destroy();
     scanout_.release();
@@ -454,18 +394,10 @@ int32_t Adapter::dispatch_io_request(uint32_t, void *)
     return NtStatus(Status::not_supported).value();
 }
 
-/* A message interrupt is ours by construction; a line interrupt only if the
- * device set an ISR bit, since the line may be shared. */
-/* A configuration change is how the device says its displays moved: with
- * message interrupts it is the config vector, and on a line interrupt it is a
- * bit of the ISR, which is read to clear and so must be noticed here. */
 uint8_t Adapter::interrupt_routine(uint32_t message)
 {
     AV_SCOPE("Adapter::interrupt_routine");
     platform_.require_irql_at_most(Irql::isr, "Adapter::interrupt_routine");
-    /* A device that is being built is not one to read from: power_up
-     * constructs it and then starts it, and dxgkrnl leaves the interrupt
-     * connected across the whole transition. */
     if (!device_.constructed() || !present_ || !device_.object().running()) return 0u;
     const bool    messages = resources_.message_interrupts() != 0u;
     const uint8_t isr = messages ? 0u : device_.object().read_isr();
@@ -486,14 +418,8 @@ void Adapter::dpc_routine()
     const uint64_t now = platform_.interrupt_time();
     uint32_t       completed = 0u;
     const bool     harvest = device_.constructed() && present_ && device_.object().running();
-    /* The blank first, and dxgkrnl told before the scanout is refreshed: a
-     * refresh kicks the device, and a kick QEMU handles on the vCPU waits for
-     * its main loop - a vsync reported behind one reached dxgkrnl milliseconds
-     * after the blank. */
     if (harvest) vsync_.tick(now, scanout_.posts_frames(vsync_source));
     announce_display_change(harvest);
-    /* A device that fails every harvest would otherwise log on every DPC, so
-     * each of these lines is spent from the budget (feature 037, FR-003). */
     if (harvest && device_.object().harvest_control(completed) != Status::ok && budget_.allows())
         platform_.log("avgpu: control queue harvest failed in the DPC");
     if (harvest && device_.object().harvest_cursor(completed) != Status::ok && budget_.allows())
@@ -507,8 +433,6 @@ void Adapter::dpc_routine()
     uint32_t     named = 0u;
     const uint32_t overdue = node_.release_overdue(now, overdue_owners, 8u, &named);
     if (overdue != 0u && budget_.allows()) platform_.log("avgpu: a held packet passed its deadline and was let go");
-    /* A packet held for a batch that was never released is not one the host
-     * is slow over: its context is lost, which its process can see. */
     bool lost_context = false;
     for (uint32_t index = 0u; index < named; index++)
         lost_context = av_contexts_.fault_if_held(overdue_owners[index]) || lost_context;
@@ -517,9 +441,6 @@ void Adapter::dpc_routine()
         platform_.log("avgpu: a completion was refused in the DPC");
     if (hw_submissions_.complete(notification_) != Status::ok && budget_.allows())
         platform_.log("avgpu: a progress fence signal was refused in the DPC");
-    /* A frame is carried when a submission completed since the last DPC, never
-     * because the control queue answered: our own scanout requests complete
-     * there, and taking those for presents would flush forever. */
     constexpr uint32_t refreshes_per_present = 2u;
     const uint32_t     fence = node_.current_fence();
     const bool         completed_any = fence != presented_fence_;
@@ -536,15 +457,9 @@ void Adapter::dpc_routine()
     if (harvest) refresh_scanout(now);
 }
 
-/* A primary the host reads back is carried once a display period at most: an
- * application flipping thousands of times a second would otherwise have the
- * host read every frame. A numbered flip goes on every DPC, since the device's
- * clock shows only what it has before its blank. */
 void Adapter::refresh_scanout(uint64_t now)
 {
     AV_SCOPE("Adapter::refresh_scanout");
-    /* A display period less a millisecond early, in 100 ns, but never less than
-     * half of it: at 500 Hz and up that millisecond is the period. */
     const uint64_t period = platform_.load_atomic(scanout_period_);
     constexpr uint64_t early = 10000u;
     const uint64_t     refresh_period = period - (early < period / 2u ? early : period / 2u);
@@ -556,9 +471,6 @@ void Adapter::refresh_scanout(uint64_t now)
         platform_.log("avgpu: a scanout refresh was refused in the DPC");
 }
 
-/* One video output per display the device has. dxgkrnl's array holds one
- * descriptor more than the children StartDevice reported, zeroed, so the buffer
- * is checked against that. */
 int32_t Adapter::query_child_relations(DxgkChildDescriptorRecord *relations, uint32_t size)
 {
     AV_SCOPE("Adapter::query_child_relations");
@@ -586,8 +498,6 @@ int32_t Adapter::query_child_status(DxgkChildStatusRecord *status, uint8_t)
     if (status->Type == status_rotation) return NtStatus(Status::invalid_parameter).value();
     int32_t answered = NtStatus(Status::not_supported).value();
     if (status->Type == status_connection) {
-        /* A device with no display attached - a second host GPU, which
-         * renders but drives nothing - enables none of its scanouts. */
         status->HotPlugConnected = display_info_.enabled(status->ChildUid) ? 1u : 0u;
         answered = NtStatus(Status::ok).value();
     }
@@ -601,8 +511,6 @@ int32_t Adapter::query_device_descriptor(uint32_t child, DxgkDeviceDescriptorRec
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_device_descriptor");
     if (child >= sources_.count() || descriptor == nullptr) return NtStatus(Status::invalid_parameter).value();
     follow_display_change();
-    /* The monitor's mode set is built from this EDID, so a bring-up that never
-     * reaches a committable VidPn needs the answer visible. */
     const int32_t copied = edid_.copy(*descriptor).value();
     log_status("avgpu: QueryDeviceDescriptor", copied);
     return copied;
@@ -619,9 +527,6 @@ int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
         platform_.log("avgpu: SetPowerState D0");
         const Status powered = power_up();
         log_status("avgpu: SetPowerState D0 device", NtStatus(powered).value());
-        /* What power took away, put back: dxgkrnl kept every allocation and
-         * VidPn across this, so what it expects to find is what was scanning
-         * out before. */
         if (powered == Status::ok && transition_.held()) restore_scanouts();
         if (powered == Status::ok)
             log_status("avgpu: SetPowerState D0 vsync", NtStatus(vsync_.resume()).value());
@@ -633,9 +538,6 @@ int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
     if (power_state > power_d0 && power_state <= power_d3) {
         platform_.log("avgpu: SetPowerState D3");
         static_cast<void>(transition_.hold(device_.constructed(), scanning_out()));
-        /* Before the device goes: a vertical blank reported to an adapter that
-         * is not powered - or to one on its way out of S3, before dxgkrnl has
-         * powered it up - is what bugchecks the guest. */
         vsync_.suspend();
         const int32_t down = NtStatus(power_down()).value();
         log_status("avgpu: SetPowerState D3 done", down);
@@ -644,7 +546,6 @@ int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
     return NtStatus(Status::invalid_parameter).value();
 }
 
-/* dxgkrnl forwards ACPI events it does not handle itself; nothing to do. */
 int32_t Adapter::notify_acpi_event(int32_t, uint32_t, void *, uint32_t *acpi_flags)
 {
     AV_SCOPE("Adapter::notify_acpi_event");
@@ -660,13 +561,10 @@ void Adapter::reset_device()
     if (device_.constructed()) device_.object().reset_immediately();
 }
 
-/* GUID_WDDM_INTERFACE_FEATURE (dispmprt.h:451), the one interface this driver
- * answers: dxgkrnl asks for it to find out which staged features the driver
- * implements. */
 namespace {
 constexpr uint8_t feature_interface_guid[16] = {0x93, 0x39, 0xbb, 0x94, 0xc3, 0xc6, 0xa7, 0x4d,
                                                 0x89, 0x49, 0xa1, 0x13, 0x82, 0x32, 0xe7, 0x59};
-}  // namespace
+}
 
 int32_t Adapter::query_interface(void *query)
 {
@@ -689,8 +587,6 @@ Status Adapter::answer_feature_interface(QueryInterfaceRecord &query)
     table.Size = static_cast<uint16_t>(sizeof table);
     table.Version = feature_interface_version_1;
     table.Context = this;
-    /* Nothing is reference counted: the table is this adapter's, and dxgkrnl
-     * stops using it at RemoveDevice. */
     table.InterfaceReference = [](void *) {};
     table.InterfaceDereference = [](void *) {};
     table.QueryFeatureSupport = &AvDdiQueryFeatureSupport;
@@ -698,9 +594,6 @@ Status Adapter::answer_feature_interface(QueryInterfaceRecord &query)
     return Status::ok;
 }
 
-/* The features this driver implements, and nothing else: a feature it does not
- * answer for stays disabled, which is what keeps a capability behind it
- * unreportable (research.md §18). */
 int32_t Adapter::query_feature_support(DxgkargQueryFeatureSupportRecord *request)
 {
     AV_SCOPE("Adapter::query_feature_support");
@@ -715,19 +608,10 @@ int32_t Adapter::query_feature_support(DxgkargQueryFeatureSupportRecord *request
                              request->FeatureId == feature_hwsch;
     if (!implemented) return NtStatus(Status::ok).value();
     request->SupportedByDriver = 1u;
-    /* And on this configuration: dxgkrnl asks before StartDevice has mapped
-     * anything, so what the driver answers is what it implements rather than
-     * what it has mapped so far. A device that turns out to have no doorbell
-     * pages hands out no queues and no doorbells, which is refused there
-     * (Adapter::create_doorbell) rather than pretended here. */
     request->SupportedOnCurrentConfig = 1u;
     return NtStatus(Status::ok).value();
 }
 
-/* Present snapshots are offered while the engine runs on a device that reads
- * them: a user-mode driver that saw the bit stops reading blt presents back.
- * An integrated host GPU is said so, for the vendor libraries that describe
- * the GPU to applications. */
 Status Adapter::answer_umd_private(const AdapterInfoQuery &request)
 {
     AV_SCOPE("Adapter::answer_umd_private");
@@ -758,15 +642,10 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
         answered = NtStatus(capabilities_.report_driver_caps(request)).value();
         break;
     case query_native_fence_caps:
-        /* Answered only because the four native fence DDIs are implemented
-         * (constitution VI) and the OS allowed the feature; where it did not,
-         * this is a type this driver does not report at all (§17). */
         if (capabilities_.native_fences_reportable())
             answered = NtStatus(capabilities_.report_native_fence_caps(request)).value();
         break;
     case query_user_mode_submission_caps:
-        /* Answered only because the doorbell DDIs are implemented (constitution
-         * VI): dxgkrnl hands processes doorbell pages on the strength of it. */
         return NtStatus(capabilities_.report_user_mode_submission_caps(request)).value();
     case query_wddm_device_caps:
         answered = NtStatus(capabilities_.report_wddm_device_caps(request)).value();
@@ -789,8 +668,6 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
     default:
         break;
     }
-    /* The order and outcome of these is what US1 asks the guest log to show;
-     * dxgkrnl asks for types the driver declines, so the status is the point. */
     if (budget_.allows()) {
         char       bytes[80];
         TextBuffer message(bytes, sizeof bytes);
@@ -803,8 +680,6 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
     return answered;
 }
 
-/* No escape is defined until a user-mode component needs one; basicrender
- * answers an escape it does not know the same way. */
 int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
 {
     AV_SCOPE("Adapter::escape");
@@ -823,19 +698,10 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
         magic == NextPointRecord::pages_magic)
         return next_point(*escape);
     if (magic != TraceEscapeRecord::magic) return NtStatus(Status::not_supported).value();
-    /* Only the adapter is named: the inspector opens no device. */
     const Status answered = TraceEscape(platform_, *this).answer(bytes, escape->PrivateDriverDataSize);
     return NtStatus(answered == Status::malformed ? Status::invalid_parameter : answered).value();
 }
 
-/* A process reading the pages presents write into: DWM's user-mode driver
- * refreshing its texture of a window's surface (PagesReadRecord). A begin
- * opens a read, which the presents into the pages wait for until its end,
- * and then waits until the present engine has moved every present already
- * queued into the pages, saying in `complete` whether it did - a wait that
- * ran out is no refusal, the reader decides what to show. Both actions
- * answer the allocation's write sequence. Every refusal is
- * STATUS_INVALID_PARAMETER. */
 int32_t Adapter::pages_read(const DxgkargEscapeRecord &escape)
 {
     AV_SCOPE("Adapter::pages_read");
@@ -852,14 +718,10 @@ int32_t Adapter::pages_read(const DxgkargEscapeRecord &escape)
         complete = begin_pages_read(*allocation, record.wait_microseconds(), sequence);
     else
         end_pages_read(*allocation);
-    static_cast<void>(record.answered(sequence, complete).encode(bytes, PagesReadRecord::encoded_size));   /* decode checked the length */
+    static_cast<void>(record.answered(sequence, complete).encode(bytes, PagesReadRecord::encoded_size));
     return NtStatus(Status::ok).value();
 }
 
-/* The read is opened before the wait, not after: a present that came in
- * between would be one the wait had already seen settled, and written under
- * the read. A present already past its own wait for reads is one this wait
- * sees. */
 bool Adapter::begin_pages_read(Allocation &allocation, uint32_t wait_microseconds, uint64_t &sequence)
 {
     AV_SCOPE("Adapter::begin_pages_read");
@@ -888,9 +750,6 @@ void Adapter::end_pages_read(Allocation &allocation)
     present_waiters_.wake();
 }
 
-/* A present into pages a reader is reading waits for its end, so the reader
- * never sees the write begin. One held past its bound goes ahead and writes:
- * a reader that is gone must not stop the window. */
 void Adapter::admit_present_write(Allocation &destination)
 {
     AV_SCOPE("Adapter::admit_present_write");
@@ -904,10 +763,6 @@ void Adapter::admit_present_write(Allocation &destination)
         platform_.log("avgpu: more waiters on presented pages than slots to wait in");
 }
 
-/* A process asking for a chunk of the host window on its av context, or
- * giving one back (docs/host-memory.md). A device with no window, or one that
- * refuses the chunk's blob, is STATUS_NOT_SUPPORTED; every other refusal is
- * STATUS_INVALID_PARAMETER. Nothing falls back to guest RAM. */
 int32_t Adapter::window_chunk(const DxgkargEscapeRecord &escape)
 {
     AV_SCOPE("Adapter::window_chunk");
@@ -920,14 +775,10 @@ int32_t Adapter::window_chunk(const DxgkargEscapeRecord &escape)
     const Status status = av_contexts_.window_chunk(escape.hContext, record, *device);
     if (status == Status::not_supported) return NtStatus(status).value();
     if (status != Status::ok) return NtStatus(Status::invalid_parameter).value();
-    static_cast<void>(record.encode(bytes, HostWindowRecord::encoded_size));   /* the length was checked */
+    static_cast<void>(record.encode(bytes, HostWindowRecord::encoded_size));
     return NtStatus(Status::ok).value();
 }
 
-/* A process naming the point of its next blt from a surface one of its
- * devices opened, which Direct3D 9's present cannot carry (NextPointRecord).
- * The escape is the adapter's - the runtime takes no device on it - so the
- * process is what scopes it. Every refusal is STATUS_INVALID_PARAMETER. */
 int32_t Adapter::next_point(const DxgkargEscapeRecord &escape)
 {
     AV_SCOPE("Adapter::next_point");
@@ -951,9 +802,6 @@ int32_t Adapter::next_point(const DxgkargEscapeRecord &escape)
     return NtStatus(Status::invalid_parameter).value();
 }
 
-/* A process asking where its av context's ring and reply slot are: the driver
- * mapped them into it when the context was made (docs/protocol.md, "Context
- * memory"). Every refusal is STATUS_INVALID_PARAMETER. */
 int32_t Adapter::context_views(const DxgkargEscapeRecord &escape)
 {
     AV_SCOPE("Adapter::context_views");
@@ -962,15 +810,10 @@ int32_t Adapter::context_views(const DxgkargEscapeRecord &escape)
     if (escape.hContext == nullptr || record.decode(bytes, escape.PrivateDriverDataSize) != Status::ok ||
         av_contexts_.views(escape.hContext, record) != Status::ok)
         return NtStatus(Status::invalid_parameter).value();
-    static_cast<void>(record.encode(bytes, ContextViewsRecord::encoded_size));   /* decode checked the length */
+    static_cast<void>(record.encode(bytes, ContextViewsRecord::encoded_size));
     return NtStatus(Status::ok).value();
 }
 
-/* A process handing over an event to be set whenever its av context's host
- * raises (docs/protocol.md, "Wake event record"). A device that never moves
- * `raised` would never set it, and the process is told so rather than left to
- * sleep: STATUS_NOT_SUPPORTED, as from a driver without the record. Every
- * other refusal is STATUS_INVALID_PARAMETER. */
 int32_t Adapter::wake_event(const DxgkargEscapeRecord &escape)
 {
     AV_SCOPE("Adapter::wake_event");
@@ -984,9 +827,6 @@ int32_t Adapter::wake_event(const DxgkargEscapeRecord &escape)
     return NtStatus(Status::ok).value();
 }
 
-/* A process that stores its own ring's tail before each submission: the
- * device may then take a batch before the scheduler hands this driver its
- * packet, which the context accepts as it does a doorbell's. */
 int32_t Adapter::publish_own_tail(const DxgkargEscapeRecord &escape)
 {
     AV_SCOPE("Adapter::publish_own_tail");
@@ -1041,8 +881,6 @@ int32_t Adapter::create_allocation(DxgkargCreateAllocationRecord *request)
     return created;
 }
 
-/* A source showing one of these must stop before the allocation goes: the DPC
- * follows the handle to find the primary's pages. */
 int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *request)
 {
     AV_SCOPE("Adapter::destroy_allocation");
@@ -1051,10 +889,6 @@ int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *reques
     if (request->pAllocationList != nullptr)
         for (uint32_t index = 0u; index < request->NumAllocations; index++) {
             sources_.forget_primary(request->pAllocationList[index]);
-            /* A context is named by its ring allocation, and another context
-             * of the process shares with it by that name (feature 050); a name
-             * freed while the context lives could be a new allocation's, so the
-             * context goes with it - which is the order a process exit uses. */
             void *const user = av_contexts_.user_of(allocations_.find(request->pAllocationList[index]));
             if (user != nullptr) static_cast<void>(av_contexts_.unbind(user, answering_device()));
         }
@@ -1066,11 +900,6 @@ int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *reques
     return answer;
 }
 
-/* dxgkrnl destroys a shared allocation only once every process let go of it,
- * so what the destroy forgot is gone from the whole guest: the device holds
- * what was shared under those ids until it is told. Told here, after the
- * allocation table's lock is dropped, because telling it waits for an answer.
- * A device that is not there has nothing left to hold. */
 void Adapter::release_shared()
 {
     AV_SCOPE("Adapter::release_shared");
@@ -1137,9 +966,6 @@ int32_t Adapter::open_allocation(void *device, DxgkargOpenAllocationRecord *requ
     platform_.require_irql_at_most(Irql::passive, "Adapter::open_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t opened = NtStatus(devices_.open(device, *request)).value();
-    /* dxgkrnl runs an open inside every create, so a refusal here is one a
-     * caller reads as a failed CreateAllocation. This was the only DDI in the
-     * driver with no line, and it cost four guest boots (research.md §15). */
     log_status("avgpu: OpenAllocation", opened);
     return opened;
 }
@@ -1172,7 +998,6 @@ int32_t Adapter::create_context(void *device, DxgkargCreateContextRecord *reques
     AV_SCOPE("Adapter::create_context");
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_context");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    /* Nothing new runs on a device this adapter did not start on. */
     if (identity_.changed()) return NtStatus(Status::not_supported).value();
     const Status created = contexts_.create(device, *request);
     Context *const context = created == Status::ok ? contexts_.find(request->hContext) : nullptr;
@@ -1181,8 +1006,6 @@ int32_t Adapter::create_context(void *device, DxgkargCreateContextRecord *reques
     if (bound == Status::ok) return NtStatus(Status::ok).value();
     static_cast<void>(contexts_.destroy(request->hContext));
     request->hContext = nullptr;
-    /* dxgkrnl passes a CreateContext status it does not expect straight to the
-     * process and logs it as invalid; the reason is in the driver's log. */
     return NtStatus(Status::invalid_parameter).value();
 }
 
@@ -1200,7 +1023,6 @@ Status Adapter::bind_av(Context &context)
 VirtioGpuDevice *Adapter::answering_device()
 {
     AV_SCOPE("Adapter::answering_device");
-    /* A device is only ever constructed running: power_up destroys one whose start failed. */
     return device_.constructed() && present_ ? &device_.object() : nullptr;
 }
 
@@ -1208,13 +1030,8 @@ int32_t Adapter::destroy_context(void *context)
 {
     AV_SCOPE("Adapter::destroy_context");
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_context");
-    /* DXGCONTEXT::DestroyContext destroys a context's queues first. */
     if (hw_queues_.serves(context)) return NtStatus(Status::invalid_parameter).value();
     const Context *const found = contexts_.find(context);
-    /* Only one the table still holds. Freeing an allocation a context runs on
-     * unbinds it there and then, and that is the order a process exit uses -
-     * dxgkrnl frees the allocations before the context - so asking again here
-     * would answer invalid_parameter and log a failure for the ordinary case. */
     if (found != nullptr && found->is_av() && av_contexts_.holds(context)) {
         log_status("avgpu: av context destroyed", NtStatus(av_contexts_.unbind(context, answering_device())).value());
     }
@@ -1271,10 +1088,6 @@ int32_t Adapter::build_paging_buffer(DxgkargBuildPagingBufferRecord *request)
     AV_SCOPE("Adapter::build_paging_buffer");
     platform_.require_irql_at_most(Irql::passive, "Adapter::build_paging_buffer");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    /* An unmap is VidMm evicting as often as a process exiting - a suspended
-     * app's allocations go first - and ends no context: what a context runs on,
-     * and every chunk it holds, is memory the driver owns, not an allocation
-     * (docs/protocol.md, "Context memory"). */
     PagingRequest paging(platform_, allocations_, budget_, *request);
     return paging.build().value();
 }
@@ -1309,8 +1122,6 @@ int32_t Adapter::is_supported_vidpn(DxgkargIsSupportedVidPnRecord *request)
     const int32_t     decided = check.decide().value();
     log_status("avgpu: IsSupportedVidPn", decided);
     if (check.refusal() != nullptr && budget_.allows()) {
-        /* A refused VidPn is a mode change that fails with nothing else to
-         * say why: a fullscreen game's E_INVALIDARG. */
         const D3dkmdtVidPnSourceModeRecord &mode = check.refused_mode();
         char       bytes[160];
         TextBuffer message(bytes, sizeof bytes);
@@ -1338,8 +1149,6 @@ int32_t Adapter::recommend_functional_vidpn(const DxgkargRecommendFunctionalVidP
     return declined;
 }
 
-/* dxgkrnl repeats the VidPn DDIs while it settles a topology, so these lines
- * come out of the budget rather than one per call forever. */
 void Adapter::log_handle(const char *step, const void *handle, int32_t status)
 {
     AV_SCOPE("Adapter::log_handle");
@@ -1354,10 +1163,6 @@ void Adapter::log_handle(const char *step, const void *handle, int32_t status)
     platform_.log(message.text());
 }
 
-/* The device says how many displays it has; the driver offers a VidPn source
- * for each, up to what its arrays hold. A count it cannot serve is clamped, and
- * one of zero leaves the single source a display needs - either way the value
- * is logged, because the outputs the guest sees are then not the host's. */
 void Adapter::follow_output_count(uint32_t outputs)
 {
     AV_SCOPE("Adapter::follow_output_count");
@@ -1378,8 +1183,6 @@ Status Adapter::follow_display_info()
     AV_SCOPE("Adapter::follow_display_info");
     platform_.require_irql_at_most(Irql::passive, "Adapter::follow_display_info");
     if (!device_.constructed()) return Status::invalid_state;
-    /* The request fits a max_request_size buffer, so the writer cannot refuse
-     * it and its answer is voided as the scanout's are. */
     uint8_t          request[GpuRequestWriter::max_request_size] = {};
     GpuRequestWriter writer(request, sizeof request);
     static_cast<void>(writer.get_display_info());
@@ -1418,8 +1221,6 @@ Status Adapter::follow_display_modes()
     return followed;
 }
 
-/* What the host offered and what came of it: a mode past what the EDID can
- * describe is dropped, and the line says how many were. */
 void Adapter::log_offered_modes(uint32_t offered)
 {
     AV_SCOPE("Adapter::log_offered_modes");
@@ -1440,9 +1241,6 @@ void Adapter::log_offered_modes(uint32_t offered)
     platform_.log(message.text());
 }
 
-/* A display event the interrupt saw: the device's event is cleared, and each
- * monitor unplugged and plugged back, which has Windows read its EDID and modes
- * again - the passive DDIs that answer them follow the device's new modes. */
 void Adapter::announce_display_change(bool running)
 {
     AV_SCOPE("Adapter::announce_display_change");
@@ -1453,10 +1251,6 @@ void Adapter::announce_display_change(bool running)
     for (uint32_t child = 0u; child < sources_.count(); child++) dxgkrnl_.replug(child);
 }
 
-/* Every output is offered the list the first scanout's rectangle allows, which
- * is right while the device gives them all the same rectangle - QEMU does. A
- * host that does not is worth a line, because the modes the other outputs are
- * offered are then not theirs. */
 void Adapter::log_unlike_outputs()
 {
     AV_SCOPE("Adapter::log_unlike_outputs");
@@ -1488,11 +1282,6 @@ void Adapter::follow_display_change()
     log_status("avgpu: display info", NtStatus(follow_display_info()).value());
 }
 
-/* The private-data length shares the line because the length is the question a
- * guest sweep asks: a length this driver answered leaves a line naming it, and
- * one dxgkrnl refused before the call leaves no line at all. Without the
- * number the two are told apart by counting lines, which is not evidence
- * (feature 053). */
 void Adapter::log_allocation(const DxgkargCreateAllocationRecord &request, int32_t status)
 {
     AV_SCOPE("Adapter::log_allocation");
@@ -1564,9 +1353,6 @@ void Adapter::restore_scanouts()
     AV_SCOPE("Adapter::restore_scanouts");
     for (uint32_t source = 0u; source < sources_.count(); source++) {
         if (!transition_.scanning_out(source)) continue;
-        /* Said for every source power put back, because a resume that restored
-         * one and not the other is the difference between a desktop and a
-         * black screen. */
         log_status("avgpu: resume scanout", NtStatus(follow_commit(source)).value());
     }
 }
@@ -1608,7 +1394,6 @@ int32_t Adapter::recommend_vidpn_topology(const DxgkargRecommendVidPnTopologyRec
     return declined;
 }
 
-/* Target 0 shows source 0. */
 int32_t Adapter::get_scan_line(DxgkargGetScanLineRecord *request)
 {
     AV_SCOPE("Adapter::get_scan_line");
@@ -1623,7 +1408,6 @@ int32_t Adapter::get_scan_line(DxgkargGetScanLineRecord *request)
     return NtStatus(Status::ok).value();
 }
 
-/* Before StartDevice there is no timer to start. */
 int32_t Adapter::control_interrupt(int32_t type, uint8_t enable)
 {
     AV_SCOPE("Adapter::control_interrupt");
@@ -1635,11 +1419,6 @@ int32_t Adapter::control_interrupt(int32_t type, uint8_t enable)
     return NtStatus(status).value();
 }
 
-/* A null allocation leaves the source showing nothing. */
-/* Every flip, FlipOnNextVSync or FlipImmediate, shows from the next scanout:
- * VidSch completes an immediate flip on return and expects no report. A primary
- * in the implicit system memory segment arrives as segment 0, address 0
- * (VIDMM_SEGMENT::DriverId); VidSch matches the vsync against that address. */
 int32_t Adapter::set_vidpn_source_address(const DxgkargSetVidPnSourceAddressRecord *request)
 {
     AV_SCOPE("Adapter::set_vidpn_source_address");
@@ -1658,9 +1437,6 @@ int32_t Adapter::show_primary(uint32_t source, uint32_t segment, int64_t address
     return flipped(sources_.set_scanout(source, address, allocation));
 }
 
-/* A flip reaches the host from the DPC, and the device's clock shows only
- * what it has before its blank: the DPC is asked for now rather than left to
- * whatever interrupt comes next. */
 int32_t Adapter::flipped(Status set)
 {
     AV_SCOPE("Adapter::flipped");
@@ -1668,9 +1444,6 @@ int32_t Adapter::flipped(Status set)
     return NtStatus(set).value();
 }
 
-/* Which source dxgkrnl showed or hid, and not only that it asked: a display the
- * power policy turned off comes back through this, and the log is the only way
- * to see whether it did. */
 void Adapter::log_visibility(const DxgkargSetVidPnSourceVisibilityRecord &request, int32_t status)
 {
     AV_SCOPE("Adapter::log_visibility");
@@ -1716,20 +1489,12 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::present");
     if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
     PresentRequest writing(platform_, *request);
-    platform_.store_atomic(presents_made_, platform_.load_atomic(presents_made_) + 1u);   /* a lost race still moves it */
+    platform_.store_atomic(presents_made_, platform_.load_atomic(presents_made_) + 1u);
     const uint32_t first = request->MultipassOffset;
     const int32_t  presented = writing.present().value();
-    /* The points named for this present are done with whichever way it ended
-     * - moved, refused, a flip that moves nothing - once its last pass has
-     * run: left queued they would put the window a frame behind for good. */
     ScopeExit forget_points([&] {
         if (presented != more_dma_buffer) devices_.consume_point(PresentedAllocations(*request).source());
     });
-    /* The DMA buffer this wrote is executed on the host only for a context of
-     * the av protocol; dxgkrnl's own presents are loopback-completed, so the
-     * pixels the desktop presents move here (feature 046, FR-004). */
-    /* A refusal is what dxgkrnl answers by hiding the source: the only trace
-     * of why the desktop went dark is this line. More DMA buffer is not one. */
     PresentOperation named = PresentOperation::blt;
     last_present_flags_ = request->Flags;
     last_present_status_ = presented;
@@ -1737,13 +1502,9 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
         presents_refused_++;
         log_refused_present(*request, writing.operation(named) == Status::ok);
     }
-    /* Each pass moves the sub-rectangles its DMA buffer carries, and its
-     * packet waits for them; a pass that found no room wrote none. */
     const uint32_t end = presented == 0 ? request->SubRectCnt : request->MultipassOffset;
     if (presented == 0 || (presented == more_dma_buffer && end != first)) {
         PresentOperation kind = PresentOperation::blt;
-        /* A present that was written named an operation this driver presents:
-         * `present` refuses every other one before it writes anything. */
         static_cast<void>(writing.operation(kind));
         mark_present(*request, move_presented_pixels(*request, kind, first, end));
     }
@@ -1751,9 +1512,6 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     return presented;
 }
 
-/* The pixels a blt or a fill names move here, whichever form names them
- * (PresentedAllocations): dxgkrnl's own presents, and an application's
- * blt-model present into its window's redirection surface. */
 uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, PresentOperation kind, uint32_t first,
                                        uint32_t end)
 {
@@ -1777,9 +1535,6 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
     const PresentSurface written(destination->allocation().descriptor().layout(), destination->allocation().pages());
     const PresentSurface read(source != nullptr ? source->allocation().descriptor().layout() : SurfaceLayout(),
                               source != nullptr ? source->allocation().pages() : GuestPageList());
-    /* An allocation presented by points whose point has not been named yet
-     * holds an older frame in its pages (the last readback): blt'ing those
-     * would show it, so the window keeps its last frame. */
     PointView points;
     if (source != nullptr) static_cast<void>(devices_.peek_point(source_handle, points));
     if (point_missing(request, source, points)) {
@@ -1788,12 +1543,6 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
             platform_.log("avgpu: a present of a pointed surface has no point named: the window keeps its last frame");
         return 0u;
     }
-    /* A reader of the destination's pages orders itself after this write: the
-     * sequence moves while the present is queued or moved, and names the
-     * ticket that moves the pixels once the engine has them. The present is
-     * opened before anything is queued, after any read open on the pages, and
-     * closed on every path from here, including the refusal below, so a
-     * reader is never left waiting on it. */
     admit_present_write(destination->allocation());
     PresentQueue *const queue = presents_.constructed() && present_ ? &presents_.object() : nullptr;
     const uint32_t      ticket_epoch = queue != nullptr ? queue->epoch() : 0u;
@@ -1820,11 +1569,6 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
     return ticket.ticket();
 }
 
-/* The user-mode driver names a point only where the answer to its
- * UMDRIVERPRIVATE said it may; one named anyway on a device that reads none is
- * a present from its pages, which is all such a device has. The surface is
- * the one the source allocation was minted as - the driver's private data
- * names only when, never what. */
 SurfacePoint Adapter::image_of(const DxgkargPresentRecord &request, const DeviceAllocation *source,
                                const PointView &points)
 {
@@ -1834,14 +1578,10 @@ SurfacePoint Adapter::image_of(const DxgkargPresentRecord &request, const Device
     if (record.decode(static_cast<const uint8_t *>(request.pPrivateDriverData), request.PrivateDriverDataSize) ==
         Status::ok)
         return SurfacePoint(source->allocation().shared_id(), record.point());
-    /* Named by escape where the present could carry none (NextPointRecord);
-     * a 0 is the process saying this present reads the pages. */
     if (!points.queued || points.point == 0u) return SurfacePoint();
     return SurfacePoint(source->allocation().shared_id(), points.point);
 }
 
-/* Whether `source` is presented by points - one was named for it once - and
- * this present has none: neither in its private data nor queued. */
 bool Adapter::point_missing(const DxgkargPresentRecord &request, const DeviceAllocation *source,
                             const PointView &points)
 {
@@ -1862,9 +1602,6 @@ PixelMover &Adapter::immediate_mover()
     return mapped_pixels_;
 }
 
-/* dxgkrnl hands the private data on to SubmitCommandVirtual with the packet
- * this present's DMA buffer becomes, from where the pointer started to where
- * it was left, as it does the DMA buffer's bytes. */
 void Adapter::mark_present(DxgkargPresentRecord &request, uint64_t ticket)
 {
     AV_SCOPE("Adapter::mark_present");
@@ -1922,9 +1659,6 @@ void Adapter::log_refused_present(const DxgkargPresentRecord &request, bool oper
     platform_.log(message.text());
 }
 
-/* Which of a blt's surfaces the miniport could not read or write - a surface
- * whose pages VidMm never mapped into the aperture - or the two rectangles it
- * would have had to stretch between. */
 void Adapter::log_unreadable_surfaces(const PresentSurface &read, const PresentSurface &written,
                                       AllocationKind source_kind, AllocationKind destination_kind,
                                       const Rectangle &from, const Rectangle &into)
@@ -1951,9 +1685,6 @@ void Adapter::log_unreadable_surfaces(const PresentSurface &read, const PresentS
     platform_.log(message.text());
 }
 
-/* A present whose pixels stayed where they were, with what it was: the desktop
- * not reaching the screen is invisible from the guest, so the driver says so
- * once per present it could not carry. */
 void Adapter::log_unmoved_present(const char *why, const DxgkargPresentRecord &request, uint32_t sources,
                                   uint32_t destinations)
 {
@@ -2042,8 +1773,6 @@ int32_t Adapter::query_dependent_engine_group(DxgkargQueryDependentEngineGroupRe
     if (request == nullptr || request->NodeOrdinal >= DriverCapabilities::node_count ||
         request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
-    /* Each node depends on itself alone: what runs on one does not hold the
-     * other up. */
     request->DependentNodeOrdinalMask = uint64_t{1} << request->NodeOrdinal;
     return NtStatus(Status::ok).value();
 }
@@ -2051,15 +1780,10 @@ int32_t Adapter::query_dependent_engine_group(DxgkargQueryDependentEngineGroupRe
 int32_t Adapter::query_engine_status(DxgkargQueryEngineStatusRecord *request)
 {
     AV_SCOPE("Adapter::query_engine_status");
-    /* VidSch asks from its timeout DPC: DdiQueryEngineStatus (dxgkrnl.sys
-     * @140027dc0) only reaches for the current thread when IRQL is below 2, so
-     * dispatch is a level it expects to be called at. */
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::query_engine_status");
     if (request == nullptr || request->NodeOrdinal >= DriverCapabilities::node_count ||
         request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
-    /* VidSchiCheckNodeTimeout takes responsive as "no timeout this round". The
-     * hardware-scheduled node runs no packets, so nothing there can be stuck. */
     if (request->NodeOrdinal != DriverCapabilities::packet_node || progress_.responsive())
         request->EngineStatus |= engine_responsive;
     return NtStatus(Status::ok).value();
@@ -2068,16 +1792,10 @@ int32_t Adapter::query_engine_status(DxgkargQueryEngineStatusRecord *request)
 int32_t Adapter::reset_engine(DxgkargResetEngineRecord *request)
 {
     AV_SCOPE("Adapter::reset_engine");
-    /* The same DPC resets what it found stuck; DdiResetEngine (dxgkrnl.sys
-     * @14006e0a4) checks only that the driver returns at the IRQL it entered. */
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::reset_engine");
     if (request == nullptr || request->NodeOrdinal >= DriverCapabilities::node_count ||
         request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
-    /* VidSch already knows what it reset, so nothing more is reported; every
-     * other context keeps running - a reset of one engine is not an outage
-     * (FR-002, FR-003). Resetting the hardware-scheduled node drops what its
-     * queues had in flight, which is what ResetHwEngine does for it. */
     if (request->NodeOrdinal != DriverCapabilities::packet_node) {
         hw_submissions_.abandon();
         request->LastAbortedFenceId = 0u;
@@ -2151,15 +1869,6 @@ int32_t Adapter::power_runtime_control_request(const void *, const void *, size_
     return NtStatus(Status::not_supported).value();
 }
 
-/* dxgkrnl flips through this instead of SetVidPnSourceAddress once the
- * compositor has flipped a multiplane present, and a failure here is a 0x119
- * bugcheck (FAILED_SETVIDPNSOURCEMPO_COMMAND), not a refused flip. This
- * adapter scans out one plane, the base one: it is shown as SetVidPnSourceAddress
- * shows a primary, and a flip with no enabled base plane - dxgmms2's
- * disable-planes flip when the primary's device goes away
- * (VidSchiSubmitDisablePlanesFlip) - shows nothing. An overlay plane above
- * the base is not composed. The vsync that follows reports the flip as
- * multiplane, the only report that retires it. */
 int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay(const DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord *request)
 {
     AV_SCOPE("Adapter::set_vidpn_source_address_with_multi_plane_overlay");
@@ -2178,18 +1887,6 @@ int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay(const Dxgkarg
     return flipped(sources_.set_multiplane_scanout(request->VidPnSourceId, base));
 }
 
-/* Registering this DDI is what makes dxgkrnl answer KMTQAITYPE_MPO3DDI_SUPPORT
- * (adapter[0xc01], DxgkQueryAdapterInfoImpl), and that answer is what keeps
- * DWM's DisplayCore path off its legacy present, which is E_NOTIMPL
- * (COverlayContext::LegacyPresentRequired, dwmcore.dll); dxgmms2 then flips
- * every primary and overlay plane through it. Each plane named replaces the
- * one at its layer: dxgmms2 sends a layer only when it changes
- * (VidSchiSetupMmIoFlipMultiPlaneOverlay3), a turned-off one included.
- * dxgkrnl takes only success, busy or retry from it, so a plane this adapter
- * cannot show - CheckMultiPlaneOverlaySupport3 refused it, so dxgkrnl should
- * never send one - is shown as nothing rather than refused. The vsync that
- * follows names every layer's PresentId, the only report that retires an MPO3
- * flip. An immediate flip completes when this returns, which it does. */
 int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay3(
     DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record *request)
 {
@@ -2228,8 +1925,6 @@ int32_t Adapter::check_multi_plane_overlay_support3(DxgkargCheckMultiPlaneOverla
     return NtStatus(checked).value();
 }
 
-/* A configuration refused is a window DWM composes instead of promoting, and
- * nothing else says why: the plane that failed, what it is and where. */
 void Adapter::log_refused_overlay(const DxgkargCheckMultiPlaneOverlaySupport3Record &request)
 {
     AV_SCOPE("Adapter::log_refused_overlay");
@@ -2291,8 +1986,6 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
 {
     AV_SCOPE("Adapter::get_node_metadata");
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_node_metadata");
-    /* The low half names the node, the high half the physical adapter, of
-     * which this driver has one. */
     const uint32_t node = node_and_adapter & 0xFFFFu;
     if (metadata == nullptr || (node_and_adapter >> 16u) != 0u || node >= DriverCapabilities::node_count)
         return NtStatus(Status::invalid_parameter).value();
@@ -2301,18 +1994,6 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
     *metadata = DxgkNodeMetadataRecord{};
     metadata->EngineType = engine_type_3d;
     metadata->GpuMmuSupported = 1u;
-    /* What this node is scheduled by, where the OS allows it: the queue DDIs
-     * are implemented and tested (feature 019), and the depth is what this
-     * driver can hold in flight. A node that reports context scheduling the OS
-     * has not enabled fails the adapter start outright, so what it reports is
-     * what the OS answered at StartDevice (research.md §15).
-     *
-     * The hardware-scheduled node is the second one, because dxgkrnl checks a
-     * node's context scheduling against the node before it: it is satisfied by
-     * an earlier node's GpuMmu support, and node 0 supplies that (§16). What
-     * the second node reports is what the OS allowed and this driver
-     * implements - the queue DDIs, the doorbell ones, and the native fences
-     * the OS demands beside them (§14). */
     metadata->Flags = node == DriverCapabilities::hardware_queue_node && hardware_scheduling_
                           ? node_context_scheduling_supported |
                                 (user_mode_submission_ ? node_user_mode_submission : 0u) |
@@ -2362,15 +2043,9 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
     const Context *context = contexts_.find(request->hContext);
     if (context == nullptr || !context->admits(request->DmaBufferVirtualAddress))
         return NtStatus(Status::invalid_parameter).value();
-    /* The device that would have run this is not the one this adapter started
-     * on, so no completion would ever come; SubmitCommandVirtual may refuse,
-     * and D3DKMTSubmitCommand fails for the process instead (FR-005). */
     if (identity_.changed()) return NtStatus(Status::invalid_parameter).value();
     uint64_t     awaited = 0u;
     void        *owner = request->hContext;
-    /* Every ordinary context is given room for a FollowRecord, so dxgkrnl
-     * hands its private data to every packet: only one that decodes as a
-     * record follows anything. */
     FollowRecord follow;
     const bool   follows =
         !context->is_av() && follow.decode(static_cast<const uint8_t *>(request->pDmaBufferPrivateData),
@@ -2388,25 +2063,15 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
                  : follows         ? submit_follow(*context, follow, request->SubmissionFenceId, owner, awaited)
                                    : node_.submit(request->SubmissionFenceId);
     if (status == Status::ok) {
-        /* Only a batch the device already finished needs this DPC: its
-         * interrupt may have come before the packet was queued. One still
-         * running is reported by the interrupt it raises when it finishes,
-         * and a DPC per submission doubled the work dxgkrnl's DPC lock
-         * serializes. */
         const bool done = presented ? presents_.object().completed() >= awaited
                                     : av_contexts_.completed_already(owner, awaited);
         if (awaited == 0u || done) static_cast<void>(dxgkrnl_.queue_dpc());
         return NtStatus(Status::ok).value();
     }
-    /* A refusal is what dxgkrnl answers the process with, and may be what puts
-     * its device in error: the log is the only place the reason survives. */
     log_status("avgpu: SubmitCommandVirtual refused", NtStatus(status).value());
     return NtStatus(Status::invalid_parameter).value();
 }
 
-/* The host may finish the batch before its packet is queued; the DPC queued
- * after both serves what the fence page already says, so nothing waits for an
- * interrupt that came first. */
 Status Adapter::submit_av(const DxgkargSubmitCommandVirtualRecord &request, uint64_t &awaited)
 {
     AV_SCOPE("Adapter::submit_av");
@@ -2417,9 +2082,6 @@ Status Adapter::submit_av(const DxgkargSubmitCommandVirtualRecord &request, uint
     return node_.submit(request.SubmissionFenceId, request.hContext, awaited);
 }
 
-/* A packet on an ordinary context that follows a batch on one of its
- * process's av contexts: held on the node until that context's host has
- * completed the batch, like the av context's own packet would be. */
 Status Adapter::submit_follow(const Context &context, const FollowRecord &follow, uint32_t fence, void *&owner,
                               uint64_t &awaited)
 {
@@ -2433,15 +2095,6 @@ Status Adapter::submit_follow(const Context &context, const FollowRecord &follow
     return queued;
 }
 
-/* A packet on an ordinary context that releases a batch its process wrote into
- * the ring of one of its av contexts and did not publish: the scheduler hands
- * it over once the waits queued on this context before it are satisfied, which
- * is the order the work must reach the host in. The batch is published when
- * every one before it in the ring is (ReleaseQueue), so a packet that came
- * first for a later batch is held until the earlier one's packet has run; the
- * packet itself completes when the host has run the batch, as a follow packet
- * does. What the record says came from a process: the ring must be one of the
- * process's own and the descriptor is judged against that ring. */
 Status Adapter::submit_release(const Context &context, const ReleaseRecord &release, uint32_t fence, void *&owner,
                                uint64_t &awaited)
 {
@@ -2456,14 +2109,6 @@ Status Adapter::submit_release(const Context &context, const ReleaseRecord &rele
     return node_.submit(fence, released, awaited);
 }
 
-/* Checked before the context's own kind: a present's DMA buffer comes to any
- * context, and its private data is the miniport's, written by DdiPresent. A
- * record that names no present of the queue's - another epoch, a ticket never
- * queued - holds nothing, so a process cannot park the node on one.
- * dxgkrnl counts the bytes DdiPresent advanced past as the UMD's private data
- * and passes only what was left after them as the private data's size: on a
- * context with room for the record alone that size is 0, and the packet ran
- * ahead of its pixels. */
 bool Adapter::submit_present(const DxgkargSubmitCommandVirtualRecord &request, Status &status, void *&owner,
                              uint64_t &awaited)
 {
@@ -2503,8 +2148,6 @@ int32_t Adapter::create_process(DxgkargCreateProcessRecord *request)
     AV_SCOPE("Adapter::create_process");
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_process");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    /* dxgkrnl's own handle, unique per process: what tells a present which
-     * process's command streams it follows (Adapter::submit_command_virtual). */
     request->hKmdProcess = request->hDxgkProcess;
     return NtStatus(Status::ok).value();
 }
@@ -2580,7 +2223,6 @@ int32_t Adapter::create_hw_queue(void *context, DxgkargCreateHwQueueRecord *requ
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const Status created = hw_queues_.create(context, *request);
     if (created != Status::ok) return NtStatus(created).value();
-    /* What the queue runs on, where a submission at DISPATCH can read it. */
     const Status bound = hw_queue_contexts_.bind(request->hHwQueue, static_cast<HwQueue *>(request->hHwQueue)->context());
     if (bound != Status::ok) {
         static_cast<void>(hw_queues_.destroy(request->hHwQueue));
@@ -2593,10 +2235,6 @@ int32_t Adapter::destroy_hw_queue(void *queue)
 {
     AV_SCOPE("Adapter::destroy_hw_queue");
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_hw_queue");
-    /* The context writes every completion into its queue's progress while a
-     * doorbell is connected, and dxgkrnl frees that fence with the queue: a
-     * queue that goes before its doorbell must take the writes with it, or
-     * every DPC after stores into memory Windows has handed on. */
     const HwQueue *const found = hw_queues_.find(queue);
     if (found != nullptr && av_contexts_.forget_progress(&found->context(), found->progress()) &&
         budget_.allows())
@@ -2611,15 +2249,10 @@ int32_t Adapter::submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueR
     AV_SCOPE("Adapter::submit_command_to_hw_queue");
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::submit_command_to_hw_queue");
     if (request == nullptr || request->hHwQueue == nullptr) return NtStatus(Status::invalid_parameter).value();
-    /* What the queue runs on, read without the queue table's mutex, which a
-     * submission at DISPATCH may not take (hw_queue_contexts.hpp). */
     Context *const context = hw_queue_contexts_.context_of(request->hHwQueue);
     if (context == nullptr) return NtStatus(Status::invalid_parameter).value();
     uint64_t             awaited = 0u;
     if (request->DmaBufferPrivateDataSize != 0u) {
-        /* The same descriptor the virtual path carries, into the same ring:
-         * a hardware-scheduled context submits this way and no other
-         * (feature 049, research.md §13). */
         const Status published = av_contexts_.submit(context,
                                                       static_cast<const uint8_t *>(request->pDmaBufferPrivateData),
                                                       request->DmaBufferPrivateDataSize, awaited);
@@ -2632,9 +2265,6 @@ int32_t Adapter::submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueR
     return NtStatus(status).value();
 }
 
-/* A doorbell belongs to a hardware queue on a context, and only an av context
- * has a ring the process could publish a tail into: for any other, there is
- * nothing to hand over and the refusal is the answer. */
 void Adapter::submissions_to_user_mode(const HwQueue &queue)
 {
     AV_SCOPE("Adapter::submissions_to_user_mode");
@@ -2655,8 +2285,6 @@ int32_t Adapter::create_doorbell(DxgkargCreateDoorbellRecord *request)
     if (request == nullptr || request->PrivateDriverDataSize != 0u || request->Flags != 0u)
         return NtStatus(Status::invalid_parameter).value();
     if (!doorbell_table_.constructed()) return NtStatus(Status::not_found).value();
-    /* The page is the one the queue's context was bound to: a doorbell names
-     * the context's own ring, and the device wakes that context's worker. */
     HwQueue *const queue = hw_queues_.find(request->hHwQueue);
     if (queue == nullptr) return NtStatus(Status::invalid_parameter).value();
     const uint32_t page = av_contexts_.doorbell_of(&queue->context());
@@ -2679,12 +2307,8 @@ int32_t Adapter::connect_doorbell(DxgkargConnectDoorbellRecord *request)
     const Status   connected = doorbell_table_.object().connect(request->hDoorbell, address, status, queue);
     if (connected != Status::ok) return NtStatus(connected).value();
     request->KernelCpuVirtualAddress = address;
-    /* No secondary doorbell: the caps say so, and a process that asked for one
-     * anyway is answered the one page there is. */
     request->SecondaryKernelCpuVirtualAddress = nullptr;
     request->Status = static_cast<uint32_t>(status);
-    /* From here the process publishes the tail and rings the page itself, and
-     * neither is the driver's to judge until the doorbell goes away. */
     submissions_to_user_mode(*queue);
     return NtStatus(Status::ok).value();
 }
@@ -2695,9 +2319,6 @@ int32_t Adapter::disconnect_doorbell(const DxgkargDisconnectDoorbellRecord *requ
     platform_.require_irql_at_most(Irql::passive, "Adapter::disconnect_doorbell");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (!doorbell_table_.constructed()) return NtStatus(Status::not_found).value();
-    /* Before the disconnect, while the doorbell still names its queue: a
-     * process that stores after this has submitted nothing, and the fallback
-     * it makes instead goes through the driver again. */
     submissions_to_driver(request->hDoorbell);
     return NtStatus(doorbell_table_.object().disconnect(request->hDoorbell)).value();
 }
@@ -2718,8 +2339,6 @@ int32_t Adapter::notify_work_submission(const DxgkargNotifyWorkSubmissionRecord 
     platform_.require_irql_at_most(Irql::passive, "Adapter::notify_work_submission");
     if (request == nullptr || hw_queues_.find(request->hHwQueue) == nullptr)
         return NtStatus(Status::invalid_parameter).value();
-    /* Nothing to do: the work is in the ring and the store already woke the
-     * worker. A driver whose doorbell needed a kernel push would push here. */
     return NtStatus(Status::ok).value();
 }
 
@@ -2796,4 +2415,4 @@ bool Adapter::invariants_hold() const
     return powered_only_when_started && mapped_only_when_started && presents_with_the_device;
 }
 
-}  // namespace av
+}

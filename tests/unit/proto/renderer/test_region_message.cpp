@@ -30,7 +30,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(region_message_encode, is_the_region_four_reserved_bytes_and_the_size)
 { GuardedBuffer bytes(RegionMessage::encoded_size);
@@ -66,8 +66,6 @@ TEST(region_message_encode, a_short_or_missing_destination_is_too_large)
   CHECK(buffer.guards_intact());
   CHECK_STATUS(RegionMessage(1u, 1u).encode(nullptr, RegionMessage::encoded_size), Status::too_large); }
 
-/* The memfd is the region: without exactly one the renderer has nothing to
- * map, and a second would leak in its table. */
 TEST(region_message_decode, needs_exactly_one_descriptor)
 { std::uint8_t bytes[RegionMessage::encoded_size] = {};
   CHECK_STATUS(RegionMessage(2u, 0x1000u).encode(bytes, sizeof bytes), Status::ok);
@@ -104,10 +102,5 @@ TEST(region_message_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 128u);
-  /* Region 5 stays nameable under flips of its low 24 bits, not its high 8.
-   * Size 0x10000 is one bit: flipping it empties the region, flipping bit 40
-   * or above passes 1 TiB, and the other 39 flips are sizes still in range.
-   * The reserved word must stay zero. With the untouched message,
-   * 24 + 39 + 1 acceptances. */
   const std::uint32_t acceptable = 24u + 39u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

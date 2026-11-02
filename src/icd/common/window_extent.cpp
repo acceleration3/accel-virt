@@ -42,4 +42,4 @@ uint32_t WindowExtent::height() const
     return height_;
 }
 
-}  // namespace av::icd
+}

@@ -84,7 +84,6 @@ std::int32_t ScriptedD3d11Tir::create_pipeline(std::uint32_t extent, std::uint32
     return 0;
 }
 
-/* Clip space back to subpixels: exact for what the scenario sends. */
 std::int32_t ScriptedD3d11Tir::draw(const float *positions, std::uint32_t count)
 {
     const std::int32_t refused = refusal(Call::draw);
@@ -136,4 +135,4 @@ void ScriptedD3d11Tir::release()
     live_ = false;
 }
 
-}  // namespace av
+}

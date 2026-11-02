@@ -1,5 +1,3 @@
-/* One shared object on one host GPU: what it is, what it is made of, and who
- * holds it. Freed by HostShares once no one does. */
 #include "executor/sharing/share.hpp"
 #include "executor/sharing/share_holder.hpp"
 #include "harness/executor/counted_object.hpp"
@@ -25,8 +23,6 @@ TEST(share, names_its_object)
   CHECK(share.shown() == nullptr);
   CHECK_EQ(share.writes(), 0u); }
 
-/* An open that names another kind, or reaches past the object's end, would
- * have the host read what is not there. */
 TEST(share, accepts_only_its_own_kind_and_size)
 { const Share share(1u, 1u, 7u, 4096u, ShareOrigin::object);
   CHECK(share.accepts(7u, 4096u));
@@ -48,7 +44,6 @@ TEST(share, the_guest_holds_it_until_its_driver_lets_go)
   CHECK(!share.guest_holds());
   CHECK(share.unheld()); }
 
-/* A caller working on a share outside the table's lock keeps it alive. */
 TEST(share, a_pinned_share_is_held)
 { Share share(1u, 1u, 7u, 4096u, ShareOrigin::object);
   share.let_go_by_guest();
@@ -59,7 +54,7 @@ TEST(share, a_pinned_share_is_held)
   CHECK(!share.unheld());
   share.unpin();
   CHECK(share.unheld());
-  share.unpin();   /* past zero stays zero */
+  share.unpin();
   CHECK(share.unheld()); }
 
 TEST(share, holders_come_and_go_in_any_order)
@@ -77,15 +72,15 @@ TEST(share, holders_come_and_go_in_any_order)
   CHECK(share.holder_of(b) == &second);
   CHECK(share.holder_of(c) == &third);
   CHECK(share.holder_of(stranger) == nullptr);
-  share.unhold(second);                       /* the middle */
+  share.unhold(second);
   CHECK(share.holder_of(b) == nullptr);
   CHECK(share.holder_of(a) == &first);
   CHECK(share.holder_of(c) == &third);
   CHECK(second.next() == nullptr);
-  share.unhold(second);                       /* twice is nothing */
-  share.unhold(third);                        /* the head */
+  share.unhold(second);
+  share.unhold(third);
   CHECK(share.holders() == &first);
-  share.unhold(first);                        /* the last */
+  share.unhold(first);
   CHECK(share.holders() == nullptr);
   CHECK(share.unheld()); }
 
@@ -98,8 +93,6 @@ TEST(share, keeps_one_descriptor_and_hands_it_over)
   CHECK_EQ(share.descriptor(), -1);
   CHECK_EQ(share.take_descriptor(), -1); }
 
-/* A Direct3D 11 session opens the view made over a Direct3D 12 resource, or
- * the resource itself when there is none. */
 TEST(share, opens_as_its_view_or_its_resource)
 { CountedObject resource, view;
   Share share(1u, 1u, 0u, 0u, ShareOrigin::d3d12);
@@ -128,9 +121,6 @@ TEST(share, gives_up_every_object_it_holds)
   CHECK(objects[1] == &view);
   CHECK_EQ(share.give_up_objects(objects), 0u); }
 
-/* A lost Direct3D 11 device's objects: the view and flip copy of any share,
- * and the resource only of one Direct3D 11 published - an object or a
- * Direct3D 12 resource is not its. */
 TEST(share, gives_up_only_what_a_lost_direct3d11_device_made)
 { CountedObject resource, view, shown;
   IUnknown     *objects[3] = {};
@@ -156,9 +146,6 @@ TEST(share, gives_up_only_what_a_lost_direct3d11_device_made)
   CHECK_EQ(object.give_up_direct3d11(objects), 0u);
   CHECK(object.resource() == &resource); }
 
-/* A lost Direct3D 12 device's: the resource it published, alone - the
- * Direct3D 11 view over its memory and a flip copy are Direct3D 11's - and a
- * Direct3D 11 share none of its. */
 TEST(share, gives_up_only_what_a_lost_direct3d12_device_made)
 { CountedObject resource, view, shown;
   IUnknown     *objects[3] = {};
@@ -169,7 +156,6 @@ TEST(share, gives_up_only_what_a_lost_direct3d12_device_made)
   CHECK_EQ(published12.give_up_direct3d12(objects), 1u);
   CHECK(objects[0] == &resource);
   CHECK(published12.resource() == nullptr);
-  /* The view is Direct3D 11's, over memory the resource only shared. */
   CHECK(published12.view() == &view);
   CHECK(published12.shown() == &shown);
   CHECK_EQ(published12.give_up_direct3d12(objects), 0u);
@@ -184,7 +170,6 @@ TEST(share, counts_the_copies_written_into_it)
   share.written();
   CHECK_EQ(share.writes(), 2u); }
 
-/* Who published it is remembered to let it publish again, never as a hold. */
 TEST(share, remembers_its_publisher_without_being_held_by_it)
 { MockSessionBackend session;
   Share share(1u, 1u, 7u, 4096u, ShareOrigin::object);

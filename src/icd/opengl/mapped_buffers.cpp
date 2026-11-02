@@ -13,7 +13,6 @@ namespace {
 
 constexpr uint32_t known_access = 0x007Fu;
 
-/* What OpenGL (§6.3.1) says of the access bits alone. */
 uint32_t access_error(uint32_t access)
 {
     AV_SCOPE("access_error");
@@ -29,7 +28,7 @@ uint32_t access_error(uint32_t access)
     return MappedBuffers::gl_no_error;
 }
 
-}  // namespace
+}
 
 MappedBuffers::MappedBuffers(BlockSource &memory, BufferShadows &shadows, DriverLog &log)
     : shadows_(shadows), log_(log), transfer_(shadows), mappings_(memory), persistent_writers_(0u), logged_()
@@ -58,13 +57,11 @@ uint32_t MappedBuffers::map(ClientTransport &wire, uint32_t buffer, int64_t offs
         size = static_cast<int64_t>(known);
     } else {
         glproto::av_glGetNamedBufferParameteri64v(wire, buffer, gl_buffer_size, &size);
-        /* No answer: the host's own error says why, and the name is no buffer. */
         if (size < 0) return gl_invalid_operation;
         shadows_.sized(buffer, static_cast<uint64_t>(size));
     }
     const int64_t mapped = length == whole_buffer ? size : length;
     if (offset > size || mapped > size - offset) return gl_invalid_value;
-    /* A buffer of no bytes has no range to map; past max_length is memory. */
     if (mapped == 0) return gl_invalid_value;
     if (static_cast<uint64_t>(mapped) > BufferMapping::max_length) return gl_out_of_memory;
     BufferMapping *mapping = nullptr;
@@ -178,8 +175,6 @@ void MappedBuffers::report(StateWriter &writer) const
     writer.close();
 }
 
-/* Each mapping is whole and maps a buffer no other one does, and the
- * persistent writers are counted. */
 bool MappedBuffers::invariants_hold() const
 {
     AV_SCOPE("MappedBuffers::invariants_hold");
@@ -220,4 +215,4 @@ void MappedBuffers::log_once()
                "map writes");
 }
 
-}  // namespace av::glicd
+}

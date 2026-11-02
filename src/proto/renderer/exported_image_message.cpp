@@ -129,4 +129,4 @@ Status ExportedImageMessage::decode(const uint8_t *bytes, size_t length, uint32_
     return Status::ok;
 }
 
-}  // namespace av
+}

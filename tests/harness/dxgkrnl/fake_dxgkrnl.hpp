@@ -1,9 +1,3 @@
-/* The dxgkrnl side of the DDI contract, as recovered from dxgkrnl.sys
- * 10.0.26100.9444 (docs/ddi-sequences.md). Registration only for now: the
- * scenario runner that drives DDIs arrives with the first DDIs (feature 006).
- *
- * Status mapping from the NTSTATUS dxgkrnl returns: STATUS_REVISION_MISMATCH ->
- * not_supported, STATUS_OBJECT_NAME_COLLISION -> conflict. */
 #ifndef AV_FAKE_DXGKRNL_HPP
 #define AV_FAKE_DXGKRNL_HPP
 
@@ -22,8 +16,6 @@ public:
     FakeDxgkrnl(const FakeDxgkrnl &) = delete;
     FakeDxgkrnl &operator=(const FakeDxgkrnl &) = delete;
 
-    /* DxgkInitialize: DpiInitializeInternal's checks, then DpiInitializeEx's
-     * one-registration-per-driver-object rule. */
     [[nodiscard]] Status initialize(const DdiTable *table);
 
     RegistrationRule failed_rule() const;
@@ -41,6 +33,6 @@ private:
     DdiSlot          missing_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FAKE_DXGKRNL_HPP
+#endif

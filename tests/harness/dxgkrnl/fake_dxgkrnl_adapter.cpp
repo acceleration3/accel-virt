@@ -17,7 +17,7 @@ namespace {
 constexpr std::int32_t success = 0;
 constexpr std::int32_t invalid_parameter = static_cast<std::int32_t>(0xC000000Du);
 
-}  // namespace
+}
 
 FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunction &function, std::uint8_t index)
     : platform_(platform), function_(function), record_(), device_information_status_(0u),
@@ -70,9 +70,6 @@ FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunc
     record_.DxgkCbQueueDpc = +[](void *handle) {
         return static_cast<FakeDxgkrnlAdapter *>(handle)->queue_dpc();
     };
-    /* What the OS answers about a feature the driver implements: nothing is
-     * enabled until a test says so, as a machine with hardware scheduling off
-     * answers (feature 049). */
     record_.DxgkCbQueryFeatureSupport = +[](DxgkargcbQueryFeatureSupportRecord *request) {
         return static_cast<FakeDxgkrnlAdapter *>(request->DeviceHandle)->query_feature_support(*request);
     };
@@ -101,7 +98,6 @@ std::int32_t FakeDxgkrnlAdapter::query_feature_support(DxgkargcbQueryFeatureSupp
     feature_queries_++;
     request.Enabled = 0u;
     if (feature_query_status_ != 0u) return static_cast<std::int32_t>(feature_query_status_);
-    /* A driver that says its implementation is off gets no from any OS. */
     if (request.DriverSupportState == 0u) return 0;
     request.Enabled = (allowed_features_ & (std::uint64_t{1} << (request.FeatureId % 64u))) != 0u ? 1u : 0u;
     return 0;
@@ -189,7 +185,7 @@ std::uint8_t FakeDxgkrnlAdapter::queue_dpc()
     return 1u;
 }
 
-}  // namespace av
+}
 
 namespace av {
 
@@ -213,9 +209,6 @@ bool FakeDxgkrnlAdapter::child_status_connected(std::uint32_t index) const
 
 void FakeDxgkrnlAdapter::refuse_synchronize(std::uint32_t status) { synchronize_status_ = status; }
 
-/* DxgkCbSynchronizeExecution: the routine runs at device IRQL with the ISR's
- * lock held, so a notification is legal inside it and nowhere else outside the
- * ISR. */
 std::int32_t FakeDxgkrnlAdapter::synchronize_execution(SynchronizeRoutine routine, void *context,
                                                        std::uint32_t, std::uint8_t *returned)
 {
@@ -233,11 +226,6 @@ void FakeDxgkrnlAdapter::notify_interrupt(const DxgkargcbNotifyInterruptDataReco
 {
     if (!synchronized_ && platform_.current_irql() != Irql::isr)
         TestRegistry::instance().record_failure(__FILE__, __LINE__, "DxgkCbNotifyInterrupt outside the ISR");
-    /* dxgkrnl never processes DMA_FAULTED from this adapter: on a GPU MMU
-     * adapter VidSchDdiNotifyInterruptWorker (dxgmms2.sys 26100 @140031b80)
-     * reaches WdLogSingleEntry5(0, 0x119, 0xD, node, engine, fence) for every
-     * one, and a real guest bugchecked 0x119 VIDEO_SCHEDULER_INTERNAL_ERROR
-     * on the first. */
     if (data.InterruptType == dma_faulted) {
         TestRegistry::instance().record_failure(__FILE__, __LINE__,
                                                 "DXGK_INTERRUPT_DMA_FAULTED for fence %u bugchecks 0x119/0xD",
@@ -269,4 +257,4 @@ void FakeDxgkrnlAdapter::on_notify_dpc(DpcSink sink, void *context)
     dpc_sink_context_ = context;
 }
 
-}  // namespace av
+}

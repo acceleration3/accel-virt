@@ -10,15 +10,12 @@ PitchedRows::PitchedRows(uint8_t *base, uint64_t pitch, uint64_t bytes)
     AV_SCOPE("PitchedRows::PitchedRows");
 }
 
-/* Rows only read from: nothing is ever written through them. */
 PitchedRows::PitchedRows(const uint8_t *base, uint64_t pitch, uint64_t bytes)
     : base_(nullptr), source_(base), pitch_(pitch), bytes_(base == nullptr ? 0u : bytes)
 {
     AV_SCOPE("PitchedRows::PitchedRows");
 }
 
-/* row * pitch cannot wrap: a row past the memory is refused before it is
- * multiplied by more than the memory's size allows. */
 bool PitchedRows::holds(uint32_t row, uint64_t line) const
 {
     AV_SCOPE("PitchedRows::holds");
@@ -44,4 +41,4 @@ uint32_t PitchedRows::copy_lines(const PitchedRows &from, uint32_t rows, uint64_
     return row;
 }
 
-}  // namespace av
+}

@@ -51,7 +51,6 @@ VkResult Presentation::surface_support(VkSurfaceKHR surface, VkBool32 *supported
     AV_SCOPE("Presentation::surface_support");
     *supported = VK_FALSE;
     if (surfaces_.window_of(surface) == nullptr) return VK_ERROR_SURFACE_LOST_KHR;
-    /* Every queue presents: the copy runs on the queue it is handed. */
     *supported = VK_TRUE;
     return VK_SUCCESS;
 }
@@ -113,12 +112,8 @@ VkResult Presentation::create_swapchain(VkDevice device, const VkSwapchainCreate
         log_.write("a swapchain is refused: its surface names no window");
         return VK_ERROR_SURFACE_LOST_KHR;
     }
-    /* Retired first, whether or not the new one is made, as Vulkan has it:
-     * the old one's slot of the window's chain is given back before the new
-     * one opens the chain again. */
     if (Swapchain *const old = find(device, info->oldSwapchain); old != nullptr) old->retire();
     Swapchain *chain = nullptr;
-    /* Room to name it first, so a swapchain made always has a handle. */
     if (swapchains_.reserve(swapchains_.count() + 1u) != Status::ok ||
         chains_made_.create(chain, windows_, chains_, entries_, device, host_device, physical, kmt_, log_, *connection,
                             presents_) !=
@@ -169,7 +164,6 @@ VkResult Presentation::present(VkQueue queue, const VkPresentInfoKHR *info)
     VkResult answer = VK_SUCCESS;
     for (uint32_t index = 0u; index < info->swapchainCount; index++) {
         Swapchain *const chain = find(VK_NULL_HANDLE, info->pSwapchains[index]);
-        /* The semaphores are waited on once, by the first copy. */
         const uint32_t   waits = index == 0u ? info->waitSemaphoreCount : 0u;
         const VkResult   result = chain != nullptr
                                       ? chain->present(queue, info->pImageIndices[index], waits, info->pWaitSemaphores)
@@ -230,7 +224,6 @@ void Presentation::report(StateWriter &writer) const
     writer.close();
 }
 
-/* The surfaces hold, and every swapchain a slot has holds. */
 bool Presentation::invariants_hold() const
 {
     AV_SCOPE("Presentation::invariants_hold");
@@ -242,7 +235,6 @@ bool Presentation::invariants_hold() const
     return whole && swapchains_.invariants_hold();
 }
 
-/* A swapchain this table made, of `device` unless no device is named. */
 Swapchain *Presentation::find(VkDevice device, VkSwapchainKHR swapchain)
 {
     AV_SCOPE("Presentation::find");
@@ -258,8 +250,6 @@ void Presentation::destroy(Swapchain *chain)
     static_cast<void>(chains_made_.destroy(chain));
 }
 
-/* An error outranks everything, and the first error is the one kept; a present
- * of this driver answers no other non-zero code. */
 VkResult Presentation::worse(VkResult kept, VkResult result) const
 {
     AV_SCOPE("Presentation::worse");
@@ -267,4 +257,4 @@ VkResult Presentation::worse(VkResult kept, VkResult result) const
     return result < 0 ? result : VK_SUCCESS;
 }
 
-}  // namespace av::icd
+}

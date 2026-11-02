@@ -1,9 +1,3 @@
-/* The CL probe's ClEntry in the guest (feature 052, T030): the Khronos loader
- * beside the probe, called the way any OpenCL application calls it - through
- * the import library src/um/imports/OpenCL.def names, with the API's own
- * types. The user-event pair is not in that import list, so it is resolved
- * from the loaded module by name, as the GL probe resolves what opengl32 does
- * not export. Translation only. */
 #ifndef AV_UM_WINDOWS_CL_ENTRY_HPP
 #define AV_UM_WINDOWS_CL_ENTRY_HPP
 
@@ -77,18 +71,13 @@ public:
     void release_context(void *context) override;
 
 private:
-    /* An entry of the loaded OpenCL.dll the import library does not name; null
-     * when the loader beside the probe has no such export. */
     template <typename Function>
     Function named(const char *name) const;
 
-    /* The loader this process already bound to, which is where the names the
-     * import library leaves out are found. */
     void *loader_;
-    /* The last binary program_binary fetched, from the process heap. */
     uint8_t *binary_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_WINDOWS_CL_ENTRY_HPP
+#endif

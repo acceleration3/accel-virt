@@ -18,9 +18,6 @@ constexpr GLenum unpack_store[6] = {0x0CF5u, 0x0CF2u, 0x0CF3u, 0x806Du, 0x0CF4u,
 constexpr GLenum gl_rgba = 0x1908u, gl_unsigned_byte = 0x1401u;
 constexpr std::size_t pixel_bytes = 4u;
 
-/* The live host the table's entry points reach: they are GL's own signatures
- * and carry no user pointer. A second host made while one lives takes the
- * table over. */
 GlTransferHost *live = nullptr;
 
 void entry_gen_buffers(GLsizei n, GLuint *names) { live->gen_buffers(n, names); }
@@ -77,7 +74,7 @@ std::uint32_t pattern(GLsizei x, GLsizei y)
     return static_cast<std::uint32_t>(x) | static_cast<std::uint32_t>(y) << 12u | 0xA5000000u;
 }
 
-}  // namespace
+}
 
 GlTransferHost::GlTransferHost()
     : request_(static_cast<std::uint8_t *>(std::calloc(1u, request_bytes))),
@@ -240,7 +237,6 @@ void GlTransferHost::bind_buffer(GLenum target, GLuint name)
         other_binding_ = name;
 }
 
-/* New storage is zeroed, as a driver's fresh storage reads. */
 void GlTransferHost::named_buffer_data(GLuint name, GLsizeiptr size, const void *data)
 {
     Buffer *const buffer = named(name);
@@ -309,7 +305,6 @@ std::size_t GlTransferHost::layout_offset(const Store &store, GLsizei columns, G
            (std::size_t(store.values[4]) + std::size_t(column)) * pixel_bytes;
 }
 
-/* A read into the pack buffer bound starts at the offset `pixels` names. */
 void GlTransferHost::read_pixels(GLint x, GLint y, GLsizei columns, GLsizei rows, GLenum format, GLenum type,
                                  void *pixels)
 {
@@ -395,7 +390,6 @@ TransportResult GlTransferHost::send_sync(std::uint32_t command_id, WireWriter &
     return TransportResult::ok;
 }
 
-/* Every command ran as it was sent: each is its own batch, run at once. */
 void GlTransferHost::end_call()
 {
     blobs_.seal();
@@ -405,4 +399,4 @@ void GlTransferHost::end_call()
 WireArena       &GlTransferHost::decode_arena() { return guest_arena_; }
 ClientBlobArena &GlTransferHost::blobs() { return blobs_; }
 
-}  // namespace av
+}

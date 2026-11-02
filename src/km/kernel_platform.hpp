@@ -1,6 +1,3 @@
-/* The platform on the Windows kernel. Translation only: every member is one
- * kernel call, and none makes a decision - the rules are enforced by
- * MockPlatform in every unit test and by Driver Verifier in the guest. */
 #ifndef AV_KERNEL_PLATFORM_HPP
 #define AV_KERNEL_PLATFORM_HPP
 
@@ -13,12 +10,9 @@ namespace av {
 
 class KernelPlatform final : public Platform {
 public:
-    /* Starts the log's writer thread: DriverEntry constructs the platform at
-     * PASSIVE_LEVEL before anything logs. */
     explicit KernelPlatform(ULONG pool_tag);
     KernelPlatform(const KernelPlatform &) = delete;
     KernelPlatform &operator=(const KernelPlatform &) = delete;
-    /* At unload: the log written out and its thread gone. */
     ~KernelPlatform();
 
     void    *allocate(size_t bytes, Pool pool) override;
@@ -89,55 +83,34 @@ public:
     Status   write_driver_u64(void *physical_device_object, const char *name, uint64_t value) override;
 
 private:
-    /* A view of the pages section behind `pages` in the calling process, of
-     * the access the section handle is opened with and the protection the
-     * view is mapped with. */
     Status map_section_to_process(void *pages, ACCESS_MASK access, ULONG protection, uint64_t &view,
                                   void *&mapping);
 
-    /* The longest registry value name core writes, NUL included. */
     static constexpr size_t value_name_chars = 64u;
 
-    /* What map_to_process and map_pages_to_process hand out and
-     * unmap_from_process takes back: the MDL over the device pages (null for
-     * a view of a pages section), the view it has in the process, and the
-     * process itself, referenced so that it is still the same process - alive
-     * or exited - when the view is taken down. */
     struct ProcessMapping {
         PMDL      mdl;
         PVOID     view;
         PEPROCESS process;
     };
-    /* What allocate_pages keeps ahead of the MDL it hands out, in one block. */
     struct SectionPages {
         PVOID section;
         PVOID system_view;
     };
-    /* An MDL's byte count is a ULONG. */
     static constexpr uint64_t max_mapping_bytes = 0xFFFFF000u;
-    /* The first address a 32-bit process cannot hold. */
     static constexpr uint64_t wow64_address_limit = uint64_t{1} << 32u;
 
-    /* `mdl`, whose pages its caller wrote and marked locked, mapped into the
-     * calling process; the mapping owns the MDL from then on, and frees it
-     * whatever the answer. */
     Status map_mdl_to_process(PMDL mdl, uint64_t bytes, MEMORY_CACHING_TYPE caching, uint64_t &view, void *&mapping);
 
-    /* ZwSetValueKey on the device's driver key, opened for the one write. */
     Status write_driver_value(void *physical_device_object, const char *name, ULONG type, const void *bytes,
                               ULONG size);
 
-    /* Indexed by Pool, so choosing a pool is a lookup rather than a branch. */
     static constexpr POOL_FLAGS pool_flags_[] = {POOL_FLAG_NON_PAGED, POOL_FLAG_PAGED};
     ULONG        pool_tag_;
-    /* Not the core SpinLock inside: this object implements that contract, so
-     * its own logging cannot route through it. */
     DebugPortLog log_;
-    /* The trace table's bugcheck registration (docs/trace.md): non-paged, as
-     * the kernel keeps it on its list until it is deregistered. */
     KBUGCHECK_CALLBACK_RECORD bugcheck_record_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_KERNEL_PLATFORM_HPP
+#endif

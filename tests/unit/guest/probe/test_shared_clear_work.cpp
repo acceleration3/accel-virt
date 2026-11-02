@@ -1,11 +1,3 @@
-/* Render targets shared between processes, the size of a captured window,
- * cleared and read over a scripted Direct3D 11: every step in order, each
- * target's last texel its own colour, and the device still standing - and
- * the failures a host showed: a GPU that loses the device clearing rows no
- * multiple of 128 bytes, as NVIDIA's did under a Windows.Graphics.Capture
- * window capture, and rows read from where the writer did not put them. A
- * refusal at each call is kept as its HRESULT, and the device is released
- * whatever happened. */
 #include "guest/probe/shared_clear_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
@@ -29,7 +21,7 @@ struct SharedClearWorkProbe {
     }
 };
 
-}  // namespace av
+}
 
 using av::GuestReport;
 using av::MockKmt;
@@ -69,7 +61,7 @@ private:
     ScenarioSteps       steps_;
 };
 
-}  // namespace
+}
 
 TEST(shared_clear_work, every_target_is_cleared_to_its_colour_and_read_at_its_last_texel)
 { SharedRig rig;
@@ -80,35 +72,28 @@ TEST(shared_clear_work, every_target_is_cleared_to_its_colour_and_read_at_its_la
   CHECK(std::strstr(report, "ok d3d11.shared_texels 3") != nullptr);
   CHECK(std::strstr(report, "ok d3d11.shared_device_kept") != nullptr);
   CHECK(std::strstr(report, "avd3d11probe: 5 passed, 0 failed") != nullptr);
-  /* The capture that lost the device, 2456 bytes a row. */
   CHECK_EQ(rig.d3d11().width(0u), 614u);
   CHECK_EQ(rig.d3d11().height(0u), 289u);
   CHECK_EQ(rig.d3d11().calls(Call::create_target), SharedClearWork::targets);
   CHECK_EQ(rig.d3d11().calls(Call::clear), SharedClearWork::targets);
   CHECK_EQ(rig.d3d11().calls(Call::read_texel), SharedClearWork::targets);
-  /* The last read was the single texel's only one. */
   CHECK_EQ(rig.d3d11().last_x(), 0u);
   CHECK_EQ(rig.d3d11().last_y(), 0u);
   CHECK_EQ(rig.d3d11().calls(Call::release), 1u);
-  /* No target's tight rows are a multiple of 128 bytes: each is a pitch
-   * NVIDIA's driver chose and its 3D engine could not clear. */
   for (const std::uint32_t width : SharedClearWork::widths)
       CHECK((width * SharedClearWork::texel_bytes) % 128u != 0u); }
 
-/* What NVIDIA's GPU did: the first clear of a target whose rows are not
- * 128-byte aligned lost the device, so nothing reads back. */
 TEST(shared_clear_work, a_device_lost_by_a_clear_fails_the_readback_with_its_hresult)
 { SharedRig rig;
   rig.d3d11().lose_device_below(128u);
   const char *report = rig.run();
   CHECK(std::strstr(report, "ok d3d11.shared_targets") != nullptr);
   CHECK(std::strstr(report, "FAIL d3d11.shared_readback") != nullptr);
-  CHECK(std::strstr(report, "2289696773") != nullptr);   /* DXGI_ERROR_DEVICE_REMOVED */
+  CHECK(std::strstr(report, "2289696773") != nullptr);
   CHECK(std::strstr(report, "shared_texels") == nullptr);
   CHECK(std::strstr(report, "avd3d11probe: 2 passed, 1 failed") != nullptr);
   CHECK_EQ(rig.d3d11().calls(Call::read_texel), 1u); }
 
-/* A host that rounds the rows up to 256 bytes clears every target. */
 TEST(shared_clear_work, rows_a_pitch_the_gpu_draws_at_lose_nothing)
 { SharedRig rig;
   rig.d3d11().lose_device_below(4u);
@@ -116,8 +101,6 @@ TEST(shared_clear_work, rows_a_pitch_the_gpu_draws_at_lose_nothing)
   CHECK(std::strstr(report, "ok d3d11.shared_device_kept") != nullptr);
   CHECK(std::strstr(report, "avd3d11probe: 5 passed, 0 failed") != nullptr); }
 
-/* Rows read from other than where they were written miss the last texel of
- * every target taller than a row: the single texel is still right. */
 TEST(shared_clear_work, rows_out_of_place_fail_the_texels_with_the_targets_right)
 { SharedRig rig;
   rig.d3d11().misplace_rows();
@@ -125,7 +108,6 @@ TEST(shared_clear_work, rows_out_of_place_fail_the_texels_with_the_targets_right
   CHECK(std::strstr(report, "FAIL d3d11.shared_texels status=7 1") != nullptr);
   CHECK(std::strstr(report, "ok d3d11.shared_device_kept") != nullptr); }
 
-/* A device that went away without a read noticing is still a failure. */
 TEST(shared_clear_work, a_device_removed_after_the_reads_fails_the_last_step)
 { SharedRig rig;
   rig.d3d11().fail(Call::removed_reason, 1u, ScriptedD3d11Shared::device_hung);

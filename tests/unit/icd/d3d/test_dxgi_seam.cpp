@@ -1,10 +1,3 @@
-/* The DXGI seam, slot by slot (contracts/dxgi_seam.md). There is no DXGI
- * export: the table arrives inside CreateDevice, and which of the seven arms
- * of DXGI_DDI_BASE_ARGS is live follows from the DDI interface version the
- * runtime asked for. Every one of the 22 slots is filled, and the answer each
- * gives is judged here rather than assumed - a capability this adapter does
- * not have answers S_OK with the capability at zero, and a capability a later
- * feature will fill answers E_NOTIMPL. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/fake_d3d_runtime.hpp"
 #include "harness/icd/umd_rig.hpp"
@@ -33,13 +26,9 @@ struct UmdRootProbe {
     static void release(UmdRoot &root, void *block) { root.forget_device(block); }
 };
 
-}  // namespace av::d3d
+}
 
 namespace {
-
-/* Slot numbers as dxgiddi.h declares them; the table is written in that order
- * and the thunks are called through it, so a slot in the wrong place fails
- * here. */
 enum Slot : std::uint32_t {
     present = 0u,
     gamma_caps = 1u,
@@ -65,9 +54,6 @@ enum Slot : std::uint32_t {
     reclaim_resources1 = 21u,
 };
 
-/* The slots a later feature fills: the presents and copies the device's own
- * driver answers, and the multiplane presents and reserved slots, which the
- * runtime never calls on an adapter reporting one plane. */
 constexpr std::uint32_t later_slots[] = {present,   set_display_mode, resource_residency, rotate_identities,
                                          blt,       resolve_shared,   blt1,               reserved1,
                                          present_overlay, reserved2,  present1,           present_overlay1};
@@ -107,10 +93,6 @@ public:
     Dxgi161DdiBaseFunctionsRecord &table() { return table_; }
     DxgiDdiBaseCallbacksRecord    &callbacks() { return callbacks_; }
 
-    /* The slot at `index`, called with `args`, through the table the driver
-     * wrote - which is how the runtime calls it. Templated on the argument
-     * type because each slot takes its own, and calling one through a
-     * different signature is undefined even when the layouts agree. */
     template <typename Args>
     Hresult call(std::uint32_t index, Args *args)
     {
@@ -133,7 +115,7 @@ private:
     int                           um_ = 0;
 };
 
-}  // namespace
+}
 
 TEST(dxgi_seam, a_published_table_has_no_null_slot)
 { Device device;
@@ -144,8 +126,6 @@ TEST(dxgi_seam, a_published_table_has_no_null_slot)
   CHECK(device.device()->dxgi().revision() == DxgiBaseTable::Revision::wddm_3_2);
   CHECK(device.device()->dxgi().invariants_hold()); }
 
-/* The pointer, not the rows: the runtime may move a callback whenever no
- * thread is inside the driver, so what the driver keeps must follow. */
 TEST(dxgi_seam, the_callbacks_are_kept_as_the_pointer_the_runtime_gave)
 { Device device;
   CHECK_EQ(device.adopt(), hr_ok);
@@ -170,9 +150,6 @@ TEST(dxgi_seam, a_create_with_no_dxgi_callbacks_or_no_table_publishes_nothing)
   CHECK(without_table.device() == nullptr);
   CHECK(without_table.rig().root().invariants_hold()); }
 
-/* Writing 22 slots into the struct a narrower revision names would write past
- * the runtime's memory, so a version this driver does not serve is refused
- * before the first store. */
 TEST(dxgi_seam, an_interface_this_driver_does_not_serve_publishes_nothing)
 { Device device;
   device.create().Interface = FakeD3dRuntime::d3d11_interface - 1u;
@@ -181,9 +158,6 @@ TEST(dxgi_seam, an_interface_this_driver_does_not_serve_publishes_nothing)
   for (std::uint32_t slot = 0u; slot < DxgiBaseTable::wddm_3_2_slots; slot++) CHECK(slots[slot] == nullptr);
   CHECK(device.rig().root().invariants_hold()); }
 
-/* DxgiBaseTable::until_later is what all twelve of them are, so the one that
- * says so is checked directly too: a slot's refusal must not depend on the
- * thunk that reached it. */
 TEST(dxgi_seam, until_later_refuses_with_the_entry_it_was_asked_for)
 { Device device;
   CHECK_EQ(device.adopt(), hr_ok);
@@ -196,8 +170,6 @@ TEST(dxgi_seam, until_later_refuses_with_the_entry_it_was_asked_for)
   CHECK_EQ(device.device()->dxgi().until_later(&args, "pfnBlt"), hr_dxgi_device_removed);
   CHECK_EQ(device.rig().log().holding("device removed, pfnBlt answers 0x887A0005"), 1u); }
 
-/* The residency answers, asked of the table directly: a removed device
- * answers its removal before anything is judged, as every slot does. */
 TEST(dxgi_seam, offer_resources_accepts_and_a_removed_device_answers_its_removal)
 { Device device;
   CHECK_EQ(device.adopt(), hr_ok);
@@ -223,7 +195,6 @@ TEST(dxgi_seam, every_slot_a_later_feature_fills_answers_not_implemented)
   args.hDevice = device.block();
   for (const std::uint32_t slot : later_slots) {
       CHECK_EQ(device.call(slot, &args), hr_not_impl);
-      /* A refusal is not a removal: the device is still usable. */
       CHECK(!device.device()->removal().removed());
   }
   CHECK(device.rig().root().invariants_hold()); }
@@ -244,7 +215,6 @@ TEST(dxgi_seam, the_gamma_slot_answers_no_control_points_without_touching_the_ar
   CHECK_EQ(device.call(Slot::gamma_caps, &args), hr_ok);
   CHECK_EQ(caps.header.ScaleAndOffsetSupported, 0);
   CHECK_EQ(caps.header.NumGammaControlPoints, 0u);
-  /* The 1025-entry array behind those four fields is the runtime's. */
   for (const float point : caps.points) CHECK(point == 7.5f);
 
   args.pGammaCapabilities = nullptr;
@@ -280,8 +250,6 @@ TEST(dxgi_seam, the_overlay_slots_answer_no_planes_and_no_groups)
   space.Supported = 1;
   CHECK_EQ(device.call(Slot::overlay_color_space, &space), hr_ok);
   CHECK_EQ(space.Supported, 0);
-  /* What avgpu's planes show: the scanout's RGB in the desktop's space, and
-   * NV12 or YUY2 video in a BT.601 or BT.709 YCbCr space. */
   struct Case {
       std::uint32_t format, colour_space;
       std::int32_t  supported;
@@ -306,7 +274,6 @@ TEST(dxgi_seam, the_present_duration_slot_answers_no_custom_duration)
   CHECK_EQ(device.call(Slot::present_duration, &args), hr_ok);
   CHECK_EQ(args.ClosestSmallerDuration, 0u);
   CHECK_EQ(args.ClosestLargerDuration, 0u);
-  /* What the runtime asked for is the runtime's and is not rewritten. */
   CHECK_EQ(args.DesiredPresentDuration, 166667u); }
 
 TEST(dxgi_seam, the_advisory_slots_accept_and_do_nothing)
@@ -317,9 +284,6 @@ TEST(dxgi_seam, the_advisory_slots_accept_and_do_nothing)
   CHECK_EQ(device.call(Slot::resource_priority, &args), hr_ok);
   CHECK_EQ(device.call(Slot::trim_residency, &args), hr_ok); }
 
-/* An offered resource keeps its contents, so reclaiming one never reports it
- * discarded. Answered E_NOTIMPL, an offer removed the device, and explorer
- * made a new one some two hundred times a second. */
 TEST(dxgi_seam, offered_resources_are_reclaimed_with_their_contents)
 { Device device;
   CHECK_EQ(device.adopt(), hr_ok);
@@ -336,7 +300,7 @@ TEST(dxgi_seam, offered_resources_are_reclaimed_with_their_contents)
   CHECK_EQ(device.call(Slot::reclaim_resources, &reclaim), hr_ok);
   CHECK_EQ(discarded[0], 0);
   CHECK_EQ(discarded[1], 0);
-  reclaim.pDiscarded = nullptr;   /* optional */
+  reclaim.pDiscarded = nullptr;
   CHECK_EQ(device.call(Slot::reclaim_resources, &reclaim), hr_ok);
   reclaim.pResources = nullptr;
   CHECK_EQ(device.call(Slot::reclaim_resources, &reclaim), hr_invalid_arg);
@@ -360,8 +324,6 @@ TEST(dxgi_seam, offered_resources_are_reclaimed_with_their_contents)
   reclaim1.hDevice = nullptr;
   CHECK_EQ(device.call(Slot::reclaim_resources1, &reclaim1), hr_invalid_arg); }
 
-/* A slot reached with a device handle this driver never wrote names nothing,
- * and must not be followed. */
 TEST(dxgi_seam, a_slot_called_with_a_foreign_device_is_refused)
 { Device device;
   CHECK_EQ(device.adopt(), hr_ok);
@@ -377,15 +339,11 @@ TEST(dxgi_seam, a_slot_called_with_a_foreign_device_is_refused)
   CHECK_EQ(device.call(Slot::present, &args), hr_invalid_arg);
   CHECK_EQ(device.call(Slot::present, static_cast<DxgiDdiArgRecord *>(nullptr)), hr_invalid_arg); }
 
-/* Once the device is gone every slot answers the removal code, and the reason
- * is logged once however many slots ask. */
 TEST(dxgi_seam, a_removed_device_answers_its_removal_code_from_every_slot)
 { Device device;
   CHECK_EQ(device.adopt(), hr_ok);
   if (device.device() == nullptr) return;
   device.device()->removal().remove(hr_dxgi_device_reset);
-  /* A second cause does not overwrite the first: GetDeviceRemovedReason must
-   * name what happened, not what happened last. */
   device.device()->removal().remove(hr_dxgi_device_removed);
   CHECK_EQ(device.device()->removal().later_causes(), 1u);
 
@@ -398,8 +356,6 @@ TEST(dxgi_seam, a_removed_device_answers_its_removal_code_from_every_slot)
   DxgiDdiArgGetGammaControlCapsRecord gamma = {};
   gamma.hDevice = device.block();
   gamma.pGammaCapabilities = nullptr;
-  /* Removed is answered before the argument is judged: there is nothing to
-   * fill for a device that is gone. */
   CHECK_EQ(device.call(Slot::gamma_caps, &gamma), hr_dxgi_device_reset);
 
   CHECK_EQ(device.rig().log().holding("device removed, pfnPresent answers 0x887A0007"), 1u);

@@ -1,13 +1,3 @@
-/* A D3DKMT the in-process transport runs against the loopback device core
- * (feature 043, L4): allocations are guest memory the device reads by physical
- * address, and a virtual context is set up, as the miniport sets one up, on a
- * ring, fence page and reply slot this shim allocates, publishes as guest
- * blobs and hands the process by escape, before it sends CTX_CREATE and the
- * setup over the device's control channel. A submission stores
- * the tail its descriptor ends at in the ring header and rings the context's
- * doorbell, as the miniport does; a wait blocks on its fence-queue interrupt. It is the
- * ClientTransport's `Kmt` so KmtTransport, and the generated client above it,
- * reach the real device core in one process. */
 #ifndef AV_LOOPBACK_KMT_HPP
 #define AV_LOOPBACK_KMT_HPP
 
@@ -24,7 +14,6 @@ public:
     static constexpr std::uint32_t max_allocations = 32u;
     static constexpr std::uint32_t max_contexts    = 8u;
     static constexpr std::uint32_t first_resource  = 0x00100000u;
-    /* What the one adapter answers, whatever is asked. */
     static constexpr std::uint64_t luid            = 0x0000000100000001ull;
     static constexpr std::uint64_t budget          = std::uint64_t{64} << 20u;
 
@@ -69,8 +58,6 @@ public:
     Status   free_gpu_virtual_address(std::uint32_t adapter, std::uint64_t address, std::uint64_t pages) override;
     Status   wait_for_fence(std::uint32_t device, std::uint32_t fence_object, std::uint64_t fence) override;
     Status   create_context(std::uint32_t device, std::uint32_t &context) override;
-    /* Feature 049's hardware-scheduled context is the full-stack rig's: this
-     * one submits through the kernel path it always has. */
     Status   create_hw_queue_context(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
                                      std::uint32_t &context) override;
     Status   create_context_virtual(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
@@ -79,11 +66,6 @@ public:
     Status   submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length,
                     const std::uint8_t *private_data, std::uint32_t private_size) override;
     Status   wait_for_context(std::uint32_t device, std::uint32_t context) override;
-    /* Feature 049's doorbells are not modelled here: this rig is the one below
-     * the doorbell - it publishes tails and rings the device's own page itself
-     * - so a process asking for a hardware queue is answered not_supported and
-     * submits the way it always has. The full-stack rig is where a user-mode
-     * store is driven end to end. */
     Status   create_hw_queue(std::uint32_t device, std::uint32_t context, GuestHwQueue &queue) override;
     Status   submit_to_hw_queue(std::uint32_t queue, std::uint64_t commands, std::uint64_t length,
                                 const std::uint8_t *private_data, std::uint32_t private_size,
@@ -97,7 +79,6 @@ public:
     Status   notify_work_submission(std::uint32_t doorbell) override;
 
     Status   wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
-    /* No display: nothing to read, and a pacer keeps its own schedule. */
     Status   scan_line(std::uint32_t adapter, std::uint32_t source, BeamPosition &position) override;
     Status   refresh_millihz(std::uint32_t adapter, std::uint32_t source, std::uint32_t &millihz) override;
     Status   escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
@@ -116,22 +97,18 @@ private:
     };
     struct Context {
         std::uint32_t handle;
-        /* The driver's memory the context runs on; handle 0. */
         Allocation    ring;
         Allocation    fence;
         Allocation    reply;
         std::uint32_t doorbell;
         std::uint32_t blobs[3];
-        std::uint32_t seen;   /* fence-line raises seen before the pending submit */
+        std::uint32_t seen;
     };
 
     Allocation *find_allocation(std::uint32_t handle);
     Context    *find_context(std::uint32_t handle);
-    /* One control request through the device; true when it answered OK_NODATA. */
     bool        control(const std::uint8_t *request, std::size_t length);
     bool        publish(std::uint32_t resource_id, const Allocation &allocation);
-    /* `bytes` of zeroed guest memory, as the driver allocates a context's; no
-     * view for none. */
     Allocation  make_memory(std::uint64_t bytes);
     void        free_memory(Allocation &memory);
     void        free_context_memory(Context &context);
@@ -148,6 +125,6 @@ private:
     std::uint32_t  next_doorbell_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_LOOPBACK_KMT_HPP
+#endif

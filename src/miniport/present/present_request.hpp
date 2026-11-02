@@ -1,7 +1,3 @@
-/* One DxgkDdiPresent: a PresentCommand and as many of its sub-rectangles as the
- * DMA buffer holds, addressing the allocations the operation reads or writes
- * through patch locations or, for a context with GPU virtual addressing, by
- * their GPU virtual addresses. Every field is checked before a byte moves. */
 #ifndef AV_PRESENT_REQUEST_HPP
 #define AV_PRESENT_REQUEST_HPP
 
@@ -22,12 +18,7 @@ public:
     PresentRequest(const PresentRequest &) = delete;
     PresentRequest &operator=(const PresentRequest &) = delete;
 
-    /* Advances pDmaBuffer, and pPatchLocationListOut when patching, past what it wrote. When
-     * only some sub-rectangles fit, answers STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER
-     * with MultipassOffset naming the first one left. */
     NtStatus present();
-    /* Which operation the flags name: invalid_parameter unless it is one this
-     * driver presents. The caller that moves the pixels asks (feature 046). */
     [[nodiscard]] Status operation(PresentOperation &operation) const;
 
 private:
@@ -36,13 +27,10 @@ private:
         flag_color_fill = 0x2u,
         flag_flip = 0x4u,
         flag_flip_with_no_wait = 0x8u,
-        /* The flip of an MPO present, once the adapter claims overlay planes
-         * (DXGCONTEXT::PresentMultiPlaneOverlay3): carried out by the MPO3
-         * DDI like any flip here. */
         flag_flip_with_multiplane_overlay = 0x1000u,
     };
-    enum : uint32_t { source_index = 1u, destination_index = 2u };   /* DXGK_PRESENT_*_INDEX */
-    static constexpr uint32_t insufficient_dma_buffer = 0xC01E0001u;   /* STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER */
+    enum : uint32_t { source_index = 1u, destination_index = 2u };
+    static constexpr uint32_t insufficient_dma_buffer = 0xC01E0001u;
 
     [[nodiscard]] Status validate(PresentOperation operation, const PresentAddressing &addressing) const;
 
@@ -50,6 +38,6 @@ private:
     DxgkargPresentRecord &request_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_PRESENT_REQUEST_HPP
+#endif

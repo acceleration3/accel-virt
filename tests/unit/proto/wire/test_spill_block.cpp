@@ -1,6 +1,3 @@
-/* A writer's room past what it was lent (docs/protocol.md, "Long commands"):
- * a block from a BlockSource that doubles as the writer outgrows it, keeps
- * what was written across every grow, and goes back whole. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -28,7 +25,6 @@ TEST(spill_block, grows_from_a_lent_room_keeping_every_byte_written)
   CHECK(writer.spilled());
   CHECK_EQ(writer.offset(), 300000u);
   CHECK(writer.bytes() == spill.bytes());
-  /* Doubled from its least, so a few grows were enough for all of it. */
   CHECK(spill.capacity() >= 300000u);
   CHECK(spill.capacity() < 600000u);
   std::uint32_t wrong = 0u;
@@ -42,7 +38,6 @@ TEST(spill_block, grows_from_a_lent_room_keeping_every_byte_written)
   CHECK_EQ(spill.capacity(), 0u);
   CHECK(spill.invariants_hold()); }
 
-/* What the writer had in the lent room is copied before the room is left. */
 TEST(spill_block, a_grow_copies_what_was_in_the_room)
 { MockPlatform platform;
   SpillBlock   spill(platform);
@@ -54,7 +49,6 @@ TEST(spill_block, a_grow_copies_what_was_in_the_room)
   CHECK(capacity >= 10u);
   CHECK_EQ(grown[0], 1u);
   CHECK_EQ(grown[3], 4u);
-  /* What it grows from may be its own block, which it gives back. */
   std::uint8_t *const again = spill.grow(grown, 4u, capacity + 1u, capacity);
   CHECK(again != nullptr);
   CHECK_EQ(again[2], 3u);
@@ -72,7 +66,6 @@ TEST(spill_block, no_memory_is_a_writer_that_latches_too_large)
   CHECK(!writer.spilled());
   CHECK_EQ(writer.offset(), 4u);
   CHECK(writer.bytes() == room);
-  /* A spill with no memory at all grows nothing. */
   SpillBlock  none;
   std::size_t capacity = 1u;
   CHECK(none.grow(room, 0u, 1u, capacity) == nullptr);

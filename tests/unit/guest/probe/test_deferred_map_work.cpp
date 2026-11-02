@@ -1,10 +1,3 @@
-/* Dark Souls Remastered's deferred-context frames over a scripted Direct3D
- * 11: every step in order, the frames alternating between two contexts, and
- * the two verdicts - the bytes the last frame's maps wrote, which only an
- * executed list may carry, and the memory the measured frames committed,
- * which a driver that keeps what each deferred map took grows by a MiB a
- * frame, as avumd did until the guest ran out. A refusal at each call is
- * kept as its HRESULT, and the device is released whatever happened. */
 #include "guest/probe/deferred_map_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
@@ -28,7 +21,7 @@ struct DeferredMapWorkProbe {
     }
 };
 
-}  // namespace av
+}
 
 using av::DeferredMapWork;
 using av::DeferredMapWorkProbe;
@@ -42,7 +35,6 @@ namespace {
 
 void *const window = reinterpret_cast<void *>(0x9011u);
 constexpr std::uint32_t frames = DeferredMapWork::warm_frames + DeferredMapWork::measured_frames;
-/* The first finish of a measured frame, and the last finish of all. */
 constexpr std::uint32_t first_measured = DeferredMapWork::warm_frames + 1u;
 
 class DeferredRig {
@@ -73,7 +65,7 @@ private:
     ScenarioSteps         steps_;
 };
 
-}  // namespace
+}
 
 TEST(deferred_map_work, every_frame_is_recorded_on_the_two_contexts_in_turn_and_every_step_passes)
 { DeferredRig rig;
@@ -103,9 +95,6 @@ TEST(deferred_map_work, every_frame_is_recorded_on_the_two_contexts_in_turn_and_
   CHECK_EQ(rig.d3d11().calls(Call::read_geometry), 1u);
   CHECK_EQ(rig.d3d11().calls(Call::release), 1u); }
 
-/* What the game did to avumd: every frame's deferred map of the geometry
- * buffer kept a MiB the runtime's destroy never gave back. The growth is
- * reported in KiB. */
 TEST(deferred_map_work, a_mebibyte_kept_every_measured_frame_fails_the_commit_with_the_growth)
 { DeferredRig rig;
   rig.d3d11().commit_at_finish(first_measured,
@@ -115,8 +104,6 @@ TEST(deferred_map_work, a_mebibyte_kept_every_measured_frame_fails_the_commit_wi
   CHECK(std::strstr(report, "FAIL d3d11.deferred_commit status=7 307200") != nullptr);
   CHECK(std::strstr(report, "avd3d11probe: 6 passed, 1 failed") != nullptr); }
 
-/* The limit is what the measured frames may commit, inclusive: one byte over
- * it fails. */
 TEST(deferred_map_work, growth_up_to_the_limit_passes_and_a_byte_more_fails)
 { { DeferredRig rig;
     rig.d3d11().commit_at_finish(frames, static_cast<std::int64_t>(DeferredMapWork::most_growth));
@@ -127,8 +114,6 @@ TEST(deferred_map_work, growth_up_to_the_limit_passes_and_a_byte_more_fails)
   const char *report = rig.run();
   CHECK(std::strstr(report, "FAIL d3d11.deferred_commit status=7 16384") != nullptr); }
 
-/* What the warm frames commit - the runtime's and the driver's first
- * allocations - is not measured, and memory given back is no growth. */
 TEST(deferred_map_work, warm_frames_are_not_measured_and_memory_given_back_is_no_growth)
 { { DeferredRig rig;
     rig.d3d11().commit_at_finish(DeferredMapWork::warm_frames, std::int64_t{1} << 30u);
@@ -139,8 +124,6 @@ TEST(deferred_map_work, warm_frames_are_not_measured_and_memory_given_back_is_no
   const char *report = rig.run();
   CHECK(std::strstr(report, "ok d3d11.deferred_commit 0") != nullptr); }
 
-/* A NO_OVERWRITE write that never reaches the buffer leaves only the
- * discarding map's piece right. */
 TEST(deferred_map_work, appends_that_are_lost_fail_the_contents_with_the_bytes_right)
 { DeferredRig rig;
   rig.d3d11().lose_appends();
@@ -148,8 +131,6 @@ TEST(deferred_map_work, appends_that_are_lost_fail_the_contents_with_the_bytes_r
   CHECK(std::strstr(report, "FAIL d3d11.deferred_contents status=7 64") != nullptr);
   CHECK(std::strstr(report, "ok d3d11.deferred_commit 0") != nullptr); }
 
-/* A list run in place of the one executed shows the frame before: no byte
- * of the head is the last frame's. */
 TEST(deferred_map_work, an_execute_that_runs_the_list_before_fails_the_contents)
 { DeferredRig rig;
   rig.d3d11().lag_executes();
@@ -188,7 +169,6 @@ TEST(deferred_map_work, a_refusal_at_each_call_stops_the_run_there)
   }
 }
 
-/* A frame refused stops the frames there: none after it is drawn. */
 TEST(deferred_map_work, a_refused_frame_is_the_last_drawn)
 { DeferredRig rig;
   rig.d3d11().fail(Call::execute, 10u, static_cast<std::int32_t>(0x887A0005));

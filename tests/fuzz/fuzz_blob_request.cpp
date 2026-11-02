@@ -1,6 +1,3 @@
-/* The blob request decoders over attacker-chosen bytes: whatever they accept
- * must read the fields from exactly the documented offsets, and consume no
- * more than the request holds. */
 #include "core/support/status.hpp"
 #include "proto/virtio_gpu/blob_request.hpp"
 #include "proto/virtio_gpu/create_blob_request.hpp"
@@ -21,7 +18,7 @@ std::uint64_t field(const std::uint8_t *data, std::size_t offset, std::size_t wi
     return value;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

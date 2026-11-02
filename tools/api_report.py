@@ -29,12 +29,11 @@ sys.path.insert(0, str(ROOT / "tools"))
 from d3d11_report import STYLE, cell  # noqa: E402
 
 APIS = {"d3d11": "D3D11", "d3d12": "D3D12", "opengl": "OpenGL", "vulkan": "Vulkan", "opencl": "OpenCL"}
-GOAL = 0.9                 # the VM's share of the host's speed every sample should reach
-RUN_TIMEOUT = 3 * 3600     # one API's whole run; a hung one must not hold the rest
+GOAL = 0.9
+RUN_TIMEOUT = 3 * 3600
 
 
 def run(api, args):
-    """One API's report tool into <out>/<api>; its outcome for the page."""
     out = args.out / api
     out.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, "-B", str(ROOT / "tools" / f"{api}_report.py"), "--work", str(args.work),

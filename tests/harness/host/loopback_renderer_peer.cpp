@@ -21,7 +21,6 @@ LoopbackRendererPeer::Process::Process(MockHost &qemu, const AvExecutorOps &exec
     host.forward_requests();
 }
 
-/* The renderer going away: its contexts, then the regions it mapped. */
 LoopbackRendererPeer::Process::~Process()
 {
     service.shut_down();
@@ -60,9 +59,6 @@ LoopbackRendererPeer::~LoopbackRendererPeer()
     process_.destroy();
 }
 
-/* A start that finds the renderer never spoken to is the first process's
- * own; any later one replaces it, and what the old one would have answered
- * dies with it. */
 void LoopbackRendererPeer::started()
 {
     if (!spoken_to_) return;
@@ -161,4 +157,4 @@ MockHost &LoopbackRendererPeer::host()
     return process_.object().host;
 }
 
-}  // namespace av
+}

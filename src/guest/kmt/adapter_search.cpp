@@ -48,4 +48,4 @@ uint32_t AdapterSearch::adapter() const
     return adapter_;
 }
 
-}  // namespace av
+}

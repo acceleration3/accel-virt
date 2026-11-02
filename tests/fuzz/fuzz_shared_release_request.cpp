@@ -1,6 +1,3 @@
-/* The shared-release decoder over attacker-chosen bytes: whatever it accepts
- * holds a non-zero id read from offset 24, and it consumes exactly the
- * request's 32 bytes. */
 #include "core/support/status.hpp"
 #include "proto/virtio_gpu/shared_release_request.hpp"
 #include "proto/wire/wire_reader.hpp"

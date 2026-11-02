@@ -1,46 +1,4 @@
 #!/usr/bin/env python3
-"""A qemu-system-x86_64 with a scripted Windows guest behind it, for the runner's
-tests: it parses the command line tools/guest/run_guest_suite.py builds,
-serves QMP and a guest agent on the sockets it names, writes the debug-port
-log, and answers guest-exec and guest-file-read from a script.
-
-The script is JSON at $FAKE_GUEST_SCRIPT:
-  stages     {"sign": [3010, 0], ...}: exit codes of successive calls of a stage
-  outputs    {"check": "...", "avtest": "..."}: standard output by stage, or by
-             program for the ones in PROGRAMS
-  files      {"C:\\guest\\path": "content"}: what guest-file-read returns, byte
-             per character (latin-1), so a dump's binary header can be scripted
-  avtest, avvkprobe, avglprobe, avclprobe, avd3d9probe, avd3d11probe, avd3d12probe,
-             vulkaninfo, reg, deqp-vk
-             exit code of that program; one run as `cmd.exe /c PROGRAM > FILE`
-             leaves its output in FILE
-  panic      {"during": stage, "code": n, "loop": bool}: the guest bugchecks when
-             the stage runs, then reboots; with loop, it bugchecks on every boot
-             until QEMU is started again without virtio-gpu-av-pci
-  die_during stage: QEMU aborts with an assertion when the stage runs
-  refuse     ["guest-suspend-ram", ...]: agent commands answered with an error
-  window_status  "0xc0000017" or null: what the driver logs for the host
-             window a device with hostmem= has; null takes the line away, as a
-             capset without the host-visible bit does
-  inspect    {"list": text, "trace": base64, "state": text, "kernel-trace":
-             base64, "kernel-state": text}: what avinspect.exe writes at its
-             --out path; trace answers are whole snapshot files, state answers
-             are wrapped as snapshot kind 2 (docs/trace.md); a command not
-             scripted exits 1 and writes nothing
-  powershell {"substring": "output"}: `powershell -File F` prints the output of
-             the first key found in the script pushed to F
-  console_user   who is logged into the console session, which the runner asks
-             for before it makes a scheduled task (feature 046); "" is nobody
-  console_running  how many `schtasks /query` answers say Running before the
-             task is Ready
-  trace_memory {"address": n, "b64": ...}: what pmemsave reads from guest
-             physical memory at that address
-  answer_delay seconds the agent takes over every answer, so two clients of
-             one connection are waiting at once
-  exit_at_boot, agent_silent, garbage, no_reset, hang, pmemsave_nothing:
-             misbehaviours
-Everything the guest was asked is appended to $FAKE_GUEST_JOURNAL.
-"""
 import base64
 import json
 import os
@@ -55,15 +13,12 @@ REBOOT = 0.3
 ASSERTION = "qemu-system-x86_64: ../source/hw/pci/msix.c:122: msix_fire_vector_notifier: Assertion `ret >= 0' failed."
 LOOP_PERIOD = 0.5
 HOSTMEM_BAR = 4
-"""The BAR virtio-gpu-pci registers the host window in."""
 INSPECTOR = "avinspect"
 SNAPSHOT_STATE = 2
 HOSTMEM_BASE = 0xC0000000
-"""Where this fake's guest programmed that BAR."""
 MODERN_BAR_BASE = 0xB0000000
 PROGRAMS = ("avtest", "avvkprobe", "avglprobe", "avclprobe", "avd3d9probe", "avd3d11probe",
             "avd3d12probe", "vulkaninfo", "reg", "deqp-vk")
-"""The programs the runner starts itself rather than through provision.ps1."""
 
 
 def option(argv, flag, kind=None):
@@ -74,7 +29,6 @@ def option(argv, flag, kind=None):
 
 
 def argument(arguments, name):
-    """The value after `name` in a provision.ps1 argument list."""
     return arguments[arguments.index(name) + 1] if name in arguments else ""
 
 
@@ -86,7 +40,6 @@ def field(spec, name):
 
 
 def size_property(value):
-    """A QEMU size property - "256M" - in bytes; 0 where the device has none."""
     return int(value[:-1]) << 20 if value else 0
 
 
@@ -139,28 +92,22 @@ class Guest:
             self.emit("RESET")
 
     def display_modes(self):
-        """Every mode the guest is offered; the default is what a 1280x800
-        display holds."""
         return self.script.get("modes", ["640x480", "800x600", "1024x768", "1280x720", "1280x800",
-                                         "1920x1080"])   # Windows lists more than the driver offers
+                                         "1920x1080"])
 
     def mode_stage(self, name, arguments):
-        """The display stages: what the guest's mode list says, and what a
-        switch does to the scanout the host sees."""
         if name == "modes":
             width, height = self.script.get("screendump", [1280, 800])[:2]
             lines = [f"mode: {mode}" for mode in self.display_modes()]
             return 0, "\n".join(lines + [f"current: {width}x{height}"]) + "\n"
         size = f"{argument(arguments, '-Width')}x{argument(arguments, '-Height')}"
         if size not in self.display_modes() or self.script.get("setmode_refused"):
-            return 0, "set: -2\n"   # DISP_CHANGE_BADMODE
+            return 0, "set: -2\n"
         if not self.script.get("screendump_fixed"):
             self.script["screendump"] = [int(part) for part in size.split("x")]
         return 0, "set: 0\n"
 
     def shell(self, arguments):
-        """cmd.exe /c PROGRAM ARG... > FILE 2>&1: the program runs as the agent
-        would run it, and what it printed becomes FILE for a pull."""
         line = arguments[1] if len(arguments) == 2 and arguments[0] == "/c" else ""
         command, _, redirect = line.partition(" > ")
         target = redirect.removesuffix(" 2>&1")
@@ -173,11 +120,6 @@ class Guest:
         return dict(ran, **{"out-data": ""})
 
     def schtasks(self, arguments):
-        """schtasks /create|/run|/query|/delete, as ConsoleProgram drives it: a
-        program run in the console session (feature 046). /run executes the .cmd
-        the task names, which the runner pushed, so its output lands in the file
-        that .cmd redirects to - exactly as a run through cmd.exe does.
-        """
         verb = arguments[0].lstrip("/").lower() if arguments else ""
         name = option(arguments, "/tn")
         if verb == "create":
@@ -210,7 +152,6 @@ class Guest:
         return {"exited": True, "exitcode": 1, "out-data": "", "err-data": ""}
 
     def inspect(self, arguments):
-        """avinspect.exe COMMAND ... --out F: the scripted answer lands in F."""
         answers = self.script.get("inspect", {})
         command = arguments[0] if arguments else ""
         target = arguments[arguments.index("--out") + 1] if "--out" in arguments[:-1] else None
@@ -228,7 +169,6 @@ class Guest:
         return {"exited": True, "exitcode": 0, "out-data": "", "err-data": ""}
 
     def powershell_script(self, arguments):
-        """powershell -File F, F pushed by the caller: the scripted output for it."""
         pushed = self.written.get(arguments[arguments.index("-File") + 1], b"").decode("latin-1")
         for needle, output in self.script.get("powershell", {}).items():
             if needle in pushed:
@@ -337,17 +277,12 @@ class Guest:
             self.note(command)
             if command in self.script.get("refuse", []):
                 return json.dumps({"error": {"class": "GenericError", "desc": f"{command} is not supported"}}).encode()
-            # Down before the socket closes: a wakeup that arrives while this
-            # is still deciding must not be undone by it.
             self.up = False
             connection.close()
             if command == "guest-suspend-disk":
-                # S4 leaves the machine off; the runner boots the overlay again.
                 self.emit("SHUTDOWN")
                 os._exit(0)
             self.suspended = True
-            # QEMU says when the machine has actually entered S3, which is what
-            # a wakeup has to wait for.
             self.emit("SUSPEND")
             return None
         if command == "guest-shutdown":
@@ -398,8 +333,6 @@ class Guest:
                     return
 
     def pci_devices(self):
-        """What QEMU says about the bus: the runner reads the hostmem BAR's
-        guest physical address out of it, having no config space of its own."""
         regions = [{"bar": 2, "address": MODERN_BAR_BASE, "size": 0x4000, "type": "memory",
                     "prefetch": False, "mem_type_64": True}]
         if self.hostmem:
@@ -409,8 +342,6 @@ class Guest:
                                         "regions": regions}]}]
 
     def memory_image(self, address, size):
-        """The host's own view of a guest physical range: zeros, but for the
-        trace table the script puts there."""
         image = bytearray(size)
         traced = self.script.get("trace_memory")
         if traced is not None and address == traced["address"]:
@@ -419,9 +350,6 @@ class Guest:
         return bytes(image[:size])
 
     def qmp_command(self, request):
-        """screendump writes a PPM of the scripted size, as QEMU would; input
-        events wake a display the power policy turned off; pmemsave hands out
-        the host's own read of guest physical memory."""
         if request.get("execute") == "query-pci":
             return self.pci_devices()
         if request.get("execute") == "pmemsave":
@@ -450,12 +378,10 @@ class Guest:
         with open(path, "wb") as dump:
             dump.write(f"P6\n{width} {height}\n255\n".encode())
             if self.script.get("screendump_placeholder") or self.script.get("screendump_dark"):
-                # QEMU's "display output is not active": grey text on black.
                 pixels = bytearray(b"\x00" * (width * height * 3))
                 pixels[:2052] = b"\xaa" * 2052
                 dump.write(bytes(pixels))
             else:
-                # Not one flat colour: vary per pixel, as a real frame does.
                 bytes_needed = width * height * 3
                 ramp = bytes(range(frame & 0xFF, 256)) + bytes(range(frame & 0xFF))
                 dump.write((ramp * (bytes_needed // len(ramp) + 1))[:bytes_needed])
@@ -499,9 +425,6 @@ def main():
     hostmem = size_property(field(option(argv, "-device", "virtio-gpu-av-pci") or "", "hostmem"))
     guest = Guest(script, os.environ["FAKE_GUEST_JOURNAL"], device, hostmem)
     guest.note("argv " + " ".join(argv))
-    # What the device's executor was told to do, as the runner set it: the
-    # environment is how a test executor is steered without a rebuild, and
-    # how the Vulkan layer that loses a device is loaded into it.
     work = os.path.dirname(os.environ["FAKE_GUEST_JOURNAL"])
     with open(os.path.join(work, "work", "environment.json"), "w") as out:
         json.dump({name: value for name, value in os.environ.items() if name.startswith(("AV_ECHO_", "VK_INSTANCE_LAYERS", "VK_ADD_LAYER_PATH"))}, out)
@@ -517,15 +440,10 @@ def main():
         lines = script.get("driver_log", ["avgpu: DriverEntry",
                                           "avgpu: aperture map segment 1 offset 0 pages 1000 status 0",
                                           "avgpu: vsync 600 periods in 100000000 ticks, 600 reported, enabled 0 times"])
-        # A device with a window makes the driver say what came of setting it
-        # up, whatever else the scenario had it log, because the line belongs
-        # to the device rather than to the run.
         status = script.get("window_status", "0x00000000")
         if hostmem and status is not None:
             lines = lines + [f"avgpu: host window status {status}"]
         log.write("".join(line + "\n" for line in lines) if device else "")
-    # A driver goes on logging while the run reads: what it says every 120
-    # blanks arrives long after the line before it.
     late = script.get("driver_log_late", [])
     if device and late:
         threading.Thread(target=append_later, daemon=True,

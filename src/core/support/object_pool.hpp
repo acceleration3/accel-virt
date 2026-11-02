@@ -1,13 +1,3 @@
-/* Objects of one type whose count has no fixed bound - devices, allocations -
- * constructed in place in chunks of non-paged memory, each at an address that
- * stays valid until the object is destroyed, so the address can be the handle
- * dxgkrnl passes back. One of the two places a placement-new expression may
- * appear (constitution III; tools/check_design.py).
- *
- * find accepts any address and answers null unless it is a live object of this
- * pool: a handle from outside is checked before it is trusted. The pool takes
- * no lock; its owner serializes it, usually under a mutex, so creating and
- * destroying are legal up to APC. */
 #ifndef AV_OBJECT_POOL_HPP
 #define AV_OBJECT_POOL_HPP
 
@@ -67,7 +57,6 @@ public:
         return Status::ok;
     }
 
-    /* Legal at DISPATCH: it neither allocates nor releases. */
     T *find(void *address) const
     {
         AV_SCOPE("ObjectPool::find");
@@ -98,10 +87,6 @@ public:
         }
     }
 
-    /* The first live object `matches`, or null: a table that names its objects
-     * by something of their own - an id rather than a handle - has no address
-     * to hand find(), and reaching one through for_each would mean casting
-     * away the const it visits with. Legal at DISPATCH, as for_each is. */
     template <typename Predicate>
     T *find_if(Predicate matches)
     {
@@ -122,7 +107,6 @@ public:
         destroy_if([](const T &) { return true; });
     }
 
-    /* Whether every live object satisfies `holds`; for invariants, so legal at DISPATCH. */
     template <typename Predicate>
     bool all_of(Predicate holds) const
     {
@@ -136,7 +120,6 @@ public:
         return true;
     }
 
-    /* Every live object to `visit`, in pool order; legal at DISPATCH. */
     template <typename Visitor>
     void for_each(Visitor visit) const
     {
@@ -239,6 +222,6 @@ private:
     friend struct ObjectPoolProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_OBJECT_POOL_HPP
+#endif

@@ -52,8 +52,6 @@ Status VulkanScenario::allocate_memory()
     const VkDevice       device = chain_.device();
     VkMemoryRequirements requirements = {};
     vkproto::av_vkGetBufferMemoryRequirements(transport, chain_.handles(), device, buffer_, &requirements);
-    /* The call answers no result, and a buffer always has somewhere to live:
-     * no memory type at all means the answer never came. */
     if (requirements.memoryTypeBits == 0u) return steps_.check_measured("memory", Status::not_found, 0u);
     VkMemoryAllocateInfo allocate = {};
     allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -66,8 +64,6 @@ Status VulkanScenario::allocate_memory()
     return allocated;
 }
 
-/* A null buffer or memory is the API's own no-op; the device and instance the
- * chain names only if it made them. */
 Status VulkanScenario::destroy()
 {
     AV_SCOPE("VulkanScenario::destroy");
@@ -84,4 +80,4 @@ Status VulkanScenario::destroy()
     return transport.nop(answered);
 }
 
-}  // namespace av
+}

@@ -1,5 +1,3 @@
-/* Reaches into a ScanoutFramebuffer so invariant tests can corrupt it.
- * Declared a friend by ScanoutFramebuffer; nothing outside the tests uses it. */
 #ifndef AV_SCANOUT_FRAMEBUFFER_PROBE_HPP
 #define AV_SCANOUT_FRAMEBUFFER_PROBE_HPP
 
@@ -23,6 +21,6 @@ struct ScanoutFramebufferProbe {
     ScanoutFramebuffer &framebuffer;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCANOUT_FRAMEBUFFER_PROBE_HPP
+#endif

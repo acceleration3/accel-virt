@@ -14,4 +14,4 @@ void SyncTokensProbe::set_stand_in(void *fence) { tokens.stand_in_ = fence; }
 
 RetiredSyncTokens &SyncTokensProbe::retired() { return tokens.retired_; }
 
-}  // namespace av
+}

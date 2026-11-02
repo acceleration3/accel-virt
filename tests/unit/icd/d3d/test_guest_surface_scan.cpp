@@ -1,6 +1,3 @@
-/* The scan of a guest surface's pages against its shadow (GuestSurfaceScan):
- * the band of differing rows, first through last, and the shadow brought
- * level with the pages over exactly that band. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/guest_surface_scan.hpp"
 
@@ -26,7 +23,7 @@ struct Surface {
     }
 };
 
-}  // namespace
+}
 
 TEST(guest_surface_scan, identical_pages_leave_an_empty_band_and_the_shadow_alone)
 { Surface surface;
@@ -82,9 +79,6 @@ TEST(guest_surface_scan, a_surface_of_no_rows_has_no_band)
   CHECK(scan.differing(surface.pages).empty()); }
 
 namespace {
-
-/* Pages and a shadow of `rows` rows of `row_pitch` bytes, the shadow starting
- * `shadow_offset` bytes past a sixteen-byte boundary and the pages `page_offset`. */
 struct Odd {
     alignas(16) std::uint8_t pages_store[1024u];
     alignas(16) std::uint8_t shadow_store[1024u];
@@ -101,7 +95,7 @@ struct Odd {
     bool shadow_equals_pages() const { return std::memcmp(shadow, pages, row_pitch * rows) == 0; }
 };
 
-}  // namespace
+}
 
 TEST(guest_surface_scan, an_unaligned_shadow_and_a_pitch_of_no_multiple_of_sixteen_are_scanned_exactly)
 { const std::size_t pitches[] = {1u, 15u, 17u, 31u, 63u, 65u, 100u, 130u};

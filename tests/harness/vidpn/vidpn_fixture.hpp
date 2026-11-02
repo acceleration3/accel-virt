@@ -1,6 +1,3 @@
-/* What a VidPn DDI needs from dxgkrnl, faked: a platform, an initialized
- * dxgkrnl interface whose DxgkCbQueryVidPnInterface answers a FakeVidPn, and
- * that VidPn, whose leak check runs after anything a test declares. */
 #ifndef AV_VIDPN_FIXTURE_HPP
 #define AV_VIDPN_FIXTURE_HPP
 
@@ -21,7 +18,6 @@ public:
     MockPlatform     &platform();
     DxgkrnlInterface &dxgkrnl();
     FakeVidPn        &vidpn();
-    /* The hVidPn dxgkrnl would pass. */
     void             *handle();
 
 private:
@@ -32,6 +28,6 @@ private:
     FakeVidPn             vidpn_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VIDPN_FIXTURE_HPP
+#endif

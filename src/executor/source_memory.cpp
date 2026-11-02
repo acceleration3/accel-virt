@@ -117,4 +117,4 @@ uint32_t SourceMemory::references() const
     return __atomic_load_n(&references_, __ATOMIC_ACQUIRE);
 }
 
-}  // namespace av
+}

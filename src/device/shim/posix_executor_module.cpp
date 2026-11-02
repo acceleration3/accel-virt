@@ -5,9 +5,6 @@
 #include <dlfcn.h>
 
 namespace av {
-
-/* Closed, never unloaded: a report after this object goes still names the
- * library's own frames only while its code is mapped. */
 PosixExecutorModule::~PosixExecutorModule()
 {
     AV_SCOPE("PosixExecutorModule::~PosixExecutorModule");
@@ -35,4 +32,4 @@ const AvExecutorOps *PosixExecutorModule::ops() const
     return ops_;
 }
 
-}  // namespace av
+}

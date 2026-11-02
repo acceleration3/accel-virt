@@ -1,7 +1,3 @@
-/* The virtio-gpu control commands for contexts the device core answers
- * (docs/protocol.md): the capset queries, context creation and destruction,
- * and SUBMIT_3D carrying a context setup. Every field is checked before a
- * context changes; each answer is one response. Main loop. */
 #ifndef AV_CONTEXT_COMMANDS_HPP
 #define AV_CONTEXT_COMMANDS_HPP
 
@@ -17,7 +13,7 @@ class Host;
 
 class ContextCommands {
 public:
-    enum : uint32_t {   /* VIRTIO_GPU_CMD_* */
+    enum : uint32_t {
         get_capset_info = 0x0108u,
         get_capset = 0x0109u,
         ctx_create = 0x0200u,
@@ -29,7 +25,6 @@ public:
     ContextCommands(const ContextCommands &) = delete;
     ContextCommands &operator=(const ContextCommands &) = delete;
 
-    /* Whether the core answered `request`; false leaves it to the base class. */
     bool answer(ControlRequest &request, uint32_t type);
 
 private:
@@ -44,6 +39,6 @@ private:
     const DeviceCapset &capset_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_CONTEXT_COMMANDS_HPP
+#endif

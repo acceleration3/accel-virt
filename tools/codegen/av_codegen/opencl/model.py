@@ -1,12 +1,3 @@
-"""What a lowered OpenCL command looks like.
-
-The roles are the whole design. cl.xml says ``const cl_event*`` and
-stops; the wire needs to know that the pointer is an array, that
-``num_events_in_wait_list`` counts it, that it may be null, and that
-each element is a handle rather than eight bytes of data. A role
-carries exactly that, and every emitter is a switch over these.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -16,14 +7,10 @@ from ..ir import CType
 
 
 class Role(str, Enum):
-    # Sent as written.
     SCALAR = "scalar"
-    # An object of the API, as the server's own handle.
     HANDLE = "handle"
     HANDLE_ARRAY = "handle_array"
-    # Out: one handle the call produces (the return value uses this too).
     HANDLE_OUT = "handle_out"
-    # Out: an array of handles, with a capacity in and a count out.
     HANDLE_ARRAY_OUT = "handle_array_out"
     SCALAR_ARRAY = "scalar_array"
     SCALAR_OUT = "scalar_out"
@@ -31,29 +18,12 @@ class Role(str, Enum):
     STRING_ARRAY = "string_array"
     BYTES_IN = "bytes_in"
     BYTES_OUT = "bytes_out"
-    # The clGetXInfo trio: a size in, a buffer out, a size out.
     INFO_VALUE = "info_value"
     STRUCT_IN = "struct_in"
     STRUCT_OUT = "struct_out"
-    # An address in the host's own address space, which the guest learnt
-    # from a previous call and may not dereference: a mapped range, or a
-    # shared-virtual-memory allocation. It crosses as a number, and the
-    # server turns it back into a pointer only after satisfying itself that
-    # the address and its extent lie inside something it handed out
-    # (ServerDispatch::svm_for). Unlike a handle it need not name the start
-    # of that something: a kernel argument may point into the middle of an
-    # allocation.
     SVM_POINTER = "svm_pointer"
-    # A zero-terminated key/value list, some of whose values are handles.
     PROPERTIES = "properties"
-    # A zero-terminated flat list. Device partition properties are this
-    # rather than pairs: CL_DEVICE_PARTITION_BY_COUNTS is followed by a
-    # count per sub-device and a zero of its own before the terminator,
-    # so walking it two at a time runs off the end.
     PROPERTY_LIST = "property_list"
-    # Nothing crosses. Callbacks and their user data: a function pointer
-    # is meaningless in the other address space, so the guest keeps it
-    # and calls it itself.
     IGNORED = "ignored"
 
 
@@ -62,22 +32,12 @@ class Param:
     name: str
     type: CType
     role: Role
-    # The parameter that counts this one, for the array roles.
     len_param: str | None = None
-    # For STRING_ARRAY: the parameter holding per-string lengths.
     lengths_param: str | None = None
-    # For INFO_VALUE: the size in and the size out.
     size_param: str | None = None
     size_ret_param: str | None = None
-    # Whether the pointer may be null.
     optional: bool = True
-    # For BYTES_IN and BYTES_OUT: bytes that may already be in the context's
-    # blob arena, which then cross as an offset into it rather than inline.
-    # Only plain data the host copies and never reads for meaning: the guest
-    # can change lent bytes while the host works on them.
     lent: bool = False
-    # The element type for array roles, and the struct name for struct
-    # roles; ``type.base`` with the pointer stripped.
     element: str = ""
 
     @property
@@ -94,9 +54,6 @@ class Command:
     params: list[Param] = field(default_factory=list)
     cmd_id: int = 0
     since: str = ""
-    # A command whose answer the caller does not wait for. The ICD
-    # returns CL_SUCCESS and the failure, if any, surfaces at the next
-    # synchronising call — the same bargain the Vulkan side makes.
     is_async: bool = False
 
     @property
@@ -108,11 +65,6 @@ class Command:
 
     @property
     def returns_address(self) -> bool:
-        """A raw host address, as clSVMAlloc and clEnqueueMapBuffer answer.
-
-        It is neither a handle nor void, and it crosses as a number for the
-        reason SVM_POINTER does: the guest may hold it and hand it back, and
-        may not dereference it."""
         return self.return_type.base == "void" and self.return_type.pointer_depth == 1
 
     @property
@@ -130,5 +82,4 @@ class Registry:
     commands: dict[str, Command] = field(default_factory=dict)
     handles: set[str] = field(default_factory=set)
     structs: dict[str, list[tuple[str, CType]]] = field(default_factory=dict)
-    # Every extension whose commands this build answers, in registry order.
     carried_extensions: list[str] = field(default_factory=list)

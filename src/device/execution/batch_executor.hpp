@@ -1,15 +1,3 @@
-/* Runs one context's batches on its worker (docs/protocol.md): each batch's
- * payload copied once from the ring, walked command by command, the context's
- * API's commands run through its executor in order, the transport's own
- * answered by the device, and the rest skipped, and
- * the answer of the last command that asked for one written to the reply slot
- * before the batch completes. Every command run moves the context's progress,
- * so a long batch reads as busy rather than hung. A command that crossed in
- * pieces, in this batch or across several, is gathered back and run whole
- * when its last piece - the command itself - arrives. A batch running when
- * its context is abandoned stops at the next command: its guest is gone, and
- * a backlog of slow commands - pipelines compiled one after another - would
- * otherwise hold the main loop that joins the worker for as long. */
 #ifndef AV_BATCH_EXECUTOR_HPP
 #define AV_BATCH_EXECUTOR_HPP
 
@@ -42,60 +30,33 @@ public:
     BatchExecutor(const BatchExecutor &) = delete;
     BatchExecutor &operator=(const BatchExecutor &) = delete;
 
-    /* Main loop, at setup: answers go to `reply`, an empty window for a
-     * context without a reply slot. */
     void                 prepare(const BlobWindow &reply);
-    /* Main loop: forgets the reply slot of a setup that failed. */
     void                 withdraw();
-    /* Worker: the executor's answer to being created. */
     [[nodiscard]] Status start();
-    /* Worker. */
     void                 stop();
-    /* Any thread, while the worker is being stopped: the batch running
-     * runs no further command. Undone by the next start. */
     void                 abandon();
     bool                 abandoned() const;
     bool                 started() const;
-    /* Worker: the batch whose header is at `head` of `ring`. ok when every
-     * command ran or was skipped; malformed for commands no producer could
-     * frame, an answer asked for with no reply slot, or a payload the
-     * executor cannot decode; invalid_state for a lost device, no executor,
-     * or a batch abandoned part way. */
-    /* It has a host executor to run batches on: a context whose executor never
-     * opened holds batches that will not run, and nothing waits on them. */
     bool                 ready() const;
-    /* Worker thread, between batches: see AvExecutorOps::poll. Idle with no
-     * executor. */
     HostPoll             poll();
-    /* Worker: see AvExecutorOps::gpu_progress. */
     void                 gpu_progress(uint64_t &marked, uint64_t &reached) const;
-    /* `answering`, when given, is set to where the batch ends as its command
-     * that asks for an answer begins: a synchronous call, its batch's last,
-     * which may wait on the GPU - a read back - for as long as it takes. */
     [[nodiscard]] Status run(const RingWindow &ring, uint64_t head, const BatchHeader &batch,
                              uint64_t *answering = nullptr);
 
-    /* Batches run, whether or not they completed. */
     uint64_t batches() const;
     uint64_t commands() const;
     uint64_t skipped() const;
-    /* Why the last run that failed failed; none before one has. */
     FaultCode fault() const;
 
     bool invariants_hold() const;
 
 private:
-    /* Which fault a failed command is, from the status the executor's answer
-     * became. */
     FaultCode fault_for(Status status) const;
 
     [[nodiscard]] Status run_command(const CommandHeader &header, const uint8_t *payload, bool &answered,
                                      size_t &answer);
-    /* The command `header` names with its whole payload, gathered or not. */
     [[nodiscard]] Status run_whole(const CommandHeader &header, const uint8_t *payload, size_t size, bool &answered,
                                    size_t &answer);
-    /* Records the fault `fault_` now names against `fence` and answers
-     * `status`, so every way a batch can fail leaves one record. */
     [[nodiscard]] Status failed(uint64_t fence, Status status);
     void                 write_reply(uint64_t fence_id, size_t answer);
 
@@ -117,6 +78,6 @@ private:
     friend struct BatchExecutorProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_BATCH_EXECUTOR_HPP
+#endif

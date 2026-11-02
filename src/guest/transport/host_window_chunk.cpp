@@ -14,7 +14,7 @@ namespace {
 
 constexpr uint64_t page_bytes = 4096u;
 
-}  // namespace
+}
 
 HostWindowChunk::HostWindowChunk(GuestConnection &connection, KmtTransport &transport)
     : connection_(connection), transport_(transport), resource_id_(0u), bytes_(0u), view_(nullptr)
@@ -59,7 +59,7 @@ Status HostWindowChunk::take(HostWindowRecord &record)
 {
     AV_SCOPE("HostWindowChunk::take");
     uint8_t          encoded[HostWindowRecord::encoded_size] = {};
-    static_cast<void>(record.encode(encoded, sizeof encoded));   /* the buffer is the encoded size */
+    static_cast<void>(record.encode(encoded, sizeof encoded));
     const Status escaped = send(encoded, sizeof encoded);
     if (escaped != Status::ok) return escaped;
     const Status answered = record.accept_answer(encoded, sizeof encoded);
@@ -79,11 +79,9 @@ Status HostWindowChunk::release()
     resource_id_ = 0u;
     bytes_ = 0u;
     view_ = nullptr;
-    /* The kernel refuses a close on a context the host faulted, and closes
-     * every chunk the context holds as it is destroyed. */
     if (transport_.faulted()) return Status::ok;
     uint8_t encoded[HostWindowRecord::encoded_size] = {};
-    static_cast<void>(close.encode(encoded, sizeof encoded));   /* the buffer is the encoded size */
+    static_cast<void>(close.encode(encoded, sizeof encoded));
     const Status escaped = send(encoded, sizeof encoded);
     if (escaped != Status::ok) return escaped;
     return close.accept_answer(encoded, sizeof encoded);
@@ -114,4 +112,4 @@ bool HostWindowChunk::invariants_hold() const
     return bytes_ != 0u && bytes_ % page_bytes == 0u && view_ != nullptr;
 }
 
-}  // namespace av
+}

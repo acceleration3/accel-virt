@@ -17,7 +17,7 @@ struct WireWriterProbe {
     WireWriter &writer;
 };
 
-}  // namespace av
+}
 
 using av::GuardedBuffer;
 using av::WireWriterProbe;
@@ -107,9 +107,6 @@ TEST(wire_writer_invariants, a_capacity_without_bytes_is_detected)
   WireWriterProbe(writer).drop_bytes();
   CHECK(!writer.invariants_hold()); }
 
-/* What the generated serializers call: fields of the registry's own types by
- * size, runs of bytes, and varints for lengths that are usually small
- * (feature 063). */
 TEST(wire_writer_write_pod, writes_a_field_of_the_registry_s_own_type)
 { struct Extent { std::uint32_t width; std::uint32_t height; };
   std::uint8_t bytes[16] = {};
@@ -132,8 +129,6 @@ TEST(wire_writer_write_pod, a_field_that_does_not_fit_writes_nothing)
   CHECK_EQ(writer.offset(), 0u);
   CHECK_EQ(bytes[0], 0xEEu); }
 
-/* Every varint the writer emits is one the reader takes back, which is the
- * only property either of them owes the other. */
 TEST(wire_writer_write_varint, round_trips_every_width)
 { const std::uint64_t values[] = {0u, 1u, 127u, 128u, 300u, 0xFFFFFFFFu,
                                   0xFFFFFFFFFFFFFFFFull};
@@ -157,9 +152,6 @@ TEST(wire_writer_write_varint, a_varint_that_does_not_fit_writes_nothing)
   CHECK_EQ(writer.offset(), 0u);
   CHECK_EQ(bytes[0], 0xEEu); }
 
-/* An answer that does not fit has to say how much room it wanted, because the
- * device promises the guest a length it can allocate against and then ask
- * again (feature 042, the executor ABI's A7). */
 TEST(wire_writer, says_how_much_room_the_whole_answer_wanted)
 { std::uint8_t frame[8];
   WireWriter writer(frame, sizeof frame);
@@ -167,11 +159,8 @@ TEST(wire_writer, says_how_much_room_the_whole_answer_wanted)
   CHECK_EQ(writer.wanted(), 4u);
   writer.write_u64(2u);
   CHECK_STATUS(writer.status(), Status::too_large);
-  /* Four written, twelve wanted: the rest of the answer is still counted. */
   CHECK_EQ(writer.offset(), 4u);
   CHECK_EQ(writer.wanted(), 12u);
-  /* And what follows a refusal is counted too, so the length is the answer's
-   * and not the prefix that happened to fit. */
   writer.write_u16(3u);
   CHECK_EQ(writer.wanted(), 14u);
   CHECK(writer.invariants_hold()); }
@@ -186,9 +175,6 @@ TEST(wire_writer, an_answer_that_fits_wanted_exactly_what_it_wrote)
   CHECK_EQ(writer.wanted(), 12u); }
 
 namespace {
-
-/* A spill that hands out one block of its own, once, and remembers what it
- * was asked. */
 class OneBlockSpill final : public av::WireSpill {
 public:
     std::uint8_t *grow(const std::uint8_t *written, std::size_t used, std::size_t wanted,
@@ -207,10 +193,8 @@ public:
     std::uint8_t  block_[32] = {};
 };
 
-}  // namespace
+}
 
-/* A field that outgrows the room moves what was written to the spill's and
- * goes on there: bytes() and spilled() say where it all is now. */
 TEST(wire_writer, a_writer_with_a_spill_goes_on_past_its_room)
 { GuardedBuffer buffer(6u);
   OneBlockSpill spill;
@@ -226,16 +210,13 @@ TEST(wire_writer, a_writer_with_a_spill_goes_on_past_its_room)
   CHECK_EQ(writer.offset(), 12u);
   CHECK_EQ(writer.wanted(), 12u);
   for (std::uint8_t index = 0u; index < 12u; ++index) CHECK_EQ(spill.block_[index], index + 1u);
-  /* The lent room was left as it was, and nothing past it was touched. */
   CHECK(buffer.guards_intact());
   CHECK(writer.invariants_hold());
-  /* A spill that refuses is a writer that latches, as one with none does. */
   writer.write_zeros(64u);
   CHECK_STATUS(writer.status(), Status::too_large);
   CHECK_EQ(writer.offset(), 12u);
   CHECK_EQ(spill.asked_, 2u); }
 
-/* A spilled writer's invariant: it spilled into a spill it was given. */
 TEST(wire_writer, a_writer_without_a_spill_never_reads_as_spilled)
 { GuardedBuffer buffer(2u);
   WireWriter    writer(buffer.data(), buffer.size());

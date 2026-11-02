@@ -1,12 +1,3 @@
-/* dxgkrnl's DXGADAPTER for one started adapter: the QueryAdapterInfo calls
- * DXGADAPTER::Initialize @ 1401a2818 makes, in order, and the checks it
- * applies to DXGK_DRIVERCAPS (docs/ddi-sequences.md section 2.4). Every query
- * goes through DXGADAPTER::DdiQueryAdapterInfo's rule: a status other than
- * the four it accepts fails the test.
- *
- * Not modelled: registry and feature-database state (ACG, compute class, UMD
- * name, NativeFence enablement), paravirtualized adapters, and the render and
- * display cores Initialize creates after these checks (features 008, 011). */
 #ifndef AV_FAKE_DXGADAPTER_HPP
 #define AV_FAKE_DXGADAPTER_HPP
 
@@ -29,50 +20,22 @@ public:
 
     FakeDxgadapter(MockPlatform &platform, const DdiTable &table);
 
-    /* Initialize's capability queries and checks for an adapter reporting
-     * `children` outputs; answers the NTSTATUS adapter start fails with. An
-     * adapter with outputs is first asked to prioritize HDR (SetModeBehavior
-     * @ 1401a8d0c, DDI interface >= 0x7000): the answer is only traced, but a
-     * status other than SUCCESS, NO_MEMORY or NOT_SUPPORTED is logged invalid
-     * and a behavior both satisfied and not trips an assertion. From 3.2 an
-     * adapter with outputs must register UpdateMonitorLinkInfo. */
     std::int32_t initialize(void *context, std::uint32_t children);
-    /* The registry value GraphicsDrivers\ValidateWDDMCaps (DXGADAPTER+0xBE0):
-     * only with it does Initialize refuse 1.2/1.3 features below their version
-     * or a full adapter without DirectFlip and FlipIndependent. Off by default. */
     void         validate_wddm_caps();
-    /* DXGADAPTER::DdiQueryAdapterInfo at PASSIVE. */
     std::int32_t query(void *context, std::int32_t type, void *input, std::uint32_t input_size, void *output,
                        std::uint32_t output_size);
-    /* ADAPTER_RENDER::CreateRenderCore @ 1401b13d8 over the table and the last
-     * DRIVERCAPS: no render DDI at all is a display-only adapter (success,
-     * render_adapter() false); some but not all fails with
-     * STATUS_REVISION_MISMATCH naming the first missing slot. The later checks
-     * CreateRenderCore makes (WDDM 1.2 render features, node metadata) arrive
-     * with the features that report those levels. From 2.0 a render adapter
-     * that is not compute-only must report FlipOnVSyncMmIo. */
     std::int32_t create_render_core();
     bool         render_adapter() const;
     DdiSlot      missing_render_slot() const;
-    /* The DRIVERCAPS checks alone, so a test can craft an answer. */
     CapabilityRule validate(const DxgkDriverCapsRecord &caps, std::uint32_t children) const;
 
-    /* DxgkDdiGetNodeMetadata through the table at PASSIVE. */
     std::int32_t node_metadata(void *context, std::uint32_t node, DxgkNodeMetadataRecord &metadata);
-    /* The answer to PHYSICALADAPTERCAPS, or the defaults Initialize derives
-     * from DRIVERCAPS when the driver is below 2.0 or does not answer. */
     const DxgkPhysicalAdapterCapsRecord &physical_adapter_caps() const;
 
-    /* The last ControlModeBehavior answer; zero when the slot is NULL and the
-     * default answered STATUS_NOT_SUPPORTED. */
     const DxgkargControlModeBehaviorRecord &mode_behavior() const;
-    /* DXGK_DISPLAY_DRIVERCAPS_EXTENSION as ADAPTER_DISPLAY::Initialize @ 1403abf44
-     * keeps it for a WDDM 2.0 adapter with outputs: the answer, or when the query
-     * fails, VirtualModeSupport from 2.2 and nothing before. */
     std::uint32_t display_caps_extension() const;
     CapabilityRule              failed_rule() const;
     const DxgkDriverCapsRecord &driver_caps() const;
-    /* Since the last initialize. */
     std::uint32_t               queries() const;
 
 private:
@@ -107,6 +70,6 @@ private:
     DdiSlot               missing_render_slot_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FAKE_DXGADAPTER_HPP
+#endif

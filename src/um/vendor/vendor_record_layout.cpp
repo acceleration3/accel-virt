@@ -1,9 +1,3 @@
-/* Proof that the vendor libraries' records are laid out as their SDKs lay
- * out the structures an application hands them: AMD's Display Library SDK
- * (adl_structures.h) and NVIDIA's NVAPI SDK (nvapi_lite_common.h), both MIT.
- * Neither SDK is in the kit, so the offsets are theirs written down: every
- * field is an int, a char[ADL_MAX_PATH = 256] or an NvU32, with no padding
- * between. A failure here is a compile error in the guest build. */
 #include "icd/vendor/ddi/adl_adapter_info_record.hpp"
 #include "icd/vendor/ddi/adl_versions_info_record.hpp"
 #include "icd/vendor/ddi/adl_versions_info_x2_record.hpp"
@@ -40,4 +34,4 @@ static_assert(offsetof(NvDisplayDriverMemoryInfoRecord, curAvailableDedicatedVid
 static_assert(offsetof(NvDisplayDriverMemoryInfoRecord, dedicatedVideoMemoryEvictionsSize) == 24u,
               "NV_DISPLAY_DRIVER_MEMORY_INFO_V3's own fields");
 
-}  // namespace av::vendor
+}

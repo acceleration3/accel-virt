@@ -6,8 +6,6 @@
 namespace av::icd {
 
 namespace {
-
-/* Where a present's semaphores are waited: the copy is a transfer. */
 constexpr VkPipelineStageFlags present_stages[PresentDevice::max_waits] = {
     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -50,7 +48,7 @@ using Submit = VkResult(VKAPI_PTR *)(VkQueue, uint32_t, const VkSubmitInfo *, Vk
 
 constexpr uint32_t present_family = 0u;
 
-}  // namespace
+}
 
 PresentDevice::PresentDevice(EntryLookup &entries, VkDevice device, VkPhysicalDevice physical)
     : entries_(entries), device_(device), physical_(physical), made_{}, image_count_(0u), buffer_(VK_NULL_HANDLE),
@@ -137,7 +135,6 @@ bool PresentDevice::memory_type(uint32_t mask, VkMemoryPropertyFlags wanted, uin
     AV_SCOPE("PresentDevice::memory_type");
     VkPhysicalDeviceMemoryProperties properties = {};
     call<MemoryProperties>("vkGetPhysicalDeviceMemoryProperties")(physical_, &properties);
-    /* The host's count is the host's: no more types are read than Vulkan has. */
     const uint32_t types =
         properties.memoryTypeCount < VK_MAX_MEMORY_TYPES ? properties.memoryTypeCount : VK_MAX_MEMORY_TYPES;
     for (uint32_t index = 0u; index < types; index++) {
@@ -279,8 +276,6 @@ void PresentDevice::doubt(uint32_t slot)
     if (slot < slots) doubted_[slot] = true;
 }
 
-/* The application's semaphores are the host's: the copy waits on them where
- * the host would have presented. */
 VkResult PresentDevice::run(VkQueue queue, uint32_t wait_count, const VkSemaphore *waits, uint32_t slot)
 {
     AV_SCOPE("PresentDevice::run");
@@ -330,10 +325,6 @@ VkResult PresentDevice::record_copy(VkImage image, VkExtent2D extent, uint32_t s
     return call<End>("vkEndCommandBuffer")(commands);
 }
 
-/* The slot is overwritten whole, so it is taken from UNDEFINED: nothing it
- * held is kept, and no ownership needs taking back from the device that read
- * it last. A copy, not a blit: the slot has the image's channel order, and its
- * bytes cross unconverted. */
 VkResult PresentDevice::record_copy_into(VkImage image, VkImage target, VkExtent2D extent, uint32_t slot)
 {
     AV_SCOPE("PresentDevice::record_copy_into");
@@ -375,9 +366,6 @@ void PresentDevice::transition(VkCommandBuffer commands, VkImage image, VkImageL
                                           0u, nullptr, 0u, nullptr, 1u, &barrier);
 }
 
-/* What the copy wrote made visible beyond this device, and the image handed to
- * the queue of whichever device reads it next, which is what has a driver
- * leave it in a state another driver can read. */
 void PresentDevice::release_to_external(VkCommandBuffer commands, VkImage image, VkImageLayout from,
                                         VkImageLayout to)
 {
@@ -398,8 +386,6 @@ void PresentDevice::release_to_external(VkCommandBuffer commands, VkImage image,
                                           &barrier);
 }
 
-/* A copy the present thread gave up on may still be running: it is waited
- * for, bounded, before what it reads and writes goes. */
 void PresentDevice::release()
 {
     AV_SCOPE("PresentDevice::release");
@@ -409,7 +395,6 @@ void PresentDevice::release()
         if (made != VK_NULL_HANDLE) call<DestroyFence>("vkDestroyFence")(device_, made, nullptr);
         made = VK_NULL_HANDLE;
     }
-    /* A pool's command buffers go with it. */
     if (pool_ != VK_NULL_HANDLE) call<DestroyPool>("vkDestroyCommandPool")(device_, pool_, nullptr);
     if (mapped_ != nullptr) call<Unmap>("vkUnmapMemory")(device_, buffer_memory_);
     if (buffer_ != VK_NULL_HANDLE) call<DestroyBuffer>("vkDestroyBuffer")(device_, buffer_, nullptr);
@@ -441,8 +426,6 @@ uint32_t PresentDevice::images() const
     return image_count_;
 }
 
-/* Every counted image has its memory, none past the count does, and a mapping
- * exists only over read-back memory. */
 bool PresentDevice::invariants_hold() const
 {
     AV_SCOPE("PresentDevice::invariants_hold");
@@ -457,4 +440,4 @@ bool PresentDevice::invariants_hold() const
     return mapped_ == nullptr || buffer_memory_ != VK_NULL_HANDLE;
 }
 
-}  // namespace av::icd
+}

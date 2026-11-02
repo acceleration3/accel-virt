@@ -10,8 +10,6 @@ ExecutorLibrary::ExecutorLibrary() : ops_(nullptr), domain_(0u)
     AV_SCOPE("ExecutorLibrary::ExecutorLibrary");
 }
 
-/* Every operation or none: a table that carries part of its version would be
- * found out one call later, on a worker, with a guest waiting. */
 Status ExecutorLibrary::accept(const AvExecutorOps *ops)
 {
     AV_SCOPE("ExecutorLibrary::accept");
@@ -262,8 +260,6 @@ Status ExecutorLibrary::copy_frame(const SurfacePoint &frame, uint32_t wait_ms, 
     return answer == AV_UNKNOWN ? Status::not_found : Status::not_supported;
 }
 
-/* What a library hands over is only believed as far as AV_EXECUTED: the
- * descriptor in an answer it did not execute is not looked at. */
 bool ExecutorLibrary::export_surface(uint64_t surface, uint32_t flags, AvExportedImage &image) const
 {
     AV_SCOPE("ExecutorLibrary::export_surface");
@@ -291,4 +287,4 @@ bool ExecutorLibrary::sync_surface(uint64_t surface, uint32_t flags, uint64_t &w
     return true;
 }
 
-}  // namespace av
+}

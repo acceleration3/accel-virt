@@ -99,21 +99,16 @@ class KernelPlatformLinks(unittest.TestCase):
         project = KernelProbeProject(
             {"platform": KERNEL_PLATFORM_ROUND_TRIP},
             sources=("src/km/kernel_platform.cpp",
-                     # The log is queued and written to the debug port by its own thread.
                      "src/km/debug_port_log.cpp", "src/core/log/log_queue.cpp",
                      "src/core/support/text_buffer.cpp",
                      "src/core/platform/spin_lock.cpp",
                      "src/core/platform/spin_lock_guard.cpp", "src/core/platform/mutex.cpp",
                      "src/core/platform/mutex_guard.cpp", "src/core/platform/lock_marks.cpp",
-                     # Every function opens a trace scope, and the locks mark the table.
                      "src/core/trace/function_scope.cpp", "src/core/trace/scope_binding.cpp",
                      "src/core/trace/trace_table.cpp", "src/core/trace/trace_layout.cpp",
-                     # A table's layout is laid over the byte range it is given.
                      "src/core/support/byte_range.cpp",
-                     # A table records its events into its ring.
                      "src/core/trace/event_ring.cpp", "src/core/trace/event_ring_layout.cpp",
                      "src/proto/resources/guest_page_list.cpp",
-                     # A page list writes its runs as the device reads them.
                      "src/proto/wire/wire_writer.cpp"),
             include_directories=("src",))
         self.addCleanup(project.remove)

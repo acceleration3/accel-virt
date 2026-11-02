@@ -1,7 +1,3 @@
-/* DXGK_SEGMENTDESCRIPTOR4, one segment of a DXGKQAITYPE_QUERYSEGMENT4 answer.
- * A DDI record: Flags is the DXGK_SEGMENTFLAGS Value, and
- * CpuTranslatedAddress is the 16-byte union with DXGK_CPUHOSTAPERTURE.
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGK_SEGMENT_DESCRIPTOR4_RECORD_HPP
 #define AV_DXGK_SEGMENT_DESCRIPTOR4_RECORD_HPP
 
@@ -28,6 +24,6 @@ struct DxgkSegmentDescriptor4Record {
     uint32_t NumUEFIFrameBufferRanges;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_SEGMENT_DESCRIPTOR4_RECORD_HPP
+#endif

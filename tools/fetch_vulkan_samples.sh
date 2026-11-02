@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Fetch the Vulkan samples the report runs (tools/vulkan_report.py), pinned by
-# hash: Sascha Willems' examples as forked at Voultapher/Vulkan-Samples - the
-# set samples/d3d11 was ported from - and the assimp they load models through.
-# The samples land in third_party/vulkan-samples/Vulkan-Samples with the
-# patches in tools/vulkan-samples-patches applied (a headless swap chain and
-# the hooks samples/vulkan's runner drives); assimp lands unmodified beside it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -25,8 +19,6 @@ if [ -f "$TREE/VERSION" ] && [ "$(cat "$TREE/VERSION")" = "$PINNED" ]; then
     exit 0
 fi
 
-# Prints the cached archive's path, downloading it if absent; a hash mismatch
-# deletes it, so a truncated download never survives to the next run.
 archive() {
     local file=$CACHE/$1 url=$2 want=$3
     mkdir -p "$CACHE"
@@ -56,8 +48,6 @@ tar -xzf "$assimp" -C "$staging"
 for patch in "$PATCHES"/*.patch; do
     patch -d "$staging/Vulkan-Samples-$SAMPLES_COMMIT" -p1 --quiet --forward --no-backup-if-mismatch < "$patch"
 done
-# The samples load each shader's SPIR-V, shipped beside its GLSL, so a shader
-# a patch fixes is compiled again over it.
 for shader in $(sed -n 's#^+++ b/\(data/shaders/.*\.\(vert\|frag\|geom\|tesc\|tese\|comp\)\)$#\1#p' "$PATCHES"/*.patch); do
     glslangValidator -V --quiet -o "$staging/Vulkan-Samples-$SAMPLES_COMMIT/$shader.spv" \
         "$staging/Vulkan-Samples-$SAMPLES_COMMIT/$shader"

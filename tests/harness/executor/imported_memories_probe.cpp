@@ -6,4 +6,4 @@ ImportedMemoriesProbe::ImportedMemoriesProbe(ImportedMemories &target) : memorie
 
 void ImportedMemoriesProbe::set_count(uint32_t count) { memories.count_ = count; }
 
-}  // namespace av
+}

@@ -78,8 +78,6 @@ void GpuIdentity::encode(WireWriter &writer) const
     writer.copy_bytes(static_cast<const uint8_t *>(static_cast<const void *>(name_)), name_bytes);
 }
 
-/* NUL-terminated inside the field, and zero after the terminator, so every
- * accepted name has exactly one encoding. */
 bool GpuIdentity::name_is_canonical() const
 {
     AV_SCOPE("GpuIdentity::name_is_canonical");
@@ -109,4 +107,4 @@ Status GpuIdentity::decode(WireReader &reader)
     return Status::ok;
 }
 
-}  // namespace av
+}

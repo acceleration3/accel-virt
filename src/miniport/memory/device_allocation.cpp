@@ -84,4 +84,4 @@ void DeviceAllocation::view(PointView &view)
     if (view.first_starvation) starved_told_ = true;
 }
 
-}  // namespace av
+}

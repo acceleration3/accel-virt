@@ -24,10 +24,6 @@ private:
     std::uint8_t bytes_[64];
 };
 
-/* Every BAR is decoded, so none of them may read outside the snapshot, but the
- * verdict is BAR 4's alone: this device leaves the other five unassigned, and
- * refusing an unassigned BAR says something about the fixture rather than about
- * the bytes fed. */
 bool rejects(const std::uint8_t *bytes, std::size_t length)
 {
     const PciBaseAddresses bars(bytes, length);
@@ -43,7 +39,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return bars.address(4u, assigned) != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(pci_base_addresses, reads_qemu_virtio_gpu_pci_64_bit_bar_4)
 { FixtureFile fixture("virtio_gpu_pci_config.bin");
@@ -57,7 +53,7 @@ TEST(pci_base_addresses, reads_qemu_virtio_gpu_pci_64_bit_bar_4)
 
 TEST(pci_base_addresses, a_32_bit_memory_bar_drops_its_flag_bits)
 { ConfigHeader header;
-  header.bar(1u, 0xFEA00008u);   /* 32-bit, prefetchable */
+  header.bar(1u, 0xFEA00008u);
   const PciBaseAddresses bars(header.bytes(), 64u);
   std::uint64_t address = 0u;
   CHECK_STATUS(bars.address(1u, address), Status::ok);
@@ -81,9 +77,9 @@ TEST(pci_base_addresses, an_io_bar_is_not_supported)
 
 TEST(pci_base_addresses, a_64_bit_bar_5_and_reserved_types_are_malformed)
 { ConfigHeader header;
-  header.bar(5u, 0xF0000004u);   /* 64-bit with no upper half */
-  header.bar(3u, 0xF0000002u);   /* below-1MB type, reserved since PCI 3.0 */
-  header.bar(4u, 0xF0000006u);   /* type 3, reserved */
+  header.bar(5u, 0xF0000004u);
+  header.bar(3u, 0xF0000002u);
+  header.bar(4u, 0xF0000006u);
   const PciBaseAddresses bars(header.bytes(), 64u);
   std::uint64_t address = 0u;
   CHECK_STATUS(bars.address(5u, address), Status::malformed);
@@ -99,10 +95,10 @@ TEST(pci_base_addresses, a_bar_index_past_five_is_an_invalid_parameter)
 TEST(pci_base_addresses, a_bridge_header_or_a_short_snapshot_is_malformed)
 { ConfigHeader header;
   header.bar(0u, 0xFEA00000u);
-  header.bytes()[0x0Eu] = 0x81u;   /* multi-function, type 1 (bridge) */
+  header.bytes()[0x0Eu] = 0x81u;
   std::uint64_t address = 0u;
   CHECK_STATUS(PciBaseAddresses(header.bytes(), 64u).address(0u, address), Status::malformed);
-  header.bytes()[0x0Eu] = 0x80u;   /* multi-function, type 0: fine */
+  header.bytes()[0x0Eu] = 0x80u;
   CHECK_STATUS(PciBaseAddresses(header.bytes(), 64u).address(0u, address), Status::ok);
   CHECK_STATUS(PciBaseAddresses(header.bytes(), 0x27u).address(0u, address), Status::malformed);
   CHECK_STATUS(PciBaseAddresses(nullptr, 64u).address(0u, address), Status::malformed); }
@@ -114,18 +110,6 @@ TEST(pci_base_addresses_hostile, survives_every_mutation_of_a_real_header)
   const av::HostileSweep sweep(rejects, fixture.bytes(), 64u);
   sweep.run();
   CHECK(sweep.cases_run() > 500u);
-  /* BAR 4 is this device's 64-bit memory window, and it survives a flip only
-   * where the flip cannot reach it: the 14 bytes in front of the header type
-   * (112 bits), the byte behind it (8), the four unassigned BARs (128), the 24
-   * bytes of the header past the BARs (192), and the bit of the header type
-   * byte that the type mask throws away (1). Of the BAR's own low register, the
-   * three bits that make it I/O space, a reserved type or an unassigned 32-bit
-   * BAR are refused and the other five accepted, its remaining three bytes only
-   * moving the address (24); of its high register every flip but the one that
-   * clears the whole address (31). A snapshot shorter than the 40 bytes the
-   * BARs need is refused, the 24 longer truncations still hold them, all-zero
-   * leaves BAR 4 unassigned, all-ones is not a type 0 header, and the untouched
-   * header is the last acceptance. */
   const std::uint32_t acceptable =
       112u + 8u + 128u + 192u + 1u + 5u + 24u + 31u + 24u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

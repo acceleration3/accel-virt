@@ -1,29 +1,15 @@
-# The OpenCL command set the wire carries, and the annotations cl.xml
-# does not.
-#
-# Two things live here. The first is the list: OpenCL has 252 commands
-# in the registry and this carries the ones an application actually
-# reaches for, which is roughly core 1.2 plus what 2.0 promoted. The
-# second is the array metadata. cl.xml has no `len` attribute — it says
-# `const cl_event*` and stops — so anything the inference in lower.py
-# cannot work out from the name and the type is written down here. A
-# command with an unannotated array is a generation error, not a guess.
-
 commands = [
-    # Platform and device
     "clGetPlatformIDs",
     "clGetPlatformInfo",
     "clGetDeviceIDs",
     "clGetDeviceInfo",
 
-    # Context
     "clCreateContext",
     "clCreateContextFromType",
     "clRetainContext",
     "clReleaseContext",
     "clGetContextInfo",
 
-    # Command queue
     "clCreateCommandQueue",
     "clCreateCommandQueueWithProperties",
     "clRetainCommandQueue",
@@ -32,7 +18,6 @@ commands = [
     "clFlush",
     "clFinish",
 
-    # Memory objects
     "clCreateBuffer",
     "clCreateSubBuffer",
     "clCreateImage",
@@ -42,7 +27,6 @@ commands = [
     "clGetImageInfo",
     "clGetSupportedImageFormats",
 
-    # Transfers
     "clEnqueueReadBuffer",
     "clEnqueueWriteBuffer",
     "clEnqueueCopyBuffer",
@@ -53,7 +37,6 @@ commands = [
     "clEnqueueCopyImageToBuffer",
     "clEnqueueCopyBufferToImage",
 
-    # Programs
     "clCreateProgramWithSource",
     "clCreateProgramWithBinary",
     "clRetainProgram",
@@ -63,7 +46,6 @@ commands = [
     "clGetProgramBuildInfo",
     "clUnloadPlatformCompiler",
 
-    # Kernels
     "clCreateKernel",
     "clCreateKernelsInProgram",
     "clRetainKernel",
@@ -73,12 +55,10 @@ commands = [
     "clGetKernelArgInfo",
     "clGetKernelWorkGroupInfo",
 
-    # Execution
     "clEnqueueNDRangeKernel",
     "clEnqueueMarkerWithWaitList",
     "clEnqueueBarrierWithWaitList",
 
-    # Events
     "clWaitForEvents",
     "clGetEventInfo",
     "clCreateUserEvent",
@@ -87,14 +67,6 @@ commands = [
     "clReleaseEvent",
     "clGetEventProfilingInfo",
 
-    # Sharing with OpenGL.
-    #
-    # These carry GL object names, and a GL name means the same thing on
-    # both sides of this wire: the guest's OpenGL driver hands the host's
-    # own names through unchanged. So a texture the application made
-    # through GL is a texture the host's OpenCL can be given directly,
-    # and the sharing is the host's own rather than anything rebuilt
-    # here. See docs/OPENGL.md.
     "clCreateFromGLBuffer",
     "clCreateFromGLTexture",
     "clCreateFromGLTexture2D",
@@ -106,13 +78,10 @@ commands = [
     "clEnqueueReleaseGLObjects",
     "clGetGLContextInfoKHR",
 
-    # Devices that are parts of other devices
     "clRetainDevice",
     "clReleaseDevice",
     "clCreateSubDevices",
 
-    # The rest of the 1.x enqueue surface, including the spellings an
-    # application written against OpenCL 1.1 still uses.
     "clEnqueueTask",
     "clEnqueueMarker",
     "clEnqueueBarrier",
@@ -127,44 +96,31 @@ commands = [
     "clUnloadCompiler",
     "clSetCommandQueueProperty",
 
-    # Programs beyond build: separate compilation, linking, and SPIR-V.
     "clCreateProgramWithIL",
     "clCompileProgram",
     "clLinkProgram",
     "clSetProgramSpecializationConstant",
 
-    # Kernels
     "clCloneKernel",
     "clSetKernelExecInfo",
     "clGetKernelSubGroupInfo",
 
-    # Timers
     "clGetHostTimer",
     "clGetDeviceAndHostTimer",
 
-    # The properties spellings from 2.0 and 3.0
     "clCreateBufferWithProperties",
     "clCreateImageWithProperties",
     "clCreateSamplerWithProperties",
     "clSetDefaultDeviceCommandQueue",
 
-    # Samplers
     "clCreateSampler",
     "clRetainSampler",
     "clReleaseSampler",
     "clGetSamplerInfo",
-    # The rest of 3.0's core. Pipes are memory objects the host makes;
-    # whether a device has them is its own CL_DEVICE_PIPE_SUPPORT.
     "clCreatePipe",
     "clGetPipeInfo",
     "clCreateProgramWithBuiltInKernels",
 
-    # Maps, and coarse-grained shared virtual memory (feature 052). These
-    # are the first commands on this wire to name an address rather than an
-    # object: what crosses is the host's own address, and the server turns
-    # it back into a pointer only after satisfying itself that the address
-    # and its extent lie inside something it handed out. The guest never
-    # dereferences one - the ICD keeps a mirror and translates.
     "clEnqueueMapBuffer",
     "clEnqueueUnmapMemObject",
     "clSVMAlloc",
@@ -175,60 +131,29 @@ commands = [
     "clEnqueueSVMMemFill",
     "clSetKernelArgSVMPointer",
 
-    # An event's completion, told to the guest. No guest function pointer
-    # crosses: the lowering drops the callback and its user data, and the
-    # host side registers one of its own.
     "clSetEventCallback",
 ]
 
-# Commands the driver answers itself and never sends.
-#
-# `cl_khr_external_memory`'s two. The object they name was acquired on the
-# host when the device opened it and stays acquired for its life - the GL
-# context it is imported through is the device's own import vehicle and
-# never draws - so there is no host acquire for these to carry. What is
-# left of their meaning is ordering, which the driver keeps by enqueuing a
-# marker over the wait list, and the argument checking, which is the ICD's
-# own (feature 053, research.md §21).
 driver_implemented = [
     "clEnqueueAcquireExternalMemObjectsKHR",
     "clEnqueueReleaseExternalMemObjectsKHR",
-    # `cl_khr_d3d10_sharing`'s six. Which device an application's DXGI
-    # adapter or Direct3D 10 device is on is a guest question - the LUID of
-    # a guest adapter - and the ICD answers it from the object itself. No
-    # context here is made from a Direct3D 10 device: the device's surfaces
-    # are not the host's to name, so create_context refuses one as a device
-    # this one cannot share with, and the four that act on a sharing
-    # context answer that there is none.
     "clGetDeviceIDsFromD3D10KHR",
     "clCreateFromD3D10BufferKHR",
     "clCreateFromD3D10Texture2DKHR",
     "clCreateFromD3D10Texture3DKHR",
     "clEnqueueAcquireD3D10ObjectsKHR",
     "clEnqueueReleaseD3D10ObjectsKHR",
-    # `cl_khr_d3d11_sharing`'s six (docs/d3d11-sharing.md). The resources are
-    # the application's Direct3D 11 resources, which the host cannot open, so
-    # each cl_mem is an ordinary host buffer or image and the ICD copies the
-    # resource's bytes in at acquire and back at release, through the
-    # application's own device.
     "clGetDeviceIDsFromD3D11KHR",
     "clCreateFromD3D11BufferKHR",
     "clCreateFromD3D11Texture2DKHR",
     "clCreateFromD3D11Texture3DKHR",
     "clEnqueueAcquireD3D11ObjectsKHR",
     "clEnqueueReleaseD3D11ObjectsKHR",
-    # The device's retain and release: the one device is a root device, which
-    # the API keeps no count of.
     "clRetainDevice",
     "clReleaseDevice",
-    # `cl_khr_il_program`'s create: the core clCreateProgramWithIL under the
-    # extension's name, which the ICD answers by name with the core entry.
     "clCreateProgramWithILKHR",
 ]
 
-# Commands the client does not wait for. Reference counting is the
-# obvious set: nothing reads the result, and a failure to release
-# surfaces at the next call that synchronises.
 async = [
     "clRetainContext",
     "clRetainCommandQueue",
@@ -239,18 +164,6 @@ async = [
     "clRetainSampler",
 ]
 
-# ---------------------------------------------------------------------
-# Annotations
-#
-# `role` overrides what lower.py inferred; `len` names the parameter
-# that counts an array. A `len` of "@name" is a helper the emitted code
-# calls with the command's own parameters, for the sizes OpenCL leaves
-# implicit — an image transfer's byte count is region and pitches and
-# the format's bytes per pixel, and no single parameter holds it.
-# ---------------------------------------------------------------------
-
-# Host pointers: the registry writes them non-const, but on a create
-# they are read, not written.
 [params."clCreateBuffer.host_ptr"]
 role = "bytes_in"
 len = "size"
@@ -259,12 +172,6 @@ len = "size"
 role = "bytes_in"
 len = "@image_host_bytes"
 
-# Buffer transfers name their own byte count.
-#
-# A transfer's bytes are `lent`: when the ICD stages them in the context's
-# blob arena - or the application's pointer is in it already, a mapped
-# buffer the arena backs - they cross as an offset into it, and the host
-# reads or writes them there rather than in a copy the command carries.
 [params."clEnqueueReadBuffer.ptr"]
 role = "bytes_out"
 len = "size"
@@ -279,8 +186,6 @@ lent = true
 role = "bytes_in"
 len = "pattern_size"
 
-# Image transfers do not: the count comes from the region, the pitches
-# and the image's own format.
 [params."clEnqueueReadImage.ptr"]
 role = "bytes_out"
 len = "@image_transfer_bytes"
@@ -291,7 +196,6 @@ role = "bytes_in"
 len = "@image_transfer_bytes"
 lent = true
 
-# The work-size triple is counted by work_dim.
 [params."clEnqueueNDRangeKernel.global_work_offset"]
 role = "scalar_array"
 len = "work_dim"
@@ -304,7 +208,6 @@ len = "work_dim"
 role = "scalar_array"
 len = "work_dim"
 
-# Image origins and regions are always three elements.
 [params."clEnqueueReadImage.origin"]
 role = "scalar_array"
 len = "3"
@@ -349,14 +252,10 @@ len = "3"
 role = "scalar_array"
 len = "3"
 
-# A kernel argument is bytes by shape; when it is a memory object the
-# ICD swaps the guest object for the server's handle before it gets
-# here, because only the ICD knows which is which.
 [params."clSetKernelArg.arg_value"]
 role = "bytes_in"
 len = "arg_size"
 
-# Program binaries: an array of pointers, each with its own length.
 [params."clCreateProgramWithBinary.binaries"]
 role = "string_array"
 len = "num_devices"
@@ -368,8 +267,6 @@ role = "ignored"
 [params."clCreateProgramWithSource.lengths"]
 role = "ignored"
 
-# The kernel array out of clCreateKernelsInProgram: a capacity in, a
-# count out, like the device and platform enumerations.
 [params."clCreateKernelsInProgram.kernels"]
 role = "handle_array_out"
 len = "num_kernels"
@@ -380,19 +277,11 @@ role = "bytes_out"
 len = "@image_format_bytes"
 size_ret = "num_image_formats"
 
-# A sub-buffer's "create info" is a cl_buffer_region and nothing else
-# in 1.2, so it travels as that struct rather than as loose bytes.
 [params."clCreateSubBuffer.buffer_create_info"]
 role = "struct_in"
 element = "cl_buffer_region"
 
 
-# ---------------------------------------------------------------------
-# The commands added after the first round
-# ---------------------------------------------------------------------
-
-# Rect transfers: three-element origins and regions, and a host buffer
-# whose size is the region and the pitches between them.
 [params."clEnqueueReadBufferRect.buffer_origin"]
 role = "scalar_array"
 len = "3"
@@ -439,8 +328,6 @@ len = "3"
 role = "scalar_array"
 len = "3"
 
-# A fill colour is four components of whatever the image holds, and the
-# caller knows which.
 [params."clEnqueueFillImage.fill_color"]
 role = "bytes_in"
 len = "@fill_bytes"
@@ -453,8 +340,6 @@ len = "3"
 role = "scalar_array"
 len = "3"
 
-# The 1.1 image creates, which an application of that vintage still
-# calls. Their host pointer is sized by the pitches the caller passed.
 [params."clCreateImage2D.host_ptr"]
 role = "bytes_in"
 len = "@host_bytes"
@@ -471,13 +356,10 @@ len = "size"
 role = "bytes_in"
 len = "@host_bytes"
 
-# SPIR-V, as bytes with a length beside it.
 [params."clCreateProgramWithIL.il"]
 role = "bytes_in"
 len = "length"
 
-# Separate compilation: the headers are programs, and their include
-# names are strings, both counted by num_input_headers.
 [params."clCompileProgram.input_headers"]
 role = "handle_array"
 len = "num_input_headers"
@@ -485,7 +367,6 @@ len = "num_input_headers"
 [params."clCompileProgram.header_include_names"]
 role = "string_array"
 len = "num_input_headers"
-# The parameter after this one is a callback, not a length array.
 lengths = ""
 
 [params."clLinkProgram.input_programs"]
@@ -504,9 +385,6 @@ len = "param_value_size"
 role = "bytes_in"
 len = "input_value_size"
 
-# The GL sharing commands: the arrays they take are the ones every
-# enqueue takes, and the objects are handles like any other.
-
 [params."clEnqueueAcquireGLObjects.mem_objects"]
 role = "handle_array"
 len = "num_objects"
@@ -515,9 +393,6 @@ len = "num_objects"
 role = "handle_array"
 len = "num_objects"
 
-# The properties this one takes are a context's, and they name a GL
-# context the same way clCreateContext's do — so they are translated
-# the same way, by the server.
 [params."clGetGLContextInfoKHR.properties"]
 role = "properties"
 
@@ -527,29 +402,10 @@ role = "scalar_out"
 [params."clGetGLObjectInfo.gl_object_name"]
 role = "scalar_out"
 
-# ---------------------------------------------------------------------
-# 3.0's remaining core
-# ---------------------------------------------------------------------
-
 [params."clCreateProgramWithBuiltInKernels.device_list"]
 role = "handle_array"
 len = "num_devices"
 
-
-# ---------------------------------------------------------------------
-# Addresses (feature 052)
-#
-# A raw void* that names host memory, rather than bytes to copy. The
-# inference sends every non-const one to bytes_out and every const one
-# to bytes_in, and then refuses the command for having no length, which
-# is the right refusal for data and the wrong role for an address.
-#
-# Where a command says how much it will read or write from the address,
-# `len` names it and the server asks svm_for about the extent as well as
-# the address; where it says nothing - a free, an unmap, a kernel
-# argument - there is nothing to bound and the address alone is asked
-# about.
-# ---------------------------------------------------------------------
 
 [params."clEnqueueUnmapMemObject.mapped_ptr"]
 role = "svm_pointer"
@@ -576,8 +432,6 @@ len = "size"
 role = "svm_pointer"
 len = "size"
 
-# The one parameter of the ten the existing machinery already handles:
-# a pattern is bytes, and it says how many.
 [params."clEnqueueSVMMemFill.pattern"]
 role = "bytes_in"
 len = "pattern_size"

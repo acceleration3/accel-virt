@@ -1,12 +1,3 @@
-/* A hostile device driving one guest context: arbitrary answers to its
- * requests, arbitrary heads and fence pages written into its memory, and the
- * driver submitting and serving between them. Whatever the device does, the
- * context stays consistent, writes nothing outside its blocks (ASan), refuses
- * rather than asserts, and tears down.
- *
- * Input: operations of [u8 kind][u8 count][count bytes]: kind 0 answers the
- * next request with the bytes, 1 writes the ring's head, 2 writes the fence
- * page, 3 submits the next batch of `count` bytes, 4 serves, 5 answers OK. */
 #include "core/platform/platform.hpp"
 #include "miniport/av_context/context_memory.hpp"
 #include "miniport/av_context/guest_context.hpp"
@@ -33,7 +24,7 @@ namespace {
 
 constexpr std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {};
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

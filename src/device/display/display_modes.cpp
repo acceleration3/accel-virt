@@ -16,7 +16,6 @@ Status DisplayModes::set(const char *text)
 {
     AV_SCOPE("DisplayModes::set");
     host_.require_main_loop("DisplayModes::set");
-    /* The rate belongs to the display, not to the list a new set of modes replaces. */
     const uint32_t refresh = modes_.refresh_millihz();
     const DisplayModeText told(text);
     Status               found = Status::ok;
@@ -43,4 +42,4 @@ const DisplayModeSet &DisplayModes::current() const
     return modes_;
 }
 
-}  // namespace av
+}

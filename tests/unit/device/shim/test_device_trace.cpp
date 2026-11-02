@@ -1,7 +1,3 @@
-/* The device module's trace services on this host, for real: the table in
- * /dev/shm, the state socket answered through the main-loop handshake, and
- * the crash file with its chaining. One DeviceTrace per process, so one test
- * walks every stage. */
 #include "core/trace/scope_binding.hpp"
 #include "core/trace/scope_name.hpp"
 #include "core/trace/state_reporter.hpp"
@@ -35,10 +31,6 @@ using av::Status;
 using av::TraceSnapshot;
 
 namespace {
-
-/* How the test's main loop answers: at once, or not until the test says it
- * caught up - the routine it was handed meanwhile is kept, as QEMU's main
- * loop keeps a bottom half it has not reached. */
 bool          main_loop_answers = true;
 int           bus_handled = 0;
 AvHostRoutine deferred = nullptr;
@@ -54,7 +46,6 @@ void schedule(AvHostRoutine routine, void *context)
     __atomic_store_n(&deferred, routine, __ATOMIC_RELEASE);
 }
 
-/* The main loop reaches what it was handed while it was not answering. */
 void catch_up()
 {
     const AvHostRoutine routine = __atomic_exchange_n(&deferred, nullptr, __ATOMIC_ACQUIRE);
@@ -85,7 +76,6 @@ void path_for(char *path, std::size_t size, const char *format)
     std::snprintf(path, size, format, static_cast<int>(getpid()));
 }
 
-/* A client's whole exchange with the state socket. */
 std::size_t ask(const char *request, char *answer, std::size_t capacity)
 {
     char path[108];
@@ -114,7 +104,7 @@ std::size_t read_file(const char *path, char *text, std::size_t capacity)
     return got > 0 ? static_cast<std::size_t>(got) : 0u;
 }
 
-}  // namespace
+}
 
 TEST(posix_trace_host, answers_this_thread_and_a_rising_clock)
 { av::PosixTraceHost host;
@@ -188,16 +178,11 @@ TEST(device_trace, serves_its_table_its_state_and_a_crash_file)
   counting.sa_sigaction = &count_bus;
   counting.sa_flags = SA_SIGINFO;
   sigaction(SIGBUS, &counting, nullptr);
-  /* An ignored signal: the chain gives it back and raises it again, which an
-   * ignored disposition drops. */
   signal(SIGILL, SIG_IGN);
-  /* Scopes cost every call they open, so the table is bound only where a
-   * trace is asked for; this test asks. */
   setenv("AV_TRACE_SCOPES", "1", 1);
   services.start(root, &schedule, &forward_crash);
   services.start(root, &schedule, &forward_crash);
 
-  /* The table: in /dev/shm, laid out for this process, bound. */
   char table_path[64];
   path_for(table_path, sizeof table_path, "/dev/shm/av-trace-device-%d");
   const int table_file = open(table_path, O_RDONLY);
@@ -208,15 +193,12 @@ TEST(device_trace, serves_its_table_its_state_and_a_crash_file)
   close(table_file);
   TraceSnapshot snapshot;
   CHECK_STATUS(snapshot.read(bytes, static_cast<std::size_t>(file.st_size)), Status::ok);
-  /* As many as the layout holds: HostTrace asks for more than a table may have. */
   CHECK_EQ(snapshot.slots(), av::TraceLayout(HostTrace::slots).slots());
   CHECK_EQ(snapshot.slots(), static_cast<std::uint32_t>(av::TraceLayout::max_slots));
   CHECK(std::strcmp(snapshot.module(), "device") == 0);
   CHECK_EQ(snapshot.process(), static_cast<std::uint32_t>(getpid()));
   CHECK(av::scope_binding.table() != nullptr);
 
-  /* The socket: a dump, a request it does not know, and a main loop that
-   * never answers. */
   char answer[512];
   ask("state\n", answer, sizeof answer);
   CHECK(std::strcmp(answer, "module/0 devices=0\n") == 0);
@@ -225,11 +207,6 @@ TEST(device_trace, serves_its_table_its_state_and_a_crash_file)
   ask("st", answer, sizeof answer);
   CHECK(std::strcmp(answer, "error unknown request\n") == 0);
   main_loop_answers = false;
-  /* The socket is the host's: avinspector samples every state socket in
-   * /dev/shm, and its request, queued behind the one above that waited for a
-   * newline, can be the one the silent main loop leaves owed. Every client is
-   * then told the previous request is unfinished until the main loop catches
-   * up, and the test asks again once it has. */
   const char *const still_answering = "error the main loop has not finished the previous request\n";
   ask("state\n", answer, sizeof answer);
   for (int attempt = 0; attempt < 10 && std::strcmp(answer, still_answering) == 0; attempt++) {
@@ -238,15 +215,12 @@ TEST(device_trace, serves_its_table_its_state_and_a_crash_file)
       ask("state\n", answer, sizeof answer);
   }
   CHECK(std::strcmp(answer, "error the main loop did not answer within 2 s\n") == 0);
-  /* The routine that never ran is still owed: a request now is refused until
-   * it runs and clears the abandoned one. */
   ask("state\n", answer, sizeof answer);
   CHECK(std::strcmp(answer, "error the main loop has not finished the previous request\n") == 0);
   main_loop_answers = true;
   ask("state\n", answer, sizeof answer);
   CHECK(std::strcmp(answer, "error the main loop has not finished the previous request\n") == 0);
 
-  /* A machine check is QEMU's own: chained, nothing written. */
   char crash_path[64];
   path_for(crash_path, sizeof crash_path, "/dev/shm/crash-device-%d.txt");
   unlink(crash_path);
@@ -256,7 +230,6 @@ TEST(device_trace, serves_its_table_its_state_and_a_crash_file)
   CHECK_EQ(bus_handled, 1);
   CHECK(access(crash_path, F_OK) != 0);
 
-  /* A real crash: recorded, written once with this thread's frames, chained. */
   siginfo_t fault = {};
   fault.si_code = SEGV_MAPERR;
   fault.si_addr = reinterpret_cast<void *>(static_cast<std::uintptr_t>(0x1234u));
@@ -277,18 +250,14 @@ TEST(device_trace, serves_its_table_its_state_and_a_crash_file)
   CHECK(std::strstr(crash, "  #0 device_trace_test::crash irql=0") != nullptr);
   CHECK(std::strstr(crash, "\nnative #0 0x") != nullptr);
   CHECK(std::strstr(crash, "(test_device_trace+0x") != nullptr);
-  /* The walk ends at the last real frame, never at a zero address. */
   CHECK(std::strstr(crash, " 0x0000000000000000\n") == nullptr);
   CHECK_STATUS(snapshot.read(bytes, static_cast<std::size_t>(file.st_size)), Status::ok);
   CHECK_EQ(snapshot.crash_code(), 7u);
   CHECK_EQ(snapshot.crash_address(), 0x1234u);
-  /* A second crash chains but writes nothing more. */
   unlink(crash_path);
   services.crashed(SIGBUS, &fault, nullptr);
   CHECK_EQ(bus_handled, 3);
   CHECK(access(crash_path, F_OK) != 0);
-  /* A signal whose earlier action was not a handler gets it back and is
-   * raised into it: a signal another process sent re-runs nothing. */
   services.crashed(SIGILL, &fault, nullptr);
   struct sigaction now = {};
   sigaction(SIGILL, nullptr, &now);

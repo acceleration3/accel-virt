@@ -1,11 +1,3 @@
-"""The Khronos registries arrive pinned and verified, or they do not arrive.
-
-A registry that changed under a regeneration is a wire change, so the fetch is
-held to the same standard as QEMU's and the Windows kit's: a revision, a hash,
-and nothing unpacked when they disagree. The tests drive the tool against
-local archives through `file://`, which is why the tool takes its sources as
-data rather than baking `https://` into the download path.
-"""
 import hashlib
 import io
 import pathlib
@@ -18,7 +10,6 @@ from tool_run import ROOT, run
 
 FETCH = ROOT / "tools" / "fetch_khronos_registries.py"
 
-# Every one vulkan_core.h v1.4.309 includes, and the common header they include.
 VIDEO_HEADERS = (
     "vulkan_video_codec_av1std.h", "vulkan_video_codec_av1std_decode.h",
     "vulkan_video_codec_av1std_encode.h", "vulkan_video_codec_h264std.h",
@@ -28,8 +19,6 @@ VIDEO_HEADERS = (
 
 
 def archive(root, files):
-    """A .tar.gz laid out the way GitHub's source archives are: one top
-    directory, everything under it."""
     raw = io.BytesIO()
     with tarfile.open(fileobj=raw, mode="w:gz") as tar:
         for name, text in files.items():
@@ -56,7 +45,6 @@ class FetchKhronosRegistries(unittest.TestCase):
               **{f"include/vk_video/{name}": f"// {name}\n" for name in VIDEO_HEADERS}}),
             ("opengl", "OpenGL-Registry-abc",
              {"xml/gl.xml": "<registry><gl/></registry>\n",
-              # The guest is Windows, so the WGL entry points come too.
               "xml/wgl.xml": "<registry><wgl/></registry>\n"}),
             ("opencl", "OpenCL-Docs-3.0",
              {"xml/cl.xml": "<registry><cl/></registry>\n"}),
@@ -67,8 +55,6 @@ class FetchKhronosRegistries(unittest.TestCase):
             self.archives[name] = (path, hashlib.sha256(body).hexdigest())
 
     def pins(self, **overrides):
-        """The pin file the tool reads: one line per registry, as data, so a
-        test can point it at a local archive."""
         lines = []
         for name, (path, digest) in self.archives.items():
             digest = overrides.get(name, digest)
@@ -78,7 +64,6 @@ class FetchKhronosRegistries(unittest.TestCase):
         return pins
 
     def fetch(self, pins=None, **overrides):
-        """Its own cache, so one test's download is not another's answer."""
         return run(FETCH, "--pins", pins or self.pins(**overrides), "--into", self.tree,
                    "--cache", self.scratch / "cache")
 
@@ -95,8 +80,6 @@ class FetchKhronosRegistries(unittest.TestCase):
         self.assertIn("vk.xml", result.stdout)
 
     def test_the_video_headers_vulkan_core_includes_come_with_it(self):
-        """Otherwise a Linux build resolves them from /usr/include, a different
-        version, and the freestanding guest build does not resolve them at all."""
         result = self.fetch()
         self.assertEqual(result.returncode, 0, result.stderr)
         for name in VIDEO_HEADERS:
@@ -115,8 +98,6 @@ class FetchKhronosRegistries(unittest.TestCase):
         self.assertFalse(self.tree.exists())
 
     def test_a_tree_fetched_before_a_file_was_wanted_is_fetched_again(self):
-        """The same pins, but a marker from before the video headers were
-        wanted: the tree lacks them, so it is not already fetched."""
         self.assertEqual(self.fetch().returncode, 0)
         shutil.rmtree(self.tree / "include" / "vk_video")
         pins = [line.split() for line in self.pins().read_text().splitlines()]
@@ -163,9 +144,6 @@ class FetchKhronosRegistries(unittest.TestCase):
         self.assertFalse(self.tree.exists())
 
     def test_the_repository_s_own_pins_name_a_revision_and_a_hash(self):
-        """What ships: three registries and the headers one of them needs, each
-        with a full-length hash and a URL that names a tag or a revision rather
-        than a branch."""
         pins = (ROOT / "tools" / "khronos_pins.txt").read_text().split("\n")
         named = [line.split() for line in pins if line.strip() and not line.startswith("#")]
         self.assertEqual({entry[0] for entry in named},

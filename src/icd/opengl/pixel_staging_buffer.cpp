@@ -13,8 +13,6 @@ PixelStagingBuffer::PixelStagingBuffer() : name_(0u), staged_(Staged::nothing)
     AV_SCOPE("PixelStagingBuffer::PixelStagingBuffer");
 }
 
-/* Bytes the command carries itself, or a lease lends whole, need no buffer.
- * A size past what intptr_t holds is a negative one cast: never staged. */
 bool PixelStagingBuffer::stage_upload(ClientTransport &wire, const void *pixels, size_t bytes)
 {
     AV_SCOPE("PixelStagingBuffer::stage_upload");
@@ -83,11 +81,10 @@ uint32_t PixelStagingBuffer::name() const
     return name_;
 }
 
-/* A transfer is only ever staged in a buffer the host named. */
 bool PixelStagingBuffer::invariants_hold() const
 {
     AV_SCOPE("PixelStagingBuffer::invariants_hold");
     return staged_ == Staged::nothing || name_ != 0u;
 }
 
-}  // namespace av::glicd
+}

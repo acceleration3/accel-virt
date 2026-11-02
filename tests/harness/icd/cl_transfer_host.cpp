@@ -13,8 +13,6 @@ namespace {
 
 constexpr std::uint32_t nobody = ~std::uint32_t{0};
 
-/* The wait list and the event flag every enqueue ends with; this host makes
- * no events, so a command that asks for one is one it cannot answer. */
 bool read_tail(WireReader &payload)
 {
     std::uint64_t waits = 0u;
@@ -31,7 +29,7 @@ bool read_triple(WireReader &payload, std::uint64_t *into)
     return payload.read_varint(into[0]) && payload.read_varint(into[1]) && payload.read_varint(into[2]);
 }
 
-}  // namespace
+}
 
 ClTransferHost::ClTransferHost()
     : request_(static_cast<std::uint8_t *>(std::calloc(1u, request_bytes))),
@@ -121,9 +119,6 @@ const ClTransferHost::Command &ClTransferHost::command(std::uint32_t index) cons
 
 WireWriter ClTransferHost::request_writer() { return WireWriter(request_, request_bytes); }
 
-/* A command sent without waiting for its answer is applied as the host would
- * apply it, and its answer goes nowhere: a refusal of one is not the caller's
- * to see. */
 TransportResult ClTransferHost::send_async(std::uint32_t command_id, WireWriter &writer)
 {
     return apply(command_id, writer) ? TransportResult::ok : TransportResult::failed;
@@ -202,7 +197,6 @@ bool ClTransferHost::image_command(std::uint32_t id, WireReader &payload, Comman
         seen.origin[1] + seen.region[1] > image_height || seen.origin[2] >= image_depth)
         return false;
     const std::size_t row = seen.row_pitch != 0u ? seen.row_pitch : seen.region[0] * element_bytes;
-    /* What the generated server insists on: the pitched reach of the region. */
     if (count != (seen.region[1] - 1u) * row + seen.region[0] * element_bytes) return false;
     const bool refused = commands_ == refused_at_;
     if (id == clproto::kCmd_clEnqueueWriteImage) {
@@ -232,8 +226,6 @@ std::size_t ClTransferHost::rect_offset(const Command &seen, std::size_t x, std:
     return (seen.origin[2] + z) * slice + (seen.origin[1] + y) * row + seen.origin[0] + x;
 }
 
-/* As the generated server reads a rectangle and as an OpenCL host applies it:
- * the application's bytes at their own pitch, the buffer's at its. */
 bool ClTransferHost::rect_command(std::uint32_t id, WireReader &payload, Command &seen, WireWriter &answer)
 {
     std::uint64_t queue = 0u, buffer = 0u, blocking = 0u, host_slice = 0u, count = 0u;
@@ -251,7 +243,6 @@ bool ClTransferHost::rect_command(std::uint32_t id, WireReader &payload, Command
     seen.blocking = blocking != 0u;
     seen.bytes = count;
     const std::size_t host_row = seen.row_pitch != 0u ? seen.row_pitch : seen.region[0];
-    /* What the generated server insists on: the pitched reach from the corner. */
     if (seen.host_origin[0] != 0u || seen.host_origin[1] != 0u || seen.host_origin[2] != 0u || seen.region[2] != 1u ||
         count != (seen.region[1] - 1u) * host_row + seen.region[0])
         return false;
@@ -279,4 +270,4 @@ void             ClTransferHost::end_call() {}
 WireArena       &ClTransferHost::decode_arena() { return arena_; }
 ClientBlobArena &ClTransferHost::blobs() { return blobs_; }
 
-}  // namespace av
+}

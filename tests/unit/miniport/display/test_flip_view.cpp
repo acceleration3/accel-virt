@@ -1,6 +1,3 @@
-/* One flip as a vsync reports it: its kind and address, and for a base
- * plane the layer dxgmms2 compares with the flip - layer 0, enabled, at the
- * flipped address with the flip's own attributes, whatever the record held. */
 #include "miniport/ddi/dxgk_multiplane_overlay_vsync_info_record.hpp"
 #include "miniport/ddi/dxgk_multiplane_overlay_vsync_info2_record.hpp"
 #include "miniport/ddi/dxgk_multiplane_overlay_attributes3_record.hpp"
@@ -16,7 +13,7 @@ TEST(flip_view, a_flip_keeps_its_kind_address_and_attributes)
   attributes[0] = 3u;
   attributes[av::multiplane_overlay_attribute_words - 1u] = 9u;
   const FlipView flip(FlipView::Kind::base_plane, 0x6000000000u, attributes);
-  attributes[0] = 99u;   /* the view took a copy */
+  attributes[0] = 99u;
   CHECK(flip.kind() == FlipView::Kind::base_plane);
   CHECK_EQ(flip.address(), 0x6000000000u);
   av::DxgkMultiplaneOverlayVsyncInfoRecord layer = {};
@@ -38,15 +35,12 @@ TEST(flip_view, a_flip_with_no_attributes_and_the_empty_view_carry_none)
   CHECK(none.kind() == FlipView::Kind::address);
   CHECK_EQ(none.address(), 0u); }
 
-/* An MPO3 flip is retired by its PresentIds alone: it reports every layer a
- * flip ever named, with its PresentId, shown or turned off, and skips a layer
- * never flipped. Its address is the base plane's. */
 TEST(flip_view, a_presented_flip_reports_every_flipped_layer_and_its_present_id)
 { int allocation = 0;
   av::DxgkMultiplaneOverlayAttributes3Record attributes = {};
   av::OverlayPlane planes[av::OverlayPlane::max_planes];
   planes[0] = av::OverlayPlane(0u, 41u, &allocation, 0x6000000000ll, attributes);
-  planes[2] = av::OverlayPlane(2u, 7u);   /* turned off */
+  planes[2] = av::OverlayPlane(2u, 7u);
   const FlipView flip(planes);
   CHECK(flip.kind() == FlipView::Kind::presented_plane);
   CHECK_EQ(flip.address(), 0x6000000000u);

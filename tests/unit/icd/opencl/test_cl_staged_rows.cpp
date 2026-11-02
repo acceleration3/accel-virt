@@ -1,9 +1,3 @@
-/* One staged piece's rows, between the application's layout and a block
- * packed tight. What a transfer depends on: every byte of the piece's rows
- * lands in the block in order with nothing between rows, comes back to the
- * same place, and nothing of the application's around the piece - the gap
- * after a row, the columns before and after a run, the rows of other pieces,
- * other slices - is read into the block or written back over. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/common/row_pieces.hpp"
 #include "icd/opencl/cl_image_region.hpp"
@@ -19,19 +13,15 @@ using av::clicd::ClStagedRows;
 using av::icd::RowPieces;
 
 namespace {
-
-/* 2-byte elements, 6 a row in a 16-byte pitch, 4 rows a slice in a 70-byte
- * slice pitch, 2 slices: byte i of the application's memory is i. */
 constexpr std::size_t element = 2u, width = 6u, rows = 4u, pitch = 16u, slice_pitch = 70u;
 const std::size_t     origin[3] = {0u, 0u, 0u}, extent[3] = {width, rows, 2u};
 
-}  // namespace
+}
 
 TEST(cl_staged_rows, whole_rows_of_a_slice_pack_tight_and_unpack_into_place)
 { const ClImageRegion region(origin, extent, pitch, slice_pitch, element);
   std::uint8_t application[2u * slice_pitch];
   for (std::size_t index = 0u; index < sizeof application; ++index) application[index] = static_cast<std::uint8_t>(index);
-  /* A block of three packed rows: the second piece of slice 1 is its last row. */
   RowPieces pieces(TexelLayout(element, 1u, 1u), width, rows, width * element, 3u * width * element);
   CHECK(pieces.next());
   CHECK(pieces.next());
@@ -63,7 +53,6 @@ TEST(cl_staged_rows, whole_rows_of_a_slice_pack_tight_and_unpack_into_place)
   CHECK_EQ(back[3u * pitch], 0xEEu);
   CHECK_EQ(back[slice_pitch], 0xEEu); }
 
-/* A run - a row too long for the block - is its own columns and no others. */
 TEST(cl_staged_rows, a_run_of_one_row_is_its_columns_alone)
 { const ClImageRegion region(origin, extent, pitch, slice_pitch, element);
   std::uint8_t application[2u * slice_pitch];

@@ -11,12 +11,9 @@
 namespace av::d3d12 {
 
 namespace {
-
-/* Cached host memory bulk data crosses through, and query results; a
- * CPU-visible heap is a host allocation of its own (docs/host-memory.md). */
 constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
 
-}  // namespace
+}
 
 D3d12Driver::D3d12Driver(BlockSource &memory, Kmt &kmt, KeyedLog &log, d3d::D3dCallTrace &trace)
     : lines_(log), trace_(trace), devices_(memory),
@@ -39,10 +36,7 @@ d3d::Hresult D3d12Driver::caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t km
     bool           learned = false;
     const uint32_t slot = adapters_.slot_of(kmt_adapter, learned);
     if (slot == AdapterSessions<D3d12HostCaps>::none) return d3d::hr_fail;
-    /* The record is D3D12DDIARG_GETCAPS byte for byte (umd_record_layout.cpp). */
     const HRESULT answered = adapters_.caps(slot).answer(*reinterpret_cast<const D3D12DDIARG_GETCAPS *>(&args));
-    /* Which questions go unanswered is what a first run on a new D3D12Core
-     * needs to know; the runtime asks each a handful of times at most. */
     if (FAILED(answered)) lines_.note("Direct3D 12 caps refused, type", args.Type);
     return static_cast<d3d::Hresult>(answered);
 }
@@ -82,9 +76,6 @@ d3d::Hresult D3d12Driver::fill_table(uint32_t table_type, void *table, size_t by
     case D3D12DDI_TABLE_TYPE_COMMAND_LIST_3D:
         if (bytes < sizeof(D3D12DDI_COMMAND_LIST_FUNCS_3D_0108)) return d3d::hr_invalid_arg;
         fill_list_funcs12(*static_cast<D3D12DDI_COMMAND_LIST_FUNCS_3D_0108 *>(table));
-        /* D3D12Core fills this table twice, and names each by a handle it
-         * gives nowhere else; a list is made on the first one's
-         * (D3d12Device::create_command_list). */
         if (index == 0u) list_table_ = runtime_table;
         return d3d::hr_ok;
     case D3D12DDI_TABLE_TYPE_COMMAND_QUEUE_3D:
@@ -106,4 +97,4 @@ void D3d12Driver::tear_down(void *block)
     static_cast<void>(devices_.destroy(&device));
 }
 
-}  // namespace av::d3d12
+}

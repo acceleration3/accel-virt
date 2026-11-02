@@ -14,8 +14,6 @@ int main() { ExitProcess(0); return 0; }
 
 
 class UserModeImage:
-    """A console executable importing KERNEL32.dll: everything a driver must not be."""
-
     def __init__(self, directory):
         self.directory = directory
         self.path = directory / "user.exe"

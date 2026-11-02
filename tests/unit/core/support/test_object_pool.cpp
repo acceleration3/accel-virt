@@ -30,7 +30,7 @@ struct ObjectPoolProbe {
     }
 };
 
-}  // namespace av
+}
 
 using av::Irql;
 using av::MockPlatform;
@@ -54,7 +54,7 @@ private:
     std::uint32_t value_;
 };
 
-}  // namespace
+}
 
 TEST(object_pool_create, constructs_with_the_arguments_at_a_stable_address)
 { MockPlatform platform; int destroyed = 0;
@@ -206,7 +206,6 @@ TEST(object_pool_all_of, checks_every_live_object_and_nothing_else)
   CHECK_STATUS(pool.destroy(objects[3]), Status::ok);
   CHECK(pool.all_of([](const Tracked &tracked) { return tracked.value() != 3u; })); }
 
-/* Every live object once, across chunks, and a destroyed one not at all. */
 TEST(object_pool_for_each, visits_every_live_object_once)
 { MockPlatform platform; int destroyed = 0;
   ObjectPool<Tracked> pool(platform);
@@ -265,10 +264,6 @@ TEST(object_pool_invariants, a_retained_empty_chunk_is_detected)
   CHECK_STATUS(pool.create(object, destroyed, 2u), Status::ok);
   CHECK(pool.invariants_hold()); }
 
-/* Feature 045: a pool takes its chunks from any block source, not only a
- * kernel platform - the Vulkan ICD keeps its dispatchable objects in one over
- * the process heap. Every chunk it asks for it gives back, and a source that
- * refuses a chunk is a pool that refuses the object. */
 namespace {
 
 class CountingSource final : public av::BlockSource {
@@ -298,7 +293,7 @@ private:
     bool          refuse_ = false;
 };
 
-}  // namespace
+}
 
 TEST(object_pool_create, takes_its_chunks_from_any_block_source)
 { CountingSource source; int destroyed = 0;

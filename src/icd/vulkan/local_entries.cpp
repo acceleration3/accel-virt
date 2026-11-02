@@ -309,9 +309,6 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkMapMemory2KHR(VkDevice device, const VkMe
 VKAPI_ATTR VkResult VKAPI_CALL local_vkUnmapMemory2KHR(VkDevice, const VkMemoryUnmapInfoKHR *pMemoryUnmapInfo)
 {
     AV_SCOPE("local_vkUnmapMemory2KHR");
-    /* Unmapping frees nothing: the chunk's view lives as long as the chunk. A
-     * flag in the request is a caller asking for something else - reserving
-     * the range - which this driver does not do. */
     if (pMemoryUnmapInfo == nullptr || pMemoryUnmapInfo->flags != 0u) return VK_ERROR_MEMORY_MAP_FAILED;
     return VK_SUCCESS;
 }
@@ -482,4 +479,4 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkQueuePresentKHR(VkQueue queue, const VkPr
     return icd_binding.root().presentation().present(queue, pPresentInfo);
 }
 
-}  // namespace av::icd
+}

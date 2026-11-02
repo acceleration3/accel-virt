@@ -1,6 +1,3 @@
-/* The sessions on one shared host device (DeviceTenants): a loss wakes every
- * one of them once, nobody joins a lost device, and it is made again only
- * once the last of them has left. */
 #include "executor/device_tenants.hpp"
 #include "executor/wake_signal.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -16,7 +13,7 @@ struct DeviceTenantsProbe {
     static void list_at(DeviceTenants &tenants, std::uint32_t index, WakeSignal *wake) { tenants.tenants_.at(index) = wake; }
 };
 
-}  // namespace av
+}
 
 using av::DeviceTenants;
 using av::MockPlatform;
@@ -45,7 +42,7 @@ void *leave_later(void *argument)
     return nullptr;
 }
 
-}  // namespace
+}
 
 TEST(device_tenants, a_loss_wakes_every_tenant_once)
 { MockPlatform  platform;
@@ -63,13 +60,11 @@ TEST(device_tenants, a_loss_wakes_every_tenant_once)
   CHECK(tenants.lost());
   CHECK_EQ(first_pad.raised, 1u);
   CHECK_EQ(second_pad.raised, 1u);
-  /* A second report of the same loss wakes nobody again. */
   CHECK(!tenants.lose());
   CHECK_EQ(first_pad.raised, 1u);
   CHECK_EQ(second_pad.raised, 1u);
   CHECK(tenants.invariants_hold()); }
 
-/* A tenant that left is not woken: its slot may be the next context's. */
 TEST(device_tenants, a_tenant_that_left_is_not_woken)
 { MockPlatform  platform;
   DeviceTenants tenants(platform);
@@ -82,7 +77,6 @@ TEST(device_tenants, a_tenant_that_left_is_not_woken)
   tenants.leave(leaves);
   CHECK(tenants.invariants_hold());
   CHECK_EQ(tenants.count(), 1u);
-  /* Leaving twice, or a session never on it, changes nothing. */
   tenants.leave(leaves);
   CHECK_EQ(tenants.count(), 1u);
   CHECK(tenants.lose());
@@ -96,19 +90,15 @@ TEST(device_tenants, nobody_joins_a_lost_device_until_it_is_made_again)
   CHECK_EQ(tenants.join(old_session), Status::ok);
   CHECK(tenants.lose());
   CHECK_EQ(tenants.join(new_session), Status::invalid_state);
-  /* Not while the old session is still on it: it holds the old device's objects. */
   CHECK_EQ(tenants.renew(), Status::invalid_state);
   CHECK(tenants.lost());
   tenants.leave(old_session);
   CHECK_EQ(tenants.renew(), Status::ok);
   CHECK(!tenants.lost());
   CHECK_EQ(tenants.join(new_session), Status::ok);
-  /* A device that is not lost has nothing to renew. */
   CHECK_EQ(tenants.renew(), Status::invalid_state);
   CHECK(tenants.invariants_hold()); }
 
-/* Past the 64 sessions a device once held, every session joins once; a list
- * that cannot grow refuses the next, and a loss still wakes everyone on it. */
 TEST(device_tenants, a_session_joins_once_and_the_list_grows_until_memory_runs_out)
 { MockPlatform  platform;
   DeviceTenants tenants(platform);
@@ -140,7 +130,6 @@ TEST(device_tenants, vacate_waits_for_the_last_tenant_and_gives_up_at_its_deadli
   pthread_join(thread, nullptr);
   CHECK_EQ(tenants.count(), 0u); }
 
-/* A list naming a session twice, or no session, is not one. */
 TEST(device_tenants, invariants_catch_a_tenant_listed_twice_or_none)
 { MockPlatform  platform;
   DeviceTenants tenants(platform);

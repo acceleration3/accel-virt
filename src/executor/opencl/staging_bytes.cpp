@@ -10,7 +10,7 @@ namespace {
 
 constexpr size_t page_bytes = 4096u;
 
-}  // namespace
+}
 
 StagingBytes::StagingBytes() : bytes_(nullptr), held_(0u)
 {
@@ -49,4 +49,4 @@ size_t StagingBytes::held() const
     return held_;
 }
 
-}  // namespace av
+}

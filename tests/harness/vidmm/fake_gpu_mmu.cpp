@@ -7,13 +7,13 @@ namespace av {
 
 namespace {
 
-constexpr std::int32_t  query_gpu_mmu_caps = 13;          /* DXGKQAITYPE_GPUMMUCAPS */
-constexpr std::int32_t  query_page_table_level_desc = 14; /* DXGKQAITYPE_PAGETABLELEVELDESC */
+constexpr std::int32_t  query_gpu_mmu_caps = 13;
+constexpr std::int32_t  query_page_table_level_desc = 14;
 constexpr std::uint32_t lowest_virtual_address_bits = 13u;
 constexpr std::uint32_t virtual_address_bit_span = 50u;
 constexpr std::uint32_t lowest_level_count = 2u;
 
-}  // namespace
+}
 
 FakeGpuMmu::FakeGpuMmu(FakeDxgadapter &adapter) : adapter_(adapter), caps_{}, levels_{}, failed_(GpuMmuRule::none) {}
 
@@ -71,7 +71,6 @@ std::int32_t FakeGpuMmu::check_nodes(void *context)
     return 0;
 }
 
-/* Level 0 is the leaf. A two-level table skips the directory checks. */
 std::int32_t FakeGpuMmu::initialize_va_state(std::uint32_t segments)
 {
     failed_ = GpuMmuRule::none;
@@ -114,4 +113,4 @@ const DxgkPageTableLevelDescRecord &FakeGpuMmu::level(std::uint32_t index) const
     return levels_[index < max_levels ? index : 0u];
 }
 
-}  // namespace av
+}

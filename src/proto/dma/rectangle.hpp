@@ -1,5 +1,3 @@
-/* A rectangle on the wire: left, top, right, bottom as i32, edges exclusive at
- * right and bottom as in a RECT. */
 #ifndef AV_RECTANGLE_HPP
 #define AV_RECTANGLE_HPP
 
@@ -16,7 +14,6 @@ public:
     bool is_valid() const;
     void write(WireWriter &writer) const;
 
-    /* The edges, for what moves the pixels inside them (feature 046). */
     int32_t left() const;
     int32_t top() const;
     int32_t right() const;
@@ -29,6 +26,6 @@ private:
     int32_t bottom_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_RECTANGLE_HPP
+#endif

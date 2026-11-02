@@ -14,4 +14,4 @@ void ContextSessionProbe::drop_source() { session.source_ = nullptr; }
 
 void ContextSessionProbe::set_faulted(bool faulted) { session.faulted_ = faulted; }
 
-}  // namespace av
+}

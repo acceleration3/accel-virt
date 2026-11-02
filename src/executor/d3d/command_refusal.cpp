@@ -21,4 +21,4 @@ bool CommandRefusal::removes(const char *command, uint32_t device, bool removed)
     return true;
 }
 
-}  // namespace av
+}

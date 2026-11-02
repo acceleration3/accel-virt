@@ -37,4 +37,4 @@ void SpinLock::release(Irql previous)
     platform_.release_spin_lock(word_, rank_, previous);
 }
 
-}  // namespace av
+}

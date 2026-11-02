@@ -1,22 +1,3 @@
-/* Hostile replies into the generated Vulkan and OpenCL clients (feature 044,
- * T036).
- *
- * A client reads back bytes the host wrote, into memory the application owns:
- * a count, a length or a byte total in a reply is the host's word, and the
- * application's array holds only what the application said it does. So what
- * must hold, whatever the reply: nothing is written outside the caller's
- * outputs, a count the caller reads back never claims more of its array than
- * the room it gave, an output structure's array is still the caller's, and an
- * info query that succeeded never reports a size past the buffer it filled.
- * ASan and UBSan judge the rest.
- *
- * An input is one call: a byte choosing it, a byte choosing the room the
- * caller gives (0 to 4 elements), a byte of flags - bit 0, the caller gives its
- * array or buffer; bit 1, it asks for the count or size, or chains the
- * structures a properties query fills - and then the reply, exactly as the
- * transport hands it over. The calls are the shapes T032 bounded: counted
- * handle, structure and scalar arrays, info values, byte outputs, output
- * structures carrying the caller's array (T037), and plain creates. */
 #include "harness/framework/guarded_buffer.hpp"
 #include "harness/transport/mock_transport.hpp"
 #include "proto/generated/opencl/cl_dispatch_client.h"
@@ -50,7 +31,6 @@ void require(bool holds)
     if (!holds) __builtin_trap();
 }
 
-/* A name an application may hand to strlen: a zero inside its array. */
 bool terminated(const char *name, std::size_t size)
 {
     for (std::size_t index = 0u; index < size; index++) {
@@ -59,9 +39,6 @@ bool terminated(const char *name, std::size_t size)
     return false;
 }
 
-/* `count` elements of T a caller owns, between poisoned guard bands. The bytes
- * hold a pattern no struct is zero in, unless the caller zeroed them, which is
- * what an application does with a structure it reads a count out of. */
 template <typename T>
 class Output {
 public:
@@ -121,8 +98,6 @@ private:
     template <typename T>
     T *given_or_null(Output<T> &output) { return given() ? output.get() : nullptr; }
 
-    /* A counted array's count, read back: never past the room the caller gave
-     * when it gave an array, whatever the call answered. */
     template <typename T>
     void judge_counted(Output<T> &array, std::uint32_t count)
     {
@@ -213,7 +188,6 @@ private:
         require(requirements.intact());
     }
 
-    /* Counts beside fixed arrays: the structure's own size is the room. */
     void vk_memory_properties()
     {
         Output<VkPhysicalDeviceMemoryProperties> properties(1u, 0u);
@@ -240,9 +214,6 @@ private:
         judge_counted(array, binaries.get()->pipelineBinaryCount);
     }
 
-    /* Two chained structures with the caller's arrays inside, one of scalars
-     * and one of chained structures, or no chain at all for the host to
-     * invent one into. */
     void vk_host_image_copy()
     {
         Output<VkImageLayout>                               sources(room_);
@@ -295,9 +266,6 @@ private:
         judge_counted(modifiers, list.get()->drmFormatModifierCount);
     }
 
-    /* An OpenCL list's count is how many the host has, which the API lets
-     * exceed num_entries: only the array and the count itself must be left
-     * whole. */
     void cl_platforms()
     {
         Output<std::uint64_t> platforms(room_);
@@ -316,8 +284,6 @@ private:
         require(devices.intact() && total.intact());
     }
 
-    /* A value that fit is one no larger than its buffer: an info query that
-     * succeeded into a buffer never reports more bytes than the buffer has. */
     void cl_info(std::uint32_t name)
     {
         const std::size_t room = room_ * info_bytes_per_room;
@@ -389,7 +355,7 @@ private:
     const std::uint8_t  flags_;
 };
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

@@ -43,4 +43,4 @@ bool LogBudget::invariants_hold() const
     return written_ <= lines_per_window;
 }
 
-}  // namespace av
+}

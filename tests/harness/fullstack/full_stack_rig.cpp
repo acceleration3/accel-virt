@@ -6,9 +6,6 @@ namespace {
 
 constexpr std::int32_t not_added = -1;
 
-/* A process's view of the hostmem BAR is the host memory the device core
- * placed there, so a guest that writes through a window chunk writes what the
- * host GPU reads. */
 void *window_memory(void *context, std::uint64_t physical, std::uint64_t)
 {
     auto *const host = static_cast<MockHost *>(context);
@@ -16,7 +13,7 @@ void *window_memory(void *context, std::uint64_t physical, std::uint64_t)
     return host->placed_at(physical - FullStackRig::hostmem_address);
 }
 
-}  // namespace
+}
 
 FullStackRig::FullStackRig()
     : driver_(), function_(), dxgkrnl_(driver_.platform(), function_), fdo_(driver_.platform(), driver_.table(), dxgkrnl_),
@@ -35,10 +32,6 @@ FullStackRig::FullStackRig(const AvExecutorOps &executor, const std::uint8_t *gp
       kmt_(driver_.platform(), driver_.table(), fdo_, dxgkrnl_, function_, pump_, device_.host()), added_(not_added),
       started_(not_added)
 {
-    /* A context's worker is a thread of its own that watches its ring for a
-     * while before it sleeps, timing the watch on the host's clock; a clock
-     * that never moves is a watch that never ends, and a worker that never
-     * sees it was told to stop. */
     device_.host().advance_clock_per_read(worker_clock_step_ns);
     start();
 }
@@ -46,7 +39,6 @@ FullStackRig::FullStackRig(const AvExecutorOps &executor, const std::uint8_t *gp
 void FullStackRig::start()
 {
     driver_.platform().resolve_process_views(&window_memory, &device_.host());
-    /* First: the knob rebuilds the resource list, and the regions append theirs. */
     function_.set_message_interrupts(message_interrupts);
     function_.add_shared_memory_region(hostmem_region, hostmem_bar, 0u, hostmem_bytes, hostmem_address);
     function_.add_doorbell_region();
@@ -80,4 +72,4 @@ VirtioBridge          &FullStackRig::bridge() { return bridge_; }
 InterruptPump         &FullStackRig::pump() { return pump_; }
 DdiKmt                &FullStackRig::kmt() { return kmt_; }
 
-}  // namespace av
+}

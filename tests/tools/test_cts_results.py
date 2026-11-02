@@ -1,11 +1,3 @@
-"""What one CTS run did, what two runs say about each other, and what a record
-of them refuses to lose (feature 048, US1 and US3).
-
-Driven over `.qpa` logs the tests write, because the interesting ones are the
-logs a run left behind when it died: a case that never ended, a file truncated
-mid-record, a status nobody defines. A parser that read only the tidy case
-would answer confidently about the runs that matter least.
-"""
 import pathlib
 import tempfile
 import unittest
@@ -55,26 +47,21 @@ class QpaReading(Logs):
         self.assertIsNone(results.unfinished)
         for status in statuses:
             self.assertEqual(results.cases[f"dEQP-VK.group.{status.lower()}"], status)
-        # What dEQP itself counts as not-a-failure, and nothing else.
         self.assertTrue(results.passed("dEQP-VK.group.pass"))
         self.assertTrue(results.passed("dEQP-VK.group.qualitywarning"))
         self.assertTrue(results.passed("dEQP-VK.group.compatibilitywarning"))
         self.assertTrue(results.passed("dEQP-VK.group.waiver"))
         for status in ("fail", "notsupported", "resourceerror", "internalerror", "crash", "timeout"):
             self.assertFalse(results.passed(f"dEQP-VK.group.{status}"))
-        # A case nobody ran is not a pass either.
         self.assertFalse(results.passed("dEQP-VK.group.absent"))
 
     def test_a_case_that_never_ended_is_the_one_a_run_died_in(self):
-        """A crash, a TDR or a bugcheck leaves the log open at the case that
-        caused it: that name is what a resumed run starts after."""
         results = self.log(session(case("dEQP-VK.api.first", "Pass"),
                                    "#beginTestCaseResult dEQP-VK.api.second\n", ended=False))
         self.assertEqual(results.unfinished, "dEQP-VK.api.second")
         self.assertEqual(results.cases["dEQP-VK.api.second"], "Crash")
         self.assertFalse(results.passed("dEQP-VK.api.second"))
         self.assertFalse(results.session_ended)
-        # And the case before it is still what it answered.
         self.assertTrue(results.passed("dEQP-VK.api.first"))
 
     def test_a_terminated_case_keeps_the_reason_the_run_gave(self):
@@ -84,7 +71,6 @@ class QpaReading(Logs):
         self.assertEqual(results.cases["dEQP-VK.api.slow"], "Timeout")
         self.assertIsNone(results.unfinished)
         self.assertTrue(results.passed("dEQP-VK.api.after"))
-        # A terminate with no reason is still not a pass.
         bare = self.log(session("#beginTestCaseResult dEQP-VK.api.mystery\n",
                                 "#terminateTestCaseResult\n"), name="bare.qpa")
         self.assertEqual(bare.cases["dEQP-VK.api.mystery"], "Crash")
@@ -107,9 +93,6 @@ class QpaReading(Logs):
         self.assertFalse(results.passed("dEQP-VK.api.empty"))
 
     def test_a_name_no_case_could_have_is_not_a_case(self):
-        """The log arrives over the agent from a guest: a name with a space, a
-        tag in it, or one longer than any case name is a log to distrust, not a
-        record to keep."""
         long_name = "dEQP-VK." + "x" * 600
         results = self.log(session("#beginTestCaseResult dEQP-VK.api with a space\n",
                                    '<Result StatusCode="Pass">Pass</Result>\n#endTestCaseResult\n',
@@ -122,10 +105,6 @@ class QpaReading(Logs):
         self.assertIsNone(results.unfinished)
 
     def test_two_logs_read_as_one_keep_the_case_the_first_died_in(self):
-        """What a resumed shard leaves: the log that stopped inside a case, and
-        the log of the run that went on after it. Read together, the case that
-        killed the first is still recorded - dropping it would turn a crash
-        into a case nobody ran."""
         died = session(case("dEQP-VK.api.first", "Pass"),
                        "#beginTestCaseResult dEQP-VK.api.killer\n", ended=False)
         resumed = session(case("dEQP-VK.api.after", "Pass"))
@@ -137,8 +116,6 @@ class QpaReading(Logs):
         self.assertIsNone(results.unfinished)
 
     def test_a_duplicate_case_keeps_what_it_answered_last(self):
-        """A resumed shard writes the case it died in again; the second answer
-        is the one that ran to the end."""
         results = self.log(session("#beginTestCaseResult dEQP-VK.api.twice\n",
                                    "#terminateTestCaseResult Crash\n",
                                    case("dEQP-VK.api.twice", "Pass")))
@@ -177,21 +154,14 @@ class Comparison(Logs):
         self.assertEqual(compared.guest_only_failures, [])
 
     def test_not_supported_matches_only_itself(self):
-        """A host GPU without an extension answers NotSupported on both sides -
-        a match. On one side only it is a different subset, not a result."""
         guest = self.results([("dEQP-VK.ext", "NotSupported"), ("dEQP-VK.other", "NotSupported")], "guest.qpa")
         host = self.results([("dEQP-VK.ext", "NotSupported"), ("dEQP-VK.other", "Pass")], "host.qpa")
         compared = SuiteComparison(guest, host)
-        # Neither side has the extension: a match, counted and named nowhere.
         self.assertEqual(compared.matching_failures, [])
         self.assertEqual(compared.unjudged, [])
         self.assertEqual(compared.compared, 2)
-        # NotSupported in the guest where the host passed is a guest-only
-        # failure: the ICD reported less than the host has.
         self.assertEqual(compared.guest_only_failures, ["dEQP-VK.other"])
 
-        # The other way round - the host would not run it and the guest did -
-        # is not a comparison at all.
         skipped_on_the_host = self.results([("dEQP-VK.ext", "Pass"), ("dEQP-VK.two", "Fail")], "g2.qpa")
         host_without = self.results([("dEQP-VK.ext", "NotSupported"), ("dEQP-VK.two", "NotSupported")], "h2.qpa")
         other_way = SuiteComparison(skipped_on_the_host, host_without)
@@ -227,8 +197,6 @@ class Ratchet(Logs):
         results = self.results([("dEQP-VK.a", "Pass"), ("dEQP-VK.b", "Fail")])
         self.assertEqual(record.lost(results), ["dEQP-VK.b"])
         self.assertEqual(record.gained(results), [])
-        # A case the record has and the run never ran is lost too: a subset
-        # that stopped running it proves nothing about it.
         thinner = self.results([("dEQP-VK.a", "Pass")])
         self.assertEqual(record.lost(thinner), ["dEQP-VK.b"])
 

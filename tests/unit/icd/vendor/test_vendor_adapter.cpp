@@ -1,5 +1,3 @@
-/* One avgpu adapter as the vendor libraries describe it: the facts Windows
- * gave, as they were given, and whether the primary display is on it. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "icd/vendor/vendor_adapter.hpp"

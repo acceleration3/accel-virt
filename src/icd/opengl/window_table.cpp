@@ -73,4 +73,4 @@ bool WindowTable::invariants_hold() const
     return formatted && formats_.invariants_hold();
 }
 
-}  // namespace av::glicd
+}

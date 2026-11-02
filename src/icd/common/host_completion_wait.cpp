@@ -23,4 +23,4 @@ bool HostCompletionWait::run(CompletionProbe &probe)
     return false;
 }
 
-}  // namespace av::icd
+}

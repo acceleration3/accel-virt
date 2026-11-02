@@ -36,4 +36,4 @@ Status BatchMark::wait(Kmt &kmt) const
                                  : kmt.wait_for_context(device_, context_);
 }
 
-}  // namespace av
+}

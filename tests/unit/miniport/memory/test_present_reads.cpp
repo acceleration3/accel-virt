@@ -1,8 +1,3 @@
-/* The reads open on one allocation's presented pages, which the presents into
- * them wait for: a read opens at its begin and closes at its end, a present is
- * admitted - and opened - only while none is open, and a read whose reader
- * never ended it lets go by itself once its expiry passes. The clock is the
- * mock's, so a test moves it to the instants it judges. */
 #include "miniport/memory/present_reads.hpp"
 #include "core/platform/lock_rank.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -15,11 +10,10 @@
 namespace av {
 
 struct PresentReadsProbe {
-    /* A read counted open that never took an expiry: what open() never leaves. */
     static void open_without_expiry(PresentReads &reads) { reads.open_ = 1u; reads.expires_ = 0u; }
 };
 
-}  // namespace av
+}
 
 using av::Irql;
 using av::MockPlatform;
@@ -35,7 +29,7 @@ TEST(present_reads, admits_a_present_and_opens_it_while_no_read_is_open)
   CHECK(reads.admit(writes));
   CHECK_EQ(writes.sequence(), 1u);
   CHECK(writes.in_progress(writes.sequence()));
-  CHECK(reads.admit(writes));   /* presents do not hold each other */
+  CHECK(reads.admit(writes));
   CHECK_EQ(writes.sequence(), 2u);
   CHECK(reads.invariants_hold());
   CHECK_EQ(platform.locks_held(), 0u);
@@ -61,8 +55,6 @@ TEST(present_reads, closing_the_read_admits_the_presents_again)
   CHECK_EQ(writes.sequence(), 1u);
   CHECK(reads.invariants_hold()); }
 
-/* Two readers of one window: the first to end does not let a present in on
- * the other's read. */
 TEST(present_reads, a_present_is_admitted_only_when_every_open_read_has_closed)
 { MockPlatform platform;
   PresentReads reads(platform);
@@ -80,7 +72,7 @@ TEST(present_reads, a_close_with_no_read_open_is_no_error_and_opens_nothing)
   PresentWrites writes(platform);
   reads.close();
   reads.close();
-  CHECK(reads.admit(writes));   /* not a negative count that a later read has to climb out of */
+  CHECK(reads.admit(writes));
   CHECK(!reads.open());
   CHECK(!reads.admit(writes));
   CHECK(reads.invariants_hold()); }
@@ -91,23 +83,21 @@ TEST(present_reads, a_read_expires_after_the_bound_and_stops_holding_presents)
   PresentWrites writes(platform);
   CHECK(!reads.open());
   platform.advance_time(PresentReads::expiry_ticks - 1u);
-  CHECK(!reads.admit(writes));   /* the last instant it holds */
+  CHECK(!reads.admit(writes));
   platform.advance_time(1u);
   CHECK(reads.admit(writes));
   CHECK_EQ(writes.sequence(), 1u); }
 
-/* The reader died: its count would never come back down. The next read forgets
- * it, so one reader's end closes the gate again. */
 TEST(present_reads, the_next_begin_forgets_a_read_that_expired_and_says_so)
 { MockPlatform platform;
   PresentReads reads(platform);
   PresentWrites writes(platform);
-  CHECK(!reads.open());   /* never ended */
+  CHECK(!reads.open());
   platform.advance_time(PresentReads::expiry_ticks);
-  CHECK(reads.open());    /* it forgot the dead one */
+  CHECK(reads.open());
   CHECK(!reads.admit(writes));
   reads.close();
-  CHECK(reads.admit(writes));   /* with the dead one still counted this would hold */
+  CHECK(reads.admit(writes));
   CHECK(reads.invariants_hold()); }
 
 TEST(present_reads, a_second_read_extends_the_hold_from_its_own_begin)
@@ -116,14 +106,12 @@ TEST(present_reads, a_second_read_extends_the_hold_from_its_own_begin)
   PresentWrites writes(platform);
   CHECK(!reads.open());
   platform.advance_time(PresentReads::expiry_ticks / 2u);
-  CHECK(!reads.open());   /* not expired, so nothing forgotten */
+  CHECK(!reads.open());
   platform.advance_time(PresentReads::expiry_ticks / 2u + 1u);
-  CHECK(!reads.admit(writes));   /* the first's expiry has passed, the second's has not */
+  CHECK(!reads.admit(writes));
   platform.advance_time(PresentReads::expiry_ticks / 2u);
   CHECK(reads.admit(writes)); }
 
-/* A bound added to a clock near its end would wrap to a time long past, and
- * the read would be over as it began. */
 TEST(present_reads, a_read_opened_near_the_end_of_time_is_held_and_its_expiry_not_wrapped)
 { MockPlatform platform;
   PresentReads reads(platform);

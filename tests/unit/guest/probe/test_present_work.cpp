@@ -1,7 +1,3 @@
-/* The probe's present work (feature 046) on a scripted GPU and a scripted
- * window: the surface it makes, the swapchain of the window's size, the frames
- * it draws and presents, and what it reads back off the window - with every
- * refusal each step can meet. */
 #include "guest/probe/bmp_image.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/probe/present_work.hpp"
@@ -20,9 +16,6 @@
 #include <cstring>
 
 namespace av {
-
-/* The states no legitimate sequence can put the work in, which is what makes
- * each clause of the invariant worth stating. */
 struct PresentWorkProbe {
     static void more_images_than_there_is_room_for(PresentWork &work) { work.count_ = PresentWork::images + 1u; }
     static void a_swapchain_without_its_surface(PresentWork &work) { work.surface_ = VK_NULL_HANDLE; }
@@ -32,7 +25,7 @@ struct PresentWorkProbe {
     static void taller_than_the_frame_it_keeps(PresentWork &work) { work.height_ = PresentWork::max_side + 1u; }
 };
 
-}  // namespace av
+}
 
 using av::PresentWork;
 using av::PresentWorkProbe;
@@ -50,7 +43,6 @@ constexpr std::uint32_t pixels = side * side;
 void *const             window_handle = reinterpret_cast<void *>(0x7770u);
 void *const             module_handle = reinterpret_cast<void *>(0x7771u);
 
-/* A device on the scripted GPU, a window it presents into, and the work. */
 class PresentRig {
 public:
     PresentRig() : device_(vulkan_), report_(report_memory_, "avvkprobe"), steps_(kmt_, report_, "vulkan")
@@ -68,11 +60,8 @@ public:
     ScriptedWindowFrame &frames() { return frames_; }
     ProbeDevice         &device() { return device_; }
     av::ScriptedImageSink &pictures() { return pictures_; }
-    /* The work over this rig; a window of nullptr is no window at all. */
     PresentWork          work() { return PresentWork(device_, frames_, pictures_, module_handle, window_handle); }
 
-    /* The line `step` would put in the guest's report: what the runner reads,
-     * and the only place a refusal says which one it was. */
     const char *said(const ProbeOutcome &outcome, const char *step)
     {
         outcome.report(steps_, step);
@@ -90,7 +79,7 @@ private:
     av::ScenarioSteps     steps_;
 };
 
-}  // namespace
+}
 
 TEST(present_work, a_surface_describes_the_window_it_was_made_for)
 { PresentRig   rig;
@@ -103,9 +92,6 @@ TEST(present_work, a_surface_describes_the_window_it_was_made_for)
   CHECK_EQ(work.height(), side);
   CHECK_EQ(work.presented(), 0u); }
 
-/* A surface the driver refuses, a window that cannot be measured, a surface of
- * another size than its window, and one whose formats or modes are not this
- * driver's: each ends the work. */
 TEST(present_work, a_surface_that_does_not_describe_its_window_is_refused)
 { { PresentRig   rig;
     PresentWork  work = rig.work();
@@ -123,8 +109,6 @@ TEST(present_work, a_surface_that_does_not_describe_its_window_is_refused)
     rig.vulkan().hold_the_surface_extent(side / 2u, side);
     CHECK(!work.make_surface(outcome));
     CHECK(work.invariants_hold()); }
-  /* A surface whose queries say it is lost, and one offering neither the
-   * format nor the present mode this driver presents in. */
   { PresentRig   rig;
     PresentWork  work = rig.work();
     ProbeOutcome outcome;
@@ -137,12 +121,8 @@ TEST(present_work, a_surface_that_does_not_describe_its_window_is_refused)
     CHECK(!work.make_surface(outcome));
     CHECK(work.invariants_hold()); } }
 
-/* What the surface offers is judged clause by clause, and the line each
- * refusal writes says which kind it was: a driver's error, or nothing the
- * probe can present through. */
 TEST(present_work, a_surface_offering_less_than_a_present_needs_is_refused)
-{ /* The window answers the surface's extent and is then gone: the size the
-   * surface must agree with cannot be had. */
+{
   { PresentRig   rig;
     PresentWork  work = rig.work();
     ProbeOutcome outcome;
@@ -150,32 +130,25 @@ TEST(present_work, a_surface_offering_less_than_a_present_needs_is_refused)
     CHECK(!work.make_surface(outcome));
     CHECK(std::strcmp(rig.said(outcome, "surface"), "FAIL vulkan.surface status=3 0\n") == 0);
     CHECK_EQ(work.height(), 0u); }
-  /* A surface as wide as its window but half as tall. */
   { PresentRig   rig;
     PresentWork  work = rig.work();
     ProbeOutcome outcome;
     rig.vulkan().hold_the_surface_extent(side, side / 2u);
     CHECK(!work.make_surface(outcome));
     CHECK(std::strcmp(rig.said(outcome, "surface"), "FAIL vulkan.surface status=3 0\n") == 0); }
-  /* A driver wanting more images than the work keeps room for. */
   { PresentRig   rig;
     PresentWork  work = rig.work();
     ProbeOutcome outcome;
     rig.vulkan().ask_for_images(PresentWork::images + 1u);
     CHECK(!work.make_surface(outcome));
     CHECK(std::strcmp(rig.said(outcome, "surface"), "FAIL vulkan.surface status=3 0\n") == 0);
-    /* Nothing of a surface that was refused is kept. */
     CHECK_EQ(work.width(), 0u); }
-  /* The formats answered and the modes lost: the driver's error, not a
-   * surface that offers the wrong thing. */
   { PresentRig   rig;
     PresentWork  work = rig.work();
     ProbeOutcome outcome;
     rig.vulkan().lose_the_present_modes();
     CHECK(!work.make_surface(outcome));
     CHECK(std::strcmp(rig.said(outcome, "surface"), "FAIL vulkan.surface status=7 3294967296\n") == 0); }
-  /* Both modes are needed: the paced one for the present step and the unpaced
-   * one for the resize, and a driver offering only one of them is refused. */
   { PresentRig   rig;
     PresentWork  work = rig.work();
     ProbeOutcome outcome;
@@ -198,13 +171,11 @@ TEST(present_work, a_swapchain_is_the_window_s_size_and_hands_out_its_images)
   CHECK(work.invariants_hold());
   CHECK_EQ(work.width(), side);
   CHECK_EQ(rig.vulkan().calls(Call::create_swapchain), 1u);
-  /* Its own release leaves the surface, so another swapchain may be made. */
   work.release_swapchain();
   CHECK(work.invariants_hold());
   CHECK(work.make_swapchain(VK_PRESENT_MODE_IMMEDIATE_KHR, outcome));
   CHECK_EQ(rig.vulkan().calls(Call::create_swapchain), 2u); }
 
-/* A window that grew: the swapchain is made at the size the window has now. */
 TEST(present_work, a_swapchain_follows_the_window_s_new_size)
 { PresentRig   rig;
   PresentWork  work = rig.work();
@@ -230,8 +201,6 @@ TEST(present_work, a_swapchain_that_cannot_be_made_is_the_driver_s_refusal)
       CHECK(!work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
       CHECK(work.invariants_hold());
   }
-  /* The fragment shader is the second module made: it is what fails, and the
-   * pipeline layout after it is never asked for. */
   { PresentRig   rig;
     PresentWork  work = rig.work();
     ProbeOutcome outcome;
@@ -241,8 +210,6 @@ TEST(present_work, a_swapchain_that_cannot_be_made_is_the_driver_s_refusal)
     CHECK_EQ(rig.vulkan().calls(Call::create_shader_module), 2u);
     CHECK_EQ(rig.vulkan().calls(Call::create_pipeline_layout), 0u);
     CHECK(work.invariants_hold()); }
-  /* A window larger than any frame it keeps, in either direction, and one that
-   * cannot be measured: none of them reaches the driver. */
   PresentRig   rig;
   PresentWork  work = rig.work();
   ProbeOutcome outcome;
@@ -256,9 +223,6 @@ TEST(present_work, a_swapchain_that_cannot_be_made_is_the_driver_s_refusal)
   CHECK_EQ(rig.vulkan().calls(Call::create_swapchain), 0u);
   CHECK(work.invariants_hold()); }
 
-/* The swapchain is made but its images are not the two the work has room for:
- * a driver's error is reported as one, and a count that is not two is a
- * driver the work cannot present through. */
 TEST(present_work, a_swapchain_whose_images_cannot_be_had_is_refused)
 { { PresentRig   rig;
     PresentWork  work = rig.work();
@@ -276,12 +240,9 @@ TEST(present_work, a_swapchain_whose_images_cannot_be_had_is_refused)
     rig.vulkan().hand_out_one_image();
     CHECK(!work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
     CHECK(std::strcmp(rig.said(outcome, "present"), "FAIL vulkan.present status=3 0\n") == 0);
-    /* Nothing is built on images the work never got. */
     CHECK_EQ(rig.vulkan().calls(Call::create_image_view), 0u);
     CHECK(work.invariants_hold()); } }
 
-/* Every clause of the invariant refuses the state it names. None of them is
- * reachable by presenting, so each is put there by hand. */
 TEST(present_work, an_invariant_refuses_each_state_it_names)
 { { PresentRig   rig;
     PresentWork  work = rig.work();
@@ -312,7 +273,6 @@ TEST(present_work, an_invariant_refuses_each_state_it_names)
     CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
     PresentWorkProbe::a_framebuffer_without_its_view(work);
     CHECK(!work.invariants_hold()); }
-  /* A frame larger than the bytes kept for it, in either direction. */
   { PresentRig  rig;
     PresentWork work = rig.work();
     PresentWorkProbe::wider_than_the_frame_it_keeps(work);
@@ -322,8 +282,6 @@ TEST(present_work, an_invariant_refuses_each_state_it_names)
     PresentWorkProbe::taller_than_the_frame_it_keeps(work);
     CHECK(!work.invariants_hold()); } }
 
-/* The frames reach the window: every pixel of it is the triangle's colour,
- * and the picture kept is what the window showed. */
 TEST(present_work, the_frames_it_presents_are_what_the_window_shows)
 { PresentRig   rig;
   PresentWork  work = rig.work();
@@ -335,12 +293,10 @@ TEST(present_work, the_frames_it_presents_are_what_the_window_shows)
   CHECK_EQ(rig.vulkan().presents(), 3u);
   CHECK_EQ(work.drawn_on_the_window("vulkan-present", outcome), pixels);
   CHECK_EQ(rig.frames().reads(), 1u);
-  /* The picture kept is the window's, and a BMP of its size. */
   CHECK(rig.pictures().bytes("vulkan-present") != nullptr);
   CHECK_EQ(rig.pictures().size("vulkan-present"), av::BmpImage::header_bytes + pixels * 3u);
   CHECK(work.invariants_hold()); }
 
-/* What the window shows is what the step judges: one pixel short is short. */
 TEST(present_work, a_window_that_is_not_the_frame_is_counted_pixel_by_pixel)
 { PresentRig   rig;
   PresentWork  work = rig.work();
@@ -350,14 +306,9 @@ TEST(present_work, a_window_that_is_not_the_frame_is_counted_pixel_by_pixel)
   CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
   CHECK_EQ(work.present_frames(1u, outcome), VK_SUCCESS);
   CHECK_EQ(work.drawn_on_the_window("vulkan-present", outcome), pixels - 1u);
-  /* A window that cannot be read is no count at all. */
   rig.frames().refuse_read();
   CHECK_EQ(work.drawn_on_the_window("vulkan-present", outcome), 0u); }
 
-/* The window shows what the GPU drew, and a driver rounds solid.frag's 0.5
- * either way: NVIDIA's present reaches the window as 127 green where Intel's is
- * 128. One off in any channel is still the triangle; two off is not, and the
- * window's own alpha is never judged. */
 TEST(present_work, a_window_one_off_in_a_channel_is_the_colour_and_two_off_is_not)
 { PresentRig   rig;
   PresentWork  work = rig.work();
@@ -382,8 +333,6 @@ TEST(present_work, a_window_one_off_in_a_channel_is_the_colour_and_two_off_is_no
       CHECK_EQ(work.drawn_on_the_window("vulkan-present", outcome), 0u);
   } }
 
-/* A window grown past the triangle: a frame of its new size is the triangle
- * at the top left and the background past it, every pixel of it judged. */
 TEST(present_work, a_frame_larger_than_the_triangle_is_the_background_past_it)
 { PresentRig   rig;
   PresentWork  work = rig.work();
@@ -397,21 +346,15 @@ TEST(present_work, a_frame_larger_than_the_triangle_is_the_background_past_it)
   CHECK_EQ(work.present_frames(1u, outcome), VK_SUCCESS);
   CHECK_EQ(work.drawn_on_the_window("vulkan-resized", outcome), grown * grown);
   CHECK(work.invariants_hold());
-  /* The window all the triangle's colour - the last frame of the old size,
-   * stretched - is right only where the triangle is. */
   const std::uint8_t triangle[4] = {PresentWork::window_colour[0], PresentWork::window_colour[1],
                                     PresentWork::window_colour[2], 255u};
   rig.frames().show(triangle);
   CHECK_EQ(work.drawn_on_the_window("vulkan-resized", outcome), pixels);
-  /* All background is right only past it. */
   const std::uint8_t cleared[4] = {PresentWork::window_background[0], PresentWork::window_background[1],
                                    PresentWork::window_background[2], 255u};
   rig.frames().show(cleared);
   CHECK_EQ(work.drawn_on_the_window("vulkan-resized", outcome), grown * grown - pixels); }
 
-/* A window that keeps what it showed before it grew - DWM's stretch of the
- * last frame of the old size - is not a frame of the new size, however much
- * of it is the triangle's colour. */
 TEST(present_work, a_window_still_showing_the_frame_from_before_it_grew_is_not_the_frame)
 { PresentRig   rig;
   PresentWork  work = rig.work();
@@ -427,8 +370,6 @@ TEST(present_work, a_window_still_showing_the_frame_from_before_it_grew_is_not_t
   CHECK_EQ(rig.vulkan().presents(), 2u);
   CHECK_EQ(work.drawn_on_the_window("vulkan-resized", outcome), pixels); }
 
-/* Every refusal a frame can meet: the acquire, the recording, the submission
- * and the present itself. */
 TEST(present_work, a_frame_that_cannot_be_drawn_or_presented_answers_the_driver_s_error)
 { { PresentRig   rig;
     PresentWork  work = rig.work();
@@ -462,7 +403,6 @@ TEST(present_work, a_frame_that_cannot_be_drawn_or_presented_answers_the_driver_
     CHECK_EQ(work.presented(), 0u);
     CHECK(work.invariants_hold()); } }
 
-/* The window seam is what a probe sees of the desktop, whoever implements it. */
 TEST(present_work, the_window_it_reads_is_the_seam_it_was_given)
 { ScriptedWindowFrame frames;
   WindowFrame        &seam = frames;
@@ -472,7 +412,6 @@ TEST(present_work, the_window_it_reads_is_the_seam_it_was_given)
   CHECK(seam.size(window_handle, width, height));
   CHECK_EQ(width, 2u);
   CHECK_EQ(height, 1u);
-  /* Another window is not this one. */
   CHECK(!seam.size(reinterpret_cast<void *>(0x99u), width, height));
   const std::uint8_t blue[4] = {0xFFu, 0x10u, 0x20u, 0xFFu};
   frames.show(blue);
@@ -485,7 +424,6 @@ TEST(present_work, the_window_it_reads_is_the_seam_it_was_given)
   CHECK_EQ(frames.resizes(), 1u);
   CHECK(seam.size(window_handle, width, height));
   CHECK_EQ(width, 4u);
-  /* A resize past what it keeps, and one of another window, do nothing. */
   CHECK(!seam.resize(window_handle, ScriptedWindowFrame::max_side + 1u, 2u));
   CHECK(!seam.resize(reinterpret_cast<void *>(0x99u), 4u, 2u));
   CHECK_EQ(frames.resizes(), 1u); }

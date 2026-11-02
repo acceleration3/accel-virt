@@ -110,4 +110,4 @@ bool RecordingReader::invariants_hold() const
     return offset_ >= RecordingHeader::encoded_size && header_.invariants_hold();
 }
 
-}  // namespace av
+}

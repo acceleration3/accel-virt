@@ -65,8 +65,6 @@ void FenceInterrupts::raise(uint32_t line)
     const bool injected = connected_;
     if (injected) host_.raise_fence_interrupt(line);
     host_.unlock_mutex(lock_);
-    /* Counted outside this lock: the stress probe holds its own, and nesting
-     * them would put the interrupt path behind two. */
     if (injected && stress_ != nullptr) stress_->raised(line);
 }
 
@@ -77,7 +75,6 @@ void FenceInterrupts::report_to(InterruptStressProbe &stress)
     stress_ = &stress;
 }
 
-/* Read on the main loop, which alone changes it. */
 bool FenceInterrupts::connected() const
 {
     AV_SCOPE("FenceInterrupts::connected");
@@ -90,4 +87,4 @@ bool FenceInterrupts::invariants_hold() const
     return lock_ != nullptr || !connected_;
 }
 
-}  // namespace av
+}

@@ -40,17 +40,12 @@
 namespace av::icd {
 
 namespace {
-
-/* The host extension a shared allocation is exported through, and the
- * application extension whose presence asks for it (feature 053). */
 constexpr const char *dma_buf_extension = "VK_EXT_external_memory_dma_buf";
 constexpr const char *win32_memory_extension = "VK_KHR_external_memory_win32";
 
 using Entry = vkicd::generated::Entry;
 using Level = vkicd::generated::DispatchLevel;
 
-/* The first rows are what the loader may ask for with no instance
- * (loader_interface.md); the rest answer only through an instance. */
 constexpr uint32_t before_instance_rows = 6u;
 const Entry        local_rows[] = {
     {"vkCreateInstance", reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateInstance), Level::global},
@@ -160,63 +155,26 @@ const Entry        local_rows[] = {
     {"vkQueuePresentKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkQueuePresentKHR), Level::device},
 };
 constexpr uint32_t local_row_count = sizeof local_rows / sizeof local_rows[0];
-/* VK_API_VERSION_1_3, spelled without the header macro's C casts. */
 constexpr uint32_t vulkan_1_3 = (1u << 22u) | (3u << 12u);
-/* The device extensions this ICD reports (research.md §9), each with the test
- * that exercises it through the ICD; tools/check_extension_policy.py holds every
- * row to a test that exists and a name the generator implemented. The probe's
- * arrive with T037. */
 constexpr ExtensionPolicy::Row reported_extensions[] = {
     {"VK_EXT_memory_budget", 1u, "icd_memory.the_budget_nodes_in_the_chain_are_the_adapter_s"},
-    /* VK_EXT_external_memory_host is implemented - an application's own
-     * pages lent to the device and imported as the type it asked
-     * (docs/host-memory.md, "Application memory") - and is reported once a
-     * test proves it through this ICD: no test, no row. */
     {"VK_KHR_swapchain", 70u, "icd_presentation.a_swapchain_presents_its_frame_on_the_window"},
-    /* Feature 047. VK_EXT_map_memory_placed is deliberately absent: a chunk's
-     * view is at the address VidMm chose, so this driver cannot place a
-     * mapping and does not claim to (spec.md Clarifications, research.md 9). */
     {"VK_KHR_map_memory2", 1u, "icd_memory.map_memory2_maps_what_vk_map_memory_does_and_refuses_placement"},
     {"VK_KHR_descriptor_update_template", 1u,
             "icd_descriptor_templates.a_template_is_remembered_and_sizes_the_blob_it_carries"},
     {"VK_KHR_push_descriptor", 2u,
             "fullstack_templates.a_descriptor_set_updated_through_a_template_reaches_the_host"},
-    /* The two Win32 external-object extensions, answered over the host's own
-     * fd extensions: no Linux driver has a Win32 handle to give, so what the
-     * host must have is the mechanism behind them (feature 047, US3,
-     * research.md §10). Their version is this ICD's, since the host's is a
-     * different extension's. VK_KHR_external_memory_win32's KMT and Direct3D
-     * handle types are deliberately absent - answered as absent by the
-     * external-property queries - because nothing here turns a Direct3D object
-     * into a host one. */
     {"VK_KHR_external_memory_win32", 1u,
             "icd_external_handles.a_handle_exported_is_opened_by_the_device_on_import",
             "VK_KHR_external_memory_fd"},
     {"VK_KHR_external_semaphore_win32", 1u,
             "icd_external_handles.a_semaphore_handle_becomes_the_host_s_own_fd_import",
             "VK_KHR_external_semaphore_fd"},
-    /* Minecraft's Vulkan backend declines a device without all three - "does
-     * not support required extensions from FeatureSet [Minecraft base
-     * required]" - and falls back to OpenGL. Their commands are core 1.3 or
-     * aliases the generator already emits, and their features are structures
-     * the chain carries to the host. */
     {"VK_KHR_dynamic_rendering", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
     {"VK_KHR_synchronization2", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
     {"VK_EXT_vertex_attribute_divisor", 3u,
             "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
-    /* DXVK before 2.0 declines a device without it: Portal's Vulkan
-     * renderer (DXVK 1.8.1) failed "Required Vulkan extension
-     * VK_KHR_image_format_list not supported". Core in 1.2; its one
-     * structure crosses in an image's create. */
     {"VK_KHR_image_format_list", 1u, "reported_extensions.an_image_s_format_list_reaches_the_host"},
-    /* What DXVK 3.1 and vkd3d-proton 3.0 use (audit of third_party/,
-     * 2026-09-30). DXVK requires robustness2, depth clip enable, load/store
-     * op none and maintenance 5 and 6, and vkd3d-proton robustness2; without
-     * them neither makes a device. The rest each open a path the libraries
-     * take when offered. Deliberately absent: the ray-tracing family (not
-     * yet proved end to end), calibrated timestamps (the host's time domains
-     * are not the guest's), AMD anti-lag (its markers are the host's
-     * presents, not these), and descriptor buffers (the profile says why). */
     {"VK_EXT_robustness2", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
     {"VK_EXT_depth_clip_enable", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
     {"VK_EXT_custom_border_color", 12u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
@@ -270,9 +228,6 @@ constexpr ExtensionPolicy::Row reported_extensions[] = {
     {"VK_AMD_shader_core_properties2", 1u, "reported_extensions.an_extension_with_no_structure_of_its_own_is_enabled_on_the_host"},
 };
 constexpr uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
-/* The instance extensions this ICD reports. The *2 queries are its own entry
- * points, and vulkaninfo reads a physical device's LUID only when this
- * extension is listed (the live --vulkan run of 045). */
 struct InstanceExtension {
     const char *name;
     uint32_t    spec_version;
@@ -281,26 +236,15 @@ constexpr InstanceExtension reported_instance_extensions[] = {
     {"VK_KHR_get_physical_device_properties2", 2u},
     {"VK_KHR_surface", 25u},
     {"VK_KHR_win32_surface", 6u},
-    /* DXVK resolves vkGetPhysicalDeviceSurfaceCapabilities2KHR whether or not
-     * it enabled the extension, and answering null there does not make it fall
-     * back - it makes D3D device creation fail
-     * (tools/codegen/profiles/vulkan.toml:19-25). The ICD answers both *2
-     * queries itself (feature 046), so it reports the extension that names
-     * them (feature 047, US1 scenario 1). */
     {"VK_KHR_get_surface_capabilities2", 1u},
 };
 constexpr uint32_t reported_instance_extension_count =
     sizeof reported_instance_extensions / sizeof reported_instance_extensions[0];
-/* The application's structure and the nodes after it that a memory properties
- * query looks at; a longer or cyclic chain is looked at this far. */
 constexpr uint32_t max_chain = 32u;
-/* More than any GPU driver lists: a host claiming more is not asked for them. */
 constexpr uint32_t max_host_extensions = 1024u;
-/* The most command buffers one vkAllocateCommandBuffers stages the host's
- * handles for, on the stack; the generated wrappers hold the same bound. */
 constexpr uint32_t max_allocated_at_once = 1024u;
 
-}  // namespace
+}
 
 IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
                  KeyedLog &log, IcdBinding &binding, WindowSurface &windows, WindowChains &chains,
@@ -425,8 +369,6 @@ VkResult IcdRoot::create_instance(const VkInstanceCreateInfo *create, const VkAl
         pending_ = nullptr;
         return taken == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_EXTENSION_NOT_PRESENT;
     }
-    /* The window-system extensions are answered here, not by the host: it runs
-     * on the host's own platform and has none of them (feature 046). */
     VkInstanceCreateInfo forwarded = *create;
     forwarded.enabledExtensionCount = asked.count();
     forwarded.ppEnabledExtensionNames = asked.names();
@@ -439,8 +381,6 @@ VkResult IcdRoot::create_instance(const VkInstanceCreateInfo *create, const VkAl
         span_adapters(forwarded, allocator, *instance);
         return VK_SUCCESS;
     }
-    /* The host made an instance no handle could be made for: closing its
-     * context is what destroys it. */
     release_connection(opened);
     return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
@@ -458,8 +398,6 @@ void IcdRoot::span_adapters(const VkInstanceCreateInfo &forwarded, const VkAlloc
         }
     }
     const Connection *const primary = connection_of(own, LoaderHandle::Kind::instance);
-    /* The LUIDs alone: each instance's connection opens its adapter itself,
-     * and the list's handles are closed before any does. */
     uint64_t luids[AvgpuAdapters::max_adapters] = {};
     uint32_t count = 0u;
     {
@@ -479,7 +417,6 @@ void IcdRoot::span_adapters(const VkInstanceCreateInfo &forwarded, const VkAlloc
         pending_ = opened;
         VkInstance     sibling = VK_NULL_HANDLE;
         const VkResult made = vkicd::generated::Wrap_vkCreateInstance(&forwarded, allocator, &sibling);
-        /* A refusal has released the connection already. */
         if (made != VK_SUCCESS) {
             lines_.note("vkCreateInstance: another adapter's host refused, result", static_cast<uint32_t>(made));
             continue;
@@ -506,7 +443,6 @@ VkResult IcdRoot::enumerate_physical_devices(VkInstance instance, uint32_t *coun
         const ThreadLockHold release(lock_);
         span = span_of(instance);
     }
-    /* An instance spanning no other asks its host as it always has. */
     if (span == nullptr || span->count() == 1u)
         return vkicd::generated::Wrap_vkEnumeratePhysicalDevices(instance, count, physical_devices);
     uint32_t total = 0u;
@@ -515,8 +451,6 @@ VkResult IcdRoot::enumerate_physical_devices(VkInstance instance, uint32_t *coun
         const VkInstance on = span->at(index);
         uint32_t         has = 0u;
         const VkResult   counted = vkicd::generated::Wrap_vkEnumeratePhysicalDevices(on, &has, nullptr);
-        /* The application's own instance answers for itself; another
-         * adapter's that cannot is left out, as an adapter with no device. */
         if (counted != VK_SUCCESS) {
             if (index == 0u) return counted;
             continue;
@@ -585,7 +519,6 @@ VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     if (connection->refuses("vk_icdEnumerateAdapterPhysicalDevices")) return VK_ERROR_DEVICE_LOST;
-    /* The instance on that adapter: the application's own, or one it spans. */
     VkInstance        on = luid == connection->luid() ? instance : VK_NULL_HANDLE;
     Connection       *on_connection = connection;
     VkInstance        spanned[InstanceSpan::max_instances] = {};
@@ -645,17 +578,12 @@ VkResult IcdRoot::enumerate_device_extensions(VkPhysicalDevice physical_device, 
     ScopeExit released([&] { memory_.release(host); });
     result = vkproto::av_vkEnumerateDeviceExtensionProperties(transport, translation_, physical_device, nullptr, &listed, host);
     if (result != VK_SUCCESS && result != VK_INCOMPLETE) return result;
-    /* The one time the host's own list is in hand: whether it shares by
-     * dma-buf is decided here and read everywhere else (feature 053, T031). */
     for (uint32_t index = 0u; index < listed; index++)
         if (__builtin_strcmp(host[index].extensionName, dma_buf_extension) == 0)
             made->connection()->note_host_dma_buf();
     return extensions_.report(host, listed, count, properties);
 }
 
-/* Whether this host has the dma-buf extension, asked once per connection. A
- * refusal or a host that lists none leaves the answer as it was, which is the
- * opaque fd - what every host shared by before feature 053. */
 void IcdRoot::learn_host_sharing(LoaderHandle &made, VkPhysicalDevice physical_device)
 {
     AV_SCOPE("IcdRoot::learn_host_sharing");
@@ -702,20 +630,10 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
              create->enabledExtensionCount);
         return taken == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_EXTENSION_NOT_PRESENT;
     }
-    /* Where the host has it, the dma-buf extension is asked for beside the fd
-     * one: a shared allocation is exported as a dma-buf so another process's
-     * open can import it, and VkExportMemoryAllocateInfo naming that type on a
-     * device made without the extension is refused (feature 053). */
     if (asked.named(win32_memory_extension)) {
-        /* Asked here rather than waiting for the application to enumerate:
-         * what a shared allocation is exported as has to be settled before the
-         * device is made, and an application may never ask for the list. */
         learn_host_sharing(*made, physical_device);
-        /* Not branched on, because it cannot fail: `take` made room for one
-         * more name. */
         if (made->connection()->host_has_dma_buf()) static_cast<void>(asked.add(dma_buf_extension));
     }
-    /* A swapchain is this ICD's own, so the host's device is not asked for it. */
     VkDeviceCreateInfo forwarded = *create;
     forwarded.enabledExtensionCount = asked.count();
     forwarded.ppEnabledExtensionNames = asked.names();
@@ -724,8 +642,6 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
         vkproto::av_vkCreateDevice(made->connection()->transport(), translation_, physical_device, &forwarded, allocator, &host);
     if (result != VK_SUCCESS) return result;
     *device = static_cast<VkDevice>(wrap_child(LoaderHandle::Kind::device, host, *made));
-    /* Without a handle the host's device cannot be named to destroy it; it
-     * goes when the instance's context closes. */
     return *device != VK_NULL_HANDLE ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
@@ -745,9 +661,6 @@ vkproto::HandleTranslation &IcdRoot::wire_handles()
     return translation_;
 }
 
-/* The generated wrapper makes the template on the host; what it made is
- * remembered here, because the length of every blob a later update carries is
- * this template's and nothing in that call says so (feature 047). */
 VkResult IcdRoot::create_descriptor_update_template(VkDevice device,
                                                     const VkDescriptorUpdateTemplateCreateInfo *create,
                                                     const VkAllocationCallbacks *allocator,
@@ -755,8 +668,6 @@ VkResult IcdRoot::create_descriptor_update_template(VkDevice device,
 {
     AV_SCOPE("IcdRoot::create_descriptor_update_template");
     if (create == nullptr || made == nullptr) return VK_ERROR_INITIALIZATION_FAILED;
-    /* What the entries say is read before the host is asked: a template whose
-     * blob cannot be sized is one no update through it could carry. */
     DescriptorTemplateLayout layout;
     if (layout.take(create->pDescriptorUpdateEntries, create->descriptorUpdateEntryCount) != Status::ok) {
         lines_.write("a descriptor update template names entries this driver cannot size");
@@ -766,8 +677,6 @@ VkResult IcdRoot::create_descriptor_update_template(VkDevice device,
     if (result != VK_SUCCESS) return result;
     const VkResult recorded = templates_.record(device, *made, create);
     if (recorded == VK_SUCCESS) return VK_SUCCESS;
-    /* No room to remember it is no template at all: an update through one this
-     * table does not know would send a blob of no bytes. */
     vkicd::generated::Wrap_vkDestroyDescriptorUpdateTemplate(device, *made, allocator);
     *made = VK_NULL_HANDLE;
     return recorded;
@@ -781,14 +690,6 @@ void IcdRoot::destroy_descriptor_update_template(VkDevice device, VkDescriptorUp
     vkicd::generated::Wrap_vkDestroyDescriptorUpdateTemplate(device, made, allocator);
 }
 
-/* What a shared allocation is exported and imported as. A dma-buf where the
- * host has it, because that is the only kind the *device* can import for
- * another process: vkGetMemoryFdPropertiesKHR refuses an opaque fd, whose
- * memory type is implicit and known only to whoever allocated it, so an opaque
- * fd can be imported only where the importing application names the type
- * itself - which is this process and no other. An opaque fd is still what a
- * host without the extension shares by, and within one process that works;
- * across one, such a host shares nothing (feature 053, T031). */
 VkFlags IcdRoot::memory_share_type(const Connection &connection) const
 {
     AV_SCOPE("IcdRoot::memory_share_type");
@@ -801,9 +702,6 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
 {
     AV_SCOPE("IcdRoot::publish");
     const uint32_t guest_device = made.connection()->device();
-    /* One page, and its pages are never read. What is shared is the host
-     * object; this exists only because dxgkrnl mints an identity over an
-     * allocation and there is no guest allocation of host memory at all. */
     SharedAllocationData carrier_data(
         AllocationDescriptor(AllocationKind::client, true, SurfaceLayout(), SharedObjectRecord::page_size,
                              ScanoutTarget()),
@@ -813,9 +711,6 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
         guest_device, carrier_data.lend(), static_cast<uint32_t>(SharedAllocationData::encoded_size), carrier);
     if (created != Status::ok) {
         refused("vkAllocateMemory: no allocation to mint a shared object's identity into, NTSTATUS");
-        /* What the refusal was about, because the status alone cannot say:
-         * a device of 0 is a connection that never opened, and the length is
-         * the one thing this request has that an ordinary create does not. */
         lines_.note("vkAllocateMemory: the carrier was asked for on guest device", guest_device);
         lines_.note("vkAllocateMemory: the carrier's private driver data was bytes", SharedAllocationData::encoded_size);
         return VK_ERROR_TOO_MANY_OBJECTS;
@@ -825,10 +720,6 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
         lines_.write("the miniport minted no identity into a shared object's carrier");
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     }
-    /* Published before the handle is minted: a handle naming an object the
-     * device does not hold is one an opening process would follow to nothing.
-     * What is published stays the guest's until the carrier goes, which the
-     * unwind below sees to on every refusal after it. */
     SharedObjectCall     call(made.connection()->transport());
     const uint64_t       wire_handle = memory != VK_NULL_HANDLE ? HandleBits(memory).value()
                                                                 : HandleBits(semaphore).value();
@@ -847,8 +738,6 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
         refused("vkAllocateMemory: no NT handle for a shared object, NTSTATUS");
         return VK_ERROR_TOO_MANY_OBJECTS;
     }
-    /* A row the arguments here always make: what refuses one is a process
-     * with no memory left, and then nothing published is left behind. */
     if (!externals_.remember(device, memory, semaphore, carrier_data.object_id(), size, handle, carrier)) {
         lines_.write("no memory to remember a shared object; it is given back");
         shared_handles_.forget(handle);
@@ -858,9 +747,6 @@ VkResult IcdRoot::publish(LoaderHandle &made, VkDevice device, uint32_t kind, ui
     return VK_SUCCESS;
 }
 
-/* The device holds nothing of this context's for an object it published -
- * the guest's hold goes when the miniport sees the carrier destroyed - so
- * nothing is sent. */
 void IcdRoot::release_shared(LoaderHandle &made, const ExternalObjectSlot &row)
 {
     AV_SCOPE("IcdRoot::release_shared");
@@ -868,11 +754,6 @@ void IcdRoot::release_shared(LoaderHandle &made, const ExternalObjectSlot &row)
     static_cast<void>(kmt_.destroy_shared_allocation(made.connection()->device(), row.carrier_));
 }
 
-/* Nothing is asked of the host or the kernel here. The identity and the NT
- * handle were made when the object was created, because Vulkan promises that a
- * handle to memory an application declared exportable can be got afterwards
- * without failing for want of resources - so the refusal belongs at the
- * allocate, where the application can still act on it (feature 053). */
 VkResult IcdRoot::export_memory_handle(VkDevice device, const MemoryGetWin32HandleRecord *request, void **handle)
 {
     AV_SCOPE("IcdRoot::export_memory_handle");
@@ -900,8 +781,6 @@ VkResult IcdRoot::export_semaphore_handle(VkDevice device, const SemaphoreGetWin
         request->handle_type_ != opaque_win32_semaphore)
         return VK_ERROR_INVALID_EXTERNAL_HANDLE;
     LoaderHandle *const made = allocating_device(device);
-    /* A semaphore is published the first time a handle to it is asked for:
-     * unlike memory, nothing in its creation says it will be shared. */
     uint64_t named = externals_.handle_of_semaphore(request->semaphore_);
     if (named == 0u) {
         if (request->semaphore_ == VK_NULL_HANDLE) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
@@ -938,16 +817,10 @@ VkResult IcdRoot::memory_handle_properties(VkDevice device, void *)
 {
     AV_SCOPE("IcdRoot::memory_handle_properties");
     if (allocating_device(device) == nullptr) return VK_ERROR_INVALID_EXTERNAL_HANDLE;
-    /* The query answers for a handle from outside, and a handle this ICD did
-     * not export names nothing here (contracts/external_objects.md). */
     lines_.write("vkGetMemoryWin32HandlePropertiesKHR: a handle this driver did not export names nothing");
     return VK_ERROR_INVALID_EXTERNAL_HANDLE;
 }
 
-/* Vulkan imports a payload into a semaphore the application already made, so
- * the open names that semaphore and the device imports into it, whichever
- * process - this one included - published the fence. A semaphore that holds a
- * payload imported before lets it go first: the new one replaces it. */
 VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphoreWin32HandleRecord *request)
 {
     AV_SCOPE("IcdRoot::import_semaphore_handle");
@@ -971,8 +844,6 @@ VkResult IcdRoot::import_semaphore_handle(VkDevice device, const ImportSemaphore
                                             "vkImportSemaphoreWin32HandleKHR");
     if (answered != VK_SUCCESS) return answered;
     if (opened == semaphore) return VK_SUCCESS;
-    /* The device answered another object than the one the payload went
-     * into: nothing the application holds names it. */
     lines_.write("a semaphore's import answered another semaphore; it is given back");
     static_cast<void>(opens.give_back(connection.transport(), SharedObjectKind::monitored_fence, opened));
     return VK_ERROR_INVALID_EXTERNAL_HANDLE;
@@ -994,10 +865,6 @@ void IcdRoot::destroy_semaphore(VkDevice device, VkSemaphore semaphore, const Vk
 {
     AV_SCOPE("IcdRoot::destroy_semaphore");
     LoaderHandle *const made = allocating_device(device);
-    /* A device this ICD did not make has no connection to send over, and the
-     * generated wrapper follows one without asking. Every other entry point
-     * here answers such a device INVALID_EXTERNAL_HANDLE; this one returns
-     * nothing, because vkDestroySemaphore has nothing to answer with. */
     if (made == nullptr) return;
     {
         const ThreadLockHold release(memory_lock_);
@@ -1020,8 +887,6 @@ void IcdRoot::external_buffer_properties(VkPhysicalDevice physical_device,
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
     if (!memory_handles_.answers(info->handleType)) {
-        /* Not a type this ICD shares by: answered as absent rather than asked
-         * of a host that means something else by it. */
         properties->externalMemoryProperties = VkExternalMemoryProperties{};
         return;
     }
@@ -1034,8 +899,6 @@ void IcdRoot::external_buffer_properties(VkPhysicalDevice physical_device,
                                                              &answered);
     properties->externalMemoryProperties.externalMemoryFeatures =
         answered.externalMemoryProperties.externalMemoryFeatures;
-    /* Memory opened from a handle has no identity of this process's to
-     * publish again: its handle is the one it was opened from. */
     properties->externalMemoryProperties.exportFromImportedHandleTypes = 0u;
     properties->externalMemoryProperties.compatibleHandleTypes =
         memory_handles_.reported(answered.externalMemoryProperties.compatibleHandleTypes);
@@ -1112,9 +975,6 @@ VkResult IcdRoot::shared_allocation(LoaderHandle &made, VkDevice device, const V
     const VkResult allocated = vkproto::av_vkAllocateMemory(made.connection()->transport(), translation_, device,
                                                              chain.forwarded(), allocator, &memory);
     if (allocated != VK_SUCCESS) return allocated;
-    /* Declared exportable, so the identity is minted now: Vulkan promises the
-     * handle can be got later without failing for want of resources, and a
-     * memory nobody shares is never given one (feature 053, T031). */
     const VkResult published = publish(made, device, SharedObjectKind::memory, size, memory, VK_NULL_HANDLE);
     if (published == VK_SUCCESS) return VK_SUCCESS;
     vkproto::av_vkFreeMemory(made.connection()->transport(), translation_, device, memory, allocator);
@@ -1122,10 +982,6 @@ VkResult IcdRoot::shared_allocation(LoaderHandle &made, VkDevice device, const V
     return published;
 }
 
-/* Memory a Win32 handle names, opened on the device into the importing
- * device: published by another process, or by another device of this one -
- * the device holds an object once for each device it is imported into, so
- * each VkDevice gets a VkDeviceMemory of its own (feature 053). */
 VkResult IcdRoot::imported_allocation(LoaderHandle &made, const ImportMemoryWin32HandleRecord &importing,
                                       uint64_t size, VkDeviceMemory &memory)
 {
@@ -1149,16 +1005,12 @@ void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *alloc
     templates_.forget_device(device);
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return;
-    /* A process that exits holding everything leaves nothing: each object's
-     * reference on the device, its NT handle and its carrier are given back
-     * before the device that owns them goes (feature 053, T033). */
     {
         const ThreadLockHold release(memory_lock_);
         ExternalObjectSlot   row = {};
         while (externals_.take_any_of_device(device, row)) release_shared(*made, row);
         made->connection()->opened_objects().give_back_into(made->connection()->transport(), made->host());
     }
-    /* A swapchain frees its memory through the device: before the device's own. */
     presentation_.forget_device(device);
     release_device_memory(*made);
     release_idle_fences(*made);
@@ -1168,7 +1020,6 @@ void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *alloc
     destroy_wrapper(device, LoaderHandle::Kind::device);
 }
 
-/* Each queue's vkQueueWaitIdle fence, before the device that owns them. */
 void IcdRoot::release_idle_fences(LoaderHandle &device)
 {
     AV_SCOPE("IcdRoot::release_idle_fences");
@@ -1193,7 +1044,6 @@ void IcdRoot::destroy_instance(VkInstance instance, const VkAllocationCallbacks 
     if (span != nullptr) {
         for (uint32_t index = 1u; index < span->count(); ++index) destroy_one_instance(span->at(index), allocator);
         const ThreadLockHold release(lock_);
-        /* Found in the pool just now, so the pool cannot refuse it. */
         static_cast<void>(spans_.destroy(span));
     }
     destroy_one_instance(instance, allocator);
@@ -1288,9 +1138,6 @@ VkResult IcdRoot::allocate_memory(VkDevice device, const VkMemoryAllocateInfo *i
     if (made == nullptr) return VK_ERROR_DEVICE_LOST;
     if (made->connection()->refuses("vkAllocateMemory")) return VK_ERROR_DEVICE_LOST;
     const ThreadLockHold release(memory_lock_);
-    /* An allocation that shares memory is the host's whole and never a chunk
-     * of this process's RAM: exported as the host's own type, or opened on
-     * the device (feature 053). */
     if (shares_memory(info->pNext)) return shared_allocation(*made, device, *info, allocator, *memory);
     DeviceMemory *const owned = memory_of(*made);
     if (owned == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -1319,9 +1166,6 @@ void IcdRoot::free_memory(VkDevice device, VkDeviceMemory memory, const VkAlloca
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return;
     const ThreadLockHold release(memory_lock_);
-    /* Memory this context opened was made by the device inside the open and
-     * is destroyed by the release; memory it exported is given back and then
-     * freed as any it allocated itself. */
     if (made->connection()->opened_objects().give_back(made->connection()->transport(), SharedObjectKind::memory,
                                                        HandleBits(memory).value()))
         return;
@@ -1344,9 +1188,6 @@ VkResult IcdRoot::map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSiz
     return owned->map(memory, offset, size, flags, *data);
 }
 
-/* The VkMemoryMapInfoKHR shape of the same mapping. Placement is refused, not
- * ignored: the chunk's view is at the address VidMm chose, so a caller that
- * asked for one of its own must be told no (contracts/placed_mappings.md). */
 VkResult IcdRoot::map_memory2(VkDevice device, const VkMemoryMapInfoKHR *info, void **data)
 {
     AV_SCOPE("IcdRoot::map_memory2");
@@ -1412,8 +1253,6 @@ void *IcdRoot::wrap(LoaderHandle::Kind kind, uint64_t host, Connection *connecti
     return wrap_under(kind, host, connection, parent);
 }
 
-/* Under the root's lock. A command buffer is not a handle without its batch:
- * every vkCmd* on it records there. */
 LoaderHandle *IcdRoot::wrap_under(LoaderHandle::Kind kind, uint64_t host, Connection *connection,
                                   LoaderHandle *parent)
 {
@@ -1428,7 +1267,6 @@ LoaderHandle *IcdRoot::wrap_under(LoaderHandle::Kind kind, uint64_t host, Connec
     CommandBatch *batch = nullptr;
     if (batches_.create(batch, memory_, *connection) != Status::ok) {
         lines_.note("no batch for host command buffer", host);
-        /* The handle was made just now, so the registry cannot refuse it. */
         static_cast<void>(handles_.destroy(handle));
         return nullptr;
     }
@@ -1436,7 +1274,6 @@ LoaderHandle *IcdRoot::wrap_under(LoaderHandle::Kind kind, uint64_t host, Connec
     return handle;
 }
 
-/* The registry refuses a parent destroyed since it was looked up. */
 void *IcdRoot::wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &parent)
 {
     AV_SCOPE("IcdRoot::wrap_child");
@@ -1523,8 +1360,6 @@ VkResult IcdRoot::allocate_command_buffers(VkDevice device, const VkCommandBuffe
         command_buffers[wrapped] =
             static_cast<VkCommandBuffer>(wrap_child(LoaderHandle::Kind::command_buffer, hosts[wrapped], *made));
         if (command_buffers[wrapped] != VK_NULL_HANDLE) continue;
-        /* The ones already handed out go back; the host's others stay in their
-         * pool until it is reset or destroyed, with no handle to name them by. */
         free_command_buffers(device, info->commandPool, wrapped, command_buffers);
         lines_.note("vkAllocateCommandBuffers: host command buffers left in their pool:", count - wrapped);
         for (uint32_t cleared = 0u; cleared < count; cleared++) command_buffers[cleared] = VK_NULL_HANDLE;
@@ -1557,8 +1392,6 @@ VkResult IcdRoot::begin_command_buffer(VkCommandBuffer command_buffer, const VkC
     return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
-/* A command that could not be recorded, End's own included, is latched in the
- * batch, so what end() answers is the whole recording's answer. */
 VkResult IcdRoot::end_command_buffer(VkCommandBuffer command_buffer)
 {
     AV_SCOPE("IcdRoot::end_command_buffer");
@@ -1613,8 +1446,6 @@ VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *in
     return probe.result();
 }
 
-/* A wait for query results is a wait on host work with no timeout of its own:
- * it never passes (SlicedWait::forever), but no host call it makes blocks. */
 VkResult IcdRoot::query_pool_results(VkDevice device, VkQueryPool pool, uint32_t first, uint32_t count, size_t size,
                                      void *data, VkDeviceSize stride, VkQueryResultFlags flags)
 {
@@ -1634,11 +1465,6 @@ VkResult IcdRoot::query_pool_results(VkDevice device, VkQueryPool pool, uint32_t
     return probe.result();
 }
 
-/* The host's own vkQueueWaitIdle has no timeout, so it could hold the context's
- * worker past TdrDelay; a fence on an empty submission can be waited for in
- * slices instead. The queue keeps that fence: making one per wait was a round
- * trip of its own, several times a frame in an application that waits for its
- * queue between passes. */
 VkResult IcdRoot::queue_wait_idle(VkQueue queue)
 {
     AV_SCOPE("IcdRoot::queue_wait_idle");
@@ -1648,9 +1474,6 @@ VkResult IcdRoot::queue_wait_idle(VkQueue queue)
         return VK_ERROR_DEVICE_LOST;
     }
     if (made->connection()->refuses("vkQueueWaitIdle")) return VK_ERROR_DEVICE_LOST;
-    /* Nothing sent on the connection since the queue was last found idle -
-     * no submit, no present, nothing - leaves it idle: a device-wide wait
-     * right after a queue's own was a whole submission and wait for nothing. */
     Connection &connection = *made->connection();
     if (made->idle_at() == connection.submissions()) {
         idle_skipped_++;
@@ -1697,8 +1520,6 @@ VkResult IcdRoot::signal_acquire(VkDevice device, VkSemaphore semaphore, VkFence
                                       1u, &submit, fence);
 }
 
-/* An application may submit only through a queue it was handed, so the queues
- * this ICD handed out are every queue with work on it. */
 VkResult IcdRoot::device_wait_idle(VkDevice device)
 {
     AV_SCOPE("IcdRoot::device_wait_idle");
@@ -1767,8 +1588,6 @@ void IcdRoot::report(StateWriter &writer)
 bool IcdRoot::invariants_hold() const
 {
     AV_SCOPE("IcdRoot::invariants_hold");
-    /* The entry point tables are constant: a row named twice is a build
-     * mistake the root's tests see as a wrong answer, not a state it reaches. */
     if (pending_ != nullptr || !handles_.invariants_hold() || handles_on_connections() != handles_.live()) return false;
     if (!batches_.invariants_hold() || batches_.live() != handles_.batches()) return false;
     if (!batches_.all_of([](const CommandBatch &batch) { return batch.invariants_hold(); })) return false;
@@ -1806,4 +1625,4 @@ bool IcdRoot::present_context(VkDevice device, VkPhysicalDevice &physical, uint6
     return true;
 }
 
-}  // namespace av::icd
+}

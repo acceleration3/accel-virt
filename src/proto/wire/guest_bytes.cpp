@@ -40,18 +40,13 @@ bool GuestBytes::over(const uint8_t *base) const
 uint8_t *GuestBytes::at(uint64_t offset, uint64_t bytes) const
 {
     AV_SCOPE("GuestBytes::at");
-    /* Subtraction rather than `offset + bytes`, which is what a guest would
-     * pick the numbers to wrap. */
     if (base_ == nullptr || offset > length_ || bytes > length_ - offset) return nullptr;
-    /* Within length_, which a mapping of this process holds, so it fits. */
     return base_ + static_cast<uintptr_t>(offset);
 }
 
 bool GuestBytes::holds(const void *bytes) const
 {
     AV_SCOPE("GuestBytes::holds");
-    /* As integers: the pointer may be into any other object. One below the
-     * base wraps to an offset past the end. */
     return base_ != nullptr && reinterpret_cast<uintptr_t>(bytes) - reinterpret_cast<uintptr_t>(base_) < length_;
 }
 
@@ -67,4 +62,4 @@ bool GuestBytes::invariants_hold() const
     return (base_ == nullptr) == (length_ == 0u);
 }
 
-}  // namespace av
+}

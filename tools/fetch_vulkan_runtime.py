@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the Vulkan loader and vulkaninfo for Windows x64, pinned by URL and hash.
-
-The same standard as the Khronos registries' fetch: a pinned archive, a SHA-256,
-and nothing written when they disagree. Every file taken out of the archive is
-pinned too, and all of them are verified before the first is written, so what
-lands in third_party/vulkan-runtime/ is either the pinned set or what was there
-before. --check says whether the files on disk are the pinned ones.
-
-The pins are data, in tools/vulkan_runtime_pins.txt:
-
-    archive <url> <sha256>
-    <file> <path inside the archive's top directory> <sha256>
-
-which is what lets the tests drive this against a local archive through file://.
-"""
+"""Fetch the Vulkan loader and vulkaninfo for Windows x64, pinned by URL and hash."""
 import argparse
 import hashlib
 import io
@@ -28,17 +14,14 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT_PINS = ROOT / "tools" / "vulkan_runtime_pins.txt"
 DEFAULT_INTO = ROOT / "third_party" / "vulkan-runtime"
 ARCHIVE = "archive"
-# The guest runner pushes both beside the probe: the loader the probe imports,
-# and vulkaninfo, which SC-001 names.
 WANTED = ("vulkan-1.dll", "vulkaninfo.exe")
 
 
 class Refused(Exception):
-    """A pin that cannot be honoured; the message names what."""
+    pass
 
 
 def pins_from(path):
-    """(archive url, archive sha256, {file: (inside, sha256)})."""
     archive = None
     files = {}
     for number, line in enumerate(path.read_text().splitlines(), 1):
@@ -68,8 +51,6 @@ def sha256_of(raw):
 
 
 def problems_on_disk(into, files):
-    """{file: what is wrong with it}, empty when every pinned file is present
-    with its pinned hash."""
     problems = {}
     for name, (_inside, digest) in files.items():
         path = into / name
@@ -83,13 +64,10 @@ def problems_on_disk(into, files):
 
 
 def download(url, digest, cache):
-    """The archive, cached under the hash it is pinned to, with a partial
-    download removed rather than left to be trusted next time."""
     archive = cache / f"vulkan-runtime-{digest}.zip"
     if archive.is_file():
         return archive
     partial = archive.with_suffix(".part")
-    # sdk.lunarg.com answers 403 to Python's default User-Agent.
     request = urllib.request.Request(url, headers={"User-Agent": "accel-virt-fetch"})
     try:
         with urllib.request.urlopen(request) as source, partial.open("wb") as out:
@@ -102,8 +80,6 @@ def download(url, digest, cache):
 
 
 def verified_files(archive, digest, files):
-    """{file: bytes} for every pinned file, each matching its pin, or Refused
-    before anything is written."""
     raw = archive.read_bytes()
     got = sha256_of(raw)
     if got != digest:

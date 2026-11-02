@@ -1,7 +1,3 @@
-/* One allocation as a memory exporter made it: a value carrying the memory's
- * handle, its dma-buf, the exporter's mapping and its size. What a caller
- * acts on is whether it was made at all - a handle of 0 is the one answer
- * "nothing" has - and that every field reads back as given. */
 #include "executor/exported_memory.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -13,7 +9,7 @@ namespace {
 
 std::uint8_t mapping[64];
 
-}  // namespace
+}
 
 TEST(exported_memory, nothing_is_not_made_and_names_no_descriptor)
 { const ExportedMemory nothing;
@@ -31,15 +27,10 @@ TEST(exported_memory, an_allocation_answers_every_field_it_was_made_with)
   CHECK(memory.pointer() == mapping);
   CHECK_EQ(memory.size(), 0x10000u); }
 
-/* Made is the handle alone: memory with no descriptor or no mapping is still
- * memory the exporter must free, and handle 0 is never memory whatever else
- * it carries. */
 TEST(exported_memory, made_is_decided_by_the_handle_alone)
 { CHECK(ExportedMemory(1u, -1, nullptr, 0u).made());
   CHECK(!ExportedMemory(0u, 5, mapping, 4096u).made()); }
 
-/* A value: a copy carries the same allocation, which is what lets a source
- * keep it and hand it back to the exporter to free. */
 TEST(exported_memory, a_copy_names_the_same_allocation)
 { const ExportedMemory memory(9u, 3, mapping, 4096u);
   ExportedMemory       copy;

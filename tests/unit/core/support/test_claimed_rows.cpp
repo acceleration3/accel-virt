@@ -29,7 +29,6 @@ struct ClaimedRowsProbe {
         rows.chunks_[chunk][index].ready_ = true;
     }
 
-    /* A second writer publishing chunk `chunk` first, with memory of its own. */
     template <typename Row>
     static void publish_first(ClaimedRows<Row> &rows, BlockSource &blocks, std::uint32_t chunk)
     {
@@ -41,7 +40,7 @@ struct ClaimedRowsProbe {
     }
 };
 
-}  // namespace av
+}
 
 using av::BlockSource;
 using av::ClaimedRows;
@@ -61,8 +60,6 @@ struct Line {
 
 using Lines = ClaimedRows<Line>;
 
-/* A block source whose first allocation of a chunk loses the race: another
- * writer publishes the chunk while this one is still making its own. */
 class RacingBlocks final : public BlockSource {
 public:
     explicit RacingBlocks(MockPlatform &platform) : platform_(platform), rows_(nullptr), chunk_(0u) {}
@@ -113,7 +110,6 @@ void *write_rows(void *argument)
     return nullptr;
 }
 
-/* A malloc-backed source for threads: the mock platform keeps its books on one. */
 class ThreadBlocks final : public BlockSource {
 public:
     void *allocate(std::size_t bytes, Pool) override { return std::calloc(1u, bytes); }
@@ -121,7 +117,7 @@ public:
     void  require_irql_at_most(Irql, const char *) override {}
 };
 
-}  // namespace
+}
 
 TEST(claimed_rows_append, starts_with_nothing_and_makes_the_first_chunk_on_the_first_row)
 { MockPlatform platform;

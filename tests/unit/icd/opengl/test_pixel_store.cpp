@@ -1,6 +1,3 @@
-/* The bytes a pixel transfer spans from the application's pointer, as OpenGL
- * 4.6 §8.4.3 sizes them: every format and type a transfer takes, row padding
- * at each alignment, skips, volumes, and sizes too large for size_t. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/opengl/pixel_store.hpp"
 
@@ -17,7 +14,7 @@ struct PixelStoreProbe {
     static void break_skip(PixelStore &store) { store.values_[4] = -1; }
 };
 
-}  // namespace av::glicd
+}
 
 namespace {
 
@@ -33,7 +30,7 @@ struct Case {
     std::size_t   pixel;
 };
 
-}  // namespace
+}
 
 TEST(pixel_store, a_pixel_is_its_components_times_its_value_bytes)
 { const PixelStore store;
@@ -43,13 +40,10 @@ TEST(pixel_store, a_pixel_is_its_components_times_its_value_bytes)
       {0x8D94u, ubyte, 1u}, {0x8D95u, ubyte, 1u}, {0x8D96u, ubyte, 1u}, {0x8228u, ubyte, 2u},
       {0x8D98u, ubyte, 3u}, {0x8D99u, ubyte, 4u}, {0x8D9Au, ubyte, 3u}, {0x8D9Bu, ubyte, 4u},
       {0x80E0u, ubyte, 3u}, {0x1904u, ubyte, 1u}, {0x1905u, ubyte, 1u},
-      /* The compatibility profile's, which the host sizes too: a luminance
-       * lookup table is what Photoshop's Blur Gallery uploads. */
       {luminance, ubyte, 1u}, {luminance, gl_float, 4u}, {luminance_alpha, ubyte, 2u},
       {luminance_alpha, half, 4u}, {color_index, ushort, 2u}, {alpha_integer, sint, 4u},
   };
   for (const Case &row : cases) {
-      /* One pixel, and one row of three at alignment 1 so no padding shows. */
       CHECK_EQ(store.span(row.format, row.type, 1, 1, 1), row.pixel);
   }
   CHECK(store.invariants_hold()); }
@@ -63,7 +57,6 @@ TEST(pixel_store, a_packed_type_is_one_value_per_pixel_and_only_with_its_format)
       {rgb, 0x8C3Eu, 4u},  {depth_stencil, 0x8DADu, 8u},
   };
   for (const Case &row : packed) CHECK_EQ(store.span(row.format, row.type, 1, 1, 1), row.pixel);
-  /* A packing given the wrong format sizes nothing. */
   const Case refused[] = {
       {rgba, 0x8032u, 0u}, {rgb, 0x8033u, 0u}, {rgba, 0x84FAu, 0u}, {depth_stencil, 0x8035u, 0u},
       {rgba, 0x8C3Eu, 0u}, {red, 0x8363u, 0u}, {depth_stencil, ubyte, 0u},
@@ -83,8 +76,6 @@ TEST(pixel_store, nothing_is_sized_for_an_unknown_format_or_type_or_an_empty_tra
   CHECK_EQ(store.span(rgba, ubyte, 4, -1, 1), 0u);
   CHECK_EQ(store.span(rgba, ubyte, 4, 4, -1), 0u); }
 
-/* The default alignment of 4: a 3x2 RGB image of bytes pads its first row to
- * 12 and leaves the last unpadded - 12 + 9. */
 TEST(pixel_store, rows_pad_to_the_alignment_only_when_a_value_is_narrower)
 { PixelStore store;
   CHECK_EQ(store.span(rgb, ubyte, 3, 2, 1), 21u);
@@ -97,7 +88,6 @@ TEST(pixel_store, rows_pad_to_the_alignment_only_when_a_value_is_narrower)
   CHECK(store.set(Field::alignment, 8));
   CHECK_EQ(store.span(rgb, ubyte, 3, 2, 1), 25u);
   CHECK(store.invariants_hold());
-  /* Floats are 4 bytes: no padding at 4, padding to 8 at 8. */
   CHECK_EQ(store.span(red, gl_float, 3, 2, 1), 16u + 12u);
   CHECK(store.set(Field::alignment, 4));
   CHECK_EQ(store.span(red, gl_float, 3, 2, 1), 24u);
@@ -117,8 +107,6 @@ TEST(pixel_store, row_length_and_skips_move_the_span)
   CHECK_EQ(store.get(Field::row_length), 10);
   CHECK(store.invariants_hold()); }
 
-/* A volume counts its images, the image height and the skipped images; a
- * single image ignores both. */
 TEST(pixel_store, a_volume_spans_its_images)
 { PixelStore store;
   CHECK(store.set(Field::alignment, 1));
@@ -158,19 +146,14 @@ TEST(pixel_store, a_span_past_size_t_sizes_nothing)
   CHECK(store.set(Field::image_height, most));
   CHECK_EQ(store.span(rgba, gl_float, 1, most, 1), 0u);
   CHECK_EQ(store.span(rgba, gl_float, 1, 1, most), 0u);
-  /* The largest that fits is sized exactly: 2^31-1 bytes of a single row. */
   PixelStore wide;
   CHECK(wide.set(Field::alignment, 1));
   CHECK_EQ(wide.span(red, ubyte, most, 1, 1), 0x7FFFFFFFu);
-  /* Row padding that would wrap sizes nothing. */
   PixelStore padded;
   CHECK(padded.set(Field::alignment, 8));
   CHECK(padded.set(Field::row_length, most));
   CHECK_EQ(padded.span(rgb, ubyte, 1, 2, 1), static_cast<std::size_t>(3u * 0x7FFFFFFFull + 7u) / 8u * 8u + 3u); }
 
-/* Each product and sum that can wrap, reached exactly: with 8-byte pixels and
- * a row of 2^31-1 of them, 2^30 rows before the last come to 2^64 - 2^33, and
- * a last row of 2^31 pixels is more than the room left. */
 TEST(pixel_store, each_wrap_in_the_span_sizes_nothing)
 { constexpr std::uint32_t d24s8_float = 0x8DADu;
   const std::int32_t most = 0x7FFFFFFF;

@@ -15,7 +15,7 @@ namespace {
 constexpr VkDeviceSize pixel_bytes = 4u;
 constexpr uint32_t     triangle_vertices = 3u;
 
-}  // namespace
+}
 
 DrawWork::DrawWork(ProbeDevice &device, ImageSink &images)
     : device_(device), images_(images), image_(device), readback_(device), commands_(device), render_pass_(VK_NULL_HANDLE),
@@ -24,7 +24,6 @@ DrawWork::DrawWork(ProbeDevice &device, ImageSink &images)
     AV_SCOPE("DrawWork::DrawWork");
 }
 
-/* Vulkan makes destroying VK_NULL_HANDLE a no-op. */
 DrawWork::~DrawWork()
 {
     AV_SCOPE("DrawWork::~DrawWork");
@@ -44,12 +43,10 @@ void DrawWork::run(ProbeOutcome &outcome)
     if (!commands_.begin(outcome)) return;
     record();
     if (!commands_.run(outcome)) return;
-    /* The copy is the image as rendered, top row first. */
     images_.save("vulkan-draw", BmpImage(readback_.bytes(), extent, extent, BmpImage::Rows::top_first));
     outcome.measure(coloured(), pixels);
 }
 
-/* Cleared, drawn, and left ready to be copied out. */
 bool DrawWork::make_render_pass(ProbeOutcome &outcome)
 {
     AV_SCOPE("DrawWork::make_render_pass");
@@ -125,4 +122,4 @@ bool DrawWork::invariants_hold() const
     return triangle_.invariants_hold();
 }
 
-}  // namespace av
+}

@@ -45,8 +45,6 @@ GUEST_DIR = "C:\\av\\samples12"
 GUEST_EXE = GUEST_DIR + "\\avd3d12samples.exe"
 DXC = ROOT / "third_party" / "dxc"
 DXC_FILES = ("dxcompiler.dll", "dxil.dll")
-# dxcompiler.dll links the Visual C++ runtime, which a clean Windows install
-# lacks: without it the samples find no compiler beside them.
 VC_REDIST = ROOT / "third_party" / "vcredist" / "vc_redist.x64.exe"
 VC_REDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 GUEST_EXE_LOCAL = ROOT / "build" / "guest" / "avd3d12samples.exe"
@@ -66,8 +64,6 @@ def sample_arguments(args, out, shaders):
 
 
 def ensure_vc_runtime(work):
-    """Microsoft's Visual C++ runtime in the guest, installed quietly when it
-    is not there: the guest disk is a fresh overlay each boot."""
     present = guest_shell(work, "ps", "Test-Path C:\\Windows\\System32\\vcruntime140_1.dll").strip()
     if present.endswith("True"):
         return
@@ -81,7 +77,6 @@ def ensure_vc_runtime(work):
 
 
 def run_guest(args, out):
-    """The guest's run, and everything it wrote brought back."""
     work = args.work
     guest_shell(work, "ps", f"Remove-Item -Recurse -Force {GUEST_DIR} -ErrorAction SilentlyContinue; "
                             f"New-Item -ItemType Directory -Force {GUEST_DIR}\\out, {GUEST_DIR}\\shaders | Out-Null")
@@ -93,7 +88,6 @@ def run_guest(args, out):
         for name in ("d3d12.dll", "d3d12core.dll"):
             guest_shell(work, "push", str(args.layer / name), f"{GUEST_DIR}\\{name}")
     print("guest: rendering", flush=True)
-    # The user's interactive session, where the D3D runtime loads the user-mode driver.
     command = (f"/c cd /d {GUEST_DIR} && {GUEST_EXE} "
                + " ".join(sample_arguments(args, f"{GUEST_DIR}\\out", f"{GUEST_DIR}\\shaders"))
                + f" > {GUEST_DIR}\\run.txt 2>&1")
@@ -110,7 +104,6 @@ while ((Get-ScheduledTask avsamples12).State -eq 'Running') {{ Start-Sleep 1 }}
 Get-Content {GUEST_DIR}\\run.txt -ErrorAction SilentlyContinue""", timeout=1800)
     print(output, flush=True)
     (out / "guest.log").write_text(output)
-    # Everything in one gzip-compressed tar-like bundle: file name, length, bytes.
     bundle = f"{GUEST_DIR}\\bundle.gz"
     guest_shell(work, "ps", f"""
 $out = [IO.File]::Create('{bundle}')
@@ -147,8 +140,6 @@ $writer.Close()""")
 
 
 def compile_with_wine(args, out):
-    """The guest's program under wine, --compile: DXIL from the same dxcompiler
-    the guest runs, written where the host reads it."""
     print("wine: compiling the shaders", flush=True)
     staging = out / "wine"
     shutil.rmtree(staging, ignore_errors=True)

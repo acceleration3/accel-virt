@@ -35,4 +35,4 @@ bool WindowsThreadWake::wait(uint32_t milliseconds)
     return event_ != nullptr && WaitForSingleObject(event_, milliseconds) == WAIT_OBJECT_0;
 }
 
-}  // namespace av
+}

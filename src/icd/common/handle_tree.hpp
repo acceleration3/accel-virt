@@ -1,22 +1,3 @@
-/* The objects an ICD hands the application as pointers, each made through a
- * parent of a lower kind, and the only place a pointer from outside is
- * believed: Vulkan's dispatchable handles (HandleRegistry) and OpenCL's
- * objects (ClObjectTable).
- *
- * An application passes back whatever it likes - an object it destroyed, one of
- * another kind, a stack address, a number it made up. None of those may be
- * read through to find out, so a pointer is judged by the pool's own record of
- * what it made before anything behind it is looked at.
- *
- * Each node is found by its address through a KeyedSlots index, so judging a
- * pointer is one probe however many objects an application holds. The index
- * also links every node to its parent and to its children, in the order they
- * were made, so a node's children are found without a walk of every node, and
- * a node is destroyed with everything made through it, at any depth, each
- * after everything made through it - at a cost of the subtree, not the tree.
- *
- * `Node` has a `Kind` enumeration ordered from the roots down, `kind()` and
- * `parent()`. The tree takes no lock: its owner serializes it. */
 #ifndef AV_ICD_HANDLE_TREE_HPP
 #define AV_ICD_HANDLE_TREE_HPP
 
@@ -29,16 +10,12 @@
 
 namespace av {
 class BlockSource;
-}  // namespace av
+}
 
 namespace av::icd {
 
 struct HandleTreeProbe;
 
-/* Where one node sits in the tree, kept under its address. The links are
- * slots of the same index. A type of its own so the tree's members are
- * complete (tools/header_scan.py reads a class's members only to its first
- * nested type). */
 template <typename Node>
 struct HandleTreePlace {
     Node    *node_;
@@ -58,43 +35,20 @@ public:
     HandleTree(const HandleTree &) = delete;
     HandleTree &operator=(const HandleTree &) = delete;
 
-    /* One more node, constructed from `arguments`, the last of its parent's
-     * children; no_memory when the pool refuses. Whether its parent fits is the
-     * caller's to ask first. */
     template <typename... Arguments>
     [[nodiscard]] Status make(Node *&made, Arguments &&...arguments);
-    /* Whether a node of `kind` may be made through `parent`: one this tree
-     * holds, of a lower kind. */
     bool                 parent_fits(Kind kind, const Node *parent) const;
-    /* Whether `node` is one this tree holds. */
     bool                 holds(const Node *node) const;
-    /* The node of `kind` at `pointer`, or null; nothing is read through a
-     * pointer the pool did not make. */
     Node                *made(const void *pointer, Kind kind) const;
-    /* The `index`th child of `kind` made through `parent`, in the order they
-     * were made; null past the last, and for a parent this tree does not
-     * hold. */
     Node                *child(const Node &parent, Kind kind, uint32_t index) const;
-    /* Every child made through `parent` to `visit(child)`, in the order they
-     * were made; nothing for a parent this tree does not hold. A visitor that
-     * destroys is a mistake. */
     template <typename Visitor>
     void                 for_children(const Node &parent, Visitor visit) const;
-    /* `node` and every node made through it, at any depth, to `visit(node)`;
-     * nothing for a node this tree does not hold. A visitor that destroys is
-     * a mistake. */
     template <typename Visitor>
     void                 for_subtree(const Node &node, Visitor visit) const;
-    /* `node` and every node made through it, at any depth, destroyed, each
-     * after every node made through it; how many went, 0 for a node this tree
-     * does not hold. */
     uint32_t             destroy(Node &node);
     uint32_t             live() const;
-    /* What it holds, to visit; a visitor that destroys is a mistake. */
     const ObjectPool<Node> &nodes() const;
 
-    /* Every node is indexed at its address, its parent is one this tree holds
-     * and their links agree, and the pool is sound. */
     bool invariants_hold() const;
 
 private:
@@ -104,20 +58,12 @@ private:
     static constexpr uint32_t no_slot = KeyedSlots<uint64_t, Place>::no_slot;
 
     uint64_t key_of(const void *pointer) const;
-    /* The slot `node` is indexed in, or no_slot. */
     uint32_t slot_of(const Node *node) const;
-    /* The place in `slot`, which the caller knows is indexed. */
     Place   &place(uint32_t slot) const;
-    /* The node in `slot` taken out of its parent's children. */
     void     unlink(uint32_t slot);
-    /* Whether the children linked under `slot` agree with it, each counted
-     * into `children`. */
     bool     children_agree(uint32_t slot, uint32_t &children) const;
 
     ObjectPool<Node>                    pool_;
-    /* Every node by its address, with its links. Mutable because a lookup is
-     * how a const question reaches a place, and the index answers a place it
-     * may change only to an index it may change. */
     mutable KeyedSlots<uint64_t, Place> index_;
 };
 
@@ -133,7 +79,6 @@ Status HandleTree<Node>::make(Node *&made, Arguments &&...arguments)
 {
     AV_SCOPE("HandleTree::make");
     made = nullptr;
-    /* Room to index the node first, so a node made is always found. */
     const Status room = index_.reserve(index_.count() + 1u);
     if (room != Status::ok) return room;
     const Status created = pool_.create(made, static_cast<Arguments &&>(arguments)...);
@@ -227,9 +172,6 @@ void HandleTree<Node>::for_subtree(const Node &node, Visitor visit) const
 {
     AV_SCOPE("HandleTree::for_subtree");
     const uint32_t top = slot_of(&node);
-    /* Down to a node's first child where it has one; else on to the next
-     * child of the nearest node at or above it, short of the top, that has
-     * one. */
     for (uint32_t at = top; at != no_slot;) {
         visit(static_cast<const Node &>(*place(at).node_));
         if (place(at).first_child_ != no_slot) {
@@ -265,15 +207,12 @@ uint32_t HandleTree<Node>::destroy(Node &node)
     const uint32_t top = slot_of(&node);
     if (top == no_slot) return 0u;
     uint32_t gone = 0u;
-    /* A node goes once it has no children left: down to a leaf, then back up
-     * to its parent, whose next child is then its first. */
     for (uint32_t at = top;;) {
         while (place(at).first_child_ != no_slot) at = place(at).first_child_;
         const uint32_t above = place(at).parent_;
         Node *const    going = place(at).node_;
         unlink(at);
         index_.erase_slot(at);
-        /* Indexed, so the pool made it and cannot refuse it. */
         static_cast<void>(pool_.destroy(going));
         gone++;
         if (at == top) return gone;
@@ -305,7 +244,6 @@ bool HandleTree<Node>::children_agree(uint32_t slot, uint32_t &children) const
         const Place *const below = index_.at(at);
         if (below == nullptr || below->parent_ != slot || below->previous_ != previous) return false;
         if (static_cast<uint32_t>(below->node_->kind()) <= parent_kind) return false;
-        /* More children than nodes is a loop in the links. */
         if (++children > index_.count()) return false;
         previous = at;
     }
@@ -327,10 +265,9 @@ bool HandleTree<Node>::invariants_hold() const
         if (parent == no_slot) roots++;
         return children_agree(slot, linked);
     });
-    /* Every node but a root is linked under its parent, and only once. */
     return placed && linked + roots == pool_.live();
 }
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_HANDLE_TREE_HPP
+#endif

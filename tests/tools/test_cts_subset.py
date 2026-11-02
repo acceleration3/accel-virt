@@ -1,11 +1,3 @@
-"""Which CTS cases this repository runs, and the gate that keeps the subset
-honest (feature 048, US1 and FR-005).
-
-Constitution VI says nothing is reported that is not implemented. FR-005 goes
-one further: nothing is reported that is not measured. The gate reads both
-lists from where they live, so the test drives it over a repository it builds
-itself rather than over today's tables.
-"""
 import pathlib
 import sys
 import tempfile
@@ -46,8 +38,6 @@ class Subset(unittest.TestCase):
         subset = self.subset("dEQP-VK.api.smoke.*   for: core\ndEQP-VK.memory.mapping.*  for: core\n")
         printed = ["dEQP-VK.api.smoke.triangle", "dEQP-VK.pipeline.huge.case",
                    "dEQP-VK.memory.mapping.suballocation.full", "dEQP-VK.api.smoke.triangle"]
-        # In the order the CTS printed them, each once, and nothing a pattern
-        # does not name.
         self.assertEqual(subset.matching(printed),
                          ["dEQP-VK.api.smoke.triangle", "dEQP-VK.memory.mapping.suballocation.full"])
         self.assertEqual(subset.matching([]), [])
@@ -91,8 +81,6 @@ class Subset(unittest.TestCase):
         self.assertIn("3 reported extension(s) covered", passing.stdout)
 
     def test_a_group_for_an_extension_nobody_reports_fails_too(self):
-        """A subset that measures what the ICD does not report is a subset that
-        drifted from the driver: the run would fail on cases nobody promised."""
         rows = 'constexpr ExtensionPolicy::Row reported_extensions[] = {\n    {"VK_KHR_swapchain", 70u, "t.t"},\n};\n'
         result = run(CHECK, self.repository(rows, "dEQP-VK.wsi.*  for: VK_KHR_swapchain\n"
                                                   "dEQP-VK.ray.*  for: VK_KHR_ray_tracing_pipeline\n"))

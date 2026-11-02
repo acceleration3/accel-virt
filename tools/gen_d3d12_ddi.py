@@ -1,34 +1,4 @@
 #!/usr/bin/env python3
-"""The Direct3D 12 DDI tables' thunks, from the WDK's own header.
-
-D3D12Core asks a user-mode driver for four tables of its own - the device's
-(D3D12DDI_DEVICE_FUNCS_CORE_0109, 127 slots), a command list's
-(D3D12DDI_COMMAND_LIST_FUNCS_3D_0108, 84), a command queue's
-(D3D12DDI_COMMAND_QUEUE_FUNCS_CORE_0001) and the extended features'
-(D3D12DDI_EXTENDED_FEATURES_FUNCS_0096) - at the interface this driver
-answers GetSupportedVersions with (D3D12DDI_SUPPORTED_0110). Every slot is
-typed by a PFN typedef that is one of several versions of the same DDI, and a
-wrong signature is a stack the runtime and the driver disagree about, so clang
-reads the kit's header for the Windows target and this writes, from the types
-it reports:
-
-  src/um/d3d/generated/d3d12_thunks.cpp        one ABI thunk per slot, each one
-                                                line, and the functions that fill
-                                                the four tables
-  src/um/d3d/generated/d3d12_device_ddi.inc     the D3d12Device methods the device,
-                                                queue and extended-feature slots call
-  src/um/d3d/generated/d3d12_recorder_ddi.inc   the D3d12Recorder methods the
-                                                command list slots call
-
-A slot the driver implements is named in IMPLEMENTED; every other slot is still
-filled - D3D12Core reads several of them as non-null before it will make a
-device - with a thunk that answers what a driver without the feature answers:
-E_NOTIMPL, zero, or nothing. A device slot does so through the device's
-`unsupported`, which logs the first call of each.
-
-    tools/gen_d3d12_ddi.py            # regenerate
-    tools/gen_d3d12_ddi.py --check    # fail if the committed files differ
-"""
 import argparse
 import json
 import pathlib
@@ -116,8 +86,6 @@ IMPLEMENTED = {
     },
 }
 
-# How each table's slots find the object that answers them from their first
-# parameter, and the class that is.
 TABLES = [
     (DEVICE_TABLE, "D3D12DDI_HDEVICE", "d3d12", "d3d::DeviceBlock<D3d12Device>({h}.pDrvPrivate).device()", "device"),
     (QUEUE_TABLE, "D3D12DDI_HCOMMANDQUEUE", "d3d12q", "D3d12RecordHandle({h}.pDrvPrivate).device()", "device"),
@@ -128,7 +96,6 @@ TABLES = [
 FILLERS = {DEVICE_TABLE: "fill_device_funcs12", QUEUE_TABLE: "fill_queue_funcs12", LIST_TABLE: "fill_list_funcs12",
            EXTENDED_TABLE: "fill_extended_funcs12"}
 
-# What an unimplemented slot answers, by its return type.
 DEFAULTS = {"HRESULT": "E_NOTIMPL", "void": None}
 
 
@@ -237,16 +204,12 @@ def thunks(tables):
                     raise SystemExit(f"{name}: implemented, but its first parameter is {parameters[0]}")
                 call_arguments = ", ".join(names) if table == LIST_TABLE or table == QUEUE_TABLE else arguments
                 traced = "".join(f", {label}" for label in call_arguments.split(", ") if label)
-                # Every call is written to the process's call trace (D3dCallTrace) by the device it
-                # reaches: after it, so what it made has its id - a destroy before, while its id is there.
                 tracer = "target" if owner == "device" else target.format(h='handle').replace(".recorder()", ".device()")
                 trace = f"{tracer}.trace_call(\"{name[3:]}\"{traced});"
                 kind = "D3d12Recorder" if owner == "recorder" else "D3d12Device"
                 call = f"target.{snake(name)}({call_arguments})"
                 head = f"{{ {kind} &target = {target.format(h='handle')};"
                 if table in (DEVICE_TABLE, EXTENDED_TABLE) and ret == "HRESULT":
-                    # A refusal is logged with the slot's name: most say nothing of why, and the runtime
-                    # hands the bare code to the application.
                     lines.append(f"{head} const HRESULT answer = {call}; {trace} "
                                  f"return target.answered(\"{name[3:]}\", answer); }}")
                 elif ret == "void" and name.startswith("pfnDestroy"):

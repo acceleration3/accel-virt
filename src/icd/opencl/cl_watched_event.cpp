@@ -66,9 +66,6 @@ ClientTransport *ClWatchedEvent::transport() const
 bool ClWatchedEvent::reached_by(cl_int status) const
 {
     AV_SCOPE("ClWatchedEvent::reached_by");
-    /* OpenCL counts down: CL_QUEUED is 3 and CL_COMPLETE is 0, so "at least as
-     * far as" is "no greater than". A negative status is a command that
-     * failed, and every registration runs then. */
     return status < 0 || status <= status_wanted_;
 }
 
@@ -88,4 +85,4 @@ bool ClWatchedEvent::invariants_hold() const
     return event_ != nullptr && transport_ != nullptr && notify_ != nullptr && wire_ != 0u;
 }
 
-}  // namespace av::clicd
+}

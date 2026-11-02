@@ -25,10 +25,6 @@ void OverlayWork::run(ScenarioSteps &steps)
     made_ = true;
     bool supported = false;
     if (steps.check_result("supports_overlays", dxgi_.supports_overlays(supported)) != Status::ok) return;
-    /* Reported, not judged: DXGI answers it from a flag only DWM's classic
-     * path sets (CDXGIOutput::SetHudSupported, dxgi.dll), so on DisplayCore it
-     * is FALSE while DWM promotes swap chains to planes - which the steps
-     * below judge. */
     steps.check_measured("overlays", Status::ok, supported ? 1u : 0u);
     uint32_t flags = 0u;
     if (steps.check_result("check_overlay_support", dxgi_.overlay_support(format_bgra, flags)) != Status::ok) return;
@@ -50,7 +46,6 @@ void OverlayWork::promote(ScenarioSteps &steps, const char *step, int32_t x, int
 {
     AV_SCOPE("OverlayWork::promote");
     if (steps.check_result(step, dxgi_.create_swap_chain(x, y, width, height)) != Status::ok) return;
-    /* Only a refused present is a line of the report, not each of them. */
     for (uint32_t frame = 0u; frame < presents; frame++) {
         const int32_t presented = dxgi_.present(colour);
         if (presented < 0) {
@@ -83,4 +78,4 @@ bool OverlayWork::invariants_hold() const
     return made_ || mode_ == 0u;
 }
 
-}  // namespace av
+}

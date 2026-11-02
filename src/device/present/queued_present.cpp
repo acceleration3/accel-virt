@@ -47,9 +47,6 @@ Status QueuedPresent::accept(ControlRequest &request, const QueuedPresentRequest
     return status;
 }
 
-/* The pages are mapped already, so a present the GPU cannot take is moved
- * through them as before. A swap is the CPU's: the copy puts bytes where they
- * are. */
 void QueuedPresent::lend(ControlRequest &request, GuestRamLendings &lendings)
 {
     AV_SCOPE("QueuedPresent::lend");
@@ -105,10 +102,6 @@ Status QueuedPresent::move(const PresentFrames &snapshots)
 {
     AV_SCOPE("QueuedPresent::move");
     if (present_.source() == QueuedPresentRequest::Source::image) {
-        /* Given back before the move: the descriptor is of a dma-buf the guest
-         * no longer has. One given back during it cannot be: the RAM is not
-         * restored while the engine is mid-move (RunSwapGate), and the restore
-         * carries what the copy wrote. */
         if (lent_fd_ >= 0 && life_->given_back()) fallback_ = Fallback::lending_gone;
         else if (lent_fd_ >= 0) {
             const Status copied = copy_snapshot(snapshots);
@@ -128,12 +121,6 @@ Status QueuedPresent::move_regions(RegionMover &mover)
     return Status::ok;
 }
 
-/* A row the buffer layout places is `pitch` bytes after the one before, in
- * four-byte texels. Nothing is multiplied before it is known to fit: the pitch
- * is a positive int, the rows the destination holds are counted by division,
- * and a region is inside them before its offset is formed - as RegionMover
- * does for its rows. A region whose row would run into the next has no layout
- * either, and the CPU moves it. */
 bool QueuedPresent::place_regions(AvFrameRegion *out) const
 {
     AV_SCOPE("QueuedPresent::place_regions");
@@ -168,8 +155,6 @@ Status QueuedPresent::copy_snapshot(const PresentFrames &snapshots)
     return copied;
 }
 
-/* The snapshot is one extent of the executor's memory, rows `row_pitch`
- * apart: the regions move out of it as out of a surface of that pitch. */
 Status QueuedPresent::move_snapshot(const PresentFrames &snapshots)
 {
     AV_SCOPE("QueuedPresent::move_snapshot");
@@ -246,4 +231,4 @@ bool QueuedPresent::invariants_hold() const
     return mapped == (present_.ticket() != 0u) && (mapped || refusals_after_ == 0u);
 }
 
-}  // namespace av
+}

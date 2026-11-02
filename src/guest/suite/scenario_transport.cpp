@@ -47,4 +47,4 @@ GuestConnection &ScenarioTransport::connection()
     return connection_;
 }
 
-}  // namespace av
+}

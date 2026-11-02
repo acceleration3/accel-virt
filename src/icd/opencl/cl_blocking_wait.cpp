@@ -14,9 +14,6 @@ ClBlockingWait::ClBlockingWait(Kmt &kmt, ClEventWatcher &watcher)
     AV_SCOPE("ClBlockingWait::ClBlockingWait");
 }
 
-/* The deadline passing with work still outstanding answers CL_SUCCESS: the
- * two APIs this serves have no timeout to report, so what the caller gets is
- * the answer a completed wait would give; the events say the rest. */
 cl_int ClBlockingWait::until_complete(ClientTransport &wire, const uint64_t *events, uint32_t count,
                                       uint64_t timeout, bool driven)
 {
@@ -49,4 +46,4 @@ uint64_t ClBlockingWait::raises_asked() const
     return raises_asked_;
 }
 
-}  // namespace av::clicd
+}

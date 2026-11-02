@@ -9,8 +9,6 @@ PublishedSlotLayout::PublishedSlotLayout(uint64_t arena_bytes) : arena_bytes_(ar
     AV_SCOPE("PublishedSlotLayout::PublishedSlotLayout");
 }
 
-/* An arena whose size is not a whole number of words would put the word
- * where an aligned load cannot read it. */
 bool PublishedSlotLayout::holds_tail() const
 {
     AV_SCOPE("PublishedSlotLayout::holds_tail");
@@ -40,4 +38,4 @@ bool PublishedSlotLayout::keeps_word_clear(uint64_t offset, uint32_t count) cons
     return count != 0u && offset % slot_bytes == 0u && offset <= word && span <= word - offset;
 }
 
-}  // namespace av
+}

@@ -1,12 +1,3 @@
-/* What the device core asks of the process it runs in, answered by the
- * renderer process (docs/renderer.md). Its control thread is the "main loop":
- * the one thread that takes QEMU's messages, and the one routines posted with
- * run_on_main_loop run on. Guest memory is what QEMU sent as regions; a
- * worker's event waits on the doorbell QEMU registered too, because the guest
- * rings a KVM ioeventfd this process never made; a fence interrupt is a write
- * to the guest notifier QEMU passed. What only QEMU has - the display, the
- * hostmem BAR, the GPU catalog and its probes, the guest's RAM blocks and the
- * renderer process itself - is not_supported here. */
 #ifndef AV_POSIX_RENDERER_HOST_HPP
 #define AV_POSIX_RENDERER_HOST_HPP
 
@@ -26,7 +17,6 @@ class GuestMemoryTable;
 
 class PosixRendererHost final : public Host, public RendererResources {
 public:
-    /* One per doorbell page. */
     static constexpr uint32_t max_interrupt_lines = 64u;
 
     PosixRendererHost(GuestMemoryTable &memory, DoorbellOffers &doorbells);
@@ -34,18 +24,12 @@ public:
     PosixRendererHost(const PosixRendererHost &) = delete;
     PosixRendererHost &operator=(const PosixRendererHost &) = delete;
 
-    /* The calling thread is the main loop from here on. no_memory when the
-     * descriptor routines are posted through cannot be made. */
     [[nodiscard]] Status become_main_loop();
-    /* The descriptor that is readable while posted routines wait. */
     int                  main_loop_wakeup() const;
-    /* Main loop: every routine posted so far, in order. */
     void                 run_main_loop_work();
     [[nodiscard]] Status map_region(int descriptor, uint64_t size, void *&base) override;
     void                 unmap_region(void *base, uint64_t size) override;
     void                 close_descriptor(int descriptor) override;
-    /* The memfd the next create_host_memory maps; this host closes it with the
-     * memory, or at the next offer if nothing took it. */
     void                 take_interrupt_lines(const int *descriptors, uint32_t count) override;
     void                 drop_interrupt_lines() override;
     [[nodiscard]] Status load_executor(const char *path, uint32_t length, const AvExecutorOps *&ops) override;
@@ -75,7 +59,6 @@ public:
     GpuIdentity          gpu_identity(uint32_t index) override;
     [[nodiscard]] Status gpu_pci_address(uint32_t index, PciAddress &address) override;
     [[nodiscard]] Status read_file(const char *path, char *buffer, size_t capacity, size_t &length) override;
-    /* The renderer runs contexts, not the display: it lists nothing. */
     [[nodiscard]] Status list_directory(const char *path, char *buffer, size_t capacity, size_t &length) override;
 
     uint64_t monotonic_nanoseconds() override;
@@ -90,7 +73,6 @@ public:
     [[nodiscard]] Status reserve_range(uint64_t bytes, void *&base) override;
     [[nodiscard]] Status alias_guest_run(void *run, uint64_t bytes, void *at) override;
     void                 release_range(void *base, uint64_t bytes) override;
-    /* Host blobs live in QEMU's process, never in the renderer's. */
     [[nodiscard]] Status overlay_guest_run(void *run, uint64_t bytes, int fd, uint64_t offset) override;
     [[nodiscard]] Status restore_guest_run(void *run, uint64_t bytes) override;
     [[nodiscard]] bool   pause_guest() override;
@@ -138,7 +120,6 @@ public:
                                           uint32_t capacity_descriptors, uint32_t &count,
                                           uint32_t timeout_ms) override;
     void                 kill_renderer() override;
-    /* A renderer serves no export socket (docs/external-export.md). */
     [[nodiscard]] Status receive_export(int connection, uint8_t *buffer, size_t capacity, size_t &length) override;
     [[nodiscard]] Status send_export(int connection, const uint8_t *bytes, size_t length, int descriptor) override;
     void                 shutdown_export(int connection) override;
@@ -165,13 +146,11 @@ private:
     PosixLock         posted_lock_;
     Posted           *posted_first_;
     Posted           *posted_last_;
-    /* The device core's mutexes (create_mutex): each one's address is its
-     * handle. */
     ObjectPool<PosixLock> locks_;
     int               interrupt_lines_[max_interrupt_lines];
     bool              interrupts_connected_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_POSIX_RENDERER_HOST_HPP
+#endif

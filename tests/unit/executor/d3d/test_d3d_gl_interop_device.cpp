@@ -1,9 +1,3 @@
-/* A Direct3D 11 texture a guest shares, opened by OpenGL on the same GPU
- * (feature 053, docs/shared-surfaces.md step 5): the texture is made over
- * memory the D3D backend exports, the GL backend imports that memory as a
- * memory object, a pattern is written into a texture over it through GL, and
- * Direct3D reads back every texel where GL put it. This is how an OpenGL window's frames reach a DXGI chain.
- * A host without DXVK or without OpenGL on one GPU returns without judging. */
 #include "proto/d3d/resource_misc.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
@@ -35,8 +29,6 @@ extern "C" const char *__lsan_default_suppressions(void)
 }
 
 namespace av {
-
-/* The host's own GL of a backend, called directly with its context current. */
 struct OpenGlBackendProbe {
     static const glproto::RealGl &gl(OpenGlBackend &backend)
     {
@@ -45,11 +37,9 @@ struct OpenGlBackendProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
-
-/* What the last import answered beside its handle, handed back to its release. */
 std::uint64_t detail = 0u;
 
 using namespace av::d3dproto;
@@ -58,8 +48,6 @@ constexpr std::uint32_t size = 64u;
 constexpr std::uint32_t format_r8g8b8a8 = 28u;
 constexpr std::uint32_t bind_shader_resource = 0x8u;
 constexpr std::uint32_t bind_render_target = 0x20u;
-/* Shared and asked for as rows, as the code of ours that makes a texture
- * another API reads asks for it (SharedRowsScope). */
 constexpr std::uint32_t misc_shared = av::ResourceMisc::shared_bit | av::ResourceMisc::rows_bit;
 constexpr std::uint64_t key = 0x5100000000000031ull;
 constexpr std::uint64_t bytes = size * size * 4u;
@@ -70,7 +58,7 @@ constexpr unsigned gl_unsigned_byte = 0x1401;
 constexpr unsigned gl_texture_tiling = 0x9580;
 constexpr unsigned gl_linear_tiling = 0x9585;
 
-}  // namespace
+}
 
 TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_through_direct3d)
 {
@@ -116,12 +104,8 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
         const av::glproto::RealGl &gl = av::OpenGlBackendProbe::gl(opengl);
         unsigned texture = 0u;
         gl.glCreateTextures(gl_texture_2d, 1, &texture);
-        /* The shared image is linear (ExportableImages); GL is told so, as a
-         * window chain's slot tells it (ChainedFrames). */
         gl.glTextureParameteri(texture, gl_texture_tiling, static_cast<int>(gl_linear_tiling));
         gl.glTextureStorageMem2DEXT(texture, 1, gl_rgba8, size, size, static_cast<unsigned>(memory), 0u);
-        /* Every texel its own value, so a layout the two drivers disagree on
-         * moves texels where a clear would not show it. */
         static std::uint8_t pattern[size * size * 4u];
         for (std::uint32_t at = 0u; at < size * size; at++) {
             pattern[at * 4u] = static_cast<std::uint8_t>(at % size);
@@ -140,7 +124,6 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
     std::uint64_t read = 0u;
     CHECK(av_d3d_ReadSubresource(wire, 1u, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
     CHECK_EQ(hresult, 0u);
-    /* R8G8B8A8 in memory: red, green, blue, alpha - each texel where GL put it. */
     CHECK_EQ(row_pitch, size * 4u);
     const std::uint32_t probes[] = {0u, 1u, size - 1u, size, size * 3u + 17u, size * size / 2u + 9u, size * size - 1u};
     for (const std::uint32_t at : probes) {

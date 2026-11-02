@@ -1,4 +1,3 @@
-// texturearray, texturecubemap, distancefieldfonts, textoverlay, debugmarker, occlusionquery, multithreading
 #include "framework.h"
 
 #ifdef _WIN32
@@ -10,8 +9,6 @@
 namespace samples {
 
 namespace {
-
-// ---------------------------------------------------------------- small math and noise
 
 float saturate(float x) { return clamp(x, 0.0f, 1.0f); }
 float smooth01(float t) { return t * t * (3.0f - 2.0f * t); }
@@ -102,15 +99,12 @@ float4 transform4(const float4x4 &m, float3 p)
     return r;
 }
 
-// ---------------------------------------------------------------- GL state helpers
-
 #define MESH_INPUTS                                  \
     "layout(location = 0) in vec3 position;\n"      \
     "layout(location = 1) in vec3 normal;\n"        \
     "layout(location = 2) in vec2 uv;\n"            \
     "layout(location = 3) in vec3 color;\n"
 
-// The fullscreen triangle's corners, as the D3D11 samples' vertex-ID shaders make them.
 #define SCREEN_VERTEX R"(
 out vec2 v_uv;
 void main() {
@@ -128,7 +122,6 @@ GLuint dynamic_buffer(uint32_t bytes)
     return made;
 }
 
-// Direct3D's Map(WRITE_DISCARD): the old contents given up, the new written through a mapping.
 bool write_buffer(GLuint buffer, const void *data, uint32_t bytes)
 {
     void *mapped = glMapNamedBufferRange(buffer, 0, bytes, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
@@ -172,7 +165,6 @@ void depth_state(bool test, bool write, GLenum func = GL_LESS)
     glDepthFunc(func);
 }
 
-// A colour target and a depth buffer, for off-screen passes.
 struct RenderTexture {
     GLuint   texture = 0;
     GLuint   depth = 0;
@@ -196,8 +188,6 @@ struct RenderTexture {
     }
 };
 
-// ---------------------------------------------------------------- mesh building
-
 void paint(Mesh &mesh, float3 color, float mask)
 {
     for (uint32_t i = 0; i < mesh.vertex_count; i++) {
@@ -206,7 +196,6 @@ void paint(Mesh &mesh, float3 color, float mask)
     }
 }
 
-// Many parts, transformed, into one mesh.
 struct MeshBuilder {
     Mesh     mesh;
     uint32_t vertex_capacity = 0, index_capacity = 0;
@@ -242,7 +231,6 @@ struct MeshBuilder {
         }
         for (uint32_t i = 0; i < part.index_count; i++) mesh.indices[mesh.index_count++] = base + part.indices[i];
     }
-    // Adds the part and frees it.
     void take(Mesh part, const float4x4 &transform)
     {
         add(part, transform);
@@ -257,14 +245,11 @@ struct MeshBuilder {
     }
 };
 
-// A surface of revolution about y. `profile` holds (radius, height) from the bottom up; a
-// repeated point makes a hard edge.
 Mesh lathe_mesh(const float2 *profile, uint32_t count, uint32_t sides, float3 color)
 {
     Mesh mesh;
     mesh.vertices = static_cast<Vertex *>(allocate(sizeof(Vertex) * count * (sides + 1)));
     mesh.indices = static_cast<uint32_t *>(allocate(sizeof(uint32_t) * (count - 1) * sides * 6));
-    // The normal of the segment from point i to i + 1, (0, 0) when the two points coincide.
     auto segment_normal = [&](uint32_t i) -> float2 {
         const float dr = profile[i + 1].x - profile[i].x, dy = profile[i + 1].y - profile[i].y;
         const float l = sqrt(dr * dr + dy * dy);
@@ -275,7 +260,6 @@ Mesh lathe_mesh(const float2 *profile, uint32_t count, uint32_t sides, float3 co
         const float2 after = i + 1 < count ? segment_normal(i) : float2{0, 0};
         const bool hard_before = i > 0 && before.x == 0 && before.y == 0;
         const bool hard_after = i + 1 < count && after.x == 0 && after.y == 0;
-        // A duplicated point is a hard edge: each copy takes the normal of its own side only.
         float2 n = hard_before ? after : hard_after ? before : float2{before.x + after.x, before.y + after.y};
         const float nl = sqrt(n.x * n.x + n.y * n.y);
         if (nl > 0) n = {n.x / nl, n.y / nl};
@@ -307,7 +291,6 @@ float3 bezier(float3 p0, float3 p1, float3 p2, float3 p3, float t)
     return p0 * (u * u * u) + p1 * (3 * u * u * t) + p2 * (3 * u * t * t) + p3 * (t * t * t);
 }
 
-// A tube along a cubic Bezier lying in the xy plane, its radius going from r0 to r1.
 Mesh tube_mesh(float3 p0, float3 p1, float3 p2, float3 p3, float r0, float r1, uint32_t segments, uint32_t sides,
                float3 color)
 {
@@ -343,9 +326,6 @@ Mesh tube_mesh(float3 p0, float3 p1, float3 p2, float3 p3, float r0, float r1, u
     return mesh;
 }
 
-// ---------------------------------------------------------------- the built-in 5x7 font
-
-// Columns left to right, bit 0 the top row: ASCII 32..126.
 const uint8_t font5x7[95][5] = {
     {0x00, 0x00, 0x00, 0x00, 0x00}, {0x00, 0x00, 0x5F, 0x00, 0x00}, {0x00, 0x07, 0x00, 0x07, 0x00},
     {0x14, 0x7F, 0x14, 0x7F, 0x14}, {0x24, 0x2A, 0x7F, 0x2A, 0x12}, {0x23, 0x13, 0x08, 0x64, 0x62},
@@ -394,15 +374,12 @@ uint32_t text_length(const char *text)
     return n;
 }
 
-// "+1.25" / "-0.50": always signed, two decimals.
 void append_signed(char *to, size_t capacity, float value)
 {
     append_text(to, capacity, value <= -0.005f ? "-" : "+");
     append_number(to, capacity, abs(value), 2);
 }
 
-// Screen-space text from the 5x7 font: one dynamic vertex buffer rebuilt each frame.
-// Screen-space text from the 5x7 font: one dynamic vertex buffer rebuilt each frame.
 const char *const bitmap_text_common = R"(
 layout(std140, binding = 0) uniform Screen { vec4 screen; vec4 color; };
 )";
@@ -427,7 +404,6 @@ void main() {
 }
 )";
 
-// The layout of a 2D position and uv at a 16-byte stride, over `vertices`.
 GLuint text_layout(GLuint vertices)
 {
     GLuint made = 0;
@@ -533,15 +509,12 @@ private:
     uint32_t count_ = 0;
 };
 
-// Pixel position of a world point, as the text overlay places its labels.
 float2 project(const float4x4 &world_view_projection, float3 p, const Gpu &gpu)
 {
     const float4 clip = transform4(world_view_projection, p);
     return {(clip.x / clip.w * 0.5f + 0.5f) * static_cast<float>(gpu.width),
             (0.5f - clip.y / clip.w * 0.5f) * static_cast<float>(gpu.height)};
 }
-
-// ================================================================ texturearray
 
 const char *const texturearray_common = R"(
 layout(std140, binding = 0, row_major) uniform Frame { mat4 view_projection; mat4 world[7]; vec4 layer[7]; };
@@ -615,7 +588,6 @@ struct TextureArrayFrame {
     float4   layer[7];
 };
 
-// Seven textures in one array texture, each instance of one quad picking its slice.
 class TextureArray final : public Sample {
 public:
     const char *name() const override { return "texturearray"; }
@@ -674,8 +646,6 @@ private:
     GLuint   constants_ = 0;
 };
 
-// ================================================================ texturecubemap
-
 float3 city_environment(float3 d)
 {
     const float horizontal = sqrt(d.x * d.x + d.z * d.z);
@@ -723,7 +693,6 @@ float3 city_environment(float3 d)
     return float3{0.02f, 0.025f, 0.05f} + float3{0.05f, 0.05f, 0.07f} * sky + float3{1, 1, 1} * (star > 0.9993f ? 0.8f : 0.0f);
 }
 
-// D3D's cube faces in order +x, -x, +y, -y, +z, -z; u right, v down.
 float3 cube_direction(int face, float u, float v)
 {
     switch (face) {
@@ -785,7 +754,6 @@ struct CubemapFrame {
     float4   eye, right, up, forward;
 };
 
-// A cube map as a skybox and in a mirror sphere's reflection.
 class TextureCubemap final : public Sample {
 public:
     const char *name() const override { return "texturecubemap"; }
@@ -861,13 +829,10 @@ private:
     GLuint   constants_ = 0;
 };
 
-// ================================================================ distancefieldfonts
-
 struct Segment {
     float ax, ay, bx, by;
 };
 
-// The glyph's lit pixels joined to their lit neighbours: a stroke skeleton for a smooth, bold letter.
 uint32_t glyph_skeleton(char c, Segment *out)
 {
     uint32_t n = 0;
@@ -936,14 +901,12 @@ void main() { target = vec4(1, 1, 1, texture(atlas, v_uv).a); }
 )";
 
 struct DistanceFieldFrame {
-    float4 place;   // x: pixels per glyph unit, yz: pixel offset
+    float4 place;
     float4 screen;
     float4 outline_color;
     float4 outline;
 };
 
-// A signed distance field atlas, made on the CPU from the 5x7 font, drawn sharp with an
-// outline at any scale; below it, the same glyphs as a plain coverage bitmap, magnified.
 class DistanceFieldFonts final : public Sample {
 public:
     const char *name() const override { return "distancefieldfonts"; }
@@ -1032,7 +995,6 @@ private:
         release_memory(sdf);
         release_memory(bitmap);
     }
-    // One quad per glyph cell, in glyph units from the text's top-left.
     void build_text(Gpu &gpu, const char *line)
     {
         const uint32_t n = text_length(line);
@@ -1064,8 +1026,6 @@ private:
     uint32_t vertex_count_ = 0;
     float    text_width_ = 1.0f;
 };
-
-// ================================================================ textoverlay
 
 uint32_t panel_texel(int x, int y, int size)
 {
@@ -1159,8 +1119,6 @@ struct TextOverlayFrame {
     float4   light, eye, screen;
 };
 
-// Screen text over a 3D scene: a bitmap font in a dynamic vertex buffer, alpha blended,
-// with labels following the projected corners of a textured cube.
 class TextOverlay final : public Sample {
 public:
     const char *name() const override { return "textoverlay"; }
@@ -1265,8 +1223,6 @@ private:
     BitmapText text_;
 };
 
-// ================================================================ debugmarker
-
 const char *const debugmarker_common = R"(
 layout(std140, binding = 0, row_major) uniform Frame { mat4 view_projection; vec4 light; };
 )";
@@ -1346,7 +1302,6 @@ Mesh recolored(Mesh mesh, float3 color)
     return mesh;
 }
 
-// The debug marker scene's named parts; the glowing ones are drawn again into the glow target.
 enum ScenePart { hill, rocks, tree, stems, blue_caps, red_caps, grass, chest_box, chest_fittings, part_count };
 
 const char *const part_events[part_count] = {"Draw \"hill\"", "Draw \"rocks\"", "Draw \"tree\"",
@@ -1451,10 +1406,6 @@ struct DebugMarkerFrame {
     float4   light;
 };
 
-// KHR_debug groups and markers around every pass and draw, object labels on
-// the resources - Direct3D's user annotations and debug object names; the
-// scene is toon shaded on the left, wireframe on the right (scissored), with a
-// blurred glow pass rendered off-screen and added on top.
 class DebugMarker final : public Sample {
 public:
     const char *name() const override { return "debugmarker"; }
@@ -1552,8 +1503,6 @@ private:
     void name_object(GLenum kind, GLuint object, const char *label) { glObjectLabel(kind, object, -1, label); }
     void begin(const char *label) { glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, label); }
     void end() { glPopDebugGroup(); }
-    // Direct3D's rectangle, corners from the top left; the window's rows run
-    // the same way under the upper-left clip origin.
     void set_scissor(uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1)
     {
         glScissor(static_cast<GLint>(x0), static_cast<GLint>(y0), static_cast<GLsizei>(x1 - x0),
@@ -1572,8 +1521,6 @@ private:
     GLuint        constants_ = 0;
     GLuint        sampler_ = 0;
 };
-
-// ================================================================ occlusionquery
 
 Mesh teapot_mesh(float3 color)
 {
@@ -1633,8 +1580,6 @@ struct OcclusionFrame {
     float4   light, eye, params;
 };
 
-// Two objects either side of a translucent plane; GL_SAMPLES_PASSED queries,
-// run in a depth-only pass, decide whether each is shaded or drawn dark.
 class OcclusionQuery final : public Sample {
 public:
     const char *name() const override { return "occlusionquery"; }
@@ -1642,7 +1587,6 @@ public:
     {
         program_ = gpu.program("occlusionquery", {.common = occlusionquery_common, .vertex = occlusionquery_vertex,
                                                   .fragment = occlusionquery_fragment});
-        // Direct3D's depth pass binds no pixel shader: a program with no fragment stage.
         depth_only_ = gpu.program("occlusionquery_depth", {.common = occlusionquery_common,
                                                            .vertex = occlusionquery_vertex});
         Mesh teapot = teapot_mesh({1, 0, 0});
@@ -1671,7 +1615,6 @@ public:
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, constants_);
         raster_state(false, false, false);
 
-        // The occlusion pass: depth only, the occluder first, then each object counted against it.
         glUseProgram(depth_only_);
         blend_state(Blend::no_color);
         draw(gpu, plane_, occluder_world(), {0, 0, 1, 0});
@@ -1682,8 +1625,6 @@ public:
         glBeginQuery(GL_SAMPLES_PASSED, queries_[1]);
         draw(gpu, sphere_, sphere_world(), {1, 1, 0, 0});
         glEndQuery(GL_SAMPLES_PASSED);
-        // As the original: the scene shows what the previous frame counted, and
-        // this frame's counts are read once all of it has been submitted.
         const GLuint64 *passed = passed_;
 
         glDepthMask(GL_TRUE);
@@ -1749,8 +1690,6 @@ private:
     float3     eye_ = {0, 0, 0};
     float4x4   view_projection_ = float4x4::identity();
 };
-
-// ================================================================ multithreading
 
 Mesh ufo_mesh()
 {
@@ -1861,10 +1800,6 @@ struct UfoState {
 };
 
 
-// OpenGL has no command lists to record elsewhere: the worker threads compute
-// their share of the saucers' constants in parallel, as the original's
-// secondary command buffers are recorded, and the main thread uploads them in
-// one piece and draws each through its own range of the buffer.
 class Multithreading final : public Sample {
 public:
     const char *name() const override { return "multithreading"; }
@@ -1907,8 +1842,6 @@ public:
             workers_[t].first = t * (objects / threads);
             workers_[t].count = objects / threads;
         }
-        // The pool lives as long as the sample, as the original's does: a
-        // frame hands each worker its share and waits for it.
         for (Worker &w : workers_) spawn(w);
         return !gpu.failed;
     }
@@ -2061,7 +1994,6 @@ private:
     }
 #endif
 
-    // On the worker's thread: its share of the saucers' constants.
     void record(Worker &w)
     {
         for (uint32_t i = w.first; i < w.first + w.count; i++) {
@@ -2091,7 +2023,7 @@ private:
     float4x4 view_projection_ = float4x4::identity();
 };
 
-}  // namespace
+}
 
 void register_textures(Sample **all, uint32_t &made)
 {
@@ -2104,4 +2036,4 @@ void register_textures(Sample **all, uint32_t &made)
     all[made++] = new Multithreading();
 }
 
-}  // namespace samples
+}

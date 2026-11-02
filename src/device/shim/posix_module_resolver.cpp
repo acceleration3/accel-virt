@@ -34,4 +34,4 @@ bool PosixModuleResolver::resolve(uint64_t address, char *name, size_t capacity,
     return true;
 }
 
-}  // namespace av
+}

@@ -85,4 +85,4 @@ void Inspector::ProcessesPanel(ui::Context& ctx) {
     ui::EndWindow(ctx);
 }
 
-} // namespace inspector
+}

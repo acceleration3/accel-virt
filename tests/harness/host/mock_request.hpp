@@ -1,5 +1,3 @@
-/* One virtio-gpu control request as the glue would hand it to the core: its
- * bytes, and the response the core sends, which MockHost records. */
 #ifndef AV_MOCK_REQUEST_HPP
 #define AV_MOCK_REQUEST_HPP
 
@@ -16,7 +14,6 @@ public:
     MockRequest &operator=(const MockRequest &) = delete;
 
     std::size_t read(std::size_t offset, std::uint8_t *buffer, std::size_t size) const;
-    /* False when the request was already answered. */
     bool        answer(const std::uint8_t *bytes, std::size_t size);
 
     bool          answered() const;
@@ -33,6 +30,6 @@ private:
     bool          answered_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MOCK_REQUEST_HPP
+#endif

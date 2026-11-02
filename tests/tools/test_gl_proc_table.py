@@ -1,10 +1,3 @@
-"""The OpenGL 1.1 table order is read from opengl32.dll's own table.
-
-The fixtures are real images: a DLL clang-cl and lld-link build with a PDB,
-holding a `glCltRGBAProcTable` of `glclt*` functions laid out as opengl32's is
-(a u32 count, padding, then pointers), so the tool's PE and PDB reading is
-judged, not a stand-in for it.
-"""
 import importlib.util
 import pathlib
 import tempfile
@@ -28,9 +21,6 @@ def names(count=ENTRIES):
 
 
 class Fixture:
-    """opengl32's table shape: `count` in the header, then one pointer per
-    element of `targets`, each naming a function the image defines."""
-
     def __init__(self, directory, count=ENTRIES, targets=None, functions=None, values=None, stubs=None):
         functions = functions or [f"glcltF{index}" for index in range(ENTRIES)]
         targets = targets or functions
@@ -53,8 +43,6 @@ class Fixture:
                   "/OPT:NOREF,ICF", f"/PDB:{directory / 'opengl32.pdb'}", f"/OUT:{self.binary}", *objects)
 
     def assemble(self, directory, stubs):
-        """opengl32's export shape: the thread's table, then a jump through
-        the slot's offset in it."""
         lines = [".text", "slot_tls: .long 0x1480"]
         for name, slot in stubs.items():
             lines += [f".globl {name}", f"{name}:", "movq %gs:0x30, %rcx", "movl slot_tls(%rip), %eax",
@@ -212,7 +200,6 @@ class BinaryTest(unittest.TestCase):
         self.assertIn("entry 30 points at RVA", result.stderr)
 
     def folded(self, stubs):
-        """Slots 216 and 217 name two functions identical code folding made one."""
         values = list(range(ENTRIES))
         values[217] = values[216]
         return Fixture(self.directory, values=values, stubs=stubs)

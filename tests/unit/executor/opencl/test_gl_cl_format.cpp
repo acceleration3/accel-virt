@@ -1,6 +1,3 @@
-/* A GL internal format as OpenCL names the same texels, and as a transfer
- * moves them (GlClFormat): cl_khr_gl_sharing's table, an unsized format as
- * its eight-bit one, and nothing for a format OpenCL has no image of. */
 #include "executor/opencl/gl_cl_format.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -21,7 +18,7 @@ struct Case {
     std::uint32_t internal, order, type, format, transfer, bytes;
 };
 
-}  // namespace
+}
 
 TEST(gl_cl_format, every_format_of_the_extension_s_table_is_named_and_moved_as_its_texels_are)
 { const Case cases[] = {
@@ -76,13 +73,11 @@ TEST(gl_cl_format, every_format_of_the_extension_s_table_is_named_and_moved_as_i
       CHECK_EQ(format.texel_bytes(), item.bytes);
   } }
 
-/* Three channels have no OpenCL order a GL texel maps to, depth is another
- * extension's, and a compressed format no image at all. */
 TEST(gl_cl_format, three_channels_depth_and_compressed_formats_are_unknown)
-{ const std::uint32_t unknown[] = {0u, 0x1907u /* RGB */, 0x8051u /* RGB8 */, 0x8C41u /* SRGB8 */,
-                                   0x81A5u /* DEPTH_COMPONENT16 */, 0x8CACu /* DEPTH_COMPONENT32F */,
-                                   0x88F0u /* DEPTH24_STENCIL8 */, 0x83F1u /* COMPRESSED_RGBA_S3TC_DXT1 */,
-                                   0x8059u /* RGB10_A2 */, 0xFFFFFFFFu};
+{ const std::uint32_t unknown[] = {0u, 0x1907u , 0x8051u , 0x8C41u ,
+                                   0x81A5u , 0x8CACu ,
+                                   0x88F0u , 0x83F1u ,
+                                   0x8059u , 0xFFFFFFFFu};
   for (const std::uint32_t internal : unknown) {
       const GlClFormat format(internal);
       CHECK(!format.known());

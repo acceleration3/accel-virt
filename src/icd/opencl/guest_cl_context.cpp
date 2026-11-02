@@ -91,19 +91,12 @@ Status GuestClContext::build(uint32_t gl_share)
 {
     AV_SCOPE("GuestClContext::build");
     if (link_.acquire() != Status::ok) return Status::not_supported;
-    /* The record's reserved tail stays zero: it is OpenGL's, and
-     * KmtTransport refuses a non-default one on any other sub-API without
-     * asking the driver. */
     const Status opened = channel_.open(link_.device(), GlContextOptions().sharing(gl_share));
     if (opened != Status::ok) return opened;
     if (channel_.arena_view() == nullptr) {
         lines_.write("buffers are staged; a map copies in and out");
         return Status::ok;
     }
-    /* The arena is the memory a mappable buffer is made over, on both sides:
-     * the device holds it as one import, so an offset names the same bytes
-     * here and there and a map costs no copy. Its top is the transfers' own
-     * (ArenaSpans). */
     icd::ArenaSpans spans(channel_);
     uint8_t        *staging = nullptr;
     uint64_t        staged = 0u;
@@ -118,21 +111,11 @@ void GuestClContext::teardown()
     AV_SCOPE("GuestClContext::teardown");
     gl_share_ = 0u;
     wakes_ = false;
-    /* A buffer released with a mapping live keeps the mapping's memory until
-     * the unmap, so the blocks go here rather than with the buffer. */
     mappings_.close_all();
     svm_.give_back_all();
-    /* Before the transport goes, and only while it can still carry a release:
-     * the device counts this context as a holder of every object it opened,
-     * and a lost context's are released by the device with the context. */
     if (state_ == State::made && channel_.opened()) external_.release_all(channel_.wire());
-    /* Before the arena goes: a block naming memory that is gone is an
-     * address this context must not be able to hand out. */
     blocks_.lend(nullptr, 0u);
     staging_.lend(nullptr, 0u);
-    /* What is still held reaches the host before its context goes; a lost
-     * context's arena import is forgotten rather than released, since the
-     * device frees it with the context. */
     channel_.close(state_ == State::lost);
     link_.release();
 }
@@ -183,8 +166,6 @@ ClientTransport *GuestClContext::wire()
 {
     AV_SCOPE("GuestClContext::wire");
     if (state_ != State::made) return nullptr;
-    /* The one place loss is noticed, because it is the one place every call
-     * goes through (icd::ContextLink). */
     if (link_.lost(channel_)) {
         state_ = State::lost;
         loss_.lose(channel_.fault_code());
@@ -249,8 +230,6 @@ MappedRegion *GuestClContext::take_mapping(uint64_t buffer, uint64_t host, size_
 {
     AV_SCOPE("GuestClContext::take_mapping");
     if (host == 0u) return nullptr;
-    /* A write-invalidate map is never read from the host, and a read may
-     * answer short: the copy starts zeroed (OpenMappings::stage). */
     MappedRegion *taken = nullptr;
     if (mappings_.stage(MappedRegion(buffer, host, offset, bytes, flags, MappedRegion::Memory::staged), taken) !=
         Status::ok)
@@ -276,8 +255,6 @@ MappedRegion *GuestClContext::take_shared_mapping(uint64_t buffer, uint64_t host
 {
     AV_SCOPE("GuestClContext::take_shared_mapping");
     if (host == 0u || bytes == 0u) return nullptr;
-    /* The flags are the map's, but they change nothing here - what a write
-     * through this mapping reaches is the buffer itself. */
     MappedRegion *taken = nullptr;
     if (mappings_.lend(MappedRegion(buffer, host, offset, bytes, 0u, MappedRegion::Memory::shared), at, taken) !=
         Status::ok)
@@ -341,17 +318,12 @@ bool GuestClContext::invariants_hold() const
     AV_SCOPE("GuestClContext::invariants_hold");
     if (!svm_.invariants_hold() || !external_.invariants_hold() || !d3d11_.invariants_hold()) return false;
     if (!mappings_.invariants_hold()) return false;
-    /* The channel and the lock around it are opened together and torn down
-     * together, so one without the other is a make or a teardown that
-     * stopped halfway. */
     if (!channel_.invariants_hold()) return false;
     if (loss_.lost() != (state_ == State::lost) || !loss_.invariants_hold()) return false;
     if (state_ == State::created) {
-        /* Nothing is held before a make, and a make that failed held nothing
-         * after it either. */
         return !channel_.opened() && !link_.held();
     }
     return channel_.opened() && link_.held();
 }
 
-}  // namespace av::clicd
+}

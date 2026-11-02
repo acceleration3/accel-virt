@@ -34,18 +34,14 @@ struct TraceTextProbe {
     static void wrap_image(TraceText &text) { ImageRangeProbe::wrap(text.image_); }
 };
 
-}  // namespace av
+}
 
 namespace {
 
 constexpr std::size_t two_slots = 96u + 2u * 824u;
 constexpr std::uint64_t ms = 10000u;
 
-/* The image a crash handler would own: its name literals, and nothing else
- * the formatter may read. */
 struct FakeImage {
-    /* The image is the first 256 bytes; the rest only terminates a name that
-     * runs off its end. */
     char bytes[512] = "Outer::run\0Inner::leaf\0";
     const char *outer() const { return bytes; }
     const char *inner() const { return bytes + 11; }
@@ -70,7 +66,6 @@ struct Table {
     std::uint32_t frame_offset(std::uint32_t slot, std::uint32_t depth) const { return 96u + slot * 824u + 56u + depth * 24u; }
 };
 
-/* Every line the formatter writes, joined with newlines. */
 void render(TraceText &text, char *joined, std::size_t capacity)
 {
     TextBuffer all(joined, capacity);
@@ -86,7 +81,7 @@ void render(TraceText &text, char *joined, std::size_t capacity)
     }
 }
 
-}  // namespace
+}
 
 TEST(trace_text, writes_the_header_each_thread_and_its_named_frames)
 { FakeImage image;
@@ -169,13 +164,10 @@ TEST(trace_text, names_that_cannot_be_trusted_are_printed_as_their_id)
   const std::uint32_t slot = table.table.enter(outside);
   const ScopeName mismatched(image.outer());
   table.table.enter(mismatched);
-  /* The frame's id no longer matches the name its pointer reaches. */
   table.bytes[table.frame_offset(slot, 1u)] ^= 0x01u;
-  /* A name at the very end of the image with no terminator inside it. */
   std::memset(image.bytes + 200, 'x', 56u);
   const ScopeName unterminated(image.bytes + 200);
   table.table.enter(unterminated);
-  /* An empty name, and one longer than the formatter reads. */
   image.bytes[190] = '\0';
   const ScopeName empty(image.bytes + 190);
   table.table.enter(empty);

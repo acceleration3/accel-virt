@@ -15,7 +15,7 @@ uint64_t aligned(uint64_t value, uint64_t alignment)
     return (value + alignment - 1u) / alignment * alignment;
 }
 
-}  // namespace
+}
 
 CrossAdapterLayout::CrossAdapterLayout(uint32_t width, uint32_t height, uint32_t format, uint32_t bytes_per_pixel)
     : width_(width), height_(height), format_(format), pitch_(0u), bytes_(0u), valid_(false)
@@ -57,4 +57,4 @@ SurfaceLayout CrossAdapterLayout::surface() const
     return SurfaceLayout(width_, height_, format_, pitch_);
 }
 
-}  // namespace av
+}

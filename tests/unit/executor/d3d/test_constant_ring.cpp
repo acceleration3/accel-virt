@@ -1,10 +1,3 @@
-/* Small constant buffers kept in one ring buffer, on the host's DXVK: a
- * whole-buffer write of a dynamic constant buffer goes into the ring, a bind
- * of it is a window of the ring in whole 16-constant blocks, a buffer written
- * while bound is rebound where it moved, and a buffer let go gets its
- * contents back in its own storage. DXVK's threads leak from modules it
- * unloads before exit, so the GPU's part runs in a child that leaves with
- * _exit and hands back what it saw; a host without DXVK on a GPU returns. */
 #include "executor/d3d/constant_ring.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/d3d_runtime.hpp"
@@ -27,7 +20,7 @@ bool first_gpu(std::uint8_t *uuid)
 {
     VkApplicationInfo application = {};
     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    application.apiVersion = (1u << 22u) | (1u << 12u);   /* 1.1 */
+    application.apiVersion = (1u << 22u) | (1u << 12u);
     VkInstanceCreateInfo made = {};
     made.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     made.pApplicationInfo = &application;
@@ -49,7 +42,6 @@ bool first_gpu(std::uint8_t *uuid)
     return found;
 }
 
-/* What the child saw. */
 struct Seen {
     std::uint32_t ran;
     std::uint32_t kept_dynamic;
@@ -82,7 +74,6 @@ ID3D11Buffer *constant_buffer(ID3D11Device5 *device, std::uint32_t bytes, D3D11_
     return SUCCEEDED(device->CreateBuffer(&desc, nullptr, &made)) ? made : nullptr;
 }
 
-/* The first byte of `buffer`, copied through a staging buffer. */
 std::uint32_t first_byte(ID3D11Device5 *device, ID3D11DeviceContext4 *context, ID3D11Buffer *buffer)
 {
     D3D11_BUFFER_DESC desc = {};
@@ -145,8 +136,6 @@ void run_ring(Seen &seen)
     seen.first = first[0];
     seen.count = counts[0];
     seen.unknown_left_alone = buffers[1] == larger && first[1] == 0u ? 1u : 0u;
-    /* The ring once tracked 64 devices and left the rest bound to stale
-     * storage: every one of many more is bound to the ring. */
     constexpr std::uint32_t many_devices = 200u;
     for (std::uint32_t other = 100u; other < 100u + many_devices; other++) {
         std::uint32_t other_ids[1] = {10u};
@@ -160,7 +149,6 @@ void run_ring(Seen &seen)
     for (std::uint32_t other = 100u; other < 100u + many_devices; other++) ring.forget_device(other);
     context->VSSetConstantBuffers1(0u, 1u, buffers, first, counts);
 
-    /* A second buffer goes after the first, in whole 256-byte windows. */
     if (!ring.update(device, context, device_id, 11u, larger, data, 512u)) return;
     std::uint32_t second_ids[1] = {11u};
     ID3D11Buffer *second_buffers[1] = {larger};
@@ -170,7 +158,6 @@ void run_ring(Seen &seen)
     seen.second_first = second_first[0];
     seen.second_count = second_counts[0];
 
-    /* Writing the bound buffer again moves it, and its slot follows. */
     data[0] = 0x33u;
     if (!ring.update(device, context, device_id, 10u, small, data, 256u)) return;
     ID3D11Buffer *now = nullptr;
@@ -180,8 +167,6 @@ void run_ring(Seen &seen)
     seen.rebound_to_ring = now == buffers[0] ? 1u : 0u;
     if (now != nullptr) now->Release();
 
-    /* Let go: the buffer's own storage holds what the guest wrote, and its slot
-     * is the buffer again. */
     ring.release(context, device_id, 10u, small);
     context->VSGetConstantBuffers1(0u, 1u, &now, &now_first, &now_count);
     seen.released_back_to_own = now == small ? 1u : 0u;
@@ -205,7 +190,7 @@ void run_ring(Seen &seen)
     seen.closed_left_alone = again_buffers[0] == small ? 1u : 0u;
 }
 
-}  // namespace
+}
 
 TEST(constant_ring, keeps_dynamic_constant_buffers_in_one_ring_and_gives_them_back)
 { int channel[2] = {-1, -1};
@@ -225,19 +210,19 @@ TEST(constant_ring, keeps_dynamic_constant_buffers_in_one_ring_and_gives_them_ba
   int status = 0;
   CHECK_EQ(waitpid(child, &status, 0), child);
   CHECK_EQ(got, static_cast<ssize_t>(sizeof seen));
-  if (seen.ran == 0u) return;   /* no DXVK on a GPU here: nothing to judge */
+  if (seen.ran == 0u) return;
   CHECK_EQ(seen.kept_dynamic, 1u);
-  CHECK_EQ(seen.kept_default, 0u);      /* only a dynamic buffer is a ring's */
-  CHECK_EQ(seen.kept_wrong_size, 0u);   /* only a whole-buffer write */
+  CHECK_EQ(seen.kept_default, 0u);
+  CHECK_EQ(seen.kept_wrong_size, 0u);
   CHECK_EQ(seen.kept_too_large, 0u);
   CHECK_EQ(seen.bound_to_ring, 1u);
   CHECK_EQ(seen.first, 0u);
-  CHECK_EQ(seen.count, 16u);            /* 256 bytes of 16-byte constants */
+  CHECK_EQ(seen.count, 16u);
   CHECK_EQ(seen.unknown_left_alone, 1u);
-  CHECK_EQ(seen.second_first, 16u);     /* after the first window */
+  CHECK_EQ(seen.second_first, 16u);
   CHECK_EQ(seen.second_count, 32u);
   CHECK_EQ(seen.rebound_to_ring, 1u);
-  CHECK_EQ(seen.rebound_first, 48u);    /* after both */
+  CHECK_EQ(seen.rebound_first, 48u);
   CHECK_EQ(seen.released_back_to_own, 1u);
   CHECK_EQ(seen.released_contents, 0x33u);
   CHECK_EQ(seen.forgotten_left_alone, 1u);

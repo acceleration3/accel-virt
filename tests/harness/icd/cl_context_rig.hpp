@@ -1,11 +1,3 @@
-/* One process's OpenCL device link and the pieces a GuestClContext is made
- * over, for the tests of the context classes below ClIcdRoot: MockKmt with the
- * avgpu adapter, the host played through ScriptedHost, the send lock's trace
- * and the log.
- *
- * The OpenGL rig's twin, minus the extension policy: an OpenCL context asks
- * the host nothing at a make, because its record carries no options and the
- * device it is made on is the one the adapter names. */
 #ifndef AV_CL_CONTEXT_RIG_HPP
 #define AV_CL_CONTEXT_RIG_HPP
 
@@ -22,7 +14,6 @@ namespace av {
 
 class ClContextRig {
 public:
-    /* The adapter, the device and its paging queue. */
     static constexpr std::uint32_t link_objects = 3u;
 
     ClContextRig();
@@ -37,7 +28,6 @@ public:
     RecordingThreadLock    &blocks_lock();
     RecordingLog           &log();
     av::icd::IcdConnection &connection();
-    /* The NT handles a context's imports resolve through (feature 053). */
     av::icd::SharedHandles &handles();
 
 private:
@@ -53,6 +43,6 @@ private:
     av::icd::SharedHandles handles_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_CL_CONTEXT_RIG_HPP
+#endif

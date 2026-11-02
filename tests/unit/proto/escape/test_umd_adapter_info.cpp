@@ -1,7 +1,3 @@
-/* The miniport's answer to UMDRIVERPRIVATE, both ways round and across
- * versions: three words where the caller asked for three, two where it asked
- * for two, and a reader that finds only two reads no feature. Another tag or
- * fewer than two words is no answer of this driver's. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -41,7 +37,7 @@ TEST(umd_adapter_info, a_reader_takes_the_features_where_there_are_three_words)
   CHECK(read.luid() == 5u);
   CHECK(read.offers(UmdAdapterInfo::feature_present_snapshots));
   UmdAdapterInfo two;
-  CHECK_STATUS(two.decode(bytes, 16u), Status::ok);   /* a miniport from before the features */
+  CHECK_STATUS(two.decode(bytes, 16u), Status::ok);
   CHECK(two.luid() == 5u);
   CHECK(!two.offers(UmdAdapterInfo::feature_present_snapshots)); }
 

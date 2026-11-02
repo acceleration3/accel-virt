@@ -1,14 +1,3 @@
-// The OpenCL-OpenGL sharing samples (cl_khr_gl_sharing): each shares one kind
-// of object between an OpenGL context and an OpenCL context made from it,
-// moves values through it one way or both, and checks every one. A sample
-// passes only on exact values (or within one step of an 8-bit channel), so a
-// shared object that silently became a copy, a stale view or a different
-// object fails rather than passes.
-//
-// Guest only: Windows, no C runtime, OpenCL through the Khronos loader beside
-// the program (OpenCL.dll) and OpenGL through opengl32 and the adapter's ICD.
-// Prints one line per sample - "ok <name>" or "FAIL <name>: <why>" - and
-// exits with the number that failed.
 #include <windows.h>
 
 #define CL_TARGET_OPENCL_VERSION 300
@@ -43,8 +32,6 @@ int __cdecl memcmp(const void *a, const void *b, size_t count)
 }
 
 namespace {
-
-// ---- output, with no C runtime to format it
 
 void write_text(const char *text)
 {
@@ -88,8 +75,6 @@ void  release(void *memory)
 {
     if (memory != nullptr) HeapFree(GetProcessHeap(), 0, memory);
 }
-
-// ---- OpenGL, resolved at run time
 
 typedef unsigned int  GLenum;
 typedef unsigned int  GLuint;
@@ -174,8 +159,6 @@ struct Gl {
     }
 };
 
-// ---- OpenCL, from the loader beside the program
-
 struct Cl {
 #define CLGL_CL_ENTRIES(X)                                                                                          \
     X(GetPlatformIDs) X(GetPlatformInfo) X(GetDeviceIDs) X(GetDeviceInfo) X(CreateContext) X(ReleaseContext)        \
@@ -226,18 +209,12 @@ __kernel void exact(__write_only image2d_t image)
 constexpr int buffer_floats = 4096;
 constexpr int side = 64;
 constexpr int frames = 100;
-// Photoshop's GPU sniffer: on a profiling queue of the context shared with its
-// GL context, 64 copies of 16 MiB, each with an event; a copy reads and writes
-// its bytes, and OpenCL is "available" only at 12 GB/s or more.
 constexpr size_t copy_bytes = 16u << 20;
 constexpr int    copies = 64;
 constexpr double least_gigabytes_per_second = 12.0;
 
 class Suite {
 public:
-    // A hidden window with an OpenGL context current on it, and an OpenCL
-    // context made from that GL context. False, having said why, when any of
-    // it cannot be had: nothing after it would mean anything.
     bool open()
     {
         if (!make_window() || !gl_.load()) return fail_setup("no OpenGL context");
@@ -365,8 +342,6 @@ private:
         return gl_context_ != nullptr && wglMakeCurrent(dc_, gl_context_);
     }
 
-    // The platform and device clGetGLContextInfoKHR names for the current GL
-    // context, which is how an application is to find them.
     bool find_device()
     {
         cl_platform_id platforms[8];
@@ -427,8 +402,6 @@ private:
         gl_.BindTexture(gl_texture_2d, 0);
         return name;
     }
-
-    // ---- the samples
 
     bool gl_sharing_reported()
     {
@@ -532,8 +505,6 @@ private:
         return ok;
     }
 
-    // What an application does every frame: the kernel works on the shared
-    // buffer, then GL uses it, and the next frame starts from what GL left.
     bool a_shared_buffer_every_frame()
     {
         float *const values = static_cast<float *>(allocate(buffer_floats * sizeof(float)));
@@ -640,7 +611,6 @@ private:
         return ok;
     }
 
-    // Reads `image` back through OpenCL and compares every pixel with `want`.
     bool pixels_are(cl_mem image, const unsigned char want[4], const char *why)
     {
         unsigned char *const pixels = static_cast<unsigned char *>(allocate(side * side * 4));
@@ -749,9 +719,6 @@ private:
         return ok;
     }
 
-    // What Photoshop CS6's sniffer_gpu.exe measures before it lets "Use
-    // OpenCL" be ticked: the sum of END - START over the copies' events, which
-    // are the host GPU's own timestamps.
     bool copies_are_timed_as_photoshop_times_them()
     {
         cl_int                 error = CL_SUCCESS;
@@ -808,7 +775,7 @@ private:
     int              failed_ = 0;
 };
 
-}  // namespace
+}
 
 extern "C" void avclglsamples_entry()
 {

@@ -47,8 +47,6 @@ constexpr GLint  default_alignment = 4;
 constexpr GLint  stipple_side = 32;
 constexpr std::uint64_t map_dimensions = 3u;
 
-/* The live RecordingGl the table's entry points reach. See the constructor's
- * comment in the header. */
 RecordingGl *live = nullptr;
 
 void store(GLenum pname, GLint value) { live->pixel_store(pname, value); }
@@ -166,7 +164,6 @@ void bitmap_entry(GLsizei width, GLsizei height, GLfloat, GLfloat, GLfloat, GLfl
     live->bitmap(width, height, bits);
 }
 
-/* Bytes per pixel for the pairings the tests and seeds use. */
 std::uint64_t pixel_size(GLenum format, GLenum type)
 {
     constexpr GLenum rgba = 0x1908u, rgb = 0x1907u, red = 0x1903u, depth = 0x1902u;
@@ -179,14 +176,13 @@ std::uint64_t pixel_size(GLenum format, GLenum type)
     return 0u;
 }
 
-/* Rows padded to the store's alignment. */
 std::uint64_t aligned(std::uint64_t bytes, GLint alignment)
 {
     const std::uint64_t step = static_cast<std::uint64_t>(alignment);
     return (bytes + step - 1u) / step * step;
 }
 
-}  // namespace
+}
 
 RecordingGl::RecordingGl(const std::uint8_t *block, const WireArena &arena)
     : block_(block), arena_(arena), table_(), pack_{default_alignment, 0, 0, 0, 0, 0},
@@ -267,8 +263,6 @@ std::uint32_t RecordingGl::strays() const { return strays_; }
 
 void RecordingGl::pixel_store(GLenum pname, GLint value)
 {
-    /* GL refuses a negative value or an alignment other than 1, 2, 4 or 8,
-     * and keeps what it had. */
     if (value < 0) return;
     const bool alignment = pname == pack_store[0] || pname == unpack_store[0];
     if (alignment && value != 1 && value != 2 && value != 4 && value != 8) return;
@@ -307,8 +301,6 @@ void RecordingGl::delete_buffers(GLsizei n, const GLuint *names)
     const std::uint32_t before = strays_;
     check_span(names, static_cast<std::uint64_t>(n) * sizeof *names);
     if (strays_ != before) return;
-    /* A deleted buffer is unbound from everything in this context, the
-     * arrays it was behind included: what is left is a client array. */
     for (GLsizei i = 0; i < n; i++) {
         const GLuint name = names[i];
         if (name == 0u) continue;
@@ -374,7 +366,6 @@ void RecordingGl::read_pixels(GLsizei width, GLsizei height, GLsizei depth, GLen
                               GLenum type, void *pixels)
 {
     reads_++;
-    /* Behind a bound pack buffer the pointer is an offset GL bounds itself. */
     if (pack_buffer_ != 0u) return;
     std::uint64_t bytes = 0u;
     if (!reach(pack_, width, height, depth, format, type, bytes)) return;
@@ -424,14 +415,11 @@ void RecordingGl::upload(GLsizei width, GLsizei height, GLenum format, GLenum ty
                          const void *pixels, bool specifies)
 {
     calls_++;
-    /* An empty extent reads nothing, whatever the format. */
     if (unpack_buffer_ != 0u || width <= 0 || height <= 0) return;
     if (pixels == nullptr) {
         if (!specifies) strays_++;
         return;
     }
-    /* A pairing this fake does not size reads at least a byte a pixel, which
-     * is still a bound a short upload falls under. */
     constexpr GLenum one_byte_format = 0x1903u, one_byte_type = 0x1401u;
     std::uint64_t bytes = 0u;
     if (!reach(unpack_, width, height, 1, format, type, bytes))
@@ -443,7 +431,6 @@ void RecordingGl::compressed(GLsizei size, const void *data)
 {
     calls_++;
     if (unpack_buffer_ != 0u || data == nullptr || size <= 0) return;
-    /* With a block size set, the skips move the start whole blocks in. */
     const bool skipped = unpack_[1] != 0 || unpack_[2] != 0 || unpack_[3] != 0;
     const bool blocked = compressed_block_[0] != 0 || compressed_block_[1] != 0 ||
                          compressed_block_[2] != 0 || compressed_block_[3] != 0;
@@ -458,11 +445,6 @@ void RecordingGl::clear_data(GLenum format, GLenum type, const void *data)
 {
     calls_++;
     if (data == nullptr) return;
-    /* A pairing this fake does not size is not a stray: the decoder sizes far
-     * more of them than these five, and a span it sized and read into the
-     * arena is inside the arena whatever the pairing. What is still true of
-     * every pixel is that it is at least a byte, and a byte outside the arena
-     * is what a stray is - the same rule upload already uses. */
     const std::uint64_t pixel = pixel_size(format, type);
     check_span(data, pixel != 0u ? pixel : 1u);
 }
@@ -475,11 +457,6 @@ void RecordingGl::buffer_data(GLsizeiptr size, const void *data)
 
 void RecordingGl::call_lists(GLsizei n, GLenum type, const void *lists)
 {
-    /* What glCallLists reads per name, by its own table (GL 1.1, 5.4): the
-     * signed types are as wide as their unsigned twins, and GL_2_BYTES through
-     * GL_4_BYTES name a list with that many bytes each. Any other enum is
-     * GL_INVALID_ENUM and GL reads nothing at all, so a run sized by some
-     * other rule is a pointer nobody follows rather than a short one. */
     constexpr GLenum signed_byte = 0x1400u, unsigned_byte = 0x1401u, signed_short = 0x1402u,
                      unsigned_short = 0x1403u, signed_int = 0x1404u, unsigned_int = 0x1405u,
                      gl_float = 0x1406u, two_bytes = 0x1407u, three_bytes = 0x1408u,
@@ -534,7 +511,6 @@ void RecordingGl::draw(bool indexed)
 
 void RecordingGl::draw_many(GLsizei drawcount, const GLsizei *counts, const void *const *indices)
 {
-    /* No draws read no indices and no arrays. */
     if (drawcount <= 0) {
         calls_++;
         return;
@@ -674,9 +650,6 @@ bool RecordingGl::reach(const Store &store, GLsizei width, GLsizei height, GLsiz
     if (pixel == 0u) return false;
     bytes = 0u;
     if (width <= 0 || height <= 0 || depth <= 0) return true;
-    /* The last pixel GL touches: after the skipped images, rows and pixels,
-     * with every row padded to the alignment and every image image_height
-     * rows tall. Anything that overflows is further than any arena. */
     const std::uint64_t columns = static_cast<std::uint64_t>(store[4] > 0 ? store[4] : width);
     const std::uint64_t rows = static_cast<std::uint64_t>(store[5] > 0 ? store[5] : height);
     const std::uint64_t align = static_cast<std::uint64_t>(store[0]);
@@ -741,4 +714,4 @@ bool RecordingGl::client_array_enabled() const
     return vertex_array_enabled_ && vertex_array_buffer_ == 0u;
 }
 
-}  // namespace av
+}

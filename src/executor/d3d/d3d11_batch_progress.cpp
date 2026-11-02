@@ -66,8 +66,6 @@ uint64_t D3d11BatchProgress::marked() const
     return marked_;
 }
 
-/* A device lost answers UINT64_MAX: nothing more will finish, and nothing
- * marked is waited for. */
 uint64_t D3d11BatchProgress::reached() const
 {
     AV_SCOPE("D3d11BatchProgress::reached");
@@ -94,4 +92,4 @@ bool D3d11BatchProgress::invariants_hold() const
     return released_at_ <= marked_ && (fence_ != nullptr || (released_at_ == marked_ && !watched_));
 }
 
-}  // namespace av
+}

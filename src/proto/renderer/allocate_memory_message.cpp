@@ -75,4 +75,4 @@ Status AllocateMemoryMessage::decode(const uint8_t *bytes, size_t length, uint32
     return Status::ok;
 }
 
-}  // namespace av
+}

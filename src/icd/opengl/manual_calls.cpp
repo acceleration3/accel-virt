@@ -30,7 +30,6 @@ uint64_t address_of(const void *pointer)
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointer));
 }
 
-/* Each buffer target and the query that names what is bound there. */
 struct TargetBinding {
     uint32_t target;
     uint32_t binding;
@@ -42,15 +41,12 @@ constexpr TargetBinding target_bindings[] = {
     {0x90D2u, 0x90D3u}, {0x90EEu, 0x90EFu}, {0x9192u, 0x9193u}, {0x92C0u, 0x92C1u},
 };
 
-/* The targets whose indexed bindings a shader writes through: transform
- * feedback, shader storage and atomic counters. */
 bool shader_writable(uint32_t target)
 {
     AV_SCOPE("shader_writable");
     return target == 0x8C8Eu || target == 0x90D2u || target == 0x92C0u;
 }
 
-/* glMapBuffer's access enum as glMapBufferRange's bits; 0 for no such enum. */
 uint32_t access_bits(uint32_t access)
 {
     AV_SCOPE("access_bits");
@@ -60,7 +56,7 @@ uint32_t access_bits(uint32_t access)
     return 0u;
 }
 
-}  // namespace
+}
 
 ManualCalls::ManualCalls(CurrentContexts &currents, const Kmt &kmt) : currents_(currents), kmt_(kmt)
 {
@@ -87,7 +83,6 @@ void *ManualCalls::map_buffer_range(uint32_t target, intptr_t offset, intptr_t l
     GuestGlContext *const context = sending();
     uint32_t              buffer = 0u;
     if (context == nullptr || !bound_to(*context, target, buffer)) return nullptr;
-    /* A negative length is not glMapBuffer's whole buffer. */
     if (length < 0) {
         context->record(gl_invalid_value);
         return nullptr;
@@ -324,7 +319,6 @@ void ManualCalls::named_buffer_pointer(uint32_t buffer, uint32_t pname, void **p
     *params = context->mappings().pointer_of(buffer);
 }
 
-/* The name is judged before the target, which costs a round trip to resolve. */
 bool ManualCalls::buffer_map_state(uint32_t target, uint32_t pname, int64_t &value)
 {
     AV_SCOPE("ManualCalls::buffer_map_state");
@@ -385,7 +379,6 @@ void ManualCalls::pixel_store(uint32_t pname, float value)
     AV_SCOPE("ManualCalls::pixel_store");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    /* A float store is rounded as OpenGL rounds it (§18.2.2). */
     const float rounded = value < 0.0f ? value - 0.5f : value + 0.5f;
     if (rounded > -2147483648.0f && rounded < 2147483647.0f)
         static_cast<void>(context->arrays().store_pixel(pname, static_cast<int32_t>(rounded)));
@@ -397,7 +390,6 @@ void ManualCalls::bind_buffer(uint32_t target, uint32_t buffer)
     AV_SCOPE("ManualCalls::bind_buffer");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    /* The pinned memory target is the ICD's alone: the host never binds it. */
     if (target == PinnedBuffers::target) return context->pinned().bind(buffer);
     context->arrays().bind_buffer(target, buffer);
     glproto::av_glBindBuffer(*context->wire(), target, buffer);
@@ -454,10 +446,6 @@ void ManualCalls::delete_vertex_arrays(int32_t count, const uint32_t *arrays)
     glproto::av_glDeleteVertexArrays(*context->wire(), count, arrays);
 }
 
-/* The host's buffer becomes an object by a bind, and its storage the memory
- * object the lent pages' import is, by glBufferStorageMemEXT
- * (GL_EXT_memory_object) at the copy-write target, which is then put back as
- * the application had it. */
 void ManualCalls::pin_storage(GuestGlContext &context, intptr_t size, const void *data)
 {
     AV_SCOPE("ManualCalls::pin_storage");
@@ -612,8 +600,6 @@ void ManualCalls::flush()
     context->end_frame();
 }
 
-/* GL_WAIT_FAILED (0x911D) with nothing to wait on. GL_TIMEOUT_IGNORED is
- * SlicedWait::forever, which never passes. */
 uint32_t ManualCalls::client_wait_sync(void *sync, uint32_t flags, uint64_t timeout)
 {
     AV_SCOPE("ManualCalls::client_wait_sync");
@@ -626,9 +612,6 @@ uint32_t ManualCalls::client_wait_sync(void *sync, uint32_t flags, uint64_t time
     return probe.result();
 }
 
-/* Three round trips where a forwarded glFinish was one, so that no host
- * call blocks past TdrDelay. A fence the host would not make leaves the plain
- * finish, which is what there was before. */
 void ManualCalls::finish()
 {
     AV_SCOPE("ManualCalls::finish");
@@ -642,13 +625,9 @@ void ManualCalls::finish()
     icd::HostCompletionWait wait(kmt_, icd::SlicedWait::forever);
     static_cast<void>(wait.run(probe));
     glproto::av_glDeleteSync(wire, fence);
-    /* Everything sent before is done: pinned memory let go of before it is
-     * nobody's any more. */
     context->pinned().reclaim();
 }
 
-/* The host's debug messages are not carried back yet: the callback is kept
- * for the pointer query and never called. */
 void ManualCalls::debug_message_callback(void *callback, const void *user)
 {
     AV_SCOPE("ManualCalls::debug_message_callback");
@@ -681,8 +660,6 @@ int32_t ManualCalls::attrib_location(uint32_t program, const char *name)
     return context != nullptr ? glproto::av_glGetAttribLocation(*context->wire(), program, name) : -1;
 }
 
-/* The location's type is asked at once, while nothing else is being sent, so
- * a later glGetUniform can size its answer. */
 int32_t ManualCalls::uniform_location(uint32_t program, const char *name)
 {
     AV_SCOPE("ManualCalls::uniform_location");
@@ -734,8 +711,6 @@ void ManualCalls::integers(uint32_t pname, int32_t *data)
         if (data != nullptr) *data = static_cast<int32_t>(context->extensions().count());
         return;
     }
-    /* What the host granted was learned when the context was made, so these
-     * three are answered from it rather than asked again (feature 051). */
     if (pname == GrantedProfile::mask_query || pname == GrantedProfile::major_query ||
         pname == GrantedProfile::minor_query) {
         if (data == nullptr) return;
@@ -804,8 +779,6 @@ const uint8_t *ManualCalls::string(uint32_t name)
     return reinterpret_cast<const uint8_t *>(answer);
 }
 
-/* GL_EXTENSIONS is the one indexed string this ICD has; an index past the
- * context's list is GL_INVALID_VALUE. */
 const uint8_t *ManualCalls::string_i(uint32_t name, uint32_t index)
 {
     AV_SCOPE("ManualCalls::string_i");
@@ -815,8 +788,6 @@ const uint8_t *ManualCalls::string_i(uint32_t name, uint32_t index)
     if (answer == nullptr) context->record(name == gl_extensions ? gl_invalid_value : gl_invalid_enum);
     return reinterpret_cast<const uint8_t *>(answer);
 }
-
-/* ---- GL_EXT_memory_object and GL_EXT_semaphore (feature 053) ------------- */
 
 void ManualCalls::create_memory_objects(int32_t count, uint32_t *objects)
 {
@@ -883,9 +854,6 @@ bool ManualCalls::substituted(uint32_t kind, uint32_t name, GuestGlContext *&con
     context = sending();
     if (context == nullptr) return false;
     made = context->externals().made(kind, name);
-    /* A name this context never imported names no host object. Sending it
-     * would name whatever the host happens to hold under that number, which is
-     * another application's object or none. */
     if (made == 0u) {
         context->record(gl_invalid_operation);
         return false;
@@ -893,9 +861,6 @@ bool ManualCalls::substituted(uint32_t kind, uint32_t name, GuestGlContext *&con
     return true;
 }
 
-/* The queries and parameters the two extensions promise. Every one of them is
- * about an object the host has not been told about - a name this ICD chose -
- * so the table is what answers, and none of them crosses the wire. */
 bool ManualCalls::is_memory_object(uint32_t memory)
 {
     AV_SCOPE("ManualCalls::is_memory_object");
@@ -942,10 +907,6 @@ void ManualCalls::semaphore_parameter(uint32_t semaphore, uint32_t pname, const 
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     static_cast<void>(params);
-    /* Not branched on: a semaphore's only parameter names a D3D12 fence's
-     * value and nothing here is imported from one, so the table refuses every
-     * pname for a row of that kind - an unknown name with GL_INVALID_VALUE and
-     * a known one with GL_INVALID_ENUM. There is no answer but a refusal. */
     context->record(
         context->externals().set_parameter(SharedObjectKind::monitored_fence, semaphore, pname, 0));
 }
@@ -956,9 +917,6 @@ void ManualCalls::get_semaphore_parameter(uint32_t semaphore, uint32_t pname, ui
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
     int32_t unused = 0;
-    /* As above: always a refusal, so the answer is recorded rather than
-     * tested. The query is still asked with `unused` or with nothing, because
-     * a caller that passed nowhere to write is its own refusal. */
     context->record(context->externals().get_parameter(SharedObjectKind::monitored_fence, semaphore, pname,
                                                        params != nullptr ? &unused : nullptr));
 }
@@ -973,9 +931,6 @@ void ManualCalls::import_memory_win32_name(uint32_t memory, uint64_t size, uint3
     static_cast<void>(name);
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    /* A named section is what another process opens *by name*, and nothing on
-     * this wire carries a name: an object crosses as an id the miniport minted
-     * and a handle the kernel made (feature 053). */
     context->record(gl_invalid_operation);
 }
 
@@ -996,7 +951,6 @@ void ManualCalls::buffer_storage_mem(uint32_t target, intptr_t size, uint32_t me
     GuestGlContext *context = nullptr;
     uint32_t        made = 0u;
     if (!substituted(SharedObjectKind::memory, memory, context, made)) return;
-    /* Another API writes imported memory whenever it likes. */
     context->shadows().distrust();
     glproto::av_glBufferStorageMemEXT(*context->wire(), target, size, made, offset);
 }
@@ -1146,7 +1100,6 @@ bool ManualCalls::bound_to(GuestGlContext &context, uint32_t target, uint32_t &b
     AV_SCOPE("ManualCalls::bound_to");
     for (const TargetBinding &row : target_bindings) {
         if (row.target != target) continue;
-        /* Asking would wait for the host to run everything queued ahead. */
         if (context.arrays().known_buffer(target, buffer)) return true;
         int32_t bound = 0;
         glproto::av_glGetIntegerv(*context.wire(), row.binding, &bound);
@@ -1220,4 +1173,4 @@ bool ManualCalls::indices_cross(const void *indices)
     return indices == nullptr || context->arrays().indices_are_offset();
 }
 
-}  // namespace av::glicd
+}

@@ -37,4 +37,4 @@ bool QueryResults::read(uint32_t id, uint64_t end, void *data, uint32_t size) co
     return reader_.read(id, end, data, size);
 }
 
-}  // namespace av::d3d11
+}

@@ -3,10 +3,6 @@
 #include "core/trace/function_scope.hpp"
 
 namespace av {
-
-/* The thread procedure. An ABI boundary C requires: CreateThread takes a bare
- * function and one argument, so the object is the argument and this forwards
- * straight into it. */
 extern "C" DWORD WINAPI av_service_thread_run(LPVOID service)
 {
     static_cast<WindowsServiceThread *>(service)->run();
@@ -35,7 +31,6 @@ WindowsServiceThread::~WindowsServiceThread()
     if (woken_ != nullptr) static_cast<void>(CloseHandle(woken_));
     if (ticker_ != nullptr) static_cast<void>(CloseHandle(ticker_));
     if (relay_quit_ != nullptr) static_cast<void>(CloseHandle(relay_quit_));
-    /* The driver holds its own reference for every context still bound. */
     if (driver_wake_ != nullptr) static_cast<void>(CloseHandle(driver_wake_));
 }
 
@@ -51,8 +46,6 @@ Status WindowsServiceThread::start(icd::ServiceLoop &loop)
         if (ticker_ == nullptr)
             ticker_ = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
                                              TIMER_ALL_ACCESS);
-        /* The relay before the loop, which reads whether there is one. Without
-         * one nothing moves woken(), and every pause is timed. */
         if (driver_wake_ != nullptr && relay_quit_ == nullptr) relay_quit_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (driver_wake_ != nullptr && relay_quit_ != nullptr && ResetEvent(relay_quit_) != FALSE)
             relay_thread_ = CreateThread(nullptr, 0u, &av_service_relay_run, this, 0u, nullptr);
@@ -75,8 +68,6 @@ void WindowsServiceThread::stop()
     AcquireSRWLockExclusive(&control_);
     if (thread_ != nullptr) {
         InterlockedExchange(&stopping_, 1);
-        /* A resting loop returns now; nothing else here makes a blocked turn
-         * return, which the owner has already seen to before calling this. */
         if (woken_ != nullptr) static_cast<void>(SetEvent(woken_));
         static_cast<void>(WaitForSingleObject(thread_, INFINITE));
         static_cast<void>(CloseHandle(thread_));
@@ -120,8 +111,6 @@ void WindowsServiceThread::wait(HANDLE timer, DWORD milliseconds)
 void WindowsServiceThread::rest()
 {
     AV_SCOPE("WindowsServiceThread::rest");
-    /* A moment at most: a wake that came between the loop finding nothing and
-     * resting is an event already set, and anything else is found next turn. */
     constexpr DWORD moment_ms = 100u;
     if (woken_ != nullptr) wait(nullptr, moment_ms);
 }
@@ -134,7 +123,6 @@ void WindowsServiceThread::pause(bool driven)
         wait(nullptr, INFINITE);
         return;
     }
-    /* Relative, in 100 ns units. */
     LARGE_INTEGER due = {};
     due.QuadPart = -10000;
     if (ticker_ != nullptr && SetWaitableTimerEx(ticker_, &due, 0, nullptr, nullptr, nullptr, 0u) != FALSE) {
@@ -166,10 +154,6 @@ uint64_t WindowsServiceThread::woken() const
     return count;
 }
 
-/* The condition variable's own timeout is in milliseconds, rounded up so a
- * slice shorter than one still sleeps rather than spins; a wake that comes
- * early is told apart from the timeout by the count, and slept past again
- * for what is left. */
 void WindowsServiceThread::await_woken(uint64_t seen, uint64_t timeout)
 {
     AV_SCOPE("WindowsServiceThread::await_woken");
@@ -207,4 +191,4 @@ void WindowsServiceThread::run()
     }
 }
 
-}  // namespace av
+}

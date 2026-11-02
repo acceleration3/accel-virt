@@ -1,8 +1,3 @@
-/* avclprobe.exe's proof (feature 052, T030): ClProbe's steps over the Khronos
- * loader beside the probe, `ok opencl.<step>` and `FAIL opencl.<step>` lines
- * and `avclprobe: N passed, M failed` on standard output, the failure count
- * as the exit code. No window and no image sink: an OpenCL probe draws
- * nothing. Translation only. */
 #ifndef AV_UM_CL_PROBE_PROGRAM_HPP
 #define AV_UM_CL_PROBE_PROGRAM_HPP
 
@@ -32,6 +27,6 @@ private:
     WindowsClEntry cl_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_CL_PROBE_PROGRAM_HPP
+#endif

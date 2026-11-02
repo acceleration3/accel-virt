@@ -1,7 +1,3 @@
-/* One allocation of host GPU memory a process holds (docs/host-memory.md),
- * over MockKmt playing the kernel and ScriptedHost the host: a window chunk
- * of the memory asked for, imported into the context it was opened on, let
- * go import first, and nothing held after any refusal. */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/transport/guest_connection.hpp"
@@ -19,8 +15,6 @@
 #include <cstring>
 
 namespace av {
-
-/* The parts' own probes, for a part broken on its own. */
 struct HostWindowChunkProbe {
     static void claim_bytes(HostWindowChunk &chunk, std::uint64_t bytes) { chunk.bytes_ = bytes; }
 };
@@ -32,13 +26,11 @@ struct BlobImportProbe {
 struct HostAllocationProbe {
     static HostWindowChunk &chunk(HostAllocation &allocation) { return allocation.chunk_; }
     static BlobImport      &import(HostAllocation &allocation) { return allocation.import_; }
-    /* The chunk held with no import, and an import held with no chunk: what
-     * open and close never leave. */
     static void forget_import(HostAllocation &allocation) { allocation.import_.forget(); }
     static Status drop_chunk(HostAllocation &allocation) { return allocation.chunk_.release(); }
 };
 
-}  // namespace av
+}
 
 using av::BlobImportAnswer;
 using av::CommandHeader;
@@ -131,7 +123,7 @@ void witness_release(void *context)
     witness.chunks_at_release = witness.kmt->window_chunks();
 }
 
-}  // namespace
+}
 
 TEST(host_allocation, opens_a_chunk_of_the_memory_asked_and_imports_it_whole)
 { Rig rig;
@@ -145,19 +137,15 @@ TEST(host_allocation, opens_a_chunk_of_the_memory_asked_and_imports_it_whole)
   CHECK_EQ(rig.allocation().handle(), imported_memory);
   CHECK_EQ(rig.allocation().host_status(), 0u);
   CHECK_EQ(rig.kmt().window_request(MockKmt::first_window_resource).encoded(), vulkan.encoded());
-  /* The import names the chunk the kernel made. */
   CHECK_EQ(rig.kmt().commands(), 1u);
   CHECK_EQ(rig.kmt().command_id(0u), CommandHeader::import_blob_id);
   CHECK_EQ(u32_at(rig.kmt().command_bytes(0u) + CommandHeader::encoded_size, 0u), MockKmt::first_window_resource);
-  /* What the process writes through the view is the window's. */
   rig.allocation().view()[4096u] = 0x3Cu;
   CHECK_EQ(rig.kmt().window_base()[4096u], 0x3Cu);
-  /* A second open is refused and asks nothing. */
   const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
   CHECK_STATUS(rig.allocation().open(mib, vulkan), Status::invalid_state);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
   CHECK_EQ(rig.kmt().commands(), 1u);
-  /* Close releases the import while the chunk is still the kernel's. */
   ReleaseWitness witness = {&rig.kmt(), 0xFFu};
   rig.kmt().play_at_wait(1u, &witness_release, &witness);
   rig.host().nop();
@@ -166,15 +154,11 @@ TEST(host_allocation, opens_a_chunk_of_the_memory_asked_and_imports_it_whole)
   CHECK_EQ(rig.kmt().command_id(1u), CommandHeader::release_blob_id);
   CHECK_EQ(u64_at(rig.kmt().command_bytes(1u) + CommandHeader::encoded_size, 0u), imported_memory);
   rig.check_nothing_is_held();
-  /* Closed twice, nothing is asked. */
   const std::uint32_t after = rig.kmt().calls(MockKmt::Call::escape);
   CHECK_STATUS(rig.allocation().close(), Status::ok);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), after);
   CHECK_EQ(rig.kmt().commands(), 2u); }
 
-/* The process's own pages lent and imported: the view is the process's
- * address, the import names the kernel's resource, and a refusal on either
- * side holds nothing (docs/host-memory.md, "Application memory"). */
 TEST(host_allocation, adopts_the_processs_own_pages_and_imports_them)
 { Rig rig;
   alignas(4096) static std::uint8_t pages[2u * 4096u];
@@ -195,7 +179,6 @@ TEST(host_allocation, adopts_the_processs_own_pages_and_imports_them)
   CHECK_STATUS(rig.allocation().adopt(pages, sizeof pages, readback), Status::invalid_parameter);
   rig.check_nothing_is_held(); }
 
-/* A chunk the kernel will not give is its answer, and nothing is imported. */
 TEST(host_allocation, a_refused_chunk_imports_nothing)
 { { Rig rig;
     rig.kmt().open_host_window(0u);
@@ -210,14 +193,12 @@ TEST(host_allocation, a_refused_chunk_imports_nothing)
     CHECK_EQ(rig.kmt().commands(), 0u);
     rig.check_nothing_is_held(); } }
 
-/* An import the host refuses closes the chunk it was made for, keeps the
- * host's word, and the allocation can open again. */
 TEST(host_allocation, an_import_the_host_refuses_closes_the_chunk)
 { Rig rig;
   rig.host().blob_import(BlobImportAnswer::executor_refused, 0u);
   CHECK_STATUS(rig.allocation().open(mib, vulkan), Status::invalid_parameter);
   CHECK_EQ(rig.allocation().host_status(), static_cast<std::uint32_t>(BlobImportAnswer::executor_refused));
-  CHECK_EQ(rig.kmt().commands(), 1u);   /* nothing to release */
+  CHECK_EQ(rig.kmt().commands(), 1u);
   rig.check_nothing_is_held();
   CHECK_EQ(rig.kmt().window_opens(), 1u);
   rig.host().blob_import(0u, imported_memory);
@@ -227,25 +208,21 @@ TEST(host_allocation, an_import_the_host_refuses_closes_the_chunk)
   CHECK_STATUS(rig.allocation().close(), Status::ok);
   rig.check_nothing_is_held(); }
 
-/* Every part is let go whatever the one before answered, and the first
- * failure is what close says. */
 TEST(host_allocation, close_lets_every_part_go_and_answers_the_first_failure)
 { { Rig rig;
     rig.host().blob_import(0u, imported_memory);
     CHECK_STATUS(rig.allocation().open(mib, vulkan), Status::ok);
-    rig.host().blob_import(0u, 1u);   /* bytes where the release answers nothing */
+    rig.host().blob_import(0u, 1u);
     CHECK_STATUS(rig.allocation().close(), Status::malformed);
     rig.check_nothing_is_held(); }
   { Rig rig;
     rig.host().blob_import(0u, imported_memory);
     CHECK_STATUS(rig.allocation().open(mib, vulkan), Status::ok);
     rig.host().nop();
-    rig.kmt().fail_at(MockKmt::Call::escape, 1u, refused);   /* the chunk's close */
+    rig.kmt().fail_at(MockKmt::Call::escape, 1u, refused);
     CHECK_STATUS(rig.allocation().close(), Status::invalid_state);
     rig.check_nothing_is_held(1u); } }
 
-/* A context whose device was lost forgets the import - its context frees it
- * on the host - and lets the chunk go; the chunk's refusal is the answer. */
 TEST(host_allocation, abandon_sends_the_host_nothing_and_closes_the_chunk)
 { Rig rig;
   CHECK_STATUS(rig.allocation().abandon(), Status::ok);
@@ -289,8 +266,6 @@ TEST(host_allocation_invariants, a_chunk_without_its_import_or_an_import_without
     HostAllocationProbe::forget_import(rig.allocation());
     CHECK(rig.allocation().invariants_hold()); } }
 
-/* A part broken on its own breaks the allocation: a chunk whose size is no
- * page count, and an import that both holds memory and keeps a refusal. */
 TEST(host_allocation_invariants, a_broken_chunk_or_a_broken_import_is_caught)
 { Rig rig;
   rig.host().blob_import(0u, imported_memory);

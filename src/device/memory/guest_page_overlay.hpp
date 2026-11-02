@@ -1,15 +1,3 @@
-/* The guest pages a process lent a device, under one lending's memory
- * (GuestRamLending, docs/host-memory.md, "Application memory"): each run of
- * them, as the guest names them a piece at a time, has its RAM replaced by
- * the memory's dma-buf at the same offset of it - the bytes the RAM held
- * copied in first - so the process's own pages and the host GPU's memory are
- * one memory. Restored, each run gets its RAM back holding what the dma-buf
- * held: what the GPU wrote stays in the process's pages after the device lets
- * go. A page lies under one lending at a time (LentPages). Main loop.
- *
- * It outlives the device that laid it - another adapter's device may hold the
- * lending still - so it keeps no device: each call names the host to work
- * through. */
 #ifndef AV_GUEST_PAGE_OVERLAY_HPP
 #define AV_GUEST_PAGE_OVERLAY_HPP
 
@@ -35,42 +23,19 @@ public:
     static constexpr size_t   entry_size = 16u;
     static constexpr uint64_t page_size = 4096u;
 
-    /* Its pages are claimed in `lent` for `owner`, the lending it is part of;
-     * its records live in `blocks`. Runs are swapped with `gate` holding the
-     * writers still: once for each add and each restore, not for each run. */
     GuestPageOverlay(BlockSource &blocks, LentPages &lent, RunSwapGate &gate, GuestRamLending &owner);
-    /* Restored already: a restore needs a host, which a destructor has not
-     * got. */
     ~GuestPageOverlay();
     GuestPageOverlay(const GuestPageOverlay &) = delete;
     GuestPageOverlay &operator=(const GuestPageOverlay &) = delete;
 
-    /* The `entries` memory entries at `offset` of `request`, laid over the
-     * dma-buf `fd` from where the last piece ended, of the `size` bytes it
-     * has. invalid_parameter for no entries, a short list, an entry that is
-     * empty, not whole pages, wraps or runs past `size`; conflict for a page
-     * already under a blob; not_found for memory that is not mapped;
-     * not_supported for memory that is not guest RAM or that the host cannot
-     * overlay; no_memory when the host cannot hold the record. Runs laid
-     * before a failure stay laid: restore() takes them back. */
     [[nodiscard]] Status add(Host &host, ControlRequest &request, size_t offset, uint32_t entries, int fd,
                              uint64_t size);
-    /* Every run its RAM again, last first, and lent no more; the record
-     * emptied. A run the host would not restore is logged and left as it is. */
     void                 restore(Host &host);
-    /* The bytes laid so far: the blob's offset the next piece starts at. */
     uint64_t             covered() const;
     uint32_t             runs() const;
-    /* The entries laid so far, each as the guest named it. */
     uint32_t             extents() const;
     uint64_t             extent_address(uint32_t index) const;
     uint64_t             extent_length(uint32_t index) const;
-    /* Whether the guest bytes [address, address + length) are laid in one
-     * piece of the memory - inside one entry, or across entries that follow
-     * each other in guest memory as they do in the dma-buf - and where in the
-     * dma-buf they start, in `offset`. The search starts at extent `hint`,
-     * the last entry an earlier range ended in, and leaves the one this ends
-     * in: a list read in order costs a step an entry. */
     [[nodiscard]] bool   locate(uint64_t address, uint64_t length, uint32_t &hint, uint64_t &offset) const;
 
     bool invariants_hold() const;
@@ -85,12 +50,10 @@ private:
     struct Extent {
         uint64_t address_;
         uint64_t length_;
-        /* Where in the dma-buf the entry starts. */
         uint64_t offset_;
     };
 
     [[nodiscard]] Status lay_entry(Host &host, uint64_t address, uint64_t length, int fd, uint64_t size);
-    /* One run of guest RAM at `pointer`, guest address `address`, laid. */
     [[nodiscard]] Status lay_run(Host &host, void *pointer, uint64_t length, uint64_t address, int fd);
 
     LentPages           &lent_;
@@ -103,6 +66,6 @@ private:
     friend struct GuestPageOverlayProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_GUEST_PAGE_OVERLAY_HPP
+#endif

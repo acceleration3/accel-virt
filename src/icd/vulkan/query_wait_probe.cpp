@@ -33,4 +33,4 @@ VkResult QueryWaitProbe::result() const
     return result_;
 }
 
-}  // namespace av::icd
+}

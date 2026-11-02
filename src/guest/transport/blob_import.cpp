@@ -31,8 +31,6 @@ Status BlobImport::import(uint32_t resource_id)
     return judge(answer);
 }
 
-/* An answer of any other length than the contract's is no answer, even one
- * whose leading bytes would decode. */
 Status BlobImport::judge(WireReader &answer)
 {
     AV_SCOPE("BlobImport::judge");
@@ -80,11 +78,10 @@ uint32_t BlobImport::host_status() const
     return host_status_;
 }
 
-/* The host either took the import or refused it, never both. */
 bool BlobImport::invariants_hold() const
 {
     AV_SCOPE("BlobImport::invariants_hold");
     return memory_ == 0u || host_status_ == 0u;
 }
 
-}  // namespace av
+}

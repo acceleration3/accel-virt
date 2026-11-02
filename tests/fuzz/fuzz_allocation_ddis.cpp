@@ -1,8 +1,3 @@
-/* Devices, allocations and opens driven by an attacker-chosen sequence of
- * DDI calls: descriptors from the input, handle lists mixing live handles,
- * destroyed ones and arbitrary addresses. The tables may refuse anything; they
- * must never touch memory they do not own, must keep their invariants after
- * every call, and must release everything at the end. */
 #include "miniport/adapter/adapter.hpp"
 #include "miniport/ddi/dxgk_allocation_info_record.hpp"
 #include "miniport/ddi/dxgk_open_allocation_info_record.hpp"
@@ -158,7 +153,7 @@ private:
     std::uint32_t             next_ = 0u;
 };
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

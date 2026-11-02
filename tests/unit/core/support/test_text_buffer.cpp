@@ -63,10 +63,10 @@ TEST(text_buffer_append_hex, writes_a_fixed_width_of_uppercase_digits_and_trunca
   text.append(" ");
   text.append_hex(0xAu, 4u);
   text.append(" ");
-  text.append_hex(0x123u, 2u);   /* too narrow: the low digits */
+  text.append_hex(0x123u, 2u);
   text.append(" ");
-  text.append_hex(0xFFu, 0u);    /* no digits asked for */
-  text.append_hex(0x0123456789ABCDEFull, 20u);   /* wider than a u64: 16 */
+  text.append_hex(0xFFu, 0u);
+  text.append_hex(0x0123456789ABCDEFull, 20u);
   CHECK(std::strcmp(text.text(), "C0000001 000A 23 0123456789ABCDEF") == 0);
   char small[4];
   TextBuffer cut(small, sizeof small);

@@ -1,5 +1,3 @@
-/* A window's pixel format: set once, as Windows allows, on a real window, for
- * as many windows as there are. */
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
@@ -22,7 +20,7 @@ struct WindowTableProbe {
     }
 };
 
-}  // namespace av::glicd
+}
 
 TEST(window_table, a_window_takes_one_format_and_keeps_it)
 { MockPlatform platform;
@@ -65,8 +63,6 @@ TEST(window_table, keeps_windows_past_the_old_bound)
       CHECK_EQ(table.format_of(&windows[index]), 1 + static_cast<int>(index % 5u));
   CHECK(table.invariants_hold()); }
 
-/* A window's format lasts as long as the window: a row goes only once its
- * window is gone, and the others keep theirs. */
 TEST(window_table, drops_the_rows_of_windows_that_are_gone)
 { MockPlatform platform;
   WindowTable  table(platform);
@@ -87,7 +83,6 @@ TEST(window_table, drops_the_rows_of_windows_that_are_gone)
   CHECK_EQ(table.format_of(&windows[0]), 0);
   CHECK_EQ(table.format_of(&windows[1]), 2);
   CHECK_EQ(table.format_of(&windows[2]), 0);
-  /* A handle Windows reuses for a new window starts with no format. */
   CHECK_STATUS(table.set_format(&windows[0], 5), Status::ok);
   CHECK_EQ(table.format_of(&windows[0]), 5); }
 

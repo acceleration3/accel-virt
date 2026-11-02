@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Query an imported program: functions, symbols, decompile, xrefs, strings."""
 import os, sys, re
 os.environ.setdefault("GHIDRA_INSTALL_DIR", "/opt/ghidra")
 os.environ.setdefault("JAVA_HOME", "/usr/lib/jvm/java-26-openjdk")
@@ -36,7 +35,6 @@ elif CMD == "dec":
     from ghidra.app.decompiler import DecompInterface
     from ghidra.util.task import ConsoleTaskMonitor
     di = DecompInterface(); di.openProgram(prog)
-    # Comma-separated names decompile in one run: starting the JVM dominates.
     tgt = []
     for want in ARG.split(","):
         tgt += ([f for f in funcs() if f.getName() == want] or

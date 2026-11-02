@@ -1,15 +1,3 @@
-/* Two av contexts of one adapter naming one host object (feature 053, US3,
- * T041): the real driver, the real device core and the whole channel an
- * identity crosses on - the miniport mints it into a carrier's private driver
- * data, the creating context publishes it, an NT handle carries those bytes to
- * the other context, and the device opens one host resource for it.
- *
- * What only this layer can prove is that the two halves agree. The miniport
- * mints the id and the device knows nothing of allocations; the library keeps
- * the host object (HostShares, whose own tests hold it to the lifetimes) and
- * the miniport knows nothing of it. What this pair shows is the path between:
- * every guest command reaches the library as the context that sent it, one
- * object shared and opened once, and a publisher that can go first. */
 #include "core/support/status.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -47,15 +35,10 @@ namespace {
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::uint8_t  ring_order = 12u;
-/* The object the contexts share: four pages of it, which is not the carrier's
- * size and must not have to be (T031). */
 constexpr std::uint64_t object_bytes = 4u * 4096u;
 constexpr std::uint32_t memory_kind = SharedObjectKind::memory;
-/* What a publishing context's executor already made. MockExecutorOps exports
- * any handle it is given, so the number stands for a VkDeviceMemory. */
 constexpr std::uint64_t published_handle = 0x7001u;
 
-/* One guest process's context: its D3DKMT device and the av context on it. */
 class GuestContext {
 public:
     explicit GuestContext(DdiKmt &kmt) : connection_(kmt),
@@ -73,16 +56,12 @@ public:
         live_ = true;
         return Status::ok;
     }
-    /* The av context goes, and every reference it held on a shared object
-     * with it. The D3DKMT device stays: a process may lose its context - to a
-     * fault, or to the API being torn down - while its allocations live. */
     void close_context()
     {
         if (!live_) return;
         live_ = false;
         transport_.teardown();
     }
-    /* And the rest of what the process held. */
     void close()
     {
         close_context();
@@ -100,9 +79,6 @@ private:
     bool            live_ = false;
 };
 
-/* A carrier as an ICD makes one: a page of client memory whose private driver
- * data is a descriptor followed by an unassigned record, which the miniport
- * mints an identity into. The id it minted, or 0. */
 std::uint64_t minted_carrier(DdiKmt &kmt, std::uint32_t device, std::uint32_t &carrier)
 {
     std::uint8_t bytes[AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size] = {};
@@ -120,9 +96,6 @@ std::uint64_t minted_carrier(DdiKmt &kmt, std::uint32_t device, std::uint32_t &c
     return minted.object_id();
 }
 
-/* The id as the *opening* process learns it: out of the creating process's own
- * bytes, carried by the NT handle and by nothing else. `resource` is what the
- * open made, which the opening process owns from here on. */
 std::uint64_t crossed_id(DdiKmt &kmt, std::uint32_t opener, std::uint64_t handle, std::uint32_t &resource)
 {
     std::uint8_t  carried[128] = {};
@@ -137,9 +110,8 @@ std::uint64_t crossed_id(DdiKmt &kmt, std::uint32_t opener, std::uint64_t handle
     return record.object_id();
 }
 
-}  // namespace
+}
 
-/* The whole channel, in the order a pair of processes walks it. */
 TEST(fullstack_shared_objects, a_second_context_opens_what_the_first_published_and_outlives_it)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -163,8 +135,6 @@ TEST(fullstack_shared_objects, a_second_context_opens_what_the_first_published_a
   CHECK_STATUS(publish.share(object_id, memory_kind, object_bytes, published_handle), Status::ok);
   CHECK_EQ(rig.device().executor().shared_objects(), 1u);
 
-  /* The handle crosses, and the id with it - through the creating process's
-   * private driver data, which is the only thing dxgkrnl carries. */
   std::uint64_t handle = 0u;
   CHECK_STATUS(kmt.share_object(publisher.device(), carrier, handle), Status::ok);
   CHECK(handle != 0u);
@@ -177,25 +147,18 @@ TEST(fullstack_shared_objects, a_second_context_opens_what_the_first_published_a
   CHECK_STATUS(open.open(object_id, memory_kind, object_bytes, opened_handle), Status::ok);
   CHECK(opened_handle != 0u);
   CHECK(opened_handle != published_handle);
-  /* One host object, opened once: the second context made no object of its
-   * own. */
   CHECK_EQ(rig.device().executor().shared_objects(), 1u);
   CHECK_EQ(rig.device().executor().opened_objects(), 1u);
   CHECK_EQ(rig.device().executor().live_opens(), 1u);
 
-  /* The publishing context goes. The opener's hold is the opener's - which
-   * is the whole of what US3 claims. */
   publisher.close_context();
   CHECK_EQ(rig.device().device().contexts(), 1u);
   CHECK_EQ(rig.device().executor().live_opens(), 1u);
 
-  /* And the opener still names it, and gives it back once. */
   CHECK_STATUS(open.release(object_id, memory_kind, object_bytes), Status::ok);
   CHECK_EQ(rig.device().executor().live_opens(), 0u);
   CHECK_EQ(rig.device().executor().closed_objects(), 1u);
 
-  /* The guest side, in the order the kernel allows it: the opener gives back
-   * what its open made, and only then is the carrier nobody holds open. */
   CHECK_STATUS(kmt.destroy_shared_allocation(opener.device(), opened_resource), Status::ok);
   CHECK_STATUS(kmt.close_shared_object(handle), Status::ok);
   CHECK_STATUS(kmt.destroy_shared_allocation(publisher.device(), carrier), Status::ok);
@@ -204,12 +167,6 @@ TEST(fullstack_shared_objects, a_second_context_opens_what_the_first_published_a
   CHECK_EQ(rig.device().device().contexts(), 0u);
   CHECK_EQ(kmt.open_objects(), 0u); }
 
-/* The same two contexts, with the second one hostile. Every refusal here is
- * the device's answer to bytes a guest wrote, so what has to be true of each
- * is the same: a status rather than a fault, the object untouched, and both
- * contexts still running afterwards. A device that tore a context down for one
- * of these would hand a guest a way to kill a process that was sharing
- * correctly. */
 TEST(fullstack_shared_objects, ids_a_context_never_published_are_refused_and_nothing_else_is)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -230,43 +187,30 @@ TEST(fullstack_shared_objects, ids_a_context_never_published_are_refused_and_not
 
   SharedObjectCall attack(hostile.transport());
   std::uint64_t    got = 9u;
-  /* An id nobody published. The device has one object and it is not this. */
   CHECK_STATUS(attack.open(object_id + 0x1000u, memory_kind, object_bytes, got),
                Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 2u);
   CHECK_EQ(got, 0u);
-  /* The right id with the wrong kind, and with the wrong size: an object is
-   * what the publisher said it was, and an opener saying otherwise is either
-   * confused or fishing. */
   CHECK_STATUS(attack.open(object_id, SharedObjectKind::monitored_fence, 0u, got),
                Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 3u);
   CHECK_STATUS(attack.open(object_id, memory_kind, object_bytes * 2u, got), Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 3u);
-  /* A kind that is not one at all never leaves the guest: the body refuses to
-   * encode it, so the device answers nothing and has nothing to answer. */
   CHECK_STATUS(attack.open(object_id, 4u, object_bytes, got), Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 0u);
   CHECK_EQ(got, 0u);
-  /* Publishing under an id another context published, with a descriptor that
-   * is not that one's. */
   CHECK_STATUS(attack.share(object_id, memory_kind, object_bytes * 2u, published_handle),
                Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 6u);
 
-  /* None of it touched the object, and none of it cost either context. */
   CHECK_EQ(rig.device().executor().shared_objects(), 1u);
   CHECK_EQ(rig.device().executor().live_opens(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 2u);
   CHECK_EQ(rig.device().executor().opened_objects(), 0u);
 
-  /* The same context now does it correctly, which is what proves the refusals
-   * were refusals and not a context left broken. */
   CHECK_STATUS(attack.open(object_id, memory_kind, object_bytes, got), Status::ok);
   CHECK(got != 0u);
   CHECK_EQ(rig.device().executor().live_opens(), 1u);
-  /* And opening it a second time in the same context is refused: one context
-   * holding two handles to one object could free it twice. */
   std::uint64_t again = 9u;
   CHECK_STATUS(attack.open(object_id, memory_kind, object_bytes, again), Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 6u);

@@ -9,8 +9,6 @@ VblankPhase::VblankPhase() : period_ns_(0u), anchor_(0), candidate_(0), seen_(0u
     AV_SCOPE("VblankPhase::VblankPhase");
 }
 
-/* The arithmetic is modular on purpose: the offsets are near each other, so
- * their signed differences order them wherever the counts started. */
 void VblankPhase::observe(uint64_t sequence, uint64_t now, uint32_t period_ns)
 {
     AV_SCOPE("VblankPhase::observe");
@@ -64,11 +62,10 @@ void VblankPhase::forget()
     known_ = false;
 }
 
-/* A known phase has a period; an unknown one has nothing. */
 bool VblankPhase::invariants_hold() const
 {
     AV_SCOPE("VblankPhase::invariants_hold");
     return known_ ? period_ns_ != 0u && seen_ < window : period_ns_ == 0u && seen_ == 0u;
 }
 
-}  // namespace av
+}

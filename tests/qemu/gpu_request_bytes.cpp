@@ -1,12 +1,3 @@
-/* Prints, as hex, the bytes the driver's GpuRequestWriter writes for one
- * request, so the tests in tests/qemu send QEMU exactly what avgpu.sys sends.
- *
- *   gpu_request_bytes create_2d <resource> <format> <width> <height>
- *   gpu_request_bytes attach_backing <resource> <address> <length>
- *   gpu_request_bytes transfer_to_host_2d <resource> <width> <height>
- *   gpu_request_bytes update_cursor <scanout> <x> <y> <resource> <hot x> <hot y>
- *   gpu_request_bytes move_cursor <scanout> <x> <y> <resource>
- */
 #include "core/support/status.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
 
@@ -21,7 +12,7 @@ std::uint64_t unsigned_argument(char **argv, int index) { return std::strtoull(a
 std::uint32_t u32_argument(char **argv, int index) { return static_cast<std::uint32_t>(unsigned_argument(argv, index)); }
 std::int32_t  i32_argument(char **argv, int index) { return static_cast<std::int32_t>(std::strtol(argv[index], nullptr, 0)); }
 
-}  // namespace
+}
 
 int main(int argc, char **argv)
 {

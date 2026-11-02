@@ -43,4 +43,4 @@ void TransportTimeline::forget()
     __atomic_store_n(&waited_, 0u, __ATOMIC_RELEASE);
 }
 
-}  // namespace av::icd
+}

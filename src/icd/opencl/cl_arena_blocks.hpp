@@ -1,19 +1,3 @@
-/* The blocks one context's buffers are carved out of its blob arena.
- *
- * A buffer backed here costs no copy to map: the device makes the host's
- * cl_mem over this same memory with CL_MEM_USE_HOST_PTR, so the guest's view
- * and the host's are one allocation. That is only true while the block lasts
- * as long as the buffer, which is why this is a suballocator with a free list
- * and not the bump arena the generated clients lease from and retire
- * together - those leases are read once, at the command's send.
- *
- * Blocks are page aligned because a host asked to take memory as a buffer's
- * own wants its device's base alignment, and a page is the coarsest anything
- * on this path asks for.
- *
- * A transfer stages its bytes in a block for as long as it runs
- * (ClStagingBlock), so blocks come and go on every application thread at once:
- * each call holds the lock it is given, which is nothing else's. */
 #ifndef AV_CLICD_CL_ARENA_BLOCKS_HPP
 #define AV_CLICD_CL_ARENA_BLOCKS_HPP
 
@@ -25,7 +9,7 @@
 namespace av {
 class BlockSource;
 class ThreadLock;
-}  // namespace av
+}
 
 namespace av::clicd {
 
@@ -33,34 +17,20 @@ struct ClArenaBlocksProbe;
 
 class ClArenaBlocks {
 public:
-    /* What every block's offset and length are a whole number of. */
     static constexpr uint64_t alignment = 4096u;
 
     ClArenaBlocks(BlockSource &memory, ThreadLock &lock);
     ClArenaBlocks(const ClArenaBlocks &) = delete;
     ClArenaBlocks &operator=(const ClArenaBlocks &) = delete;
 
-    /* Carves from `bytes` at `base` from now on, forgetting every block of
-     * whatever was lent before. A null base is no arena at all. */
     void lend(uint8_t *base, uint64_t bytes);
     bool ready() const;
 
-    /* An offset with room for `bytes`, or false with `offset` untouched: for
-     * no arena, a block of nothing, no memory for its row, and an arena with
-     * no gap big enough. The caller stages that buffer instead. */
     [[nodiscard]] bool take(uint64_t bytes, uint64_t &offset);
-    /* Forgets the block at `offset`. An offset no block holds is ignored. */
     void               give_back(uint64_t offset);
-    /* The block at `offset`, let go of by its buffer while the host may still
-     * run work over it, kept out of use until reclaim. Given back at once
-     * only when there is no memory to note it, which is the one time the
-     * rule gives. */
     void               retire(uint64_t offset);
-    /* Every retired block given back: the host's work over them is done. */
     void               reclaim();
 
-    /* The guest's view of `bytes` at `offset`, or null unless one live block
-     * begins there and is long enough. */
     uint8_t *at(uint64_t offset, uint64_t bytes) const;
 
     uint32_t live() const;
@@ -73,12 +43,10 @@ private:
     ThreadLock                      &lock_;
     uint8_t                         *base_;
     uint64_t                         bytes_;
-    /* The blocks, first fit over the arena (RangeTable). */
     icd::RangeTable                  blocks_;
-    /* Blocks let go of while the host may still run work over them. */
     icd::RetireList<uint64_t>        retired_;
 };
 
-}  // namespace av::clicd
+}
 
-#endif  // AV_CLICD_CL_ARENA_BLOCKS_HPP
+#endif

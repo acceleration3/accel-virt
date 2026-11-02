@@ -13,8 +13,6 @@ ContextSignal::ContextSignal(Host &host, Worker &worker, FenceReporter &fences)
     AV_SCOPE("ContextSignal::ContextSignal");
 }
 
-/* The flag is set before the wake, so a worker woken by anything else - a
- * doorbell, a posted item - still drains this pass rather than the next. */
 void ContextSignal::raise()
 {
     AV_SCOPE("ContextSignal::raise");
@@ -50,9 +48,6 @@ uint64_t ContextSignal::delivered() const
     return delivered_;
 }
 
-/* Nothing is delivered that was never raised, and the flag is never set by
- * anything but a raise - a wake the guest was not owed would cost it a fence
- * page write and an interrupt for a completion that never happened. */
 bool ContextSignal::invariants_hold() const
 {
     AV_SCOPE("ContextSignal::invariants_hold");
@@ -60,4 +55,4 @@ bool ContextSignal::invariants_hold() const
     return delivered_ <= raised && (!__atomic_load_n(&pending_, __ATOMIC_RELAXED) || raised != 0u);
 }
 
-}  // namespace av
+}

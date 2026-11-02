@@ -1,17 +1,3 @@
-/* The one symbol this library exports, and the table it answers.
- *
- * In the shim because it is the process's own wiring: it builds the loaders
- * the host really has and hands them to the root, and nothing but a dlopen of
- * the finished library ever reaches it. The conformance suite is what holds it
- * to the ABI; a unit test linking the core has no way to be the process that
- * loaded it.
- *
- * An ABI boundary the constitution permits and the only place in the library
- * where a function is not a method: `av_executor_ops()` takes no argument, so
- * there is nowhere to put a `this`, and the root lives in storage of its own
- * for exactly that reason (CLAUDE.md). No logic lives here - each entry point
- * is one line into ExecutorRoot.
- */
 #include "core/support/object_storage.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
@@ -28,17 +14,8 @@
 #include <dlfcn.h>
 
 namespace {
-
-/* Built on the first question and never destroyed: QEMU closes the module and
- * the process ends, and a destructor here would run after the device has gone. */
 class Library {
 public:
-    /* A session, or null: the device turns a null into a context fault and
-     * keeps every other context running.
-     *
-     * A sub-API with no backend is refused by the root rather than given a
-     * session that would answer nothing; the capset already says which those
-     * are, because it offers only what a GPU here reports running. */
     av::ContextSession *create(uint32_t sub_api, const AvContextOptions &options, av::ContextSession *share)
     {
         AV_SCOPE("Library::create");
@@ -56,8 +33,6 @@ public:
         AV_SCOPE("Library::root");
         if (!asked_) {
             asked_ = true;
-            /* The library's own table, before anything it runs opens a scope
-             * worth reading; a host without /dev/shm runs untraced. */
             (void)trace_.construct();
             (void)trace_.object().start("executor");
             (void)sink_.construct(stderr);
@@ -65,9 +40,6 @@ public:
             (void)apis_.construct(log_.object());
             (void)root_.construct(log_.object());
             apis_.object().open();
-            /* A host that serves nothing is a host this still answers for: the
-             * root then offers no sub-API and the device describes no capset,
-             * which is the honest outcome rather than a failed realize. */
             (void)root_.object().initialize(apis_.object());
             if (trace_.object().started()) serve_state();
         }
@@ -75,10 +47,6 @@ public:
     }
 
 private:
-    /* The root's dump on /dev/shm/av-state-executor-<pid>.sock. The library
-     * pins itself first: the socket's thread and each traced thread's signal
-     * stack run or free code in this object for the rest of the process, and
-     * QEMU closes an executor it no longer needs. */
     void serve_state()
     {
         AV_SCOPE("Library::serve_state");
@@ -91,7 +59,6 @@ private:
     }
 
     av::ObjectStorage<av::HostTrace>      trace_;
-    /* QEMU's stderr, which its log collects: every line the library writes. */
     av::ObjectStorage<av::StdioLog>       sink_;
     av::ObjectStorage<av::ExecutorLog>    log_;
     av::ObjectStorage<av::LoaderHostApis> apis_;
@@ -103,8 +70,6 @@ private:
 
 Library library;
 
-/* The device holds a session as an opaque AvExecutor *; these two are the
- * only places that spelling is crossed. */
 av::ContextSession *session_of(AvExecutor *executor)
 {
     AV_SCOPE("session_of");
@@ -376,7 +341,7 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               lose_device,
                               answer_part};
 
-}  // namespace
+}
 
 extern "C" __attribute__((visibility("default"))) const AvExecutorOps *av_executor_ops(void)
 {

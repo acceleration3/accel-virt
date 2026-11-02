@@ -1,10 +1,3 @@
-/* The OpenCL server dispatch between a guest's bytes and the host ICD.
- *
- * Driven over RecordingClDispatch, which holds handles the way OpenClBackend
- * does and has no OpenCL behind it. What is asserted is the contract with the
- * ICD (feature 044, research section 2): a command that names an object this
- * host did not make, or asks the ICD to read or write past what crossed, is
- * refused before any call - and a well-formed one still runs. */
 #include "harness/executor/recording_cl_dispatch.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opencl/cl_dispatch_server.h"
@@ -28,8 +21,6 @@ constexpr std::size_t block_bytes = 16384u;
 constexpr std::size_t frame_bytes = 1024u;
 constexpr std::size_t reply_bytes = 4064u;
 
-/* One guest context's worth of decoding: the block, the dispatch that holds
- * its handles, and the answer to the last command. */
 class ClSession {
 public:
     ClSession() : block_{}, arena_(block_, sizeof block_), dispatch_(block_, arena_), reply_{},
@@ -48,9 +39,6 @@ public:
     WireReader answer() const { return WireReader(reply_, answered_); }
     RecordingClDispatch &dispatch() { return dispatch_; }
 
-    /* clGetPlatformIDs, clGetDeviceIDs, clCreateContext and
-     * clCreateCommandQueue, as a guest starts every program: the numbers each
-     * answered, which the host now holds. */
     void make_chain(std::uint64_t &platform, std::uint64_t &device, std::uint64_t &context,
                     std::uint64_t &queue)
     {
@@ -90,7 +78,6 @@ public:
           queue = returned(); }
     }
 
-    /* A buffer of `size` bytes in `context`, copied from nothing. */
     std::uint64_t make_buffer(std::uint64_t context, std::uint64_t size)
     {
         std::uint8_t bytes[frame_bytes];
@@ -105,7 +92,6 @@ public:
     }
 
 private:
-    /* The first handle of an enumeration's answer. */
     std::uint64_t first_listed() const
     {
         WireReader reply = answer();
@@ -119,7 +105,6 @@ private:
         return first;
     }
 
-    /* A creating call's answer. */
     std::uint64_t returned() const
     {
         WireReader reply = answer();
@@ -135,7 +120,6 @@ private:
     std::size_t         answered_;
 };
 
-/* clReleaseX(handle), the one-handle frame every lifetime test sends. */
 bool send_handle(ClSession &session, std::uint32_t command, std::uint64_t handle)
 {
     std::uint8_t bytes[16];
@@ -144,8 +128,6 @@ bool send_handle(ClSession &session, std::uint32_t command, std::uint64_t handle
     return session.run(command, frame, bytes);
 }
 
-/* clEnqueueReadBuffer(queue, buffer, blocking, 0, size, ptr of `capacity`,
- * no events, no event out). */
 bool read_buffer(ClSession &session, std::uint64_t queue, std::uint64_t buffer, std::uint64_t size,
                  std::uint64_t capacity)
 {
@@ -164,9 +146,6 @@ bool read_buffer(ClSession &session, std::uint64_t queue, std::uint64_t buffer, 
     return session.run(av::clproto::kCmd_clEnqueueReadBuffer, frame, bytes);
 }
 
-/* clEnqueueReadBuffer or clEnqueueWriteBuffer (`command`) of `size` bytes at
- * buffer offset 0, its memory lent at `offset` of the guest's arena - nothing
- * of it in the frame - with no events and no event out. */
 bool transfer_lent(ClSession &session, std::uint32_t command, std::uint64_t queue, std::uint64_t buffer,
                    std::uint64_t size, std::uint64_t offset)
 {
@@ -186,7 +165,7 @@ bool transfer_lent(ClSession &session, std::uint32_t command, std::uint64_t queu
     return session.run(command, frame, bytes);
 }
 
-}  // namespace
+}
 
 TEST(opencl_dispatch, a_program_s_first_objects_resolve_back_as_what_they_are)
 { ClSession session;
@@ -196,15 +175,11 @@ TEST(opencl_dispatch, a_program_s_first_objects_resolve_back_as_what_they_are)
   RecordingClDispatch &dispatch = session.dispatch();
   CHECK_EQ(dispatch.calls(), 4u);
   CHECK_EQ(dispatch.strangers(), 0u);
-  /* The ICD had two platforms and two devices, and the guest had room for
-   * one of each: what the guest was never told of is not its to name. */
   CHECK_EQ(dispatch.handles().count(), 4u);
   CHECK(dispatch.handle_for(HandleKind::context, context) != nullptr);
   CHECK(dispatch.handle_for(HandleKind::command_queue, queue) != nullptr);
   CHECK(dispatch.handles().invariants_hold()); }
 
-/* The hole this feature closes: a number the guest made up, handed to the ICD
- * as a pointer. */
 TEST(opencl_dispatch, a_handle_the_host_never_made_is_refused_before_any_call)
 { ClSession session;
   CHECK(!send_handle(session, av::clproto::kCmd_clReleaseContext, 0x4141414141414141u));
@@ -223,15 +198,12 @@ TEST(opencl_dispatch, an_object_named_as_another_kind_is_refused)
   CHECK(send_handle(session, av::clproto::kCmd_clFinish, queue));
   CHECK_EQ(session.dispatch().last_called(), av::clproto::kCmd_clFinish); }
 
-/* Null is the API's own, and the ICD answers it with an error code. */
 TEST(opencl_dispatch, a_null_handle_reaches_the_call_as_null)
 { ClSession session;
   CHECK(send_handle(session, av::clproto::kCmd_clFinish, 0u));
   CHECK_EQ(session.dispatch().calls(), 1u);
   CHECK_EQ(session.dispatch().strangers(), 0u); }
 
-/* A retain keeps an object through one release; the last release makes its
- * number name nothing, because the ICD may have freed it. */
 TEST(opencl_dispatch, an_object_released_for_the_last_time_is_refused_afterwards)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -247,8 +219,6 @@ TEST(opencl_dispatch, an_object_released_for_the_last_time_is_refused_afterwards
   CHECK_EQ(session.dispatch().calls(), before);
   CHECK(session.dispatch().handles().invariants_hold()); }
 
-/* T006: the ICD writes `size` bytes at the pointer, and the pointer is room
- * for `capacity`. */
 TEST(opencl_dispatch, a_read_larger_than_its_room_is_refused_before_the_call)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -258,7 +228,6 @@ TEST(opencl_dispatch, a_read_larger_than_its_room_is_refused_before_the_call)
   CHECK(!read_buffer(session, queue, buffer, 65u, 64u));
   CHECK(!read_buffer(session, queue, buffer, ~std::uint64_t{0}, 64u));
   CHECK_EQ(session.dispatch().calls(), before);
-  /* At exactly its room it runs, and writes nowhere but the room. */
   CHECK(read_buffer(session, queue, buffer, 64u, 64u));
   CHECK_EQ(session.dispatch().calls(), before + 1u);
   CHECK_EQ(session.dispatch().strays(), 0u);
@@ -271,7 +240,6 @@ TEST(opencl_dispatch, a_count_larger_than_the_list_that_crossed_is_refused)
   session.make_chain(platform, device, context, queue);
   const std::uint32_t before = session.dispatch().calls();
   std::uint8_t bytes[frame_bytes];
-  /* clCreateContext(null, num_devices 2, one device). */
   WireWriter frame(bytes, sizeof bytes);
   frame.write_pod<std::uint8_t>(0u);
   frame.write_varint(2u);
@@ -282,9 +250,6 @@ TEST(opencl_dispatch, a_count_larger_than_the_list_that_crossed_is_refused)
   CHECK(!session.run(av::clproto::kCmd_clCreateContext, frame, bytes));
   CHECK_EQ(session.dispatch().calls(), before); }
 
-/* A property whose value is a host pointer by definition - here a GL context
- * - is one no guest can know, and a platform the host never enumerated is a
- * pointer like any other. */
 TEST(opencl_dispatch, context_properties_holding_a_host_pointer_or_an_unknown_platform_are_refused)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -306,9 +271,6 @@ TEST(opencl_dispatch, context_properties_holding_a_host_pointer_or_an_unknown_pl
   }
   CHECK_EQ(session.dispatch().calls(), before); }
 
-/* The copied bytes live in a block the next command reuses; an ICD told to
- * use them in place would keep reading and writing it. And bytes shorter than
- * the size the ICD copies are a read past the block. */
 TEST(opencl_dispatch, a_buffer_over_the_guest_s_bytes_is_refused_unless_copied_whole)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -336,8 +298,6 @@ TEST(opencl_dispatch, a_buffer_over_the_guest_s_bytes_is_refused_unless_copied_w
   CHECK_EQ(session.dispatch().calls(), before + ran);
   CHECK_EQ(session.dispatch().strays(), 0u); }
 
-/* A rectangle whose origin and pitches multiply past 64 bits is a size the
- * host cannot check, so it is not one it runs. */
 TEST(opencl_dispatch, a_rectangle_read_that_overflows_or_outgrows_its_room_is_refused)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -345,8 +305,6 @@ TEST(opencl_dispatch, a_rectangle_read_that_overflows_or_outgrows_its_room_is_re
   const std::uint64_t buffer = session.make_buffer(context, 4096u);
   const std::uint32_t before = session.dispatch().calls();
   struct Case { std::uint64_t origin_z; std::uint64_t region_x; std::uint64_t slice; std::uint64_t capacity; bool runs; };
-  /* Region {x, 2, 1} at pitches 0 reaches 2x bytes past an origin of
-   * z slices of 2x bytes each. */
   const Case cases[] = {{0u, 16u, 0u, 32u, true},
                         {0u, 17u, 0u, 32u, false},
                         {1u, 4u, 0u, 15u, false},
@@ -360,7 +318,6 @@ TEST(opencl_dispatch, a_rectangle_read_that_overflows_or_outgrows_its_room_is_re
       frame.write_pod<std::uint64_t>(queue);
       frame.write_pod<std::uint64_t>(buffer);
       frame.write_varint(CL_TRUE);
-      /* buffer_origin, host_origin, region: three each. */
       const std::uint64_t triples[3][3] = {{0u, 0u, 0u}, {0u, 0u, item.origin_z},
                                            {item.region_x, 2u, 1u}};
       for (const auto &triple : triples) {
@@ -382,8 +339,6 @@ TEST(opencl_dispatch, a_rectangle_read_that_overflows_or_outgrows_its_room_is_re
   }
   CHECK_EQ(session.dispatch().calls(), before + ran); }
 
-/* ARM's SVM pointers and Intel's USM: this wire makes neither, so every one
- * is invented; and SVM pointers this host never allocated. */
 TEST(opencl_dispatch, kernel_exec_info_naming_host_pointers_is_refused)
 { ClSession session;
   constexpr std::uint64_t names[] = {CL_KERNEL_EXEC_INFO_SVM_PTRS, 0x40B8u, 0x4203u};
@@ -400,9 +355,6 @@ TEST(opencl_dispatch, kernel_exec_info_naming_host_pointers_is_refused)
   }
   CHECK_EQ(session.dispatch().calls(), 0u); }
 
-/* CL_KERNEL_EXEC_INFO_SVM_PTRS: a whole number of addresses this host
- * allocated, each resolved before the host sees it; one outside every
- * allocation, a count that is not whole addresses, or none, is refused. */
 TEST(opencl_dispatch, kernel_exec_info_svm_pointers_resolve_only_what_this_host_allocated)
 { ClSession session;
   const std::uint64_t allocated = session.dispatch().make_svm(256u);
@@ -431,7 +383,6 @@ TEST(opencl_dispatch, kernel_exec_info_svm_pointers_resolve_only_what_this_host_
       CHECK_EQ(session.dispatch().strangers(), 0u);
   } }
 
-/* An event a call made is one a later wait may name; one it did not is not. */
 TEST(opencl_dispatch, an_event_the_host_made_may_be_waited_on_and_no_other)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -460,7 +411,6 @@ TEST(opencl_dispatch, an_event_the_host_made_may_be_waited_on_and_no_other)
   }
   CHECK_EQ(session.dispatch().strangers(), 0u); }
 
-/* An image description carries a buffer handle inside the struct's bytes. */
 TEST(opencl_dispatch, an_image_description_naming_an_unknown_buffer_is_refused)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -489,8 +439,6 @@ TEST(opencl_dispatch, an_image_description_naming_an_unknown_buffer_is_refused)
   CHECK_EQ(session.dispatch().calls(), before + 1u);
   CHECK_EQ(session.dispatch().strangers(), 0u); }
 
-/* An image transfer's size is the image's element size over the region, and
- * an image this ICD cannot say the element size of is not read into. */
 TEST(opencl_dispatch, an_image_read_whose_element_size_is_unknown_is_refused)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -518,7 +466,6 @@ TEST(opencl_dispatch, an_image_read_whose_element_size_is_unknown_is_refused)
   frame.write_pod<std::uint8_t>(0u);
   frame.write_pod<std::uint8_t>(0u);
   CHECK(!session.run(av::clproto::kCmd_clEnqueueReadImage, frame, bytes));
-  /* The one call made was the element-size question itself. */
   CHECK_EQ(session.dispatch().calls(), before + 1u);
   CHECK_EQ(session.dispatch().last_called(), av::clproto::kCmd_clGetImageInfo); }
 
@@ -526,8 +473,6 @@ namespace {
 
 using Declared = RecordingClDispatch::Declared;
 
-/* clCreateProgramWithSource(context, one source), then clBuildProgram(program,
- * no devices, `options`): the program's number. */
 std::uint64_t make_program(ClSession &session, std::uint64_t context, const char *options)
 {
     constexpr char source[] = "kernel void add(global float *a) {}";
@@ -592,7 +537,6 @@ std::uint64_t make_sampler(ClSession &session, std::uint64_t context)
     return sampler;
 }
 
-/* The first index whose argument the fake's kernels declare as `declared`. */
 std::uint32_t index_declared(const RecordingClDispatch &dispatch, Declared declared)
 {
     std::uint32_t index = 0u;
@@ -600,7 +544,6 @@ std::uint32_t index_declared(const RecordingClDispatch &dispatch, Declared decla
     return index;
 }
 
-/* clSetKernelArg(kernel, index, size, `size` bytes of `value` or none). */
 bool set_argument(ClSession &session, std::uint64_t kernel, std::uint32_t index, std::uint64_t size,
                   bool present, std::uint64_t value)
 {
@@ -615,9 +558,6 @@ bool set_argument(ClSession &session, std::uint64_t kernel, std::uint32_t index,
         frame.write(&value, static_cast<std::size_t>(size));
     }
     if (!session.run(av::clproto::kCmd_clSetKernelArg, frame, bytes)) return false;
-    /* The host's own answer is CL_SUCCESS; one refused before the host is a
-     * well-formed command answered with the API's error for an argument it
-     * cannot take, and nothing called. */
     WireReader    answer = session.answer();
     std::uint64_t result = 0u;
     CHECK(answer.read_varint(result));
@@ -627,10 +567,8 @@ bool set_argument(ClSession &session, std::uint64_t kernel, std::uint32_t index,
     return answered == CL_SUCCESS;
 }
 
-}  // namespace
+}
 
-/* Without -cl-kernel-arg-info the ICD cannot later say which arguments are
- * objects, and every eight-byte argument of the kernel would be refused. */
 TEST(opencl_dispatch, every_build_and_compile_asks_the_icd_to_keep_argument_information)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -655,10 +593,6 @@ TEST(opencl_dispatch, every_build_and_compile_asks_the_icd_to_keep_argument_info
   CHECK_EQ(session.dispatch().last_called(), av::clproto::kCmd_clCompileProgram);
   CHECK_EQ(session.dispatch().builds_without_argument_info(), 0u); }
 
-/* The hole: eight guest bytes where the kernel reads a cl_mem, an image or a
- * cl_sampler, which the ICD dereferences. Each argument is held to what the
- * kernel declared - an object this host made, of that kind - and one the ICD
- * cannot describe may not be an object's width at all. */
 TEST(opencl_dispatch, a_kernel_argument_reaches_the_icd_only_as_what_the_kernel_declared)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -692,11 +626,9 @@ TEST(opencl_dispatch, a_kernel_argument_reaches_the_icd_only_as_what_the_kernel_
       {Declared::pipe, 8u, true, invented, false},
       {Declared::constant, 8u, true, invented, false},
       {Declared::constant, 8u, true, buffer, true},
-      /* Its address space alone says a global argument is memory. */
       {Declared::untyped_global, 8u, true, buffer, true},
       {Declared::untyped_global, 8u, true, invented, false},
       {Declared::untyped_global, 8u, false, 0u, true},
-      /* A private one is what the server declares it, a sampler here. */
       {Declared::untyped_private, 8u, true, sampler, true},
       {Declared::untyped_private, 8u, true, buffer, false},
       {Declared::untyped_private, 8u, true, invented, false},
@@ -708,8 +640,6 @@ TEST(opencl_dispatch, a_kernel_argument_reaches_the_icd_only_as_what_the_kernel_
       CHECK_EQ(session.dispatch().strays(), 0u);
   } }
 
-/* The index the guest names is the one asked about: an object argument past
- * the first few is refused an invented value as the first would be. */
 TEST(opencl_dispatch, a_kernel_argument_is_described_by_its_own_index)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -729,8 +659,6 @@ namespace {
 
 constexpr std::size_t image_frame_bytes = 1024u;
 
-/* clCreateImage(context, COPY_HOST_PTR, format, description, `crossed` bytes of
- * host pointer): whether it ran. */
 bool create_image(ClSession &session, std::uint64_t context, const cl_image_format &format,
                   const cl_image_desc *description, std::uint64_t crossed)
 {
@@ -762,11 +690,8 @@ cl_image_desc described(cl_mem_object_type type, std::size_t width, std::size_t 
     return description;
 }
 
-}  // namespace
+}
 
-/* The ICD copies the format's elements over the extent out of the host
- * pointer, at the pitches it was given, and the bytes that crossed are all
- * the pointer has. */
 TEST(opencl_dispatch, an_image_copied_from_fewer_bytes_than_its_format_and_extent_is_refused)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -794,8 +719,6 @@ TEST(opencl_dispatch, an_image_copied_from_fewer_bytes_than_its_format_and_exten
       {rgba8, sliced, 120u, true},
       {rgb565, described(CL_MEM_OBJECT_IMAGE2D, 4u, 4u, 0u, 0u), 31u, false},
       {rgb565, described(CL_MEM_OBJECT_IMAGE2D, 4u, 4u, 0u, 0u), 32u, true},
-      /* A packed type in an order it does not pack, an order and an image
-       * type this host does not know, and a width whose bytes pass 64 bits. */
       {{CL_RGBA, CL_UNORM_SHORT_565}, described(CL_MEM_OBJECT_IMAGE2D, 1u, 1u, 0u, 0u), 64u, false},
       {{0x1234u, CL_UNORM_INT8}, described(CL_MEM_OBJECT_IMAGE2D, 1u, 1u, 0u, 0u), 64u, false},
       {rgba8, described(0x1234u, 1u, 1u, 0u, 0u), 64u, false},
@@ -811,8 +734,6 @@ TEST(opencl_dispatch, an_image_copied_from_fewer_bytes_than_its_format_and_exten
   CHECK_EQ(session.dispatch().calls(), before + ran);
   CHECK_EQ(session.dispatch().strays(), 0u); }
 
-/* The 1.1 spellings carry the extent as arguments, and the properties
- * spelling in the description, and each is held to it the same way. */
 TEST(opencl_dispatch, the_other_image_calls_hold_their_host_bytes_to_their_extent)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -871,8 +792,6 @@ TEST(opencl_dispatch, the_other_image_calls_hold_their_host_bytes_to_their_exten
   CHECK_EQ(session.dispatch().strays(), 0u); }
 
 namespace {
-
-/* An answer's result, as the decoder writes it. */
 cl_int answered_result(WireReader &reply)
 {
     std::uint64_t result = 0u;
@@ -880,8 +799,6 @@ cl_int answered_result(WireReader &reply)
     return static_cast<cl_int>(static_cast<std::int64_t>(result));
 }
 
-/* clGetDeviceIDs(platform, all, num_entries, the ids wanted, the count wanted
- * or not). */
 bool query_devices(ClSession &session, std::uint64_t platform, std::uint32_t entries, bool count_wanted)
 {
     std::uint8_t bytes[frame_bytes];
@@ -894,8 +811,6 @@ bool query_devices(ClSession &session, std::uint64_t platform, std::uint32_t ent
     return session.run(av::clproto::kCmd_clGetDeviceIDs, frame, bytes);
 }
 
-/* clGetDeviceInfo(device, CL_DEVICE_VENDOR, `room` bytes wanted, the size
- * wanted). */
 bool query_vendor(ClSession &session, std::uint64_t device, std::uint32_t room)
 {
     std::uint8_t bytes[frame_bytes];
@@ -908,12 +823,8 @@ bool query_vendor(ClSession &session, std::uint64_t device, std::uint32_t room)
     return session.run(av::clproto::kCmd_clGetDeviceInfo, frame, bytes);
 }
 
-}  // namespace
+}
 
-/* T033: an ICD that fails an ID query may leave anything in the array - a host
- * pointer included - and a count to match. The guest that wanted the ids and
- * not the count used to be sent num_entries of them regardless, and the host
- * to remember every one as an object it made. */
 TEST(opencl_dispatch, a_failed_id_query_answers_no_ids_whatever_the_icd_left)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -953,8 +864,6 @@ TEST(opencl_dispatch, a_failed_id_query_answers_no_ids_whatever_the_icd_left)
   CHECK_EQ(dispatch.refused(), 0u);
   CHECK(dispatch.handles().invariants_hold()); }
 
-/* A query that worked answers as many ids as the ICD said it wrote, not as
- * many as there was room for: the slots past them are whatever the ICD left. */
 TEST(opencl_dispatch, an_id_query_answers_only_the_ids_the_icd_reported)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -973,7 +882,6 @@ TEST(opencl_dispatch, an_id_query_answers_only_the_ids_the_icd_reported)
   CHECK(dispatch.handle_for(HandleKind::device, listed) != nullptr);
   CHECK_EQ(reply.remaining(), 0u);
   CHECK_EQ(dispatch.handles().count(), held + 1u);
-  /* An ICD reporting more than the room it was given is held to the room. */
   dispatch.answer_next_with(CL_SUCCESS, 9u);
   CHECK(query_devices(session, platform, 2u, true));
   WireReader bounded = session.answer();
@@ -982,8 +890,6 @@ TEST(opencl_dispatch, an_id_query_answers_only_the_ids_the_icd_reported)
   CHECK_EQ(sent, 2u);
   CHECK(dispatch.handles().invariants_hold()); }
 
-/* An info query answers the bytes the ICD reported writing, and a failed one
- * none, and no size. */
 TEST(opencl_dispatch, an_info_query_answers_only_the_bytes_the_icd_reported)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -1015,8 +921,6 @@ TEST(opencl_dispatch, an_info_query_answers_only_the_bytes_the_icd_reported)
     CHECK_EQ(size, 0u);
     CHECK_EQ(reply.remaining(), 0u); } }
 
-/* A failed read sends back no bytes, and no event: what the ICD left there was
- * never an event, and naming it would make it one the guest may wait on. */
 TEST(opencl_dispatch, a_failed_read_answers_no_bytes_and_no_event)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -1049,10 +953,6 @@ TEST(opencl_dispatch, a_failed_read_answers_no_bytes_and_no_event)
   CHECK_EQ(reply.remaining(), 0u);
   CHECK_EQ(dispatch.handles().count(), held); }
 
-/* A read whose memory the guest lent is written there, and its answer is the
- * count alone: the bytes are already where the guest reads them. Only the
- * span asked for is written, and a span not wholly inside what was lent - or
- * with nothing lent at all - is refused before the call. */
 TEST(opencl_dispatch, a_lent_read_writes_the_guest_s_memory_and_answers_only_its_count)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -1082,9 +982,6 @@ TEST(opencl_dispatch, a_lent_read_writes_the_guest_s_memory_and_answers_only_its
   CHECK_EQ(sent, 64u);
   CHECK_EQ(reply.remaining(), 0u); }
 
-/* A lent write carries none of its bytes, so a frame holding only the offset
- * runs, and the call is handed the guest's own memory there. A span past what
- * was lent, or anything with nothing lent, is refused before the call. */
 TEST(opencl_dispatch, a_lent_write_hands_the_call_the_guest_s_memory)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -1105,15 +1002,6 @@ TEST(opencl_dispatch, a_lent_write_hands_the_call_the_guest_s_memory)
   CHECK(!transfer_lent(session, write, queue, buffer, 64u, 192u));
   CHECK_EQ(dispatch.calls(), before + 1u); }
 
-/* ---- addresses (feature 052) ---------------------------------------------
- *
- * The ten commands that name shared virtual memory or a mapped range. What is
- * asserted is the rule the handles already follow, applied to an address: only
- * one the host allocated resolves, and the extent the command will touch is
- * part of the question - so an address one byte inside a live allocation with
- * a size that runs past its end never reaches the ICD.
- */
-
 TEST(opencl_dispatch, an_svm_address_the_host_never_allocated_is_refused)
 { ClSession session;
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
@@ -1123,12 +1011,9 @@ TEST(opencl_dispatch, an_svm_address_the_host_never_allocated_is_refused)
   std::uint8_t bytes[frame_bytes];
   WireWriter frame(bytes, sizeof bytes);
   frame.write_pod<std::uint64_t>(context);
-  /* clSVMFree(context, svm_pointer): an address the guest made up. */
   frame.write_pod<std::uint64_t>(0x7F0000001000u);
   CHECK(!session.run(av::clproto::kCmd_clSVMFree, frame, bytes));
   CHECK_EQ(session.dispatch().calls(), before);
-  /* Refused at the decoder, so no call was handed the address at all: a
-   * stranger is one that got through. */
   CHECK_EQ(session.dispatch().strangers(), 0u); }
 
 TEST(opencl_dispatch, an_svm_address_the_host_allocated_resolves)
@@ -1155,8 +1040,6 @@ TEST(opencl_dispatch, an_svm_extent_that_leaves_its_allocation_is_refused)
   const std::uint64_t allocated = session.dispatch().make_svm(256u);
   CHECK(allocated != 0u);
 
-  /* clEnqueueSVMMap(queue, blocking, flags, svm_ptr, size, events..., event).
-   * The address is inside the allocation; the size is not. */
   struct Case { std::uint64_t offset; std::uint64_t size; bool runs; };
   constexpr Case cases[] = {{0u, 256u, true}, {128u, 128u, true}, {255u, 1u, true},
                             {0u, 257u, false}, {128u, 129u, false}, {255u, 2u, false},
@@ -1166,13 +1049,13 @@ TEST(opencl_dispatch, an_svm_extent_that_leaves_its_allocation_is_refused)
       std::uint8_t bytes[frame_bytes];
       WireWriter frame(bytes, sizeof bytes);
       frame.write_pod<std::uint64_t>(queue);
-      frame.write_varint(1u);                       /* blocking_map */
-      frame.write_varint(1u);                       /* map_flags */
+      frame.write_varint(1u);
+      frame.write_varint(1u);
       frame.write_pod<std::uint64_t>(allocated + item.offset);
       frame.write_varint(item.size);
-      frame.write_varint(0u);                       /* num_events_in_wait_list */
-      frame.write_pod<std::uint8_t>(0u);            /* event_wait_list */
-      frame.write_pod<std::uint8_t>(0u);            /* event */
+      frame.write_varint(0u);
+      frame.write_pod<std::uint8_t>(0u);
+      frame.write_pod<std::uint8_t>(0u);
       CHECK_EQ(session.run(av::clproto::kCmd_clEnqueueSVMMap, frame, bytes), item.runs);
       CHECK_EQ(session.dispatch().calls(), before + (item.runs ? 1u : 0u));
   } }
@@ -1186,7 +1069,6 @@ TEST(opencl_dispatch, a_copy_judges_both_of_its_addresses)
   CHECK(source != 0u);
   CHECK(destination != 0u);
 
-  /* clEnqueueSVMMemcpy(queue, blocking, dst, src, size, events..., event). */
   struct Case { std::uint64_t destination_offset; std::uint64_t source_offset; std::uint64_t size; bool runs; };
   const Case cases[] = {{0u, 0u, 128u, true}, {0u, 0u, 129u, false}, {1u, 0u, 128u, false},
                         {0u, 1u, 128u, false}, {64u, 64u, 64u, true}};
@@ -1213,8 +1095,6 @@ TEST(opencl_dispatch, a_kernel_argument_may_point_into_the_middle_of_an_allocati
   const std::uint64_t allocated = session.dispatch().make_svm(64u);
   CHECK(allocated != 0u);
 
-  /* clSetKernelArgSVMPointer(kernel, arg_index, arg_value): no extent at all,
-   * and an address that need not be the allocation's base. */
   struct Case { std::uint64_t address; bool runs; };
   const Case cases[] = {{allocated, true}, {allocated + 32u, true}, {allocated + 63u, true},
                         {allocated + 64u, false}, {allocated - 1u, false}};
@@ -1222,7 +1102,7 @@ TEST(opencl_dispatch, a_kernel_argument_may_point_into_the_middle_of_an_allocati
       const std::uint32_t before = session.dispatch().calls();
       std::uint8_t bytes[frame_bytes];
       WireWriter frame(bytes, sizeof bytes);
-      frame.write_pod<std::uint64_t>(0u);   /* kernel: null is the API's own error */
+      frame.write_pod<std::uint64_t>(0u);
       frame.write_varint(0u);
       frame.write_pod<std::uint64_t>(item.address);
       CHECK_EQ(session.run(av::clproto::kCmd_clSetKernelArgSVMPointer, frame, bytes), item.runs);
@@ -1236,9 +1116,6 @@ TEST(opencl_dispatch, a_null_svm_address_is_the_apis_own_error_and_not_a_refusal
   const std::uint32_t before = session.dispatch().calls();
   const std::uint32_t strangers = session.dispatch().strangers();
 
-  /* As for a null handle: the command decodes and the host answers
-   * CL_INVALID_VALUE. Refusing the frame would fault the context over an
-   * application's mistake. */
   std::uint8_t bytes[frame_bytes];
   WireWriter frame(bytes, sizeof bytes);
   frame.write_pod<std::uint64_t>(0u);
@@ -1252,8 +1129,6 @@ TEST(opencl_dispatch, an_address_returning_command_answers_a_wire_word)
   std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
   session.make_chain(platform, device, context, queue);
 
-  /* clSVMAlloc(context, flags, size, alignment). The fake allocates nothing,
-   * so the answer is zero - and it is eight bytes of answer, not a varint. */
   std::uint8_t bytes[frame_bytes];
   WireWriter frame(bytes, sizeof bytes);
   frame.write_pod<std::uint64_t>(context);

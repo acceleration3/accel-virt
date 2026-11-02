@@ -1,5 +1,3 @@
-/* The context commands the core answers, request byte by request byte: the
- * capset queries, context creation and destruction, and context setup. */
 #include "core/support/status.hpp"
 #include "device/gpu/device_capset.hpp"
 #include "device/context/device_context.hpp"
@@ -87,7 +85,6 @@ GpuRequestBuilder destroy(std::uint32_t id)
     return request;
 }
 
-/* The setup's own size unless `size` says otherwise. */
 GpuRequestBuilder submit(std::uint32_t id, const ContextSetup &setup, std::uint32_t size = 0u)
 {
     std::uint8_t bytes[ContextSetup::encoded_size] = {};
@@ -106,7 +103,6 @@ ContextSetup setup(std::uint32_t ring_id = ring, std::uint8_t order = 12u, std::
 
 class Fixture {
 public:
-    /* A device offering `sub_apis`, over a library of `abi_version`. */
     explicit Fixture(std::uint32_t sub_apis = vulkan_only, std::uint32_t abi_version = AV_EXECUTOR_ABI_VERSION)
         : blobs_(host_), maker_(host_, blobs_), owners_(host_), interrupts_(host_), ops_(sub_apis), recorder_(host_),
           plane_(host_, blobs_, owners_, interrupts_, recorder_),
@@ -133,7 +129,6 @@ public:
         writer.write_header(third_ring, 12u);
     }
 
-    /* The response type, or 0 when the core left the request to the base class. */
     std::uint32_t send(const GpuRequestBuilder &builder)
     {
         MockRequest mock(builder.bytes(), builder.size());
@@ -175,7 +170,7 @@ std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
     return value;
 }
 
-}  // namespace
+}
 
 TEST(context_commands_capset_info, names_one_capset_at_index_zero)
 { Fixture fixture;
@@ -212,9 +207,9 @@ TEST(context_commands_create, refuses_other_capsets_long_names_and_ids_it_cannot
   CHECK_EQ(fixture.send(create(1u)), ok_nodata);
   CHECK_EQ(fixture.send(create(1u)), err_invalid_context_id);
   CHECK_EQ(fixture.send(create(0u)), err_invalid_context_id);
-  CHECK_EQ(fixture.send(create(2u, 0u)), err_invalid_parameter);              /* virgl's default */
-  CHECK_EQ(fixture.send(create(2u, 0x04u)), err_invalid_parameter);           /* venus */
-  CHECK_EQ(fixture.send(create(2u, 0x172u)), err_invalid_parameter);          /* reserved bits */
+  CHECK_EQ(fixture.send(create(2u, 0u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(create(2u, 0x04u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(create(2u, 0x172u)), err_invalid_parameter);
   CHECK_EQ(fixture.send(create(2u, CapsetInfo::capset_id, 65u)), err_invalid_parameter);
   CHECK_EQ(fixture.send(create(2u).truncate(95u)), err_invalid_parameter);
   CHECK_EQ(fixture.contexts().live(), 1u);
@@ -247,7 +242,7 @@ TEST(context_commands_submit, a_setup_binds_the_context_until_it_is_destroyed)
   CHECK_EQ(context->binding().fence_resource(), fence);
   CHECK_EQ(context->binding().version().major_version(), 1u);
   CHECK_STATUS(fixture.blobs().release(ring), Status::invalid_state);
-  CHECK_EQ(fixture.send(submit(4u, setup())), err_invalid_parameter);   /* already set up */
+  CHECK_EQ(fixture.send(submit(4u, setup())), err_invalid_parameter);
   CHECK_EQ(fixture.send(destroy(4u)), ok_nodata);
   CHECK_STATUS(fixture.blobs().release(ring), Status::ok);
   CHECK_STATUS(fixture.blobs().release(fence), Status::ok); }
@@ -267,24 +262,23 @@ TEST(context_commands_submit, refuses_every_setup_it_cannot_bind)
       {submit(6u, setup()), err_invalid_context_id},
       {submit(5u, setup()).truncate(31u), err_invalid_parameter},
       {submit(5u, setup(), 31u), err_invalid_parameter},
-      {submit(5u, setup()).truncate(48u), err_invalid_parameter},        /* the buffer is not all there */
-      {submit(5u, setup(), 48u), err_invalid_parameter},                 /* a 32-byte setup named as 48 */
-      {submit(5u, setup(ring, 12u, 1u, 0u, 0u, 1u), 32u), err_invalid_parameter},   /* a 48-byte one as 32 */
+      {submit(5u, setup()).truncate(48u), err_invalid_parameter},
+      {submit(5u, setup(), 48u), err_invalid_parameter},
+      {submit(5u, setup(ring, 12u, 1u, 0u, 0u, 1u), 32u), err_invalid_parameter},
       {submit(5u, setup(ring, 12u, 1u, 0u, 0u, 1u)).truncate(79u), err_invalid_parameter},
-      {submit(5u, setup(), 49u), err_invalid_parameter},                 /* past any setup */
+      {submit(5u, setup(), 49u), err_invalid_parameter},
       {malformed, err_invalid_parameter},
       {submit(5u, setup(99u)), err_invalid_resource_id},
       {submit(5u, setup(small_ring)), err_invalid_parameter},
-      {submit(5u, setup(ring, 12u, 2u)), err_invalid_parameter},        /* another major */
-      {submit(5u, setup(ring, 12u, 1u, 64u)), err_invalid_parameter},   /* no such doorbell */
-      {submit(5u, setup(headless_ring)), err_invalid_parameter},        /* the guest wrote no ring header */
-      {submit(5u, setup(ring, 12u, 1u, 0u, 99u)), err_invalid_resource_id},   /* no such reply slot */
+      {submit(5u, setup(ring, 12u, 2u)), err_invalid_parameter},
+      {submit(5u, setup(ring, 12u, 1u, 64u)), err_invalid_parameter},
+      {submit(5u, setup(headless_ring)), err_invalid_parameter},
+      {submit(5u, setup(ring, 12u, 1u, 0u, 99u)), err_invalid_resource_id},
   };
   for (Case &c : cases) CHECK_EQ(fixture.send(c.request), c.answer);
   CHECK(!fixture.contexts().find(5u)->binding().bound());
   CHECK_EQ(fixture.send(submit(5u, setup())), ok_nodata); }
 
-/* The setup of the current minor is 48 bytes, and binds as the old one does. */
 TEST(context_commands_submit, binds_a_setup_of_the_current_minor)
 { Fixture fixture;
   CHECK_EQ(fixture.send(create(5u)), ok_nodata);
@@ -358,8 +352,6 @@ TEST(context_commands, answer_is_main_loop_only)
   fixture.host().join_thread(thread);
   CHECK(fixture.host().claim(HostViolation::main_loop_required)); }
 
-/* ---- OpenGL options and sharing (feature 050) ---- */
-
 namespace {
 
 ContextSetup gl_setup(std::uint32_t ring_id, std::uint32_t doorbell, const av::GlContextOptions &options)
@@ -370,7 +362,7 @@ ContextSetup gl_setup(std::uint32_t ring_id, std::uint32_t doorbell, const av::G
 
 const av::GlContextOptions core_33(3u, 3u, av::GlContextOptions::Profile::core, 0u, 0u);
 
-}  // namespace
+}
 
 TEST(context_commands_submit, a_gl_context_shares_only_another_bound_gl_context)
 { Fixture fixture(vulkan_and_gl);

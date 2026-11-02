@@ -75,8 +75,6 @@ void WireRecorder::close()
     lock_ = nullptr;
 }
 
-/* What a caller asks; `write` asks `full_` again under the lock, which is the
- * answer that decides. */
 bool WireRecorder::recording() const
 {
     AV_SCOPE("WireRecorder::recording");
@@ -87,15 +85,13 @@ Status WireRecorder::write_file_header()
 {
     AV_SCOPE("WireRecorder::write_file_header");
     uint8_t bytes[RecordingHeader::encoded_size] = {};
-    static_cast<void>(header_.encode(bytes, sizeof bytes)); /* sized for it, and open refused a smaller ceiling */
+    static_cast<void>(header_.encode(bytes, sizeof bytes));
     const Status written = host_.append_recording(file_, bytes, sizeof bytes);
     if (written != Status::ok) return written;
     limit_.wrapped();
     return Status::ok;
 }
 
-/* Under the lock, and only from a path that has just seen `full_` false, so
- * the reason is logged exactly once for a recording. */
 void WireRecorder::give_up(const char *reason)
 {
     AV_SCOPE("WireRecorder::give_up");
@@ -143,7 +139,7 @@ void WireRecorder::write(RecordKind kind, uint32_t context, uint64_t fence, cons
         }
         host_.log("recording: the size limit was reached; the recording wrapped");
     }
-    static_cast<void>(header.encode(frame_, sizeof frame_)); /* sized for it, and the length was judged above */
+    static_cast<void>(header.encode(frame_, sizeof frame_));
     for (uint32_t index = 0u; index < fixed_length; index++)
         frame_[RecordHeader::encoded_size + index] = fixed[index];
     if (host_.append_recording(file_, frame_, RecordHeader::encoded_size + fixed_length) != Status::ok) {
@@ -250,12 +246,8 @@ uint32_t WireRecorder::wraps() const
 bool WireRecorder::invariants_hold() const
 {
     AV_SCOPE("WireRecorder::invariants_hold");
-    /* The counts outlive the file: a run reads them after close, so a closed
-     * recorder that kept something is the ordinary end of a recording. */
     if (file_ == nullptr) return lock_ == nullptr;
-    /* The kinds are not asked: they are parsed once at open and never touched
-     * again, so the recorder has nothing of its own to keep true about them. */
     return lock_ != nullptr && header_.invariants_hold() && limit_.invariants_hold();
 }
 
-}  // namespace av
+}

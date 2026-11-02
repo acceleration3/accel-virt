@@ -20,8 +20,6 @@ from cts_results import QpaResults, SuiteComparison  # noqa: E402
 
 
 class Verdict:
-    """One comparison, and what it prints."""
-
     def __init__(self, guest, host):
         self.guest = guest
         self.host = host
@@ -30,11 +28,8 @@ class Verdict:
         return SuiteComparison(QpaResults(self.guest), QpaResults(self.host))
 
     def report(self):
-        """The exit code of contracts/cts_verdict.md."""
         compared = self.compared()
         if not compared.guest.cases or not compared.host.cases:
-            # One side answered nothing at all: a log that is not there, or a
-            # run that never started. Never a pass.
             print(f"cts: nothing to compare in {self.guest} and {self.host}", file=sys.stderr)
             return 2
         if compared.compared == 0 and not compared.unjudged:

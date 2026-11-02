@@ -1,6 +1,3 @@
-/* The three D3D probes' entry points (feature 047, T028). Each program is its
- * own executable, and each of these is the one line the linker's /ENTRY names:
- * no C runtime, so nothing runs before or after it. */
 #include "um/probe/d3d/d3d_probe_program.hpp"
 
 #include <windows.h>

@@ -1,7 +1,3 @@
-/* DISPLAY_CLOCK and DISPLAY_TIMING over attacker-chosen bytes, as a hostile
- * guest writes them: whatever the decoders accept is what the bytes at the
- * documented offsets say - a page-aligned address, a rate from 1 Hz to 1 kHz -
- * and each consumes exactly its request's 32 bytes. A refusal leaves nothing. */
 #include "core/support/status.hpp"
 #include "proto/virtio_gpu/page_request.hpp"
 #include "proto/virtio_gpu/display_timing_request.hpp"

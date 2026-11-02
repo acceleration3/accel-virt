@@ -28,23 +28,16 @@ ICD_EXPORTS = ("vk_icdNegotiateLoaderICDInterfaceVersion", "vk_icdGetInstancePro
 X86_BASE = 0x10000000
 
 
-# A table of pointers to its own code, which gives an image base relocations.
 POINTERS = """
 extern "C" long vk_icdNegotiateLoaderICDInterfaceVersion(unsigned *version);
 extern "C" void *const own_entries[] = {reinterpret_cast<void *>(&vk_icdNegotiateLoaderICDInterfaceVersion)};
 """
 
-# What each architecture is built as: the target, llvm-dlltool's machine, and
-# what lld-link needs to resolve an x86 __stdcall import against the
-# undecorated import library src/um/CMakeLists.txt makes.
 ARCHITECTURES = {"amd64": ("x86_64-pc-windows-msvc", "i386:x86-64", []),
                  "i386": ("i686-pc-windows-msvc", "i386", ["-stdcall-fixup"])}
 
 
 class Image:
-    """A small image importing `modules`, linked for `subsystem`; a DLL
-    exporting `exports` when it names any; x64 unless `machine` says i386."""
-
     def __init__(self, directory, name, subsystem, modules, exports=(), machine="amd64", base=None):
         target, dlltool_machine, fixup = ARCHITECTURES[machine]
         self.path = directory / (f"{name}.dll" if exports else f"{name}.exe")
@@ -88,10 +81,6 @@ RELOCATED_DIR64 = 10
 
 def synthetic_pe(machine=0x8664, dll=True, subsystem=2, imports=None, delay_imports=None,
                  exports=(), unnamed_exports=0, relocated=(), relocation_block=None):
-    """A PE32+ image laid out by hand: one section holding the import, delay
-    import and export tables. A symbol given as an int is imported by ordinal.
-    `relocated` is one DIR64-relocated pointer per value, each holding that
-    value; `relocation_block` replaces the whole table with raw bytes."""
     section = bytearray()
 
     def place(raw):
@@ -215,7 +204,6 @@ class GuestImageCheck(unittest.TestCase):
         self.assertIn("not a PE image: no MZ header", result.stderr)
 
     def test_accepts_a_linked_dll_exporting_exactly_the_icd_entry_points(self):
-        """A real linker's export table, not only the one these tests lay out."""
         arguments = ["--dll", "--only-exports", "--require-import", "D3DKMTEnumAdapters2"]
         for export in ICD_EXPORTS:
             arguments += ["--require-export", export]
@@ -224,7 +212,6 @@ class GuestImageCheck(unittest.TestCase):
         self.assertIn("guest_image: ok", result.stdout)
 
     def test_a_32_bit_dll_passes_as_i386_and_is_refused_as_the_default_amd64(self):
-        """The x86 drivers a WoW64 process loads, checked as what they are."""
         arguments = ["--dll", "--only-exports", "--require-import", "D3DKMTEnumAdapters2"]
         for export in ICD_EXPORTS:
             arguments += ["--require-export", export]
@@ -239,9 +226,6 @@ class GuestImageCheck(unittest.TestCase):
         self.assertIn("machine IMAGE_FILE_MACHINE_AMD64, want IMAGE_FILE_MACHINE_I386", result.stderr)
 
     def test_a_32_bit_images_base_and_32_bit_relocations_are_read(self):
-        """PE32's ImageBase is four bytes past where PE32+'s begins, and its
-        pointers are HIGHLOW relocations: each one read holds an address inside
-        the image, above its base."""
         image = check_guest_image.PeImage(self.icd32.path.read_bytes())
         self.assertEqual(image.image_base, X86_BASE)
         pointers = image.relocated_pointers()
@@ -315,7 +299,6 @@ class SyntheticDllCheck(unittest.TestCase):
         self.assertEqual(self.refusals(result), ["imports Vulkan-1.dll, not a module every guest has"])
 
     def test_the_opengl_icds_user32_and_opengl32_imports_are_accepted_only_when_allowed(self):
-        # avgl.dll presents through user32 (050 research.md §6); its probe imports opengl32.
         image = self.icd(imports={**GUEST_IMPORTS, "user32.dll": ["WindowFromDC", "GetClientRect"],
                                   "opengl32.dll": ["wglCreateContext"]})
         result = self.check(image, *self.exactly_the_icd(), "--require-import", "WindowFromDC")
@@ -358,10 +341,6 @@ class SyntheticDllCheck(unittest.TestCase):
         self.assertEqual(self.refusals(result), ["exports ordinal 3 with no name"])
 
     def test_a_relocated_pointer_to_the_image_base_is_refused_naming_where_it_is(self):
-        """A pointer the linker filled with nothing: RVA 0 is the DOS header,
-        never a symbol, and calling one jumps to the image base. This is how a
-        guest DLL built against a __declspec(dllimport) declaration with no
-        import library to satisfy it fails, and it fails at run time."""
         result = self.check(self.icd(relocated=(IMAGE_BASE,)), *self.exactly_the_icd())
         refusals = self.refusals(result)
         self.assertEqual(len(refusals), 1, refusals)
@@ -382,8 +361,6 @@ class SyntheticDllCheck(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_a_padding_entry_relocates_nothing_and_is_not_read(self):
-        """Type 0 is IMAGE_REL_BASED_ABSOLUTE, which every linker pads blocks
-        with; reading a pointer at its offset would judge an unrelated word."""
         block = struct.pack("<IIHH", SECTION_RVA, 12, 0, 0)
         result = self.check(self.icd(relocation_block=block), *self.exactly_the_icd())
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -422,10 +399,6 @@ class SyntheticDllCheck(unittest.TestCase):
 
 
 class HostileImages(unittest.TestCase):
-    """The parse in-process, so every prefix and every flipped byte is judged
-    quickly: an image is either read or refused as Malformed, never anything
-    else."""
-
     def parse(self, data):
         image = check_guest_image.PeImage(data)
         return image.imports(), image.exports()
@@ -468,8 +441,6 @@ class HostileImages(unittest.TestCase):
             self.parse(bytes(image))
 
     def test_a_table_straddling_the_end_of_its_section_is_refused(self):
-        """The file holds padding past the section's virtual size; a read that
-        starts inside the section and ends in that padding is still refused."""
         image = bytearray(synthetic_pe(exports=ICD_EXPORTS))
         directory = struct.unpack_from("<I", image, OPTIONAL_AT + 112)[0]
         struct.pack_into("<I", image, OPTIONAL_AT + OPTIONAL_SIZE + 8, directory + 38 - SECTION_RVA)
@@ -477,7 +448,6 @@ class HostileImages(unittest.TestCase):
             self.parse(bytes(image))
 
     def test_a_name_with_no_terminator_is_refused(self):
-        """Section data that runs on past the longest name a linker writes."""
         image = bytearray(synthetic_pe(imports={}))
         header = OPTIONAL_AT + OPTIONAL_SIZE
         unterminated = SECTION_RVA + len(image) - FILE_ALIGNMENT

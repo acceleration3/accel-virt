@@ -21,7 +21,7 @@ struct DriverTraceProbe {
     static void resize(DriverTrace &trace, std::size_t bytes) { trace.bytes_ = bytes; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -37,7 +37,7 @@ struct Traced {
     ~Traced() { trace.stop(); }
 };
 
-}  // namespace
+}
 
 TEST(driver_trace_start, binds_a_64_slot_table_and_registers_it_for_the_dump)
 { Traced traced;
@@ -54,7 +54,6 @@ TEST(driver_trace_start, binds_a_64_slot_table_and_registers_it_for_the_dump)
   CHECK(std::memcmp(table->region() + 32u, "avgpu\0", 7u) == 0);
   CHECK_EQ(traced.platform.logged(), 1u);
   CHECK(std::strcmp(traced.platform.last_log(), "avgpu: trace table at physical 0x0000000100000000 bytes 52832") == 0);
-  /* A second start changes nothing. */
   traced.trace.start(&no_bugcheck);
   CHECK_EQ(traced.platform.logged(), 1u);
   CHECK(av::scope_binding.table() == table);
@@ -109,8 +108,6 @@ TEST(driver_trace_start, is_passive_only)
   CHECK(traced.platform.claim(av::Violation::irql_ceiling));
   traced.platform.set_irql(av::Irql::passive); }
 
-/* Stopping leaves a binding that is not this trace's own: another table's
- * scopes are not this driver's to end. */
 TEST(driver_trace_stop, leaves_another_table_bound)
 { Traced traced;
   traced.trace.start(nullptr);
@@ -134,8 +131,6 @@ TEST(driver_trace_bugcheck, writes_every_line_of_the_table)
   traced.trace.start(&no_bugcheck);
   traced.trace.bugcheck();
   CHECK(traced.platform.bugcheck_line("avgpu: trace module=avgpu pid=0 slots=64\n"));
-  /* The formatter's own scopes are gone: only its caller, whose name is
-   * outside the empty image, is on the stack. */
   CHECK(traced.platform.bugcheck_line("avgpu: thread 100 active depth=1 "));
   CHECK(traced.platform.bugcheck_line("avgpu:   #0 #"));
   CHECK_EQ(traced.platform.bugcheck_lines(), 3u); }

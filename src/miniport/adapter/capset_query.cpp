@@ -38,7 +38,6 @@ Status CapsetQuery::accept(const uint8_t *bytes, size_t length)
     return Status::invalid_state;
 }
 
-/* A device answers the one capset it has at index 0, big enough to be ours. */
 Status CapsetQuery::accept_info(const uint8_t *bytes, size_t length)
 {
     AV_SCOPE("CapsetQuery::accept_info");
@@ -102,4 +101,4 @@ bool CapsetQuery::invariants_hold() const
     return step_ != Step::done || described_;
 }
 
-}  // namespace av
+}

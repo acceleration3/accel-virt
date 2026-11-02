@@ -71,4 +71,4 @@ void *MappedRegisterWindow::address_at(uint64_t offset) const
     return base_ + offset;
 }
 
-}  // namespace av
+}

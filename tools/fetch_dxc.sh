@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-# Fetch Microsoft's DirectX Shader Compiler - dxcompiler.dll and dxil.dll, the
-# x64 Windows release - into third_party/dxc/. The D3D12 samples
-# (samples/d3d12) compile their HLSL to DXIL with it: in the guest, pushed
-# beside avd3d12samples.exe by tools/d3d12_report.py, and on this machine
-# under wine, which is how the host half gets the same bytecode without a
-# guest (samples/d3d12/README in the report's docstring). dxil.dll beside
-# dxcompiler.dll is what signs the DXIL, which Windows' D3D12 requires.
-#
-# Pinned by hash and fetched, never committed: the release is 40 MB of binary.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -42,8 +33,6 @@ fi
 
 staging=$(mktemp -d third_party/.dxc.XXXXXX)
 trap 'rm -rf "$staging"' EXIT
-# The archive names its members with backslashes, which unzip warns about and
-# then honours as directories.
 unzip -q "$file" -d "$staging/archive" 2>/dev/null || [ -d "$staging/archive/bin" ]
 mkdir -p "$staging/dxc"
 for entry in "${FILES[@]}"; do

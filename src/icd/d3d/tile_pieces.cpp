@@ -6,12 +6,9 @@
 namespace av::icd {
 
 namespace {
-
-/* D3D12_TILE_RANGE_FLAG_REUSE_SINGLE_TILE: every tile of the range is its
- * heap offset's one. */
 constexpr uint32_t range_reuse = 0x4u;
 
-}  // namespace
+}
 
 TilePieces::TilePieces(const TileMappingSource &source)
     : source_(source), region_(0u), range_(0u), range_used_(0u), regions_{}, ranges_{}, region_count_(0u),
@@ -94,4 +91,4 @@ bool TilePieces::cut_short() const
     return cut_short_;
 }
 
-}  // namespace av::icd
+}

@@ -1,5 +1,3 @@
-/* The doorbell BAR of virtio-gpu-av-pci as a driver's register window sees
- * it: every store is recorded by page, and the reading any page gives is 0. */
 #ifndef AV_FAKE_DOORBELL_PAGES_HPP
 #define AV_FAKE_DOORBELL_PAGES_HPP
 
@@ -25,9 +23,7 @@ public:
     void          write_u32(std::uint64_t offset, std::uint32_t value) override;
     void          write_u64(std::uint64_t offset, std::uint64_t value) override;
 
-    /* 4-byte stores at offset 0 of `page`: what rings a doorbell. */
     std::uint32_t rings(std::uint32_t page) const;
-    /* Every other store. */
     std::uint32_t stray_stores() const;
 
 private:
@@ -37,6 +33,6 @@ private:
     std::uint32_t stray_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FAKE_DOORBELL_PAGES_HPP
+#endif

@@ -5,12 +5,10 @@
 namespace av {
 
 namespace {
-
-/* From drm_fourcc.h. */
 constexpr uint64_t drm_format_mod_linear = 0u;
 constexpr uint64_t drm_format_mod_invalid = 0x00ffffffffffffffull;
 
-}  // namespace
+}
 
 ExportableImage::ExportableImage(ExportableImages &owner)
     : TextureHold(owner), image_(), modifier_(drm_format_mod_invalid)
@@ -54,4 +52,4 @@ void ExportableImage::free()
     image_.release();
 }
 
-}  // namespace av
+}

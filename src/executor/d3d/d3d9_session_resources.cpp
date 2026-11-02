@@ -1,5 +1,3 @@
-/* D3d9Session's surfaces, textures and buffers, and what is written into,
- * read out of and copied between them (d3d9_session.hpp). */
 #include "core/support/scope_exit.hpp"
 #include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
@@ -28,19 +26,14 @@ constexpr uint32_t type_2d = 1u;
 constexpr uint32_t type_cube = 2u;
 constexpr uint32_t type_volume = 3u;
 constexpr uint32_t cube_faces = 6u;
-constexpr uint32_t max_levels = 15u;                 /* a 16384 edge's chain */
+constexpr uint32_t max_levels = 15u;
 constexpr uint32_t max_buffer_bytes = 256u << 20u;
 constexpr uint32_t max_multisample = D3DMULTISAMPLE_16_SAMPLES;
 constexpr uint32_t usage_kept = D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL | D3DUSAGE_DYNAMIC |
                                 D3DUSAGE_AUTOGENMIPMAP | D3DUSAGE_WRITEONLY | D3DUSAGE_POINTS |
                                 D3DUSAGE_RTPATCHES | D3DUSAGE_NPATCHES | D3DUSAGE_DMAP;
-/* What a write may ask of a dynamic resource's lock. */
 constexpr uint32_t write_flags = D3DLOCK_DISCARD | D3DLOCK_NOOVERWRITE;
 
-/* Where the host keeps a resource the guest made in `pool` (D3DPOOL_DEFAULT or
- * MANAGED): what renders or is drawn into stays default, what the guest
- * rewrites every frame is dynamic, and everything else is managed, which a
- * write reaches through a plain lock. */
 bool host_pool(uint32_t pool, uint32_t usage, D3DPOOL &placed)
 {
     AV_SCOPE("host_pool");
@@ -50,16 +43,12 @@ bool host_pool(uint32_t pool, uint32_t usage, D3DPOOL &placed)
     return true;
 }
 
-/* The lock flags a write carries to a resource in `pool`: a managed one's
- * lock takes neither discard nor no-overwrite. */
 DWORD lock_flags(D3DPOOL pool, uint32_t flags)
 {
     AV_SCOPE("lock_flags");
     return pool == D3DPOOL_DEFAULT ? flags & write_flags : 0u;
 }
 
-/* A Direct3D 9 present's frame, staged through its GPU's Direct3D 9: a
- * surface of four-byte X8R8G8B8 or A8R8G8B8 pixels, or nothing. */
 class PresentedSurface final : public FrameStager {
 public:
     PresentedSurface(D3d9HostDevice &host, IDirect3DDevice9 *device, IDirect3DSurface9 *source);
@@ -88,7 +77,7 @@ StagedFrame *PresentedSurface::stage()
                              desc.MultiSampleType != D3DMULTISAMPLE_NONE);
 }
 
-}  // namespace
+}
 
 bool D3d9Session::on_CreateSurface9(uint32_t surface, uint32_t kind, uint32_t width, uint32_t height,
                                     uint32_t format, uint32_t multisample, uint32_t quality, uint32_t flags)
@@ -127,12 +116,6 @@ bool D3d9Session::on_CreateTexture9(uint32_t texture, uint32_t type, uint32_t wi
         height > max_dimension || depth > max_dimension || levels > max_levels || (usage & ~usage_kept) != 0u ||
         !host_pool(pool, usage, placed))
         return false;
-    /* A default 2D or cube texture stays default: StretchRect reads from the
-     * default pool only (DXVK refuses a managed source, and a refusal removes
-     * the device), and its writes go through UpdateSurface (write_level).
-     * Not one of blocks: StretchRect never reads one, and the system-memory
-     * surface a write goes through cannot be made for a level smaller than a
-     * block - a DXT1 texture's 2x2 level. */
     const D3d9FormatLayout layout(format);
     const bool             blocks = layout.element_width() > 1u || layout.element_height() > 1u;
     if (pool == D3DPOOL_DEFAULT && type != type_volume && !blocks) placed = D3DPOOL_DEFAULT;
@@ -198,8 +181,6 @@ bool D3d9Session::on_WriteTexture9(uint32_t texture, uint32_t subresource, const
     return write_level(texture, subresource, box, row_pitch, flags, data, data_size);
 }
 
-/* A 2D texture's level is its subresource; a cube's subresources go face by
- * face, every level of one face before the next. */
 bool D3d9Session::write_level(uint32_t texture, uint32_t subresource, const d3d9proto::Box &box, uint32_t row_pitch,
                               uint32_t flags, const uint8_t *data, uint64_t data_size)
 {
@@ -268,12 +249,6 @@ bool D3d9Session::write_volume(uint32_t texture, uint32_t subresource, const d3d
     return fits;
 }
 
-/* A surface's lock and unlock in the guest, or an UpdateSurface from its
- * system memory. An offscreen plain surface or a lockable render target is
- * locked where it is; one the host cannot lock - a render target made
- * unlockable - takes the rows through a system-memory surface of the box's
- * size and UpdateSurface. A plain surface has no dynamic usage, so the
- * guest's discard and no-overwrite do not reach its lock. */
 bool D3d9Session::write_surface(uint32_t id, uint32_t subresource, const d3d9proto::Box &box, uint32_t row_pitch,
                                 const uint8_t *data, uint64_t data_size)
 {
@@ -407,10 +382,6 @@ bool D3d9Session::on_ReadSurface9(uint32_t surface_id, uint32_t subresource, uin
     return true;
 }
 
-/* A surface in memory the CPU sees - a managed texture's level - is locked
- * where it is; a render target is not lockable on the host, so it is read
- * through a system-memory surface of its size, which GetRenderTargetData
- * waits for. */
 int32_t D3d9Session::read(IDirect3DSurface9 *source, uint32_t &pitch, uint8_t *pixels, uint64_t capacity,
                           uint64_t &written)
 {
@@ -436,8 +407,6 @@ int32_t D3d9Session::read(IDirect3DSurface9 *source, uint32_t &pitch, uint8_t *p
     if (FAILED(opened)) return opened;
     pitch = static_cast<uint32_t>(locked.Pitch);
     const uint64_t rows = D3d9FormatLayout(static_cast<uint32_t>(desc.Format)).rows(desc.Height);
-    /* All of it or none: a surface cut short at the guest's room would be
-     * presented or copied as a whole one with its bottom rows stale. */
     if (uint64_t{pitch} * rows > capacity) {
         locked_surface->UnlockRect();
         return D3DERR_MOREDATA;
@@ -481,10 +450,6 @@ bool D3d9Session::on_ColorFill9(uint32_t surface_id, uint32_t subresource, const
     return SUCCEEDED(device()->ColorFill(target, rect.right > rect.left ? &area : nullptr, color));
 }
 
-/* What D3dBackend::on_PresentPoint does for Direct3D 11: the frame staged
- * where the commands before it left the surface, kept under the guest's key
- * and point for the present engine. A surface it cannot stage is abandoned,
- * so the present naming it is refused rather than left waiting. */
 bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, uint64_t key, uint32_t point)
 {
     AV_SCOPE("D3d9Session::on_PresentPoint9");
@@ -492,8 +457,6 @@ bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, ui
     IDirect3DSurface9 *const source = surface(surface_id, subresource);
     if (source == nullptr) return false;
     ScopeExit             release([source] { source->Release(); });
-    /* Point 0 is a flip of a fullscreen primary: what it shows is kept under
-     * its key, where DWM and the scanout open it. */
     if (point == 0u && key != 0u) {
         const Status shown = flips_.flip(device(), source, key);
         if (shown != Status::ok && shown != Status::not_supported) lines_.note_hex("a primary's flip was not shared, key", key, 16u);
@@ -505,4 +468,4 @@ bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, ui
     return true;
 }
 
-}  // namespace av
+}

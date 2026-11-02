@@ -37,4 +37,4 @@ bool DeviceCookie::invariants_hold() const
     return magic_ == 0ull ? device_ == nullptr : true;
 }
 
-}  // namespace av::d3d
+}

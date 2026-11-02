@@ -49,10 +49,6 @@ bool BlobCommands::answer(ControlRequest &request, uint32_t type)
     return true;
 }
 
-/* A base-class resource, or a short request the base class refuses, is not
- * ours. A guest blob still pinned is refused, not released; a host blob is
- * always released, since an import holding its memory keeps it in the
- * library rather than here. */
 bool BlobCommands::unref(ControlRequest &request, GpuResponse &response)
 {
     AV_SCOPE("BlobCommands::unref");
@@ -108,8 +104,6 @@ uint32_t BlobCommands::create_guest(ControlRequest &request, uint32_t id, uint32
     return answer;
 }
 
-/* Host GPU memory for one live context: mappable, no memory entries, and
- * the memory it is in named as the context object. */
 uint32_t BlobCommands::create_host(const CreateBlobRequest &create)
 {
     AV_SCOPE("BlobCommands::create_host");
@@ -128,8 +122,6 @@ uint32_t BlobCommands::create_host(const CreateBlobRequest &create)
     return GpuResponse::ok_nodata;
 }
 
-/* Like a host blob, but never mapped - the guest sees it through the pages it
- * lies over - and with the pages to come. */
 uint32_t BlobCommands::create_adopted(const CreateBlobRequest &create)
 {
     AV_SCOPE("BlobCommands::create_adopted");
@@ -147,7 +139,6 @@ uint32_t BlobCommands::create_adopted(const CreateBlobRequest &create)
     return GpuResponse::ok_nodata;
 }
 
-/* Anything but a host blob is the base class's: a 2D resource's backing. */
 bool BlobCommands::attach(ControlRequest &request, GpuResponse &response)
 {
     AV_SCOPE("BlobCommands::attach");
@@ -213,4 +204,4 @@ uint32_t BlobCommands::unmap(ControlRequest &request)
     }
 }
 
-}  // namespace av
+}

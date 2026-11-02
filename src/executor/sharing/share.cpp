@@ -211,4 +211,4 @@ void Share::describe_image(const SharedImageShape &shape)
     shape_ = shape;
 }
 
-}  // namespace av
+}

@@ -45,7 +45,7 @@ std::uint8_t *encoded(const AllocationDescriptor &descriptor, std::uint8_t *byte
     return bytes;
 }
 
-}  // namespace
+}
 
 TEST(allocation_descriptor_encode, places_every_field_at_its_offset)
 { GuardedBuffer bytes(AllocationDescriptor::encoded_size);
@@ -104,15 +104,15 @@ TEST(allocation_descriptor_decode, round_trips_every_kind)
 TEST(allocation_descriptor_decode, rejects_each_invalid_field_and_stays_unchanged)
 { struct Case { std::size_t offset; std::size_t width; std::uint64_t value; };
   const Case cases[] = {
-      {0u, 4u, 0x414B5653u},       /* magic */
-      {4u, 2u, 0u},                /* no kind */
-      {4u, 2u, 5u},                /* unknown kind */
-      {6u, 2u, 2u},                /* reserved flag */
-      {8u, 4u, 4097u},             /* pitch below width */
-      {12u, 4u, 769u},             /* rows past the size */
-      {20u, 4u, 0u},               /* surface without pitch */
-      {24u, 8u, 0u},               /* empty */
-      {44u, 4u, 1u},               /* reserved */
+      {0u, 4u, 0x414B5653u},
+      {4u, 2u, 0u},
+      {4u, 2u, 5u},
+      {6u, 2u, 2u},
+      {8u, 4u, 4097u},
+      {12u, 4u, 769u},
+      {20u, 4u, 0u},
+      {24u, 8u, 0u},
+      {44u, 4u, 1u},
   };
   for (const Case &c : cases) {
       std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
@@ -150,32 +150,17 @@ TEST(allocation_descriptor_decode, hostile_sweep_never_accepts_what_does_not_rou
   const HostileSweep sweep(rejects, encoded(primary, bytes), sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 8u * AllocationDescriptor::encoded_size);
-  /* A primary is the most constrained descriptor there is, and the sweep says
-   * so. Free: the format (32 bits), the scanout's source and refresh, which
-   * only a primary may carry at all (96), and the host key (64), which names a
-   * host image and is the device's to judge. Judged: clearing the CPU-visible flag
-   * is the one flag a reader knows (1); of the width, the eleven flips that
-   * keep it non-zero and no wider than the 4096-byte pitch (11); of the height,
-   * the two that keep pitch * height inside the allocation (2); of the size,
-   * every flip but the two that drop it below that product (62); and no flip of
-   * the pitch or the kind survives, a wider pitch overflowing the allocation
-   * and any other kind forbidding the scanout this one carries. Every shorter
-   * input is short of 56 bytes, all-zero and all-ones carry no magic, and the
-   * untouched descriptor is the last acceptance. */
   const std::uint32_t acceptable = 32u + 96u + 64u + 1u + 11u + 2u + 62u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
-/* The page an av context is named by: nothing is ever kept in it - the
- * context runs on the driver's memory (docs/protocol.md, "Context memory") - so
- * it is one page, exactly, and never a surface. */
 TEST(allocation_descriptor_decode, a_context_s_name_is_one_page_and_no_surface)
 { struct Case { AllocationKind kind; std::uint64_t size; bool surface; Status expected; };
   const Case cases[] = {
       {AllocationKind::context_ring, 0x1000u, false, Status::ok},
       {AllocationKind::context_ring, 0x2000u, false, Status::malformed},
-      {AllocationKind::context_ring, 0x4000u, false, Status::malformed},   /* a ring, as it once was */
-      {AllocationKind::context_ring, 0x800u, false, Status::malformed},    /* under a page */
-      {AllocationKind::context_ring, 0x1000u, true, Status::malformed},    /* not a surface */
+      {AllocationKind::context_ring, 0x4000u, false, Status::malformed},
+      {AllocationKind::context_ring, 0x800u, false, Status::malformed},
+      {AllocationKind::context_ring, 0x1000u, true, Status::malformed},
   };
   for (const Case &one : cases) {
       const SurfaceLayout layout = one.surface ? SurfaceLayout(8u, 8u, 21u, 32u) : SurfaceLayout();
@@ -185,17 +170,10 @@ TEST(allocation_descriptor_decode, a_context_s_name_is_one_page_and_no_surface)
       CHECK_STATUS(decoded.decode(encoded(descriptor, bytes), sizeof bytes), one.expected);
   } }
 
-/* A kind outside the enumeration is refused, whatever else the descriptor
- * says: a guest that invents one is asking for memory this driver has no rules
- * for. */
 TEST(allocation_descriptor_decode, a_kind_past_the_last_one_is_refused)
 { const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
   std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
   static_cast<void>(encoded(ring, bytes));
-  /* 18 to 20 were a context's fence page and reply slot and a chunk of its
-   * guest RAM, all the driver's own memory now (docs/protocol.md, "Context
-   * memory"); 21 was host memory VidMm placed in a CPU-visible segment, which
-   * is gone (docs/host-memory.md). A stale client asking for any is refused. */
   const std::uint16_t pasts[] = {18u, 19u, 20u, 21u, 22u};
   for (std::uint16_t past : pasts) {
       std::memcpy(bytes + 4u, &past, sizeof past);

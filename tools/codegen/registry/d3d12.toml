@@ -1,39 +1,8 @@
-# The Direct3D 12 commands the user-mode driver (avumd.dll's OpenAdapter12
-# half) sends and the executor runs on the host's vkd3d-proton.
-#
-# The same wire as d3d.toml - the same api number, the same session, the same
-# generator - in the id range d3d.toml reserves for Direct3D 12 (0x1000-0x1fff),
-# so one session backend decodes both and routes by range. Values are the
-# Direct3D 12 *API*'s (D3D12_RESOURCE_STATES, D3D12_SRV_DIMENSION, DXGI_FORMAT
-# ...): the guest translates from the DDI once, the host judges and forwards.
-#
-# Objects are named by a 32-bit id the guest chooses, unique within its
-# session; 0 is "none" wherever a binding may be empty.
-#
-# Three things a D3D12 driver hands out that are not objects cross as what
-# they stand for:
-# - A descriptor handle (CPU or GPU) is (descriptor heap id, index); the
-#   guest's driver chooses the handle values it gives the runtime and maps
-#   them back.
-# - A GPU virtual address is the guest's own. Every buffer is made with the
-#   guest address the guest gave it, and the host finds the buffer an address
-#   falls in and adds the offset to the host buffer's own address.
-# - An upload or readback heap is guest memory: the heap names its offset in
-#   the session's blob arena and the host imports those pages, so what the
-#   guest writes the GPU reads and what the GPU writes the guest reads, with no
-#   copy either way.
-#
-# Shaders are not objects: a pipeline carries every stage's code, and the
-# signatures the DDI gives as registers, so the host keeps nothing it has not
-# made into a pipeline.
-
 [meta]
 api = 4
 prefix = "d3d12"
 first_id = 0x1000
 last_id = 0x1fff
-
-# ---------------------------------------------------------------- structs
 
 [structs.Float4]
 fields = ["f32 v[4]"]
@@ -47,31 +16,19 @@ fields = ["u32 left", "u32 top", "u32 front", "u32 right", "u32 bottom", "u32 ba
 [structs.Viewport]
 fields = ["f32 x", "f32 y", "f32 width", "f32 height", "f32 min_depth", "f32 max_depth"]
 
-# A descriptor handle, CPU or GPU: which heap, and where in it.
 [structs.DescriptorRef]
 fields = ["u32 heap", "u32 index"]
 
-# D3D12_HEAP_PROPERTIES without the node masks: type is D3D12_HEAP_TYPE,
-# cpu_page D3D12_CPU_PAGE_PROPERTY, pool D3D12_MEMORY_POOL.
 [structs.HeapProperties]
 fields = ["u32 type", "u32 cpu_page", "u32 pool", "u32 reserved"]
 
-# D3D12_RESOURCE_DESC, u64s first.
 [structs.ResourceDesc]
 fields = ["u64 alignment", "u64 width", "u32 dimension", "u32 height", "u32 depth_or_array", "u32 mip_levels",
           "u32 format", "u32 sample_count", "u32 sample_quality", "u32 layout", "u32 flags", "u32 reserved"]
 
-# D3D12_CLEAR_VALUE, or none when present is 0.
 [structs.ClearValue]
 fields = ["u32 present", "u32 format", "f32 color[4]", "f32 depth", "u32 stencil"]
 
-# A view of any kind. dimension is the kind's own D3D12_*_DIMENSION; for a
-# buffer view first_element and args[0..1] are NumElements and
-# StructureByteStride, flags the kind's buffer flags, counter_offset a UAV
-# counter's; for a texture view args are the dimension's union members in
-# declaration order (SRV Texture2DArray: MostDetailedMip, MipLevels,
-# FirstArraySlice, ArraySize, PlaneSlice), min_lod its ResourceMinLODClamp.
-# mapping is an SRV's Shader4ComponentMapping.
 [structs.ViewDesc]
 fields = ["u64 first_element", "u64 counter_offset", "u32 resource", "u32 counter_resource", "u32 format",
           "u32 dimension", "u32 mapping", "u32 flags", "u32 args[6]", "f32 min_lod", "u32 reserved"]
@@ -80,33 +37,22 @@ fields = ["u64 first_element", "u64 counter_offset", "u32 resource", "u32 counte
 fields = ["u32 filter", "u32 address_u", "u32 address_v", "u32 address_w", "f32 mip_lod_bias",
           "u32 max_anisotropy", "u32 comparison", "f32 border_color[4]", "f32 min_lod", "f32 max_lod"]
 
-# D3D12_ROOT_PARAMETER1 flattened. type is D3D12_ROOT_PARAMETER_TYPE; a table
-# is ranges[first_range .. first_range + range_count) of the command's ranges;
-# constants have `values` 32-bit values; a root descriptor names its register.
 [structs.RootParameter]
 fields = ["u32 type", "u32 visibility", "u32 shader_register", "u32 register_space", "u32 values",
           "u32 first_range", "u32 range_count", "u32 flags"]
 
-# D3D12_DESCRIPTOR_RANGE1: offset 0xffffffff appends.
 [structs.DescriptorRange]
 fields = ["u32 type", "u32 count", "u32 base_register", "u32 register_space", "u32 offset", "u32 flags"]
 
-# D3D12_STATIC_SAMPLER_DESC: border is D3D12_STATIC_BORDER_COLOR.
 [structs.StaticSampler]
 fields = ["u32 filter", "u32 address_u", "u32 address_v", "u32 address_w", "f32 mip_lod_bias",
           "u32 max_anisotropy", "u32 comparison", "u32 border", "f32 min_lod", "f32 max_lod",
           "u32 shader_register", "u32 register_space", "u32 visibility", "u32 reserved"]
 
-# One element of a stage's signature as the DDI gives it (d3d.toml's
-# SignatureEntry), with `set` saying whose: stage * 3 + role, stage 0 vertex,
-# 1 hull, 2 domain, 3 geometry, 4 pixel, role 0 input, 1 output, 2 patch
-# constant.
 [structs.SignatureEntry]
 fields = ["u32 set", "u32 system_value", "u32 register_index", "u32 mask", "u32 component_type",
           "u32 min_precision", "u32 stream", "u32 reserved"]
 
-# D3D12DDIARG_INPUT_ELEMENT_DESC: the DDI names each element's vertex shader
-# input register, not a semantic.
 [structs.InputElement]
 fields = ["u32 input_slot", "u32 aligned_byte_offset", "u32 format", "u32 classification", "u32 step_rate",
           "u32 input_register"]
@@ -128,55 +74,35 @@ fields = ["u32 fail", "u32 depth_fail", "u32 pass", "u32 func"]
 fields = ["u32 depth_enable", "u32 depth_write_mask", "u32 depth_func", "u32 stencil_enable",
           "u32 stencil_read_mask", "u32 stencil_write_mask", "StencilOp front", "StencilOp back"]
 
-# Everything of D3D12_GRAPHICS_PIPELINE_STATE_DESC that is not a shader, the
-# root signature or the input layout.
 [structs.GraphicsState]
 fields = ["u32 alpha_to_coverage", "u32 independent_blend", "RenderTargetBlend targets[8]",
           "u32 sample_mask", "RasterizerDesc rasterizer", "DepthStencilDesc depth_stencil",
           "u32 strip_cut", "u32 topology_type", "u32 render_targets", "u32 rtv_formats[8]",
           "u32 dsv_format", "u32 sample_count", "u32 sample_quality", "u32 flags"]
 
-# A transition (type 0: resource, subresource, before, after), aliasing
-# (1: resource before, resource_after after) or UAV barrier (2: resource).
 [structs.Barrier]
 fields = ["u32 type", "u32 flags", "u32 resource", "u32 subresource", "u32 before", "u32 after",
           "u32 resource_after", "u32 reserved"]
 
-# D3D12_VERTEX_BUFFER_VIEW with the guest's address.
 [structs.VertexBufferView]
 fields = ["u64 address", "u32 size", "u32 stride"]
 
-# D3D12_TEXTURE_COPY_LOCATION: type 0 a subresource of `resource`, 1 a placed
-# footprint of buffer `resource` at `offset`.
 [structs.CopyLocation]
 fields = ["u64 offset", "u32 resource", "u32 type", "u32 subresource", "u32 format", "u32 width", "u32 height",
           "u32 depth", "u32 row_pitch"]
 
-# What the host's device is, asked once.
-# D3D12_INDIRECT_ARGUMENT_DESC: type is D3D12_INDIRECT_ARGUMENT_TYPE, and a, b, c
-# the members of its union in declaration order - a vertex buffer's Slot; a
-# constant's RootParameterIndex, DestOffsetIn32BitValues, Num32BitValuesToSet; a
-# root view's RootParameterIndex - and 0 past them.
 [structs.IndirectArgument]
 fields = ["u32 type", "u32 a", "u32 b", "u32 c"]
 
-# D3D12_TILED_RESOURCE_COORDINATE: in tiles, not texels; a packed mip's
-# subresource names the resource's packed tiles, x counting them.
 [structs.TileCoordinate]
 fields = ["u32 x", "u32 y", "u32 z", "u32 subresource"]
 
-# D3D12_TILE_REGION_SIZE: `tiles` tiles, in a width x height x depth box when
-# use_box is not 0 (and then the box holds exactly `tiles`), else counted on
-# from the start through the resource's tiles in order.
 [structs.TileSize]
 fields = ["u32 tiles", "u32 use_box", "u32 width", "u32 height", "u32 depth"]
 
 [structs.TileRegion]
 fields = ["TileCoordinate start", "TileSize size"]
 
-# One run of heap tiles an update maps regions' tiles to, in order: flags is
-# D3D12_TILE_RANGE_FLAGS (NULL unmaps, SKIP leaves, REUSE_SINGLE_TILE maps each
-# tile to heap_offset alone), heap_offset counts 64 KiB tiles into the heap.
 [structs.TileRange]
 fields = ["u32 flags", "u32 heap_offset", "u32 tiles"]
 
@@ -187,8 +113,6 @@ fields = ["u32 feature_level", "u32 shader_model", "u32 resource_binding_tier", 
           "u32 descriptor_sizes[4]",
           "u32 double_ops", "u32 int64_ops", "u32 wave_ops", "u32 wave_lane_min", "u32 wave_lane_max",
           "u32 total_lanes", "u32 reserved"]
-
-# ---------------------------------------------------------------- device
 
 [[command]]
 name = "OpenDevice12"
@@ -220,8 +144,6 @@ and d3d.toml's FormatCaps for every DXGI_FORMAT from 0 up, as many as fit. hresu
 has no device, and then nothing else is answered."""
 params = []
 reply = ["u32 hresult", "Caps12 caps", "out_bytes formats"]
-
-# ---------------------------------------------------------------- memory
 
 [[command]]
 name = "CreateHeap12"
@@ -277,8 +199,6 @@ the host is where it will be placed. size is ~0 for a description the host would
 params = ["ResourceDesc desc"]
 reply = ["u64 size", "u64 alignment"]
 
-# ---------------------------------------------------------------- descriptors
-
 [[command]]
 name = "CreateDescriptorHeap12"
 id = 0x1200
@@ -321,8 +241,6 @@ id = 0x1207
 doc = """`count` descriptors from `source` to `destination`, both of heaps of the same type."""
 params = ["DescriptorRef destination", "DescriptorRef source", "u32 count"]
 
-# ---------------------------------------------------------------- pipelines
-
 [[command]]
 name = "CreateRootSignature12"
 id = 0x1300
@@ -353,8 +271,6 @@ params = ["u32 pipeline", "u32 root", "GraphicsState state", "u32 element_count"
 name = "CreateComputePipeline12"
 id = 0x1302
 params = ["u32 pipeline", "u32 root", "bytes cs"]
-
-# ---------------------------------------------------------------- queues and lists
 
 [[command]]
 name = "CreateCommandQueue12"
@@ -423,8 +339,6 @@ params = ["u32 queue", "u32 destination", "TileCoordinate destination_start", "u
 name = "CreateQueryHeap12"
 id = 0x140c
 params = ["u32 heap", "u32 type", "u32 count"]
-
-# ---------------------------------------------------------------- recording
 
 [[command]]
 name = "ResourceBarrier12"

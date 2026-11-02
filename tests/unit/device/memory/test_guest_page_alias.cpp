@@ -1,8 +1,3 @@
-/* One host range over a guest blob's scattered pages (feature 045, T011): the
- * host GPU imports a pointer, and a pointer names contiguous memory, so the
- * blob's extents are mapped again side by side. Every test runs over MockHost's
- * file-backed guest RAM, so the alias is a real second mapping and a byte is
- * judged through both addresses. */
 #include "core/support/status.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/memory/guest_page_alias.hpp"
@@ -35,7 +30,7 @@ struct GuestPageAliasProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -43,8 +38,6 @@ constexpr std::uint64_t page = GuestPageAlias::page_size;
 constexpr std::uint64_t ram = 0x40000000u;
 constexpr std::uint32_t ram_pages = 64u;
 
-/* A blob's extents as GuestPageMapping holds them: up to `capacity` of them,
- * each a pointer into the mock's guest RAM and a length. */
 class Extents {
 public:
     explicit Extents(std::uint32_t capacity)
@@ -92,8 +85,6 @@ private:
     MockHost host_;
 };
 
-/* Pages 7, 2-3, 12, 13 (adjacent to 12), 40-42, 5 and 9: seven extents that
- * are six runs, ten pages. */
 Extents &scattered(Fixture &fixture, Extents &extents)
 {
     return extents.add(fixture.guest_page(7u), page)
@@ -105,7 +96,7 @@ Extents &scattered(Fixture &fixture, Extents &extents)
         .add(fixture.guest_page(9u), page);
 }
 
-}  // namespace
+}
 
 TEST(guest_page_alias_map, every_offset_of_the_range_is_the_guest_byte_of_its_extent_both_ways)
 { Fixture fixture;
@@ -132,7 +123,7 @@ TEST(guest_page_alias_map, extents_adjacent_in_guest_memory_are_one_mapping)
   Extents extents(8u);
   GuestPageAlias alias(fixture.host());
   CHECK_STATUS(alias.map(scattered(fixture, extents).window()), Status::ok);
-  CHECK_EQ(alias.runs(), 6u);                          /* 12 and 13 merged; the rest stand alone */
+  CHECK_EQ(alias.runs(), 6u);
   CHECK_EQ(fixture.host().live_aliases(), 6u);
   Extents contiguous(4u);
   contiguous.add(fixture.guest_page(20u), page).add(fixture.guest_page(21u), 2u * page).add(fixture.guest_page(23u), page);
@@ -141,7 +132,6 @@ TEST(guest_page_alias_map, extents_adjacent_in_guest_memory_are_one_mapping)
   CHECK_EQ(whole.runs(), 1u);
   CHECK_EQ(fixture.host().live_aliases(), 7u);
   CHECK(std::memcmp(static_cast<std::uint8_t *>(whole.base()) + 3u * page, fixture.guest_page(23u), page) == 0);
-  /* The page before an extent is not adjacent to it: order matters, not membership. */
   Extents backwards(2u);
   backwards.add(fixture.guest_page(31u), page).add(fixture.guest_page(30u), page);
   GuestPageAlias reversed(fixture.host());
@@ -165,7 +155,6 @@ TEST(guest_page_alias_map, a_blob_of_exactly_the_run_limit_maps_and_one_more_run
   CHECK_STATUS(alias.map(limit.window()), Status::no_memory);
   CHECK(alias.invariants_hold());
   CHECK(!alias.mapped());
-  /* Refused before the host was asked: the reservation it was told to fail is still to come. */
   void *base = nullptr;
   CHECK_STATUS(fixture.host().reserve_range(page, base), Status::no_memory); }
 
@@ -174,11 +163,11 @@ TEST(guest_page_alias_map, extents_that_are_not_whole_pages_or_are_empty_are_mal
   const auto *const second = static_cast<std::uint8_t *>(fixture.guest_page(1u));
   struct Case { void *pointer; std::uint64_t bytes; };
   const Case cases[] = {
-      {static_cast<std::uint8_t *>(fixture.guest_page(1u)) + 1, page},   /* misaligned base */
-      {fixture.guest_page(1u), page - 1u},                              /* short of a page */
-      {fixture.guest_page(1u), page + 1u},                              /* a byte over */
-      {fixture.guest_page(1u), 0u},                                     /* empty extent */
-      {nullptr, page},                                                  /* no memory behind it */
+      {static_cast<std::uint8_t *>(fixture.guest_page(1u)) + 1, page},
+      {fixture.guest_page(1u), page - 1u},
+      {fixture.guest_page(1u), page + 1u},
+      {fixture.guest_page(1u), 0u},
+      {nullptr, page},
   };
   for (const Case &c : cases) {
       Extents extents(2u);
@@ -214,7 +203,7 @@ TEST(guest_page_alias_map, a_host_that_cannot_reserve_or_alias_refuses_and_relea
   std::uint8_t *const unfiled = static_cast<std::uint8_t *>(std::aligned_alloc(page, page));
   Extents foreign(2u);
   foreign.add(fixture.guest_page(0u), page).add(unfiled, page);
-  CHECK_STATUS(alias.map(foreign.window()), Status::not_supported);   /* RAM with no file behind it */
+  CHECK_STATUS(alias.map(foreign.window()), Status::not_supported);
   CHECK_EQ(fixture.host().live_ranges(), 0u);
   std::free(unfiled);
   CHECK_STATUS(alias.map(extents.window()), Status::ok);
@@ -292,7 +281,6 @@ TEST(guest_page_alias_invariants, each_rule_is_detected)
   av::GuestPageAliasProbe::overcount_runs(alias);
   CHECK(!alias.invariants_hold());
   av::GuestPageAliasProbe::repair(alias, mutable_base, length, runs);
-  /* Every run a page long, and one run more than an alias may spend. */
   av::GuestPageAliasProbe::repair(alias, mutable_base, (GuestPageAlias::max_runs + 1u) * page, GuestPageAlias::max_runs + 1u);
   CHECK(!alias.invariants_hold());
   av::GuestPageAliasProbe::repair(alias, mutable_base, GuestPageAlias::max_runs * page, GuestPageAlias::max_runs);

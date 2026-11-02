@@ -126,4 +126,4 @@ bool ScanoutFramebuffer::invariants_hold() const
     return rect_.inside(width_, height_);
 }
 
-}  // namespace av
+}

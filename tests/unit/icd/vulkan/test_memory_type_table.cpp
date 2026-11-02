@@ -1,13 +1,3 @@
-/* The memory types a guest application sees (research.md §7): the host's
- * types as the executor narrowed them - host visible only where the host GPU
- * imports guest RAM - a device-local heap the host's size, any other the
- * adapter's non-local budget - never a type
- * the host did not list. The host's answer is its word: a count past the
- * arrays, a device with no heap or a type naming a heap past the heaps is
- * refused, and the table is left empty. Budgets are MockKmt's; the two hosts
- * measured are this machine's Intel (seven types on one device-local heap) and
- * NVIDIA (six types on two heaps, the BAR type already narrowed to
- * device-local only). */
 #include "core/support/status.hpp"
 #include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
@@ -29,7 +19,7 @@ struct MemoryTypeTableProbe {
     static VkPhysicalDeviceMemoryProperties &properties(MemoryTypeTable &table) { return table.properties_; }
 };
 
-}  // namespace av::icd
+}
 
 using av::icd::MemoryTypeTableProbe;
 
@@ -70,7 +60,6 @@ const Type intel_types[] = {{local, 0u},
                             {local | visible | coherent, 0u},
                             {local | visible | coherent | cached, 0u}};
 const VkMemoryHeapFlags intel_heaps[] = {VK_MEMORY_HEAP_DEVICE_LOCAL_BIT};
-/* After the executor: the BAR type 5 is device-local only. */
 const Type nvidia_types[] = {{0u, 1u}, {local, 0u}, {local, 0u}, {visible | coherent, 1u},
                              {visible | coherent | cached, 1u}, {local, 0u}};
 const VkMemoryHeapFlags nvidia_heaps[] = {VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, 0u};
@@ -78,7 +67,6 @@ const VkMemoryHeapFlags nvidia_heaps[] = {VK_MEMORY_HEAP_DEVICE_LOCAL_BIT, 0u};
 VkPhysicalDeviceMemoryProperties intel() { return host(intel_types, 7u, intel_heaps, 1u); }
 VkPhysicalDeviceMemoryProperties nvidia() { return host(nvidia_types, 6u, nvidia_heaps, 2u); }
 
-/* An adapter opened on MockKmt, with its budgets set. */
 class TableRig {
 public:
     TableRig() : kmt_(), adapter_(0u)
@@ -109,7 +97,7 @@ void check_empty(const MemoryTypeTable &table)
   CHECK_EQ(answer.memoryHeapCount, 0u);
   for (std::uint32_t type = 0u; type < VK_MAX_MEMORY_TYPES; type++) CHECK(!table.host_visible(type)); }
 
-}  // namespace
+}
 
 TEST(memory_type_table, is_empty_until_built)
 { TableRig rig;
@@ -117,9 +105,6 @@ TEST(memory_type_table, is_empty_until_built)
   CHECK(table.invariants_hold());
   check_empty(table); }
 
-/* Intel's one heap is device local, so it is the host's size; every
- * type keeps its flags and heap, and the host-visible ones are the ones the
- * ICD serves from its own RAM. */
 TEST(memory_type_table, intel_s_device_local_heap_is_the_host_s_size)
 { TableRig      rig;
   MemoryTypeTable table(rig.kmt(), rig.adapter());
@@ -139,7 +124,6 @@ TEST(memory_type_table, intel_s_device_local_heap_is_the_host_s_size)
   CHECK(!table.host_visible(7u));
   CHECK(!table.host_visible(VK_MAX_MEMORY_TYPES));
   CHECK(!table.host_visible(0xFFFFFFFFu));
-  /* The arrays past the counts are cleared, not left as the caller's. */
   CHECK_EQ(answer.memoryTypes[7].propertyFlags, 0u);
   CHECK_EQ(answer.memoryHeaps[1].size, 0u); }
 
@@ -159,8 +143,6 @@ TEST(memory_type_table, nvidia_s_host_heap_sits_on_the_non_local_budget)
   const bool visible_types[] = {false, false, false, true, true, false};
   for (std::uint32_t type = 0u; type < 6u; type++) CHECK_EQ(table.host_visible(type), visible_types[type]); }
 
-/* VK_EXT_memory_budget: each heap's size, and what this process uses of its group;
- * every entry past the heaps zero, as the extension requires. */
 TEST(memory_type_table, the_budget_of_each_heap_is_its_size)
 { TableRig      rig;
   MemoryTypeTable table(rig.kmt(), rig.adapter());
@@ -183,9 +165,6 @@ TEST(memory_type_table, the_budget_of_each_heap_is_its_size)
   }
 }
 
-/* Asked again, the budgets are the adapter's now: usage moves as the process
- * allocates, and a device-local heap stays the host's size whatever the local
- * budget says - none at all, as an adapter with no local segment answers. */
 TEST(memory_type_table, a_rebuild_reads_the_budgets_again)
 { TableRig      rig;
   MemoryTypeTable table(rig.kmt(), rig.adapter());
@@ -203,7 +182,6 @@ TEST(memory_type_table, a_rebuild_reads_the_budgets_again)
   CHECK_EQ(answered(table).memoryHeaps[0].size, 1024u * mib);
   CHECK_EQ(answered(table).memoryHeaps[1].size, 32u * mib); }
 
-/* A host at the arrays' ends is a host, not a lie. */
 TEST(memory_type_table, thirty_two_types_on_sixteen_heaps_are_taken)
 { TableRig rig;
   Type     types[VK_MAX_MEMORY_TYPES] = {};
@@ -216,8 +194,6 @@ TEST(memory_type_table, thirty_two_types_on_sixteen_heaps_are_taken)
   CHECK_EQ(answered(table).memoryTypes[31].heapIndex, 15u);
   CHECK_EQ(answered(table).memoryHeaps[15].size, shared_budget); }
 
-/* A device with no types is valid Vulkan only with at least one heap, and
- * answers no host-visible type. */
 TEST(memory_type_table, a_host_with_no_types_is_taken_with_its_heaps)
 { TableRig      rig;
   MemoryTypeTable table(rig.kmt(), rig.adapter());
@@ -227,8 +203,6 @@ TEST(memory_type_table, a_host_with_no_types_is_taken_with_its_heaps)
   CHECK_EQ(answered(table).memoryHeapCount, 1u);
   CHECK(!table.host_visible(0u)); }
 
-/* Each lie refused, and a table built before is emptied by it rather than
- * left answering the old host. */
 TEST(memory_type_table, a_host_lying_about_its_arrays_is_refused_and_empties_the_table)
 { struct Case {
       const char   *name;
@@ -266,8 +240,6 @@ TEST(memory_type_table, a_host_lying_about_its_arrays_is_refused_and_empties_the
   }
 }
 
-/* The adapter's refusal is the answer, with nothing built; the host's types
- * are not judged until both budgets are known. */
 TEST(memory_type_table, a_budget_the_adapter_refuses_builds_nothing)
 { for (std::uint32_t nth = 1u; nth <= 2u; nth++) {
       TableRig      rig;

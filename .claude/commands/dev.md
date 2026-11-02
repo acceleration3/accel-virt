@@ -18,22 +18,9 @@ Read these, in this order:
 2. `docs/constitution.md` — the principles. III (object-oriented
    with state) and IV (test-first and exhaustive) are marked NON-NEGOTIABLE and
    are enforced by build gates.
-3. `docs/testing.md` — the five test layers and why a display miniport can be
-   unit tested on Linux at all.
-4. `docs/roadmap.md` — the 62 features, their status and dependencies.
-5. `README.md` — layout and build commands.
-
-The design this implements lives in the knowledge base in `docs/kb/`:
-
-- `docs/kb/11-implementation-plan.md` — the architecture and milestones. Read this.
-- `docs/kb/02-kmd-contract.md`, `docs/kb/04-memory.md`,
-  `docs/kb/05-scheduling.md`, `docs/kb/06-display.md` — the WDDM mechanisms.
-- `docs/kb/10-warp-kmd.md` — `basicrender.sys`, Microsoft's own hardware-free
-  WDDM miniport, reverse engineered. The closest existing thing to what we build.
-- `docs/kb/12-re-cookbook.md` — how to answer a question by reverse engineering
-  instead of guessing.
-- `docs/ref/driver_init_table.md` — all 193 fields (187 DDIs, 5 reserved) and the WDDM level each
-  arrived in.
+3. `README.md` — layout and build commands.
+4. `docs/ref/driver_init_table.md` — all 193 fields (187 DDIs, 5 reserved) and the WDDM level each
+   arrived in.
 
 Normative headers (these outrank everything above when they disagree):
 `third_party/windows-kit/include/{km,wdk-shared,sdk-shared}`, the pinned WDK
@@ -81,10 +68,8 @@ $PY tools/re/q.py re/ghidra-proj wddm basicrender.sys dec WarpKMSubmitCommandVir
 
 ## 3. Pick the work
 
-`$ARGUMENTS` names a feature number if given. If it is empty, read
-`docs/roadmap.md`, find the lowest-numbered feature whose dependencies are all
-complete and which is not yet implemented, and say which one you picked and
-why before starting.
+`$ARGUMENTS` names a feature number if given. If it is empty, ask which
+feature to work on.
 
 Name the classes the work introduces, and which kind each is, before writing
 any code; then write the first failing test.

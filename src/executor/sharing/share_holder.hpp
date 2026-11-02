@@ -1,9 +1,3 @@
-/* One session's hold on a Share: the backend that imported it through its
- * descriptor (feature 053), what the import was made into (a Vulkan device or
- * semaphore; 0 for an API with nothing to choose), the handle its API names
- * the import by, and whatever else the backend said releasing it takes -
- * which the backend is handed back when the hold ends, so no backend keeps a
- * table of its own. A session holds a share at most once per `into`. */
 #ifndef AV_SHARE_HOLDER_HPP
 #define AV_SHARE_HOLDER_HPP
 
@@ -32,6 +26,6 @@ private:
     uint64_t        detail_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SHARE_HOLDER_HPP
+#endif

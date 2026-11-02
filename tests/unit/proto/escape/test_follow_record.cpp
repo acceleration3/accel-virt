@@ -28,13 +28,13 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(follow_record_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[FollowRecord::encoded_size] = {};
   CHECK_STATUS(FollowRecord(0x11223344u, 0x5566778899AABBCCull).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x00465641u);   /* "AVF" */
+  CHECK(layout.at(0u, 4u) == 0x00465641u);
   CHECK(layout.at(4u, 4u) == 0x11223344u);
   CHECK(layout.at(8u, 8u) == 0x5566778899AABBCCull); }
 
@@ -51,10 +51,6 @@ TEST(follow_record, a_default_record_follows_nothing)
   CHECK_EQ(record.ring(), 0u);
   CHECK(record.fence() == 0u); }
 
-/* A packet follows a ring by its handle and a fence the host completes: a
- * handle of 0 names no allocation, and fence 0 is never submitted, so either
- * is a record of nothing - and a packet with private data that does not decode
- * is an ordinary packet. */
 TEST(follow_record_decode, rejects_a_bad_magic_ring_zero_and_fence_zero_and_stays_unchanged)
 { struct Case { std::size_t offset; std::size_t width; std::uint64_t value; };
   const Case cases[] = {{0u, 4u, 0x464B5653u}, {4u, 4u, 0u}, {8u, 8u, 0u}};
@@ -68,9 +64,6 @@ TEST(follow_record_decode, rejects_a_bad_magic_ring_zero_and_fence_zero_and_stay
       CHECK(decoded.fence() == 4u);
   } }
 
-/* dxgkrnl hands every packet on an ordinary context private data of the size
- * the context reported, room for the largest record it carries: a record is
- * the prefix, and fewer bytes than a record are none. */
 TEST(follow_record_decode, a_shorter_length_is_malformed_and_a_longer_one_carries_the_prefix)
 { std::uint8_t bytes[FollowRecord::encoded_size + 1u] = {};
   CHECK_STATUS(FollowRecord(7u, 9u).encode(bytes, sizeof bytes), Status::ok);
@@ -93,10 +86,5 @@ TEST(follow_record_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 128u);
-  /* The format constrains the magic and forbids a zero ring or fence. Ring and
-   * fence are 3, with two bits set, so no single flip clears either: all 32
-   * flips of the ring and 64 of the fence are acceptable. Every shorter input
-   * is not 16 bytes, all-zero and all-ones carry no magic, and the untouched
-   * record is the last acceptance. */
   const std::uint32_t acceptable = 32u + 64u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

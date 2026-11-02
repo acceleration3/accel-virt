@@ -1,7 +1,3 @@
-/* A present's point as the user-mode driver hands it DdiPresent: the fields at
- * their offsets, a round trip, and private data that is anything else -
- * another magic, a point of 0, reserved bytes, too few bytes, a snapshot key
- * an older driver sent - refused with the reader unchanged. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -20,7 +16,7 @@ TEST(present_point_record, places_its_fields_and_reads_back_as_written)
 { std::uint8_t bytes[PresentPointRecord::encoded_size] = {};
   CHECK_STATUS(PresentPointRecord(0x88776655u).encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x00505641u);   /* "AVP" */
+  CHECK(layout.at(0u, 4u) == 0x00505641u);
   CHECK(layout.at(4u, 4u) == 0x88776655u);
   CHECK(layout.at(8u, 8u) == 0u);
   PresentPointRecord read;
@@ -30,8 +26,6 @@ TEST(present_point_record, places_its_fields_and_reads_back_as_written)
 
 TEST(present_point_record, anything_else_is_malformed_and_changes_nothing)
 { struct Case { std::size_t offset; std::size_t width; std::uint64_t value; };
-  /* Another magic - the snapshot record's "AVS" among them - no point, and
-   * each reserved byte. */
   const Case cases[] = {{0u, 4u, 0x00535641u}, {0u, 4u, 0x504B5653u}, {4u, 4u, 0u}, {8u, 1u, 1u}, {15u, 1u, 0x80u}};
   for (const Case &c : cases) {
       std::uint8_t bytes[PresentPointRecord::encoded_size] = {};

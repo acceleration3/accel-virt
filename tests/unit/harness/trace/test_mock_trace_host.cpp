@@ -13,7 +13,7 @@ namespace {
 
 void count_call(void *context) { ++*static_cast<int *>(context); }
 
-}  // namespace
+}
 
 TEST(mock_trace_host, answers_through_trace_host_what_the_test_set)
 { MockTraceHost mock;
@@ -64,10 +64,8 @@ void *key_on_this_thread(void *host)
     return reinterpret_cast<void *>(static_cast<std::uintptr_t>(static_cast<MockTraceHost *>(host)->thread_key()));
 }
 
-}  // namespace
+}
 
-/* The full-stack rig's device workers share the process with the driver's
- * table: another thread gets no key, and so no slot. */
 TEST(mock_trace_host, another_thread_is_given_no_key)
 { MockTraceHost mock;
   mock.run_as(0x77u, 7u);

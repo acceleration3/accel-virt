@@ -1,10 +1,3 @@
-/* What each hardware queue runs on, read at DISPATCH (feature 049).
- *
- * The queue table answers this too, behind a mutex a submission may not take,
- * so what these tests judge is the part that makes the copy worth having: a
- * handle nobody bound is answered with nothing rather than followed, and a
- * queue destroyed is one the next submission cannot reach.
- */
 #include "core/platform/lock_rank.hpp"
 #include "miniport/scheduling/hw_queue_contexts.hpp"
 #include "core/support/status.hpp"
@@ -21,15 +14,12 @@ using av::Status;
 using av::Violation;
 
 namespace {
-
-/* The contexts are only ever compared and answered, so what they point at is
- * the test's own memory: nothing here reads a Context. */
 av::Context &as_context(int &stand_in)
 {
     return *reinterpret_cast<av::Context *>(&stand_in);
 }
 
-}  // namespace
+}
 
 TEST(hw_queue_contexts, answers_the_context_a_queue_runs_on_and_nothing_for_one_nobody_bound)
 { MockPlatform    platform;
@@ -50,8 +40,6 @@ TEST(hw_queue_contexts, answers_the_context_a_queue_runs_on_and_nothing_for_one_
   CHECK(bound.context_of(nullptr) == nullptr);
   CHECK(bound.invariants_hold());
 
-  /* A queue destroyed is one the next submission cannot reach, and the other
-   * is untouched. */
   bound.forget(&first_queue);
   CHECK(bound.context_of(&first_queue) == nullptr);
   CHECK(bound.context_of(&second_queue) == &as_context(second_context));
@@ -66,9 +54,6 @@ TEST(hw_queue_contexts, refuses_a_queue_that_is_no_queue_and_a_table_with_no_roo
   HwQueueContexts bound(platform);
   int             context = 0;
   CHECK_STATUS(bound.bind(nullptr, as_context(context)), Status::invalid_parameter);
-  /* One slot per queue a process may hold; past that there is nowhere to
-   * write the pair, and a submission that could not find its context would
-   * fault a context at random. */
   int queues[HwQueueContexts::capacity + 1u] = {};
   for (std::uint32_t index = 0u; index < HwQueueContexts::capacity; index++)
       CHECK_STATUS(bound.bind(&queues[index], as_context(context)), Status::ok);
@@ -85,14 +70,12 @@ TEST(hw_queue_contexts, runs_at_the_levels_it_declares)
   int             queue = 0;
   platform.set_irql(Irql::dispatch);
   static_cast<void>(bound.bind(&queue, as_context(context)));
-  /* A submission reads it at DISPATCH, and nothing reads it above that. */
   static_cast<void>(bound.context_of(&queue));
   bound.forget(&queue);
   static_cast<void>(bound.bound());
   platform.set_irql(Irql::isr);
   static_cast<void>(bound.context_of(&queue));
   platform.set_irql(Irql::passive);
-  /* The bind at DISPATCH, and the read above it with the lock it takes. */
   while (platform.claim(Violation::irql_ceiling)) {}
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
@@ -105,11 +88,8 @@ struct HwQueueContextsProbe {
     static void duplicate(HwQueueContexts &bound) { bound.queues_[1] = bound.queues_[0]; }
 };
 
-}  // namespace av
+}
 
-/* What the invariant is for: a table that lost count, a slot naming nothing,
- * and one queue answered by two contexts are each a table no submission may be
- * read out of. */
 TEST(hw_queue_contexts_invariants, a_lost_count_a_blank_slot_and_a_queue_bound_twice_are_all_caught)
 { MockPlatform    platform;
   int             context = 0;

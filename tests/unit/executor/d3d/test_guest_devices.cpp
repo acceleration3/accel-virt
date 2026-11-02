@@ -1,9 +1,3 @@
-/* One session's devices by the guest's ids (GuestDevices): kept, found and
- * given back one at a time or all at once; one selected, which commands run
- * on while it is not removed; and the first reason each was removed for. An
- * id of 0 or one kept twice refuses, and any number of devices is kept;
- * invariants after every mutation. The handles are never touched, so
- * stand-ins do. */
 #include "core/log/driver_log.hpp"
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/guest_devices.hpp"
@@ -31,7 +25,7 @@ Handle *stand_in(std::uint32_t index)
 constexpr std::uint32_t reset_reason = 0x887A0020u;
 constexpr std::uint32_t hung_reason = 0x887A0005u;
 
-}  // namespace
+}
 
 namespace av {
 
@@ -46,7 +40,7 @@ struct GuestDevicesProbe {
     static void set_selected_removed(Devices &d, std::uint32_t reason) { d.selected_removed_ = reason; }
 };
 
-}  // namespace av
+}
 
 using av::GuestDevicesProbe;
 
@@ -80,8 +74,6 @@ TEST(guest_devices, refuses_id_zero_a_null_handle_and_an_id_kept_twice)
   CHECK_EQ(devices.count(), 1u);
   CHECK(devices.invariants_hold()); }
 
-/* The old table held 64: a process with a thousand devices keeps every one,
- * and one given back in the middle leaves the rest where they were. */
 TEST(guest_devices, keeps_any_number_of_devices)
 { MockPlatform platform;
   Devices      devices(platform);
@@ -96,8 +88,6 @@ TEST(guest_devices, keeps_any_number_of_devices)
   CHECK(devices.ready());
   CHECK(devices.invariants_hold()); }
 
-/* A table that cannot grow refuses with no_memory and keeps nothing; asked
- * for room first, the add that follows cannot fail. */
 TEST(guest_devices, a_table_that_cannot_grow_refuses_and_room_made_first_is_kept)
 { MockPlatform platform;
   Devices      devices(platform);
@@ -132,9 +122,6 @@ TEST(guest_devices, remove_any_gives_every_device_back_once)
   CHECK(seen[0] && seen[1]);
   CHECK_EQ(devices.count(), 0u); }
 
-/* Commands run on the selected device. An id that names nothing selects
- * nothing but is remembered - the guest said it - and a device that goes is
- * selected no more. */
 TEST(guest_devices, the_selected_device_is_the_one_commands_run_on_until_it_goes)
 { MockPlatform platform;
   Devices      devices(platform);
@@ -152,7 +139,6 @@ TEST(guest_devices, the_selected_device_is_the_one_commands_run_on_until_it_goes
   CHECK(!devices.ready());
   CHECK(devices.invariants_hold());
   CHECK(devices.select(4u) == stand_in(0u));
-  /* Another device going leaves the selection alone. */
   CHECK(devices.remove(6u) == stand_in(1u));
   CHECK(devices.selected() == stand_in(0u));
   CHECK(devices.remove(4u) == stand_in(0u));
@@ -160,9 +146,6 @@ TEST(guest_devices, the_selected_device_is_the_one_commands_run_on_until_it_goes
   CHECK_EQ(devices.selected_id(), 0u);
   CHECK(devices.invariants_hold()); }
 
-/* A removal is kept against its device: the first reason stands, a device
- * not kept or a zero reason records nothing, a removed device is not ready,
- * and the reason goes with the device, so an id used again starts clean. */
 TEST(guest_devices, keeps_the_first_reason_a_device_was_removed_for)
 { MockPlatform platform;
   Devices      devices(platform);
@@ -195,21 +178,17 @@ TEST(guest_devices_invariants, detect_every_state_the_table_never_builds)
       CHECK_STATUS(devices.add(1u, stand_in(0u)), Status::ok);
       CHECK_STATUS(devices.add(2u, stand_in(1u)), Status::ok);
       CHECK(devices.select(2u) == stand_in(1u));
-      if (knob == 0) GuestDevicesProbe::set_handle(devices, 1u, nullptr);   /* an id with no handle */
-      if (knob == 1) GuestDevicesProbe::keep_zero(devices);                /* id 0 kept */
-      if (knob == 2) GuestDevicesProbe::set_selected(devices, stand_in(0u));   /* not the selected id's */
-      if (knob == 3) GuestDevicesProbe::set_selected_removed(devices, 1u);    /* a kept device's own */
-      if (knob == 4) {                                                        /* nothing selected */
+      if (knob == 0) GuestDevicesProbe::set_handle(devices, 1u, nullptr);
+      if (knob == 1) GuestDevicesProbe::keep_zero(devices);
+      if (knob == 2) GuestDevicesProbe::set_selected(devices, stand_in(0u));
+      if (knob == 3) GuestDevicesProbe::set_selected_removed(devices, 1u);
+      if (knob == 4) {
           static_cast<void>(devices.select(0u));
           GuestDevicesProbe::set_selected_removed(devices, 1u);
       }
       CHECK(!devices.invariants_hold());
   } }
 
-/* An id the guest selected that names no device kept is removed the same way
- * a kept one is, until the next selection: a later refusal follows from the
- * first rather than saying it again, and selecting anything else starts
- * clean. */
 TEST(guest_devices, a_selected_id_that_names_nothing_is_removed_until_the_next_selection)
 { MockPlatform platform;
   Devices      devices(platform);
@@ -219,18 +198,13 @@ TEST(guest_devices, a_selected_id_that_names_nothing_is_removed_until_the_next_s
   devices.mark_removed(9u, hung_reason);
   CHECK_EQ(devices.removed_reason(9u), reset_reason);
   CHECK(devices.invariants_hold());
-  /* Selected again, the same id keeps it. */
   CHECK(devices.select(9u) == nullptr);
   CHECK_EQ(devices.removed_reason(9u), reset_reason);
-  /* Another selection forgets it. */
   CHECK(devices.select(4u) == stand_in(0u));
   CHECK_EQ(devices.removed_reason(9u), 0u);
   CHECK(devices.ready());
-  /* An id neither kept nor selected records nothing. */
   devices.mark_removed(9u, reset_reason);
   CHECK_EQ(devices.removed_reason(9u), 0u);
-  /* A device made under the selected id after its removal starts clean once
-   * selected. */
   CHECK(devices.select(9u) == nullptr);
   devices.mark_removed(9u, reset_reason);
   CHECK_STATUS(devices.add(9u, stand_in(1u)), Status::ok);
@@ -238,9 +212,6 @@ TEST(guest_devices, a_selected_id_that_names_nothing_is_removed_until_the_next_s
   CHECK_EQ(devices.removed_reason(9u), 0u);
   CHECK(devices.invariants_hold()); }
 
-/* A refused command removes the selected device and is logged once; a refusal
- * with nothing selected fails the session; an unknown selected id is removed
- * rather than failing the session. */
 TEST(guest_devices, a_refusal_removes_the_speaker_and_says_so_once)
 { av::RecordingLog     log;
   av::DriverLog        lines(log, "test: ");

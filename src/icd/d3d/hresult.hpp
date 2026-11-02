@@ -1,8 +1,3 @@
-/* The HRESULT values the Direct3D user-mode driver DDI answers with, spelled
- * here because the portable core cannot include winerror.h. Every value is the
- * one the WDK's header defines (third_party/windows-kit/include/sdk-shared/
- * winerror.h); src/um/d3d/umd_record_layout.cpp asserts each against it, so a
- * transcription error fails the guest build rather than the guest. */
 #ifndef AV_D3D_HRESULT_HPP
 #define AV_D3D_HRESULT_HPP
 
@@ -28,6 +23,6 @@ inline constexpr Hresult hr_dxgi_device_reset = static_cast<Hresult>(0x887A0007u
 
 inline constexpr Hresult hr_d3d12_driver_version_mismatch = static_cast<Hresult>(0x887E0002u);
 
-}  // namespace av::d3d
+}
 
-#endif  // AV_D3D_HRESULT_HPP
+#endif

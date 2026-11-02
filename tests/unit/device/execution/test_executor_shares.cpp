@@ -1,6 +1,3 @@
-/* The OpenGL executors a device's contexts may share objects with (feature
- * 050): published by the worker that made one, found by the worker making
- * another on the same GPU, and never destroyed while a create is using it. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/execution/executor_library.hpp"
@@ -32,7 +29,7 @@ struct ExecutorSharesProbe {
     static void orphan(ExecutorShares &shares, std::uint32_t id) { shares.ids_[2] = id; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -54,7 +51,6 @@ public:
     ExecutorLibrary &library() { return library_; }
     ExecutorShares  &shares() { return shares_; }
 
-    /* Runs `body` on a worker the host started, and waits for it. */
     template <typename Body>
     void on_worker(Body body)
     {
@@ -77,7 +73,7 @@ private:
     ExecutorShares  shares_;
 };
 
-}  // namespace
+}
 
 TEST(executor_shares, a_published_executor_is_shared_by_a_create_on_the_same_gpu)
 { Fixture fixture;
@@ -102,8 +98,6 @@ TEST(executor_shares, a_published_executor_is_shared_by_a_create_on_the_same_gpu
   CHECK_EQ(fixture.ops().misuses(), 0u);
   CHECK_EQ(fixture.ops().live(), 0u); }
 
-/* Nothing to share - an id never published, one withdrawn, one on another GPU
- * - is no executor, and the library is not asked. */
 TEST(executor_shares, nothing_published_on_that_gpu_is_no_executor_and_no_call)
 { Fixture fixture;
   ExecutorShares &shares = fixture.shares();
@@ -120,7 +114,6 @@ TEST(executor_shares, nothing_published_on_that_gpu_is_no_executor_and_no_call)
       shares.withdraw(9u);
       CHECK(shares.create_sharing(av::SubApi::opengl, 3u, gpu, core_46) == nullptr);
       CHECK_EQ(fixture.ops().option_creates(), asked);
-      /* A library that refuses answers null too. */
       CHECK_STATUS(shares.publish(3u, gpu, first), Status::ok);
       fixture.ops().fail_create_at(1u);
       CHECK(shares.create_sharing(av::SubApi::opengl, 3u, gpu, core_46) == nullptr);
@@ -130,8 +123,6 @@ TEST(executor_shares, nothing_published_on_that_gpu_is_no_executor_and_no_call)
   });
   CHECK_EQ(fixture.ops().misuses(), 0u); }
 
-/* The share outlives every create using it: a withdraw waits until the create
- * returns, and the executor is alive when the library is done with it. */
 TEST(executor_shares, a_withdraw_waits_for_a_create_that_is_using_the_executor)
 { Fixture fixture;
   ExecutorShares &shares = fixture.shares();

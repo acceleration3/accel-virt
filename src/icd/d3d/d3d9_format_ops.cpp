@@ -6,8 +6,6 @@
 namespace av::d3d {
 
 namespace {
-
-/* D3DFORMAT values (d3d9types.h). */
 constexpr uint32_t a8r8g8b8 = 21u;
 constexpr uint32_t x8r8g8b8 = 22u;
 constexpr uint32_t r5g6b5 = 23u;
@@ -27,7 +25,6 @@ constexpr uint32_t asked_formats[] = {
 constexpr uint32_t asked_count = sizeof(asked_formats) / sizeof(asked_formats[0]);
 static_assert(asked_count <= D3d9FormatOps::max_formats, "every format asked fits the table");
 
-/* FormatCaps9's support bits (d3d9.toml). */
 constexpr uint32_t can_texture = 1u << 0u;
 constexpr uint32_t can_cube = 1u << 1u;
 constexpr uint32_t can_volume = 1u << 2u;
@@ -45,7 +42,6 @@ constexpr uint32_t can_offscreen = 1u << 13u;
 constexpr uint32_t can_bump = 1u << 14u;
 constexpr uint32_t can_depth_texture = 1u << 15u;
 
-/* FORMATOP_* (d3dumddi.h). */
 constexpr uint32_t op_texture = 0x1u;
 constexpr uint32_t op_volume = 0x2u;
 constexpr uint32_t op_cube = 0x4u;
@@ -66,7 +62,6 @@ constexpr uint32_t op_no_blend = 0x200000u;
 constexpr uint32_t op_autogen = 0x400000u;
 constexpr uint32_t op_vertex_texture = 0x800000u;
 
-/* Each support bit and the operation it grants. */
 struct Grant {
     uint32_t support;
     uint32_t operation;
@@ -87,7 +82,7 @@ constexpr Grant grants[] = {
     {can_bump, op_bump},
 };
 
-}  // namespace
+}
 
 D3d9FormatOps::D3d9FormatOps() : offered_{}, count_(0u)
 {
@@ -114,10 +109,6 @@ bool D3d9FormatOps::asked(uint32_t format) const
     return false;
 }
 
-/* A format the desktop runs in, and a windowed back buffer can be shown in, is
- * a display mode the runtime pairs the kernel's modes with; the 32-bit colour formats are the ARGB group a
- * windowed back buffer converts within. A renderable format that cannot be
- * filtered or blended says so, as the runtime would otherwise let it be. */
 uint32_t D3d9FormatOps::operations(uint32_t format, uint32_t support) const
 {
     AV_SCOPE("D3d9FormatOps::operations");
@@ -125,16 +116,10 @@ uint32_t D3d9FormatOps::operations(uint32_t format, uint32_t support) const
     for (const Grant &grant : grants)
         if ((support & grant.support) != 0u) granted |= grant.operation;
     const bool renders = (support & (can_rt_texture | can_rt_surface)) != 0u;
-    /* d3d9.dll disables the driver for a display mode with alpha, and for
-     * R5G6B5 and X1R5G5B5 both offered as modes (reverse-engineering.md
-     * §2.4), so the modes are X8R8G8B8 and R5G6B5; an A8R8G8B8 back buffer
-     * converts into the X8R8G8B8 mode it is shown in. */
     if ((support & can_back_buffer) != 0u && (format == x8r8g8b8 || format == r5g6b5))
         granted |= op_display | op_3d;
     if (renders && (format == a8r8g8b8 || format == a1r5g5b5 || format == a4r4g4b4 || format == a2r10g10b10))
         granted |= op_up_to_alpha_rt;
-    /* The ARGB group is the runtime's own list; a format outside it there
-     * disables the driver too. */
     if (renders && (format == a8r8g8b8 || format == x8r8g8b8 || format == a2r10g10b10 || format == r5g6b5 ||
                     format == x1r5g5b5 || format == a1r5g5b5))
         granted |= op_member_argb;
@@ -149,9 +134,6 @@ void D3d9FormatOps::record(uint32_t format, uint32_t support, uint32_t multisamp
     AV_SCOPE("D3d9FormatOps::record");
     if (!asked(format)) return;
     const uint32_t granted = operations(format, support);
-    /* FormatCaps9 gives bit n for D3DMULTISAMPLE_TYPE n; the runtime reads
-     * bit (n - 1), and a mask with any type in it must have NONMASKABLE's
-     * (type 1, bit 0) too, or the driver is disabled. */
     const uint32_t types = multisample >> 1u;
     const uint32_t samples = types != 0u ? types | 1u : 0u;
     for (uint32_t index = 0u; index < count_; index++) {
@@ -191,4 +173,4 @@ bool D3d9FormatOps::invariants_hold() const
     return true;
 }
 
-}  // namespace av::d3d
+}

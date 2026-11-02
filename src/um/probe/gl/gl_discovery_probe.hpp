@@ -1,10 +1,3 @@
-/* avglprobe.exe --discovery (feature 050, T008): what the system opengl32.dll
- * does for a window this process makes - the calls an application makes first
- * (DescribePixelFormat, SetPixelFormat, wglCreateContext), each result and
- * GetLastError, which adapter the window's DC opens (D3DKMTOpenAdapterFromHdc),
- * whether avgl.dll is loaded afterwards, and every module the calls loaded.
- * One line per fact on standard output. Translation only: the live run is the
- * experiment, and the ICD is built on what it shows (research.md §9). */
 #ifndef AV_UM_GL_DISCOVERY_PROBE_HPP
 #define AV_UM_GL_DISCOVERY_PROBE_HPP
 
@@ -22,8 +15,6 @@ public:
     GlDiscoveryProbe(const GlDiscoveryProbe &) = delete;
     GlDiscoveryProbe &operator=(const GlDiscoveryProbe &) = delete;
 
-    /* The exit code: 0 once every call was made and reported, whatever it
-     * answered; 1 when the window could not be made. */
     uint32_t run();
 
 private:
@@ -46,6 +37,6 @@ private:
     int32_t     format_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_GL_DISCOVERY_PROBE_HPP
+#endif

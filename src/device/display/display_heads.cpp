@@ -19,8 +19,6 @@ DisplayHeads::~DisplayHeads()
     release_all();
 }
 
-/* A binding acquires nothing at construction, so the only way construct
- * refuses is a slot already made, which is what the guard asks. */
 void DisplayHeads::say_once(bool &said, const char *what)
 {
     AV_SCOPE("DisplayHeads::say_once");
@@ -50,8 +48,6 @@ Status DisplayHeads::show(uint32_t head, uint32_t blob, const ScanoutFramebuffer
     const Status shown = binding(head).show(blob, framebuffer);
     if (shown == Status::not_supported)
         say_once(said_no_display_, "virtio-gpu-av: this display has no head to show a blob on");
-    /* The first frame a head shows, once: it is the moment the guest stopped
-     * copying, and a run that never reaches it says nothing at all. */
     if (shown == Status::ok)
         say_once(said_showing_, "virtio-gpu-av: a head shows a guest blob; no frame is copied any more");
     return shown;
@@ -123,4 +119,4 @@ bool DisplayHeads::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

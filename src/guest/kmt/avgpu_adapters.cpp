@@ -27,7 +27,6 @@ Status AvgpuAdapters::learn()
     if (status != Status::ok) return status;
     const uint32_t held = enumerated < max_adapters ? enumerated : max_adapters;
     for (uint32_t index = 0u; index < held; ++index) keep_or_close(handles[index]);
-    /* A machine with no primary display has no adapter it is on: 0 is no LUID. */
     uint64_t primary = 0u;
     if (kmt_.primary_display_luid(primary) != Status::ok) primary = 0u;
     put_primary_first(primary);
@@ -49,7 +48,6 @@ void AvgpuAdapters::keep_or_close(uint32_t adapter)
         ++count_;
         return;
     }
-    /* Another GPU: a failed close leaves nothing to undo. */
     static_cast<void>(kmt_.close_adapter(adapter));
 }
 
@@ -133,7 +131,6 @@ void AvgpuAdapters::close()
 {
     AV_SCOPE("AvgpuAdapters::close");
     for (uint32_t index = 0u; index < count_; ++index) {
-        /* A failed close leaves nothing to undo. */
         if (adapters_[index] != 0u) static_cast<void>(kmt_.close_adapter(adapters_[index]));
         adapters_[index] = 0u;
         luids_[index] = 0u;
@@ -153,4 +150,4 @@ bool AvgpuAdapters::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

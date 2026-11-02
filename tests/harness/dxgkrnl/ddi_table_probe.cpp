@@ -10,4 +10,4 @@ void DdiTableProbe::set_version(std::uint32_t version) { table.version_ = versio
 
 void DdiTableProbe::set_padding(std::uint32_t padding) { table.padding_ = padding; }
 
-}  // namespace av
+}

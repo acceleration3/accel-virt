@@ -17,4 +17,4 @@ ThreadLockHold::~ThreadLockHold()
     lock_.release();
 }
 
-}  // namespace av
+}

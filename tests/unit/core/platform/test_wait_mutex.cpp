@@ -1,6 +1,3 @@
-/* A lock held across waits at PASSIVE (feature 045): what serializes a control
- * request sequence, which waits for each answer at PASSIVE and so cannot sit under
- * a fast mutex, which raises to APC. */
 #include "core/platform/wait_mutex.hpp"
 #include "core/platform/wait_mutex_guard.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -22,7 +19,6 @@ TEST(wait_mutex_acquire, keeps_passive_so_its_holder_may_wait)
   mutex.acquire();
   CHECK(platform.current_irql() == Irql::passive);
   CHECK_EQ(platform.locks_held(), 1u);
-  /* A wait that must be at PASSIVE is legal under it. */
   platform.require_irql_at_most(Irql::passive, "a wait for an answer");
   mutex.release();
   CHECK_EQ(platform.locks_held(), 0u);
@@ -74,7 +70,7 @@ std::uint32_t held_inside(WaitMutex &mutex, MockPlatform &platform, bool early)
     return platform.locks_held() + 10u;
 }
 
-}  // namespace
+}
 
 TEST(wait_mutex_guard, holds_for_its_scope_on_every_return)
 { MockPlatform platform; WaitMutex mutex(platform, LockRank{10});

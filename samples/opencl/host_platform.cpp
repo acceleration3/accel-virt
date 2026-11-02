@@ -1,4 +1,3 @@
-// The host build's platform: Linux, the host's own OpenCL through its ICD loader.
 #include "framework.h"
 
 #include <dlfcn.h>
@@ -52,6 +51,6 @@ void *cl_entry(const char *name)
     return dlsym(loader, name);
 }
 
-}  // namespace samples
+}
 
 int main(int argc, char **argv) { return samples::run(argc, argv); }

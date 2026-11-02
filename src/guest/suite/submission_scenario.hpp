@@ -1,6 +1,3 @@
-/* A command buffer mapped at a GPU virtual address is submitted on a context, and the context's completion awaited.
- * Every object is destroyed in reverse, and the teardown reported, whatever
- * failed. */
 #ifndef AV_SUBMISSION_SCENARIO_HPP
 #define AV_SUBMISSION_SCENARIO_HPP
 
@@ -24,6 +21,6 @@ private:
     ScenarioSteps        steps_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SUBMISSION_SCENARIO_HPP
+#endif

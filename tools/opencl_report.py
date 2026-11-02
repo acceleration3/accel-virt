@@ -33,10 +33,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 GUEST_DIR = "C:\\av\\clsamples"
 GUEST_EXE = GUEST_DIR + "\\avclsamples.exe"
 
-BUFFER_MAGIC = 0x00425641  # "AVB"
+BUFFER_MAGIC = 0x00425641
 ELEMENTS = {1: "I", 2: "f", 3: "i"}
-# A float that differs by less than this, relative or absolute, is the same
-# answer computed in another order; the same device and compiler give none.
 RELATIVE_TOLERANCE = 1e-5
 ABSOLUTE_TOLERANCE = 1e-6
 
@@ -53,22 +51,16 @@ def build(args):
 
 
 def run_guest(args, out):
-    """The guest's run, and everything it wrote brought back."""
     work = args.work
     guest = args.build / "guest"
     guest_shell(work, "ps", f"Remove-Item -Recurse -Force {GUEST_DIR} -ErrorAction SilentlyContinue; "
                             f"New-Item -ItemType Directory -Force {GUEST_DIR}\\out | Out-Null")
-    # The loader beside the program, where Windows looks first: the run is the
-    # cross-built Khronos loader's, finding avcl.dll through the adapter.
     guest_shell(work, "push", str(guest / "OpenCL.dll"), GUEST_DIR + "\\OpenCL.dll")
     guest_shell(work, "push", str(guest / "avclsamples.exe"), GUEST_EXE)
     print("guest: running", flush=True)
     only = f" --only {args.only}" if args.only else ""
     command = (f"{GUEST_EXE} --out {GUEST_DIR}\\out --frames {args.frames} --warmup {args.warmup}{only} "
                f"> {GUEST_DIR}\\run.txt 2>&1")
-    # The user's interactive session: with more than one avgpu adapter the ICD
-    # takes the one the primary display is on, and the agent's session has no
-    # display to ask - there it would take whichever the kernel lists first.
     output = guest_shell(work, "ps", f"""
 Unregister-ScheduledTask -TaskName avclsamples -Confirm:$false -ErrorAction SilentlyContinue
 $a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c cd /d {GUEST_DIR} && {command}'
@@ -82,7 +74,6 @@ while ((Get-ScheduledTask avclsamples).State -eq 'Running') {{ Start-Sleep 1 }}
 Get-Content {GUEST_DIR}\\run.txt -ErrorAction SilentlyContinue""", timeout=1800)
     print(output, flush=True)
     (out / "guest.log").write_text(output)
-    # Everything in one gzip-compressed stream: name length, name, size, bytes.
     bundle = f"{GUEST_DIR}\\bundle.gz"
     guest_shell(work, "ps", f"""
 $out = [IO.File]::Create('{bundle}')
@@ -118,10 +109,6 @@ $writer.Close()""")
 
 
 def run_loopback(args, out):
-    """The guest's path without a guest: avcl's core, the driver, the device
-    core and the executor library in one host process (the L4 rig), in the
-    VM's column. What it shows is whether the ICD carries every sample right;
-    its speed is the sanitized single-process rig's, not a VM's."""
     print("loopback: running", flush=True)
     shutil.rmtree(out / "guest", ignore_errors=True)
     (out / "guest").mkdir(parents=True)
@@ -170,7 +157,6 @@ def read_buffer(path):
 
 
 def compare_buffers(host, guest):
-    """Integers must be equal; floats equal within the tolerance, NaN to NaN."""
     kind, a = host
     guest_kind, b = guest
     stats = {"kind": {1: "u32", 2: "f32", 3: "i32"}[kind], "count": len(a), "exact": 0, "differing": 0,
@@ -239,7 +225,6 @@ def cell(value, unit="", decimals=1):
 
 
 def sample_verdict(r):
-    """The worst of the sample's comparisons, or what is missing."""
     h, g = r["host"], r["guest"]
     if not h or not g:
         return ("host only", "warn") if h else ("VM only", "warn")

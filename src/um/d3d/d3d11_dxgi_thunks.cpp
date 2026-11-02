@@ -1,6 +1,3 @@
-/* The DXGI slots a device presents through, over the ones the root published:
- * the ABI boundary C requires, each one line into the device the argument's
- * hDevice names. */
 #include "um/d3d/d3d11_dxgi_thunks.hpp"
 
 #include "core/trace/function_scope.hpp"
@@ -42,7 +39,7 @@ extern "C" HRESULT APIENTRY avumd_dxgi11_SetDisplayMode(DXGI_DDI_ARG_SETDISPLAYM
 extern "C" HRESULT APIENTRY avumd_dxgi11_QueryResourceResidency(DXGI_DDI_ARG_QUERYRESOURCERESIDENCY *args)
 { return d3d::DeviceCall<D3d11Device>(d3d::DeviceBlock<D3d11Device>(reinterpret_cast<void *>(args->hDevice)).device()).traced("QueryResourceResidency", &D3d11Device::query_resource_residency, args); }
 
-}  // namespace
+}
 
 void fill_dxgi_funcs(DXGI1_6_1_DDI_BASE_FUNCTIONS &table)
 {
@@ -59,4 +56,4 @@ void fill_dxgi_funcs(DXGI1_6_1_DDI_BASE_FUNCTIONS &table)
     table.pfnQueryResourceResidency = &avumd_dxgi11_QueryResourceResidency;
 }
 
-}  // namespace av::d3d11
+}

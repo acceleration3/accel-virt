@@ -13,7 +13,7 @@ namespace {
 constexpr uint64_t command_buffer_bytes = 4096u;
 constexpr uint64_t command_bytes = 64u;
 
-}  // namespace
+}
 
 FenceStressScenario::FenceStressScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search,
                                          uint32_t seconds)
@@ -39,9 +39,6 @@ void FenceStressScenario::run()
     if (status == Status::ok) status = steps_.check("map", session.map(index, descriptor.pages(), address));
     if (status == Status::ok) status = steps_.check("context", session.open_context());
     if (status == Status::ok) {
-        /* The run first, then what it counted: an argument list may read
-         * completed_ before it calls stress(), and a live run reported zero
-         * fences beside a worst wait of thirteen milliseconds because of it. */
         const Status ran = stress(session, address);
         status = steps_.check_measured("fences", ran, completed_);
         static_cast<void>(steps_.check_measured("worst_wait_us", Status::ok,
@@ -51,8 +48,6 @@ void FenceStressScenario::run()
     steps_.check_teardown(session);
 }
 
-/* One fence at a time, so a wait that never wakes stops the run where it
- * happened rather than behind a queue of others. */
 Status FenceStressScenario::stress(GuestSession &session, uint64_t address)
 {
     AV_SCOPE("FenceStressScenario::stress");
@@ -71,8 +66,6 @@ Status FenceStressScenario::stress(GuestSession &session, uint64_t address)
         previous = now;
         completed_++;
         if (completed_ % fences_per_blank != 0u) continue;
-        /* The last waiter leaving turns the blank's interrupt off, and this
-         * one arriving turns it back on. */
         status = session.await_vertical_blank(0u);
         blanks_++;
         previous = kmt_.performance_counter(frequency_);
@@ -93,4 +86,4 @@ uint64_t FenceStressScenario::worst_wait_microseconds() const
     return worst_ * microseconds_per_second / frequency_;
 }
 
-}  // namespace av
+}

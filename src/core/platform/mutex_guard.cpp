@@ -17,4 +17,4 @@ MutexGuard::~MutexGuard()
     mutex_.release();
 }
 
-}  // namespace av
+}

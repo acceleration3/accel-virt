@@ -37,7 +37,6 @@ TEST(patched_present_addresses, each_reference_is_a_patch_location)
   request.pPatchLocationListOut = nullptr;
   CHECK_STATUS(addresses.validate(1u), Status::invalid_parameter); }
 
-/* PresentRequest holds one or the other through the interface. */
 TEST(present_addressing, patched_and_virtual_answer_their_address_space)
 { MockPlatform platform; DxgkargPresentRecord request = {};
   PatchedPresentAddresses patched(platform, request);

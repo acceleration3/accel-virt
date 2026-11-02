@@ -34,7 +34,6 @@ bool MockSessionBackend::run(std::uint32_t command_id, WireReader &payload, Wire
     ran_++;
     if (command_id == malformed_id) return false;
     if (command_id == greedy_id) {
-        /* More than an address space holds, whatever the heap behind it. */
         return arena.allocate<std::uint64_t>(~std::size_t{0} / 4u) != nullptr;
     }
     if (command_id == roomy_id) {
@@ -51,7 +50,6 @@ bool MockSessionBackend::run(std::uint32_t command_id, WireReader &payload, Wire
         lost_ = true;
         return true;
     }
-    /* echo_id: the payload is the answer. */
     while (payload.remaining() != 0u) {
         std::uint8_t byte = 0u;
         if (!payload.read_pod(byte)) return false;
@@ -104,8 +102,6 @@ bool MockSessionBackend::adopt(ImportedBlob &blob)
 {
     if (!adopts_) return false;
     adopted_++;
-    /* Whatever this API holds memory as, and a different number the guest
-     * names it by, so a test can tell which of the two it was answered. */
     blob.record(blob.id() + 0x1000u, blob.id() + wire_offset);
     return true;
 }
@@ -140,8 +136,6 @@ void MockSessionBackend::before_next_export(void (*during)(void *context), void 
     during_export_context_ = context;
 }
 
-/* A real descriptor, because whoever takes it closes it: a made-up number
- * would be a close of some other file of this process. */
 bool MockSessionBackend::export_object(std::uint32_t kind, std::uint64_t wire_handle,
                                        std::uint32_t &handle_kind, int &fd)
 {
@@ -182,4 +176,4 @@ void MockSessionBackend::release_object(std::uint32_t, std::uint64_t wire_handle
     last_released_detail_ = detail;
 }
 
-}  // namespace av
+}

@@ -30,4 +30,4 @@ bool ScanoutPlaneCommands::answer(ControlRequest &request, uint32_t type)
     return true;
 }
 
-}  // namespace av
+}

@@ -1,5 +1,3 @@
-/* One physically contiguous, zero-filled allocation a device can address - the
- * memory under a virtqueue. Released when the buffer is destroyed. */
 #ifndef AV_DMA_BUFFER_HPP
 #define AV_DMA_BUFFER_HPP
 
@@ -37,6 +35,6 @@ private:
     friend struct DmaBufferProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DMA_BUFFER_HPP
+#endif

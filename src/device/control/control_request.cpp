@@ -28,7 +28,7 @@ void ControlRequest::respond(const GpuResponse &response)
     AV_SCOPE("ControlRequest::respond");
     host_.require_main_loop("ControlRequest::respond");
     if (responded_) return;
-    constexpr uint32_t first_error = 0x1200u;   /* VIRTIO_GPU_RESP_ERR_UNSPEC */
+    constexpr uint32_t first_error = 0x1200u;
     if (response.type() >= first_error) {
         uint8_t bytes[sizeof(uint32_t)] = {};
         static_cast<void>(host_.read_request(request_, 0u, bytes, sizeof bytes));
@@ -47,4 +47,4 @@ bool ControlRequest::responded() const
     return responded_;
 }
 
-}  // namespace av
+}

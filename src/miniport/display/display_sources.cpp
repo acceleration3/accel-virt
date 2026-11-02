@@ -70,7 +70,6 @@ void DisplaySources::set_vsync(bool enabled)
     vsync_enabled_ = enabled;
 }
 
-/* The vsync the scan-out timer raises reads it at DISPATCH. */
 bool DisplaySources::vsync_enabled() const
 {
     AV_SCOPE("DisplaySources::vsync_enabled");
@@ -142,7 +141,6 @@ DisplaySources::Flip DisplaySources::flip(uint32_t source)
     return static_cast<Flip>(platform_.load_atomic(flips_[source]));
 }
 
-/* Frames are u32 on the wire and 0 is none, so the count wraps past it. */
 void DisplaySources::number(uint32_t source, const FlipView &flip)
 {
     AV_SCOPE("DisplaySources::number");
@@ -261,4 +259,4 @@ bool DisplaySources::invariants_hold() const
     return count_ != 0u && count_ <= max_sources;
 }
 
-}  // namespace av
+}

@@ -1,9 +1,3 @@
-/* A process's chunk of the device's host window over MockKmt, which answers
- * the HostWindowRecord as the driver does (docs/host-memory.md): one escape
- * opens it - host GPU memory of the kind asked for, no allocation, no lock,
- * no paging - and one closes it, the answer is judged before anything is
- * kept, nothing falls back to guest RAM, and a faulted transport leaves the
- * close to the kernel. */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/transport/guest_connection.hpp"
@@ -29,7 +23,7 @@ struct HostWindowChunkProbe {
     static void view_at(HostWindowChunk &chunk, unsigned char *view) { chunk.view_ = view; }
 };
 
-}  // namespace av
+}
 
 using av::GuestConnection;
 using av::HostMemoryRequest;
@@ -50,8 +44,6 @@ constexpr std::uint64_t window_bytes = 256u * mib;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::uint32_t refused = 0xC0000001u;
 const HostMemoryRequest upload(HostMemoryRequest::Kind::upload, 0u);
-/* The connection's device and queue, the transport's two allocations, its DMA
- * mapping and its context, with the adapter. */
 constexpr std::uint32_t link_objects = 7u;
 
 class Rig {
@@ -97,7 +89,6 @@ private:
     KmtTransport    transport_;
 };
 
-/* An open answer the kernel could write back, for a test to break one field of. */
 void script_open_answer(MockKmt &kmt, std::uint64_t asked, std::uint32_t resource, std::uint64_t bytes,
                         std::uint64_t address)
 {
@@ -109,7 +100,7 @@ void script_open_answer(MockKmt &kmt, std::uint64_t asked, std::uint32_t resourc
     kmt.answer_next_escape(answer, sizeof answer);
 }
 
-}  // namespace
+}
 
 TEST(host_window_chunk, one_escape_opens_a_writable_chunk_and_one_closes_it)
 { Rig rig;
@@ -123,13 +114,11 @@ TEST(host_window_chunk, one_escape_opens_a_writable_chunk_and_one_closes_it)
   const HostMemoryRequest vulkan(HostMemoryRequest::Kind::vulkan, 2u);
   CHECK_STATUS(chunk.open(64u * mib + 1u, vulkan), Status::ok);
   CHECK(chunk.invariants_hold());
-  /* The escape is the whole of it. */
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), allocations);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::lock), locks);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::make_resident), residents);
   CHECK_EQ(rig.kmt().open_objects(), link_objects);
-  /* What was sent is an open of the bytes asked, no more. */
   HostWindowRecord sent;
   CHECK_EQ(rig.kmt().last_escape_size(), HostWindowRecord::encoded_size);
   CHECK_STATUS(sent.decode(rig.kmt().last_escape(), HostWindowRecord::encoded_size), Status::ok);
@@ -137,7 +126,6 @@ TEST(host_window_chunk, one_escape_opens_a_writable_chunk_and_one_closes_it)
   CHECK_EQ(sent.bytes(), 64u * mib + 1u);
   CHECK_EQ(sent.memory().encoded(), vulkan.encoded());
   CHECK_EQ(rig.kmt().window_request(MockKmt::first_window_resource).encoded(), vulkan.encoded());
-  /* The answer: the resource, the pages granted and where the window put it. */
   CHECK_EQ(chunk.resource_id(), MockKmt::first_window_resource);
   CHECK_EQ(chunk.bytes(), 64u * mib + 4096u);
   CHECK(chunk.view() == rig.kmt().window_base());
@@ -154,13 +142,10 @@ TEST(host_window_chunk, one_escape_opens_a_writable_chunk_and_one_closes_it)
   CHECK_EQ(chunk.resource_id(), 0u);
   CHECK_EQ(chunk.bytes(), 0u);
   CHECK(chunk.view() == nullptr);
-  /* Released twice, nothing is asked. */
   CHECK_STATUS(chunk.release(), Status::ok);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 2u);
   rig.check_only_the_link_is_left(); }
 
-/* A second chunk lies after the first, and one opened after the first closed
- * reuses its place: the window is placed from its start. */
 TEST(host_window_chunk, chunks_lie_apart_and_a_closed_place_is_reused)
 { Rig rig;
   rig.kmt().open_host_window(window_bytes);
@@ -197,10 +182,6 @@ TEST(host_window_chunk, an_open_while_held_of_nothing_or_of_no_memory_asks_nothi
   CHECK_STATUS(chunk.release(), Status::ok);
   rig.check_only_the_link_is_left(); }
 
-/* Nothing falls back to guest RAM: a device with no window is the kernel's
- * STATUS_NOT_SUPPORTED, and a window with no room for the chunk its
- * STATUS_INVALID_PARAMETER, with nothing held either way. The window's own
- * size still fits. */
 TEST(host_window_chunk, a_chunk_the_window_cannot_hold_is_refused)
 { { Rig rig;
     HostWindowChunk chunk(rig.connection(), rig.transport());
@@ -225,8 +206,6 @@ TEST(host_window_chunk, a_chunk_the_window_cannot_hold_is_refused)
     CHECK_STATUS(past.release(), Status::ok);
     rig.check_only_the_link_is_left(); } }
 
-/* A device that will back the chunk nowhere, and any other refusal of the
- * open, is the kernel's answer, with nothing held. */
 TEST(host_window_chunk, the_kernels_refusal_is_the_answer_and_nothing_is_held)
 { { Rig rig;
     HostWindowChunk chunk(rig.connection(), rig.transport());
@@ -247,9 +226,6 @@ TEST(host_window_chunk, the_kernels_refusal_is_the_answer_and_nothing_is_held)
     CHECK_EQ(chunk.resource_id(), 0u);
     rig.check_only_the_link_is_left(); } }
 
-/* Success with bytes that are not an answer - the request left as it was, a
- * size the kernel does not grant in pages, an address off a page, less than
- * was asked, another operation - is malformed and nothing is kept. */
 TEST(host_window_chunk, an_answer_that_does_not_answer_the_open_is_malformed)
 { { Rig rig;
     rig.kmt().open_host_window(window_bytes);
@@ -283,8 +259,6 @@ TEST(host_window_chunk, an_answer_that_does_not_answer_the_open_is_malformed)
     CHECK_STATUS(chunk.open(mib, upload), Status::malformed);
     CHECK_EQ(chunk.resource_id(), 0u); } }
 
-/* A close the kernel refuses, or answers with something else, is what release
- * says; nothing is held after either way. */
 TEST(host_window_chunk, a_refused_or_misanswered_close_still_lets_the_chunk_go)
 { { Rig rig;
     rig.kmt().open_host_window(window_bytes);
@@ -310,8 +284,6 @@ TEST(host_window_chunk, a_refused_or_misanswered_close_still_lets_the_chunk_go)
     CHECK(chunk.view() == nullptr);
     CHECK(chunk.invariants_hold()); } }
 
-/* On a faulted transport the kernel refuses a close and closes the chunk with
- * the context: nothing is sent, and the context's teardown frees it. */
 TEST(host_window_chunk, release_on_a_faulted_transport_leaves_the_close_to_the_kernel)
 { Rig rig;
   rig.kmt().open_host_window(window_bytes);
@@ -349,7 +321,6 @@ TEST(host_window_chunk, invariants_want_a_resource_whole_pages_and_a_view_togeth
   CHECK(chunk.invariants_hold());
   HostWindowChunkProbe::without_view(chunk);
   CHECK(!chunk.invariants_hold());
-  /* Nothing held: neither a size nor a view may be left. */
   HostWindowChunkProbe::without_resource(chunk);
   CHECK(!chunk.invariants_hold());
   HostWindowChunkProbe::without_bytes(chunk);
@@ -359,9 +330,6 @@ TEST(host_window_chunk, invariants_want_a_resource_whole_pages_and_a_view_togeth
   HostWindowChunkProbe::without_view(chunk);
   CHECK(chunk.invariants_hold()); }
 
-/* The process's own pages lent (docs/host-memory.md, "Application memory"):
- * one escape names them, the view is the process's own address, and the
- * close is the same as a window chunk's. */
 TEST(host_window_chunk, an_adoption_lends_the_processs_own_pages_and_its_view_is_them)
 { Rig rig;
   HostWindowChunk chunk(rig.connection(), rig.transport());
@@ -381,14 +349,11 @@ TEST(host_window_chunk, an_adoption_lends_the_processs_own_pages_and_its_view_is
   CHECK_EQ(chunk.bytes(), sizeof pages);
   CHECK(chunk.view() == pages);
   CHECK(rig.kmt().window_chunk_memory(chunk.resource_id()) == pages);
-  /* Held, a second open or adoption asks nothing. */
   CHECK_STATUS(chunk.adopt(pages, sizeof pages, readback), Status::invalid_state);
   CHECK_STATUS(chunk.release(), Status::ok);
   CHECK_EQ(chunk.resource_id(), 0u);
   rig.check_only_the_link_is_left(); }
 
-/* Not whole pages, nothing, or no memory named: refused before the kernel is
- * asked; the kernel's refusal is the answer, and nothing is held. */
 TEST(host_window_chunk, an_adoption_of_no_whole_pages_or_one_the_kernel_refuses_holds_nothing)
 { Rig rig;
   HostWindowChunk chunk(rig.connection(), rig.transport());

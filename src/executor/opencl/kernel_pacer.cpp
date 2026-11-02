@@ -52,12 +52,10 @@ uint32_t KernelPacer::group() const
     return group_;
 }
 
-/* A group is one to `most` kernels, and no more are gathered than the
- * largest holds. */
 bool KernelPacer::invariants_hold() const
 {
     AV_SCOPE("KernelPacer::invariants_hold");
     return group_ >= 1u && group_ <= most && gathered_ <= most && timed_kernels_ <= most;
 }
 
-}  // namespace av
+}

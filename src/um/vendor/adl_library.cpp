@@ -98,4 +98,4 @@ vendor::AdlRoot *AdlLibrary::root(const void *context)
     return answering != nullptr && answering->holds(context) ? answering : nullptr;
 }
 
-}  // namespace av
+}

@@ -1,4 +1,3 @@
-/* The device's lines on a stdio stream (StdioLog): each whole, each ended. */
 #include "device/host/stdio_log.hpp"
 #include "harness/framework/test_registry.hpp"
 

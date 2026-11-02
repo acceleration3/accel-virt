@@ -31,7 +31,6 @@ Status WindowFramebuffers::make_current_on(ClientTransport &wire, void *window, 
     AV_SCOPE("WindowFramebuffers::make_current_on");
     BackBufferPresenter *found = find(window);
     const bool           added = found == nullptr;
-    /* Room to name a new presenter first, so one made always has a name. */
     if (added && (presenters_.reserve(presenters_.count() + 1u) != Status::ok ||
                   pool_.create(found, memory_, log_) != Status::ok))
         return Status::no_memory;
@@ -46,9 +45,6 @@ Status WindowFramebuffers::make_current_on(ClientTransport &wire, void *window, 
     }
     uint32_t slot = 0u;
     if (added) static_cast<void>(presenters_.insert(key_of(window), found, slot));
-    /* A window that changed size while another context was current on this
-     * thread is made again here, not after a swap: what the application left
-     * on it is bound again all the same, or the host draws into nothing. */
     const bool remade = !added && (presenter.framebuffer() != before || presenter.width() != old_width ||
                                    presenter.height() != old_height);
     const bool moved = found != current_;
@@ -159,9 +155,6 @@ void WindowFramebuffers::follow(ClientTransport &wire, void *window, const Pixel
     const uint32_t       height = presenter.height();
     static_cast<void>(presenter.prepare(wire, window, format, surface));
     const uint32_t after = presenter.framebuffer();
-    /* Made again at a new size, the framebuffer may come back under the name
-     * the deleted one had - the host reuses names - while deleting it bound 0
-     * in its place: so a new size rebinds whatever the name. */
     const bool remade = after != before || presenter.width() != width || presenter.height() != height;
     if (remade && found == current_) bind_window(wire, after);
 }
@@ -205,8 +198,6 @@ void WindowFramebuffers::report(StateWriter &writer) const
     writer.close();
 }
 
-/* The current window is a held presenter, no window is held twice, and each
- * presenter is whole. */
 bool WindowFramebuffers::invariants_hold() const
 {
     AV_SCOPE("WindowFramebuffers::invariants_hold");
@@ -241,8 +232,6 @@ uint64_t WindowFramebuffers::key_of(void *window) const
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(window));
 }
 
-/* `presenter` gone from the pool and from what names it; the caller takes it
- * out of the table. */
 void WindowFramebuffers::forget(BackBufferPresenter *presenter)
 {
     AV_SCOPE("WindowFramebuffers::forget");
@@ -251,4 +240,4 @@ void WindowFramebuffers::forget(BackBufferPresenter *presenter)
     static_cast<void>(pool_.destroy(presenter));
 }
 
-}  // namespace av::glicd
+}

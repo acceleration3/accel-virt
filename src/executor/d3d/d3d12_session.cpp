@@ -29,11 +29,8 @@
 namespace av {
 
 namespace {
-
-/* Direct3D 12's commands name no device: a session is its guest's one. */
 constexpr uint32_t only_device = 1u;
 constexpr uint32_t descriptor_heap_types = 4u;
-/* D3D12_HEAP_TYPE and D3D12_CPU_PAGE_PROPERTY values the wire carries. */
 constexpr uint32_t heap_default = 1u;
 constexpr uint32_t heap_upload = 2u;
 constexpr uint32_t heap_readback = 3u;
@@ -90,7 +87,6 @@ D3D12_RESOURCE_DESC host_desc(const d3d12proto::ResourceDesc &desc)
     return made;
 }
 
-/* The clear value, or null when there is none. */
 const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_CLEAR_VALUE &made)
 {
     AV_SCOPE("host_clear");
@@ -98,18 +94,12 @@ const D3D12_CLEAR_VALUE *host_clear(const d3d12proto::ClearValue &clear, D3D12_C
     made = {};
     made.Format = static_cast<DXGI_FORMAT>(clear.format);
     for (uint32_t channel = 0u; channel < 4u; channel++) made.Color[channel] = clear.color[channel];
-    /* A depth format's clear value is its DepthStencil, which the union
-     * overlays on Color's first two floats: written last, it wins where the
-     * format is a depth one, and the runtime reads the member the format
-     * names. */
     const bool depth = clear.format == DXGI_FORMAT_D32_FLOAT || clear.format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
                        clear.format == DXGI_FORMAT_D16_UNORM || clear.format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
     if (depth) made.DepthStencil = {clear.depth, static_cast<UINT8>(clear.stencil)};
     return &made;
 }
 
-/* A Direct3D 12 present's frame, staged by a copy on the presenting queue
- * behind the work that drew it. */
 class PresentedResource final : public FrameStager {
 public:
     PresentedResource(D3d12HostDevice &device, ID3D12CommandQueue *queue, ID3D12Resource *resource);
@@ -134,7 +124,7 @@ StagedFrame *PresentedResource::stage()
     return device_.stage_frame(queue_, resource_);
 }
 
-}  // namespace
+}
 
 D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, WakeSignal &tenant,
                            EventfdWake &fence_wake, WatchedBlocks &blocks, DriverLog &lines)
@@ -165,8 +155,6 @@ void D3d12Session::initialize(const ImportTable &imports, D3d12HostDevice *devic
 void D3d12Session::shut_down()
 {
     AV_SCOPE("D3d12Session::shut_down");
-    /* What is compiling finishes; what is not yet is never compiled, and
-     * nothing compiled is kept: the session's objects all go below. */
     compiles_.stop();
     for (D3d12PipelineJob *job = compiles_.oldest(); job != nullptr; job = compiles_.oldest()) {
         ID3D12PipelineState *const made = compiles_.collect(*job);
@@ -256,12 +244,6 @@ bool D3d12Session::gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &ha
     return true;
 }
 
-/* A buffer placed in a heap lies inside the buffer D3D12Core made over the
- * whole heap when the heap was created, whose range is registered already.
- * The host placed both in one heap at the same offsets, so an address of the
- * placed buffer translates through that range to exactly where the buffer
- * is, and it is not registered again. A range overlapping one that does not
- * translate so is refused, as before. */
 bool D3d12Session::place(uint32_t id, IUnknown *made, uint64_t address, uint64_t width)
 {
     AV_SCOPE("D3d12Session::place");
@@ -269,8 +251,6 @@ bool D3d12Session::place(uint32_t id, IUnknown *made, uint64_t address, uint64_t
     const uint64_t        host = resource->GetGPUVirtualAddress();
     const bool            within = address != 0u && addresses_.translate(address, width) == host;
     const bool            registering = address != 0u && !within;
-    /* An id in use would be refused by the keep below; asked first, so the
-     * range removed after a refused keep can only be this buffer's. */
     D3dObjectKind  taken = D3dObjectKind::none;
     const Status   registered = objects_.find_any(id, taken) != nullptr ? Status::conflict
                                 : registering ? addresses_.insert(address, width, host, id)
@@ -300,7 +280,6 @@ bool D3d12Session::kept(uint32_t id, D3dObjectKind kind, IUnknown *made)
 void D3d12Session::drain()
 {
     AV_SCOPE("D3d12Session::drain");
-    /* A lost device finishes nothing more, and is not waited five seconds for. */
     if (device_ == nullptr || lost()) return;
     if (!progress_.mark_all()) {
         if (removed_ == 0u)
@@ -308,10 +287,6 @@ void D3d12Session::drain()
         removed_ = static_cast<uint32_t>(DXGI_ERROR_DEVICE_HUNG);
         return;
     }
-    /* The GPU usually finishes within a frame's time, and a blocked wait adds
-     * a thread's wake on top of vkd3d-proton's own: the worker looks for a
-     * while, then naps. A GPU that never finishes is a hung device, not a
-     * worker parked for good - every other D3D stream waits on this one. */
     constexpr uint64_t spin_ns = 2000000u;
     constexpr uint64_t nap_ns = 50000u;
     constexpr uint64_t hung_ns = 5000000000u;
@@ -325,8 +300,6 @@ void D3d12Session::drain()
     removed_ = static_cast<uint32_t>(DXGI_ERROR_DEVICE_HUNG);
 }
 
-// ---------------------------------------------------------------- device
-
 bool D3d12Session::on_OpenDevice12(uint32_t, uint32_t &hresult)
 {
     AV_SCOPE("D3d12Session::on_OpenDevice12");
@@ -335,8 +308,6 @@ bool D3d12Session::on_OpenDevice12(uint32_t, uint32_t &hresult)
         return true;
     }
     if (!joined_) {
-        /* A device the sessions before this one lost is made again for it,
-         * once they are gone; the wait is for their workers to fault them. */
         constexpr uint32_t renew_wait_ms = 2000u;
         if (!device_->renew(renew_wait_ms) || !device_->admit(tenant_)) {
             hresult = static_cast<uint32_t>(DXGI_ERROR_DEVICE_REMOVED);
@@ -352,9 +323,6 @@ bool D3d12Session::on_OpenDevice12(uint32_t, uint32_t &hresult)
     return true;
 }
 
-/* Measured when the GPU's device was made, so a session that only asks - the
- * guest's adapter, before it has any device - neither joins the device nor
- * waits for one lost to be made again. */
 bool D3d12Session::on_QueryCaps12(uint32_t &hresult, d3d12proto::Caps12 &caps, uint8_t *formats,
                                   uint64_t formats_capacity, uint64_t &formats_size)
 {
@@ -388,7 +356,6 @@ bool D3d12Session::on_Destroy12(uint32_t id)
 bool D3d12Session::on_Finish12(uint32_t &hresult)
 {
     AV_SCOPE("D3d12Session::on_Finish12");
-    /* The verdict covers every pipeline asked for so far. */
     settle_pipelines();
     hresult = removed_;
     if (device_ == nullptr) return true;
@@ -397,11 +364,6 @@ bool D3d12Session::on_Finish12(uint32_t &hresult)
     return true;
 }
 
-// ---------------------------------------------------------------- memory
-
-/* A CPU-visible heap is host memory the guest opened for it and imported
- * (docs/host-memory.md), named by that import, which vkd3d-proton opens as a
- * heap by its dma-buf over the source's own mapping of it. */
 bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties &properties, uint32_t flags,
                                    uint64_t size, uint64_t alignment, uint64_t memory)
 {
@@ -442,8 +404,6 @@ bool D3d12Session::on_CreateCommittedResource12(uint32_t resource, const d3d12pr
                                                 uint64_t address)
 {
     AV_SCOPE("D3d12Session::on_CreateCommittedResource12");
-    /* Memory the CPU sees is the guest's, so it is a heap of guest pages
-     * (CreateHeap12) and a placed resource, never a heap of the host's own. */
     if (device_ == nullptr || properties.type != heap_default || !resource_holds(desc)) return false;
     const D3D12_HEAP_PROPERTIES heap = host_properties(properties);
     const D3D12_RESOURCE_DESC   made_desc = host_desc(desc);
@@ -521,8 +481,6 @@ bool D3d12Session::placed(uint32_t resource, ID3D12Heap *in, uint64_t offset, co
                                                 host_clear(clear, value), __uuidof(ID3D12Resource),
                                                 reinterpret_cast<void **>(&made));
     if (FAILED(made_result)) {
-        /* Which of an application's thousands of resources the host refused,
-         * and where it was put: what makes a refusal reproducible in a probe. */
         const D3D12_HEAP_DESC heap_desc = in->GetDesc();
         LogLine(lines_).text("a placed resource refused (").hex(static_cast<uint32_t>(made_result), 8u)
             .text("): dimension ").number(desc.dimension).text(" format ").number(desc.format).text(" ")
@@ -536,20 +494,12 @@ bool D3d12Session::placed(uint32_t resource, ID3D12Heap *in, uint64_t offset, co
     return place(resource, made, desc.dimension == buffer_dimension ? address : 0u, desc.width);
 }
 
-// ---------------------------------------------------------------- descriptors
-
 bool D3d12Session::on_CreateDescriptorHeap12(uint32_t heap, uint32_t type, uint32_t count, uint32_t flags)
 {
     AV_SCOPE("D3d12Session::on_CreateDescriptorHeap12");
     constexpr uint32_t most_descriptors = 1000000u;
     if (device_ == nullptr || type >= descriptor_heap_types || count == 0u || count > most_descriptors) return false;
-    /* vkd3d-proton makes a shader-visible sampler heap of at most the API's
-     * 2048, while the guest's runtime has the driver report more than that
-     * (D3d12HostCaps): an application that makes the heap it was told of - as
-     * wgpu makes one of the size reported - gets 2048, and a sampler past them
-     * is refused as one outside any heap is. Applications hand sampler slots
-     * out from the start. */
-    constexpr uint32_t visible_samplers = 2048u;   /* D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE */
+    constexpr uint32_t visible_samplers = 2048u;
     const bool         capped = type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER &&
                         (flags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE) != 0u && count > visible_samplers;
     D3D12_DESCRIPTOR_HEAP_DESC desc = {};
@@ -635,8 +585,6 @@ bool D3d12Session::on_CopyDescriptors12(const d3d12proto::DescriptorRef &destina
     return true;
 }
 
-// ---------------------------------------------------------------- pipelines
-
 bool D3d12Session::on_CreateRootSignature12(uint32_t root, uint32_t flags, uint32_t parameter_count,
                                             const d3d12proto::RootParameter *parameters, uint32_t range_count,
                                             const d3d12proto::DescriptorRange *ranges, uint32_t sampler_count,
@@ -648,8 +596,6 @@ bool D3d12Session::on_CreateRootSignature12(uint32_t root, uint32_t flags, uint3
                                           sampler_count));
 }
 
-/* The layout a root argument is judged against is the one kept on the root
- * signature when it was made (D3d12RootLayout). */
 bool D3d12Session::on_CreateCommandSignature12(uint32_t signature, uint32_t root, uint32_t byte_stride,
                                                uint32_t argument_count, const d3d12proto::IndirectArgument *arguments)
 {
@@ -735,8 +681,6 @@ void D3d12Session::settle_pipelines()
         static_cast<void>(settle(*job));
 }
 
-// ---------------------------------------------------------------- queues and lists
-
 bool D3d12Session::on_CreateCommandQueue12(uint32_t queue, uint32_t type, uint32_t priority, uint32_t flags)
 {
     AV_SCOPE("D3d12Session::on_CreateCommandQueue12");
@@ -804,10 +748,6 @@ bool D3d12Session::on_CloseCommandList12(uint32_t id)
     return recorded != nullptr && SUCCEEDED(recorded->Close());
 }
 
-/* The frame a blt reads is copied on the presenting queue here, behind the
- * work that drew it and ahead of whatever the queue is given next; only for a
- * surface a blt has read before (SharedSurfaces). One the host cannot stage
- * is a frame not shown, never a removed device. */
 bool D3d12Session::on_PresentResource12(uint32_t queue, uint32_t resource, uint32_t point)
 {
     AV_SCOPE("D3d12Session::on_PresentResource12");
@@ -827,10 +767,6 @@ bool D3d12Session::on_ExecuteCommandLists12(uint32_t queue, uint32_t count, cons
     constexpr uint32_t most_lists = 64u;
     ID3D12CommandQueue *const on = objects_.find_as<ID3D12CommandQueue>(queue, D3dObjectKind::queue12);
     if (on == nullptr || count > most_lists) return false;
-    /* A refused command left a list short of what the guest recorded into it
-     * - a descriptor heap never bound, a view never written - and the GPU
-     * would read through the hole: the host GPU faults, and every context on
-     * it is reset with this one. Nothing runs on a removed device. */
     if (removed_ != 0u) return true;
     ID3D12CommandList *executed[most_lists] = {};
     for (uint32_t index = 0u; index < count; index++) {
@@ -867,4 +803,4 @@ bool D3d12Session::invariants_hold() const
             objects_.count_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12) == 0u);
 }
 
-}  // namespace av
+}

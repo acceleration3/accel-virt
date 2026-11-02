@@ -1,6 +1,3 @@
-/* The driver's word that a shared object is gone: the header, then the id at
- * offset 24. Too short to hold the id, or an id no object is minted under,
- * decodes to nothing. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/virtio_gpu/av_request_writer.hpp"
@@ -41,7 +38,7 @@ TEST(shared_release_request, a_short_request_or_an_id_of_zero_is_malformed)
   SharedReleaseRequest zero;
   CHECK_STATUS(zero.decode(zero_reader), Status::malformed);
   CHECK_EQ(zero.object_id(), 0u);
-  bytes[31] = 1u;   /* the id's last byte: the whole u64 is read */
+  bytes[31] = 1u;
   WireReader high_reader(bytes, sizeof bytes);
   SharedReleaseRequest high;
   CHECK_STATUS(high.decode(high_reader), Status::ok);

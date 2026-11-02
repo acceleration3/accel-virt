@@ -7,9 +7,6 @@
 namespace av {
 
 namespace {
-
-/* Short enough that the program's command - source, count and handles - stays
- * far under ScenarioTransport::command_bytes. */
 constexpr char vector_add_source[] =
     "__kernel void vector_add(__global const float *a, __global const float *b, __global float *c)\n"
     "{\n"
@@ -19,11 +16,9 @@ constexpr char vector_add_source[] =
 constexpr char vector_add_name[] = "vector_add";
 constexpr cl_mem_flags copied_input = CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR;
 constexpr cl_mem_flags written_output = CL_MEM_WRITE_ONLY;
-/* What an error output holds until an answer overwrites it, so a call whose
- * answer never came fails rather than reading as CL_SUCCESS. */
 constexpr cl_int unanswered = CL_OUT_OF_RESOURCES;
 
-}  // namespace
+}
 
 OpenClScenario::OpenClScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : steps_(kmt, report, "opencl"), link_(kmt, search, steps_, SubApi::opencl), device_(0u), context_(0u),
@@ -46,9 +41,6 @@ void OpenClScenario::run()
     if (built == Status::ok) static_cast<void>(steps_.check_result("release", release_error_));
 }
 
-/* The host shows a context its GPU's platform alone, but the search is the one
- * an application makes - the first GPU any platform offers - so it holds
- * wherever a CPU runtime or another GPU is listed too. */
 Status OpenClScenario::find_device()
 {
     AV_SCOPE("OpenClScenario::find_device");
@@ -115,8 +107,6 @@ Status OpenClScenario::make_kernel()
     return steps_.check_result("kernel", error);
 }
 
-/* Each argument is a cl_mem, passed as the handle the host gave: the host
- * resolves it, never the guest. */
 Status OpenClScenario::compute()
 {
     AV_SCOPE("OpenClScenario::compute");
@@ -142,8 +132,6 @@ Status OpenClScenario::compute()
     return steps_.check_measured("sum", matched == elements ? Status::ok : Status::conflict, matched);
 }
 
-/* An object never made is not released: a null handle is refused by the host
- * as undecodable, which would fault the context before the rest are. */
 void OpenClScenario::release()
 {
     AV_SCOPE("OpenClScenario::release");
@@ -165,4 +153,4 @@ void OpenClScenario::release_object(Release call, uint64_t &object)
     if (release_error_ == CL_SUCCESS) release_error_ = released;
 }
 
-}  // namespace av
+}

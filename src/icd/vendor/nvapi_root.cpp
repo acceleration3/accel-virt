@@ -9,15 +9,12 @@
 namespace av::vendor {
 
 namespace {
-
-/* MAKE_NVAPI_VERSION(NV_DISPLAY_DRIVER_MEMORY_INFO_Vn, n): the record's size
- * at version n, over n. */
 constexpr uint32_t memory_info_v1 = 20u | (1u << 16u);
 constexpr uint32_t memory_info_v2 = 24u | (2u << 16u);
 constexpr uint32_t memory_info_v3 = 32u | (3u << 16u);
 constexpr uint64_t kib = 1024u;
 
-}  // namespace
+}
 
 NvapiRoot::NvapiRoot(Kmt &kmt, ThreadLock &lock) : lock_(lock), adapters_(kmt), opened_(0u), displays_{}
 {
@@ -49,7 +46,6 @@ int NvapiRoot::enum_physical_gpus(void **gpus, uint32_t *count)
     if (gpus == nullptr || count == nullptr) return invalid_argument;
     const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
-    /* Every adapter fits: VendorAdapters holds fewer than NVAPI's array. */
     static_assert(VendorAdapters::max_adapters <= max_physical_gpus);
     const uint32_t found = adapters_.count_of(PciIdentity::nvidia_vendor);
     for (uint32_t index = 0u; index < found; ++index)
@@ -164,13 +160,9 @@ int NvapiRoot::driver_and_branch_version(uint32_t *version, char *branch)
     if (version == nullptr || branch == nullptr) return invalid_argument;
     const ThreadLockHold held(lock_);
     if (opened_ == 0u) return not_initialized;
-    /* A second initialise that found no NVIDIA GPU leaves the first's open
-     * over none, which NVAPI answers as a machine without one. */
     const VendorAdapter *const first = adapters_.nth_of(PciIdentity::nvidia_vendor, 0u);
     if (first == nullptr) return device_not_found;
     const uint64_t full = first->facts().driver_version();
-    /* NVIDIA's a.b.c.d is the release c.dd, shown as three digits and the two
-     * after the point: 32.0.16.1088 is 61088, which is 610.88. */
     *version = static_cast<uint32_t>((((full >> 16u) & 0xFFFFu) % 10u) * 10000u + (full & 0xFFFFu));
     TextBuffer text(branch, short_string);
     text.append("avgpu ");
@@ -223,4 +215,4 @@ const VendorAdapter *NvapiRoot::adapter(const void *gpu) const
     return nullptr;
 }
 
-}  // namespace av::vendor
+}

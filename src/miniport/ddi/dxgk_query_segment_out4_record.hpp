@@ -1,5 +1,3 @@
-/* DXGK_QUERYSEGMENTOUT4, the in/out block of DXGKQAITYPE_QUERYSEGMENT4. A DDI
- * record. src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGK_QUERY_SEGMENT_OUT4_RECORD_HPP
 #define AV_DXGK_QUERY_SEGMENT_OUT4_RECORD_HPP
 
@@ -18,6 +16,6 @@ struct DxgkQuerySegmentOut4Record {
     uint64_t SegmentDescriptorStride;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_QUERY_SEGMENT_OUT4_RECORD_HPP
+#endif

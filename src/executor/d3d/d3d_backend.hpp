@@ -1,15 +1,3 @@
-/* One guest Direct3D device, run on the host's Direct3D.
- *
- * The wire is generated from tools/codegen/registry/d3d.toml: the generated
- * decoder checks that every command frames and every count is within the
- * registry's bounds, and hands the values here. What they mean is judged
- * here - an id naming an object of the wrong kind, a stage that is not one, a
- * format past the table - before DXVK sees any of it, because DXVK trusts its
- * caller and a guest is not a caller to trust.
- *
- * The session's Direct3D 11 device is its host GPU's shared one
- * (D3d11HostDevice), with the session's pipeline state in a context state
- * object of its own; every command runs holding that device's lock. */
 #ifndef AV_D3D_BACKEND_HPP
 #define AV_D3D_BACKEND_HPP
 
@@ -59,18 +47,10 @@ class SharedSurfaces;
 
 class D3dBackend final : public SessionBackend, public d3dproto::ServerDispatch {
 public:
-    /* The most resources one rotation names: the wire's bound. */
     static constexpr uint32_t max_rotation = 16u;
 
-    /* Its Direct3D 11, 12 and 9 halves write to their parts of `log`. */
     explicit D3dBackend(ExecutorLog &log);
 
-    /* Binds this session to what the guest shares through `shares` - bound
-     * to its domain, or not, and then it shares nothing - to its GPU's
-     * Direct3D 11 device and, where it has them, its Direct3D 12 device and
-     * its Direct3D 9, and to the surfaces its presents publish
-     * (SharedSurfaces); all must outlive it. False for a GPU with no
-     * Direct3D 11 device: that is what says Direct3D is served at all. */
     [[nodiscard]] bool initialize(SessionShares &shares, ImportTable &imports, D3d11HostDevice *device11,
                                   D3d12HostDevice *device12 = nullptr, SharedSurfaces *surfaces = nullptr,
                                   D3d9HostDevice *device9 = nullptr);
@@ -79,28 +59,14 @@ public:
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                            WireArena &arena) override;
-    /* Lost once a command found it so, or once the GPU's Direct3D 11 device
-     * is - or its Direct3D 12 device, for a session that opened one -
-     * whichever session saw it first. */
     bool lost() const override;
-    /* The GPU's Direct3D 11 device, which every session on it shares
-     * (D3d11HostDevice::lose). */
     [[nodiscard]] bool lose_device() override;
     void end_batch() override;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
     void bind_signal(void (*signal)(void *context), void *context) override;
-    /* The session's region first, its arena; every import after is an
-     * object's own memory - a Direct3D 12 heap's, the slice store - named by
-     * its own address. */
     [[nodiscard]] bool adopt(const SourceMemory &memory, uint64_t &handle) override;
     void abandon(const SourceMemory &memory, uint64_t handle) override;
-    /* A shared texture's memory, which other APIs import (feature 053).
-     * Direct3D imports nothing: it opens by key what a Direct3D session
-     * published (D3dShares), and a guest's Direct3D runtime opens no other
-     * shared allocation - one with no Direct3D resource data behind it is
-     * refused before the driver sees it - so no Direct3D context ever sends
-     * OPEN_SHARED_OBJECT. */
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      OwnedFd &descriptor) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,
@@ -207,135 +173,69 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* The slice store `store` imported for DXVK to draw from, if it can be:
-     * false for a device that cannot rename a buffer to it, and for good once
-     * an import failed, and for a store other than the one held. Under the
-     * device's lock. */
     bool slice_storage_for(const SourceMemory &store);
-    /* The slice store's import let go of, every buffer that may be on it
-     * given storage of its own first, once the GPU has finished what read it.
-     * Under the device's lock. */
     void release_slice_storage();
-    /* Whether `resource` is a buffer of dynamic usage: the one kind a slice
-     * takes. */
     bool dynamic_buffer(ID3D11Resource *resource) const;
     friend struct D3dBackendProbe;
 
     static constexpr uint32_t stage_count = 6u;
 
-    /* The object `id` names, as the kind a command needs; null for none or
-     * another kind. Id 0 is null too, which is what an unbinding names. */
-    /* `texture` made over memory other APIs can open, when the guest's
-     * `guest_misc` shares it and the host can; null otherwise. */
     void             describe_shared_image(uint64_t shared_key, IUnknown *made);
     ID3D11Texture2D         *shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc);
-    /* A texture over the memory the guest lent beneath it (`memory`, the name
-     * of an import of this session's), as rows `row_pitch` bytes apart: what
-     * two adapters' devices share between them. Null for memory this session
-     * has not imported or too small, or one the host will not make an image
-     * of. */
     ID3D11Texture2D         *lent_texture(const D3D11_TEXTURE2D_DESC &texture, uint64_t memory, uint32_t row_pitch);
-    /* A copy into `destination` has run: counted when it is a shared surface. */
     void                     counted(ID3D11Resource *destination);
-    /* Whether every id in `ids` names nothing (0) or an object of `kind`. */
     bool                     all_of(const uint32_t *ids, uint32_t count, D3dObjectKind kind) const;
-    /* A device is selected and not removed: what a command on the immediate
-     * context needs, since without one it would run on another session's
-     * pipeline state, and a removed device's commands are dropped. */
     bool                     ready() const;
-    /* The session made a device: what creating an object, flushing and
-     * finishing need, none of which touch pipeline state. */
     bool                     has_device() const;
-    /* Every view of one of `textures` remade on the next; no_memory, with
-     * the views not yet remade left as they were, when one cannot be kept. */
     [[nodiscard]] Status     remake_views(IUnknown *const *textures, uint32_t count);
     void rebind_remade();
     bool swap_remade(IUnknown **bound, uint32_t count) const;
     void release_all(IUnknown **held, uint32_t count) const;
-    /* A view like `view`, of `kind`, on `texture`; null when the host refuses one. */
     IUnknown                *remake_view(D3dObjectKind kind, IUnknown *view, ID3D11Resource *texture);
-    /* The kind of object a shader of `stage` is; none for no stage. */
     D3dObjectKind            shader_kind(uint32_t stage) const;
-    /* One subresource's size in texels (bytes for a buffer) and its format;
-     * false for a subresource the resource does not have. */
     bool                     extent_of(ID3D11Resource *resource, uint32_t subresource, uint32_t &width,
                                        uint32_t &height, uint32_t &depth, uint32_t &format) const;
-    /* Inside a command holding the device's lock: returns once the GPU has
-     * run what the session recorded, the lock let go meanwhile. */
     void                     await_gpu_unlocked();
-    /* A CPU-readable resource one subresource of `resource` can be copied
-     * into, with a reference the caller owns; null when the host refuses one. */
     ID3D11Resource          *staging_for(ID3D11Resource *resource, uint32_t subresource, uint32_t width,
                                          uint32_t height, uint32_t depth, uint32_t format);
 
     D3d11HostDevice        *device11_;
     SharedSurfaces         *surfaces_;
-    /* What this session shares and opens, in its domain; null only while the
-     * session is not initialized. */
     SessionShares          *shares_;
-    /* What wakes this session's worker when a device it shares is lost
-     * (DeviceTenants): bound with the session's signal, and named by its
-     * Direct3D 12 half too, before which it is made. */
     WakeSignal              wake_;
-    /* What wakes this session's worker when the GPU reaches a mark its
-     * Direct3D 11 batches or Direct3D 12 queues left. */
     EventfdWake             fence_wake_;
-    /* What a wait on the GPU measures its deadline on. */
     MonotonicClock          clock_;
-    /* Whether it joined its Direct3D 11 device's tenants. */
     bool                    admitted_;
-    /* The device lock, taken at a batch's first command and held to its end. */
     bool                    held_;
-    /* What every table of the session grows in, and how a command refused
-     * for want of it is told apart (WatchedBlocks). */
     HostHeap                heap_;
     WatchedBlocks           blocks_;
-    /* A view a rotation remade, the old one held until what bound it is rebound. */
     struct Remade {
         IUnknown *old_;
         IUnknown *made_;
     };
     GrowableArray<Remade>   remade_;
-    /* Each device's pipeline state, by the guest's id, and the selected
-     * one, which commands run on. */
     GuestDevices<ID3DDeviceContextState> states_;
-    /* Where the host log is read when a guest's command fails. */
     DriverLog              &lines_;
     CommandRefusal          refusal_;
-    /* The decode arena of the command running, which scratch - a shader's
-     * container - is taken from; null between commands. */
     WireArena              *arena_;
     D3dObjectTable          objects_;
-    /* The session's blob arena, which the three dispatches resolve offsets
-     * in. */
     GuestBytes              guest_;
     GuestRegion             region_;
-    /* What the session imported: its region, Direct3D 12's CPU-visible
-     * heaps and the slice store. Null between sessions. */
     ImportTable            *imports_;
-    /* Direct3D 12's half of the session, sharing its blob arena. */
     D3d12Session            d3d12_;
-    /* Direct3D 9's, sharing it too. */
     D3d9Session             d3d9_;
     QueryResultPublisher    published_;
-    /* How far the host GPU has got with the batches the session recorded. */
     D3d11BatchProgress      progress11_;
     ConstantRing            constants_;
-    /* The session's slice store as DXVK's to draw from, imported on the
-     * first bind: what buffers bound to slices of it read (BindBufferSlice). */
     VulkanBuffer            slice_storage_;
     const SourceMemory     *slice_memory_;
     bool                    slice_storage_refused_;
-    /* The last shared key an open found nothing under: the guest asks again
-     * and again for one it was just given, and the host log says so once. */
     uint64_t                missed_key_;
-    /* The host log says once that batches complete as recorded. */
     bool                    mark_refused_;
-    /* The host log says once that a flip is read from the buffer itself. */
     bool                    show_refused_;
     bool                    lost_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_D3D_BACKEND_HPP
+#endif

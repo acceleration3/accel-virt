@@ -1,7 +1,3 @@
-/* The extension names a guest's create info carried, with what the host needs
- * added. What is judged is the list the driver is handed: the guest's names in
- * its order, an added name once and only where there is room, and a list the
- * loader would refuse left for the loader to refuse. */
 #include "core/support/status.hpp"
 #include "executor/vulkan/extension_list.hpp"
 #include "harness/executor/extension_list_probe.hpp"
@@ -22,7 +18,7 @@ constexpr const char *surface = "VK_KHR_surface";
 constexpr const char *host = "VK_EXT_external_memory_host";
 constexpr const char *external = "VK_KHR_external_memory";
 
-}  // namespace
+}
 
 TEST(extension_list, keeps_the_guest_s_names_in_order_and_adds_one_after_them)
 { MockPlatform  platform;
@@ -37,8 +33,6 @@ TEST(extension_list, keeps_the_guest_s_names_in_order_and_adds_one_after_them)
   CHECK(std::strcmp(list.names()[1], external) == 0);
   CHECK(std::strcmp(list.names()[2], host) == 0); }
 
-/* A name the guest already enabled is not enabled twice - compared by its
- * characters, because the guest's copy is a different pointer. */
 TEST(extension_list, a_name_already_there_is_not_added_again)
 { MockPlatform  platform;
   ExtensionList list(platform);
@@ -52,7 +46,6 @@ TEST(extension_list, a_name_already_there_is_not_added_again)
   CHECK(list.names()[0] == copy);
   CHECK(list.invariants_hold()); }
 
-/* No names at all is a list, and what is added is the whole of it. */
 TEST(extension_list, an_empty_list_takes_what_is_added)
 { MockPlatform  platform;
   ExtensionList list(platform);
@@ -65,9 +58,6 @@ TEST(extension_list, an_empty_list_takes_what_is_added)
   CHECK(std::strcmp(list.names()[1], host) == 0);
   CHECK(list.invariants_hold()); }
 
-/* However many names the guest enabled - well past the 256 a list once held -
- * the list holds them all, and adds the host's into the room it was told to
- * make: no more than that. */
 TEST(extension_list, holds_every_name_and_adds_only_into_the_room_made)
 { static const char *many[1000];
   for (const char *&name : many) name = surface;
@@ -81,10 +71,6 @@ TEST(extension_list, holds_every_name_and_adds_only_into_the_room_made)
   CHECK(std::strcmp(list.names()[1000], external) == 0);
   CHECK(list.invariants_hold()); }
 
-/* What the list cannot be: a count with no names - which the loader refuses on
- * its own - a name that is not there, or more than memory holds. Each leaves
- * the list empty rather than half-taken, so a later add cannot extend what a
- * previous create left behind. */
 TEST(extension_list, a_list_it_cannot_take_is_refused_and_leaves_it_empty)
 { static const char *many[64];
   for (const char *&name : many) name = surface;
@@ -110,8 +96,6 @@ TEST(extension_list, a_list_it_cannot_take_is_refused_and_leaves_it_empty)
   CHECK_EQ(list.count(), 1u);
   CHECK(list.invariants_hold()); }
 
-/* A name slot the count covers that is empty is a list the driver would
- * dereference null in. */
 TEST(extension_list_invariants, an_empty_name_inside_the_count_breaks_them)
 { MockPlatform  platform;
   ExtensionList list(platform);

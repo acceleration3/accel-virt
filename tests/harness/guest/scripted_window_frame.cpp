@@ -34,8 +34,6 @@ void ScriptedWindowFrame::show(const std::uint8_t bgra[4])
         std::memcpy(&pixels_[at], bgra, 4u);
 }
 
-/* The rows are kept bottom first, as a DIB holds them: the top left is the
- * last rows' first pixels. */
 void ScriptedWindowFrame::show_frame(const std::uint8_t drawn[4], std::uint32_t width, std::uint32_t height,
                                      const std::uint8_t cleared[4])
 {
@@ -46,7 +44,6 @@ void ScriptedWindowFrame::show_frame(const std::uint8_t drawn[4], std::uint32_t 
         }
 }
 
-/* The pixel the bottom-first rows keep last is the window's bottom right. */
 void ScriptedWindowFrame::lose_the_last_pixel()
 {
     const std::uint32_t last = width_ * height_ * 4u;
@@ -74,7 +71,6 @@ bool ScriptedWindowFrame::read(void *window, std::uint32_t width, std::uint32_t 
     return true;
 }
 
-/* What it showed, stretched over the new size, nearest pixel. */
 bool ScriptedWindowFrame::resize(void *window, std::uint32_t width, std::uint32_t height)
 {
     if (refuse_resize_ || window != window_ || width > max_side || height > max_side) return false;
@@ -90,4 +86,4 @@ bool ScriptedWindowFrame::resize(void *window, std::uint32_t width, std::uint32_
     return true;
 }
 
-}  // namespace av
+}

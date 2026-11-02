@@ -1,8 +1,3 @@
-/* DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, the operation union of
- * DXGKARG_BUILDPAGINGBUFFER for DXGK_OPERATION_UPDATE_PAGE_TABLE. A DDI record:
- * PageTableAddress is DXGK_PAGETABLEUPDATEADDRESS's CpuVirtual member and
- * PageTableAddressRemainder the rest of its union; src/km/ddi_record_layout.cpp
- * proves each offset. */
 #ifndef AV_DXGK_BUILD_PAGING_BUFFER_UPDATE_PAGE_TABLE_RECORD_HPP
 #define AV_DXGK_BUILD_PAGING_BUFFER_UPDATE_PAGE_TABLE_RECORD_HPP
 #include "miniport/ddi/dxgk_pte_record.hpp"
@@ -31,6 +26,6 @@ struct DxgkBuildPagingBufferUpdatePageTableRecord {
     uint64_t            FirstPteVirtualAddress;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_BUILD_PAGING_BUFFER_UPDATE_PAGE_TABLE_RECORD_HPP
+#endif

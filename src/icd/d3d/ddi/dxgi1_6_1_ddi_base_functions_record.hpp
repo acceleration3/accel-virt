@@ -1,6 +1,3 @@
-/* DXGI1_6_1_DDI_BASE_FUNCTIONS (dxgiddi.h:798), the 21 slots a WDDM 3.2 device
- * publishes. Every one is written; which answers what is
- * contracts/dxgi_seam.md. A DDI record. */
 #ifndef AV_D3D_DXGI1_6_1_DDI_BASE_FUNCTIONS_RECORD_HPP
 #define AV_D3D_DXGI1_6_1_DDI_BASE_FUNCTIONS_RECORD_HPP
 
@@ -31,6 +28,6 @@ struct Dxgi161DdiBaseFunctionsRecord {
     void *pfnReclaimResources1;
 };
 
-}  // namespace av::d3d
+}
 
-#endif  // AV_D3D_DXGI1_6_1_DDI_BASE_FUNCTIONS_RECORD_HPP
+#endif

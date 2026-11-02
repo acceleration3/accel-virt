@@ -1,8 +1,3 @@
-/* One host wait cut into slices of at most 500 ms (research.md §6), against a
- * performance counter the test moves: a timeout is spent slice by slice and
- * passes once the counter says so, a zero timeout is one zero-length slice, an
- * infinite one never passes, and the arithmetic from ticks to nanoseconds
- * saturates rather than wraps at every counter value and frequency. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/common/sliced_wait.hpp"
 
@@ -17,7 +12,7 @@ struct SlicedWaitProbe {
     static bool          &asked(SlicedWait &wait) { return wait.asked_; }
 };
 
-}  // namespace av::icd
+}
 
 using av::icd::SlicedWaitProbe;
 
@@ -28,7 +23,7 @@ constexpr std::uint64_t ticks_per_second = 10000000u;
 constexpr std::uint64_t ticks_per_ms = ticks_per_second / 1000u;
 constexpr std::uint64_t max = ~std::uint64_t{0};
 
-}  // namespace
+}
 
 TEST(sliced_wait, a_timeout_of_1200_ms_is_three_slices_as_the_clock_moves_500_ms_each)
 { const std::uint64_t start = 7u * ticks_per_second;
@@ -66,7 +61,6 @@ TEST(sliced_wait, a_timeout_shorter_than_a_slice_is_sent_whole)
   std::uint64_t slice = 0u;
   CHECK(wait.next(0u, slice));
   CHECK_EQ(slice, 1u);
-  /* Less than a nanosecond has passed on this counter: the rest is sent. */
   CHECK(wait.next(0u, slice));
   CHECK_EQ(slice, 1u);
   CHECK(!wait.next(1u, slice)); }
@@ -90,8 +84,6 @@ TEST(sliced_wait, an_infinite_timeout_never_passes_even_at_the_counters_end)
   }
 }
 
-/* A counter that cannot say how long a tick is measures nothing: a finite wait
- * gets its one slice, an infinite one keeps going. */
 TEST(sliced_wait, a_counter_with_no_frequency_gives_a_finite_wait_one_slice)
 { SlicedWait finite(1200u * ms, 0u, 0u);
   std::uint64_t slice = 0u;
@@ -110,9 +102,6 @@ TEST(sliced_wait, a_counter_that_went_backwards_has_measured_nothing)
   CHECK(wait.next(0u, slice));
   CHECK_EQ(slice, 500u * ms); }
 
-/* Each product and the sum of ticks to nanoseconds, taken past 2^64: the
- * elapsed time saturates, so the deadline has passed rather than come round
- * again. */
 TEST(sliced_wait, elapsed_time_saturates_at_every_overflow_rather_than_wrapping)
 { struct Case {
       const char   *why;
@@ -121,7 +110,6 @@ TEST(sliced_wait, elapsed_time_saturates_at_every_overflow_rather_than_wrapping)
   };
   const Case cases[] = {
       {"whole seconds times 10^9", 1u, max},
-      /* A counter faster than 18 GHz: the part of a second is what overflows. */
       {"a part of a second times 10^9", max, max - 1u},
       {"their sum", 999999999u, 18446744055262807543ull},
   };
@@ -132,7 +120,6 @@ TEST(sliced_wait, elapsed_time_saturates_at_every_overflow_rather_than_wrapping)
       if (wait.next(check.now, slice))
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "%s: not passed", check.why);
   }
-  /* One nanosecond short of the sum's overflow is not saturated. */
   SlicedWait short_of(max, 0u, 999999999u);
   std::uint64_t slice = 0u;
   CHECK(short_of.next(0u, slice));

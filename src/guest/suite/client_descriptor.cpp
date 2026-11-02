@@ -16,7 +16,6 @@ ClientDescriptor::ClientDescriptor(uint64_t bytes, AllocationKind kind)
     : bytes_{}, pages_((bytes + page_bytes - 1u) / page_bytes)
 {
     AV_SCOPE("ClientDescriptor::ClientDescriptor");
-    /* Sized for it, and a client allocation of any non-zero size is valid. */
     static_cast<void>(AllocationDescriptor(kind, true, SurfaceLayout(), bytes, ScanoutTarget())
                           .encode(bytes_, sizeof bytes_));
 }
@@ -43,4 +42,4 @@ uint64_t       ClientDescriptor::pages() const
     return pages_;
 }
 
-}  // namespace av
+}

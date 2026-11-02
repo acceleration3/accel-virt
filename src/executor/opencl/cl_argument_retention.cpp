@@ -49,4 +49,4 @@ bool ClArgumentRetention::kept(cl_context context, cl_device_id device)
     return answer_ == Answer::kept;
 }
 
-}  // namespace av
+}

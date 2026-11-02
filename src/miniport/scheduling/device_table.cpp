@@ -51,8 +51,6 @@ Status DeviceTable::destroy(void *device)
     if (target == nullptr) return Status::invalid_parameter;
     opens_.destroy_if([&](const DeviceAllocation &open) {
         if (&open.device() != target) return false;
-        /* A process that exits holding a shared object lets go of it here, and
-         * every other process keeps what it has (US1 scenario 3). */
         if (open.shared() != nullptr) static_cast<void>(shared_.close(*open.shared()));
         static_cast<void>(allocations_.close(open.allocation()));
         return true;
@@ -60,10 +58,6 @@ Status DeviceTable::destroy(void *device)
     return devices_.destroy(target);
 }
 
-/* Each handle is resolved before the mutex raises to APC, and the borrowed data
- * is released as each AcquiredHandleData goes out of scope - the pointer it
- * answered is this driver's own allocation, which outlives the loan.
- * hDeviceSpecificAllocation holds it until the open replaces it. */
 Status DeviceTable::resolve(DxgkargOpenAllocationRecord &request)
 {
     AV_SCOPE("DeviceTable::resolve");
@@ -87,26 +81,11 @@ Status DeviceTable::claim(const Allocation &allocation, const DxgkOpenAllocation
     if (data.decode(static_cast<const uint8_t *>(info.pPrivateDriverData), info.PrivateDriverDataSize) != Status::ok)
         return Status::invalid_parameter;
     const SharedObjectRecord &record = data.record();
-    /* An unassigned record on an allocation that already has an identity is
-     * the creating device's own open, which dxgkrnl runs inside every create
-     * after copying the caller's bytes back over whatever the create wrote. So
-     * this is where the minted record is written: the bytes handed to an open
-     * are the ones dxgkrnl copies out to the caller, and the ones it stores
-     * for another process to open by (research.md §15).
-     *
-     * It is no weaker than the assigned case. An opener reaches claim only
-     * once dxgkrnl has resolved the allocation handle for it, and across
-     * processes that handle comes from the NT handle; the record was never
-     * what made the open allowed. */
     if (!record.assigned()) return adopt(allocation, info, data, object);
-    /* The allocation dxgkrnl resolved and the record the creator wrote have to
-     * be the same object: either alone is something a process can arrange. */
     if (record.object_id() != allocation.shared_id()) return Status::invalid_parameter;
     return shared_.open(record, object);
 }
 
-/* The creating device's own open: the identity is the allocation's, and the
- * record goes back into the bytes dxgkrnl will copy out. */
 Status DeviceTable::adopt(const Allocation &allocation, const DxgkOpenAllocationInfoRecord &info,
                           SharedAllocationData &data, SharedObject *&object)
 {
@@ -114,7 +93,6 @@ Status DeviceTable::adopt(const Allocation &allocation, const DxgkOpenAllocation
     SharedObjectRecord minted;
     const Status       opened = shared_.open_minted(allocation.shared_id(), object, minted);
     if (opened != Status::ok) return opened;
-    /* Read just above, so the mint cannot be refused. */
     static_cast<void>(data.mint(minted));
     __builtin_memcpy(info.pPrivateDriverData, data.bytes(), SharedAllocationData::encoded_size);
     return Status::ok;
@@ -143,8 +121,6 @@ Status DeviceTable::open_one(Device &device, DxgkOpenAllocationInfoRecord &info)
     return Status::ok;
 }
 
-/* The first `count` entries hold opens; the rest may still hold resolved
- * handle data, which is not an answer either. */
 void DeviceTable::close_opened(DxgkargOpenAllocationRecord &request, uint32_t count)
 {
     AV_SCOPE("DeviceTable::close_opened");
@@ -274,7 +250,6 @@ uint32_t DeviceTable::opens() const
     return opens_.live();
 }
 
-/* Every open joins a live device to an allocation that counts it. */
 void DeviceTable::report(StateWriter &writer)
 {
     AV_SCOPE("DeviceTable::report");
@@ -313,4 +288,4 @@ bool DeviceTable::invariants_hold() const
            });
 }
 
-}  // namespace av
+}

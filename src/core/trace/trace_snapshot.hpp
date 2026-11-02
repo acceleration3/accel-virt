@@ -1,7 +1,3 @@
-/* A copy of a trace table, read by something that did not write it - the
- * guest's inspector reading another process's section or the driver's escape,
- * a crash handler reading its own - and therefore validated field by field
- * against the bytes held before any slot is looked at (docs/trace.md). */
 #ifndef AV_TRACE_SNAPSHOT_HPP
 #define AV_TRACE_SNAPSHOT_HPP
 
@@ -20,14 +16,10 @@ class TraceSnapshot {
 public:
     TraceSnapshot();
 
-    /* malformed unless `bytes` holds a whole version 1 table: the magic, the
-     * layout's sizes, a slot count at most TraceLayout::max_slots whose slots
-     * fit, and a NUL within the module name. Nothing is kept on failure. */
     [[nodiscard]] Status read(const uint8_t *bytes, size_t size);
 
     uint32_t      slots() const;
     TraceSlotView slot(uint32_t index) const;
-    /* The module name, always terminated; empty before a read. */
     const char   *module() const;
     uint32_t      process() const;
     uint64_t      created() const;
@@ -48,6 +40,6 @@ private:
     friend struct TraceSnapshotProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_TRACE_SNAPSHOT_HPP
+#endif

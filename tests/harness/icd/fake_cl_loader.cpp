@@ -7,9 +7,6 @@
 namespace av {
 
 namespace {
-
-/* The loader holds a vendor's platforms by the dispatch table in their first
- * word; this is that read, spelled once. */
 const cl_icd_dispatch *first_word(const void *object)
 {
     return object != nullptr ? *reinterpret_cast<const cl_icd_dispatch *const *>(object) : nullptr;
@@ -17,7 +14,7 @@ const cl_icd_dispatch *first_word(const void *object)
 
 using PlatformIds = cl_int(CL_API_CALL *)(cl_uint, cl_platform_id *, cl_uint *);
 
-}  // namespace
+}
 
 FakeClLoader::FakeClLoader(clicd::ClIcdRoot &root)
     : root_(&root), hidden_(false), state_(Load::kept), platforms_{}, count_(0u), suffix_{},
@@ -44,12 +41,10 @@ const cl_icd_dispatch *FakeClLoader::dispatch_of(const void *object) const
 FakeClLoader::Load FakeClLoader::load()
 {
     count_ = 0u;
-    /* 1. The one symbol a vendor library is resolved by. */
     if (hidden_) {
         state_ = Load::no_extension_function;
         return state_;
     }
-    /* 2. The enumeration, asked for through it by name. */
     void *const asked = root_->extension_function("clIcdGetPlatformIDsKHR");
     if (asked == nullptr) {
         state_ = Load::no_enumeration;
@@ -57,7 +52,6 @@ FakeClLoader::Load FakeClLoader::load()
     }
     const PlatformIds enumerate = reinterpret_cast<PlatformIds>(asked);
 
-    /* 3 and 4. The count, then the platforms. */
     cl_uint available = 0u;
     if (enumerate(0u, nullptr, &available) != CL_SUCCESS) {
         state_ = Load::enumeration_failed;
@@ -73,15 +67,12 @@ FakeClLoader::Load FakeClLoader::load()
         return state_;
     }
 
-    /* 5. A platform with no dispatch table is skipped before it is asked
-     * anything at all. */
     if (first_word(platforms_[0]) == nullptr) {
         state_ = Load::not_dispatchable;
         return state_;
     }
     const cl_icd_dispatch *const table = first_word(platforms_[0]);
 
-    /* 6. The extensions, size then bytes. */
     std::size_t bytes = 0u;
     if (table->clGetPlatformInfo(platforms_[0], CL_PLATFORM_EXTENSIONS, 0u, nullptr, &bytes) !=
             CL_SUCCESS ||
@@ -92,8 +83,6 @@ FakeClLoader::Load FakeClLoader::load()
         return state_;
     }
 
-    /* 7. The suffix, which a platform cannot decline: one that does is
-     * dropped, and the driver with it. */
     if (table->clGetPlatformInfo(platforms_[0], CL_PLATFORM_ICD_SUFFIX_KHR, 0u, nullptr, &bytes) !=
             CL_SUCCESS ||
         bytes > sizeof suffix_ ||
@@ -230,8 +219,6 @@ cl_int FakeClLoader::set_user_event_status(cl_event event, cl_int status)
 
 cl_int FakeClLoader::wait_for_events(cl_uint count, const cl_event *events)
 {
-    /* The real loader dispatches a wait through the first event's table, so a
-     * wait of none has nothing to dispatch through. */
     if (count == 0u || events == nullptr) return CL_INVALID_VALUE;
     const cl_icd_dispatch *const table = first_word(events[0]);
     return table != nullptr ? table->clWaitForEvents(count, events) : CL_INVALID_EVENT;
@@ -278,4 +265,4 @@ cl_int FakeClLoader::release_mem(cl_mem buffer)
     return table != nullptr ? table->clReleaseMemObject(buffer) : CL_INVALID_MEM_OBJECT;
 }
 
-}  // namespace av
+}

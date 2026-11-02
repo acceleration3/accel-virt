@@ -66,4 +66,4 @@ bool RegionMover::offset_of(uint64_t x, uint64_t y, uint32_t pitch, uint64_t len
     return true;
 }
 
-}  // namespace av
+}

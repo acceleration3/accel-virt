@@ -6,7 +6,7 @@ namespace {
 
 constexpr std::uint64_t page = 4096u;
 
-}  // namespace
+}
 
 ScriptedWindowChains::ScriptedWindowChains()
     : refuse_opens_(true), refuse_presents_(false), opens_(0u), presents_(0u), closes_(0u), window_(nullptr),
@@ -30,7 +30,6 @@ bool ScriptedWindowChains::open(void *window, std::uint64_t luid, std::uint32_t 
     slots_ = slots;
     for (std::uint32_t slot = 0u; slot < slots; slot++) {
         ids[slot] = first_id + slot;
-        /* Whole pages, as a kernel surface's bytes are. */
         bytes[slot] = (static_cast<std::uint64_t>(width) * height * 4u + page - 1u) / page * page;
     }
     return true;
@@ -63,4 +62,4 @@ std::uint32_t ScriptedWindowChains::last_slots() const { return slots_; }
 std::uint32_t ScriptedWindowChains::last_slot() const { return slot_; }
 void         *ScriptedWindowChains::last_closed() const { return closed_; }
 
-}  // namespace av
+}

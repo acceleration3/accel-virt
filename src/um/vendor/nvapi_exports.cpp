@@ -1,12 +1,3 @@
-/* nvapi64.dll's entry point (docs/vendor-libraries.md): NVAPI exports one
- * function, nvapi_QueryInterface, which answers each call's ID - the IDs of
- * nvapi_interface.h (NVIDIA NVAPI SDK, MIT) - with the function, or null for a
- * call this library does not make, as NVAPI does for a call a driver predates.
- * Each function is one line into the library in this translation unit's
- * storage, C-linked as an ABI entry point though only nvapi.def's one name is
- * exported - the vendor library's process-lifetime state (constitution III) -
- * and the DLL entry does nothing at attach or detach. NVAPI's functions are
- * cdecl. */
 #include "icd/vendor/ddi/nv_display_driver_memory_info_record.hpp"
 #include "um/vendor/nvapi_library.hpp"
 
@@ -14,22 +5,21 @@
 
 #include <stdint.h>
 
-/* Each call's ID, as nvapi_interface.h names it. */
 namespace {
-constexpr uint32_t initialize_call = 0x0150E828u;   /* NvAPI_Initialize */
-constexpr uint32_t unload_call = 0xD22BDD7Eu;   /* NvAPI_Unload */
-constexpr uint32_t enum_physical_gpus_call = 0xE5AC921Fu;   /* NvAPI_EnumPhysicalGPUs */
-constexpr uint32_t full_name_call = 0xCEEE8E9Fu;   /* NvAPI_GPU_GetFullName */
-constexpr uint32_t pci_identifiers_call = 0x2DDFB66Eu;   /* NvAPI_GPU_GetPCIIdentifiers */
-constexpr uint32_t bus_id_call = 0x1BE0B8E5u;   /* NvAPI_GPU_GetBusId */
-constexpr uint32_t bus_slot_id_call = 0x2A0A350Fu;   /* NvAPI_GPU_GetBusSlotId */
-constexpr uint32_t gpu_type_call = 0xC33BAEB1u;   /* NvAPI_GPU_GetGPUType */
-constexpr uint32_t memory_info_call = 0x07F9B368u;   /* NvAPI_GPU_GetMemoryInfo */
-constexpr uint32_t adapter_id_call = 0x0FF07FDEu;   /* NvAPI_GPU_GetAdapterIdFromPhysicalGpu */
-constexpr uint32_t driver_and_branch_version_call = 0x2926AAADu;   /* NvAPI_SYS_GetDriverAndBranchVersion */
-constexpr uint32_t enum_display_call = 0x9ABDD40Du;   /* NvAPI_EnumNvidiaDisplayHandle */
-constexpr uint32_t gpus_from_display_call = 0x34EF9506u;   /* NvAPI_GetPhysicalGPUsFromDisplay */
-}  // namespace
+constexpr uint32_t initialize_call = 0x0150E828u;
+constexpr uint32_t unload_call = 0xD22BDD7Eu;
+constexpr uint32_t enum_physical_gpus_call = 0xE5AC921Fu;
+constexpr uint32_t full_name_call = 0xCEEE8E9Fu;
+constexpr uint32_t pci_identifiers_call = 0x2DDFB66Eu;
+constexpr uint32_t bus_id_call = 0x1BE0B8E5u;
+constexpr uint32_t bus_slot_id_call = 0x2A0A350Fu;
+constexpr uint32_t gpu_type_call = 0xC33BAEB1u;
+constexpr uint32_t memory_info_call = 0x07F9B368u;
+constexpr uint32_t adapter_id_call = 0x0FF07FDEu;
+constexpr uint32_t driver_and_branch_version_call = 0x2926AAADu;
+constexpr uint32_t enum_display_call = 0x9ABDD40Du;
+constexpr uint32_t gpus_from_display_call = 0x34EF9506u;
+}
 
 static constinit av::NvapiLibrary nvapi_library;
 

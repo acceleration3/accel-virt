@@ -9,7 +9,7 @@ namespace {
 constexpr uint64_t published_marker = uint64_t{0x80} << 56u;
 constexpr uint32_t bits_per_count = 8u;
 
-}  // namespace
+}
 
 GlErrorWord::GlErrorWord() : word_(published_marker)
 {
@@ -21,8 +21,6 @@ GlErrorWord::GlErrorWord(uint64_t word) : word_(word)
     AV_SCOPE("GlErrorWord::GlErrorWord");
 }
 
-/* Each count wraps within its own byte: the guest compares counts, never
- * sums them. */
 void GlErrorWord::record(uint32_t error)
 {
     AV_SCOPE("GlErrorWord::record");
@@ -51,4 +49,4 @@ uint64_t GlErrorWord::word() const
     return word_;
 }
 
-}  // namespace av
+}

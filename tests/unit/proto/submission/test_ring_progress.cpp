@@ -18,7 +18,7 @@ struct RingProgressProbe {
     RingProgress &progress;
 };
 
-}  // namespace av
+}
 
 using av::RingProgressProbe;
 
@@ -27,7 +27,7 @@ namespace {
 constexpr std::uint64_t page = 4096u;
 constexpr std::uint64_t top = ~std::uint64_t{0};
 
-}  // namespace
+}
 
 TEST(ring_progress, starts_unobserved)
 { const RingProgress progress;

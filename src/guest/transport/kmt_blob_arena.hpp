@@ -1,9 +1,3 @@
-/* The room a context lends bulk data in (docs/host-memory.md): host memory
- * the CPU reads and writes on both sides - readback memory, cached - opened
- * on the context's own transport and imported whole, which the host executor
- * takes as the region its bulk-data commands read and write. While it is
- * held, the transport's blobs() lends from its view, a lease's offset being
- * its distance from the start - where the host finds it. */
 #ifndef AV_KMT_BLOB_ARENA_HPP
 #define AV_KMT_BLOB_ARENA_HPP
 
@@ -21,9 +15,6 @@ struct KmtBlobArenaProbe;
 class KmtBlobArena {
 public:
     static constexpr uint64_t default_bytes = uint64_t{16} << 20u;
-    /* A Direct3D 12 session's upload and readback heaps are its arena's too,
-     * and an application's allocator takes them 64 MiB at a time: 256 MiB ran
-     * out under a game streaming its world in. */
     static constexpr uint64_t max_bytes = uint64_t{1} << 30u;
 
     KmtBlobArena(GuestConnection &connection, KmtTransport &transport);
@@ -31,30 +22,12 @@ public:
     KmtBlobArena(const KmtBlobArena &) = delete;
     KmtBlobArena &operator=(const KmtBlobArena &) = delete;
 
-    /* `bytes` in whole pages and at least default_bytes, opened and
-     * imported, then lent through the transport. invalid_state when one is
-     * held; invalid_parameter, with nothing asked, past max_bytes; otherwise
-     * HostAllocation's refusal with nothing left held. */
     [[nodiscard]] Status open(uint64_t bytes);
-    /* Takes the lending back, releases the import, then the chunk, each
-     * attempted whatever the one before answered: the first failure, and
-     * nothing is held after. ok with nothing asked when nothing is held. */
     [[nodiscard]] Status close();
-    /* close() for a context whose device was lost: the import is forgotten
-     * rather than released - destroying the context frees it on the host -
-     * and the chunk is let go. The chunk's failure, if any. */
     [[nodiscard]] Status abandon();
     bool                 lending() const;
-    /* The chunk's size; 0 unless lending. */
     uint64_t             bytes() const;
-    /* The process's view of the chunk, or null unless lending. The device
-     * holds the same memory as one import, so an offset of this names the
-     * same bytes on both sides - which is what lets a buffer be made over it
-     * (feature 052, T033). */
     uint8_t             *view() const;
-    /* The host's error word, the chunk's last eight bytes, which the arena
-     * never lends (docs/protocol.md, "Error word and published slots"); 0
-     * unless lending. */
     uint64_t             host_errors() const;
 
     bool invariants_hold() const;
@@ -67,6 +40,6 @@ private:
     friend struct KmtBlobArenaProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_KMT_BLOB_ARENA_HPP
+#endif

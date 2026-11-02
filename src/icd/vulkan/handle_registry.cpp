@@ -8,11 +8,9 @@
 namespace av::icd {
 
 namespace {
-
-/* LoaderHandle::Kind's names, in its order. */
 constexpr const char *kind_names[] = {"instance", "physical_device", "device", "queue", "command_buffer"};
 
-}  // namespace
+}
 
 HandleRegistry::HandleRegistry(BlockSource &memory)
     : tree_(memory), index_(memory, Pool::paged), instances_(memory, Pool::paged), unindexed_(0u)
@@ -29,23 +27,18 @@ Status HandleRegistry::wrap(LoaderHandle::Kind kind, uint64_t host, Connection *
     if (!parent_fits(kind, connection, parent)) return Status::invalid_parameter;
     handle = existing(kind, host, connection);
     if (handle != nullptr) return Status::ok;
-    /* Room for the instance first, so a connection's instance is always found. */
     if (kind == LoaderHandle::Kind::instance && instance_of(connection) == nullptr &&
         instances_.reserve(instances_.count() + 1u) != Status::ok)
         return Status::no_memory;
     const Status made = tree_.make(handle, kind, host, connection, parent);
     if (made != Status::ok) return made;
-    /* A handle the index cannot take is still found, by the walk. */
     uint32_t slot = 0u;
     if (index_.insert(key_of(kind, host, connection), handle, slot) != Status::ok) unindexed_++;
-    /* A second instance on one connection is not the one its handles are made
-     * through: the first stays. */
     if (kind == LoaderHandle::Kind::instance)
         static_cast<void>(instances_.insert(address_of(connection), handle, slot));
     return Status::ok;
 }
 
-/* splitmix64's finaliser over the three. */
 uint64_t HandleRegistry::key_of(LoaderHandle::Kind kind, uint64_t host, const Connection *connection) const
 {
     AV_SCOPE("HandleRegistry::key_of");
@@ -221,7 +214,6 @@ uint32_t HandleRegistry::number_of(const LoaderHandle *handle) const
 bool HandleRegistry::invariants_hold() const
 {
     AV_SCOPE("HandleRegistry::invariants_hold");
-    /* A parent is proven live before the handle's own invariants read it. */
     if (!tree_.invariants_hold() || !index_.invariants_hold() || !instances_.invariants_hold()) return false;
     bool instances_live = true;
     instances_.for_each([&](uint64_t connection, LoaderHandle *const &instance) {
@@ -239,4 +231,4 @@ bool HandleRegistry::invariants_hold() const
     return whole && indexed == index_.count() && indexed + unindexed_ == tree_.live();
 }
 
-}  // namespace av::icd
+}

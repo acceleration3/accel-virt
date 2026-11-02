@@ -1,10 +1,3 @@
-/* A Direct3D driver's adapters: each kernel adapter a device was asked for,
- * the host's capabilities for it - learned once, the first time - and the one
- * session every device of this runtime on it shares (D3dSession), a
- * generation at a time (icd::LinkGenerations). Direct3D
- * 9's, 11's and 12's drivers each keep one over their own Caps, which is made
- * empty and has learned() and learn(transport, kmt, adapter): the questions
- * it asks go over a channel opened for them alone and closed after. */
 #ifndef AV_UM_ADAPTER_SESSIONS_HPP
 #define AV_UM_ADAPTER_SESSIONS_HPP
 
@@ -31,38 +24,23 @@ template <typename Caps>
 class AdapterSessions {
 public:
     static constexpr uint32_t max_adapters = AvgpuAdapters::max_adapters;
-    /* The slot of no adapter: the host runs none of this runtime on it, or
-     * every slot is taken. */
     static constexpr uint32_t none = max_adapters;
 
-    /* `refusal` says the host answered no capabilities for an adapter. A
-     * session opens an arena of `arena_bytes`, a slice store of
-     * `slice_store_bytes` (none for 0) where the host draws in place, and
-     * selects and flushes with the runtime's two commands (D3dCommandStream). */
     AdapterSessions(Kmt &kmt, BlockSource &memory, DriverLog &log, const char *refusal, uint64_t arena_bytes,
                     uint64_t slice_store_bytes, uint32_t select_command, uint32_t flush_command);
     ~AdapterSessions();
     AdapterSessions(const AdapterSessions &) = delete;
     AdapterSessions &operator=(const AdapterSessions &) = delete;
 
-    /* The slot of `kmt_adapter`, its capabilities learned on its first ask -
-     * `learned` says whether that was this one - or none. */
     uint32_t         slot_of(uint32_t kmt_adapter, bool &learned);
     Caps            &caps(uint32_t slot);
-    /* The session a new device on the slot joins, opened on its first ask;
-     * null when there is no memory for one. One the host faulted is left to
-     * the devices it has, and a new device gets a session of its own
-     * (icd::LinkGenerations). */
     d3d::D3dSession *session(uint32_t slot);
 
 private:
-    /* The channel the capabilities are asked over: one question at a time,
-     * small enough answers to need no arena. */
     static constexpr uint8_t  probe_ring_order = 16u;
     static constexpr uint32_t probe_reply_bytes = 64u * 1024u;
     static constexpr size_t   probe_staging_bytes = 16u * 1024u;
 
-    /* `caps` learned over a channel opened on `kmt_adapter`. */
     [[nodiscard]] bool learn(Caps &caps, uint32_t kmt_adapter);
 
     Kmt                           &kmt_;
@@ -74,8 +52,6 @@ private:
     uint32_t                       select_command_;
     uint32_t                       flush_command_;
     Caps                           caps_[max_adapters];
-    /* Each slot's sessions: the one new devices join, and the faulted ones
-     * whose devices the runtime has not let go of yet. */
     ObjectStorage<icd::LinkGenerations<d3d::D3dSession>> sessions_[max_adapters];
     uint32_t                       adapters_[max_adapters];
 };
@@ -156,6 +132,6 @@ d3d::D3dSession *AdapterSessions<Caps>::session(uint32_t slot)
     return joined;
 }
 
-}  // namespace av
+}
 
-#endif  // AV_UM_ADAPTER_SESSIONS_HPP
+#endif

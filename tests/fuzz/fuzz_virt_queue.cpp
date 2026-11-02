@@ -1,7 +1,3 @@
-/* A hostile device driving one virtqueue's used ring, interleaved with the
- * driver adding and harvesting. Nothing the device writes may corrupt the
- * driver's shadow: invariants hold, free descriptors never exceed the size,
- * and a harvested head was always one the driver published. */
 #include "core/support/status.hpp"
 #include "miniport/virtio/virt_queue.hpp"
 #include "miniport/virtio/virtq_segment.hpp"
@@ -23,7 +19,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
                                    queue.device_area(), queue.size());
     bool published[8] = {};
     av::WireReader reader(data, size);
-    /* A read past the end latches and stops advancing, so stop on failure too. */
     while (reader.remaining() != 0u && reader.status() == av::Status::ok) {
         const std::uint8_t op = reader.read_u8();
         switch (op % 5u) {

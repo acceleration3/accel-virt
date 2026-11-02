@@ -7,8 +7,6 @@
 namespace av {
 
 namespace {
-
-/* Binding points and nothing more: the vehicle draws with neither. */
 constexpr GLenum copy_read_buffer = 0x8F36u;
 constexpr GLenum copy_write_buffer = 0x8F37u;
 constexpr GLenum buffer_size_query = 0x8764u;
@@ -19,7 +17,7 @@ constexpr GLenum texture_height = 0x1001u;
 constexpr GLenum texture_depth = 0x8071u;
 constexpr GLenum texture_internal_format = 0x1003u;
 
-}  // namespace
+}
 
 GlObjectBytes::GlObjectBytes()
     : is_buffer_(nullptr), bind_buffer_(nullptr), get_buffer_parameter_(nullptr), get_buffer_sub_data_(nullptr),
@@ -86,7 +84,6 @@ bool GlObjectBytes::quiet()
 bool GlObjectBytes::buffer_size(uint32_t buffer, uint64_t &bytes)
 {
     AV_SCOPE("GlObjectBytes::buffer_size");
-    /* Asked first, since binding a name that is none would make it one. */
     if (current() == nullptr || buffer == 0u || is_buffer_(buffer) == 0u) return false;
     static_cast<void>(quiet());
     GLint64 size = 0;
@@ -120,8 +117,6 @@ bool GlObjectBytes::write_buffer(uint32_t buffer, uint64_t bytes, const void *fr
     return quiet();
 }
 
-/* A texture bound at a target it is not of is GL_INVALID_OPERATION, and no
- * binding: that is how a texture of another target is told. */
 bool GlObjectBytes::bound(uint32_t target, uint32_t texture)
 {
     AV_SCOPE("GlObjectBytes::bound");
@@ -185,4 +180,4 @@ void GlObjectBytes::finish()
     if (current() != nullptr) finish_();
 }
 
-}  // namespace av
+}

@@ -12,8 +12,6 @@ PresentReads::PresentReads(Platform &platform)
     AV_SCOPE("PresentReads::PresentReads");
 }
 
-/* The clock only goes up, so the newest read has the latest expiry, and a
- * second reader never shortens the first's. */
 bool PresentReads::open()
 {
     AV_SCOPE("PresentReads::open");
@@ -52,7 +50,6 @@ bool PresentReads::holding(uint64_t now) const
     return open_ != 0u && now < expires_;
 }
 
-/* A read that is open has the expiry it was opened under. */
 bool PresentReads::invariants_hold()
 {
     AV_SCOPE("PresentReads::invariants_hold");
@@ -60,4 +57,4 @@ bool PresentReads::invariants_hold()
     return open_ == 0u || expires_ != 0u;
 }
 
-}  // namespace av
+}

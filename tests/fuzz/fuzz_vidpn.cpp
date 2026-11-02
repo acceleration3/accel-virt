@@ -1,8 +1,3 @@
-/* The VidPn DDIs over an attacker-shaped VidPn: paths to any source and target
- * with any transformation, mode sets seeded with any sizes and formats, any
- * pivot, one dxgkrnl callback refused, and any descriptor window. Whatever is
- * refused, every path, mode set and mode info must be released, nothing written
- * past the descriptor buffer, and no IRQL rule broken. */
 #include "miniport/ddi/dxgk_device_descriptor_record.hpp"
 #include "miniport/ddi/dxgkarg_commit_vidpn_record.hpp"
 #include "miniport/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
@@ -34,7 +29,6 @@ constexpr std::uint32_t guard = 32u;
 constexpr std::uint8_t  poison = 0x5Au;
 constexpr std::int32_t  no_memory = static_cast<std::int32_t>(0xC0000017u);
 const std::int32_t      formats[] = {22, 21, 0};
-/* Uninitialized, Identity, a real transformation, Unpinned and NotSpecified. */
 const std::int32_t      transformations[] = {0, 1, 2, 5, 254, 255};
 const std::int32_t      gamma_ramps[] = {0, 1, 2, 4};
 
@@ -105,7 +99,7 @@ void drive(av::WireReader &reader)
     if (fixture.platform().unclaimed_violations() != 0u) __builtin_trap();
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

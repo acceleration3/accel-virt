@@ -6,11 +6,9 @@
 namespace av {
 
 namespace {
-
-/* {124c5515-2c7f-4159-a086-ef9cc0405e27} */
 constexpr GUID layout_guid = {0x124c5515u, 0x2c7fu, 0x4159u, {0xa0u, 0x86u, 0xefu, 0x9cu, 0xc0u, 0x40u, 0x5eu, 0x27u}};
 
-}  // namespace
+}
 
 D3d12RootLayout::D3d12RootLayout() : stored_{}
 {
@@ -58,4 +56,4 @@ bool D3d12RootLayout::has_descriptor(uint32_t index, uint32_t type) const
     return index < stored_.count_ && stored_.types_[index] == type && type != constants_type;
 }
 
-}  // namespace av
+}

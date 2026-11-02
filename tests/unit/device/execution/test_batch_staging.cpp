@@ -1,4 +1,3 @@
-/* The copies a context's worker executes from, allocated at setup. */
 #include "core/support/status.hpp"
 #include "device/execution/batch_staging.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -20,7 +19,7 @@ struct BatchStagingProbe {
     static void repair(BatchStaging &staging) { staging.payload_capacity_ = 0u; staging.reply_capacity_ = 0u; }
 };
 
-}  // namespace av
+}
 
 TEST(batch_staging_allocate, holds_a_payload_block_and_a_reply_block_until_released)
 { MockHost host;

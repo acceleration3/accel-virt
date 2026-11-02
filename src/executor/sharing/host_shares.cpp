@@ -21,12 +21,8 @@ HostShares::HostShares(BlockSource &blocks, DriverLog &lines)
 HostShares::~HostShares()
 {
     AV_SCOPE("HostShares::~HostShares");
-    /* Nothing is left to hand the device: whatever was waiting goes with
-     * retired_. */
     clear();
 }
-
-/* ------------------------------------------------------------ objects */
 
 Status HostShares::publish(uint32_t domain, uint64_t id, uint32_t kind, uint64_t size, SessionBackend &session,
                            uint64_t handle)
@@ -35,16 +31,11 @@ Status HostShares::publish(uint32_t domain, uint64_t id, uint32_t kind, uint64_t
     if (id == 0u) return Status::invalid_parameter;
     Share *const known = pinned(domain, id);
     if (known != nullptr) {
-        /* Shared already: by this session as the same object (again, or a
-         * Direct3D resource it made shared and now hands to other APIs), or by
-         * somebody else, which a hostile guest would drive at the worst time. */
         bool mine = false;
         bool exported = false;
         {
             const ThreadLockHold locked(lock_);
             const bool publisher = known->publisher() == &session;
-            /* A Direct3D resource is published before anyone says what kind of
-             * object it is to other APIs: its first publish by handle does. */
             if (publisher && known->origin() != ShareOrigin::object && known->descriptor() < 0)
                 known->describe(kind, size);
             mine = publisher && known->accepts(kind, size);
@@ -70,7 +61,6 @@ Status HostShares::publish(uint32_t domain, uint64_t id, uint32_t kind, uint64_t
     if (!session.export_object(kind, handle, handle_kind, descriptor)) return Status::not_supported;
     const ThreadLockHold locked(lock_);
     Share *const share = make(domain, id, kind, size, ShareOrigin::object);
-    /* Shared by another session between the export and this lock. */
     if (share == nullptr) return index_.find(domain, id) != nullptr ? Status::conflict : Status::no_memory;
     share->keep_descriptor(handle_kind, descriptor);
     share->publish_by(&session);
@@ -97,8 +87,6 @@ Status HostShares::open(uint32_t domain, uint64_t id, uint32_t kind, uint64_t si
         handle_kind = share->handle_kind();
         fd = share->descriptor();
     }
-    /* The descriptor stays the share's, open while it is pinned; the importer
-     * keeps a duplicate of its own. */
     uint64_t made = 0u;
     uint64_t detail = 0u;
     if (answer == Status::ok && !session.import_object(kind, handle_kind, fd, size, shape, into, made, detail))
@@ -139,8 +127,6 @@ void HostShares::close(uint32_t domain, uint64_t id, SessionBackend &session, ui
     settle(*share);
 }
 
-/* ----------------------------------------------------------- Direct3D */
-
 bool HostShares::describe_image(uint32_t domain, uint64_t id, const SharedImageShape &shape)
 {
     AV_SCOPE("HostShares::describe_image");
@@ -151,10 +137,6 @@ bool HostShares::describe_image(uint32_t domain, uint64_t id, const SharedImageS
     return true;
 }
 
-/* ----------------------------------------------------------- lifetime */
-
-/* What it imported is released through it one hold at a time, outside the
- * lock as a close is: a backend's release may wait on its host driver. */
 void HostShares::session_closed(SessionBackend &session)
 {
     AV_SCOPE("HostShares::session_closed");
@@ -236,7 +218,6 @@ uint32_t HostShares::live() const
 void HostShares::report(StateWriter &writer)
 {
     AV_SCOPE("HostShares::report");
-    /* A dump must not wait on the worker holding the table. */
     const ReportGate gate(lock_, writer, "shares");
     if (!gate.held()) return;
     uint32_t by_origin[3] = {0u, 0u, 0u};
@@ -290,8 +271,6 @@ bool HostShares::invariants_hold() const
     });
     return unfound == 0u && index_.count() == indexed && holders == holders_.live();
 }
-
-/* ------------------------------------------------------------ private */
 
 Share *HostShares::pinned(uint32_t domain, uint64_t id)
 {
@@ -380,4 +359,4 @@ void HostShares::milestone(uint32_t live)
         .write();
 }
 
-}  // namespace av
+}

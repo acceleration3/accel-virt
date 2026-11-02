@@ -10,4 +10,4 @@ void RetiredSyncTokensProbe::set_run(uint32_t index, uint64_t first, uint64_t la
     retired.runs_.at(index).last_ = last;
 }
 
-}  // namespace av
+}

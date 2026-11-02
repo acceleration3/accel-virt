@@ -1,12 +1,3 @@
-/* D3d9Device's draws and clears, and the streams they read
- * (d3d9_device.hpp).
- *
- * The host draws from its own buffers. A user pointer (DrawPrimitiveUP and
- * its indexed twin) or a system-memory buffer has none, so the draw's
- * vertices and indices are copied into a dynamic ring the host draws from
- * instead: from the draw's first vertex, so every stream of that draw is
- * bound from its first vertex too, and the draw counts from 0. Streams are
- * bound when a draw needs them and only where the host's binding differs. */
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
 #include "icd/d3d/list_pieces.hpp"
@@ -20,23 +11,19 @@ namespace {
 
 constexpr uint32_t vertex_ring_bytes = 4u << 20u;
 constexpr uint32_t index_ring_bytes = 1u << 20u;
-/* Where a ring's next write lands: aligned for any stream offset and index. */
 constexpr uint32_t ring_alignment = 16u;
-/* D3DUSAGE_WRITEONLY | D3DUSAGE_DYNAMIC. */
 constexpr uint32_t ring_usage = 0x8u | 0x200u;
 constexpr uint32_t write_discard = 0x2000u;
 constexpr uint32_t write_no_overwrite = 0x1000u;
 constexpr uint32_t index16 = D3DDDIFMT_INDEX16;
 constexpr uint32_t index32 = D3DDDIFMT_INDEX32;
 constexpr uint32_t index16_bytes = 2u;
-/* D3DCLEAR_TARGET | ZBUFFER | STENCIL: the DDI adds COMPUTERECTS, which is
- * the runtime's alone. */
 constexpr uint32_t clear_flags = 0x7u;
 constexpr uint32_t clear_rects = 64u;
 
 static_assert(sizeof(RECT) == sizeof(d3d9proto::Rect), "a DDI rectangle crosses as the wire's");
 
-}  // namespace
+}
 
 uint32_t D3d9Device::vertices_of(D3DPRIMITIVETYPE type, uint32_t primitives) const
 {
@@ -52,8 +39,6 @@ uint32_t D3d9Device::vertices_of(D3DPRIMITIVETYPE type, uint32_t primitives) con
     }
 }
 
-/* Front to back with no-overwrite, and from the start again with a discard
- * when the write does not fit: the host never waits on what it still draws. */
 bool D3d9Device::ring_write(Ring &ring, bool index_buffer, uint32_t format, const void *data, uint32_t bytes,
                             uint32_t alignment, uint32_t &offset)
 {
@@ -80,8 +65,6 @@ bool D3d9Device::ring_write(Ring &ring, bool index_buffer, uint32_t format, cons
     return true;
 }
 
-/* Sent as the unlock would, and the lock left open: its discard is spent on
- * the first send, so what follows only adds to the buffer. */
 HRESULT D3d9Device::send_locked(D3d9Resource &buffer)
 {
     AV_SCOPE("D3d9Device::send_locked");
@@ -104,8 +87,6 @@ HRESULT D3d9Device::bind(uint32_t stream, const Bound &wanted)
     return S_OK;
 }
 
-/* `stream0_bytes` is where stream 0's vertex 0 lies past its start - a
- * DrawPrimitiveUP's offset into the application's memory. */
 HRESULT D3d9Device::prepare_streams(uint32_t first_vertex, uint32_t vertex_count, uint32_t stream0_bytes,
                                     bool &rebased)
 {
@@ -148,9 +129,6 @@ HRESULT D3d9Device::prepare_streams(uint32_t first_vertex, uint32_t vertex_count
     return S_OK;
 }
 
-/* `user` is a DrawIndexedPrimitiveUP's indices from its first; otherwise the
- * bound index buffer's from `first_index`. `start` is where the host's
- * binding has the first. */
 HRESULT D3d9Device::prepare_indices(const void *user, uint32_t index_bytes, uint32_t first_index, uint32_t count,
                                     uint32_t &start)
 {
@@ -181,7 +159,6 @@ HRESULT D3d9Device::prepare_indices(const void *user, uint32_t index_bytes, uint
     return S_OK;
 }
 
-/* A user pointer holds for the one draw the runtime set it for. */
 HRESULT D3d9Device::draw_primitive(const D3DDDIARG_DRAWPRIMITIVE *args, const UINT *)
 {
     AV_SCOPE("D3d9Device::draw_primitive");
@@ -215,8 +192,6 @@ HRESULT D3d9Device::draw_primitive2(const D3DDDIARG_DRAWPRIMITIVE2 *args)
                : lost(__func__);
 }
 
-/* Rebased, index i is vertex i - MinIndex of the ring: the draw's base
- * vertex is -MinIndex. */
 HRESULT D3d9Device::draw_indexed_primitive(const D3DDDIARG_DRAWINDEXEDPRIMITIVE *args)
 {
     AV_SCOPE("D3d9Device::draw_indexed_primitive");
@@ -264,7 +239,6 @@ HRESULT D3d9Device::draw_indexed_primitive2(const D3DDDIARG_DRAWINDEXEDPRIMITIVE
                : lost(__func__);
 }
 
-/* Clear9 carries 64 rectangles; more are cleared 64 at a time. */
 HRESULT D3d9Device::clear(const D3DDDIARG_CLEAR *args, UINT count, const RECT *rects)
 {
     AV_SCOPE("D3d9Device::clear");
@@ -280,4 +254,4 @@ HRESULT D3d9Device::clear(const D3DDDIARG_CLEAR *args, UINT count, const RECT *r
     return S_OK;
 }
 
-}  // namespace av::d3d9
+}

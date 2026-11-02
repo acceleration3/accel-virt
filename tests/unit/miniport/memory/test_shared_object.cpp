@@ -1,7 +1,3 @@
-/* One shared object the adapter knows. Its whole job is to count devices, and
- * the two ends of that count are what matter: a count that wrapped would make
- * an object nobody holds look held, and one that went below zero would free an
- * object another process still has open. */
 #include "miniport/memory/allocation.hpp"
 #include "miniport/memory/aperture_segment.hpp"
 #include "miniport/memory/memory_segments.hpp"
@@ -25,7 +21,7 @@ struct SharedObjectProbe {
     static std::uint32_t ceiling() { return SharedObject::max_opens; }
 };
 
-}  // namespace av
+}
 
 using av::Allocation;
 using av::AllocationDescriptor;
@@ -42,7 +38,6 @@ namespace {
 
 constexpr std::uint64_t page = Allocation::page_bytes;
 
-/* One allocation for the object to name, over the aperture this adapter has. */
 class Fixture {
 public:
     Fixture()
@@ -69,7 +64,7 @@ private:
     SharedObject            object_;
 };
 
-}  // namespace
+}
 
 TEST(shared_object, is_born_naming_its_allocation_with_nobody_holding_it)
 { Fixture rig;
@@ -124,7 +119,6 @@ TEST(shared_object_open, refuses_at_the_ceiling_rather_than_wrapping_to_nobody_h
   CHECK_STATUS(rig.object().open(), Status::no_space);
   rig.check();
   CHECK_EQ(rig.object().opens(), SharedObjectProbe::ceiling());
-  /* And one below it still takes the last one. */
   SharedObjectProbe::set_opens(rig.object(), SharedObjectProbe::ceiling() - 1u);
   CHECK_STATUS(rig.object().open(), Status::ok);
   rig.check();
@@ -162,8 +156,6 @@ TEST(shared_object_invariants, refuse_an_object_with_no_id_no_kind_no_allocation
   SharedObjectProbe::set_size(rig.object(), 2u * page);
   CHECK(rig.object().invariants_hold());
 
-  /* A fence's size is none at all, which is the record's rule and the wire
-   * body's: an object of either kind holding pages is one no create made. */
   SharedObjectProbe::set_kind(rig.object(), SharedObjectKind::monitored_fence);
   CHECK(!rig.object().invariants_hold());
   SharedObjectProbe::set_size(rig.object(), 0u);
@@ -175,16 +167,12 @@ TEST(shared_object_invariants, refuse_an_object_with_no_id_no_kind_no_allocation
   SharedObjectProbe::set_size(rig.object(), 2u * page);
   CHECK(rig.object().invariants_hold());
 
-  /* Forgotten while still held is a count that lost track: dxgkrnl destroys
-   * a shared allocation only once nobody holds it. */
   CHECK_STATUS(rig.object().open(), Status::ok);
   SharedObjectProbe::forget_allocation(rig.object());
   CHECK(!rig.object().invariants_hold());
   CHECK_STATUS(rig.object().close(), Status::ok);
   CHECK(rig.object().invariants_hold()); }
 
-/* Forgotten as its allocation is destroyed: it names that allocation no more,
- * and says so. */
 TEST(shared_object, a_forgotten_object_names_no_allocation)
 { Fixture rig;
   CHECK(!rig.object().forgotten());

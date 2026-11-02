@@ -1,8 +1,3 @@
-/* Vector add over MockKmt, the test playing the host through ScriptedHost:
- * every step passes when the host answers as an OpenCL GPU does; the output is
- * judged element by element; a failure at each step is reported with the rest
- * skipped; and every object made is released in reverse, whatever failed, with
- * nothing that was never made named to the host. */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
@@ -43,7 +38,6 @@ const PciIdentity av(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_devic
                       PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 constexpr std::uint32_t device_removed = 0xC00E0102u;
 constexpr std::uint32_t elements = OpenClScenario::elements;
-/* The commands a whole run sends before its first release. */
 constexpr std::uint32_t first_release = 17u;
 
 bool has_line(const GuestReport &report, const char *line)
@@ -63,7 +57,6 @@ public:
     AdapterSearch &search() { return search_; }
     ScriptedHost  &host() { return host_; }
 
-    /* A command's body, past its header. */
     WireReader body(std::uint32_t index) const
     {
         return WireReader(kmt_.command_bytes(index) + CommandHeader::encoded_size,
@@ -83,7 +76,6 @@ public:
         return count;
     }
 
-    /* Every answer queued was awaited, and only the adapter is left open. */
     void check_nothing_left_but_the_adapter()
     {
         CHECK_EQ(kmt_.queued_answers(), 0u);
@@ -104,7 +96,6 @@ void correct_sum(float *sum)
     for (std::uint32_t index = 0u; index < elements; index++) sum[index] = static_cast<float>(3u * index);
 }
 
-/* The first `answers` answers of a successful run, in the order it waits. */
 void answer_until(ScriptedHost &host, std::uint32_t answers)
 {
     const std::uint64_t platforms[] = {ScriptedHost::cl_cpu_platform, ScriptedHost::cl_gpu_platform};
@@ -124,7 +115,7 @@ void answer_until(ScriptedHost &host, std::uint32_t answers)
     }
 }
 
-}  // namespace
+}
 
 TEST(opencl_scenario, vector_add_runs_on_the_host_and_everything_is_released_in_reverse)
 { Rig rig;
@@ -158,7 +149,6 @@ TEST(opencl_scenario, vector_add_runs_on_the_host_and_everything_is_released_in_
   CHECK_EQ(rig.kmt().commands(), sizeof expected / sizeof expected[0]);
   for (std::uint32_t index = 0u; index < sizeof expected / sizeof expected[0]; index++)
       CHECK_EQ(rig.kmt().command_id(index), expected[index]);
-  /* Released newest first, each by the handle the host made. */
   const std::uint64_t released[] = {ScriptedHost::cl_kernel,       ScriptedHost::cl_program,
                                     ScriptedHost::cl_buffer + 2u,  ScriptedHost::cl_buffer + 1u,
                                     ScriptedHost::cl_buffer,       ScriptedHost::cl_queue,
@@ -173,10 +163,6 @@ TEST(opencl_scenario, vector_add_runs_on_the_host_and_everything_is_released_in_
   CHECK(report.invariants_hold());
   rig.check_nothing_left_but_the_adapter(); }
 
-/* The device searched is the GPU platform's, not the CPU runtime listed first;
- * the kernel's arguments are the buffers in order, as cl_mem handles the host
- * made; the inputs cross copied from guest memory; and the read asks, blocking,
- * for exactly the output's bytes. The program command fits the transport. */
 TEST(opencl_scenario, sends_the_handles_and_inputs_the_host_needs)
 { Rig rig;
   rig.host().opencl_run();
@@ -204,7 +190,7 @@ TEST(opencl_scenario, sends_the_handles_and_inputs_the_host_needs)
       CHECK(body.read_varint(size));
       CHECK_EQ(body.read_u64(), ScriptedHost::cl_buffer + argument);
   }
-  { WireReader body = rig.body(6u);   /* the second input: 2i */
+  { WireReader body = rig.body(6u);
     CHECK_EQ(body.read_u64(), ScriptedHost::cl_context);
     std::uint64_t flags = 0u;
     std::uint64_t size = 0u;
@@ -217,7 +203,7 @@ TEST(opencl_scenario, sends_the_handles_and_inputs_the_host_needs)
     float values[4] = {};
     CHECK(body.read(values, sizeof values));
     CHECK(values[3] == 6.0f); }
-  { WireReader body = rig.body(7u);   /* the output: written, never copied */
+  { WireReader body = rig.body(7u);
     CHECK_EQ(body.read_u64(), ScriptedHost::cl_context);
     std::uint64_t flags = 0u;
     std::uint64_t size = 0u;
@@ -238,8 +224,6 @@ TEST(opencl_scenario, sends_the_handles_and_inputs_the_host_needs)
   CHECK(rig.kmt().command_size(8u) <= av::ScenarioTransport::command_bytes);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* Each element is judged: three wrong answers leave 61 matched, which the step
- * reports, and everything made is still released. */
 TEST(opencl_scenario, a_wrong_sum_fails_with_how_many_elements_matched)
 { Rig rig;
   float sum[ScriptedHost::cl_elements] = {};
@@ -260,8 +244,6 @@ TEST(opencl_scenario, a_wrong_sum_fails_with_how_many_elements_matched)
   CHECK_EQ(rig.releases(), 7u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* A read that answers fewer bytes than the output leaves the rest unmatched,
- * even on a scenario whose previous run read every element right. */
 TEST(opencl_scenario, a_short_read_matches_only_what_came_back)
 { Rig rig;
   float sum[ScriptedHost::cl_elements] = {};
@@ -280,12 +262,10 @@ TEST(opencl_scenario, a_short_read_matches_only_what_came_back)
   CHECK_EQ(report.failed(), 1u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* Each step's failure is the last step reported, with the OpenCL error on the
- * line, and exactly what was made before it is released. */
 TEST(opencl_scenario, a_failure_at_each_step_releases_only_what_was_made)
 { struct Case {
       std::uint32_t answers;
-      std::uint32_t failing;   /* 0 platform, 1 no platform, 2 no GPU, 3 created, 4 result, 5 read */
+      std::uint32_t failing;
       std::int32_t  error;
       const char   *line;
       const char   *skipped;
@@ -311,7 +291,7 @@ TEST(opencl_scenario, a_failure_at_each_step_releases_only_what_was_made)
       answer_until(rig.host(), failure.answers);
       switch (failure.failing) {
           case 0u: case 1u: rig.host().cl_ids(failure.error, nullptr, 0u, 0u); break;
-          case 2u:   /* neither the CPU runtime nor the second platform has a GPU */
+          case 2u:
               rig.host().cl_ids(failure.error, nullptr, 0u, 0u);
               rig.host().cl_ids(failure.error, nullptr, 0u, 0u);
               break;
@@ -332,17 +312,15 @@ TEST(opencl_scenario, a_failure_at_each_step_releases_only_what_was_made)
       rig.check_nothing_left_but_the_adapter();
   } }
 
-/* Every release is sent whatever the host answers, and the step reports the
- * first refusal. */
 TEST(opencl_scenario, a_refused_release_fails_release_with_the_first_error)
 { Rig rig;
   float sum[ScriptedHost::cl_elements] = {};
   correct_sum(sum);
   rig.host().opencl_run_to_read(sum);
   rig.host().cl_result(0);
-  rig.host().cl_result(-44);   /* the program */
+  rig.host().cl_result(-44);
   for (std::uint32_t release = 0u; release < 4u; release++) rig.host().cl_result(0);
-  rig.host().cl_result(-34);   /* the context */
+  rig.host().cl_result(-34);
   av::MockPlatform report_memory;
   GuestReport report(report_memory);
   OpenClScenario scenario(rig.kmt(), report, rig.search());
@@ -352,8 +330,6 @@ TEST(opencl_scenario, a_refused_release_fails_release_with_the_first_error)
   CHECK_EQ(rig.releases(), 7u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* More platforms than the room: the count is the host's, the search covers the
- * ids that fit, and the GPU on the first of them is the one used. */
 TEST(opencl_scenario, more_platforms_than_the_room_reports_the_host_s_count)
 { Rig rig;
   std::uint64_t platforms[16] = {};
@@ -384,8 +360,6 @@ TEST(opencl_scenario, more_platforms_than_the_room_reports_the_host_s_count)
   CHECK_EQ(report.failed(), 0u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* A context lost mid-run: the error output keeps the value it had before the
- * call, which is a failure, and the lost context sends no releases. */
 TEST(opencl_scenario, a_lost_context_fails_the_step_it_was_lost_at)
 { Rig rig;
   answer_until(rig.host(), 3u);

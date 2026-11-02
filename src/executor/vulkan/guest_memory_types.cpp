@@ -19,8 +19,6 @@ void GuestMemoryTypes::learn(const VkPhysicalDeviceMemoryProperties &host, uint3
                                                                              : VK_MAX_MEMORY_HEAPS;
     for (uint32_t heap = 0u; heap < properties_.memoryHeapCount; heap++)
         properties_.memoryHeaps[heap] = host.memoryHeaps[heap];
-    /* The source maps only host-visible memory: a type outside that is never
-     * backed, whatever the mask says. */
     uint32_t sourced = 0u;
     for (uint32_t type = 0u; type < host_types_; type++)
         if ((host.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u)
@@ -35,9 +33,6 @@ void GuestMemoryTypes::learn(const VkPhysicalDeviceMemoryProperties &host, uint3
     order();
 }
 
-/* A type that is DEVICE_LOCAL alone, after the source's narrowing, already
- * serves a heap. A protected type does not: nothing but protected work may
- * use it, so no twin is derived from one either. */
 uint32_t GuestMemoryTypes::twin_origins(const VkPhysicalDeviceMemoryProperties &host, uint32_t backed) const
 {
     AV_SCOPE("GuestMemoryTypes::twin_origins");
@@ -73,11 +68,6 @@ void GuestMemoryTypes::append(VkMemoryPropertyFlags flags, uint32_t heap, uint32
     if (backed) backed_ |= 1u << type;
 }
 
-/* VkPhysicalDeviceMemoryProperties: a type whose flags are a strict subset of
- * another's comes first. Each step takes the first type nothing left must
- * precede, so types the rule does not order keep the host's order - which is
- * the host's word on heap performance among equal flags, and on AMD's device
- * coherent types coming last. */
 void GuestMemoryTypes::order()
 {
     AV_SCOPE("GuestMemoryTypes::order");
@@ -85,8 +75,6 @@ void GuestMemoryTypes::order()
         move_to(ready_from(position), position);
 }
 
-/* Strict subset is a strict partial order, so among the types from `first`
- * on there is always one nothing precedes: the walk ends on it. */
 uint32_t GuestMemoryTypes::ready_from(uint32_t first) const
 {
     AV_SCOPE("GuestMemoryTypes::ready_from");
@@ -180,4 +168,4 @@ bool GuestMemoryTypes::invariants_hold() const
     return host_types_ == VK_MAX_MEMORY_TYPES ? shown == 0xFFFFFFFFu : shown == (1u << host_types_) - 1u;
 }
 
-}  // namespace av
+}

@@ -57,4 +57,4 @@ void RendererExtent::read(WireReader &reader)
     length_ = reader.read_u64();
 }
 
-}  // namespace av
+}

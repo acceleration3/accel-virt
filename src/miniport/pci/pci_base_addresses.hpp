@@ -1,6 +1,3 @@
-/* The six base address registers of a type 0 PCI header, copied from a
- * configuration space snapshot (PCI 3.0 6.2.5.1). The device wrote them, so a
- * BAR is only an address after its type bits have been checked. */
 #ifndef AV_PCI_BASE_ADDRESSES_HPP
 #define AV_PCI_BASE_ADDRESSES_HPP
 
@@ -15,12 +12,8 @@ class PciBaseAddresses {
 public:
     static constexpr uint8_t bar_count = 6u;
 
-    /* A snapshot too short to hold the BARs, or of a non-type-0 header, makes
-     * every address() malformed. */
     PciBaseAddresses(const uint8_t *config_space, size_t length);
 
-    /* The memory address `bar` decodes: not_supported for an I/O BAR, not_found
-     * for one firmware left unassigned, malformed for a reserved type. */
     [[nodiscard]] Status address(uint8_t bar, uint64_t &address) const;
 
 private:
@@ -38,6 +31,6 @@ private:
     bool     complete_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_PCI_BASE_ADDRESSES_HPP
+#endif

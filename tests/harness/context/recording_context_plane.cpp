@@ -5,8 +5,6 @@
 #include <unistd.h>
 
 namespace av {
-
-/* A page, so a test that reads the descriptor's size reads something. */
 RecordingContextPlane::~RecordingContextPlane()
 {
     if (composed_fd_ >= 0) ::close(composed_fd_);
@@ -47,4 +45,4 @@ int RecordingContextPlane::fresh_eventfd() const
     return ::eventfd(1u, EFD_CLOEXEC);
 }
 
-}  // namespace av
+}

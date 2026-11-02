@@ -1,6 +1,4 @@
 #version 450
-// One triangle covering the whole viewport, made from the vertex index alone so
-// the draw needs no vertex buffer.
 
 void main() {
     vec2 corner = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);

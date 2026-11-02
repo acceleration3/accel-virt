@@ -28,4 +28,4 @@ Status HostLoss::send()
     return status == CommandHeader::host_device_kept ? Status::not_supported : Status::malformed;
 }
 
-}  // namespace av
+}

@@ -1,7 +1,3 @@
-/* Heaps and resources: every one made on the host under an id, at a guest
- * GPU virtual address this device hands out, and a CPU-visible heap placed in
- * the session's arena so that what the application maps is what the host's
- * GPU reads. */
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
@@ -14,41 +10,27 @@
 namespace av::d3d12 {
 
 namespace {
-
-/* D3D12_HEAP_TYPE, D3D12_CPU_PAGE_PROPERTY, D3D12_MEMORY_POOL. */
 constexpr uint32_t heap_default = 1u;
 constexpr uint32_t heap_upload = 2u;
 constexpr uint32_t heap_readback = 3u;
-/* D3D12_HEAP_FLAG_SHARED and D3D12_HEAP_FLAG_DENY_*. */
 constexpr uint32_t heap_shared = 0x1u;
 constexpr uint32_t deny_buffers = 0x4u;
 constexpr uint32_t deny_rt_ds_textures = 0x40u;
 constexpr uint32_t deny_non_rt_ds_textures = 0x80u;
-/* D3D12_RESOURCE_FLAG_*. */
 constexpr uint32_t allow_render_target = 0x1u;
 constexpr uint32_t allow_depth_stencil = 0x2u;
 constexpr uint32_t allow_unordered_access = 0x4u;
 constexpr uint32_t deny_shader_resource = 0x8u;
 constexpr uint32_t allow_cross_adapter = 0x10u;
 constexpr uint32_t allow_simultaneous_access = 0x20u;
-/* D3D12_RESOURCE_STATES a CPU-visible heap's resources are made in, which
- * the host - like Direct3D 12 - insists on. */
 constexpr uint32_t state_generic_read = 0xAC3u;
 constexpr uint32_t state_copy_dest = 0x400u;
 constexpr uint32_t buffer_dimension = 1u;
 constexpr uint64_t buffer_alignment = uint64_t{64} * 1024u;
 constexpr uint64_t refused_size = ~uint64_t{0};
 constexpr uint64_t page_bytes = 4096u;
-/* The runtime sums a resource's data, its additional data header and its
- * additional data, aligning the running size up to each part's alignment in
- * turn and taking any wrap as UINT64_MAX (d3d12core DDIRAIToAPIRAI). Aligned to
- * 0, size - 1 + 0 is below size: every resource of a driver that leaves the
- * alignments of parts it does not have at zero measures UINT64_MAX, and an
- * application that sizes a heap by it has CreateHeap refused. */
 constexpr UINT32   no_additional_data_alignment = 1u;
 
-/* D3D12_RESOURCE_STATES by D3D12DDI_BARRIER_LAYOUT, the layout D3D12Core hands
- * a driver that takes legacy barriers the state it was made in as. */
 uint32_t state_of_layout(D3D12DDI_BARRIER_LAYOUT layout)
 {
     AV_SCOPE("state_of_layout");
@@ -80,7 +62,6 @@ uint32_t api_resource_flags(uint32_t ddi)
     return flags;
 }
 
-/* The DDI says what a heap allows; the API, what it denies. */
 uint32_t api_heap_flags(uint32_t ddi)
 {
     AV_SCOPE("api_heap_flags");
@@ -107,7 +88,7 @@ d3d12proto::HeapProperties properties_of(uint32_t type)
     return made;
 }
 
-}  // namespace
+}
 
 d3d12proto::ResourceDesc D3d12Device::resource_desc(const D3D12DDIARG_CREATERESOURCE_0109 &args) const
 {
@@ -142,8 +123,6 @@ uint64_t D3d12Device::allocation_bytes(const d3d12proto::ResourceDesc &desc, uin
     uint64_t bytes = refused_size;
     if (!sent(d3d12proto::av_d3d12_ResourceAllocation12(wire(), desc, &bytes, &alignment), "ResourceAllocation12"))
         return refused_size;
-    /* The runtime hands an application this size as it is, and one that sizes
-     * a heap by it gets E_INVALIDARG from CreateHeap with no word of why. */
     if (bytes == refused_size) log_unsized(desc);
     return bytes;
 }
@@ -191,8 +170,6 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
         const HRESULT memory = heap_memory(args.ByteSize, heap);
         if (FAILED(memory)) return memory;
     } else if (committed) {
-        /* A committed resource in the GPU's own memory is one host object; the
-         * heap the runtime asked for with it names nothing there. */
         return S_OK;
     }
     const uint64_t memory = heap.memory != nullptr ? heap.memory->handle() : 0u;
@@ -208,10 +185,6 @@ HRESULT D3d12Device::heap_memory(uint64_t bytes, HeapRecord &heap)
 {
     AV_SCOPE("D3d12Device::heap_memory");
     if (heap.type == heap_readback && lend_pages(bytes, heap) == Status::ok) return S_OK;
-    /* Written by the CPU and read by the GPU, or the other way about: the
-     * memory the host gives either is the one native drivers use. A
-     * write-back heap the device would not take pages for is host memory
-     * too, which GetWriteWatch knows nothing of. */
     const HostMemoryRequest memory(heap.type == heap_upload ? HostMemoryRequest::Kind::upload
                                                             : HostMemoryRequest::Kind::readback,
                                    0u);
@@ -220,10 +193,6 @@ HRESULT D3d12Device::heap_memory(uint64_t bytes, HeapRecord &heap)
     return E_OUTOFMEMORY;
 }
 
-/* Every write-back heap, since D3D12Core passes D3D12_HEAP_FLAG_ALLOW_WRITE_WATCH
- * on to no driver: it is a write-back heap whose mapping GetWriteWatch must
- * answer for - GFXReconstruct's capture makes every upload buffer one - and
- * only memory the process allocated with MEM_WRITE_WATCH is. */
 Status D3d12Device::lend_pages(uint64_t bytes, HeapRecord &heap)
 {
     AV_SCOPE("D3d12Device::lend_pages");
@@ -301,10 +270,6 @@ D3D12DDI_HEAP_AND_RESOURCE_SIZES D3d12Device::calc_private_heap_and_resource_siz
     return D3D12DDI_HEAP_AND_RESOURCE_SIZES{sizeof(HeapRecord), sizeof(ResourceRecord)};
 }
 
-/* Four calls in one: a heap alone (pResource null), a committed resource
- * with the heap made for it, a resource placed in an existing heap (pHeap
- * null), at the offset D3D12Core puts in ReuseBufferGPUVA - and a reserved
- * resource, with neither a heap nor a buffer to be placed in. */
 HRESULT D3d12Device::create_heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_args, D3D12DDI_HHEAP heap_handle,
                                               D3D12DDI_HRTRESOURCE runtime, const D3D12DDIARG_CREATERESOURCE_0109 *args,
                                               const D3D12DDI_CLEAR_VALUES *clear,
@@ -324,15 +289,8 @@ HRESULT D3d12Device::heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_a
     if (heap_args != nullptr && heap_handle.pDrvPrivate == nullptr) return E_INVALIDARG;
     if (heap_args != nullptr) {
         HeapRecord &heap = *static_cast<HeapRecord *>(heap_handle.pDrvPrivate);
-        /* A committed resource's heap comes unsized - D3D12Core passes all
-         * ones - since its size is the resource's; a shared one's (a swap
-         * chain buffer's) comes sized. */
         D3D12DDIARG_CREATEHEAP_0001 sized = *heap_args;
         const bool unsized = sized.ByteSize == 0u || sized.ByteSize == refused_size;
-        /* An explicit heap arrives with a resource too - the buffer D3D12Core
-         * makes over all of it, which placed resources then name - but sized,
-         * and a buffer: only a committed resource's heap is one host object
-         * with it. */
         const bool committed = args != nullptr && (unsized || args->ResourceType != D3D12DDI_RT_BUFFER);
         if (committed && unsized) {
             uint64_t alignment = buffer_alignment;
@@ -342,13 +300,6 @@ HRESULT D3d12Device::heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_a
         const HRESULT made = make_heap(sized, heap, committed);
         if (FAILED(made) || args == nullptr) return made;
         if (handle.pDrvPrivate == nullptr) return E_INVALIDARG;
-        /* A committed texture whose heap D3D12Core sized itself is one made
-         * shared - a swap chain buffer, which DXGI makes for DWM to compose.
-         * The heap's flags say nothing of sharing or display (a driver whose
-         * heaps are all kernel allocations need not know); a shared heap's
-         * size is what D3D12Core asked the driver for, and a committed one's
-         * is left to the driver. The host makes it shared, and it gets the
-         * kernel allocation DWM opens it by. */
         const bool shown = committed && !unsized && args->ResourceType == D3D12DDI_RT_TEXTURE2D;
         if (shown) heap.flags |= heap_shared;
         ResourceRecord &resource = *static_cast<ResourceRecord *>(handle.pDrvPrivate);
@@ -361,9 +312,6 @@ HRESULT D3d12Device::heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_a
     return place_resource(heap_handle, args, clear, handle);
 }
 
-/* A resource placed in an existing heap: D3D12Core names the heap by the
- * buffer it made over all of it when the heap was created, and the offset
- * into that buffer, and passes no heap handle. */
 HRESULT D3d12Device::place_resource(D3D12DDI_HHEAP heap_handle, const D3D12DDIARG_CREATERESOURCE_0109 *args,
                                     const D3D12DDI_CLEAR_VALUES *clear, D3D12DDI_HRESOURCE handle)
 {
@@ -371,7 +319,6 @@ HRESULT D3d12Device::place_resource(D3D12DDI_HHEAP heap_handle, const D3D12DDIAR
     if (args == nullptr || handle.pDrvPrivate == nullptr) return E_INVALIDARG;
     const D3D12DDIARG_HRESOURCE_PLACEMENT &at = args->ReuseBufferGPUVA.BaseAddress.UMD;
     const auto *const spanning = static_cast<const ResourceRecord *>(at.hResource.pDrvPrivate);
-    /* No heap, and no buffer of one to be placed in: a reserved resource. */
     if (heap_handle.pDrvPrivate == nullptr && spanning == nullptr)
         return reserve_resource(*args, clear, *static_cast<ResourceRecord *>(handle.pDrvPrivate));
     HeapRecord *const in = heap_handle.pDrvPrivate != nullptr ? static_cast<HeapRecord *>(heap_handle.pDrvPrivate)
@@ -389,11 +336,6 @@ D3D12DDI_HEAP_AND_RESOURCE_SIZES D3d12Device::calc_private_opened_heap_and_resou
     return D3D12DDI_HEAP_AND_RESOURCE_SIZES{sizeof(HeapRecord), sizeof(ResourceRecord)};
 }
 
-/* D3D12Core opens an existing heap as it opens a shared one: an allocation it
- * made itself - D3DKMT_STANDARDALLOCATIONTYPE_EXISTINGHEAP over the
- * application's pages, which the kernel describes as a one-row GDI surface
- * (StandardAllocation) - with the buffer spanning it. A heap shared from
- * elsewhere is still not opened. */
 HRESULT D3d12Device::open_heap_and_resource(const D3D12DDIARG_OPENHEAP_0003 *args, D3D12DDI_HHEAP heap_handle,
                                             D3D12DDI_HRTRESOURCE, D3D12DDI_HPROTECTEDRESOURCESESSION_0030,
                                             D3D12DDI_HRESOURCE handle)
@@ -447,10 +389,6 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
     return make_resource(spanning, nullptr, heap, 0u, resource);
 }
 
-/* A share holds its texture until the guest gives the allocation back, and
- * nothing else does: not given back, every texture shown stayed in VRAM until
- * its device went. The resource alone names it: pfnDeallocateCb refuses a
- * resource and a list together (KernelDevice::deallocate). */
 void D3d12Device::give_back(const ResourceRecord &resource)
 {
     AV_SCOPE("D3d12Device::give_back");
@@ -542,8 +480,6 @@ VOID D3d12Device::check_existing_resource_allocation_info(D3D12DDI_HRESOURCE han
     info->AdditionalDataAlignment = no_additional_data_alignment;
 }
 
-/* Only a texture in a CPU-visible heap has a layout the CPU sees, and this
- * driver makes none: every CPU-visible heap holds only buffers. */
 VOID D3d12Device::check_subresource_info(D3D12DDI_HRESOURCE, UINT, D3D12DDI_SUBRESOURCE_INFO *info)
 {
     AV_SCOPE("D3d12Device::check_subresource_info");
@@ -551,4 +487,4 @@ VOID D3d12Device::check_subresource_info(D3D12DDI_HRESOURCE, UINT, D3D12DDI_SUBR
 }
 
 
-}  // namespace av::d3d12
+}

@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""A compiled DXIL shader, as the Direct3D 12 runtime hands it to a driver.
-
-The Direct3D 12 runtime gives a user-mode driver a shader's program and its
-signatures as registers, masks and system values (D3D12DDIARG_CREATE_SHADER),
-not the container the application compiled. This splits a dxc container that
-way - the DXIL chunk's program, and each signature as the executor's wire
-carries it, set to the stage's - and writes both, with the container itself
-for the path that takes one whole, as a C++ header:
-
-    ddi_dxil_fixture.py <name> <stage> <shader.dxil> > <name>.hpp
-
-stage is the wire's: 0 vertex, 1 hull, 2 domain, 3 geometry, 4 pixel. The
-system values are the token format's (D3D10_SB_NAME); a pixel shader's
-render-target outputs carry none.
-"""
 import struct
 import sys
 

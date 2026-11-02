@@ -1,4 +1,3 @@
-// The guest build's platform: Windows, no C runtime, d3dcompiler_47 for HLSL.
 #include "framework.h"
 
 #include <d3dcommon.h>
@@ -57,7 +56,7 @@ void write_out(const char *text, size_t length)
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), text, static_cast<DWORD>(length), &wrote, nullptr);
 }
 
-}  // namespace
+}
 
 void log(const char *text)
 {
@@ -114,7 +113,6 @@ bool read_file(const char *path, Blob &blob)
 
 void set_shader_directory(const char *directory) { copy_text(shader_directory, sizeof shader_directory, directory); }
 
-// Compiled here, where Microsoft's compiler is, and kept for the host to load.
 bool shader(const char *name, const char *source, const char *entry, const char *target, Blob &bytecode)
 {
     if (compiler == nullptr) {
@@ -128,7 +126,6 @@ bool shader(const char *name, const char *source, const char *entry, const char 
     size_t length = 0;
     while (source[length] != '\0') length++;
     ID3DBlob *code = nullptr, *errors = nullptr;
-    /* 1 << 15: D3DCOMPILE_OPTIMIZATION_LEVEL3, which d3dcommon.h does not carry. */
     const HRESULT compiled = compiler(source, length, name, nullptr, nullptr, entry, target,
                                       (1u << 15), 0, &code, &errors);
     if (errors != nullptr) {
@@ -158,12 +155,10 @@ bool create_device(ID3D11Device **device, ID3D11DeviceContext **context)
                                        device, nullptr, context));
 }
 
-}  // namespace samples
+}
 
 extern "C" void avd3d11samples_entry()
 {
-    // The command line split on spaces outside double quotes, as ASCII:
-    // shell32's CommandLineToArgvW would be one more import for this.
     const wchar_t *line = GetCommandLineW();
     char         **argv = static_cast<char **>(samples::allocate(sizeof(char *) * 64));
     int            argc = 0;

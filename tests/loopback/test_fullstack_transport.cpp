@@ -1,10 +1,3 @@
-/* L4 through the real driver: the 043 transport's round trip with nothing of
- * the miniport's job left in the harness. KmtTransport's calls reach the
- * registered DDI table through DdiKmt; the driver's AvContextTable publishes
- * the ring, fence page and reply slot and sets the host context up over the
- * control queue the real device core answers; a submission rings the doorbell
- * page the core's worker waits on, and the fence interrupt it raises reaches
- * the driver's ISR and DPC, whose DMA_COMPLETED is what the wait sees. */
 #include "miniport/driver/ddi_slot.hpp"
 #include "miniport/driver/ddi_table.hpp"
 #include "core/platform/platform.hpp"
@@ -32,7 +25,7 @@ struct KmtTransportProbe {
     static void forget_fault(KmtTransport &transport) { transport.faulted_ = false; }
 };
 
-}  // namespace av
+}
 
 using av::DdiKmt;
 using av::DdiSlot;
@@ -51,22 +44,16 @@ using av::WireReader;
 using av::WireWriter;
 
 namespace {
-
-/* The av suite's transport: 1 KiB commands and a page of reply (feature 044). */
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
-/* The command TransportScenario sends; MockExecutorOps echoes every payload it
- * does not script, as tests/qemu/echo_executor.cpp does for this one. */
 constexpr std::uint32_t echo_command = 0x10001u;
 constexpr std::uint64_t echo_payload = 0x0123456789ABCDEFull;
 constexpr std::uint8_t  ring_order = 12u;
 constexpr std::int32_t  power_d0 = 1;
 constexpr std::int32_t  power_d3 = 4;
-/* STATUS_INVALID_PARAMETER, what SubmitCommandVirtual answers a lost context. */
 constexpr std::uint32_t invalid_parameter = 0xC000000Du;
 
-/* One echo on `transport`: whether it came back as exactly the payload sent. */
 bool echoes(KmtTransport &transport, std::uint64_t payload)
 {
     WireWriter request = transport.request_writer();
@@ -76,10 +63,6 @@ bool echoes(KmtTransport &transport, std::uint64_t payload)
     return reply.remaining() == sizeof payload && reply.read_u64() == payload;
 }
 
-/* How many of the driver's fences have completed once every one `transport`
- * handed it has, or the rig gave up: a process that read its answer from its
- * own memory made no wait, and the driver's completion reaches the rig with
- * the next interrupt the rig delivers. */
 std::uint32_t settled_fences(FullStackRig &rig, const KmtTransport &transport)
 {
     constexpr std::uint32_t passes = 20000u;
@@ -91,7 +74,7 @@ std::uint32_t settled_fences(FullStackRig &rig, const KmtTransport &transport)
     return rig.kmt().fences().completed();
 }
 
-}  // namespace
+}
 
 TEST(fullstack_adapter, starts_on_the_real_device_core_with_its_capset_and_doorbells)
 { FullStackRig rig;
@@ -101,32 +84,20 @@ TEST(fullstack_adapter, starts_on_the_real_device_core_with_its_capset_and_doorb
   CHECK_EQ(rig.started(), 0);
   CHECK(rig.fdo().started());
   CHECK(rig.platform().logged_line("avgpu: StartDevice"));
-  /* The capset came from the device core, not from a scripted answer. */
   CHECK(rig.platform().logged_line("avgpu: device capset status 0x00000000"));
-  /* The host GPU's name and memory, from that capset, are where Device
-   * Manager, WMI and DXGI read an adapter's. */
   CHECK(rig.platform().logged_line("avgpu: adapter description status 0x00000000"));
   CHECK(rig.platform().described_device() != nullptr);
   CHECK(rig.platform().device_description_is("mock gpu"));
   CHECK(rig.platform().driver_text_is("HardwareInformation.AdapterString", "mock gpu"));
   CHECK_EQ(rig.platform().driver_number("HardwareInformation.qwMemorySize"), 24ull << 30);
-  /* The hostmem region is the driver's host window, and nothing is placed in
-   * it until a process asks (docs/host-window.md). */
   CHECK(rig.platform().logged_line("avgpu: host window status 0x00000000"));
   CHECK_EQ(rig.device().device().blobs(), 0u);
-  CHECK(rig.bridge().answered_by_core() >= 2u);      /* the capset's two */
-  CHECK(rig.bridge().answered_by_base() >= 1u);      /* GET_DISPLAY_INFO */
+  CHECK(rig.bridge().answered_by_core() >= 2u);
+  CHECK(rig.bridge().answered_by_base() >= 1u);
   CHECK_EQ(rig.fdo().children(), 1u);
-  /* BAR 0's doorbell pages, the virtio BAR and the MSI-X table stay mapped. */
   CHECK(rig.dxgkrnl().live_mappings() >= 2u);
   CHECK_EQ(rig.device().doorbells().stores(), 0u); }
 
-/* What a Vulkan ICD sizes its heaps and names its adapter by: the rig's LUID,
- * and budgets that are the driver's own segments - the aperture over the
- * guest's 8 GiB of system memory, which is not local, and the host GPU's 24 GiB
- * as the capset reports it, which is; the hostmem region is the driver's host
- * window, not a segment (docs/host-window.md) - with this process's
- * allocations counted where they live, none of them in the host GPU's. */
 TEST(fullstack_adapter, the_luid_and_the_video_memory_budgets_are_the_drivers_segments)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -154,8 +125,6 @@ TEST(fullstack_adapter, the_luid_and_the_video_memory_budgets_are_the_drivers_se
                          reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::non_local, budget, usage), Status::ok);
-  /* The page naming the context and the DMA buffer: the ring, fence page and
-   * reply slot are the driver's own pages, which no segment counts. */
   CHECK_EQ(usage, 2u * 4096u);
   CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::local, budget, usage), Status::ok);
   CHECK_EQ(usage, 0u);
@@ -191,28 +160,19 @@ TEST(fullstack_transport, an_echo_crosses_the_real_driver_and_the_real_device_co
   CHECK(rig.device().executor().executed() > executed);
   CHECK_EQ(rig.device().executor().id_at(executed), echo_command);
   CHECK(rig.device().doorbells().stores() >= 1u);
-  /* A second batch on the same ring, after the first moved its head. */
   CHECK(echoes(transport, ~echo_payload));
-  /* The process publishes its tail first and calls the kernel only for a
-   * worker that is asleep: every batch it did hand the driver completed. */
   CHECK_EQ(transport.submissions(), 2u);
   CHECK_EQ(settled_fences(rig, transport), transport.submissions_through_kernel());
 
-  CHECK_EQ(rig.device().device().blobs(), 3u);   /* the ring, fence page and reply slot */
+  CHECK_EQ(rig.device().device().blobs(), 3u);
   transport.teardown();
   connection.close();
   CHECK_EQ(rig.device().device().contexts(), 0u);
   CHECK_EQ(rig.device().device().blobs(), 0u);
-  /* The display clock's page and the present engine's, the device's while it runs. */
   CHECK_EQ(rig.device().host().live_guest_mappings(), 2u);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.handles().outstanding(), 0u); }
 
-/* A process takes a chunk of its device's host window through the real driver
- * and the real device core (docs/host-memory.md): a host blob of executor
- * memory made for its context, placed at the window's first page, and the
- * process's view of it. Giving it back takes all three away again, and the
- * executor's memory with them. */
 TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_driver)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -238,8 +198,6 @@ TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_d
   CHECK(open.resource_id() != 0u);
   CHECK_EQ(open.bytes(), 0x10000u);
   CHECK(open.address() != 0u);
-  /* A host blob, not a guest one: the executor holds its memory, asked for
-   * as the process asked, under the blob's own id. */
   CHECK_EQ(rig.device().device().blobs(), 3u);
   CHECK_EQ(executor.held_memory(), 1u);
   CHECK_EQ(executor.last_memory_request().key, std::uint64_t{open.resource_id()});
@@ -247,8 +205,7 @@ TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_d
   CHECK_EQ(executor.last_memory_request().request, upload.encoded());
   CHECK(rig.device().host().placed_at(0u) != nullptr);
   CHECK_EQ(rig.device().host().live_placements(), 1u);
-  CHECK_EQ(rig.platform().process_mappings(), 4u);   /* and the context's ring, reply slot and fence page */
-  /* The process's view is the executor's memory: what it writes, the host reads. */
+  CHECK_EQ(rig.platform().process_mappings(), 4u);
   auto *const view = reinterpret_cast<volatile std::uint8_t *>(static_cast<std::uintptr_t>(open.address()));
   view[0] = 0x5Au;
   view[0xF7FFu] = 0xA5u;
@@ -268,7 +225,6 @@ TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_d
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes),
                Status::invalid_parameter);
 
-  /* One left open is closed with its context. */
   HostWindowRecord again(HostWindowRecord::Operation::open, 0x1000u, 0u, upload);
   CHECK_STATUS(again.encode(bytes, sizeof bytes), Status::ok);
   CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
@@ -281,11 +237,6 @@ TEST(fullstack_transport, an_escape_opens_a_host_window_chunk_through_the_real_d
   CHECK_EQ(rig.platform().process_mappings(), 0u);
   CHECK_EQ(kmt.open_objects(), 0u); }
 
-/* DdiKmt's escape is DxgkDdiEscape as dxgkrnl calls it: the driver's device and
- * context, a kernel copy of the record copied back out. A chunk larger than the
- * whole window is refused - nothing falls back to guest RAM - with nothing
- * asked of the host; handles the process never had, and data that is no
- * record, are refused too. */
 TEST(fullstack_transport, a_chunk_the_window_cannot_hold_is_refused_through_the_real_driver)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -321,7 +272,6 @@ TEST(fullstack_transport, a_chunk_the_window_cannot_hold_is_refused_through_the_
   CHECK_EQ(rig.device().host().live_guest_mappings(), mapped);
   CHECK_EQ(rig.platform().process_mappings(), 3u);
 
-  /* The whole window fits, and is the window's: the refusal was the size. */
   HostWindowRecord whole(HostWindowRecord::Operation::open, FullStackRig::hostmem_bytes, 0u,
                          HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u));
   CHECK_STATUS(whole.encode(bytes, sizeof bytes), Status::ok);
@@ -348,10 +298,6 @@ TEST(fullstack_transport, a_chunk_the_window_cannot_hold_is_refused_through_the_
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.handles().outstanding(), 0u); }
 
-/* The completion reaches dxgkrnl only through the fence interrupt: while the
- * executor holds the batch the DPC the submission queued finds nothing
- * finished, and after the worker raises the fence queue nothing changes until
- * that interrupt is delivered to the driver's ISR and DPC. */
 TEST(fullstack_transport, a_batch_the_host_finishes_later_completes_on_its_fence_interrupt)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -384,11 +330,6 @@ TEST(fullstack_transport, a_batch_the_host_finishes_later_completes_on_its_fence
   transport.teardown();
   connection.close(); }
 
-/* FR-006 through the whole stack: a batch the executor cannot decode faults
- * its context on the host; the driver completes the submission, so the
- * process's wait returns and finds no reply, and refuses the context's next
- * submission; a context beside it on the same device keeps running. The
- * driver never reports DMA_FAULTED, which dxgkrnl bugchecks on (0x119/0xD). */
 TEST(fullstack_transport, a_faulted_context_fails_its_wait_and_its_neighbour_still_echoes)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -410,12 +351,8 @@ TEST(fullstack_transport, a_faulted_context_fails_its_wait_and_its_neighbour_sti
   const std::uint64_t through_kernel = doomed.submissions_through_kernel();
   CHECK(doomed.send_sync(MockExecutorOps::undecodable_id, request, reply) == TransportResult::failed);
   CHECK(doomed.faulted());
-  /* The wait completed - through the driver, when the batch went that way -
-   * and the reply is what is missing. */
   CHECK_EQ(kmt.fences().completed(), completed + (doomed.submissions_through_kernel() - through_kernel));
   CHECK_EQ(kmt.last_code(), 0u);
-  /* With the transport's own latch lifted the send reaches the driver, which
-   * refuses it before the doorbell rings. */
   const std::uint32_t stores = rig.device().doorbells().stores();
   KmtTransportProbe::forget_fault(doomed);
   CHECK(!echoes(doomed, echo_payload));
@@ -431,10 +368,6 @@ TEST(fullstack_transport, a_faulted_context_fails_its_wait_and_its_neighbour_sti
   connection.close();
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* Feature 040 through the whole stack: D3 resets the device, which destroys
- * every host context, so the process's transport is lost - its next send
- * fails rather than waiting on a fence nobody will write - and a transport it
- * sets up again after D0 runs on the device that came back. */
 TEST(fullstack_transport, a_power_cycle_loses_the_context_and_a_new_one_echoes)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -450,7 +383,6 @@ TEST(fullstack_transport, a_power_cycle_loses_the_context_and_a_new_one_echoes)
   CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK_EQ(rig.fdo().set_power_state(power_d0), 0);
   CHECK(rig.platform().logged_line("avgpu: SetPowerState D0 done"));
-  /* The same device came back with nothing placed in its window. */
   CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK(!echoes(before, echo_payload));
   CHECK(before.faulted());
@@ -464,9 +396,6 @@ TEST(fullstack_transport, a_power_cycle_loses_the_context_and_a_new_one_echoes)
   connection.close();
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* A timeout reset is a device reset: dxgkrnl's ResetFromTimeout loses every
- * context, and RestartFromTimeout brings back a device with room for a new
- * transport. */
 TEST(fullstack_transport, a_timeout_reset_loses_the_context_and_the_restart_runs_a_new_one)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -498,9 +427,6 @@ TEST(fullstack_transport, a_timeout_reset_loses_the_context_and_the_restart_runs
   after.teardown();
   connection.close(); }
 
-/* pnputil disabling and enabling the adapter under a process that keeps its
- * device: StopDevice resets the device and StartDevice builds a new one, on
- * which a new transport runs. */
 TEST(fullstack_transport, a_stop_and_start_under_a_live_transport_leaves_room_for_a_new_one)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -527,8 +453,6 @@ TEST(fullstack_transport, a_stop_and_start_under_a_live_transport_leaves_room_fo
   after.teardown();
   connection.close(); }
 
-/* Thousands of batches on the smallest ring, so its head and tail wrap many
- * times with the driver publishing and the device core consuming. */
 TEST(fullstack_transport, the_smallest_ring_wraps_many_times_and_every_echo_returns)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -548,8 +472,6 @@ TEST(fullstack_transport, the_smallest_ring_wraps_many_times_and_every_echo_retu
   transport.teardown();
   connection.close(); }
 
-/* Five transports interleaved on one device, each on a doorbell and a message
- * of its own; one torn down gives its doorbell to the next set up. */
 TEST(fullstack_transport, five_transports_interleave_and_a_freed_doorbell_is_reused)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -598,8 +520,7 @@ TEST(fullstack_teardown, a_process_that_exits_holding_a_context_leaves_nothing_b
                            reply_bytes, transport_staging, sizeof transport_staging);
     CHECK_STATUS(transport.initialize(), Status::ok);
     CHECK(echoes(transport, echo_payload));
-    CHECK(rig.kmt().open_objects() >= 4u);   /* a device, two allocations and a context */
-    /* The process ends here without a teardown: dxgkrnl cleans up after it. */
+    CHECK(rig.kmt().open_objects() >= 4u);
     rig.kmt().end_process();
     CHECK_EQ(rig.kmt().open_objects(), 0u);
     CHECK_EQ(rig.device().device().contexts(), 0u);

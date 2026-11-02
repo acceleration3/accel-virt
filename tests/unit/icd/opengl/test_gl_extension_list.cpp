@@ -17,7 +17,7 @@ struct GlExtensionListProbe {
     static void empty_name(GlExtensionList &list) { list.names_[0] = ""; }
 };
 
-}  // namespace av::glicd
+}
 
 TEST(gl_extension_list, joins_the_names_it_is_given_once_each)
 { GlExtensionList list;
@@ -49,8 +49,6 @@ TEST(gl_extension_list, stops_at_its_name_count_and_its_string_room)
   }
   CHECK_EQ(full.count(), GlExtensionList::max_names);
   CHECK(full.invariants_hold());
-  /* Two names that fill the string to its last byte, the terminator's
-   * being the last: one character more does not fit. */
   GlExtensionList room;
   static char long_names[3][2049];
   std::memset(long_names[0], 'a', 2047u);

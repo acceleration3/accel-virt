@@ -1,6 +1,3 @@
-/* The doorbell BAR as the guest core writes it in the loopback suite: a 4-byte
- * store at offset 0 of a page rings that page on the device's MockHost, as a
- * KVM ioeventfd would; any other store does nothing. */
 #ifndef AV_LOOPBACK_DOORBELLS_HPP
 #define AV_LOOPBACK_DOORBELLS_HPP
 
@@ -35,6 +32,6 @@ private:
     std::uint32_t stores_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_LOOPBACK_DOORBELLS_HPP
+#endif

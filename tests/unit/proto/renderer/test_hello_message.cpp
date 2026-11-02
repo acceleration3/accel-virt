@@ -42,7 +42,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(hello_message_encode, is_the_fixed_fields_then_the_path_then_the_capset)
 { GuardedBuffer bytes(hello_length);
@@ -88,8 +88,6 @@ TEST(hello_message, the_longest_path_and_capset_round_trip)
   CHECK_EQ(decoded.executor_path_length(), HelloMessage::max_path_length);
   CHECK_EQ(decoded.capset_length(), HelloMessage::max_capset_length); }
 
-/* dlopen reads the path up to its NUL: one inside would load another file
- * than the one QEMU named. */
 TEST(hello_message_encode, refuses_what_decode_would)
 { static char         long_path[HelloMessage::max_path_length + 1u];
   static std::uint8_t long_capset[HelloMessage::max_capset_length + 1u];
@@ -138,8 +136,6 @@ TEST(hello_message_decode, a_length_other_than_the_fields_give_is_malformed)
   CHECK_STATUS(decoded.decode(nullptr, hello_length, 0u), Status::malformed);
   CHECK_EQ(decoded.version(), 0u); }
 
-/* A length past the bound is refused before it is added to anything, whatever
- * arrived after it. */
 TEST(hello_message_decode, lengths_past_their_bounds_are_malformed)
 { static std::uint8_t bytes[HelloMessage::fixed_size + HelloMessage::max_path_length + 1u + 4u];
   std::memset(bytes, 'a', sizeof bytes);
@@ -179,10 +175,5 @@ TEST(hello_message_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 256u);
-  /* Version, epoch and the uuid are free: 32 + 32 + 128 flips. A flip of
-   * either length claims bytes that did not arrive. "/x.so" has no byte with a
-   * single bit set, so none of its 40 flips makes a NUL; the capset's 32 are
-   * free. With the untouched message, 265 acceptances - the sweep is mostly
-   * payload, and what it proves is the lengths. */
   const std::uint32_t acceptable = 32u + 32u + 128u + 40u + 32u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

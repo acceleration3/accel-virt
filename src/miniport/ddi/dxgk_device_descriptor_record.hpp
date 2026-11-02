@@ -1,5 +1,3 @@
-/* DXGK_DEVICE_DESCRIPTOR, as DxgkDdiQueryDeviceDescriptor receives it. A DDI
- * record; src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGK_DEVICE_DESCRIPTOR_RECORD_HPP
 #define AV_DXGK_DEVICE_DESCRIPTOR_RECORD_HPP
 
@@ -13,6 +11,6 @@ struct DxgkDeviceDescriptorRecord {
     uint8_t  *DescriptorBuffer;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_DEVICE_DESCRIPTOR_RECORD_HPP
+#endif

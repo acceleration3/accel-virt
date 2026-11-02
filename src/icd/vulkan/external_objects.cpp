@@ -34,9 +34,6 @@ bool ExternalObjects::remember(VkDevice device, VkDeviceMemory memory, VkSemapho
 {
     AV_SCOPE("ExternalObjects::remember");
     if (device == VK_NULL_HANDLE || object_id == 0u || handle == 0u || carrier == 0u) return false;
-    /* Exactly one kind, because a row is one object and the two are told apart
-     * by which field is set; and each kind's own size rule, which is the wire
-     * body's. */
     if ((memory == VK_NULL_HANDLE) == (semaphore == VK_NULL_HANDLE)) return false;
     if ((memory != VK_NULL_HANDLE) != (size != 0u)) return false;
     const ThreadLockHold released(lock_);
@@ -144,4 +141,4 @@ bool ExternalObjects::invariants_hold() const
     });
 }
 
-}  // namespace av::icd
+}

@@ -1,6 +1,3 @@
-/* DXGKARG_SUBMITCOMMANDVIRTUAL, as DxgkDdiSubmitCommandVirtual receives it. A DDI
- * record: Flags is DXGK_SUBMITCOMMANDFLAGS' UINT; src/km/ddi_record_layout.cpp
- * proves each offset. */
 #ifndef AV_DXGKARG_SUBMIT_COMMAND_VIRTUAL_RECORD_HPP
 #define AV_DXGKARG_SUBMIT_COMMAND_VIRTUAL_RECORD_HPP
 
@@ -24,6 +21,6 @@ struct DxgkargSubmitCommandVirtualRecord {
     uint32_t NodeOrdinal;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_SUBMIT_COMMAND_VIRTUAL_RECORD_HPP
+#endif

@@ -7,11 +7,9 @@
 
 namespace inspector {
 namespace {
-
-// A dump that takes longer is reported as missing for the round; the next round asks again.
 constexpr int kStateTimeoutMs = 1500;
 
-} // namespace
+}
 
 const ProcessSample* Sample::Find(StringView key) const noexcept {
     for (const ProcessSample& process : processes) {
@@ -102,4 +100,4 @@ Sample Sampler::Collect(u64 round) const {
     return sample;
 }
 
-} // namespace inspector
+}

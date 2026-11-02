@@ -1,9 +1,3 @@
-/* One dxgkrnl context bound to an av context. The binding builds the setup
- * from the record it was created with and the resource ids the driver gave it,
- * and drives the context's request sequence - CTX_CREATE, three blobs over the
- * pages it is handed and the setup - against the device, all the way to
- * established. A setup the device refuses leaves the binding failed, not
- * established; teardown reverses what setup created and lets go of the pages. */
 #include "miniport/av_context/context_memory.hpp"
 #include "miniport/av_context/context_pages.hpp"
 #include "miniport/av_context/ring_submitter.hpp"
@@ -58,11 +52,8 @@ constexpr std::uint32_t ctx_destroy_type = 0x0201u;
 constexpr std::uint32_t create_blob_type = 0x010Cu;
 constexpr std::uint32_t unref_type = 0x0102u;
 constexpr std::uint32_t submit_3d_type = 0x0207u;
-/* Slot 2: host context 3, doorbell 2, and the three blobs after slots 0 and 1's. */
 constexpr std::uint32_t slot = 2u;
-/* Slot 2: past two slots of the three transport blobs each. */
 constexpr std::uint32_t first_resource = 0x00100000u + 2u * 3u;
-/* The request buffer an adapter lends every binding. */
 std::uint8_t lent[AvContextBinding::request_bytes];
 constexpr std::uint8_t  uuid[GpuIdentity::uuid_bytes] = {};
 
@@ -72,15 +63,11 @@ CapsetInfo capset()
                       GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
 }
 
-/* Named by allocation 10 of its process, a page of replies, an order the
- * capset allows, Vulkan. */
 AvContextRecord record()
 {
     return AvContextRecord(SubApi::vulkan, 12u, 10u, 4096u);
 }
 
-/* A device answering control requests from the stall between the driver's
- * polls, OK_NODATA by default, refusing the request at a chosen index. */
 class Host {
 public:
     explicit Host(MappedVirtioFunction &mapped) : queue_(mapped.queue_device(control_queue))
@@ -88,7 +75,6 @@ public:
 
     void refuse_at(int index) { refuse_at_ = index; }
     void answer_nothing() { silent_ = true; }
-    /* Answers with four bytes, which no virtio-gpu response is. */
     void answer_short() { short_ = true; }
     FakeVirtqueueDevice &queue() { return queue_; }
     std::uint32_t count_of(std::uint32_t type) const
@@ -98,8 +84,6 @@ public:
             if (queue_.request_type(i) == type) seen++;
         return seen;
     }
-    /* The little-endian u32 at `offset` of the `nth` request of `type`, among
-     * the first bytes the queue keeps. */
     std::uint32_t field(std::uint32_t type, std::uint32_t nth, std::size_t offset) const
     {
         for (std::uint32_t i = 0u; i < queue_.requests(); i++) {
@@ -138,7 +122,6 @@ private:
     bool                short_ = false;
 };
 
-/* The memory stands in for the process's ring, fence and reply allocations. */
 class Fixture {
 public:
     Fixture() : memory_(mapped_.platform()) {}
@@ -164,7 +147,7 @@ private:
     std::optional<av::VirtioGpuDevice> device_;
 };
 
-}  // namespace
+}
 
 TEST(av_context_binding, is_idle_before_it_is_set_up)
 { MappedVirtioFunction mapped;
@@ -181,15 +164,10 @@ TEST(av_context_binding, drives_the_sequence_to_established)
   AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   CHECK(binding.established());
-  /* CTX_CREATE, three blobs and the setup: one context command and three blob
-   * creates on the wire. */
   CHECK_EQ(host.count_of(ctx_create_type), 1u);
   CHECK_EQ(host.count_of(create_blob_type), 3u);
   CHECK(binding.invariants_hold()); }
 
-/* The blobs, and the setup naming them, use the ids the driver assigned from
- * `first_resource` - never the record's allocation handles 10, 11 and 12 - and
- * each blob is over the pages it was handed. */
 TEST(av_context_binding, names_the_blobs_by_the_ids_it_was_given)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -204,8 +182,6 @@ TEST(av_context_binding, names_the_blobs_by_the_ids_it_was_given)
         static_cast<std::uint32_t>(fixture.pages().ring().frame(0u)));
   CHECK(host.field(create_blob_type, 1u, blob_first_address) ==
         static_cast<std::uint32_t>(fixture.pages().fence().frame(0u)));
-  /* The setup follows SUBMIT_3D's 32-byte header: ring at 12, fence at 20,
-   * doorbell at 24, reply at 28. */
   CHECK_EQ(host.field(submit_3d_type, 0u, 32u + 12u), first_resource);
   CHECK_EQ(host.field(submit_3d_type, 0u, 32u + 20u), first_resource + 1u);
   CHECK_EQ(host.field(submit_3d_type, 0u, 32u + 24u), 2u);
@@ -214,9 +190,6 @@ TEST(av_context_binding, names_the_blobs_by_the_ids_it_was_given)
   CHECK_EQ(host.field(unref_type, 0u, blob_resource), first_resource);
   CHECK_EQ(host.field(unref_type, 2u, blob_resource), first_resource + 2u); }
 
-/* A ring VidMm scattered over eight separate pages is a blob of eight entries,
- * 184 bytes - wider than any fixed-size context request - and still reaches
- * the device whole. */
 TEST(av_context_binding, a_scattered_ring_reaches_the_device_as_one_wide_blob)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -235,7 +208,6 @@ TEST(av_context_binding, a_scattered_ring_reaches_the_device_as_one_wide_blob)
   CHECK_EQ(host.field(create_blob_type, 0u, blob_entries), pages);
   CHECK_EQ(host.field(create_blob_type, 1u, blob_entries), 1u); }
 
-/* Pages with a part missing are refused before any request reaches the device. */
 TEST(av_context_binding, pages_not_complete_are_refused_locally)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -249,19 +221,16 @@ TEST(av_context_binding, a_setup_the_device_refuses_leaves_the_binding_unestabli
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
-  host.refuse_at(4);   /* the setup step, after CTX_CREATE and three blobs */
+  host.refuse_at(4);
   AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK(binding.set_up(fixture.device(), capset(), fixture.pages()) != Status::ok);
   CHECK(!binding.established());
   CHECK(binding.state() == GuestContext::State::failed); }
 
-/* A record whose fields the capset does not allow is refused before any request
- * reaches the device. */
 TEST(av_context_binding, a_setup_the_capset_forbids_is_refused_locally)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
-  /* Order 12 is fine, but a capset whose range starts at 16 forbids it. */
   const CapsetInfo strict(ProtocolVersion(1u, 0u), 0x7u, 64u, 16u, 20u, 0u,
                           GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
   AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
@@ -277,7 +246,6 @@ TEST(av_context_binding, teardown_reverses_setup)
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   CHECK_STATUS(binding.tear_down(fixture.device()), Status::ok);
   CHECK(binding.state() == GuestContext::State::idle);
-  /* CTX_DESTROY and an unref for each blob. */
   CHECK_EQ(host.count_of(ctx_destroy_type), 1u);
   CHECK(binding.invariants_hold()); }
 
@@ -287,8 +255,6 @@ TEST(av_context_binding, forwards_a_submission_and_a_serve_once_established)
   Host host(fixture.mapped());
   AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
-  /* The device writes the fence page; a no-progress page is what serve reads
-   * before any batch completes. */
   static_cast<void>(FencePage(0u, 0u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), av::FencePage::encoded_size));
   fixture.mapped().platform().set_irql(Irql::dispatch);
   CHECK_STATUS(binding.submit(SubmissionDescriptor(1u, 0u, 16u)), Status::ok);
@@ -299,7 +265,6 @@ TEST(av_context_binding, forwards_a_submission_and_a_serve_once_established)
   CHECK(!binding.faulted());
   CHECK(binding.invariants_hold()); }
 
-/* Before setup there is nothing to tear down, submit to, or serve. */
 TEST(av_context_binding, service_before_setup_is_refused)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -311,8 +276,6 @@ TEST(av_context_binding, service_before_setup_is_refused)
   CHECK_STATUS(binding.serve(), Status::invalid_state);
   fixture.mapped().platform().set_irql(Irql::passive); }
 
-/* A device that stops answering mid-sequence leaves the binding unestablished
- * rather than hanging. */
 TEST(av_context_binding, a_silent_device_does_not_establish)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -322,8 +285,6 @@ TEST(av_context_binding, a_silent_device_does_not_establish)
   CHECK(binding.set_up(fixture.device(), capset(), fixture.pages()) != Status::ok);
   CHECK(!binding.established()); }
 
-/* A device reset holds nothing of the context: the binding lets go of its
- * pages without asking the device anything, and can be set up again. */
 TEST(av_context_binding_abandon, lets_go_without_a_request_and_sets_up_again)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -335,15 +296,10 @@ TEST(av_context_binding_abandon, lets_go_without_a_request_and_sets_up_again)
   CHECK(binding.state() == GuestContext::State::idle);
   CHECK_EQ(host.queue().requests(), asked);
   CHECK(binding.invariants_hold());
-  binding.abandon();   /* idle: nothing */
+  binding.abandon();
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   CHECK(binding.established()); }
 
-/* A slot's three transport blobs follow the slot before it, and a later
- * binding of a slot takes ids past every slot's earlier ones, so what an
- * unfinished teardown left behind never collides with it; the generation
- * wraps after AvContextBinding::generations. Every id any slot of any
- * generation takes stays below the host blobs' range, which the chunks own. */
 TEST(av_context_binding_resources, each_slot_and_generation_takes_transport_ids_of_its_own)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -370,9 +326,6 @@ TEST(av_context_binding_resources, each_slot_and_generation_takes_transport_ids_
       CHECK_STATUS(binding.tear_down(fixture.device()), Status::ok);
   } }
 
-/* Feature 049: which side of the kernel boundary submits on this context is
- * the binding's to pass on, and its context's to act on - what a process with
- * a doorbell queues is completed where the process reads it. */
 TEST(av_context_binding, hands_submissions_to_user_mode_and_takes_them_back)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -383,8 +336,6 @@ TEST(av_context_binding, hands_submissions_to_user_mode_and_takes_them_back)
   std::uint64_t progress = 0u;
   fixture.mapped().platform().set_irql(av::Irql::dispatch);
   binding.user_mode_submits(&progress);
-  /* A fence page completing what the driver never submitted is believed now,
-   * and reported where the process waits. */
   static_cast<void>(av::FencePage(2u, 64u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), av::FencePage::encoded_size));
   CHECK_STATUS(binding.serve(), Status::ok);
   CHECK_EQ(progress, 2u);
@@ -395,8 +346,6 @@ TEST(av_context_binding, hands_submissions_to_user_mode_and_takes_them_back)
   fixture.mapped().platform().set_irql(av::Irql::passive);
   CHECK(binding.invariants_hold()); }
 
-/* The hardware queue whose progress a process read is going: the binding
- * passes that on to its context, which lets go of that location only. */
 TEST(av_context_binding, forget_progress_reaches_the_context_for_its_own_location_only)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);

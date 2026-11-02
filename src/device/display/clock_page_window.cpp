@@ -62,9 +62,6 @@ uint32_t *ClockPageWindow::word(uint64_t offset) const
     return reinterpret_cast<uint32_t *>(page_ + offset);
 }
 
-/* The generation goes odd before the first field changes and even after the
- * last, each store ordered after what came before it: a guest that reads the
- * same even generation on both sides of its copy copied one whole record. */
 void ClockPageWindow::publish(uint32_t head, const VblankRecord &blank)
 {
     AV_SCOPE("ClockPageWindow::publish");
@@ -98,4 +95,4 @@ bool ClockPageWindow::invariants_hold() const
     return page_ == nullptr ? heads_ == 0u : heads_ != 0u && heads_ <= ClockPageHeader::max_heads;
 }
 
-}  // namespace av
+}

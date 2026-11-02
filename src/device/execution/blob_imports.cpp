@@ -21,10 +21,6 @@ BlobImports::~BlobImports()
     AV_SCOPE("BlobImports::~BlobImports");
 }
 
-/* The executor names the memory by the blob's resource id, which is the key
- * the device allocated it under (HostBlobTable::create). Room for the import
- * is made before the executor is asked, so an import it made is never one
- * there is nowhere to keep. */
 Status BlobImports::import(uint32_t resource, uint64_t &device_memory)
 {
     AV_SCOPE("BlobImports::import");
@@ -35,9 +31,6 @@ Status BlobImports::import(uint32_t resource, uint64_t &device_memory)
     const uint64_t blob_id = next_blob_id_++;
     uint64_t       made = 0u;
     if (executor_.import(blob_id, resource, made) != Status::ok) return Status::not_supported;
-    /* Two imports answering to one handle would make RELEASE_BLOB of either
-     * release both, and no import is named 0: a library that says so has
-     * broken the ABI. */
     uint32_t slot = 0u;
     if (made == 0u || blob_ids_.insert(made, blob_id, slot) != Status::ok) {
         executor_.release(blob_id);
@@ -64,8 +57,6 @@ uint32_t BlobImports::imports() const
     return blob_ids_.count();
 }
 
-/* Every import is named by a handle other than 0, under an id handed out
- * already; the table keeps each handle to one import. */
 bool BlobImports::invariants_hold() const
 {
     AV_SCOPE("BlobImports::invariants_hold");
@@ -76,4 +67,4 @@ bool BlobImports::invariants_hold() const
     return held;
 }
 
-}  // namespace av
+}

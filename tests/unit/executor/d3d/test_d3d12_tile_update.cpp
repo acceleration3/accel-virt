@@ -1,8 +1,3 @@
-/* What one update of a reserved resource's tile mappings may hold: at most
- * one command's worth of regions and ranges, and only ranges vkd3d-proton can
- * walk - some tiles, one flag of D3D12_TILE_RANGE_FLAGS, and a mapping inside
- * the heap it names (a single reused tile only its first). What it applies is
- * judged on a GPU (test_d3d12_session_tiles_device.cpp). */
 #include "core/support/object_storage.hpp"
 #include "executor/d3d/d3d12_tile_update.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -16,8 +11,6 @@ using av::d3d12proto::TileRegion;
 using av::d3d12proto::TileSize;
 
 namespace {
-
-/* Five arrays of 2048, kept out of the test's stack. */
 av::ObjectStorage<D3d12TileUpdate> storage;
 
 class FreshUpdate {
@@ -35,18 +28,15 @@ constexpr std::uint32_t range_skip = 0x2u;
 constexpr std::uint32_t range_reuse = 0x4u;
 constexpr TileRegion    one_tile = {TileCoordinate{}, TileSize{1u, 0u, 0u, 0u, 0u}};
 
-}  // namespace
+}
 
 TEST(d3d12_tile_update, a_range_maps_only_inside_its_heap)
 { FreshUpdate fresh;
   D3d12TileUpdate &update = fresh.update();
-  /* Tiles 2 and 3 of a 4-tile heap; tile 3 and 4 are not both its. */
   CHECK(update.add_range(TileRange{0u, 2u, 2u}, 4u));
   CHECK(!update.add_range(TileRange{0u, 3u, 2u}, 4u));
-  /* Reused, only the one tile named need be the heap's. */
   CHECK(update.add_range(TileRange{range_reuse, 3u, 100u}, 4u));
   CHECK(!update.add_range(TileRange{range_reuse, 4u, 1u}, 4u));
-  /* No heap holds no tile to map. */
   CHECK(!update.add_range(TileRange{0u, 0u, 1u}, 0u));
   CHECK_EQ(update.ranges(), 2u); }
 
@@ -60,8 +50,6 @@ TEST(d3d12_tile_update, a_range_that_unmaps_or_skips_names_no_heap)
 TEST(d3d12_tile_update, a_range_of_no_tiles_or_of_no_flag_the_api_has_is_refused)
 { FreshUpdate fresh;
   D3d12TileUpdate &update = fresh.update();
-  /* vkd3d-proton ends a range when its count is reached: one of none never
-   * ends. */
   CHECK(!update.add_range(TileRange{range_null, 0u, 0u}, 4u));
   CHECK(!update.add_range(TileRange{0x8u, 0u, 1u}, 4u));
   CHECK(!update.add_range(TileRange{range_null | range_skip, 0u, 1u}, 4u));

@@ -27,9 +27,8 @@ using av::Violation;
 namespace {
 
 constexpr std::int32_t no_memory = static_cast<std::int32_t>(0xC0000017u);
-constexpr std::int32_t x8r8g8b8 = 22;   /* D3DDDIFMT_X8R8G8B8 */
+constexpr std::int32_t x8r8g8b8 = 22;
 
-/* Decides for the fixture's VidPn; answers the NTSTATUS, and the verdict in `supported`. */
 std::int32_t decide(VidPnFixture &fixture, void *vidpn, std::uint8_t &supported)
 {
     DxgkargIsSupportedVidPnRecord request = {};
@@ -43,7 +42,7 @@ std::int32_t decide(VidPnFixture &fixture, void *vidpn, std::uint8_t &supported)
     return status;
 }
 
-}  // namespace
+}
 
 TEST(vidpn_support_check_decide, no_vidpn_is_supported)
 { VidPnFixture fixture;
@@ -76,10 +75,8 @@ TEST(vidpn_support_check_visit, a_second_path_or_another_source_or_target_is_not
   CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
   CHECK_EQ(supported, 0u); }
 
-/* FR-006: the answer is "not supported", so DMM never commits a VidPn the
- * adapter would have to refuse halfway through UpdateActiveVidPnPresentPath. */
 TEST(vidpn_support_check_visit, a_path_pinning_scaling_rotation_or_a_gamma_ramp_is_not_supported)
-{ const std::int32_t scalings[] = {2, 3, 4, 5, 253};   /* Centered .. Custom, and Reserved1 */
+{ const std::int32_t scalings[] = {2, 3, 4, 5, 253};
   for (const std::int32_t scaling : scalings) {
       VidPnFixture fixture;
       fixture.vidpn().add_path(0u, 0u).ContentTransformationScaling = scaling;
@@ -87,7 +84,7 @@ TEST(vidpn_support_check_visit, a_path_pinning_scaling_rotation_or_a_gamma_ramp_
       CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
       CHECK_EQ(supported, 0u);
   }
-  const std::int32_t rotations[] = {2, 3, 4, 5, 16};   /* Rotate90 .. Rotate270, and the Offset rotations */
+  const std::int32_t rotations[] = {2, 3, 4, 5, 16};
   for (const std::int32_t rotation : rotations) {
       VidPnFixture fixture;
       fixture.vidpn().add_path(0u, 0u).ContentTransformationRotation = rotation;
@@ -96,13 +93,11 @@ TEST(vidpn_support_check_visit, a_path_pinning_scaling_rotation_or_a_gamma_ramp_
       CHECK_EQ(supported, 0u);
   }
   VidPnFixture fixture;
-  fixture.vidpn().add_path(0u, 0u).GammaRampType = 2;   /* D3DDDI_GAMMARAMP_RGB256x3x16 */
+  fixture.vidpn().add_path(0u, 0u).GammaRampType = 2;
   std::uint8_t supported = 1u;
   CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
   CHECK_EQ(supported, 0u); }
 
-/* Unpinned and NotSpecified are what a VidPn under construction carries, and
- * they are not a claim to refuse. */
 TEST(vidpn_support_check_visit, an_undecided_transformation_keeps_the_vidpn_supported)
 { const std::int32_t undecided[][2] = {{254, 254}, {255, 255}, {1, 1}, {0, 0}};
   for (const auto &pair : undecided) {
@@ -115,8 +110,6 @@ TEST(vidpn_support_check_visit, an_undecided_transformation_keeps_the_vidpn_supp
       CHECK_EQ(supported, 1u);
   } }
 
-/* The standard list has 1024x768; the source mode dxgkrnl pins is one it was
- * given, described the same way. */
 TEST(vidpn_support_check_visit, a_pinned_source_mode_the_adapter_offers_is_supported)
 { VidPnFixture fixture;
   fixture.vidpn().add_path(0u, 0u);
@@ -127,8 +120,6 @@ TEST(vidpn_support_check_visit, a_pinned_source_mode_the_adapter_offers_is_suppo
   CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
   CHECK_EQ(supported, 1u); }
 
-/* What dxgkrnl restores at boot: a size the host stopped offering, or the
- * X8R8G8B8 an older driver described. Refused, so it is never committed. */
 TEST(vidpn_support_check_visit, a_pinned_source_mode_the_adapter_does_not_offer_is_not_supported)
 { D3dkmdtVidPnSourceModeRecord unoffered_size = {};
   DisplayMode(1000u, 700u).describe(unoffered_size, DisplayMode::source_formats[0]);
@@ -145,9 +136,6 @@ TEST(vidpn_support_check_visit, a_pinned_source_mode_the_adapter_does_not_offer_
       CHECK_EQ(supported, 0u);
   } }
 
-/* The target mode a saved configuration pins carries the refresh it was made
- * at: one the device no longer states is refused, so Windows asks for a VidPn
- * at the new rate; one it does state, or none pinned, is supported. */
 TEST(vidpn_support_check_visit, a_pinned_target_mode_at_another_refresh_is_not_supported)
 { DisplayModeList modes;
   av::DisplayModeSet set;
@@ -206,8 +194,6 @@ TEST(vidpn_support_check, is_passive_only)
   static_cast<void>(check.decide());
   CHECK_EQ(fixture.platform().unclaimed_violations(), 1u);
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
-  /* A path it would refuse anyway, so the walk stops at visit's own ceiling
-   * before it reads the source mode set. */
   av::D3dkmdtVidPnPresentPathRecord path = fixture.vidpn().path(0u);
   path.VidPnSourceId = 1u;
   static_cast<void>(check.visit(path));
@@ -215,8 +201,6 @@ TEST(vidpn_support_check, is_passive_only)
   CHECK_EQ(fixture.platform().unclaimed_violations(), 1u);
   CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
-/* A refusal says why, for the adapter's log: a mode change it turns down
- * fails in the application with nothing else to go on. */
 TEST(vidpn_support_check, a_refusal_names_its_reason_and_the_source_mode_it_turned_down)
 { const DisplayModeList    modes;
   const auto refusal_of = [&](VidPnFixture &fixture, D3dkmdtVidPnSourceModeRecord &refused) {

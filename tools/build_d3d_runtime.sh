@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-# Builds the host's Direct3D - DXVK (Direct3D 11, DXGI) and vkd3d-proton
-# (Direct3D 12) - natively for Linux from the submodules in third_party/, and
-# installs the shared objects into one directory, build-d3d/lib, which is what
-# the executor library loads them from (AV_D3D_PATH; src/executor/shim/
-# d3d_runtime.hpp).
-#
-#   tools/build_d3d_runtime.sh            # configure if needed, build, install
-#   AV_D3D_PATH=$PWD/build-d3d/lib ...   # what the device and the tests read
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -23,12 +15,6 @@ build() {
     if [ ! -f "$dir/build.ninja" ]; then
         meson setup "$dir" "$source" --buildtype=release --prefix="$PREFIX" --libdir=lib "$@"
     fi
-    # vkd3d-proton copies each header it generates into the build's include/
-    # to install it, and that directory is on every compile's include path
-    # ahead of the copy the compiles wait for - while nothing orders a compile
-    # after the copy. A compile could read a header still being copied:
-    # IUnknown unknown in vkd3d_core_interface.h, a parallel build's luck.
-    # The copies are made before anything is compiled.
     local copies
     mapfile -t copies < <(ninja -C "$dir" -t targets all | sed -n 's|^\(include/[A-Za-z0-9_]*\.h\): CUSTOM_COMMAND$|\1|p')
     if [ ${#copies[@]} -ne 0 ]; then ninja -C "$dir" -j"$JOBS" "${copies[@]}"; fi
@@ -36,12 +22,6 @@ build() {
     meson install -C "$dir" --quiet
 }
 
-# A submodule with its series of patches on top of the pinned commit. The
-# series is judged whole - the files it touches, as they are, against the pinned
-# commit with every patch applied, both built in a scratch index - since one
-# patch reverse-checked alone fails once a later one edits beside it. Files
-# already as the series makes them are left alone (a rebuild stays
-# incremental); otherwise they are put back as pinned and the series applied.
 apply_series() {
     local dir=$1 patches=("${@:2}") scratch files present expected current
     scratch=$(mktemp -d)
@@ -50,8 +30,6 @@ apply_series() {
     for patch in "${patches[@]}"; do GIT_INDEX_FILE="$scratch/expected" git -C "$dir" apply --cached "$patch"; done
     expected=$(GIT_INDEX_FILE="$scratch/expected" git -C "$dir" write-tree)
     GIT_INDEX_FILE="$scratch/current" git -C "$dir" read-tree HEAD
-    # A file the series creates and has not yet created is no pathspec git
-    # add accepts; left out, it is simply missing from the current tree.
     present=$(for file in $files; do
         if [ -e "$dir/$file" ] || git -C "$dir" cat-file -e "HEAD:$file" 2>/dev/null; then echo "$file"; fi
     done)
@@ -70,15 +48,10 @@ apply_series() {
     for patch in "${patches[@]}"; do git -C "$dir" apply "$patch"; done
 }
 
-# The pinned DXVK with what this project needs of it that upstream does not
-# enable: tools/dxvk-patches.
 apply_series "$ROOT/third_party/dxvk" "$ROOT"/tools/dxvk-patches/*.patch
 
-# The pinned vkd3d-proton with the host-pointer heap the executor imports guest
-# memory through, and shared textures and fences as fds: tools/vkd3d-proton-patches.
 apply_series "$ROOT/third_party/vkd3d-proton" "$ROOT"/tools/vkd3d-proton-patches/*.patch
 
-# Direct3D 8 and 10 stay out: the guest's user-mode driver serves 9, 11 and 12.
 build dxvk "$ROOT/third_party/dxvk" -Denable_d3d8=false -Denable_d3d9=true -Denable_d3d10=false
 build vkd3d-proton "$ROOT/third_party/vkd3d-proton"
 ls -1 "$PREFIX/lib"/*.so

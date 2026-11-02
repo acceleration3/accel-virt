@@ -42,4 +42,4 @@ void PresentFrames::unmap(const SurfacePoint &frame) const
     if (readable()) plane_->unmap_frame(gpu_uuid_.raw(), frame);
 }
 
-}  // namespace av
+}

@@ -21,4 +21,4 @@ SourceMemory &LocalImport::memory()
     return memory_;
 }
 
-}  // namespace av
+}

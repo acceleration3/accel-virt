@@ -1,11 +1,3 @@
-/* The OpenGL ICD on this machine's GPU (feature 050, T031): FakeOpengl32 drives
- * the ICD's entries as the system opengl32 would, and the ICD root, over
- * DdiKmt, carries every command through the real driver and device core to the
- * executor library, loaded from its file and bound to the host GPU that runs
- * the most sub-APIs. The window is declared, not drawn on: the host context
- * has no default framebuffer before presentation exists (T035), so the clear
- * lands in a texture of the application's own. A host without OpenGL has
- * nothing here to judge, and the test returns without checking. */
 #include "core/trace/state_writer.hpp"
 #include "device/abi/av_executor.h"
 #include "guest/probe/gl_probe.hpp"
@@ -36,10 +28,6 @@
 #include <cstdio>
 #include <cstring>
 
-/* The executor library opens every host API when it loads, and a real
- * VkDevice, OpenCL platform and EGL display allocate from driver modules that
- * never give everything back; named, as the other full-stack tests name them,
- * rather than leak detection turned off. */
 extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
 {
@@ -83,13 +71,8 @@ constexpr GLbitfield gl_color_buffer_bit = 0x4000u;
 constexpr std::uint32_t side = 64u;
 constexpr std::uint32_t window_side = 32u;
 constexpr std::size_t   renderer_bytes = 256u;
-/* The generated client's kPixelBlobFloor, which its own file keeps to itself:
- * pixel data from here up goes through the blob arena. */
 constexpr std::size_t   pixel_blob_floor = 4096u;
 
-/* opengl32's table slots for the GL 1.1 entries the test calls. */
-/* The compatibility profile's own slots (feature 051): the list ones first in
- * the table, then immediate mode. */
 constexpr std::uint32_t slot_new_list = 0u, slot_end_list = 1u, slot_call_list = 2u, slot_gen_lists = 5u,
                         slot_begin = 7u, slot_color_3f = 13u, slot_end = 43u, slot_vertex_2f = 128u,
                         slot_load_identity = 290u, slot_matrix_mode = 293u, slot_get_integerv = 263u;
@@ -97,8 +80,6 @@ constexpr std::uint32_t slot_tex_image_2d = 183u, slot_clear = 203u, slot_clear_
                         slot_finish = 216u, slot_read_pixels = 256u, slot_get_error = 261u,
                         slot_get_string = 275u, slot_bind_texture = 307u, slot_gen_textures = 328u;
 
-/* The ICD as one guest process holds it: its own memory, locks, log, window
- * and threads, and the opengl32 that loaded it. */
 class GlProcess {
 public:
     explicit GlProcess(DdiKmt &kmt)
@@ -107,8 +88,6 @@ public:
           root_(memory_, kmt, lock_, send_lock_, log_, surface_, threads_, opengl32_, presents_,
                 av::glicd::gl_icd_binding)
     {
-        /* Swaps read back and blit on the calling thread, as the loopback
-         * checks them. */
         presents_.refuse();
         surface_.add_dc(&dc_, &window_, window_side, window_side);
     }
@@ -139,9 +118,6 @@ private:
     int                   window_ = 0;
 };
 
-/* GL_RENDERER as the executor answers it with no guest in between: the host
- * GPU's own name, which the ICD must hand the application unchanged. The reply
- * is a present flag, a length and the bytes. */
 bool host_renderer(const AvExecutorOps &ops, const std::uint8_t *uuid, char *out)
 {
     const std::uint32_t    domain = ops.open_domain(ops.opaque, uuid);
@@ -166,9 +142,6 @@ bool host_renderer(const AvExecutorOps &ops, const std::uint8_t *uuid, char *out
     return true;
 }
 
-/* The host GPU is found once, before the executor library opens its EGL
- * displays: finding it opens and terminates the same displays, and an EGL
- * display terminated under the library stays terminated for it. */
 const WidestHostGpu &widest_gpu()
 {
     static const WidestHostGpu gpu;
@@ -182,13 +155,12 @@ const ExecutorLibraryFile &shared_library()
     return library;
 }
 
-/* The major and minor a GL_VERSION string starts with. */
 bool version_of(const char *version, unsigned &major, unsigned &minor)
 {
     return std::sscanf(version, "%u.%u", &major, &minor) == 2;
 }
 
-}  // namespace
+}
 
 TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_through_the_arena)
 { const WidestHostGpu &gpu = widest_gpu();
@@ -221,8 +193,6 @@ TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_throu
     CHECK(version_of(version, major, minor));
     CHECK(major >= 3u && (major < 4u || (major == 4u && minor <= 6u)));
 
-    /* A texture-backed framebuffer, cleared to a colour every UNORM8 rounding
-     * keeps exact, then read back in one call larger than the arena floor. */
     GLuint texture = 0u, framebuffer = 0u;
     gl.gl<void (APIENTRY *)(GLsizei, GLuint *)>(slot_gen_textures)(1, &texture);
     gl.gl<void (APIENTRY *)(GLenum, GLuint)>(slot_bind_texture)(gl_texture_2d, texture);
@@ -256,7 +226,6 @@ TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_throu
     }
     CHECK_EQ(wrong, 0u);
 
-    /* The readback's bytes came back in the context's blob arena, not inline. */
     char dump[4096] = {};
     av::StateWriter writer(dump, sizeof dump);
     process.root().report(writer);
@@ -272,12 +241,6 @@ TEST(fullstack_opengl_icd, a_context_on_the_host_gpu_clears_and_reads_back_throu
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* A context the device gives no blob arena - an RTX 3070 Ti host once refused
- * every one - moves its bulk data inline, and inline is bounded: a request
- * holds 256 KiB, a reply 64 KiB and the executor's decode arena 1 MiB. A 2 MiB
- * texture upload and the 2 MiB read of it back, each larger than all three,
- * cross through the context's pixel staging buffer in pieces, and the pixels
- * read back are the ones sent. Before, the read faulted the context. */
 TEST(fullstack_opengl_icd, without_an_arena_a_texture_larger_than_every_room_goes_up_and_comes_back)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENGL) == 0u) return;
@@ -333,12 +296,6 @@ TEST(fullstack_opengl_icd, without_an_arena_a_texture_larger_than_every_room_goe
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* Feature 051, US1: a context created the way every OpenGL application written
- * before profiles existed creates one - wglCreateContext, no attributes - gets
- * a compatibility context from this machine's driver, and the fixed-function
- * pipeline in it draws. The triangle is compiled into a display list and
- * called, so what is judged is the host's pixels for a list the guest sent
- * once. */
 TEST(fullstack_opengl_icd, a_legacy_context_draws_the_fixed_function_pipeline_through_a_display_list)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENGL) == 0u) return;
@@ -356,17 +313,12 @@ TEST(fullstack_opengl_icd, a_legacy_context_draws_the_fixed_function_pipeline_th
     CHECK(context != nullptr);
     CHECK(gl.make_current(process.dc(), context));
 
-    /* What the host granted, read the only way that answers on both of this
-     * project's host GPUs: NVIDIA's compatibility version string is its core
-     * one (research.md §1). */
     GLint mask = 0;
-    gl.gl<void (APIENTRY *)(GLenum, GLint *)>(slot_get_integerv)(0x9126u /* GL_CONTEXT_PROFILE_MASK */, &mask);
+    gl.gl<void (APIENTRY *)(GLenum, GLint *)>(slot_get_integerv)(0x9126u , &mask);
     using GetString = const GLubyte *(APIENTRY *)(GLenum);
     const auto *const version = reinterpret_cast<const char *>(gl.gl<GetString>(slot_get_string)(gl_version));
     std::fprintf(stderr, "legacy context: mask 0x%x, %s\n", static_cast<unsigned>(mask),
                  version != nullptr ? version : "(none)");
-    /* A host with no compatibility profile is a host this cannot be tried on,
-     * and says so rather than failing (US1.4). */
     if (mask != 2) {
         std::fprintf(stderr, "host grants no compatibility profile; nothing to draw\n");
         CHECK(gl.make_current(nullptr, nullptr));
@@ -387,21 +339,19 @@ TEST(fullstack_opengl_icd, a_legacy_context_draws_the_fixed_function_pipeline_th
     reinterpret_cast<BindFramebuffer>(gl.get_proc_address("glBindFramebuffer"))(gl_framebuffer, framebuffer);
     reinterpret_cast<FramebufferTexture2D>(gl.get_proc_address("glFramebufferTexture2D"))(
         gl_framebuffer, gl_color_attachment0, gl_texture_2d, texture, 0);
-    gl.gl<void (APIENTRY *)(GLint, GLint, GLsizei, GLsizei)>(305u /* glViewport */)(0, 0, side, side);
+    gl.gl<void (APIENTRY *)(GLint, GLint, GLsizei, GLsizei)>(305u )(0, 0, side, side);
 
-    /* The matrix stacks a core context does not have. */
-    gl.gl<void (APIENTRY *)(GLenum)>(slot_matrix_mode)(0x1701u /* GL_PROJECTION */);
+    gl.gl<void (APIENTRY *)(GLenum)>(slot_matrix_mode)(0x1701u );
     gl.gl<void (APIENTRY *)()>(slot_load_identity)();
-    gl.gl<void (APIENTRY *)(GLenum)>(slot_matrix_mode)(0x1700u /* GL_MODELVIEW */);
+    gl.gl<void (APIENTRY *)(GLenum)>(slot_matrix_mode)(0x1700u );
     gl.gl<void (APIENTRY *)()>(slot_load_identity)();
     gl.gl<void (APIENTRY *)(GLfloat, GLfloat, GLfloat, GLfloat)>(slot_clear_color)(0.0f, 0.0f, 0.0f, 1.0f);
     gl.gl<void (APIENTRY *)(GLbitfield)>(slot_clear)(gl_color_buffer_bit);
 
-    /* One list, compiled once: a triangle that covers the whole viewport. */
     const GLuint list = gl.gl<GLuint (APIENTRY *)(GLsizei)>(slot_gen_lists)(1);
     CHECK(list != 0u);
-    gl.gl<void (APIENTRY *)(GLuint, GLenum)>(slot_new_list)(list, 0x1300u /* GL_COMPILE */);
-    gl.gl<void (APIENTRY *)(GLenum)>(slot_begin)(0x0004u /* GL_TRIANGLES */);
+    gl.gl<void (APIENTRY *)(GLuint, GLenum)>(slot_new_list)(list, 0x1300u );
+    gl.gl<void (APIENTRY *)(GLenum)>(slot_begin)(0x0004u );
     gl.gl<void (APIENTRY *)(GLfloat, GLfloat, GLfloat)>(slot_color_3f)(1.0f, 0.0f, 0.0f);
     gl.gl<void (APIENTRY *)(GLfloat, GLfloat)>(slot_vertex_2f)(-1.0f, -1.0f);
     gl.gl<void (APIENTRY *)(GLfloat, GLfloat)>(slot_vertex_2f)(3.0f, -1.0f);
@@ -429,11 +379,6 @@ TEST(fullstack_opengl_icd, a_legacy_context_draws_the_fixed_function_pipeline_th
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* The GL probe's steps (T038, T041) through the ICD on this machine's GPU: a
- * triangle presented to the window and read back, a texture read across
- * wglShareLists, a context refused to a second thread, the ARB errors, a
- * robust context the host faulted, and a context made after that loss - with
- * the device holding no context once the process is gone. */
 TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENGL) == 0u) return;
@@ -454,7 +399,7 @@ TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
     report.finish();
     std::fprintf(stderr, "%s", report.text());
     CHECK_EQ(report.failed(), 0u);
-    CHECK_EQ(report.passed(), 12u);   /* feature 051 added compat, interval and resized */
+    CHECK_EQ(report.passed(), 12u);
     CHECK(std::strstr(report.text(), "ok opengl.draw 1024\n") != nullptr);
     CHECK(std::strstr(report.text(), "ok opengl.share 4\n") != nullptr);
     CHECK(std::strstr(report.text(), "ok opengl.busy 170\n") != nullptr);

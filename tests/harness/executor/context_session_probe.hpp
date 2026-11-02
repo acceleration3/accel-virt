@@ -1,6 +1,3 @@
-/* Reaches into a ContextSession so invariant tests can corrupt it, or the
- * imports it holds. Declared a friend by ContextSession; nothing outside the
- * tests uses it. */
 #ifndef AV_CONTEXT_SESSION_PROBE_HPP
 #define AV_CONTEXT_SESSION_PROBE_HPP
 
@@ -24,6 +21,6 @@ struct ContextSessionProbe {
     ContextSession &session;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_CONTEXT_SESSION_PROBE_HPP
+#endif

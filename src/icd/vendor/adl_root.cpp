@@ -144,9 +144,6 @@ const VendorAdapter *AdlRoot::adapter(int index) const
     return adapters_.nth_of(PciIdentity::amd_vendor, static_cast<uint32_t>(index));
 }
 
-/* The hardware ID is the one Windows gave the device, which an application
- * matches against SetupAPI's; it names no instance, so the display path and
- * the driver's registry key are left empty rather than guessed. */
 void AdlRoot::describe(uint32_t index, AdlAdapterInfoRecord &info) const
 {
     AV_SCOPE("AdlRoot::describe");
@@ -179,4 +176,4 @@ void AdlRoot::driver_version(char *out, uint32_t capacity) const
     if (first != nullptr) first->facts().append_driver_version(text);
 }
 
-}  // namespace av::vendor
+}

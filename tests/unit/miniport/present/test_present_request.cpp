@@ -41,8 +41,6 @@ std::uint64_t u64(const std::uint8_t *bytes, std::size_t offset)
     return std::uint64_t{u32(bytes, offset)} | std::uint64_t{u32(bytes, offset + 4u)} << 32u;
 }
 
-/* One Present as dxgkrnl builds it: a DMA buffer of `dma_size` inside a larger
- * poisoned one, a three-entry patch list, and three sub-rectangles. */
 class Present {
 public:
     explicit Present(std::uint32_t flags, std::uint32_t dma_size = 512u)
@@ -66,7 +64,6 @@ public:
         allocations_[2].AllocationVirtualAddress = 0x0000567800002000ull;
     }
 
-    /* As dxgkrnl presents for a context with GPU virtual addressing. */
     void on_gpu_virtual_addresses()
     {
         request_.pPatchLocationListOut = nullptr;
@@ -107,7 +104,7 @@ private:
     DxgkargPresentRecord          request_;
 };
 
-}  // namespace
+}
 
 TEST(present_request_present, a_blt_writes_one_command_with_both_patches)
 { Present present(blt);
@@ -145,8 +142,6 @@ TEST(present_request_present, a_colour_fill_patches_only_the_destination)
   CHECK_EQ(present.patch(0u).PatchOffset, PresentCommand::destination_address_offset);
   CHECK(present.patches_untouched_from(1u)); }
 
-/* An MPO present's flip, once the adapter claims overlay planes, is a flip
- * like any other here. */
 TEST(present_request_present, a_flip_patches_only_the_source)
 { const std::uint32_t flips[] = {flip, flip | flip_with_no_wait, flip | flip_with_multiplane_overlay,
                                  flip | flip_with_no_wait | flip_with_multiplane_overlay};

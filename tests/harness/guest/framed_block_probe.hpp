@@ -1,6 +1,3 @@
-/* Reaches into a FramedBlock so the invariant tests of the classes that frame
- * into one can build the states it never builds. Declared a friend by
- * FramedBlock; nothing outside the tests uses it. */
 #ifndef AV_FRAMED_BLOCK_PROBE_HPP
 #define AV_FRAMED_BLOCK_PROBE_HPP
 
@@ -21,6 +18,6 @@ struct FramedBlockProbe {
     FramedBlock &framed;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FRAMED_BLOCK_PROBE_HPP
+#endif

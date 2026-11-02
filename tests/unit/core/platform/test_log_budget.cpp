@@ -1,6 +1,3 @@
-/* The bound on how much the driver may say. A fault storm reaches the DPC at
- * DISPATCH, where logging is neither free nor allowed to be unbounded, so the
- * budget admits a fixed number of lines per window and counts what it drops. */
 #include "core/platform/log_budget.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -32,17 +29,14 @@ TEST(log_budget_allows, admits_again_once_the_window_has_passed)
   LogBudget budget(platform);
   for (std::uint32_t line = 0u; line < LogBudget::lines_per_window; line++) CHECK(budget.allows());
   CHECK(!budget.allows());
-  /* One tick short of the window is still the same window. */
   platform.advance_time(LogBudget::window_ticks - 1u);
   CHECK(!budget.allows());
   CHECK_EQ(budget.dropped(), 2u);
   platform.advance_time(1u);
   CHECK(budget.allows());
-  CHECK_EQ(budget.dropped(), 2u);   /* admitting does not drop */
+  CHECK_EQ(budget.dropped(), 2u);
   CHECK(budget.invariants_hold()); }
 
-/* A storm must not turn into a storm of log lines: the count of what was
- * dropped is what a later line reports instead. */
 TEST(log_budget_dropped, counts_every_refusal_across_windows)
 { MockPlatform platform;
   LogBudget budget(platform);

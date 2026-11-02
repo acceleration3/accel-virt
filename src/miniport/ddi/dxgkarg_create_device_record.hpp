@@ -1,6 +1,3 @@
-/* DXGKARG_CREATEDEVICE, as DxgkDdiCreateDevice receives and answers it. A DDI
- * record: Flags is the DXGK_CREATEDEVICEFLAGS Value, widened by the pInfo
- * union. src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_CREATE_DEVICE_RECORD_HPP
 #define AV_DXGKARG_CREATE_DEVICE_RECORD_HPP
 
@@ -17,6 +14,6 @@ struct DxgkargCreateDeviceRecord {
     void     *hKmdProcess;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_CREATE_DEVICE_RECORD_HPP
+#endif

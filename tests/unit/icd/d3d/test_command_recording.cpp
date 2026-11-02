@@ -1,7 +1,3 @@
-/* A deferred context's recording block: made once at its first size, kept
- * when what is asked for fits, doubled - carrying over what was recorded -
- * when it does not, never past its largest size, and left as it was when a
- * larger block cannot be had. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -30,7 +26,7 @@ bool filled(const std::uint8_t *bytes, std::size_t count)
     return true;
 }
 
-}  // namespace
+}
 
 TEST(command_recording, the_first_block_is_made_once_and_released_with_the_recording)
 { MockPlatform platform;
@@ -65,14 +61,12 @@ TEST(command_recording, what_fits_keeps_the_block_and_what_does_not_doubles_it)
   CHECK(recording.bytes() == block);
   CHECK_EQ(recording.capacity(), first);
 
-  /* One past the end: doubled, and what was recorded carried over. */
   fill(recording.bytes(), first - 4u);
   CHECK(recording.hold(first - 4u, 5u));
   CHECK_EQ(recording.capacity(), 2u * first);
   CHECK(filled(recording.bytes(), first - 4u));
   CHECK_EQ(platform.live_allocations(), 1u);
 
-  /* Doubled as often as it takes, and never past the largest. */
   CHECK(recording.hold(40u, most - 40u));
   CHECK_EQ(recording.capacity(), most);
   CHECK(filled(recording.bytes(), 40u));
@@ -94,12 +88,10 @@ TEST(command_recording, a_block_that_cannot_grow_is_left_as_it_was)
   CHECK_EQ(recording.capacity(), first);
   CHECK(filled(recording.bytes(), first));
 
-  /* Exactly the largest still fits. */
   CHECK(recording.hold(first, most - first));
   CHECK_EQ(recording.capacity(), most);
   CHECK(filled(recording.bytes(), first)); }
 
-/* A largest size below the first is the first: the block never shrinks. */
 TEST(command_recording, a_largest_size_below_the_first_is_the_first)
 { MockPlatform platform;
   CommandRecording recording(platform, first, first / 2u);

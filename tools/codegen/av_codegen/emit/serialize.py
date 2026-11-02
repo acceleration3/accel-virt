@@ -1,18 +1,3 @@
-"""Emit serialize_/deserialize_ helpers for handles and structs.
-
-Phase 1.6 expands struct support beyond pure-POD: optional pointer-to-struct,
-single null-terminated string, string array, variable-length POD array, and
-variable-length struct array. Server-side deserialization allocates pointed-to
-storage in an ``Arena`` provided by the caller. Client-side serialization is
-direct.
-
-What's still not handled (would need pNext support, opaque blobs, unions, etc.):
-  * non-empty pNext chains
-  * function pointers
-  * unions (VkClearValue family)
-  * external memory handle types (Win32, fd, etc.)
-"""
-
 from __future__ import annotations
 
 import re
@@ -31,11 +16,6 @@ def _referenced_handle_names(reg: Registry) -> list[str]:
         for p in cmd.params:
             if p.type.base in reg.handles:
                 seen.add(p.type.base)
-    # Struct members too, not just command parameters. A handle can reach
-    # the wire purely through a struct — pNext chain nodes carry
-    # VkAccelerationStructureKHR, VkValidationCacheEXT and friends that no
-    # selected command mentions by type, and their serializers would be
-    # referenced without ever being emitted.
     for s in reg.structs.values():
         for m in s.members:
             if m.type.base in reg.handles:
@@ -44,8 +24,6 @@ def _referenced_handle_names(reg: Registry) -> list[str]:
 
 
 def handle_kind(name: str) -> str:
-    """The ``HandleKind`` enumerator of a handle type:
-    ``VkAccelerationStructureKHR`` is ``acceleration_structure_khr``."""
     return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name[2:]).lower()
 
 
@@ -77,13 +55,6 @@ _CARRIERS: dict[int, frozenset[str]] = {}
 
 
 def carriers(reg: Registry) -> frozenset[str]:
-    """Every struct whose encoder or decoder needs the ``HandleTranslation``.
-
-    One that holds a handle, a chain (whose nodes may), a blob only a template
-    sizes, or such a struct. The rest - an extent, a copy region, a viewport -
-    are plain data and are not handed one: the hottest commands carry arrays
-    of them, and a parameter nothing reads is a register spent per element.
-    """
     key = id(reg)
     if key in _CARRIERS:
         return _CARRIERS[key]
@@ -109,7 +80,6 @@ def carriers(reg: Registry) -> frozenset[str]:
 
 
 def serialize_call(reg: Registry, type_name: str, buf: str, value: str, via: str = "handles") -> str:
-    """A call to ``type_name``'s encoder, handed ``via`` where it takes one."""
     if type_name in reg.handles or type_name in carriers(reg):
         return f"serialize_{type_name}({buf}, {via}, {value})"
     return f"serialize_{type_name}({buf}, {value})"
@@ -117,15 +87,11 @@ def serialize_call(reg: Registry, type_name: str, buf: str, value: str, via: str
 
 def deserialize_call(reg: Registry, type_name: str, r: str, out: str, arena: str,
                      via: str = "handles") -> str:
-    """A call to ``type_name``'s decoder; a handle's takes no arena."""
     if type_name in reg.handles:
         return f"deserialize_{type_name}({r}, {via}, {out})"
     if type_name in carriers(reg):
         return f"deserialize_{type_name}({r}, {via}, {out}, {arena})"
     return f"deserialize_{type_name}({r}, {out}, {arena})"
-
-
-# ---- Member classification ------------------------------------------------
 
 
 def _len_components(m: StructMember) -> list[str]:
@@ -135,31 +101,12 @@ def _len_components(m: StructMember) -> list[str]:
 
 
 def _expr_to_cpp(expr: str, prefix: str) -> str:
-    """Rewrite a vk.xml ``len`` / ``altlen`` expression into a C++ expression.
-
-    Bare C-identifier tokens are member references — they get ``prefix``
-    prepended (``v.`` for serializer, ``out->`` for deserializer). Numeric
-    literals, parens, and operators are left as-is. So
-    ``"(rasterizationSamples + 31) / 32"`` becomes
-    ``"(v.rasterizationSamples + 31) / 32"`` for serializer-side use.
-    """
     import re
 
     def sub(m: "re.Match[str]") -> str:
         name = m.group(0)
-        # ``VK_``-prefixed tokens are API constants, not members:
-        # ``len="2*VK_UUID_SIZE"`` must stay ``2*VK_UUID_SIZE``. Prefixing
-        # produces ``v.VK_UUID_SIZE``, which the preprocessor then expands
-        # to ``v.16U`` — a syntax error pointing into vulkan_core.h rather
-        # than at the generated line that caused it.
         if name.startswith("VK_"):
             return name
-        # Read as the number it is. A member decoded from the wire holds
-        # whatever a guest sent, and some of them are enum-typed: loading one
-        # whose value the enum does not have is undefined, and a length
-        # expression is exactly where that load happens. as_number copies the
-        # bytes out instead, which is defined for every value there is. A fuzz
-        # target found it in VkPipelineMultisampleStateCreateInfo (feature 042).
         return f"as_number({prefix}{name})"
 
     return re.sub(r"\b([a-zA-Z_][a-zA-Z_0-9]*)\b", sub, expr)
@@ -169,13 +116,6 @@ _TEMPLATE_SIBLINGS: dict[int, str | None] = {}
 
 
 def _template_sibling(reg: Registry, m: StructMember) -> str | None:
-    """The ``VkDescriptorUpdateTemplate`` member beside ``m`` in its struct.
-
-    VK_KHR_maintenance6 moved the ``WithTemplate`` push into a struct
-    (``VkPushDescriptorSetWithTemplateInfo``), and its ``pData`` has no ``len``
-    there either: the template sizes it, exactly as it does the command
-    parameter ``classify.template_sibling`` answers for.
-    """
     key = id(m)
     if key not in _TEMPLATE_SIBLINGS:
         found = None
@@ -209,29 +149,16 @@ def _classify_member(reg: Registry, m: StructMember) -> str:
                 return "string"
             return "unknown_ptr"
         if m.type.base == "void":
-            # A ``void*`` carrying a ``len`` is a byte blob with its size
-            # right there in the struct — specialization constant data,
-            # pipeline cache blobs, inline uniform blocks. Encodable, and
-            # it must be encoded: dropping the pointer while still sending
-            # the size hands the driver a null pointer and a non-zero
-            # length, which it dereferences and dies on.
             if parts:
                 return "void_blob"
             if _template_sibling(reg, m) is not None:
                 return "template_blob"
-            # Otherwise genuinely opaque — host pointers, function
-            # pointers. Nothing sensible to put on a wire.
             return "unknown_ptr"
         if m.type.base in reg.structs:
             if not parts:
                 return "optional_struct_ptr"
             return "struct_array"
         if m.type.base in reg.handles and parts:
-            # Arrays of Vulkan handles MUST go through ``serialize_<H>``
-            # so the translation can unwrap dispatchable
-            # handles (VkCommandBuffer in VkSubmitInfo.pCommandBuffers,
-            # VkSemaphore in pWaitSemaphores, etc.). Without this they'd
-            # write the raw client-side wrapper pointer.
             return "handle_array"
         if parts:
             return "pod_array"
@@ -249,18 +176,6 @@ CALLER_ARRAY_KINDS = ("handle_array", "pod_array", "struct_array")
 
 
 def caller_arrays(reg: Registry, s: Struct) -> list[tuple[StructMember, StructMember]]:
-    """The (array, count) member pairs an output struct's caller fills in.
-
-    ``VkPipelineBinaryHandlesInfoKHR::pPipelineBinaries`` and
-    ``VkPhysicalDeviceHostImageCopyProperties::pCopySrcLayouts`` are the shape:
-    the application points the member at its own array and says in the count
-    how many elements it holds - or leaves the pointer null to be told how
-    many there are - and the implementation writes at most that many and
-    overwrites the count with how many it wrote. Only a plain ``uint32_t``
-    count that sizes nothing else is taken: decoding holds the answered count
-    aside until the elements are read, which is only sound for a count that
-    belongs to one array.
-    """
     members = {m.name: m for m in s.members}
     pairs: list[tuple[StructMember, StructMember]] = []
     for m in s.members:
@@ -277,14 +192,6 @@ def caller_arrays(reg: Registry, s: Struct) -> list[tuple[StructMember, StructMe
 
 
 def _output_structs(reg: Registry) -> set[str]:
-    """Every struct a reply decodes into memory the application owns.
-
-    What a command writes through - an output struct, an element of an output
-    array - and, transitively, what those structs hold by value, point at as
-    an array, or chain on. vk.xml's ``returnedonly`` would be the obvious test
-    and is missing from structs that are exactly this, the
-    ``VkPipelineBinaryHandlesInfoKHR`` a create fills among them.
-    """
     found: set[str] = set()
     for cmd in reg.commands.values():
         for index, p in enumerate(cmd.params):
@@ -306,14 +213,6 @@ def _output_structs(reg: Registry) -> set[str]:
 
 
 def _fixed_array_bounds(s: Struct) -> dict[str, str]:
-    """Each count that says how much of a fixed array is used, and the array's size.
-
-    ``VkPhysicalDeviceMemoryProperties::memoryTypeCount`` beside
-    ``memoryTypes[VK_MAX_MEMORY_TYPES]`` is the shape: an application walks
-    the array up to the count, so a count past the array's size is a read past
-    the structure, in the guest for a reply and in the host's driver for a
-    request. Found by tests/fuzz/fuzz_generated_client_replies.cpp (T036).
-    """
     members = {m.name: m for m in s.members}
     bounds: dict[str, str] = {}
     for m in s.members:
@@ -325,9 +224,6 @@ def _fixed_array_bounds(s: Struct) -> dict[str, str]:
 
 
 def _deserialize_bounded_count(count: StructMember, bound: str) -> list[str]:
-    """A count past its array's size is refused before it replaces the one the
-    destination held, so an application whose call had no error to return
-    still reads a count its array holds."""
     answered = f"{count.name}_answered"
     return [
         "    {",
@@ -340,15 +236,6 @@ def _deserialize_bounded_count(count: StructMember, bound: str) -> list[str]:
 
 
 def _deserialize_caller_array(reg: Registry, m: StructMember, count: StructMember) -> list[str]:
-    """An output struct's array member, into the caller's array when it gave one.
-
-    The server decodes into zeroed storage whose pointer is null, and allocates
-    as it always did. The client decodes into the application's struct: a
-    non-null pointer there is the application's array with the count's room,
-    so the elements go into it - never into an arena the call's return
-    abandons - and an answered count past that room is refused before one is
-    written, the count and array then left as the caller set them.
-    """
     kind = _classify_member(reg, m)
     answered = f"{count.name}_answered"
     if kind in ("struct_array", "handle_array"):
@@ -383,19 +270,6 @@ def _deserialize_caller_array(reg: Registry, m: StructMember, count: StructMembe
     ]
 
 
-# ---- Per-member emission --------------------------------------------------
-
-
-# ``size_t`` is the one POD in Vulkan whose width is the machine's.
-#
-# VkDescriptorUpdateTemplateEntry::offset and ::stride are size_t, as are
-# VkSpecializationInfo::dataSize and several others. Written with the
-# local width, a 32-bit client puts four bytes where the 64-bit server
-# reads eight, and every field after it in the message is shifted: the
-# server rejects the command as undecodable and names the command rather
-# than the field, which is a long way from the cause.
-#
-# So size_t crosses as a fixed 64 bits, like everything else here.
 def _is_size_t(m) -> bool:
     return classify.is_machine_width(m.type)
 
@@ -410,8 +284,6 @@ def _serialize_member(reg: Registry, m: StructMember) -> list[str]:
         return [f"    {serialize_call(reg, m.type.base, 'buf', f'v.{m.name}')};"]
     if kind == "pod":
         if classify.is_machine_width(m.type):
-            # 64 bits, stated. See classify.MACHINE_WIDTH_TYPES for why
-            # this is the one thing here that is never left implicit.
             return [f"    buf.write_pod<uint64_t>(v.{m.name});"]
         return [f"    buf.write_pod(v.{m.name});"]
     if kind == "string":
@@ -526,19 +398,12 @@ def _serialize_member(reg: Registry, m: StructMember) -> list[str]:
 
 
 def _refuse_absent(m: StructMember, length: str) -> list[str]:
-    """A required array the frame left out while its length says it has
-    elements: the driver would read that many through a null pointer."""
     if not m.required:
         return []
     return [f"        if (!present && {_expr_to_cpp(length, "out->")} != 0) {{ return false; }}"]
 
 
 def _zero_absent(m: StructMember, length: str, element: str) -> list[str]:
-    """An array the registry leaves to conditions (``noautovalidity``) - a
-    write's image infos, a create's queue family indices - that the frame
-    left out while its length says it has elements. Where the condition makes
-    the driver ignore it this is nothing; where it does not, the driver reads
-    zeroes instead of dereferencing a null pointer."""
     if not m.conditional:
         return []
     count = _expr_to_cpp(length, "out->")
@@ -552,8 +417,6 @@ def _zero_absent(m: StructMember, length: str, element: str) -> list[str]:
 
 
 def _absent_struct(m: StructMember) -> list[str]:
-    """A structure the frame left out: refused where the API requires it,
-    zeroes where the registry leaves it to conditions, null otherwise."""
     if m.required:
         return ["            return false;"]
     if m.conditional:
@@ -568,10 +431,6 @@ def _absent_struct(m: StructMember) -> list[str]:
 def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
     kind = _classify_member(reg, m)
     if kind == "pnext":
-        # The codec never overwrites ``out->pNext`` with a chain the
-        # caller did not already own — see ``deserialize_pnext_chain``.
-        # On the client that pointer is the application's own chain, and
-        # replacing it would orphan the structs it is about to read.
         return [
             "    if (!deserialize_pnext_chain(r, handles, "
             "reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }",
@@ -605,9 +464,6 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             ]
         return [f"    if (!r.read_pod(out->{m.name})) {{ return false; }}"]
     if kind == "string":
-        # The wire says nothing for a null string and an empty one alike. A
-        # string the API requires is read by the driver - an entry point's
-        # name - so it is the empty one, never a null pointer.
         absent = (
             [
                 "            char* empty = arena.allocate_chars(1u);",
@@ -669,9 +525,6 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "    }",
         ]
     if kind == "template_blob":
-        # The length is a claim, checked as the command form's is
-        # (server_dispatch): the template decoded before it says what it must
-        # be, and a side with no templates answers 0 for every one.
         template = _template_sibling(reg, m)
         return [
             "    {",
@@ -707,7 +560,6 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
         ]
     if kind == "pod_array":
         count = _len_components(m)[0]
-        # Use the underlying pointee type for storage, peeled off the pointer.
         elem = m.type.base
         return [
             "    {",
@@ -788,15 +640,6 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
 
 
 def _chain_nodes(reg: Registry) -> list[Struct]:
-    """Chain-extension structs the codec can encode losslessly.
-
-    A struct with a member the emitter cannot encode is left out rather
-    than encoded with a hole in it: an absent node leaves the caller's
-    struct exactly as it was, which for a feature query reads as
-    "unsupported" — the same answer as today, and a safe one. A node
-    encoded with a silently-dropped member would instead claim to carry
-    data it does not.
-    """
     out: list[Struct] = []
     for name in reg.struct_order:
         s = reg.structs[name]
@@ -809,8 +652,6 @@ def _chain_nodes(reg: Registry) -> list[Struct]:
             continue
         if any(_classify_member(reg, m) == "unknown_ptr" for m in s.members):
             continue
-        # The struct can be declared while its sType enumerant is not —
-        # the codec switches on that constant, so both have to exist.
         if reg.declared_names and stype not in reg.declared_names:
             continue
         out.append(s)
@@ -822,22 +663,6 @@ def _stype_of(s: Struct) -> str:
 
 
 def _emit_pnext_codec(reg: Registry) -> list[str]:
-    """The pNext chain codec.
-
-    Encoded as a linked list rather than a flat array: each node's own
-    serializer emits its pNext member, so writing one node and recursing
-    falls out of the existing per-struct code. Nodes whose sType this
-    build does not know are skipped over, not fatal — a newer client
-    talking to an older server degrades to "that extension's struct did
-    not come through" instead of dropping the connection.
-
-    Deserialization serves both directions with one function. The server
-    receives a zero-initialized struct whose pNext is null, so every node
-    is allocated from the per-dispatch arena. The client receives a
-    struct whose chain the *application* already built and still owns, so
-    a node matching by sType is filled in place. Allocating there would
-    orphan the application's struct and it would read back zeros.
-    """
     nodes = _chain_nodes(reg)
     lines: list[str] = [
         "// ---- pNext chain codec ----------------------------------------------",
@@ -921,22 +746,7 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
     return lines
 
 
-# Structs whose encoding cannot be derived from vk.xml alone, keyed by
-# name. Each entry is (serializer body, deserializer body) — the function
-# signatures are generated as usual, only the bodies are hand-written.
-#
-# VkDescriptorGetInfoEXT is the reason this exists: its ``data`` member is
-# a union of pointers, and the only thing that says which arm is live is
-# the sibling ``type`` field. The generic emitter has no way to express
-# "switch on that member", and raw-byte encoding would hand the server a
-# client-side pointer to dereference.
 BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
-    # The regions carry a raw host pointer whose length is a function of
-    # the destination image's format — information this struct does not
-    # contain and the server cannot recover. Nothing on the guest keeps an
-    # image's format either, so each region goes with a length of 0: no
-    # pixels, rather than a null pointer with a non-zero size for the driver
-    # to walk. The length is on the wire for a client that comes to know it.
     "VkCopyMemoryToImageInfo": (
         [
             "    buf.write_pod(v.sType);",
@@ -1049,8 +859,7 @@ BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
 
 
 def _is_address_union(s: Struct) -> bool:
-    """``{deviceAddress, hostAddress}`` — see lower._is_address_union."""
-    return s.is_union and {m.name for m in s.members} == {"deviceAddress", "hostAddress"}
+   return s.is_union and {m.name for m in s.members} == {"deviceAddress", "hostAddress"}
 
 
 def _serializer_head(reg: Registry, name: str) -> str:
@@ -1065,8 +874,6 @@ def _deserializer_head(reg: Registry, name: str) -> str:
 
 
 def _unread_translation(reg: Registry, name: str, body: list[str]) -> list[str]:
-    """A carrier's translation, marked read in the direction that never asks
-    it: a template blob's length is asked of it going out only."""
     if name in carriers(reg) and not any("handles" in line for line in body):
         return ["    (void)handles;"]
     return []
@@ -1087,11 +894,6 @@ def _emit_struct_helpers(reg: Registry, s: Struct, outputs: set[str]) -> list[st
             "",
         ]
     if _is_address_union(s):
-        # Encode the device address explicitly rather than memcpy'ing the
-        # union. Both arms are 64 bits wide so raw bytes would round-trip
-        # the same value, but writing it this way says which arm the
-        # proxy supports: a host pointer means nothing on the far side of
-        # the connection.
         return [
             _serializer_head(reg, s.name),
             "    buf.write_pod(v.deviceAddress);",
@@ -1104,11 +906,6 @@ def _emit_struct_helpers(reg: Registry, s: Struct, outputs: set[str]) -> list[st
             "",
         ]
     if s.is_union:
-        # Unions are encoded as raw bytes — the discriminator is
-        # context-dependent (e.g. VkClearColorValue's active member is
-        # determined by the format of the image being cleared). The
-        # alternative would be to walk every member every time, which
-        # reads invalid memory for inactive members.
         return [
             _serializer_head(reg, s.name),
             "    buf.write(&v, sizeof(v));",
@@ -1143,11 +940,6 @@ def _emit_struct_helpers(reg: Registry, s: Struct, outputs: set[str]) -> list[st
             decoded.extend(_deserialize_bounded_count(m, bounds[m.name]))
         else:
             decoded.extend(_deserialize_member(reg, m))
-        # A name the API promises is terminated inside its array is one an
-        # application hands to strlen; a sender that filled every byte would
-        # have it read past the structure. Terminating the last byte changes
-        # nothing a sender keeping the promise wrote. Found by
-        # tests/fuzz/fuzz_generated_client_replies.cpp (T036).
         if m.type.is_fixed_array and m.type.base == "char" and _len_components(m) == ["null-terminated"]:
             decoded.append(f"    out->{m.name}[sizeof(out->{m.name}) - 1u] = '\\0';")
     out.extend(_unread_translation(reg, s.name, decoded))
@@ -1159,7 +951,6 @@ def _emit_struct_helpers(reg: Registry, s: Struct, outputs: set[str]) -> list[st
 
 
 def _translation_declarations(reg: Registry) -> list[str]:
-    """The kinds of handle, what translates them, and the identity."""
     lines = [
         "// The kinds of handle that cross the wire: one per handle type the",
         "// profile carries.",
@@ -1212,9 +1003,6 @@ def _translation_declarations(reg: Registry) -> list[str]:
 
 
 def _optional_helpers(reg: Registry) -> list[str]:
-    """Optional-pointer helpers for the bespoke struct bodies. Each writes a
-    presence byte then the pointee, and allocates from the arena on the way
-    back in."""
     lines = [
         "// Optional pointer helpers (used by hand-written struct bodies).",
         "inline void serialize_optional_sampler(::av::WireWriter& buf, HandleTranslation& handles, "
@@ -1256,14 +1044,6 @@ def _optional_helpers(reg: Registry) -> list[str]:
         "}",
         "",
     ]
-    # Only if the struct is in this build.
-    #
-    # These helpers are for hand-written struct bodies, and the body
-    # that uses this one belongs to VK_EXT_descriptor_buffer. Drop
-    # that extension from the profile and the helper still emitted,
-    # referring to a serializer for a struct nobody generated — the
-    # build then failed on a name, several thousand lines from the
-    # decision that caused it.
     if "VkDescriptorAddressInfoEXT" in reg.structs:
         lines += [
             "inline void serialize_optional_addr_info(::av::WireWriter& buf, HandleTranslation& handles, "
@@ -1290,7 +1070,6 @@ def _optional_helpers(reg: Registry) -> list[str]:
 
 
 def _emit_identity(reg: Registry) -> str:
-    """vk_handle_identity.cpp: HandleIdentity's definitions."""
     return "\n".join([
         GENERATED_BANNER,
         "",
@@ -1329,10 +1108,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "proto/wire/wire_arena.hpp"',
         '#include "proto/wire/wire_writer.hpp"',
-        # Every deserialize_* takes a BufferReader&, so this header is
-        # not optional. It was missing from the emitter and present in
-        # the committed output, which is one of the ways generated/ had
-        # drifted out of reach of check-codegen.
         '#include "proto/wire/wire_reader.hpp"',
         '#include "vk_handle_translation.h"',
         "",
@@ -1378,9 +1153,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
 
     if reg.struct_order:
         header.append("// Forward declarations.")
-        # The chain codec is mutually recursive with the per-struct
-        # helpers: a struct serializer emits its pNext through the codec,
-        # and the codec dispatches back into a struct serializer.
         header.append(
             "inline void serialize_pnext_chain(::av::WireWriter&, HandleTranslation&, const void*);"
         )

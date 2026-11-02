@@ -14,7 +14,6 @@ using av::Status;
 namespace av {
 
 struct GuestSessionProbe {
-    /* One field of a session set behind its back: whether it is still sound. */
     static bool sound_with_device(GuestSession &session, std::uint32_t device)
     {
         session.device_ = device;
@@ -31,7 +30,6 @@ struct GuestSessionProbe {
         session.fence_object_ = fence_object;
         session.addresses_[0] = unheld_address;
     }
-    /* A view of a slot that holds no allocation. */
     static void unheld_view(GuestSession &session, void *view) { session.views_[0] = view; }
     static void clear(GuestSession &session)
     {
@@ -42,7 +40,7 @@ struct GuestSessionProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -66,7 +64,6 @@ private:
 
 const ClientDescriptor descriptor(8192u);
 
-/* Every object a submission needs: the address of the mapping. */
 std::uint64_t submittable(GuestSession &session)
 {
     std::uint32_t index = 9u;
@@ -81,7 +78,7 @@ std::uint64_t submittable(GuestSession &session)
     return address;
 }
 
-}  // namespace
+}
 
 TEST(guest_session, creates_every_object_submits_waits_and_destroys_them_in_reverse)
 { Fixture fixture;
@@ -94,7 +91,7 @@ TEST(guest_session, creates_every_object_submits_waits_and_destroys_them_in_reve
   CHECK_EQ(fixture.kmt().open_objects(), 6u);
   CHECK_STATUS(session.tear_down(), Status::ok);
   CHECK(session.invariants_hold());
-  CHECK_EQ(fixture.kmt().open_objects(), 1u);   /* the adapter, the fixture's */
+  CHECK_EQ(fixture.kmt().open_objects(), 1u);
   CHECK_STATUS(session.tear_down(), Status::ok);
   CHECK_EQ(fixture.kmt().misuses(), 0u); }
 
@@ -112,18 +109,18 @@ TEST(guest_session, refuses_each_step_before_what_it_needs_exists)
   CHECK_STATUS(session.wait(), Status::invalid_state);
   CHECK_STATUS(session.open_device(), Status::ok);
   CHECK_STATUS(session.open_device(), Status::invalid_state);
-  CHECK_STATUS(session.map(0u, 1u, address), Status::invalid_state);   /* no allocation */
+  CHECK_STATUS(session.map(0u, 1u, address), Status::invalid_state);
   CHECK_STATUS(session.allocate(descriptor.bytes(), descriptor.size(), index), Status::ok);
-  CHECK_STATUS(session.map(0u, 1u, address), Status::invalid_state);   /* no paging queue */
+  CHECK_STATUS(session.map(0u, 1u, address), Status::invalid_state);
   CHECK_STATUS(session.open_paging_queue(), Status::ok);
   CHECK_STATUS(session.open_paging_queue(), Status::invalid_state);
-  CHECK_STATUS(session.map(1u, 1u, address), Status::invalid_state);   /* no such slot */
+  CHECK_STATUS(session.map(1u, 1u, address), Status::invalid_state);
   CHECK_STATUS(session.map(0u, 1u, address), Status::ok);
-  CHECK_STATUS(session.map(0u, 1u, address), Status::invalid_state);   /* already mapped */
+  CHECK_STATUS(session.map(0u, 1u, address), Status::invalid_state);
   CHECK_EQ(address, 0u);
   CHECK_STATUS(session.allocate(descriptor.bytes(), descriptor.size(), index), Status::ok);
   CHECK_EQ(index, 1u);
-  CHECK_STATUS(session.allocate(descriptor.bytes(), descriptor.size(), index), Status::invalid_state);   /* full */
+  CHECK_STATUS(session.allocate(descriptor.bytes(), descriptor.size(), index), Status::invalid_state);
   CHECK_STATUS(session.open_context(), Status::ok);
   CHECK_STATUS(session.open_context(), Status::invalid_state);
   CHECK(session.invariants_hold());
@@ -153,19 +150,19 @@ TEST(guest_session, a_failure_at_every_call_keeps_nothing_it_did_not_get_and_lea
       CHECK_EQ(fixture.kmt().open_objects(), 1u);
       CHECK_EQ(fixture.kmt().misuses(), 0u);
   }
-  Fixture second_wait;   /* the wait after the mapping itself: the mapping is kept to free */
+  Fixture second_wait;
   { GuestSession session(second_wait.kmt(), second_wait.adapter());
     std::uint32_t index = 0u;
     std::uint64_t address = 0u;
     CHECK_STATUS(session.open_device(), Status::ok);
     CHECK_STATUS(session.allocate(descriptor.bytes(), descriptor.size(), index), Status::ok);
     CHECK_STATUS(session.open_paging_queue(), Status::ok);
-    CHECK_STATUS(session.map(index, 0u, address), Status::invalid_parameter);   /* no pages */
+    CHECK_STATUS(session.map(index, 0u, address), Status::invalid_parameter);
     second_wait.kmt().fail_at(MockKmt::Call::wait_for_fence, 2u, 0xC0000001u);
     CHECK_STATUS(session.map(index, descriptor.pages(), address), Status::invalid_state);
     CHECK_EQ(address, 0u);
     CHECK(session.invariants_hold());
-    CHECK_STATUS(session.map(index, descriptor.pages(), address), Status::invalid_state);   /* mapped already */
+    CHECK_STATUS(session.map(index, descriptor.pages(), address), Status::invalid_state);
     CHECK_STATUS(session.tear_down(), Status::ok);
     CHECK_EQ(second_wait.kmt().calls(MockKmt::Call::free_gpu_virtual_address), 1u); }
   CHECK_EQ(second_wait.kmt().open_objects(), 1u);
@@ -238,9 +235,6 @@ TEST(guest_session_invariants, an_orphaned_object_a_stray_fence_object_or_an_unh
   GuestSessionProbe::clear(session);
   CHECK(session.invariants_hold()); }
 
-/* A view is one the session asked for and has not given back: a slot it never
- * filled, or a second view of the same allocation, is refused before the driver
- * is asked for anything. */
 TEST(guest_session_lock, refuses_a_slot_it_never_filled_or_a_second_view_of_the_same_one)
 { Fixture fixture;
   GuestSession  session(fixture.kmt(), fixture.adapter());
@@ -251,7 +245,7 @@ TEST(guest_session_lock, refuses_a_slot_it_never_filled_or_a_second_view_of_the_
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::lock), 0u);
   CHECK_STATUS(session.open_device(), Status::ok);
   CHECK_STATUS(session.allocate(descriptor.bytes(), descriptor.size(), index), Status::ok);
-  CHECK_STATUS(session.unlock(index), Status::invalid_state);   /* nothing locked it */
+  CHECK_STATUS(session.unlock(index), Status::invalid_state);
   fixture.kmt().fail_at(MockKmt::Call::lock, 1u, 0xC0000001u);
   CHECK_STATUS(session.lock(index, view), Status::invalid_state);
   CHECK(view == nullptr);
@@ -270,8 +264,6 @@ TEST(guest_session_lock, refuses_a_slot_it_never_filled_or_a_second_view_of_the_
   CHECK_STATUS(session.tear_down(), Status::ok);
   CHECK_EQ(fixture.kmt().misuses(), 0u); }
 
-/* A view nobody gave back is given back by the teardown, before the allocation
- * it addresses is destroyed. */
 TEST(guest_session_lock, the_teardown_gives_back_a_view_that_was_left_open)
 { Fixture fixture;
   GuestSession  session(fixture.kmt(), fixture.adapter());
@@ -287,8 +279,6 @@ TEST(guest_session_lock, the_teardown_gives_back_a_view_that_was_left_open)
   CHECK_EQ(fixture.kmt().open_objects(), 1u);
   CHECK_EQ(fixture.kmt().misuses(), 0u); }
 
-/* The vertical blank is the adapter's, waited on through the session's device:
- * without one there is nothing to wait on. */
 TEST(guest_session_await_vertical_blank, needs_the_device_and_names_it)
 { Fixture fixture;
   GuestSession session(fixture.kmt(), fixture.adapter());

@@ -6,8 +6,6 @@
 namespace av {
 
 namespace {
-
-/* In LoaderVulkan::Function order. */
 constexpr const char *const names[] = {
     "vkDestroyInstance",
     "vkGetDeviceProcAddr",
@@ -82,7 +80,7 @@ constexpr const char *const names[] = {
 
 constexpr const char force_context_fault_name[] = "vkAvForceContextFault";
 
-}  // namespace
+}
 
 LoaderVulkan::LoaderVulkan(GetInstanceProcAddr get_instance_proc_addr)
     : get_instance_proc_addr_(get_instance_proc_addr), functions_{}
@@ -227,10 +225,6 @@ VkResult LoaderVulkan::allocate_memory(VkDevice device, const VkMemoryAllocateIn
     return resolved<VkResult (VKAPI_PTR *)(VkDevice, const VkMemoryAllocateInfo *, const VkAllocationCallbacks *, VkDeviceMemory *)>(Function::allocate_memory)(device, info, nullptr, memory);
 }
 
-/* VkMemoryGetWin32HandleInfoKHR, which no portable header declares: a HANDLE is
- * Windows' own type and the vendored registry headers carry no platform header
- * at all, exactly as src/icd/vulkan says of the same structures. The fields and
- * their order are what the Windows structure lays out (feature 053). */
 struct MemoryGetWin32HandleInfo {
     VkStructureType type;
     const void     *next;
@@ -255,8 +249,6 @@ VkResult LoaderVulkan::enumerate_device_extensions(VkPhysicalDevice physical_dev
     const auto call =
         resolved<VkResult (VKAPI_PTR *)(VkPhysicalDevice, const char *, uint32_t *, VkExtensionProperties *)>(
             Function::enumerate_device_extensions);
-    /* A loader that answers no such function is one the probe asks nothing
-     * more of, rather than one it calls through a null. */
     if (call == nullptr) return VK_ERROR_EXTENSION_NOT_PRESENT;
     return call(physical_device, nullptr, count, properties);
 }
@@ -265,7 +257,7 @@ VkResult LoaderVulkan::memory_win32_handle(VkDevice device, VkDeviceMemory memor
 {
     AV_SCOPE("LoaderVulkan::memory_win32_handle");
     MemoryGetWin32HandleInfo get = {};
-    get.type = static_cast<VkStructureType>(1000073003);   /* MEMORY_GET_WIN32_HANDLE_INFO_KHR */
+    get.type = static_cast<VkStructureType>(1000073003);
     get.memory = memory;
     get.handle_type = static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT);
     const auto call =
@@ -583,4 +575,4 @@ VkResult LoaderVulkan::queue_present(VkQueue queue, const VkPresentInfoKHR *info
     return resolved<VkResult (VKAPI_PTR *)(VkQueue, const VkPresentInfoKHR *)>(Function::queue_present)(queue, info);
 }
 
-}  // namespace av
+}

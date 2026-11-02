@@ -1,10 +1,3 @@
-"""The bytes docs/trace.md defines, read on the host: a trace table, the
-snapshot file avinspect.exe writes around one, and a state dump's text.
-
-Everything here reads bytes another machine wrote, so a table is refused on
-the same terms src/core/trace/trace_snapshot.cpp refuses it, field by field,
-before a slot is looked at. A refusal is a ValueError naming the field.
-"""
 import re
 import struct
 
@@ -36,7 +29,6 @@ STATE_FIELD = re.compile(r"(\S+?)=(\S*)")
 
 
 def fnv1a(name):
-    """The id AV_SCOPE stores for `name` (src/core/trace/scope_name.hpp)."""
     value = FNV_OFFSET
     for byte in name.encode():
         value = ((value ^ byte) * FNV_PRIME) & 0xFFFFFFFF
@@ -44,8 +36,6 @@ def fnv1a(name):
 
 
 def parse_table(data):
-    """A trace table's header and every slot, as dictionaries. Frames past a
-    slot's stored depth are not read; a slot never used is left out."""
     data = bytes(data)
     if len(data) < HEADER_BYTES:
         raise ValueError(f"header: {len(data)} bytes, a table needs {HEADER_BYTES}")
@@ -86,7 +76,6 @@ def parse_table(data):
 
 
 def parse_snapshot(data):
-    """avinspect.exe's file: (kind name, clock at the copy, payload bytes)."""
     data = bytes(data)
     if len(data) < SNAPSHOT_HEADER.size:
         raise ValueError(f"snapshot: {len(data)} bytes, shorter than its header")
@@ -101,7 +90,6 @@ def parse_snapshot(data):
 
 
 def parse_state(text):
-    """A state dump: [{"path": ..., "kinds": [...], "fields": {...}}] per line."""
     entries = []
     for line in text.splitlines():
         line = line.strip()
@@ -115,9 +103,6 @@ def parse_state(text):
 
 
 def describe_threads(table, names, now=None, stall_seconds=5.0):
-    """What a reader wants of a table: per thread its named frames and their
-    ages, what it waits on and who holds that, and whether it looks stuck.
-    With no clock for the copy, ages are measured from the newest frame."""
     if now is None:
         stamps = [frame["entered"] for slot in table["slots"] for frame in slot["frames"]]
         stamps += [slot["left_at"] for slot in table["slots"]]
@@ -144,9 +129,6 @@ def describe_threads(table, names, now=None, stall_seconds=5.0):
             described["holding"] = f"{slot['holding']:#x}"
         old = bool(slot["active"] and frames and frames[-1]["age_ms"] is not None
                    and frames[-1]["age_ms"] >= stall_seconds * 1000)
-        # A wait on something no traced thread holds - an event, a service's
-        # doorbell - is how an idle thread looks; a wait on a lock another
-        # thread holds is the start of a deadlock.
         parked = bool(slot["active"] and slot["waiting_on"] and not described["lock_held_by"])
         described["stalled"] = old and not parked
         if not slot["active"]:
@@ -165,8 +147,6 @@ def describe_threads(table, names, now=None, stall_seconds=5.0):
 
 
 def age_ms(now, stamp):
-    """Milliseconds from `stamp` to `now`, both 100 ns; None for a stamp never
-    written or one after the copy (a frame written while it was taken)."""
     if not stamp or stamp > now:
         return None
     return (now - stamp) // TICKS_PER_MS

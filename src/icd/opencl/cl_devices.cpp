@@ -24,10 +24,7 @@ void ClDevices::learn(const AvgpuAdapters &adapters)
     learnt_ = true;
     uint64_t luids[AvgpuAdapters::max_adapters] = {};
     const uint32_t named = adapters.luids(luids);
-    /* A device is opened by its adapter's LUID; without one there is no
-     * saying which adapter it would open. */
     left_out_ = adapters.count() - named;
-    /* Storage past count_ is empty, so no construct can be refused. */
     for (; count_ < named; ++count_) static_cast<void>(devices_[count_].construct(memory_, kmt_, luids[count_]));
 }
 
@@ -90,8 +87,6 @@ void ClDevices::report(StateWriter &writer) const
     writer.close();
 }
 
-/* The first count_ are constructed and the rest are not; no two devices are
- * on one adapter; nothing is made before learn. */
 bool ClDevices::invariants_hold() const
 {
     AV_SCOPE("ClDevices::invariants_hold");
@@ -106,4 +101,4 @@ bool ClDevices::invariants_hold() const
     return true;
 }
 
-}  // namespace av::clicd
+}

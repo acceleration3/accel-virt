@@ -1,12 +1,3 @@
-/* D3d9Device's resources, their locks, and the blts between them
- * (d3d9_device.hpp).
- *
- * A host resource is written, never mapped: a lock hands out a guest shadow
- * of the subresource, and its unlock sends what the lock covered. Discard
- * then needs no renaming - the data crosses in the command stream, and the
- * host's own discard keeps the GPU from waiting - and no-overwrite no wait.
- * The runtime keeps the managed pool itself and fills it with TexBlt and
- * BufBlt from system memory of its own, which is copied from where it lies. */
 #include "core/platform/block_source.hpp"
 #include "core/log/log_line.hpp"
 #include "core/support/text_buffer.hpp"
@@ -29,9 +20,6 @@
 namespace av::d3d9 {
 
 namespace {
-
-/* CreateSurface9's and CreateTexture9's kinds (d3d9.toml). */
-/* What a relocked resource's line is logged once under. */
 constexpr char relocked_key[] = "relocked";
 constexpr uint32_t surface_render_target = 1u;
 constexpr uint32_t surface_depth_stencil = 2u;
@@ -41,9 +29,7 @@ constexpr uint32_t texture_2d = 1u;
 constexpr uint32_t texture_cube = 2u;
 constexpr uint32_t texture_volume = 3u;
 constexpr uint32_t cube_faces = 6u;
-/* D3DPOOL_DEFAULT: the host places what the guest makes as it can draw it. */
 constexpr uint32_t pool_default = 0u;
-/* D3DUSAGE_*, from d3d9types.h's values. */
 constexpr uint32_t usage_render_target = 0x1u;
 constexpr uint32_t usage_depth_stencil = 0x2u;
 constexpr uint32_t usage_write_only = 0x8u;
@@ -53,16 +39,12 @@ constexpr uint32_t usage_n_patches = 0x100u;
 constexpr uint32_t usage_dynamic = 0x200u;
 constexpr uint32_t usage_autogen_mipmap = 0x400u;
 constexpr uint32_t usage_dmap = 0x4000u;
-/* D3DLOCK_DISCARD and D3DLOCK_NOOVERWRITE, which a write carries. */
 constexpr uint32_t write_discard = 0x2000u;
 constexpr uint32_t write_no_overwrite = 0x1000u;
-/* D3DTEXF_POINT and D3DTEXF_LINEAR. */
 constexpr uint32_t filter_point = 1u;
 constexpr uint32_t filter_linear = 2u;
 
-}  // namespace
-
-/* ---------------------------------------------------------------- creation */
+}
 
 HRESULT D3d9Device::create_resource(D3DDDIARG_CREATERESOURCE *args)
 {
@@ -110,8 +92,6 @@ HRESULT D3d9Device::create_resource(D3DDDIARG_CREATERESOURCE *args)
     return S_OK;
 }
 
-/* What the runtime's resource flags say of the API's usage
- * (reverse-engineering.md §4.2 maps one to the other). */
 HRESULT D3d9Device::create_host_object(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create)
 {
     AV_SCOPE("D3d9Device::create_host_object");
@@ -139,8 +119,6 @@ HRESULT D3d9Device::create_host_object(D3d9Resource &resource, const D3DDDIARG_C
                                        : D3d9Resource::Kind::texture;
         resource.levels = create.SurfCount / faces;
         const uint32_t type = flags.CubeMap ? texture_cube : flags.Volume ? texture_volume : texture_2d;
-        /* An autogen texture shows the runtime its top level only, and the
-         * host makes the chain below it. */
         const uint32_t levels = flags.AutogenMipmap ? 0u : resource.levels;
         sent = d3d9proto::av_d3d9_CreateTexture9(wire(), resource.id, type, top.width, top.height, top.depth, levels,
                                                  usage, static_cast<uint32_t>(create.Format), pool_default);
@@ -152,8 +130,6 @@ HRESULT D3d9Device::create_host_object(D3d9Resource &resource, const D3DDDIARG_C
     return sent ? S_OK : lost(__func__);
 }
 
-/* A surface resource is as many surfaces as it has subresources: a swap
- * chain's buffers, or one render target or depth surface. */
 HRESULT D3d9Device::create_surfaces(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create)
 {
     AV_SCOPE("D3d9Device::create_surfaces");
@@ -189,8 +165,6 @@ HRESULT D3d9Device::destroy_resource(HANDLE handle)
     return S_OK;
 }
 
-/* The host objects, shadows and kernel allocation go; the record stays for
- * the caller to destroy. */
 void D3d9Device::release_resource(D3d9Resource &resource)
 {
     AV_SCOPE("D3d9Device::release_resource");
@@ -206,9 +180,6 @@ void D3d9Device::release_resource(D3d9Resource &resource)
     else allocations_.release_address(resource.gpu_address, resource.gpu_pages);
 }
 
-/* The redirection surface of a window, which d3d9.dll opens into the device
- * before it presents into it (reverse-engineering.md §4.3). Another process's
- * resource would open through the host's object, which nothing here shares. */
 HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
 {
     AV_SCOPE("D3d9Device::open_resource");
@@ -243,11 +214,6 @@ HRESULT D3d9Device::open_resource(D3DDDIARG_OPENRESOURCE *args)
     made->allocation = info.hAllocation;
     made->allocation_pitch = layout.pitch();
     made->opened = true;
-    /* A present names it as its destination in the blt dxgkrnl builds, and
-     * dxgkrnl puts the device in error for an allocation this device never
-     * asked to be resident (PagingQueue). With a GPU virtual address context
-     * it also drops the present, before the miniport hears of it, when the
-     * destination has no address in this process. */
     made->gpu_pages = layout.pages();
     if (FAILED(allocations_.keep_addressable(made->allocation, made->gpu_pages, made->gpu_address))) {
         release_resource(*made);
@@ -300,8 +266,6 @@ bool D3d9Device::surface_of(const D3d9Resource &resource, uint32_t index, uint32
     }
 }
 
-/* ---------------------------------------------------------------- locks */
-
 uint32_t D3d9Device::row_pitch(const D3d9Resource &resource, const D3d9Subresource &subresource) const
 {
     AV_SCOPE("D3d9Device::row_pitch");
@@ -353,9 +317,6 @@ bool D3d9Device::make_shadow(const D3d9Resource &resource, D3d9Subresource &subr
     return true;
 }
 
-/* System memory is the runtime's own and handed back where it lies. A host
- * subresource hands out its shadow, which for a surface the host draws into
- * is read back first unless the lock throws it away. */
 HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
 {
     AV_SCOPE("D3d9Device::lock");
@@ -387,8 +348,6 @@ HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
     if (locked->kind == D3d9Resource::Kind::surface && !args->Flags.Discard && !args->Flags.WriteOnly) {
         uint32_t      pitch = 0u, rows = 0u;
         const HRESULT read = read_surface(*locked, args->SubResourceIndex, pitch, rows);
-        /* A device the host lost hands out no bytes: the application is told
-         * the device is gone rather than shown what the shadow held before. */
         if (loss_.lost()) return read;
         if (SUCCEEDED(read))
             static_cast<void>(PitchedRows(subresource.shadow, subresource.shadow_pitch, subresource.shadow_bytes)
@@ -416,8 +375,6 @@ HRESULT D3d9Device::unlock(const D3DDDIARG_UNLOCK *args)
     return unlock_subresource(*locked, subresource, args->SubResourceIndex);
 }
 
-/* What the lock covered crosses to the host, with the lock's discard or
- * no-overwrite. */
 HRESULT D3d9Device::unlock_subresource(const D3d9Resource &resource, D3d9Subresource &subresource, uint32_t index)
 {
     AV_SCOPE("D3d9Device::unlock_subresource");
@@ -439,8 +396,6 @@ HRESULT D3d9Device::unlock_subresource(const D3d9Resource &resource, D3d9Subreso
     return write_texture(resource, index, box, subresource.shadow + offset, subresource.shadow_pitch,
                          subresource.shadow_slice_pitch, flags);
 }
-
-/* ---------------------------------------------------------------- writes and reads */
 
 HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data, uint32_t bytes, uint32_t flags)
 {
@@ -474,9 +429,6 @@ bool D3d9Device::TextureWriter::piece(const d3dproto::Box &box, const uint8_t *d
                                first ? flags_ : flags_ & ~write_discard);
 }
 
-/* A Direct3D 9 box with Back on Front is a 2D one: one slice. A surface
- * resource's subresource is a host surface of its own; a texture's is its
- * subresource of the one host texture. */
 HRESULT D3d9Device::write_texture(const D3d9Resource &resource, uint32_t index, const D3DDDIBOX &box,
                                   const uint8_t *data, uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags)
 {
@@ -526,7 +478,6 @@ bool D3d9Device::readback_room(size_t bytes)
     return true;
 }
 
-/* A round trip: the host has run everything before it once it answers. */
 HRESULT D3d9Device::read_surface(const D3d9Resource &resource, uint32_t index, uint32_t &pitch, uint32_t &rows)
 {
     AV_SCOPE("D3d9Device::read_surface");
@@ -534,8 +485,6 @@ HRESULT D3d9Device::read_surface(const D3d9Resource &resource, uint32_t index, u
     if (!surface_of(resource, index, id, subresource)) return E_INVALIDARG;
     const D3d9Subresource &level = resource.subresources[index];
     const D3d9FormatLayout layout(static_cast<uint32_t>(resource.format));
-    /* The host's pitch may be wider than packed rows: room for a 256-byte
-     * aligned row. */
     constexpr uint32_t pitch_slack = 256u;
     const size_t capacity = (size_t{layout.row_bytes(level.width)} + pitch_slack) * layout.rows(level.height);
     if (capacity == 0u || !readback_room(capacity)) return E_OUTOFMEMORY;
@@ -552,12 +501,6 @@ HRESULT D3d9Device::read_surface(const D3d9Resource &resource, uint32_t index, u
     return S_OK;
 }
 
-/* ---------------------------------------------------------------- blts */
-
-/* The runtime fills the managed pool level by level from its system-memory
- * copy: the whole chain of one face, from the source level that is the
- * destination's top level (a source may have more levels), each level's
- * rectangle and point halved from the one above. */
 HRESULT D3d9Device::tex_blt(const D3DDDIARG_TEXBLT *args)
 {
     AV_SCOPE("D3d9Device::tex_blt");
@@ -587,8 +530,6 @@ HRESULT D3d9Device::tex_blt(const D3DDDIARG_TEXBLT *args)
     return S_OK;
 }
 
-/* A compressed format's rectangle widens to whole blocks, and stays inside
- * both levels. */
 HRESULT D3d9Device::blt_level(const D3d9Resource &source, uint32_t source_index, const D3d9Resource &destination,
                               uint32_t destination_index, const RECT &area, POINT at)
 {
@@ -613,7 +554,6 @@ HRESULT D3d9Device::blt_level(const D3d9Resource &source, uint32_t source_index,
     return write_texture(destination, destination_index, box, data, from.system_pitch, from.system_slice_pitch, 0u);
 }
 
-/* A volume's levels, each box halved from the one above. */
 HRESULT D3d9Device::vol_blt(const D3DDDIARG_VOLUMEBLT *args)
 {
     AV_SCOPE("D3d9Device::vol_blt");
@@ -634,8 +574,6 @@ HRESULT D3d9Device::vol_blt(const D3DDDIARG_VOLUMEBLT *args)
         if (right <= left || bottom <= top || back <= front || from.system == nullptr) break;
         const uint32_t x = args->DstX >> level, y = args->DstY >> level, z = args->DstZ >> level;
         if (x + (right - left) > to.width || y + (bottom - top) > to.height || z + (back - front) > to.depth) break;
-        /* A block format's box starts on a block: the texel's element is
-         * where its bytes are. */
         const uint8_t *const data = from.system + size_t{front} * from.system_slice_pitch +
                                     layout.offset_of(left, top, from.system_pitch);
         const D3DDDIBOX box = {x, y, x + (right - left), y + (bottom - top), z, z + (back - front)};
@@ -646,8 +584,6 @@ HRESULT D3d9Device::vol_blt(const D3DDDIARG_VOLUMEBLT *args)
     return S_OK;
 }
 
-/* A managed buffer's dirty range, from the runtime's copy. A lock's shadow
- * takes it too, since a later lock that keeps the contents reads it. */
 HRESULT D3d9Device::buf_blt(const D3DDDIARG_BUFFERBLT *args)
 {
     AV_SCOPE("D3d9Device::buf_blt");
@@ -667,10 +603,6 @@ HRESULT D3d9Device::buf_blt(const D3DDDIARG_BUFFERBLT *args)
     return write_buffer(destination->id, args->Offset, from.system + start, bytes, 0u);
 }
 
-/* Between host surfaces a StretchRect; into system memory a read-back the
- * runtime asked for (GetRenderTargetData, GetFrontBufferData); from system
- * memory a write; between two system-memory surfaces nothing, since the
- * runtime copies those itself after the call (prior-art.md §8). */
 HRESULT D3d9Device::blt(const D3DDDIARG_BLT *args)
 {
     AV_SCOPE("D3d9Device::blt");
@@ -713,8 +645,6 @@ HRESULT D3d9Device::blt_to_system(const D3d9Resource &source, const D3d9Resource
     uint32_t pitch = 0u, rows = 0u;
     const HRESULT read = read_surface(source, blt.SrcSubResourceIndex, pitch, rows);
     if (FAILED(read)) return read;
-    /* Rows of elements, not texels: a block format's rectangle is whole rows
-     * of blocks, each the line of its blocks. */
     const D3d9FormatLayout layout(static_cast<uint32_t>(source.format));
     const uint32_t         left = static_cast<uint32_t>(blt.SrcRect.left), top = static_cast<uint32_t>(blt.SrcRect.top);
     const uint32_t width = static_cast<uint32_t>(blt.SrcRect.right - blt.SrcRect.left);
@@ -746,8 +676,6 @@ HRESULT D3d9Device::color_fill(const D3DDDIARG_COLORFILL *args)
     return d3d9proto::av_d3d9_ColorFill9(wire(), id, subresource, rect, args->Color) ? S_OK : lost(__func__);
 }
 
-/* Asked for only by the runtime's own clears of depth it cannot reach with
- * Clear; there is no host command for a fill in a native depth value. */
 HRESULT D3d9Device::depth_fill(const D3DDDIARG_DEPTHFILL *)
 {
     AV_SCOPE("D3d9Device::depth_fill");
@@ -764,4 +692,4 @@ HRESULT D3d9Device::generate_mip_sub_levels(const D3DDDIARG_GENERATEMIPSUBLEVELS
     return d3d9proto::av_d3d9_GenerateMips9(wire(), texture->id, filter) ? S_OK : lost(__func__);
 }
 
-}  // namespace av::d3d9
+}

@@ -15,4 +15,4 @@ bool HostBlobId::valid() const
     return id_ >= first;
 }
 
-}  // namespace av
+}

@@ -59,4 +59,4 @@ const TransferRoom &D3dDeviceSelection::room() const
     return stream_.room();
 }
 
-}  // namespace av::d3d
+}

@@ -64,8 +64,6 @@ bool ClientBlobArena::ready() const
     return block_ != nullptr;
 }
 
-/* Above the newest lease while it fits, else from the block's start once the
- * oldest has moved past what the lease needs. */
 ClientBlobLease ClientBlobArena::take(size_t count)
 {
     AV_SCOPE("ClientBlobArena::take");
@@ -84,8 +82,6 @@ ClientBlobLease ClientBlobArena::take(size_t count)
     return ClientBlobLease(block_ + at, at, count);
 }
 
-/* A lease that was the first of a lap takes the lap back with it: nothing was
- * sealed since it was taken, so no mark names the lap. */
 void ClientBlobArena::give_back(const ClientBlobLease &lease)
 {
     AV_SCOPE("ClientBlobArena::give_back");
@@ -119,8 +115,6 @@ void ClientBlobArena::mark(uint64_t fence)
     AV_SCOPE("ClientBlobArena::mark");
     if (mark_count_ != 0u) {
         Mark &newest = marks_[(first_mark_ + mark_count_ - 1u) % max_marks];
-        /* Nothing sealed since the newest mark, or no slot for another: the
-         * newest covers this batch too. */
         if ((newest.top_ == sealed_ && newest.lap_ == sealed_lap_) || mark_count_ == max_marks) {
             newest = Mark{fence, sealed_, sealed_lap_};
             return;
@@ -135,7 +129,6 @@ void ClientBlobArena::retire_through(uint64_t fence)
     AV_SCOPE("ClientBlobArena::retire_through");
     while (mark_count_ != 0u && marks_[first_mark_].fence_ <= fence) {
         const Mark &done = marks_[first_mark_];
-        /* A mark on the next lap retires the rest of this one. */
         if (done.lap_ != base_lap_) {
             wrapped_ = false;
             base_lap_ = done.lap_;
@@ -144,12 +137,9 @@ void ClientBlobArena::retire_through(uint64_t fence)
         first_mark_ = (first_mark_ + 1u) % max_marks;
         mark_count_--;
     }
-    /* Marks left cover nothing past base_, and a lease taken at the start
-     * has the whole block above it rather than what the last lap left. */
     if (!wrapped_ && base_ == top_) empty();
 }
 
-/* Only a top no lease lives in, so the leases keep the room they have. */
 ClientBlobLease ClientBlobArena::set_aside(size_t count)
 {
     AV_SCOPE("ClientBlobArena::set_aside");
@@ -169,9 +159,6 @@ bool ClientBlobArena::holds(const void *bytes, size_t count, uint64_t &offset) c
 {
     AV_SCOPE("ClientBlobArena::holds");
     if (block_ == nullptr || count == 0u) return false;
-    /* As integers: comparing pointers into different objects is undefined,
-     * and `bytes` is any application pointer at all. One below the block
-     * wraps to an offset past it. */
     const uintptr_t into = reinterpret_cast<uintptr_t>(bytes) - reinterpret_cast<uintptr_t>(block_);
     if (into > lent_ || count > lent_ - into) return false;
     offset = static_cast<uint64_t>(into);
@@ -198,12 +185,10 @@ bool ClientBlobArena::invariants_hold() const
     AV_SCOPE("ClientBlobArena::invariants_hold");
     const bool laid = wrapped_ ? top_ <= base_ && base_ <= end_ && end_ <= capacity_
                                : base_ <= top_ && top_ <= capacity_;
-    /* The seal is on base_'s lap at or above it - below end_ once wrapped -
-     * or on top_'s new lap at or below top_. */
     const bool sealed = sealed_lap_ == base_lap_ ? base_ <= sealed_ && sealed_ <= (wrapped_ ? end_ : top_)
                                                  : wrapped_ && sealed_lap_ == lap_ && sealed_ <= top_;
     return laid && sealed && capacity_ <= lent_ && (block_ != nullptr || lent_ == 0u) && mark_count_ <= max_marks &&
            first_mark_ < max_marks && (wrapped_ ? lap_ == base_lap_ + 1u : lap_ == base_lap_);
 }
 
-}  // namespace av
+}

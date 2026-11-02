@@ -16,7 +16,6 @@ void Put(DynamicArray<u8>& bytes, usize offset, T value) {
     memcpy(bytes.GetBuffer() + offset, &value, sizeof value);
 }
 
-// A version 1 table of `slots` slots with `frames` frames each, all free.
 DynamicArray<u8> EmptyTable(u32 slots, u32 frames) {
     DynamicArray<u8> bytes;
     bytes.Resize(96 + static_cast<usize>(slots) * (56 + frames * 24));
@@ -34,13 +33,13 @@ DynamicArray<u8> EmptyTable(u32 slots, u32 frames) {
     return bytes;
 }
 
-} // namespace
+}
 
 TEST_CASE("TraceTable/decodes an active slot's frames and skips free slots") {
     DynamicArray<u8> bytes = EmptyTable(4, 3);
     const usize slot = 96 + 2 * (56 + 3 * 24);
     Put<u64>(bytes, slot, 0x55ull | (1ull << 63));
-    Put<u32>(bytes, slot + 8, 5);      // depth past the stored frames
+    Put<u32>(bytes, slot + 8, 5);
     Put<u32>(bytes, slot + 12, 4321);
     Put<u64>(bytes, slot + 16, 99);
     Put<u64>(bytes, slot + 40, 0xABC);
@@ -61,14 +60,14 @@ TEST_CASE("TraceTable/decodes an active slot's frames and skips free slots") {
     CHECK_EQ(s.thread, 4321u);
     CHECK_EQ(s.depth, 5u);
     CHECK_EQ(s.waiting_on, 0xABCull);
-    REQUIRE(s.frames.GetSize() == 3);   // the stored ones only
+    REQUIRE(s.frames.GetSize() == 3);
     CHECK_EQ(s.frames[2].name_id, 102u);
     CHECK_EQ(s.frames[2].entered, 1002ull);
 }
 
 TEST_CASE("TraceTable/an idle slot keeps no frames") {
     DynamicArray<u8> bytes = EmptyTable(1, 2);
-    Put<u64>(bytes, 96, 0x77ull);   // owned, not active
+    Put<u64>(bytes, 96, 0x77ull);
     Put<u32>(bytes, 96 + 8, 2);
     Put<u32>(bytes, 96 + 24, 555);
     String why;
@@ -89,7 +88,7 @@ TEST_CASE("TraceTable/refuses what is not a whole version 1 table") {
     Put<u32>(wrong, 8, 2);
     CHECK(!ParseTraceTable(wrong.AsSpan(), why).HasValue());
     DynamicArray<u8> lying = EmptyTable(2, 2);
-    Put<u32>(lying, 20, 999);   // slot bytes that do not match the frames
+    Put<u32>(lying, 20, 999);
     CHECK(!ParseTraceTable(lying.AsSpan(), why).HasValue());
     DynamicArray<u8> magic = EmptyTable(2, 2);
     magic[0] = 'X';
@@ -109,12 +108,12 @@ TEST_CASE("StateDump/builds the tree from paths, making parents never written") 
     CHECK(context->Flag("bound"));
     CHECK_EQ(context->Integer("last_fence").ValueOr(-1), 20);
     const StateNode* contexts = dump.Find("module/0/device/0/contexts/0");
-    REQUIRE(contexts != nullptr);   // made, never written
+    REQUIRE(contexts != nullptr);
     CHECK(contexts->fields.IsEmpty());
     const StateNode* device = dump.Ancestor(*context, "device");
     REQUIRE(device != nullptr);
     CHECK_EQ(device->Integer("gpu").ValueOr(-1), 0);
-    CHECK_EQ(dump.GetRoots().GetSize(), 2u);   // module/0 and executor/0
+    CHECK_EQ(dump.GetRoots().GetSize(), 2u);
     CHECK_EQ(dump.Find("executor/0/gpu/1")->Integer("sub_apis").ValueOr(0), 15);
     CHECK_EQ(dump.OfKind("context").GetSize(), 1u);
 }
@@ -126,7 +125,6 @@ TEST_CASE("StateDump/keeps a binary's refusal as its error") {
 }
 
 TEST_CASE("ScopeNames/hashes as the tables do and finds every AV_SCOPE literal") {
-    // FNV-1a 32 of "a" is 0xE40C292C.
     CHECK_EQ(ScopeNames::Hash("a"), 0xE40C292Cu);
     ScopeNames names;
     names.AddSource("void A::b() {\n    AV_SCOPE(\"A::b\");\n}\nvoid C() { AV_SCOPE(\"C\"); }");

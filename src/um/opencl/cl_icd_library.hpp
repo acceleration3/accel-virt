@@ -1,10 +1,3 @@
-/* avcl.dll's ICD root and what it is constructed over: the process heap, the
- * two thread locks, the log file and D3DKMT through gdi32. No window surface
- * and no memory lock, because an OpenCL ICD presents nothing. One per process,
- * in the exports' storage (avcl_exports.cpp), constructed on the loader's
- * first call rather than at DLL attach, where the loader lock forbids opening
- * a file or an event. Translation only: what the root decides is in
- * src/icd/opencl. */
 #ifndef AV_UM_CL_ICD_LIBRARY_HPP
 #define AV_UM_CL_ICD_LIBRARY_HPP
 
@@ -26,19 +19,12 @@ namespace av {
 
 class ClIcdLibrary {
 public:
-    /* `crashed` is the exports' unhandled-exception filter, which forwards to
-     * crashed(). Constexpr: the library is the exports' constinit storage. */
     constexpr explicit ClIcdLibrary(ProcessTrace::Filter crashed);
     ClIcdLibrary(const ClIcdLibrary &) = delete;
     ClIcdLibrary &operator=(const ClIcdLibrary &) = delete;
 
-    /* The Khronos loader may reach either from several threads at once:
-     * khrIcdOsVendorsEnumerate runs on whichever first reached
-     * clGetPlatformIDs, with nothing held. A process LazyDriver refuses gets
-     * no root, and the loader is told there is no platform here. */
     cl_int platform_ids(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms);
     void  *extension_function(const char *name);
-    /* The process is crashing: the crash file, if tracing started. */
     long   crashed(void *pointers);
 
 
@@ -52,8 +38,6 @@ private:
         SrwLock          send_lock;
         SrwLock          objects_lock;
         SrwLock          blocks_lock;
-        /* Declared before the root, so it is stopped after the root has let
-         * its watcher go. */
         WindowsServiceThread watcher;
         WindowsGlShareSource gl_share;
         WindowsD3dAdapterSource d3d_adapters;
@@ -67,6 +51,6 @@ private:
 
 constexpr ClIcdLibrary::ClIcdLibrary(ProcessTrace::Filter crashed) : driver_("avcl", crashed) {}
 
-}  // namespace av
+}
 
-#endif  // AV_UM_CL_ICD_LIBRARY_HPP
+#endif

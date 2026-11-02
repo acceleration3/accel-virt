@@ -58,8 +58,6 @@ TEST(display_mode_list_find, a_signal_in_the_list)
   CHECK(modes.find(signal) == nullptr); }
 
 namespace {
-
-/* A display-info answer with one enabled scanout of that size. */
 class Reported {
 public:
     Reported(std::uint32_t scanout, std::uint32_t width, std::uint32_t height) : bytes_{}
@@ -86,7 +84,7 @@ private:
     av::DisplayInfoResponse info_;
 };
 
-}  // namespace
+}
 
 TEST(display_mode_list_follow, prefers_the_size_the_device_reports)
 { DisplayModeList modes;
@@ -96,8 +94,6 @@ TEST(display_mode_list_follow, prefers_the_size_the_device_reports)
   CHECK_EQ(modes.preferred().height(), 900u);
   CHECK(modes.is_preferred(modes.preferred())); }
 
-/* A mode larger than the display in either direction is not offered: dxgkrnl
- * would commit it and the host would scan out a rectangle it does not have. */
 TEST(display_mode_list_follow, offers_only_the_modes_that_fit_the_display)
 { DisplayModeList modes;
   const Reported device(0u, 1366u, 768u);
@@ -115,7 +111,6 @@ TEST(display_mode_list_follow, offers_only_the_modes_that_fit_the_display)
   DisplayMode(1280u, 720u).describe(signal);
   CHECK(modes.find(signal) != nullptr); }
 
-/* A size that is nobody's standard mode is still the one the device has. */
 TEST(display_mode_list_follow, adds_a_size_that_is_not_a_standard_mode)
 { DisplayModeList modes;
   const Reported device(0u, 1234u, 765u);
@@ -128,7 +123,6 @@ TEST(display_mode_list_follow, adds_a_size_that_is_not_a_standard_mode)
       CHECK(modes.mode(index).width() * modes.mode(index).height() >=
             modes.mode(index - 1u).width() * modes.mode(index - 1u).height()); }
 
-/* A display smaller than every standard mode offers just its own. */
 TEST(display_mode_list_follow, offers_the_display_alone_when_nothing_standard_fits)
 { DisplayModeList modes;
   const Reported device(0u, 320u, 200u);
@@ -137,7 +131,6 @@ TEST(display_mode_list_follow, offers_the_display_alone_when_nothing_standard_fi
   CHECK_EQ(modes.mode(0u).width(), 320u);
   CHECK(modes.is_preferred(modes.mode(0u))); }
 
-/* Nothing the device says can leave the driver with no modes to offer. */
 TEST(display_mode_list_follow, keeps_the_list_a_device_says_nothing_about)
 { DisplayModeList modes;
   const Reported device(1u, 1024u, 768u);
@@ -147,7 +140,6 @@ TEST(display_mode_list_follow, keeps_the_list_a_device_says_nothing_about)
   CHECK_STATUS(modes.follow(device.info(), DisplayInfoResponse::max_scanouts), av::Status::not_found);
   CHECK_EQ(modes.count(), DisplayModeList::standard_count); }
 
-/* The device's own size is offered once, not twice. */
 TEST(display_mode_list_follow, offers_a_standard_size_the_device_has_once)
 { DisplayModeList modes;
   const Reported device(0u, 1280u, 800u);
@@ -159,7 +151,6 @@ TEST(display_mode_list_follow, offers_a_standard_size_the_device_has_once)
   CHECK(modes.is_preferred(modes.preferred()));
   CHECK_EQ(modes.preferred().width(), 1280u); }
 
-/* Following twice does not grow the list. */
 TEST(display_mode_list_follow, replaces_what_it_offered_before)
 { DisplayModeList modes;
   const Reported wide(0u, 1920u, 1080u);
@@ -173,8 +164,6 @@ TEST(display_mode_list_follow, replaces_what_it_offered_before)
   CHECK_EQ(modes.preferred().width(), 800u); }
 
 namespace av {
-
-/* The states the invariant guards, which correct code never reaches. */
 struct DisplayModeListProbe {
     static void offer_nothing(DisplayModeList &modes) { modes.count_ = 0u; }
     static void offer_more_than_it_has(DisplayModeList &modes) { modes.count_ = DisplayModeList::max_modes + 1u; }
@@ -187,7 +176,7 @@ struct DisplayModeListProbe {
     }
 };
 
-}  // namespace av
+}
 
 TEST(display_mode_list_invariants, an_empty_list_a_preference_past_it_and_a_mode_out_of_order_are_detected)
 { DisplayModeList modes;
@@ -204,8 +193,6 @@ TEST(display_mode_list_invariants, an_empty_list_a_preference_past_it_and_a_mode
   av::DisplayModeListProbe::offer_more_than_it_has(overflowing);
   CHECK(!overflowing.invariants_hold()); }
 
-/* ---- the host's own modes -------------------------------------------------- */
-
 namespace {
 
 av::DisplayModeSet offered(std::initializer_list<std::pair<std::uint32_t, std::uint32_t>> modes, std::uint32_t preferred)
@@ -216,14 +203,13 @@ av::DisplayModeSet offered(std::initializer_list<std::pair<std::uint32_t, std::u
     return set;
 }
 
-}  // namespace
+}
 
 TEST(display_mode_list_adopt, the_hosts_modes_in_ascending_area_with_its_preferred_one)
 { DisplayModeList modes;
   CHECK_STATUS(modes.adopt(offered({{2560u, 1440u}, {100u, 100u}, {1920u, 1080u}, {1080u, 1920u}}, 0u)), av::Status::ok);
   CHECK_EQ(modes.count(), 4u);
   CHECK_EQ(modes.mode(0u).width(), 100u);
-  /* The same area twice keeps the host's order. */
   CHECK_EQ(modes.mode(1u).width(), 1920u);
   CHECK_EQ(modes.mode(2u).width(), 1080u);
   CHECK_EQ(modes.mode(3u).width(), 2560u);
@@ -233,8 +219,6 @@ TEST(display_mode_list_adopt, the_hosts_modes_in_ascending_area_with_its_preferr
   CHECK_EQ(modes.preferred().width(), 100u);
   CHECK(modes.invariants_hold()); }
 
-/* One rate for every mode, the set's, and the 4K the 16 bit EDID clock cannot
- * name at that rate among them. */
 TEST(display_mode_list_adopt, every_mode_runs_at_the_refresh_the_set_says)
 { DisplayModeList modes;
   av::DisplayModeSet set = offered({{3840u, 2160u}, {1920u, 1080u}}, 0u);
@@ -249,13 +233,10 @@ TEST(display_mode_list_adopt, every_mode_runs_at_the_refresh_the_set_says)
   CHECK(modes.find(signal) == nullptr);
   av::DisplayMode(1920u, 1080u, 359980u).describe(signal);
   CHECK(modes.find(signal) == &modes.mode(0u));
-  /* A set that says nothing is 60 Hz. */
   CHECK_STATUS(modes.adopt(offered({{1920u, 1080u}}, 0u)), av::Status::ok);
   CHECK_EQ(modes.preferred().refresh_millihz(), 60000u);
   CHECK(modes.invariants_hold()); }
 
-/* dxgkrnl refuses a source mode under 100 pixels an edge, and one refusal
- * would fail the whole source mode set - the display with it. */
 TEST(display_mode_list_adopt, a_mode_windows_refuses_as_too_small_is_left_out)
 { DisplayModeList modes;
   CHECK_STATUS(modes.adopt(offered({{80u, 80u}, {1920u, 1080u}, {99u, 1080u}, {1280u, 720u}}, 0u)), av::Status::ok);
@@ -268,12 +249,10 @@ TEST(display_mode_list_adopt, a_mode_windows_refuses_as_too_small_is_left_out)
 
 TEST(display_mode_list_adopt, a_mode_the_edid_cannot_describe_is_left_out)
 { DisplayModeList modes;
-  /* Past 4095 an edge; the preferred one among them, so the largest left is preferred. */
   CHECK_STATUS(modes.adopt(offered({{1920u, 1080u}, {4096u, 2160u}, {3840u, 2160u}, {5120u, 2880u}}, 3u)),
                av::Status::ok);
   CHECK_EQ(modes.count(), 2u);
   CHECK_EQ(modes.preferred().width(), 3840u);
-  /* Nothing describable leaves the list as it was. */
   CHECK_STATUS(modes.adopt(offered({{4096u, 4096u}, {8000u, 100u}}, 0u)), av::Status::not_found);
   CHECK_EQ(modes.count(), 2u);
   CHECK_EQ(modes.preferred().width(), 3840u);

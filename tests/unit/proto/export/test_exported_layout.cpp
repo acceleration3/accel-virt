@@ -1,5 +1,3 @@
-/* An exported surface's layout: a picture only with a size, a format and
- * rows at least as wide as the picture, and empty only when every field is. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/export/exported_layout.hpp"
 

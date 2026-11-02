@@ -48,8 +48,6 @@ constexpr const char  *path = "replay.av";
 constexpr std::size_t  widest = 8192u;
 constexpr std::uint8_t uuid[GpuIdentity::uuid_bytes] = {0x41u, 0x42u};
 
-/* A batch payload of framed commands, and the answer the mock executor will
- * give for it: the mock echoes each reply-generating command's payload. */
 class Batch {
 public:
     Batch() : bytes_{}, length_(0u) {}
@@ -74,7 +72,6 @@ private:
     std::uint32_t length_;
 };
 
-/* A recording the device wrote, kept as bytes a replay can read. */
 class Written {
 public:
     Written() : host_(), recorder_(host_), length_(0u), bytes_{}
@@ -93,9 +90,6 @@ public:
             context, ContextSetup(ProtocolVersion(1u, 0u), api, 40u, 16u, 41u, 1u, 42u));
     }
 
-    /* A batch and the reply the mock executor would have produced for it; a
-     * batch whose commands asked for no answer leaves no reply record, as the
-     * device leaves none. */
     void ran(std::uint32_t context, std::uint64_t fence, const Batch &batch, const std::uint8_t *answer,
              std::uint32_t answer_length)
     {
@@ -123,8 +117,6 @@ private:
     std::uint8_t bytes_[widest];
 };
 
-/* A recording of one Vulkan context running one batch whose only command asks
- * for an answer; the mock echoes the payload, so `fill` is the answer. */
 void one_batch(Written &written, std::uint8_t fill)
 {
     written.set_up(3u, SubApi::vulkan);
@@ -136,7 +128,6 @@ void one_batch(Written &written, std::uint8_t fill)
     written.close();
 }
 
-/* A recording built byte by byte, for the records a device never writes. */
 class Handmade {
 public:
     Handmade() : length_(0u), bytes_{}
@@ -176,12 +167,11 @@ private:
     std::uint8_t bytes_[widest];
 };
 
-}  // namespace
+}
 
 namespace av {
 
 struct ReplayContextProbe {
-    /* An answer the library said was longer than the context can keep. */
     static void answer_too_long(ReplayContext &context)
     {
         context.answered_ = true;
@@ -209,7 +199,7 @@ struct RecordingReplayProbe {
     static void forget_a_context(RecordingReplay &replay) { replay.contexts_ = 0u; }
 };
 
-}  // namespace av
+}
 
 TEST(recording_replay_run, replays_a_recording_into_a_library_with_no_finding)
 { Written written;
@@ -227,17 +217,11 @@ TEST(recording_replay_run, replays_a_recording_into_a_library_with_no_finding)
   CHECK_EQ(replay.findings(), 0u);
   CHECK_EQ(std::strcmp(replay.finding(0u), ""), 0);
   CHECK(replay.invariants_hold());
-  /* The library was driven through the ABI the device drives. */
   CHECK_EQ(ops.created(), 1u);
   CHECK_EQ(ops.executed(), 1u);
   CHECK_EQ(ops.id_at(0u), 0x00010006u);
   CHECK_STATUS(replay.run(reader, filter), Status::invalid_state); }
 
-/* US3 scenario 1 at the place it is easiest to get wrong: the answer a context
- * kept from one batch must not be compared against the next batch's recorded
- * reply. A second batch that asked for nothing and a recorded reply that says
- * otherwise is a difference, and reporting it as a match would be the replay
- * quietly agreeing with a host it never asked. */
 TEST(recording_replay_run, an_answer_is_never_carried_from_one_batch_into_the_next)
 { Written written;
   written.set_up(3u, SubApi::vulkan);
@@ -245,7 +229,6 @@ TEST(recording_replay_run, an_answer_is_never_carried_from_one_batch_into_the_ne
   replying.add(0x00010006u, 4u, CommandHeader::generate_reply, 0x7Au);
   const std::uint8_t answer[4] = {0x7Au, 0x7Au, 0x7Au, 0x7Au};
   written.ran(3u, 1u, replying, answer, sizeof answer);
-  /* The same bytes recorded against a batch that asks the library for none. */
   Batch silent;
   silent.add(0x00010007u, 4u, 0u, 0x7Au);
   written.ran(3u, 2u, silent, answer, sizeof answer);
@@ -286,14 +269,12 @@ TEST(recording_replay_run, destroys_every_executor_it_made)
 TEST(recording_replay_run, names_the_fence_and_the_command_of_an_answer_that_differs)
 { Written written;
   one_batch(written, 0x5Au);
-  /* The recorded reply is changed, as a host that answers differently would. */
   std::uint8_t *const bytes = written.editable();
   bool                changed = false;
   for (std::size_t index = 0u; index + 3u < written.length(); index++) {
       if (bytes[index] != 0x5Au || bytes[index + 1u] != 0x5Au || bytes[index + 2u] != 0x5Au
           || bytes[index + 3u] != 0x5Au)
           continue;
-      /* The reply record's payload, which follows the batch's copy of it. */
       if (!changed) { changed = true; continue; }
       bytes[index + 1u] = 0x5Bu;
       break;
@@ -322,7 +303,6 @@ TEST(recording_replay_run, a_library_that_makes_no_executor_is_a_finding_and_not
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.contexts(), 0u);
-  /* No executor, so the batch belongs to a context that was never set up. */
   CHECK_EQ(replay.findings(), 2u);
   CHECK(std::strstr(replay.finding(0u), "made no executor") != nullptr);
   CHECK(std::strstr(replay.finding(1u), "never set up") != nullptr);
@@ -350,8 +330,6 @@ TEST(recording_replay_run, a_command_the_library_cannot_decode_stops_that_contex
   CHECK_EQ(replay.findings(), 1u);
   CHECK(std::strstr(replay.finding(0u), "ctx=3 fence=7 ") != nullptr);
   CHECK(std::strstr(replay.finding(0u), "could not decode command 2") != nullptr);
-  /* The command that would have followed it never ran, and neither did the
-   * batch after it: US3 scenario 4, stopping where the recording did. */
   CHECK_EQ(ops.executed(), 2u);
   CHECK(replay.commands() == 2u);
   CHECK(replay.invariants_hold()); }
@@ -408,7 +386,6 @@ TEST(recording_replay_run, a_batch_that_imports_guest_memory_is_reported_unrepla
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
   CHECK(std::strstr(replay.finding(0u), "unreplayable: command 1 imports guest memory") != nullptr);
-  /* The command after it never reached the library. */
   CHECK_EQ(ops.executed(), 0u);
   CHECK(replay.invariants_hold()); }
 
@@ -461,17 +438,12 @@ TEST(recording_replay_run, a_damaged_recording_is_malformed_and_replays_what_it_
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::malformed);
   CHECK_EQ(replay.contexts(), 1u);
-  /* US3 scenario 4: what a recording holds before the damage is replayed, not
-   * thrown away with it - the batch that crashed the host is the whole point
-   * of replaying a recording that ends in the middle of one. The cut lands in
-   * the fence record, so the batch ran and its answer was compared. */
   CHECK_EQ(replay.commands(), 1u);
   CHECK_EQ(replay.replies(), 1u);
   CHECK_EQ(replay.findings(), 0u);
   CHECK_EQ(ops.executed(), 1u);
   CHECK_EQ(ops.id_at(0u), 0x00010006u);
   CHECK(replay.invariants_hold());
-  /* A file that is no recording at all replays nothing. */
   const std::uint8_t nothing[8] = {};
   RecordingReader    empty(nothing, sizeof nothing);
   RecordingReplay    none(library);
@@ -538,8 +510,6 @@ TEST(replay_context, names_each_sub_apis_command_half)
       ReplayContext context;
       CHECK_STATUS(context.create(library, 1u, c.api), Status::ok);
       CHECK_EQ(context.command_api(), c.half);
-      /* And the library was asked for that API, not for the one the last
-       * context happened to want. */
       CHECK_EQ(ops.last_sub_api(), static_cast<std::uint32_t>(c.api));
       context.destroy(library);
   } }
@@ -567,7 +537,6 @@ TEST(replay_context, keeps_the_last_answer_asked_for_and_forgets_it_between_batc
   CHECK(!context.answers_with(same, 3u));
   CHECK(context.invariants_hold());
 
-  /* A command that asked for no answer leaves the last one alone. */
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), command.next_offset()), Status::ok);
   CHECK_STATUS(context.execute(library, command), Status::ok);
   CHECK(context.answers_with(same, sizeof same));
@@ -576,11 +545,7 @@ TEST(replay_context, keeps_the_last_answer_asked_for_and_forgets_it_between_batc
   CHECK(!context.answered());
   CHECK_EQ(context.answer_length(), 0u);
   CHECK(!context.answers_with(same, sizeof same));
-  /* A batch that produced no answer matches no recorded reply, not even an
-   * empty one: the recording says a command asked and the replay says none did. */
   CHECK(!context.answers_with(same, 0u));
-  /* A batch that fetched part of a kept answer matches whatever it recorded,
-   * until the next batch. */
   context.answer_in_parts();
   CHECK(context.answers_with(other, 3u));
   context.forget_answer();
@@ -609,7 +574,6 @@ TEST(replay_context_execute, tells_each_of_the_librarys_refusals_apart)
       CHECK(context.invariants_hold());
       context.destroy(library);
   }
-  /* A context with no executor runs nothing. */
   ReplayContext none;
   Batch         batch;
   batch.add(0x00010006u, 0u);
@@ -632,9 +596,6 @@ TEST(recording_replay_run, a_gpu_of_its_own_is_the_one_it_asks_the_library_for)
   CHECK_EQ(ops.last_domain_gpu(), 0x99u);
   CHECK(replay.invariants_hold()); }
 
-/* The other half of the same sentence: with no GPU named - and with a null one
- * named, which names none - the recording's own is what the library is asked
- * for, so a replay reproduces the run on the GPU it was recorded on. */
 TEST(recording_replay_run, with_no_gpu_named_it_asks_the_library_for_the_recordings_own)
 { for (std::uint32_t named = 0u; named < 2u; named++) {
       Written written;
@@ -666,7 +627,6 @@ TEST(recording_replay_run, a_setup_that_does_not_decode_and_a_context_set_up_twi
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
   CHECK(std::strstr(replay.finding(0u), "setup does not decode") != nullptr);
-  /* The second setup of one context replaces the executor the first made. */
   CHECK_EQ(ops.created(), 2u);
   CHECK_EQ(ops.live(), 1u);
   CHECK(replay.invariants_hold()); }
@@ -677,7 +637,6 @@ TEST(recording_replay_run, a_batch_framed_wrong_and_a_transport_command_that_is_
   CHECK_STATUS(CommandHeader(CommandHeader::nop_id, CommandHeader::encoded_size, 0u)
                    .encode(batch, sizeof batch),
                Status::ok);
-  /* A second header claiming more than the batch holds. */
   CHECK_STATUS(CommandHeader(0x00010006u, 200u, 0u)
                    .encode(batch + CommandHeader::encoded_size, CommandHeader::encoded_size),
                Status::ok);
@@ -691,7 +650,6 @@ TEST(recording_replay_run, a_batch_framed_wrong_and_a_transport_command_that_is_
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
   CHECK(std::strstr(replay.finding(0u), "framed wrong from byte 8") != nullptr);
-  /* The NOP was skipped rather than handed to the library. */
   CHECK_EQ(ops.executed(), 0u);
   CHECK(replay.invariants_hold()); }
 
@@ -708,8 +666,6 @@ TEST(recording_replay_run, another_apis_commands_and_a_filter_leave_the_library_
   RecordingFilter filter;
   CHECK_STATUS(filter.keep_command("vkCreateInstance"), Status::ok);
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
-  /* The OpenCL command is not this context's API, and of the two that are the
-   * filter keeps one. */
   CHECK_EQ(ops.executed(), 1u);
   CHECK_EQ(ops.id_at(0u), 0x00010006u);
   CHECK_EQ(replay.findings(), 0u);
@@ -724,7 +680,7 @@ TEST(recording_replay_run, a_blob_created_or_released_is_not_an_import_and_repla
   made.setup(1u, SubApi::vulkan)
       .add(av::RecordKind::blob, 1u, 0u, created, sizeof created)
       .add(av::RecordKind::blob, 1u, 0u, released, sizeof released)
-      .add(av::RecordKind::blob, 1u, 0u, nothing, 0u)          /* too short to read */
+      .add(av::RecordKind::blob, 1u, 0u, nothing, 0u)
       .add(av::RecordKind::blob, 9u, 0u, created, sizeof created);
   MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
@@ -770,8 +726,6 @@ TEST(recording_replay_run, nothing_of_a_context_that_gave_up_is_replayed_or_comp
   RecordingReplay replay(library);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
-  /* One finding: the import. The reply, the blob and the second batch all
-   * belong to a context that has given up. */
   CHECK_EQ(replay.findings(), 1u);
   CHECK(replay.replies() == 0u);
   CHECK(replay.invariants_hold()); }
@@ -779,7 +733,7 @@ TEST(recording_replay_run, nothing_of_a_context_that_gave_up_is_replayed_or_comp
 TEST(recording_replay_run, a_reply_with_no_answer_behind_it_says_what_it_replied)
 { Handmade           made;
   Batch              batch;
-  batch.add(0x00010006u, 4u);              /* asks for no answer */
+  batch.add(0x00010006u, 4u);
   const std::uint8_t answer[4] = {};
   made.setup(1u, SubApi::vulkan)
       .add(av::RecordKind::batch, 1u, 7u, batch.bytes(), batch.length())
@@ -838,7 +792,7 @@ TEST(recording_replay_invariants, catch_a_replay_whose_contexts_or_findings_do_n
     filter.keep_context(99u);
     CHECK_STATUS(replay.run(reader, filter), Status::ok);
     av::RecordingReplayProbe::unterminate_a_finding(replay);
-    CHECK(replay.invariants_hold());   /* nothing was kept, so nothing to judge */
+    CHECK(replay.invariants_hold());
   } }
 
 TEST(recording_replay_invariants, catch_a_finding_with_no_end)
@@ -867,8 +821,6 @@ TEST(replay_context, an_answer_longer_than_it_keeps_is_reported_rather_than_comp
   av::ReplayContextProbe::answer_too_long(context);
   const std::uint8_t recorded[4] = {};
   CHECK(!context.answers_with(recorded, sizeof recorded));
-  /* Even a recorded reply of exactly that length is reported rather than
-   * compared: the bytes to compare it against were never kept. */
   CHECK(!context.answers_with(recorded, ReplayContext::answer_bytes + 1u));
   CHECK(context.answered());
   CHECK(context.answer_length() > ReplayContext::answer_bytes);
@@ -901,9 +853,6 @@ TEST(replay_context_invariants, catch_a_context_that_kept_what_it_could_not_have
   CHECK(!third.invariants_hold());
   third.destroy(library); }
 
-/* Docs/protocol.md, "Long commands": the replay does not gather pieces, so a
- * context that sent one is reported and stops there; a batch that fetched
- * part of a kept answer has a reply that is the device's, not compared. */
 TEST(recording_replay_run, a_command_in_pieces_is_unreplayable_and_an_answer_part_is_not_compared)
 { Written written;
   written.set_up(3u, SubApi::vulkan);

@@ -16,7 +16,7 @@ void *run_pipeline_compiles(void *compiles)
     return nullptr;
 }
 
-}  // namespace
+}
 
 D3d12PipelineCompiles::D3d12PipelineCompiles(BlockSource &blocks)
     : lock_(), started_(lock_), compiled_(lock_), jobs_(), stages_(), orders_(), next_order_(0u), threads_(),
@@ -120,9 +120,6 @@ void D3d12PipelineCompiles::stop()
     stopping_ = false;
 }
 
-/* As many threads as half the host's cores, up to most_threads: the guest's
- * own processors run on the rest. One that cannot start leaves fewer, and
- * none leaves start() compiling on the session's thread, as before. */
 void D3d12PipelineCompiles::start_threads()
 {
     AV_SCOPE("D3d12PipelineCompiles::start_threads");
@@ -176,4 +173,4 @@ bool D3d12PipelineCompiles::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

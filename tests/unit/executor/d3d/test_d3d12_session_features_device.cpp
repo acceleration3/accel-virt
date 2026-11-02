@@ -1,17 +1,3 @@
-/* The rest of what the Direct3D 12 samples ask of the host, through the same
- * loopback the guest's driver speaks on, on this machine's GPU: a texture
- * uploaded from an upload heap of host memory and sampled through a
- * descriptor table and a static sampler, an occlusion query counting what
- * that draw wrote, a compute dispatch writing through an unordered access
- * view with root constants, and a multisampled target resolved into a
- * single-sampled one - each read back through a readback heap of host memory
- * and judged where the answer is certain. Each such heap is an allocation of
- * the GPU's memory source, opened by its dma-buf (docs/host-memory.md).
- * Shaders are DXIL as the DDI hands them (tests/fixtures/d3d12/): programs,
- * with signatures as registers.
- *
- * vkd3d-proton is loaded from AV_D3D_PATH, or build-d3d/lib in this checkout;
- * a host without one that opens a heap over a dma-buf returns without judging. */
 #include "fixtures/d3d12/fill_cs.hpp"
 #include "fixtures/d3d12/textured_ps.hpp"
 #include "fixtures/d3d12/textured_vs.hpp"
@@ -63,8 +49,6 @@ constexpr std::uint32_t samples = 4u;
 constexpr std::uint32_t fill_base = 1000u;
 constexpr std::uint32_t fill_count = 256u;
 
-/* The session's region, which lends bulk data; each heap is memory of its
- * own. */
 constexpr std::size_t   region_bytes = 8u << 20u;
 constexpr std::size_t   lent_bytes = region_bytes;
 constexpr std::uint64_t heap_bytes = 64u * 1024u;
@@ -78,14 +62,11 @@ enum Id : std::uint32_t {
     view_heap, root, pipeline, queries, compute_queue, compute_allocator, compute_list, written, multisampled
 };
 
-/* The quadrants' colours, BGRA words as a little-endian read gives them. */
 constexpr std::uint32_t quadrant[4] = {0xffff0000u, 0xff00ff00u, 0xff0000ffu, 0xffffffffu};
 
 const av::HostMemoryRequest upload_memory(av::HostMemoryRequest::Kind::upload, 0u);
 const av::HostMemoryRequest readback_memory(av::HostMemoryRequest::Kind::readback, 0u);
 
-/* The memory the readback and upload heaps are, as the handles CreateHeap12
- * names: opened by make_device and upload_texture. */
 struct HeapMemory {
     std::uint64_t readback;
     std::uint64_t upload;
@@ -107,8 +88,6 @@ bool host_devices(av::LoaderHostApis &apis, av::D3d11HostDevice *&device11, av::
     return false;
 }
 
-/* Whether this vkd3d-proton opens a heap over the source's memory: a stock
- * one does not. */
 bool imports(av::D3d12HostDevice &device, av::D3dLoopback &wire)
 {
     const std::uint64_t           memory = wire.open_memory(readback_memory, heap_bytes);
@@ -155,8 +134,6 @@ ResourceDesc texture_of(std::uint32_t width, std::uint32_t flags, std::uint32_t 
     return desc;
 }
 
-/* A queue, allocator and open list of `type`; a readback buffer of guest
- * memory a frame or a buffer is copied into. */
 void open_list(av::D3dLoopback &wire, std::uint32_t type, std::uint32_t queue_id, std::uint32_t allocator_id,
                std::uint32_t list_id)
 {
@@ -202,7 +179,6 @@ void execute(av::D3dLoopback &wire, std::uint32_t queue_id, std::uint32_t list_i
     CHECK(completed >= value);
 }
 
-/* The target into the readback buffer. */
 void copy_frame(av::D3dLoopback &wire)
 {
     const Barrier to_copy = {0u, 0u, target, 0xffffffffu, state_render_target, state_copy_source, 0u, 0u};
@@ -232,9 +208,6 @@ std::uint32_t pixel(const av::D3dLoopback &wire, std::uint32_t x, std::uint32_t 
     return word_at(wire, std::uint64_t{y} * row_pitch + x * 4u);
 }
 
-/* A 4x4 texture of four quadrant colours in an upload heap of guest memory,
- * copied into a default-heap texture by footprint, and its view at index 1
- * of a shader-visible heap. */
 void upload_texture(av::D3dLoopback &wire)
 {
     heap_memory.upload = wire.open_memory(upload_memory, heap_bytes);
@@ -263,8 +236,6 @@ void upload_texture(av::D3dLoopback &wire)
     const Barrier to_read = {0u, 0u, texture, 0xffffffffu, state_copy_dest, state_pixel_resource, 0u, 0u};
     CHECK(av_d3d12_ResourceBarrier12(wire, list, 1u, &to_read));
     CHECK(av_d3d12_CreateDescriptorHeap12(wire, view_heap, descriptors_view, 2u, heap_shader_visible));
-    /* The view as the guest's driver writes it: Texture2D's MostDetailedMip,
-     * MipLevels and PlaneSlice. */
     ViewDesc view = {};
     view.resource = texture;
     view.format = format_b8g8r8a8;
@@ -274,14 +245,12 @@ void upload_texture(av::D3dLoopback &wire)
     CHECK(av_d3d12_CreateShaderResourceView12(wire, DescriptorRef{view_heap, 1u}, 1u, view));
 }
 
-/* A root signature of one table (t0) and a point sampler (s0), and the
- * pipeline that samples through them. */
 void make_textured_pipeline(av::D3dLoopback &wire, std::uint32_t sample_count)
 {
     const DescriptorRange range = {range_srv, 1u, 0u, 0u, 0u, 0u};
     const RootParameter   table = {parameter_table, visibility_pixel, 0u, 0u, 0u, 0u, 1u, 0u};
     StaticSampler         sampler = {};
-    sampler.address_u = sampler.address_v = sampler.address_w = 3u; /* CLAMP */
+    sampler.address_u = sampler.address_v = sampler.address_w = 3u;
     sampler.comparison = 1u;
     sampler.max_lod = 1000.0f;
     sampler.visibility = visibility_pixel;
@@ -312,7 +281,7 @@ void make_textured_pipeline(av::D3dLoopback &wire, std::uint32_t sample_count)
                                              0u, nullptr, 0u, textured_ps::program, textured_ps::program_bytes));
 }
 
-}  // namespace
+}
 
 TEST(d3d12_session_features_device, a_texture_from_guest_memory_is_sampled_through_a_table_and_counted)
 {
@@ -357,13 +326,10 @@ TEST(d3d12_session_features_device, a_texture_from_guest_memory_is_sampled_throu
     std::memset(wire.memory(heap_memory.readback), 0xcd, query_offset);
     execute(wire, queue, list, 1u);
 
-    /* Each quadrant of the frame is its texel's colour: point sampling of a
-     * 4x4 texture stretched over 64x64. */
     CHECK_EQ(pixel(wire, 8u, 8u), quadrant[0]);
     CHECK_EQ(pixel(wire, size - 8u, 8u), quadrant[1]);
     CHECK_EQ(pixel(wire, 8u, size - 8u), quadrant[2]);
     CHECK_EQ(pixel(wire, size - 8u, size - 8u), quadrant[3]);
-    /* Every pixel of the target passed: the query counts all 4096. */
     std::uint64_t passed = 0u;
     std::memcpy(&passed, wire.memory(heap_memory.readback, query_offset - 8u), sizeof(passed));
     CHECK_EQ(passed, std::uint64_t{size} * size);
@@ -400,7 +366,7 @@ TEST(d3d12_session_features_device, a_compute_dispatch_writes_through_a_view_wit
     view.resource = written;
     view.dimension = view_buffer;
     view.args[0] = fill_count;
-    view.args[1] = 4u; /* StructureByteStride */
+    view.args[1] = 4u;
     CHECK(av_d3d12_CreateUnorderedAccessView12(wire, DescriptorRef{view_heap, 0u}, 1u, view));
     const DescriptorRange range = {range_uav, 1u, 0u, 0u, 0u, 0u};
     const RootParameter   parameters[2] = {{parameter_constants, visibility_all, 0u, 0u, 1u, 0u, 0u, 0u},
@@ -461,7 +427,6 @@ TEST(d3d12_session_features_device, a_multisampled_target_resolves_into_a_single
                                               texture_of(size, flag_render_target, samples), state_render_target,
                                               ClearValue{}, 0u));
     CHECK(av_d3d12_CreateDescriptorHeap12(wire, view_heap, descriptors_rtv, 1u, 0u));
-    /* The view as the guest writes one of a multisampled texture: 2DMS. */
     ViewDesc view = {};
     view.resource = multisampled;
     view.format = format_b8g8r8a8;

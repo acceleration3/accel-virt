@@ -16,7 +16,7 @@ struct DmaBufferProbe {
     DmaBuffer &buffer;
 };
 
-}  // namespace av
+}
 
 using av::DmaBuffer;
 using av::DmaBufferProbe;

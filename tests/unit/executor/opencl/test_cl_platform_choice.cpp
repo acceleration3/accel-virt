@@ -1,6 +1,3 @@
-/* Which host platform runs a GPU two of them offer: the vendor's own over an
- * implementation on another driver stack, and between two of a kind the
- * name that sorts first - whichever order they were offered in. */
 #include "executor/opencl/cl_platform_choice.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -12,13 +9,12 @@ int rusticl_platform = 0, rusticl_device = 0;
 int vendor_platform = 0, vendor_device = 0;
 int other_platform = 0, other_device = 0;
 
-}  // namespace
+}
 
 TEST(cl_platform_choice, nothing_considered_is_nothing_kept)
 { ClPlatformChoice choice;
   CHECK(choice.platform() == nullptr);
   CHECK(choice.device() == nullptr);
-  /* Half an offer is no offer. */
   choice.consider(&vendor_platform, nullptr, "NVIDIA CUDA");
   choice.consider(nullptr, &vendor_device, "NVIDIA CUDA");
   CHECK(choice.device() == nullptr); }
@@ -46,11 +42,8 @@ TEST(cl_platform_choice, between_two_of_a_kind_the_name_that_sorts_first_is_kept
   { ClPlatformChoice choice;
     choice.consider(&other_platform, &other_device, "Alpha");
     choice.consider(&vendor_platform, &vendor_device, "Beta");
-    /* The same name again is no better. */
     choice.consider(&vendor_platform, &vendor_device, "Alpha");
     CHECK(choice.device() == &other_device); }
-  /* A prefix sorts before what it begins, and no name at all is the empty
-   * one; Mesa's own, met twice, keeps the first. */
   { ClPlatformChoice choice;
     choice.consider(&vendor_platform, &vendor_device, "rusticlx");
     choice.consider(&other_platform, &other_device, nullptr);

@@ -18,7 +18,6 @@ QueryResultPublisher::~QueryResultPublisher()
     release_all();
 }
 
-/* The guest counts its ends from its bind; a backend outlives sessions. */
 bool QueryResultPublisher::bind(uint64_t offset, uint32_t slots)
 {
     AV_SCOPE("QueryResultPublisher::bind");
@@ -35,8 +34,6 @@ void QueryResultPublisher::unbind()
     slots_.unbind();
 }
 
-/* A query ended again before its last end was published supersedes it: D3D11
- * reads only the latest. */
 Status QueryResultPublisher::ended(uint32_t id, ID3D11Query *query)
 {
     AV_SCOPE("QueryResultPublisher::ended");
@@ -63,8 +60,6 @@ void QueryResultPublisher::forget(uint32_t id)
     if (pending_.take(id, dropped)) dropped.query_->Release();
 }
 
-/* The references a pending result held, given back: its queries may be the
- * last things keeping them. */
 void QueryResultPublisher::release_all()
 {
     AV_SCOPE("QueryResultPublisher::release_all");
@@ -107,4 +102,4 @@ bool QueryResultPublisher::pending() const
     return pending_.count() != 0u;
 }
 
-}  // namespace av
+}

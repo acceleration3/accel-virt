@@ -1,5 +1,3 @@
-/* The capset read over a real control queue: the device answers each request
- * from the stall between the driver's polls, as it does at StartDevice. */
 #include "core/platform/platform.hpp"
 #include "miniport/adapter/capset_exchange.hpp"
 #include "core/support/status.hpp"
@@ -39,7 +37,6 @@ CapsetInfo host_capset()
                       GpuIdentity(0x10DEu, 0x2204u, GpuIdentity::discrete_gpu, uuid, 1u << 20, 0u, "the host's"));
 }
 
-/* A device that answers the capset query, step by step, from the stall. */
 class Host {
 public:
     Host(MappedVirtioFunction &mapped, std::uint32_t refuse_at = 0u)
@@ -73,8 +70,6 @@ private:
 
 class Fixture {
 public:
-    /* The device is built once the BARs are mapped, as the adapter builds it:
-     * its register windows come from the layout the mapping filled in. */
     Status start()
     {
         const Status mapped = mapped_.map();
@@ -91,7 +86,7 @@ private:
     std::optional<VirtioGpuDevice> device_;
 };
 
-}  // namespace
+}
 
 TEST(capset_exchange_read, asks_the_device_and_answers_what_it_said)
 { Fixture fixture;
@@ -105,8 +100,6 @@ TEST(capset_exchange_read, asks_the_device_and_answers_what_it_said)
   CHECK_EQ(capset.max_contexts(), 64u);
   CHECK_EQ(host.answered(), 2u); }
 
-/* A device that refuses the capset is not one this driver can run contexts on,
- * and the caller is told rather than left with a capset it never read. */
 TEST(capset_exchange_read, a_refused_capset_is_not_supported)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -123,8 +116,6 @@ TEST(capset_exchange_read, a_device_that_answers_nothing_is_not_found)
   CapsetInfo capset;
   CHECK_STATUS(exchange.read(capset), Status::not_found); }
 
-/* One read per object: what failed is not asked again behind the caller's
- * back. */
 TEST(capset_exchange_read, a_failed_exchange_stays_failed)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);

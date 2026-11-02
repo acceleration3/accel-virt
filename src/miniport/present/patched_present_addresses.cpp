@@ -34,4 +34,4 @@ void PatchedPresentAddresses::refer(uint8_t *, uint32_t allocation_index, uint32
     request_.pPatchLocationListOut++;
 }
 
-}  // namespace av
+}

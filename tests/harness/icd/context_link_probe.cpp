@@ -6,4 +6,4 @@ ContextLinkProbe::ContextLinkProbe(ContextLink &target) : held(target) {}
 
 uint32_t &ContextLinkProbe::link() { return held.link_; }
 
-}  // namespace av::icd
+}

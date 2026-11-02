@@ -1,16 +1,3 @@
-"""Addresses named `module!function` for a trace's processes and kernel.
-
-This repository's own binaries are named from their PDBs in the build tree
-through llvm-symbolizer, when the PDB is the one the trace's image was built
-with. Every other image - Windows' DLLs, the kernel, drivers - is named from
-the public symbols of the exact PDB the trace records for it (WPR's
-DbgID_RSDS: name, GUID and age), fetched once from Microsoft's symbol server
-and kept, with the table read from it, in a cache directory:
-
-    symbols = Symbols(kernel, local=[ROOT / "build" / "guest"], cache=ROOT / "build-perfetto" / "symbols")
-    symbols.name(pid, address)        # "dwmcore.dll!COffScreenRenderTarget::IsRenderTime"
-    symbols.resolve(pid, addresses)   # many at once: one llvm-symbolizer run per module
-"""
 import bisect
 import json
 import pathlib
@@ -24,7 +11,6 @@ CALLING_CONVENTIONS = ("__cdecl ", "__stdcall ", "__fastcall ", "__thiscall ", "
 
 
 def short_name(demangled):
-    """`protected: virtual bool __cdecl A::B(void)` -> `A::B`."""
     text = demangled
     for convention in CALLING_CONVENTIONS:
         position = text.rfind(convention)
@@ -43,7 +29,6 @@ def short_name(demangled):
 
 
 def demangle(names):
-    """{mangled: short name}, one llvm-undname run for all of them."""
     mangled = [name for name in names if name.startswith("?")]
     result = {name: name for name in names}
     if not mangled:
@@ -57,8 +42,6 @@ def demangle(names):
 
 
 class PublicTable:
-    """A PDB's public functions as (rva, name), sorted."""
-
     def __init__(self, entries):
         self.entries = sorted(entries)
         self.rvas = [rva for rva, _ in self.entries]
@@ -92,9 +75,9 @@ class Symbols:
         self.local = [pathlib.Path(folder) for folder in local]
         self.cache = pathlib.Path(cache) if cache else None
         self.offline = offline
-        self.named = {}          # (pid, address) -> text
-        self.tables = {}         # pdb key -> PublicTable or None
-        self.local_pdbs = {}     # basename -> (binary, pdb guid+age) or None
+        self.named = {}
+        self.tables = {}
+        self.local_pdbs = {}
 
     def name(self, pid, address):
         self.resolve(pid, [address])
@@ -104,7 +87,6 @@ class Symbols:
         return 0 if address >= 1 << 63 else pid
 
     def resolve(self, pid, addresses):
-        """Names every address in `addresses` for the process `pid`."""
         by_image = {}
         for address in addresses:
             key = (self.space(pid, address), address)
@@ -134,7 +116,6 @@ class Symbols:
         return {offset: table.name(offset) for offset in offsets}
 
     def local_binary(self, module, pdb_id):
-        """This repository's build of `module`, if its PDB is the traced one."""
         if module not in self.local_pdbs:
             self.local_pdbs[module] = None
             for folder in self.local:
@@ -167,7 +148,6 @@ class Symbols:
         if pdb_id is None or self.cache is None:
             return None
         path, guid, age = pdb_id
-        # A PDB is named by its build's full path; the server keys the file.
         name = path.replace("/", "\\").split("\\")[-1]
         key = f"{guid}{age:X}"
         if key in self.tables:

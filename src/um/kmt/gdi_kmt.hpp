@@ -1,7 +1,3 @@
-/* Kmt over gdi32's D3DKMT functions: each call fills the kernel's structure,
- * keeps the NTSTATUS, and answers core's types. Waits go through one event
- * with a timeout, so a fence the driver never reaches fails the step instead
- * of hanging the guest. Translation only, like src/km. */
 #ifndef AV_GDI_KMT_HPP
 #define AV_GDI_KMT_HPP
 
@@ -22,7 +18,6 @@ public:
     GdiKmt(const GdiKmt &) = delete;
     GdiKmt &operator=(const GdiKmt &) = delete;
 
-    /* The event every wait uses. */
     [[nodiscard]] Status initialize();
 
     Status   enumerate_adapters(uint32_t *adapters, uint32_t capacity, uint32_t &count) override;
@@ -71,11 +66,6 @@ public:
     Status   submit(uint32_t context, uint64_t commands, uint64_t length, const uint8_t *private_data,
                     uint32_t private_size) override;
     Status   wait_for_context(uint32_t device, uint32_t context) override;
-    /* Feature 049: the hardware queue a doorbell is created on, and the
-     * doorbell itself. The queue's progress fence is where the driver writes
-     * what it has finished; the doorbell's three addresses are the page a
-     * process stores to, the status it reads first, and where it writes the
-     * fence value it has queued. */
     Status   create_hw_queue(uint32_t device, uint32_t context, GuestHwQueue &queue) override;
     Status   submit_to_hw_queue(uint32_t queue, uint64_t commands, uint64_t length, const uint8_t *private_data,
                                 uint32_t private_size, uint64_t progress_fence_id) override;
@@ -94,21 +84,15 @@ public:
     uint32_t last_code() const override;
 
 private:
-    /* The one D3DKMTCreateContextVirtual both context calls make, with or
-     * without the flag that says a hardware queue may run on it. */
     [[nodiscard]] Status make_context(uint32_t device, const uint8_t *private_data, uint32_t size,
                                       bool hardware_queue, uint32_t &context);
 
     Status answer(int32_t code);
     Status await_event();
-    /* An open handle's LUID, kept until the handle is closed: every search
-     * enumerates afresh, and the handle an earlier one kept stays open. */
     void   remember(uint32_t adapter, uint64_t luid);
     void   forget(uint32_t adapter);
 
-    /* D3DKMT_ENUMADAPTERS2's limit on what one enumeration answers. */
     static constexpr uint32_t max_adapters = 16u;
-    /* One enumeration's handles beside those the searches before it kept. */
     static constexpr uint32_t known_capacity = 2u * max_adapters;
 
     PerformanceClock clock_;
@@ -119,6 +103,6 @@ private:
     uint32_t known_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_GDI_KMT_HPP
+#endif

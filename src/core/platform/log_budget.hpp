@@ -1,8 +1,3 @@
-/* How much the driver may say in one window. Refusals are logged at the point
- * of decision (constitution IX), and some of those points are the DPC at
- * DISPATCH, where a fault storm would otherwise turn one failure into an
- * unbounded stream of log lines. Lines are admitted up to a fixed count per
- * window; the rest are counted, so a later line can say how many were lost. */
 #ifndef AV_LOG_BUDGET_HPP
 #define AV_LOG_BUDGET_HPP
 
@@ -17,20 +12,13 @@ struct LogBudgetProbe;
 
 class LogBudget {
 public:
-    /* Well above the legitimate burst: one adapter start answers around thirty
-     * DDIs, and dxgkrnl repeats the VidPn DDIs while it settles a topology, so
-     * a window that a bring-up can exhaust stops the log being evidence for the
-     * step that failed. A storm is unbounded; this still bounds it. */
     static constexpr uint32_t lines_per_window = 256u;
-    /* One second, in the 100ns units Platform::interrupt_time counts. */
     static constexpr uint64_t window_ticks = 10000000u;
 
     explicit LogBudget(Platform &platform);
     LogBudget(const LogBudget &) = delete;
     LogBudget &operator=(const LogBudget &) = delete;
 
-    /* Dispatch at most. Whether another line may be written now; a refusal is
-     * counted, never logged. */
     [[nodiscard]] bool allows();
     uint64_t           dropped() const;
 
@@ -46,6 +34,6 @@ private:
     friend struct LogBudgetProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_LOG_BUDGET_HPP
+#endif

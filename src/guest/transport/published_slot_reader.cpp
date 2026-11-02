@@ -25,8 +25,6 @@ bool PublishedSlotReader::reading() const
     return count_ != 0u;
 }
 
-/* x86 keeps loads in order, so the acquire fence - which keeps the compiler
- * from moving the copy past it - is all the second look needs. */
 bool PublishedSlotReader::read(uint32_t index, uint64_t sequence, void *payload, uint32_t size) const
 {
     AV_SCOPE("PublishedSlotReader::read");
@@ -46,4 +44,4 @@ bool PublishedSlotReader::invariants_hold() const
     return (slots_ == nullptr) == (count_ == 0u);
 }
 
-}  // namespace av
+}

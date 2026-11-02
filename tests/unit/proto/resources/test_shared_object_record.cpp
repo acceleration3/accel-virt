@@ -1,8 +1,3 @@
-/* The record that carries a shared object's identity between two processes.
- * Every process on the far side of it is a process this one has no control
- * over, so the layout is pinned byte for byte and every field the bytes alone
- * can judge is judged here - the miniport's table then judges what only it
- * knows, which is whether the id was ever minted. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -47,14 +42,14 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(shared_object_record_encode, lays_out_the_magic_version_and_every_field_with_the_reserved_word_zero)
 { std::uint8_t bytes[SharedObjectRecord::encoded_size];
   std::memset(bytes, 0xEE, sizeof bytes);
   encode(valid(), bytes);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK(layout.at(0u, 4u) == 0x00535641u);                 /* "AVS" */
+  CHECK(layout.at(0u, 4u) == 0x00535641u);
   CHECK(layout.at(4u, 4u) == 1u);
   CHECK(layout.at(8u, 8u) == 0x0123456789ABCDEFu);
   CHECK(layout.at(16u, 4u) == SharedObjectKind::memory);
@@ -119,21 +114,21 @@ TEST(shared_object_record_decode, any_length_but_its_own_is_framing_and_leaves_t
 TEST(shared_object_record_decode, a_field_no_record_can_have_is_an_invalid_parameter_left_unread)
 { struct Case { std::size_t offset; std::size_t width; std::uint64_t value; };
   const Case cases[] = {
-      {0u, 4u, 0u},                        /* no magic */
-      {0u, 4u, 0x534B5653u},               /* one bit off the magic */
+      {0u, 4u, 0u},
+      {0u, 4u, 0x534B5653u},
       {0u, 4u, 0xFFFFFFFFu},
-      {4u, 4u, 0u},                        /* version 0 */
-      {4u, 4u, 2u},                        /* a version this build does not know */
+      {4u, 4u, 0u},
+      {4u, 4u, 2u},
       {4u, 4u, 0xFFFFFFFFu},
-      {16u, 4u, 0u},                       /* no kind */
-      {16u, 4u, 4u},                       /* the kind after the last one */
+      {16u, 4u, 0u},
+      {16u, 4u, 4u},
       {16u, 4u, 0xFFFFFFFFu},
-      {20u, 4u, 1u},                       /* reserved */
+      {20u, 4u, 1u},
       {20u, 4u, 0x80000000u},
-      {24u, 8u, 0u},                       /* an id with no adapter */
-      {8u, 8u, 0u},                        /* an adapter with no id */
-      {32u, 8u, 0u},                       /* no size */
-      {32u, 8u, 1u},                       /* a size that is not whole pages */
+      {24u, 8u, 0u},
+      {8u, 8u, 0u},
+      {32u, 8u, 0u},
+      {32u, 8u, 1u},
       {32u, 8u, page - 1u},
       {32u, 8u, page + 1u},
       {32u, 8u, 0xFFFFFFFFFFFFFFFFu},
@@ -160,9 +155,6 @@ TEST(shared_object_record_decode, the_widest_representable_record_round_trips)
   CHECK_EQ(decoded.adapter_id(), 0xFFFFFFFFFFFFFFFFu);
   CHECK_EQ(decoded.size(), size); }
 
-/* A fence has no size, exactly as the wire body says: the two describe one
- * object and an opener compares them, so a rule either one kept alone would be
- * a record no open could match (feature 053, T031). */
 TEST(shared_object_record_decode, a_fence_carries_no_size_and_memory_carries_pages)
 { std::uint8_t bytes[SharedObjectRecord::encoded_size] = {};
   const std::uint32_t fences[] = {SharedObjectKind::monitored_fence, SharedObjectKind::native_fence};
@@ -185,16 +177,5 @@ TEST(shared_object_record_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 320u);
-  /* The same free fields as the request - 64 bits of object id and 51 of the
-   * eight-page size - plus 64 of adapter id, which travels with the object id
-   * and so need only stay non-zero, as no single flip of 0x100002b71 makes it.
-   * Nothing else is free: the magic and the version are compared whole, so all
-   * 64 of their bits are fixed; the kind's 32 flips leave an unknown kind or a
-   * fence carrying a size; the four reserved bytes must be zero; and all-zero,
-   * all-ones and every truncation fail on the magic or the length.
-   *
-   * The count is exact, not a bound: it was checked as an equality before
-   * being written as a floor, so a decoder that starts refusing one of these
-   * has changed its format. */
   const std::uint32_t acceptable = 64u + 64u + 51u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

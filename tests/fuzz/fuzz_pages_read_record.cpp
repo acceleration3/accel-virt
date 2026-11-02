@@ -1,7 +1,3 @@
-/* The escape a reader of an allocation's pages sends around its read, fed
- * attacker-chosen bytes: Adapter::escape decodes it for any process. What
- * decodes must re-encode to exactly the bytes read, name an allocation, and
- * carry no answer yet. */
 #include "core/support/status.hpp"
 #include "proto/escape/pages_read_record.hpp"
 

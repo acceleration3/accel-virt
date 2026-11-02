@@ -1,9 +1,3 @@
-/* The windows one context draws on (research.md §6): a BackBufferPresenter per
- * window it was made current on, the window it is current on now, and which of
- * the application's draw and read bindings is framebuffer 0 - the window. What
- * the application calls framebuffer 0, GL_BACK or GL_FRONT is translated to the
- * current window's framebuffer object and its colour attachment on the way to
- * the host, and back again in what a query answers. */
 #ifndef AV_GLICD_WINDOW_FRAMEBUFFERS_HPP
 #define AV_GLICD_WINDOW_FRAMEBUFFERS_HPP
 
@@ -16,20 +10,20 @@
 
 namespace av {
 class DriverLog;
-}  // namespace av
+}
 
 namespace av {
 class BlockSource;
 class ClientTransport;
 class StateWriter;
-}  // namespace av
+}
 
 namespace av::icd {
 }
 
 namespace av::icd {
 class WindowSurface;
-}  // namespace av::icd
+}
 
 namespace av::glicd {
 
@@ -52,53 +46,21 @@ public:
     WindowFramebuffers(const WindowFramebuffers &) = delete;
     WindowFramebuffers &operator=(const WindowFramebuffers &) = delete;
 
-    /* The context was made current on `window`: its presenter prepared, and,
-     * the first time the context is current anywhere, the window bound for
-     * drawing and reading with the viewport and scissor at its size, as a new
-     * context finds them; afterwards a binding the application left on the
-     * window follows it to this one. no_memory when there is no room for a
-     * new window's presenter; prepare's refusals otherwise, with the current
-     * window unchanged. */
     [[nodiscard]] Status make_current_on(ClientTransport &wire, void *window, const PixelFormat &format,
                                          icd::WindowSurface &surface);
-    /* Null until the context is current on a window, or once that window is gone. */
     void    *window() const;
-    /* An application's framebuffer name as the host knows it: 0 is the
-     * current window's framebuffer object. */
     uint32_t name_of(uint32_t name) const;
-    /* glBindFramebuffer(target, name), which of the two bindings is the window now. */
     void     bound(uint32_t target, uint32_t name);
-    /* What the application last named as its read buffer, so a read of
-     * GL_FRONT is answered from the frame the window is showing (feature
-     * 051). */
     void     reading(uint32_t buffer);
-    /* Answers `width` x `height` pixels from (`x`, `y`) out of the current
-     * window's last presented frame; false unless the read is of GL_FRONT on
-     * the window, and then the host answers it as before. */
     [[nodiscard]] bool read_front(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format,
                                   uint32_t type, void *pixels) const;
-    /* A draw or read buffer the application names, as the window's
-     * framebuffer object takes it: the window's buffers are its colour
-     * attachment while that binding is the window. */
     uint32_t buffer_for(uint32_t buffer, bool drawing) const;
-    /* A glGetIntegerv answer as the application must see it. */
     int32_t  answer(uint32_t pname, int32_t host_value) const;
-    /* The frame of `window` onto `dc`, or read for `loop` to show
-     * (BackBufferPresenter::present). false for a window this context never
-     * drew on. */
     bool     present(ClientTransport &wire, const ClientArrayState &state, void *dc, void *window,
                      icd::WindowSurface &surface, GlPresentQueue *loop, uint64_t luid);
-    /* The frame the last present read for the present thread goes to it, to
-     * show once the batch `mark` names is done. */
     void     hand_over(const BatchMark &mark);
-    /* After a swap: when `window`'s size changed, its framebuffer made again -
-     * bound again where the application left the window bound - before the
-     * next frame. One that cannot have its new size keeps the old until the
-     * window is gone. */
     void     follow(ClientTransport &wire, void *window, const PixelFormat &format, icd::WindowSurface &surface);
-    /* The presenters of windows that are gone, given up. */
     void     drop_gone(ClientTransport &wire, icd::WindowSurface &surface);
-    /* Every presenter given up; the host's objects deleted through `wire` when there is one. */
     void     release(ClientTransport *wire);
     uint32_t held() const;
 
@@ -107,26 +69,19 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* The presenter of `window`, or null. */
     BackBufferPresenter *find(void *window) const;
     uint64_t             key_of(void *window) const;
     void                 forget(BackBufferPresenter *presenter);
-    /* The current window's `framebuffer`, bound for whichever of drawing and
-     * reading the application left on the window. */
     void     bind_window(ClientTransport &wire, uint32_t framebuffer);
 
     BlockSource                        &memory_;
     DriverLog                     &log_;
     ObjectPool<BackBufferPresenter>     pool_;
-    /* Each presenter by the window it draws on. */
     KeyedSlots<uint64_t, BackBufferPresenter *> presenters_;
-    /* The window's presenter, or null. */
     BackBufferPresenter                *current_;
-    /* The presenter the last present read a frame for, or null. */
     BackBufferPresenter                *presented_;
     bool                                draws_window_;
     bool                                reads_window_;
-    /* The buffer glReadBuffer last named, GL_BACK until it is named. */
     uint32_t                            read_buffer_;
 
     bool                                ever_current_;
@@ -134,6 +89,6 @@ private:
     friend struct WindowFramebuffersProbe;
 };
 
-}  // namespace av::glicd
+}
 
-#endif  // AV_GLICD_WINDOW_FRAMEBUFFERS_HPP
+#endif

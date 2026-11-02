@@ -1,11 +1,3 @@
-/* A host's device extension list into the ICD's extension policy (feature 045,
- * T041). Whatever the host wrote - names with no terminator, repeats, any spec
- * version - what the application is handed is only a policy row's name, each at
- * most once, terminated and zero after the terminator, at a spec version no newer
- * than the row's, never more than the room it gave and nothing written past it.
- *
- * An input is a byte whose low two bits are the room the application gives (0
- * asks only how many), then whole VkExtensionProperties as the host sent them. */
 #include "icd/common/extension_policy.hpp"
 
 #include <cstddef>
@@ -50,7 +42,7 @@ void check_entry(const VkExtensionProperties &entry, const VkExtensionProperties
         require(std::strcmp(earlier[index].extensionName, entry.extensionName) != 0);
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

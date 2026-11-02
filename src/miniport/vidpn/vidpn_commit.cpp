@@ -16,7 +16,6 @@ VidPnCommit::VidPnCommit(Platform &platform, DxgkrnlInterface &dxgkrnl, const Di
           AV_SCOPE("VidPnCommit::VidPnCommit");
       }
 
-/* A path powering off keeps its mode for when it powers on again. */
 NtStatus VidPnCommit::apply()
 {
     AV_SCOPE("VidPnCommit::apply");
@@ -40,4 +39,4 @@ NtStatus VidPnCommit::apply()
     return NtStatus(sources_.commit(source, mode));
 }
 
-}  // namespace av
+}

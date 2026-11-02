@@ -1,11 +1,3 @@
-/* A host GPU's memory as its compositing context allocates it, on this
- * machine's own GPUs, through the memory source the executor gives every
- * guest-mapped byte from (docs/host-memory.md). What the device and the guest
- * rely on is judged on the real driver: every class allocates, the dma-buf
- * the device maps shows exactly what the source's own mapping holds and the
- * other way round, the caching answered is the memory type's, and only
- * host-visible coherent types are ever offered. A GPU whose compositing
- * context does not open, or a host with none, judges nothing and says so. */
 #include "device/abi/av_executor.h"
 #include "executor/host_memory_source.hpp"
 #include "executor/shim/loader_host_apis.hpp"
@@ -45,17 +37,13 @@ using av::Status;
 namespace {
 
 constexpr std::uint32_t domain = 1u;
-/* Large enough to span several pages of any driver's mapping granularity. */
 constexpr std::uint64_t bytes = 64u * 4096u;
 
-/* The host's loaders, opened once for the binary. */
 av::LoaderHostApis &opened_host()
 { static av::LoaderHostApis host;
   host.open();
   return host; }
 
-/* The flags the host's own enumeration answers for GPU `index`'s memory type
- * `type`, found by the GPU's UUID. */
 std::uint32_t driver_flags(av::LoaderHostApis &host, std::uint32_t index, std::uint32_t type)
 { std::uint8_t uuid[16] = {};
   host.gpu_uuid(index, uuid);
@@ -89,9 +77,6 @@ std::uint32_t driver_flags(av::LoaderHostApis &host, std::uint32_t index, std::u
   ::vkDestroyInstance(instance, nullptr);
   return flags; }
 
-/* Whether a device of GPU `index`'s driver, made as an importer makes one,
- * may import the dma-buf `fd` as a host-visible type: what vkd3d-proton asks
- * of a heap before it imports one. */
 bool imports_host_visible(av::LoaderHostApis &host, std::uint32_t index, int fd)
 { std::uint8_t uuid[16] = {};
   host.gpu_uuid(index, uuid);
@@ -147,14 +132,10 @@ bool imports_host_visible(av::LoaderHostApis &host, std::uint32_t index, int fd)
   ::vkDestroyInstance(instance, nullptr);
   return visible; }
 
-/* What the device does with an answer: maps the dma-buf, here for reading
- * and writing; null where it cannot. */
 std::uint8_t *map(const AvHostMemory &memory)
 { void *const mapped = ::mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, memory.fd, 0);
   return mapped != MAP_FAILED ? static_cast<std::uint8_t *>(mapped) : nullptr; }
 
-/* A write through either view is the other's: the guest's window and the
- * host API that imported the memory see one allocation. */
 void judge_shared(HostMemorySource &source, std::uint64_t key, const AvHostMemory &answered)
 { std::uint8_t *const window = map(answered);
   CHECK(window != nullptr);
@@ -174,10 +155,8 @@ void judge_shared(HostMemorySource &source, std::uint64_t key, const AvHostMemor
   source.release(*held);
   ::munmap(window, bytes); }
 
-}  // namespace
+}
 
-/* Every class a guest asks for allocates on every GPU with a source, and is
- * one allocation both views share. */
 TEST(compositor_memory_device, every_class_allocates_memory_both_views_share)
 { av::LoaderHostApis &host = opened_host();
   std::uint32_t judged = 0u;
@@ -202,10 +181,6 @@ TEST(compositor_memory_device, every_class_allocates_memory_both_views_share)
   }
   if (judged == 0u) std::fprintf(stderr, "no GPU here has a memory source: nothing judged\n"); }
 
-/* An upload or readback answer is memory an importer that keeps to the
- * driver's word may map: its dma-buf imports back as a host-visible type,
- * which vkd3d-proton asks before it makes a heap of it. NVIDIA's BAR comes back
- * device-local only, and every Direct3D 12 upload heap was refused over it. */
 TEST(compositor_memory_device, upload_and_readback_import_back_as_memory_a_cpu_maps)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t index = 0u; index < host.gpu_count(); index++) {
@@ -224,10 +199,6 @@ TEST(compositor_memory_device, upload_and_readback_import_back_as_memory_a_cpu_m
       }
   } }
 
-/* Each type the source maps is host visible and coherent on the driver, and
- * allocated as exactly itself, cached as the driver says it is: what the
- * guest is told to map with is what the host maps with. A Vulkan guest's
- * own allocation of the type is the same shared memory. */
 TEST(compositor_memory_device, every_mappable_type_is_coherent_and_answers_its_own_caching)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t index = 0u; index < host.gpu_count(); index++) {
@@ -257,7 +228,6 @@ TEST(compositor_memory_device, every_mappable_type_is_coherent_and_answers_its_o
           source->free(domain, 100u + type);
           ::close(answered.fd);
       }
-      /* A type it does not map is no request this GPU answers. */
       for (std::uint32_t type = 0u; type < HostMemoryRequest::memory_types; type++) {
           if ((mappable >> type & 1u) != 0u) continue;
           AvHostMemory answered = {-1, 0u, 0u};
@@ -269,9 +239,6 @@ TEST(compositor_memory_device, every_mappable_type_is_coherent_and_answers_its_o
       CHECK(source->invariants_hold());
   } }
 
-/* The memory outlives the device's hold while an import holds it, and is the
- * driver's again once nothing does: an import's view keeps reading what was
- * written after the device let go. */
 TEST(compositor_memory_device, an_import_keeps_the_memory_after_the_device_lets_go)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t index = 0u; index < host.gpu_count(); index++) {

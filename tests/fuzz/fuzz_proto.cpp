@@ -1,7 +1,3 @@
-/* Every av protocol decoder, fed attacker-chosen bytes. The first byte picks
- * the target. A decoder may reject anything; what it accepts must re-encode to
- * exactly the bytes it read, and the trackers must stay consistent whatever
- * sequence of snapshots they see. */
 #include "core/support/status.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
@@ -33,9 +29,6 @@ void round_trip(const std::uint8_t *bytes, std::size_t length)
     if (std::memcmp(again, bytes, sizeof again) != 0) __builtin_trap();
 }
 
-/* The header's awake flag and published fence are the device's and the
- * miniport's to write; the process's encode leaves them zero, so only the
- * rest of what decoded comes back. */
 void ring_header_round_trip(const std::uint8_t *bytes, std::size_t length)
 {
     constexpr std::size_t awake_flag = 5u;
@@ -51,7 +44,6 @@ void ring_header_round_trip(const std::uint8_t *bytes, std::size_t length)
     if (std::memcmp(again, expected, sizeof again) != 0) __builtin_trap();
 }
 
-/* A setup is 32 or 48 bytes by its minor: what decodes is exactly its size. */
 void setup_round_trip(const std::uint8_t *bytes, std::size_t length)
 {
     av::ContextSetup decoded;
@@ -98,7 +90,7 @@ void fence_sequence(const std::uint8_t *bytes, std::size_t length)
     }
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size);
 

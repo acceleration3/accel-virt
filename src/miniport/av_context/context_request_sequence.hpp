@@ -1,10 +1,3 @@
-/* One context's setup or teardown on the device, as the requests it takes in
- * order (docs/protocol.md): CTX_CREATE, a guest blob each for the ring, fence
- * page and reply slot - one memory entry per run of adjacent pages - then the setup; or CTX_DESTROY and an unref for each
- * blob. One request and one answer at a time. A refused setup stops; a
- * teardown releases exactly what the setup created - counting a request whose
- * answer was unreadable as done, since the device may have acted on it - and
- * keeps going past a refusal. At most DISPATCH. */
 #ifndef AV_CONTEXT_REQUEST_SEQUENCE_HPP
 #define AV_CONTEXT_REQUEST_SEQUENCE_HPP
 
@@ -24,22 +17,12 @@ class ContextRequestSequence {
 public:
     explicit ContextRequestSequence(Platform &platform);
 
-    /* invalid_state unless idle - nothing set up, or all of it torn down; invalid_parameter
-     * for pages not complete. The pages' frames must outlive the setup requests. */
     [[nodiscard]] Status begin_setup(uint32_t context_id, const ContextSetup &setup, const ContextPages &pages);
-    /* invalid_state while a sequence runs or when nothing was created. */
     [[nodiscard]] Status begin_teardown();
-    /* The next request into `bytes`. invalid_state while an answer is awaited
-     * or the sequence finished; too_large, writing nothing, when it does not fit. */
     [[nodiscard]] Status next_request(uint8_t *bytes, size_t capacity, size_t &length);
-    /* ok for OK_NODATA; not_supported for a refusal; malformed for an answer
-     * too short to read, which ends a setup; invalid_state when none is awaited. */
     [[nodiscard]] Status accept(const uint8_t *bytes, size_t length);
-    /* DISPATCH. The device reset: it holds nothing any request created. */
     void                 abandon();
     bool                 finished() const;
-    /* Whether any answer since the last setup began was not OK_NODATA, and the
-     * first such answer's type. */
     bool                 refused() const;
     uint32_t             refusal() const;
 
@@ -75,6 +58,6 @@ private:
     friend struct ContextRequestSequenceProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_CONTEXT_REQUEST_SEQUENCE_HPP
+#endif

@@ -14,7 +14,6 @@ bool GlExtensionList::add(const char *name)
     AV_SCOPE("GlExtensionList::add");
     if (names_.holds(name) || names_.reserve(names_.count() + 1u) != Status::ok) return false;
     if (joined_.add(name) != Status::ok) return false;
-    /* Room was made, and the joined string took it, so it is a name. */
     static_cast<void>(names_.add(name));
     return true;
 }
@@ -50,4 +49,4 @@ bool GlExtensionList::invariants_hold() const
     return *text == '\0';
 }
 
-}  // namespace av::glicd
+}

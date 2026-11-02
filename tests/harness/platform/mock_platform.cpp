@@ -23,7 +23,7 @@ const char *const violation_names[] = {
     "time_overflow", "unmapped_register", "frame_misuse", "event_misuse",
 };
 
-}  // namespace
+}
 
 MockPlatform::MockPlatform()
     : live_{}, live_count_(0u), allocation_sequence_(0u), contiguous_{}, contiguous_count_(0u),
@@ -97,8 +97,6 @@ void MockPlatform::record(Violation kind, const char *format, ...)
 
 void *MockPlatform::allocate(std::size_t bytes, Pool)
 {
-    /* Allocating at DISPATCH is legal for non-paged pool on Windows, but this
-     * driver's submission path must never do it: make it a failure. */
     if (irql_ >= Irql::dispatch) {
         record(Violation::allocation_at_dispatch, "%zu bytes at IRQL %u", bytes,
                static_cast<unsigned>(irql_));
@@ -111,7 +109,6 @@ void *MockPlatform::allocate(std::size_t bytes, Pool)
 
     void *block = std::malloc(bytes);
     if (block == nullptr) return nullptr;
-    /* Poison, so a caller that reads uninitialized memory is caught. */
     std::memset(block, 0xA5, bytes);
     live_[live_count_++] = block;
     return block;
@@ -130,8 +127,6 @@ void MockPlatform::release(void *block)
             return;
         }
     }
-    /* Freeing memory this platform never handed out is corruption; continuing
-     * would free a foreign pointer. */
     std::fprintf(stderr, "\n    release of untracked pointer %p\n", block);
     std::abort();
 }
@@ -150,7 +145,6 @@ void *MockPlatform::allocate_contiguous(std::size_t bytes)
     if (block == nullptr) return nullptr;
     std::memset(block, 0xA5, bytes);
     const std::uint64_t address = next_physical_address_;
-    /* A guard page between blocks, so an overrun never lands in a neighbour. */
     next_physical_address_ += ((bytes + 0xFFFu) & ~std::uint64_t{0xFFF}) + 0x1000u;
     contiguous_[contiguous_count_++] = ContiguousBlock{block, address, bytes};
     return block;
@@ -354,8 +348,6 @@ void MockPlatform::unlock_process_pages(void *locked)
     record(Violation::frame_misuse, "unlocking a process range never locked");
 }
 
-/* A real MDL bounds the read by the span it describes; this one by the page
- * count it was attached with, and an unknown pointer is no MDL at all. */
 Status MockPlatform::read_page_frames(void *mdl, std::uint32_t first, std::uint32_t count, std::uint64_t *frames)
 {
     require_irql_at_most(Irql::apc, "Platform::read_page_frames");
@@ -687,7 +679,6 @@ bool MockPlatform::try_acquire_mutex(void *storage, LockRank rank)
 
 void MockPlatform::initialize_wait_mutex(void *) {}
 
-/* Blocks without raising the IRQL, so a holder may wait at PASSIVE. */
 void MockPlatform::acquire_wait_mutex(void *, LockRank rank)
 {
     if (acquire_callback_ != nullptr) acquire_callback_(acquire_context_);
@@ -709,7 +700,6 @@ void MockPlatform::released_elsewhere() { holding_elsewhere_ = false; }
 
 std::uint64_t MockPlatform::interrupt_time() const { return now_; }
 
-/* A stall busy-waits in the kernel; here it only moves the clock. */
 void MockPlatform::store_atomic(std::uint64_t &target, std::uint64_t value) { target = value; }
 
 std::uint64_t MockPlatform::load_atomic(std::uint64_t &source)
@@ -816,8 +806,6 @@ void MockPlatform::log_at_bugcheck(const char *message)
     }
 }
 
-/* The kernel keeps one record per registration; a second without a
- * deregistration is a record inserted twice, which it bugchecks on. */
 bool MockPlatform::register_bugcheck(void *buffer, std::size_t bytes, BugcheckRoutine routine)
 {
     if (irql_ != Irql::passive)
@@ -845,8 +833,6 @@ void MockPlatform::deregister_bugcheck()
 
 void MockPlatform::refuse_bugcheck_registration() { refuse_bugcheck_ = true; }
 
-/* Only an open handle of the process's own resolves: one it closed, or a
- * number it never had, is what ObReferenceObjectByHandle refuses. */
 Status MockPlatform::reference_event(std::uint64_t handle, void *&event)
 {
     event = nullptr;
@@ -1128,7 +1114,7 @@ void         *MockPlatform::registered_driver_object() const { return registered
 void         *MockPlatform::registered_registry_path() const { return registered_registry_path_; }
 const DdiTable *MockPlatform::registered_table() const { return registered_table_; }
 
-}  // namespace av
+}
 
 namespace av {
 
@@ -1215,4 +1201,4 @@ void MockPlatform::write_register_u64(void *address, std::uint64_t value)
     if (RegisterWindow *window = route(address, 8u, offset)) window->write_u64(offset, value);
 }
 
-}  // namespace av
+}

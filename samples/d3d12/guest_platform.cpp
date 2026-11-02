@@ -1,5 +1,3 @@
-// The guest build's platform: Windows, no C runtime, Microsoft's dxcompiler
-// (beside the program, with dxil.dll to sign what it writes) for HLSL.
 #include "framework.h"
 
 #include <d3dcommon.h>
@@ -42,8 +40,6 @@ void *operator new(size_t bytes) { return samples::allocate(bytes); }
 void  operator delete(void *memory) noexcept { samples::release_memory(memory); }
 void  operator delete(void *memory, size_t) noexcept { samples::release_memory(memory); }
 
-// What of dxcapi.h this uses, declared here: the SDK the guest builds against
-// does not carry it. Interface order and IDs are dxcapi.h's (DXC v1.9.2607).
 struct DxcBuffer {
     LPCVOID Ptr;
     SIZE_T  Size;
@@ -112,7 +108,7 @@ bool load_compiler()
     return true;
 }
 
-}  // namespace
+}
 
 void log(const char *text)
 {
@@ -169,9 +165,6 @@ bool read_file(const char *path, Blob &blob)
 
 void set_shader_directory(const char *directory) { copy_text(shader_directory, sizeof shader_directory, directory); }
 
-// Compiled here, where Microsoft's compiler is, and kept for the host to load.
-// HLSL 2018: the D3D11 samples' shaders were written for FXC, and 2021's
-// short-circuiting and template rules change what some of them mean.
 bool shader(const char *name, const char *source, const char *entry, const char *target, Blob &bytecode)
 {
     if (!load_compiler()) return false;
@@ -182,7 +175,7 @@ bool shader(const char *name, const char *source, const char *entry, const char 
     LPCWSTR arguments[] = {wide_name, L"-E", wide_entry, L"-T", wide_target, L"-O3", L"-HV", L"2018"};
     size_t length = 0;
     while (source[length] != '\0') length++;
-    const DxcBuffer text = {source, length, 65001u /* UTF-8 */};
+    const DxcBuffer text = {source, length, 65001u };
     IDxcOperationResult *compiled = nullptr;
     if (FAILED(compiler->Compile(&text, arguments, sizeof arguments / sizeof arguments[0], nullptr,
                                  iid_dxc_operation_result, reinterpret_cast<void **>(&compiled))))
@@ -252,7 +245,7 @@ DWORD WINAPI thread_main(LPVOID thread)
     t->entry(t->argument);
     return 0;
 }
-}  // namespace
+}
 
 Thread *start_thread(void (*entry)(void *), void *argument)
 {
@@ -302,12 +295,10 @@ bool create_device(ID3D12Device **device)
                                        reinterpret_cast<void **>(device)));
 }
 
-}  // namespace samples
+}
 
 extern "C" void avd3d12samples_entry()
 {
-    // The command line split on spaces outside double quotes, as ASCII:
-    // shell32's CommandLineToArgvW would be one more import for this.
     const wchar_t *line = GetCommandLineW();
     char         **argv = static_cast<char **>(samples::allocate(sizeof(char *) * 64));
     int            argc = 0;

@@ -7,12 +7,9 @@
 namespace av {
 
 namespace {
-
-/* What the process has committed before anything here: any value will do,
- * as long as giving memory back cannot take it below zero. */
 constexpr std::uint64_t starting_commit = std::uint64_t{512} << 20u;
 
-}  // namespace
+}
 
 ScriptedD3d11Deferred::ScriptedD3d11Deferred()
     : calls_{}, fail_at_{}, fail_with_{}, recording_{}, lists_{}, previous_{}, geometry_{}, finishes_on_{},
@@ -232,4 +229,4 @@ void ScriptedD3d11Deferred::release()
     live_ = false;
 }
 
-}  // namespace av
+}

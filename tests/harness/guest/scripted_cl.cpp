@@ -8,7 +8,6 @@ namespace {
 
 constexpr std::uint32_t never = 0u;
 constexpr std::uint32_t none = ~std::uint32_t{0};
-/* cl.h's, as cl_probe.cpp spells them. */
 constexpr std::uint32_t platform_name = 0x0902u;
 constexpr std::uint32_t platform_icd_suffix = 0x0920u;
 constexpr std::uint32_t device_name = 0x102Bu;
@@ -17,30 +16,20 @@ constexpr std::uint32_t device_vendor_id = 0x1001u;
 constexpr std::uint32_t device_luid = 0x106Cu;
 constexpr std::uint32_t device_svm_capabilities = 0x1053u;
 constexpr std::uint32_t device_il_version = 0x105Bu;
-/* CL_INVALID_BINARY and CL_INVALID_OPERATION. */
 constexpr std::int32_t  invalid_binary = -42;
 constexpr std::int32_t  invalid_operation = -59;
-/* What every binary this hands out holds, and what a binary handed back must
- * hold to be one of its. */
 constexpr char          binary_text[] = "scripted binary";
 static_assert(sizeof binary_text == ScriptedCl::binary_bytes);
 constexpr std::uint32_t spirv_magic = 0x07230203u;
-/* CL_DEVICE_SVM_COARSE_GRAIN_BUFFER: what a device that has shared memory
- * offers at least. */
 constexpr std::uint64_t coarse_grain_buffer = 1u;
-/* CL_SUBMITTED, which a user event is until its status is set, and
- * CL_COMPLETE. */
 constexpr std::int32_t submitted = 3;
 constexpr std::int32_t complete = 0;
-/* CL_INVALID_KERNEL_NAME. */
 constexpr std::int32_t unknown_kernel = -46;
-/* Handles this hands out: a base per family plus a row, never a real
- * address. */
 constexpr std::uintptr_t platform_base = 0x5100u;
 constexpr std::uintptr_t device_base = 0x5200u;
 constexpr std::uintptr_t object_base = 0x5300u;
 
-}  // namespace
+}
 
 ScriptedCl::ScriptedCl()
     : fail_at_{}, silent_at_{}, from_{}, errors_{}, calls_{}, suffixes_{}, platforms_(1u), overstating_(false), devices_(1u),
@@ -136,8 +125,6 @@ std::int32_t ScriptedCl::failure(Call call)
 
 bool ScriptedCl::answers_nothing(Call call, std::int32_t &error)
 {
-    /* failure() counts the call, so the silent check reads the count it
-     * left behind rather than counting again. */
     error = failure(call);
     if (error != 0) return true;
     const auto index = static_cast<std::uint32_t>(call);
@@ -218,7 +205,6 @@ std::int32_t ScriptedCl::platforms(void **into, std::uint32_t room, std::uint32_
     for (std::uint32_t index = 0u; index < fits; index++) {
         into[index] = reinterpret_cast<void *>(platform_base + index);
     }
-    /* A loader that overstates writes what it can and says it wrote more. */
     written = overstating_ ? platforms_ : fits;
     return 0;
 }
@@ -314,16 +300,11 @@ void *ScriptedCl::create_queue(void *context, void *device, std::int32_t &error)
     return made;
 }
 
-/* A buffer over memory another API made: the property list is what carries
- * the Win32 handle, and this answers the same buffer an ordinary create does
- * once it has judged the list the way the ICD would (feature 053). */
 void *ScriptedCl::create_buffer_with_properties(void *context, const std::uint64_t *properties,
                                                 std::uint64_t flags, std::size_t bytes,
                                                 std::int32_t &error)
 {
     if (answers_nothing(Call::create_buffer_with_properties, error)) return nullptr;
-    /* An external create names exactly one handle property and a handle that
-     * is not zero; anything else is a list the ICD would refuse. */
     if (properties == nullptr || properties[0] == 0u || properties[1] == 0u || properties[2] != 0u) {
         misuses_++;
         error = refused;
@@ -333,9 +314,6 @@ void *ScriptedCl::create_buffer_with_properties(void *context, const std::uint64
         error = refused;
         return nullptr;
     }
-    /* Neither the handle nor the size goes through create_buffer: the memory
-     * is the exporter's, so its size is not this object's own arena's and a
-     * handle nothing exported names nothing at all. */
     const auto named = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(exported_handle_));
     if (exported_handle_ == nullptr || properties[1] != named) {
         error = refused;
@@ -388,7 +366,6 @@ void *ScriptedCl::create_program(void *context, const char *const *sources, std:
         error = refused;
         return nullptr;
     }
-    /* No source at all is a caller that lost it. */
     if (source == nullptr || source[0] == '\0') {
         misuses_++;
         error = refused;
@@ -463,7 +440,6 @@ void *ScriptedCl::create_program_with_binary(void *context, void *device, const 
         error = refused;
         return nullptr;
     }
-    /* A binary that is not one this made, byte for byte, is another's. */
     if (bytes != binary_bytes || std::memcmp(binary, binary_text, binary_bytes) != 0) {
         status = invalid_binary;
         error = invalid_binary;
@@ -580,8 +556,6 @@ std::int32_t ScriptedCl::run_kernel(void *queue, void *kernel, std::size_t eleme
     if (first == nullptr || second == nullptr || sum == nullptr) return refused;
     for (std::size_t index = 0u; index < elements; index++) {
         sum->values[index] = first->values[index] + second->values[index];
-        /* A device that ran the wrong program writes something else into the
-         * elements a test named. */
         if (index < wrong_) sum->values[index] += 1.0f;
     }
     return 0;
@@ -711,14 +685,11 @@ std::int32_t ScriptedCl::set_user_event_status(void *event, std::int32_t status)
     if (failed != 0) return failed;
     set->status = status;
     if (!set->watching || forgets_callbacks_ || status > set->watched) return 0;
-    /* An ICD whose event thread has not run it yet: it is left for
-     * deliver_deferred, which is that thread catching up. */
     if (defers_callbacks_) {
         deferred_ = set;
         return 0;
     }
     set->notify(event, status, set->user_data);
-    /* An ICD whose event thread ran the same callback twice. */
     if (notifies_twice_) set->notify(event, status, set->user_data);
     return 0;
 }
@@ -729,8 +700,6 @@ std::int32_t ScriptedCl::wait_for_event(void *event)
     Object *const waited = required(event, Kind::event);
     if (waited == nullptr) return refused;
     if (failed != 0) return failed;
-    /* Nothing here blocks: an event that is not complete is one this run would
-     * have waited on forever. */
     return waited->status == complete ? 0 : refused;
 }
 
@@ -747,4 +716,4 @@ void ScriptedCl::release_context(void *context)
     release(context, Kind::context, Call::release_context);
 }
 
-}  // namespace av
+}

@@ -12,7 +12,7 @@ namespace {
 
 constexpr std::uint32_t resources_per_context = 10u;
 
-}  // namespace
+}
 
 LoopbackRig::LoopbackRig(const std::uint8_t *gpu, const char *record)
     : platform_(), device_(platform_, gpu, record), driver_(platform_, device_), query_(platform_),
@@ -41,8 +41,6 @@ Status LoopbackRig::set_up(std::uint32_t index)
     const std::uint32_t base = (index + 1u) * resources_per_context;
     const ContextSetup  setup(ProtocolVersion(1u, 0u), SubApi::vulkan, base, ring_order, base + 1u, line(index),
                               base + 2u);
-    /* A context that is not idle refuses the setup before it looks at the
-     * pages, so only an idle one's memory is replaced with a fresh ring. */
     if (context(index).state() == GuestContext::State::idle) {
         memory(index).release();
         Status allocated = memory(index).allocate(ring_order, reply_bytes);
@@ -84,4 +82,4 @@ Status LoopbackRig::serve(std::uint32_t index)
     return status;
 }
 
-}  // namespace av
+}

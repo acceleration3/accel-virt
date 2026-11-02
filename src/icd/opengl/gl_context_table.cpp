@@ -27,7 +27,6 @@ Status GlContextTable::create(int32_t pixel_format, const GlContextOptions &opti
 {
     AV_SCOPE("GlContextTable::create");
     handle = 0u;
-    /* Room first, so a context made is never one with nowhere to be named. */
     const Status room = contexts_.reserve(contexts_.count() + 1u);
     if (room != Status::ok) return room;
     GuestGlContext *made = nullptr;
@@ -53,7 +52,6 @@ Status GlContextTable::destroy(uint64_t handle)
     AV_SCOPE("GlContextTable::destroy");
     GuestGlContext *gone = nullptr;
     if (!contexts_.take(handle, gone)) return Status::invalid_parameter;
-    /* The last context gone gives the table's memory back with it. */
     if (contexts_.count() == 0u) contexts_.clear();
     return pool_.destroy(gone);
 }
@@ -83,4 +81,4 @@ bool GlContextTable::invariants_hold() const
     return sound && contexts_.count() == pool_.live() && contexts_.invariants_hold();
 }
 
-}  // namespace av::glicd
+}

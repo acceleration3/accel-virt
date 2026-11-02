@@ -24,7 +24,6 @@ struct GuestPageMappingProbe {
     static void miscount(GuestPageMapping &mapping) { mapping.length_ += 1u; }
     static void overcount(GuestPageMapping &mapping) { mapping.count_ = mapping.capacity_ + 1u; }
     static void lose_table(GuestPageMapping &mapping) { mapping.capacity_ = 1u; }
-    /* Back to an empty mapping, so destruction releases nothing it never held. */
     static void repair(GuestPageMapping &mapping)
     {
         mapping.count_ = 0u;
@@ -33,14 +32,13 @@ struct GuestPageMappingProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
 
 constexpr std::uint64_t ram = 0x100000u;
 constexpr std::size_t   header = 56u;
 
-/* A request whose memory entries start at byte 56, as RESOURCE_CREATE_BLOB's do. */
 class EntryList {
 public:
     explicit EntryList(std::uint32_t capacity)
@@ -78,7 +76,7 @@ private:
     GuestPageMapping mapping_;
 };
 
-}  // namespace
+}
 
 TEST(guest_page_mapping_map, maps_each_entry_until_released)
 { Fixture fixture;
@@ -116,13 +114,13 @@ TEST(guest_page_mapping_map, a_bad_list_or_memory_that_is_not_guest_ram_holds_no
       Status        status;
   };
   const Case cases[] = {
-      {ram, 0x1000u, 0u, Status::invalid_parameter},                        /* no entries */
+      {ram, 0x1000u, 0u, Status::invalid_parameter},
       {ram, 0x1000u, GuestPageMapping::max_entries + 1u, Status::invalid_parameter},
-      {ram, 0x1000u, 2u, Status::invalid_parameter},                        /* the list holds one */
-      {ram, 0u, 1u, Status::invalid_parameter},                             /* empty entry */
-      {0xFFFFFFFFFFFFF000ull, 0x2000u, 1u, Status::invalid_parameter},     /* wraps */
-      {0x900000u, 0x1000u, 1u, Status::not_found},                          /* nothing there */
-      {0x800000u, 0x1000u, 1u, Status::not_supported},                      /* bounce */
+      {ram, 0x1000u, 2u, Status::invalid_parameter},
+      {ram, 0u, 1u, Status::invalid_parameter},
+      {0xFFFFFFFFFFFFF000ull, 0x2000u, 1u, Status::invalid_parameter},
+      {0x900000u, 0x1000u, 1u, Status::not_found},
+      {0x800000u, 0x1000u, 1u, Status::not_supported},
   };
   for (const Case &c : cases) {
       Fixture fixture;

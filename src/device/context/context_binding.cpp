@@ -109,8 +109,6 @@ uint32_t ContextBinding::doorbell() const
     return doorbell_;
 }
 
-/* A bound ring blob is pinned, so the table always has its window; unbound, the
- * empty window is what prepare refuses. */
 RingWindow ContextBinding::ring_window()
 {
     AV_SCOPE("ContextBinding::ring_window");
@@ -144,4 +142,4 @@ FenceWindow ContextBinding::fence_window()
     return FenceWindow(blob);
 }
 
-}  // namespace av
+}

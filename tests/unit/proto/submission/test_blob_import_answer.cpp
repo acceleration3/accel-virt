@@ -1,5 +1,3 @@
-/* IMPORT_BLOB's 16-byte answer: an import always names its device memory, and
- * a refusal never does, so the ICD cannot mistake one for the other. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -30,7 +28,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(blob_import_answer_encode, lays_out_the_status_and_the_handle)
 { std::uint8_t bytes[BlobImportAnswer::encoded_size];
@@ -87,11 +85,5 @@ TEST(blob_import_answer_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 128u);
-  /* An import names its device memory, so the handle's 64 bits are free: the
-   * handle has two bits set and no single flip can zero it. A flipped status
-   * is a refusal still carrying a handle, and the reserved word must be zero.
-   * Every shorter input is short of 16 bytes, all-zero is an import with no
-   * handle, all-ones a status past no_room, and the untouched input is the
-   * last acceptance. */
   const std::uint32_t acceptable = 64u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

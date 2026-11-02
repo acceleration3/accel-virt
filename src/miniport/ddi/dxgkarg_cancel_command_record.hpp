@@ -1,5 +1,3 @@
-/* DXGKARG_CANCELCOMMAND, as DxgkDdiCancelCommand receives it. A DDI record;
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_CANCEL_COMMAND_RECORD_HPP
 #define AV_DXGKARG_CANCEL_COMMAND_RECORD_HPP
 
@@ -35,6 +33,6 @@ struct DxgkargCancelCommandRecord {
     uint32_t                            DmaBufferUmdPrivateDataSizePadding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_CANCEL_COMMAND_RECORD_HPP
+#endif

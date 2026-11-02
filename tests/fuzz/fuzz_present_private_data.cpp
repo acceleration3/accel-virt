@@ -1,8 +1,3 @@
-/* The private data a present carries between the drivers, fed
- * attacker-chosen bytes: a present's point as the miniport reads it
- * from a process's DdiPresent, and the miniport's UMDRIVERPRIVATE answer as a
- * user-mode driver reads it. What decodes re-encodes to the bytes read; a
- * refusal leaves the reader as it was. */
 #include "core/support/status.hpp"
 #include "proto/escape/umd_adapter_info.hpp"
 #include "proto/escape/present_point_record.hpp"

@@ -13,7 +13,7 @@ namespace {
 
 constexpr std::uint64_t page = GuestPageList::page_bytes;
 
-}  // namespace
+}
 
 TEST(guest_page_list, is_empty_by_default)
 { const GuestPageList pages;
@@ -70,9 +70,6 @@ TEST(guest_page_list, has_no_run_past_the_end)
 { const std::uint64_t frames[] = {page};
   CHECK_EQ(GuestPageList(frames, 1u).run_length(1u), 0u); }
 
-/* Two lists differ in their fingerprint when any frame or the count differs,
- * and agree when they hold the same frames, wherever those are stored: the
- * scanout compares what it attached with what the address holds now. */
 TEST(guest_page_list, fingerprint_follows_the_frames_and_their_count)
 { const std::uint64_t frames[] = {page, 2u * page, 3u * page};
   const std::uint64_t same[] = {page, 2u * page, 3u * page};
@@ -85,8 +82,6 @@ TEST(guest_page_list, fingerprint_follows_the_frames_and_their_count)
   CHECK(list.fingerprint() != GuestPageList(frames, 2u).fingerprint());
   CHECK(GuestPageList().fingerprint() != GuestPageList(frames, 1u).fingerprint()); }
 
-/* Each run as one virtio memory entry: its first page, its length in bytes, and
- * four zero bytes; a list of nothing writes nothing. */
 TEST(guest_page_list, writes_one_memory_entry_per_run)
 { const std::uint64_t frames[] = {0x10000u, 0x11000u, 0x12000u, 0x40000u, 0x3F000u};
   const GuestPageList pages(frames, 5u);

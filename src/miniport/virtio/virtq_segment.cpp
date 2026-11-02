@@ -32,4 +32,4 @@ bool VirtqSegment::continues_request() const
     return length_ != 0u && direction_ == SegmentDirection::device_reads;
 }
 
-}  // namespace av
+}

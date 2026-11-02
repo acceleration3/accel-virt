@@ -1,7 +1,3 @@
-/* DXVK's Vulkan interop interfaces and its context extensions, as
- * src/dxgi/dxgi_interfaces.h and src/d3d11/d3d11_interfaces.h declare them:
- * those headers pull in DXVK's own sources, so the ones this project uses are
- * declared again here, method for method, which is all a COM vtable is. */
 #ifndef AV_DXVK_INTEROP_HPP
 #define AV_DXVK_INTEROP_HPP
 
@@ -39,8 +35,6 @@ IDXGIVkInteropDevice1 : public IDXGIVkInteropDevice {
                                                                  ID3D11Texture2D **ppTexture2D) = 0;
 };
 
-/* DXVK's own extensions of a Direct3D 11 context, declared in its vtable's
- * order: only BindBufferStorage is called here (tools/dxvk-patches/0003). */
 MIDL_INTERFACE("fd0bca13-5cb6-4c3a-987e-4750de2ca791")
 ID3D11VkExtContext : public IUnknown {
     virtual void STDMETHODCALLTYPE MultiDrawIndirect(UINT DrawCount, ID3D11Buffer *pBufferForArgs, UINT ByteOffsetForArgs,
@@ -78,4 +72,4 @@ __CRT_UUID_DECL(IDXGIVkInteropSurface, 0x5546cf8c, 0x77e7, 0x4341, 0xb0, 0x5d, 0
 __CRT_UUID_DECL(IDXGIVkInteropDevice, 0xe2ef5fa5, 0xdc21, 0x4af7, 0x90, 0xc4, 0xf6, 0x7e, 0xf6, 0xa0, 0x93, 0x23);
 __CRT_UUID_DECL(IDXGIVkInteropDevice1, 0xe2ef5fa5, 0xdc21, 0x4af7, 0x90, 0xc4, 0xf6, 0x7e, 0xf6, 0xa0, 0x93, 0x24);
 
-#endif  // AV_DXVK_INTEROP_HPP
+#endif

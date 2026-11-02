@@ -29,7 +29,6 @@ std::uint64_t u64(const std::uint8_t *bytes, std::size_t offset)
     return value;
 }
 
-/* A poisoned 4096-byte table with a guard, and three entries to write. */
 class Update {
 public:
     Update() : table_{}, entries_{}, record_{}
@@ -61,7 +60,7 @@ private:
     DxgkBuildPagingBufferUpdatePageTableRecord record_;
 };
 
-}  // namespace
+}
 
 TEST(page_table_update_write, writes_each_entry_at_its_index)
 { Update update;

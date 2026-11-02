@@ -1,6 +1,3 @@
-/* DXGK_DISPLAY_INFORMATION, the frame buffer DxgkDdiStopDeviceAndReleasePostDisplayOwnership
- * hands to the basic display driver. A DDI record; src/km/ddi_record_layout.cpp
- * proves each offset. */
 #ifndef AV_DXGK_DISPLAY_INFORMATION_RECORD_HPP
 #define AV_DXGK_DISPLAY_INFORMATION_RECORD_HPP
 
@@ -18,6 +15,6 @@ struct DxgkDisplayInformationRecord {
     uint32_t AcpiId;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_DISPLAY_INFORMATION_RECORD_HPP
+#endif

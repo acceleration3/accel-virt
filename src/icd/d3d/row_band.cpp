@@ -40,4 +40,4 @@ RowBand RowBand::joined(const RowBand &other) const
     return RowBand(first_ < other.first_ ? first_ : other.first_, end_ > other.end_ ? end_ : other.end_);
 }
 
-}  // namespace av::d3d
+}

@@ -63,7 +63,6 @@ void HostBlob::lend(GuestRamLending &lending, bool made_here, const AvHostMemory
     lender_ = made_here;
     waiting_ = false;
     caching_ = memory.caching;
-    /* The lending owns the dma-buf that lies under the pages. */
     fd_ = -1;
 }
 
@@ -131,4 +130,4 @@ bool HostBlob::overlaps(uint64_t offset, uint64_t size) const
     return mapped_ && offset < offset_ + size_ && offset_ < offset + size;
 }
 
-}  // namespace av
+}

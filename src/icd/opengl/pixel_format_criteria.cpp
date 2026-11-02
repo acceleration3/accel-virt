@@ -35,7 +35,6 @@ double   PixelFormatCriteria::value(uint32_t index) const
     return index < count_ ? values_[index] : 0.0;
 }
 
-/* A held criterion always names an attribute: zero ends a list. */
 bool PixelFormatCriteria::invariants_hold() const
 {
     AV_SCOPE("PixelFormatCriteria::invariants_hold");
@@ -45,4 +44,4 @@ bool PixelFormatCriteria::invariants_hold() const
     return true;
 }
 
-}  // namespace av::glicd
+}

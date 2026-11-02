@@ -61,4 +61,4 @@ const Series* History::Find(StringView key) const noexcept {
     return m_series.Find(key);
 }
 
-} // namespace inspector
+}

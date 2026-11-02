@@ -9,11 +9,9 @@
 namespace av {
 
 namespace {
-
-/* Where RESOURCE_CREATE_BLOB's memory entries start, after its header. */
 constexpr std::size_t entries_at = 24u;
 
-}  // namespace
+}
 
 GuestBlobMaker::GuestBlobMaker(MockHost &host, BlobTable &blobs) : host_(host), blobs_(blobs), next_(base), last_(base)
 {
@@ -40,4 +38,4 @@ std::uint8_t *GuestBlobMaker::last_pages() const
     return host_.guest_ram(last_);
 }
 
-}  // namespace av
+}

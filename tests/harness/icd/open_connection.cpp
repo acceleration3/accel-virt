@@ -27,4 +27,4 @@ RecordingThreadLock &OpenConnection::lock() { return lock_; }
 RecordingLog        &OpenConnection::log() { return log_; }
 icd::Connection     &OpenConnection::connection() { return connection_; }
 
-}  // namespace av
+}

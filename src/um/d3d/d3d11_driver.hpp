@@ -1,8 +1,3 @@
-/* The Direct3D 11 half of avumd.dll that needs the host: the devices the
- * runtime makes, each a D3d11Device in this pool, and for each adapter its
- * host capabilities, asked once, and the one session its devices share. One
- * per process, in the library's UmdDrivers beside the Direct3D 12 half; the
- * root calls it under its own lock. */
 #ifndef AV_UM_D3D11_DRIVER_HPP
 #define AV_UM_D3D11_DRIVER_HPP
 
@@ -19,12 +14,12 @@
 
 namespace av {
 class KeyedLog;
-}  // namespace av
+}
 
 namespace av {
 class BlockSource;
 class Kmt;
-}  // namespace av
+}
 
 
 namespace av::d3d {
@@ -32,7 +27,7 @@ class UmdAdapter;
 class UmdDevice;
 struct D3d10ddiargCreateDeviceRecord;
 struct D3d102ddiargGetCapsRecord;
-}  // namespace av::d3d
+}
 
 namespace av::d3d11 {
 
@@ -43,7 +38,6 @@ public:
     d3d::Hresult build(d3d::UmdDevice &adopted, d3d::D3d10ddiargCreateDeviceRecord &create, uint32_t kmt_adapter);
     d3d::Hresult caps(d3d::UmdAdapter &adapter, d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt_adapter);
     void         tear_down(void *block);
-    /* What AvAskSharedRows and AvWithdrawSharedRows change, from any thread. */
     d3d::SharedRowsRequest &rows();
 
 private:
@@ -55,6 +49,6 @@ private:
     AdapterSessions<D3d11HostCaps> adapters_;
 };
 
-}  // namespace av::d3d11
+}
 
-#endif  // AV_UM_D3D11_DRIVER_HPP
+#endif

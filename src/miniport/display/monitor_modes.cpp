@@ -49,4 +49,4 @@ Status MonitorModes::add(const DisplayMode &mode)
     return added.status();
 }
 
-}  // namespace av
+}

@@ -53,10 +53,7 @@ size_t GpuCommandQueue::request_bytes_of(uint32_t slot) const
 uint32_t GpuCommandQueue::slot_for(size_t length) const
 {
     AV_SCOPE("GpuCommandQueue::slot_for");
-    /* send has already refused a request wider than the wide slot. */
     if (length > GpuRequestWriter::max_request_size) return busy_[wide_slot] ? no_slot : wide_slot;
-    /* A narrow request never takes the wide slot: the backing of a primary
-     * must not wait behind a burst of small ones. */
     uint32_t slot = 0u;
     while (slot < slot_count && busy_[slot]) slot++;
     return slot < slot_count ? slot : no_slot;
@@ -144,9 +141,6 @@ Status GpuCommandQueue::send_carrying(const uint8_t *request, size_t length, con
     return Status::ok;
 }
 
-/* The answer a request carries is only read here: the DPC's harvest counts and
- * drops the rest, so an exchange records the slot it is waiting on and takes
- * the bytes out of whichever caller harvests it first. */
 Status GpuCommandQueue::exchange(const uint8_t *request, size_t length, uint8_t *response, size_t capacity,
                                  uint32_t &written)
 {
@@ -163,8 +157,6 @@ Status GpuCommandQueue::exchange_carrying(const uint8_t *request, size_t length,
     return exchange_segments(request, length, &payload, 1u, response, capacity, written);
 }
 
-/* A late answer to a request given up on is harvested before the next is
- * sent, so a device that came back is asked again. */
 Status GpuCommandQueue::exchange_segments(const uint8_t *request, size_t length, const VirtqSegment *payload,
                                           uint16_t payload_count, uint8_t *response, size_t capacity,
                                           uint32_t &written)
@@ -206,8 +198,6 @@ Status GpuCommandQueue::await_answer(uint32_t &written)
         const Status harvested = harvest(completed, refused);
         bool         answered = false;
         {
-            /* The lock is dropped before waiting: a spin lock raises to
-             * DISPATCH, and this path waits at PASSIVE. */
             SpinLockGuard lock(lock_);
             if (harvested != Status::ok) awaited_slot_ = no_slot;
             answered = awaited_slot_ == no_slot;
@@ -233,7 +223,6 @@ Status GpuCommandQueue::await_answer(uint32_t &written)
     return Status::not_found;
 }
 
-/* The waiter is woken once the lock is dropped. */
 Status GpuCommandQueue::harvest(uint32_t &completed, uint32_t &refused)
 {
     AV_SCOPE("GpuCommandQueue::harvest");
@@ -251,8 +240,6 @@ Status GpuCommandQueue::harvest(uint32_t &completed, uint32_t &refused)
     return status;
 }
 
-/* VirtQueue::take_used frees a chain only after proving the queue published
- * it, so its head names a busy slot. */
 Status GpuCommandQueue::reclaim_used(uint32_t &completed, uint32_t &refused, bool &answered)
 {
     AV_SCOPE("GpuCommandQueue::reclaim_used");
@@ -300,4 +287,4 @@ bool GpuCommandQueue::invariants_hold() const
            (abandoned_slot_ == no_slot || (busy_[abandoned_slot_] && abandoned_slot_ != awaited_slot_));
 }
 
-}  // namespace av
+}

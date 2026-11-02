@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Writes samples/opengl/gl.h from the Khronos registry: every GL command and
-constant the samples name, and nothing else.
-
-    samples/opengl/gl_header.py
-
-Run it after a sample starts using a command or constant gl.h lacks. The
-registry is the one tools/fetch_khronos_registries.py pins, so the values are
-the ones the ICD's generated protocol was built from.
-"""
 import pathlib
 import re
 import xml.etree.ElementTree as ElementTree

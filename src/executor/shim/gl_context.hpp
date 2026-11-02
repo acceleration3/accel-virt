@@ -1,8 +1,3 @@
-/* An OpenGL context on a host GPU's display, with no window.
- *
- * The shim's other half. The display is found once and kept by GlDisplay; what
- * a guest context costs here is one eglCreateContext on it, a millisecond or
- * so, rather than a driver start-up per EGL device (feature 044, T035). */
 #ifndef AV_GL_CONTEXT_HPP
 #define AV_GL_CONTEXT_HPP
 
@@ -18,24 +13,12 @@ public:
     GlContext(const GlContext &) = delete;
     GlContext &operator=(const GlContext &) = delete;
 
-    /* Opens a context on `display`, which must outlive it, made with
-     * `attributes` and sharing `share`'s objects (null: none), which must be
-     * open on the same display. False for a display that is not open, attributes
-     * that are not valid, a share on another display or not open, a driver that
-     * refuses the context, or a context already open. */
     [[nodiscard]] bool open(const GlDisplay &display, const GlContextAttributes &attributes, const GlContext *share);
-    /* Destroys the context; the display stays open for every other one. */
     void               close();
     bool               open() const;
 
-    /* Makes this context current on the calling thread. One context belongs to
-     * one worker, so this is called around a dispatch rather than once. */
     [[nodiscard]] bool make_current();
-    /* Resolves an entry point, which is what fills the generated table. */
     void              *resolve(const char *name) const;
-    /* The context itself, which OpenCL's context properties name when a
-     * cl_context is to share this one's objects: CL_GL_CONTEXT_KHR takes the
-     * driver's own handle (feature 053, T019). Null until opened. */
     void              *handle() const;
 
 private:
@@ -43,6 +26,6 @@ private:
     void            *context_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_GL_CONTEXT_HPP
+#endif

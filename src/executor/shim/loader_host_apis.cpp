@@ -50,18 +50,12 @@ void LoaderHostApis::enumerate()
     VkApplicationInfo application = {};
     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     application.pApplicationName = "av-executor";
-    /* Spelled out rather than VK_API_VERSION_1_1, which is a macro full of
-     * C casts this build refuses. 1.1 is what VkPhysicalDeviceIDProperties
-     * needs, and nothing here needs more. */
     application.apiVersion = (1u << 22) | (1u << 12);
     VkInstanceCreateInfo instance = {};
     instance.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instance.pApplicationInfo = &application;
 
     VkInstance handle = VK_NULL_HANDLE;
-    /* A host with no GPU, no driver or no loader at all answers here, and that
-     * is an answer: the library then serves nothing and the device describes
-     * no capset rather than one it cannot honour. */
     if (vkCreateInstance(&instance, nullptr, &handle) != VK_SUCCESS) return;
     instance_ = handle;
 
@@ -76,26 +70,17 @@ void LoaderHostApis::enumerate()
         render_minors_[i] = identity.render_minor();
         sub_apis_[i] = AV_EXECUTOR_SUB_API_VULKAN;
         if (opencl_devices_[i].find(uuids_[i].raw())) sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENCL;
-        /* Every GPU's one source of the memory a guest maps
-         * (docs/host-memory.md): its compositing context, which also owns
-         * what the APIs hand each other. Opened now, and allocating nothing
-         * until a guest asks. */
         if (compositors_[i].open(uuids_[i].raw()))
             static_cast<void>(sources_[i].construct(exporters_[i].object(), heap_));
         if (gl_displays_[i].open(uuids_[i].raw())) sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENGL;
     }
-    /* After the loop: DXVK makes a Vulkan instance of its own, and asking it
-     * about each GPU in turn is one factory and one enumeration. */
     if (d3d_runtime_.open()) {
         for (uint32_t i = 0u; i < found; i++)
             if (d3d11_devices_[i].object().open(d3d_runtime_, uuids_[i].raw(), shares_[i].object())) {
                 sub_apis_[i] |= AV_EXECUTOR_SUB_API_D3D;
                 if (compositors_[i].opened()) d3d11_devices_[i].object().use_compositor(&compositors_[i]);
-                /* Direct3D 12 rides on the same sub-API: a session speaks
-                 * whichever the guest's runtime asks for. */
                 if (d3d12_devices_[i].object().open(d3d_runtime_, uuids_[i].raw()))
                     d3d11_devices_[i].object().pair(&d3d12_devices_[i].object());
-                /* So does Direct3D 9, where DXVK's d3d9 is there too. */
                 static_cast<void>(d3d9_devices_[i].open(d3d_runtime_, uuids_[i].raw()));
             }
     }
@@ -105,8 +90,6 @@ void LoaderHostApis::enumerate()
 void LoaderHostApis::close()
 {
     AV_SCOPE("LoaderHostApis::close");
-    /* Before any source goes: an alias holds a reference to memory of another
-     * source, whose exporter is still there to free it while all are. */
     for (uint32_t i = 0u; i < count_; i++)
         if (sources_[i].constructed()) sources_[i].object().release_aliases();
     for (uint32_t i = 0u; i < count_; i++) {
@@ -198,4 +181,4 @@ HostShares *LoaderHostApis::shares(uint32_t index)
     return index < count_ ? &shares_[index].object() : nullptr;
 }
 
-}  // namespace av
+}

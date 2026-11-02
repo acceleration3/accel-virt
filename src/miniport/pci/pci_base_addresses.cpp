@@ -37,4 +37,4 @@ Status PciBaseAddresses::address(uint8_t bar, uint64_t &address) const
     return Status::ok;
 }
 
-}  // namespace av
+}

@@ -37,4 +37,4 @@ uint32_t SubresourceLayout::layer_of(uint32_t subresource) const
     return mips_ != 0u && layers_ != 0u ? subresource / mips_ % layers_ : 0u;
 }
 
-}  // namespace av
+}

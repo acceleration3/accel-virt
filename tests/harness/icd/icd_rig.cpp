@@ -12,7 +12,7 @@ namespace {
 const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
                          PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 
-}  // namespace
+}
 
 IcdRig::IcdRig()
     : platform_(), kmt_(), host_(kmt_), trace_(), lock_(trace_, 'H'), send_lock_(trace_, 'S'), memory_lock_(trace_, 'M'),
@@ -68,4 +68,4 @@ void IcdRig::destroy_instance(VkInstance instance)
     destroy(instance, nullptr);
 }
 
-}  // namespace av
+}

@@ -1,7 +1,3 @@
-/* What opens every datagram on the socket between QEMU and av-renderer
- * (docs/renderer.md): the message's kind, how many body bytes follow, and the
- * sender's sequence number, which a reply names. SOCK_SEQPACKET keeps each
- * message one datagram, so the body length must be exactly what arrived. */
 #ifndef AV_RENDERER_MESSAGE_HEADER_HPP
 #define AV_RENDERER_MESSAGE_HEADER_HPP
 
@@ -14,7 +10,6 @@ namespace av {
 
 class RendererMessageHeader {
 public:
-    /* Zero is no kind, so a zeroed buffer is not a message. */
     enum class Kind : uint32_t {
         hello = 1u,
         ready,
@@ -36,9 +31,6 @@ public:
     };
 
     static constexpr size_t   encoded_size = 16u;
-    /* The largest body is a guest blob of GuestBlobMessage::max_extents
-     * extents - a 64 MiB blob scattered page by page - so a socket's send
-     * buffer must hold one datagram this long. */
     static constexpr uint32_t max_body_length = 0x40010u;
 
     RendererMessageHeader();
@@ -48,12 +40,7 @@ public:
     uint32_t body_length() const;
     uint64_t sequence() const;
 
-    /* too_large for less room than encoded_size; invalid_parameter for a
-     * header decode would refuse. */
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
-    /* `length` is the whole datagram, header and body. malformed for an
-     * unknown kind, a body past max_body_length or other than what arrived,
-     * and a body on interrupts_off. Unchanged unless ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
@@ -64,6 +51,6 @@ private:
     uint64_t sequence_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_RENDERER_MESSAGE_HEADER_HPP
+#endif

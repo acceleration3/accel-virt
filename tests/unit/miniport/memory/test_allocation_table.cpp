@@ -43,7 +43,7 @@ struct AllocationProbe {
     Allocation &allocation;
 };
 
-}  // namespace av
+}
 
 using av::Allocation;
 using av::AllocationDescriptor;
@@ -103,8 +103,6 @@ public:
 
     Status create() { return table_.create(request_); }
 
-    /* What a creator that wants an identity hands the miniport: the descriptor
-     * and, after it, a record naming a kind and a size and nothing else. */
     void ask_to_share(std::uint32_t index, std::uint64_t size,
                       std::uint32_t kind = av::SharedObjectKind::memory)
     {
@@ -116,9 +114,6 @@ public:
             AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size;
     }
 
-    /* A creator claiming an identity it cannot have: only the kernel knows an
-     * id, so a record that already names one is a forgery, and the allocation
-     * goes with it. */
     void claim_an_identity(std::uint32_t index, std::uint64_t size, std::uint64_t object_id)
     {
         av::SharedObjectRecord forged(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, size);
@@ -130,7 +125,6 @@ public:
             AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size;
     }
 
-    /* The record the miniport wrote back, as the opening process reads it. */
     av::SharedObjectRecord minted(std::uint32_t index) const
     {
         av::SharedObjectRecord record;
@@ -140,7 +134,6 @@ public:
         return record;
     }
 
-    /* A destroy naming a resource, which is how dxgkrnl takes one. */
     Status destroy_resource(std::uint32_t count, void *resource)
     {
         void *handles[max_infos] = {};
@@ -184,16 +177,12 @@ private:
     av::SharedObjectTable         shared_;
     AllocationTable               table_;
     DxgkAllocationInfoRecord      infos_[max_infos];
-    /* Room for a descriptor and, where a test asks to share, the record that
-     * follows it (feature 053). */
     std::uint8_t                  descriptors_[max_infos][AllocationDescriptor::encoded_size +
                                                           av::SharedObjectRecord::encoded_size];
     DxgkargCreateAllocationRecord request_;
 };
 
-}  // namespace
-
-/* ---- create ------------------------------------------------------------------ */
+}
 
 TEST(allocation_table_create, gives_each_allocation_a_live_handle_and_a_page_rounded_size)
 { Fixture fixture;
@@ -218,22 +207,19 @@ TEST(allocation_table_create, refuses_a_malformed_request_and_keeps_nothing)
       if (knob == 0) fixture.request().NumAllocations = 0u;
       if (knob == 1) fixture.request().NumAllocations = AllocationTable::max_per_call + 1u;
       if (knob == 2) fixture.request().pAllocationInfo = nullptr;
-      if (knob == 3) fixture.request().PrivateDriverDataSize = 4u;          /* resource data: none defined */
+      if (knob == 3) fixture.request().PrivateDriverDataSize = 4u;
       if (knob == 4) fixture.info(3u).pPrivateDriverData = nullptr;
       if (knob == 5) fixture.info(3u).PrivateDriverDataSize = AllocationDescriptor::encoded_size - 1u;
-      if (knob == 6) fixture.descriptor(3u)[0] = 0u;                        /* bad magic */
-      if (knob == 7) {                                                       /* larger than the segment */
+      if (knob == 6) fixture.descriptor(3u)[0] = 0u;
+      if (knob == 7) {
           const AllocationDescriptor huge(AllocationKind::client, false, SurfaceLayout(),
                                           static_cast<std::uint64_t>(segment_bytes) + 1u, ScanoutTarget());
           CHECK_STATUS(huge.encode(fixture.descriptor(3u), AllocationDescriptor::encoded_size), Status::ok);
       }
-      if (knob == 8) {                                                       /* would wrap when page-rounded */
+      if (knob == 8) {
           const AllocationDescriptor wrapping(AllocationKind::client, false, SurfaceLayout(), ~0ull, ScanoutTarget());
           CHECK_STATUS(wrapping.encode(fixture.descriptor(3u), AllocationDescriptor::encoded_size), Status::ok);
       }
-      /* Knob 5 is a length this driver has no shape for, which is
-       * not_supported; every other knob is a request it can read and will
-       * not take (feature 053). */
       CHECK_STATUS(fixture.create(), knob == 5 ? Status::not_supported : Status::invalid_parameter);
       CHECK_EQ(fixture.table().live(), 0u);
       CHECK_EQ(fixture.platform().live_allocations(), 0u);
@@ -269,8 +255,6 @@ TEST(allocation_table_create, a_chunk_that_fills_mid_call_takes_its_allocation_f
   CHECK_EQ(fixture.table().live(), 64u);
   CHECK(fixture.table().invariants_hold()); }
 
-/* ---- destroy ----------------------------------------------------------------- */
-
 TEST(allocation_table_destroy, releases_every_listed_allocation)
 { Fixture fixture;
   fixture.set_count(3u, shadow);
@@ -290,7 +274,7 @@ TEST(allocation_table_destroy, refuses_the_whole_list_for_one_bad_handle)
   request.NumAllocations = 4u;
   request.pAllocationList = handles;
   CHECK_STATUS(fixture.table().destroy(request), Status::invalid_parameter);
-  handles[3] = handles[0];   /* listed twice */
+  handles[3] = handles[0];
   CHECK_STATUS(fixture.table().destroy(request), Status::invalid_parameter);
   request.pAllocationList = nullptr;
   CHECK_STATUS(fixture.table().destroy(request), Status::invalid_parameter);
@@ -309,8 +293,6 @@ TEST(allocation_table_destroy, an_allocation_still_open_is_refused)
   CHECK_STATUS(fixture.table().close(*allocation), Status::invalid_state);
   CHECK_STATUS(fixture.destroy(1u), Status::ok); }
 
-/* ---- describe ---------------------------------------------------------------- */
-
 TEST(allocation_table_describe, answers_the_primary_layout_refresh_rate_and_source_format)
 { Fixture fixture;
   fixture.set_count(1u, primary);
@@ -328,7 +310,7 @@ TEST(allocation_table_describe, answers_the_primary_layout_refresh_rate_and_sour
   CHECK_EQ(request.RefreshRateNumerator, 60u);
   CHECK_EQ(request.RefreshRateDenominator, 1u);
   CHECK_EQ(request.PrivateDriverFormatAttribute, 0x77u);
-  CHECK_EQ(request.Rotation, 1);   /* D3DDDI_ROTATION_IDENTITY */ }
+  CHECK_EQ(request.Rotation, 1);   }
 
 TEST(allocation_table_describe, another_kind_has_no_private_format_and_a_stranger_is_invalid)
 { Fixture fixture;
@@ -365,8 +347,6 @@ TEST(allocation_table_invariants, a_broken_allocation_breaks_the_table)
   AllocationTableProbe::corrupt_pool(fixture.table());
   CHECK(!fixture.table().invariants_hold()); }
 
-/* ---- aperture ------------------------------------------------------------------ */
-
 namespace {
 
 constexpr std::uint64_t aperture_page = av::GuestPageList::page_bytes;
@@ -397,7 +377,7 @@ std::uint64_t aperture_at(std::uint64_t offset)
     return static_cast<std::uint64_t>(ApertureSegment::base_address) + offset * aperture_page;
 }
 
-}  // namespace
+}
 
 TEST(allocation_table_map_aperture, records_where_vidmm_placed_an_allocation_and_unmap_forgets_it)
 { Fixture fixture;
@@ -421,9 +401,6 @@ TEST(allocation_table_map_aperture, a_handle_the_table_never_made_is_not_found)
   CHECK_STATUS(fixture.table().map_aperture(placed(&stranger, mdl, 0u)), Status::not_found);
   CHECK_STATUS(fixture.table().unmap_aperture(taken(&stranger, 0u)), Status::not_found); }
 
-/* VidMm's worker records pages beside the DDIs that check every allocation:
- * both run inside the table's guard, so a check never sees a page record half
- * written. */
 TEST(allocation_table_map_aperture, runs_inside_the_tables_guard)
 { Fixture fixture;
   CHECK_STATUS(fixture.create(), Status::ok);
@@ -448,8 +425,6 @@ TEST(allocation_table_map_aperture, is_passive_only)
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   while (fixture.platform().claim(Violation::irql_ceiling)) {}
   while (fixture.platform().claim(Violation::blocking_at_dispatch)) {} }
-
-/* ---- report -------------------------------------------------------------------- */
 
 TEST(allocation_table_report, writes_the_table_then_each_allocation)
 { Fixture fixture;
@@ -492,29 +467,18 @@ TEST(allocation_table_report, is_apc_at_most)
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   fixture.platform().set_irql(Irql::passive); }
 
-/* Feature 053: an allocation whose private data asks for an identity gets one,
- * written back into the creator's own bytes - the only thing that reaches the
- * process that opens it (docs/kb/04-memory.md). */
 TEST(allocation_table_create, mints_an_identity_for_a_creator_that_asked_for_one)
 { Fixture fixture;
   fixture.set_count(1u, shadow);
   fixture.ask_to_share(0u, 4096u);
   CHECK_STATUS(fixture.create(), Status::ok);
   CHECK_EQ(fixture.shared().live(), 1u);
-  /* The create writes nothing back. dxgkrnl copies the caller's own bytes over
-   * this buffer before the open it runs inside every create, so a record
-   * written here would be discarded before anyone read it; the open is where
-   * it goes (research.md §15). What the create leaves is the identity on the
-   * allocation. */
   const av::SharedObjectRecord record = fixture.minted(0u);
   CHECK(!record.assigned());
   const auto *const allocation = static_cast<const av::Allocation *>(fixture.info(0u).hAllocation);
   CHECK(allocation != nullptr);
   if (allocation == nullptr) return;
   CHECK(allocation->shared_id() != 0u);
-  /* And the object it minted is the one the record asked for: an open with a
-   * record naming it agrees about the kind and the size, which is the only
-   * thing that makes such an open succeed. */
   const av::SharedObjectRecord names(allocation->shared_id(), av::SharedObjectKind(av::SharedObjectKind::memory),
                                      fixture.shared().adapter(), 4096u);
   av::SharedObject *object = nullptr;
@@ -536,23 +500,15 @@ TEST(allocation_table_create, refuses_private_data_of_any_other_length_than_the_
                                    AllocationDescriptor::encoded_size + 1u,
                                    AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size - 1u,
                                    AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size + 1u,
-                                   /* the shareable length before the descriptor grew its host key: a
-                                    * record read at 56 would run eight bytes past it */
                                    48u + av::SharedObjectRecord::encoded_size};
   for (const std::uint32_t length : lengths) {
       Fixture fixture;
       fixture.ask_to_share(0u, 4096u);
       fixture.info(0u).PrivateDriverDataSize = length;
-      /* not_supported, not invalid_parameter: a length this driver has no
-       * shape for is a different answer from data it cannot read, and telling
-       * them apart is what lets a guest say whether dxgkrnl refused a create
-       * before it arrived or this driver refused it after (feature 053). */
       CHECK_STATUS(fixture.create(), Status::not_supported);
       CHECK_EQ(fixture.table().live(), 0u);
       CHECK_EQ(fixture.shared().live(), 0u);
   }
-  /* Private data that is not there at all is still invalid_parameter: there is
-   * no length to have a shape for. */
   Fixture missing;
   missing.ask_to_share(0u, 4096u);
   missing.info(0u).pPrivateDriverData = nullptr;
@@ -561,25 +517,18 @@ TEST(allocation_table_create, refuses_private_data_of_any_other_length_than_the_
 TEST(allocation_table_create, refuses_a_record_that_does_not_decode_and_leaves_no_allocation_behind)
 { Fixture fixture;
   fixture.ask_to_share(0u, 4096u);
-  fixture.descriptor(0u)[AllocationDescriptor::encoded_size] ^= 0xFFu;   /* the magic */
+  fixture.descriptor(0u)[AllocationDescriptor::encoded_size] ^= 0xFFu;
   CHECK_STATUS(fixture.create(), Status::invalid_parameter);
   CHECK_EQ(fixture.table().live(), 0u);
   CHECK_EQ(fixture.shared().live(), 0u);
   CHECK(fixture.table().invariants_hold()); }
 
-/* The size a record declares is the object's, which need not be the
- * allocation's: an ICD sharing host memory has no guest allocation of it and
- * asks for an identity over a one-page carrier (feature 053, T031). What the
- * allocation still owns is the identity's lifetime. */
 TEST(allocation_table_create, a_record_may_name_an_object_bigger_than_the_allocation_carrying_it)
 { Fixture fixture;
-  fixture.ask_to_share(0u, 8192u);   /* the descriptor rounds to one page */
+  fixture.ask_to_share(0u, 8192u);
   CHECK_STATUS(fixture.create(), Status::ok);
   CHECK_EQ(fixture.table().live(), 1u);
   CHECK_EQ(fixture.shared().live(), 1u);
-  /* The object is the size the record asked for and the allocation is one
-   * page: an open naming 8192 agrees with the object, and one naming the
-   * allocation's own size does not. */
   const auto *const allocation = static_cast<const av::Allocation *>(fixture.info(0u).hAllocation);
   CHECK(allocation != nullptr);
   if (allocation == nullptr) return;
@@ -613,9 +562,6 @@ TEST(allocation_table_destroy, takes_the_identity_with_the_allocation)
   CHECK_EQ(fixture.shared().live(), 0u);
   CHECK(fixture.shared().invariants_hold()); }
 
-/* A create whose record already names an object: a caller can know no id, so
- * this is a forgery, and the allocation it came with is destroyed rather than
- * left behind holding an identity nobody minted (feature 053). */
 TEST(allocation_table_create, a_record_that_already_names_an_object_takes_its_allocation_with_it)
 { Fixture fixture;
   fixture.claim_an_identity(0u, 4096u, 77u);
@@ -626,25 +572,16 @@ TEST(allocation_table_create, a_record_that_already_names_an_object_takes_its_al
   CHECK(fixture.table().invariants_hold());
   CHECK(fixture.shared().invariants_hold()); }
 
-/* Feature 053, research.md §16. D3DKMTShareObjects mints an NT handle over a
- * resource and refuses anything else - silently - so a shared object's carrier
- * has to be one. The flag is what asks; the handle answered is this driver's
- * own, and it goes with the last allocation in it. */
 TEST(allocation_table_create, a_create_that_asks_for_a_resource_is_answered_one)
 { Fixture fixture;
-  fixture.request().Flags = 1u;   /* DXGK_CREATEALLOCATIONFLAGS::Resource */
+  fixture.request().Flags = 1u;
   CHECK_STATUS(fixture.create(), Status::ok);
   CHECK(fixture.request().hResource != nullptr);
   CHECK(fixture.table().invariants_hold());
-  /* Destroying the allocation without the flag leaves the resource: dxgkrnl
-   * takes it in the call that says so. */
   CHECK_STATUS(fixture.destroy(1u), Status::ok);
   CHECK_EQ(fixture.table().live(), 0u);
   CHECK(fixture.table().invariants_hold()); }
 
-/* A second create into a resource dxgkrnl already has a handle for: the handle
- * it was given comes back, one resource holds both allocations, and the
- * destroy that names it takes it only once they have both gone. */
 TEST(allocation_table_create, a_second_create_into_a_resource_answers_the_same_one)
 { Fixture fixture;
   fixture.request().Flags = 1u;
@@ -653,7 +590,6 @@ TEST(allocation_table_create, a_second_create_into_a_resource_answers_the_same_o
   CHECK(first != nullptr);
   void *const kept = fixture.info(0u).hAllocation;
 
-  /* The second create, with the handle dxgkrnl kept from the first. */
   fixture.set_count(1u, shadow);
   fixture.request().Flags = 1u;
   fixture.request().hResource = first;
@@ -662,17 +598,12 @@ TEST(allocation_table_create, a_second_create_into_a_resource_answers_the_same_o
   CHECK_EQ(fixture.table().live(), 2u);
   CHECK(fixture.table().invariants_hold());
 
-  /* Named by a destroy while it still holds the first allocation: refused, so
-   * a resource is never taken out from under an allocation dxgkrnl still has. */
   CHECK_STATUS(fixture.destroy_resource(1u, first), Status::invalid_state);
-  /* And once the other has gone too, it goes. */
   void *const both[] = {kept, fixture.info(0u).hAllocation};
   CHECK_STATUS(fixture.destroy_list(both, 2u, first), Status::ok);
   CHECK_EQ(fixture.table().live(), 0u);
   CHECK(fixture.table().invariants_hold()); }
 
-/* The flag with no handle behind it, and a host with no memory for a resource:
- * neither leaves an allocation behind. */
 TEST(allocation_table_create, a_resource_the_host_cannot_hold_and_a_destroy_that_names_none)
 { { Fixture fixture;
     fixture.platform().fail_allocation_at(1u);
@@ -680,16 +611,13 @@ TEST(allocation_table_create, a_resource_the_host_cannot_hold_and_a_destroy_that
     CHECK_STATUS(fixture.create(), Status::no_memory);
     CHECK_EQ(fixture.table().live(), 0u);
     CHECK(fixture.table().invariants_hold()); }
-  { /* A destroy that says "and the resource" and names none: the allocations
-     * go and there is nothing else to take. */
+  {
     Fixture fixture;
     CHECK_STATUS(fixture.create(), Status::ok);
     CHECK_STATUS(fixture.destroy_resource(1u, nullptr), Status::ok);
     CHECK_EQ(fixture.table().live(), 0u);
     CHECK(fixture.table().invariants_hold()); } }
 
-/* The table's invariant folds in its resource pool's, as it does its
- * allocations'. */
 TEST(allocation_table_invariants, a_broken_resource_pool_is_a_broken_table)
 { Fixture fixture;
   fixture.request().Flags = 1u;
@@ -698,19 +626,14 @@ TEST(allocation_table_invariants, a_broken_resource_pool_is_a_broken_table)
   AllocationTableProbe::corrupt_resources(fixture.table());
   CHECK(!fixture.table().invariants_hold()); }
 
-/* Every allocation in the list belongs to the one resource, and a create that
- * fails part way leaves neither the allocations nor the resource behind. */
 TEST(allocation_table_create, a_resource_create_that_fails_part_way_leaves_no_resource)
 { Fixture fixture;
   fixture.set_count(3u, shadow);
   fixture.request().Flags = 1u;
-  /* The third allocation has private data this driver has no shape for. */
   fixture.info(2u).PrivateDriverDataSize = AllocationDescriptor::encoded_size + 1u;
   CHECK_STATUS(fixture.create(), Status::not_supported);
   CHECK_EQ(fixture.table().live(), 0u);
   CHECK(fixture.table().invariants_hold());
-  /* And the one that follows still gets a resource, which it would not if the
-   * pool had kept the first. */
   Fixture again;
   again.request().Flags = 1u;
   CHECK_STATUS(again.create(), Status::ok);

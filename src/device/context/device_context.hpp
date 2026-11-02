@@ -1,8 +1,3 @@
-/* One guest API context on the device: the virtio-gpu context id the guest
- * named, what its setup bound it to, how it reports completions, the ring its
- * worker consumes, and the worker. Members are declared so the worker is
- * destroyed first: it disconnects the doorbell and joins before the reporter,
- * the ring or the pins go. */
 #ifndef AV_DEVICE_CONTEXT_HPP
 #define AV_DEVICE_CONTEXT_HPP
 
@@ -46,22 +41,13 @@ public:
     DeviceContext(const DeviceContext &) = delete;
     DeviceContext &operator=(const DeviceContext &) = delete;
 
-    /* Main loop: starts the context's worker. */
     [[nodiscard]] Status start();
     [[nodiscard]] Status post(const WorkItem &item);
-    /* Main loop. invalid_parameter, with nothing bound, for options the
-     * library cannot make; the binding's answer; invalid_parameter for a ring
-     * header that is not fresh or a fence page that cannot be prepared; no_memory when the
-     * host cannot stage its batches; the worker's answer when the doorbell cannot be connected
-     * or the ring handed over, or the pulse's when it cannot carry the fence
-     * page. Nothing stays pinned, connected, prepared or carried unless ok. */
     [[nodiscard]] Status  bind(const ContextSetup &setup, const CapsetInfo &capset);
     Status                refused(const char *step, Status status) const;
     const ContextBinding &binding() const;
     uint32_t             id() const;
     bool                 running() const;
-    /* Main loop: its line and its worker's. The ring's progress is the
-     * worker's own, read as it last wrote it. */
     void                 report(StateWriter &writer);
 
 private:
@@ -71,20 +57,17 @@ private:
     uint32_t       id_;
     ContextBinding binding_;
     FenceReporter   fences_;
-    /* Before the executor: an import points into an alias until the executor
-     * that holds it is gone. */
     BlobImports          imports_;
     ContextExecutor executor_;
     BatchStaging    staging_;
     BatchExecutor   batches_;
     RingConsumer    ring_;
-    /* Before the worker: the worker drains it, and is stopped before it goes. */
     ContextSignal   signal_;
     Worker          worker_;
 
     friend struct DeviceContextProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DEVICE_CONTEXT_HPP
+#endif

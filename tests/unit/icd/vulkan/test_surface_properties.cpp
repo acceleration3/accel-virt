@@ -1,7 +1,3 @@
-/* What a surface offers (feature 046, research.md §2-3): the window's client
- * area as the current extent, two to eight images, the four formats and two
- * present modes this driver presents, each count/array protocol, and a window
- * that is minimized or gone. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/icd_rig.hpp"
 #include "harness/icd/scripted_vulkan_device.hpp"
@@ -27,7 +23,6 @@ constexpr std::uint32_t height = 32u;
 
 void *as_window(std::uintptr_t number) { return reinterpret_cast<void *>(number); }
 
-/* One window on its own DC, as a probe's is. */
 class WindowRig {
 public:
     WindowRig() { windows_.add_dc(as_window(0x20u), as_window(0x10u), width, height); }
@@ -39,7 +34,7 @@ private:
     ScriptedWindowSurface windows_;
 };
 
-}  // namespace
+}
 
 TEST(surface_properties, the_capabilities_are_the_window_s_client_area_and_what_this_driver_presents)
 { WindowRig rig;
@@ -59,15 +54,11 @@ TEST(surface_properties, the_capabilities_are_the_window_s_client_area_and_what_
   CHECK_EQ(capabilities.supportedTransforms, VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR);
   CHECK_EQ(capabilities.supportedCompositeAlpha, VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR);
   CHECK_EQ(capabilities.supportedUsageFlags, SurfaceProperties::usage);
-  /* A resized window is a new current extent, which is how an application
-   * learns it must recreate. */
   rig.windows().resize(rig.window(), 8u, 4u);
   CHECK_EQ(properties.capabilities(capabilities), VK_SUCCESS);
   CHECK_EQ(capabilities.currentExtent.width, 8u);
   CHECK_EQ(capabilities.currentExtent.height, 4u); }
 
-/* Nothing can be made for a window with no client area: a minimized window
- * offers an extent range of zero, which refuses every swapchain. */
 TEST(surface_properties, a_minimized_window_offers_no_extent_at_all)
 { WindowRig rig;
   rig.windows().resize(rig.window(), 0u, 0u);
@@ -80,7 +71,6 @@ TEST(surface_properties, a_minimized_window_offers_no_extent_at_all)
   CHECK_EQ(capabilities.minImageExtent.height, 0u);
   CHECK_EQ(capabilities.maxImageExtent.width, 0u);
   CHECK_EQ(capabilities.maxImageExtent.height, 0u);
-  /* A window with a width and no height is as minimized as one with neither. */
   rig.windows().resize(rig.window(), width, 0u);
   CHECK_EQ(properties.capabilities(capabilities), VK_SUCCESS);
   CHECK_EQ(capabilities.maxImageExtent.width, 0u); }
@@ -110,14 +100,12 @@ TEST(surface_properties, the_formats_are_the_four_it_presents_in_the_srgb_non_li
       CHECK_EQ(formats[index].colorSpace, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR);
       CHECK(properties.offers_format(expected[index], VK_COLOR_SPACE_SRGB_NONLINEAR_KHR));
   }
-  /* Room for fewer than there are fills what there is room for and says so. */
   count = 2u;
   formats[2] = VkSurfaceFormatKHR{};
   CHECK_EQ(properties.formats(count, formats), VK_INCOMPLETE);
   CHECK_EQ(count, 2u);
   CHECK_EQ(formats[1].format, VK_FORMAT_B8G8R8A8_SRGB);
   CHECK_EQ(formats[2].format, VK_FORMAT_UNDEFINED);
-  /* Room for more than there are writes only what there is. */
   count = SurfaceProperties::format_count + 3u;
   CHECK_EQ(properties.formats(count, formats), VK_SUCCESS);
   CHECK_EQ(count, SurfaceProperties::format_count);
@@ -139,8 +127,6 @@ TEST(surface_properties, the_two_spellings_of_the_formats_answer_the_same)
   CHECK_EQ(properties.formats2(count, formats), VK_INCOMPLETE);
   CHECK_EQ(count, 1u); }
 
-/* FIFO and IMMEDIATE only: a mailbox needs a frame queue no D3DKMT present
- * gives this driver (research.md §3). */
 TEST(surface_properties, the_present_modes_are_fifo_and_immediate)
 { WindowRig rig;
   SurfaceProperties properties(rig.windows(), rig.window());
@@ -161,8 +147,6 @@ TEST(surface_properties, the_present_modes_are_fifo_and_immediate)
   CHECK_EQ(count, 1u);
   CHECK_EQ(modes[1], VK_PRESENT_MODE_MAILBOX_KHR); }
 
-/* The physical-device queries go through the surface the application named,
- * in both the one-argument and the info-structure spellings. */
 TEST(icd_presentation, the_surface_queries_answer_from_the_named_surface_s_window)
 { IcdRig rig;
   ScriptedVulkanDevice host;
@@ -196,8 +180,6 @@ TEST(icd_presentation, the_surface_queries_answer_from_the_named_surface_s_windo
   CHECK_EQ(wsi.present_modes(surface, &count, modes), VK_SUCCESS);
   CHECK_EQ(modes[0], VK_PRESENT_MODE_FIFO_KHR);
 
-  /* A surface the ICD never made, and one already destroyed: lost, on every
-   * query, in both spellings. */
   wsi.destroy_surface(reinterpret_cast<VkInstance>(1u), surface);
   CHECK_EQ(wsi.capabilities(surface, &capabilities), VK_ERROR_SURFACE_LOST_KHR);
   CHECK_EQ(wsi.capabilities2(&named, &second), VK_ERROR_SURFACE_LOST_KHR);

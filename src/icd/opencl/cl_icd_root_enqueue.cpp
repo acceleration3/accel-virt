@@ -1,7 +1,3 @@
-/* ClIcdRoot's enqueues beyond the ones a vector add makes: the 1.x spellings,
- * the image-buffer copies and the image fill, migration, sub-buffers, image
- * maps, pipes and the queue's own shared-memory commands - and the settle
- * every transfer the host blocks on makes first, behind its wait list. */
 #include "icd/opencl/cl_icd_root.hpp"
 
 #include "core/platform/thread_lock.hpp"
@@ -24,11 +20,9 @@ void report_error(cl_int *error, cl_int value)
     if (error != nullptr) *error = value;
 }
 
-/* What a fill colour is on the wire: four components of four bytes, which is
- * cl_float4, cl_int4 and cl_uint4 alike. */
 constexpr size_t fill_colour_bytes = 16u;
 
-}  // namespace
+}
 
 cl_int ClIcdRoot::settle(ClientTransport &wire, ClObject &queue, const ClWaitList &waits)
 {
@@ -41,19 +35,11 @@ cl_int ClIcdRoot::settle(ClientTransport &wire, ClObject &queue, const ClWaitLis
     if (judged_list != CL_SUCCESS) return judged_list;
     const uint32_t kept = waits.blocks() ? waits.count() : without_unset_user_events(wire, waits, listed);
     if (kept == 0u) return drain_unless_idle(wire, queue);
-    /* Not known idle afterwards on a queue that was: the marker is work of
-     * its own until the wait has seen it complete, which it then has. */
     const cl_int drained = drain(wire, queue.wire(), context->wakes(), listed, kept);
     if (drained == CL_SUCCESS) drained_queue(queue);
     return drained;
 }
 
-/* A call that returns before its work is done may be waiting on a user event
- * the same thread sets only after it returns, and waiting for it here would
- * never end. So such a call does not wait for a user event the application
- * has not set yet - it runs ahead of it, as every call did before this ICD
- * honoured wait lists - and waits for the rest. The command's own event still
- * completes after the transfer. */
 uint32_t ClIcdRoot::without_unset_user_events(ClientTransport &wire, const ClWaitList &waits, uint64_t *listed)
 {
     AV_SCOPE("ClIcdRoot::without_unset_user_events");
@@ -236,8 +222,6 @@ cl_mem ClIcdRoot::create_sub_buffer(cl_mem buffer, cl_mem_flags flags, cl_buffer
         report_error(error, CL_OUT_OF_RESOURCES);
         return nullptr;
     }
-    /* The host judges the region against the buffer, its alignment and the
-     * flags against the buffer's: those are its own rules. */
     cl_int         host_error = CL_SUCCESS;
     const uint64_t made = av::clproto::av_clCreateSubBuffer(*wire, held->wire(), flags, type, &region, &host_error);
     if (made == 0u) {
@@ -253,7 +237,6 @@ cl_mem ClIcdRoot::create_sub_buffer(cl_mem buffer, cl_mem_flags flags, cl_buffer
         held->retain();
         sub->slice_of(*held);
     }
-    /* The host accepted the region, so it lies inside the buffer. */
     if (held->backed()) sub->back_with(held->backing_offset() + region.origin, region.size);
     if (held->application_memory() != nullptr) sub->use_application_memory(held->application_memory() + region.origin);
     if (held->lent() != nullptr) sub->lend(*held->lent());
@@ -292,9 +275,6 @@ void *ClIcdRoot::map_image(cl_command_queue queue, cl_mem image, cl_bool blockin
         report_error(error, CL_INVALID_MEM_OBJECT);
         return nullptr;
     }
-    /* Which pitches the API answers is the image type's: a 3D image and every
-     * array has slices, a 1D array's of one row each; the rest have none, and
-     * the API wants a slice pitch only of those that do. */
     const bool sliced = type == CL_MEM_OBJECT_IMAGE3D || type == CL_MEM_OBJECT_IMAGE2D_ARRAY ||
                         type == CL_MEM_OBJECT_IMAGE1D_ARRAY;
     if (sliced && slice_pitch == nullptr) {
@@ -344,7 +324,6 @@ cl_int ClIcdRoot::unmap_image(ClientTransport &wire, ClObject &queue, uint64_t i
     GuestClContext *const context = queue.context();
     cl_int                written = CL_SUCCESS;
     if (region.writes_back()) {
-        /* The image's own write, which the host blocks on: behind nothing. */
         written = drain_unless_idle(wire, queue);
         if (written == CL_SUCCESS) {
             ClTransferChunks chunks(wire, queue.wire(), context->staging());
@@ -432,7 +411,6 @@ cl_int ClIcdRoot::svm_from_guest(ClientTransport &wire, ClObject &queue, uint64_
             if (moved == CL_SUCCESS) moved = unmapped;
         }
     }
-    /* The host keeps the buffer until the copy that reads it has run. */
     give_back_to_host(wire, ClObject::Kind::mem, through);
     queue.busy();
     return moved;
@@ -459,8 +437,6 @@ cl_int ClIcdRoot::svm_to_guest(ClientTransport &wire, ClObject &queue, void *to,
             av::clproto::av_clEnqueueUnmapMemObject(wire, queue.wire(), through, mapped, 0u, nullptr, nullptr);
         if (moved == CL_SUCCESS) moved = unmapped;
     }
-    /* The read the host blocks on comes once the copy into the buffer has
-     * run, which the drain waits for here instead. */
     queue.busy();
     if (moved == CL_SUCCESS) moved = drain_unless_idle(wire, queue);
     if (moved == CL_SUCCESS) {
@@ -478,7 +454,6 @@ cl_int ClIcdRoot::svm_memcpy(cl_command_queue queue, cl_bool blocking, void *to,
     ClObject *const held = judged(queue, ClObject::Kind::command_queue);
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     if (to == nullptr || from == nullptr) return CL_INVALID_VALUE;
-    /* Nothing to copy is still a point in the queue behind its list. */
     if (bytes == 0u) return enqueue_marker(queue, waits.count(), waits.events(), event);
     const uintptr_t target = reinterpret_cast<uintptr_t>(to);
     const uintptr_t source = reinterpret_cast<uintptr_t>(from);
@@ -491,8 +466,6 @@ cl_int ClIcdRoot::svm_memcpy(cl_command_queue queue, cl_bool blocking, void *to,
     uint64_t     *listed = nullptr;
     const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);
     if (judged_list != CL_SUCCESS) return judged_list;
-    /* An address inside an allocation, with the copy's whole extent inside it
-     * too - the host judges the same and would refuse it otherwise. */
     const SvmAllocation *const into_shared = context->svm().covering(to);
     const SvmAllocation *const from_shared = context->svm().covering(from);
     if (into_shared != nullptr && context->svm().covering(static_cast<uint8_t *>(to) + bytes - 1u) != into_shared)
@@ -501,8 +474,6 @@ cl_int ClIcdRoot::svm_memcpy(cl_command_queue queue, cl_bool blocking, void *to,
         context->svm().covering(static_cast<const uint8_t *>(from) + bytes - 1u) != from_shared)
         return CL_INVALID_VALUE;
     if (into_shared != nullptr && from_shared != nullptr) {
-        /* The host's own copy, never blocking there: a blocking one waits for
-         * its event here instead. */
         held->busy();
         uint64_t     produced = 0u;
         const bool   wanted = event != nullptr || blocking == CL_TRUE;
@@ -518,9 +489,6 @@ cl_int ClIcdRoot::svm_memcpy(cl_command_queue queue, cl_bool blocking, void *to,
         hand_over(*wire, *held, produced, event);
         return waited;
     }
-    /* The application's memory on one side or both: done here, behind
-     * everything the copy would have been behind, and complete when it
-     * returns - which the API allows of a non-blocking copy too. */
     const cl_int settled = settle(*wire, *held, waits);
     if (settled != CL_SUCCESS) return settled;
     cl_int moved = CL_SUCCESS;
@@ -578,8 +546,6 @@ cl_int ClIcdRoot::enqueue_svm_free(cl_command_queue queue, cl_uint count, void *
     }
     ClientTransport *const wire = context->wire();
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    /* An allocation a kernel queued before this still reads may not go until
-     * that kernel has run. */
     const cl_int settled = settle(*wire, *held, waits);
     if (settled != CL_SUCCESS) return settled;
     if (freed != nullptr) {
@@ -606,4 +572,4 @@ cl_int ClIcdRoot::enqueue_svm_migrate(cl_command_queue queue, cl_uint count, con
     return enqueue_marker(queue, waits.count(), waits.events(), event);
 }
 
-}  // namespace av::clicd
+}

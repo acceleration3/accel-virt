@@ -13,7 +13,7 @@ namespace {
 
 constexpr uint8_t tolerance = 1u;
 
-}  // namespace
+}
 
 D3d9Work::D3d9Work(D3d9Entry &d3d9, ImageSink &images)
     : d3d9_(d3d9), images_(images), adapter_(0u), made_(false), read_(false), frame_{}
@@ -39,7 +39,6 @@ void D3d9Work::run(ScenarioSteps &steps, void *window)
     if (steps.check_result("clear", d3d9_.clear(colour)) != Status::ok) return;
     if (steps.check_result("readback", d3d9_.read_back(frame_, sizeof frame_)) != Status::ok) return;
     read_ = true;
-    /* A locked surface holds BGRA rows from the top. */
     images_.save("d3d9-clear", BmpImage(frame_, extent, extent, BmpImage::Rows::top_first,
                                         BmpImage::Order::blue_first));
     const uint32_t right = coloured();
@@ -74,4 +73,4 @@ bool D3d9Work::invariants_hold() const
     return coloured() <= pixels;
 }
 
-}  // namespace av
+}

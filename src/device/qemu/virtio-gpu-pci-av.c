@@ -1,13 +1,4 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/*
- * virtio-gpu-av-pci: the PCI function the guest's avgpu.sys binds to - a
- * virtio-gpu with subsystem 1af4:5256, "RV", whose doorbell pages are BAR 0,
- * located by a shared memory capability. Its vendor, device and revision are
- * the bound host GPU's, or virtio-gpu's own 1af4:1050 when that GPU has no PCI
- * function to name.
- *
- * Installed by accel-virt's tools/build_qemu.sh as hw/display/virtio-gpu-pci-av.c.
- */
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "qemu/module.h"
@@ -33,15 +24,6 @@ struct VirtIOGPUAvPCI {
 
 static void (*virtio_gpu_av_pci_parent_realize)(VirtIOPCIProxy *proxy, Error **errp);
 
-/* BAR 0 is free: virtio-gpu-pci forces virtio 1, so there is no legacy I/O BAR.
- *
- * The vendor, device and revision are the bound host GPU's once the parent has
- * realized - virtio-pci writes its own when the virtio device is plugged, which
- * is inside that realize - so a Windows guest names the adapter after the host
- * GPU in Device Manager, WMI and DXGI. The subsystem stays 1af4:5256: it is how
- * avgpu.inf and the guest's own programs tell this function from any other,
- * and the driver finds everything else through the virtio capabilities, never
- * the IDs. */
 static void virtio_gpu_av_pci_realize(VirtIOPCIProxy *proxy, Error **errp)
 {
     ERRP_GUARD();
@@ -63,13 +45,6 @@ static void virtio_gpu_av_pci_realize(VirtIOPCIProxy *proxy, Error **errp)
     pci_config_set_revision(config, host.revision);
 }
 
-/* ioeventfd on by default, as virtio-blk-pci and virtio-net-pci have it;
- * virtio-gpu-pci leaves it off. Off, a queue kick is an MMIO exit QEMU handles
- * on the vCPU under the BQL, and the main loop holds the BQL while it draws
- * the display: the vCPU waited milliseconds in the kick, and the display DPC
- * it was running - and every interrupt aimed at that vCPU - with it. Set here
- * rather than as a property default because the property is the base's, and
- * after its default so that ioeventfd=off still wins. */
 static void virtio_gpu_av_pci_initfn(Object *obj)
 {
     VirtIOGPUAvPCI *dev = VIRTIO_GPU_AV_PCI(obj);

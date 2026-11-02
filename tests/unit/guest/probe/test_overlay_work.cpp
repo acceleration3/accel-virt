@@ -1,9 +1,3 @@
-/* The overlay proof over a scripted DXGI - an OverlayEntry whose
- * supports_overlays, overlay support and composition modes the test sets:
- * every step in order, a swap chain on part of the screen and one on all of it
- * each judged by whether DWM showed it in an overlay plane, a refusal at each call kept as the HRESULT it is, a
- * composed swap chain failed with its mode on the line, and the device released
- * whatever happened. */
 #include "guest/probe/overlay_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
@@ -58,7 +52,7 @@ private:
 
 bool says(const char *report, const char *line) { return std::strstr(report, line) != nullptr; }
 
-}  // namespace
+}
 
 TEST(overlay_work, proves_both_swap_chains_shown_in_overlay_planes)
 { OverlayRig rig;
@@ -73,23 +67,20 @@ TEST(overlay_work, proves_both_swap_chains_shown_in_overlay_planes)
   CHECK_EQ(rig.dxgi().calls(Call::create_swap_chain), 2u);
   CHECK_EQ(rig.dxgi().calls(Call::present), 2u * OverlayWork::presents);
   CHECK_EQ(rig.dxgi().calls(Call::composition), 2u);
-  CHECK_EQ(rig.dxgi().x(), 0);          /* the last covers the output */
+  CHECK_EQ(rig.dxgi().x(), 0);
   CHECK_EQ(rig.dxgi().width(), 0u);
   CHECK_EQ(rig.mode(), OverlayWork::mode_overlay);
   CHECK(!rig.dxgi().live()); }
 
 TEST(overlay_work, fails_a_composed_swap_chain_and_goes_on)
 { OverlayRig rig;
-  rig.dxgi().answer(true, 1u, 0u);   /* composed */
+  rig.dxgi().answer(true, 1u, 0u);
   rig.run();
   CHECK_EQ(rig.failed(), 2u);
   CHECK_EQ(rig.dxgi().calls(Call::create_swap_chain), 2u);
   CHECK_EQ(rig.mode(), 0u);
   CHECK(!rig.dxgi().live()); }
 
-/* SupportsOverlays FALSE is what DXGI answers on DWM's DisplayCore path
- * while DWM promotes swap chains: it is reported, the swap chains are still
- * tried, and nothing fails for it. */
 TEST(overlay_work, reports_supports_overlays_without_failing_for_it)
 { OverlayRig rig;
   rig.dxgi().answer(false, 1u, 1u);
@@ -106,7 +97,7 @@ TEST(overlay_work, keeps_each_refusal_and_releases_what_it_made)
       rig.dxgi().fail(static_cast<Call>(call), 1u, static_cast<std::int32_t>(0x887A0001u));
       const char *const report = rig.run();
       CHECK(rig.failed() >= 1u);
-      CHECK(says(report, "2289696769"));   /* 0x887A0001, as the report writes it */
+      CHECK(says(report, "2289696769"));
       CHECK(!rig.dxgi().live());
   } }
 
@@ -115,11 +106,9 @@ TEST(overlay_work, a_failed_present_is_one_line_and_ends_that_swap_chain)
   rig.dxgi().fail(Call::present, 3u, static_cast<std::int32_t>(0x887A0005u));
   rig.run();
   CHECK_EQ(rig.dxgi().calls(Call::composition), 0u);
-  CHECK_EQ(rig.dxgi().calls(Call::present), 4u);   /* the third, then the second chain's first */
+  CHECK_EQ(rig.dxgi().calls(Call::present), 4u);
   CHECK(!rig.dxgi().live()); }
 
-/* Statistics that restarted are asked for again after another present, and a
- * swap chain that keeps restarting them fails with the answer it gave. */
 TEST(overlay_work, asks_again_while_the_statistics_are_disjoint)
 { OverlayRig rig;
   rig.dxgi().fail(Call::composition, 1u, OverlayWork::disjoint);
@@ -128,17 +117,14 @@ TEST(overlay_work, asks_again_while_the_statistics_are_disjoint)
   CHECK_EQ(rig.dxgi().calls(Call::present), 2u * (OverlayWork::presents + OverlayWork::disjoint_retries));
   CHECK_EQ(rig.failed(), 2u); }
 
-/* Either kind of overlay support is support; none is a failure. */
 TEST(overlay_work, takes_direct_or_scaling_overlay_support)
 { for (const std::uint32_t flags : {OverlayWork::support_direct, OverlayWork::support_scaling, 0u}) {
       OverlayRig rig;
       rig.dxgi().answer(true, flags, OverlayWork::mode_overlay);
       rig.run();
-      CHECK_EQ(rig.failed(), flags == 0u ? 2u : 0u);   /* the desktop's and video's */
+      CHECK_EQ(rig.failed(), flags == 0u ? 2u : 0u);
   } }
 
-/* A hold keeps the partial window presenting after it is judged, for a check
- * from outside the guest, and the full-screen one after it is not held. */
 TEST(overlay_work, holds_the_partial_window_when_asked)
 { OverlayRig rig(40u);
   rig.run();

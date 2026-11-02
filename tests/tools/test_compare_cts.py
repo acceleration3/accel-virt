@@ -1,10 +1,3 @@
-"""The two verdicts a conformance run answers with (feature 048, US1 and US3):
-the guest against the host, and the guest against what it used to pass.
-
-Both are driven over `.qpa` logs the tests write. A comparison that was never
-made says so rather than passing quietly, which is the case worth testing most:
-this machine has no CTS, so "could not compare" is what the tools answer today.
-"""
 import pathlib
 import tempfile
 import unittest
@@ -57,9 +50,6 @@ class Verdicts(unittest.TestCase):
         self.assertIn("cts: 2 guest-only failure(s)", result.stderr)
 
     def test_a_comparison_that_was_never_made_says_so(self):
-        """Neither an empty log nor a subset that ran on one side only is a
-        pass: this machine has no CTS, and what it must never do is report
-        conformance it did not measure."""
         empty = self.write("empty.qpa", "")
         whole = self.write("host.qpa", log(("dEQP-VK.a", "Pass")))
         nothing = run(COMPARE, empty, whole)
@@ -103,14 +93,11 @@ class Verdicts(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("1 gained", result.stdout)
         self.assertIn("dEQP-VK.new", result.stdout)
-        # And --write puts it there, so the gain is committed with the change.
         written = run(RATCHET, gained, "--record", record, "--write")
         self.assertEqual(written.returncode, 0, written.stdout + written.stderr)
         self.assertEqual(record.read_text(), "dEQP-VK.a\ndEQP-VK.new\n")
 
     def test_the_repositorys_own_record_is_empty_and_passes(self):
-        """No guest has run the CTS here, so the record claims nothing - and a
-        run against it cannot fail for having lost what was never recorded."""
         anything = self.write("anything.qpa", log(("dEQP-VK.a", "Fail")))
         result = run(RATCHET, anything)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

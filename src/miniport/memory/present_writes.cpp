@@ -10,8 +10,6 @@ PresentWrites::PresentWrites(Platform &platform)
     AV_SCOPE("PresentWrites::PresentWrites");
 }
 
-/* The writer is counted before the sequence moves: a reader that sees the new
- * sequence sees the writer too. */
 void PresentWrites::opening()
 {
     AV_SCOPE("PresentWrites::opening");
@@ -20,7 +18,6 @@ void PresentWrites::opening()
     static_cast<void>(platform_.add_atomic(sequence_, 1u));
 }
 
-/* Adding the all-ones is subtracting one. */
 void PresentWrites::written(uint64_t ticket, uint32_t epoch)
 {
     AV_SCOPE("PresentWrites::written");
@@ -61,8 +58,6 @@ uint32_t PresentWrites::epoch()
     return static_cast<uint32_t>(platform_.load_atomic(epoch_));
 }
 
-/* A ticket is only ever stored after a present opened the pages, and a
- * writer open is one more opening than the sequence has counted closed. */
 bool PresentWrites::invariants_hold()
 {
     AV_SCOPE("PresentWrites::invariants_hold");
@@ -71,4 +66,4 @@ bool PresentWrites::invariants_hold()
     return ticketed_after_opening && platform_.load_atomic(writers_) <= sequence;
 }
 
-}  // namespace av
+}

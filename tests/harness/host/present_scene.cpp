@@ -16,7 +16,7 @@ constexpr std::uint64_t destination_run = PresentScene::ram + 8u * PresentScene:
 constexpr std::uint32_t blt_operation = 1u;
 constexpr std::uint32_t fill_operation = 2u;
 
-}  // namespace
+}
 
 PresentScene::PresentScene(MockHost &host) : host_(host)
 {
@@ -86,7 +86,7 @@ GpuRequestBuilder PresentScene::fill(std::uint64_t ticket, std::uint32_t colour,
 GpuRequestBuilder PresentScene::image(std::uint64_t ticket, std::uint64_t key) const
 {
     GpuRequestBuilder builder(QueuedPresentRequest::type);
-    builder.u64(ticket).u32(1u).u32(1u).u64(key);   /* the surface's first present */
+    builder.u64(ticket).u32(1u).u32(1u).u64(key);
     builder.u32(blt_operation).u32(0u).u32(0u).u32(1u).u32(0u).u32(1u).u32(0u).u32(pitch);
     builder.u64(destination_run).u32(2u * page_bytes).u32(0u);
     builder.u32(0u).u32(0u).u32(0u).u32(0u).u32(width).u32(1u);
@@ -98,4 +98,4 @@ bool PresentScene::progress(PresentProgress &progress) const
     return progress.decode(host_.guest_ram(engine_page), PresentProgress::encoded_size) == Status::ok;
 }
 
-}  // namespace av
+}

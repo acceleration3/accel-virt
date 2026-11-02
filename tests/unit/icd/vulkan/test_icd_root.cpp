@@ -1,9 +1,3 @@
-/* The ICD as the loader reaches it (contracts/loader_interface.md), over MockKmt
- * with the test playing the host: interface negotiation, what is answered before
- * and after an instance exists, the instance's own connection and its refusals,
- * the adapter's physical device by LUID, device teardown, the generated
- * wrappers' hooks, and the lock order that keeps two threads from deadlocking.
- * Invariants after every call that changes the root. */
 #include "core/support/status.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
@@ -60,7 +54,7 @@ struct ConnectionProbe {
     static GuestConnection &guest(Connection &c) { return c.connection_; }
 };
 
-}  // namespace av::icd
+}
 
 namespace av {
 
@@ -68,7 +62,7 @@ struct GuestConnectionProbe {
     static void set_queue(GuestConnection &c, std::uint32_t queue) { c.queue_ = queue; }
 };
 
-}  // namespace av
+}
 
 using av::GuestConnectionProbe;
 using av::icd::ConnectionProbe;
@@ -100,12 +94,10 @@ constexpr std::uint32_t vulkan_1_3 = 0x00403000u;
 constexpr std::uint64_t other_luid = 0x0000000200001235ull;
 constexpr std::uint64_t queue_host = 0x6600u;
 constexpr std::uint64_t command_buffer_host = 0x7700u;
-/* What one open connection holds in MockKmt (test_connection.cpp). */
 constexpr std::uint32_t connection_objects = 7u;
 
 PFN_vkVoidFunction entry_of(auto function) { return reinterpret_cast<PFN_vkVoidFunction>(function); }
 
-/* The body of the journalled command at `index`, past its header. */
 WireReader body_of(MockKmt &kmt, std::uint32_t index)
 {
     return WireReader(kmt.command_bytes(index) + CommandHeader::encoded_size,
@@ -130,7 +122,7 @@ VkQueue get_queue(IcdRig &rig, VkInstance instance, VkDevice device)
     return queue;
 }
 
-}  // namespace
+}
 
 TEST(icd_root, binds_itself_for_its_life)
 { CHECK(!av::icd::icd_binding.bound());
@@ -198,7 +190,6 @@ TEST(icd_root, an_instance_it_made_answers_every_entry_point_with_its_own_rows_f
   const VkInstance instance = rig.create_instance();
   CHECK(instance != VK_NULL_HANDLE);
   IcdRoot &root = rig.root();
-  /* The generated commands the ICD answers itself. */
   const char *const overridden[] = {
       "vkCreateInstance", "vkDestroyDevice", "vkGetPhysicalDeviceProperties", "vkGetPhysicalDeviceProperties2",
       "vkGetDeviceQueue", "vkGetDeviceQueue2", "vkAllocateCommandBuffers", "vkFreeCommandBuffers",
@@ -207,18 +198,11 @@ TEST(icd_root, an_instance_it_made_answers_every_entry_point_with_its_own_rows_f
       "vkCreateDevice", "vkDestroyInstance", "vkGetPhysicalDeviceMemoryProperties",
       "vkGetPhysicalDeviceMemoryProperties2", "vkAllocateMemory", "vkFreeMemory", "vkFlushMappedMemoryRanges",
       "vkInvalidateMappedMemoryRanges",
-      /* The four that keep the descriptor template table honest (feature 047):
-       * each forwards to its generated wrapper and remembers or forgets what
-       * it made around it. */
       "vkCreateDescriptorUpdateTemplate", "vkCreateDescriptorUpdateTemplateKHR",
       "vkDestroyDescriptorUpdateTemplate", "vkDestroyDescriptorUpdateTemplateKHR",
-      /* And feature 047's US3: a semaphore destroyed takes any handle that
-       * named it with it, and the two external-property queries are answered
-       * over the host's fd rather than passed on as Win32 (research.md §10). */
       "vkDestroySemaphore", "vkGetPhysicalDeviceExternalBufferProperties",
       "vkGetPhysicalDeviceExternalBufferPropertiesKHR", "vkGetPhysicalDeviceExternalSemaphoreProperties",
       "vkGetPhysicalDeviceExternalSemaphorePropertiesKHR",
-      /* Every adapter's devices, through the instances one spans. */
       "vkEnumeratePhysicalDevices", "vkEnumeratePhysicalDeviceGroups", "vkEnumeratePhysicalDeviceGroupsKHR"};
   std::uint32_t wrappers = 0u;
   for (const av::vkicd::generated::Entry &row : av::vkicd::generated::wrapper_entries()) {
@@ -248,7 +232,6 @@ TEST(icd_root, a_pointer_it_did_not_make_as_an_instance_answers_nothing)
   CHECK(rig.root().instance_proc_addr(reinterpret_cast<VkInstance>(&stack), "vkCreateDevice") == nullptr);
   CHECK(rig.root().instance_proc_addr(reinterpret_cast<VkInstance>(physical_device), "vkCreateDevice") == nullptr);
   rig.destroy_instance(instance);
-  /* A destroyed instance too. */
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateDevice") == nullptr);
   CHECK(rig.root().invariants_hold()); }
 
@@ -261,8 +244,6 @@ TEST(icd_root, every_manual_entry_point_it_answers_is_its_own_and_the_rest_are_n
       const PFN_vkVoidFunction found = rig.root().instance_proc_addr(instance, name);
       if (found == nullptr) continue;
       answered++;
-      /* Mapping (T035), device dispatch and the WSI (feature 046) are the
-       * ICD's own too, and answer only through an instance. */
       if (rig.root().instance_proc_addr(VK_NULL_HANDLE, name) == nullptr) {
           through_an_instance++;
           continue;
@@ -273,12 +254,8 @@ TEST(icd_root, every_manual_entry_point_it_answers_is_its_own_and_the_rest_are_n
   CHECK(rig.root().instance_proc_addr(VK_NULL_HANDLE, "vkMapMemory") == nullptr);
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateSwapchainKHR") ==
         entry_of(&av::icd::local_vkCreateSwapchainKHR));
-  /* The window-system entries of another platform are not this driver's. */
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateXlibSurfaceKHR") == nullptr);
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateHeadlessSurfaceEXT") == nullptr);
-  /* Three before the WSI, the twelve window-system entries this platform's
-   * manual list names (the two Win32-only ones are not on it), feature 047's
-   * two mapping entries and its four Win32 external-object ones. */
   CHECK_EQ(answered, 23u);
   CHECK_EQ(through_an_instance, 21u);
   CHECK(rig.root().instance_proc_addr(instance, "vkGetMemoryWin32HandleKHR") ==
@@ -289,9 +266,6 @@ TEST(icd_root, every_manual_entry_point_it_answers_is_its_own_and_the_rest_are_n
   CHECK(rig.root().instance_proc_addr(instance, "vkUnmapMemory2KHR") == entry_of(&av::icd::local_vkUnmapMemory2KHR));
   rig.destroy_instance(instance); }
 
-/* The Windows loader drops a driver that answers any of these null for its
- * instance (Vulkan-Loader, loader_icd_init_entries: LOOKUP_REQUIRED_GIPA), and
- * every application then sees no device at all. */
 TEST(icd_root, an_instance_answers_every_entry_point_the_loader_requires)
 { IcdRig rig;
   const VkInstance instance = rig.create_instance();
@@ -310,9 +284,6 @@ using GetDeviceProcAddr = PFN_vkVoidFunction (*)(VkDevice, const char *);
 using CreateDeviceEntry = VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo *, const VkAllocationCallbacks *,
                                        VkDevice *);
 
-/* The loader fills a device's dispatch table from this: the device-level
- * entry the instance would answer, local rows first, and null for a command
- * dispatched on anything but a device, queue or command buffer. */
 TEST(icd_root, a_device_it_made_answers_device_level_entry_points_and_no_other)
 { IcdRig rig;
   const VkInstance instance = rig.create_instance();
@@ -327,7 +298,6 @@ TEST(icd_root, a_device_it_made_answers_device_level_entry_points_and_no_other)
   CHECK(device_proc_addr(device, "vkDestroyDevice") == entry_of(&av::icd::local_vkDestroyDevice));
   CHECK(device_proc_addr(device, "vkAllocateMemory") == entry_of(&av::icd::local_vkAllocateMemory));
   CHECK(device_proc_addr(device, "vkMapMemory") == entry_of(&av::icd::local_vkMapMemory));
-  /* A device-level command itself, which the spec has answer through a device. */
   CHECK(device_proc_addr(device, "vkGetDeviceProcAddr") == entry_of(&av::icd::local_vkGetDeviceProcAddr));
   CHECK(device_proc_addr(device, "vkCreateBuffer") ==
         entry_of(&av::vkicd::generated::Wrap_vkCreateBuffer));
@@ -348,7 +318,6 @@ TEST(icd_root, a_device_it_made_answers_device_level_entry_points_and_no_other)
                                           "vk_icdEnumerateAdapterPhysicalDevices", "vkNotAnEntryPoint", "",
                                           nullptr};
   for (const char *name : not_device_level) CHECK(device_proc_addr(device, name) == nullptr);
-  /* Anything but a live device of this ICD answers nothing. */
   int stack = 0;
   CHECK(device_proc_addr(reinterpret_cast<VkDevice>(&stack), "vkDestroyDevice") == nullptr);
   CHECK(device_proc_addr(reinterpret_cast<VkDevice>(physical_device), "vkDestroyDevice") == nullptr);
@@ -358,13 +327,6 @@ TEST(icd_root, a_device_it_made_answers_device_level_entry_points_and_no_other)
   rig.destroy_instance(instance);
   CHECK(rig.root().invariants_hold()); }
 
-/* The instance extensions are VK_KHR_get_physical_device_properties2 - its
- * entry points are the ICD's own, and a loader client such as vulkaninfo asks
- * for the physical device's LUID only when the extension is listed - the two
- * surface extensions the WSI answers (feature 046), and the *2 surface queries
- * DXVK resolves whether or not it enabled them (feature 047). The count and
- * array protocol is the loader's: VK_INCOMPLETE with what fits, nothing
- * written past the capacity. */
 TEST(icd_root, reports_properties2_and_the_surface_extensions_as_its_instance_extensions)
 { IcdRig rig;
   const InstanceExtensions enumerate =
@@ -412,8 +374,6 @@ TEST(icd_root, reports_vulkan_1_3)
   CHECK_EQ(rig.root().enumerate_instance_version(&version), VK_SUCCESS);
   CHECK_EQ(version, vulkan_1_3); }
 
-/* The loader dispatches whatever this answers on a physical device: a device or
- * instance command answered here would be called with the wrong object. */
 TEST(icd_root, answers_only_physical_device_level_entry_points_to_get_physical_device_proc_addr)
 { IcdRig rig;
   const VkInstance instance = rig.create_instance();
@@ -440,14 +400,10 @@ TEST(icd_root, create_instance_opens_its_own_connection_and_wraps_the_hosts_inst
   const VkInstance instance = rig.create_instance();
   CHECK(rig.root().invariants_hold());
   CHECK(instance != VK_NULL_HANDLE);
-  /* What the loader reads at the handle's address, before it writes its own. */
   CHECK(*static_cast<void **>(static_cast<void *>(instance)) == reinterpret_cast<void *>(LoaderHandle::loader_magic));
   CHECK_EQ(rig.kmt().open_objects(), connection_objects);
   CHECK_EQ(rig.kmt().commands(), 1u);
   CHECK_EQ(rig.kmt().command_id(0u), static_cast<std::uint32_t>(kCmd_vkCreateInstance));
-  /* The connection opened under the root's lock, the command under the send
-   * lock, and the handle wrapped under the root's lock again; then its span
-   * made and its adapter looked up, each under the root's lock. */
   CHECK(std::strcmp(rig.trace().text(), "HhSsHhHhHh") == 0);
   const Connection *const connection = av::icd::connection_of(instance);
   CHECK(connection != nullptr && connection->opened());
@@ -503,7 +459,6 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
                                           av::PciIdentity::virtio_vendor, av::AvgpuAdapters::av_subsystem),
                           av::AdapterScenario::wddm_3_2);
       }
-      /* The connection's own ask, after the one listing the adapters. */
       if (refusal.no_luid) kmt.fail_at(MockKmt::Call::adapter_luid, 2u, MockKmt::invalid_parameter);
       if (refusal.call != MockKmt::Call::count) kmt.fail_at(refusal.call, 1u, MockKmt::invalid_parameter);
       VkInstanceCreateInfo info = {};
@@ -536,7 +491,6 @@ TEST(icd_root, create_instance_passes_on_the_hosts_refusal_and_closes_the_connec
   CHECK_EQ(rig.log().holding("the host refused, result 4294967293"), 1u);
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
-/* The connection's pool chunk, then its 256 KiB of staging. */
 TEST(icd_root, create_instance_with_no_memory_for_its_connection_answers_out_of_host_memory)
 { for (std::uint32_t refused = 1u; refused <= 2u; refused++) {
       IcdRig rig;
@@ -555,8 +509,6 @@ TEST(icd_root, create_instance_with_no_memory_for_its_connection_answers_out_of_
   }
 }
 
-/* The host made an instance, but no handle could be made for it: the context,
- * and with it the host's instance, is closed rather than leaked. */
 TEST(icd_root, create_instance_with_no_memory_for_its_handle_closes_the_hosts_instance)
 { IcdRig rig;
   rig.platform().fail_allocation_at(3u);
@@ -584,8 +536,6 @@ TEST(icd_root, the_adapters_luid_answers_the_same_physical_device_enumeration_do
   VkPhysicalDevice physical_device = VK_NULL_HANDLE;
   rig.host().vk_physical_devices(0, 1u);
   CHECK_EQ(by_luid(instance, IcdRig::adapter_luid, &count, &physical_device), VK_SUCCESS);
-  /* The instance is unwrapped under the root's lock inside the send lock, never
-   * the other way round; its span is looked up under the root's lock alone. */
   CHECK(std::strcmp(rig.trace().text(), "HhHhHhSHhsHh") == 0);
   CHECK(physical_device != VK_NULL_HANDLE);
   CHECK_EQ(av::vkproto::handle_to_wire(physical_device), ScriptedHost::vk_physical_device);
@@ -602,10 +552,6 @@ TEST(icd_root, the_adapters_luid_answers_the_same_physical_device_enumeration_do
   CHECK(rig.root().invariants_hold()); }
 
 namespace {
-
-/* A host's answer to vkEnumeratePhysicalDeviceGroups: the result, the count and
- * one group naming `named` devices from vk_physical_device on, claiming
- * `claimed` of them. */
 void queue_group(MockKmt &kmt, std::uint32_t claimed, std::uint32_t named)
 {
     std::uint8_t    answer[MockKmt::max_answer] = {};
@@ -622,7 +568,7 @@ void queue_group(MockKmt &kmt, std::uint32_t claimed, std::uint32_t named)
     kmt.queue_answer(answer, static_cast<std::uint32_t>(writer.offset()));
 }
 
-}  // namespace
+}
 
 TEST(icd_root, a_device_groups_physical_device_is_the_handle_enumeration_answered)
 { IcdRig rig;
@@ -643,9 +589,6 @@ TEST(icd_root, a_device_groups_physical_device_is_the_handle_enumeration_answere
   }
   rig.destroy_instance(instance); }
 
-/* A full group has every one of its devices wrapped and nothing after it
- * touched; a group claiming more than the array holds is a reply the decoder
- * refuses, with the application's structures left unwrapped. */
 TEST(icd_root, a_full_device_group_is_wrapped_and_an_overfull_one_refused)
 { IcdRig rig;
   const VkInstance instance = rig.create_instance();
@@ -668,17 +611,13 @@ TEST(icd_root, a_full_device_group_is_wrapped_and_an_overfull_one_refused)
   queue_group(rig.kmt(), VK_MAX_DEVICE_GROUP_SIZE + 1u, 1u);
   CHECK_EQ(enumerate(instance, &count, overfull), VK_ERROR_DEVICE_LOST);
   CHECK(overfull[0].physicalDevices[0] == VK_NULL_HANDLE);
-  /* A device the host names 0 has no handle to be: the call fails rather than
-   * hand the application a null. */
   count = 1u;
   queue_group(rig.kmt(), 2u, 1u);
   CHECK_EQ(enumerate(instance, &count, groups), VK_ERROR_OUT_OF_HOST_MEMORY);
-  /* Asking only how many wraps nothing. */
   count = 0u;
   rig.host().vk_count(VK_SUCCESS, 1u);
   CHECK_EQ(enumerate(instance, &count, nullptr), VK_SUCCESS);
   CHECK_EQ(count, 1u);
-  /* A refusal is passed on with nothing wrapped. */
   count = 1u;
   rig.host().vk_count(vk_error_initialization_failed, 0u);
   CHECK_EQ(enumerate(instance, &count, groups), vk_error_initialization_failed);
@@ -718,7 +657,6 @@ TEST(icd_root, enumerating_adapters_passes_on_the_hosts_answer)
   CHECK_EQ(by_luid(instance, IcdRig::adapter_luid, &count, physical_devices),
            vk_error_initialization_failed);
   CHECK(physical_devices[0] == VK_NULL_HANDLE);
-  /* Room for one of two: the one there is, and VK_INCOMPLETE. */
   count = 1u;
   rig.host().vk_physical_devices(VK_INCOMPLETE, 1u);
   CHECK_EQ(by_luid(instance, IcdRig::adapter_luid, &count, physical_devices), VK_INCOMPLETE);
@@ -730,7 +668,6 @@ TEST(icd_root, a_physical_device_no_handle_could_be_made_for_answers_out_of_host
 { IcdRig rig;
   const VkInstance instance = rig.create_instance();
   Connection *const connection = av::icd::connection_of(instance);
-  /* Fill the instance's chunk of handles, so the physical device needs a new one. */
   for (std::uint64_t host = 1u; host < av::ObjectPool<LoaderHandle>::chunk_slots; host++)
       CHECK(rig.root().wrap(Kind::physical_device, 0x90000u + host, connection) != nullptr);
   rig.platform().fail_allocation_at(1u);
@@ -771,14 +708,12 @@ TEST(icd_root, destroying_a_null_or_foreign_device_sends_nothing)
   destroy(VK_NULL_HANDLE, nullptr);
   int stack = 0;
   destroy(reinterpret_cast<VkDevice>(&stack), nullptr);
-  /* An instance is not a device. */
   destroy(reinterpret_cast<VkDevice>(instance), nullptr);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(av::icd::connection_of(instance) != nullptr);
   CHECK(rig.root().invariants_hold());
   rig.destroy_instance(instance); }
 
-/* The instance's handles all end with it, whatever was made through it. */
 TEST(icd_root, destroying_an_instance_ends_every_handle_made_through_it)
 { IcdRig rig;
   const VkInstance instance = rig.create_instance();
@@ -810,12 +745,10 @@ TEST(icd_root, queues_and_command_buffers_cross_as_the_hosts_handles)
            VK_SUCCESS);
   CHECK(rig.root().invariants_hold());
   CHECK_EQ(av::vkproto::handle_to_wire(command_buffer), command_buffer_host);
-  /* A recorded command crosses in its batch, at the end. */
   const std::uint32_t sent = rig.kmt().commands();
   rig.entry<CmdDraw>(instance, "vkCmdDraw")(command_buffer, 3u, 1u, 0u, 0u);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK_EQ(rig.entry<EndCommandBuffer>(instance, "vkEndCommandBuffer")(command_buffer), VK_SUCCESS);
-  /* The draw, and the end that closes the batch after it. */
   WireReader drawn = body_of(rig.kmt(), rig.kmt().commands() - 2u);
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 2u), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), static_cast<std::uint32_t>(kCmd_vkEndCommandBuffer));
@@ -836,8 +769,6 @@ TEST(icd_root, properties_through_the_root_carry_the_adapters_luid)
   VkPhysicalDevice physical_device = VK_NULL_HANDLE;
   rig.host().vk_physical_devices(0, 1u);
   CHECK_EQ(by_luid(instance, 0x0000000300000077ull, &count, &physical_device), VK_SUCCESS);
-  /* A reply MockKmt can carry holds the result and nothing else: the view's
-   * answer is then the zeroed properties with the LUID written. */
   rig.host().vk_result(VK_SUCCESS);
   VkPhysicalDeviceIDProperties identity = {};
   identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
@@ -892,7 +823,6 @@ TEST(icd_root, the_hooks_answer_nothing_for_what_it_did_not_make)
   CHECK_EQ(av::vkproto::handle_to_wire(reinterpret_cast<VkPhysicalDevice>(&stack)), 0u);
   CHECK_EQ(av::vkproto::handle_to_wire(reinterpret_cast<VkQueue>(&stack)), 0u);
   CHECK_EQ(av::vkproto::handle_to_wire(reinterpret_cast<VkCommandBuffer>(&stack)), 0u);
-  /* The host never names an object 0: wrapping it makes no handle. */
   CHECK(av::icd::wrap_server_handle<VkQueue>(0u, reinterpret_cast<Connection *>(&stack)) == VK_NULL_HANDLE);
   av::icd::release_connection(reinterpret_cast<Connection *>(&stack));
   CHECK_EQ(rig.log().holding("never opened"), 1u);
@@ -909,28 +839,24 @@ TEST(icd_root, invariants_see_a_connection_left_pending_closed_or_unowned_and_a_
   CHECK(!rig.root().invariants_hold());
   CHECK(rig.root().acquire_connection() == connection);
   CHECK(rig.root().invariants_hold());
-  /* A handle on a connection this root does not hold. */
   int stack = 0;
   void *const unowned = rig.root().wrap(Kind::instance, 0x1u, reinterpret_cast<Connection *>(&stack));
   CHECK(unowned != nullptr);
   CHECK(!rig.root().invariants_hold());
   rig.root().destroy_wrapper(unowned, Kind::instance);
   CHECK(rig.root().invariants_hold());
-  /* A handle the host would have named 0. */
   const VkPhysicalDevice physical_device = rig.physical_device(instance);
   LoaderHandleProbe::set_host(*static_cast<LoaderHandle *>(static_cast<void *>(physical_device)), 0u);
   CHECK(!rig.root().invariants_hold());
   LoaderHandleProbe::set_host(*static_cast<LoaderHandle *>(static_cast<void *>(physical_device)),
                               ScriptedHost::vk_physical_device);
   CHECK(rig.root().invariants_hold());
-  /* An open connection whose device has lost its paging queue. */
   av::GuestConnection &guest = ConnectionProbe::guest(*connection);
   const std::uint32_t queue = guest.queue();
   GuestConnectionProbe::set_queue(guest, 0u);
   CHECK(!rig.root().invariants_hold());
   GuestConnectionProbe::set_queue(guest, queue);
   CHECK(rig.root().invariants_hold());
-  /* Closed under the root, which never leaves one closed: the root says so. */
   connection->close();
   CHECK(!rig.root().invariants_hold());
   CHECK_STATUS(connection->open(0u), Status::ok);

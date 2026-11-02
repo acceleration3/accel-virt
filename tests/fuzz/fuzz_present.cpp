@@ -1,8 +1,3 @@
-/* Present over attacker-chosen flags, rectangles, counts, multipass offsets and
- * buffer sizes, with the DMA buffer and patch list exactly as large as they
- * claim; without a patch list, over the three allocations a GPU VA present
- * names. Whatever is refused, nothing may be written outside them, the
- * pointers may only advance within them, and no IRQL rule may break. */
 #include "miniport/ddi/dxgk_present_allocation_info_record.hpp"
 #include "miniport/ddi/dxgkarg_present_record.hpp"
 #include "miniport/present/present_request.hpp"
@@ -32,7 +27,7 @@ av::RectRecord read_rect(av::WireReader &reader)
     return {left, top, right, bottom};
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

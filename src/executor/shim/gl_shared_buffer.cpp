@@ -10,7 +10,7 @@ namespace {
 
 constexpr GLenum buffer_size = 0x8764u;
 
-}  // namespace
+}
 
 GlSharedBuffer::GlSharedBuffer()
     : create_buffers_(nullptr), storage_mem_(nullptr), buffer_parameter_(nullptr), delete_buffers_(nullptr),
@@ -73,8 +73,6 @@ bool GlSharedBuffer::make(int fd, uint64_t size, uint32_t &memory, uint32_t &buf
     }
     if (stored != static_cast<GLint64>(size)) {
         if (made != 0u) {
-            /* What the refused storage raised, cleared so it is not read as
-             * an error of whatever the context runs next. */
             static_cast<void>(errors_.clear());
             delete_buffers_(1, &made);
         }
@@ -97,4 +95,4 @@ void GlSharedBuffer::destroy(uint32_t memory, uint32_t buffer)
     if (memory != 0u && import_ != nullptr) import_->delete_memory(memory);
 }
 
-}  // namespace av
+}

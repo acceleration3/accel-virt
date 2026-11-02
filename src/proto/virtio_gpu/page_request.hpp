@@ -1,8 +1,3 @@
-/* A control request of this driver's own naming one guest page the device
- * writes from now on, or none: the header, then the page's guest physical
- * address. The display clock publishes each head's vertical blanks in its page
- * (docs/protocol.md, "Display clock"), the present engine the presents it has
- * moved ("Present engine"). */
 #ifndef AV_PAGE_REQUEST_HPP
 #define AV_PAGE_REQUEST_HPP
 
@@ -24,8 +19,6 @@ public:
 
     PageRequest();
 
-    /* malformed for a request too short to hold the address, or an address
-     * that is not a page's; 0 is the one that stops publishing. */
     [[nodiscard]] Status decode(WireReader &reader);
     uint64_t             address() const;
 
@@ -35,6 +28,6 @@ private:
     uint64_t address_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_PAGE_REQUEST_HPP
+#endif

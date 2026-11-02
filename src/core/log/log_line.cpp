@@ -47,4 +47,4 @@ void LogLine::write()
     log_.write(body_.text());
 }
 
-}  // namespace av
+}

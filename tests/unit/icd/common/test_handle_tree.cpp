@@ -1,13 +1,3 @@
-/* The objects an ICD hands out as pointers, each made through a parent of a
- * lower kind (HandleTree): what Vulkan's registry and OpenCL's object table are
- * both built on.
- *
- * A pointer is judged by what the pool made before anything behind it is read,
- * and a node goes with everything made through it. The subtree is destroyed
- * deepest kind first, so no parent chain a destroy walks passes through a node
- * it has already destroyed: the nodes here keep a list of the destroyed, and
- * every walk checks each node against it before reading through it - a walk
- * into a destroyed node is a walk into storage the pool may have freed. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -19,9 +9,6 @@ using av::MockPlatform;
 using av::Status;
 
 namespace {
-
-/* The nodes destroyed so far, by address, and whether a walk ever reached
- * one. */
 class Graveyard {
 public:
     static constexpr std::uint32_t capacity = 256u;
@@ -101,7 +88,7 @@ private:
     Tree         tree_;
 };
 
-}  // namespace
+}
 
 namespace av {
 
@@ -110,7 +97,7 @@ struct ObjectPoolProbe {
     static void miscount(ObjectPool<T> &pool) { pool.live_ += 1u; }
 };
 
-}  // namespace av
+}
 
 namespace av::icd {
 
@@ -119,7 +106,7 @@ struct HandleTreeProbe {
     static ObjectPool<N> &pool(HandleTree<N> &tree) { return tree.pool_; }
 };
 
-}  // namespace av::icd
+}
 
 TEST(handle_tree, an_empty_tree_holds_and_believes_nothing)
 { Forest forest;
@@ -142,9 +129,6 @@ TEST(handle_tree, a_node_it_made_is_the_one_it_answers_for_and_only_as_its_kind)
   CHECK_EQ(visited, 1u);
   CHECK(forest.tree().invariants_hold()); }
 
-/* A parent is one the tree holds, of a lower kind: a parent of the same kind or
- * higher makes a chain no destroy could order, and one from outside a subtree
- * that cannot go with it. */
 TEST(handle_tree, a_parent_fits_only_when_held_and_of_a_lower_kind)
 { Forest      forest;
   Node *const root = forest.make(Node::Kind::root);
@@ -158,9 +142,6 @@ TEST(handle_tree, a_parent_fits_only_when_held_and_of_a_lower_kind)
   Node outside(forest.graveyard(), Node::Kind::root, nullptr);
   CHECK(!forest.tree().parent_fits(Node::Kind::middle, &outside)); }
 
-/* Made in pool order root, middle, leaf: a destroy of the root's subtree in one
- * pass would destroy the middle node and then walk the leaf's chain through
- * it. Deepest kind first, the leaf goes while its chain is whole. */
 TEST(handle_tree, a_subtree_goes_deepest_kind_first_and_no_walk_reaches_a_destroyed_node)
 { Forest      forest;
   Node *const root = forest.make(Node::Kind::root);
@@ -174,8 +155,6 @@ TEST(handle_tree, a_subtree_goes_deepest_kind_first_and_no_walk_reaches_a_destro
   CHECK_EQ(forest.tree().live(), 0u);
   CHECK(forest.tree().invariants_hold()); }
 
-/* Only what descends from the node goes: a sibling branch and another root
- * stay, and so does the node's own parent. */
 TEST(handle_tree, a_destroy_leaves_every_other_branch)
 { Forest      forest;
   Node *const root = forest.make(Node::Kind::root);
@@ -211,8 +190,6 @@ TEST(handle_tree, a_pool_out_of_memory_makes_nothing)
   CHECK_EQ(forest.tree().live(), 0u);
   CHECK(forest.tree().invariants_hold()); }
 
-/* A node whose parent the tree does not hold, and a pool whose count is not
- * what it holds: the two states a destroy never leaves. */
 TEST(handle_tree, the_invariant_catches_a_lost_parent_and_an_unsound_pool)
 { Forest      forest;
   Node *const root = forest.make(Node::Kind::root);

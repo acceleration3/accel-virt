@@ -16,9 +16,6 @@ DeviceCapset::DeviceCapset(Host &host) : host_(host), info_(), described_(false)
     AV_SCOPE("DeviceCapset::DeviceCapset");
 }
 
-/* A device type Vulkan does not define is reported as other, so the capset
- * stays decodable. The name is the one the guest shows for the adapter, not
- * the driver's own (AdapterName). */
 void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t features)
 {
     AV_SCOPE("DeviceCapset::describe");
@@ -63,4 +60,4 @@ const CapsetInfo &DeviceCapset::info() const
     return info_;
 }
 
-}  // namespace av
+}

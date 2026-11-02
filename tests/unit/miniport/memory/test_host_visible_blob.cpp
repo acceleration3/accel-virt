@@ -1,7 +1,3 @@
-/* One window chunk's memory on the device: a host blob of host GPU memory made
- * for one context, mapped where the driver placed it with the caching the
- * device answers, and released in reverse (docs/host-memory.md). The device
- * answers over a real control queue, as it does at StartDevice. */
 #include "miniport/memory/host_visible_blob.hpp"
 #include "core/support/status.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
@@ -34,8 +30,6 @@ using av::Violation;
 namespace av {
 
 struct HostVisibleBlobProbe {
-    /* A blob that says it is mapped with no resource behind it: what the class
-     * never builds, and what its invariant is there to catch. */
     static void map_without_a_resource(HostVisibleBlob &blob)
     {
         blob.resource_ = 0u;
@@ -43,7 +37,7 @@ struct HostVisibleBlobProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -53,8 +47,6 @@ constexpr std::uint32_t resource = 0x01000000u;
 constexpr std::uint32_t context_id = 3u;
 const HostMemoryRequest upload(HostMemoryRequest::Kind::upload, 0u);
 
-/* A device that answers each control request from the stall between the
- * driver's polls, with what the test told it to say. */
 class Host {
 public:
     explicit Host(MappedVirtioFunction &mapped) : queue_(mapped.queue_device(control_queue))
@@ -64,7 +56,6 @@ public:
     void refuse_next() { refuse_ = true; }
     void refuse_attaches() { refuse_attach_ = true; }
     void answer_nothing() { silent_ = true; }
-    /* Bytes no device sends: too short to be a response header. */
     void answer_garbage() { garbage_ = true; }
     std::uint32_t answered() const { return answered_; }
     FakeVirtqueueDevice &queue() { return queue_; }
@@ -125,7 +116,7 @@ private:
     std::optional<VirtioGpuDevice> device_;
 };
 
-}  // namespace
+}
 
 TEST(host_visible_blob, holds_nothing_until_it_is_created)
 { MappedVirtioFunction mapped;
@@ -146,19 +137,16 @@ TEST(host_visible_blob, is_created_mapped_and_released_in_reverse)
   CHECK(!blob.mapped());
   CHECK_STATUS(blob.map(fixture.device(), 4u * page), Status::ok);
   CHECK(blob.mapped());
-  CHECK(blob.invariants_hold());   /* mapped, with the resource behind it */
+  CHECK(blob.invariants_hold());
   CHECK_EQ(blob.offset(), 4u * page);
   CHECK_STATUS(blob.unmap(fixture.device()), Status::ok);
   CHECK(!blob.mapped());
-  CHECK(blob.created());                 /* the device keeps what it holds */
+  CHECK(blob.created());
   CHECK_STATUS(blob.destroy(fixture.device()), Status::ok);
   CHECK(!blob.created());
   CHECK_EQ(host.answered(), 4u);
   CHECK(blob.invariants_hold()); }
 
-/* A window chunk remembers only its resource and where its blob was placed:
- * the blob rebuilt from those is created and mapped there, and comes down with
- * an unmap and then an unref. */
 TEST(host_visible_blob, a_blob_rebuilt_from_what_a_chunk_remembers_comes_down_in_reverse)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -174,11 +162,9 @@ TEST(host_visible_blob, a_blob_rebuilt_from_what_a_chunk_remembers_comes_down_in
   CHECK(!placed.created());
   CHECK(!placed.mapped());
   CHECK_EQ(host.answered(), 2u);
-  CHECK_EQ(host.queue().request_type(0u), 0x0209u);   /* RESOURCE_UNMAP_BLOB */
-  CHECK_EQ(host.queue().request_type(1u), 0x0102u);   /* RESOURCE_UNREF */ }
+  CHECK_EQ(host.queue().request_type(0u), 0x0209u);
+  CHECK_EQ(host.queue().request_type(1u), 0x0102u);   }
 
-/* The answer to a map is read, not assumed: a blob the driver thinks is mapped
- * and is not would hand a process whatever else is at that offset. */
 TEST(host_visible_blob_map, a_refused_map_leaves_it_unmapped)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -191,8 +177,6 @@ TEST(host_visible_blob_map, a_refused_map_leaves_it_unmapped)
   CHECK_EQ(blob.offset(), 0u);
   CHECK(blob.invariants_hold()); }
 
-/* An OK_MAP_INFO that is not the caching the device promised is not a mapping
- * this driver knows how to hand out. */
 TEST(host_visible_blob_map, an_answer_of_another_kind_is_refused)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -213,8 +197,6 @@ TEST(host_visible_blob_map, a_device_that_answers_nothing_leaves_it_unmapped)
   CHECK_STATUS(blob.map(fixture.device(), page), Status::not_found);
   CHECK(!blob.mapped()); }
 
-/* Order is the whole contract: nothing is mapped before it exists, nothing is
- * mapped twice, and nothing is unmapped or destroyed that was not. */
 TEST(host_visible_blob, refuses_every_step_out_of_order)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -229,8 +211,6 @@ TEST(host_visible_blob, refuses_every_step_out_of_order)
   CHECK_STATUS(blob.map(fixture.device(), page), Status::ok);
   CHECK_STATUS(blob.map(fixture.device(), 2u * page), Status::invalid_state);
   CHECK_EQ(blob.offset(), page);
-  /* Destroying a mapped blob unmaps it first: the device refuses an unref of
-   * something still placed in its region. */
   CHECK_STATUS(blob.destroy(fixture.device()), Status::ok);
   CHECK(!blob.mapped());
   CHECK(!blob.created());
@@ -247,8 +227,6 @@ TEST(host_visible_blob_create, refuses_what_is_not_a_page_multiple)
   CHECK(!blob.created());
   CHECK_EQ(host.answered(), 0u); }
 
-/* A blob is made for a context, of memory a host GPU has: neither may be
- * missing, and nothing is asked of the device when one is. */
 TEST(host_visible_blob_create, refuses_no_context_and_a_request_no_driver_makes)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -263,8 +241,6 @@ TEST(host_visible_blob_create, refuses_no_context_and_a_request_no_driver_makes)
   CHECK(!blob.created());
   CHECK_EQ(host.answered(), 0u); }
 
-/* What the device is asked to make is the context's, of the memory the
- * process named, carried as the blob id. */
 TEST(host_visible_blob_create, asks_for_the_contexts_memory_as_the_blob_id)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -283,9 +259,6 @@ TEST(host_visible_blob_create, asks_for_the_contexts_memory_as_the_blob_id)
   CHECK(asked.size() == 3u * page);
   CHECK_STATUS(blob.destroy(fixture.device()), Status::ok); }
 
-/* The device says how the host maps the memory, and a process must map it
- * the same way: cached memory is write-back, anything else the device may
- * say is write-combined. Until it is mapped there is nothing to say. */
 TEST(host_visible_blob_map, takes_the_caching_the_device_answers)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -313,13 +286,8 @@ TEST(host_visible_blob, is_passive_only)
   fixture.mapped().platform().set_irql(Irql::passive);
   CHECK(fixture.mapped().platform().claim(Violation::irql_ceiling));
   while (fixture.mapped().platform().claim(Violation::irql_ceiling)) {}
-  /* The wait for its turn at the queue, which blocks. */
   CHECK(fixture.mapped().platform().claim(Violation::blocking_at_dispatch)); }
 
-/* The device refusing each step in turn: a create it will not make, an unmap it
- * will not take, and an unref it refuses. Each leaves the blob where it was,
- * because what the driver believes about the device's memory has to be what the
- * device said. */
 TEST(host_visible_blob, a_device_that_refuses_a_step_leaves_it_where_it_was)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -333,11 +301,9 @@ TEST(host_visible_blob, a_device_that_refuses_a_step_leaves_it_where_it_was)
   CHECK_STATUS(blob.map(fixture.device(), page), Status::ok);
   host.refuse_next();
   CHECK_STATUS(blob.unmap(fixture.device()), Status::not_supported);
-  CHECK(blob.mapped());                        /* still the device's to hold */
+  CHECK(blob.mapped());
   CHECK_EQ(blob.offset(), page);
 
-  /* Destroying it unmaps first, so a refused unmap stops the destroy before it
-   * unrefs something the device still has placed. */
   host.refuse_next();
   CHECK_STATUS(blob.destroy(fixture.device()), Status::not_supported);
   CHECK(blob.created());
@@ -350,10 +316,6 @@ TEST(host_visible_blob, a_device_that_refuses_a_step_leaves_it_where_it_was)
   CHECK_STATUS(blob.destroy(fixture.device()), Status::ok);
   CHECK(!blob.created()); }
 
-/* A device that does not answer a create in time may still make the blob, and
- * a blob made after the driver gave its id back has every later open of that
- * id refused. So the blob counts as created and an unref follows; one that is
- * not answered either leaves it so, and the id is kept. */
 TEST(host_visible_blob, a_create_the_device_did_not_answer_is_unrefed_before_its_id_goes_back)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -373,8 +335,6 @@ TEST(host_visible_blob_invariants, a_mapping_with_no_resource_is_caught)
   av::HostVisibleBlobProbe::map_without_a_resource(blob);
   CHECK(!blob.invariants_hold()); }
 
-/* The device that held it is gone - a power transition destroyed it - so there
- * is nothing to tell and nothing left to hold. */
 TEST(host_visible_blob_abandon, forgets_a_blob_whose_device_went_away)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -387,12 +347,9 @@ TEST(host_visible_blob_abandon, forgets_a_blob_whose_device_went_away)
   CHECK(!blob.created());
   CHECK(!blob.mapped());
   CHECK_EQ(blob.offset(), 0u);
-  CHECK_EQ(host.answered(), answered);   /* nothing was said to a device that is gone */
+  CHECK_EQ(host.answered(), answered);
   CHECK(blob.invariants_hold()); }
 
-/* A device that answers bytes no device sends is not a device to believe: the
- * blob is left as it was rather than recorded from a reply that did not
- * decode. */
 TEST(host_visible_blob, an_answer_that_does_not_decode_is_malformed)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -421,10 +378,8 @@ std::uint64_t u64_at(const std::uint8_t *bytes, std::size_t at)
     return value;
 }
 
-}  // namespace
+}
 
-/* Pages a process lent: a HOST3D_GUEST blob of no entries, not mappable,
- * then the pages in order, one memory entry per run of adjacent frames. */
 TEST(host_visible_blob_create_over, makes_the_blob_then_names_its_pages_run_by_run)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -443,19 +398,18 @@ TEST(host_visible_blob_create_over, makes_the_blob_then_names_its_pages_run_by_r
   CHECK_EQ(u32_at(create, 16u), context_id);
   CHECK_EQ(u32_at(create, 24u), resource);
   CHECK_EQ(u32_at(create, 28u), CreateBlobRequest::memory_host3d_guest);
-  CHECK_EQ(u32_at(create, 32u), 0u);                 /* not mappable */
-  CHECK_EQ(u32_at(create, 36u), 0u);                 /* no entries yet */
+  CHECK_EQ(u32_at(create, 32u), 0u);
+  CHECK_EQ(u32_at(create, 36u), 0u);
   CHECK_EQ(u64_at(create, 40u), std::uint64_t{readback.encoded()});
   CHECK_EQ(u64_at(create, 48u), 3u * page);
   const std::uint8_t *const attach = host.queue().request(1u);
   CHECK_EQ(u32_at(attach, 0u), 0x0106u);
   CHECK_EQ(u32_at(attach, 24u), resource);
-  CHECK_EQ(u32_at(attach, 28u), 2u);                 /* two runs */
+  CHECK_EQ(u32_at(attach, 28u), 2u);
   CHECK_EQ(u64_at(attach, 32u), 0x40000u);
   CHECK_EQ(u32_at(attach, 40u), 2u * page);
   CHECK_EQ(u64_at(attach, 48u), 0x90000u);
   CHECK_EQ(u32_at(attach, 56u), page);
-  /* What a chunk remembers of it comes down with an unref alone. */
   HostVisibleBlob lent(fixture.mapped().platform(), resource);
   CHECK(lent.created());
   CHECK(!lent.mapped());
@@ -463,7 +417,6 @@ TEST(host_visible_blob_create_over, makes_the_blob_then_names_its_pages_run_by_r
   CHECK_EQ(host.queue().request_type(2u), 0x0102u);
   fixture.mapped().platform().unlock_process_pages(locked); }
 
-/* More pages than one piece holds go in as many pieces, in order. */
 TEST(host_visible_blob_create_over, a_range_past_one_piece_is_named_in_pieces)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -503,23 +456,19 @@ TEST(host_visible_blob_create_over, refuses_what_it_cannot_name_and_counts_a_blo
   CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, (std::uint64_t{1} << 32u) * page),
                Status::invalid_parameter);
   CHECK_EQ(host.answered(), 0u);
-  /* No room for a piece asks the device nothing. */
   fixture.mapped().platform().fail_allocation_at(1u);
   CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, page), Status::no_memory);
   fixture.mapped().platform().fail_allocation_at(2u);
   CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, page), Status::no_memory);
   CHECK(!blob.created());
-  /* A creation the device refused is no blob. */
   host.refuse_next();
   CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, page), Status::not_supported);
   CHECK(!blob.created());
-  /* A piece the device refused leaves a blob it made, to be released. */
   host.refuse_attaches();
   CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, page), Status::not_supported);
   CHECK(blob.created());
   CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, page), Status::invalid_state);
   CHECK_STATUS(blob.destroy(device), Status::ok);
-  /* Pages the platform cannot read back are no pages to name. */
   std::uint64_t not_a_lock = 0u;
   CHECK_STATUS(blob.create_over(device, context_id, resource, readback, &not_a_lock, page), Status::invalid_parameter);
   CHECK(blob.created());

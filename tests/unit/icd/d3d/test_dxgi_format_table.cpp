@@ -1,7 +1,3 @@
-/* What a Direct3D runtime is told of each DXGI format, from what the host's
- * device answered: the host's D3D11 support words become DDI bits, each
- * family's multisampling settles on one story for both runtimes, and no
- * answer is one the runtime refuses the driver over. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/dxgi_format_table.hpp"
 #include "proto/d3d/dxgi_format.hpp"
@@ -12,8 +8,6 @@
 using av::d3d::DxgiFormatTable;
 
 namespace {
-
-/* D3D11_FORMAT_SUPPORT and _SUPPORT2 bits, as the host answers them. */
 constexpr std::uint32_t api_buffer = 0x1u;
 constexpr std::uint32_t api_sample = 0x200u;
 constexpr std::uint32_t api_render_target = 0x4000u;
@@ -25,7 +19,6 @@ constexpr std::uint32_t api_multisample_load = 0x400000u;
 constexpr std::uint32_t api2_uav_reads = 0x40u;
 constexpr std::uint32_t api2_logic_op = 0x100u;
 
-/* D3D10_DDI_FORMAT_SUPPORT bits, as the runtime is told them. */
 constexpr std::uint32_t ddi_sample = 0x1u;
 constexpr std::uint32_t ddi_render_target = 0x2u;
 constexpr std::uint32_t ddi_blendable = 0x4u;
@@ -37,7 +30,6 @@ constexpr std::uint32_t ddi_uav_reads = 0x20000u;
 constexpr std::uint32_t ddi_display = 0x200000u;
 constexpr std::uint32_t ddi_multiplane_overlay = 0x8000u;
 
-/* DXGI_FORMAT numbers. */
 constexpr std::uint32_t rgba32_float = 2u;
 constexpr std::uint32_t rgb32_typeless = 5u, rgb32_float = 6u, rgb32_uint = 7u;
 constexpr std::uint32_t rgba8_typeless = 27u, rgba8_unorm = 28u, rgba8_srgb = 29u, rgba8_uint = 30u,
@@ -46,9 +38,6 @@ constexpr std::uint32_t d24_s8 = 45u;
 constexpr std::uint32_t bgra_unorm = 87u, bgra_typeless = 90u;
 constexpr std::uint32_t r16_typeless = 53u;
 
-/* DXGI's typeless families, numbered after their head, and the two BGRA
- * families, named member by member: the runtime's own parent of each format,
- * written out here apart from the table's. */
 struct Family {
     std::uint32_t head, last;
 };
@@ -77,8 +66,6 @@ bool is_typeless(std::uint32_t format)
 constexpr std::uint32_t renders = api_render_target | api_blendable | api_multisample_render_target |
                                   api_multisample_load | api_sample;
 
-/* An RGBA8 family whose two multisampled members disagree on their levels,
- * and a member that renders but only loads multisampled. */
 void record_rgba8(DxgiFormatTable &table)
 {
     table.record(rgba8_unorm, renders | api_display, 0u);
@@ -90,7 +77,7 @@ void record_rgba8(DxgiFormatTable &table)
     table.record(rgba8_uint, api_render_target | api_sample | api_multisample_load, 0u);
 }
 
-}  // namespace
+}
 
 TEST(dxgi_format_table, the_hosts_bits_become_the_ddis_bits)
 { DxgiFormatTable table;
@@ -101,18 +88,15 @@ TEST(dxgi_format_table, the_hosts_bits_become_the_ddis_bits)
            ddi_sample | ddi_render_target | ddi_blendable | ddi_multisample_render_target | ddi_multisample_load |
                ddi_display | ddi_multiplane_overlay);
   CHECK_EQ(table.format_support(rgba32_float), ddi_buffer | ddi_sample | ddi_uav_reads | ddi_logic_op);
-  /* Nothing recorded, nothing claimed; and no format is 0 or past the table. */
   CHECK_EQ(table.format_support(1u), 0u);
   CHECK_EQ(table.format_support(0u), 0u);
   CHECK_EQ(table.format_support(av::DxgiFormat::count), 0u); }
 
-/* An overlay plane is composed on the host from a format the scanout shows:
- * the three 32-bit RGB layouts, and only while the host displays them. */
 TEST(dxgi_format_table, an_overlay_plane_takes_the_displayed_32_bit_rgb_formats)
 { DxgiFormatTable table;
   constexpr std::uint32_t bgra8_unorm = 87u, bgrx8_unorm = 88u, bgra8_srgb = 91u;
   table.record(bgra8_unorm, api_sample | api_render_target | api_display, 0u);
-  table.record(bgrx8_unorm, api_sample | api_render_target, 0u);   /* not displayed */
+  table.record(bgrx8_unorm, api_sample | api_render_target, 0u);
   table.record(bgra8_srgb, api_sample | api_render_target | api_display, 0u);
   table.record(rgba32_float, api_sample | api_display, 0u);
   table.settle();
@@ -121,9 +105,6 @@ TEST(dxgi_format_table, an_overlay_plane_takes_the_displayed_32_bit_rgb_formats)
   CHECK_EQ(table.format_support(bgra8_srgb) & ddi_multiplane_overlay, 0u);
   CHECK_EQ(table.format_support(rgba32_float) & ddi_multiplane_overlay, 0u); }
 
-/* Whether the host tiles a format is its own bit, which only a driver that
- * carries tiled resources adds - Direct3D 11's never does - and no other
- * answer carries it. */
 TEST(dxgi_format_table, a_format_the_host_tiles_is_told_apart_from_its_other_support)
 { DxgiFormatTable table;
   constexpr std::uint32_t api2_tiled = 0x200u, ddi_tiled = 0x10000u;
@@ -135,8 +116,6 @@ TEST(dxgi_format_table, a_format_the_host_tiles_is_told_apart_from_its_other_sup
   CHECK_EQ(table.tiled_support(av::DxgiFormat::count), 0u);
   CHECK_EQ(table.format_support(rgba8_unorm) & ddi_tiled, 0u); }
 
-/* Blending and multisampled rendering are rendering: claimed without a render
- * target, they are not told. */
 TEST(dxgi_format_table, blending_without_rendering_is_not_claimed)
 { DxgiFormatTable table;
   table.record(rgba32_float, api_blendable | api_multisample_render_target, 0u);
@@ -146,27 +125,20 @@ TEST(dxgi_format_table, blending_without_rendering_is_not_claimed)
   CHECK(!table.multisample_candidate(rgba32_float));
   CHECK_EQ(table.quality_levels(rgba32_float, 4u), 0u); }
 
-/* A depth format's render target is its depth-stencil view, and it is never
- * sampled itself. */
 TEST(dxgi_format_table, a_depth_format_renders_by_its_depth_stencil_and_is_never_sampled)
 { DxgiFormatTable table;
   table.record(d24_s8, api_depth_stencil | api_sample | api_buffer | api_multisample_render_target, 0u);
   table.settle();
-  /* No level at any count: its multisampling is not told either. */
   CHECK_EQ(table.format_support(d24_s8), ddi_render_target);
   table.record_samples(d24_s8, 4u, 1u);
   table.settle();
   CHECK_EQ(table.format_support(d24_s8), ddi_render_target | ddi_multisample_render_target);
   CHECK_EQ(table.quality_levels(d24_s8, 4u), 1u);
-  /* Without the depth-stencil bit it does not render at all. */
   DxgiFormatTable bare;
   bare.record(d24_s8, api_sample, 0u);
   bare.settle();
   CHECK_EQ(bare.format_support(d24_s8), 0u); }
 
-/* A family tells one story: every member that keeps multisampling answers the
- * family's levels, the typeless parent the same, and a member that does not
- * multisample answers none. Both drivers are told it. */
 TEST(dxgi_format_table, a_family_answers_one_set_of_levels)
 { DxgiFormatTable table;
   record_rgba8(table);
@@ -177,27 +149,20 @@ TEST(dxgi_format_table, a_family_answers_one_set_of_levels)
   CHECK_EQ(table.quality_levels(rgba8_unorm, 2u), 1u);
   CHECK_EQ(table.quality_levels(rgba8_srgb, 2u), 1u);
   CHECK_EQ(table.quality_levels(rgba8_uint, 4u), 0u);
-  /* No count past the family's recorded ones: 8 and 16 samples are none. */
   CHECK_EQ(table.quality_levels(rgba8_unorm, 8u), 0u);
   CHECK_EQ(table.quality_levels(rgba8_unorm, 16u), 0u);
-  /* One sample is every format's one level; a count that is no power of two,
-   * or past 16, is no count. */
   CHECK_EQ(table.quality_levels(rgba8_uint, 1u), 1u);
   CHECK_EQ(table.quality_levels(rgba8_unorm, 3u), 0u);
   CHECK_EQ(table.quality_levels(rgba8_unorm, 32u), 0u);
   CHECK_EQ(table.quality_levels(0u, 1u), 0u);
   CHECK_EQ(table.quality_levels(av::DxgiFormat::count, 1u), 0u); }
 
-/* A member that claims multisampled rendering at no count is told none, and
- * its siblings keep theirs: pooled, it took its family down with it, and the
- * formats DWM draws its acrylic backdrop in lost their multisampling. */
 TEST(dxgi_format_table, a_member_with_no_count_takes_nothing_from_its_siblings)
 { DxgiFormatTable table;
   record_rgba8(table);
   table.record(rgba8_snorm, renders, 0u);
   table.settle();
   CHECK_EQ(table.quality_levels(rgba8_snorm, 4u), 0u);
-  /* It still loads from a multisampled view, which is its part in the family. */
   CHECK_EQ(table.format_support(rgba8_snorm) & (ddi_multisample_render_target | ddi_multisample_load),
            ddi_multisample_load);
   CHECK_EQ(table.quality_levels(rgba8_unorm, 4u), 3u);
@@ -206,11 +171,6 @@ TEST(dxgi_format_table, a_member_with_no_count_takes_nothing_from_its_siblings)
            ddi_sample | ddi_render_target | ddi_blendable | ddi_multisample_render_target | ddi_multisample_load |
                ddi_display | ddi_multiplane_overlay); }
 
-/* An Intel GPU renders R32G32B32_FLOAT multisampled, and neither its typeless
- * parent nor its UINT sibling - which cannot even load multisampled. The
- * runtime refuses a member that takes no part in its family's multisampling,
- * so the family offers none: told otherwise, it refused the driver and dxdiag
- * found no feature level. */
 TEST(dxgi_format_table, a_member_that_takes_no_part_keeps_its_family_from_multisampling)
 { DxgiFormatTable table;
   table.record(rgb32_float, renders, 0u);
@@ -224,9 +184,6 @@ TEST(dxgi_format_table, a_member_that_takes_no_part_keeps_its_family_from_multis
   }
   CHECK_EQ(table.format_support(rgb32_float) & (ddi_multisample_render_target | ddi_multisample_load), 0u); }
 
-/* A member that only loads multisampled takes part: the typeless parent
- * answers what the rendering member does, not the host's own answer for it,
- * and the loading member keeps its loading with no levels of its own. */
 TEST(dxgi_format_table, a_typeless_parent_answers_what_its_members_do)
 { DxgiFormatTable table;
   table.record(rgb32_float, renders, 0u);
@@ -240,9 +197,6 @@ TEST(dxgi_format_table, a_typeless_parent_answers_what_its_members_do)
   }
   CHECK_EQ(table.format_support(rgb32_uint), ddi_sample | ddi_multisample_load); }
 
-/* A member that multisamples at fewer counts than its siblings gives its
- * multisampling up when keeping it would cost them more counts than it
- * offers. */
 TEST(dxgi_format_table, a_weak_member_gives_way_to_its_siblings)
 { DxgiFormatTable table;
   for (const std::uint32_t member : {rgba8_unorm, rgba8_srgb}) {
@@ -258,8 +212,6 @@ TEST(dxgi_format_table, a_weak_member_gives_way_to_its_siblings)
   CHECK_EQ(table.quality_levels(rgba8_snorm, 2u), 0u);
   CHECK_EQ(table.format_support(rgba8_snorm) & ddi_multisample_render_target, 0u); }
 
-/* And a strong member gives its extra counts up when the rest of the family
- * shares fewer: more members at the shared counts offer more. */
 TEST(dxgi_format_table, a_strong_member_gives_its_extra_counts_to_the_family)
 { DxgiFormatTable table;
   table.record(rgba8_unorm, renders, 0u);
@@ -276,11 +228,6 @@ TEST(dxgi_format_table, a_strong_member_gives_its_extra_counts_to_the_family)
       CHECK_EQ(table.quality_levels(member, 16u), 0u);
   } }
 
-/* Whatever the host answers, every family tells one story: each member that
- * claims multisampled rendering answers its typeless parent's levels at every
- * count, and offers no level the host did not answer for it; each member that
- * does not answers none; and nothing claimed multisampled answers none at
- * every count ("MSAA quality reported to be 0"). */
 TEST(dxgi_format_table, any_hosts_answers_keep_every_family_consistent)
 { std::uint32_t seed = 0x2545f491u;
   const auto next = [&seed]() {
@@ -320,7 +267,6 @@ TEST(dxgi_format_table, any_hosts_answers_keep_every_family_consistent)
               CHECK(levels <= recorded[format][step]);
           }
           if (claims) CHECK(counted);
-          /* A typed member that takes no part: its parent offers nothing. */
           const bool takes_part = (table.format_support(format) & (ddi_multisample_render_target | ddi_multisample_load)) != 0u;
           if (parent != format && !takes_part && table.format_support(format) != 0u)
               for (std::uint32_t step = 1u; step < DxgiFormatTable::sample_steps; step++)
@@ -328,8 +274,6 @@ TEST(dxgi_format_table, any_hosts_answers_keep_every_family_consistent)
       }
   } }
 
-/* The two BGRA families are named member by member, not numbered after their
- * head. */
 TEST(dxgi_format_table, a_bgra_member_pools_under_its_typeless_head)
 { DxgiFormatTable table;
   table.record(bgra_unorm, renders, 0u);
@@ -337,7 +281,6 @@ TEST(dxgi_format_table, a_bgra_member_pools_under_its_typeless_head)
   table.settle();
   CHECK_EQ(table.quality_levels(bgra_typeless, 4u), 2u);
   CHECK_EQ(table.quality_levels(bgra_unorm, 4u), 2u);
-  /* A family nobody multisamples settles at none. */
   CHECK_EQ(table.quality_levels(r16_typeless, 4u), 0u); }
 
 TEST(dxgi_format_table, a_multisample_candidate_claims_multisampled_rendering)
@@ -349,7 +292,6 @@ TEST(dxgi_format_table, a_multisample_candidate_claims_multisampled_rendering)
   CHECK(!table.multisample_candidate(rgba8_uint));
   CHECK(!table.multisample_candidate(av::DxgiFormat::count)); }
 
-/* What is out of the table's range is not recorded, and changes nothing. */
 TEST(dxgi_format_table, an_answer_for_no_format_or_no_count_is_dropped)
 { DxgiFormatTable table;
   table.record(av::DxgiFormat::count, renders, 0u);
@@ -362,8 +304,6 @@ TEST(dxgi_format_table, an_answer_for_no_format_or_no_count_is_dropped)
   CHECK_EQ(table.quality_levels(rgba8_unorm, 2u), 0u);
   CHECK_EQ(table.format_support(rgba8_unorm) & ddi_multisample_render_target, 0u); }
 
-/* Video an overlay plane shows - NV12 and YUY2, which the host converts - is
- * told it wherever the host has the format at all. */
 TEST(dxgi_format_table, an_overlay_plane_takes_the_video_formats_the_host_has)
 { DxgiFormatTable table;
   constexpr std::uint32_t nv12 = 103u, yuy2 = 107u;

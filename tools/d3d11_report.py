@@ -45,13 +45,11 @@ def build():
 
 
 def run_guest(args, out):
-    """The guest's run, and everything it wrote brought back."""
     work = args.work
     guest_shell(work, "ps", f"Remove-Item -Recurse -Force {GUEST_DIR} -ErrorAction SilentlyContinue; "
                             f"New-Item -ItemType Directory -Force {GUEST_DIR}\\out, {GUEST_DIR}\\shaders | Out-Null")
     guest_shell(work, "push", str(ROOT / "build" / "guest" / "avd3d11samples.exe"), GUEST_EXE)
     print("guest: rendering", flush=True)
-    # The user's interactive session, where the D3D runtime loads the user-mode driver.
     command = (f"/c {GUEST_EXE} --out {GUEST_DIR}\\out --shaders {GUEST_DIR}\\shaders --frames {args.frames} "
                f"--warmup {args.warmup} --width {args.width} --height {args.height} > {GUEST_DIR}\\run.txt 2>&1")
     output = guest_shell(work, "ps", f"""
@@ -67,7 +65,6 @@ while ((Get-ScheduledTask avsamples).State -eq 'Running') {{ Start-Sleep 1 }}
 Get-Content {GUEST_DIR}\\run.txt -ErrorAction SilentlyContinue""", timeout=1800)
     print(output, flush=True)
     (out / "guest.log").write_text(output)
-    # Everything in one gzip-compressed tar-like bundle: file name, length, bytes.
     bundle = f"{GUEST_DIR}\\bundle.gz"
     guest_shell(work, "ps", f"""
 $out = [IO.File]::Create('{bundle}')
@@ -107,12 +104,6 @@ HOST_TIMEOUT = 1800
 
 
 def host_run(command, environment=None):
-    """A host half's output, whole or as far as it got. The guest's results are
-    in hand by the time the host renders, so a native run that stops answering
-    is a report whose samples past that point have no host picture, which
-    a judge fails, not a report that is never written.
-    A runner that writes metrics.tsv after every sample, as the D3D11 samples
-    do, keeps what finished before the stop."""
     try:
         done = subprocess.run(command, capture_output=True, text=True, env=environment, timeout=HOST_TIMEOUT)
         return done.stdout + done.stderr
@@ -155,7 +146,6 @@ def read_frame(path):
 
 
 def png(path, width, height, bgra):
-    """RGB PNG from BGRA rows, with zlib alone."""
     rows = bytearray()
     stride = width * 4
     for y in range(height):
@@ -175,7 +165,6 @@ def png(path, width, height, bgra):
 
 
 def compare(host, guest):
-    """Per-channel differences, and a heat map of the largest channel's (x8)."""
     width, height, a = host
     _, _, b = guest
     diff = bytes(abs(x - y) for x, y in zip(a, b))
@@ -196,7 +185,7 @@ def compare(host, guest):
     heat = bytearray(count * 4)
     for i, m in enumerate(worst):
         v = min(255, m * 8)
-        heat[i * 4 + 0] = 0 if v else 40      # blue: background where equal
+        heat[i * 4 + 0] = 0 if v else 40
         heat[i * 4 + 1] = v // 2
         heat[i * 4 + 2] = v
         heat[i * 4 + 3] = 255
@@ -206,8 +195,6 @@ def compare(host, guest):
 
 
 def write_summary(out, api, rows, rate="fps", judge=None):
-    """summary.json beside index.html: each sample's rates, their ratio and
-    its picture's verdict, for tools/api_report.py's overview of every API."""
     samples = []
     for row in rows:
         h, g = row["host"], row["guest"]
@@ -262,7 +249,6 @@ def report(args, out):
     write_summary(out, "D3D11", rows)
 
 
-# The report's stylesheet, which tools/vulkan_report.py's report shares.
 STYLE = """:root { --bg:#fafaf8; --fg:#1d1d1b; --muted:#6b6b66; --card:#fff; --line:#e4e2dc; --good:#1f7a4d; --warn:#a36a00; --bad:#b3261e; }
 @media (prefers-color-scheme: dark) { :root { --bg:#161614; --fg:#ecebe6; --muted:#a19f97; --card:#1f1f1c; --line:#33322e; --good:#5cc08a; --warn:#e0a33a; --bad:#f07167; } }
 body { background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, sans-serif; margin:0; padding:24px max(16px, 3vw); }

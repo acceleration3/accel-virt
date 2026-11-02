@@ -13,8 +13,6 @@ DescriptorTemplateTable::DescriptorTemplateTable(BlockSource &memory, ThreadLock
     AV_SCOPE("DescriptorTemplateTable::DescriptorTemplateTable");
 }
 
-/* A non-dispatchable handle is a pointer on 64-bit Windows and a 64-bit
- * integer on 32-bit, so its bytes are what is compared. */
 uint64_t DescriptorTemplateTable::key_of(VkDescriptorUpdateTemplate made) const
 {
     AV_SCOPE("DescriptorTemplateTable::key_of");
@@ -34,8 +32,6 @@ VkResult DescriptorTemplateTable::record(VkDevice device, VkDescriptorUpdateTemp
         return VK_ERROR_INITIALIZATION_FAILED;
     const ThreadLockHold         released(lock_);
     const DescriptorTemplateSlot recorded{device, made, layout.bytes()};
-    /* A handle a driver handed out again is this template now, not the one
-     * that was destroyed at the same address. */
     DescriptorTemplateSlot *const known = slots_.find(key_of(made));
     if (known != nullptr) {
         *known = recorded;
@@ -84,4 +80,4 @@ bool DescriptorTemplateTable::invariants_hold() const
     return named && slots_.invariants_hold();
 }
 
-}  // namespace av::icd
+}

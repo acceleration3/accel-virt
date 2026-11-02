@@ -1,7 +1,3 @@
-/* The transport's own commands (docs/protocol.md, "Execution"): a NOP is
- * answered with nothing, a NOP carrying a body is framing no producer writes,
- * the blob pair goes to the blob command, the shared-object trio to theirs,
- * and any other transport id is one the device does not know. */
 #include "core/support/status.hpp"
 #include "device/execution/blob_imports.hpp"
 #include "device/recording/wire_recorder.hpp"
@@ -26,8 +22,6 @@ using av::Status;
 using av::TransportCommand;
 
 namespace {
-
-/* What a context's transport commands run over: no library, no blobs. */
 class Fixture {
 public:
     Fixture()
@@ -57,7 +51,7 @@ private:
     std::size_t         produced_ = 0u;
 };
 
-}  // namespace
+}
 
 TEST(transport_command_run, a_nop_without_a_body_runs_whether_or_not_it_asks_for_an_answer)
 { Fixture fixture;
@@ -89,8 +83,6 @@ TEST(transport_command_run, a_transport_id_the_device_does_not_answer_is_not_kno
       CHECK_EQ(fixture.produced(), 0u);
   } }
 
-/* The ids are the blob command's: a body it refuses to decode is still its
- * answer, and a body of the wrong length its framing fault. */
 TEST(transport_command_run, the_blob_ids_are_answered_by_the_blob_command)
 { Fixture fixture;
   CHECK_EQ(CommandHeader::import_blob_id, 0x00000002u);
@@ -108,13 +100,9 @@ TEST(transport_command_run, the_blob_ids_are_answered_by_the_blob_command)
   const std::uint8_t handle[8] = {};
   CHECK_STATUS(fixture.run(CommandHeader(CommandHeader::release_blob_id, 16u, 0u), handle), Status::ok);
   CHECK_EQ(fixture.produced(), 0u);
-  CHECK(fixture.host().claim(HostViolation::worker_required));   /* the release, run here on the main loop */
+  CHECK(fixture.host().claim(HostViolation::worker_required));
   CHECK_STATUS(fixture.run(CommandHeader(CommandHeader::release_blob_id, 8u, 0u)), Status::malformed); }
 
-/* Every single-bit corruption of a NOP's framed header, decoded as the stream
- * decodes it: the outcome is decided per field by the contract, not read back
- * off the implementation. A flip that makes the id 2 or 3 names a blob command
- * with no body, which is framing. */
 TEST(transport_command_run, every_bit_flip_of_a_nop_is_refused_skipped_or_still_a_nop)
 { Fixture fixture;
   std::uint8_t bytes[CommandHeader::encoded_size] = {};
@@ -126,17 +114,14 @@ TEST(transport_command_run, every_bit_flip_of_a_nop_is_refused_skipped_or_still_
       CommandHeader header;
       const Status  decoded = header.decode(flipped, sizeof flipped);
       if (bit == 35u || bit > 56u) {
-          CHECK_STATUS(decoded, Status::malformed);   /* a size of 0, or a flag nobody defined */
+          CHECK_STATUS(decoded, Status::malformed);
           continue;
       }
       CHECK_STATUS(decoded, Status::ok);
       if (bit >= 16u && bit < 32u) {
-          CHECK(header.api() != CommandHeader::transport_api);   /* another API's command: never a transport one */
+          CHECK(header.api() != CommandHeader::transport_api);
           continue;
       }
-      /* Flipping a low bit of the NOP's id makes one of the other transport
-       * ids as often as it makes an unknown one, and each of those reads its
-       * own body: with none framed, that is this command's framing fault. */
       const bool known = (header.id() >= CommandHeader::nop_id &&
                           header.id() <= CommandHeader::release_shared_object_id) ||
                          header.id() == CommandHeader::answer_piece_id;

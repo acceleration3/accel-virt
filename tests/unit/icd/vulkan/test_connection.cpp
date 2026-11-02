@@ -1,10 +1,3 @@
-/* One instance's connection over MockKmt: it opens on the avgpu adapter among
- * others with that adapter's LUID and a Vulkan context whose ring is order 20,
- * staging its commands in 256 KiB it takes when it opens, sends one command at a
- * time under its lock, answers not_supported for every reason it cannot open
- * and no_memory when the staging cannot be had, with nothing left open, stays
- * faulted once the host fails it, and closes everything it opened. Invariants
- * after every step. */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/pci_location.hpp"
@@ -60,7 +53,6 @@ struct GuestConnectionProbe {
     static void set_adapter(GuestConnection &c, std::uint32_t adapter) { c.adapter_ = adapter; }
 };
 
-/* An established context whose name the transport no longer holds. */
 struct KmtTransportProbe {
     static std::uint32_t forget_name(KmtTransport &t)
     {
@@ -71,7 +63,7 @@ struct KmtTransportProbe {
     static void restore_name(KmtTransport &t, std::uint32_t name) { t.allocations_[0] = name; }
 };
 
-}  // namespace av
+}
 
 namespace av::icd {
 
@@ -81,7 +73,7 @@ struct ConnectionProbe {
     static AdapterSearch   &search(Connection &c) { return c.search_; }
 };
 
-}  // namespace av::icd
+}
 
 using av::GuestConnectionProbe;
 using av::KmtTransportProbe;
@@ -93,10 +85,7 @@ namespace {
 const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
                          PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
-/* The avgpu adapter is the second one added. */
 constexpr std::uint32_t avgpu_index = 1u;
-/* What an open connection holds: the adapter, a device, its paging queue, the
- * transport's two allocations, its DMA mapping and its context. */
 constexpr std::uint32_t open_objects = 7u;
 
 class Rig {
@@ -119,7 +108,6 @@ public:
         CHECK(!connection_.faulted());
         CHECK_EQ(connection_.luid(), 0u);
         CHECK_EQ(connection_.adapter(), 0u);
-        /* The D3DKMT device a swapchain's pacing waits on: none while closed. */
         CHECK_EQ(connection_.device(), 0u);
         CHECK_EQ(connection_.submissions(), 0u);
         CHECK_EQ(kmt_.open_objects(), 0u);
@@ -137,8 +125,6 @@ private:
     Connection          connection_;
 };
 
-/* vkCreateInstance, which names no dispatchable handle to unwrap, through the
- * connection's transport. */
 VkResult create_instance(Connection &connection, std::uint64_t &instance)
 {
     VkInstanceCreateInfo create = {};
@@ -146,7 +132,7 @@ VkResult create_instance(Connection &connection, std::uint64_t &instance)
     return av::vkproto::av_vkCreateInstance(connection.transport(), &create, nullptr, &instance);
 }
 
-}  // namespace
+}
 
 TEST(connection, is_closed_until_opened)
 { Rig rig;
@@ -160,7 +146,6 @@ TEST(connection, opens_a_vulkan_context_on_the_avgpu_adapter_with_its_luid)
   CHECK(rig.connection().invariants_hold());
   CHECK(rig.connection().opened());
   CHECK(!rig.connection().faulted());
-  /* The LUID of the adapter the connection kept, not the other one's. */
   CHECK_EQ(rig.connection().luid(), 0x0000000700000042ull);
   CHECK_EQ(ConnectionProbe::guest(rig.connection()).adapter(), ConnectionProbe::search(rig.connection()).adapter());
   CHECK_EQ(rig.connection().device(), ConnectionProbe::guest(rig.connection()).device());
@@ -187,9 +172,6 @@ TEST(connection, a_command_crosses_under_the_lock_and_its_answer_comes_back)
   CHECK(std::strcmp(rig.trace().text(), "Ss") == 0);
   CHECK(!rig.connection().faulted()); }
 
-/* A command as large as the staging: the room it lends is the 256 KiB less the
- * command's header, and a byte past it spills into the channel's memory and
- * crosses as a piece and the command (docs/protocol.md, "Long commands"). */
 TEST(connection, lends_a_command_all_of_its_staging_and_spills_past_it)
 { Rig rig;
   CHECK_STATUS(rig.connection().open(0u), Status::ok);
@@ -211,7 +193,7 @@ TEST(connection, lends_a_command_all_of_its_staging_and_spills_past_it)
 TEST(connection, answers_not_supported_for_every_reason_it_cannot_open_and_leaves_nothing_open)
 { struct Refusal {
       const char   *why;
-      MockKmt::Call call;      /* the call that fails; Call::count for none */
+      MockKmt::Call call;
       bool          no_avgpu;
   };
   const Refusal refusals[] = {
@@ -232,8 +214,6 @@ TEST(connection, answers_not_supported_for_every_reason_it_cannot_open_and_leave
       Connection          connection(kmt, platform, lock, log);
       kmt.add_adapter(basic_render, 3100u);
       if (!refusal.no_avgpu) kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
-      /* The LUID is asked twice: once as the adapters are listed, once by the
-       * connection. The connection's own is the one refused. */
       const std::uint32_t nth = refusal.call == MockKmt::Call::adapter_luid ? 2u : 1u;
       if (refusal.call != MockKmt::Call::count) kmt.fail_at(refusal.call, nth, MockKmt::invalid_parameter);
       const Status status = connection.open(0u);
@@ -301,8 +281,6 @@ TEST(connection, invariants_see_a_half_open_connection)
   AdapterSearch   &search = ConnectionProbe::search(connection);
   HostChannelProbe channel(ConnectionProbe::channel(connection));
   std::uint8_t     stray = 0u;
-  /* Closed, with staging kept, a channel open under it, an adapter still
-   * kept, a device still open. */
   CHECK(channel.swap_staging(&stray) == nullptr);
   CHECK(!connection.invariants_hold());
   channel.build_transport(guest);
@@ -317,8 +295,6 @@ TEST(connection, invariants_see_a_half_open_connection)
   CHECK(!connection.invariants_hold());
   guest.close();
   CHECK(connection.invariants_hold());
-  /* Open, with a context it does not name, no staging, the device gone, a
-   * device without its queue, another adapter. */
   CHECK_STATUS(connection.open(0u), Status::ok);
   KmtTransport &transport = channel.channel.transport();
   const std::uint32_t name = KmtTransportProbe::forget_name(transport);
@@ -343,8 +319,6 @@ TEST(connection, invariants_see_a_half_open_connection)
   CHECK(connection.invariants_hold());
   CHECK_STATUS(search.close(), Status::ok);
   CHECK(!connection.invariants_hold());
-  /* Last, since neither the adapter nor the transport can be given back: a
-   * channel closed under the lock that still sends through it. */
   channel.drop_transport();
   std::uint8_t *const kept = channel.swap_staging(nullptr);
   CHECK(!connection.invariants_hold());
@@ -354,8 +328,6 @@ TEST(connection, invariants_see_a_half_open_connection)
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
 namespace {
-
-/* `count` framed commands of eight bytes of body each, numbered from `id`. */
 std::size_t frame(std::uint8_t *bytes, std::uint32_t id, std::uint32_t count)
 {
     for (std::uint32_t index = 0u; index < count; index++)
@@ -363,7 +335,7 @@ std::size_t frame(std::uint8_t *bytes, std::uint32_t id, std::uint32_t count)
     return 16u * count;
 }
 
-}  // namespace
+}
 
 TEST(connection, a_batch_of_framed_commands_is_one_submission_under_the_lock)
 { Rig rig;
@@ -375,7 +347,6 @@ TEST(connection, a_batch_of_framed_commands_is_one_submission_under_the_lock)
   CHECK(rig.connection().invariants_hold());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted + 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), 0u);
-  /* One submission, and the device finds every command framed in it. */
   CHECK_EQ(rig.kmt().commands(), 3u);
   for (std::uint32_t index = 0u; index < 3u; index++) {
       CHECK_EQ(rig.kmt().command_id(index), static_cast<std::uint32_t>(av::vkproto::kCmd_vkCmdDraw) + index);
@@ -403,12 +374,8 @@ constexpr std::uint64_t first_memory = 0x0000700000000001ull;
 constexpr std::uint64_t second_memory = 0x0000700000000002ull;
 const av::HostMemoryRequest vulkan_type(av::HostMemoryRequest::Kind::vulkan, 3u);
 
-}  // namespace
+}
 
-/* Host memory is asked of the kernel and the host on the connection's
- * context, under the connection's lock: a chunk of the window of the type
- * asked, imported as the memory the host names; closing it releases the
- * import, then the chunk, under the lock again. */
 TEST(connection_memory, opens_finds_and_closes_host_memory_under_its_lock)
 { Rig rig;
   rig.kmt().open_host_window(2u * memory_bytes);
@@ -440,12 +407,10 @@ TEST(connection_memory, opens_finds_and_closes_host_memory_under_its_lock)
   CHECK_EQ(rig.kmt().misuses(), 0u);
   CHECK(!rig.lock().held()); }
 
-/* Memory the kernel or the host refuses is the answer, with nothing made. */
 TEST(connection_memory, memory_refused_leaves_nothing)
 { Rig rig;
   CHECK_STATUS(rig.connection().open(0u), Status::ok);
   av::HostAllocation *made = nullptr;
-  /* No window: the kernel's not_supported. */
   CHECK_STATUS(rig.connection().open_memory(memory_bytes, vulkan_type, made), Status::not_supported);
   CHECK(made == nullptr);
   rig.kmt().open_host_window(memory_bytes);
@@ -459,9 +424,6 @@ TEST(connection_memory, memory_refused_leaves_nothing)
   CHECK_EQ(rig.kmt().misuses(), 0u);
   CHECK(!rig.lock().held()); }
 
-/* A connection not open, or one the host has failed, makes no memory and
- * asks the Kmt nothing; what a faulted one made is abandoned - its context
- * frees it on the host - with nothing sent. */
 TEST(connection_memory, makes_no_memory_closed_or_faulted_and_abandons_what_a_faulted_one_made)
 { Rig rig;
   rig.kmt().open_host_window(2u * memory_bytes);
@@ -492,9 +454,6 @@ TEST(connection_memory, makes_no_memory_closed_or_faulted_and_abandons_what_a_fa
   CHECK_EQ(rig.kmt().window_chunks(), 0u);
   CHECK(!rig.lock().held()); }
 
-/* The kernel's refusal to give a chunk back is reported, and the connection
- * lets go of the memory all the same: the kernel closes it with the
- * context. */
 TEST(connection_memory, memory_whose_release_is_refused_is_still_let_go)
 { Rig rig;
   rig.kmt().open_host_window(memory_bytes);
@@ -512,25 +471,16 @@ TEST(connection_memory, memory_whose_release_is_refused_is_still_let_go)
   rig.connection().close();
   CHECK_EQ(rig.kmt().window_chunks(), 0u); }
 
-/* What the host said when it was asked for its device extensions, kept for the
- * one decision that reads it: whether a shared allocation is exported as a
- * dma-buf or as an opaque fd (feature 053, T031). A connection never asked is
- * taken not to have it, which is the answer every host gave before 053 and the
- * one that shares within a process and not across one. */
 TEST(connection, remembers_whether_the_host_shares_by_dma_buf_and_starts_saying_no)
 { Rig rig;
   CHECK(!rig.connection().host_has_dma_buf());
   CHECK(rig.connection().invariants_hold());
   rig.connection().note_host_dma_buf();
   CHECK(rig.connection().host_has_dma_buf());
-  /* Said twice by two enumerations is still once. */
   rig.connection().note_host_dma_buf();
   CHECK(rig.connection().host_has_dma_buf());
   CHECK(rig.connection().invariants_hold()); }
 
-/* The adapter's name is read as the connection opens - what its physical
- * device is called - and gone once it closes; a name Windows will not give
- * opens the adapter all the same, with none. */
 TEST(connection, learns_what_windows_calls_its_adapter)
 { { Rig rig;
     rig.kmt().describe_adapter(avgpu_index, av::PciLocation(0x7Bu, 0u, 0u), "AMD Radeon(TM) Graphics", 0u);

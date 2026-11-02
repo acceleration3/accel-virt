@@ -1,6 +1,3 @@
-/* Which loaded module an address lies in, for a crash file's native stack.
- * WindowsModuleResolver (src/um) asks the loader; ScriptedModuleResolver
- * (tests) answers from a table. */
 #ifndef AV_MODULE_RESOLVER_HPP
 #define AV_MODULE_RESOLVER_HPP
 
@@ -15,14 +12,12 @@ public:
     ModuleResolver(const ModuleResolver &) = delete;
     ModuleResolver &operator=(const ModuleResolver &) = delete;
 
-    /* The module's file name, cut to fit and terminated, and the address's
-     * offset from its base; false when no module holds the address. */
     virtual bool resolve(uint64_t address, char *name, size_t capacity, uint64_t &offset) = 0;
 
 protected:
     ~ModuleResolver() = default;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MODULE_RESOLVER_HPP
+#endif

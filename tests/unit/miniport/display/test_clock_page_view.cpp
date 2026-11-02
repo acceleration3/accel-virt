@@ -1,8 +1,3 @@
-/* The display clock's page as the guest reads it: a head's blank only when
- * it read the record whole - the same even generation before and after - and
- * only from a page the device headed; everything else on the page is the
- * device's word and refused when it is wrong. The one field the driver
- * writes, interrupt_every, lands in the head's record and nowhere else. */
 #include "miniport/display/clock_page_view.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -41,7 +36,7 @@ void write_blank(std::uint8_t *page, std::uint32_t at_head, const VblankRecord &
     std::memcpy(record, &generation, sizeof generation);
 }
 
-}  // namespace
+}
 
 TEST(clock_page_view, a_page_is_a_zeroed_block_the_device_can_address_and_is_freed)
 { MockPlatform platform;
@@ -58,7 +53,7 @@ TEST(clock_page_view, a_page_is_a_zeroed_block_the_device_can_address_and_is_fre
       view.release();
       CHECK_STATUS(view.initialize(), Status::ok);
   }
-  CHECK_EQ(platform.live_allocations(), 0u);   /* freed with the view */
+  CHECK_EQ(platform.live_allocations(), 0u);
   ClockPageView refused(platform);
   platform.fail_allocation_at(1u);
   CHECK_STATUS(refused.initialize(), Status::no_memory);
@@ -68,9 +63,9 @@ TEST(clock_page_view, a_head_s_blank_is_read_from_a_page_the_device_headed)
 { MockPlatform platform;
   ClockPageView view(platform);
   VblankRecord  blank(7u, 8u, 9u, 60000u);
-  CHECK_STATUS(view.read(0u, blank), Status::invalid_state);   /* no page */
+  CHECK_STATUS(view.read(0u, blank), Status::invalid_state);
   CHECK_STATUS(view.initialize(), Status::ok);
-  CHECK_STATUS(view.read(0u, blank), Status::malformed);       /* nothing headed it */
+  CHECK_STATUS(view.read(0u, blank), Status::malformed);
   std::uint8_t *const page = page_of(platform, view);
   head(page, 2u);
   write_blank(page, 1u, VblankRecord(3u, 400u, 5000u, 143998u), 6u);
@@ -82,7 +77,7 @@ TEST(clock_page_view, a_head_s_blank_is_read_from_a_page_the_device_headed)
   CHECK_EQ(blank.sequence(), 400u);
   CHECK_EQ(blank.vblank_ns(), 5000u);
   CHECK_EQ(blank.refresh_millihz(), 143998u);
-  write_blank(page, 1u, VblankRecord(3u, 401u, 5000u, 999u), 8u);   /* a rate no device runs at */
+  write_blank(page, 1u, VblankRecord(3u, 401u, 5000u, 999u), 8u);
   CHECK_STATUS(view.read(1u, blank), Status::malformed);
   CHECK_EQ(blank.sequence(), 400u);
   CHECK(view.invariants_hold()); }
@@ -93,13 +88,11 @@ TEST(clock_page_view, a_record_never_whole_is_a_conflict)
   CHECK_STATUS(view.initialize(), Status::ok);
   std::uint8_t *const page = page_of(platform, view);
   head(page, 1u);
-  write_blank(page, 0u, VblankRecord(1u, 1u, 1u, 60000u), 5u);   /* odd: mid-write, and it stays so */
+  write_blank(page, 0u, VblankRecord(1u, 1u, 1u, 60000u), 5u);
   VblankRecord blank;
   CHECK_STATUS(view.read(0u, blank), Status::conflict);
   CHECK_EQ(blank.sequence(), 0u); }
 
-/* A device writing the record while the guest reads it: every read either
- * finds a blank the device wrote whole or says it could not. */
 TEST(clock_page_view, a_record_written_during_the_read_is_never_taken_torn)
 { MockPlatform platform;
   ClockPageView view(platform);
@@ -145,16 +138,16 @@ TEST(clock_page_view, a_record_written_during_the_read_is_never_taken_torn)
 TEST(clock_page_view, the_driver_asks_in_its_head_s_record_and_nowhere_else)
 { MockPlatform platform;
   ClockPageView view(platform);
-  view.ask(0u, 1u);   /* no page: nothing */
+  view.ask(0u, 1u);
   CHECK_STATUS(view.initialize(), Status::ok);
   std::uint8_t *const page = page_of(platform, view);
-  view.ask(0u, 1u);   /* a page no device headed: nowhere to ask */
+  view.ask(0u, 1u);
   std::uint32_t every = 0u;
   std::memcpy(&every, page + 32u + VblankRecord::interrupt_every_at, sizeof every);
   CHECK_EQ(every, 0u);
   head(page, 2u);
   view.ask(1u, 24u);
-  view.ask(2u, 7u);   /* past the page's heads */
+  view.ask(2u, 7u);
   std::memcpy(&every, page + 96u + VblankRecord::interrupt_every_at, sizeof every);
   CHECK_EQ(every, 24u);
   std::memcpy(&every, page + 32u + VblankRecord::interrupt_every_at, sizeof every);

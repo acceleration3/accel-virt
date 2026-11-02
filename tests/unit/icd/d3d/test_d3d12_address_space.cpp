@@ -1,6 +1,3 @@
-/* The GPU virtual addresses a Direct3D 12 device hands out: aligned, never
- * handed out twice, inside the 40 bits GPUVA_CAPS reports, and 0 - which no
- * buffer has - once the space is used up. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/d3d12_address_space.hpp"
 
@@ -25,7 +22,6 @@ TEST(d3d12_address_space, no_bytes_and_more_than_the_space_holds_reserve_nothing
   const std::uint64_t end = std::uint64_t{1} << D3d12AddressSpace::address_bits;
   CHECK_EQ(space.reserve(end + 1u), 0u);
   CHECK_EQ(space.reserved(), 0u);
-  /* The rest of the space fits exactly once; after that nothing does. */
   const std::uint64_t rest = end - D3d12AddressSpace::first;
   CHECK_EQ(space.reserve(rest), D3d12AddressSpace::first);
   CHECK_EQ(space.reserve(1u), 0u);

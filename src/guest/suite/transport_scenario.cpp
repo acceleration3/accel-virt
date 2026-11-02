@@ -10,7 +10,7 @@ namespace {
 
 constexpr uint64_t microseconds_per_second = 1000000u;
 
-}  // namespace
+}
 
 TransportScenario::TransportScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search, SubApi sub_api,
                                      const char *name)
@@ -33,8 +33,6 @@ Status TransportScenario::timed_nop(uint32_t &answered, uint32_t &microseconds)
     AV_SCOPE("TransportScenario::timed_nop");
     uint64_t       frequency = 0u;
     const uint64_t sent_at = kmt_.performance_counter(frequency);
-    /* A failed call has lost the context, which is the state a device reset
-     * leaves it in; an answer with anything in it is not a no-op's. */
     const Status   sent = link_.transport().nop(answered);
     const uint64_t elapsed = kmt_.performance_counter(frequency) - sent_at;
     microseconds = frequency == 0u ? 0u : static_cast<uint32_t>(elapsed * microseconds_per_second / frequency);
@@ -48,7 +46,6 @@ Status TransportScenario::first_round_trip()
     uint32_t     microseconds = 0u;
     const Status sent = timed_nop(answered, microseconds);
     if (steps_.check_measured("nop", sent, answered) != Status::ok) return sent;
-    /* Reported, never judged: SC-002's threshold comes from a live run. */
     return steps_.check_measured("latency", Status::ok, microseconds);
 }
 
@@ -72,4 +69,4 @@ void TransportScenario::warm_round_trips()
     static_cast<void>(steps_.check_measured("warm_fastest", Status::ok, samples[0]));
 }
 
-}  // namespace av
+}

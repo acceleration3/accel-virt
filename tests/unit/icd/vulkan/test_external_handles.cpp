@@ -1,13 +1,3 @@
-/* The Win32 external objects through the ICD (feature 047, US3,
- * contracts/external_objects.md, research.md §10).
- *
- * A guest device is a host device, so two guest devices sharing an image share
- * it between two host devices - which the host's own fd extensions do, inside
- * the one process both live in. So a handle here is this ICD's own, an import
- * asks the host for a fresh fd of the object the handle names and forwards the
- * host's own import in the Win32 structure's place, and a handle this process
- * did not export names nothing at all.
- */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -61,30 +51,17 @@ using SemaphorePropertiesEntry = void (*)(VkPhysicalDevice, const VkPhysicalDevi
 
 constexpr std::uint64_t host_memory = 0x5500u;
 constexpr std::uint64_t host_semaphore = 0x6600u;
-/* The fd the host answers for a fresh export of a remembered object: a number
- * the guest only carries, since the fd is the host process's own. */
 constexpr int shared_fd = 9;
-/* Whole pages, which is what the wire demands of shared memory. */
 constexpr std::uint64_t shared_size = 4096u;
-/* IcdRoot::max_host_extensions, which a host claiming more than is refused at. */
 constexpr std::uint32_t max_host_extensions = 1024u;
 
-/* A device on the scripted host, and the entry points sharing needs. */
 class SharingRig {
 public:
-    /* `host_dma_buf` asks the host for its device extensions first, answering
-     * a list that holds VK_EXT_external_memory_dma_buf - which is the one
-     * moment the ICD decides what a shared allocation is exported as
-     * (feature 053, T031). Without it the host was never asked, and the
-     * opaque fd is what every host shared by before 053. */
-    /* What the host answers when the ICD asks for its device extensions, which
-     * it does once per connection to decide what a shared allocation is
-     * exported as. Every field is a way that ask can go wrong (feature 053). */
     struct HostExtensions {
-        std::int32_t  counted;    /* the counting call's result */
-        std::uint32_t count;      /* how many it claims */
-        bool          dma_buf;    /* whether the list holds VK_EXT_external_memory_dma_buf */
-        std::int32_t  listed;     /* the naming call's result */
+        std::int32_t  counted;
+        std::uint32_t count;
+        bool          dma_buf;
+        std::int32_t  listed;
     };
 
     explicit SharingRig(bool host_dma_buf = false)
@@ -95,9 +72,6 @@ public:
         : instance_(rig_.create_instance()), physical_device_(rig_.physical_device(instance_)),
           device_(VK_NULL_HANDLE)
     {
-        /* The device create asks the host for its list before it makes the
-         * device, because what a shared allocation is exported as has to be
-         * settled first (feature 053). Two answers, always. */
         list_host_extensions(host);
         rig_.host().vk_handle(0, ScriptedHost::vk_device);
         VkDeviceCreateInfo info = {};
@@ -120,13 +94,9 @@ public:
     SharingRig(const SharingRig &) = delete;
     SharingRig &operator=(const SharingRig &) = delete;
 
-    /* The host's own extension list, queued for the one enumeration the create
-     * makes: the count, then the names. */
     void list_host_extensions(const HostExtensions &host)
     { const char *const names[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf"};
       rig_.host().vk_count(host.counted, host.count);
-      /* The counting call is the only one the ICD makes when it refuses the
-       * answer or the count, so a second is queued only where one is read. */
       if (host.counted != 0 || host.count == 0u || host.count > max_host_extensions) return;
       std::uint8_t   answer[MockKmt::max_answer] = {};
       av::WireWriter writer(answer, sizeof answer);
@@ -150,9 +120,6 @@ public:
     T entry(const char *name)
     { return rig_.entry<T>(instance_, name); }
 
-    /* Memory an application declared exportable: the host allocates it and the
-     * device publishes it, which is where the identity is minted (feature
-     * 053). Two answers are scripted because two calls go out. */
     VkDeviceMemory allocate_shared(std::uint64_t bytes = shared_size,
                                    std::uint64_t answered = host_memory)
     { rig_.host().vk_handle(0, answered);
@@ -170,8 +137,6 @@ public:
       CHECK(made != VK_NULL_HANDLE);
       return made; }
 
-    /* The NT handle for memory already published: nothing goes on the wire,
-     * because the identity and the handle were made at the allocate. */
     void *handle_of(VkDeviceMemory memory)
     { MemoryGetWin32HandleRecord request = {};
       request.type_ = av::icd::memory_get_win32_handle_info;
@@ -184,9 +149,6 @@ public:
 
     void *exported_memory() { return handle_of(allocate_shared()); }
 
-    /* A handle another process minted: an allocation on a second guest device
-     * of the same kernel, shared there, which this ICD never published and so
-     * must adopt and open rather than find in its own table (feature 053). */
     void *foreign_handle(std::uint64_t bytes = shared_size)
     { std::uint32_t adapter = 0u;
       std::uint32_t count = 0u;
@@ -209,8 +171,6 @@ public:
       CHECK_STATUS(rig_.kmt().share_object(elsewhere, allocation, handle), av::Status::ok);
       return reinterpret_cast<void *>(static_cast<std::uintptr_t>(handle)); }
 
-    /* A semaphore is published the first time a handle to it is asked for:
-     * nothing in vkCreateSemaphore says it will ever be shared. */
     void *exported_semaphore()
     { rig_.host().shared_object(0u, 0u);
       SemaphoreGetWin32HandleRecord request = {};
@@ -222,13 +182,9 @@ public:
       CHECK(handle != nullptr);
       return handle; }
 
-    /* The last command the ICD sent, by id. */
     std::uint32_t last_command()
     { return rig_.kmt().command_id(rig_.kmt().commands() - 1u); }
 
-    /* The body of the command before the last, past its device handle: an
-     * allocation that is published sends two, and the one worth reading is the
-     * first (feature 053). */
     WireReader body_before_last()
     { const std::uint32_t sent = rig_.kmt().commands() - 2u;
       const std::uint8_t *bytes = rig_.kmt().command_bytes(sent);
@@ -237,15 +193,12 @@ public:
       CHECK_EQ(body.read_u64(), ScriptedHost::vk_device);
       return body; }
 
-    /* The body of the last command as it stands. A transport command names no
-     * device, unlike every Vulkan one. */
     WireReader last_body_whole()
     { const std::uint32_t sent = rig_.kmt().commands() - 1u;
       const std::uint8_t *bytes = rig_.kmt().command_bytes(sent);
       return WireReader(bytes + CommandHeader::encoded_size,
                         MockKmt::journal_bytes - CommandHeader::encoded_size); }
 
-    /* The body of the last command, past its device handle. */
     WireReader last_body()
     { const std::uint32_t sent = rig_.kmt().commands() - 1u;
       const std::uint8_t *bytes = rig_.kmt().command_bytes(sent);
@@ -274,26 +227,16 @@ VkPhysicalDeviceExternalSemaphoreInfo semaphore_info(VkExternalSemaphoreHandleTy
   info.handleType = type;
   return info; }
 
-}  // namespace
+}
 
-/* An export answers a handle without asking the host anything - the fd it
- * shares by is asked for at the import, because a driver takes ownership of
- * one it imports - and an import sends the host its own structure naming that
- * fd. */
-/* An export publishes the memory when it is allocated, so asking for its handle
- * afterwards sends nothing; an import opens the object the handle names and
- * the handle the device answers *is* the VkDeviceMemory (feature 053). */
 TEST(icd_external_handles, a_handle_exported_is_opened_by_the_device_on_import)
 { SharingRig            rig;
   const VkDeviceMemory  shared = rig.allocate_shared();
   const std::uint32_t   before = rig.rig().kmt().commands();
   CHECK(rig.handle_of(shared) != nullptr);
   CHECK_EQ(rig.rig().kmt().commands(), before);
-  /* The handle another process sent, which this ICD never published. */
   void *const           handle = rig.foreign_handle();
 
-  /* The import: one OPEN_SHARED_OBJECT, answered with the memory the device
-   * made of it. Nothing is allocated on the host for it. */
   rig.rig().host().shared_object(0u, 0x7700u);
   ImportMemoryWin32HandleRecord importing = {};
   importing.type_ = av::icd::import_memory_win32_handle_info;
@@ -308,8 +251,6 @@ TEST(icd_external_handles, a_handle_exported_is_opened_by_the_device_on_import)
   CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &imported), VK_SUCCESS);
   CHECK(imported == reinterpret_cast<VkDeviceMemory>(0x7700u));
 
-  /* What went on the wire: the open, naming the object and not the handle -
-   * an NT handle means nothing to the device. */
   CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id);
   WireReader     body = rig.last_body_whole();
   const std::uint64_t object_id = body.read_u64();
@@ -319,17 +260,11 @@ TEST(icd_external_handles, a_handle_exported_is_opened_by_the_device_on_import)
   CHECK_EQ(body.read_u64(), 0u);
   CHECK_EQ(body.read_u64(), shared_size);
 
-  /* Freed, it is released rather than freed on the host: the device made it
-   * and the device destroys it. */
   rig.rig().host().shared_object(0u, 0u);
   rig.entry<void (*)(VkDevice, VkDeviceMemory, const VkAllocationCallbacks *)>("vkFreeMemory")(
       rig.device(), imported, nullptr);
   CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id); }
 
-/* The carrier an export minted is a resource, and a resource is given back by
- * being named as one: dxgkrnl walks a destroy's allocation list checking the
- * type of every handle in it, so a carrier named there is refused and left
- * behind for the life of the process (research.md §17). */
 TEST(icd_external_handles, freeing_an_exported_allocation_gives_the_carrier_back_as_a_resource)
 { SharingRig           rig;
   const std::uint32_t  objects = rig.rig().kmt().open_objects();
@@ -343,9 +278,6 @@ TEST(icd_external_handles, freeing_an_exported_allocation_gives_the_carrier_back
   CHECK_EQ(rig.rig().kmt().calls(MockKmt::Call::destroy_shared_allocation), 1u);
   CHECK_EQ(rig.rig().kmt().calls(MockKmt::Call::destroy_allocation), 0u); }
 
-/* A semaphore's handle is imported the same way, through the host's own
- * vkImportSemaphoreFdKHR, and a semaphore destroyed takes the handle that
- * named it with it. */
 TEST(icd_external_handles, a_semaphore_handle_becomes_the_host_s_own_fd_import)
 { SharingRig  rig;
   void *const handle = rig.exported_semaphore();
@@ -370,9 +302,6 @@ TEST(icd_external_handles, a_semaphore_handle_becomes_the_host_s_own_fd_import)
   CHECK_EQ(sent.flags, static_cast<VkFlags>(VK_SEMAPHORE_IMPORT_TEMPORARY_BIT));
   CHECK(sent.semaphore == reinterpret_cast<VkSemaphore>(0x8800u));
 
-  /* Destroyed, the handle it was exported for names nothing: the import is
-   * refused before the host is asked for an fd of a semaphore that is gone.
-   * The destroy releases the object first, which is one answer on the wire. */
   rig.rig().host().shared_object(0u, 0u);
   rig.entry<DestroySemaphore>("vkDestroySemaphore")(rig.device(),
                                                     reinterpret_cast<VkSemaphore>(host_semaphore), nullptr);
@@ -380,8 +309,6 @@ TEST(icd_external_handles, a_semaphore_handle_becomes_the_host_s_own_fd_import)
            VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkDestroySemaphore)); }
 
-/* A handle this process did not export names nothing, on either path, and a
- * handle from outside has no memory types to answer. */
 TEST(icd_external_handles, a_handle_it_did_not_export_is_refused_before_the_host)
 { SharingRig rig;
   ImportMemoryWin32HandleRecord importing = {};
@@ -408,13 +335,10 @@ TEST(icd_external_handles, a_handle_it_did_not_export_is_refused_before_the_host
            VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK_EQ(rig.rig().kmt().commands(), before);
 
-  /* The properties of a handle from outside: nothing, because a handle this
-   * ICD did not export names no object it could answer for. */
   CHECK_EQ(rig.entry<HandleProperties>("vkGetMemoryWin32HandlePropertiesKHR")(
                rig.device(), av::icd::opaque_win32_memory, reinterpret_cast<void *>(0xDEADu), nullptr),
            VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
-  /* A device this ICD did not make answers nothing on any of them. */
   int      stack = 0;
   VkDevice foreign = reinterpret_cast<VkDevice>(&stack);
   MemoryGetWin32HandleRecord request = {};
@@ -437,22 +361,15 @@ TEST(icd_external_handles, a_handle_it_did_not_export_is_refused_before_the_host
            VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK_EQ(rig.rig().kmt().commands(), before);
 
-  /* And a request that is not there at all names no object either, on every
-   * one of the four. */
   av::icd::IcdRoot &root = rig.rig().root();
   CHECK_EQ(root.export_memory_handle(rig.device(), nullptr, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK_EQ(root.export_semaphore_handle(rig.device(), nullptr, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK_EQ(root.import_semaphore_handle(rig.device(), nullptr), VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK_EQ(root.memory_handle_properties(rig.device(), nullptr), VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK_EQ(rig.rig().kmt().commands(), before);
-  /* Destroying a semaphore nobody exported a handle for forgets nothing and
-   * still reaches the host, as vkDestroySemaphore must. */
   root.destroy_semaphore(rig.device(), VK_NULL_HANDLE, nullptr);
   CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkDestroySemaphore)); }
 
-/* What the host says of its own opaque fd, said in Win32's spelling; every
- * other Win32 type is answered as absent, because nothing here turns a
- * Direct3D object into a host one. */
 TEST(icd_external_handles, the_external_properties_of_a_win32_handle_are_the_host_s_of_an_fd)
 { SharingRig rig;
   rig.rig().host().vk_external_buffer_properties(
@@ -468,16 +385,12 @@ TEST(icd_external_handles, the_external_properties_of_a_win32_handle_are_the_hos
   CHECK_EQ(answered.externalMemoryProperties.externalMemoryFeatures,
            static_cast<VkFlags>(VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
                                 VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT));
-  /* Said in Win32's spelling, and the host's own types dropped: a guest could
-   * not name an fd or a dma-buf. */
   CHECK_EQ(answered.externalMemoryProperties.exportFromImportedHandleTypes,
            static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT));
   CHECK_EQ(answered.externalMemoryProperties.compatibleHandleTypes,
            static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT));
   CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkGetPhysicalDeviceExternalBufferProperties));
 
-  /* A KMT handle, and a Direct3D resource: nothing, and the host is not asked
-   * about them at all. */
   const std::uint32_t                         after = rig.rig().kmt().commands();
   const VkExternalMemoryHandleTypeFlagBits    others[] = {
       VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT, VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT,
@@ -494,7 +407,6 @@ TEST(icd_external_handles, the_external_properties_of_a_win32_handle_are_the_hos
   }
   CHECK_EQ(rig.rig().kmt().commands(), after);
 
-  /* The semaphore query is the same story on its own bits. */
   rig.rig().host().vk_external_semaphore_properties(VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT,
                                                     VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT,
                                                     VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
@@ -519,8 +431,6 @@ TEST(icd_external_handles, the_external_properties_of_a_win32_handle_are_the_hos
                                                                                         &fence, &nothing);
   CHECK_EQ(nothing.compatibleHandleTypes, 0u);
 
-  /* Neither query answers for a physical device this ICD did not make, and
-   * neither reads a request that is not there. */
   int stack = 0;
   VkExternalBufferProperties untouched = {};
   untouched.externalMemoryProperties.compatibleHandleTypes = 0xFFFFFFFFu;
@@ -542,10 +452,6 @@ TEST(icd_external_handles, the_external_properties_of_a_win32_handle_are_the_hos
                                                                                         &semaphore, nullptr);
   CHECK_EQ(kept.compatibleHandleTypes, 0xFFFFFFFFu); }
 
-/* An allocation the application means to share is the host's whole - never a
- * chunk of this process's RAM - and the export goes to the host in the only
- * spelling it understands. A chain this ICD cannot carry whole is refused
- * rather than sent without it. */
 TEST(icd_external_handles, an_allocation_made_to_be_shared_is_exported_as_an_fd)
 { SharingRig rig;
   VkExportMemoryAllocateInfo exporting = {};
@@ -558,16 +464,12 @@ TEST(icd_external_handles, an_allocation_made_to_be_shared_is_exported_as_an_fd)
   allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   allocate.pNext = &exporting;
   allocate.allocationSize = 8192u;
-  /* A host-visible type, which without the export would have been served from
-   * a chunk of this process's RAM: what is shared is the host's own. */
   allocate.memoryTypeIndex = 1u;
   rig.rig().host().vk_handle(0, 0x7700u);
   rig.rig().host().shared_object(0u, 0u);
   VkDeviceMemory shared = VK_NULL_HANDLE;
   CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &shared), VK_SUCCESS);
   CHECK(shared != VK_NULL_HANDLE);
-  /* The publish follows the allocation, so the last command is the share and
-   * the allocation is the one before it. */
   CHECK_EQ(rig.last_command(), av::CommandHeader::share_object_id);
   WireReader           body = rig.body_before_last();
   VkMemoryAllocateInfo sent = {};
@@ -582,7 +484,6 @@ TEST(icd_external_handles, an_allocation_made_to_be_shared_is_exported_as_an_fd)
   CHECK_EQ(reinterpret_cast<const VkExportMemoryAllocateInfo *>(node)->handleTypes,
            static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT));
 
-  /* A node this ICD does not carry: refused, and nothing sent. */
   VkMemoryOpaqueCaptureAddressAllocateInfo captured = {};
   captured.sType = VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO;
   dedicated.pNext = &captured;
@@ -593,8 +494,6 @@ TEST(icd_external_handles, an_allocation_made_to_be_shared_is_exported_as_an_fd)
   CHECK(refused == VK_NULL_HANDLE);
   CHECK_EQ(rig.rig().kmt().commands(), before);
 
-  /* An export of a handle type this ICD does not answer is not a shared
-   * allocation at all, and goes the way every other allocation goes. */
   dedicated.pNext = nullptr;
   exporting.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT;
   rig.rig().host().vk_memory_properties(ScriptedHost::vk_host_memory_types, ScriptedHost::vk_host_visible_types);
@@ -604,13 +503,8 @@ TEST(icd_external_handles, an_allocation_made_to_be_shared_is_exported_as_an_fd)
   CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &other), VK_SUCCESS);
   CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkAllocateMemory)); }
 
-/* What a chain longer than this driver reads means, and what a host that
- * refuses the fd leaves: neither is answered with a share that did not
- * happen. */
 TEST(icd_external_handles, a_chain_longer_than_it_reads_and_a_host_that_refuses_the_fd)
 { SharingRig rig;
-  /* A chain of nodes with no Win32 marker in the part this driver reads is not
-   * a shared allocation, and goes the way every other allocation goes. */
   constexpr std::uint32_t            beyond = 33u;
   VkMemoryDedicatedAllocateInfo      many[beyond] = {};
   for (std::uint32_t index = 0u; index < beyond; index++) {
@@ -627,9 +521,6 @@ TEST(icd_external_handles, a_chain_longer_than_it_reads_and_a_host_that_refuses_
   CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &plain), VK_SUCCESS);
   CHECK(plain != VK_NULL_HANDLE);
 
-  /* The Win32 export structure alone still says the allocation is shared -
-   * it is what DXVK chains for a named handle - and then the chain is longer
-   * than this driver reads, which is refused rather than sent short. */
   struct {
       VkStructureType type_;
       const void     *next_;
@@ -645,8 +536,6 @@ TEST(icd_external_handles, a_chain_longer_than_it_reads_and_a_host_that_refuses_
   CHECK(refused == VK_NULL_HANDLE);
   CHECK_EQ(rig.rig().kmt().commands(), before);
 
-  /* A device that will not open the object: the import is that refusal, not an
-   * allocation of memory nothing shares. */
   void *const handle = rig.foreign_handle();
   av::icd::ImportMemoryWin32HandleRecord importing = {};
   importing.type_ = av::icd::import_memory_win32_handle_info;
@@ -663,16 +552,12 @@ TEST(icd_external_handles, a_chain_longer_than_it_reads_and_a_host_that_refuses_
   CHECK(none == VK_NULL_HANDLE);
   CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id);
 
-  /* An allocation of no size at all shares nothing, and is refused before the
-   * kernel is asked for a carrier: the wire has no body for it. */
   sharing.allocationSize = 0u;
   const std::uint32_t quiet = rig.rig().kmt().commands();
   CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &sharing, nullptr, &none),
            VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK_EQ(rig.rig().kmt().commands(), quiet); }
 
-/* A lost device answers the loss rather than the handle: the import goes
- * nowhere, and neither does a host asked for an fd it will not answer. */
 TEST(icd_external_handles, a_lost_device_and_a_refused_semaphore_fd_are_both_the_answer)
 { SharingRig rig;
   void *const handle = rig.exported_semaphore();
@@ -682,13 +567,11 @@ TEST(icd_external_handles, a_lost_device_and_a_refused_semaphore_fd_are_both_the
   importing.handle_type_ = av::icd::opaque_win32_semaphore;
   importing.handle_ = handle;
 
-  /* The host refuses a fresh fd of the semaphore this process published. */
   rig.rig().host().vk_fd(VK_ERROR_TOO_MANY_OBJECTS, -1);
   CHECK_EQ(rig.entry<ImportSemaphore>("vkImportSemaphoreWin32HandleKHR")(rig.device(), &importing),
            VK_ERROR_TOO_MANY_OBJECTS);
   CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkGetSemaphoreFdKHR));
 
-  /* And once the context is faulted, the import is the loss. */
   const std::uint32_t before = rig.rig().kmt().commands();
   rig.rig().kmt().withhold_answer_at(1u);
   CHECK_EQ(rig.entry<VkResult (*)(VkDevice)>("vkAvForceContextFault")(rig.device()), VK_ERROR_DEVICE_LOST);
@@ -696,12 +579,6 @@ TEST(icd_external_handles, a_lost_device_and_a_refused_semaphore_fd_are_both_the
            VK_ERROR_DEVICE_LOST);
   CHECK_EQ(rig.rig().kmt().commands(), before + 1u); }
 
-/* Feature 053, T031. A host with VK_EXT_external_memory_dma_buf shares by
- * dma-buf and not by its opaque fd, because a dma-buf is the only kind the
- * *device* can import for another process: vkGetMemoryFdPropertiesKHR refuses
- * an opaque fd, whose memory type is implicit and known only to whoever
- * allocated it. The extension is asked of the host as well, since an export
- * naming that type on a device made without it is refused. */
 TEST(icd_external_handles, a_host_with_the_dma_buf_extension_shares_by_it_and_asks_for_it)
 { SharingRig rig(true);
   const VkDeviceMemory shared = rig.allocate_shared();
@@ -718,9 +595,6 @@ TEST(icd_external_handles, a_host_with_the_dma_buf_extension_shares_by_it_and_as
   CHECK_EQ(reinterpret_cast<const VkExportMemoryAllocateInfo *>(node)->handleTypes,
            static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT));
 
-  /* And an import of a handle this process published asks the host for a
-   * descriptor of the same kind: the two must agree, or the fd names a type
-   * the import does not. */
   void *const handle = rig.handle_of(shared);
   av::icd::ImportMemoryWin32HandleRecord importing = {};
   importing.type_ = av::icd::import_memory_win32_handle_info;
@@ -747,8 +621,6 @@ TEST(icd_external_handles, a_host_with_the_dma_buf_extension_shares_by_it_and_as
                reinterpret_cast<const VkImportMemoryFdInfoKHR *>(import_node)->handleType),
            static_cast<std::uint32_t>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT)); }
 
-/* A host without it shares by its opaque fd, which is what every host did
- * before 053 and what works inside one process. */
 TEST(icd_external_handles, a_host_without_the_dma_buf_extension_shares_by_its_opaque_fd)
 { SharingRig rig;
   CHECK(rig.allocate_shared() != VK_NULL_HANDLE);
@@ -762,25 +634,12 @@ TEST(icd_external_handles, a_host_without_the_dma_buf_extension_shares_by_its_op
   CHECK_EQ(reinterpret_cast<const VkExportMemoryAllocateInfo *>(node)->handleTypes,
            static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT)); }
 
-/* Feature 053: the NTSTATUS a probe reads back. The kernel call is made by
- * *this* driver's Kmt, inside the DLL, so nothing outside can see it - and
- * every one of the calls behind sharing answers the application the same
- * VK_ERROR_TOO_MANY_OBJECTS.
- *
- * What is kept is the last kernel call that *refused*, not the last call of
- * any kind. A driver that has just failed to share something goes on to free
- * what it half-made, and those calls succeed; reading the Kmt afterwards gave
- * zero, which is what two guest runs reported while the answer sat in the
- * log. */
 TEST(icd_external_handles, the_drivers_last_kernel_refusal_is_readable_from_outside)
 { SharingRig    rig;
   std::uint32_t status = 9u;
   CHECK_EQ(rig.rig().root().last_kernel_status(rig.device(), &status), VK_SUCCESS);
-  /* Nothing has refused yet. */
   CHECK_EQ(status, 0u);
 
-  /* The kernel refuses the carrier, and the driver then frees the host memory
-   * it had already allocated - a call that succeeds. The refusal survives it. */
   rig.rig().kmt().fail_at(MockKmt::Call::create_shared_allocation, 1u, MockKmt::invalid_parameter);
   rig.rig().host().vk_handle(0, host_memory);
   VkExportMemoryAllocateInfo exporting = {};
@@ -793,22 +652,16 @@ TEST(icd_external_handles, the_drivers_last_kernel_refusal_is_readable_from_outs
   VkDeviceMemory refused = VK_NULL_HANDLE;
   CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &refused),
            VK_ERROR_TOO_MANY_OBJECTS);
-  CHECK(rig.rig().kmt().last_code() != MockKmt::invalid_parameter);   /* the free wiped it */
+  CHECK(rig.rig().kmt().last_code() != MockKmt::invalid_parameter);
   CHECK_EQ(rig.rig().root().last_kernel_status(rig.device(), &status), VK_SUCCESS);
   CHECK_EQ(status, MockKmt::invalid_parameter);
 
-  /* A device this driver did not make, a handle of another kind, and no place
-   * to put the answer are all refused rather than answered with somebody's
-   * number. */
   CHECK(rig.rig().root().last_kernel_status(rig.device(), nullptr) != VK_SUCCESS);
   CHECK(rig.rig().root().last_kernel_status(reinterpret_cast<VkDevice>(0xDEADu), &status) != VK_SUCCESS);
   CHECK_EQ(status, 0u);
   CHECK(rig.rig().root().last_kernel_status(reinterpret_cast<VkDevice>(rig.physical_device()), &status) !=
         VK_SUCCESS);
 
-  /* And it is a device function, found by name on the device as the fault
-   * hook is: vkGetDeviceProcAddr answers the driver's own pointer, which no
-   * loader has to trampoline. */
   using LastStatus = VkResult (*)(VkDevice, std::uint32_t *);
   const auto entry = reinterpret_cast<LastStatus>(rig.rig().root().device_proc_addr(rig.device(), "vkAvLastKernelStatus"));
   CHECK(entry != nullptr);
@@ -816,10 +669,6 @@ TEST(icd_external_handles, the_drivers_last_kernel_refusal_is_readable_from_outs
   CHECK_EQ(entry(rig.device(), &status), VK_SUCCESS);
   CHECK_EQ(status, MockKmt::invalid_parameter); }
 
-/* A request that is the wrong structure, or names the wrong handle type, or
- * names an object this process never published: each is refused before
- * anything reaches the kernel, and each on its own, because a caller cannot
- * fix what it is not told (feature 053). */
 TEST(icd_external_handles, a_malformed_export_request_is_refused_on_each_of_its_parts)
 { SharingRig rig;
   av::icd::IcdRoot   &root = rig.rig().root();
@@ -830,19 +679,12 @@ TEST(icd_external_handles, a_malformed_export_request_is_refused_on_each_of_its_
   memory.type_ = av::icd::memory_get_win32_handle_info;
   memory.memory_ = reinterpret_cast<VkDeviceMemory>(host_memory);
   memory.handle_type_ = av::icd::opaque_win32_memory;
-  /* Some other structure in the same place. */
   memory.type_ = av::icd::semaphore_get_win32_handle_info;
   CHECK_EQ(root.export_memory_handle(rig.device(), &memory, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
   memory.type_ = av::icd::memory_get_win32_handle_info;
-  /* The right structure asking for a handle type this driver has no answer
-   * for: a D3D11 texture handle is not memory it shared. (The two "opaque
-   * Win32" constants are the same bit in two enums, so the type that
-   * discriminates a memory request from a semaphore one is the structure's,
-   * not this field's.) */
   memory.handle_type_ = static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT);
   CHECK_EQ(root.export_memory_handle(rig.device(), &memory, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
   memory.handle_type_ = av::icd::opaque_win32_memory;
-  /* Well formed, and naming memory nobody declared exportable. */
   CHECK_EQ(root.export_memory_handle(rig.device(), &memory, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
   SemaphoreGetWin32HandleRecord semaphore = {};
@@ -854,14 +696,10 @@ TEST(icd_external_handles, a_malformed_export_request_is_refused_on_each_of_its_
   semaphore.handle_type_ = static_cast<VkFlags>(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT);
   CHECK_EQ(root.export_semaphore_handle(rig.device(), &semaphore, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
   semaphore.handle_type_ = av::icd::opaque_win32_semaphore;
-  /* No semaphore at all: nothing to publish, and nothing goes out for it. */
   semaphore.semaphore_ = VK_NULL_HANDLE;
   CHECK_EQ(root.export_semaphore_handle(rig.device(), &semaphore, &handle), VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK_EQ(rig.rig().kmt().commands(), before); }
 
-/* A semaphore is published the first time its handle is asked for and not
- * again: the second ask is answered from the table, with the same handle and
- * nothing on the wire. */
 TEST(icd_external_handles, a_semaphore_is_published_once_and_the_second_ask_sends_nothing)
 { SharingRig rig;
   void *const         first = rig.exported_semaphore();
@@ -876,8 +714,6 @@ TEST(icd_external_handles, a_semaphore_is_published_once_and_the_second_ask_send
   CHECK(second == first);
   CHECK_EQ(rig.rig().kmt().commands(), after); }
 
-/* An import request that is the wrong structure, names the wrong type, or
- * names an object by a string: each refused on its own part. */
 TEST(icd_external_handles, a_malformed_semaphore_import_is_refused_on_each_of_its_parts)
 { SharingRig rig;
   av::icd::IcdRoot &root = rig.rig().root();
@@ -887,7 +723,6 @@ TEST(icd_external_handles, a_malformed_semaphore_import_is_refused_on_each_of_it
   importing.handle_type_ = av::icd::opaque_win32_semaphore;
   importing.handle_ = exported;
   importing.semaphore_ = reinterpret_cast<VkSemaphore>(0x8800u);
-  /* A handle named by a string rather than a value: nothing here has a name. */
   int stack = 0;
   importing.name_ = &stack;
   CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE);
@@ -898,10 +733,6 @@ TEST(icd_external_handles, a_malformed_semaphore_import_is_refused_on_each_of_it
   importing.handle_type_ = static_cast<VkFlags>(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT);
   CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE); }
 
-/* A handle that names memory cannot be imported as a semaphore, and one that
- * names an object another process published has no path here at all: both are
- * refused rather than half-served, and the second is the limit the executor
- * ABI leaves (feature 053, T031). */
 TEST(icd_external_handles, a_semaphore_import_of_memory_or_of_another_process_is_refused)
 { SharingRig rig;
   av::icd::IcdRoot                &root = rig.rig().root();
@@ -909,18 +740,11 @@ TEST(icd_external_handles, a_semaphore_import_of_memory_or_of_another_process_is
   importing.type_ = av::icd::import_semaphore_win32_handle_info;
   importing.handle_type_ = av::icd::opaque_win32_semaphore;
   importing.semaphore_ = reinterpret_cast<VkSemaphore>(0x8800u);
-  /* The handle of memory this process published: the row is there and holds no
-   * semaphore. */
   importing.handle_ = rig.exported_memory();
   CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  /* And one minted on another guest device, which this table never saw. */
   importing.handle_ = rig.foreign_handle();
   CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE); }
 
-/* vkDestroySemaphore on a device this ICD did not make forgets nothing and
- * sends nothing: there is no connection to send over, and the generated
- * wrapper would have followed a null one. The loader never routes such a
- * device here, which is exactly why nothing had caught it. */
 TEST(icd_external_handles, destroying_a_semaphore_of_a_foreign_device_sends_nothing)
 { SharingRig rig;
   void *const         held = rig.exported_semaphore();
@@ -930,7 +754,6 @@ TEST(icd_external_handles, destroying_a_semaphore_of_a_foreign_device_sends_noth
   root.destroy_semaphore(reinterpret_cast<VkDevice>(&stack), reinterpret_cast<VkSemaphore>(host_semaphore),
                          nullptr);
   CHECK_EQ(rig.rig().kmt().commands(), before);
-  /* And the object it named is still held, because nothing released it. */
   MemoryGetWin32HandleRecord unused = {};
   static_cast<void>(unused);
   CHECK(held != nullptr);
@@ -943,10 +766,6 @@ TEST(icd_external_handles, destroying_a_semaphore_of_a_foreign_device_sends_noth
            VK_SUCCESS);
   CHECK(again == held); }
 
-/* Every way publishing an identity can fail, and what each leaves behind. The
- * carrier allocation is the ICD's own and nothing else will destroy it, so a
- * publish that gives up part way has to take it with it - a leaked carrier is
- * a guest allocation nobody can name again (feature 053, T031). */
 TEST(icd_external_handles, each_way_a_publish_can_fail_gives_the_carrier_back)
 { VkExportMemoryAllocateInfo exporting = {};
   exporting.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
@@ -957,9 +776,7 @@ TEST(icd_external_handles, each_way_a_publish_can_fail_gives_the_carrier_back)
   allocate.allocationSize = shared_size;
   allocate.memoryTypeIndex = 0u;
 
-  { /* A size no whole number of pages holds: rounding it up would overflow,
-     * and an object whose declared size is not its real one is one an open
-     * would be refused against for ever. */
+  {
     SharingRig           rig;
     VkMemoryAllocateInfo huge = allocate;
     huge.allocationSize = ~std::uint64_t{0};
@@ -970,8 +787,7 @@ TEST(icd_external_handles, each_way_a_publish_can_fail_gives_the_carrier_back)
     CHECK(memory == VK_NULL_HANDLE);
     CHECK_EQ(rig.rig().kmt().commands(), before); }
 
-  { /* The host will not allocate the memory the identity would have named, so
-     * no identity is asked for. */
+  {
     SharingRig          rig;
     const std::uint32_t objects = rig.rig().kmt().open_objects();
     rig.rig().host().vk_handle(0, 0u);
@@ -979,7 +795,7 @@ TEST(icd_external_handles, each_way_a_publish_can_fail_gives_the_carrier_back)
     CHECK(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory) != VK_SUCCESS);
     CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
 
-  { /* The kernel took the carrier and minted nothing into it. */
+  {
     SharingRig          rig;
     rig.rig().host().vk_handle(0, host_memory);
     const std::uint32_t objects = rig.rig().kmt().open_objects();
@@ -990,7 +806,7 @@ TEST(icd_external_handles, each_way_a_publish_can_fail_gives_the_carrier_back)
     CHECK(memory == VK_NULL_HANDLE);
     CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
 
-  { /* And wrote back bytes no record decodes from. */
+  {
     SharingRig          rig;
     rig.rig().host().vk_handle(0, host_memory);
     const std::uint32_t objects = rig.rig().kmt().open_objects();
@@ -1001,7 +817,7 @@ TEST(icd_external_handles, each_way_a_publish_can_fail_gives_the_carrier_back)
     CHECK(memory == VK_NULL_HANDLE);
     CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
 
-  { /* The device refused to hold the object the identity names. */
+  {
     SharingRig          rig;
     rig.rig().host().vk_handle(0, host_memory);
     const std::uint32_t objects = rig.rig().kmt().open_objects();
@@ -1012,9 +828,7 @@ TEST(icd_external_handles, each_way_a_publish_can_fail_gives_the_carrier_back)
     CHECK(memory == VK_NULL_HANDLE);
     CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
 
-  { /* The kernel would not mint an NT handle over the carrier. The object is
-     * released again: one published under a name no process can reach is one
-     * nobody will ever close. */
+  {
     SharingRig          rig;
     rig.rig().host().vk_handle(0, host_memory);
     rig.rig().host().shared_object(0u, 0u);
@@ -1027,12 +841,8 @@ TEST(icd_external_handles, each_way_a_publish_can_fail_gives_the_carrier_back)
     CHECK_EQ(rig.rig().kmt().open_objects(), objects);
     CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id); } }
 
-/* The last row a publish or an open takes is the ICD's own record of the
- * object, and a process with no memory left for it is refused without
- * anything left behind: what the device published or opened is released, and
- * an export's NT handle and carrier are given back. */
 TEST(icd_external_handles, no_memory_to_remember_an_object_releases_what_was_made_for_it)
-{ { /* An export: the handle row is the first allocation, this the second. */
+{ {
     SharingRig          rig;
     rig.rig().host().vk_handle(0, host_memory);
     rig.rig().host().shared_object(0u, 0u);
@@ -1051,15 +861,13 @@ TEST(icd_external_handles, no_memory_to_remember_an_object_releases_what_was_mad
     CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
              VK_ERROR_OUT_OF_HOST_MEMORY);
     CHECK(memory == VK_NULL_HANDLE);
-    /* Released, and then the host's memory freed as any refused export's is. */
     MockKmt &kmt = rig.rig().kmt();
     CHECK_EQ(kmt.command_id(kmt.commands() - 2u), av::CommandHeader::release_shared_object_id);
     CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkFreeMemory));
     CHECK_EQ(kmt.calls(MockKmt::Call::close_shared_object), 1u);
     CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
 
-  { /* An open of another process's object: the adopted handle's row is the
-     * first allocation, this the second. */
+  {
     SharingRig  rig;
     void *const handle = rig.foreign_handle();
     rig.rig().host().shared_object(0u, 0x7700u);
@@ -1080,8 +888,7 @@ TEST(icd_external_handles, no_memory_to_remember_an_object_releases_what_was_mad
     CHECK(imported == VK_NULL_HANDLE);
     CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id); }
 
-  { /* An export whose NT handle has no row: the first allocation. The object
-     * is released and the handle never minted, so nothing names it. */
+  {
     SharingRig          rig;
     rig.rig().host().vk_handle(0, host_memory);
     rig.rig().host().shared_object(0u, 0u);
@@ -1102,9 +909,7 @@ TEST(icd_external_handles, no_memory_to_remember_an_object_releases_what_was_mad
     CHECK_EQ(kmt.command_id(kmt.commands() - 2u), av::CommandHeader::release_shared_object_id);
     CHECK_EQ(kmt.calls(MockKmt::Call::share_object), 0u); }
 
-  { /* A handle another process sent with no row to adopt it into, named to
-     * either import: refused as the memory failure it is, before the device
-     * is asked. */
+  {
     SharingRig          rig;
     void *const         handle = rig.foreign_handle();
     const std::uint32_t sent = rig.rig().kmt().commands();
@@ -1135,17 +940,13 @@ TEST(icd_external_handles, no_memory_to_remember_an_object_releases_what_was_mad
                  "avvk: no memory to keep the Win32 handle named to vkImportSemaphoreWin32HandleKHR"),
              1u); } }
 
-/* What a shared allocation is exported as is decided once per connection, from
- * the host's own device extension list. Every way that ask can fail leaves the
- * answer as it was - the opaque fd, which is what every host shared by before
- * 053 - rather than guessing at dma-buf (feature 053, T031). */
 TEST(icd_external_handles, a_host_that_cannot_be_asked_what_it_shares_by_keeps_the_opaque_fd)
 { const SharingRig::HostExtensions cases[] = {
-      {VK_ERROR_OUT_OF_HOST_MEMORY, 2u, true, 0},        /* will not be counted */
-      {0, 0u, true, 0},                                  /* claims none */
-      {0, max_host_extensions + 1u, true, 0},            /* claims more than there is room for */
-      {0, 2u, true, VK_ERROR_OUT_OF_HOST_MEMORY},        /* counted, and will not be named */
-      {0, 2u, false, VK_INCOMPLETE},                     /* named only in part, and not a dma-buf host */
+      {VK_ERROR_OUT_OF_HOST_MEMORY, 2u, true, 0},
+      {0, 0u, true, 0},
+      {0, max_host_extensions + 1u, true, 0},
+      {0, 2u, true, VK_ERROR_OUT_OF_HOST_MEMORY},
+      {0, 2u, false, VK_INCOMPLETE},
   };
   for (const SharingRig::HostExtensions &host : cases) {
       SharingRig rig(host);
@@ -1161,7 +962,6 @@ TEST(icd_external_handles, a_host_that_cannot_be_asked_what_it_shares_by_keeps_t
       rig.rig().host().shared_object(0u, 0u);
       VkDeviceMemory memory = VK_NULL_HANDLE;
       CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory), VK_SUCCESS);
-      /* The allocation that went out asked for an opaque fd, not a dma-buf. */
       WireReader           body = rig.body_before_last();
       VkMemoryAllocateInfo sent = {};
       std::uint8_t         block[1024] = {};
@@ -1173,10 +973,6 @@ TEST(icd_external_handles, a_host_that_cannot_be_asked_what_it_shares_by_keeps_t
                static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT));
   } }
 
-/* An import request the ICD will not read: a handle named by a string, and one
- * asking for a type that is not memory. Both are refused before the handle is
- * resolved, because a handle this driver cannot say the shape of is one it
- * must not open (feature 053). */
 TEST(icd_external_handles, a_malformed_memory_import_is_refused_on_each_of_its_parts)
 { SharingRig rig;
   void *const         exported = rig.exported_memory();
@@ -1201,9 +997,6 @@ TEST(icd_external_handles, a_malformed_memory_import_is_refused_on_each_of_its_p
   CHECK(memory == VK_NULL_HANDLE);
   CHECK_EQ(rig.rig().kmt().commands(), before); }
 
-/* Three refusals that cost nothing and are each their own: an export with
- * nowhere to put the answer, a device extension list with a hole in it, and a
- * host list the ICD was given only part of. */
 TEST(icd_external_handles, an_export_with_nowhere_to_answer_is_refused_before_anything_else)
 { SharingRig rig;
   av::icd::IcdRoot &root = rig.rig().root();
@@ -1218,9 +1011,6 @@ TEST(icd_external_handles, an_export_with_nowhere_to_answer_is_refused_before_an
   semaphore.handle_type_ = av::icd::opaque_win32_semaphore;
   CHECK_EQ(root.export_semaphore_handle(rig.device(), &semaphore, nullptr), VK_ERROR_INVALID_EXTERNAL_HANDLE); }
 
-/* A handle that names a semaphore cannot be allocated as memory. The row is
- * there and holds no memory, so the ICD asks the device rather than handing
- * back the semaphore, and the device is the one that says no. */
 TEST(icd_external_handles, a_memory_import_of_a_semaphores_handle_goes_to_the_device_and_is_refused)
 { SharingRig rig;
   ImportMemoryWin32HandleRecord importing = {};
@@ -1238,8 +1028,6 @@ TEST(icd_external_handles, a_memory_import_of_a_semaphores_handle_goes_to_the_de
   CHECK(memory == VK_NULL_HANDLE);
   CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id); }
 
-/* A host that will not allocate the memory an exportable request names: the
- * identity is never asked for, because there is nothing for it to name. */
 TEST(icd_external_handles, a_host_that_refuses_an_exportable_allocation_mints_no_identity)
 { SharingRig rig;
   VkExportMemoryAllocateInfo exporting = {};
@@ -1257,17 +1045,13 @@ TEST(icd_external_handles, a_host_that_refuses_an_exportable_allocation_mints_no
   CHECK(memory == VK_NULL_HANDLE);
   CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
 
-/* A semaphore is published the first time its handle is asked for, so that ask
- * is where a lost device and a refused publish both surface - and each has to
- * say which it was, because an application that gets DEVICE_LOST will recreate
- * everything and one that gets TOO_MANY_OBJECTS will not (feature 053). */
 TEST(icd_external_handles, a_semaphore_export_says_a_lost_device_and_a_refused_publish_apart)
 { SemaphoreGetWin32HandleRecord request = {};
   request.type_ = av::icd::semaphore_get_win32_handle_info;
   request.semaphore_ = reinterpret_cast<VkSemaphore>(host_semaphore);
   request.handle_type_ = av::icd::opaque_win32_semaphore;
 
-  { /* The kernel will not make the carrier the identity is minted into. */
+  {
     SharingRig rig;
     rig.rig().kmt().fail_at(MockKmt::Call::create_shared_allocation, 1u, 0xC000009Au);
     void *handle = nullptr;
@@ -1275,7 +1059,7 @@ TEST(icd_external_handles, a_semaphore_export_says_a_lost_device_and_a_refused_p
              VK_ERROR_TOO_MANY_OBJECTS);
     CHECK(handle == nullptr); }
 
-  { /* The device went with the connection before the ask. */
+  {
     SharingRig rig;
     rig.rig().kmt().withhold_answer_at(1u);
     using GetFenceStatus = VkResult (*)(VkDevice, VkFence);
@@ -1286,13 +1070,8 @@ TEST(icd_external_handles, a_semaphore_export_says_a_lost_device_and_a_refused_p
     CHECK_EQ(rig.entry<ExportSemaphore>("vkGetSemaphoreWin32HandleKHR")(rig.device(), &request, &handle),
              VK_ERROR_DEVICE_LOST);
     CHECK(handle == nullptr);
-    /* Nothing was asked of a device that is gone. */
     CHECK_EQ(rig.rig().kmt().commands(), before); } }
 
-/* Importing memory this process already holds is 047's path - a fresh fd of it,
- * because a driver takes ownership of one it imports - and it has two ways to
- * fail that the cross-process path does not: the host refusing the fd, and a
- * chain this driver cannot carry whole (feature 053, T031). */
 TEST(icd_external_handles, an_in_process_import_refuses_a_host_that_will_not_give_an_fd_or_a_chain_it_cannot_send)
 { { SharingRig rig;
     ImportMemoryWin32HandleRecord importing = {};
@@ -1303,7 +1082,6 @@ TEST(icd_external_handles, an_in_process_import_refuses_a_host_that_will_not_giv
     allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocate.pNext = &importing;
     allocate.allocationSize = shared_size;
-    /* The host will not export an fd of the memory it made. */
     rig.rig().host().vk_fd(VK_ERROR_TOO_MANY_OBJECTS, -1);
     VkDeviceMemory memory = VK_NULL_HANDLE;
     CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
@@ -1315,8 +1093,6 @@ TEST(icd_external_handles, an_in_process_import_refuses_a_host_that_will_not_giv
     importing.type_ = av::icd::import_memory_win32_handle_info;
     importing.handle_type_ = av::icd::opaque_win32_memory;
     importing.handle_ = rig.exported_memory();
-    /* A node past the marker that this driver does not carry: the chain cannot
-     * be sent whole, and half of it is not the application's request. */
     VkMemoryOpaqueCaptureAddressAllocateInfo captured = {};
     captured.sType = VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO;
     importing.next_ = &captured;

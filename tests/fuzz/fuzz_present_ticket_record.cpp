@@ -1,8 +1,3 @@
-/* The private data of a submitted packet read as a present's ticket, fed
- * attacker-chosen bytes: Adapter::submit_command_virtual reads it for every
- * packet, and a process writes the private data of its own. What decodes must
- * re-encode to exactly the bytes read and name an epoch and a ticket; a
- * refusal leaves the record as it was. */
 #include "core/support/status.hpp"
 #include "miniport/present/present_ticket_record.hpp"
 

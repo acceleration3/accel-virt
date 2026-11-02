@@ -1,7 +1,3 @@
-/* A buffer's bytes cut into commands one each fits inline (BufferPieces),
- * judged against a host that decodes them with the generated server and
- * refuses what the executor would: what the buffer holds after, and that no
- * command was larger than its room. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_transfer_host.hpp"
 #include "icd/opengl/buffer_pieces.hpp"
@@ -21,7 +17,6 @@ namespace {
 
 constexpr GLenum array_buffer = 0x8892u, static_draw = 0x88E4u;
 
-/* Bytes no two pieces share, so a piece written in the wrong place shows. */
 class Pattern {
 public:
     explicit Pattern(std::size_t bytes) : bytes_(static_cast<std::uint8_t *>(std::malloc(bytes))), size_(bytes)
@@ -40,7 +35,6 @@ private:
     std::size_t   size_;
 };
 
-/* A buffer of `bytes` the host made and bound at GL_ARRAY_BUFFER. */
 GLuint made_buffer(GlTransferHost &host, std::size_t bytes)
 {
     GLuint name = 0u;
@@ -52,11 +46,8 @@ GLuint made_buffer(GlTransferHost &host, std::size_t bytes)
 
 constexpr std::size_t awkward = 3u * BufferPieces::write_room + 17u;
 
-}  // namespace
+}
 
-/* The room is the line: what fits a command goes whole, a byte more is cut;
- * nothing to send, a negative size or one past any buffer goes whole for the
- * host to judge; and what the blob arena can lend whole is lent, not cut. */
 TEST(buffer_pieces, a_write_is_cut_only_past_the_room_and_what_no_lease_holds)
 { GlTransferHost host;
   BufferPieces   pieces(host);
@@ -87,9 +78,6 @@ TEST(buffer_pieces, a_read_is_cut_only_past_one_reply)
   CHECK(!pieces.cuts_read(-5, &byte));
   CHECK(!pieces.cuts_read(room + 1, nullptr)); }
 
-/* Why the cut exists: one command past the room is lost - a write too large
- * for the request is never sent, a read too large for the reply is refused
- * by the host, which faults a real context. */
 TEST(buffer_pieces, one_command_past_the_room_is_lost)
 { GlTransferHost host;
   Pattern        data(BufferPieces::write_room * 2u);
@@ -102,8 +90,6 @@ TEST(buffer_pieces, one_command_past_the_room_is_lost)
                              data.bytes());
   CHECK_EQ(host.refusals(), 1u); }
 
-/* Each spelling: the bytes land whole at their offset, in as many commands as
- * the room says, none of them larger than a request holds. */
 TEST(buffer_pieces, a_write_of_any_size_lands_whole_at_its_offset)
 { for (std::uint32_t way = 0u; way < 3u; way++) {
       GlTransferHost host;
@@ -142,7 +128,6 @@ TEST(buffer_pieces, a_read_of_any_size_comes_back_whole_from_its_offset)
       CHECK_EQ(back.bytes()[awkward], 0x5Au);
   } }
 
-/* Nothing to move is no command at all. */
 TEST(buffer_pieces, nothing_to_move_sends_nothing)
 { GlTransferHost host;
   BufferPieces   pieces(host);

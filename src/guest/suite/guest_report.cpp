@@ -10,7 +10,7 @@ namespace {
 
 constexpr uint32_t code_digits = 8u;
 
-}  // namespace
+}
 
 GuestReport::GuestReport(BlockSource &memory) : GuestReport(memory, "avtest")
 {
@@ -24,8 +24,6 @@ GuestReport::GuestReport(BlockSource &memory, const char *program)
     AV_SCOPE("GuestReport::GuestReport");
 }
 
-/* Room for the whole line and the terminator first, so a line is kept whole
- * or not at all. */
 void GuestReport::keep(const TextBuffer &written)
 {
     AV_SCOPE("GuestReport::keep");
@@ -178,4 +176,4 @@ bool GuestReport::invariants_hold() const
     return text_.at(text_.size() - 1u) == '\0';
 }
 
-}  // namespace av
+}

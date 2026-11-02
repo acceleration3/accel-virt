@@ -1,7 +1,3 @@
-/* wglCreateContextAttribsARB's attribute lists, which applications write, as
- * WGL_ARB_create_context, its profile extension and the robustness extension
- * judge them: what each accepted list asks the host for, and the Win32 error
- * each hostile one answers - decided from the extensions' error lists. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/opengl/context_attributes.hpp"
 #include "proto/context/gl_context_options.hpp"
@@ -48,7 +44,7 @@ bool same(const GlContextOptions &options, std::uint8_t want_major, std::uint8_t
            options.flags() == want_flags && options.share_context() == 0u;
 }
 
-}  // namespace
+}
 
 TEST(context_attributes, a_null_or_empty_list_is_the_hosts_default_context)
 { Decoded decoded = decode(nullptr);
@@ -68,23 +64,18 @@ TEST(context_attributes, a_version_and_profile_become_the_options)
   decoded = decode(compat33);
   CHECK_EQ(decoded.error, ok);
   CHECK(same(decoded.options, 3u, 3u, Profile::compatibility, 0u));
-  /* 3.2 and later with no mask is core, as the profile extension defaults. */
   const std::int32_t plain32[] = {major, 3, minor, 2, 0};
   decoded = decode(plain32);
   CHECK_EQ(decoded.error, ok);
   CHECK(same(decoded.options, 3u, 2u, Profile::core, 0u));
-  /* Below 3.2 the mask is ignored, whatever it holds. */
   const std::int32_t old_with_mask[] = {major, 3, minor, 1, mask, 0x7, 0};
   decoded = decode(old_with_mask);
   CHECK_EQ(decoded.error, ok);
   CHECK(same(decoded.options, 3u, 1u, Profile::none, 0u));
-  /* A minor alone is a 1.x version. */
   const std::int32_t minor_only[] = {minor, 5, 0};
   decoded = decode(minor_only);
   CHECK_EQ(decoded.error, ok);
   CHECK(same(decoded.options, 1u, 5u, Profile::none, 0u));
-  /* No version is 1.0, below 3.2, so a mask alone is ignored - whatever it
-   * holds - and the context is the host's default. */
   const std::int32_t mask_only[] = {mask, 0x2, 0};
   decoded = decode(mask_only);
   CHECK_EQ(decoded.error, ok);
@@ -98,14 +89,12 @@ TEST(context_attributes, flags_and_the_reset_strategy_become_option_flags)
 { const std::int32_t all[] = {flags, 0xF, reset, 0x8252, major, 4, minor, 5, 0};
   Decoded decoded = decode(all);
   CHECK_EQ(decoded.error, ok);
-  /* Isolation is asked for, not given: no host offers it, so it is dropped. */
   CHECK(same(decoded.options, 4u, 5u, Profile::core,
              GlContextOptions::debug | GlContextOptions::forward_compatible | GlContextOptions::robust_access |
                  GlContextOptions::lose_context_on_reset));
   const std::int32_t debug_only[] = {flags, 0x1, 0};
   decoded = decode(debug_only);
   CHECK_EQ(decoded.error, ok);
-  /* A flag with no version asks for the extension's default version, 1.0. */
   CHECK(same(decoded.options, 1u, 0u, Profile::none, GlContextOptions::debug));
   const std::int32_t no_notification[] = {reset, 0x8261, 0};
   decoded = decode(no_notification);
@@ -163,22 +152,16 @@ TEST(context_attributes, the_hostile_table_answers_the_extensions_errors)
       {{flags, 0, flags, 1, 0}, bad_parameter},
       {{mask, 1, mask, 1, 0}, bad_parameter},
       {{reset, 0x8261, reset, 0x8261, 0}, bad_parameter},
-      /* An unknown name wins over a bad version seen before it: nothing is
-       * judged until the whole list is read. */
       {{major, 9, 0x1234, 0, 0}, bad_parameter},
   };
   for (const Case &check : cases) CHECK_EQ(decode(check.list).error, check.error); }
 
 TEST(context_attributes, reads_no_more_than_64_pairs_and_their_terminator)
-{ /* Exactly 129 values: 64 pairs and the place of their terminator. A 65th
-   * pair's value would be read past the array, which ASan reports. */
+{
   std::int32_t list[2u * 64u + 1u] = {};
   for (std::uint32_t pair = 0u; pair < 64u; pair++) list[2u * pair] = 0x2091;
   list[128] = 0x2092;
-  /* The repeat is refused at the second pair, before the limit matters. */
   CHECK_EQ(decode(list).error, bad_parameter);
-  /* Names the test can repeat without a refusal do not exist, so no list
-   * reaches the limit: unknown names are refused at the first pair. */
   std::int32_t unterminated[2u * 64u + 1u] = {};
   for (std::uint32_t pair = 0u; pair < 64u; pair++) unterminated[2u * pair] = 0x7000 + static_cast<std::int32_t>(pair);
   unterminated[128] = 0x7fff;
@@ -211,7 +194,7 @@ struct ContextAttributesProbe {
     static bool          &accepted(ContextAttributes &attributes) { return attributes.accepted_; }
 };
 
-}  // namespace av::glicd
+}
 
 TEST(context_attributes, invariants_refuse_an_acceptance_the_list_does_not_support)
 { using av::glicd::ContextAttributesProbe;

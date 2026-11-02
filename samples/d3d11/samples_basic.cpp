@@ -1,4 +1,3 @@
-// triangle, pushconstants, gears, texture
 #include "framework.h"
 
 namespace samples {
@@ -97,8 +96,6 @@ private:
     ID3D11Buffer       *constants_ = nullptr;
 };
 
-// Vulkan's push constants become a small constant buffer rewritten per draw:
-// a ring of spheres, each with its own colour and offset.
 class PushConstants final : public Sample {
 public:
     const char *name() const override { return "pushconstants"; }
@@ -210,7 +207,6 @@ private:
     ID3D11Buffer       *constants_ = nullptr;
 };
 
-// A mipmapped, anisotropically filtered texture on a receding quad.
 class Texture final : public Sample {
 public:
     const char *name() const override { return "texture"; }
@@ -281,11 +277,11 @@ private:
     ID3D11Buffer             *constants_ = nullptr;
 };
 
-}  // namespace
+}
 
 Sample *make_triangle() { return new Triangle(); }
 Sample *make_pushconstants() { return new PushConstants(); }
 Sample *make_gears() { return new Gears(); }
 Sample *make_texture() { return new Texture(); }
 
-}  // namespace samples
+}

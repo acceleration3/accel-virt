@@ -1,8 +1,3 @@
-/* PRESENT_ENGINE and QUEUED_PRESENT as the device answers them: a page of
- * guest RAM is taken and the engine counts in it, anything else is refused
- * with the reason logged; a queued present is handed to the engine and
- * answered with what it said; every other type is left to the rest of the
- * device. */
 #include "device/control/control_request.hpp"
 #include "device/control/present_engine_commands.hpp"
 #include "device/fence/fence_interrupts.hpp"
@@ -49,7 +44,6 @@ struct Rig {
     }
     ~Rig() { engine.detach(); }
 
-    /* The response type, or 0 when the commands left the request alone. */
     std::uint32_t send(const GpuRequestBuilder &built, std::uint32_t type)
     {
         MockRequest    mock(built.bytes(), built.size());
@@ -64,7 +58,7 @@ struct Rig {
     }
 };
 
-}  // namespace
+}
 
 TEST(present_engine_commands, a_page_of_guest_ram_is_taken_and_presents_are_queued_to_the_engine)
 { Rig rig;
@@ -74,7 +68,7 @@ TEST(present_engine_commands, a_page_of_guest_ram_is_taken_and_presents_are_queu
   CHECK_EQ(rig.host.live_threads(), 1u);
   CHECK_EQ(rig.send(rig.scene.blt(1u, 0u, 1u), queued_present), ok_nodata);
   CHECK_EQ(rig.send(rig.scene.blt(7u, 0u, 1u), queued_present), err_invalid_parameter);
-  CHECK_EQ(rig.attach(0u), ok_nodata);   /* none stops the engine */
+  CHECK_EQ(rig.attach(0u), ok_nodata);
   CHECK_EQ(rig.host.live_threads(), 0u);
   CHECK_EQ(rig.send(rig.scene.blt(1u, 0u, 1u), queued_present), err_invalid_parameter); }
 

@@ -1,7 +1,3 @@
-/* The module a host program was made from, on this host's first GPU: the
- * probe's SPIR-V as it went in, the same words for the same program without
- * asking again, nothing for a program made from source, and the program let
- * go when another is asked about or the module forgotten. */
 #include "executor/opencl/cl_program_il.hpp"
 #include "guest/probe/shaders/vector_add_spv.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -36,7 +32,7 @@ cl_uint references(cl_program program)
     return count;
 }
 
-}  // namespace
+}
 
 TEST(cl_program_il, no_program_has_no_module)
 { ClProgramIl il;
@@ -72,7 +68,6 @@ TEST(cl_program_il, a_program_s_module_is_kept_with_a_reference_until_another_is
       count = 0u;
       CHECK(il.words(from_il, count) == words);
       CHECK_EQ(references(from_il), 2u);
-      /* Another asked about lets the first go. */
       CHECK(il.words(from_source, count) == nullptr);
       CHECK_EQ(references(from_il), 1u);
       CHECK(il.words(from_il, count) != nullptr);

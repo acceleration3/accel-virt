@@ -125,8 +125,6 @@ Status DisplayModeSet::decode(const uint8_t *bytes, size_t length)
     for (uint32_t index = 0u; index < count; index++) {
         const uint32_t width = reader.read_u32();
         const uint32_t height = reader.read_u32();
-        /* A repeat is the device's to avoid; kept, it would be one mode
-         * offered twice and every index after it off by one. */
         const uint32_t before = decoded.count_;
         if (decoded.add(width, height) != Status::ok || decoded.count_ == before) return Status::malformed;
     }
@@ -154,4 +152,4 @@ bool DisplayModeSet::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

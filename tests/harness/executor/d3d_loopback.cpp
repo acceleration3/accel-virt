@@ -13,11 +13,9 @@
 namespace av {
 
 namespace {
-
-/* What the guest's kernel rounds every allocation to. */
 constexpr std::uint64_t page_bytes = 4096u;
 
-}  // namespace
+}
 
 D3dLoopback::D3dLoopback(D3dBackend &backend, HostMemorySource *source, std::size_t region_bytes,
                          std::size_t lent_bytes)
@@ -40,10 +38,6 @@ D3dLoopback::~D3dLoopback()
     std::free(arena_block_);
 }
 
-/* As the device asks the executor for memory (HostMemorySource::allocate) and
- * the context then imports what it was given by key
- * (ContextSession::import_blob); the descriptor the device would map is not
- * needed here. */
 bool D3dLoopback::open(HostMemoryRequest request, std::uint64_t bytes, ImportedBlob &blob)
 {
     if (source_ == nullptr) return false;
@@ -107,12 +101,8 @@ bool D3dLoopback::run(uint32_t command_id, WireWriter &writer, bool awaited, std
     answered = 0u;
     if (writer.status() != Status::ok) return false;
     WireReader payload(command_, writer.offset());
-    /* Only an answer the guest waits on is lent room, as the device's batch
-     * executor lends it: that is how a session tells the two apart. */
     WireWriter reply(awaited ? reply_ : nullptr, awaited ? reply_bytes : 0u);
     arena_.reset();
-    /* Each command is a batch of its own here, ended as the worker ends one:
-     * whether it ran or was refused, the Direct3D 11 lock it took is let go. */
     const bool ran = backend_.run(command_id, payload, reply, arena_);
     backend_.end_batch();
     if (!ran) {
@@ -133,7 +123,6 @@ TransportResult D3dLoopback::send_sync(uint32_t command_id, WireWriter &writer, 
 {
     std::size_t answered = 0u;
     if (!run(command_id, writer, true, answered)) return TransportResult::failed;
-    /* An answer means the host has read every lease sent before it. */
     answers_++;
     blobs_.seal();
     blobs_.mark(answers_);
@@ -167,4 +156,4 @@ uint32_t D3dLoopback::refused() const
     return refused_;
 }
 
-}  // namespace av
+}

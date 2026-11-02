@@ -22,4 +22,4 @@ uint32_t PresentCount::last() const
     return count_;
 }
 
-}  // namespace av::d3d
+}

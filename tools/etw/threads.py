@@ -1,27 +1,18 @@
-"""What one thread was doing over time, from the kernel's context switches and
-readied-thread events: running (and on which processor), ready (runnable,
-waiting for a processor), or blocked (waiting, and for what) - and, while it
-ran, how much of that time interrupts and DPCs took from it.
-
-    timeline = ThreadTimeline(kernel, tid, trace.ms)
-    timeline.account(start, end)      # Account: ms running, ready, blocked by reason, interrupted
-    timeline.spans(start, end)        # [(start, end, state, detail)] for drawing
-"""
 import bisect
 import collections
 from dataclasses import dataclass, field
 
 PREEMPTED_STATES = ("Ready", "Standby", "DeferredReady")
-OPEN_END = 1 << 63     # the state after a thread's last switch lasts past the trace
+OPEN_END = 1 << 63
 
 
 @dataclass
 class Account:
-    running: float = 0.0            # on a processor, interrupts included
-    interrupted: float = 0.0        # of which DPCs and ISRs had the processor
-    ready: float = 0.0              # runnable, no processor given
-    blocked: dict = field(default_factory=lambda: collections.defaultdict(float))   # wait reason -> ms
-    unknown: float = 0.0            # before the trace saw the thread switch
+    running: float = 0.0
+    interrupted: float = 0.0
+    ready: float = 0.0
+    blocked: dict = field(default_factory=lambda: collections.defaultdict(float))
+    unknown: float = 0.0
 
     def add(self, other):
         self.running += other.running
@@ -42,9 +33,6 @@ class ThreadTimeline:
         self.starts = [span[0] for span in self.spans_list]
 
     def build(self):
-        """[(start, end, state, detail)]: 'running' with the processor, 'ready',
-        or 'blocked' with the wait reason; covering from the thread's first
-        switch to its last."""
         switches = []
         for cpu, per_cpu in self.kernel.switches.items():
             for switch in per_cpu:
@@ -103,7 +91,6 @@ class ThreadTimeline:
         return account
 
     def interrupted(self, cpu, start, end):
-        """ms of DPCs and ISRs on `cpu` within [start, end)."""
         interrupts = self.kernel.interrupts.get(cpu, [])
         if cpu not in self.interrupt_starts:
             self.interrupt_starts[cpu] = [interrupt.start for interrupt in interrupts]

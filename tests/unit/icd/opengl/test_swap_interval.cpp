@@ -1,9 +1,3 @@
-/* How many vertical blanks a swap waits for (feature 051, US2.2).
- *
- * WGL_EXT_swap_control defines 0 and 1, and leaves anything above 1 to the
- * implementation; what it does not define is a negative interval, which is
- * WGL_EXT_swap_control_tear's, and this driver reports no tear control - so an
- * application asking for one is refused and keeps the interval it had. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/opengl/swap_interval.hpp"
 
@@ -42,7 +36,6 @@ TEST(swap_interval, every_blank_waited_for_is_counted)
   interval.waited_one();
   interval.waited_one();
   CHECK_EQ(interval.waited(), 2u);
-  /* An interval of nothing waits for nothing, and the count stands. */
   CHECK(interval.ask(0));
   CHECK_EQ(interval.blanks(), 0u);
   CHECK_EQ(interval.waited(), 2u);

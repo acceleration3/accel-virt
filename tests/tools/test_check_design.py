@@ -68,8 +68,6 @@ class DesignRules(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_members_after_a_nested_type_are_the_enclosing_class_s_state(self):
-        """A table of complete slots is declared after its slot type, so a
-        class's members often follow a nested struct."""
         self.tree.write("src/device/table.hpp",
                         "class Table {\npublic:\n    int count() const;\nprivate:\n"
                         "    struct Slot {\n        int id_;\n    };\n"
@@ -131,18 +129,11 @@ if __name__ == "__main__":
 
 
 class GeneratedDirectories(unittest.TestCase):
-    """What a generator wrote is not this project's design, and is not judged
-    as such - but nothing hand-written may hide there either, which is what
-    check_generated.py asserts and what this asserts it relies on (feature
-    063)."""
-
     def setUp(self):
         self.tree = SourceTree()
         self.addCleanup(self.tree.remove)
 
     def test_a_class_a_generator_wrote_is_not_judged_by_these_rules(self):
-        """A registry decides the shape of generated code: static methods and
-        stateless classes in it are the API's doing, not a design mistake."""
         self.tree.write("src/proto/generated/vulkan/vk_serialize.hpp",
                         "namespace av::vkproto {\n"
                         "class Commands {\n"
@@ -154,8 +145,6 @@ class GeneratedDirectories(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_the_same_class_outside_a_generated_directory_is_judged(self):
-        """The exclusion is the directory, not the name: move it and the rules
-        apply again."""
         self.tree.write("src/proto/hand_written/vk_serialize.hpp",
                         "namespace av::vkproto {\n"
                         "class Commands {\n"

@@ -114,8 +114,6 @@ void ScriptedD3d9Ex::release()
     live_ = false;
 }
 
-/* What a window's DIB holds of the frame: blue, green, red, and the
- * desktop's own alpha. */
 void ScriptedD3d9Ex::arrive()
 {
     if (!pending_) return;
@@ -124,4 +122,4 @@ void ScriptedD3d9Ex::arrive()
     window_frame_.show(bgra);
 }
 
-}  // namespace av
+}

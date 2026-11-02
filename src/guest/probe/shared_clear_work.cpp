@@ -8,8 +8,6 @@
 namespace av {
 
 namespace {
-
-/* A driver may round a clear colour either way at the half step. */
 constexpr uint8_t tolerance = 1u;
 
 bool near(uint8_t read, uint8_t asked)
@@ -18,7 +16,7 @@ bool near(uint8_t read, uint8_t asked)
     return read + tolerance >= asked && asked + tolerance >= read;
 }
 
-}  // namespace
+}
 
 SharedClearWork::SharedClearWork(D3d11SharedEntry &d3d11)
     : d3d11_(d3d11), made_(false), made_targets_(0u), read_(0u), texels_{}
@@ -55,8 +53,6 @@ int32_t SharedClearWork::make_targets()
     return 0;
 }
 
-/* The last texel: rows placed other than where the texture's reader looks
- * for them move it first. */
 int32_t SharedClearWork::read_texels()
 {
     AV_SCOPE("SharedClearWork::read_texels");
@@ -74,7 +70,6 @@ uint32_t SharedClearWork::coloured() const
     for (uint32_t target = 0u; target < read_; target++) {
         const uint8_t *const texel = texels_[target];
         const uint8_t *const colour = colours[target];
-        /* BGRA against the colour's red-first bytes. */
         right += near(texel[0], colour[2]) && near(texel[1], colour[1]) && near(texel[2], colour[0]) ? 1u : 0u;
     }
     return right;
@@ -87,4 +82,4 @@ bool SharedClearWork::invariants_hold() const
     return made_targets_ <= targets && read_ <= made_targets_;
 }
 
-}  // namespace av
+}

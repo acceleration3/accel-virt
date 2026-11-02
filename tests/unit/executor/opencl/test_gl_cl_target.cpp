@@ -1,7 +1,3 @@
-/* A texture target as the copy path needs it (GlClTarget): where it binds -
- * a cube map's faces at the cube map - the image OpenCL makes, the object type
- * the guest is told, how many dimensions a level's write takes, and the image
- * description a level's extent becomes. */
 #include "executor/opencl/gl_cl_target.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -39,12 +35,10 @@ TEST(gl_cl_target, every_target_the_extension_lists_with_texels_of_its_own_is_kn
       CHECK_EQ(target.dimensions(), item.dimensions);
   } }
 
-/* A buffer texture's texels are its buffer's, a multisampled one is
- * cl_khr_gl_msaa_sharing's, and a cube map is named by its faces. */
 TEST(gl_cl_target, a_buffer_texture_a_multisampled_one_and_a_whole_cube_map_are_unknown)
-{ const std::uint32_t unknown[] = {0u, 0x8C2Au /* TEXTURE_BUFFER */, 0x9100u /* TEXTURE_2D_MULTISAMPLE */,
-                                   0x9102u /* TEXTURE_2D_MULTISAMPLE_ARRAY */, 0x8513u /* TEXTURE_CUBE_MAP */,
-                                   0x9009u /* TEXTURE_CUBE_MAP_ARRAY */, 0x8D41u /* RENDERBUFFER */};
+{ const std::uint32_t unknown[] = {0u, 0x8C2Au , 0x9100u ,
+                                   0x9102u , 0x8513u ,
+                                   0x9009u , 0x8D41u };
   for (const std::uint32_t named : unknown) {
       const GlClTarget target(named);
       CHECK(!target.known());
@@ -55,9 +49,6 @@ TEST(gl_cl_target, a_buffer_texture_a_multisampled_one_and_a_whole_cube_map_are_
       CHECK_EQ(target.dimensions(), 0u);
   } }
 
-/* GL counts a 1D array's layers as its height and a 2D array's as its depth;
- * OpenCL counts both as the array's size, and leaves at zero what an image
- * has none of. */
 TEST(gl_cl_target, a_level_s_extent_is_described_as_opencl_counts_it)
 { struct Case {
       std::uint32_t target, height, depth;
@@ -81,6 +72,5 @@ TEST(gl_cl_target, a_level_s_extent_is_described_as_opencl_counts_it)
       CHECK_EQ(desc.image_height, item.desc_height);
       CHECK_EQ(desc.image_depth, item.desc_depth);
       CHECK_EQ(desc.image_array_size, item.desc_layers);
-      /* Written over, all of it. */
       CHECK_EQ(desc.image_row_pitch, 0u);
   } }

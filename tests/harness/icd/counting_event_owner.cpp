@@ -23,4 +23,4 @@ const clicd::ClObject *CountingEventOwner::last() const { return last_; }
 std::uint32_t          CountingEventOwner::deliveries() const { return deliveries_; }
 bool CountingEventOwner::delivered_before_release() const { return !out_of_order_; }
 
-}  // namespace av
+}

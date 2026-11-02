@@ -22,7 +22,7 @@ std::uint32_t u32(const std::uint8_t *bytes, unsigned offset)
            std::uint32_t{bytes[offset + 2u]} << 16u | std::uint32_t{bytes[offset + 3u]} << 24u;
 }
 
-}  // namespace
+}
 
 TEST(present_command_write, lays_out_the_documented_header)
 { const PresentCommand command(PresentOperation::color_fill, 0x00FF8040u, Rectangle(0, 0, 8, 8),

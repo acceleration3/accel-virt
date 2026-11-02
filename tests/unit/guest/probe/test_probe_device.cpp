@@ -1,7 +1,3 @@
-/* The probe's device over a scripted Vulkan: an instance at 1.3, the listed
- * device whose valid LUID is asked for, the first family that draws and
- * computes, a device with one queue of it, memory types chosen lowest first,
- * and destroyed device before instance, naming only what was made. */
 #include "guest/probe/probe_device.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/scripted_vulkan.hpp"
@@ -17,11 +13,10 @@ struct ProbeDeviceProbe {
     static void queueless(ProbeDevice &device) { device.queue_ = VK_NULL_HANDLE; }
     static void long_list(ProbeDevice &device) { device.listed_count_ = ProbeDevice::max_physical_devices + 1u; }
     static void far_family(ProbeDevice &device) { device.family_ = ProbeDevice::max_queue_families; }
-    /* Forgets what it made, so the scripted Vulkan keeps it for the test. */
     static void forget(ProbeDevice &device) { device.device_ = VK_NULL_HANDLE; device.instance_ = VK_NULL_HANDLE; }
 };
 
-}  // namespace av
+}
 
 using av::ProbeDevice;
 using av::ProbeDeviceProbe;
@@ -32,7 +27,7 @@ namespace {
 
 constexpr std::uint64_t luid = 0x0000000300000042ull;
 
-}  // namespace
+}
 
 TEST(probe_device, a_device_is_made_on_the_device_with_the_luid)
 { ScriptedVulkan vulkan;
@@ -61,7 +56,6 @@ TEST(probe_device, a_device_is_made_on_the_device_with_the_luid)
   CHECK_EQ(vulkan.live(), 0u);
   CHECK_EQ(vulkan.misuses(), 0u); }
 
-/* Nothing made, nothing destroyed. */
 TEST(probe_device, an_unmade_device_destroys_nothing)
 { ScriptedVulkan vulkan;
   vulkan.fail(Call::create_instance, 1u, VK_ERROR_INITIALIZATION_FAILED);
@@ -83,7 +77,6 @@ TEST(probe_device, a_refused_list_is_passed_on_and_an_incomplete_one_is_kept_as_
   CHECK_EQ(device.listed(), ProbeDevice::max_physical_devices);
   CHECK(device.invariants_hold()); }
 
-/* Its LUID, but not valid; the right LowPart under another HighPart. */
 TEST(probe_device, only_a_valid_equal_luid_is_chosen)
 { ScriptedVulkan vulkan;
   vulkan.set_physical_devices(2u);
@@ -96,7 +89,6 @@ TEST(probe_device, only_a_valid_equal_luid_is_chosen)
   CHECK(device.physical_device() == VK_NULL_HANDLE);
   CHECK(device.invariants_hold()); }
 
-/* The first family with both, not the first family. */
 TEST(probe_device, a_family_that_only_computes_is_passed_over)
 { ScriptedVulkan vulkan;
   vulkan.set_queue_families(2u, VK_QUEUE_GRAPHICS_BIT);
@@ -119,8 +111,6 @@ TEST(probe_device, a_refused_device_leaves_no_queue)
   CHECK(device.queue() == VK_NULL_HANDLE);
   CHECK(device.invariants_hold()); }
 
-/* The lowest usable type with every wanted flag; the device's count bounds
- * the search even when it claims more than Vulkan has. */
 TEST(probe_device, memory_types_are_chosen_lowest_first_within_the_count)
 { ScriptedVulkan vulkan;
   vulkan.set_memory_types(4u);
@@ -154,8 +144,6 @@ TEST(probe_device, memory_types_past_vulkan_s_limit_are_not_looked_at)
   CHECK(device.choose_family());
   CHECK_EQ(device.make_device(), VK_SUCCESS);
   std::uint32_t type = 0u;
-  /* Nothing usable below 32, so only the limit ends the search: a shift past
-   * the mask would be undefined, which UBSan reports. */
   CHECK(!device.memory_type(0u, 0u, type)); }
 
 TEST(probe_device, invariants_refuse_what_was_made_out_of_order)
@@ -198,10 +186,6 @@ TEST(probe_device, invariants_refuse_what_was_made_out_of_order)
   vulkan.destroy_device(made);
   vulkan.destroy_instance(instance); }
 
-/* The present steps call vkCreateWin32SurfaceKHR and the swapchain entries.
- * A loader fills a dispatch slot for those only when the extension was enabled,
- * so an instance and a device made without them are a jump to address zero the
- * first time one is called - which is how the live probe crashed (046). */
 TEST(probe_device, the_window_system_extensions_are_enabled_on_the_instance_and_the_device)
 { ScriptedVulkan vulkan;
   ProbeDevice    device(vulkan);
@@ -213,15 +197,10 @@ TEST(probe_device, the_window_system_extensions_are_enabled_on_the_instance_and_
   CHECK(device.choose(1u));
   CHECK(device.choose_family());
   CHECK_EQ(device.make_device(), VK_SUCCESS);
-  /* The swapchain is the device's, and the window's surface is not. */
   CHECK(vulkan.device_enabled("VK_KHR_swapchain"));
   CHECK(!vulkan.device_enabled("VK_KHR_win32_surface"));
   CHECK_EQ(vulkan.misuses(), 0u); }
 
-/* More extensions than the array holds: refused rather than written past, and
- * nothing is asked of the host. A probe is the one program in this tree with
- * no test harness underneath it in the guest, so its own bounds are the only
- * thing between a caller's list and its stack (feature 053). */
 TEST(probe_device_make_device, more_extensions_than_there_is_room_for_are_refused)
 { ScriptedVulkan vulkan;
   ProbeDevice    device(vulkan);
@@ -234,7 +213,6 @@ TEST(probe_device_make_device, more_extensions_than_there_is_room_for_are_refuse
   CHECK_EQ(device.make_device(wanted, ProbeDevice::max_device_extensions),
            VK_ERROR_EXTENSION_NOT_PRESENT);
   CHECK_EQ(vulkan.calls(ScriptedVulkan::Call::create_device), before);
-  /* One fewer is exactly the room there is, and goes through. */
   const char *const fits[ProbeDevice::max_device_extensions - ProbeDevice::device_extension_count] = {
       "VK_KHR_external_memory_win32"};
   CHECK_EQ(device.make_device(fits, ProbeDevice::max_device_extensions - ProbeDevice::device_extension_count),

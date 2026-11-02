@@ -1,21 +1,8 @@
-"""Raw cl.xml commands to wire-ready ones.
-
-Most of a parameter's role is inferable from its C type and its name —
-OpenCL is consistent about ``num_events_in_wait_list`` preceding
-``event_wait_list``, about ``errcode_ret``, about the ``param_value``
-trio. What is not inferable is which scalar counts which array, because
-the registry never says. Those come from the profile, and a command
-with an array the profile does not annotate is an error rather than a
-guess: guessing produces a protocol that decodes into plausible
-nonsense, which is the failure this codegen exists to avoid.
-"""
-
 from __future__ import annotations
 
 from .model import Command, Param, Registry, Role
 from .parse import RawCommand, RawRegistry
 
-# Scalars that are counts, not data.
 _COUNT_PREFIXES = ("num_", "count", "n_")
 
 _PROPERTY_TYPES = {
@@ -73,9 +60,6 @@ def _infer(raw: RawCommand, index: int, handles: set[str],
             return Param(name, t, Role.HANDLE_ARRAY,
                          len_param=prev.name if prev is not None else None,
                          element=t.base)
-        # An out array is recognised by the pair around it: a capacity
-        # before, a count after. clGetDeviceIDs and clGetPlatformIDs are
-        # the shape.
         capacity = prev.name if prev is not None and prev.type.pointer_depth == 0 else None
         count_out = nxt.name if nxt is not None and nxt.type.pointer_depth == 1 else None
         if capacity is not None and count_out is not None:
@@ -94,19 +78,12 @@ def _infer(raw: RawCommand, index: int, handles: set[str],
         return Param(name, t, Role.STRUCT_IN if t.is_const else Role.STRUCT_OUT,
                      element=t.base)
 
-    # A pointer to a plain scalar: an array in, or one value out.
     if t.is_const:
         return Param(name, t, Role.SCALAR_ARRAY, element=t.base)
     return Param(name, t, Role.SCALAR_OUT, element=t.base)
 
 
 def _needs_len(param: Param) -> bool:
-    """An array with no count cannot be decoded, so generation stops.
-
-    An SVM pointer is not in the list: most of them carry no extent at all -
-    clSVMFree and clSetKernelArgSVMPointer name an address and nothing more -
-    and the server bounds what it can. Where a command does say how much it
-    will touch, the profile names it and svm_for is asked about that too."""
     return param.role in (Role.HANDLE_ARRAY, Role.SCALAR_ARRAY, Role.BYTES_IN,
                           Role.BYTES_OUT) and param.len_param is None
 
@@ -134,10 +111,6 @@ def lower(raw: RawRegistry, profile) -> Registry:
                              "lengths": "lengths_param",
                              "size": "size_param",
                              "size_ret": "size_ret_param"}[key]
-                    # An empty string means "there is none": inference
-                    # takes the parameter that follows an array as its
-                    # lengths, and for clCompileProgram that is a
-                    # callback.
                     setattr(param, field, override[key] or None)
                 if "optional" in override:
                     param.optional = bool(override["optional"])
@@ -159,18 +132,6 @@ def lower(raw: RawRegistry, profile) -> Registry:
 
 
 def _carry_extensions(raw: RawRegistry, reg: Registry, profile) -> None:
-    """Which extensions this build can offer.
-
-    One rule, and the same one the OpenGL half has: an extension is carried
-    when an application gets a working entry point for every command the
-    registry puts in it - one that crosses the wire, or one the driver
-    answers itself. An extension needing an entry point that does neither is
-    not one this driver can offer, whatever the host reports.
-
-    The registry's `depends` is the second half: cl_khr_external_memory_win32
-    carries no command of its own and everything an application does with it
-    goes through cl_khr_external_memory's two, so it is carried only where
-    that one is."""
     answered = set(reg.commands) | set(profile.driver_implemented)
     carried = {name for name, ext in raw.extensions.items()
                if all(command in answered for command in ext.commands)}

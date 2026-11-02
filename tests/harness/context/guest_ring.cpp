@@ -63,4 +63,4 @@ std::uint8_t &GuestRing::data(std::uint64_t counter)
 
 std::uint8_t *GuestRing::bytes() { return bytes_; }
 
-}  // namespace av
+}

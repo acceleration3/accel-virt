@@ -18,7 +18,7 @@ namespace {
 
 constexpr uint32_t blob_imported = 1u;
 
-}  // namespace
+}
 
 RecordingReplay::RecordingReplay(ExecutorLibrary &library, BlockSource &memory)
     : library_(library),
@@ -59,8 +59,6 @@ Status RecordingReplay::run(RecordingReader &reader, const RecordingFilter &filt
     const Status opened = reader.open();
     if (opened != Status::ok) return Status::malformed;
     if (!gpu_chosen_) use_gpu(reader.header().uuid());
-    /* A GPU the library has not got makes every context a finding, as a
-     * library that makes no executor does. */
     static_cast<void>(library_.open_domain(gpu_.raw()));
     RecordHeader   record;
     const uint8_t *payload = nullptr;
@@ -114,10 +112,6 @@ void RecordingReplay::replay_setup(const RecordHeader &record, const uint8_t *pa
     contexts_++;
 }
 
-/* A transport command is the device's own answer, never the library's, so it
- * is not replayed; an import is the one that leaves memory behind, and a
- * context that asked for one runs no further - nor does one that sent a
- * command in pieces, which the replay does not gather. */
 void RecordingReplay::replay_batch(const RecordHeader &record, const uint8_t *payload,
                                    const RecordingFilter &filter)
 {
@@ -147,8 +141,6 @@ void RecordingReplay::replay_batch(const RecordHeader &record, const uint8_t *pa
         index++;
         if (command.header().api() == CommandHeader::transport_api) {
             const uint32_t id = command.header().id();
-            /* A part of an answer the library kept is the device's answer, so
-             * the batch's reply is not one to compare. */
             if (id == CommandHeader::answer_piece_id) context->answer_in_parts();
             if (id != CommandHeader::import_blob_id && id != CommandHeader::piece_id) continue;
             char       bytes[finding_bytes];
@@ -165,7 +157,7 @@ void RecordingReplay::replay_batch(const RecordHeader &record, const uint8_t *pa
         if (command.header().api() != context->command_api() || !filter.keeps(command)) continue;
         const Status ran = context->execute(library_, command);
         commands_++;
-        if (ran == Status::not_found) continue;   /* a command this library does not know */
+        if (ran == Status::not_found) continue;
         if (ran == Status::ok) continue;
         char       bytes[finding_bytes];
         TextBuffer text(bytes, sizeof bytes);
@@ -274,9 +266,6 @@ const char *RecordingReplay::finding(uint32_t index) const
 bool RecordingReplay::invariants_hold() const
 {
     AV_SCOPE("RecordingReplay::invariants_hold");
-    /* Every replay is found by its context and made an executor, every
-     * finding kept is a whole string, and no more are kept than were found or
-     * live than were ever made. */
     if (!replays_.all_of([](const ReplayContext &replay) { return replay.invariants_hold() && replay.created(); }))
         return false;
     for (const Finding &kept : findings_text_)
@@ -285,4 +274,4 @@ bool RecordingReplay::invariants_hold() const
            findings_text_.size() <= findings_;
 }
 
-}  // namespace av
+}

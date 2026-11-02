@@ -28,4 +28,4 @@ void PollPause::between()
     if (!spinning()) rest();
 }
 
-}  // namespace av::icd
+}

@@ -30,7 +30,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(submission_descriptor_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[SubmissionDescriptor::encoded_size] = {};
@@ -54,9 +54,9 @@ TEST(submission_descriptor, round_trips_through_its_encoding)
 
 TEST(submission_descriptor_decode, rejects_each_malformed_descriptor)
 { const SubmissionDescriptor bad[] = {
-      SubmissionDescriptor(0u, 0u, 1u),     /* fence id 0 */
-      SubmissionDescriptor(1u, 5u, 5u),     /* empty batch */
-      SubmissionDescriptor(1u, 6u, 5u),     /* end before begin */
+      SubmissionDescriptor(0u, 0u, 1u),
+      SubmissionDescriptor(1u, 5u, 5u),
+      SubmissionDescriptor(1u, 6u, 5u),
   };
   for (const SubmissionDescriptor &descriptor : bad) {
       std::uint8_t bytes[SubmissionDescriptor::encoded_size] = {};
@@ -93,13 +93,5 @@ TEST(submission_descriptor_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 256u);
-  /* The descriptor constrains its magic and reserved word, forbids fence zero
-   * and demands a non-empty span. The fence's 64 bits are free, because 7 has
-   * three bits set and no single flip can clear them. Of the begin counter
-   * only the six flips that keep 40 under the 88-byte end survive - 8, 32, 41,
-   * 42, 44 and 56 - and of the end counter every flip but the one that drops
-   * 88 to 24, below begin. Every shorter input is short of 32 bytes, all-zero
-   * and all-ones carry no magic, and the untouched input is the last
-   * acceptance. */
   const std::uint32_t acceptable = 64u + 6u + 63u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

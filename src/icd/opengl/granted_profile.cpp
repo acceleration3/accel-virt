@@ -66,4 +66,4 @@ bool GrantedProfile::invariants_hold() const
     return mask_ == 0u || mask_ == core_bit || mask_ == compatibility_bit;
 }
 
-}  // namespace av::glicd
+}

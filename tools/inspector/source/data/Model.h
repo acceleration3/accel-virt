@@ -1,14 +1,6 @@
 #ifndef DATA_MODEL_H
 #define DATA_MODEL_H
 
-// What the inspector knows: the sampler's newest round, every numeric field's history, each
-// thread's last progress, and the dump each process gave the round before. Both front ends - the
-// window and the MCP tools - read it, and the views they share (a thread's state, a context's rates)
-// are computed here once, so the two never disagree about what is stalled or how fast.
-//
-// Thread-safety: Update takes the lock itself; everything else is read with the lock held
-// (`LockGuard<Mutex> hold(model.GetMutex())`), since a view holds pointers into the current round.
-
 #include "containers/DynamicArray.h"
 #include "containers/HashMap.h"
 #include "containers/String.h"
@@ -24,7 +16,7 @@ namespace inspector {
 
 struct ModelOptions {
     String shm_directory = "/dev/shm";
-    String source_root;  // empty: ScopeNames::DefaultRoot()
+    String source_root;
     int interval_ms = 250;
 };
 
@@ -33,30 +25,30 @@ StringView ThreadStateName(ThreadState state);
 
 struct StackFrameView {
     String name;
-    f64 age = 0.0;   // seconds the frame has been open
+    f64 age = 0.0;
 };
 
 struct ThreadView {
     const TraceSlot* slot = nullptr;
     u32 thread = 0;
     ThreadState state = ThreadState::Idle;
-    f64 since_progress = 0.0;            // seconds since it last entered a function
+    f64 since_progress = 0.0;
     Optional<f64> calls_per_second;
-    const TraceSlot* lock_holder = nullptr; // who holds the lock it waits on
-    DynamicArray<StackFrameView> stack;  // outermost first; empty when idle
-    String last_left;                    // idle: what it last left
+    const TraceSlot* lock_holder = nullptr;
+    DynamicArray<StackFrameView> stack;
+    String last_left;
     f64 left_ago = 0.0;
 };
 
 struct ContextView {
     const ProcessSample* process = nullptr;
-    const StateNode* node = nullptr;     // module/../contexts/0/context/<id>
+    const StateNode* node = nullptr;
     const StateNode* worker = nullptr;
     StringView gpu;
-    StringView api;                      // "Direct3D"
+    StringView api;
     Optional<f64> batches_per_second;
     Optional<f64> ring_bytes_per_second;
-    StringView state;                    // live, FAULTED, not bound, worker stopped
+    StringView state;
 };
 
 class Model {
@@ -70,9 +62,7 @@ public:
 
     void Start();
     void Stop();
-    // Folds in the sampler's newest round; true when there was one.
     bool Update();
-    // Asks for a round now and waits up to `timeout_ms` for it to be folded in.
     bool SampleNow(int timeout_ms);
 
     Mutex& GetMutex() noexcept { return m_mutex; }
@@ -83,20 +73,15 @@ public:
     History& GetHistory() noexcept { return m_history; }
     const Optional<Sample>& GetCurrent() const noexcept { return m_current; }
 
-    // Seconds since the model started, on the sampler's clock; and since a stamp of that clock.
     f64 Seconds(u64 ticks) const noexcept;
     f64 SecondsSince(u64 ticks) const noexcept;
 
     const ProcessSample* Find(StringView process_key) const noexcept;
     Optional<f64> RateOf(StringView process, StringView path, StringView field, f64 window = 2.0) const;
-    // "" when `key` of `path` holds `value` as it did last round; "new" when it did not exist; else
-    // the value it had.
     String FieldChange(StringView process, StringView path, StringView key, StringView value) const;
     bool IsNewNode(StringView process, StringView path) const;
 
-    // Every thread of `process`'s table, worst first (stalled, waiting, running, idle).
     DynamicArray<ThreadView> Threads(const ProcessSample& process, f64 stall_seconds) const;
-    // Every av context every device holds.
     DynamicArray<ContextView> Contexts() const;
 
 private:
@@ -115,6 +100,6 @@ private:
     u64 m_started = 0;
 };
 
-} // namespace inspector
+}
 
 #endif

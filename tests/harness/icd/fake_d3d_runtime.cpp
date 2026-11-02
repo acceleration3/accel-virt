@@ -26,22 +26,13 @@ using CloseAdapter = Hresult (*)(void *);
 using DestroyDevice = void (*)(void *);
 using OptionalTables = Hresult (*)(void *, std::uint32_t *, d3d::D3d12ddiTableRequestRecord *);
 using FillTable = Hresult (*)(void *, std::uint32_t, void *, std::size_t, std::uint32_t, void *);
-/* The eight slots of the D3D12 table in the order the header declares them, so
- * the check below can name the six D3D12Core requires by index. */
 void *const *slots_of(const d3d::D3d12ddiAdapterFuncsRecord &table)
 {
     return reinterpret_cast<void *const *>(&table);
 }
 
-/* The runtime's QueryAdapterInfo callback, which the driver asks for the LUID
- * the kernel driver answers: this fake has no kernel driver, so it refuses,
- * and the driver takes the first avgpu adapter. The driver calls it through
- * a pointer to its own function-local argument struct, which no type here can
- * name, so -fsanitize=function would see a mismatch that the ABI does not. */
 __attribute__((no_sanitize("function"))) std::int32_t refuse_adapter_info(void *, void *) { return -1; }
 
-/* UMDRIVERPRIVATE as avgpu.sys writes it for a caller with room for two
- * words: the tag, then the adapter's LUID. */
 struct AdapterInfoQuery {
     void         *private_data;
     std::uint32_t private_bytes;
@@ -58,7 +49,7 @@ __attribute__((no_sanitize("function"))) std::int32_t answer_adapter_info(void *
                : -1;
 }
 
-}  // namespace
+}
 
 FakeD3dRuntime::FakeD3dRuntime(d3d::UmdRoot &root, d3d::RuntimeKind runtime)
     : root_(root), runtime_(runtime), callbacks_{}, funcs9_{}, version9_(d3d9_newest_version), driver_version_(0u),
@@ -70,8 +61,6 @@ FakeD3dRuntime::FakeD3dRuntime(d3d::UmdRoot &root, d3d::RuntimeKind runtime)
       no_callbacks_(false), no_table_(false), no_dxgi_callbacks_(false), no_dxgi_table_(false), scribble_(false),
       block_{}, table_{}, runtime_device_(0), luid_(0u), runtime_core_layer_(0), kt_callbacks_(0), um_callbacks_(0)
 {
-    /* Non-null rows, as a real runtime's table has: the driver keeps the
-     * pointer to the table, and a test that moved a row would see it. */
     callbacks_.pfnQueryAdapterInfoCb = reinterpret_cast<void *>(&refuse_adapter_info);
     callbacks_.pfnGetMultisampleMethodListCb = &runtime_core_layer_;
     callbacks_.pfnQueryAdapterInfoCb2 = &kt_callbacks_;
@@ -94,8 +83,6 @@ void FakeD3dRuntime::answer_luid(std::uint64_t luid)
 
 Hresult FakeD3dRuntime::open()
 {
-    /* Both runtimes zero the table before the call, so a slot the driver does
-     * not write reads back null (research.md §12). */
     std::memset(&funcs10_, 0, sizeof funcs10_);
     std::memset(&funcs12_, 0, sizeof funcs12_);
     std::memset(&funcs9_, 0, sizeof funcs9_);
@@ -140,7 +127,6 @@ bool FakeD3dRuntime::table_is_whole() const
         return funcs10_.pfnCalcPrivateDeviceSize != nullptr && funcs10_.pfnCreateDevice != nullptr &&
                funcs10_.pfnCloseAdapter != nullptr && funcs10_.pfnGetSupportedVersions != nullptr &&
                funcs10_.pfnGetCaps != nullptr;
-    /* Slots two through seven, which is what D3D12Core checks. */
     void *const *const slots = slots_of(funcs12_);
     for (std::uint32_t slot = 2u; slot < 8u; slot++)
         if (slots[slot] == nullptr) return false;
@@ -183,8 +169,6 @@ Hresult FakeD3dRuntime::create_device()
     std::memset(block_, scribble_ ? 0x5A : 0, sizeof block_);
     std::memset(&dxgi_table_, 0, sizeof dxgi_table_);
     if (runtime_ == d3d::RuntimeKind::d3d9) {
-        /* D3DDDIARG_CREATEDEVICE begins with hDevice: the runtime's handle in,
-         * the driver's out. */
         void *create[16] = {};
         create[0] = &runtime_device_;
         const Hresult made = reinterpret_cast<CreateDevice9>(funcs9_.pfnCreateDevice)(adapter_, create);
@@ -251,8 +235,6 @@ void FakeD3dRuntime::destroy_device()
 std::uint32_t FakeD3dRuntime::driver_version() const { return driver_version_; }
 void         *FakeD3dRuntime::device9() const { return device9_; }
 
-/* d3d9.dll destroys a device through its device table; the root's slot is
- * what that table's DestroyDevice thunk calls (tools/gen_d3d9_ddi.py). */
 Hresult FakeD3dRuntime::destroy_device9()
 {
     const Hresult destroyed = root_.destroy_device9(device9_);
@@ -266,4 +248,4 @@ d3d::Dxgi161DdiBaseFunctionsRecord &FakeD3dRuntime::dxgi_table() { return dxgi_t
 
 const d3d::DxgiDdiBaseCallbacksRecord &FakeD3dRuntime::dxgi_callbacks() const { return dxgi_callbacks_; }
 
-}  // namespace av
+}

@@ -1,11 +1,3 @@
-/* The probe's forced fault (feature 045, T037): vkAvForceContextFault is a
- * device-level entry point, so vkGetDeviceProcAddr answers the ICD's own
- * pointer and no loader needs a trampoline for it. It is called with a device
- * of the instance, and sends a vkCreateInstance cut after its structure type on the
- * instance's own transport; the host faults the context (MockKmt withholding
- * the answer), the call answers VK_ERROR_DEVICE_LOST, and every later call on
- * that instance answers the loss while a new instance works. Invariants after
- * every call that changes the root. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -82,11 +74,8 @@ private:
     VkPhysicalDevice physical_ = VK_NULL_HANDLE;
 };
 
-}  // namespace
+}
 
-/* A device answers it by name, and the instance's table answers the same
- * function; it is no physical-device function, and before an instance exists
- * nothing answers it. */
 TEST(icd_forced_fault, it_is_a_device_entry_point)
 { FaultRig rig;
   const VkDevice           device = rig.device();
@@ -96,9 +85,6 @@ TEST(icd_forced_fault, it_is_a_device_entry_point)
   CHECK(rig.rig().root().physical_device_proc_addr(entry_name) == nullptr);
   CHECK(rig.rig().root().instance_proc_addr(VK_NULL_HANDLE, entry_name) == nullptr); }
 
-/* The host faults the context the cut frame reached: the call answers the
- * loss, the frame on the ring is vkCreateInstance with four bytes of body,
- * and the instance's device answers the loss from then on without a Kmt call. */
 TEST(icd_forced_fault, a_withheld_answer_loses_the_instance)
 { FaultRig rig;
   const VkDevice device = rig.device();
@@ -119,8 +105,6 @@ TEST(icd_forced_fault, a_withheld_answer_loses_the_instance)
   CHECK_EQ(kmt_calls(rig.kmt()), before);
   CHECK(rig.rig().log().holding("vkAvForceContextFault on a lost device") == 1u); }
 
-/* A second instance opens a connection of its own, which the first one's
- * fault leaves working. */
 TEST(icd_forced_fault, a_new_instance_is_not_lost)
 { FaultRig rig;
   const VkDevice device = rig.device();
@@ -135,8 +119,6 @@ TEST(icd_forced_fault, a_new_instance_is_not_lost)
   rig.rig().destroy_instance(again);
   CHECK(rig.rig().root().invariants_hold()); }
 
-/* A host that answers the cut frame did not fault anything: the call says it
- * could not, logs it, and the instance goes on working. */
 TEST(icd_forced_fault, an_answered_frame_is_refused_as_not_faulting)
 { FaultRig rig;
   const VkDevice device = rig.device();
@@ -147,8 +129,6 @@ TEST(icd_forced_fault, an_answered_frame_is_refused_as_not_faulting)
   CHECK_EQ(rig.rig().log().holding("avvk: the host answered a truncated vkCreateInstance"), 1u);
   CHECK(rig.device() != VK_NULL_HANDLE); }
 
-/* A device this ICD did not make, or a handle of another kind, is not
- * dispatched on: nothing is sent, and it is logged. */
 TEST(icd_forced_fault, a_foreign_device_is_refused)
 { FaultRig rig;
   const std::uint32_t before = kmt_calls(rig.kmt());

@@ -5,7 +5,6 @@
 
 #include <windows.h>
 
-/* GL 1.1 as opengl32.dll exports it; the SDK subset carries no GL/gl.h. */
 extern "C" {
 const unsigned char *WINAPI glGetString(unsigned int name);
 unsigned int WINAPI         glGetError();
@@ -22,8 +21,6 @@ void WINAPI glTexImage2D(unsigned int target, int level, int internal_format, in
 void WINAPI glGetTexImage(unsigned int target, int level, unsigned int format, unsigned int type, void *pixels);
 void WINAPI glDeleteTextures(int count, const unsigned int *textures);
 void WINAPI glGetIntegerv(unsigned int pname, int *data);
-/* The compatibility profile's own, which opengl32 exports whatever the driver
- * grants: the ICD refuses them on a core context (feature 051). */
 unsigned int WINAPI glGenLists(int range);
 void WINAPI         glNewList(unsigned int list, unsigned int mode);
 void WINAPI         glEndList();
@@ -45,7 +42,6 @@ constexpr unsigned int gl_texture_2d = 0x0DE1u, gl_rgba = 0x1908u, gl_rgba8 = 0x
 constexpr BYTE         colour_bits = 32u, depth_bits = 24u, stencil_bits = 8u;
 constexpr DWORD        elsewhere_timeout_ms = 10000u;
 
-/* A wglMakeCurrent from a second thread: what it was asked and answered. */
 struct Elsewhere {
     HDC   dc;
     HGLRC context;
@@ -63,7 +59,7 @@ DWORD WINAPI elsewhere_thread(LPVOID argument)
     return 0u;
 }
 
-}  // namespace
+}
 
 WindowsGlEntry::WindowsGlEntry(ProbeWindow &window) : window_(window)
 {
@@ -77,8 +73,6 @@ Function WindowsGlEntry::named(const char *name) const
     return reinterpret_cast<Function>(wglGetProcAddress(name));
 }
 
-/* The client area as it is now, not as the window was made: a step that
- * resizes the window is judged against what the window became (feature 051). */
 uint32_t WindowsGlEntry::width() const
 {
     AV_SCOPE("WindowsGlEntry::width");
@@ -125,8 +119,6 @@ void *WindowsGlEntry::create_context()
     return wglCreateContext(static_cast<HDC>(window_.dc()));
 }
 
-/* wglCreateContextAttribsARB is an extension function: opengl32 answers it
- * only while some context of the ICD is current, as for any application. */
 void *WindowsGlEntry::create_context_attribs(const int32_t *attributes)
 {
     AV_SCOPE("WindowsGlEntry::create_context_attribs");
@@ -435,8 +427,6 @@ bool WindowsGlEntry::resize(uint32_t width, uint32_t height)
 bool WindowsGlEntry::legacy_triangle()
 {
     AV_SCOPE("WindowsGlEntry::legacy_triangle");
-    /* The fixed-function pipeline, compiled once and called: no shader, no
-     * vertex array, nothing a core context has (feature 051). */
     const unsigned int list = glGenLists(1);
     if (list == 0u) return false;
     constexpr unsigned int gl_projection = 0x1701u, gl_modelview = 0x1700u, gl_compile = 0x1300u,
@@ -459,4 +449,4 @@ bool WindowsGlEntry::legacy_triangle()
     return true;
 }
 
-}  // namespace av
+}

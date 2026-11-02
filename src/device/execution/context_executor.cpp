@@ -8,11 +8,6 @@
 #include "device/host/host.hpp"
 
 namespace av {
-
-/* What the executor library calls when a host API finishes work on a thread
- * the device did not give it. An ABI boundary C requires: the callback is a
- * bare function pointer with nowhere to put a `this`, so the landing pad is
- * the context and this forwards straight into it, with no logic of its own. */
 extern "C" void av_context_signalled(void *context)
 {
     static_cast<ContextSignal *>(context)->raise();
@@ -26,7 +21,6 @@ ContextExecutor::ContextExecutor(Host &host, const ExecutorLibrary &library, Exe
           AV_SCOPE("ContextExecutor::ContextExecutor");
       }
 
-/* Withdrawn first, so a create sharing it finishes before it goes. */
 ContextExecutor::~ContextExecutor()
 {
     AV_SCOPE("ContextExecutor::~ContextExecutor");
@@ -68,10 +62,6 @@ Status ContextExecutor::create()
     if (executor_ != nullptr || !configured_) return Status::invalid_state;
     executor_ = make();
     if (executor_ == nullptr) return Status::no_memory;
-    /* Given as soon as there is an executor to give it to, and never taken
-     * back: the library's own registrations may outlive this - OpenCL cannot
-     * unregister a callback - and the pad is the context's, which lives as
-     * long as the device does. */
     if (signal_ != nullptr) library_.set_signal(executor_, &av_context_signalled, signal_);
     if (api_ != SubApi::opengl) return Status::ok;
     const Status published = shares_.publish(id_, uuid_.raw(), executor_);
@@ -131,9 +121,6 @@ Status ContextExecutor::execute(uint32_t command_id, const uint8_t *payload, siz
     case AV_UNKNOWN: return Status::not_found;
     case AV_UNDECODABLE: return Status::malformed;
     case AV_DEVICE_LOST: return Status::invalid_state;
-    /* Anything else is a library that does not keep the contract. Saying so is
-     * not pedantry: folded into device lost, a bug in an executor reads as a
-     * GPU fault and is chased in the wrong place (feature 042). */
     default: return Status::not_supported;
     }
 }
@@ -223,4 +210,4 @@ bool ContextExecutor::invariants_hold() const
     return executor_ == nullptr || configured_;
 }
 
-}  // namespace av
+}

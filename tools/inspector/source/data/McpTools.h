@@ -1,18 +1,6 @@
 #ifndef DATA_MCP_TOOLS_H
 #define DATA_MCP_TOOLS_H
 
-// The inspector's MCP tools: what the window shows, as JSON, for a debugging agent. Each tool reads
-// the Model under its lock, so the rates and stall verdicts are the window's own.
-//
-//   stalls        every stalled or lock-waiting thread of every process, with its stack - first stop
-//   processes     the binaries found, alive or not, their threads and their last dump
-//   threads       one process's threads: state, function, time in it, calls/s, locks, stack
-//   state         one process's dump, filtered, optionally only what changed since the last round
-//   connections   every device av context (fence, batches/s, ring bytes/s, worker, faults), sessions
-//   surfaces      every GPU's shares (origin, kind, size, holders, writes/s) and exportable images
-//   series        the history behind any number: list keys by substring, or one key's samples
-//   sample_now    take a round now instead of waiting for the next
-
 #include "mcp/Server.h"
 
 namespace inspector {
@@ -44,6 +32,6 @@ private:
     Model& m_model;
 };
 
-} // namespace inspector
+}
 
 #endif

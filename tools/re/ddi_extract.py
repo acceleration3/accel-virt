@@ -8,13 +8,12 @@ DRIVER_INITIALIZATION_DATA callback-table slot order.
 import re, sys, json, collections, os
 
 VER = re.compile(r"DXGKDDI_INTERFACE_VERSION\s*(>=|>|==)\s*(DXGKDDI_INTERFACE_VERSION_\w+)")
-# a DDI prototype is `APIENTRY NAME(` or `(APIENTRY *NAME)(`
 PROTO = re.compile(r"APIENTRY\s*\*?\s*\)?\s*(DXGKDDI_\w+|DXGKCB_\w+)\s*\)?\s*\(")
 PROTO2 = re.compile(r"\(\s*APIENTRY\s*\*\s*(P?DXGKDDI_\w+|P?DXGKCB_\w+)\s*\)")
 
 def scan(path):
     gate = {}
-    stack = []          # (is_version_gate, version_or_None)
+    stack = []
     for ln in open(path, encoding="utf-8", errors="replace"):
         s = ln.strip()
         if s.startswith("#if"):
@@ -47,7 +46,6 @@ def init_table(path):
         if s.startswith("#endif"):
             if stack: stack.pop()
             continue
-        # VOID* / void* are the Reserved pointers; dropping them shifts every later slot.
         m = re.match(r"(?:__field\w*\s+)?(P?DXGKDDI_\w+|PDXGK\w+|ULONG|PVOID|VOID\s*\*|void\s*\*|DXGK\w+)\s+(\w+)\s*;", s)
         if m and m.group(1) not in ("ULONG",):
             active = [v for v in stack if v]

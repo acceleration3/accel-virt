@@ -1,6 +1,3 @@
-/* A client allocation is made from a valid descriptor and refused from one with a bad magic.
- * Every object is destroyed in reverse, and the teardown reported, whatever
- * failed. */
 #ifndef AV_ALLOCATION_SCENARIO_HPP
 #define AV_ALLOCATION_SCENARIO_HPP
 
@@ -24,6 +21,6 @@ private:
     ScenarioSteps        steps_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_ALLOCATION_SCENARIO_HPP
+#endif

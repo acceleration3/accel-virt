@@ -1,9 +1,3 @@
-/* The rows of a present copy moved between two surfaces the device mapped:
- * each row of a region lands where the region names it, whatever the two
- * pitches; red and blue trade places when the request says so, a pixel split
- * across two extents included; a fill writes its colour; a row longer than the
- * mover's buffer moves whole; and a region that leaves either surface is
- * refused at the first row that does, the rows before it moved. */
 #include "device/present/region_mover.hpp"
 #include "device/memory/blob_window.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -22,10 +16,6 @@ using av::RegionMover;
 using av::Status;
 
 namespace {
-
-/* A surface of `width` x `height` pixels, rows `pitch` bytes apart, whose
- * bytes are split into two extents at `split` - anywhere, a pixel's middle
- * included, as guest RAM regions can split them. */
 class HostSurface {
 public:
     HostSurface(std::uint32_t width, std::uint32_t height, std::uint32_t pitch, std::size_t split)
@@ -75,7 +65,7 @@ std::uint32_t swapped(std::uint32_t pixel)
     return (pixel & 0xFF00FF00u) | ((pixel >> 16u) & 0xFFu) | ((pixel & 0xFFu) << 16u);
 }
 
-}  // namespace
+}
 
 TEST(region_mover, each_row_lands_where_the_region_names_it)
 { HostSurface source(8u, 6u, 32u, 64u);
@@ -90,8 +80,6 @@ TEST(region_mover, each_row_lands_where_the_region_names_it)
   CHECK_EQ(destination.at(9u, 0u), 0u);
   CHECK_EQ(destination.at(5u, 3u), 0u); }
 
-/* A split in the middle of a pixel still swaps it whole: the row goes through
- * the mover's own buffer, not extent by extent. */
 TEST(region_mover, red_and_blue_trade_places_when_the_request_says_so)
 { HostSurface source(8u, 2u, 32u, 38u);
   HostSurface destination(8u, 2u, 32u, 17u);
@@ -124,9 +112,6 @@ TEST(region_mover, a_row_longer_than_its_buffer_moves_whole)
   CHECK_EQ(destination.at(4096u, 0u), swapped(source.at(4096u, 0u)));
   CHECK_EQ(destination.at(wide - 1u, 0u), swapped(source.at(wide - 1u, 0u))); }
 
-/* A region whose last row is past the source: the rows before it moved, the
- * rest did not, and the answer says so. The same for the destination, for a
- * row that starts past it, for columns past the end, and for a pitch of 0. */
 TEST(region_mover, a_region_leaving_either_surface_is_refused_at_its_first_row_outside)
 { HostSurface source(8u, 4u, 32u, 40u);
   HostSurface destination(8u, 8u, 32u, 40u);
@@ -140,7 +125,6 @@ TEST(region_mover, a_region_leaving_either_surface_is_refused_at_its_first_row_o
     CHECK_STATUS(mover.move(PresentRegion(0u, 0u, 0u, 3u, 8u, 2u)), Status::invalid_parameter); }
   { RegionMover mover(source.window(), destination.window(), request);
     CHECK_STATUS(mover.move(PresentRegion(0u, 0u, 0u, 0xFFFFFFFFu, 1u, 1u)), Status::invalid_parameter);
-    /* The last row's columns run past the surface's last byte. */
     CHECK_STATUS(mover.move(PresentRegion(4u, 3u, 0u, 0u, 5u, 1u)), Status::invalid_parameter); }
   const PresentCopyRequest flat(PresentOperation::blt, 0u, 0u, 1u, 1u, 0u, 1u, 32u);
   RegionMover              mover(source.window(), destination.window(), flat);

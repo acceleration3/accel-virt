@@ -12,7 +12,7 @@ constexpr HRESULT  invalid_argument = static_cast<HRESULT>(0x80070057u);
 constexpr uint32_t texel_bytes = 4u;
 constexpr uint32_t vertex_bytes = 2u * sizeof(float);
 
-}  // namespace
+}
 
 WindowsD3d11TirEntry::WindowsD3d11TirEntry()
     : device_(nullptr), context_(nullptr), target_(nullptr), view_(nullptr), staging_(nullptr),
@@ -105,8 +105,6 @@ int32_t WindowsD3d11TirEntry::create_states(uint32_t samples)
     rasterizer.ForcedSampleCount = samples;
     const HRESULT made = device_->CreateRasterizerState1(&rasterizer, &rasterizer_);
     if (made < 0) return made;
-    /* Every target the same: no blending, the logic op OR'ing the shader's
-     * output into what the target holds, as Direct2D's atlas pass sets it. */
     D3D11_BLEND_DESC1 blend = {};
     for (D3D11_RENDER_TARGET_BLEND_DESC1 &target : blend.RenderTarget) {
         target.LogicOpEnable = TRUE;
@@ -198,4 +196,4 @@ void WindowsD3d11TirEntry::release()
     extent_ = 0u;
 }
 
-}  // namespace av
+}

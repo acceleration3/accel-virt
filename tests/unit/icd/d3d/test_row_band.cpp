@@ -1,5 +1,3 @@
-/* A run of rows (RowBand): empty by default and when its end is not past its
- * first, and joining two takes the smallest run holding both. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/row_band.hpp"
 

@@ -3,8 +3,6 @@
 
 using av::CrossAdapterLayout;
 
-/* Affinity's 1249x805 B8G8R8A8 texture: a 4996-byte row is 5120, and 805 rows
- * are 808 - 1010 pages, where a packed 4996-byte pitch took 982. */
 TEST(cross_adapter_layout, a_texture_has_aligned_rows_and_an_aligned_height)
 { const CrossAdapterLayout layout(1249u, 805u, 21u, 4u);
   CHECK(layout.valid());

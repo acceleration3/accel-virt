@@ -71,9 +71,6 @@ bool DeviceIdentity::same_gpu(const CapsetInfo &capset) const
     return started_on_.gpu().same_gpu(capset.gpu());
 }
 
-/* The same major, and no older a minor: the device agreed to speak what this
- * adapter started on, and cannot be asked to finish work in a dialect it has
- * since lost. */
 bool DeviceIdentity::same_protocol(const CapsetInfo &capset) const
 {
     AV_SCOPE("DeviceIdentity::same_protocol");
@@ -87,4 +84,4 @@ bool DeviceIdentity::invariants_hold() const
     return known_ || !changed_;
 }
 
-}  // namespace av
+}

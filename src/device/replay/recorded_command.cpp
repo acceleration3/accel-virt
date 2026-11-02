@@ -57,8 +57,6 @@ uint32_t RecordedCommand::next_offset() const
     return offset_ + header_.size();
 }
 
-/* The names come from the tables the generator writes from the registries
- * (FR-005); the transport's three are this repository's own (CommandApi). */
 const char *RecordedCommand::name() const
 {
     AV_SCOPE("RecordedCommand::name");
@@ -71,4 +69,4 @@ const char *RecordedCommand::api_name() const
     return CommandApi(header_.api()).name();
 }
 
-}  // namespace av
+}

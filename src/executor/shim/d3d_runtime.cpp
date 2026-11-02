@@ -16,10 +16,8 @@ namespace {
 
 constexpr size_t path_bytes = 4096u;
 
-}  // namespace
+}
 
-/* The file `name` in AV_D3D_PATH, or the bare name for the loader's own
- * search when that is unset. */
 void *D3dRuntime::open_library(const char *name) const
 {
     AV_SCOPE("D3dRuntime::open_library");
@@ -50,12 +48,6 @@ bool D3dRuntime::open()
 {
     AV_SCOPE("D3dRuntime::open");
     if (d3d11_ != nullptr) return true;
-    /* SDL3's driver is the one that loads with no display: the device never
-     * presents through DXVK, it only needs a factory. SDL3 itself still wants
-     * a display to start its video subsystem, so with none - a VM started
-     * before anyone logged in to the host's desktop - it is told to run
-     * offscreen; without that DXVK made no factory and the guest had no
-     * Direct3D 11 at all. A display, or a driver someone chose, is kept. */
     setenv("DXVK_WSI_DRIVER", "SDL3", 0);
     if (EnvSetting("WAYLAND_DISPLAY").text() == nullptr && EnvSetting("DISPLAY").text() == nullptr)
         setenv("SDL_VIDEO_DRIVER", "offscreen", 0);
@@ -71,10 +63,6 @@ bool D3dRuntime::open()
         close();
         return false;
     }
-    /* d3d12 finds its core by soname alone (vkd3d-proton's libs/d3d12/main.c,
-     * load_d3d12core_module), which the loader's search cannot resolve in
-     * AV_D3D_PATH: loaded first, the core is already in the link map under
-     * that soname, and without it every D3D12CreateDevice fails. */
     d3d12core_ = open_library("libvkd3d-proton-d3d12core.so");
     if (d3d12core_ != nullptr) d3d12_ = open_library("libvkd3d-proton-d3d12.so");
     if (d3d12_ != nullptr) {
@@ -93,9 +81,6 @@ bool D3dRuntime::open()
 void D3dRuntime::close()
 {
     AV_SCOPE("D3dRuntime::close");
-    /* Never unloaded: DXVK and vkd3d-proton keep threads of their own that
-     * outlive any one device, and unloading code a thread is still in is a
-     * crash at exit rather than a leak. */
     create_factory_ = nullptr;
     create_device11_ = nullptr;
     get_interface12_ = nullptr;
@@ -183,11 +168,6 @@ uint32_t D3dRuntime::vulkan_index(const uint8_t *uuid) const
     return found;
 }
 
-/* Through a device factory, so each GPU's device is one of its own: natively
- * vkd3d-proton ignores the adapter and keys its singleton devices by a LUID
- * that is zero for every GPU, so D3D12CreateDevice on the second GPU would
- * answer the first's. The GPU is chosen by VKD3D_VULKAN_DEVICE, the one way
- * its native build takes one, set for the call and put back after it. */
 int32_t D3dRuntime::create_device12(const uint8_t *uuid, void *&device) const
 {
     AV_SCOPE("D3dRuntime::create_device12");
@@ -254,4 +234,4 @@ int32_t D3dRuntime::serialize_root_signature(const void *desc, void *&blob) cons
     return made;
 }
 
-}  // namespace av
+}

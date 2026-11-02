@@ -18,7 +18,7 @@ namespace {
 constexpr size_t   name_chars = 128u;
 constexpr uint32_t hex_digits = 16u;
 
-}  // namespace
+}
 
 GlDiscoveryProbe::GlDiscoveryProbe()
     : bytes_{}, report_(bytes_, sizeof bytes_), window_(), format_(0)
@@ -72,8 +72,6 @@ void GlDiscoveryProbe::modules(void **list, uint32_t &count) const
     if (count > max_modules) count = max_modules;
 }
 
-/* Every module the pixel-format and context calls brought in: the ICD
- * opengl32 chose, whatever it is called. */
 void GlDiscoveryProbe::report_new_modules(void *const *before, uint32_t before_count)
 {
     AV_SCOPE("GlDiscoveryProbe::report_new_modules");
@@ -157,7 +155,6 @@ void GlDiscoveryProbe::create_context()
     if (context != nullptr) static_cast<void>(wglDeleteContext(context));
 }
 
-/* A report the console does not take is still the exit code. */
 void GlDiscoveryProbe::write() const
 {
     AV_SCOPE("GlDiscoveryProbe::write");
@@ -166,4 +163,4 @@ void GlDiscoveryProbe::write() const
                                 &written, nullptr));
 }
 
-}  // namespace av
+}

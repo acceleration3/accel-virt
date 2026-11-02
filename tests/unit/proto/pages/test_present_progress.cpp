@@ -1,7 +1,3 @@
-/* The present engine's page as the device writes it and the guest reads it
- * back: the magic, the version and both counts at their documented offsets,
- * and anything a device could get wrong - magic, version, more refused than
- * finished - refused with the reader's counts unchanged. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/pages/present_progress.hpp"
@@ -22,7 +18,7 @@ T field_at(const std::uint8_t *bytes, std::size_t offset)
     return value;
 }
 
-}  // namespace
+}
 
 TEST(present_progress, the_counts_sit_where_the_page_documents_them)
 { std::uint8_t bytes[PresentProgress::encoded_size] = {};
@@ -46,9 +42,9 @@ TEST(present_progress, a_page_the_guest_cannot_trust_leaves_what_it_had)
       std::size_t  offset;
       std::uint8_t value;
   };
-  const Damage damages[] = {{0u, 0x53u},   /* magic */
-                            {4u, 2u},      /* version */
-                            {16u, 6u},     /* one more refused than finished */
+  const Damage damages[] = {{0u, 0x53u},
+                            {4u, 2u},
+                            {16u, 6u},
                             {23u, 1u}};
   for (const Damage &damage : damages) {
       std::uint8_t bytes[PresentProgress::encoded_size] = {};

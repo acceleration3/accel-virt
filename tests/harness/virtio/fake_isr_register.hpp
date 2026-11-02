@@ -1,5 +1,3 @@
-/* The ISR status byte of a fake virtio device: reading it clears it
- * (virtio 1.2 4.1.4.5). Any other access fails the test. */
 #ifndef AV_FAKE_ISR_REGISTER_HPP
 #define AV_FAKE_ISR_REGISTER_HPP
 
@@ -30,6 +28,6 @@ private:
     std::uint8_t status_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FAKE_ISR_REGISTER_HPP
+#endif

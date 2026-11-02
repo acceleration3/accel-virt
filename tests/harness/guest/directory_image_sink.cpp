@@ -21,4 +21,4 @@ void DirectoryImageSink::save(const char *name, const BmpImage &image)
 
 std::size_t DirectoryImageSink::written() const { return written_; }
 
-}  // namespace av
+}

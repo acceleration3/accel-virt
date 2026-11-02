@@ -102,9 +102,6 @@ Status HostVisibleBlob::map(VirtioGpuDevice &device, uint64_t offset)
     uint32_t     map_info = 0u;
     const Status status = exchange(device, request_, writer.length(), map_info);
     if (status != Status::ok) return status;
-    /* The device says how the host maps the memory, which is how the guest
-     * must; anything else is an answer this driver does not know how to hand
-     * a process. */
     if (map_info != map_cache_cached && map_info != map_cache_wc) return Status::malformed;
     caching_ = map_info == map_cache_cached ? PageCaching::write_back : PageCaching::write_combined;
     offset_ = offset;
@@ -145,8 +142,6 @@ Status HostVisibleBlob::destroy(VirtioGpuDevice &device)
     return Status::ok;
 }
 
-/* One request, one answer: an error the device answers with is the device
- * refusing, not a framing mistake of ours. */
 Status HostVisibleBlob::exchange(VirtioGpuDevice &device, const uint8_t *request, size_t length, uint32_t &map_info)
 {
     AV_SCOPE("HostVisibleBlob::exchange");
@@ -203,4 +198,4 @@ bool HostVisibleBlob::invariants_hold() const
     return !mapped_ || resource_ != 0u;
 }
 
-}  // namespace av
+}

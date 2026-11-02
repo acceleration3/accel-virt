@@ -1,5 +1,3 @@
-/* A synchronous call ends on its transport when the scope that opened around
- * its send does, once, whichever way the scope is left. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/transport/mock_transport.hpp"
 #include "proto/client/client_transport.hpp"
@@ -28,7 +26,7 @@ std::uint32_t answer_with_the_call_open(MockTransport &transport)
     return transport.end_calls() == 0u ? reply.read_u32() : 0u;
 }
 
-}  // namespace
+}
 
 TEST(sync_call_scope, the_call_is_open_while_the_reply_is_read_and_ends_once_after)
 { MockTransport transport;

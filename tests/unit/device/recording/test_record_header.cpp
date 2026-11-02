@@ -20,9 +20,6 @@ namespace {
 
 bool rejects(const std::uint8_t *bytes, std::size_t length)
 {
-    /* Loaded with something recognisable, because a refusal must leave it
-     * exactly as it was: "unchanged unless ok" is the contract every caller
-     * reads a refused header under. */
     RecordHeader header(RecordKind::reply, 0x0BADF00Du, 4u, 5u, 6u);
     const Status status = header.decode(bytes, length);
     if (status != Status::ok) {
@@ -44,7 +41,7 @@ RecordHeader a_batch(std::uint32_t length)
     return RecordHeader(RecordKind::batch, 7u, length, 0x1122334455667788u, 9u);
 }
 
-}  // namespace
+}
 
 TEST(record_header_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[RecordHeader::encoded_size] = {};
@@ -100,7 +97,6 @@ TEST(record_header_encode, a_short_destination_is_too_large_and_untouched)
 
 TEST(record_header_decode, rejects_a_bad_magic_a_kind_nobody_wrote_and_a_reserved_field)
 { struct Case { std::size_t offset; std::uint8_t value; };
-  /* magic, kind 0, kind 8, and the reserved halfword. */
   const Case cases[] = {{0u, 0u}, {3u, 0x45u}, {4u, 0u}, {4u, 8u}, {5u, 1u}, {6u, 1u}, {7u, 1u}};
   for (const Case &c : cases) {
       std::uint8_t bytes[RecordHeader::encoded_size] = {};
@@ -117,7 +113,7 @@ TEST(record_header_decode, rejects_a_length_larger_than_any_record)
   CHECK_STATUS(a_batch(RecordHeader::max_payload).encode(bytes, sizeof bytes), Status::ok);
   RecordHeader decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
-  bytes[12] = 1u;  /* max_payload + 1 */
+  bytes[12] = 1u;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::malformed); }
 
 TEST(record_header_decode, a_short_buffer_is_malformed)
@@ -133,15 +129,6 @@ TEST(record_header_decode, survives_the_hostile_sweep)
   CHECK_STATUS(a_batch(40u).encode(bytes, sizeof bytes), Status::ok);
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
-  /* Every truncation, every bit flipped, and the all-zero and all-ones cases:
-   * a sweep that quietly stopped short would still be a passing sweep. */
   CHECK_EQ(sweep.cases_run(), sizeof bytes + 1u + 8u * sizeof bytes + 2u);
-  /* What the format leaves free is what a flip can survive: context, timestamp
-   * and fence constrain nothing, so their 20 bytes are 160 acceptable bits; a
-   * flip of the kind reaches another assigned kind twice (batch -> reply and
-   * batch -> blob); the three low bytes of the length keep a 40-byte payload
-   * under 16 MiB, 24 more. Every shorter input is short of 32 bytes, all-zero
-   * and all-ones carry no magic, and the untouched input is the one
-   * acceptance left. */
   const std::uint32_t acceptable = 160u + 2u + 24u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

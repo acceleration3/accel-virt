@@ -10,7 +10,7 @@ namespace {
 
 constexpr uint64_t page_bytes = 4096u;
 
-}  // namespace
+}
 
 HostWindowRecord::HostWindowRecord() : operation_(0u), resource_id_(0u), memory_(0u), bytes_(0u), address_(0u)
 {
@@ -92,9 +92,6 @@ Status HostWindowRecord::encode(uint8_t *bytes, size_t capacity) const
     return writer.status();
 }
 
-/* An open names the bytes and the memory and leaves the answer's fields
- * empty; an adoption names whole pages of the process and the memory; a
- * close names a resource and nothing else. */
 bool HostWindowRecord::is_request() const
 {
     AV_SCOPE("HostWindowRecord::is_request");
@@ -135,8 +132,6 @@ Status HostWindowRecord::decode(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-/* The kernel owns the resource, the granted size and the address; the
- * operation and the memory must be the request's own. */
 Status HostWindowRecord::accept_answer(const uint8_t *bytes, size_t length)
 {
     AV_SCOPE("HostWindowRecord::accept_answer");
@@ -153,4 +148,4 @@ Status HostWindowRecord::accept_answer(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-}  // namespace av
+}

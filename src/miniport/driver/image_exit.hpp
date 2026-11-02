@@ -1,6 +1,3 @@
-/* What DxgkDdiUnload ends with: the driver image let go of whole - the
- * miniport, the trace table and the platform - before dxgkrnl unmaps the code
- * they run. The kernel's image and the harness's are the two that leave. */
 #ifndef AV_IMAGE_EXIT_HPP
 #define AV_IMAGE_EXIT_HPP
 
@@ -18,6 +15,6 @@ protected:
     ~ImageExit() = default;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_IMAGE_EXIT_HPP
+#endif

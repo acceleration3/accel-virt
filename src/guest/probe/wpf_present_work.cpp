@@ -40,8 +40,6 @@ void WpfPresentWork::run(ScenarioSteps &steps, void *window)
     static_cast<void>(steps.check_measured("wpf_window", shown, right));
 }
 
-/* Nothing presents again: the frame either reaches the window or never does.
- * One read, then one after each blank until the last. */
 bool WpfPresentWork::watch(void *window)
 {
     AV_SCOPE("WpfPresentWork::watch");
@@ -53,7 +51,6 @@ bool WpfPresentWork::watch(void *window)
     return windows_.read(window, extent, extent, frame_);
 }
 
-/* The alpha a window keeps is the desktop's, not the frame's. */
 uint32_t WpfPresentWork::coloured() const
 {
     AV_SCOPE("WpfPresentWork::coloured");
@@ -67,4 +64,4 @@ bool WpfPresentWork::invariants_hold() const
     return looks_ <= blanks && coloured() <= pixels;
 }
 
-}  // namespace av
+}

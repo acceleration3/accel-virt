@@ -1,9 +1,3 @@
-/* The present engine over an attacker-chosen queued present: the fixed part,
- * the page lists and the regions are all the guest's. Whatever it asks, the
- * device answers once, the ticket completes - refused unless it was taken -
- * nothing stays mapped once the engine is reset, and no byte of guest RAM
- * changes outside the page and the destination's own entries; a request that
- * does not decode changes none of them. */
 #include "device/control/control_request.hpp"
 #include "device/control/present_engine_commands.hpp"
 #include "device/fence/fence_interrupts.hpp"
@@ -28,7 +22,6 @@ namespace {
 constexpr std::uint64_t ram = 0x100000u;
 constexpr std::size_t   ram_bytes = 0x10000u;
 constexpr std::uint64_t page = ram + 0xE000u;
-/* A region boundary in the middle, as QEMU's RAM blocks split a mapping. */
 constexpr std::uint64_t split = ram + 0x7000u;
 constexpr std::uint32_t ok_nodata = 0x1100u;
 
@@ -47,8 +40,6 @@ bool in_destination(const std::uint8_t *data, std::size_t size, const av::Queued
     return false;
 }
 
-/* The page's progress once it says `ticket` is done: false when it never
- * does within a second. */
 bool completes(av::MockHost &host, std::uint64_t ticket, av::PresentProgress &progress)
 {
     const timespec pause = {0, 20000};
@@ -61,7 +52,7 @@ bool completes(av::MockHost &host, std::uint64_t ticket, av::PresentProgress &pr
     return false;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

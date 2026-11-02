@@ -1,8 +1,3 @@
-/* The display clock's page as a hostile device writes it, read the way the
- * driver's DPC reads it: whatever a read accepts is a blank the page's bytes
- * say whole - a head the header describes, an even generation, a rate in
- * range with the period it has - and a refused read leaves the blank as it
- * was. Asking writes only the asking head's word. */
 #include "miniport/display/clock_page_view.hpp"
 #include "core/support/status.hpp"
 #include "harness/platform/mock_platform.hpp"

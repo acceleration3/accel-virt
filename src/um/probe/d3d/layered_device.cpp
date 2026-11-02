@@ -5,11 +5,9 @@
 namespace av {
 
 namespace {
-
-/* DXVK's IDXGIVkInteropDevice (src/dxgi/dxgi_interfaces.h). */
 constexpr GUID dxvk_interop_device = {0xe2ef5fa5u, 0xdc21u, 0x4af7u, {0x90u, 0xc4u, 0xf6u, 0x7eu, 0xf6u, 0xa0u, 0x93u, 0x23u}};
 
-}  // namespace
+}
 
 LayeredDevice::LayeredDevice(IUnknown *device) : device_(device)
 {
@@ -26,4 +24,4 @@ bool LayeredDevice::layered() const
     return true;
 }
 
-}  // namespace av
+}

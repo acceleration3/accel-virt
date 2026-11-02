@@ -1,7 +1,3 @@
-/* One host binary's trace table: laid out over shared memory named for the
- * binary and this process, bound for AV_SCOPE, with the binary's own address
- * range for naming its frames. The device module and the executor library
- * each hold one (docs/trace.md). Tracing that cannot start stays off. */
 #ifndef AV_HOST_TRACE_HPP
 #define AV_HOST_TRACE_HPP
 
@@ -24,7 +20,6 @@ public:
     HostTrace(const HostTrace &) = delete;
     HostTrace &operator=(const HostTrace &) = delete;
 
-    /* Once: invalid_state after. The region's refusal otherwise. */
     [[nodiscard]] Status start(const char *module);
     bool                 started() const;
     TraceTable          &table();
@@ -38,12 +33,11 @@ private:
     PosixTraceHost host_;
     ShmTraceRegion region_;
     TraceTable     table_;
-    /* AV_PERFETTO=1 in the environment: every scope is also an event. */
     ShmTraceRegion events_region_;
     EventRing      events_;
     ImageRange     image_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_HOST_TRACE_HPP
+#endif

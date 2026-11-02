@@ -9,12 +9,10 @@ namespace av {
 namespace {
 
 constexpr uint32_t level_12_2 = 0xc200u;
-/* The highest shader model asked about; the answer is the device's highest
- * at or below it. */
 constexpr uint32_t shader_model_6_6 = 0x66u;
 constexpr uint32_t descriptor_heap_types = 4u;
 
-}  // namespace
+}
 
 D3d12Capabilities::D3d12Capabilities() : caps_{}, formats_()
 {
@@ -32,7 +30,6 @@ void D3d12Capabilities::measure(ID3D12Device &device)
 void D3d12Capabilities::measure_options(ID3D12Device &device)
 {
     AV_SCOPE("D3d12Capabilities::measure_options");
-    /* 12_2 is 0xc200, newer than the native headers' enum. */
     const D3D_FEATURE_LEVEL asked[] = {static_cast<D3D_FEATURE_LEVEL>(level_12_2), D3D_FEATURE_LEVEL_12_1,
                                        D3D_FEATURE_LEVEL_12_0, D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
     D3D12_FEATURE_DATA_FEATURE_LEVELS levels = {};
@@ -47,9 +44,6 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
     D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
     if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options)))) {
         caps_.resource_binding_tier = static_cast<uint32_t>(options.ResourceBindingTier);
-        /* Read as a plain integer: drivers report tier 4, past the last
-         * value the headers' enum names, and loading that through the enum
-         * is undefined. */
         uint32_t tiled_tier = 0u;
         __builtin_memcpy(&tiled_tier, &options.TiledResourcesTier, sizeof tiled_tier);
         caps_.tiled_resources_tier = tiled_tier;
@@ -77,9 +71,6 @@ void D3d12Capabilities::measure_options(ID3D12Device &device)
             device.GetDescriptorHandleIncrementSize(static_cast<D3D12_DESCRIPTOR_HEAP_TYPE>(type));
 }
 
-/* Quality levels are asked only of a format that says it renders multisampled
- * at all: the guest's table reads no other format's. UNKNOWN is no format a
- * resource is made in, and its row stays empty. */
 void D3d12Capabilities::measure_formats(ID3D12Device &device)
 {
     AV_SCOPE("D3d12Capabilities::measure_formats");
@@ -118,4 +109,4 @@ const FormatCapsRows &D3d12Capabilities::formats() const
     return formats_;
 }
 
-}  // namespace av
+}

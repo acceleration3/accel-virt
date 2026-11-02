@@ -69,4 +69,4 @@ void GlContext::close()
     context_ = nullptr;
 }
 
-}  // namespace av
+}

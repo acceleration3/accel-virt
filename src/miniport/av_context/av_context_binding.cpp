@@ -53,7 +53,6 @@ void AvContextBinding::abandon()
 {
     AV_SCOPE("AvContextBinding::abandon");
     context_.abandon();
-    /* Abandoned, the context is torn down, which release always accepts. */
     static_cast<void>(context_.release());
 }
 
@@ -105,9 +104,6 @@ Status AvContextBinding::serve()
     return context_.serve();
 }
 
-/* Carries the sequence's requests to the device and its answers back, one at a
- * time, until the sequence has no more; a device that stops answering ends it,
- * and the context's state says whether it established or failed. */
 void AvContextBinding::run_sequence(VirtioGpuDevice &device)
 {
     AV_SCOPE("AvContextBinding::run_sequence");
@@ -164,4 +160,4 @@ bool AvContextBinding::invariants_hold() const
     return context_.invariants_hold();
 }
 
-}  // namespace av
+}

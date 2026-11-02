@@ -5,8 +5,6 @@
 namespace av {
 
 namespace {
-
-/* EGL 1.5's names, written here so the list can be judged without EGL. */
 constexpr int32_t egl_none = 0x3038;
 constexpr int32_t egl_true = 1;
 constexpr int32_t context_major_version = 0x3098;
@@ -18,13 +16,12 @@ constexpr int32_t context_robust_access = 0x31B2;
 constexpr int32_t context_reset_strategy = 0x31BD;
 constexpr int32_t lose_context_on_reset = 0x31BF;
 
-/* The highest minor each major version of OpenGL has, from 1 to 4. */
 constexpr uint8_t highest_minor[] = {5u, 1u, 3u, 6u};
 constexpr uint8_t highest_major = sizeof highest_minor / sizeof highest_minor[0];
 constexpr uint8_t defined_flags = AV_CONTEXT_FLAG_DEBUG | AV_CONTEXT_FLAG_FORWARD_COMPATIBLE |
                                   AV_CONTEXT_FLAG_ROBUST_ACCESS | AV_CONTEXT_FLAG_LOSE_CONTEXT_ON_RESET;
 
-}  // namespace
+}
 
 GlContextAttributes::GlContextAttributes(const AvContextOptions *options)
     : options_(options != nullptr ? *options : AvContextOptions{}), list_{}, used_(0u), valid_(acceptable())
@@ -69,4 +66,4 @@ const int32_t *GlContextAttributes::list() const
     return list_;
 }
 
-}  // namespace av
+}

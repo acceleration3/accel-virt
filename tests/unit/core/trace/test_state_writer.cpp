@@ -15,12 +15,9 @@ struct StateWriterProbe {
     static void shrink_capacity(StateWriter &writer) { writer.capacity_ = writer.length(); }
 };
 
-}  // namespace av
+}
 
 namespace {
-
-/* Two contexts, one of them lost: what a root writes through the interface
- * the dump service holds. */
 class TwoContexts final : public av::StateReporter {
 public:
     void report(StateWriter &writer) override
@@ -33,7 +30,7 @@ public:
     }
 };
 
-}  // namespace
+}
 
 TEST(state_writer, writes_one_line_per_object_under_its_path)
 { char bytes[512];
@@ -103,7 +100,6 @@ TEST(state_writer, a_dump_that_fills_its_buffer_is_cut_and_says_so)
   CHECK(std::strcmp(writer.dump(), "connection/0 ad") == 0);
   CHECK_EQ(bytes[16], 'x');
   CHECK(writer.invariants_hold());
-  /* One byte short of full is whole; filling the buffer exactly reads as cut. */
   char roomy[14];
   StateWriter spare(roomy, sizeof roomy);
   spare.open("connection", 0u);

@@ -1,6 +1,3 @@
-/* The pipeline slots: binding, drawing, clearing, copying and querying, each
- * one command on the batch. Handles become the ids their records hold; a null
- * handle is id 0, which the host reads as unbinding. */
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/list_pieces.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
@@ -24,13 +21,9 @@ constexpr uint32_t max_uavs = 64u;
 constexpr uint32_t max_targets = 8u;
 constexpr uint32_t max_viewports = 16u;
 constexpr uint32_t max_vertex_buffers = 32u;
-/* A constant buffer bound without a range is bound whole: the host binds the
- * API's maximum of 4096 constants. */
 constexpr uint32_t whole_buffer = 0u;
 
-}  // namespace
-
-/* ---------------------------------------------------------------- per-stage binding */
+}
 
 void D3d11Device::set_shader(uint32_t stage, D3D10DDI_HSHADER shader)
 {
@@ -107,7 +100,6 @@ VOID D3d11Device::cs_set_shader(D3D10DDI_HSHADER shader)
     set_shader(stage_compute, shader);
 }
 
-/* Class linkage is not carried: a shader with interfaces binds with none. */
 VOID D3d11Device::vs_set_shader_with_ifaces(D3D10DDI_HSHADER shader, UINT, const UINT *, const D3D11DDIARG_POINTERDATA *)
 {
     AV_SCOPE("D3d11Device::vs_set_shader_with_ifaces");
@@ -270,8 +262,6 @@ VOID D3d11Device::cs_set_unordered_access_views(UINT start, UINT count, const D3
     static_cast<void>(d3dproto::av_d3d_SetComputeUnorderedAccessViews(wire(), start, used, bound));
 }
 
-/* ---------------------------------------------------------------- input assembly, output merger, rasterizer */
-
 VOID D3d11Device::ia_set_input_layout(D3D10DDI_HELEMENTLAYOUT layout)
 {
     AV_SCOPE("D3d11Device::ia_set_input_layout");
@@ -397,8 +387,6 @@ VOID D3d11Device::resource_read_after_write_hazard(D3D10DDI_HRESOURCE)
     AV_SCOPE("D3d11Device::resource_read_after_write_hazard");
 }
 
-/* ---------------------------------------------------------------- work */
-
 VOID D3d11Device::draw(UINT vertices, UINT start)
 {
     AV_SCOPE("D3d11Device::draw");
@@ -453,8 +441,6 @@ VOID D3d11Device::dispatch_indirect(D3D10DDI_HRESOURCE buffer, UINT offset)
     static_cast<void>(d3dproto::av_d3d_DispatchIndirect(wire(), id_of(buffer.pDrvPrivate), offset));
 }
 
-/* ---------------------------------------------------------------- clears */
-
 VOID D3d11Device::clear_render_target_view(D3D10DDI_HRENDERTARGETVIEW view, FLOAT *color)
 {
     AV_SCOPE("D3d11Device::clear_render_target_view");
@@ -487,8 +473,6 @@ VOID D3d11Device::clear_view(D3D11DDI_HANDLETYPE, void *view, const FLOAT *color
 {
     AV_SCOPE("D3d11Device::clear_view");
     const d3dproto::Float4 value = {{color[0], color[1], color[2], color[3]}};
-    /* The wire carries a pipeline's worth of rectangles a command; a longer
-     * list is cleared that many at a time, and none clears the whole view. */
     icd::ListPieces pieces(rects == nullptr ? 0u : rect_count, max_viewports);
     while (pieces.next()) {
         d3dproto::Rect bound[max_viewports] = {};
@@ -516,8 +500,6 @@ VOID D3d11Device::discard(D3D11DDI_HANDLETYPE, void *object, const D3D10_DDI_REC
     }
 }
 
-/* ---------------------------------------------------------------- copies */
-
 VOID D3d11Device::resource_copy(D3D10DDI_HRESOURCE destination, D3D10DDI_HRESOURCE source)
 {
     AV_SCOPE("D3d11Device::resource_copy");
@@ -539,8 +521,6 @@ VOID D3d11Device::resource_copy_region(D3D10DDI_HRESOURCE destination, UINT dest
                                                               box != nullptr ? 1u : 0u, region, flags));
 }
 
-/* A conversion between formats of one family is a copy on the host, whose
- * copies convert between compatible formats themselves. */
 VOID D3d11Device::resource_convert(D3D10DDI_HRESOURCE destination, D3D10DDI_HRESOURCE source)
 {
     AV_SCOPE("D3d11Device::resource_convert");
@@ -577,8 +557,6 @@ VOID D3d11Device::copy_structure_count(D3D10DDI_HRESOURCE destination, UINT offs
         d3dproto::av_d3d_CopyStructureCount(wire(), id_of(destination.pDrvPrivate), offset, id_of(view.pDrvPrivate)));
 }
 
-/* ---------------------------------------------------------------- queries */
-
 VOID D3d11Device::query_begin(D3D10DDI_HQUERY query)
 {
     AV_SCOPE("D3d11Device::query_begin");
@@ -599,12 +577,6 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
 {
     AV_SCOPE("D3d11Device::query_get_data");
     QueryRecord &query = *static_cast<QueryRecord *>(handle.pDrvPrivate);
-    /* The host writes a result into the session's slots once it has it, so
-     * this reads memory. What is not there yet needs only its end sent - the
-     * commands this driver still holds are its business, whatever
-     * DO_NOT_FLUSH says about the GPU's. A slot that stays behind - another
-     * query sharing it, a full host list - is asked about the old way, once
-     * it has been behind longer than any GPU wait a frame makes. */
     constexpr uint64_t patience_per_second = 500u;
     if (session_.query_results().read(query.stamp.id(), query.last_end, data, size < query.data_bytes ? size : query.data_bytes))
         return;
@@ -630,4 +602,4 @@ VOID D3d11Device::query_get_data(D3D10DDI_HQUERY handle, void *data, UINT size, 
     if (data != nullptr && size != 0u) __builtin_memcpy(data, answer, static_cast<size_t>(size < answered ? size : answered));
 }
 
-}  // namespace av::d3d11
+}

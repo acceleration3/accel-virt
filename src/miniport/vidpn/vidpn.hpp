@@ -1,7 +1,3 @@
-/* One VidPn dxgkrnl hands a display DDI, reached through
- * DxgkCbQueryVidPnInterface: its interface table and its topology. Every path
- * and mode set acquired through it is released - paths by for_each_path, mode
- * sets by VidPnModeSet. All of it is PASSIVE. */
 #ifndef AV_VIDPN_HPP
 #define AV_VIDPN_HPP
 
@@ -24,12 +20,10 @@ public:
 
     [[nodiscard]] Status initialize();
 
-    /* Zero, not a failure, for a source the topology does not include. */
     [[nodiscard]] Status source_paths(uint32_t source, uint64_t &paths);
     [[nodiscard]] Status for_each_path(PathVisitor &visitor);
     [[nodiscard]] Status update_path_support(const D3dkmdtVidPnPresentPathRecord &path);
 
-    /* The interface's type names which kind of mode set: source or target. */
     [[nodiscard]] Status acquire_mode_set(uint32_t source, void *&mode_set,
                                           const DxgkVidPnSourceModeSetInterfaceRecord *&mode_set_interface);
     [[nodiscard]] Status acquire_mode_set(uint32_t target, void *&mode_set,
@@ -40,7 +34,6 @@ public:
                                          const DxgkVidPnTargetModeSetInterfaceRecord *&mode_set_interface);
     [[nodiscard]] Status release_mode_set(void *mode_set, const DxgkVidPnSourceModeSetInterfaceRecord *mode_set_interface);
     [[nodiscard]] Status release_mode_set(void *mode_set, const DxgkVidPnTargetModeSetInterfaceRecord *mode_set_interface);
-    /* On success the VidPn owns the set; on failure the caller still does. */
     [[nodiscard]] Status assign_mode_set(uint32_t source, void *mode_set,
                                          const DxgkVidPnSourceModeSetInterfaceRecord *mode_set_interface);
     [[nodiscard]] Status assign_mode_set(uint32_t target, void *mode_set,
@@ -60,6 +53,6 @@ private:
     const DxgkVidPnTopologyInterfaceRecord *topology_interface_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VIDPN_HPP
+#endif

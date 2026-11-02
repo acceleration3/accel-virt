@@ -1,8 +1,3 @@
-/* D3d11DeferredEntry over the system's d3d11.dll, which in the guest is
- * Microsoft's runtime on this driver: one device and swap chain on the
- * probe's window, the dynamic buffers, two deferred contexts and the list
- * each finished last. Translation only - what the probe decides is in
- * src/guest/probe/deferred_map_work.cpp. */
 #ifndef AV_WINDOWS_D3D11_DEFERRED_ENTRY_HPP
 #define AV_WINDOWS_D3D11_DEFERRED_ENTRY_HPP
 
@@ -37,11 +32,8 @@ private:
     static constexpr uint32_t most_constants = 8u;
     static constexpr uint32_t most_contexts = 4u;
 
-    /* `buffer` mapped on `context` as `type`, `bytes` at `offset` written
-     * `value`, and unmapped. */
     int32_t write(uint32_t context, ID3D11Buffer *buffer, D3D11_MAP type, uint32_t offset, uint32_t bytes,
                   uint8_t value);
-    /* A dynamic buffer of `bytes` the CPU writes, bound as `bind`. */
     int32_t dynamic_buffer(uint32_t bytes, uint32_t bind, ID3D11Buffer **made);
 
     IDXGISwapChain      *swapchain_;
@@ -56,6 +48,6 @@ private:
     uint32_t             context_count_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WINDOWS_D3D11_DEFERRED_ENTRY_HPP
+#endif

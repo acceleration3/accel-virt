@@ -1,12 +1,3 @@
-/* An application's structure field of an enumeration type may hold any bit
- * pattern - the ICD's callers are foreign code, and the fuzzer's structures
- * are foreign bytes. Loading such a field as its own type is undefined
- * behaviour (and UBSan traps on it), so a field the ICD did not write is read
- * as the integer it is.
- *
- * It lives beside the wire rather than in one ICD because both sides read
- * such a field: a descriptor template's entries are an application's, and the
- * device validates them again (feature 047). */
 #ifndef AV_FOREIGN_ENUM_HPP
 #define AV_FOREIGN_ENUM_HPP
 
@@ -25,6 +16,6 @@ int32_t foreign_enum(const Enumeration &field)
     return value;
 }
 
-}  // namespace av
+}
 
-#endif  // AV_FOREIGN_ENUM_HPP
+#endif

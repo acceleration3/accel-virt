@@ -1,35 +1,3 @@
-/* The host objects one session's guest may name, by the number the guest
- * names each with: what every backend's decoder asks before it hands a
- * number to the host's driver as an object.
- *
- * A number from the guest is an attacker's (constitution V). The host's
- * driver dereferences whatever it is handed - a number a guest invented, an
- * object of one kind named where another belongs, one already destroyed - so
- * a backend accepts a number only where it made an object of the kind the
- * command wants, and a number that names none is a command the host refuses
- * (feature 044). Who chose the number differs - Vulkan's and OpenCL's are the
- * driver's own, answered to the guest; Direct3D's are the guest's, named in
- * the batch that creates the object - and the bookkeeping does not.
- *
- * Each entry is an object of a kind, with the references the guest holds on
- * it, what it was made through, and whatever else its API keeps with it
- * (Detail). An object made through another ends with it: a driver that
- * destroys a Vulkan device frees the device's buffers, and a buffer still
- * held here would be a freed pointer the guest could name. References are
- * counted where the API counts them - an OpenCL application that retains a
- * context and releases it once has not given it up - and a count saturates
- * rather than wraps, after which it no longer says how many and is never
- * counted down to a forget the driver may not have done.
- *
- * What the guest never destroyed is the session's to release as it ends, in
- * an order its API decides - dependents before what they depend on - through
- * whatever its API releases with. The registry calls the release; what it
- * does is the API's.
- *
- * The entries are KeyedSlots, so there is no count past which an object is
- * refused, and an entry keeps its slot while it is held. Detail is copied
- * bytewise. The registry takes no lock: a session runs one command at a
- * time on its own worker. */
 #ifndef AV_HOST_OBJECT_REGISTRY_HPP
 #define AV_HOST_OBJECT_REGISTRY_HPP
 
@@ -48,10 +16,7 @@ template <typename Key, typename Kind, typename Detail>
 class HostObjectRegistry {
     struct Entry {
         Detail   detail_;
-        /* The slot of what it was made through; no_slot for nothing. */
         uint32_t parent_;
-        /* How many entries name this one as their parent, so forgetting a
-         * leaf - which most objects are - looks at nothing else. */
         uint32_t children_;
         uint32_t references_;
         Kind     kind_;
@@ -59,7 +24,6 @@ class HostObjectRegistry {
 
 public:
     static constexpr uint32_t no_slot = KeyedSlots<Key, Entry>::no_slot;
-    /* A count that has stopped counting. */
     static constexpr uint32_t saturated = 0xFFFFFFFFu;
 
     explicit HostObjectRegistry(BlockSource &blocks);
@@ -68,75 +32,36 @@ public:
     HostObjectRegistry(HostObjectRegistry &&) = delete;
     HostObjectRegistry &operator=(HostObjectRegistry &&) = delete;
 
-    /* Room for `objects` more, so remembering that many cannot fail for want
-     * of memory: asked before the driver makes them, so a guest that wants
-     * more than the host can hold is told it is out of memory rather than
-     * handed an object this host would refuse. */
     [[nodiscard]] Status make_room(uint64_t objects);
-    /* `key` held as `kind` with one reference and `detail`, made through
-     * `parent` - nothing when 0 or a key not held. invalid_parameter for key
-     * 0, which no object is; conflict for a key already held, as whatever
-     * kind, with nothing changed; no_memory when no room was made and none
-     * can be. */
     [[nodiscard]] Status remember(Key key, Kind kind, Key parent, const Detail &detail);
     bool                 holds(Key key) const;
-    /* What `key` was made through; 0 for a key not held, or made through
-     * nothing. */
     Key                  parent_of(Key key) const;
-    /* What `key` is held with if it is held as `kind`; null otherwise - for
-     * 0, a key never held, and one held as another kind. */
     Detail              *find(Key key, Kind kind);
     const Detail        *find(Key key, Kind kind) const;
-    /* What `key` is held with and its kind, whatever it is; null for a key
-     * not held. */
     Detail              *find_any(Key key, Kind &kind);
     const Detail        *find_any(Key key, Kind &kind) const;
-    /* One more reference on `key` held as `kind`; nothing otherwise. */
     void                 retain(Key key, Kind kind);
-    /* One reference fewer; the last forgets `key` as forget does. True when
-     * it was the last. Nothing for a key not held as `kind`, or whose count
-     * has saturated. */
     bool                 release(Key key, Kind kind);
-    /* `key` and everything made through it, at any depth, forgotten; nothing
-     * for a key not held. */
     void                 forget(Key key);
-    /* Everything made through `key`, at any depth, forgotten, and not `key`. */
     void                 forget_children(Key key);
-    /* Every entry of a kind from `first` to `last` to `let_go(key, kind,
-     * detail, times)` - `times` the references the guest holds, once for a
-     * saturated count - and then forgotten as forget does. `let_go` releases
-     * the host's object and leaves this registry alone. */
     template <typename Release>
     void                 release_kinds(Kind first, Kind last, Release let_go);
-    /* Every entry of each kind in `order`, in that order, to `let_go` as
-     * release_kinds hands them; then everything forgotten, entries of kinds
-     * not in `order` unreleased, and the memory given back. */
     template <typename Release>
     void                 release_all(const Kind *order, uint32_t kinds, Release let_go);
-    /* Everything forgotten unreleased, and the memory given back. */
     void                 forget_all();
 
-    /* The slot `key` is in; no_slot for none. */
     uint32_t             slot_of(Key key) const;
-    /* The first slot at or after `from` an entry is in; no_slot for none. */
     uint32_t             next_held(uint32_t from) const;
-    /* What the entry in `slot` is held with, its key and its kind; null, key
-     * 0, for a slot holding nothing. */
     Detail              *at(uint32_t slot, Key &key, Kind &kind);
     const Detail        *at(uint32_t slot, Key &key, Kind &kind) const;
     uint32_t             count() const;
-    /* How many entries are of a kind from `first` to `last`. */
     uint32_t             count_kinds(Kind first, Kind last) const;
 
-    /* No key is 0 and no count 0; every parent is a live slot other than its
-     * own, and the children each claims are the entries naming it. */
     bool invariants_hold() const;
 
 private:
     void forget_slot(uint32_t slot);
-    /* Forgets every entry whose parent is gone, until none is. */
     void sweep_orphans();
-    /* The times a release hands back for `references`. */
     uint32_t times_of(uint32_t references) const;
 
     KeyedSlots<Key, Entry> entries_;
@@ -228,8 +153,6 @@ void HostObjectRegistry<Key, Kind, Detail>::retain(Key key, Kind kind)
 {
     AV_SCOPE("HostObjectRegistry::retain");
     Entry *const entry = key != Key(0) ? entries_.find(key) : nullptr;
-    /* Saturated rather than wrapped: a count that wrapped to zero would be an
-     * entry no release could take out. */
     if (entry != nullptr && entry->kind_ == kind && entry->references_ != saturated) entry->references_++;
 }
 
@@ -415,6 +338,6 @@ bool HostObjectRegistry<Key, Kind, Detail>::invariants_hold() const
     return claimed == made_through;
 }
 
-}  // namespace av
+}
 
-#endif  // AV_HOST_OBJECT_REGISTRY_HPP
+#endif

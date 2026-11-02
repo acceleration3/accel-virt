@@ -1,9 +1,3 @@
-/* The modes this device's display offers the guest: the ones it was told to
- * offer - its `modes` property, set before the VM starts or while it runs - or,
- * told none, the host's own monitors' (HostMonitorModes). A host with neither
- * offers none, and the guest keeps what GET_DISPLAY_INFO's rectangle allows.
- * The display's refresh rate goes with them, the same for every mode, and
- * outlives a change of modes. Main loop. */
 #ifndef AV_DISPLAY_MODES_HPP
 #define AV_DISPLAY_MODES_HPP
 
@@ -20,12 +14,7 @@ public:
     DisplayModes(const DisplayModes &) = delete;
     DisplayModes &operator=(const DisplayModes &) = delete;
 
-    /* `text` null or blank: the host's monitors. invalid_parameter for text
-     * that is no list of modes, which leaves the modes as they were; not_found
-     * for no text and no monitor, which leaves none. */
     [[nodiscard]] Status set(const char *text);
-    /* The rate the guest is told, in millihertz; invalid_parameter, nothing
-     * changed, outside 1 Hz to 1 kHz. */
     [[nodiscard]] Status set_refresh(uint32_t millihz);
     const DisplayModeSet &current() const;
 
@@ -34,6 +23,6 @@ private:
     DisplayModeSet modes_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DISPLAY_MODES_HPP
+#endif

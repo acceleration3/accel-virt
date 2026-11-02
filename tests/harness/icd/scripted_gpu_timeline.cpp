@@ -43,4 +43,4 @@ std::uint32_t ScriptedGpuTimeline::waits() const
     return waits_;
 }
 
-}  // namespace av
+}

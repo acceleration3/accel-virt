@@ -127,4 +127,4 @@ bool D3d12QueueProgress::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

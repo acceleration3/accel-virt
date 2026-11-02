@@ -1,6 +1,3 @@
-/* Drive the address space with an attacker-chosen sequence of operations and
- * addresses. No input may crash, leak, translate out of bounds, or break an
- * invariant. */
 #include "miniport/memory/gpu_virtual_address_space.hpp"
 #include "harness/platform/mock_platform.hpp"
 
@@ -34,7 +31,7 @@ private:
     const std::uint8_t *end_;
 };
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size);
 
@@ -70,7 +67,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
             std::uint32_t object = 0u; std::uint64_t offset = 0u;
             if (space.translate(stream.take_quad(), object, offset) == av::Status::ok
                 && object == 0u)
-                __builtin_trap();   /* mapped implies a non-zero object */
+                __builtin_trap();
             break;
         }
         default: {
@@ -83,7 +80,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         }
         if (!space.invariants_hold()) __builtin_trap();
     }
-    /* A rule the address space broke is a finding, even when nothing crashed. */
     if (platform.unclaimed_violations() != 0u) __builtin_trap();
     return 0;
 }

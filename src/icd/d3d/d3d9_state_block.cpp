@@ -12,7 +12,7 @@ namespace {
 
 constexpr uint32_t first_capacity = 64u;
 
-}  // namespace
+}
 
 D3d9StateBlock::D3d9StateBlock(BlockSource &memory) : memory_(memory), entries_(nullptr), count_(0u), capacity_(0u)
 {
@@ -25,8 +25,6 @@ D3d9StateBlock::~D3d9StateBlock()
     if (entries_ != nullptr) memory_.release(entries_);
 }
 
-/* Doubling, as far as memory and a 32-bit count go: the entries are copied as they are, since an
- * entry is a value with no pointer into the block. */
 bool D3d9StateBlock::grow()
 {
     AV_SCOPE("D3d9StateBlock::grow");
@@ -78,7 +76,6 @@ const D3d9StateEntry &D3d9StateBlock::at(uint32_t index) const
     return entries_[index];
 }
 
-/* Each piece of state at most once, and no more entries than room. */
 bool D3d9StateBlock::invariants_hold() const
 {
     AV_SCOPE("D3d9StateBlock::invariants_hold");
@@ -89,4 +86,4 @@ bool D3d9StateBlock::invariants_hold() const
     return true;
 }
 
-}  // namespace av::d3d
+}

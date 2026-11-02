@@ -5,25 +5,21 @@
 namespace av {
 
 namespace {
-
-/* A sample position in sixteenths of a pixel from the pixel's center. */
 struct SamplePosition {
     int8_t x;
     int8_t y;
 };
 
-/* D3D's standard patterns for 2, 4, 8 and 16 samples, one after another. */
 constexpr SamplePosition positions[30] = {
-    {4, 4},  {-4, -4},                                                               // 2
-    {-2, -6}, {6, -2}, {-6, 2}, {2, 6},                                              // 4
-    {1, -3}, {-1, 3}, {5, 1}, {-3, -5}, {-5, 5}, {-7, -1}, {3, 7}, {7, -7},          // 8
-    {1, 1},   {-1, -3}, {-3, 2}, {4, -1}, {-5, -2}, {2, 5},  {5, 3}, {3, -5},        // 16
+    {4, 4},  {-4, -4},
+    {-2, -6}, {6, -2}, {-6, 2}, {2, 6},
+    {1, -3}, {-1, 3}, {5, 1}, {-3, -5}, {-5, 5}, {-7, -1}, {3, 7}, {7, -7},
+    {1, 1},   {-1, -3}, {-3, 2}, {4, -1}, {-5, -2}, {2, 5},  {5, 3}, {3, -5},
     {-2, 6},  {0, -7},  {-4, -6}, {-6, 4}, {-8, 0}, {7, -4}, {6, 7}, {-7, -8}};
 
-/* Subpixels per sixteenth of a pixel. */
 constexpr int64_t sixteenth = CoverageTriangle::subpixels / 16;
 
-}  // namespace
+}
 
 CoverageTriangle::CoverageTriangle(const int32_t (&x)[3], const int32_t (&y)[3]) : x_{}, y_{}, area_(false)
 {
@@ -34,7 +30,6 @@ CoverageTriangle::CoverageTriangle(const int32_t (&x)[3], const int32_t (&y)[3])
     }
     const int64_t area = (x_[1] - x_[0]) * (y_[2] - y_[0]) - (y_[1] - y_[0]) * (x_[2] - x_[0]);
     area_ = area != 0;
-    /* Wound so that the interior has positive edge functions. */
     if (area < 0) {
         const int64_t x1 = x_[1], y1 = y_[1];
         x_[1] = x_[2];
@@ -80,4 +75,4 @@ bool CoverageTriangle::covers(int64_t x, int64_t y) const
     return true;
 }
 
-}  // namespace av
+}

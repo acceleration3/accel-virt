@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""The OpenCL-OpenGL sharing samples (samples/clgl) in the running guest.
-
-Each sample checks the values it moves between an OpenGL context and the
-OpenCL context made from it, so there is no host run to compare against: the
-program's own "ok"/"FAIL" lines are the verdict, and this exits with the
-number that failed (100 when no shared context could be made at all).
-
-    cmake --build build/guest --target avclglsamples.exe
-    tools/clgl_samples.py --work build-guest-render
-
-The guest must already be running a build of this tree, with the avcl.dll and
-avgl.dll these samples were written against.
-"""
+"""The OpenCL-OpenGL sharing samples (samples/clgl) in the running guest."""
 import argparse
 import pathlib
 import re
@@ -38,8 +26,6 @@ def main():
                             f"New-Item -ItemType Directory -Force {GUEST_DIR} | Out-Null")
     guest_shell(work, "push", str(args.build / "OpenCL.dll"), GUEST_DIR + "\\OpenCL.dll")
     guest_shell(work, "push", str(args.build / "avclglsamples.exe"), GUEST_EXE)
-    # The user's interactive session: an OpenGL context needs a desktop, which
-    # the agent's session does not have.
     output = guest_shell(work, "ps", f"""
 Unregister-ScheduledTask -TaskName avclglsamples -Confirm:$false -ErrorAction SilentlyContinue
 $a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c cd /d {GUEST_DIR} && {GUEST_EXE} > {GUEST_DIR}\\run.txt 2>&1'

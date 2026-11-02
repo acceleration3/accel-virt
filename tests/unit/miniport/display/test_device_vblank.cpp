@@ -1,10 +1,3 @@
-/* The vertical blanks the driver reports, as the device's display clock
- * counts them. The device's side is played here by writing its page as it
- * does: the header when it takes the page, and each blank's record whole.
- * A blank is reported once, while dxgkrnl asks and not before it asked; it
- * names the flip the device latched when the source posts numbered frames and
- * the newest otherwise; the scan line follows the blanks' phase; nothing is
- * reported across a suspend; and the rate line says how the clock kept. */
 #include "miniport/ddi/dxgk_multiplane_overlay_plane_record.hpp"
 #include "miniport/display/device_vblank.hpp"
 #include "miniport/display/display_mode.hpp"
@@ -46,14 +39,11 @@ public:
             av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "interface");
     }
 
-    /* The page the vsync registers, as the device takes it: zeroed and
-     * headed. What attach asks the device for, played without one. */
     void take_page()
     {
         std::memset(page(), 0, av::ClockPageHeader::page_size);
         static_cast<void>(av::ClockPageHeader(1u).encode(page(), av::ClockPageHeader::encoded_size));
     }
-    /* Blank `sequence` of head 0, latching `latched`, written whole. */
     void blank(std::uint64_t sequence, std::uint32_t latched = 0u, std::uint32_t refresh = 60000u)
     {
         std::uint8_t *const record = page() + 32u;
@@ -70,7 +60,6 @@ public:
         std::memcpy(&every, page() + 32u + VblankRecord::interrupt_every_at, sizeof every);
         return every;
     }
-    /* The DPC at `now` (interrupt time). */
     void tick(std::uint64_t now, bool latching = false)
     {
         platform_.set_irql(Irql::dispatch);
@@ -86,7 +75,6 @@ public:
 private:
     std::uint8_t *page()
     {
-        /* The only contiguous block the vsync makes: the one it tells the device of. */
         return static_cast<std::uint8_t *>(platform_.translate_physical(platform_.last_contiguous_address(),
                                                                         av::ClockPageHeader::page_size));
     }
@@ -99,22 +87,22 @@ private:
     DeviceVblank          vsync_;
 };
 
-}  // namespace
+}
 
 TEST(device_vblank_enable, each_blank_is_reported_once_while_asked_and_not_before)
 { Fixture fixture;
-  CHECK_STATUS(fixture.vsync().enable(), Status::invalid_state);   /* no page before StartDevice */
+  CHECK_STATUS(fixture.vsync().enable(), Status::invalid_state);
   CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
   fixture.take_page();
   CHECK_STATUS(fixture.sources().set_scanout(0u, 0x40000000, nullptr), Status::ok);
-  fixture.blank(3u);   /* before anyone asked, and no DPC looked */
+  fixture.blank(3u);
   CHECK_STATUS(fixture.vsync().enable(), Status::ok);
   CHECK_EQ(fixture.interrupt_every(), 1u);
   fixture.tick(100u);
-  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);   /* it came before the wait: not the waiter's */
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
   fixture.blank(4u);
   fixture.tick(200u);
-  fixture.tick(250u);   /* a DPC for something else: the blank was reported */
+  fixture.tick(250u);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).InterruptType, crtc_vsync);
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument2, 0x40000000u);
@@ -139,12 +127,12 @@ TEST(device_vblank_tick, a_posted_source_reports_the_flip_the_device_latched_and
   base.AllocationAddress = 0x1000ll;
   base.PlaneAttributes[0] = 1u;
   fixture.platform().set_irql(Irql::isr);
-  CHECK_STATUS(fixture.sources().set_multiplane_scanout(0u, &base), Status::ok);   /* frame 1 */
+  CHECK_STATUS(fixture.sources().set_multiplane_scanout(0u, &base), Status::ok);
   base.AllocationAddress = 0x2000ll;
   base.PlaneAttributes[0] = 2u;
-  CHECK_STATUS(fixture.sources().set_multiplane_scanout(0u, &base), Status::ok);   /* frame 2 */
+  CHECK_STATUS(fixture.sources().set_multiplane_scanout(0u, &base), Status::ok);
   fixture.platform().set_irql(Irql::passive);
-  fixture.blank(1u, 1u);   /* the device latched frame 1: frame 2 came too late for this blank */
+  fixture.blank(1u, 1u);
   fixture.tick(100u, true);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).InterruptType, crtc_vsync_multiplane);
@@ -156,21 +144,21 @@ TEST(device_vblank_tick, a_posted_source_reports_the_flip_the_device_latched_and
       CHECK_EQ(layer->PhysicalAddress, 0x1000ll);
       CHECK_EQ(layer->PlaneAttributes[0], 1u);
   }
-  fixture.blank(2u, 1u);   /* latched nothing new: the flip's own record still names frame 1 */
-  fixture.tick(200u, false);   /* shown as it comes: the newest */
+  fixture.blank(2u, 1u);
+  fixture.tick(200u, false);
   const auto *const newest = reinterpret_cast<const av::DxgkMultiplaneOverlayVsyncInfoRecord *>(
       static_cast<std::uintptr_t>(fixture.dxgkrnl().interrupt(1u).UnionRemainder[0]) |
       (static_cast<std::uintptr_t>(fixture.dxgkrnl().interrupt(1u).UnionRemainder[1]) << 32u));
   CHECK(newest != nullptr);
   if (newest != nullptr) CHECK_EQ(newest->PhysicalAddress, 0x2000ll);
   fixture.platform().set_irql(Irql::isr);
-  CHECK_STATUS(fixture.sources().set_multiplane_scanout(0u, nullptr), Status::ok);   /* frame 3: planes off */
-  CHECK_STATUS(fixture.sources().set_scanout(0u, 0x3000, &allocation), Status::ok);  /* frame 4 */
+  CHECK_STATUS(fixture.sources().set_multiplane_scanout(0u, nullptr), Status::ok);
+  CHECK_STATUS(fixture.sources().set_scanout(0u, 0x3000, &allocation), Status::ok);
   fixture.platform().set_irql(Irql::passive);
   fixture.blank(3u, 3u);
   fixture.tick(300u, true);
   CHECK_EQ(fixture.dxgkrnl().interrupt(2u).InterruptType, crtc_vsync_multiplane);
-  CHECK_EQ(fixture.dxgkrnl().interrupt(2u).Argument2, 0u);   /* no layers: the disable-planes flip */
+  CHECK_EQ(fixture.dxgkrnl().interrupt(2u).Argument2, 0u);
   fixture.blank(4u, 4u);
   fixture.tick(400u, true);
   CHECK_EQ(fixture.dxgkrnl().interrupt(3u).InterruptType, crtc_vsync);
@@ -189,18 +177,18 @@ TEST(device_vblank_tick, a_refused_report_is_said_and_not_counted)
 
 TEST(device_vblank_tick, a_page_the_device_never_took_or_wrote_wrong_reports_nothing)
 { Fixture fixture;
-  fixture.tick(100u);   /* no page at all */
+  fixture.tick(100u);
   CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
   CHECK_STATUS(fixture.vsync().enable(), Status::ok);
-  fixture.tick(200u);   /* a page no device headed */
+  fixture.tick(200u);
   fixture.take_page();
-  fixture.blank(1u, 0u, 999u);   /* a rate no device runs at */
+  fixture.blank(1u, 0u, 999u);
   fixture.tick(300u);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
   fixture.blank(1u);
   fixture.tick(400u);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
-  fixture.blank(1u);   /* the same blank again, or one before it: not reported twice */
+  fixture.blank(1u);
   fixture.tick(500u);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u); }
 
@@ -209,11 +197,10 @@ TEST(device_vblank_scan_line, the_line_follows_the_blanks_phase_once_one_is_seen
   const av::DisplayMode mode(1920u, 1080u);
   CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
   fixture.take_page();
-  /* Before any blank: the mode's own reckoning. */
   CHECK_EQ(fixture.vsync().scan_line(mode, 5000000u), mode.scan_line(5000000u));
   fixture.blank(10u);
-  fixture.tick(1000000u);   /* blank 10 seen at interrupt time 1 000 000 */
-  CHECK_EQ(fixture.vsync().scan_line(mode, 1000000u), 1080u);   /* the blank begins */
+  fixture.tick(1000000u);
+  CHECK_EQ(fixture.vsync().scan_line(mode, 1000000u), 1080u);
   CHECK_EQ(fixture.vsync().scan_line(mode, 1000000u + 166666u / 2u), mode.scan_line_within(83333u, 166666u));
   CHECK(fixture.vsync().invariants_hold()); }
 
@@ -227,7 +214,7 @@ TEST(device_vblank_power, nothing_is_reported_across_a_suspend_and_the_asking_co
   fixture.blank(1u);
   fixture.tick(100u);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
-  fixture.take_page();   /* the device was reset; its page taken again */
+  fixture.take_page();
   CHECK_STATUS(fixture.vsync().resume(), Status::ok);
   CHECK_EQ(fixture.interrupt_every(), 1u);
   fixture.blank(2u);
@@ -236,7 +223,7 @@ TEST(device_vblank_power, nothing_is_reported_across_a_suspend_and_the_asking_co
   fixture.vsync().disable();
   fixture.vsync().suspend();
   CHECK_STATUS(fixture.vsync().resume(), Status::ok);
-  CHECK_EQ(fixture.interrupt_every(), DeviceVblank::sweep_every);   /* nothing asked before: nothing after */
+  CHECK_EQ(fixture.interrupt_every(), DeviceVblank::sweep_every);
   fixture.vsync().destroy();
   CHECK_STATUS(fixture.vsync().resume(), Status::invalid_state);
   CHECK_EQ(fixture.platform().live_allocations(), 0u); }
@@ -248,7 +235,7 @@ TEST(device_vblank_report_rate, every_hundred_and_twenty_blanks_a_line_says_how_
   CHECK_STATUS(fixture.vsync().enable(), Status::ok);
   fixture.blank(1u);
   fixture.tick(1000u);
-  fixture.blank(4u);   /* two blanks a late DPC folded into this one */
+  fixture.blank(4u);
   fixture.tick(51000u);
   for (std::uint64_t blank = 5u; blank <= DeviceVblank::blanks_per_report; blank++) {
       fixture.blank(blank);
@@ -256,5 +243,5 @@ TEST(device_vblank_report_rate, every_hundred_and_twenty_blanks_a_line_says_how_
   }
   CHECK(fixture.platform().logged_line(
       "avgpu: vsync 120 blanks in 20000040 ticks, 2 folded, 118 reported, enabled 1 times"));
-  CHECK_EQ(fixture.vsync().reported(), 0u);   /* the window started again */
+  CHECK_EQ(fixture.vsync().reported(), 0u);
   CHECK(fixture.vsync().invariants_hold()); }

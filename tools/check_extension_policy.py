@@ -1,49 +1,20 @@
 #!/usr/bin/env python3
-"""Gate for constitution VI on the ICDs (feature 045, research.md §9; feature
-050): an ICD reports an extension only through a row of its policy table, and
-every row names the test that proves the extension through the ICD - a
-TEST(suite, case) that exists under tests/ - and an extension the generator
-implemented for that API. No test, no row; no row, no report.
-
-Each ICD is one directory src/icd/<api>/ holding source (src/icd/common/ is what
-they share and holds no table) with exactly one `reported_extensions`: an array of
-ExtensionPolicy::Row, or a null pointer while nothing is reported. Anything in
-the array that is not a row this can read fails, so a row cannot hide from it.
-
-An API with no extension mechanism has no table and is named in NO_EXTENSIONS:
-Direct3D reports capabilities through the DDI's own GetCaps, which is held to
-constitution VI by its own tests, not by a policy table.
-
-  check_extension_policy.py [repository root]
-"""
 import os
 import re
 import sys
 
 TABLE_DIRECTORY = "src/icd"
 SHARED_DIRECTORY = "common"
-# Directories under src/icd whose drivers report no extensions, because their
-# API has no extension mechanism: Direct3D's capabilities are pfnGetCaps's, and
-# the vendor libraries (ADL, NVAPI) answer the calls they export and no others.
 NO_EXTENSIONS = ("d3d", "vendor")
-# Where each API's generator lists what it implemented, and the array naming it.
 IMPLEMENTED_LISTS = {
     "vulkan": ("src/proto/generated/vulkan/vk_supported_extensions.h", "kImplementedDeviceExtensions"),
     "opengl": ("src/proto/generated/opengl/gl_tier.h", "kCarriedExtensions"),
     "opencl": ("src/proto/generated/opencl/cl_supported_extensions.h", "kCarriedExtensions"),
 }
-# The OpenGL ICD also reports window-system extensions: its own WGL functions,
-# which no generator lists, held to a test each all the same (feature 050).
 WINDOW_SYSTEM_API = "opengl"
 WGL_ARRAY = re.compile(r"ExtensionPolicy::Row\s+reported_wgl_extensions\s*\[\s*\]\s*=\s*\{(?P<rows>.*?)\}\s*;", re.S)
 WGL_NAME = re.compile(r"^WGL_\w+$")
 TESTS_DIRECTORY = "tests"
-# Where the executor resolves a host extension's own entry points. A row answered
-# over a host extension is a promise that *something in this build* can use that
-# mechanism - which for Vulkan is the ICD, whose translation the generator had
-# to emit, and for OpenGL is the device: the guest never sends an fd command,
-# because the memory object is made inside OPEN_SHARED_OBJECT by the shim here
-# (feature 053, T037).
 EXECUTOR_SHIM_DIRECTORY = "src/executor/shim"
 COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
 ARRAY = re.compile(r"ExtensionPolicy::Row\s+reported_extensions\s*\[\s*\]\s*=\s*\{(?P<rows>.*?)\}\s*;", re.S)
@@ -51,16 +22,10 @@ EMPTY = re.compile(r"ExtensionPolicy::Row\s*\*\s*reported_extensions\s*=\s*nullp
 ROW = re.compile(r'\s*\{\s*"(?P<name>[^"]*)"\s*,\s*(?P<version>\d+)u?\s*,\s*"(?P<test>[^"]*)"'
                  r'(\s*,\s*"(?P<host>[^"]*)")?\s*\}\s*,?')
 TEST_NAME = re.compile(r"^(\w+)\.(\w+)$")
-# A row whose host is this - alone, or followed by the PCI vendor ID whose adapters
-# it is reported on ("-1002"), or by "*" for any described adapter - is answered
-# by the ICD alone and needs no host
-# mechanism (ClExtensionPolicy::answered_here).
 ANSWERED_HERE = "-"
 
 
 class PolicyCheck:
-    """Judges the policy table of one repository tree."""
-
     def __init__(self, root):
         self.root = root
 
@@ -73,9 +38,6 @@ class PolicyCheck:
                         yield os.path.relpath(path, self.root), COMMENT.sub("", source.read())
 
     def icds(self):
-        """Each ICD's directory under src/icd, by API name: one holding source.
-        Headers alone - hooks a generated tree calls before the ICD exists - are
-        no ICD yet, and have nothing to report."""
         base = os.path.join(self.root, TABLE_DIRECTORY)
         if not os.path.isdir(base):
             return []
@@ -84,12 +46,10 @@ class PolicyCheck:
                       and any(True for _source in self.sources(os.path.join(TABLE_DIRECTORY, name), (".cpp",))))
 
     def wgl_tables(self, directory):
-        """Every WGL table in `directory`: (where, rows text)."""
         return [(relative, match.group("rows")) for relative, code in self.sources(directory, (".cpp", ".hpp"))
                 for match in WGL_ARRAY.finditer(code)]
 
     def tables(self, directory):
-        """Every definition of a table in `directory`: (where, rows text or None for empty)."""
         found = []
         for relative, code in self.sources(directory, (".cpp", ".hpp")):
             found += [(relative, match.group("rows")) for match in ARRAY.finditer(code)]
@@ -97,7 +57,6 @@ class PolicyCheck:
         return found
 
     def rows(self, where, text):
-        """The rows of a table's text, and a violation for anything unreadable."""
         rows, violations, at = [], [], 0
         while text[at:].strip():
             match = ROW.match(text, at)
@@ -110,7 +69,6 @@ class PolicyCheck:
         return rows, violations
 
     def implemented(self, api):
-        """The names the generator implemented for `api`, or None without a list."""
         if api not in IMPLEMENTED_LISTS:
             return None
         relative, array = IMPLEMENTED_LISTS[api]
@@ -157,9 +115,6 @@ class PolicyCheck:
         return violations
 
     def device_uses(self, extension):
-        """Whether the device's shim names `extension`: it resolves the host's
-        own entry points there, so a host mechanism the ICD never touches is
-        still one this build uses."""
         shim = os.path.join(self.root, EXECUTOR_SHIM_DIRECTORY)
         if not os.path.isdir(shim):
             return False
@@ -173,8 +128,6 @@ class PolicyCheck:
         return False
 
     def row_violations(self, where, rows, tests, implemented):
-        """What is wrong with `rows`: judged against `implemented` names, or as
-        WGL names when there is no generated list for them."""
         violations = []
         seen = set()
         for name, version, test, host in rows:
@@ -187,10 +140,6 @@ class PolicyCheck:
                 violations.append(f"{where}: {name} is not in {implemented[0]}")
             if (host is not None and not host.startswith(ANSWERED_HERE) and implemented is not None
                     and host not in implemented[1] and not self.device_uses(host)):
-                # A row answered over another extension is a promise about that
-                # mechanism, and the promise is kept by whichever side uses it:
-                # the ICD, whose translation the generator had to emit, or the
-                # device, which names the host extension in its own shim.
                 violations.append(f"{where}: {name} is answered over {host}, which is in neither "
                                   f"{implemented[0]} nor {EXECUTOR_SHIM_DIRECTORY}")
             if version == 0:
@@ -222,7 +171,6 @@ class PolicyCheck:
         return violations + self.row_violations(where, rows, tests, (IMPLEMENTED_LISTS[api][0], implemented))
 
     def reported(self):
-        """(api, rows reported, WGL rows reported) for every ICD whose table can be read."""
         counts = []
         for api in self.icds():
             tables = self.tables(f"{TABLE_DIRECTORY}/{api}")

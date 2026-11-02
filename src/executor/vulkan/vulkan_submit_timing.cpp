@@ -10,7 +10,7 @@ namespace {
 
 constexpr uint64_t nanoseconds_per_second = 1000000000u;
 
-}  // namespace
+}
 
 VulkanSubmitTiming::VulkanSubmitTiming(DriverLog &lines)
     : lines_(lines), clock_(), enabled_(EnvSetting("AV_VK_SUBMIT_TIMING").on()), device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE),
@@ -72,8 +72,6 @@ void VulkanSubmitTiming::harvest()
                                                     VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
         if (read != VK_SUCCESS || results[1] == 0u || results[3] == 0u) return;
         busy_ns_ += static_cast<uint64_t>(static_cast<double>(results[2] - results[0]) * period_ns_);
-        /* A gap past a millisecond is the application doing something else -
-         * loading, or not submitting at all - and is counted apart. */
         constexpr uint64_t long_gap_ns = 1000000u;
         if (last_end_ != 0u && results[0] > last_end_) {
             const uint64_t gap = static_cast<uint64_t>(static_cast<double>(results[0] - last_end_) * period_ns_);
@@ -181,4 +179,4 @@ void VulkanSubmitTiming::forget(VkDevice device)
     last_end_ = 0u;
 }
 
-}  // namespace av
+}

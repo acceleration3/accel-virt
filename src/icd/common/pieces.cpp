@@ -36,4 +36,4 @@ bool Pieces::first() const
     return offset_ == 0u;
 }
 
-}  // namespace av::icd
+}

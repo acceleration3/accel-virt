@@ -36,4 +36,4 @@ uint64_t VirtioRegion::length() const
     return length_;
 }
 
-}  // namespace av
+}

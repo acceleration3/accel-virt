@@ -12,12 +12,9 @@ namespace {
 
 constexpr uint32_t wire_args = 6u;
 constexpr uint32_t buffer_dimension = 1u;
-/* CBVs are 256-byte aligned and at most 64 KiB, as Direct3D 12 has them. */
 constexpr uint32_t constant_alignment = 256u;
 constexpr uint32_t most_constant_bytes = 65536u;
 
-/* Each dimension's UINT members, and whether a ResourceMinLODClamp follows
- * them, indexed by the kind's D3D12_*_DIMENSION: 0 is unknown and none. */
 struct Shape {
     uint32_t words;
     bool     lod;
@@ -41,7 +38,7 @@ template <size_t N> const Shape *shape_of(const Shape (&shapes)[N], uint32_t dim
     return dimension < N && shapes[dimension].known ? &shapes[dimension] : nullptr;
 }
 
-}  // namespace
+}
 
 D3d12ViewWriter::D3d12ViewWriter(const D3dObjectTable &objects, const D3d12AddressMap &addresses)
     : objects_(objects), addresses_(addresses), device_(nullptr)
@@ -216,4 +213,4 @@ bool D3d12ViewWriter::sampler(size_t at, const d3d12proto::SamplerDesc &desc) co
     return true;
 }
 
-}  // namespace av
+}

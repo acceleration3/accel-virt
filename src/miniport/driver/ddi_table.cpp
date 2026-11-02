@@ -45,4 +45,4 @@ bool DdiTable::invariants_hold() const
     return version_ == wddm_3_2 && padding_ == 0u;
 }
 
-}  // namespace av
+}

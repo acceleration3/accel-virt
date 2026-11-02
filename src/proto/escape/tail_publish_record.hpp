@@ -1,8 +1,3 @@
-/* The escape record a process sends to publish its own ring's tail: from then
- * on it stores the tail itself before each submission, so the device may take
- * a batch before the scheduler has handed the driver its packet, and the
- * driver adopts the tail it finds rather than writing its own (the doorbell
- * path's shared tail, reached through D3DKMTSubmitCommand). */
 #ifndef AV_TAIL_PUBLISH_RECORD_HPP
 #define AV_TAIL_PUBLISH_RECORD_HPP
 
@@ -15,15 +10,10 @@ namespace av {
 
 class TailPublishRecord {
 public:
-    /* dxgkrnl answers STATUS_NOT_SUPPORTED to an 8-byte private escape without
-     * handing it to the driver; one the size of the other escape records gets
-     * through. */
     static constexpr size_t   encoded_size = 32u;
-    static constexpr uint32_t magic        = 0x50564B52u;  /* "RKVP" in memory order */
+    static constexpr uint32_t magic        = 0x50564B52u;
 
     TailPublishRecord();
-    /* The ring whose tail the process will store: the driver refuses the
-     * record on a context that has another. */
     explicit TailPublishRecord(uint32_t ring);
 
     uint32_t ring() const;
@@ -35,6 +25,6 @@ private:
     uint32_t ring_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_TAIL_PUBLISH_RECORD_HPP
+#endif

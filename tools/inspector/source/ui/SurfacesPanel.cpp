@@ -5,8 +5,6 @@
 
 namespace inspector {
 namespace {
-
-// ShareOrigin (src/executor/sharing/share.hpp).
 StringView OriginName(StringView value) {
     if (value == "0") return "object";
     if (value == "1") return "D3D11";
@@ -14,8 +12,6 @@ StringView OriginName(StringView value) {
     return value;
 }
 
-// SharedObjectKind (src/proto/resources/shared_object_kind.hpp); 0 is a Direct3D resource, which
-// has no wire kind of its own.
 StringView KindName(StringView value) {
     if (value == "0") return "resource";
     if (value == "1") return "memory";
@@ -24,8 +20,6 @@ StringView KindName(StringView value) {
     return value;
 }
 
-// What a size is likely to be: a frame of a common resolution at 4 or 8 bytes a pixel. A guess,
-// shown as one: the dump says the bytes, not the shape.
 String ShapeGuess(u64 size) {
     struct Mode {
         u32 width, height;
@@ -44,7 +38,7 @@ String ShapeGuess(u64 size) {
     return {};
 }
 
-} // namespace
+}
 
 void Inspector::SurfacesPanel(ui::Context& ctx) {
     if (!ui::BeginWindow(ctx, "Surfaces", &m_show_surfaces)) {
@@ -157,4 +151,4 @@ void Inspector::SurfacesPanel(ui::Context& ctx) {
     ui::EndWindow(ctx);
 }
 
-} // namespace inspector
+}

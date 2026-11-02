@@ -1,5 +1,3 @@
-/* One context's doorbell page connected to its worker's wake event: once, to a
- * page that exists, and never outliving the object. */
 #include "core/support/status.hpp"
 #include "device/threading/doorbell.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -19,7 +17,7 @@ struct DoorbellProbe {
     static void misplace(Doorbell &doorbell) { doorbell.index_ = Doorbell::pages; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -35,7 +33,7 @@ private:
     void    *event_;
 };
 
-}  // namespace
+}
 
 TEST(doorbell_connect, rings_the_event_until_disconnected)
 { Fixture fixture;

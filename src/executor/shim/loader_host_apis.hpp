@@ -1,12 +1,3 @@
-/* What this host's loaders say, asked through the loaders themselves.
- *
- * The other implementation of `HostApis`, and the reason that seam is virtual:
- * this one needs a machine with a GPU and the mock does not.
- *
- * A host with no GPU, no driver, or a Vulkan that will not make an instance is
- * not a failure here: it is a host that serves nothing, every query answers
- * zero, and the device then describes no capset rather than one it cannot
- * honour. */
 #ifndef AV_LOADER_HOST_APIS_HPP
 #define AV_LOADER_HOST_APIS_HPP
 
@@ -36,12 +27,9 @@ class ExecutorLog;
 
 class LoaderHostApis final : public HostApis {
 public:
-    /* What the shares and the Direct3D devices see is written to `log`. */
     explicit LoaderHostApis(ExecutorLog &log);
     ~LoaderHostApis();
 
-    /* Asks the host's Vulkan once. A host with no instance and no device is
-     * not a failure: every query below then answers zero. */
     void open();
     void close();
 
@@ -65,28 +53,15 @@ private:
     DeviceUuid uuids_[HostGpuSet::max_gpus];
     uint32_t sub_apis_[HostGpuSet::max_gpus];
     int32_t  render_minors_[HostGpuSet::max_gpus];
-    /* OpenCL is served where a device on this host says it is the same GPU,
-     * and OpenGL where a context made on a display answers that GPU's UUID -
-     * because every cheaper answer, an EGL device count or a vendor string,
-     * has been wrong on this host at least once. Both are kept once found. */
     OpenClDevice opencl_devices_[HostGpuSet::max_gpus];
     GlDisplay    gl_displays_[HostGpuSet::max_gpus];
-    /* Direct3D is served where DXVK makes a device on the GPU, found and made
-     * here for the reason the displays are: a device made inside a guest's
-     * first batch would cost it dxgkrnl's timeout. */
     D3dRuntime      d3d_runtime_;
     ObjectStorage<D3d11HostDevice> d3d11_devices_[HostGpuSet::max_gpus];
-    /* Each GPU's compositing context, and the memory source on it
-     * (docs/host-memory.md), opened as the GPU is found and closed after
-     * every API that imports from it. */
     CompositorDevice compositors_[HostGpuSet::max_gpus];
     ObjectStorage<CompositorMemory> exporters_[HostGpuSet::max_gpus];
     ObjectStorage<HostMemorySource> sources_[HostGpuSet::max_gpus];
     ObjectStorage<D3d12HostDevice> d3d12_devices_[HostGpuSet::max_gpus];
     D3d9HostDevice  d3d9_devices_[HostGpuSet::max_gpus];
-    /* What every GPU's shares and surfaces are kept in, and the shares,
-     * before the devices whose textures they hold are closed and after they
-     * are made. */
     HostHeap                   heap_;
     ObjectStorage<SharedSurfaces> surfaces_[HostGpuSet::max_gpus];
     ObjectStorage<HostShares>  shares_[HostGpuSet::max_gpus];
@@ -94,6 +69,6 @@ private:
     bool     opened_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_LOADER_HOST_APIS_HPP
+#endif

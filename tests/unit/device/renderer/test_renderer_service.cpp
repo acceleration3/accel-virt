@@ -1,8 +1,3 @@
-/* The renderer process's half of the device, fed QEMU's messages directly:
- * each kind carried out on the contexts, blobs and interrupts the renderer
- * holds, every answer framed to the request's sequence, and every message
- * that does not decode - or comes before the hello, or brings descriptors it
- * has no use for - refused with each of its descriptors closed. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/context/local_context_plane.hpp"
@@ -61,7 +56,7 @@ struct RendererServiceProbe {
     static void               forget_hello(RendererService &service) { service.ready_ = false; }
 };
 
-}  // namespace av
+}
 
 using av::RendererServiceProbe;
 
@@ -75,7 +70,6 @@ constexpr std::uint64_t region_size = 0x8000u;
 constexpr std::uint32_t ring = 11u, fence = 12u, context_id = 4u, doorbell = 6u;
 constexpr std::size_t   capacity = av::RendererMessageHeader::encoded_size + 4096u + 256u;
 
-/* What the executor has published, which a test sets. */
 struct Published {
     bool             found;
     AvExportedImage image;
@@ -106,9 +100,6 @@ int fresh_descriptor()
 
 bool is_open(int descriptor) { return ::fcntl(descriptor, F_GETFD) != -1; }
 
-/* The renderer's process around a service: its own host, resources that map
- * a region to the bytes the test's QEMU host registered, and guest RAM the
- * test writes as the guest. */
 class Rig {
 public:
     Rig()
@@ -147,8 +138,6 @@ public:
     std::size_t                answer_length() const { return answer_length_; }
     int                        answer_descriptor() const { return answer_descriptor_; }
 
-    /* One datagram of `kind` and `sequence` around `body`, with descriptors
-     * that are the service's from here on. */
     Status send(Kind kind, std::uint64_t sequence, const std::uint8_t *body, std::uint32_t length,
                 const int *descriptors = nullptr, std::uint32_t count = 0u)
     {
@@ -164,7 +153,6 @@ public:
         return service_.receive(datagram, length, descriptors, count, answer_, room, answer_length_,
                                 answer_descriptor_);
     }
-    /* Host memory for host blob `key`, made for `context`, as QEMU asks for it. */
     Status allocate(std::uint32_t context, std::uint64_t key, std::uint64_t size, std::uint64_t sequence = 5u,
                     std::size_t room = RendererService::answer_capacity)
     {
@@ -182,7 +170,6 @@ public:
         static_cast<void>(av::FreeMemoryMessage(key).encode(body, sizeof body));
         return send(Kind::free_memory, 6u, body, sizeof body);
     }
-    /* The allocated_memory the last answer is, with the descriptor beside it. */
     av::AllocatedMemoryMessage allocated(std::uint64_t sequence = 5u)
     {
         RendererMessageHeader      header;
@@ -205,7 +192,6 @@ public:
         static_cast<void>(message.encode(body, sizeof body));
         return send(Kind::hello, sequence, body, static_cast<std::uint32_t>(message.encoded_length()));
     }
-    /* Guest RAM region `region_number`, as QEMU sends it. */
     Status region()
     {
         std::uint32_t number = 0u;
@@ -218,7 +204,6 @@ public:
         static_cast<void>(av::RegionMessage(number, size).encode(body, sizeof body));
         return send(Kind::region, 2u, body, sizeof body, &crossed, 1u);
     }
-    /* Blob `id`: `size` bytes at `offset` of the region, in one extent. */
     Status guest_blob(std::uint32_t id, std::uint64_t offset, std::uint64_t size)
     {
         const av::RendererExtent   extent(region_number, offset, size);
@@ -244,14 +229,12 @@ public:
         return send(Kind::bind_context, sequence, body, static_cast<std::uint32_t>(message.encoded_length()),
                     &descriptor, 1u);
     }
-    /* The ring and fence blobs a bind names, over guest RAM with a fresh ring. */
     void rings()
     {
         av::GuestRing(ram_, 12u);
         CHECK_STATUS(guest_blob(ring, 0u, 0x2000u), Status::ok);
         CHECK_STATUS(guest_blob(fence, 0x2000u, 0x1000u), Status::ok);
     }
-    /* The reply the last answer is, or a reply of sequence 0. */
     av::ReplyMessage reply(std::uint64_t &sequence)
     {
         RendererMessageHeader header;
@@ -277,10 +260,8 @@ private:
     int                       answer_descriptor_;
 };
 
-}  // namespace
+}
 
-/* The Ready names the protocol, the executor ABI and the library's
- * sub-APIs, under the hello's sequence. */
 TEST(renderer_service_hello, answers_ready_with_the_librarys_sub_apis)
 { Rig rig;
   CHECK_STATUS(rig.hello(9u), Status::ok);
@@ -298,13 +279,10 @@ TEST(renderer_service_hello, answers_ready_with_the_librarys_sub_apis)
   CHECK_EQ(ready.sub_apis(), both);
   CHECK_EQ(rig.answer_descriptor(), -1);
   CHECK(rig.service().invariants_hold());
-  /* The executor is loaded once: a second hello is answered nothing. */
   CHECK_STATUS(rig.hello(10u), Status::malformed);
   CHECK_EQ(rig.answer_length(), 0u);
   CHECK_EQ(rig.resources().executor_loads(), 1u); }
 
-/* A hello that is not this protocol's, or whose capset does not decode, or
- * that carries descriptors, loads nothing - and what it carried is closed. */
 TEST(renderer_service_hello, refuses_another_version_a_bad_capset_or_descriptors)
 { Rig rig;
   std::uint8_t capset_bytes[av::CapsetInfo::encoded_size] = {};
@@ -334,8 +312,6 @@ TEST(renderer_service_hello, refuses_another_version_a_bad_capset_or_descriptors
   CHECK(!rig.service().ready());
   CHECK_EQ(rig.answer_length(), 0u); }
 
-/* A library that does not open, or one of another ABI, is the hello's
- * answer; the first leaves the renderer able to take another hello. */
 TEST(renderer_service_hello, a_library_that_does_not_load_or_is_refused_answers_nothing)
 { { Rig rig;
     rig.resources().refuse_executor();
@@ -348,7 +324,7 @@ TEST(renderer_service_hello, a_library_that_does_not_load_or_is_refused_answers_
     rig.ops().editable().abi_version = 0u;
     CHECK_STATUS(rig.hello(), Status::not_supported);
     CHECK(!rig.service().ready()); }
-  for (std::uint32_t lock = 1u; lock <= 3u; lock++) {   /* the blobs', the interrupts', the contexts' */
+  for (std::uint32_t lock = 1u; lock <= 3u; lock++) {
       Rig rig;
       rig.host().fail_mutex_at(lock);
       CHECK_STATUS(rig.hello(), Status::no_memory);
@@ -375,8 +351,6 @@ TEST(renderer_service_hello, a_library_that_does_not_load_or_is_refused_answers_
   CHECK_EQ(descriptor, -1);
   CHECK(!rig.service().ready()); }
 
-/* Before the hello only interrupts_off is taken; anything else is refused
- * and its descriptors closed. */
 TEST(renderer_service_receive, nothing_but_a_hello_or_interrupts_off_is_taken_first)
 { Rig rig;
   CHECK_STATUS(rig.region(), Status::invalid_state);
@@ -390,8 +364,6 @@ TEST(renderer_service_receive, nothing_but_a_hello_or_interrupts_off_is_taken_fi
   CHECK_EQ(rig.resources().live_descriptors(), 0u);
   CHECK(rig.service().invariants_hold()); }
 
-/* Bytes that are no message, and messages QEMU never sends, are malformed;
- * whatever came with them is closed. */
 TEST(renderer_service_receive, garbage_and_kinds_qemu_never_sends_are_malformed_and_closed)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -412,14 +384,11 @@ TEST(renderer_service_receive, garbage_and_kinds_qemu_never_sends_are_malformed_
       CHECK_EQ(rig.answer_length(), 0u);
   }
   CHECK_EQ(rig.resources().live_descriptors(), 0u);
-  /* A descriptor slot that holds none is not closed. */
   const int none = -1;
   CHECK_STATUS(rig.service().receive(garbage, sizeof garbage, &none, 1u, answer, sizeof answer, answered,
                                      descriptor),
                Status::malformed); }
 
-/* A kind that carries no descriptor has any that came with it closed,
- * whether or not the rest of it decodes. */
 TEST(renderer_service_receive, descriptors_on_a_kind_that_takes_none_are_closed)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -437,8 +406,6 @@ TEST(renderer_service_receive, descriptors_on_a_kind_that_takes_none_are_closed)
   CHECK_EQ(rig.resources().live_descriptors(), 0u);
   CHECK_EQ(av::RendererServiceProbe::plane(rig.service()).live(), 0u); }
 
-/* A region is mapped and kept with its descriptor; a region that does not
- * map, or is already held, is closed again. */
 TEST(renderer_service_region, maps_a_region_and_refuses_one_it_cannot_map_or_already_holds)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -451,18 +418,15 @@ TEST(renderer_service_region, maps_a_region_and_refuses_one_it_cannot_map_or_alr
       rig.memory().resolve(std::uint64_t{region_number} << av::GuestMemoryTable::region_shift | 0x123u, 1u));
   CHECK(seen == rig.ram() + 0x123);
   CHECK_EQ(rig.answer_length(), 0u);
-  /* The same region again: mapped, found already held, undone. */
   CHECK_STATUS(rig.region(), Status::conflict);
   CHECK_EQ(rig.resources().live_mappings(), 1u);
   CHECK_EQ(rig.resources().live_descriptors(), 1u);
-  /* A descriptor that is no region's does not map. */
   const int stranger = fresh_descriptor();
   std::uint8_t body[av::RegionMessage::encoded_size] = {};
   CHECK_STATUS(av::RegionMessage(5u, 0x1000u).encode(body, sizeof body), Status::ok);
   CHECK_STATUS(rig.send(Kind::region, 2u, body, sizeof body, &stranger, 1u), Status::no_memory);
   CHECK(!is_open(stranger));
   CHECK_EQ(rig.resources().live_descriptors(), 1u);
-  /* A region with no descriptor, or two, does not decode. */
   CHECK_STATUS(rig.send(Kind::region, 2u, body, sizeof body), Status::malformed);
   const int two[2] = {fresh_descriptor(), fresh_descriptor()};
   CHECK_STATUS(rig.send(Kind::region, 2u, body, sizeof body, two, 2u), Status::malformed);
@@ -472,8 +436,6 @@ TEST(renderer_service_region, maps_a_region_and_refuses_one_it_cannot_map_or_alr
   CHECK_EQ(rig.memory().count(), 1u);
   CHECK(rig.service().invariants_hold()); }
 
-/* A guest blob becomes one of the renderer's own table, over the very bytes
- * of guest RAM QEMU's extents named. */
 TEST(renderer_service_guest_blob, mirrors_the_blob_over_the_bytes_its_extents_name)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -491,15 +453,11 @@ TEST(renderer_service_guest_blob, mirrors_the_blob_over_the_bytes_its_extents_na
   CHECK_STATUS(pages.read(0u, &first, 1u), Status::ok);
   CHECK_EQ(first, 0xC3u);
   CHECK_EQ(rig.answer_length(), 0u);
-  /* The same id twice is the table's conflict. */
   CHECK_STATUS(rig.guest_blob(21u, 0x1000u, 0x1000u), Status::conflict);
-  /* An extent past the region's mapping resolves to nothing. */
   CHECK_STATUS(rig.guest_blob(22u, region_size - 0x1000u, 0x2000u), Status::not_found);
   CHECK(!blobs.contains(22u));
   CHECK(rig.service().invariants_hold()); }
 
-/* A memory entry's length is 32 bits: an extent longer than that cannot be
- * one, and the blob is refused rather than cut short. */
 TEST(renderer_service_guest_blob, refuses_an_extent_longer_than_a_memory_entry_carries)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -512,20 +470,13 @@ TEST(renderer_service_guest_blob, refuses_an_extent_longer_than_a_memory_entry_c
   CHECK_STATUS(rig.send(Kind::guest_blob, 3u, body, static_cast<std::uint32_t>(message.encoded_length())),
                Status::invalid_parameter);
   CHECK(!RendererServiceProbe::blobs(rig.service()).contains(23u));
-  /* One byte less is a memory entry, and the table judges it instead: past
-   * this region's mapping, it resolves to nothing. */
   const av::RendererExtent   largest(region_number, 0u, past - 1u);
   const av::GuestBlobMessage fits(23u, past - 1u, &largest, 1u);
   CHECK_STATUS(fits.encode(body, sizeof body), Status::ok);
   CHECK_STATUS(rig.send(Kind::guest_blob, 3u, body, static_cast<std::uint32_t>(fits.encoded_length())),
                Status::not_found);
-  /* A body that does not decode. */
   CHECK_STATUS(rig.send(Kind::guest_blob, 3u, body, 8u), Status::malformed); }
 
-/* Host memory for a host blob is the library's, answered with its dma-buf
- * beside the message under the request's sequence; the renderer keeps who
- * it was made for, and closes its own copy of the descriptor once the answer
- * has gone. */
 TEST(renderer_service_allocate_memory, answers_the_librarys_memory_and_keeps_its_owner)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -544,8 +495,7 @@ TEST(renderer_service_allocate_memory, answers_the_librarys_memory_and_keeps_its
   CHECK_EQ(asked.request, 0x101u);
   CHECK(RendererServiceProbe::owners(rig.service()).owns(context_id, key));
   CHECK(!RendererServiceProbe::owners(rig.service()).owns(context_id + 1u, key));
-  CHECK_EQ(rig.resources().live_descriptors(), 0u);   /* the library's, not one QEMU sent */
-  /* The answer has gone: the next datagram closes the renderer's copy. */
+  CHECK_EQ(rig.resources().live_descriptors(), 0u);
   CHECK_STATUS(rig.free_memory(key), Status::ok);
   CHECK(!is_open(handed));
   CHECK_EQ(rig.answer_length(), 0u);
@@ -554,9 +504,6 @@ TEST(renderer_service_allocate_memory, answers_the_librarys_memory_and_keeps_its
   CHECK(!RendererServiceProbe::owners(rig.service()).owns(context_id, key));
   CHECK(rig.service().invariants_hold()); }
 
-/* Nothing allocated is an answer of no memory and no descriptor: a library
- * with none to give, a key that names no host blob - allocated, then given
- * back, so no import can name it - and memory answered without a dma-buf. */
 TEST(renderer_service_allocate_memory, memory_it_cannot_hand_over_is_answered_as_none_and_given_back)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -585,9 +532,9 @@ TEST(renderer_service_allocate_memory, memory_it_cannot_hand_over_is_answered_as
 TEST(renderer_service_allocate_memory, a_request_that_does_not_decode_or_an_answer_that_does_not_fit_is_refused)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
-  CHECK_STATUS(rig.allocate(0u, av::HostBlobId::first, 0x1000u), Status::malformed);   /* no context */
-  CHECK_STATUS(rig.allocate(context_id, 0u, 0x1000u), Status::malformed);              /* no key */
-  CHECK_STATUS(rig.allocate(context_id, av::HostBlobId::first, 0u), Status::malformed); /* no size */
+  CHECK_STATUS(rig.allocate(0u, av::HostBlobId::first, 0x1000u), Status::malformed);
+  CHECK_STATUS(rig.allocate(context_id, 0u, 0x1000u), Status::malformed);
+  CHECK_STATUS(rig.allocate(context_id, av::HostBlobId::first, 0u), Status::malformed);
   std::uint8_t body[av::AllocateMemoryMessage::encoded_size] = {};
   CHECK_STATUS(av::AllocateMemoryMessage(context_id, 1u, av::HostBlobId::first, 0x1000u).encode(body, sizeof body),
                Status::ok);
@@ -604,13 +551,13 @@ TEST(renderer_service_free_memory, frees_the_key_and_forgets_its_owner)
   CHECK_STATUS(rig.hello(), Status::ok);
   CHECK_STATUS(rig.allocate(context_id, av::HostBlobId::first + 9u, 0x1000u), Status::ok);
   CHECK(RendererServiceProbe::owners(rig.service()).owns(context_id, av::HostBlobId::first + 9u));
-  CHECK_STATUS(rig.free_memory(std::uint64_t{1} << 32), Status::ok);   /* names no blob: nothing of it held */
+  CHECK_STATUS(rig.free_memory(std::uint64_t{1} << 32), Status::ok);
   CHECK_EQ(rig.ops().held_memory(), 1u);
   CHECK_STATUS(rig.free_memory(av::HostBlobId::first + 9u), Status::ok);
   CHECK_EQ(rig.ops().held_memory(), 0u);
   CHECK(!RendererServiceProbe::owners(rig.service()).owns(context_id, av::HostBlobId::first + 9u));
   std::uint8_t body[av::FreeMemoryMessage::encoded_size] = {};
-  CHECK_STATUS(rig.send(Kind::free_memory, 6u, body, sizeof body), Status::malformed);   /* key 0 */
+  CHECK_STATUS(rig.send(Kind::free_memory, 6u, body, sizeof body), Status::malformed);
   CHECK_STATUS(rig.send(Kind::free_memory, 6u, body, 4u), Status::malformed);
   CHECK_EQ(rig.answer_length(), 0u); }
 
@@ -627,8 +574,6 @@ TEST(renderer_service_blob_retired, retires_a_blob_and_refuses_one_it_does_not_h
   CHECK_STATUS(rig.send(Kind::blob_retired, 4u, body, 3u), Status::malformed);
   CHECK_EQ(rig.answer_length(), 0u); }
 
-/* Create and destroy are answered with the plane's outcome, under the
- * request's own sequence; one that does not decode is answered nothing. */
 TEST(renderer_service_context, answers_create_and_destroy_with_the_planes_outcome)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -652,8 +597,6 @@ TEST(renderer_service_context, answers_create_and_destroy_with_the_planes_outcom
   CHECK_EQ(rig.answer_length(), 0u);
   CHECK(rig.service().invariants_hold()); }
 
-/* An answer with no room, or nowhere, to go is too_large - and the request
- * was carried out all the same. */
 TEST(renderer_service_context, an_answer_that_does_not_fit_is_too_large)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -672,8 +615,6 @@ TEST(renderer_service_context, an_answer_that_does_not_fit_is_too_large)
                Status::too_large);
   CHECK_EQ(RendererServiceProbe::plane(rig.service()).live(), 1u); }
 
-/* The doorbell QEMU registered is offered for the bind, which connects the
- * context to it; none is left offered and the renderer keeps no copy. */
 TEST(renderer_service_bind, binds_the_context_to_its_doorbell_and_leaves_no_offer)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -689,21 +630,17 @@ TEST(renderer_service_bind, binds_the_context_to_its_doorbell_and_leaves_no_offe
   CHECK_EQ(rig.host().live_doorbells(), 1u);
   int left = -1;
   CHECK_STATUS(rig.doorbells().take(doorbell, left), Status::not_found);
-  /* The mock host connects its own event and takes no offer, so the service
-   * closes what the bind did not take. */
   CHECK(!is_open(bell));
-  CHECK_EQ(rig.resources().live_descriptors(), 1u);   /* the region's */
+  CHECK_EQ(rig.resources().live_descriptors(), 1u);
   CHECK(rig.service().invariants_hold()); }
 
-/* A bind the plane refuses leaves no doorbell offered: the descriptor is
- * closed, not kept for a later context at that page. */
 TEST(renderer_service_bind, a_refused_bind_leaves_no_doorbell_offered)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
   CHECK_STATUS(rig.region(), Status::ok);
   rig.rings();
   const int bell = fresh_descriptor();
-  CHECK_STATUS(rig.bind(99u, doorbell, bell, 8u), Status::ok);   /* no such context */
+  CHECK_STATUS(rig.bind(99u, doorbell, bell, 8u), Status::ok);
   std::uint64_t sequence = 0u;
   CHECK_STATUS(rig.reply(sequence).status(), Status::invalid_parameter);
   CHECK_EQ(sequence, 8u);
@@ -713,8 +650,6 @@ TEST(renderer_service_bind, a_refused_bind_leaves_no_doorbell_offered)
   CHECK_EQ(rig.host().live_doorbells(), 0u);
   CHECK_EQ(rig.resources().live_descriptors(), 1u); }
 
-/* A page already holding an offer is a conflict: the bind is not tried and
- * the new descriptor is closed, the old offer untouched. */
 TEST(renderer_service_bind, a_doorbell_that_conflicts_is_refused_and_closed)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -732,13 +667,10 @@ TEST(renderer_service_bind, a_doorbell_that_conflicts_is_refused_and_closed)
   CHECK(is_open(standing));
   CHECK(!RendererServiceProbe::plane(rig.service()).holds_doorbell(doorbell));
   CHECK_EQ(rig.host().live_doorbells(), 0u);
-  /* The teardown withdraws the offer still standing and closes it. */
   rig.service().shut_down();
   CHECK(!is_open(standing));
   CHECK_EQ(rig.resources().live_descriptors(), 1u); }
 
-/* A context bound with no doorbell polls its ring: nothing is offered and
- * nothing is left to close. */
 TEST(renderer_service_bind, a_bind_without_a_doorbell_offers_none)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -759,8 +691,6 @@ TEST(renderer_service_bind, a_bind_without_a_doorbell_offers_none)
   CHECK_STATUS(rig.doorbells().take(doorbell, left), Status::not_found);
   CHECK_EQ(rig.resources().live_descriptors(), 1u); }
 
-/* A bind whose message or setup does not decode is answered nothing, and its
- * descriptor is closed. */
 TEST(renderer_service_bind, a_bind_that_does_not_decode_is_malformed_and_closed)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -778,8 +708,6 @@ TEST(renderer_service_bind, a_bind_that_does_not_decode_is_malformed_and_closed)
   CHECK_EQ(rig.answer_length(), 0u);
   CHECK_EQ(rig.resources().live_descriptors(), 0u); }
 
-/* One notifier per line QEMU marked present, in line order; interrupts_off
- * drops them all and disconnects. */
 TEST(renderer_service_interrupt_lines, takes_a_notifier_per_present_line_and_interrupts_off_drops_them)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -792,7 +720,6 @@ TEST(renderer_service_interrupt_lines, takes_a_notifier_per_present_line_and_int
   CHECK(is_open(lines[0]));
   CHECK(is_open(lines[1]));
   CHECK_EQ(rig.answer_length(), 0u);
-  /* A count other than the lines present does not decode. */
   const int one = fresh_descriptor();
   CHECK_STATUS(rig.send(Kind::interrupt_lines, 2u, body, sizeof body, &one, 1u), Status::malformed);
   CHECK(!is_open(one));
@@ -803,8 +730,6 @@ TEST(renderer_service_interrupt_lines, takes_a_notifier_per_present_line_and_int
   CHECK(!is_open(lines[0]));
   CHECK_EQ(rig.resources().live_descriptors(), 0u); }
 
-/* A slot's image crosses with its dma-buf only when it is not the one last
- * sent for that slot; nothing published is answered as nothing found. */
 TEST(renderer_service_export_image, sends_a_slots_dma_buf_only_when_the_image_changed)
 { Rig rig;
   rig.ops().editable().export_image = &export_published;
@@ -836,20 +761,17 @@ TEST(renderer_service_export_image, sends_a_slots_dma_buf_only_when_the_image_ch
   CHECK_EQ(message.stride(), 256u);
   CHECK_EQ(message.fourcc(), 0x34325258u);
   CHECK_EQ(message.modifier(), 7u);
-  /* The same image again: no descriptor. */
   CHECK_STATUS(rig.send(Kind::export_image, 61u, body, sizeof body), Status::ok);
   CHECK(exported(message, sequence));
   CHECK(message.found());
   CHECK(!message.fresh());
   CHECK_EQ(rig.answer_descriptor(), -1);
-  /* The same descriptor with another layout is another image. */
   published.image.height = 48u;
   CHECK_STATUS(rig.send(Kind::export_image, 62u, body, sizeof body), Status::ok);
   CHECK(exported(message, sequence));
   CHECK(message.fresh());
   CHECK_EQ(message.height(), 48u);
   CHECK_EQ(rig.answer_descriptor(), image_fd);
-  /* Any field of the layout changed is another image. */
   const auto changed = [&](void (*change)(AvExportedImage &)) {
       change(published.image);
       std::uint64_t at = 0u;
@@ -865,13 +787,11 @@ TEST(renderer_service_export_image, sends_a_slots_dma_buf_only_when_the_image_ch
   CHECK_STATUS(rig.send(Kind::export_image, 71u, body, sizeof body), Status::ok);
   CHECK(exported(message, sequence));
   CHECK(!message.fresh());
-  /* One said found with no descriptor is nothing found. */
   published.image.fd = -1;
   CHECK_STATUS(rig.send(Kind::export_image, 72u, body, sizeof body), Status::ok);
   CHECK(exported(message, sequence));
   CHECK(!message.found());
   published.image.fd = image_fd;
-  /* A slot past the last, or nothing published, is nothing found. */
   published.image.slot = av::ExportedImageMessage::slots;
   CHECK_STATUS(rig.send(Kind::export_image, 63u, body, sizeof body), Status::ok);
   CHECK(exported(message, sequence));
@@ -883,11 +803,9 @@ TEST(renderer_service_export_image, sends_a_slots_dma_buf_only_when_the_image_ch
   CHECK(!message.found());
   CHECK_STATUS(rig.send(Kind::export_image, 65u, body, 7u), Status::malformed);
   CHECK_EQ(rig.answer_length(), 0u);
-  /* The descriptor stayed the executor's throughout. */
   CHECK(is_open(image_fd));
   ::close(image_fd); }
 
-/* QEMU going away leaves nothing: contexts, blobs, owners, lines and offers. */
 TEST(renderer_service_shut_down, leaves_no_context_blob_line_or_offer)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
@@ -913,11 +831,9 @@ TEST(renderer_service_shut_down, leaves_no_context_blob_line_or_offer)
   CHECK(!is_open(line));
   CHECK_EQ(rig.host().live_doorbells(), 0u);
   CHECK_EQ(rig.host().live_threads(), 0u);
-  CHECK_EQ(rig.resources().live_descriptors(), 1u);   /* the region stays the process's */
+  CHECK_EQ(rig.resources().live_descriptors(), 1u);
   CHECK(rig.service().invariants_hold()); }
 
-/* A context only exists behind a hello: a service that holds one and says
- * it never took a hello is broken. */
 TEST(renderer_service_invariants, a_context_without_a_hello_breaks_them)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);

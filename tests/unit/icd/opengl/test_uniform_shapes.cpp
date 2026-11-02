@@ -1,6 +1,3 @@
-/* How many values a uniform location answers, from its type (OpenGL 4.6 table
- * 7.3), kept per program and location until the program is linked again or
- * deleted. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -17,7 +14,6 @@ using av::glicd::UniformShapes;
 namespace av::glicd {
 
 struct UniformShapesProbe {
-    /* A row no remember writes: a negative location, or no values. */
     static void plant(UniformShapes &shapes, std::uint64_t key, std::uint32_t values)
     {
         std::uint32_t slot = 0u;
@@ -25,7 +21,7 @@ struct UniformShapesProbe {
     }
 };
 
-}  // namespace av::glicd
+}
 
 TEST(uniform_shape, a_type_names_its_value_count)
 { struct Row { std::uint32_t type; std::uint32_t values; };
@@ -37,11 +33,9 @@ TEST(uniform_shape, a_type_names_its_value_count)
       {0x8B6Au, 12u}, {0x140Au, 1u},  {0x8FFCu, 2u},  {0x8FFDu, 3u},  {0x8FFEu, 4u},  {0x8F46u, 4u},
       {0x8F47u, 9u},  {0x8F48u, 16u}, {0x8F49u, 6u},  {0x8F4Au, 8u},  {0x8F4Bu, 6u},  {0x8F4Cu, 12u},
       {0x8F4Du, 8u},  {0x8F4Eu, 12u},
-      /* samplers and images, first and last of each range */
       {0x8B5Du, 1u},  {0x8B64u, 1u},  {0x8DC0u, 1u},  {0x8DC5u, 1u},  {0x8DC9u, 1u},  {0x8DD8u, 1u},
       {0x900Cu, 1u},  {0x900Fu, 1u},  {0x904Cu, 1u},  {0x906Cu, 1u},  {0x9108u, 1u},  {0x910Du, 1u},
       {0x9055u, 1u},
-      /* next to a range, and nothing */
       {0x8B4Fu, 0u}, {0x8B6Bu, 0u}, {0x8DD9u, 0u}, {0x9010u, 0u}, {0x906Du, 0u}, {0x910Eu, 0u},
       {0x8DBFu, 0u}, {0x0u, 0u}, {0xFFFFFFFFu, 0u},
   };
@@ -68,7 +62,6 @@ TEST(uniform_shapes, remembers_locations_per_program_until_forgotten)
   CHECK_EQ(shapes.values(1u, 4), 3u);
   CHECK_EQ(shapes.values(2u, 0), 1u);
   CHECK_EQ(shapes.values(2u, 4), 0u);
-  /* A location answered again takes its new type. */
   CHECK_STATUS(shapes.remember(1u, 4, 0x8B52u), Status::ok);
   CHECK_EQ(shapes.values(1u, 4), 4u);
   CHECK_EQ(shapes.held(), 3u);
@@ -89,8 +82,6 @@ TEST(uniform_shapes, ignores_a_negative_location_and_an_unknown_type)
   CHECK_EQ(shapes.values(1u, -1), 0u);
   CHECK(shapes.invariants_hold()); }
 
-/* Well past the 1024 the table once held: every location of every program
- * answers its own count, and a program forgotten takes only its own. */
 TEST(uniform_shapes, keeps_every_location_past_the_old_bound)
 { MockPlatform  platform;
   UniformShapes shapes(platform);
@@ -107,8 +98,6 @@ TEST(uniform_shapes, keeps_every_location_past_the_old_bound)
   CHECK_EQ(shapes.values(18u, 499), 16u);
   CHECK(shapes.invariants_hold()); }
 
-/* A location there is no memory to keep is refused, and answers 0 - nothing
- * written - rather than a size the host would not match. */
 TEST(uniform_shapes, a_location_with_no_memory_to_keep_it_is_refused)
 { MockPlatform  platform;
   UniformShapes shapes(platform);

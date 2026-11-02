@@ -11,4 +11,4 @@ void ClHandleRegistryProbe::hold_null()
 { uint32_t slot = 0u;
   static_cast<void>(registry.handles_.insert(0u, ClHandle{1u, clproto::HandleKind::mem}, slot)); }
 
-}  // namespace av
+}

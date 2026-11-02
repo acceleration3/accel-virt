@@ -1,5 +1,3 @@
-/* How many values one uniform location of one program answers a glGetUniform
- * with, from the uniform's type (OpenGL 4.6 table 7.3). */
 #ifndef AV_GLICD_UNIFORM_SHAPE_HPP
 #define AV_GLICD_UNIFORM_SHAPE_HPP
 
@@ -14,7 +12,6 @@ public:
 
     uint32_t program() const;
     int32_t  location() const;
-    /* 0 for a type OpenGL does not have. */
     uint32_t values() const;
 
 private:
@@ -25,6 +22,6 @@ private:
     uint32_t values_;
 };
 
-}  // namespace av::glicd
+}
 
-#endif  // AV_GLICD_UNIFORM_SHAPE_HPP
+#endif

@@ -1,6 +1,3 @@
-/* DxgkDdiCommitVidPn for one source of one functional VidPn: the pinned source
- * mode becomes the source's mode, or the source has none when the VidPn gives
- * it no path or no pinned mode. */
 #ifndef AV_VIDPN_COMMIT_HPP
 #define AV_VIDPN_COMMIT_HPP
 
@@ -27,7 +24,7 @@ public:
     NtStatus apply();
 
 private:
-    static constexpr uint32_t path_powered_off = 2u;   /* DXGKARG_COMMITVIDPN_FLAGS.PathPoweredOff */
+    static constexpr uint32_t path_powered_off = 2u;
 
     Platform                       &platform_;
     const DisplayModeList          &modes_;
@@ -36,6 +33,6 @@ private:
     VidPn                           vidpn_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VIDPN_COMMIT_HPP
+#endif

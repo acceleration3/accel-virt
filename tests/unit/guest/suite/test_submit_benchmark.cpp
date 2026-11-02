@@ -1,13 +1,3 @@
-/* What the doorbell bought, measured over MockKmt (feature 049, US3). The mock
- * charges a kernel submission the ticks a transition into dxgkrnl costs and
- * charges a doorbell store nothing - which is not a simplification but the
- * whole claim: a store is a write in the process, and this mock never sees it.
- *
- * What these tests judge is that both paths are measured on one run, that the
- * ratio is the driver's property and not the clock's, and that a machine whose
- * OS hands out no hardware queue reports no gain rather than the kernel's own
- * cost compared against nothing.
- */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
@@ -35,8 +25,6 @@ namespace {
 
 const PciIdentity av(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
                       PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
-/* Ticks per second in MockKmt's clock, and the cost of one kernel submission:
- * 20 ticks is two microseconds there. */
 constexpr std::uint64_t submit_ticks = 20u;
 constexpr std::uint32_t submit_ns = 2000u;
 
@@ -69,7 +57,7 @@ private:
     AdapterSearch search_;
 };
 
-}  // namespace
+}
 
 TEST(submit_benchmark, measures_both_paths_on_one_run_and_answers_their_ratio)
 { Rig rig;
@@ -80,8 +68,6 @@ TEST(submit_benchmark, measures_both_paths_on_one_run_and_answers_their_ratio)
   benchmark.run();
   CHECK_EQ(report.failed(), 0u);
 
-  /* A doorbell submission costs nothing this mock can see, and a kernel one
-   * costs the transition: the ratio is what the run is for. */
   CHECK_EQ(benchmark.doorbell_ns(), 0u);
   CHECK_EQ(benchmark.kernel_ns(), submit_ns);
   CHECK_EQ(benchmark.ratio(), submit_ns * 100u);
@@ -90,22 +76,12 @@ TEST(submit_benchmark, measures_both_paths_on_one_run_and_answers_their_ratio)
   CHECK(has_line(report, "ok submit.kernel_ns 2000\n"));
   CHECK(has_line(report, "ok submit.ratio 200000\n"));
 
-  /* Every timed submission of the first path went through the doorbell and
-   * every one of the second through the kernel: one warm no-op and one drain
-   * per block are the only others. */
-  /* The kernel path's timed submissions and its drains, and nothing else: the
-   * doorbell path's - and the warm no-op, made while the doorbell was still
-   * connected - never reached the kernel at all. They go through the queue,
-   * not the context, because a hardware-scheduled context refuses
-   * D3DKMTSubmitCommand outright (research.md §13). */
   const std::uint32_t timed = SubmitBenchmark::rounds * SubmitBenchmark::block;
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit_to_hw_queue), timed + SubmitBenchmark::rounds);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), 0u);
   CHECK(report.invariants_hold());
   rig.close(); }
 
-/* A machine whose OS hands out no hardware queue measures the only path it
- * has, and reports no gain at all rather than one it did not have. */
 TEST(submit_benchmark, a_machine_without_hardware_queues_reports_no_gain)
 { Rig rig;
   av::MockPlatform report_memory;
@@ -120,8 +96,6 @@ TEST(submit_benchmark, a_machine_without_hardware_queues_reports_no_gain)
   CHECK(has_line(report, "ok submit.ratio 0\n"));
   rig.close(); }
 
-/* A clock that cannot say how long a tick is measures nothing, and a driver
- * that refuses a submission mid-run fails the step it refused. */
 TEST(submit_benchmark, a_run_that_cannot_be_measured_fails_rather_than_reporting_a_number)
 { { Rig rig;
     rig.kmt().set_frequency(0u);
@@ -135,7 +109,6 @@ TEST(submit_benchmark, a_run_that_cannot_be_measured_fails_rather_than_reporting
     rig.close(); }
 
   Rig rig;
-  /* The second submission of the first block: the warm no-op's is the first. */
   rig.kmt().fail_at(MockKmt::Call::submit, 2u, 0xC0000001u);
   av::MockPlatform report_memory;
   GuestReport     report(report_memory);
@@ -146,8 +119,6 @@ TEST(submit_benchmark, a_run_that_cannot_be_measured_fails_rather_than_reporting
   rig.close(); }
 
 
-/* Each step's failure stops the run where it happened: a first round trip the
- * device does not answer, and a doorbell path that fails while being timed. */
 TEST(submit_benchmark, a_step_that_fails_stops_the_run_where_it_failed)
 { { Rig rig;
     rig.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
@@ -160,8 +131,6 @@ TEST(submit_benchmark, a_step_that_fails_stops_the_run_where_it_failed)
     CHECK_EQ(benchmark.ratio(), 0u);
     rig.close(); }
 
-  /* The doorbell path, timed and then refused: the first drain of the first
-   * block is the second wait of the run, the warm no-op's being the first. */
   Rig rig;
   rig.kmt().allow_hardware_scheduling();
   rig.kmt().fail_at(MockKmt::Call::wait_for_hw_queue, 2u, 0xC0000001u);
@@ -175,11 +144,9 @@ TEST(submit_benchmark, a_step_that_fails_stops_the_run_where_it_failed)
   CHECK_EQ(benchmark.kernel_ns(), 0u);
   rig.close(); }
 
-/* Answered no-ops one at a time: every percentile of their cost, in order, and
- * what a read of the clock costs beside them. */
 TEST(submit_benchmark, round_trips_report_their_spread_in_order)
 { Rig rig;
-  rig.kmt().spend_on_wait(10u);   /* a microsecond a trip, after the reply-slot watch */
+  rig.kmt().spend_on_wait(10u);
   av::MockPlatform report_memory;
   GuestReport     report(report_memory);
   SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
@@ -189,7 +156,6 @@ TEST(submit_benchmark, round_trips_report_their_spread_in_order)
   const char *const steps[] = {"trip_min_ns", "trip_p10_ns", "trip_p25_ns", "trip_median_ns",
                                "trip_p75_ns", "trip_p90_ns", "trip_p99_ns", "trip_mean_ns", "clock_read_ns"};
   for (const char *step : steps) CHECK(has_line(report, step));
-  /* No trip is faster than the wait it paid for. */
   CHECK(!has_line(report, "ok submit.trip_min_ns 0\n"));
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), SubmitBenchmark::trips + 1u);
   rig.close(); }

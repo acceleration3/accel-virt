@@ -1,5 +1,3 @@
-/* The C operations table the QEMU glue fills, filled instead with calls into a
- * MockHost, so TableHost and the AvDevice ABI run against the adversarial host. */
 #ifndef AV_MOCK_HOST_OPS_HPP
 #define AV_MOCK_HOST_OPS_HPP
 
@@ -21,6 +19,6 @@ private:
     AvHostOps table_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MOCK_HOST_OPS_HPP
+#endif

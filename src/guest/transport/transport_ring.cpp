@@ -18,8 +18,6 @@ Status TransportRing::initialize(uint8_t *ring, uint8_t order)
     if (ring_ != nullptr) return Status::invalid_state;
     if (ring == nullptr || order < RingHeader::lowest_order || order > RingHeader::highest_order)
         return Status::invalid_parameter;
-    /* The header is 32 bytes of a ring that by contract holds header and data,
-     * so this cannot refuse. */
     static_cast<void>(RingHeader(order, 0u, 0u).encode(ring, header_size));
     ring_ = ring;
     order_ = order;
@@ -38,16 +36,12 @@ Status TransportRing::write_batch(const uint8_t *payload, uint32_t length, uint6
     const uint64_t span = header.span();
     if (span > free_space()) return Status::no_space;
     uint8_t framing[BatchHeader::encoded_size] = {};
-    static_cast<void>(header.encode(framing, sizeof framing));   /* exactly its size, never refuses */
+    static_cast<void>(header.encode(framing, sizeof framing));
     begin = tail_;
     write_wrapped(tail_, framing, BatchHeader::encoded_size);
     write_wrapped(tail_ + BatchHeader::encoded_size, payload, length);
     tail_ += span;
     end = tail_;
-    /* The header's tail is the miniport's to store, once it has judged the
-     * submission: a device woken for anything else consumes up to whatever
-     * tail it finds, and one found here before the driver published it puts
-     * the device's head past the driver's tail, which fails the context. */
     return Status::ok;
 }
 
@@ -56,16 +50,12 @@ void TransportRing::write_wrapped(uint64_t counter, const uint8_t *source, uint3
     AV_SCOPE("TransportRing::write_wrapped");
     const uint64_t mask = capacity() - 1u;
     uint8_t *const data = ring_ + header_size;
-    /* Inside the ring, which is mapped and so fits a size_t. */
     const size_t at = static_cast<size_t>(counter & mask);
     const size_t first = static_cast<size_t>(capacity() - at < count ? capacity() - at : count);
     __builtin_memcpy(data + at, source, first);
     __builtin_memcpy(data, source + first, count - first);
 }
 
-/* One load: the device stores the head whole while this reads, and a head
- * read a byte at a time could be seen half moved - past what the device has
- * consumed, which frees room it has not. */
 uint64_t TransportRing::read_head() const
 {
     AV_SCOPE("TransportRing::read_head");
@@ -77,13 +67,7 @@ Status TransportRing::publish_tail()
 {
     AV_SCOPE("TransportRing::publish_tail");
     if (ring_ == nullptr) return Status::invalid_state;
-    /* The ring is an aperture allocation the process maps write-combining,
-     * and x86 does not keep write-combined stores in order with a later one:
-     * a release store alone let the device see this tail before the batch it
-     * covers, and read a header that was not there yet. A full fence drains
-     * them first. */
     __atomic_thread_fence(__ATOMIC_SEQ_CST);
-    /* One 8-byte store: the device polls it, and must never see half of it. */
     __atomic_store_n(reinterpret_cast<uint64_t *>(ring_ + tail_offset), tail_, __ATOMIC_RELEASE);
     return Status::ok;
 }
@@ -127,4 +111,4 @@ bool TransportRing::invariants_hold() const
     return tail_ >= head && tail_ - head <= capacity();
 }
 
-}  // namespace av
+}

@@ -17,7 +17,7 @@ struct GrowableArrayProbe {
     static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
 };
 
-}  // namespace av
+}
 
 using av::GrowableArray;
 using av::GrowableArrayProbe;
@@ -46,7 +46,7 @@ bool holds_in_order(const GrowableArray<std::uint32_t> &array, std::uint32_t fir
     return true;
 }
 
-}  // namespace
+}
 
 TEST(growable_array_append, starts_with_no_block_and_takes_one_at_the_first_value)
 { MockPlatform platform;

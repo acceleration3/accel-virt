@@ -1,7 +1,3 @@
-/* The escape record a process sends to have the driver set its event whenever
- * the host raises on its av context (docs/protocol.md, "Wake event record").
- * The kernel decodes it from memory the process wrote, so every field is
- * judged as hostile input. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/escape/wake_event_record.hpp"
@@ -30,7 +26,7 @@ private:
     Status       status_ = Status::ok;
 };
 
-}  // namespace
+}
 
 TEST(wake_event_record, round_trips_with_the_handle_where_the_contract_puts_it)
 { Bytes bytes{WakeEventRecord(handle)};
@@ -48,7 +44,7 @@ TEST(wake_event_record, round_trips_with_the_handle_where_the_contract_puts_it)
 TEST(wake_event_record, every_field_is_judged)
 { struct Case { const char *what; std::size_t at; std::uint8_t width; std::uint64_t value; };
   const Case cases[] = {
-      {"magic", 0u, 4u, 0x00565641u},   /* AVV, the views' */
+      {"magic", 0u, 4u, 0x00565641u},
       {"version 0", 4u, 2u, 0u},
       {"version 2", 4u, 2u, 2u},
       {"reserved half", 6u, 2u, 1u},

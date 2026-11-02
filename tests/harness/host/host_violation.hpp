@@ -1,25 +1,21 @@
-/* A rule of the host contract that MockHost caught being broken. */
 #ifndef AV_HOST_VIOLATION_HPP
 #define AV_HOST_VIOLATION_HPP
 
 namespace av {
 
 enum class HostViolation : unsigned {
-    main_loop_required,   /* a main-loop method called from a worker */
-    worker_required,      /* worker work run on the main loop */
-    unknown_handle,       /* a thread, event or mutex the host never made, or already destroyed */
-    held_mutex,           /* a mutex destroyed while locked, or unlocked while not */
-    second_response,      /* a control request answered twice */
-    overlapping_placement,/* a host memory block placed over another in the hostmem region */
-    fence_misuse,         /* fence interrupts connected twice, disconnected unconnected, or raised
-                           * while disconnected or on a line past the fence queues */
-    doorbell_misuse,      /* a doorbell connected twice, to a taken page or unknown event, disconnected by
-                           * another event, or an event destroyed while connected */
-    scanout_misuse,       /* a display head shown, updated or hidden past the heads the host has, a head
-                           * updated while it shows nothing, or a head shown a descriptor that is not open */
+    main_loop_required,
+    worker_required,
+    unknown_handle,
+    held_mutex,
+    second_response,
+    overlapping_placement,
+    fence_misuse,
+    doorbell_misuse,
+    scanout_misuse,
     count
 };
 
-}  // namespace av
+}
 
-#endif  // AV_HOST_VIOLATION_HPP
+#endif

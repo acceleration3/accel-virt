@@ -33,7 +33,6 @@ namespace {
 constexpr const char *path = "read.av";
 constexpr std::size_t widest = 4096u;
 
-/* A recording of one of each kind, as the device writes one. */
 class Written {
 public:
     Written() : host_(), recorder_(host_), length_(0u), bytes_{}
@@ -67,7 +66,6 @@ private:
     std::uint8_t bytes_[widest];
 };
 
-/* Walks `length` bytes to the end or to the damage: the records answered. */
 std::uint32_t walked(const std::uint8_t *bytes, std::size_t length, bool &damaged)
 {
     RecordingReader reader(bytes, length);
@@ -90,28 +88,24 @@ std::uint32_t walked(const std::uint8_t *bytes, std::size_t length, bool &damage
             CHECK(reader.damaged());
             CHECK(reader.damage()[0] != '\0');
             CHECK(reader.damage_offset() < length);
-            /* Once damaged it stays damaged and reads nothing more. */
             CHECK_STATUS(reader.next(record, payload), Status::malformed);
             CHECK(payload == nullptr);
             break;
         }
         CHECK_STATUS(status, Status::ok);
         CHECK(payload != nullptr);
-        /* Every payload the reader answers is inside the bytes it was given. */
         CHECK(payload + record.length() <= bytes + length);
         count++;
         CHECK(reader.invariants_hold());
     }
     CHECK_EQ(reader.records(), count);
-    /* Undamaged, the walk consumed the whole file; damaged, it stopped exactly
-     * where the record it could not frame begins. */
     if (damaged) CHECK(reader.damage_offset() == reader.offset());
     else CHECK(reader.offset() == length);
     CHECK(reader.invariants_hold());
     return count;
 }
 
-}  // namespace
+}
 
 namespace av {
 
@@ -121,18 +115,14 @@ struct RecordingReaderProbe {
     {
         reader.damage_offset_ = reader.length_ + 1u;
     }
-    /* An unopened reader that has already answered records, and an opened one
-     * standing before its own file header: neither can happen. */
     static void answer_unopened(RecordingReader &reader)
     {
         reader.opened_ = false;
         reader.offset_ = 0u;
         reader.records_ = 1u;
     }
-    /* An unopened reader already standing past its file header. */
     static void walk_unopened(RecordingReader &reader) { reader.opened_ = false; }
     static void stand_in_the_header(RecordingReader &reader) { reader.offset_ = 0u; }
-    /* A ceiling no recording could have been written with. */
     static void break_the_header(RecordingReader &reader)
     {
         reader.header_ = RecordingHeader(ProtocolVersion(1u, 1u), 0u, 0u,
@@ -140,7 +130,7 @@ struct RecordingReaderProbe {
     }
 };
 
-}  // namespace av
+}
 
 TEST(recording_reader_open, reads_the_file_header_the_device_wrote)
 { const Written written;
@@ -230,10 +220,6 @@ TEST(recording_reader_open, a_recording_from_a_later_version_says_so_rather_than
   CHECK(reader.damaged());
   CHECK(std::strstr(reader.damage(), "later version") != nullptr); }
 
-/* US2 scenario 3: cut anywhere, every whole record before the cut is answered
- * and the damage is reported with its offset. The count expected of each cut
- * comes from the format - a record is its 32-byte header and its payload, and
- * nothing is padded (docs/protocol.md) - not from what the reader answers. */
 TEST(recording_reader_next, a_recording_cut_at_any_offset_answers_what_was_whole)
 { const Written       written;
   const std::uint32_t payloads[] = {5u, 2u, 0u, 8u, WireRecorder::blob_payload};
@@ -261,7 +247,6 @@ TEST(recording_reader_next, a_record_length_past_the_end_is_damage_where_that_re
 { Written      written;
   std::uint8_t bytes[widest] = {};
   std::memcpy(bytes, written.bytes(), written.length());
-  /* The first record's length, at offset 12 of its header. */
   const std::size_t first = RecordingHeader::encoded_size;
   bytes[first + 12u] = 0xFFu;
   bytes[first + 13u] = 0xFFu;
@@ -280,7 +265,7 @@ TEST(recording_reader_next, a_kind_no_device_wrote_is_damage_where_that_record_s
   std::uint8_t bytes[widest] = {};
   std::memcpy(bytes, written.bytes(), written.length());
   const std::size_t second = RecordingHeader::encoded_size + RecordHeader::encoded_size + 5u;
-  bytes[second + 4u] = 9u;   /* kind 9 */
+  bytes[second + 4u] = 9u;
   RecordingReader reader(bytes, written.length());
   CHECK_STATUS(reader.open(), Status::ok);
   RecordHeader        record;
@@ -291,12 +276,6 @@ TEST(recording_reader_next, a_kind_no_device_wrote_is_damage_where_that_record_s
   CHECK(std::strstr(reader.damage(), "no device wrote") != nullptr);
   CHECK_EQ(reader.records(), 1u); }
 
-/* Every bit of a valid recording flipped in turn. What each flip must produce
- * is decided from the format: a flip in the file's magic or in a field the
- * format says is zero is damage before any record; a flip in a record's own
- * magic is damage exactly where that record starts, so every whole record
- * before it is still answered; a flip in a payload byte is no damage at all,
- * because a payload is the guest's bytes and the reader frames around them. */
 TEST(recording_reader_next, survives_a_byte_flip_anywhere_in_a_recording)
 { const Written       written;
   const std::uint32_t payloads[] = {5u, 2u, 0u, 8u, WireRecorder::blob_payload};
@@ -314,11 +293,7 @@ TEST(recording_reader_next, survives_a_byte_flip_anywhere_in_a_recording)
           bytes[index] = static_cast<std::uint8_t>(bytes[index] ^ (1u << bit));
           bool                damaged = false;
           const std::uint32_t records = walked(bytes, written.length(), damaged);
-          /* A flip in a length can make one record swallow the next and still
-           * land on a boundary, so a clean walk may answer fewer than five -
-           * never more, and never past the bytes it was given (`walked`). */
           CHECK(records <= 5u);
-          /* The file's magic, and the u32 the format reserves at offset 44. */
           if (index < 4u || (index >= 44u && index < 48u)) {
               CHECK(damaged);
               CHECK_EQ(records, 0u);
@@ -326,7 +301,6 @@ TEST(recording_reader_next, survives_a_byte_flip_anywhere_in_a_recording)
           }
           for (std::size_t which = 0u; which < 5u; which++) {
               const bool magic = index >= starts[which] && index < starts[which] + 4u;
-              /* The u16 the record header reserves, at offset 6 of it. */
               const bool reserved = index == starts[which] + 6u || index == starts[which] + 7u;
               if (!magic && !reserved) continue;
               CHECK(damaged);

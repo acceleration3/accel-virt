@@ -148,4 +148,4 @@ bool ScriptedD3d11Bridge::refused()
     return refusing;
 }
 
-}  // namespace av
+}

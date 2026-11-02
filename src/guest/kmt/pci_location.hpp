@@ -1,7 +1,3 @@
-/* Where an adapter sits on the PCI bus, as Windows reports it
- * (KMTQAITYPE_ADAPTERADDRESS; the same bus, and device and function, that
- * SetupAPI's DEVPKEY_Device_BusNumber and DEVPKEY_Device_Address give): what a
- * vendor's management library and an OpenCL vendor extension name a GPU by. */
 #ifndef AV_PCI_LOCATION_HPP
 #define AV_PCI_LOCATION_HPP
 
@@ -24,6 +20,6 @@ private:
     uint32_t function_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_PCI_LOCATION_HPP
+#endif

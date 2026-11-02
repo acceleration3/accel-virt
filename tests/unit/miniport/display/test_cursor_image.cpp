@@ -19,7 +19,6 @@ namespace {
 
 constexpr std::uint32_t monochrome = 1u, color = 2u, masked_color = 4u;
 
-/* A poisoned destination one row larger than the image. */
 struct Canvas {
     Canvas() { std::memset(pixels, 0xEE, sizeof pixels); }
     const std::uint8_t *at(std::uint32_t x, std::uint32_t y) const { return &pixels[(y * CursorImage::side + x) * 4u]; }
@@ -43,7 +42,7 @@ Status draw(const DxgkargSetPointerShapeRecord &shape, Canvas &canvas)
     return CursorImage(platform, shape).draw(canvas.pixels);
 }
 
-}  // namespace
+}
 
 TEST(cursor_image_draw, colour_pixels_are_copied_with_their_alpha)
 { std::uint8_t argb[2 * 8u] = {};
@@ -60,9 +59,9 @@ TEST(cursor_image_draw, colour_pixels_are_copied_with_their_alpha)
   CHECK(canvas.untouched_past_the_image()); }
 
 TEST(cursor_image_draw, a_masked_colour_is_opaque_unless_it_masks_black)
-{ const std::uint8_t pixels[3 * 4u] = {9, 8, 7, 0x00,      /* opaque colour */
-                                       0, 0, 0, 0xFF,      /* transparent */
-                                       9, 8, 7, 0xFF};     /* an XOR, shown opaque */
+{ const std::uint8_t pixels[3 * 4u] = {9, 8, 7, 0x00,
+                                       0, 0, 0, 0xFF,
+                                       9, 8, 7, 0xFF};
   const DxgkargSetPointerShapeRecord shape = {masked_color, 3u, 1u, 12u, 0u, 0u, pixels, 2u, 0u};
   Canvas canvas;
   CHECK_STATUS(draw(shape, canvas), Status::ok);
@@ -71,20 +70,20 @@ TEST(cursor_image_draw, a_masked_colour_is_opaque_unless_it_masks_black)
   CHECK(canvas.is(2u, 0u, 9, 8, 7, 0xFF)); }
 
 TEST(cursor_image_draw, a_monochrome_pointer_reads_and_then_xor_masks)
-{ /* Four pixels in one row, pitch 1: AND 0b0101, XOR 0b0011 (most significant bit first). */
+{
   const std::uint8_t masks[2] = {0x50, 0x30};
   const DxgkargSetPointerShapeRecord shape = {monochrome, 4u, 1u, 1u, 0u, 0u, masks, 0u, 0u};
   Canvas canvas;
   CHECK_STATUS(draw(shape, canvas), Status::ok);
-  CHECK(canvas.is(0u, 0u, 0, 0, 0, 0xFF));          /* AND 0 XOR 0: black */
-  CHECK(canvas.is(1u, 0u, 0, 0, 0, 0));             /* AND 1 XOR 0: transparent */
-  CHECK(canvas.is(2u, 0u, 0xFF, 0xFF, 0xFF, 0xFF)); /* AND 0 XOR 1: white */
-  CHECK(canvas.is(3u, 0u, 0, 0, 0, 0xFF)); }        /* AND 1 XOR 1: invert, shown black */
+  CHECK(canvas.is(0u, 0u, 0, 0, 0, 0xFF));
+  CHECK(canvas.is(1u, 0u, 0, 0, 0, 0));
+  CHECK(canvas.is(2u, 0u, 0xFF, 0xFF, 0xFF, 0xFF));
+  CHECK(canvas.is(3u, 0u, 0, 0, 0, 0xFF)); }
 
 TEST(cursor_image_draw, rows_are_top_down_at_the_pitch)
 { std::uint8_t masks[2 * 2u * 2u] = {};
-  masks[0] = 0x00; masks[2] = 0x80;   /* AND rows */
-  masks[4] = 0x80; masks[6] = 0x00;   /* XOR rows */
+  masks[0] = 0x00; masks[2] = 0x80;
+  masks[4] = 0x80; masks[6] = 0x00;
   const DxgkargSetPointerShapeRecord shape = {monochrome, 1u, 2u, 2u, 0u, 0u, masks, 0u, 1u};
   Canvas canvas;
   CHECK_STATUS(draw(shape, canvas), Status::ok);

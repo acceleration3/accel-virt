@@ -19,8 +19,6 @@ bool EventFile::wanted() const
     return directory_.flagged(L"perfetto");
 }
 
-/* The flag file's text, "<events per slot> <depth> <scope,scope,...>", every
- * field optional; empty when there is none. */
 void EventFile::read_flag(char *text, uint32_t capacity) const
 {
     AV_SCOPE("EventFile::read_flag");
@@ -36,7 +34,6 @@ void EventFile::read_flag(char *text, uint32_t capacity) const
     text[read] = '\0';
 }
 
-/* Where the flag's field `index` starts, or its end when it has fewer. */
 const char *EventFile::field(const char *text, uint32_t index) const
 {
     AV_SCOPE("EventFile::field");
@@ -87,8 +84,6 @@ void EventFile::only(TraceTable &table) const
     table.only(field(text, 2u));
 }
 
-/* The mapping and the file handle are left open for the process's life: the
- * table writes into the view until the process ends. */
 Status EventFile::open(const char *module, uint32_t process, size_t bytes)
 {
     AV_SCOPE("EventFile::open");
@@ -108,9 +103,6 @@ Status EventFile::open(const char *module, uint32_t process, size_t bytes)
     const HANDLE file = CreateFileW(wide, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                                     CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return Status::no_memory;
-    /* Sparse: the rings of threads that never run take no disk. */
-    /* FSCTL_SET_SPARSE: CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 49, METHOD_BUFFERED,
-     * FILE_SPECIAL_ACCESS), which the user-mode kit here has no winioctl.h for. */
     constexpr DWORD set_sparse = 0x000900C4u;
     DWORD returned = 0u;
     static_cast<void>(DeviceIoControl(file, set_sparse, nullptr, 0u, nullptr, 0u, &returned, nullptr));
@@ -136,4 +128,4 @@ size_t EventFile::bytes() const
     return bytes_;
 }
 
-}  // namespace av
+}

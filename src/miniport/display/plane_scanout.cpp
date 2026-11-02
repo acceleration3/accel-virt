@@ -21,9 +21,6 @@ int64_t smaller(int64_t one, int64_t other)
     return one < other ? one : other;
 }
 
-/* D3DDDI_COLOR_SPACE_TYPE's YCbCr spaces OverlaySupport takes, 5 to 9, as
- * the conversion the host makes: BT.709's matrix for 8 and 9, BT.601's for the
- * rest (5 is full-range BT.601, JPEG's), full range for 5, 7 and 9. */
 uint32_t conversion(uint32_t colour_space)
 {
     AV_SCOPE("conversion");
@@ -35,7 +32,6 @@ uint32_t conversion(uint32_t colour_space)
            (full ? ScanoutPlaneRequest::flag_full_range : 0u);
 }
 
-/* Two requests that would show the same thing. */
 bool same(const ScanoutPlaneRequest &one, const ScanoutPlaneRequest &other)
 {
     AV_SCOPE("same");
@@ -52,16 +48,13 @@ bool same(const ScanoutPlaneRequest &one, const ScanoutPlaneRequest &other)
     return true;
 }
 
-}  // namespace
+}
 
 PlaneScanout::PlaneScanout(ObjectStorage<VirtioGpuDevice> &device) : device_(device), sent_(), told_{}
 {
     AV_SCOPE("PlaneScanout::PlaneScanout");
 }
 
-/* The destination cut by the clip and the head's edges, and the source cut in
- * the same proportion, in 64 bits so no stretch overflows. A plane with
- * nothing left, or one whose image has no key the host knows it by, is off. */
 ScanoutPlaneRequest PlaneScanout::request(uint32_t source, const OverlayPlane &plane, uint32_t width,
                                           uint32_t height) const
 {
@@ -77,7 +70,6 @@ ScanoutPlaneRequest PlaneScanout::request(uint32_t source, const OverlayPlane &p
     const int64_t     from_width = static_cast<int64_t>(from.right) - from.left;
     const int64_t     from_height = static_cast<int64_t>(from.bottom) - from.top;
     if (key == 0u || into_width <= 0 || into_height <= 0 || from_width <= 0 || from_height <= 0) return off;
-    /* A clip of no size is none: the whole destination is shown. */
     const bool    clipped = clip.right > clip.left && clip.bottom > clip.top;
     const int64_t left = larger(larger(into.left, clipped ? clip.left : into.left), 0);
     const int64_t top = larger(larger(into.top, clipped ? clip.top : into.top), 0);
@@ -91,7 +83,6 @@ ScanoutPlaneRequest PlaneScanout::request(uint32_t source, const OverlayPlane &p
         static_cast<int32_t>(from.top + (top - into.top) * from_height / into_height),
         static_cast<int32_t>(from.left + (right - into.left) * from_width / into_width),
         static_cast<int32_t>(from.top + (bottom - into.top) * from_height / into_height)};
-    /* A sliver the proportion rounds to nothing still shows a pixel. */
     if (shown_from[2] <= shown_from[0]) shown_from[2] = shown_from[0] + 1;
     if (shown_from[3] <= shown_from[1]) shown_from[3] = shown_from[1] + 1;
     const uint32_t flags = ScanoutPlaneRequest::flag_shown |
@@ -127,4 +118,4 @@ void PlaneScanout::forget_device()
         for (bool &told : layers) told = false;
 }
 
-}  // namespace av
+}

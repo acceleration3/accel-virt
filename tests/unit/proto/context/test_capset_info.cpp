@@ -61,7 +61,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(capset_info, is_capset_0x72_of_128_bytes)
 { CHECK_EQ(CapsetInfo::capset_id, 0x72u);
@@ -112,9 +112,6 @@ TEST(capset_info_offers, only_the_advertised_sub_apis)
   CHECK(!capset.offers(SubApi::opengl));
   CHECK(!capset.has_feature(CapsetInfo::feature_host_visible_memory)); }
 
-/* Bits 2 and 4 were feature 039's memory probes and no device sets them now;
- * a capset that carries them still round-trips them as bits it does not know,
- * and they say nothing about the features beside them. */
 TEST(capset_info_has_feature, carries_the_retired_memory_bits_as_unknown_ones)
 { constexpr std::uint64_t retired = 2u | 4u;
   CapsetInfo capset(ProtocolVersion(1u, 0u), 0x1u, 1u, 12u, 12u,
@@ -146,17 +143,17 @@ TEST(capset_info_decode, accepts_a_longer_buffer)
 TEST(capset_info_decode, rejects_each_malformed_field)
 { struct Case { std::size_t offset; std::uint8_t value; };
   const Case cases[] = {
-      {0u, 0x00u},    /* magic */
-      {8u, 0x00u},    /* no sub-API */
-      {8u, 0x1Fu},    /* unknown sub-API bit */
-      {12u, 0x00u},   /* zero contexts (low byte of 64) */
-      {16u, 11u},     /* min order below 12 */
-      {17u, 25u},     /* max order above 24 */
-      {16u, 21u},     /* min above max */
-      {18u, 1u},      /* reserved u16 */
-      {21u, 1u},      /* reserved u32 */
-      {41u, 1u},      /* identity: device type high byte */
-      {44u, 1u},      /* identity reserved */
+      {0u, 0x00u},
+      {8u, 0x00u},
+      {8u, 0x1Fu},
+      {12u, 0x00u},
+      {16u, 11u},
+      {17u, 25u},
+      {16u, 21u},
+      {18u, 1u},
+      {21u, 1u},
+      {41u, 1u},
+      {44u, 1u},
   };
   for (const Case &c : cases) {
       Encoded encoded(sample());
@@ -185,19 +182,6 @@ TEST(capset_info_decode, survives_the_hostile_sweep)
   CHECK(sweep.cases_run() > CapsetInfo::encoded_size * 8u);
   CHECK(rejects(nullptr, 0u));
   CHECK(rejects(nullptr, CapsetInfo::encoded_size));
-  /* What the capset does not judge is what a flip survives: the protocol
-   * version (32 bits), the feature mask, whose unknown bits are kept on purpose
-   * (64), the two PCI ids (64), the UUID (128) and the two memory sizes (128).
-   * What it does judge leaves less: four flips of the sub-api mask stay inside
-   * 0xF and non-empty, every flip of 64 contexts but the one that clears it is
-   * still a count, two flips of the lowest ring order and three of the highest
-   * stay inside [12, 24] and in order, and two flips of the device type stay
-   * within VkPhysicalDeviceType. The 48-byte name must be text then zeroes:
-   * 172 of its 176 character bits leave it so, the exceptions being the bit
-   * that turns one of the four spaces into a terminator with text behind it,
-   * and the terminator's own 8 bits just move it one byte on. Every shorter
-   * input is short of 128 bytes, all-zero and all-ones carry no magic, and the
-   * untouched capset is the last acceptance. */
   const std::uint32_t acceptable =
       32u + 64u + 64u + 128u + 128u + 4u + 31u + 2u + 3u + 2u + 180u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
@@ -215,10 +199,6 @@ TEST(capset_info_encode, into_a_writer_matches_the_buffer_encoding_and_a_short_w
   capset.encode(short_writer);
   CHECK(short_writer.status() != Status::ok); }
 
-/* The one bit a device cannot decide when it describes its capset: QEMU
- * registers its display backends after every device has realized, so whether
- * a head can show a dma-buf is announced later, into the same field the
- * others live in - no encoding change, no new capability (feature 058). */
 TEST(capset_info_announce, adds_the_scanout_bit_without_disturbing_the_rest)
 { CapsetInfo capset(ProtocolVersion(1u, 0u), 0x1u, 1u, 12u, 12u,
                     CapsetInfo::feature_host_visible_memory, GpuIdentity());

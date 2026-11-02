@@ -42,8 +42,6 @@ std::uint64_t u64_at(const std::uint8_t *bytes, std::size_t offset)
     return value;
 }
 
-/* A two-slot table a process wrote, with one thread inside a function, in a
- * section larger than the table. */
 struct ProcessTable {
     av::MockTraceHost trace_host;
     alignas(8) std::uint8_t bytes[two_slots + 100u] = {};
@@ -81,7 +79,6 @@ struct Rig {
     std::uint32_t length() const { return u32_at(host.written(), 20u); }
     std::uint64_t clock() const { return u64_at(host.written(), 8u); }
     const std::uint8_t *payload() const { return host.written() + 24u; }
-    /* An error file's text, terminated. */
     const char *reason()
     {
         CHECK_EQ(kind(), 3u);
@@ -92,7 +89,7 @@ struct Rig {
     char text[256] = {};
 };
 
-}  // namespace
+}
 
 TEST(inspect_program_run, anything_but_a_known_command_ending_in_out_is_usage)
 { Rig rig;
@@ -127,7 +124,6 @@ TEST(inspect_program_list, names_each_table_found_with_its_scope_and_executable)
   CHECK_EQ(rig.host.written_size(), std::strlen(expected));
   CHECK(std::memcmp(rig.host.written(), expected, std::strlen(expected)) == 0);
   CHECK(std::strcmp(rig.host.written_path(), "C:\\av\\list.txt") == 0);
-  /* A global table is found first and the local name of it is never asked. */
   CHECK(std::strncmp(rig.host.journal(),
                      "Global\\av-trace-avvk-10\nGlobal\\av-trace-avgl-10\nLocal\\av-trace-avgl-10\n", 71u) == 0); }
 
@@ -222,8 +218,6 @@ TEST(inspect_program_state, every_way_a_service_fails_to_answer_is_an_error_file
   lost.host.add_service("Global\\av-dump-avvk-42", Status::ok);
   CHECK(lost.program.run(wide(u"avinspect state 42 avvk --out f")) == Exit::written);
   CHECK(std::strcmp(lost.reason(), "the state service answered but its dump cannot be opened") == 0);
-  /* A length past the section, a section with no room for the length, and a
-   * length exactly filling the section. */
   const std::uint8_t long_length[8] = {5, 0, 0, 0, 'a', 'b', 'c', 'd'};
   const std::uint8_t cut[3] = {0, 0, 0};
   const std::uint8_t full[8] = {4, 0, 0, 0, 'a', 'b', 'c', 'd'};

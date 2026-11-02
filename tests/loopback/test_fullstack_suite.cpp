@@ -1,7 +1,3 @@
-/* The in-guest suite on Linux: GuestSuite, the program avtest.exe runs in the
- * Windows guest, run unchanged over DdiKmt against the real driver and the
- * real device core. Each run is judged by the report the guest runner reads,
- * line by line where a line carries a measurement. */
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/guest_suite.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -18,8 +14,6 @@ using av::GuestReport;
 using av::GuestSuite;
 
 namespace {
-
-/* Whether the report holds `line` as a whole line. */
 bool reported(const GuestReport &report, const char *line)
 {
     const std::size_t length = std::strlen(line);
@@ -30,8 +24,6 @@ bool reported(const GuestReport &report, const char *line)
     return false;
 }
 
-/* The number a measured line `ok <name> <value>` carries; 0 when the report
- * has no such line. */
 std::uint64_t measured(const GuestReport &report, const char *name)
 {
     char prefix[64];
@@ -45,12 +37,8 @@ void print(const GuestReport &report)
     std::fwrite(report.text(), 1u, report.length(), stderr);
 }
 
-}  // namespace
+}
 
-/* Every scenario avtest.exe runs in the guest passes here too, with the same
- * steps the guest run reports. vsync measures the driver's timer
- * period on the mock clock, which only the wait moves: it proves the period
- * the driver asks for, not how a host timer keeps it. */
 TEST(fullstack_suite, the_in_guest_suite_passes_over_the_real_driver)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -68,23 +56,14 @@ TEST(fullstack_suite, the_in_guest_suite_passes_over_the_real_driver)
   CHECK(reported(report, "ok mapping.map"));
   CHECK(reported(report, "ok submission.wait"));
   CHECK(std::strstr(report.text(), "\nok vsync.rate 60") != nullptr);
-  /* The blanks keep the mode's absolute 60 Hz schedule; the rig's clock moves
-   * in 100 us steps, so a wait sees its blank up to a step late and what the
-   * process caught is 60 Hz less at most that step over the window. */
   CHECK(measured(report, "vsync.caught") >= 5995u && measured(report, "vsync.caught") <= 6000u);
   CHECK(reported(report, "ok transport.nop 0"));
   CHECK(std::strstr(report.text(), "\nok transport.latency ") != nullptr);
   CHECK(std::strstr(report.text(), "\nok transport.warm_nop ") != nullptr);
-  /* The device core answered the no-op itself: the executor behind it ran nothing. */
   CHECK_EQ(rig.device().executor().executed(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* The long fence run, for one second of the mock clock: a submission and wait
- * at a time, a vertical blank after every 64, so the clock moves only at the
- * blanks and the run is exactly sixty of them. The fences count and the blanks
- * are the driver's; worst_wait_us is not a measurement here, because nothing
- * moves the clock while a fence is awaited. */
 TEST(fullstack_suite, the_fence_stress_run_completes_every_fence_it_submits)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -95,24 +74,11 @@ TEST(fullstack_suite, the_fence_stress_run_completes_every_fence_it_submits)
     failed = suite.run(); }
   if (failed != 0u) print(report);
   CHECK_EQ(failed, 0u);
-  /* A blank after every sixty-four fences, until the second is up. The
-   * process's counter is the mock clock plus the real time the run took
-   * (the transport's spins need a clock that moves), so the second holds
-   * sixty blanks, fewer on a loaded machine - and one more when the device's
-   * clock, whose phase is its own, puts a blank just after the second began:
-   * the wait that straddles its end then counts one past it. */
   const std::uint64_t blanks = measured(report, "stress.blanks");
   const std::uint64_t fences = measured(report, "stress.fences");
   CHECK(blanks >= 40u && blanks <= 61u);
   CHECK(fences >= blanks * 64u && fences < (blanks + 1u) * 64u); }
 
-/* The timeout run cannot pass on this rig, and this says exactly where. The
- * scenario needs dxgkrnl's timeout detection - VidSch seeing the held node
- * make no progress past TdrDelay, QueryEngineStatus, ResetEngine and the held
- * wait failed - and a host told to hold one context. The rig has neither: its
- * sessions' contexts carry no av record, so the driver completes them in its
- * DPC, and nothing ever times a node out. The held wait completes instead of
- * being refused; every other step passes. */
 TEST(fullstack_suite, the_timeout_run_fails_only_where_the_rig_has_no_tdr)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);

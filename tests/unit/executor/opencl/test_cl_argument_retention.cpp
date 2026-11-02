@@ -1,7 +1,3 @@
-/* Whether this host's OpenCL keeps a kernel's argument types through its own
- * binary, measured on its first GPU: rusticl does, and the answer is the same
- * the second time without measuring again. A host with no OpenCL GPU judges
- * only that nothing to measure on keeps nothing. */
 #include "executor/opencl/cl_argument_retention.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -44,9 +40,6 @@ TEST(cl_argument_retention, a_host_that_keeps_argument_types_is_measured_once)
   static_cast<void>(::clGetPlatformInfo(platform, CL_PLATFORM_NAME, sizeof name, name, nullptr));
   ClArgumentRetention retention;
   const bool first = retention.kept(context, device);
-  /* rusticl's binary carries its kernels' argument information. */
   if (std::strcmp(name, "rusticl") == 0) CHECK(first);
-  /* The answer kept: a second ask on no context is the first answer, which
-   * it could not be if it measured again. */
   CHECK_EQ(retention.kept(nullptr, nullptr), first);
   CHECK_EQ(::clReleaseContext(context), CL_SUCCESS); }

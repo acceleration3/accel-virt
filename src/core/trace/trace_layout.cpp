@@ -23,4 +23,4 @@ size_t TraceLayout::frame(uint32_t index, uint32_t depth) const
     return slot(index) + slot_header_bytes + static_cast<size_t>(depth) * frame_bytes;
 }
 
-}  // namespace av
+}

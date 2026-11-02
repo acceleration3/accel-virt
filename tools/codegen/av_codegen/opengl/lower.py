@@ -1,25 +1,12 @@
-"""Raw registry plus profile, into commands the emitters can write out.
-
-The rules here decide a role and a length for every parameter, and
-refuse rather than guess. A refusal is a line in the profile waiting to
-be written: it names the command, the parameter and what the registry
-said, and generation stops until someone says what it means.
-"""
-
 from __future__ import annotations
 
 from .model import Command, Length, LengthKind, Param, Registry, Role
 from .parse import RawCommand, RawParam, RawRegistry
 from .profile import Profile
 
-# Types that are a function pointer rather than data. The registry
-# declares them as plain typedefs, so there is nothing in the document
-# to recognise them by.
 CALLBACK_TYPES = {"GLDEBUGPROC", "GLDEBUGPROCARB", "GLDEBUGPROCAMD",
                   "GLVULKANPROCNV", "PROC", "FARPROC"}
 
-# The pixel-length forms. Every one of them is the same question with a
-# different number of extents.
 PIXEL_LENS = {
     "COMPSIZE(format,type)",
     "COMPSIZE(format,type,width)",
@@ -40,9 +27,6 @@ def _compsize_reads(text: str) -> tuple[str, ...]:
 
 def _length_from(cmd: RawCommand, param: RawParam,
                  override: dict) -> Length | None:
-    # A length written in the profile is C the author meant, and is
-    # taken as written: it may name a helper or a constant, neither of
-    # which is a sibling parameter.
     if "len" in override:
         text = str(override["len"])
         if text.isdigit():
@@ -57,10 +41,6 @@ def _length_from(cmd: RawCommand, param: RawParam,
     if text.isdigit():
         return Length(LengthKind.FIXED, count=int(text))
     if not text.startswith("COMPSIZE("):
-        # A sibling, or arithmetic over siblings. Both are valid C in
-        # the scope the generated code writes them into, so they are
-        # kept as written; a sibling that does not exist is a mistake
-        # worth stopping for.
         names = {p.name for p in cmd.params}
         used = [w for w in _identifiers(text)]
         unknown = [w for w in used if w not in names]
@@ -122,9 +102,6 @@ def _role_of(cmd: RawCommand, param: RawParam, override: dict,
     if length is not None and length.kind is LengthKind.PIXELS:
         return Role.PIXELS_IN if param.type.is_const else Role.PIXELS_OUT
     if param.type.base == "void" and length is None:
-        # A void* with no length is an offset into the bound buffer.
-        # Client-side arrays are the other reading, and the guest tells
-        # them apart at the call: see the ICD.
         return Role.BUFFER_OFFSET
     if length is None:
         raise LoweringError(
@@ -134,11 +111,6 @@ def _role_of(cmd: RawCommand, param: RawParam, override: dict,
 
 
 def _lower_command(raw: RawCommand, prof: Profile, tier: str) -> Command:
-    # A command that answers with an address has no meaning across the
-    # boundary: the address belongs to the process that made it. Those
-    # need a driver-side answer — a shadow copy for the mapping ones —
-    # and until one exists they are excluded rather than generated into
-    # a function that returns nothing.
     ret = raw.return_type
     if (ret.pointer_depth > 0 and
             ret.base not in ("GLubyte", "GLchar", "char") and
@@ -151,9 +123,6 @@ def _lower_command(raw: RawCommand, prof: Profile, tier: str) -> Command:
                   force_sync=raw.name in prof.synchronous)
     for raw_param in raw.params:
         override = prof.param_override(raw.name, raw_param.name)
-        # A role written in the profile settles the question, and some
-        # of those roles have no length to work out — so the role is
-        # asked for first when the profile gives one.
         if "role" in override and "len" not in override:
             role = Role(override["role"])
             length = None
@@ -193,10 +162,6 @@ def lower(raw: RawRegistry, prof: Profile) -> Registry:
                    read_into_blob=set(prof.read_into_blob))
     wanted: list[tuple[str, str]] = []
     seen: set[str] = set()
-    # A tier is the union of what its features require, minus
-    # everything any of them removed: the core profile is written in
-    # the registry as a set of removals late in the list that apply to
-    # what the early features asked for.
     for tier, features in prof.tiers.items():
         asked: set[str] = set()
         gone: set[str] = set()
@@ -216,9 +181,6 @@ def lower(raw: RawRegistry, prof: Profile) -> Registry:
             seen.add(name)
             wanted.append((name, "extra"))
 
-    # What version this driver may claim: the highest feature any tier
-    # asked for. Claiming more than that is the mistake the OpenCL side
-    # has a test for and this one now has a table for.
     for tier, features in prof.tiers.items():
         for feature in features:
             if not feature.startswith("GL_VERSION_"):
@@ -229,8 +191,6 @@ def lower(raw: RawRegistry, prof: Profile) -> Registry:
             major, minor = int(parts[0]), int(parts[1])
             if (major, minor) > (reg.tier_major, reg.tier_minor):
                 reg.tier_major, reg.tier_minor = major, minor
-    # The boot tier names commands rather than features, so a profile
-    # with no feature tiers still has to say what it is.
     if (reg.tier_major, reg.tier_minor) == (1, 0) and prof.extra:
         reg.tier_major, reg.tier_minor = 3, 3
 
@@ -243,12 +203,6 @@ def lower(raw: RawRegistry, prof: Profile) -> Registry:
             reg.commands[name] = _lower_command(raw.commands[name], prof, tier)
         except LoweringError as error:
             problems.append(str(error))
-    # An extension may be claimed only if every command it needs is
-    # generated. One with no commands of its own rides on the ones that
-    # are already here and is safe to carry.
-    # Every other spelling of what was generated. A raw command that
-    # aliases one this driver carries, and is not carried itself, is a
-    # name the loader may ask for and this driver can answer.
     for name, raw_command in raw.commands.items():
         if name in reg.commands:
             continue
@@ -258,16 +212,11 @@ def lower(raw: RawRegistry, prof: Profile) -> Registry:
         if reg.commands[target].api != "gl":
             continue
         reg.aliases[name] = target
-    # And the ones the profile declares, where the registry declares
-    # none. See the [aliases] table there for why there are any.
     for name, target in prof.aliases.items():
         if name in reg.commands or target not in reg.commands:
             continue
         reg.aliases[name] = target
 
-    # The driver's own entry points, declared from the registry so the ICD's
-    # definitions and the table agree with gl.xml; another spelling of one of
-    # them is an alias, as for the generated commands.
     for name in sorted(prof.driver_implemented):
         entry = raw.commands.get(name)
         if entry is None or entry.api != "gl" or name in reg.commands:
@@ -287,28 +236,11 @@ def lower(raw: RawRegistry, prof: Profile) -> Registry:
     for name, commands in sorted(raw.extensions.items()):
         if not name.startswith("GL_"):
             continue
-        # A command counts as carried under either of its names. The
-        # EXT and ARB spellings of the framebuffer family are the core
-        # entry points with another name on them, and the driver's
-        # table answers to both — an application that asks for
-        # GL_EXT_framebuffer_object and gets no for an extension it can
-        # in fact use turns its graphics processor off. That is what
-        # Photoshop's sniffer does.
         if all(command in generated or command in reg.aliases or
                command in prof.driver_implemented
                for command in commands):
             reg.carried_extensions.append(name)
 
-    # An extension is no use without the one it is written on top of.
-    #
-    # A few carry no commands of their own — they are GLSL, or a
-    # relaxation of a rule — and pass the test above by having nothing
-    # to fail it, while everything an application does with them goes
-    # through the base extension's entry points. The registry does not
-    # record that dependency, so the profile does: see
-    # [extension_requires] there, and gl-500-texture-sparse-ext, which
-    # found GL_EXT_sparse_texture2 offered, asked for
-    # glTexPageCommitmentARB, and called the null it was handed.
     carried = set(reg.carried_extensions)
     dropped = True
     while dropped:

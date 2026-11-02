@@ -1,7 +1,3 @@
-/* What a platform logged, kept outside it. A refusal on a teardown path is
- * logged by an object that then destroys the platform - DriverImage::enter
- * releases everything when dxgkrnl refuses the registration - so a test that
- * means to assert the line needs somewhere for it to outlive the platform. */
 #ifndef AV_LOG_RECORD_HPP
 #define AV_LOG_RECORD_HPP
 
@@ -19,7 +15,6 @@ public:
 
     void          write(const char *message);
     std::uint32_t count() const;
-    /* The last message written, empty before the first, cut at the capacity. */
     const char   *last() const;
 
 private:
@@ -27,6 +22,6 @@ private:
     char          last_[capacity];
 };
 
-}  // namespace av
+}
 
-#endif  // AV_LOG_RECORD_HPP
+#endif

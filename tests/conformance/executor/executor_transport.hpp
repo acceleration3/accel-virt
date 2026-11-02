@@ -1,7 +1,3 @@
-/* The generated Vulkan client's commands, delivered through an executor
- * library's own execute: what a guest's ICD sends, with no guest and no
- * device between, so the conformance suite drives a library by the same
- * encoding a guest does rather than by bytes it wrote by hand. */
 #ifndef AV_EXECUTOR_TRANSPORT_HPP
 #define AV_EXECUTOR_TRANSPORT_HPP
 
@@ -29,8 +25,6 @@ public:
     WireArena                    &decode_arena() override;
     ClientBlobArena              &blobs() override;
 
-    /* Whether the library ran the last command sent, which is all a command
-     * with no answer says. */
     bool ran() const;
 
 private:
@@ -46,6 +40,6 @@ private:
     bool                 ran_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_EXECUTOR_TRANSPORT_HPP
+#endif

@@ -1,6 +1,3 @@
-/* A present's allocations addressed through patch locations: one per reference,
- * written to pPatchLocationListOut, which advances past them. dxgkrnl passes the
- * start of a fresh DMA buffer, so the offsets are the command's own. */
 #ifndef AV_PATCHED_PRESENT_ADDRESSES_HPP
 #define AV_PATCHED_PRESENT_ADDRESSES_HPP
 
@@ -26,6 +23,6 @@ private:
     DxgkargPresentRecord &request_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_PATCHED_PRESENT_ADDRESSES_HPP
+#endif

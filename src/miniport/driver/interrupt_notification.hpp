@@ -1,9 +1,3 @@
-/* A completion reported to dxgkrnl from outside the ISR: the notify-interrupt
- * data is built once, and DxgkCbNotifyInterrupt is called from a routine
- * DxgkCbSynchronizeExecution runs at device IRQL - the recipe basicrender.sys
- * uses (WARPKMADAPTER::WarpSynchronizeNotifyInterrupt), with a data block
- * reused for every report rather than allocated. Reporters that can run at
- * once - the adapter's DPC and the vsync timer - each own one. */
 #ifndef AV_INTERRUPT_NOTIFICATION_HPP
 #define AV_INTERRUPT_NOTIFICATION_HPP
 
@@ -27,26 +21,15 @@ public:
 
     [[nodiscard]] Status report_completed(uint32_t fence);
     [[nodiscard]] Status report_preempted(uint32_t preemption_fence, uint32_t last_completed_fence);
-    /* Hardware queue progress fences of the node's engine were written. */
     [[nodiscard]] Status report_monitored_fence_signaled(uint32_t node, uint32_t engine);
-    /* The address is the primary the target shows at this vsync. */
     [[nodiscard]] Status report_vsync(uint32_t target, uint64_t address);
-    /* CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY: what the target's planes show,
-     * `count` layers from `layers`, which must outlive the call. No layers is
-     * every plane disabled. */
     [[nodiscard]] Status report_multiplane_vsync(uint32_t target, const DxgkMultiplaneOverlayVsyncInfoRecord *layers,
                                                  uint32_t count);
-    /* CRTC_VSYNC_WITH_MULTIPLANE_OVERLAY2: the layers an MPO3 flip showed,
-     * each named by its PresentId; the same lifetime rule. */
     [[nodiscard]] Status report_presented_vsync(uint32_t target, const DxgkMultiplaneOverlayVsyncInfo2Record *layers,
                                                 uint32_t count);
-    /* The synchronized routine: runs at device IRQL. */
     uint8_t              notify();
 
 private:
-    /* DXGK_INTERRUPT_TYPE. DMA_FAULTED (4) is absent on purpose: on a GPU MMU
-     * adapter VidSchDdiNotifyInterruptWorker (dxgmms2.sys 26100 @140031b80)
-     * bugchecks 0x119/0xD for it instead of processing it. */
     enum : int32_t {
         dma_completed = 1,
         dma_preempted = 2,
@@ -55,7 +38,6 @@ private:
         crtc_vsync_with_multiplane_overlay2 = 10,
         monitored_fence_signaled = 11
     };
-    /* One adapter, not linked: physical adapter 0. */
     static constexpr uint32_t physical_adapter_mask = 1u;
 
     [[nodiscard]] Status report();
@@ -65,6 +47,6 @@ private:
     DxgkargcbNotifyInterruptDataRecord data_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_INTERRUPT_NOTIFICATION_HPP
+#endif

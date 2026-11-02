@@ -12,7 +12,7 @@ struct PixelFormatCriteriaProbe {
     static void overcount(PixelFormatCriteria &criteria) { criteria.count_ = PixelFormatCriteria::capacity + 1u; }
 };
 
-}  // namespace av::glicd
+}
 
 TEST(pixel_format_criteria, keeps_criteria_in_order_up_to_its_capacity)
 { PixelFormatCriteria criteria;

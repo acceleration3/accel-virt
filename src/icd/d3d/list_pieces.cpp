@@ -33,4 +33,4 @@ uint64_t ListPieces::count() const
     return count_;
 }
 
-}  // namespace av::icd
+}

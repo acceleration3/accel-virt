@@ -45,7 +45,7 @@ void answer_routine(void *trace)
     static_cast<DeviceTrace *>(trace)->answer_on_main_loop();
 }
 
-}  // namespace
+}
 
 DeviceTrace::DeviceTrace()
     : trace_(), modules_(), root_(nullptr), schedule_(nullptr), previous_{},
@@ -74,14 +74,11 @@ void DeviceTrace::start(StateReporter &root, AvMainLoopScheduler schedule, Crash
 void DeviceTrace::crashed(int signal, siginfo_t *info, void *context)
 {
     AV_SCOPE("DeviceTrace::crashed");
-    /* A machine-check SIGBUS is QEMU's to handle and the process lives on. */
     const bool machine_check = signal == SIGBUS && info != nullptr &&
                                (info->si_code == BUS_MCEERR_AR || info->si_code == BUS_MCEERR_AO);
     uint64_t   unwritten = 0u;
     if (!machine_check && trace_.started() &&
         __atomic_compare_exchange_n(&crash_written_, &unwritten, written, false, 5, 5)) {
-        /* si_addr means an address only for a fault; a signal another process
-         * sent carries its sender there instead. */
         const bool     fault = info != nullptr && info->si_code > 0;
         const uint64_t address = fault ? static_cast<uint64_t>(reinterpret_cast<uintptr_t>(info->si_addr)) : 0u;
         trace_.table().record_crash(static_cast<uint32_t>(signal), address);
@@ -100,8 +97,6 @@ void DeviceTrace::answer_on_main_loop()
         if (!asked) request_ = Request::idle;
     }
     if (!asked) return;
-    /* The socket thread does not touch the dump while a request is pending or
-     * abandoned, so it is written outside the lock. */
     StateWriter writer(dump_, sizeof dump_);
     root_->report(writer);
     const ThreadLockHold locked(lock_);
@@ -117,8 +112,6 @@ void DeviceTrace::answer_on_main_loop()
 void DeviceTrace::install(CrashHandler handler)
 {
     AV_SCOPE("DeviceTrace::install");
-    /* The handler runs on the thread's alternate stack, which the trace host
-     * gives each thread the first time it asks who is calling. */
     static_cast<void>(trace_.host().thread_number());
     struct sigaction action = {};
     action.sa_sigaction = handler;
@@ -167,9 +160,6 @@ void DeviceTrace::chain(int signal, siginfo_t *info, void *context)
         } else if (previous.sa_handler != SIG_DFL && previous.sa_handler != SIG_IGN) {
             previous.sa_handler(signal);
         } else {
-            /* The action the process had before, raised again: a fault would
-             * re-run on return anyway, but a signal another process sent
-             * would not. It stays blocked until this handler returns. */
             static_cast<void>(sigaction(signal, &previous, nullptr));
             static_cast<void>(raise(signal));
         }
@@ -212,7 +202,6 @@ bool DeviceTrace::await_dump(size_t &length)
     bool                 in_time = true;
     while (request_ == Request::pending && in_time) in_time = answered_.wait_until(deadline);
     const bool answered = request_ == Request::answered;
-    /* A routine still to run finds the request abandoned and only resets it. */
     request_ = answered ? Request::idle : Request::abandoned;
     length = length_;
     return answered;
@@ -232,4 +221,4 @@ void DeviceTraceRoot::crashed(int signal, siginfo_t *info, void *context)
     if (trace_.constructed()) trace_.object().crashed(signal, info, context);
 }
 
-}  // namespace av
+}

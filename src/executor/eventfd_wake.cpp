@@ -17,7 +17,7 @@ void *run_eventfd_wake(void *wake)
     return nullptr;
 }
 
-}  // namespace
+}
 
 EventfdWake::EventfdWake() : signal_(), reached_fd_(-1), stop_fd_(-1), thread_{}, running_(false)
 {
@@ -45,8 +45,6 @@ int EventfdWake::descriptor()
     return reached_fd_;
 }
 
-/* Both descriptors, once: the runtimes read descriptor 0 as no event at
- * all, so a reached_fd_ of 0 is no use and is let go again. */
 bool EventfdWake::open()
 {
     AV_SCOPE("EventfdWake::open");
@@ -61,8 +59,6 @@ bool EventfdWake::open()
     return false;
 }
 
-/* A write before the thread starts is a fence of an earlier binding's: it
- * wakes nobody. */
 bool EventfdWake::start()
 {
     AV_SCOPE("EventfdWake::start");
@@ -73,8 +69,6 @@ bool EventfdWake::start()
     return running_;
 }
 
-/* The stop asked is taken back once the thread has gone, so the next thread
- * does not leave at once. */
 void EventfdWake::stop()
 {
     AV_SCOPE("EventfdWake::stop");
@@ -105,4 +99,4 @@ void EventfdWake::run()
     }
 }
 
-}  // namespace av
+}

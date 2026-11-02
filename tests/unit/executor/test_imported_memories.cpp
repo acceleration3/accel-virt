@@ -1,7 +1,3 @@
-/* The memory a session imported besides its region, each named on the wire by
- * the memory's own address. What a caller acts on: the handle an adopted
- * import is answered with, which memory a handle a command names finds, and
- * that a handle given back finds nothing. */
 #include "device/abi/av_executor.h"
 #include "executor/exported_memory.hpp"
 #include "executor/imported_blob.hpp"
@@ -37,7 +33,7 @@ std::uint64_t address_of(const SourceMemory &memory)
     return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&memory));
 }
 
-}  // namespace
+}
 
 TEST(imported_memories, an_adopted_import_is_named_by_its_memory_s_address)
 { ImportedMemories memories;
@@ -51,8 +47,6 @@ TEST(imported_memories, an_adopted_import_is_named_by_its_memory_s_address)
   CHECK(memories.find(blob.wire_handle()) == &heap.memory);
   CHECK(memories.invariants_hold()); }
 
-/* A handle no live import has - none at all, one never adopted, one given
- * back - finds nothing, so a command naming it is refused. */
 TEST(imported_memories, a_handle_no_live_import_has_finds_nothing)
 { ImportedMemories memories;
   Memory           heap(1u);
@@ -72,8 +66,6 @@ TEST(imported_memories, a_handle_no_live_import_has_finds_nothing)
   CHECK(memories.find(handle) == nullptr);
   CHECK(memories.invariants_hold()); }
 
-/* Giving back an import this never adopted leaves the others, and their
- * handles, as they were. */
 TEST(imported_memories, abandoning_an_import_it_never_adopted_changes_nothing)
 { ImportedMemories memories;
   Memory           heap(1u);
@@ -90,8 +82,6 @@ TEST(imported_memories, abandoning_an_import_it_never_adopted_changes_nothing)
   CHECK(memories.find(adopted.wire_handle()) == &heap.memory);
   CHECK(memories.invariants_hold()); }
 
-/* As many as a session's import table holds, and not one more: a full table
- * refuses and records nothing; a slot given back takes the next. */
 TEST(imported_memories, a_full_table_refuses_and_records_nothing)
 { ImportedMemories memories;
   static Memory     heap(1u);
@@ -112,7 +102,6 @@ TEST(imported_memories, a_full_table_refuses_and_records_nothing)
   memories.forget_all();
   for (ImportedBlob &blob : blobs) static_cast<void>(blob.give_back()); }
 
-/* A session that ends forgets every import at once. */
 TEST(imported_memories, forgetting_all_leaves_no_handle_to_find)
 { ImportedMemories memories;
   Memory           first(1u);
@@ -129,8 +118,6 @@ TEST(imported_memories, forgetting_all_leaves_no_handle_to_find)
   CHECK(memories.find(b.wire_handle()) == nullptr);
   CHECK(memories.invariants_hold()); }
 
-/* A count that disagrees with the slots is a table that would refuse while it
- * has room, or stop seeing what it holds. */
 TEST(imported_memories_invariants, a_count_that_disagrees_with_the_slots_breaks_them)
 { ImportedMemories memories;
   ImportedMemoriesProbe(memories).set_count(1u);

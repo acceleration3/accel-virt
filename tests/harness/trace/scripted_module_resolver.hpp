@@ -1,4 +1,3 @@
-/* Modules at addresses a test declares, for a crash report's native stack. */
 #ifndef AV_SCRIPTED_MODULE_RESOLVER_HPP
 #define AV_SCRIPTED_MODULE_RESOLVER_HPP
 
@@ -32,6 +31,6 @@ private:
     std::uint32_t asked_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_MODULE_RESOLVER_HPP
+#endif

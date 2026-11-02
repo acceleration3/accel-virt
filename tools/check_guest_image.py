@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Gate: a guest binary is x64 and binds only to the user-mode modules every
-Windows guest has - gdi32 for D3DKMT, kernel32, ntdll - so it runs in a guest
-with nothing installed beside it.
-
-avtest.exe is a console program. A DLL (--dll) may be either Windows
-subsystem, and what it exports is judged too: the Vulkan loader calls an ICD by
-exactly the names --require-export gives, and --only-exports refuses any other.
-
-  check_guest_image.py IMAGE [--dll] [--require-import NAME ...] [--allow-import MODULE ...]
-                       [--require-export NAME ...] [--only-exports]
-
-The image is parsed here, bounds-checked, rather than by llvm-readobj: the export
-table is part of the verdict, and a truncated or hostile file must be refused
-naming what is wrong rather than read past its end.
-"""
+"""Gate: a guest binary is x64 and binds only to the user-mode modules every"""
 import argparse
 import struct
 import sys
@@ -22,8 +8,6 @@ MACHINE_I386 = 0x014C
 MACHINE_AMD64 = 0x8664
 MACHINES = {MACHINE_I386: "IMAGE_FILE_MACHINE_I386", MACHINE_AMD64: "IMAGE_FILE_MACHINE_AMD64",
             0xAA64: "IMAGE_FILE_MACHINE_ARM64"}
-# --machine: the x64 drivers and programs, or the x86 drivers a 32-bit process
-# loads.
 MACHINE_NAMES = {"amd64": MACHINE_AMD64, "i386": MACHINE_I386}
 SUBSYSTEM_WINDOWS_GUI = 2
 SUBSYSTEM_WINDOWS_CUI = 3
@@ -41,29 +25,20 @@ IMPORT_DIRECTORY = 1
 RELOCATION_DIRECTORY = 5
 DELAY_IMPORT_DIRECTORY = 13
 RELOCATION_BLOCK_HEADER = 8
-# IMAGE_REL_BASED_DIR64: the whole 64-bit pointer at the entry's RVA has the
-# image base added to it; IMAGE_REL_BASED_HIGHLOW the whole 32-bit one, in a
-# PE32 image. Type 0 is IMAGE_REL_BASED_ABSOLUTE, the padding every linker ends
-# a block with, and it relocates nothing.
 RELOCATED_HIGHLOW = 3
 RELOCATED_DIR64 = 10
 KNOWN_DIRECTORIES = 16
 SECTION_HEADER_SIZE = 40
 IMPORT_DESCRIPTOR_SIZE = 20
 DELAY_DESCRIPTOR_SIZE = 32
-# A name longer than this is not one a linker wrote; the bound is what keeps a
-# string with no terminator from being searched to the end of the file.
 LONGEST_NAME = 4096
 
 
 class Malformed(Exception):
-    """What makes a file not a PE image this can judge."""
+    pass
 
 
 class PeImage:
-    """The facts the gate judges, read from an image's bytes. Every read is
-    checked against the file and every RVA against a section's file data."""
-
     def __init__(self, data):
         self.data = data
         if self.bytes_at(0, 2) != b"MZ":
@@ -78,8 +53,6 @@ class PeImage:
         self.characteristics = self.u16(coff + 18)
         optional = coff + 20
         magic = self.u16(optional)
-        # PE32 has BaseOfData where PE32+'s 8-byte ImageBase begins, so its
-        # 4-byte ImageBase is 4 bytes further on.
         if magic == OPTIONAL_PE32_PLUS:
             count_at, self.thunk_size, base_at = 108, 8, 24
         elif magic == OPTIONAL_PE32:
@@ -99,7 +72,6 @@ class PeImage:
                          for index in range(section_count)]
 
     def section(self, header):
-        """(rva, extent, file offset): the part of a section backed by the file."""
         virtual_size, rva, raw_size, raw_at = struct.unpack("<IIII", self.bytes_at(header + 8, 16))
         return rva, min(raw_size, virtual_size) if virtual_size else raw_size, raw_at
 
@@ -148,8 +120,6 @@ class PeImage:
         return self.directories[index][0] if index < len(self.directories) else 0
 
     def imports(self):
-        """(module, [symbol]) for every import and every delay-load import: a
-        module loaded late is still a module the guest must have."""
         found = []
         at = self.directory(IMPORT_DIRECTORY)
         while at:
@@ -181,8 +151,6 @@ class PeImage:
             table += self.thunk_size
 
     def relocated_pointers(self):
-        """The RVA and value of every pointer the base relocation table names,
-        as the file holds them: 64-bit ones, and a PE32 image's 32-bit ones."""
         at, remaining = self.directories[RELOCATION_DIRECTORY] if len(self.directories) > RELOCATION_DIRECTORY \
             else (0, 0)
         found = []
@@ -205,7 +173,6 @@ class PeImage:
         return found
 
     def exports(self):
-        """Every exported name, and the ordinal of every export with none."""
         directory = self.directory(EXPORT_DIRECTORY)
         if not directory:
             return [], []
@@ -242,10 +209,6 @@ def violations_of(image, arguments):
     if arguments.dll and not image.characteristics & FILE_DLL:
         violations.append("not a DLL: IMAGE_FILE_DLL is clear")
 
-    # A relocated pointer holding the image base points at RVA 0, which is the
-    # DOS header and never a symbol. lld-link writes one where a
-    # __declspec(dllimport) declaration had no import library to satisfy it:
-    # the link succeeds, and the first call through it jumps to the image base.
     violations += [f"the relocated pointer at RVA 0x{rva:X} holds the image base, so it points at nothing"
                    for rva, value in image.relocated_pointers() if value == image.image_base]
 

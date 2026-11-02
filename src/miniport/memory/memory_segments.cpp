@@ -32,8 +32,6 @@ uint32_t MemorySegments::count() const
 {
     AV_SCOPE("MemorySegments::count");
     platform_.require_irql_at_most(Irql::dispatch, "MemorySegments::count");
-    /* Identifiers are one-based and none is skipped, so the count is the
-     * last one's. */
     return local_.present() ? LocalMemorySegment::segment_id : ApertureSegment::segment_id;
 }
 
@@ -50,8 +48,6 @@ Status MemorySegments::report(const AdapterInfoQuery &query) const
     platform_.require_irql_at_most(Irql::passive, "MemorySegments::report");
     uint32_t                   physical_adapter = 0u;
     DxgkQuerySegmentOut4Record out = {};
-    /* Before StartDevice there is no memory to describe, and VidMm asking then
-     * is asking about an adapter that has not been built. */
     Status                     status = aperture_.size() == 0u ? Status::invalid_parameter : Status::ok;
     if (status == Status::ok) status = query.read_input(&physical_adapter, physical_adapter_bytes);
     if (status == Status::ok) status = query.read_output(&out, sizeof out);
@@ -65,9 +61,6 @@ Status MemorySegments::report(const AdapterInfoQuery &query) const
     return query.write_output(&out, sizeof out);
 }
 
-/* Descriptors sit at VidMm's stride, one per segment identifier from one. The
- * local segment's range follows the aperture's, so no guest-visible address is
- * two segments' at once. */
 void MemorySegments::describe(DxgkQuerySegmentOut4Record &out) const
 {
     AV_SCOPE("MemorySegments::describe");
@@ -90,4 +83,4 @@ bool MemorySegments::invariants_hold() const
     return aperture_.invariants_hold() && local_.invariants_hold();
 }
 
-}  // namespace av
+}

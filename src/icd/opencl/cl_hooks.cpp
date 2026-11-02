@@ -1,13 +1,3 @@
-/* The ABI boundary the Khronos loader calls across.
- *
- * Every function here is a bare pointer in a cl_icd_dispatch, called with
- * OpenCL's own arguments and nowhere to put a `this`, so each is one line
- * through ClIcdBinding and holds no logic of its own (constitution III). The
- * one exported symbol is clGetExtensionFunctionAddress; everything else the
- * loader wants it reaches through the table.
- *
- * ClDispatchTable::fill is defined here rather than beside its class, because
- * what it installs is exactly these entries and nothing else may see them. */
 #include "icd/opencl/cl_dispatch_table.hpp"
 
 #include "core/trace/function_scope.hpp"
@@ -24,10 +14,6 @@ namespace av::clicd {
 constinit ClIcdBinding cl_icd_binding;
 
 namespace {
-
-/* An entry reached before the root exists answers the API's own refusal.
- * Nothing in this process can have a valid object yet, so every one of these
- * is an application calling into a driver that failed to start. */
 #define AV_CL_ROOT_OR(refusal) \
     if (!cl_icd_binding.bound()) return refusal; \
     ClIcdRoot &root = cl_icd_binding.root()
@@ -132,8 +118,6 @@ cl_command_queue CL_API_CALL create_queue(cl_context context, cl_device_id devic
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
-    /* The deprecated 1.2 call carries a bitfield rather than a list: the same
-     * bits, which a list names as its one CL_QUEUE_PROPERTIES. */
     const uint64_t listed[] = {static_cast<uint64_t>(CL_QUEUE_PROPERTIES), properties, 0u};
     ClNotedError noted(cl_icd_binding.root(), "clCreateCommandQueue", error);
     return cl_icd_binding.root().create_queue(context, device, properties != 0u ? listed : nullptr, noted.pointer());
@@ -161,15 +145,10 @@ cl_mem CL_API_CALL create_buffer(cl_context context, cl_mem_flags flags, size_t 
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
-    /* clCreateBuffer carries no list; clCreateBufferWithProperties is not a
-     * slot this ICD claims, so the only list a buffer could have is none. */
     ClNotedError noted(cl_icd_binding.root(), "clCreateBuffer", error);
     return cl_icd_binding.root().create_buffer(context, flags, bytes, host_pointer, nullptr, noted.pointer());
 }
 
-/* clCreateBufferWithProperties: the same create, with the list the
- * application wrote. The only names it may carry are the external-memory
- * ones, and only while that row is reported (feature 053). */
 cl_mem CL_API_CALL create_buffer_with_properties(cl_context context, const cl_mem_properties *properties,
                                                  cl_mem_flags flags, size_t bytes, void *host_pointer,
                                                  cl_int *error)
@@ -639,7 +618,6 @@ cl_sampler CL_API_CALL create_sampler(cl_context context, cl_bool normalized,
         if (error != nullptr) *error = CL_INVALID_CONTEXT;
         return nullptr;
     }
-    /* The 1.2 call is the property list written out in its arguments. */
     const uint64_t properties[] = {CL_SAMPLER_NORMALIZED_COORDS, normalized,
                                    CL_SAMPLER_ADDRESSING_MODE,   addressing,
                                    CL_SAMPLER_FILTER_MODE,       filter,
@@ -687,10 +665,6 @@ cl_int CL_API_CALL enqueue_barrier(cl_command_queue queue, cl_uint count, const 
     return root.noted("clEnqueueBarrierWithWaitList", root.enqueue_barrier(queue, count, events, event));
 }
 
-/* cl_khr_d3d10_sharing: its six slots of cl_icd_dispatch, which the loader's
- * own entry points for the names dispatch through. Each takes the Direct3D
- * objects as the pointers they are; the slots' declared types name them by
- * interface only where d3d10.h is included, which portable code is not. */
 cl_int CL_API_CALL get_device_ids_from_d3d10(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
                                              cl_uint num_entries, cl_device_id *devices, cl_uint *num_devices)
 {
@@ -738,8 +712,6 @@ cl_int CL_API_CALL enqueue_release_d3d10(cl_command_queue queue, cl_uint, const 
     return root.noted("clEnqueueReleaseD3D10ObjectsKHR", root.enqueue_d3d10_objects(queue));
 }
 
-/* cl_khr_d3d11_sharing's six (docs/d3d11-sharing.md), with the Direct3D
- * objects as the pointers they are, as for Direct3D 10. */
 cl_int CL_API_CALL get_device_ids_from_d3d11(cl_platform_id platform, cl_uint source, void *object, cl_uint set,
                                              cl_uint num_entries, cl_device_id *devices, cl_uint *num_devices)
 {
@@ -804,8 +776,6 @@ cl_int CL_API_CALL enqueue_release_d3d11(cl_command_queue queue, cl_uint count, 
                       root.enqueue_release_d3d11(queue, count, objects, waits, events, event));
 }
 
-/* The device's retain and release, which answer alike for the root device
- * this ICD shows; two entries so the log names the one an application called. */
 cl_int CL_API_CALL retain_device(cl_device_id device)
 {
     AV_SCOPE("retain_device");
@@ -820,8 +790,6 @@ cl_int CL_API_CALL release_device(cl_device_id device)
     return root.noted("clReleaseDevice", root.device_reference(device));
 }
 
-/* cl_khr_gl_sharing: each slot of cl_icd_dispatch, and clGetGLContextInfoKHR
- * also by name, since an application may ask the ICD for it directly. */
 cl_mem CL_API_CALL create_from_gl_buffer(cl_context context, cl_mem_flags flags, cl_GLuint buffer, cl_int *error)
 {
     AV_SCOPE("create_from_gl_buffer");
@@ -896,8 +864,6 @@ cl_int CL_API_CALL get_gl_context_info(const cl_context_properties *properties, 
     return root.noted("clGetGLContextInfoKHR", root.gl_context_info(properties, name, value_bytes, value, size_ret));
 }
 
-/* `cl_khr_external_memory`'s two, which the loader asks for by name: they are
- * not slots of cl_icd_dispatch, because the ICD ABI predates the extension. */
 cl_int CL_API_CALL acquire_external_objects(cl_command_queue queue, cl_uint num_mem_objects,
                                            const cl_mem *mem_objects, cl_uint waits, const cl_event *events,
                                            cl_event *event)
@@ -916,10 +882,6 @@ cl_int CL_API_CALL release_external_objects(cl_command_queue queue, cl_uint num_
     return root.enqueue_external(queue, num_mem_objects, mem_objects, event, ClWaitList(waits, events));
 }
 
-/* The rest of the enqueue surface and the memory objects it names: the 1.x
- * spellings, image-buffer copies, image fills and maps, migration,
- * sub-buffers, the properties spelling of an image, pipes, and the queue's
- * own shared-memory commands. */
 cl_int CL_API_CALL enqueue_task(cl_command_queue queue, cl_kernel kernel, cl_uint waits, const cl_event *events,
                                 cl_event *event)
 {
@@ -1087,7 +1049,6 @@ cl_int CL_API_CALL enqueue_svm_migrate(cl_command_queue queue, cl_uint count, co
                       root.enqueue_svm_migrate(queue, count, pointers, event, ClWaitList(waits, events)));
 }
 
-/* Programs and kernels beyond the one-source build (cl_icd_root_programs.cpp). */
 cl_program CL_API_CALL create_program_with_binary(cl_context context, cl_uint num_devices,
                                                   const cl_device_id *device_list, const size_t *lengths,
                                                   const unsigned char **binaries, cl_int *binary_status,
@@ -1185,7 +1146,6 @@ cl_int CL_API_CALL unload_platform_compiler(cl_platform_id platform)
     return root.noted("clUnloadPlatformCompiler", root.unload_platform_compiler(platform));
 }
 
-/* The 1.1 spelling, of no platform: a hint, as the 1.2 one is. */
 cl_int CL_API_CALL unload_compiler()
 {
     AV_SCOPE("unload_compiler");
@@ -1229,7 +1189,6 @@ cl_int CL_API_CALL get_kernel_arg_info(cl_kernel kernel, cl_uint index, cl_kerne
                             root.kernel_arg_info(kernel, index, name, value_bytes, value, size_ret));
 }
 
-/* The core call and cl_khr_subgroups' slot, which take the same arguments. */
 cl_int CL_API_CALL get_kernel_sub_group_info(cl_kernel kernel, cl_device_id device, cl_kernel_sub_group_info name,
                                              size_t input_bytes, const void *input, size_t value_bytes, void *value,
                                              size_t *size_ret)
@@ -1248,8 +1207,6 @@ cl_int CL_API_CALL set_kernel_exec_info(cl_kernel kernel, cl_kernel_exec_info na
     return root.noted("clSetKernelExecInfo", root.set_kernel_exec_info(kernel, name, bytes, value));
 }
 
-/* A context from a device type, which carries its notify as clCreateContext's
- * does. */
 cl_context CL_API_CALL create_context_from_type(const cl_context_properties *properties, cl_device_type type,
                                                 void(CL_CALLBACK *notify)(const char *, const void *, size_t, void *),
                                                 void *user_data, cl_int *error)
@@ -1297,8 +1254,6 @@ cl_int CL_API_CALL create_sub_devices(cl_device_id device, const cl_device_parti
                       root.create_sub_devices(device, properties, num_devices, out_devices, num_devices_ret));
 }
 
-/* The loader's own clGetExtensionFunctionAddressForPlatform dispatches here
- * through the platform. */
 void *CL_API_CALL extension_function_for_platform(cl_platform_id platform, const char *name)
 {
     AV_SCOPE("extension_function_for_platform");
@@ -1306,7 +1261,6 @@ void *CL_API_CALL extension_function_for_platform(cl_platform_id platform, const
     return cl_icd_binding.root().extension_function_for(platform, name);
 }
 
-/* The 1.1 spelling of the same, of no platform: this ICD's one. */
 void *CL_API_CALL extension_function_of_any_platform(const char *name)
 {
     AV_SCOPE("extension_function_of_any_platform");
@@ -1316,7 +1270,7 @@ void *CL_API_CALL extension_function_of_any_platform(const char *name)
 
 #undef AV_CL_ROOT_OR
 
-}  // namespace
+}
 
 ClDispatchTable::ClDispatchTable() : table_(), claimed_(0u), filled_(false)
 {
@@ -1472,7 +1426,6 @@ void ClDispatchTable::fill()
     table_.clEnqueueSVMFree = &enqueue_svm_free;
     table_.clEnqueueSVMMigrateMem = &enqueue_svm_migrate;
     claimed_ = 132u;
-    /* Last, and only into slots nothing above claimed. */
     av::clproto::fill_unimplemented(table_);
     filled_ = true;
 }
@@ -1489,9 +1442,6 @@ const cl_icd_dispatch &ClDispatchTable::table() const
     return table_;
 }
 
-/* Not a slot of the table: cl_icd_dispatch has no clIcdGetPlatformIDsKHR, and
- * the loader asks clGetExtensionFunctionAddress for it by name before it has a
- * platform to dispatch through. */
 void *ClDispatchTable::icd_get_platform_ids() const
 {
     AV_SCOPE("ClDispatchTable::icd_get_platform_ids");
@@ -1532,14 +1482,12 @@ bool ClDispatchTable::invariants_hold() const
 {
     AV_SCOPE("ClDispatchTable::invariants_hold");
     if (!filled_) return claimed_ == 0u;
-    /* Every slot the loader could dispatch a carried command through holds
-     * something; the ones this ICD claims hold its own. */
     return claimed_ != 0u && table_.clGetPlatformIDs == &get_platform_ids &&
            table_.clGetPlatformInfo == &get_platform_info && table_.clCreateContext != nullptr &&
            table_.clEnqueueMapBuffer == &map_buffer && table_.clCreateImage != nullptr;
 }
 
-}  // namespace av::clicd
+}
 
 namespace av::icd {
 
@@ -1551,4 +1499,4 @@ void stub_called(const char *api, const char *entry_point, const char *why) noex
     if (clicd::cl_icd_binding.bound()) clicd::cl_icd_binding.root().note_refused(entry_point);
 }
 
-}  // namespace av::icd
+}

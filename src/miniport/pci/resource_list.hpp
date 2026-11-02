@@ -1,7 +1,3 @@
-/* The memory ranges and message-signalled interrupts of one device, read out of
- * the translated CM_RESOURCE_LIST dxgkrnl passes at DxgkDdiStartDevice. The list
- * is variable-length and sized by its own counts, so every count is bounded
- * before the bytes it describes are read, and each field is read once. */
 #ifndef AV_RESOURCE_LIST_HPP
 #define AV_RESOURCE_LIST_HPP
 
@@ -21,7 +17,6 @@ public:
     static constexpr uint32_t max_partial_descriptors = 64u;
     static constexpr uint32_t max_memory_ranges       = 16u;
 
-    /* CM_RESOURCE_LIST layout, pinned by src/km/ddi_record_layout.cpp. */
     static constexpr size_t list_header_bytes        = 4u;
     static constexpr size_t full_header_bytes        = 16u;
     static constexpr size_t partial_count_offset     = 12u;
@@ -30,7 +25,6 @@ public:
     static constexpr size_t memory_start_offset      = 4u;
     static constexpr size_t memory_length_offset     = 12u;
 
-    /* The most bytes a list within the ceilings can occupy. */
     static constexpr size_t max_bytes =
         list_header_bytes +
         max_full_descriptors * (full_header_bytes + max_partial_descriptors * partial_descriptor_bytes);
@@ -39,12 +33,8 @@ public:
     ResourceList(const ResourceList &) = delete;
     ResourceList &operator=(const ResourceList &) = delete;
 
-    /* `length` bounds every read; the counts decide how much is read. A failure
-     * leaves the list empty. */
     [[nodiscard]] Status initialize(const uint8_t *bytes, size_t length);
 
-    /* The range starting exactly at `start`: malformed if shorter than
-     * `minimum_length`, not_found if there is none. */
     [[nodiscard]] Status find_memory(uint64_t start, uint64_t minimum_length, uint64_t &length) const;
     uint32_t             message_interrupts() const;
 
@@ -66,6 +56,6 @@ private:
     friend struct ResourceListProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_RESOURCE_LIST_HPP
+#endif

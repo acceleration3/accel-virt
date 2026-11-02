@@ -1,11 +1,3 @@
-/* avvkprobe's proof through the ICD on this machine's GPU (feature 045,
- * T038): the probe calls the ICD's own entry point as the Windows loader would
- * - vkCreateInstance from the null instance, everything else through the
- * instance - and the ICD root, over DdiKmt, carries every command through the
- * real driver and device core to the executor library, loaded from its file
- * and bound to the host GPU that runs the most sub-APIs. Host-visible memory
- * is the guest process's own pages, imported by the host GPU. A host without
- * Vulkan has nothing here to judge, and the test returns without checking. */
 #include "device/abi/av_executor.h"
 #include "guest/suite/guest_report.hpp"
 #include "guest/probe/loader_vulkan.hpp"
@@ -30,10 +22,6 @@
 #include <cstdio>
 #include <cstring>
 
-/* The executor library opens every host API when it loads, and a real
- * VkDevice, OpenCL platform and EGL display allocate from driver modules that
- * never give everything back; named, as the other full-stack tests name them,
- * rather than leak detection turned off. */
 extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
 {
@@ -68,11 +56,8 @@ using av::VulkanProbe;
 using av::WidestHostGpu;
 
 namespace {
-
-/* The probe's window, and the resized one its last step makes. */
 constexpr std::uint32_t window_side = av::VulkanProbe::extent;
 
-/* The ICD as one guest process holds it: its own memory, locks and log. */
 class IcdProcess {
 public:
     explicit IcdProcess(DdiKmt &kmt)
@@ -107,7 +92,7 @@ bool reported(const GuestReport &report, const char *line)
     return false;
 }
 
-}  // namespace
+}
 
 TEST(fullstack_vulkan_icd, the_probe_passes_every_step_through_the_icd)
 { const WidestHostGpu gpu;
@@ -122,8 +107,6 @@ TEST(fullstack_vulkan_icd, the_probe_passes_every_step_through_the_icd)
   { IcdProcess process(rig.kmt());
     LoaderVulkan vulkan(&av::bound_icd_instance_proc_addr);
     av::DirectoryImageSink images(AV_IMAGE_DIR);
-    /* The probe's window: a DC of the probe's size on the ICD's own window
-     * surface, read back as a desktop would be (feature 046). */
     void *const window = reinterpret_cast<void *>(0x7770u);
     process.windows().add_dc(reinterpret_cast<void *>(0x7771u), window, window_side, window_side);
     av::SurfaceWindowFrame frames(process.windows(), window, window_side, window_side);
@@ -142,8 +125,6 @@ TEST(fullstack_vulkan_icd, the_probe_passes_every_step_through_the_icd)
   CHECK(reported(report, "ok vulkan.draw 4096"));
   CHECK(reported(report, "ok vulkan.lost"));
   CHECK(reported(report, "ok vulkan.recreated 256"));
-  /* The window-system steps: the surface the window offers, the frames the
-   * driver put on it, the pacing it held them to, and the resize. */
   CHECK(reported(report, "ok vulkan.surface 4096"));
   CHECK(reported(report, "ok vulkan.present 4096"));
   CHECK(reported(report, "ok vulkan.resized 9216"));

@@ -1,11 +1,3 @@
-/* SHARE_OBJECT, OPEN_SHARED_OBJECT and RELEASE_SHARED_OBJECT as a guest frames
- * them (docs/protocol.md, Transport commands).
- *
- * Two rules divide this file. A body of the wrong length is *framing* - no
- * producer writes one, so the context stops and nothing is answered. Anything
- * else is an answer with a status in it, and the context runs on: a guest that
- * asks for something the device will not do is a guest making a mistake, not
- * an attack on the frame. Every status in data-model.md has a case here. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/execution/shared_object_command.hpp"
@@ -33,7 +25,6 @@ namespace {
 constexpr std::uint64_t size = 8u * 4096u;
 constexpr std::uint64_t made_by_guest = 0x40u;
 
-/* One command sent by one context of the rig, with the answer it wrote. */
 class Sent {
 public:
     Sent(av::SharedObjectContext &context, std::uint32_t id, const SharedObjectRequest &request,
@@ -84,7 +75,7 @@ void check(SharedObjectRig &rig)
         av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "invariants broken");
 }
 
-}  // namespace
+}
 
 TEST(shared_object_command_run, a_share_then_an_open_from_another_context_names_one_host_object)
 { SharedObjectRig rig;
@@ -117,8 +108,6 @@ TEST(shared_object_command_run, a_release_destroys_what_this_context_made_and_an
   check(rig);
   CHECK_EQ(rig.ops().closed_objects(), 1u);
   CHECK_EQ(rig.ops().live_opens(), 0u);
-  /* An id this context never held answers done and the library does
-   * nothing with it, as RELEASE_BLOB does. */
   const Sent again(rig.second(), CommandHeader::release_shared_object_id, memory(9u, 0u));
   CHECK_EQ(again.status(), SharedObjectAnswer::done);
   check(rig);
@@ -149,11 +138,9 @@ TEST(shared_object_command_run, an_id_that_is_not_one_of_the_three_is_not_known)
 
 TEST(shared_object_command_run, a_body_no_request_can_be_is_refused_as_a_request_and_the_context_runs_on)
 { SharedObjectRig rig;
-  /* An id of 0, and a kind this protocol does not have. */
   const SharedObjectRequest bodies[] = {
       SharedObjectRequest(0u, SharedObjectKind(SharedObjectKind::memory), made_by_guest, size),
       SharedObjectRequest(7u, SharedObjectKind(4u), made_by_guest, size),
-      /* Memory with no length, and a fence carrying one. */
       SharedObjectRequest(7u, SharedObjectKind(SharedObjectKind::memory), made_by_guest, 0u),
       SharedObjectRequest(7u, SharedObjectKind(SharedObjectKind::native_fence), made_by_guest, size),
   };
@@ -179,7 +166,6 @@ TEST(shared_object_command_run, only_a_share_may_carry_a_wire_handle)
       CHECK_EQ(sent.status(), SharedObjectAnswer::refused_request);
   }
   check(rig);
-  /* And a share that names no object is a share of nothing. */
   const Sent nothing(rig.second(), CommandHeader::share_object_id, memory(9u, 0u));
   CHECK_EQ(nothing.status(), SharedObjectAnswer::refused_request);
   check(rig);
@@ -244,8 +230,6 @@ TEST(shared_object_command_run, a_second_publisher_of_one_id_and_a_second_open_b
   check(rig);
   CHECK_EQ(rig.ops().opened_objects(), 1u); }
 
-/* No count of objects a context shares is one past which it is refused: the
- * table this replaces stopped at 64. */
 TEST(shared_object_command_run, a_context_shares_more_than_any_fixed_table_held)
 { SharedObjectRig rig;
   for (std::uint64_t id = 1u; id <= 64u; id++)
@@ -263,6 +247,5 @@ TEST(shared_object_command_run, an_answer_slot_too_small_is_written_nothing_and_
   CHECK_STATUS(shared.ran(), Status::ok);
   CHECK_EQ(shared.produced(), SharedObjectAnswer::encoded_size);
   check(rig);
-  /* The command still did what it was asked; only the answer did not fit. */
   CHECK_EQ(rig.ops().shared_objects(), 1u);
   CHECK_EQ(rig.ops().shared_objects(), 1u); }

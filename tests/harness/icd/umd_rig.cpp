@@ -13,7 +13,7 @@ namespace {
 const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
                          PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 
-}  // namespace
+}
 
 UmdRig::UmdRig(d3d::UmdHostDriver *builder)
     : platform_(), kmt_(), trace_(), lock_(trace_, 'U'), log_(),
@@ -33,4 +33,4 @@ RecordingThreadLock &UmdRig::lock() { return lock_; }
 RecordingLog        &UmdRig::log() { return log_; }
 d3d::UmdRoot        &UmdRig::root() { return root_; }
 
-}  // namespace av
+}

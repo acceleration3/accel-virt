@@ -7,11 +7,9 @@
 namespace av {
 
 namespace {
-
-/* Sample counts a format is asked about: 2^0 through 2^5. */
 constexpr uint32_t sample_count_steps = 6u;
 
-}  // namespace
+}
 
 D3d11Capabilities::D3d11Capabilities() : caps_{}, formats_()
 {
@@ -33,9 +31,6 @@ void D3d11Capabilities::measure_options(ID3D11Device5 &device)
     D3D11_FEATURE_DATA_THREADING threading = {};
     if (SUCCEEDED(device.CheckFeatureSupport(D3D11_FEATURE_THREADING, &threading, sizeof(threading)))) {
         caps_.driver_concurrent_creates = static_cast<uint32_t>(threading.DriverConcurrentCreates);
-        /* Command lists are the runtime's to emulate: the wire carries an
-         * immediate stream only, so a driver command list would be a second
-         * encoding of the same thing. */
         caps_.driver_command_lists = 0u;
     }
     D3D11_FEATURE_DATA_DOUBLES doubles = {};
@@ -76,8 +71,6 @@ void D3d11Capabilities::measure_options(ID3D11Device5 &device)
         caps_.typed_uav_load_additional_formats = static_cast<uint32_t>(options2.TypedUAVLoadAdditionalFormats);
         caps_.rovs = static_cast<uint32_t>(options2.ROVsSupported);
         caps_.conservative_rasterization_tier = static_cast<uint32_t>(options2.ConservativeRasterizationTier);
-        /* Tiled resources cross no wire here: the tile-mapping DDIs are
-         * refused, so the tier is too. */
         caps_.tiled_resources_tier = 0u;
         caps_.map_on_default_textures = 0u;
         caps_.standard_swizzle = 0u;
@@ -111,14 +104,8 @@ void D3d11Capabilities::measure_formats(ID3D11Device5 &device)
             counts |= 1u << step;
             if (levels > most) most = levels;
         }
-        /* Every count this host renders at offers the same number of quality
-         * levels on every driver measured; the most is kept, at each. */
         for (uint32_t step = 0u; step < multisample_counts; step++)
             row.quality_levels[step] = (counts & (2u << step)) != 0u ? most : 0u;
-        /* A format DXVK says renders, loads or resolves multisampled but at no
-         * count past one - its typeless formats - is one the guest's runtime
-         * refuses the whole driver over ("MSAA quality reported to be 0"), so
-         * the table says what the counts say. */
         if ((counts & ~1u) == 0u)
             row.support &= ~static_cast<uint32_t>(D3D11_FORMAT_SUPPORT_MULTISAMPLE_RESOLVE |
                                                   D3D11_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET |
@@ -139,4 +126,4 @@ const FormatCapsRows &D3d11Capabilities::formats() const
     return formats_;
 }
 
-}  // namespace av
+}

@@ -1,8 +1,3 @@
-/* What the overlay planes can show: the caps dxgkrnl passes on to DXGI and
- * DWM, and the verdict on a configuration of every source's planes - a keyed
- * 32-bit RGB surface, unrotated, in the desktop's colour space, scaled no more
- * than eight times either way, once per layer, below the plane count. A
- * refusal names the first plane it could not show. */
 #include "miniport/ddi/dxgkarg_check_multiplane_overlay_support3_record.hpp"
 #include "miniport/ddi/dxgkarg_multiplane_overlay_caps_records.hpp"
 #include "miniport/display/display_sources.hpp"
@@ -34,8 +29,6 @@ using av::Status;
 using av::SurfaceLayout;
 
 namespace {
-
-/* A source with two 640x480 surfaces the host holds and one it does not. */
 class Fixture {
 public:
     Fixture()
@@ -50,7 +43,6 @@ public:
     { CHECK_STATUS(aperture_.initialize(0x100000000), Status::ok);
       overlays_.offer(capset(av::CapsetInfo::feature_scanout_planes)); }
 
-    /* A capset with `features`, as a device answers it at StartDevice. */
     static av::CapsetInfo capset(std::uint64_t features)
     {
         const std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {};
@@ -63,10 +55,8 @@ public:
     Allocation     &keyed() { return keyed_; }
     Allocation     &other() { return other_; }
     Allocation     &unkeyed() { return unkeyed_; }
-    /* An NV12 surface the host holds. */
     Allocation     &video() { return video_; }
 
-    /* A plane showing the whole of `allocation` at its own size. */
     static DxgkMultiplaneOverlayPlaneWithSource2Record plane(Allocation &allocation, std::uint32_t layer)
     {
         DxgkMultiplaneOverlayPlaneWithSource2Record plane = {};
@@ -97,7 +87,6 @@ private:
     Allocation          video_;
 };
 
-/* Checks `planes` alone. */
 DxgkargCheckMultiPlaneOverlaySupport3Record checked(Fixture &fixture, DxgkMultiplaneOverlayPlaneWithSource2Record *planes,
                                                     std::uint32_t count)
 {
@@ -113,7 +102,7 @@ DxgkargCheckMultiPlaneOverlaySupport3Record checked(Fixture &fixture, DxgkMultip
     return check;
 }
 
-}  // namespace
+}
 
 TEST(overlay_support_caps, reports_the_planes_and_scaling_the_host_composes)
 { Fixture fixture;
@@ -125,11 +114,11 @@ TEST(overlay_support_caps, reports_the_planes_and_scaling_the_host_composes)
   CHECK((caps.OverlayCaps & av::overlay_caps_stretch_rgb) != 0u);
   CHECK((caps.OverlayCaps & av::overlay_caps_stretch_yuv) != 0u);
   CHECK((caps.OverlayCaps & av::overlay_caps_bilinear_filter) != 0u);
-  CHECK_EQ(caps.MaxStretchFactor, 0x41000000u);   /* 8.0f */
-  CHECK_EQ(caps.MaxShrinkFactor, 0x3E000000u);    /* 0.125f */
+  CHECK_EQ(caps.MaxStretchFactor, 0x41000000u);
+  CHECK_EQ(caps.MaxShrinkFactor, 0x3E000000u);
   av::DxgkargGetPostCompositionCapsRecord post = {};
   CHECK_STATUS(fixture.overlays().post_composition_caps(post), Status::ok);
-  CHECK_EQ(post.MaxStretchFactor, 0x3F800000u);   /* 1.0f */
+  CHECK_EQ(post.MaxStretchFactor, 0x3F800000u);
   CHECK_EQ(post.MaxShrinkFactor, 0x3F800000u);
   caps.VidPnSourceId = 1u;
   post.VidPnSourceId = 1u;
@@ -140,15 +129,15 @@ TEST(overlay_support_check, shows_keyed_rgb_planes_scaled_within_eight_times)
 { Fixture fixture;
   DxgkMultiplaneOverlayPlaneWithSource2Record planes[2] = {Fixture::plane(fixture.keyed(), 0u),
                                                            Fixture::plane(fixture.other(), 1u)};
-  planes[1].PlaneAttributes.SrcRect = {100, 100, 260, 220};   /* 160x120 */
-  planes[1].PlaneAttributes.DstRect = {0, 0, 1280, 960};      /* stretched 8 times */
+  planes[1].PlaneAttributes.SrcRect = {100, 100, 260, 220};
+  planes[1].PlaneAttributes.DstRect = {0, 0, 1280, 960};
   planes[1].PlaneAttributes.Blend = av::overlay_blend_alpha;
   DxgkargCheckMultiPlaneOverlaySupport3Record check = checked(fixture, planes, 2u);
   CHECK_EQ(check.Supported, 1);
   CHECK_EQ(check.ReturnInfo, 0u);
-  planes[1].PlaneAttributes.DstRect = {0, 0, 20, 15};         /* shrunk 8 times */
+  planes[1].PlaneAttributes.DstRect = {0, 0, 20, 15};
   CHECK_EQ(checked(fixture, planes, 2u).Supported, 1);
-  planes[1].PlaneAttributes.Rotation = 0u;                     /* never set */
+  planes[1].PlaneAttributes.Rotation = 0u;
   CHECK_EQ(checked(fixture, planes, 2u).Supported, 1); }
 
 TEST(overlay_support_check, names_the_first_plane_it_cannot_show)
@@ -159,41 +148,39 @@ TEST(overlay_support_check, names_the_first_plane_it_cannot_show)
       const DxgkargCheckMultiPlaneOverlaySupport3Record check = checked(fixture, planes, 2u);
       return check.Supported == 0 && check.ReturnInfo == failing;
   };
-  planes[1].PlaneAttributes.SrcRect = {100, 100, 260, 220};   /* 160x120 */
-  planes[1].PlaneAttributes.DstRect = {0, 0, 1290, 960};      /* past eight times */
+  planes[1].PlaneAttributes.SrcRect = {100, 100, 260, 220};
+  planes[1].PlaneAttributes.DstRect = {0, 0, 1290, 960};
   CHECK(refused(1u));
-  planes[1].PlaneAttributes.DstRect = {0, 0, 19, 15};         /* past an eighth */
-  CHECK(refused(1u));
-  planes[1] = Fixture::plane(fixture.other(), 1u);
-  planes[1].PlaneAttributes.Rotation = 2u;                     /* 90 degrees */
+  planes[1].PlaneAttributes.DstRect = {0, 0, 19, 15};
   CHECK(refused(1u));
   planes[1] = Fixture::plane(fixture.other(), 1u);
-  planes[1].PlaneAttributes.ColorSpaceType = 8u;               /* RGB read as YCbCr */
+  planes[1].PlaneAttributes.Rotation = 2u;
   CHECK(refused(1u));
   planes[1] = Fixture::plane(fixture.other(), 1u);
-  planes[1].PlaneAttributes.Flags = av::overlay_vertical_flip;  /* mirrored */
-  CHECK(refused(1u));
-  planes[1] = Fixture::plane(fixture.video(), 1u);             /* video in the desktop's RGB space */
-  CHECK(refused(1u));
-  planes[1].PlaneAttributes.ColorSpaceType = 12u;              /* HDR10 */
+  planes[1].PlaneAttributes.ColorSpaceType = 8u;
   CHECK(refused(1u));
   planes[1] = Fixture::plane(fixture.other(), 1u);
-  planes[1].PlaneAttributes.SrcRect = {0, 0, 641, 480};        /* past the surface */
+  planes[1].PlaneAttributes.Flags = av::overlay_vertical_flip;
   CHECK(refused(1u));
-  planes[1] = Fixture::plane(fixture.unkeyed(), 1u);           /* no host image */
+  planes[1] = Fixture::plane(fixture.video(), 1u);
   CHECK(refused(1u));
-  planes[1] = Fixture::plane(fixture.other(), 0u);             /* layer 0 twice */
+  planes[1].PlaneAttributes.ColorSpaceType = 12u;
+  CHECK(refused(1u));
+  planes[1] = Fixture::plane(fixture.other(), 1u);
+  planes[1].PlaneAttributes.SrcRect = {0, 0, 641, 480};
+  CHECK(refused(1u));
+  planes[1] = Fixture::plane(fixture.unkeyed(), 1u);
+  CHECK(refused(1u));
+  planes[1] = Fixture::plane(fixture.other(), 0u);
   CHECK(refused(1u));
   planes[1] = Fixture::plane(fixture.other(), av::OverlayPlane::max_planes);
   CHECK(refused(1u));
-  planes[0].VidPnSourceId = 1u;                                /* no such source */
+  planes[0].VidPnSourceId = 1u;
   CHECK(refused(0u));
   planes[0] = Fixture::plane(fixture.keyed(), 0u);
   planes[0].hAllocation = nullptr;
   CHECK(refused(0u)); }
 
-/* After composition the frame is shown as it is: a post-composition that
- * scales it is refused, one that does not is no obstacle. */
 TEST(overlay_support_check, takes_only_an_unscaled_post_composition)
 { Fixture fixture;
   DxgkMultiplaneOverlayPlaneWithSource2Record plane = Fixture::plane(fixture.keyed(), 0u);
@@ -218,8 +205,6 @@ TEST(overlay_support_check, takes_only_an_unscaled_post_composition)
   check.ppPlanes = nullptr;
   CHECK_STATUS(fixture.overlays().check(check), Status::invalid_parameter); }
 
-/* A device that does not compose planes shows the base plane alone: one plane
- * is offered, and a configuration with any other is refused at it. */
 TEST(overlay_support, offers_one_plane_where_the_device_composes_none)
 { Fixture fixture;
   fixture.overlays().offer(Fixture::capset(0u));
@@ -237,8 +222,6 @@ TEST(overlay_support, offers_one_plane_where_the_device_composes_none)
   fixture.overlays().offer(Fixture::capset(av::CapsetInfo::feature_scanout_planes));
   CHECK_EQ(fixture.overlays().planes(), av::OverlayPlane::max_planes); }
 
-/* Video goes in a plane over the base one, in any BT.601 or BT.709 YCbCr space
- * the host converts from; the base plane is never video. */
 TEST(overlay_support_check, shows_bt601_and_bt709_video_over_the_base_plane)
 { Fixture fixture;
   DxgkMultiplaneOverlayPlaneWithSource2Record planes[2] = {Fixture::plane(fixture.keyed(), 0u),

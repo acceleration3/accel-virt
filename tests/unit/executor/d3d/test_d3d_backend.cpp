@@ -1,9 +1,3 @@
-/* A Direct3D session's backend before the guest made a device on it, and a
- * guest naming objects it never made: every drawing, binding and copying
- * command is refused, every object command naming nothing is refused, and the
- * guest's memory is reached only inside the blob the session adopted. What a
- * backend does with a device is judged on the host GPU in
- * test_d3d_backend_device.cpp. */
 #include "core/support/object_storage.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/sharing/session_shares.hpp"
@@ -30,13 +24,11 @@
 #include <vulkan/vulkan.h>
 
 namespace av {
-
-/* The session's object table, shared with Direct3D 12 and 9. */
 struct D3dBackendProbe {
     static D3dObjectTable &objects(D3dBackend &backend) { return backend.objects_; }
 };
 
-}  // namespace av
+}
 using av::D3dBackend;
 using av::ImportedBlob;
 using av::LocalImport;
@@ -47,7 +39,6 @@ namespace {
 constexpr std::uint32_t nobody = 77u;
 constexpr std::uint64_t page_bytes = 4096u;
 
-/* Megabytes: in static storage, made fresh for each test. */
 av::ObjectStorage<D3dBackend> backend_storage;
 alignas(4096) std::uint8_t guest[2u * page_bytes];
 alignas(4096) std::uint8_t store_bytes[page_bytes];
@@ -71,14 +62,12 @@ std::uint64_t address_of(const av::SourceMemory &memory)
     return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&memory));
 }
 
-}  // namespace
+}
 
-/* The session's first import is its region, which bulk data and query
- * results are reached in: inside it, never past it. */
 TEST(d3d_backend_guest_bytes_out, reaches_the_first_import_and_nothing_else)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
-  CHECK(backend.guest_bytes_out(0u, 1u) == nullptr);   /* nothing adopted yet */
+  CHECK(backend.guest_bytes_out(0u, 1u) == nullptr);
   LocalImport region(guest, sizeof guest);
   CHECK(backend.adopt(region.blob()));
   CHECK(backend.guest_bytes_out(0u, 16u) == guest);
@@ -89,10 +78,6 @@ TEST(d3d_backend_guest_bytes_out, reaches_the_first_import_and_nothing_else)
   CHECK(backend.guest_bytes_out(0u, 16u) == nullptr);
   CHECK(backend.invariants_hold()); }
 
-/* Every import after the region is an object's own memory - a Direct3D 12
- * heap's, a slice store's - named by the memory's address, and never part of
- * the region: abandoning one leaves the region, and the region's going leaves
- * it. */
 TEST(d3d_backend_adopt, imports_after_the_region_are_objects_memory_named_by_their_address)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
@@ -102,14 +87,13 @@ TEST(d3d_backend_adopt, imports_after_the_region_are_objects_memory_named_by_the
   CHECK(backend.adopt(object.blob()));
   CHECK_EQ(object.blob().wire_handle(), address_of(object.memory()));
   CHECK_EQ(object.blob().object(), address_of(object.memory()));
-  CHECK(backend.guest_bytes_out(0u, sizeof guest) == guest);   /* still the region */
+  CHECK(backend.guest_bytes_out(0u, sizeof guest) == guest);
   CHECK(backend.guest_bytes_out(sizeof guest, 1u) == nullptr);
   backend.abandon(object.blob());
   CHECK(backend.guest_bytes_out(0u, 16u) == guest);
   CHECK(backend.adopt(object.blob()));
   backend.abandon(region.blob());
   CHECK(backend.guest_bytes_out(0u, 16u) == nullptr);
-  /* The next import is a region again. */
   LocalImport next(guest, page_bytes, 3u);
   CHECK(backend.adopt(next.blob()));
   CHECK(backend.guest_bytes_out(page_bytes - 1u, 1u) == guest + page_bytes - 1u);
@@ -118,8 +102,6 @@ TEST(d3d_backend_adopt, imports_after_the_region_are_objects_memory_named_by_the
   backend.abandon(next.blob());
   CHECK(backend.invariants_hold()); }
 
-/* An import the session never adopted made nothing, so abandoning it gives
- * nothing back - not even the region, whose memory it names. */
 TEST(d3d_backend_abandon, an_import_never_adopted_gives_nothing_back)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
@@ -133,12 +115,10 @@ TEST(d3d_backend_abandon, an_import_never_adopted_gives_nothing_back)
   backend.abandon(region.blob());
   CHECK(backend.invariants_hold()); }
 
-/* Query results go to slots in the region: all of them inside it, and a
- * sensible number of them. */
 TEST(d3d_backend_on_BindQueryResults, binds_slots_only_inside_the_arena)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
-  CHECK(!backend.on_BindQueryResults(0u, 1u));   /* no arena */
+  CHECK(!backend.on_BindQueryResults(0u, 1u));
   LocalImport region(guest, sizeof guest);
   CHECK(backend.adopt(region.blob()));
   const std::uint32_t fit = sizeof guest / av::QueryResultPublisher::slot_bytes;
@@ -149,8 +129,6 @@ TEST(d3d_backend_on_BindQueryResults, binds_slots_only_inside_the_arena)
   CHECK(!backend.on_BindQueryResults(0u, 4097u));
   backend.abandon(region.blob()); }
 
-/* A session on no GPU draws nothing in place: it answers that buffers have no
- * slices, and binds none - not even to a store it imported. */
 TEST(d3d_backend_on_BindBufferSlice, a_session_with_no_device_has_no_slices)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
@@ -207,8 +185,6 @@ TEST(d3d_backend, a_view_of_a_resource_it_never_made_is_refused)
   CHECK(!backend.on_CreateDepthStencilView(3u, desc));
   CHECK(!backend.on_CreateUnorderedAccessView(4u, desc)); }
 
-/* With no device selected nothing is bound, drawn, cleared or copied, and an
- * end the guest sent is still counted - the guest counted it when it sent it. */
 TEST(d3d_backend, nothing_is_bound_drawn_cleared_or_copied_with_no_device_selected)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
@@ -274,8 +250,6 @@ TEST(d3d_backend, nothing_is_bound_drawn_cleared_or_copied_with_no_device_select
   CHECK(size == 0u);
   CHECK(backend.invariants_hold()); }
 
-/* No Direct3D 12 queue executed and no query pending: no GPU work outstanding,
- * nothing to publish, and a batch's end holds nothing to let go. */
 TEST(d3d_backend, a_backend_with_no_work_has_nothing_outstanding)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
@@ -287,15 +261,13 @@ TEST(d3d_backend, a_backend_with_no_work_has_nothing_outstanding)
   backend.end_batch();
   CHECK(!backend.lost()); }
 
-/* ---- on the host GPU ------------------------------------------------------ */
-
 namespace {
 
 bool first_gpu(std::uint8_t *uuid)
 {
     VkApplicationInfo application = {};
     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    application.apiVersion = (1u << 22u) | (1u << 12u);   /* 1.1 */
+    application.apiVersion = (1u << 22u) | (1u << 12u);
     VkInstanceCreateInfo made = {};
     made.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     made.pApplicationInfo = &application;
@@ -317,7 +289,6 @@ bool first_gpu(std::uint8_t *uuid)
     return found;
 }
 
-/* What the child saw of a selection. */
 struct Selected {
     std::uint32_t ran;
     std::uint32_t created_hresult;
@@ -329,8 +300,6 @@ struct Selected {
     std::uint32_t drew_again;
 };
 
-/* The guest's devices are context states of one host device, swapped by
- * SelectDevice11 under the device's lock, as run() holds it. */
 Selected select_devices()
 {
     Selected seen = {};
@@ -363,13 +332,8 @@ Selected select_devices()
     return seen;
 }
 
-}  // namespace
+}
 
-/* A selection of a device the host made takes its state, and draws run; one
- * of an id with no device is accepted - refusing it would remove whichever
- * device spoke before - and what follows until the next selection is dropped.
- * DXVK's threads leak from modules it unloads, so the GPU's part runs in a
- * child that leaves with _exit. */
 TEST(d3d_backend_on_SelectDevice11, a_known_device_is_drawn_on_and_an_unknown_one_drops_what_follows)
 { int channel[2] = {-1, -1};
   CHECK_EQ(pipe(channel), 0);
@@ -387,7 +351,7 @@ TEST(d3d_backend_on_SelectDevice11, a_known_device_is_drawn_on_and_an_unknown_on
   int status = 0;
   CHECK_EQ(waitpid(child, &status, 0), child);
   CHECK_EQ(got, static_cast<ssize_t>(sizeof seen));
-  if (seen.ran == 0u) return;   /* no DXVK on a GPU here: nothing to judge */
+  if (seen.ran == 0u) return;
   CHECK_EQ(seen.created_hresult, 0u);
   CHECK_EQ(seen.selected_known, 1u);
   CHECK_EQ(seen.drew_on_known, 1u);
@@ -411,10 +375,8 @@ public:
     ULONG references = 1u;
 };
 
-}  // namespace
+}
 
-/* DestroyObject removes Direct3D 11's objects; Direct3D 12's and 9's in the
- * same table are theirs to destroy. */
 TEST(d3d_backend_on_DestroyObject, removes_only_direct3d_11_objects)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();

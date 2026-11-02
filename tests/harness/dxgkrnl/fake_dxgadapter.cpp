@@ -14,9 +14,8 @@ using QueryAdapterInfo = std::int32_t (*)(void *, const DxgkargQueryAdapterInfoR
 constexpr std::int32_t status_not_implemented = static_cast<std::int32_t>(0xC0000002u);
 constexpr std::int32_t status_no_memory = static_cast<std::int32_t>(0xC0000017u);
 constexpr std::int32_t status_not_supported = static_cast<std::int32_t>(0xC00000BBu);
-constexpr std::uint32_t mode_behavior_prioritize_hdr = 0x1u;   /* DXGK_MODE_BEHAVIOR_FLAGS */
+constexpr std::uint32_t mode_behavior_prioritize_hdr = 0x1u;
 
-/* DXGK_QUERYADAPTERINFOTYPE */
 enum : std::int32_t {
     query_driver_caps = 1,
     query_physical_adapter_caps = 15,
@@ -27,7 +26,6 @@ enum : std::int32_t {
     query_64_bit_only_caps = 47,
 };
 
-/* DXGK_WDDMVERSION */
 enum : std::int32_t {
     wddm_1_2 = 0x1200, wddm_1_3 = 0x1300, wddm_2_0 = 0x2000, wddm_2_2 = 0x2200,
     wddm_2_3 = 0x2300, wddm_2_4 = 0x2400, wddm_2_5 = 0x2500, wddm_3_2 = 0x3200,
@@ -35,11 +33,10 @@ enum : std::int32_t {
 constexpr std::int32_t known_versions[] = {0x1000, 0x1200, 0x1300, 0x2000, 0x2100, 0x2200, 0x2300, 0x2400,
                                            0x2500, 0x2600, 0x2700, 0x2800, 0x2900, 0x3000, 0x3100, 0x3200};
 
-/* Bits of the DXGK_DRIVERCAPS unions DXGADAPTER::Initialize tests. */
 constexpr std::uint32_t scheduling_multi_engine_aware = 0x1u;
-constexpr std::uint32_t scheduling_wddm_1_2_bits = 0x14u;   /* PreemptionAware | CancelCommandAware */
+constexpr std::uint32_t scheduling_wddm_1_2_bits = 0x14u;
 constexpr std::uint32_t scheduling_native_gpu_fence = 0x800u;
-constexpr std::uint32_t display_virtual_mode_support = 0x2u;   /* DXGK_DISPLAY_DRIVERCAPS_EXTENSION */
+constexpr std::uint32_t display_virtual_mode_support = 0x2u;
 constexpr std::uint32_t memory_cross_adapter_resource = 0x10u;
 constexpr std::uint32_t memory_io_mmu_secure_mode_supported = 0x800u;
 constexpr std::uint32_t memory_cross_adapter_texture = 0x8000u;
@@ -67,7 +64,7 @@ constexpr std::uint32_t max_overlay_planes = 10u;
 
 bool bit(std::uint32_t word, std::uint32_t mask) { return (word & mask) != 0u; }
 
-}  // namespace
+}
 
 FakeDxgadapter::FakeDxgadapter(MockPlatform &platform, const DdiTable &table)
     : platform_(platform), table_(table), caps_{}, physical_{}, mode_behavior_{}, display_caps_extension_(0u), validate_wddm_caps_(false), failed_(CapabilityRule::none),
@@ -104,8 +101,6 @@ std::int32_t FakeDxgadapter::query(void *context, std::int32_t type, void *input
     return status;
 }
 
-/* Only a WDDMv2 driver is asked, and a failed query leaves defaults rather
- * than failing start; a successful one is held to MultiEngineAware. */
 std::int32_t FakeDxgadapter::query_physical_adapter(void *context)
 {
     physical_ = DxgkPhysicalAdapterCapsRecord{};
@@ -230,7 +225,6 @@ CapabilityRule FakeDxgadapter::validate_version(const DxgkDriverCapsRecord &caps
     return CapabilityRule::unknown_wddm_version;
 }
 
-/* The version checks run only with ValidateWDDMCaps; the tier checks always do. */
 CapabilityRule FakeDxgadapter::validate_levels(const DxgkDriverCapsRecord &caps) const
 {
     const bool wddm_1_2_features =
@@ -314,7 +308,6 @@ CapabilityRule FakeDxgadapter::validate_color_and_diagnostics(const DxgkDriverCa
     return CapabilityRule::none;
 }
 
-/* IsFullWDDMAdapter: both a render and a display adapter. */
 CapabilityRule FakeDxgadapter::validate_full_adapter(const DxgkDriverCapsRecord &caps) const
 {
     const bool full = has(DdiSlot::DxgkDdiCreateDevice) && has(DdiSlot::DxgkDdiCommitVidPn);
@@ -326,12 +319,6 @@ CapabilityRule FakeDxgadapter::validate_full_adapter(const DxgkDriverCapsRecord 
     return CapabilityRule::none;
 }
 
-/* The render DDIs CreateRenderCore reads from DXGADAPTER+0x1d0..0x300 and
- * +0x320, in the order it tests them; a slot with an alternative is listed with
- * it. The internal offsets map to DRIVER_INITIALIZATION_DATA slots through the
- * default DDIs Initialize installs (DefaultDdiEscape at +0x250 is slot 34,
- * DefaultDdiStopCapture at +0x2b0 slot 47, DefaultDdiCreateOverlay at +0x2c0
- * slot 49). */
 std::int32_t FakeDxgadapter::render_ddi_rule()
 {
     struct Required {
@@ -414,4 +401,4 @@ CapabilityRule              FakeDxgadapter::failed_rule() const { return failed_
 const DxgkDriverCapsRecord &FakeDxgadapter::driver_caps() const { return caps_; }
 std::uint32_t               FakeDxgadapter::queries() const { return queries_; }
 
-}  // namespace av
+}

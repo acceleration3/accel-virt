@@ -1,8 +1,3 @@
-/* SCANOUT_PLANE as the driver writes it and the device reads it: the header,
- * the head, the layer, the flags, the key, the two rectangles and the head's
- * size. A layer past the last, a head of no size or past the largest, or a
- * shown plane with no key, an empty or inverted rectangle or a source left or
- * above its image decodes to nothing; a plane turned off needs no rectangle. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/virtio_gpu/av_request_writer.hpp"
@@ -22,7 +17,6 @@ namespace {
 const std::int32_t source[4] = {10, 20, 330, 260};
 const std::int32_t destination[4] = {100, 50, 740, 530};
 
-/* `plane` written and read back into `read`. */
 Status round_trip(const ScanoutPlaneRequest &plane, ScanoutPlaneRequest &read)
 {
     std::uint8_t    bytes[AvRequestWriter::max_request_size] = {};
@@ -36,7 +30,7 @@ Status round_trip(const ScanoutPlaneRequest &plane, ScanoutPlaneRequest &read)
     return read.decode(reader);
 }
 
-}  // namespace
+}
 
 TEST(scanout_plane_request, the_writer_s_request_decodes_to_its_plane)
 { const ScanoutPlaneRequest plane(1u, 2u, ScanoutPlaneRequest::flag_shown | ScanoutPlaneRequest::flag_filtered,
@@ -76,15 +70,13 @@ TEST(scanout_plane_request, a_malformed_plane_decodes_to_nothing)
   for (const ScanoutPlaneRequest &plane : refused) {
       ScanoutPlaneRequest read(7u, 3u, shown, 9u, source, destination, 640u, 480u);
       CHECK_STATUS(round_trip(plane, read), Status::malformed);
-      CHECK_EQ(read.head(), 7u);   /* unchanged */
+      CHECK_EQ(read.head(), 7u);
   }
   std::uint8_t short_request[ScanoutPlaneRequest::encoded_size - 1u] = {};
   WireReader   reader(short_request, sizeof short_request);
   ScanoutPlaneRequest read;
   CHECK_STATUS(read.decode(reader), Status::malformed); }
 
-/* A video plane says how the host converts it: YCbCr, by BT.709's matrix or
- * BT.601's, from full-range values or studio ones. */
 TEST(scanout_plane_request, a_video_plane_carries_its_conversion)
 { const std::uint32_t video = ScanoutPlaneRequest::flag_shown | ScanoutPlaneRequest::flag_ycbcr |
                               ScanoutPlaneRequest::flag_bt709;

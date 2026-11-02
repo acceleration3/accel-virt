@@ -38,4 +38,4 @@ bool ClWaitList::blocks() const
     return blocking_ != CL_FALSE;
 }
 
-}  // namespace av::clicd
+}

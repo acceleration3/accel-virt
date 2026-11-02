@@ -84,4 +84,4 @@ std::uint64_t FakeHwQueue::submitted() const { return submitted_; }
 
 std::uint64_t FakeHwQueue::completed() const { return completed_; }
 
-}  // namespace av
+}

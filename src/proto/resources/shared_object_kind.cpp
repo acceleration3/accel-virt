@@ -51,4 +51,4 @@ bool SharedObjectKind::sized(uint64_t size) const
     return size != 0u && size % page_size == 0u;
 }
 
-}  // namespace av
+}

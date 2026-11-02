@@ -1,8 +1,3 @@
-"""A trace's scheduling and DWM frames as Chrome trace-event JSON, which
-ui.perfetto.dev opens: one row per processor with the thread it ran, one with
-its DPCs and ISRs, the DWM render thread's states, its frames and their
-stages, its CPU samples with their stacks, and the vblanks, captures and
-skipped captures as markers."""
 import json
 
 CPUS_PID, DWM_PID = 1, 2

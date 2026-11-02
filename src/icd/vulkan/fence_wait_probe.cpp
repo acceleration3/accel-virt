@@ -30,4 +30,4 @@ VkResult FenceWaitProbe::result() const
     return result_;
 }
 
-}  // namespace av::icd
+}

@@ -1,7 +1,3 @@
-/* Reaches into a HostShares so an invariant test can break it the ways a bug
- * would: a share the index lost, an index entry naming nothing, a holder no
- * share links to - and mend it again. Declared a friend by HostShares;
- * nothing outside the tests uses it. */
 #ifndef AV_HOST_SHARES_PROBE_HPP
 #define AV_HOST_SHARES_PROBE_HPP
 
@@ -27,6 +23,6 @@ struct HostSharesProbe {
     Share      *unindexed = nullptr;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_HOST_SHARES_PROBE_HPP
+#endif

@@ -1,7 +1,3 @@
-/* The probe's draw step over a scripted Vulkan: the image drawn and copied out
- * in one command buffer, three vertices, both shaders, and every pixel of the
- * copy compared with solid.frag's colour within a driver's rounding; a refusal
- * at every call is kept, and everything made is destroyed. */
 #include "guest/probe/draw_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/probe/probe_device.hpp"
@@ -32,12 +28,11 @@ struct TrianglePipelineProbe {
 struct DrawWorkProbe {
     static void framebuffer_without_pass(DrawWork &work) { work.render_pass_ = VK_NULL_HANDLE; }
     static TrianglePipeline &triangle(DrawWork &work) { return work.triangle_; }
-    /* The readback's mapping, to play a driver's rounding into. */
     static unsigned char *readback(DrawWork &work) { return work.readback_.bytes(); }
     static std::uint32_t coloured(const DrawWork &work) { return work.coloured(); }
 };
 
-}  // namespace av
+}
 
 using av::DrawWork;
 using av::DrawWorkProbe;
@@ -93,7 +88,7 @@ private:
     ScenarioSteps  steps_;
 };
 
-}  // namespace
+}
 
 TEST(draw_work, every_pixel_comes_back_the_colour)
 { DrawRig rig;
@@ -101,10 +96,8 @@ TEST(draw_work, every_pixel_comes_back_the_colour)
   CHECK_EQ(rig.vulkan().drawn_vertices(), 3u);
   CHECK_EQ(rig.vulkan().shader_words(), av::triangle_spv_words + av::solid_spv_words);
   CHECK_EQ(rig.vulkan().calls(Call::queue_submit), 1u);
-  /* The image in the device-local type, the readback in the host-visible one. */
   CHECK_EQ(rig.vulkan().allocated_type(0u), 0u);
   CHECK_EQ(rig.vulkan().allocated_type(1u), 1u);
-  /* The picture of the 64x64 render: 192 bytes a row, the colour in BGR. */
   CHECK_EQ(rig.images().saved(), 1u);
   CHECK_EQ(rig.images().size("vulkan-draw"), 54u + 64u * 192u);
   const std::uint8_t *const drawn = rig.images().bytes("vulkan-draw");
@@ -115,7 +108,6 @@ TEST(draw_work, every_pixel_comes_back_the_colour)
       CHECK(std::memcmp(drawn + 54u + 64u * 192u - 3u, bgr, 3u) == 0);
   } }
 
-/* A render that fails before its copy is made leaves no picture. */
 TEST(draw_work, a_draw_that_never_ran_saves_no_picture)
 { ScriptedVulkan vulkan;
   vulkan.fail(Call::create_render_pass, 1u, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -132,8 +124,6 @@ TEST(draw_work, a_black_pixel_is_counted_out)
   rig.vulkan().misdraw();
   CHECK(std::strcmp(rig.run(), "FAIL vulkan.draw status=4 4095\n") == 0); }
 
-/* 127.5 rounds either way, and every channel may be one off; two off is not
- * the colour, whichever channel it is in. */
 TEST(draw_work, a_channel_one_off_is_the_colour_and_two_off_is_not)
 { ScriptedVulkan vulkan;
   ProbeDevice device(vulkan);

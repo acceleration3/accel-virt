@@ -12,13 +12,10 @@ static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "trace tables are littl
 namespace av {
 
 namespace {
-
-/* A thread key's bits spread over the slots: keys are pointers or small ids,
- * both with structure in their low bits. */
 constexpr uint64_t key_mix = 0x9E3779B97F4A7C15ull;
 constexpr uint32_t mix_shift = 32u;
 
-}  // namespace
+}
 
 TraceTable::TraceTable(TraceHost &host) : host_(host), events_(nullptr), max_depth_(0u), only_{}, only_count_(0u), region_(nullptr), layout_(0u), slots_(0u) {}
 
@@ -46,7 +43,6 @@ Status TraceTable::initialize(uint8_t *region, size_t bytes, const char *module,
     write32(TraceLayout::process_at, process);
     write64(TraceLayout::created_at, host_.clock());
     write64(TraceLayout::ticks_at, TraceLayout::ticks_per_second);
-    /* Last: a reader takes the table as laid out from the moment the magic is there. */
     write64(TraceLayout::magic_at, TraceLayout::magic);
     return Status::ok;
 }
@@ -61,9 +57,6 @@ uint32_t TraceTable::enter(const ScopeName &name)
     }
     const uint64_t key = host_.thread_key();
     if (key == 0u || (key & TraceLayout::active) != 0u) return no_slot;
-    /* A thread's slot is almost always the one its key hashes to: nested, it
-     * is active there; entering again, it is idle there. Only a collision
-     * pays for the scan. */
     uint32_t       slot = first_probe(key);
     const uint64_t word = owner_word(slot);
     if (word != (key | TraceLayout::active) && !(word == key && take(slot, word, key))) {
@@ -113,7 +106,6 @@ void TraceTable::leave(uint32_t slot)
     const uint64_t key = host_.thread_key();
     const size_t   at = slot_at(slot);
     if (owner_word(slot) != (key | TraceLayout::active)) return;
-    /* An active slot holds at least the frame its enter pushed. */
     const uint32_t depth = read32(at + TraceLayout::depth_at);
     if (events_ != nullptr) events_->record(slot, host_.clock(), 0u, host_.thread_number(), false);
     write32(at + TraceLayout::depth_at, depth - 1u);
@@ -122,9 +114,6 @@ void TraceTable::leave(uint32_t slot)
             read32(at + TraceLayout::slot_header_bytes + TraceLayout::name_at));
     write64(at + TraceLayout::left_at, host_.clock());
     write64(at + TraceLayout::waiting_at, 0u);
-    /* Only this thread moves its own slot out of active, so the swap cannot
-     * meet another writer; a failure would leave the slot active, which the
-     * next entry of this thread reuses. */
     static_cast<void>(host_.exchange(owner(slot), key | TraceLayout::active, key));
 }
 
@@ -182,15 +171,12 @@ bool TraceTable::invariants_hold() const
     for (uint32_t slot = 0u; slot < layout_.slots(); slot++) {
         const uint64_t word = owner_word(slot);
         const uint32_t depth = read32(slot_at(slot) + TraceLayout::depth_at);
-        /* A free or idle slot has left every function it entered. */
         if ((word & TraceLayout::active) == 0u && depth != 0u) return false;
         if (word == TraceLayout::active) return false;
     }
     return true;
 }
 
-/* Every field is little-endian (docs/trace.md) and so is every target, so a
- * field is one load or store. */
 uint64_t TraceTable::read64(size_t offset) const
 {
     uint64_t value = 0u;
@@ -209,16 +195,11 @@ void TraceTable::write64(size_t offset, uint64_t value) { __builtin_memcpy(regio
 void TraceTable::write32(size_t offset, uint32_t value) { __builtin_memcpy(region_ + offset, &value, sizeof value); }
 void TraceTable::write16(size_t offset, uint16_t value) { __builtin_memcpy(region_ + offset, &value, sizeof value); }
 
-/* The owner word is swapped by other threads, so it is the one field read and
- * written as a whole u64: a byte-wise read could combine two owners. The
- * region is 8-byte aligned and every slot starts at an 8-byte offset. */
 uint64_t &TraceTable::owner(uint32_t slot)
 {
     return *static_cast<uint64_t *>(static_cast<void *>(region_ + slot_at(slot) + TraceLayout::owner_at));
 }
 
-/* TraceLayout::slot's arithmetic, in this file so every access on the scope
- * path is inlined rather than a call into another object. */
 size_t TraceTable::slot_at(uint32_t slot) const
 {
     return TraceLayout::header_bytes + static_cast<size_t>(slot) * TraceLayout::slot_bytes;
@@ -230,7 +211,6 @@ uint64_t TraceTable::owner_word(uint32_t slot) const
         static_cast<const void *>(region_ + slot_at(slot) + TraceLayout::owner_at));
 }
 
-/* The top 32 bits of the mixed key, scaled onto the slots without a division. */
 uint32_t TraceTable::first_probe(uint64_t key) const
 {
     return static_cast<uint32_t>((((key * key_mix) >> mix_shift) * slots_) >> mix_shift);
@@ -247,8 +227,6 @@ uint32_t TraceTable::active_slot(uint64_t key) const
     return no_slot;
 }
 
-/* This thread's idle slot first, so its last function stays with it; then a
- * free one; then another thread's idle slot, whose history is lost. */
 uint32_t TraceTable::claim(uint64_t key)
 {
     const uint32_t start = first_probe(key);
@@ -280,8 +258,6 @@ bool TraceTable::take(uint32_t slot, uint64_t expected, uint64_t key)
     return true;
 }
 
-/* The depth is raised before the frame is written: an interrupt on this
- * thread between the two pushes above this frame, not over it. */
 void TraceTable::push(uint32_t slot, const ScopeName &name)
 {
     const size_t   at = slot_at(slot);
@@ -296,4 +272,4 @@ void TraceTable::push(uint32_t slot, const ScopeName &name)
     write64(frame + TraceLayout::text_at, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(name.text())));
 }
 
-}  // namespace av
+}

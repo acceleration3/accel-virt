@@ -27,4 +27,4 @@ pthread_mutex_t &HostMemorySourceProbe::mutex()
     return source.mutex_;
 }
 
-}  // namespace av
+}

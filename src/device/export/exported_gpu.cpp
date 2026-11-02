@@ -11,15 +11,13 @@
 namespace av {
 
 namespace {
-
-/* The request's flags as the executor's AV_EXPORT_* bits. */
 uint32_t executor_flags(const ExportRequest &request)
 {
     AV_SCOPE("executor_flags");
     return request.imports_on_other_gpu() ? AV_EXPORT_OTHER_GPU : 0u;
 }
 
-}  // namespace
+}
 
 ExportedGpu::ExportedGpu(Host &host) : host_(host), contexts_(nullptr), heads_(nullptr), gpu_uuid_(nullptr), greeting_()
 {
@@ -87,8 +85,6 @@ ExportAnswer ExportedGpu::sync(const ExportRequest &request, int &descriptor) co
     return answer;
 }
 
-/* The executor keeps the image it composed into, so what goes out is a
- * descriptor of the export path's own for it. */
 ExportAnswer ExportedGpu::export_head(const ExportRequest &request, int &descriptor) const
 {
     AV_SCOPE("ExportedGpu::export_head");
@@ -111,4 +107,4 @@ ExportAnswer ExportedGpu::export_head(const ExportRequest &request, int &descrip
     return answer;
 }
 
-}  // namespace av
+}

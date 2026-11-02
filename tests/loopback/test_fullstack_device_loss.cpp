@@ -1,15 +1,3 @@
-/* A host device lost under the whole guest stack, on this machine's GPU: the
- * in-guest HostLossScenario over DdiKmt, the real driver, the real device
- * core and the executor library's own root, whose Direct3D 11 device is
- * DXVK's - lost by the layer that loses a Vulkan device on request
- * (tests/gpu_fault), which this test alone loads.
- *
- * What it proves is what the guest sees, end to end: the context that drew is
- * refused at once, the idle one - DWM on an unchanging desktop - is told by
- * its fence page within a moment and why (fault 7), a Vulkan context on a
- * device of its own runs on, and a Direct3D context made afterwards runs on
- * the device the host made again. A host without DXVK or without the layer
- * returns without judging. */
 #include "device/abi/av_executor.h"
 #include "guest/kmt/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
@@ -45,9 +33,6 @@ extern "C" const char *__lsan_default_suppressions(void)
 }
 
 namespace {
-
-/* The line `line` holds whole in the report, or the one starting with
- * `start` when the rest is a measurement: its value, else ~0. */
 bool reported(const av::GuestReport &report, const char *line)
 {
     const std::size_t length = std::strlen(line);
@@ -58,7 +43,7 @@ bool reported(const av::GuestReport &report, const char *line)
     return false;
 }
 
-}  // namespace
+}
 
 TEST(fullstack_device_loss, every_direct3d_context_is_removed_others_run_on_and_a_new_one_draws)
 { if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
@@ -91,6 +76,5 @@ TEST(fullstack_device_loss, every_direct3d_context_is_removed_others_run_on_and_
   CHECK(reported(report, "ok host_loss.idle_refused"));
   CHECK(reported(report, "ok host_loss.other_kept"));
   CHECK(reported(report, "ok host_loss.recreated"));
-  /* Everything the scenario opened, the faulted contexts included, is gone. */
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }

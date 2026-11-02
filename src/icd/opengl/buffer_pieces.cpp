@@ -108,4 +108,4 @@ uint32_t BufferPieces::commands() const
     return commands_;
 }
 
-}  // namespace av::glicd
+}

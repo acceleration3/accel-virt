@@ -1,10 +1,3 @@
-/* Command buffers and queues as the loader reaches them through the root
- * (research.md §5): a command buffer records into its own batch through the
- * generated vkCmd* wrappers and costs one submission when it ends; begin drops a
- * previous recording, reset drops it and goes out at once, free and device
- * destruction take the handles and their batches. Queues and command buffers
- * are made through their device. The host is played over MockKmt, invariants
- * after every call that changes the root. */
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -46,7 +39,7 @@ struct KmtTransportProbe {
     static std::uint32_t ring(KmtTransport &t) { return t.allocations_[0]; }
 };
 
-}  // namespace av
+}
 
 namespace av::icd {
 
@@ -62,7 +55,7 @@ struct CommandBatchProbe {
     static std::size_t &used(CommandBatch &batch) { return FramedBlockProbe(batch.framed_).used(); }
 };
 
-}  // namespace av::icd
+}
 
 namespace av {
 
@@ -71,7 +64,7 @@ struct ObjectPoolProbe {
     static void miscount(ObjectPool<T> &pool, std::int32_t by) { pool.live_ += static_cast<std::uint32_t>(by); }
 };
 
-}  // namespace av
+}
 
 using av::KmtTransportProbe;
 using av::ObjectPoolProbe;
@@ -98,11 +91,8 @@ constexpr std::uint64_t queue_host = 0x6600u;
 constexpr std::uint64_t command_buffer_host = 0x7700u;
 constexpr std::uint64_t pool_host = 0x7F00u;
 constexpr std::int32_t  vk_error_initialization_failed = -3;
-/* A vkCmdDraw on the wire, header included. */
 constexpr std::uint32_t draw_bytes = 32u;
 
-/* An instance, its physical device and a device, made through the root as the
- * loader makes them. */
 class DeviceRig {
 public:
     DeviceRig()
@@ -127,7 +117,6 @@ public:
     template <typename Function>
     Function entry(const char *name) { return rig_.entry<Function>(instance_, name); }
 
-    /* `count` command buffers the host numbers from command_buffer_host. */
     VkResult allocate(std::uint32_t count, VkCommandBuffer *command_buffers)
     {
         std::uint8_t answer[MockKmt::max_answer] = {};
@@ -171,7 +160,6 @@ public:
         return KmtTransportProbe::ring(ConnectionProbe::transport(*av::icd::connection_of(instance_)));
     }
 
-    /* The last batch shipped: Begin, draws of `first` onwards, End. */
     void check_recording(std::uint64_t host, std::uint32_t first, std::uint32_t draws)
     {
         ShippedBatch shipped(rig_.kmt(), ring());
@@ -199,14 +187,13 @@ private:
     std::uint32_t    before_device_ = 0u;
 };
 
-/* The body of the command journalled last, past its header. */
 WireReader last_body(MockKmt &kmt)
 {
     return WireReader(kmt.command_bytes(kmt.commands() - 1u) + CommandHeader::encoded_size,
                       MockKmt::journal_bytes - CommandHeader::encoded_size);
 }
 
-}  // namespace
+}
 
 TEST(icd_command_buffers, a_thousand_draws_through_the_generated_wrappers_cost_one_submission)
 { DeviceRig rig;
@@ -231,7 +218,6 @@ TEST(icd_command_buffers, begin_drops_a_recording_never_ended)
   rig.draw(command_buffer, 3u);
   CHECK_EQ(rig.end(command_buffer), VK_SUCCESS);
   rig.check_recording(command_buffer_host, 3u, 1u);
-  /* And after an end, a new recording ships only itself. */
   CHECK_EQ(rig.begin(command_buffer), VK_SUCCESS);
   CHECK_EQ(rig.end(command_buffer), VK_SUCCESS);
   rig.check_recording(command_buffer_host, 0u, 0u); }
@@ -250,7 +236,6 @@ TEST(icd_command_buffers, reset_drops_the_recording_and_reaches_the_host_at_once
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), static_cast<std::uint32_t>(kCmd_vkResetCommandBuffer));
   WireReader reset = last_body(rig.kmt());
   CHECK_EQ(reset.read_u64(), command_buffer_host);
-  /* End without a new begin ships only the End: the draw went with the reset. */
   CHECK_EQ(rig.end(command_buffer), VK_SUCCESS);
   ShippedBatch shipped(rig.kmt(), rig.ring());
   CHECK_STATUS(shipped.read(), Status::ok);
@@ -333,7 +318,6 @@ TEST(icd_command_buffers, a_foreign_device_makes_and_frees_nothing)
   VkDeviceQueueInfo2 queue_info = {};
   rig.entry<GetDeviceQueue2>("vkGetDeviceQueue2")(foreign, &queue_info, &queue);
   CHECK(queue == reinterpret_cast<VkQueue>(&stack));
-  /* A command buffer is not a device either. */
   VkCommandBuffer made = VK_NULL_HANDLE;
   CHECK_EQ(rig.allocate(1u, &made), VK_SUCCESS);
   rig.entry<GetDeviceQueue>("vkGetDeviceQueue")(reinterpret_cast<VkDevice>(made), 0u, 0u, &queue);
@@ -356,7 +340,6 @@ TEST(icd_command_buffers, allocation_passes_on_the_hosts_refusal_and_refuses_mor
   info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   info.commandBufferCount = 1u;
   VkCommandBuffer command_buffer = VK_NULL_HANDLE;
-  /* The generated decoder reads a handle for every one asked for, whatever the result. */
   rig.rig().host().vk_handle(vk_error_initialization_failed, 0u);
   CHECK_EQ(rig.entry<AllocateCommandBuffers>("vkAllocateCommandBuffers")(rig.device(), &info, &command_buffer),
            vk_error_initialization_failed);
@@ -369,8 +352,6 @@ TEST(icd_command_buffers, allocation_passes_on_the_hosts_refusal_and_refuses_mor
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted);
   CHECK_EQ(rig.rig().log().holding("more command buffers at once than 1024"), 1u); }
 
-/* The second command buffer's batch needs a new chunk of batches, which is
- * refused: the first goes back to the host and both answers are null. */
 TEST(icd_command_buffers, no_memory_for_a_batch_frees_the_command_buffers_already_made)
 { DeviceRig rig;
   Connection *const connection = av::icd::connection_of(rig.instance());
@@ -415,7 +396,6 @@ TEST(icd_command_buffers, begin_with_no_memory_to_record_into_answers_out_of_hos
   CHECK_EQ(rig.end(command_buffer), VK_ERROR_OUT_OF_HOST_MEMORY);
   CHECK_EQ(rig.rig().log().holding("vkEndCommandBuffer: batch not shipped, status 2"), 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted);
-  /* The failure went with the recording. */
   CHECK_EQ(rig.begin(command_buffer), VK_SUCCESS);
   CHECK_EQ(rig.end(command_buffer), VK_SUCCESS);
   rig.check_recording(command_buffer_host, 0u, 0u); }
@@ -433,8 +413,6 @@ TEST(icd_command_buffers, ending_on_a_lost_connection_answers_device_lost)
   CHECK_EQ(rig.rig().log().holding("avvk: vkEndCommandBuffer on a lost device"), 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted); }
 
-/* A submission the kernel refuses while the batch is published loses the
- * connection there: the recording is not shipped, and is lost. */
 TEST(icd_command_buffers, a_publish_the_kernel_refuses_answers_device_lost)
 { DeviceRig rig;
   VkCommandBuffer command_buffer = VK_NULL_HANDLE;
@@ -448,7 +426,6 @@ TEST(icd_command_buffers, a_publish_the_kernel_refuses_answers_device_lost)
   CHECK(rig.rig().root().invariants_hold()); }
 
 
-/* The root's own spellings of the entry points, as the loader's table reaches them. */
 TEST(icd_command_buffers, the_roots_methods_answer_as_its_entry_points_do)
 { DeviceRig rig;
   av::icd::IcdRoot &root = rig.rig().root();

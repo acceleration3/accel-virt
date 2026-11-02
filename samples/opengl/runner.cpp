@@ -1,5 +1,3 @@
-// Runs every sample off-screen: warm-up frames, timed frames, then one frame
-// at a fixed time read back as the picture both machines are compared by.
 #include "framework.h"
 
 namespace samples {
@@ -37,13 +35,12 @@ bool make_target(Gpu &gpu)
     return glCheckNamedFramebufferStatus(gpu.target, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
 }
 
-// The frame as B8G8R8A8 rows, top first: "BGRA", width, height, then the texels.
 bool capture(Gpu &gpu, const char *path)
 {
     const size_t row = static_cast<size_t>(gpu.width) * 4u;
     const size_t bytes = 12u + row * gpu.height;
     uint8_t *file = static_cast<uint8_t *>(allocate(bytes));
-    const uint32_t header[3] = {0x41524742u, gpu.width, gpu.height};   /* "BGRA" */
+    const uint32_t header[3] = {0x41524742u, gpu.width, gpu.height};
     for (size_t i = 0; i < 12u; i++) file[i] = reinterpret_cast<const uint8_t *>(header)[i];
     glBindFramebuffer(GL_READ_FRAMEBUFFER, gpu.target);
     glReadBuffer(GL_COLOR_ATTACHMENT0);
@@ -75,8 +72,6 @@ void report(char *metrics, size_t capacity, const char *name, const char *status
     append_text(metrics, capacity, line);
 }
 
-// A sample that left an error behind has drawn something other than what it
-// meant: named, so the report's line says which call.
 bool clean(const char *name, const char *where)
 {
     const GLenum error = glGetError();
@@ -109,10 +104,6 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
         return;
     }
     const float step = 1.0f / 60.0f;
-    /* The GPU's clocks climb over the first few hundred milliseconds of load,
-     * so the warm-up runs for a time as well as a count: otherwise whichever
-     * run followed another on a warm GPU looks faster than the one that did
-     * not. */
     const double warm_from = seconds();
     for (uint32_t frame = 0; frame < options.warmup || seconds() - warm_from < options.warmup_seconds; frame++) {
         sample.render(gpu, static_cast<float>(frame % (options.warmup != 0 ? options.warmup : 1)) * step);
@@ -120,10 +111,6 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
     }
     glFinish();
     bool drawn = clean(sample.name(), "warm-up");
-    /* Blocks of the frames asked for, each finished, until a second has gone:
-     * a run of a few milliseconds measures whatever else the machine did
-     * then, and a flush alone holds nothing back - a machine can queue a
-     * minute of frames in a second. */
     const double timed = seconds();
     uint32_t     frames = 0;
     double       looped = 0.0;
@@ -139,9 +126,6 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
     const double taken = seconds() - timed;
     log_number("loop ms", looped * 1000.0);
     log_number("finish ms", (taken - looped) * 1000.0);
-    /* Twice: a sample that shows what its previous frame measured - the
-     * occlusion counts - then shows the capture time's own, however many
-     * frames each machine managed before it. */
     sample.render(gpu, options.capture_time);
     glFlush();
     glFinish();
@@ -160,7 +144,7 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
     glFlush();
 }
 
-}  // namespace
+}
 
 int run(int argc, const char *const *argv)
 {
@@ -222,4 +206,4 @@ int run(int argc, const char *const *argv)
     return 0;
 }
 
-}  // namespace samples
+}

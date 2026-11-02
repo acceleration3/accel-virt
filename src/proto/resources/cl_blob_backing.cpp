@@ -40,10 +40,6 @@ bool ClBlobBacking::read(const uint64_t *properties)
     refuse();
     if (properties == nullptr) return false;
     bool named_memory = false;
-    /* Bounded because the list comes from the guest: a list with no
-     * terminator must end the walk rather than run off the end of the
-     * decoder's arena. Named twice is a list the device would have to choose
-     * from, and choosing is what it must not do. */
     for (uint32_t word = 0u; word + 1u < max_words && properties[word] != 0u; word += 2u) {
         if (properties[word] == property) {
             if (held_) return refuse();
@@ -55,7 +51,6 @@ bool ClBlobBacking::read(const uint64_t *properties)
             named_memory = true;
         }
     }
-    /* An import with no offset into it says nothing. */
     if (named_memory && !held_) return refuse();
     return held_;
 }
@@ -98,4 +93,4 @@ bool ClBlobBacking::invariants_hold() const
     return held_ || (offset_ == 0u && memory_ == 0u);
 }
 
-}  // namespace av
+}

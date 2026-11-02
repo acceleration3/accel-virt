@@ -69,7 +69,6 @@ Status CompositorMemory::allocate(uint32_t type, uint64_t size, ExportedMemory &
     return Status::ok;
 }
 
-/* Freeing memory unmaps it too (vkFreeMemory). */
 void CompositorMemory::free(const ExportedMemory &memory)
 {
     AV_SCOPE("CompositorMemory::free");
@@ -78,4 +77,4 @@ void CompositorMemory::free(const ExportedMemory &memory)
     device_.table().free_memory(reinterpret_cast<VkDeviceMemory>(memory.handle()));
 }
 
-}  // namespace av
+}

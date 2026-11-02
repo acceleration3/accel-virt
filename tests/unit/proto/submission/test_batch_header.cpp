@@ -28,7 +28,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(batch_header_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[BatchHeader::encoded_size] = {};
@@ -105,11 +105,5 @@ TEST(batch_header_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 128u);
-  /* The format constrains the magic, forbids fence zero and reserves the last
-   * eight bytes; the payload length is 32 free bits, the fence's 64 bits are
-   * free too, because 3 has two bits set and no single flip can clear both, and
-   * the publication time is 64 more. Every shorter input is short of 32 bytes,
-   * all-zero and all-ones carry no magic, and the untouched input is the last
-   * acceptance. */
   const std::uint32_t acceptable = 32u + 64u + 64u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

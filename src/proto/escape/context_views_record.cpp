@@ -63,7 +63,6 @@ Status ContextViewsRecord::encode(uint8_t *bytes, size_t capacity) const
     return writer.status();
 }
 
-/* Version 1 keeps the fence's field reserved. */
 Status ContextViewsRecord::read(const uint8_t *bytes, size_t length)
 {
     AV_SCOPE("ContextViewsRecord::read");
@@ -107,4 +106,4 @@ Status ContextViewsRecord::accept_answer(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-}  // namespace av
+}

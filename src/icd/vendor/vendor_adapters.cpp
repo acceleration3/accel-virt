@@ -71,4 +71,4 @@ Status VendorAdapters::local_memory_left(const VendorAdapter &adapter, uint64_t 
     return Status::ok;
 }
 
-}  // namespace av::vendor
+}

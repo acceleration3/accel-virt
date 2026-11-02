@@ -1,6 +1,3 @@
-/* QEMU -> renderer: the host blob under a key is released, so the renderer's
- * library lets its memory go (docs/host-memory.md). Read from a socket, so
- * judged as hostile: a key, nothing more, and no descriptor. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -33,7 +30,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(free_memory_message, is_the_key_and_round_trips)
 { GuardedBuffer bytes(FreeMemoryMessage::encoded_size);
@@ -46,7 +43,6 @@ TEST(free_memory_message, is_the_key_and_round_trips)
   CHECK_STATUS(decoded.decode(bytes.data(), bytes.size(), 0u), Status::ok);
   CHECK_EQ(decoded.key(), key); }
 
-/* Key 0 names nothing the device allocated under. */
 TEST(free_memory_message, key_zero_is_refused_both_ways)
 { std::uint8_t bytes[FreeMemoryMessage::encoded_size] = {};
   CHECK_STATUS(FreeMemoryMessage(0u).encode(bytes, sizeof bytes), Status::invalid_parameter);
@@ -76,8 +72,5 @@ TEST(free_memory_message_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 64u);
-  /* Any key but 0 is a key, and no single flip of this one - five bits set -
-   * reaches 0: all 64 flips, all ones and the untouched message are keys;
-   * all zero is not. 64 + 1 + 1. */
   const std::uint32_t acceptable = 64u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

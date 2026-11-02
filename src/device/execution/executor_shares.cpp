@@ -59,7 +59,6 @@ Status ExecutorShares::publish(uint32_t id, const uint8_t *uuid, AvExecutor *exe
     return status;
 }
 
-/* Id 0 finds a free entry, and clearing one changes nothing. */
 void ExecutorShares::withdraw(uint32_t id)
 {
     AV_SCOPE("ExecutorShares::withdraw");
@@ -73,8 +72,6 @@ void ExecutorShares::withdraw(uint32_t id)
     host_.unlock_mutex(lock_);
 }
 
-/* The lock is held across the library's create: that is what keeps the shared
- * executor alive for it. */
 AvExecutor *ExecutorShares::create_sharing(SubApi api, uint32_t share_id, const uint8_t *uuid,
                                             const AvContextOptions &options)
 {
@@ -113,4 +110,4 @@ bool ExecutorShares::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

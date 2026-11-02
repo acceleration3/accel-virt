@@ -1,11 +1,3 @@
-"""The av capset and context lifetime against the real device: the capset
-describes the host GPU the device is bound to, contexts are created only for the
-av capset, a context setup binds a ring and a fence blob that then cannot be
-unreferenced, and a reset forgets every context before every blob.
-
-Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
-AV_QEMU_BUILD.
-"""
 import os
 import pathlib
 import struct
@@ -53,12 +45,7 @@ FEATURE_HOST_VISIBLE_MEMORY = 1
 FEATURE_GPU_EXPORTED_MEMORY = 2
 FEATURE_GUEST_MEMORY_IMPORT = 4
 PROBED_FEATURES = FEATURE_GPU_EXPORTED_MEMORY | FEATURE_GUEST_MEMORY_IMPORT
-"""Bits feature 039's probes decide on the host the test runs on: this suite
-says what does not depend on the host, and the probe tests say the rest."""
-# The device's own, offered on every host (docs/protocol.md, "Present engine").
 FEATURE_PRESENT_ENGINE = 16
-# Offered wherever a library is loaded: every library at this ABI version
-# reads frames.
 FEATURE_PRESENT_FROM_IMAGE = 32
 DEVICE_TYPES = {"other": 0, "integrated": 1, "discrete": 2, "virtual": 3, "cpu": 4}
 
@@ -98,7 +85,6 @@ def unref(resource):
 
 
 def last_host_gpu():
-    """The host's last Vulkan device, so binding by UUID is what is exercised, not auto."""
     text = subprocess.run(["vulkaninfo"], capture_output=True, text=True, check=True).stdout
     return list_gpus.parse(text)[-1]
 
@@ -115,7 +101,6 @@ class VirtioGpuContexts(unittest.TestCase):
         self.assertEqual(hex(response_type(gpu.control(request, response_size))), hex(answer), request[:32].hex())
 
     def bindable(self, gpu, context=1):
-        """A context, a guest-backed ring with a fresh header and a fence blob it can be set up with."""
         self.expect(gpu, create_context(context), RESP_OK_NODATA)
         address = gpu.device.memory.allocate(2 * PAGE)
         av_context.GuestRing(gpu.qtest, address)
@@ -183,7 +168,6 @@ class VirtioGpuContexts(unittest.TestCase):
         gpu = self.open(av_context.av_device())
         features = struct.unpack_from("<Q", self.capset(gpu), 24)[0]
         self.assertEqual(features & ~PROBED_FEATURES, FEATURE_PRESENT_ENGINE | FEATURE_PRESENT_FROM_IMAGE)
-        # Nothing can be exported into a region that is not there.
         self.assertEqual(features & FEATURE_GPU_EXPORTED_MEMORY, 0)
 
     def test_get_capset_for_another_id_or_version_is_refused(self):
@@ -224,7 +208,6 @@ class VirtioGpuContexts(unittest.TestCase):
     def test_a_bound_context_keeps_its_blobs_until_it_is_destroyed(self):
         gpu = self.open()
         self.bindable(gpu)
-        # A later minor carries at least the options minor's 48 bytes.
         self.expect(gpu, submit(1, setup(minor=7) + bytes(16)), RESP_OK_NODATA)
         self.expect(gpu, unref(RING), RESP_ERR_INVALID_PARAMETER)
         self.expect(gpu, unref(FENCE), RESP_ERR_INVALID_PARAMETER)
@@ -246,8 +229,8 @@ class VirtioGpuContexts(unittest.TestCase):
             (submit(1, setup(sub_api=SUB_API_VULKAN | SUB_API_OPENGL)), RESP_ERR_INVALID_PARAMETER),
             (submit(1, setup(order=11)), RESP_ERR_INVALID_PARAMETER),
             (submit(1, setup(order=25)), RESP_ERR_INVALID_PARAMETER),
-            (submit(1, setup(order=13)), RESP_ERR_INVALID_PARAMETER),          # 32 + 8192 > two pages
-            (submit(1, setup(ring=SPARE)), RESP_ERR_INVALID_PARAMETER),        # 32 + 4096 > one page
+            (submit(1, setup(order=13)), RESP_ERR_INVALID_PARAMETER),
+            (submit(1, setup(ring=SPARE)), RESP_ERR_INVALID_PARAMETER),
             (submit(1, setup(ring=99)), RESP_ERR_INVALID_RESOURCE_ID),
             (submit(1, setup(fence=99)), RESP_ERR_INVALID_RESOURCE_ID),
             (submit(1, setup(fence=RING)), RESP_ERR_INVALID_PARAMETER),
@@ -270,7 +253,7 @@ class VirtioGpuContexts(unittest.TestCase):
         self.bindable(gpu, context=1)
         self.expect(gpu, submit(1, setup()), RESP_OK_NODATA)
         self.expect(gpu, create_context(2), RESP_OK_NODATA)
-        again = virtio_qtest.VirtioGpu(gpu.qtest, gpu.features)   # a new driver resets the device first
+        again = virtio_qtest.VirtioGpu(gpu.qtest, gpu.features)
         self.expect(again, header(CMD_CTX_DESTROY, 1), RESP_ERR_INVALID_CONTEXT_ID)
         self.expect(again, header(CMD_CTX_DESTROY, 2), RESP_ERR_INVALID_CONTEXT_ID)
         self.expect(again, unref(RING), RESP_ERR_INVALID_RESOURCE_ID)

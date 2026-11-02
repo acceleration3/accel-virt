@@ -48,7 +48,6 @@ Status BlobTable::create_guest(uint32_t id, uint64_t size, ControlRequest &reque
     if (blobs_.create(blob, host_, id) != Status::ok) return Status::no_memory;
     const Status backed = blob->back_with_guest(request, offset, entries, size);
     uint32_t     slot = 0u;
-    /* Room was made above, so the insert cannot fail. */
     if (backed == Status::ok) return ids_.insert(id, Entry{blob, false}, slot);
     static_cast<void>(blobs_.destroy(blob));
     return backed;
@@ -182,8 +181,6 @@ uint32_t BlobTable::live() const
     return ids_.count();
 }
 
-/* No blob lives that a worker's read could not be held apart from, and each
- * id names a live blob of that id and no other id the same one. */
 bool BlobTable::invariants_hold() const
 {
     AV_SCOPE("BlobTable::invariants_hold");
@@ -196,4 +193,4 @@ bool BlobTable::invariants_hold() const
     return named;
 }
 
-}  // namespace av
+}

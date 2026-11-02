@@ -1,5 +1,3 @@
-; StringFromGUID2, which the Khronos OpenCL loader uses to name a device
-; interface class while it walks the adapters (feature 052).
 LIBRARY ole32.dll
 EXPORTS
 StringFromGUID2

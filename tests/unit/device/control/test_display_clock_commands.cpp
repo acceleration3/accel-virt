@@ -1,8 +1,3 @@
-/* DISPLAY_CLOCK and DISPLAY_TIMING as the device answers them: a page of guest
- * RAM is taken and published in, anything else is refused with the reason
- * logged; a head's rate is taken when the head and the rate are ones the
- * protocol allows; a request too short for its fields is refused; every other
- * type is left to the rest of the device. */
 #include "device/control/control_request.hpp"
 #include "device/control/display_clock_commands.hpp"
 #include "device/display/display_clock.hpp"
@@ -42,7 +37,6 @@ struct Rig {
     }
     ~Rig() { clock.detach(); }
 
-    /* The response type, or 0 when the commands left the request alone. */
     std::uint32_t send(const GpuRequestBuilder &built, std::uint32_t type)
     {
         MockRequest    mock(built.bytes(), built.size());
@@ -51,7 +45,7 @@ struct Rig {
     }
 };
 
-}  // namespace
+}
 
 TEST(display_clock_commands, a_page_of_guest_ram_is_taken_and_published_in)
 { Rig rig;
@@ -64,7 +58,7 @@ TEST(display_clock_commands, a_page_of_guest_ram_is_taken_and_published_in)
   CHECK_EQ(magic, 0x00435641u);
   GpuRequestBuilder none(0x02F4u);
   none.u64(0u);
-  CHECK_EQ(rig.send(none, 0x02F4u), 0x1100u);   /* none stops publishing */
+  CHECK_EQ(rig.send(none, 0x02F4u), 0x1100u);
   CHECK(!rig.clock.latches(0u));
   CHECK_EQ(rig.host.live_threads(), 0u); }
 
@@ -83,7 +77,7 @@ TEST(display_clock_commands, a_page_that_cannot_be_taken_is_refused_and_said_why
   rig.host.fail_thread_start_at(1u);
   GpuRequestBuilder no_thread(0x02F4u);
   no_thread.u64(ram);
-  CHECK_EQ(rig.send(no_thread, 0x02F4u), 0x1201u);   /* ERR_OUT_OF_MEMORY */
+  CHECK_EQ(rig.send(no_thread, 0x02F4u), 0x1201u);
   CHECK(!rig.clock.latches(0u));
   CHECK_EQ(rig.host.live_guest_mappings(), 0u); }
 

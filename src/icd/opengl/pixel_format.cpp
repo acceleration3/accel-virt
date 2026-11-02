@@ -45,4 +45,4 @@ uint32_t PixelFormat::flags() const
     return double_buffer_ ? window | flag_double_buffer : window;
 }
 
-}  // namespace av::glicd
+}

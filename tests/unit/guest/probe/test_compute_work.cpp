@@ -1,7 +1,3 @@
-/* The probe's compute step over a scripted Vulkan: 256 elements written
- * through the mapping, one dispatch of 16 groups of double.comp, and the count
- * that came back doubled; a refusal at every call is kept, and everything made
- * is destroyed. */
 #include "guest/probe/compute_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/probe/probe_device.hpp"
@@ -24,7 +20,7 @@ struct ComputeWorkProbe {
     static void set_without_pool(ComputeWork &work) { work.pool_ = VK_NULL_HANDLE; }
 };
 
-}  // namespace av
+}
 
 using av::ComputeWork;
 using av::ComputeWorkProbe;
@@ -47,7 +43,6 @@ void make(ProbeDevice &device)
     CHECK_EQ(device.make_device(), VK_SUCCESS);
 }
 
-/* The work's report line, over a device made on `vulkan`. */
 class ComputeRig {
 public:
     ComputeRig() : steps_(kmt_, report_, "vulkan") {}
@@ -79,7 +74,7 @@ private:
     ScenarioSteps  steps_;
 };
 
-}  // namespace
+}
 
 TEST(compute_work, every_element_comes_back_doubled)
 { ComputeRig rig;
@@ -93,7 +88,6 @@ TEST(compute_work, an_element_left_as_it_was_is_counted_out)
   rig.vulkan().miscompute();
   CHECK(std::strcmp(rig.run(), "FAIL vulkan.compute status=4 255\n") == 0); }
 
-/* A submission that never completes is the wait's timeout, not a count. */
 TEST(compute_work, a_submission_that_never_completes_times_out)
 { ComputeRig rig;
   rig.vulkan().hold_fences();

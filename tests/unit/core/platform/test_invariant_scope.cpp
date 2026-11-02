@@ -18,7 +18,7 @@ private:
     bool consistent_ = true;
 };
 
-}  // namespace
+}
 
 TEST(invariant_scope, is_silent_while_the_invariants_hold)
 { MockPlatform platform; Subject subject;

@@ -1,8 +1,3 @@
-# Stable command IDs for the AV wire protocol.
-# Auto-maintained by codegen — do not hand-edit unless you're
-# bumping the protocol major version. New commands get appended
-# at the next free ID; existing IDs never move.
-
 [commands]
 "vkDestroyInstance" = 65537
 "vkDestroyDevice" = 65538

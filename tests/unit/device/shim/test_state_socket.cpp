@@ -1,6 +1,3 @@
-/* A host binary's state socket, for real on this host: the executor's dump
- * written where it is asked, a source that says why it has none, a request it
- * does not know, and names it refuses. */
 #include "core/trace/state_reporter.hpp"
 #include "core/trace/state_writer.hpp"
 #include "executor/shim/reporter_state_source.hpp"
@@ -66,7 +63,7 @@ StateSocket         executor;
 Refusing            refusing;
 StateSocket         silent;
 
-}  // namespace
+}
 
 TEST(state_socket, answers_a_reporter_s_dump_and_refuses_what_it_does_not_know)
 { const auto pid = static_cast<std::uint32_t>(getpid());
@@ -92,7 +89,6 @@ TEST(state_socket, a_name_too_long_for_a_socket_path_is_refused)
 { StateSocket named;
   const char *const long_module = "a-module-name-long-enough-that-the-socket-path-cannot-hold-it-whole-in-108-bytes-at-all";
   CHECK(!named.start(long_module, 1u, source));
-  /* Nothing named for it is left in /dev/shm, cut short or whole. */
   DIR *const shm = opendir("/dev/shm");
   CHECK(shm != nullptr);
   bool left = false;

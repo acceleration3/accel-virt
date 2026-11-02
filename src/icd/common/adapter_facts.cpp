@@ -11,7 +11,7 @@ namespace {
 
 constexpr uint32_t every_fact = (AdapterFacts::features_fact << 1u) - 1u;
 
-}  // namespace
+}
 
 AdapterFacts::AdapterFacts()
     : known_(0u), luid_(0u), identity_(), location_(), name_(), driver_version_(0u), dedicated_video_(0u),
@@ -126,8 +126,6 @@ bool AdapterFacts::integrated() const
     return integrated_;
 }
 
-/* A fact not given reads as nothing at all, never as half of what a refusal
- * left behind. */
 bool AdapterFacts::invariants_hold() const
 {
     AV_SCOPE("AdapterFacts::invariants_hold");
@@ -139,4 +137,4 @@ bool AdapterFacts::invariants_hold() const
     return knows(features_fact) || !integrated_;
 }
 
-}  // namespace av::icd
+}

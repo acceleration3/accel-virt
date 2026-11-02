@@ -1,6 +1,3 @@
-"""tools/guest/guest_agent.py against a socket that answers each request line
-with scripted bytes: the answers a real agent gives, and every way one can be
-wrong."""
 import base64
 import json
 import os
@@ -19,10 +16,6 @@ from guest_agent import PULL_CHUNK, AgentError, GuestAgent, Qmp, wait_for_agent 
 
 
 class ScriptedPeer:
-    """Accepts one connection, sends `greeting`, then answers the Nth request
-    line with replies[N] - bytes, or a callable of the request - and closes
-    once the script runs out."""
-
     def __init__(self, path, replies, greeting=b""):
         self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.server.bind(path)
@@ -231,12 +224,12 @@ class QmpClient(unittest.TestCase):
         stop = json.dumps({"event": "STOP"}).encode() + b"\n"
         ScriptedPeer(self.path, [event + answer({}), stop + answer({}), answer({}) + stop + event], greeting=greeting)
         qmp = Qmp(self.path, 1.0)
-        qmp.wait_event("RESET", 1.0)   # seen during negotiation
+        qmp.wait_event("RESET", 1.0)
         self.assertEqual(qmp.execute("cont"), {})
         self.assertEqual([message["event"] for message in qmp.pending], ["STOP"])
         qmp.forget_events("STOP")
         qmp.execute("query-status")
-        self.assertEqual(qmp.wait_event("RESET", 1.0), {"event": "RESET"})   # read past a STOP
+        self.assertEqual(qmp.wait_event("RESET", 1.0), {"event": "RESET"})
         self.assertEqual([message["event"] for message in qmp.pending], ["STOP"])
         with self.assertRaises(AgentError):
             qmp.wait_event("SHUTDOWN", 0.2)

@@ -14,8 +14,6 @@ BatchFollower::BatchFollower(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device
     AV_SCOPE("BatchFollower::BatchFollower");
 }
 
-/* The packet's commands are the transport's marker: dxgkrnl wants a GPU VA to
- * submit, and the miniport reads only the private data. */
 HRESULT BatchFollower::follow(HANDLE context)
 {
     AV_SCOPE("BatchFollower::follow");
@@ -38,4 +36,4 @@ HRESULT BatchFollower::follow(HANDLE context)
     return S_OK;
 }
 
-}  // namespace av::d3d
+}

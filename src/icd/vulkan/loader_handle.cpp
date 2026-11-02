@@ -14,8 +14,6 @@ LoaderHandle::LoaderHandle(Kind kind, uint64_t host, Connection *connection, Loa
           AV_SCOPE("LoaderHandle::LoaderHandle");
       }
 
-/* A batch or memory is only ever taken from the pool it names, and only this
- * handle destroys it. */
 LoaderHandle::~LoaderHandle()
 {
     AV_SCOPE("LoaderHandle::~LoaderHandle");
@@ -112,4 +110,4 @@ bool LoaderHandle::invariants_hold() const
     return parent_ != nullptr && parent_->kind_ < kind_ && parent_->connection_ == connection_;
 }
 
-}  // namespace av::icd
+}

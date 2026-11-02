@@ -1,8 +1,3 @@
-/* A Direct3D 11 the deferred-map scenario's tests drive: every call counted
- * and refusable, each deferred context's writes held in its command list
- * until the list is executed - as a deferred context's are - and the
- * process's committed memory a number the test moves, at a chosen finish, as
- * a driver that keeps what a frame's maps took does. */
 #ifndef AV_SCRIPTED_D3D11_DEFERRED_HPP
 #define AV_SCRIPTED_D3D11_DEFERRED_HPP
 
@@ -37,11 +32,8 @@ public:
     ScriptedD3d11Deferred &operator=(const ScriptedD3d11Deferred &) = delete;
 
     void          fail(Call call, std::uint32_t nth, std::int32_t result);
-    /* At the `nth` finish the process commits `bytes` more; less, negative. */
     void          commit_at_finish(std::uint32_t nth, std::int64_t bytes);
-    /* Writes made with NO_OVERWRITE never reach the buffer. */
     void          lose_appends();
-    /* An execute runs the list finished before the one it names. */
     void          lag_executes();
     std::uint32_t calls(Call call) const;
     std::uint32_t finishes_on(std::uint32_t context) const;
@@ -69,8 +61,6 @@ public:
     void          release() override;
 
 private:
-    /* What one context recorded, or one list holds: the head as its writes
-     * leave it, and which of its bytes they wrote. */
     struct Writes {
         std::uint8_t bytes[head_bytes];
         bool         written[head_bytes];
@@ -102,6 +92,6 @@ private:
     bool          live_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_D3D11_DEFERRED_HPP
+#endif

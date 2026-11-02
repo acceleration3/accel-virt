@@ -1,13 +1,3 @@
-/* WGL_ARB_pixel_format, with WGL_ARB_multisample's and
- * WGL_ARB_framebuffer_sRGB's attributes, answered from the ICD's pixel formats
- * (data-model.md): the attributes of one format, and the formats a criteria
- * list selects in the ARB's order - exact criteria must be equal, minimum ones
- * met, and among the formats that pass, those with the fewest bits past the
- * minimums come first, in table order otherwise. Criteria the ARB ignores
- * (the format count, the channel shifts, transparent values) select nothing.
- *
- * Every list is read as bytes the application wrote: pairs until a zero name,
- * at most max_pairs of them. */
 #ifndef AV_GLICD_PIXEL_FORMAT_QUERY_HPP
 #define AV_GLICD_PIXEL_FORMAT_QUERY_HPP
 
@@ -43,19 +33,8 @@ public:
     PixelFormatQuery(const PixelFormatQuery &) = delete;
     PixelFormatQuery &operator=(const PixelFormatQuery &) = delete;
 
-    /* wglGetPixelFormatAttribiv/fvARB: the `count` attributes `names` names
-     * of format `format` (1-based) into `ints` or `floats`, exactly one of
-     * them non-null. Format 0 answers only WGL_NUMBER_PIXEL_FORMATS_ARB.
-     * not_found for a format out of range; invalid_parameter for a layer
-     * other than 0, a missing list or output, more than max_pairs names or an
-     * unknown one. Nothing is written unless ok. */
     [[nodiscard]] Status attribs(int32_t format, int32_t layer, uint32_t count, const int32_t *names, int32_t *ints,
                                  float *floats) const;
-    /* wglChoosePixelFormatARB: at most `max` chosen formats into `formats`
-     * and how many formats the criteria select into `count`. A null list asks
-     * nothing. invalid_parameter, writing nothing, for an unknown name, a
-     * float name that is not a whole number, a list with no zero name within
-     * max_pairs pairs, a null `count`, or a null `formats` with `max` above 0. */
     [[nodiscard]] Status choose(const int32_t *ints, const float *floats, uint32_t max, int32_t *formats,
                                 uint32_t *count) const;
 
@@ -68,12 +47,11 @@ private:
     int32_t value_of(const PixelFormat &row, uint32_t name) const;
     [[nodiscard]] Status read_ints(const int32_t *list, PixelFormatCriteria &criteria) const;
     [[nodiscard]] Status read_floats(const float *list, PixelFormatCriteria &criteria) const;
-    /* Whether `row` meets every criterion, and its bits past the minimums. */
     bool    admits(const PixelFormat &row, const PixelFormatCriteria &criteria, double &surplus) const;
 
     const PixelFormatTable &table_;
 };
 
-}  // namespace av::glicd
+}
 
-#endif  // AV_GLICD_PIXEL_FORMAT_QUERY_HPP
+#endif

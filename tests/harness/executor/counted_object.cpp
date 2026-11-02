@@ -16,4 +16,4 @@ ULONG STDMETHODCALLTYPE CountedObject::Release() { return --references_; }
 
 ULONG CountedObject::references() const { return references_; }
 
-}  // namespace av
+}

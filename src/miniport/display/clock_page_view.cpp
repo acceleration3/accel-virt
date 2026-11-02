@@ -60,8 +60,6 @@ uint32_t ClockPageView::heads() const
     return header.decode(header_bytes, sizeof header_bytes) == Status::ok ? header.heads() : 0u;
 }
 
-/* The generation is read before the fields and again after them; only the same
- * even number both times means no store of the device's fell in between. */
 Status ClockPageView::read(uint32_t head, VblankRecord &blank) const
 {
     AV_SCOPE("ClockPageView::read");
@@ -103,4 +101,4 @@ bool ClockPageView::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

@@ -1,28 +1,13 @@
-"""The records of an ETL file, with the processor each was logged on.
-
-An ETL file is a run of per-processor buffers; each holds records of five
-kinds told apart by a marker byte, 8-byte aligned. This reads them with plain
-struct unpacking - several times faster than the etl-parser package - and
-keeps what analysis needs and a generic parser drops: the buffer's processor
-(the only place a context switch's processor is recorded) and a manifest
-event's extended data items (its stack, when the session asked for one).
-
-    for record in EtlFile(path).records():
-        record.kind, record.cpu, record.time, record.group, record.type, ...
-
-Times are the trace's clock as logged: QPC ticks for WPR's traces, whose
-frequency the header record gives (EtlFile.frequency).
-"""
 import struct
 import uuid
 from dataclasses import dataclass, field
 
 BUFFER_HEADER = 72
 ALIGNMENT = 8
-EXTENDED_INFO = 0x0001      # EVENT_HEADER_FLAG_EXTENDED_INFO
-HEADER_GROUP = 0            # EVENT_TRACE_GROUP_HEADER
-HEADER_INFO = 0             # its first type: the trace's header, with the clock
-PERF_FREQUENCY = 256        # TRACE_LOGFILE_HEADER.PerfFreq in a 64-bit header
+EXTENDED_INFO = 0x0001
+HEADER_GROUP = 0
+HEADER_INFO = 0
+PERF_FREQUENCY = 256
 
 SYSTEM_FULL = (0x01, 0x02)
 SYSTEM_COMPACT = (0x03, 0x04)
@@ -43,9 +28,6 @@ for marker in TRACE_FULL:
 
 @dataclass
 class Record:
-    """One record. `group` and `type` name a kernel (system or perfinfo)
-    record; `provider`, `id`, `version`, `opcode` and `task` a manifest event;
-    `provider` and `type` (its class's event type) a classic trace record."""
     kind: str
     cpu: int
     time: int
@@ -60,7 +42,7 @@ class Record:
     task: int = 0
     keyword: int = 0
     payload: bytes = b""
-    extended: list = field(default_factory=list)   # (ext_type, bytes)
+    extended: list = field(default_factory=list)
 
 
 def guid_text(raw, offset):
@@ -75,7 +57,6 @@ class EtlFile:
         self.lost_buffers = 0
 
     def buffers(self):
-        """(processor, flags, payload view) of each buffer, in file order."""
         offset = 0
         data = self.data
         while offset + BUFFER_HEADER <= len(data):
@@ -105,7 +86,6 @@ class EtlFile:
                 break
             kind = KINDS[marker]
             if kind == "system" or kind == "perfinfo":
-                # The packet's size is the record's; the marker's is a version.
                 size, = struct.unpack_from("<H", payload, offset + 4)
             if size < 4 or offset + size > end:
                 break
@@ -151,8 +131,5 @@ class EtlFile:
         return None
 
     def read_header(self, payload):
-        """TRACE_LOGFILE_HEADER's PerfFreq, the clock's ticks a second: after
-        two 64-bit name pointers at 56 and the 172-byte time zone at 72, then
-        BootTime at 248."""
         if len(payload) >= PERF_FREQUENCY + 8:
             self.frequency, = struct.unpack_from("<Q", payload, PERF_FREQUENCY)

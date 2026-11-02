@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the Vulkan CTS build this repository runs in the guest, pinned by URL
-and hash (feature 048, FR-001).
-
-The standard the layers' fetch set: one pinned archive, a SHA-256 for it and
-one for every file taken out of it, and nothing written until all of them
-agree - so what lands in third_party/vulkan-cts/ is either the pinned set or
-what was there before. --check says whether what is on disk is the pinned set,
-which is what the guest runner asks before it boots anything.
-
-The pins are data, in tools/cts_pins.txt:
-
-    archive <url> <sha256>
-    file <name> <path inside the archive's top directory> <sha256>
-
-and that file is **empty on purpose**: the archive has never been downloaded
-here, and a hash written from memory is indistinguishable from a tampered one.
-"""
+"""Fetch the Vulkan CTS build this repository runs in the guest, pinned by URL"""
 import argparse
 import hashlib
 import pathlib
@@ -34,8 +18,6 @@ FILE = "file"
 
 
 class CtsPins:
-    """The archive the CTS comes from, and the files taken out of it."""
-
     def __init__(self, path):
         self.path = path
         self.archive = None
@@ -63,8 +45,6 @@ class CtsPins:
         return self
 
     def invariants_hold(self):
-        """Every pin is a URL and a 64-character hash, and no file is pinned
-        twice under different names."""
         if self.archive is None:
             return False
         url, digest = self.archive
@@ -79,16 +59,12 @@ class CtsPins:
 
 
 class CtsFetch:
-    """The CTS on disk, and whether it is the pinned build."""
-
     def __init__(self, pins, into, cache):
         self.pins = pins
         self.into = into
         self.cache = cache
 
     def problems(self):
-        """What is wrong with what is on disk; empty when it is the pinned
-        set."""
         problems = {}
         for name, (_inside, digest) in self.pins.files.items():
             path = self.into / name
@@ -101,7 +77,6 @@ class CtsFetch:
         return problems
 
     def fetch(self):
-        """Everything verified and written, or Refused with nothing written."""
         archive = ArchiveCache(self.cache, "vulkan-cts").get(*self.pins.archive, ARCHIVE)
         members = archive.members()
         taken = {}
@@ -117,8 +92,6 @@ class CtsFetch:
             path = self.into / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(raw)
-            # The runner starts deqp-vk in the guest; on this side it is only
-            # ever hashed, but a build that cannot be run is not a build.
             path.chmod(0o755)
         return sorted(taken)
 

@@ -40,12 +40,10 @@ SLOT_HEADER = 16
 EVENT = 16
 BEGIN = 0x80000000
 MODULES = ("device", "executor")
-TICKS_PER_US = 10  # the trace host's clock counts 100 ns
+TICKS_PER_US = 10
 
 
 def read_ring(path, since=0):
-    """Per slot, its events at or after `since` oldest first, as (time, name, thread, begin).
-    Walked from the newest back, so a full ring costs only its window."""
     with open(path, "rb") as handle:
         data = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
     magic, version, slots, per_slot = struct.unpack_from("<IIII", data, 0)
@@ -80,8 +78,6 @@ def collect(pid, seconds, names, now):
             for _, events in rings[module]:
                 if events:
                     newest = max(newest, events[-1][0])
-    # A slot a thread is writing while this reads can hand back a torn event;
-    # the window ends at the host's clock now, which no real event passes.
     newest = min(newest, now)
     if not rings:
         raise SystemExit(f"no /dev/shm/av-events-*-{pid}: was QEMU started with AV_PERFETTO=1?")
@@ -90,8 +86,6 @@ def collect(pid, seconds, names, now):
         trace.append({"ph": "M", "name": "process_name", "pid": index + 1, "args": {"name": f"qemu {module}"}})
         named_threads = set()
         for _, events in slots:
-            # A ring may start inside a scope: an end with no begin is dropped,
-            # and what is still open at the window's edge opens there.
             depth = {}
             for time, name, thread, begin in events:
                 if time < since or time > newest:
@@ -110,9 +104,9 @@ def collect(pid, seconds, names, now):
     return trace
 
 
-CLOCK_MONOTONIC = 3  # Perfetto's BUILTIN_CLOCK_MONOTONIC
+CLOCK_MONOTONIC = 3
 CLOCK_BOOTTIME = 6
-SEQUENCE = 0x5256  # trusted_packet_sequence_id of every packet this writes
+SEQUENCE = 0x5256
 TYPE_BEGIN, TYPE_END = 1, 2
 SEQ_INCREMENTAL_STATE_CLEARED = 1
 
@@ -138,15 +132,11 @@ def field_bytes(number, payload):
 
 
 def packet(body):
-    """One TracePacket as a Trace's repeated field 1."""
     return field_bytes(1, body + field_varint(10, SEQUENCE))
 
 
 def protobuf(pid, trace):
-    """The JSON events as TrackEvents on host-thread tracks, stamped with CLOCK_MONOTONIC."""
     out = bytearray()
-    # Perfetto places a stamp only through a snapshot naming its clock: the
-    # two clocks read side by side now, BOOTTIME being what tracebox keeps.
     boottime = clock.clock_gettime_ns(clock.CLOCK_BOOTTIME)
     monotonic = clock.clock_gettime_ns(clock.CLOCK_MONOTONIC)
     snapshot = field_bytes(1, field_varint(1, CLOCK_BOOTTIME) + field_varint(2, boottime)) + \
@@ -182,7 +172,7 @@ def protobuf(pid, trace):
     return bytes(out)
 
 
-GUEST_PID_BASE = 0x40000000   # guest processes' track pids, clear of the host's
+GUEST_PID_BASE = 0x40000000
 CLOCK_PAIR = re.compile(r"av-clock host=(\d+) guest=(\d+)")
 
 
@@ -192,8 +182,6 @@ def guest_shell(work, *arguments):
 
 
 def guest_offset(work):
-    """Host clock minus guest clock, both 100 ns: the smallest difference a
-    batch's guest stamp and the host's clock as it ran it show."""
     pairs = CLOCK_PAIR.findall((pathlib.Path(work) / "qemu.log").read_text(errors="replace"))
     if not pairs:
         raise SystemExit(f"no clock pairs in {work}/qemu.log: was QEMU started with AV_PERFETTO=1?")
@@ -201,21 +189,15 @@ def guest_offset(work):
 
 
 def freeze_guest(work, frozen=True):
-    """Sets the freeze byte of every guest event file: its process stops
-    recording, so what the files hold is the time before this. Cleared again
-    once they are copied."""
     guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\av\\events-*.bin | ForEach-Object { "
                             "$f = [IO.File]::Open($_.FullName, 'Open', 'ReadWrite', 'ReadWrite'); "
                             f"$f.Seek(24, 'Begin') | Out-Null; $f.WriteByte({1 if frozen else 0}); $f.Close() }}")
 
 
-GUEST_EVENTS_KEPT = 1 << 20   # the newest events a guest thread's ring gives the capture
+GUEST_EVENTS_KEPT = 1 << 20
 
 
 def guest_rings(work, scratch, kept=GUEST_EVENTS_KEPT):
-    """Every guest process's recorded events, copied in the guest without the
-    ring's unused slots and with only each slot's newest `kept` events, zipped
-    and pulled: slot number, count, then the events oldest first."""
     listing = guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\av\\events-*.bin | ForEach-Object { $_.Name }")
     for name in listing.split():
         if not name.endswith(".bin"):
@@ -239,9 +221,6 @@ def guest_rings(work, scratch, kept=GUEST_EVENTS_KEPT):
             "    $in.Seek($base + 16, 'Begin') | Out-Null; $in.Read($rest, 0, $rest.Length) | Out-Null; $w.Write($rest) } } "
             "$w.Close(); $in.Close()")
         local = scratch / f"{name}.c.gz"
-        # A copy can come back empty once and whole the next time; a process
-        # that ended mid-copy, or a file from an older driver, never gives a
-        # readable one, and the others are still worth having.
         whole = False
         for _attempt in range(2):
             guest_shell(work, "ps", script)
@@ -259,8 +238,6 @@ def guest_rings(work, scratch, kept=GUEST_EVENTS_KEPT):
 
 
 def read_compact(path):
-    """The compact copy guest_rings pulls: per slot, its events oldest first,
-    as read_ring yields them."""
     data = gzip.decompress(path.read_bytes())
     magic, _slots = struct.unpack_from("<II", data, 0)
     if magic != 0x00435641:
@@ -278,9 +255,6 @@ def read_compact(path):
 
 
 def collect_guest(work, seconds, names, scratch, end=None):
-    """The guest processes' events in the `seconds` before `end` (the guest
-    clock; the newest of them when None), on the host's clock, and where that
-    window ends."""
     offset = guest_offset(work)
     rings = []
     latest = []
@@ -288,8 +262,6 @@ def collect_guest(work, seconds, names, scratch, end=None):
         slots = list(read_compact(path))
         latest.append(max((events[-1][0] for _, events in slots if events), default=0))
         rings.append((name, slots))
-    # The freeze reaches the files one at a time, hundreds of milliseconds
-    # apart: the window ends where the first of the live processes stopped.
     live_within = 2 * 1_000_000 * TICKS_PER_US
     if end is not None:
         newest = end
@@ -325,8 +297,6 @@ def collect_guest(work, seconds, names, scratch, end=None):
 
 
 def stop_host(pid, stop):
-    """Every host ring of `pid` stops recording at `stop` (host clock, 100 ns;
-    0 records again)."""
     for module in MODULES:
         path = pathlib.Path(f"/dev/shm/av-events-{module}-{pid}")
         if path.exists():
@@ -336,7 +306,6 @@ def stop_host(pid, stop):
 
 
 def stop_guest(work, stop):
-    """Every guest event file stops recording at `stop` (the guest's clock)."""
     guest_shell(work, "ps", "Get-ChildItem C:\\ProgramData\\av\\events-*.bin | ForEach-Object { "
                             "$f = [IO.File]::Open($_.FullName, 'Open', 'ReadWrite', 'ReadWrite'); "
                             f"$f.Seek(24, 'Begin') | Out-Null; $f.Write([BitConverter]::GetBytes([uint64]{stop}), 0, 8); "
@@ -344,9 +313,6 @@ def stop_guest(work, stop):
 
 
 def arm_guest(work, events_per_slot, depth, only=""):
-    """Guest processes started from now on record events, `events_per_slot`
-    per thread, of scopes at most `depth` deep (0: all) - or with `only`
-    (comma-separated scope names), just those, at any depth."""
     guest_shell(work, "ps", "Set-Content -NoNewline -Path C:\\ProgramData\\av\\perfetto "
                             f"-Value '{events_per_slot} {depth} {only}'")
 
@@ -381,9 +347,6 @@ def main():
         print(f"guest processes started from now record {args.arm} events per thread, {args.depth} deep")
         return
     if args.guest is not None:
-        # Both sides stop at one instant, far enough ahead for the guest to be
-        # told: a ring holds well under a second of a busy thread, so windows
-        # cut at different moments would not overlap.
         offset = guest_offset(args.guest)
         stop = now + int(args.lead * 1_000_000 * TICKS_PER_US)
         stop_host(args.pid, stop)

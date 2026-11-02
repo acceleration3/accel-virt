@@ -76,4 +76,4 @@ void LoopbackDriver::truncate_answer(std::uint32_t nth, std::size_t length)
     truncate_length_ = length;
 }
 
-}  // namespace av
+}

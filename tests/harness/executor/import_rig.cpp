@@ -12,9 +12,8 @@ namespace {
 
 constexpr std::uint8_t no_uuid[ContextExecutor::uuid_bytes] = {};
 
-}  // namespace
+}
 
-/* A rig that cannot make its events, thread or lock has nothing to test with. */
 ImportRig::ImportRig(bool executor)
     : host_(), ops_(AV_EXECUTOR_SUB_API_VULKAN), recorder_(host_), library_(), shares_(host_, library_),
       executor_(host_, library_, shares_, context), plane_(), host_blobs_(host_),
@@ -32,7 +31,6 @@ ImportRig::ImportRig(bool executor)
     if (executor) on_worker([this] { static_cast<void>(executor_.create()); });
 }
 
-/* The blobs go before the domain does, as a device's reset frees them. */
 ImportRig::~ImportRig()
 {
     on_worker([this] { executor_.destroy(); });
@@ -83,4 +81,4 @@ std::uint8_t *ImportRig::memory_of(std::uint32_t id)
     return ops_.memory_bytes(ops_.last_opened_domain(), id);
 }
 
-}  // namespace av
+}

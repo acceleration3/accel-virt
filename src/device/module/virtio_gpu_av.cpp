@@ -62,7 +62,6 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
         host_.log(message.text());
         return Status::invalid_parameter;
     }
-    /* A realize that failed before may already have the lock. */
     if (interrupts_.initialize() == Status::no_memory) {
         message.append("virtio-gpu-av: the host has no mutex for fence interrupts");
         host_.log(message.text());
@@ -87,11 +86,6 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
     if (status != Status::ok) return status;
     pci_.read(binding_.index());
     if (feasibility_.interrupts().initialize() == Status::ok) interrupts_.report_to(feasibility_.interrupts());
-    /* A renderer answers what its library offers only once started, and it is
-     * started with a capset: one offering every sub-API, which QEMU narrows
-     * to the answer before any guest reads it. QEMU checks each context's
-     * setup against the narrowed one before the renderer sees it. */
-    /* Snapshots are read where the contexts run: in this process only. */
     const uint64_t features = feasibility_.features() | CapsetInfo::feature_present_engine | CapsetInfo::feature_raises |
                               (contexts_->reads_frames() ? CapsetInfo::feature_present_from_image : 0u) |
                               (contexts_->composes() ? CapsetInfo::feature_scanout_planes : 0u);
@@ -106,8 +100,6 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
         }
     }
     capset_.describe(binding_.index(), contexts_->sub_apis(), features);
-    /* In this process the library's domain for the device opens now, on the
-     * GPU just described; a renderer opened it as it started. */
     if (!isolated) static_cast<void>(contexts_->start(capset_.info().gpu().uuid(), capset_.info()));
     attach_exports();
     if (clock_.initialize() == Status::no_memory || presents_.initialize() == Status::no_memory ||
@@ -120,8 +112,6 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
     return start_recording(recording, message);
 }
 
-/* Hello names the GPU by the UUID the executor knows it by, and by its PCI
- * address where the host read one, so a consumer imports on the same GPU. */
 void VirtioGpuAv::attach_exports()
 {
     AV_SCOPE("VirtioGpuAv::attach_exports");
@@ -131,8 +121,6 @@ void VirtioGpuAv::attach_exports()
     exports_.attach(*contexts_, uuid, on_pci ? address.greeting(uuid) : ExportGreeting(uuid), planes_);
 }
 
-/* After the GPU is bound, so the recording's header names the GPU it recorded
- * and the version its contexts will speak. */
 Status VirtioGpuAv::start_recording(const AvRecordingOptions *recording, TextBuffer &message)
 {
     AV_SCOPE("VirtioGpuAv::start_recording");
@@ -154,23 +142,16 @@ void VirtioGpuAv::reset()
     planes_.clear();
     presents_.detach();
     contexts_->destroy_all();
-    /* The guest's shared-object ids start again, so what the executor still
-     * shares under the old ones goes - on this device's GPU, which the device
-     * knows and a plane running in QEMU was never told. */
     contexts_->shared_released(capset_.info().gpu().uuid(), 0u);
     exports_.revoke(0u, ExportRevocation::reset);
     const bool connected = interrupts_.connected();
     status_.reset();
     if (connected && !interrupts_.connected()) contexts_->interrupts_changed(false);
-    /* Before the blobs: a head holds a pin on the blob it shows, so every head
-     * lets go before the table it pinned from does. */
     heads_.release_all();
     host_blobs_.release_all();
     blobs_.release_all();
 }
 
-/* An unrealized device has no lock to hold its interrupts apart, so a status
- * written before realize would only log a refusal it can do nothing about. */
 void VirtioGpuAv::status(uint8_t status)
 {
     AV_SCOPE("VirtioGpuAv::status");
@@ -181,8 +162,6 @@ void VirtioGpuAv::status(uint8_t status)
     if (interrupts_.connected() != connected) contexts_->interrupts_changed(interrupts_.connected());
 }
 
-/* The glue watches the renderer's process and socket; either ending lands
- * here once. */
 void VirtioGpuAv::renderer_lost()
 {
     AV_SCOPE("VirtioGpuAv::renderer_lost");
@@ -195,12 +174,6 @@ bool VirtioGpuAv::control(void *request, uint32_t type)
     AV_SCOPE("VirtioGpuAv::control");
     host_.require_main_loop("VirtioGpuAv::control");
     if (!binding_.bound()) return false;
-    /* The first request the guest sends arrives long after QEMU has started
-     * its display, which is the earliest the display's answer is worth
-     * anything (DeviceCapset::resolve_display). */
-    /* The scanout shows host images by key (SCANOUT_IMAGE), which a blob's
-     * dma-buf cannot carry, so the guest keeps the 2D path even where the
-     * display could take a dma-buf - a GL window, which then only draws. */
     if (!capset_.display_resolved()) capset_.resolve_display(false);
     ControlRequest         control(host_, request);
     const PresentFrames snapshots(*contexts_, capset_.info().gpu().uuid());
@@ -288,8 +261,6 @@ uint32_t VirtioGpuAv::scanouts() const
     return heads_.showing();
 }
 
-/* A context reports its fences by interrupt, so one created while nothing
- * carries them would run with no one to tell. */
 Status VirtioGpuAv::create_context(uint32_t id)
 {
     AV_SCOPE("VirtioGpuAv::create_context");
@@ -345,8 +316,6 @@ bool VirtioGpuAv::post_frame(uint32_t head, uint32_t frame, uint64_t key)
     return true;
 }
 
-/* An image gone since its blank - its swapchain destroyed - is one the head
- * can no longer show; the head keeps the frame it had. */
 void VirtioGpuAv::show_latched_frames()
 {
     AV_SCOPE("VirtioGpuAv::show_latched_frames");
@@ -390,7 +359,6 @@ void VirtioGpuAv::report(StateWriter &writer)
     contexts_->report(writer);
 }
 
-/* Contexts exist only on a realized device. */
 bool VirtioGpuAv::invariants_hold() const
 {
     AV_SCOPE("VirtioGpuAv::invariants_hold");
@@ -400,4 +368,4 @@ bool VirtioGpuAv::invariants_hold() const
            (binding_.bound() || (contexts_->live() == 0u && exports_.live() == 0u));
 }
 
-}  // namespace av
+}

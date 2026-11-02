@@ -1,5 +1,3 @@
-/* What a shared object's memory is as an image (SharedImageShape): described
- * only with every field there. */
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 

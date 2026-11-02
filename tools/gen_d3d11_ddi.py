@@ -1,29 +1,8 @@
 #!/usr/bin/env python3
-"""The Direct3D 11 device-function table's thunks, from the WDK's own header.
-
-The table the runtime hands a user-mode driver at WDDM 3.2's interface is
-D3DWDDM2_6DDI_DEVICEFUNCS: 176 function pointers, each typed by a PFN typedef
-that is itself one of several versions of the same DDI. Writing 176 thunks by
-hand is 176 chances to get a signature subtly wrong, and a wrong signature is a
-stack the runtime and the driver disagree about. So clang reads the kit's
-header for the Windows target, and this writes, from the types it reports:
-
-  src/um/d3d/generated/d3d11_device_thunks.cpp   one ABI thunk per slot, each one
-                                                  line into D3d11Device, and the
-                                                  function that fills the table
-  src/um/d3d/generated/d3d11_device_ddi.inc       the D3d11Device methods they
-                                                  call, included in its class
-
-    tools/gen_d3d11_ddi.py            # regenerate
-    tools/gen_d3d11_ddi.py --check    # fail if the committed files differ
-"""
 import sys
 
 from ddi_table import DdiTable
 
-# Slots the root answers rather than the device. The runtime destroys a Direct3D
-# 11 device through its device table, not its adapter table, and the device
-# cannot give itself back: the root tears it down and forgets its block.
 ROOT_SLOTS = {"pfnDestroyDevice": "destroy_device"}
 
 

@@ -22,7 +22,7 @@ std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
     return value;
 }
 
-}  // namespace
+}
 
 TEST(gpu_response, starts_as_ok_nodata)
 { const GpuResponse response;
@@ -86,7 +86,6 @@ TEST(gpu_response_set_display_modes, carries_the_set_and_an_empty_one_is_unspeci
   av::DisplayModeSet read;
   CHECK_STATUS(read.decode(response.bytes(), response.length()), Status::ok);
   CHECK(read.same_as(modes));
-  /* The largest set fits the response. */
   for (std::uint32_t width = 100u; modes.count() < av::DisplayModeSet::max_modes; width++)
       CHECK_STATUS(modes.add(width, 100u), Status::ok);
   response.set_display_modes(modes);

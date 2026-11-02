@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-"""Gate for constitution Principle III: every unit of behaviour is a class that
-owns state. Reports static member functions and classes with no data members,
-and any new or delete expression - objects are constructed in place only by
-ObjectStorage and ObjectPool - in src/core, src/miniport, src/device, src/proto, src/guest and
-src/icd.
-
-  check_design.py [repository root]
-"""
 import os
 import re
 import sys
@@ -25,16 +17,12 @@ def sources(root):
                 if name.endswith((".cpp", ".hpp")):
                     path = os.path.join(base, name)
                     relative = os.path.relpath(path, root)
-                    # What a generator wrote answers to the compiler and to
-                    # check_generated.py, not to these rules: a registry decides
-                    # its shape (feature 063).
                     if is_generated(relative):
                         continue
                     yield path, relative
 
 
 def allocation_expressions(root):
-    """Comments are blanked line-preservingly so a line number still points at the code."""
     found = []
     for path, relative in sources(root):
         with open(path) as source:

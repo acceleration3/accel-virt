@@ -33,4 +33,4 @@ std::uint64_t ScriptedD3dAdapterSource::device_luid(void *d3d10_device)
 
 std::uint32_t ScriptedD3dAdapterSource::asked() const { return asked_; }
 
-}  // namespace av
+}

@@ -1,5 +1,4 @@
 #version 450
-// VulkanProbe reads back every pixel expecting exactly this colour.
 
 layout(location = 0) out vec4 colour;
 

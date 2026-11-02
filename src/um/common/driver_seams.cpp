@@ -41,4 +41,4 @@ ProcessTrace &DriverSeams::trace()
     return trace_;
 }
 
-}  // namespace av
+}

@@ -13,4 +13,4 @@ void DisplayHeadsProbe::renumber_head(uint32_t head, uint32_t number)
     heads.heads_[head].object().head_ = number;
 }
 
-}  // namespace av
+}

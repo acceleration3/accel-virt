@@ -1,5 +1,3 @@
-/* DXGKARG_SETVIDPNSOURCEVISIBILITY, as DxgkDdiSetVidPnSourceVisibility
- * receives it. A DDI record; src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_SET_VIDPN_SOURCE_VISIBILITY_RECORD_HPP
 #define AV_DXGKARG_SET_VIDPN_SOURCE_VISIBILITY_RECORD_HPP
 
@@ -13,6 +11,6 @@ struct DxgkargSetVidPnSourceVisibilityRecord {
     uint8_t  VisiblePadding[3];
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_SET_VIDPN_SOURCE_VISIBILITY_RECORD_HPP
+#endif

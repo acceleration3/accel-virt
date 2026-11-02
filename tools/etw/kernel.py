@@ -1,24 +1,3 @@
-"""The kernel's records of a trace, decoded into who ran where, when and why.
-
-    kernel = Kernel()
-    for record in EtlFile(path).records():
-        kernel.add(record)
-    kernel.finish()
-
-then:
-    kernel.process_name(pid), kernel.thread_process[tid], kernel.thread_names[tid]
-    kernel.images[pid]               [(base, size, path)], kernel images under pid 0
-    kernel.pdbs[(pid, base)]         (pdb name, guid hex, age) from WPR's merge
-    kernel.switches[cpu]             [Switch] in time order
-    kernel.readies                   [Ready]
-    kernel.samples                   [Sample], each with its stack (leaf first)
-    kernel.interrupts[cpu]           [Interrupt] (DPCs and ISRs, start and end)
-
-Layouts are the 64-bit ones the Windows 10/11 kernel logs (the MOF classes
-Process_V4, Thread_V4, Image, CSwitch_V4, ReadyThread, SampledProfile,
-StackWalk_Event, DPC and ISR), and KernelTraceControl's ImageID and DbgID_RSDS
-records that WPR adds when it merges a trace.
-"""
 import bisect
 import collections
 import struct
@@ -28,18 +7,17 @@ from dataclasses import dataclass, field
 PROCESS, THREAD, IMAGE_GROUP, PERFINFO, STACKWALK = 3, 5, 20, 15, 24
 PROCESS_EVENTS = (1, 2, 3, 4, 39)
 THREAD_EVENTS = (1, 2, 3, 4)
-IMAGE_EVENTS = (2, 3, 4, 10)          # unload, rundown start and end, load
+IMAGE_EVENTS = (2, 3, 4, 10)
 CSWITCH, READY_THREAD, THREAD_NAME = 36, 50, 72
 SAMPLED_PROFILE, STACK = 46, 32
 DPC_TYPES = {66: "threaded dpc", 68: "dpc", 69: "timer dpc"}
 ISR_TYPES = {67: "isr", 50: "msi isr"}
-IMAGE_ID = "b3e675d7-2554-4f18-830b-2762732560de"   # KernelTraceControl's ImageID
+IMAGE_ID = "b3e675d7-2554-4f18-830b-2762732560de"
 IMAGE_NAME, DBGID_RSDS = 0, 36
 KERNEL_SPACE = 1 << 63
 SID_OFFSETS = (40, 36)
 MAX_SUBAUTHORITIES = 15
 
-# KWAIT_REASON, for why a thread left the CPU.
 WAIT_REASONS = [
     "Executive", "FreePage", "PageIn", "PoolAllocation", "DelayExecution", "Suspended", "UserRequest",
     "WrExecutive", "WrFreePage", "WrPageIn", "WrPoolAllocation", "WrDelayExecution", "WrSuspended",
@@ -49,8 +27,6 @@ WAIT_REASONS = [
     "WrPreempted", "WrYieldExecution", "WrFastMutex", "WrGuardedMutex", "WrRundown", "WrAlertByThreadId",
     "WrDeferredPreempt", "WrPhysicalFault", "WrIoRing", "WrMdlCache",
 ]
-# KTHREAD_STATE: a thread left in Ready or Standby was preempted, one in
-# Waiting blocked on something.
 THREAD_STATES = ["Initialized", "Ready", "Running", "Standby", "Terminated", "Waiting", "Transition",
                  "DeferredReady", "GateWaitObsolete", "WaitingForProcessInSwap"]
 
@@ -69,9 +45,9 @@ class Switch:
 @dataclass
 class Ready:
     time: int
-    cpu: int          # where the readying code ran
-    tid: int          # the thread made ready
-    readier: int      # the thread running there when it was, 0 in a DPC or unknown
+    cpu: int
+    tid: int
+    readier: int
 
 
 @dataclass
@@ -118,16 +94,14 @@ class Kernel:
         self.process_names = {}
         self.thread_process = {}
         self.thread_names = {}
-        self.images = collections.defaultdict(dict)   # pid -> {base: Image}
+        self.images = collections.defaultdict(dict)
         self.pdbs = {}
         self.switches = collections.defaultdict(list)
         self.readies = []
         self.samples = []
         self.interrupts = collections.defaultdict(list)
-        self._stacks = {}            # (time, tid) -> frames
+        self._stacks = {}
         self._idle_threads = set()
-
-    # -- reading -------------------------------------------------------------
 
     def add(self, record):
         if record.kind in ("system", "perfinfo"):
@@ -163,8 +137,6 @@ class Kernel:
         elif group == STACKWALK and kind == STACK and len(data) > 16:
             stamp, _, tid = struct.unpack_from("<QII", data)
             count = (len(data) - 16) // 8
-            # A sample in kernel mode walks twice at one stamp: the kernel's
-            # frames, then the user's once the thread returns.
             self._stacks.setdefault((stamp, tid), []).extend(struct.unpack_from(f"<{count}Q", data, 16))
         elif group == PERFINFO and kind in DPC_TYPES and len(data) >= 16:
             start, routine = struct.unpack_from("<QQ", data)
@@ -178,9 +150,6 @@ class Kernel:
         if len(data) < 40:
             return
         pid, = struct.unpack_from("<I", data, 8)
-        # UserSID is a TOKEN_USER (a pointer and attributes, 16 bytes) followed
-        # by the SID itself, revision 1. It starts at 40 in a live event and
-        # at 36 in a rundown one, which lacks a field before it.
         for token in SID_OFFSETS:
             offset = token + 16
             if offset + 8 <= len(data) and data[offset] == 1 and data[offset + 1] <= MAX_SUBAUTHORITIES:
@@ -210,16 +179,12 @@ class Kernel:
             self.pdbs[(pid if base < KERNEL_SPACE else 0, base)] = (name, guid, age)
 
     def finish(self):
-        """Samples joined to their stacks, everything in time order."""
         for sample in self.samples:
             sample.stack = tuple(self._stacks.get((sample.time, sample.tid), ()))
         self._stacks = {}
         self.samples.sort(key=lambda sample: sample.time)
         for switches in self.switches.values():
             switches.sort(key=lambda switch: switch.time)
-        # Who readied a thread is whoever ran on that processor then: the
-        # buffers of different processors come in no time order, so it is
-        # looked up once every processor's switches are sorted.
         times = {cpu: [switch.time for switch in switches] for cpu, switches in self.switches.items()}
         for ready in self.readies:
             index = bisect.bisect_right(times.get(ready.cpu, []), ready.time) - 1
@@ -227,8 +192,6 @@ class Kernel:
         self.readies.sort(key=lambda ready: ready.time)
         for interrupts in self.interrupts.values():
             interrupts.sort(key=lambda interrupt: interrupt.start)
-
-    # -- questions -----------------------------------------------------------
 
     def process_name(self, pid):
         return self.process_names.get(pid, f"pid {pid}")
@@ -245,7 +208,6 @@ class Kernel:
         return tid == 0 or tid in self._idle_threads
 
     def image_at(self, pid, address):
-        """The image an address falls in, in the process or the kernel."""
         table = self.images.get(0 if address >= KERNEL_SPACE else pid, {})
         bases = sorted(table)
         index = bisect.bisect_right(bases, address) - 1

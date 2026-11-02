@@ -33,8 +33,6 @@ uint64_t WireReader::read_u64() { return read_little_endian(8u); }
 
 void WireReader::copy_bytes(uint8_t *destination, size_t count)
 {
-    /* Builtins, not loops: the freestanding builds do not turn a loop into
-     * memcpy, and every byte an upload carries passes through here. */
     const uint8_t *start = take(count);
     if (start != nullptr) __builtin_memcpy(destination, start, count);
     else __builtin_memset(destination, 0, count);
@@ -52,8 +50,6 @@ void WireReader::skip(size_t count) { static_cast<void>(take(count)); }
 
 bool WireReader::read(void *destination, size_t count)
 {
-    /* A decoder whose arena refused it has nowhere to put the bytes. Reading
-     * into nothing is a frame this host cannot take, not a write through null. */
     if (destination == nullptr) {
         status_ = Status::malformed;
         return false;
@@ -69,8 +65,6 @@ bool WireReader::read_varint_bits(uint64_t &value, size_t bits)
         const uint8_t byte = read_u8();
         if (status_ != Status::ok) return false;
         const uint64_t group = static_cast<uint64_t>(byte & 0x7Fu);
-        /* A group whose bits do not fit the destination is a frame claiming a
-         * value the field cannot hold. */
         if (shift >= bits || (shift + 7u > bits && (group >> (bits - shift)) != 0u)) {
             status_ = Status::malformed;
             return false;
@@ -84,7 +78,6 @@ bool WireReader::read_varint_bits(uint64_t &value, size_t bits)
 
 Status WireReader::status() const    { return status_; }
 size_t WireReader::offset() const    { return offset_; }
-/* Zero after a failure, so a loop reading until nothing remains always ends. */
 size_t WireReader::remaining() const { return status_ == Status::ok ? length_ - offset_ : 0u; }
 
 bool WireReader::invariants_hold() const
@@ -92,4 +85,4 @@ bool WireReader::invariants_hold() const
     return offset_ <= length_ && (bytes_ != nullptr || length_ == 0u);
 }
 
-}  // namespace av
+}

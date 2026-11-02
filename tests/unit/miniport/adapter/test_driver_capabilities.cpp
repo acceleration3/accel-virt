@@ -28,8 +28,8 @@ using av::Violation;
 
 namespace {
 
-constexpr std::uint32_t driver_caps_bytes = 0x250u;   /* GetDriverCapsSizeFromDdiVersion(0x11007) */
-constexpr std::int32_t  wddm_version = 0x3200;             /* DXGKDDI_WDDMv3_2 */
+constexpr std::uint32_t driver_caps_bytes = 0x250u;
+constexpr std::int32_t  wddm_version = 0x3200;
 
 DxgkargQueryAdapterInfoRecord request(void *input, std::uint32_t input_size, void *output, std::uint32_t output_size)
 {
@@ -41,7 +41,7 @@ DxgkargQueryAdapterInfoRecord request(void *input, std::uint32_t input_size, voi
     return record;
 }
 
-}  // namespace
+}
 
 TEST(driver_capabilities_report_driver_caps, fills_exactly_the_wddm_3_2_block)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
@@ -51,10 +51,6 @@ TEST(driver_capabilities_report_driver_caps, fills_exactly_the_wddm_3_2_block)
   CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
   CHECK(output.guards_intact()); }
 
-/* Constitution VI: nothing is claimed before it is implemented. WDDM 3.2 with a
- * GPU MMU, MultiEngineAware over one node and flips at device IRQL (017),
- * per-engine recovery (015), an unrestricted address range and the hardware
- * cursor (013) are the whole answer at this level. */
 TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_earlier_features_implement)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
   DxgkDriverCapsRecord caps;
@@ -65,16 +61,11 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_ea
   CHECK(caps.HighestAcceptableAddress == -1);
   DxgkDriverCapsRecord expected = {};
   expected.WDDMVersion = wddm_version;
-  /* MultiEngineAware alone until the OS allows native fences: claiming
-   * NativeGpuFence while the feature is disabled fails the adapter start
-   * (feature 049, research.md §17). */
   expected.SchedulingCaps = 0x1u;
-  expected.MemoryManagementCaps = 0x70u;   /* CrossAdapterResource | VirtualAddressingSupported | GpuMmuSupported */
+  expected.MemoryManagementCaps = 0x70u;
   expected.GpuEngineTopologyNbAsymetricProcessingNodes = 2u;
-  expected.FlipCaps = 0x2u;                /* FlipOnVSyncMmIo */
-  /* Software device bitmaps and nothing else: no kernel-mode command buffer,
-   * so CDD sends no GDI drawing to a DxgkDdiRenderKm this driver lacks. */
-  expected.PresentationCaps = 0x1006c003u; /* as WARP reports */
+  expected.FlipCaps = 0x2u;
+  expected.PresentationCaps = 0x1006c003u;
   expected.SupportPerEngineTDR = 1u;
   expected.SupportDirectFlip = 1u;
   expected.SupportMultiPlaneOverlay = 1u;
@@ -82,14 +73,9 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_ea
   expected.HighestAcceptableAddress = -1;
   expected.MaxPointerWidth = 64u;
   expected.MaxPointerHeight = 64u;
-  expected.PointerCaps = 0x7u;   /* Monochrome | Color | MaskedColor */
+  expected.PointerCaps = 0x7u;
   CHECK(std::memcmp(&caps, &expected, sizeof caps) == 0); }
 
-/* FR-006 named out loud: rotation and gamma are what the display path would
- * otherwise silently ignore, so each field that would claim one is asserted
- * zero by name. Overlay planes it does have - four, beside DirectFlip, which
- * dxgkrnl insists on (OverlaySupport) - but none flipped immediately, no
- * scaled cursor and no queue of overlay flips. */
 TEST(driver_capabilities_report_driver_caps, claims_no_rotation_or_gamma_and_four_overlay_planes)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
   DxgkDriverCapsRecord caps;
@@ -175,12 +161,10 @@ TEST(driver_capabilities_report_physical_adapter_caps, two_gpu_mmu_nodes_the_fir
   int handle = 0;
   const DxgkargQueryAdapterInfoRecord record = request(&physical_adapter, 4u, &caps, sizeof caps);
   CHECK_STATUS(capabilities.report_physical_adapter_caps(AdapterInfoQuery(platform, record), &handle), Status::ok);
-  /* Node 0 runs packets and pages; node 1 is the hardware-scheduled one a
-   * process holds queues and doorbells on (feature 049, research.md §16). */
   CHECK_EQ(caps.NumExecutionNodes, 2u);
   CHECK_EQ(caps.PagingNodeIndex, 0u);
   CHECK(caps.DxgkPhysicalAdapterHandle == &handle);
-  CHECK_EQ(caps.Flags, 0x2u);   /* GpuMmuSupported */
+  CHECK_EQ(caps.Flags, 0x2u);
   CHECK_EQ(caps.VPRPagingNode, 0u);
   CHECK_EQ(caps.VirtualCopyNodeIndex, 0u); }
 
@@ -205,18 +189,11 @@ TEST(driver_capabilities_report_physical_adapter_caps, another_adapter_or_short_
   platform.set_irql(Irql::passive);
   while (platform.claim(Violation::irql_ceiling)) {} }
 
-/* Feature 049: what this driver's native fences need of the OS. One monitored
- * value to a fence - none of them are packed together here - and nothing
- * mapped into a GPU system process, because this device reads no fence memory
- * of its own (research.md §14). The caps are answered at all only because the
- * four native fence DDIs are implemented (constitution VI). */
 TEST(driver_capabilities_report_native_fence_caps, asks_for_one_value_a_fence_and_no_gpu_mapping)
 { MockPlatform platform; DriverCapabilities capabilities(platform);
   av::DxgkNativeFenceCapsRecord caps;
   std::memset(&caps, 0xA5, sizeof caps);
   const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, &caps, sizeof caps);
-  /* Until the OS says the feature is on, there are none to report and none of
-   * NativeGpuFence is claimed either. */
   CHECK(!capabilities.native_fences_reportable());
   DxgkDriverCapsRecord driver_caps = {};
   const DxgkargQueryAdapterInfoRecord all = request(nullptr, 0u, &driver_caps, sizeof driver_caps);
@@ -233,7 +210,6 @@ TEST(driver_capabilities_report_native_fence_caps, asks_for_one_value_a_fence_an
   CHECK_EQ(caps.MaximumAddress, 0u);
   for (const std::uint8_t byte : caps.Reserved) CHECK_EQ(byte, 0u);
 
-  /* A buffer with no room for them is not answered with part of them. */
   const DxgkargQueryAdapterInfoRecord short_output = request(nullptr, 0u, &caps, sizeof caps - 1u);
   CHECK(capabilities.report_native_fence_caps(AdapterInfoQuery(platform, short_output)) != Status::ok);
   platform.set_irql(av::Irql::dispatch);

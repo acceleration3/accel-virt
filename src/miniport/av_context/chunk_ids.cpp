@@ -67,4 +67,4 @@ bool ChunkIds::invariants_hold() const
     return counted == taken_ && words_.invariants_hold();
 }
 
-}  // namespace av
+}

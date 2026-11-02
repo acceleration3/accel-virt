@@ -17,7 +17,7 @@ LRESULT CALLBACK overlay_window_procedure(HWND window, UINT message, WPARAM wide
     return DefWindowProcW(window, message, wide, lengthy);
 }
 
-}  // namespace
+}
 
 WindowsOverlayEntry::WindowsOverlayEntry()
     : instance_(GetModuleHandleW(nullptr)), atom_(0u), window_(nullptr), device_(nullptr), context_(nullptr),
@@ -117,7 +117,6 @@ int32_t WindowsOverlayEntry::create_swap_chain(int32_t x, int32_t y, uint32_t wi
     return asked;
 }
 
-/* FLIP_DISCARD has one view of buffer 0 that always names the back buffer. */
 int32_t WindowsOverlayEntry::present(const uint8_t *colour)
 {
     AV_SCOPE("WindowsOverlayEntry::present");
@@ -180,4 +179,4 @@ void WindowsOverlayEntry::release()
     device_ = nullptr;
 }
 
-}  // namespace av
+}

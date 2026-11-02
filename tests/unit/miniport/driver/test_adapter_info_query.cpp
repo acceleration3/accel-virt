@@ -31,15 +31,13 @@ DxgkargQueryAdapterInfoRecord record_with_output(std::uint8_t *output, std::uint
     return record;
 }
 
-}  // namespace
+}
 
 TEST(adapter_info_query, reports_the_requested_type)
 { MockPlatform platform;
   DxgkargQueryAdapterInfoRecord record = {};
   record.Type = 47;
   CHECK_EQ(AdapterInfoQuery(platform, record).type(), 47); }
-
-/* ---- require_input ---------------------------------------------------------- */
 
 TEST(adapter_info_query_require_input, accepts_at_least_the_bytes_asked_for)
 { MockPlatform platform; std::uint32_t input = 0u;
@@ -64,8 +62,6 @@ TEST(adapter_info_query_require_input, nothing_asked_needs_no_input)
 { MockPlatform platform;
   const DxgkargQueryAdapterInfoRecord record = {};
   CHECK_STATUS(AdapterInfoQuery(platform, record).require_input(0u), Status::ok); }
-
-/* ---- write_output ----------------------------------------------------------- */
 
 TEST(adapter_info_query_write_output, writes_exactly_the_bytes_into_a_buffer_of_that_size)
 { MockPlatform platform; GuardedBuffer output(payload_bytes);
@@ -117,8 +113,6 @@ TEST(adapter_info_query, is_passive_only)
   CHECK(platform.claim(Violation::irql_ceiling));
   CHECK(platform.claim(Violation::irql_ceiling));
   platform.set_irql(Irql::passive); }
-
-/* ---- read_input and read_output --------------------------------------------- */
 
 TEST(adapter_info_query_read_input, copies_what_the_caller_supplied)
 { MockPlatform platform; std::uint32_t input = 0x11007u, copy = 0u;

@@ -45,4 +45,4 @@ void NodeFences::forget(std::uint32_t context)
 std::uint32_t NodeFences::completed() const { return completed_; }
 std::uint32_t NodeFences::vertical_blanks() const { return blanks_; }
 
-}  // namespace av
+}

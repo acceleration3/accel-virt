@@ -1,6 +1,3 @@
-/* clCreateContext's pfn_notify (ClContextNotify): the text handed to the
- * application's callback with its own data and no private information, and
- * nothing at all for an application that registered none. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/opencl/cl_context_notify.hpp"
 
@@ -28,7 +25,7 @@ void heard(const char *text, const void *info, std::size_t bytes, void *user_dat
     record->bytes = bytes;
 }
 
-}  // namespace
+}
 
 TEST(cl_context_notify, says_the_text_to_the_callback_with_its_own_data)
 { Heard           record;

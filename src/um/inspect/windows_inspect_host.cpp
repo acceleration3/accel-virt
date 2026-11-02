@@ -5,8 +5,6 @@
 
 #include <windows.h>
 
-/* tlhelp32.h is not in the pinned SDK subset; the process entry and the three
- * calls as that header declares them (SDK 10.0.26100, um/tlhelp32.h). */
 extern "C" {
 struct AvProcessEntry32W {
     DWORD     dwSize;
@@ -33,7 +31,7 @@ constexpr DWORD path_chars = 520u;
 constexpr DWORD snapshot_processes = 0x00000002u;
 constexpr DWORD write_chunk = 1u << 20u;
 
-}  // namespace
+}
 
 WindowsInspectHost::WindowsInspectHost() : clock_()
 {
@@ -138,4 +136,4 @@ uint64_t WindowsInspectHost::clock() const
     return clock_.now();
 }
 
-}  // namespace av
+}

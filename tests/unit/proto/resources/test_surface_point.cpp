@@ -1,5 +1,3 @@
-/* A surface point names a frame only with both halves: a surface without a
- * point, or a point of no surface, names nothing; equality is both halves. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/resources/surface_point.hpp"
 

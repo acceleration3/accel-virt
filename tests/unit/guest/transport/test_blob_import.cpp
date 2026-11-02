@@ -1,7 +1,3 @@
-/* IMPORT_BLOB and RELEASE_BLOB as a process sends them (docs/host-memory.md,
- * docs/protocol.md), over MockTransport playing the host: the request names
- * one host blob whole in 8 bytes, the answer's 16 are the host's word and
- * judged as hostile, and the device memory it names is released once. */
 #include "core/support/status.hpp"
 #include "guest/transport/blob_import.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -17,11 +13,10 @@
 namespace av {
 
 struct BlobImportProbe {
-    /* A refusal and a handle held at once: what judging an answer never leaves. */
     static void refused_and_held(BlobImport &import) { import.memory_ = 1u; import.host_status_ = 1u; }
 };
 
-}  // namespace av
+}
 
 using av::BlobImport;
 using av::BlobImportAnswer;
@@ -65,7 +60,7 @@ std::uint64_t u64_at(const std::uint8_t *bytes, std::size_t at)
     return value;
 }
 
-}  // namespace
+}
 
 TEST(blob_import, import_sends_the_contracts_request_and_holds_the_hosts_memory)
 { MockTransport transport;
@@ -84,7 +79,6 @@ TEST(blob_import, import_sends_the_contracts_request_and_holds_the_hosts_memory)
   const std::uint8_t *const request = transport.last_payload();
   CHECK_EQ(u32_at(request, 0u), chunk_resource);
   CHECK_EQ(u32_at(request, 4u), 0u);
-  /* One import per object: a second is refused without a send. */
   CHECK_STATUS(import.import(chunk_resource), Status::invalid_state);
   CHECK_EQ(transport.sends(), 1u);
   transport.set_reply(taken.bytes(), 0u);
@@ -95,12 +89,9 @@ TEST(blob_import, import_sends_the_contracts_request_and_holds_the_hosts_memory)
   CHECK_EQ(transport.last_length(), 8u);
   CHECK_EQ(u64_at(transport.last_payload(), 0u), device_memory);
   CHECK_EQ(import.memory(), 0u);
-  /* Nothing held, nothing sent. */
   CHECK_STATUS(import.release(), Status::ok);
   CHECK_EQ(transport.sends(), 2u); }
 
-/* A host out of memory to keep the import in is the caller's out of memory,
- * not a refusal it could fix by asking differently. */
 TEST(blob_import, a_host_with_no_room_is_out_of_memory)
 { MockTransport transport;
   BlobImport import(transport);
@@ -111,8 +102,6 @@ TEST(blob_import, a_host_with_no_room_is_out_of_memory)
   CHECK_EQ(import.host_status(), static_cast<std::uint32_t>(BlobImportAnswer::no_room));
   CHECK_EQ(import.memory(), 0u); }
 
-/* A refusal is the host's status with no memory; the object can import again,
- * and a later import it takes clears the refusal. */
 TEST(blob_import, a_refusal_keeps_the_hosts_status_and_holds_nothing)
 { MockTransport transport;
   BlobImport import(transport);
@@ -130,8 +119,6 @@ TEST(blob_import, a_refusal_keeps_the_hosts_status_and_holds_nothing)
   CHECK_EQ(import.host_status(), 0u);
   CHECK_EQ(import.memory(), device_memory); }
 
-/* Every answer the contract does not allow, and a failed call, holds nothing;
- * an empty one is told apart as a device that does not know the command. */
 TEST(blob_import, hostile_answers_hold_nothing)
 { struct Case { const char *what; std::uint32_t status; std::uint32_t reserved; std::uint64_t memory;
                 std::size_t length; Status expected; };
@@ -165,8 +152,6 @@ TEST(blob_import, hostile_answers_hold_nothing)
   CHECK_STATUS(import.import(chunk_resource), Status::invalid_state);
   CHECK_EQ(import.memory(), 0u); }
 
-/* One bit of an accepted answer flipped anywhere: a refusal only if it names no
- * memory, and whatever is accepted is exactly what the bytes say. */
 TEST(blob_import, a_byte_flip_sweep_accepts_only_what_the_bytes_say)
 { for (std::size_t byte = 0u; byte < BlobImportAnswer::encoded_size; byte++) {
       for (unsigned bit = 0u; bit < 8u; bit++) {
@@ -187,8 +172,6 @@ TEST(blob_import, a_byte_flip_sweep_accepts_only_what_the_bytes_say)
       }
   } }
 
-/* The import is forgotten whatever the release answers: a failed call or an
- * answer with bytes is reported, and the handle is never named again. */
 TEST(blob_import, release_forgets_the_import_whatever_the_host_answers)
 { { MockTransport transport;
     BlobImport import(transport);
@@ -215,9 +198,6 @@ TEST(blob_import, invariants_refuse_a_refusal_that_holds_memory)
   BlobImportProbe::refused_and_held(import);
   CHECK(!import.invariants_hold()); }
 
-/* A context whose device was lost forgets its import rather than asking the
- * host to release it: destroying the context frees it on the host (feature
- * 050, T040). Nothing is sent, and a later release asks nothing either. */
 TEST(blob_import, forget_drops_the_import_without_a_call)
 { MockTransport transport;
   BlobImport import(transport);

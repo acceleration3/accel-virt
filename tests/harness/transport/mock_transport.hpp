@@ -1,9 +1,3 @@
-/* A ClientTransport a test drives without a guest.
- *
- * It lends a writer over its own block, records the command id and bytes of
- * everything sent, and answers a scripted reply. The second implementation of
- * the interface after KmtTransport, and the one that lets the generated Vulkan
- * and OpenCL clients be exercised on a machine with no driver at all (043). */
 #ifndef AV_MOCK_TRANSPORT_HPP
 #define AV_MOCK_TRANSPORT_HPP
 
@@ -21,12 +15,9 @@ public:
 
     MockTransport();
 
-    /* The next send answers `reply` of `length` bytes. */
     void          set_reply(const std::uint8_t *reply, std::size_t length);
-    /* The next send fails rather than delivering. */
     void          fail_next();
     std::uint32_t sends() const;
-    /* How many times a call was ended. */
     std::uint32_t end_calls() const;
     std::uint32_t last_command() const;
     std::size_t   last_length() const;
@@ -56,6 +47,6 @@ private:
     ClientBlobArena blobs_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MOCK_TRANSPORT_HPP
+#endif

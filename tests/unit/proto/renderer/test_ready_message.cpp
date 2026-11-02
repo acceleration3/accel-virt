@@ -17,8 +17,6 @@ using av::Status;
 using av::SubApi;
 
 namespace {
-
-/* Vulkan (bit 0) and OpenCL (bit 2). */
 constexpr std::uint32_t offered = static_cast<std::uint32_t>(SubApi::vulkan) | static_cast<std::uint32_t>(SubApi::opencl);
 
 bool rejects(const std::uint8_t *bytes, std::size_t length)
@@ -33,7 +31,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(ready_message_encode, is_the_versions_and_the_sub_apis)
 { GuardedBuffer bytes(ReadyMessage::encoded_size);
@@ -57,8 +55,6 @@ TEST(ready_message, round_trips_through_its_encoding)
   CHECK_EQ(decoded.executor_abi(), 9u);
   CHECK_EQ(decoded.sub_apis(), offered); }
 
-/* A renderer that can run nothing still answers: the capset then offers
- * nothing, which is the guest's to see. */
 TEST(ready_message, a_renderer_offering_nothing_is_a_message)
 { std::uint8_t bytes[ReadyMessage::encoded_size] = {};
   CHECK_STATUS(ReadyMessage(1u, 1u, 0u).encode(bytes, sizeof bytes), Status::ok);
@@ -66,8 +62,6 @@ TEST(ready_message, a_renderer_offering_nothing_is_a_message)
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes, 0u), Status::ok);
   CHECK_EQ(decoded.sub_apis(), 0u); }
 
-/* The last lane is bit 7: every lane up to it is a sub-API, the next bit is
- * none. */
 TEST(ready_message_encode, refuses_a_sub_api_past_the_last_lane)
 { std::uint8_t bytes[ReadyMessage::encoded_size] = {};
   CHECK_STATUS(ReadyMessage(1u, 1u, 1u << (ReadyMessage::lanes - 1u)).encode(bytes, sizeof bytes), Status::ok);
@@ -109,9 +103,5 @@ TEST(ready_message_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 96u);
-  /* Both versions are free: 64 flips. Any of the eight lane bits of the
-   * sub-API mask may be flipped; the 24 above them name no lane. All zero is
-   * a renderer that offers nothing, which is a message. With the untouched
-   * message, 64 + 8 + 1 + 1. */
   const std::uint32_t acceptable = 64u + 8u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

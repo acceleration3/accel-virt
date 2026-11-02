@@ -14,8 +14,8 @@ namespace av {
 
 namespace {
 
-constexpr std::int32_t no_mode_to_pin = 0x001E0310;   /* the success twin of STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE */
-constexpr std::int32_t crtc_vsync = 3;                /* DXGK_INTERRUPT_CRTC_VSYNC */
+constexpr std::int32_t no_mode_to_pin = 0x001E0310;
+constexpr std::int32_t crtc_vsync = 3;
 
 using QueryDeviceDescriptor = std::int32_t (*)(void *, std::uint32_t, DxgkDeviceDescriptorRecord *);
 using RecommendMonitorModes = std::int32_t (*)(void *, const DxgkargRecommendMonitorModesRecord *);
@@ -28,7 +28,7 @@ using RecommendTopology = std::int32_t (*)(void *, const DxgkargRecommendVidPnTo
 using GetScanLine = std::int32_t (*)(void *, DxgkargGetScanLineRecord *);
 using ControlInterrupt = std::int32_t (*)(void *, std::int32_t, std::uint8_t);
 
-}  // namespace
+}
 
 FakeDisplayModeManager::FakeDisplayModeManager(MockPlatform &platform, const DdiTable &table, void *adapter)
     : platform_(platform), table_(table), adapter_(adapter) {}
@@ -124,7 +124,7 @@ std::int32_t FakeDisplayModeManager::show_primary(void *allocation, std::int64_t
     request.PrimarySegment = 1u;
     request.PrimaryAddress = address;
     request.hAllocation = allocation;
-    request.Flags = 0x4u;   /* FlipOnNextVSync */
+    request.Flags = 0x4u;
     return reinterpret_cast<std::int32_t (*)(void *, const DxgkargSetVidPnSourceAddressRecord *)>(
         table_.routine(DdiSlot::DxgkDdiSetVidPnSourceAddress))(adapter_, &request);
 }
@@ -158,4 +158,4 @@ std::int32_t FakeDisplayModeManager::enumerate(FakeVidPn &vidpn, std::int32_t pi
                                                                                                           &request);
 }
 
-}  // namespace av
+}

@@ -13,7 +13,7 @@ namespace {
 
 constexpr uint8_t tolerance = 1u;
 
-}  // namespace
+}
 
 D3d12Work::D3d12Work(D3d12Entry &d3d12, ImageSink &images)
     : d3d12_(d3d12), images_(images), adapter_(0u), feature_level_(0u), serialized_library_(0u), made_(false),
@@ -86,7 +86,6 @@ uint32_t D3d12Work::coloured() const
     for (uint32_t pixel = 0u; pixel < pixels; pixel++) {
         const uint8_t *const bytes = &frame_[pixel * pixel_bytes];
         bool                 same = true;
-        /* RGBA, as the copy out of the render target leaves it. */
         for (uint32_t channel = 0u; channel < 3u; channel++)
             same = same && bytes[channel] + tolerance >= colour[channel] &&
                    colour[channel] + tolerance >= bytes[channel];
@@ -102,4 +101,4 @@ bool D3d12Work::invariants_hold() const
     return coloured() <= pixels && existing_.invariants_hold();
 }
 
-}  // namespace av
+}

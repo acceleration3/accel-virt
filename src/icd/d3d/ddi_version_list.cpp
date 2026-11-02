@@ -4,16 +4,11 @@
 
 namespace av::d3d {
 namespace {
-
-/* D3DWDDM3_2_DDI_SUPPORTED: interface (11 << 16) | 45, build 1
- * (d3d10umddi.h:7969-7974). The one WDDM level this project declares. */
 constexpr uint64_t d3d11_wddm3_2 = (((11ull << 16) | 45ull) << 32) | (1ull << 16);
 
-/* D3D12DDI_SUPPORTED_0110: interface (12 << 16) | 80 (R8), build 110
- * (d3d12umddi.h:10148, 13656). The newest revision the pinned kit declares. */
 constexpr uint64_t d3d12_r8_0110 = (((12ull << 16) | 80ull) << 32) | (110ull << 16);
 
-}  // namespace
+}
 
 DdiVersionList::DdiVersionList(RuntimeKind runtime) : words_{}, count_(1u)
 {
@@ -76,4 +71,4 @@ bool DdiVersionList::invariants_hold() const
     return true;
 }
 
-}  // namespace av::d3d
+}

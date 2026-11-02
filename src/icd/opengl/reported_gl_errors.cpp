@@ -28,4 +28,4 @@ uint32_t ReportedGlErrors::take(uint64_t word)
     return 0u;
 }
 
-}  // namespace av::glicd
+}

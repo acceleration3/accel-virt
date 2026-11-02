@@ -67,4 +67,4 @@ size_t TextBuffer::length() const
     return length_;
 }
 
-}  // namespace av
+}

@@ -1,7 +1,3 @@
-/* The driver's half of the loopback suite: carries a guest core's control
- * requests to a LoopbackDevice and its answers back, at the IRQL the driver
- * would, and serves a context on its fence interrupts. An answer can be cut
- * short or have a byte rewritten on the way, a device that lies. */
 #ifndef AV_LOOPBACK_DRIVER_HPP
 #define AV_LOOPBACK_DRIVER_HPP
 
@@ -23,16 +19,10 @@ public:
 
     LoopbackDriver(MockPlatform &platform, LoopbackDevice &device);
 
-    /* Runs the query to its end: the status of the last answer accepted. */
     Status        query(CapsetQuery &query);
-    /* Sends every request the context has, each answered by the device: how many. */
     std::uint32_t converse(GuestContext &context);
-    /* Serves the context on each interrupt of `line` until `fence` completes:
-     * false once it faults, fails, or the device goes quiet. */
     bool          serve_until(GuestContext &context, std::uint32_t line, std::uint64_t fence);
-    /* The Nth answer from now (1-based): byte `offset` becomes `value`. */
     void          tamper_answer(std::uint32_t nth, std::size_t offset, std::uint8_t value);
-    /* The Nth answer from now (1-based) cut to `length` bytes. */
     void          truncate_answer(std::uint32_t nth, std::size_t length);
 
 private:
@@ -47,6 +37,6 @@ private:
     std::size_t     truncate_length_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_LOOPBACK_DRIVER_HPP
+#endif

@@ -1,14 +1,3 @@
-"""What the two sides of SC-002's comparison keep, and what they refuse to read
-(feature 065).
-
-The record is two numbers written by two different boots, so what is worth
-testing is everything that can go wrong between them: a side arriving before
-the other, a side arriving twice, a file a hand edited into something that is
-not a measurement, and the subtraction itself at the sign that decides whether
-a recording cost anything at all. A record that quietly read as nothing would
-turn a missing boot into a cost of zero, which is the one answer nobody
-measured.
-"""
 import pathlib
 import sys
 import tempfile
@@ -38,8 +27,6 @@ class RecordingCostTests(unittest.TestCase):
         self.assertEqual(record.cost(), 72)
 
     def test_one_side_alone_is_no_cost_at_all(self):
-        """The half-measured state is the one a first boot leaves, and it must
-        not read as a recording that cost nothing."""
         for text in ("off 640\n", "on 712\n"):
             record = self.record(text)
             self.assertIsNone(record.cost())
@@ -55,8 +42,6 @@ class RecordingCostTests(unittest.TestCase):
             self.assertEqual(self.record(text).measured, {})
 
     def test_the_second_boot_replaces_its_own_side_and_keeps_the_others(self):
-        """Two boots make the pair, and a third replaces whichever side it
-        measured: the comparison is always of the two most recent runs."""
         record = self.record("off 640\n")
         record.keep("on", 712)
         self.assertEqual(record.cost(), 72)
@@ -73,8 +58,6 @@ class RecordingCostTests(unittest.TestCase):
         self.assertEqual(self.path.read_text(), HEADER + "off 640\non 712\n")
 
     def test_a_recording_that_cost_nothing_measurable_is_a_negative_difference(self):
-        """The sign is the runner's cue that the pair says nothing, so it has
-        to survive the arithmetic rather than being clamped away."""
         self.assertEqual(self.record("off 700\non 640\n").cost(), -60)
         self.assertEqual(self.record("off 640\non 640\n").cost(), 0)
 
@@ -93,8 +76,6 @@ class RecordingCostTests(unittest.TestCase):
                 record.measured
 
     def test_a_refused_record_is_not_overwritten_by_the_run_that_read_it(self):
-        """A file somebody edited by hand is evidence; the next run says so
-        rather than replacing it with its own half of a pair."""
         record = self.record("off 640\noff 700\n")
         with self.assertRaises(ValueError):
             record.keep("on", 712)

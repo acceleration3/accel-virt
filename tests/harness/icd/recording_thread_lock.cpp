@@ -59,4 +59,4 @@ bool RecordingThreadLock::claim_violation()
     return true;
 }
 
-}  // namespace av
+}

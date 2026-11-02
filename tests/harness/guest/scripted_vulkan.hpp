@@ -1,12 +1,3 @@
-/* The Vulkan the probe's unit tests play (feature 045, T037): a GPU small
- * enough to judge, behind VulkanEntry. Physical devices carry the LUIDs a test
- * gives them; memory a type marks host visible is this object's own bytes,
- * mapped as they are; a submitted command buffer that dispatched over a bound
- * storage buffer doubles the buffer's elements, and one that drew inside a
- * render pass and copied the image out fills the copy's buffer with the
- * fragment shader's colour. Any VkResult call can be made to answer an error
- * on its Nth use, and every object made is tracked, so a test asserts nothing
- * is left and nothing was destroyed twice. */
 #ifndef AV_SCRIPTED_VULKAN_HPP
 #define AV_SCRIPTED_VULKAN_HPP
 
@@ -21,7 +12,6 @@ class ScriptedWindowFrame;
 
 class ScriptedVulkan final : public VulkanEntry {
 public:
-    /* The calls a test can fail, and count. */
     enum class Call : std::uint32_t {
         create_instance,
         enumerate_physical_devices,
@@ -58,100 +48,55 @@ public:
         count
     };
 
-    /* More than ProbeDevice looks at. */
     static constexpr std::uint32_t max_physical_devices = 20u;
     static constexpr std::uint32_t max_objects = 64u;
     static constexpr std::uint32_t max_allocations = 4u;
     static constexpr std::uint64_t max_mapped_bytes = 64u * 64u * 4u;
-    /* solid.frag's vec4(0.25, 0.5, 0.75, 1.0) as UNORM bytes. */
     static constexpr std::uint8_t  colour[4] = {64u, 128u, 191u, 255u};
-    /* Two types: 0 device local, 1 host visible; the buffers may use both. */
     static constexpr std::uint32_t default_memory_types = 2u;
-    /* A swapchain's images, as the probe's present asks for. */
     static constexpr std::uint32_t images_per_swapchain = 2u;
 
     ScriptedVulkan();
     ScriptedVulkan(const ScriptedVulkan &) = delete;
     ScriptedVulkan &operator=(const ScriptedVulkan &) = delete;
 
-    /* The Nth use (1-based, counted from the first) of `call` answers `result`. */
     void          fail(Call call, std::uint32_t nth, VkResult result);
     std::uint32_t calls(Call call) const;
-    /* `count` physical devices, the one at `index` given `luid` and whether
-     * the LUID is valid; the others' LUIDs are their index plus one. */
     void          set_physical_devices(std::uint32_t count);
     void          set_luid(std::uint32_t index, std::uint64_t luid, bool valid);
-    /* `count` queue families, all with `flags`. */
     void          set_queue_families(std::uint32_t count, VkQueueFlags flags);
-    /* The type at `index` has `flags`; `count` types in all. */
     void          set_memory_types(std::uint32_t count);
     void          set_memory_type(std::uint32_t index, VkMemoryPropertyFlags flags);
-    /* The types buffers and images may use. */
     void          set_allowed_types(std::uint32_t buffers, std::uint32_t images);
-    /* The dispatch leaves the last element as it was; the draw leaves the last
-     * pixel black. */
     void          miscompute();
-    /* Submissions complete nothing: their fences are never signalled. */
     void          hold_fences();
     void          misdraw();
-    /* What vkAvForceContextFault answers, and what the device answers to
-     * vkDeviceWaitIdle after it. */
     void          answer_fault(VkResult fault, VkResult idle_after);
-    /* The window a present draws on, as the driver's blit would, once a frame
-     * has been drawn into the image being presented: the fragment shader's
-     * colour over the drawing pipeline's viewport at the top left, and the
-     * render pass's clear colour past it, in the window's own channel order. */
     void          present_into(ScriptedWindowFrame &window);
-    /* Presents from the `nth` on (1-based) answer success and reach no window:
-     * a driver whose frames stop arriving, and the window keeps showing what
-     * it last showed. */
     void          withhold_presents_from(std::uint32_t nth);
-    /* Each present waits for a vertical blank on `adapter`, as the driver's
-     * FIFO pacing does; without this a present is unpaced. */
     void          pace_on(Kmt &kmt, std::uint32_t adapter, std::uint32_t device);
     void          present_unpaced();
-    /* The surface's current extent is not the window's: what an application
-     * meets between a resize and the message that follows it. */
     void          hold_the_surface_extent(std::uint32_t width, std::uint32_t height);
-    /* A surface offering neither the format nor the mode this driver presents
-     * in, and one whose queries answer that it is lost. */
     void          offer_nothing_presentable();
     void          lose_the_surface_queries();
-    /* The least images the surface will make a swapchain of: a driver asking
-     * for more than the caller keeps room for. */
     void          ask_for_images(std::uint32_t minimum);
-    /* Every mode the surface offers is this one, listed twice: a driver that
-     * presents one way only. */
     void          offer_only_the_mode(VkPresentModeKHR mode);
-    /* The present modes alone are lost, after the formats were answered. */
     void          lose_the_present_modes();
-    /* A swapchain whose images cannot be listed, and one that hands out one
-     * image where the caller asked for two. */
     void          lose_the_swapchain_images();
     void          hand_out_one_image();
     std::uint32_t presents() const;
-    /* Whether the last instance or device was made with `name` enabled: what a
-     * real loader needs before the extension's entry points dispatch. */
     bool          instance_enabled(const char *name) const;
     bool          device_enabled(const char *name) const;
 
-    /* After the fault every LUID is xored with `luid_xor` and every family has
-     * `flags`: what a host that changed under the probe looks like. */
     void          change_after_fault(std::uint64_t luid_xor, VkQueueFlags flags);
 
-    /* Objects made and not destroyed, and destroys of objects never made or
-     * already destroyed. */
     std::uint32_t live() const;
     std::uint32_t misuses() const;
-    /* The last instance's API version, the memory type of each allocation in
-     * order, the last dispatch's group count and draw's vertex count, and the
-     * words of every shader module made, summed. */
     std::uint32_t instance_api_version() const;
     std::uint32_t allocated_type(std::uint32_t index) const;
     std::uint32_t dispatched_groups() const;
     std::uint32_t drawn_vertices() const;
     std::uint64_t shader_words() const;
-    /* The physical device the last device was made on, as its index. */
     std::uint32_t device_parent() const;
 
     VkResult create_instance(const VkInstanceCreateInfo *info, VkInstance *instance) override;
@@ -177,31 +122,16 @@ public:
     void     destroy_image(VkDevice device, VkImage image) override;
     void     image_memory_requirements(VkDevice device, VkImage image, VkMemoryRequirements *requirements) override;
     VkResult bind_image_memory(VkDevice device, VkImage image, VkDeviceMemory memory) override;
-    /* Feature 053: whether this host reports VK_KHR_external_memory_win32 and
-     * what its export answers. Off by default, as a host with no fd sharing
-     * is. */
     void     report_external_objects(void *handle);
-    /* Feature 053: the device-extension enumeration answers this instead of
-     * the host's own list - `count` extensions none of which the probe is
-     * looking for, with `first` from the counting call and `second` from the
-     * one that fills the names in. What the probe must survive is every one of
-     * them: a host that refuses to be asked, one that claims more extensions
-     * than the probe keeps room for, and one that lists only others. */
     void     answer_extensions(std::uint32_t count, VkResult first, VkResult second);
-    /* An allocate that answers success and no memory, and a handle export that
-     * answers success and no handle: a host keeping neither promise, which the
-     * probe must read as a failed step rather than a passed one. */
     void     allocate_nothing();
     void     hand_out_no_handle();
-    /* The NTSTATUS the driver reports after the free, which a release that
-     * went wrong leaves non-zero. */
     void     refuse_the_release(std::uint32_t code);
     VkResult allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info, VkDeviceMemory *memory) override;
     void     free_memory(VkDevice device, VkDeviceMemory memory) override;
     VkResult enumerate_device_extensions(VkPhysicalDevice physical_device, std::uint32_t *count,
                                          VkExtensionProperties *properties) override;
     std::uint32_t last_kernel_status(VkDevice device) override;
-    /* The NTSTATUS a scripted driver says its last kernel call answered. */
     void          set_kernel_status(std::uint32_t code);
     VkResult memory_win32_handle(VkDevice device, VkDeviceMemory memory, void **handle) override;
     VkResult map_memory(VkDevice device, VkDeviceMemory memory, void **data) override;
@@ -281,7 +211,6 @@ private:
     struct Object {
         std::uint64_t handle;
         Kind          kind;
-        /* A buffer's memory, a memory's allocation slot, a fence's signal. */
         std::uint64_t link;
     };
     struct Allocation {
@@ -296,18 +225,13 @@ private:
         std::uint32_t vertices;
         bool          in_render_pass;
         bool          drew;
-        /* The pipeline bound, and what the render pass clears to, as UNORM
-         * bytes red, green, blue, alpha. */
         std::uint64_t pipeline;
         std::uint8_t  cleared[4];
         std::uint64_t copied_to;
-        /* The buffer a fill names and the word it writes over it, which the
-         * run puts into the memory that buffer is bound to. */
         std::uint64_t filled;
         std::uint32_t fill_value;
     };
 
-    /* The scripted failure for this use of `call`, or VK_SUCCESS. */
     VkResult      use(Call call);
     std::uint64_t make(Kind kind, std::uint64_t link);
     void          destroy(Kind kind, std::uint64_t handle);
@@ -337,8 +261,6 @@ private:
     Object        objects_[max_objects];
     std::uint32_t misuses_;
     std::uint64_t next_handle_;
-    /* Feature 053: which external-object extensions this host reports, and the
-     * handle its export answers - what a probe over it is judged against. */
     bool          external_objects_;
     void         *win32_handle_;
     bool          scripted_extensions_;
@@ -389,13 +311,11 @@ private:
     std::uint32_t presents_;
     bool          drew_since_present_;
     std::uint32_t withheld_from_;
-    /* The last frame drawn: the viewport the colour covers, and the clear past
-     * it. */
     std::uint32_t drawn_width_;
     std::uint32_t drawn_height_;
     std::uint8_t  drawn_clear_[4];
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_VULKAN_HPP
+#endif

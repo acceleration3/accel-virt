@@ -1,7 +1,3 @@
-/* D3d12Entry over the d3d12.dll beside the probe (feature 047, T028), which in
- * the guest is vkd3d-proton's: one device on the first adapter DXGI lists, a
- * direct queue, a render target committed on its own heap, a readback buffer
- * of its rows, and a fence to wait on. Translation only. */
 #ifndef AV_WINDOWS_D3D12_ENTRY_HPP
 #define AV_WINDOWS_D3D12_ENTRY_HPP
 
@@ -32,11 +28,8 @@ public:
     void    release() override;
 
 private:
-    /* A buffer of `bytes` at `offset` of existing heap `heap`, in the common state. */
     int32_t place_buffer(ID3D12Heap *heap, uint64_t offset, uint32_t bytes, ID3D12Resource *&buffer);
-    /* `from` copied into `into` on the queue, and the fence waited for. */
     int32_t copy_and_wait(ID3D12Resource *from, ID3D12Resource *into, uint32_t bytes);
-    /* The two buffers over the heap, and the copy between them. */
     int32_t copy_within(ID3D12Heap *heap, uint8_t *memory, uint32_t bytes, uint32_t &aliased);
 
     IDXGIFactory4             *factory_;
@@ -53,13 +46,11 @@ private:
     uint64_t                   signalled_;
     uint32_t                   width_;
     uint32_t                   height_;
-    /* What a copy out of a texture rounds each row up to. */
     uint32_t                   row_pitch_;
-    /* Room for a serialized empty library: a header, whatever the driver. */
     static constexpr uint32_t  library_room = 4096u;
     uint8_t                    library_blob_[library_room];
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WINDOWS_D3D12_ENTRY_HPP
+#endif

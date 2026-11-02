@@ -1,12 +1,3 @@
-"""Blob resources against the real device: guest-backed blobs held by the
-device, and device-allocated blobs the guest reads and writes through the
-hostmem BAR once mapped. Stock virtio-gpu-pci with blob=off refuses every blob
-request; virtio-gpu-av-pci answers them itself without offering
-VIRTIO_GPU_F_RESOURCE_BLOB.
-
-Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
-AV_QEMU_BUILD.
-"""
 import os
 import struct
 import unittest
@@ -125,8 +116,6 @@ class VirtioGpuBlobs(unittest.TestCase):
         self.assertEqual(gpu.qtest.read_bytes(hostmem + 11 * PAGE, len(pattern)), bytes(len(pattern)))
 
     def test_a_blob_as_large_as_the_window_is_placed_at_its_start(self):
-        """The largest chunk the driver's host window can hand out
-        (docs/host-window.md) is the whole BAR, placed at offset 0."""
         gpu = self.open(AV)
         hostmem = self.hostmem(gpu)
         resource = 0x1000
@@ -135,21 +124,15 @@ class VirtioGpuBlobs(unittest.TestCase):
         response = gpu.control(map_blob(resource, 0), 32)
         self.assertEqual(hex(response_type(response)), hex(RESP_OK_MAP_INFO))
         self.assertEqual(struct.unpack_from("<I", response, 24)[0], MAP_CACHE_CACHED)
-        # Every offset VidMm could place an allocation at is the host's memory:
-        # the first page, the last, and one in the middle.
         pattern = bytes(range(256))
         for offset in (0, HOSTMEM // 2, HOSTMEM - len(pattern)):
             gpu.qtest.write_bytes(hostmem + offset, pattern)
             self.assertEqual(gpu.qtest.read_bytes(hostmem + offset, len(pattern)), pattern)
-        # Nothing else fits beside it, which is what one blob for the whole
-        # region means.
         self.assertEqual(hex(self.send(gpu, create_blob(resource + 1, BLOB_MEM_HOST3D, BLOB_FLAG_MAPPABLE, PAGE))),
                          hex(RESP_OK_NODATA))
         self.assertEqual(hex(self.send(gpu, map_blob(resource + 1, 0))), hex(RESP_ERR_INVALID_PARAMETER))
         self.assertEqual(hex(self.send(gpu, map_blob(resource + 1, HOSTMEM - PAGE))),
                          hex(RESP_ERR_INVALID_PARAMETER))
-        # And the driver's own teardown order - unmap, then unref - is what the
-        # device accepts.
         self.assertEqual(hex(self.send(gpu, named(CMD_RESOURCE_UNMAP_BLOB, resource))), hex(RESP_OK_NODATA))
         self.assertEqual(hex(self.send(gpu, named(CMD_RESOURCE_UNREF, resource))), hex(RESP_OK_NODATA))
         self.assertEqual(gpu.qtest.read_bytes(hostmem, len(pattern)), bytes(len(pattern)))
@@ -161,10 +144,10 @@ class VirtioGpuBlobs(unittest.TestCase):
                                                             2 * PAGE))), hex(RESP_OK_NODATA))
         self.assertEqual(hex(response_type(gpu.control(map_blob(3, 0), 32))), hex(RESP_OK_MAP_INFO))
         refused = (
-            (map_blob(3, 8 * PAGE), RESP_ERR_INVALID_PARAMETER),           # already mapped
-            (map_blob(4, PAGE), RESP_ERR_INVALID_PARAMETER),               # overlaps
-            (map_blob(4, 2 * PAGE + 1), RESP_ERR_INVALID_PARAMETER),       # misaligned
-            (map_blob(4, HOSTMEM - PAGE), RESP_ERR_INVALID_PARAMETER),     # past the region
+            (map_blob(3, 8 * PAGE), RESP_ERR_INVALID_PARAMETER),
+            (map_blob(4, PAGE), RESP_ERR_INVALID_PARAMETER),
+            (map_blob(4, 2 * PAGE + 1), RESP_ERR_INVALID_PARAMETER),
+            (map_blob(4, HOSTMEM - PAGE), RESP_ERR_INVALID_PARAMETER),
             (map_blob(9, 8 * PAGE), RESP_ERR_INVALID_RESOURCE_ID),
         )
         for request, error in refused:
@@ -203,7 +186,7 @@ class VirtioGpuBlobs(unittest.TestCase):
                          hex(RESP_OK_NODATA))
         self.assertEqual(hex(response_type(gpu.control(map_blob(7, 0), 32))), hex(RESP_OK_MAP_INFO))
         gpu.qtest.write_bytes(hostmem, b"\xAA" * 16)
-        again = virtio_qtest.VirtioGpu(gpu.qtest)   # a new driver resets the device first
+        again = virtio_qtest.VirtioGpu(gpu.qtest)
         self.assertEqual(gpu.qtest.read_bytes(hostmem, 16), bytes(16))
         self.assertEqual(hex(self.send(again, create_blob(7, BLOB_MEM_HOST3D, BLOB_FLAG_MAPPABLE, PAGE))),
                          hex(RESP_OK_NODATA))

@@ -1,15 +1,3 @@
-/* Two devices in one process sharing memory and a semaphore through the Win32
- * external objects (feature 047, US3, research.md §10): the ICD's own entry
- * points, the real driver and device core, the executor library, and this
- * machine's GPU.
- *
- * What only this layer can prove is that the translation works end to end. A
- * guest device is a host device, so the sharing is between two host devices,
- * over the fd extensions the host carries - and the proof is that the second
- * device sees what the first wrote into the shared memory, after waiting on
- * the semaphore the first signalled. A host without Vulkan, or one whose
- * driver cannot share by fd, has nothing here to judge and the test says so
- * and returns. */
 #include "device/abi/av_executor.h"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
@@ -59,8 +47,6 @@ using av::RecordingThreadLock;
 using av::WidestHostGpu;
 
 namespace {
-
-/* The ICD as one guest process holds it. */
 class IcdProcess {
 public:
     explicit IcdProcess(DdiKmt &kmt)
@@ -84,17 +70,12 @@ private:
     av::icd::IcdRoot          root_;
 };
 
-/* Two devices on the av adapter's one physical device, through the ICD's
- * entry points as the Windows loader would call them: what a DXGI-shared
- * resource lives between. */
 class IcdDevice {
 public:
     explicit IcdDevice(av::icd::IcdRoot &root) : root_(root), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE)
     {
         VkApplicationInfo application = {};
         application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        /* 1.3, written out: VK_API_VERSION_1_3 is an old-style cast the build
-         * refuses. */
         application.apiVersion = (1u << 22) | (3u << 12);
         VkInstanceCreateInfo create = {};
         create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -158,8 +139,6 @@ private:
 };
 
 
-/* A queue, a command pool and one command buffer of a device, with a fence to
- * wait on: what each side of the sharing submits through. */
 class Submission {
 public:
     Submission(IcdDevice &guest, VkDevice device) : guest_(guest), device_(device)
@@ -210,8 +189,6 @@ public:
     { CHECK_EQ(guest_.entry<PFN_vkEndCommandBuffer>(guest_.instance(), "vkEndCommandBuffer")(commands_),
                VK_SUCCESS); }
 
-    /* Submitted, signalling `signal` and waiting on `wait` where either is
-     * given; whether the fence was reached. */
     bool submit(VkSemaphore signal, VkSemaphore wait)
     {
         VkPipelineStageFlags stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -247,7 +224,6 @@ private:
     VkFence         fence_ = VK_NULL_HANDLE;
 };
 
-/* The first memory type of `allowed` with every flag of `wanted`. */
 std::uint32_t type_with(const VkPhysicalDeviceMemoryProperties &properties, std::uint32_t allowed,
                         VkMemoryPropertyFlags wanted)
 { for (std::uint32_t index = 0u; index < properties.memoryTypeCount; index++) {
@@ -259,12 +235,8 @@ std::uint32_t type_with(const VkPhysicalDeviceMemoryProperties &properties, std:
 constexpr VkDeviceSize shared_bytes = 4096u;
 constexpr std::uint32_t written = 0xABCDEF01u;
 
-}  // namespace
+}
 
-/* One device writes into shared memory and signals; the other waits on the
- * imported semaphore, copies the shared memory into its own staging, and the
- * guest reads back what the first wrote. Every handle in it is one this ICD
- * exported, and everything the host saw was an fd. */
 TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into_shared_memory)
 { const WidestHostGpu gpu;
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_VULKAN) == 0u) return;
@@ -277,8 +249,6 @@ TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into
   { IcdDevice guest(process.root());
     CHECK(guest.instance() != VK_NULL_HANDLE);
     if (guest.device() == VK_NULL_HANDLE || guest.second() == VK_NULL_HANDLE) {
-        /* A host driver with no fd sharing makes no such device, and there is
-         * nothing here to judge. */
         process.log().write("fullstack: the host makes no device that shares by fd");
         return;
     }
@@ -290,7 +260,6 @@ TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into
                                                          "vkGetPhysicalDeviceMemoryProperties")(
         guest.physical_device(), &properties);
 
-    /* The shared buffer, made on both devices over one allocation. */
     VkBufferCreateInfo buffer_create = {};
     buffer_create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     buffer_create.size = shared_bytes;
@@ -321,8 +290,6 @@ TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into
     const VkResult allocated = guest.entry<PFN_vkAllocateMemory>(guest.instance(), "vkAllocateMemory")(
         first, &allocate, nullptr, &shared_memory);
     if (allocated != VK_SUCCESS) {
-        /* The host's driver refused an exportable allocation, which is its
-         * answer and not this ICD's. */
         process.log().write("fullstack: the host refused an exportable allocation");
         return;
     }
@@ -330,8 +297,6 @@ TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into
                                                                                          shared_memory, 0u),
              VK_SUCCESS);
 
-    /* The handle this ICD answers for it, and the second device's import of
-     * it: a fresh fd of the same host memory, under the hood. */
     av::icd::MemoryGetWin32HandleRecord getting = {};
     getting.type_ = av::icd::memory_get_win32_handle_info;
     getting.memory_ = shared_memory;
@@ -364,8 +329,6 @@ TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into
                                                                                          imported_memory, 0u),
              VK_SUCCESS);
 
-    /* The semaphore the first signals and the second waits on, through the
-     * same translation. */
     VkExportSemaphoreCreateInfo exportable = {};
     exportable.sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO;
     exportable.handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
@@ -400,8 +363,6 @@ TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into
             guest.instance(), "vkImportSemaphoreWin32HandleKHR")(second, &semaphore_importing);
     CHECK_EQ(semaphore_imported, VK_SUCCESS);
 
-    /* The second device's staging buffer: host-visible, so the guest reads it
-     * as its own memory with no round trip. */
     VkBufferCreateInfo staging_create = buffer_create;
     staging_create.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     VkBuffer staging = VK_NULL_HANDLE;
@@ -429,8 +390,6 @@ TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into
                                                                                          staging_memory, 0u),
              VK_SUCCESS);
 
-    /* The first device fills the shared buffer and signals; the second waits
-     * on the imported semaphore and copies it into its staging. */
     Submission writing(guest, first);
     Submission reading(guest, second);
     CHECK(writing.ready());
@@ -448,8 +407,6 @@ TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into
     CHECK(writing.submit(signalled, VK_NULL_HANDLE));
     CHECK(reading.submit(VK_NULL_HANDLE, waited));
 
-    /* What the second device read is what the first wrote: one allocation,
-     * two devices, a Win32 handle between them. */
     void *mapped = nullptr;
     CHECK_EQ(guest.entry<PFN_vkMapMemory>(guest.instance(), "vkMapMemory")(second, staging_memory, 0u,
                                                                            shared_bytes, 0u, &mapped),
@@ -462,8 +419,6 @@ TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into
     }
     guest.entry<PFN_vkUnmapMemory>(guest.instance(), "vkUnmapMemory")(second, staging_memory);
 
-    /* Everything each device made, destroyed through the ICD; the handles go
-     * with what they named. */
     guest.entry<PFN_vkDestroySemaphore>(guest.instance(), "vkDestroySemaphore")(second, waited, nullptr);
     guest.entry<PFN_vkDestroySemaphore>(guest.instance(), "vkDestroySemaphore")(first, signalled, nullptr);
     guest.entry<PFN_vkDestroyBuffer>(guest.instance(), "vkDestroyBuffer")(second, staging, nullptr);
@@ -473,8 +428,6 @@ TEST(fullstack_external_objects, a_second_device_reads_what_the_first_wrote_into
     guest.entry<PFN_vkFreeMemory>(guest.instance(), "vkFreeMemory")(second, imported_memory, nullptr);
     guest.entry<PFN_vkFreeMemory>(guest.instance(), "vkFreeMemory")(first, shared_memory, nullptr);
     process.log().write("fullstack: the second device read what the first wrote"); }
-  /* Nothing in it was refused along the way, and it got to the end: the four
-   * returns above are the host saying it cannot share, and each says so. */
   CHECK_EQ(process.log().holding("fullstack: the second device read what the first wrote"), 1u);
   CHECK_EQ(process.log().holding("avvk: vkAllocateMemory names a handle this driver did not export"), 0u);
   CHECK_EQ(process.log().holding("avvk: vkImportSemaphoreWin32HandleKHR names a handle"), 0u);

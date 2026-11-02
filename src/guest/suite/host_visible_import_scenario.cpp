@@ -23,10 +23,9 @@ constexpr SideSteps side_steps[] = {
     {"dst_chunk", "dst_buffer", "dst_import", "dst_bind_buffer", VK_BUFFER_USAGE_TRANSFER_DST_BIT},
 };
 
-/* The queue VulkanDeviceChain made its device with. */
 constexpr uint32_t queue_family = 0u;
 
-}  // namespace
+}
 
 HostVisibleImportScenario::HostVisibleImportScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : steps_(kmt, report, "import"), link_(kmt, search, steps_, SubApi::vulkan), chain_(steps_, link_.transport()),
@@ -52,8 +51,6 @@ void HostVisibleImportScenario::run()
     if (built == Status::ok) static_cast<void>(steps_.check("release", released));
 }
 
-/* The call answers no result, and a device always has a memory type: none at
- * all means the answer never came. */
 Status HostVisibleImportScenario::read_memory_types()
 {
     AV_SCOPE("HostVisibleImportScenario::read_memory_types");
@@ -67,9 +64,6 @@ Status HostVisibleImportScenario::make_buffer(uint32_t side)
     AV_SCOPE("HostVisibleImportScenario::make_buffer");
     const SideSteps                &names = side_steps[side];
     KmtTransport                   &transport = link_.transport();
-    /* No VkExternalMemoryBufferCreateInfo of its own: the memory is the host
-     * GPU's, imported by dma-buf, and the device names that on every buffer
-     * made on a device that imports (docs/host-memory.md). */
     VkBufferCreateInfo buffer_info = {};
     buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     buffer_info.size = copy_bytes;
@@ -82,16 +76,11 @@ Status HostVisibleImportScenario::make_buffer(uint32_t side)
     buffers_[side] = buffer;
     const Status imported = import_chunk(side);
     if (imported != Status::ok) return imported;
-    /* In either build's shape of the type. */
     const VkDeviceMemory memory = vkproto::as_handle<VkDeviceMemory>(imports_[side].memory());
     const VkResult bound = vkproto::av_vkBindBufferMemory(transport, chain_.handles(), chain_.device(), buffers_[side], memory, 0u);
     return steps_.check_result(names.bind_buffer, bound);
 }
 
-/* The lowest host-visible type the buffer can live in, as a chunk of that
- * type's memory (docs/host-memory.md), imported whole. The chunk step reports
- * its resource, the import the type the memory was made as, or the host's
- * status when it refused. */
 Status HostVisibleImportScenario::import_chunk(uint32_t side)
 {
     AV_SCOPE("HostVisibleImportScenario::import_chunk");
@@ -114,8 +103,6 @@ Status HostVisibleImportScenario::import_chunk(uint32_t side)
     return steps_.check_measured(names.import, imported, imports_[side].host_status());
 }
 
-/* The destination is read just before the copy is submitted, so a host that
- * wrote it any earlier - or a view that is the source's - is seen. */
 Status HostVisibleImportScenario::copy()
 {
     AV_SCOPE("HostVisibleImportScenario::copy");
@@ -165,7 +152,6 @@ Status HostVisibleImportScenario::record_copy()
     return steps_.check_result("record", recorded);
 }
 
-/* The queue query answers no result: a null queue means the answer never came. */
 Status HostVisibleImportScenario::submit_copy()
 {
     AV_SCOPE("HostVisibleImportScenario::submit_copy");
@@ -191,8 +177,6 @@ Status HostVisibleImportScenario::submit_copy()
         "submit", vkproto::av_vkQueueSubmit(transport, chain_.handles(), reinterpret_cast<VkQueue>(queue), 1u, &submit, fence_));
 }
 
-/* A copy the host has not finished cannot be judged by its bytes, so a wait
- * that never saw the fence fails copied whatever the view holds. */
 Status HostVisibleImportScenario::judge_copy(uint32_t filled_before)
 {
     AV_SCOPE("HostVisibleImportScenario::judge_copy");
@@ -211,9 +195,6 @@ Status HostVisibleImportScenario::judge_copy(uint32_t filled_before)
     return steps_.check_measured("guest_saw_host_write", copied != Status::ok ? copied : unwritten, filled_before);
 }
 
-/* Whatever holds the imports goes before them, and the imports before the chunks
- * they name; a null fence, pool or buffer is the API's own no-op, a null command
- * buffer is not. */
 Status HostVisibleImportScenario::destroy()
 {
     AV_SCOPE("HostVisibleImportScenario::destroy");
@@ -240,4 +221,4 @@ Status HostVisibleImportScenario::destroy()
     return first;
 }
 
-}  // namespace av
+}

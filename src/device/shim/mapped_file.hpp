@@ -1,7 +1,3 @@
-/* A file's bytes, mapped read-only, which is how the recording tools read a
- * recording: a recording is bounded by the ceiling the device was given, and a
- * mapping costs nothing until a page is touched, so the reader walks the file
- * without the tool ever owning a copy of it. */
 #ifndef AV_MAPPED_FILE_HPP
 #define AV_MAPPED_FILE_HPP
 
@@ -19,8 +15,6 @@ public:
     MappedFile(const MappedFile &) = delete;
     MappedFile &operator=(const MappedFile &) = delete;
 
-    /* not_found for a file that does not open, no_memory for one that does not
-     * map, invalid_state once open. An empty file opens and maps nothing. */
     [[nodiscard]] Status open(const char *path);
 
     const uint8_t *bytes() const;
@@ -32,6 +26,6 @@ private:
     bool           open_ = false;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MAPPED_FILE_HPP
+#endif

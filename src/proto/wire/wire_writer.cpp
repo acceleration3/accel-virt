@@ -26,8 +26,6 @@ bool WireWriter::grow(size_t count)
 
 uint8_t *WireWriter::claim(size_t count)
 {
-    /* Counted before the room is checked, and counted whether or not this one
-     * fits: the answer's length is the answer's, not the prefix that fitted. */
     wanted_ += count;
     if (status_ != Status::ok || (count > capacity_ - offset_ && !grow(count))) {
         status_ = Status::too_large;
@@ -67,8 +65,6 @@ void WireWriter::write(const void *source, size_t count)
     copy_bytes(static_cast<const uint8_t *>(source), count);
 }
 
-/* Written into a scratch of its own first, so a varint that does not fit
- * leaves nothing behind - what every other write here promises. */
 void WireWriter::write_varint_bits(uint64_t value)
 {
     uint8_t groups[10] = {};
@@ -93,4 +89,4 @@ bool WireWriter::invariants_hold() const
     return offset_ <= capacity_ && (bytes_ != nullptr || capacity_ == 0u) && (!spilled_ || spill_ != nullptr);
 }
 
-}  // namespace av
+}

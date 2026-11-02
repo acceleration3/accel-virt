@@ -1,5 +1,3 @@
-/* Where one virtio structure lives: a BAR, and a range inside it
- * (virtio 1.2 4.1.4). */
 #ifndef AV_VIRTIO_REGION_HPP
 #define AV_VIRTIO_REGION_HPP
 
@@ -9,7 +7,6 @@ namespace av {
 
 class VirtioRegion {
 public:
-    /* Absent: the device did not present this structure. */
     VirtioRegion();
     VirtioRegion(uint8_t bar, uint64_t offset, uint64_t length);
 
@@ -25,6 +22,6 @@ private:
     uint64_t length_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VIRTIO_REGION_HPP
+#endif

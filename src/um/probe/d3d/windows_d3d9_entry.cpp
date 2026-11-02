@@ -8,7 +8,7 @@ namespace {
 
 constexpr uint32_t channels = 4u;
 
-}  // namespace
+}
 
 WindowsD3d9Entry::WindowsD3d9Entry()
     : d3d9_(nullptr), device_(nullptr), readback_(nullptr), width_(0u), height_(0u)
@@ -108,4 +108,4 @@ void WindowsD3d9Entry::release()
     d3d9_ = nullptr;
 }
 
-}  // namespace av
+}

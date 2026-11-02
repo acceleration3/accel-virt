@@ -14,4 +14,4 @@ f64 TicksToSeconds(u64 ticks) {
     return static_cast<f64>(ticks) / static_cast<f64>(kTicksPerSecond);
 }
 
-} // namespace inspector
+}

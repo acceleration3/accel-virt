@@ -10,7 +10,6 @@ constexpr uint16_t descriptor_version = 1u;
 constexpr uint8_t  type_rgba = 0u;
 constexpr uint8_t  color_bits = 32u;
 constexpr uint8_t  channel_bits = 8u;
-/* BGRA in memory: blue is the lowest byte. */
 constexpr uint8_t  red_shift = 16u;
 constexpr uint8_t  green_shift = 8u;
 constexpr uint8_t  blue_shift = 0u;
@@ -39,10 +38,8 @@ void put32(uint8_t *bytes, uint32_t at, uint32_t value)
     for (uint32_t shift = 0u; shift < 32u; shift += 8u) bytes[at + shift / 8u] = static_cast<uint8_t>(value >> shift);
 }
 
-}  // namespace
+}
 
-/* Double-buffered D24S8 first: what an application asking for nothing
- * special matches first. */
 PixelFormatTable::PixelFormatTable()
     : rows_{PixelFormat(24u, 8u, true, false, 0u),  PixelFormat(24u, 8u, false, false, 0u),
             PixelFormat(32u, 0u, true, false, 0u),  PixelFormat(32u, 0u, false, false, 0u),
@@ -108,7 +105,6 @@ bool PixelFormatTable::invariants_hold() const
         const bool    d32 = row.depth_bits() == 32u && row.stencil_bits() == 0u;
         if (!no_depth && !d24s8 && !d32) return false;
         if (row.samples() != 0u && row.samples() != multisampled) return false;
-        /* Each depth has one stencil size, checked above, so the depth tells rows apart. */
         for (uint32_t earlier = 0u; earlier < index; earlier++) {
             const PixelFormat &other = rows_[earlier];
             if (other.depth_bits() == row.depth_bits() &&
@@ -120,4 +116,4 @@ bool PixelFormatTable::invariants_hold() const
     return true;
 }
 
-}  // namespace av::glicd
+}

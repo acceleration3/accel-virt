@@ -1,6 +1,3 @@
-/* The kind a shared object is. Every value outside the three the protocol has
- * must be unknown, because "unknown" is what every table on both sides refuses
- * on, and a fence must never answer the question memory answers. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/resources/shared_object_kind.hpp"
 

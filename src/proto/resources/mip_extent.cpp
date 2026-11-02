@@ -35,4 +35,4 @@ uint32_t MipExtent::depth() const
     return static_cast<uint32_t>(at_level(depth_));
 }
 
-}  // namespace av
+}

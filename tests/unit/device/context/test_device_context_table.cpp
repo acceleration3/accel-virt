@@ -37,7 +37,6 @@ using av::WorkItem;
 namespace av {
 
 struct DeviceContextTableProbe {
-    /* A context placed in a free slot behind the table's back. */
     static void place(DeviceContextTable &table, std::uint32_t id, bool started)
     {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
@@ -50,7 +49,7 @@ struct DeviceContextTableProbe {
     }
 };
 
-}  // namespace av
+}
 
 TEST(device_context_table_create, each_context_gets_its_own_running_worker)
 { MockHost host; BlobTable blobs(host); av::HostBlobTable owners(host); FenceInterrupts interrupts(host); ExecutorLibrary library; av::WireRecorder recorder(host);
@@ -73,9 +72,6 @@ TEST(device_context_table_create, each_context_gets_its_own_running_worker)
   CHECK_EQ(ran.load(), 1u);
   CHECK(table.find(2u) == nullptr); }
 
-/* The table's line, then each context in slot order with its worker; an
- * unbound context says only that it is unbound, its ring's progress and
- * whether it has an executor. */
 TEST(device_context_table_report, writes_each_context_and_its_worker)
 { MockHost host; BlobTable blobs(host); av::HostBlobTable owners(host); FenceInterrupts interrupts(host); ExecutorLibrary library; av::WireRecorder recorder(host);
   DeviceContextTable table(host, blobs, owners, interrupts, library, recorder);
@@ -173,7 +169,7 @@ TEST(device_context_table, is_main_loop_only)
 TEST(device_context_table_invariants, a_duplicate_id_a_zero_id_or_a_stopped_worker_is_detected)
 { MockHost host;
   BlobTable blobs(host); av::HostBlobTable owners(host);
- 
+
   FenceInterrupts interrupts(host);
   ExecutorLibrary library;
   av::WireRecorder recorder(host);
@@ -189,11 +185,6 @@ TEST(device_context_table_invariants, a_duplicate_id_a_zero_id_or_a_stopped_work
   av::DeviceContextTableProbe::place(stopped, 9u, false);
   CHECK(!stopped.invariants_hold()); }
 
-/* Before the scanout reads an image, every Direct3D stream runs what it
- * published. A table with no Direct3D stream bound - none at all, or only
- * contexts of another API - has nothing to wait for, and settling is then a
- * look under the ordering's lock rather than its 100 pauses; nor does a table
- * whose ordering was never initialized wait. */
 TEST(device_context_table_settle_d3d, a_table_with_no_direct3d_stream_does_not_wait)
 { MockHost host; BlobTable blobs(host); av::HostBlobTable owners(host); FenceInterrupts interrupts(host); ExecutorLibrary library; av::WireRecorder recorder(host);
   DeviceContextTable table(host, blobs, owners, interrupts, library, recorder);

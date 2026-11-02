@@ -1,25 +1,3 @@
-// VK_LAYER_AV_device_loss: a host GPU that loses a Vulkan device when told
-// to, so a test - or a guest run that asks for it - sees what a GPU fault
-// does to every library above it: DXVK, vkd3d-proton, the compositor, a
-// guest's own Vulkan device. Nothing else in the build loads it; a process
-// gets it only by asking the loader for it:
-//
-//   VK_ADD_LAYER_PATH=<build>/gpu_fault VK_INSTANCE_LAYERS=VK_LAYER_AV_device_loss
-//
-// A device is lost by the device-level entry vkAvLoseDeviceAV(VkDevice),
-// which vkGetDeviceProcAddr answers for any device made under the layer
-// (VulkanDeviceTable::lose). From then on the device answers as a lost one:
-// every submission and every wait VK_ERROR_DEVICE_LOST, fences, events,
-// semaphores and queries too.
-//
-// What it does not do is stop the GPU. A real fault ends the work in
-// flight; here the work submitted before the loss runs to its end, and every
-// submission after it is still made with its waits, signals and fence but no
-// command buffers - so no semaphore another device or thread waits on is left
-// unsignalled for good, which a real loss would leave to the kernel's reset.
-// A wait is made below as it was asked, and answers lost once it returns: a
-// library that frees what a lost submission used, as DXVK does, never frees
-// what the GPU is still running.
 #include <vulkan/vk_layer.h>
 #include <vulkan/vulkan.h>
 
@@ -33,9 +11,6 @@ namespace {
 
 constexpr std::uint32_t max_instances = 64u;
 constexpr std::uint32_t max_devices = 256u;
-/* The most submits one call may carry and still be replayed without its
- * command buffers; a call with more is answered lost without reaching the
- * driver. */
 constexpr std::uint32_t max_submits = 64u;
 
 void *key_of(const void *handle)
@@ -74,8 +49,6 @@ struct Device {
     bool                        lost;
 };
 
-/* The layer's whole state: the loader hands a layer no context of its own,
- * and the dispatch key of a handle is all it has to find its device by. */
 class Registry {
 public:
     Registry() : mutex_(PTHREAD_MUTEX_INITIALIZER), instances_{}, devices_{} {}
@@ -123,7 +96,6 @@ public:
         pthread_mutex_unlock(&mutex_);
     }
 
-    /* A copy, so a call down runs with the lock let go. */
     bool device(const void *key, Device &found)
     {
         pthread_mutex_lock(&mutex_);
@@ -325,8 +297,6 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL get_device_proc_addr(VkDevice device, c
     return device_proc(device, name);
 }
 
-/* What this layer answers in place of the next one, for a device whose next
- * one has the entry at all: an entry the driver lacks stays absent. */
 PFN_vkVoidFunction device_proc(VkDevice handle, const char *name)
 {
     struct Wrapped {
@@ -461,7 +431,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL get_instance_proc_addr(VkInstance insta
     return kept.next(instance, name);
 }
 
-}  // namespace
+}
 
 AV_LOSS_EXPORT VKAPI_ATTR VkResult VKAPI_CALL vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface *version)
 {

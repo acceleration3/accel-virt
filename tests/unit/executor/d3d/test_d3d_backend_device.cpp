@@ -1,12 +1,3 @@
-/* The Direct3D backend on this machine's GPU, through DXVK: a triangle drawn
- * the way the guest's user-mode driver will draw one - shaders as the DDI hands
- * them (tokens and register signatures, tests/fixtures/d3d/), an input layout
- * naming registers, a dynamic constant buffer written with UpdateSubresource -
- * and read back, judged pixel by pixel where the answer is certain.
- *
- * DXVK is loaded from AV_D3D_PATH, or from build-d3d/lib in this checkout
- * (tools/build_d3d_runtime.sh). A host without it returns without judging, as
- * the other device tests do on a host without their API. */
 #include "executor/d3d/shared_surfaces.hpp"
 #include "fixtures/d3d/triangle_ps.hpp"
 #include "fixtures/d3d/triangle_vs.hpp"
@@ -60,7 +51,7 @@ struct WatchedBlocksProbe {
     static void draw_from(WatchedBlocks &blocks, BlockSource &source) { blocks.blocks_ = &source; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -75,7 +66,6 @@ constexpr std::uint32_t bind_render_target = 0x20u;
 constexpr std::uint32_t rtv_texture2d = 4u;
 constexpr std::uint32_t topology_triangles = 4u;
 constexpr std::uint32_t size = 64u;
-/* DXGI_ERROR_DRIVER_INTERNAL_ERROR: the reason a refused command removes its device for. */
 constexpr std::uint32_t driver_internal_error = 0x887A0020u;
 
 struct Vertex {
@@ -83,8 +73,6 @@ struct Vertex {
     float r, g, b, a;
 };
 
-/* One device of the host's, on its first GPU that runs Direct3D; null when
- * none does. */
 av::D3d11HostDevice *host_device(av::LoaderHostApis &apis)
 {
     if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
@@ -95,7 +83,6 @@ av::D3d11HostDevice *host_device(av::LoaderHostApis &apis)
     return nullptr;
 }
 
-/* The shares of the GPU `device` is on. */
 av::HostShares &shares_of(av::LoaderHostApis &apis, const av::D3d11HostDevice *device)
 {
     std::uint32_t index = 0u;
@@ -110,9 +97,6 @@ std::uint32_t pixel(const std::uint8_t *pixels, std::uint32_t x, std::uint32_t y
     return value;
 }
 
-/* The render target (1) and its view (2), a triangle's vertices (3), a tint
- * (4), its shaders (5, 6) and input layout (7): one triangle over the left
- * half and down the middle, red halved by the tint. */
 void make_triangle(av::D3dLoopback &wire, std::uint64_t shared_key = 0u)
 {
     ResourceDesc target = {};
@@ -156,7 +140,6 @@ void make_triangle(av::D3dLoopback &wire, std::uint64_t shared_key = 0u)
     CHECK(av_d3d_CreateInputLayout(wire, 7u, 2u, elements));
 }
 
-/* The triangle's pipeline bound on the selected device, the target cleared blue. */
 void bind_triangle(av::D3dLoopback &wire)
 {
     const std::uint32_t targets[1] = {2u};
@@ -174,9 +157,6 @@ void bind_triangle(av::D3dLoopback &wire)
     CHECK(av_d3d_SetConstantBuffers(wire, 4u, 0u, 1u, &constants));
 }
 
-/* A backend is several megabytes - two object tables and Direct3D 12's
- * descriptor state - so a test holding two would overflow its stack: they
- * live in static storage, constructed and destroyed around each test. */
 av::ObjectStorage<av::D3dBackend> first_backend, second_backend;
 
 class HeldBackend {
@@ -195,7 +175,7 @@ private:
     av::ObjectStorage<av::D3dBackend> &storage_;
 };
 
-}  // namespace
+}
 
 TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_was_drawn)
 {
@@ -225,17 +205,12 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     CHECK_EQ(hresult, 0u);
     CHECK_EQ(row_pitch, size * 4u);
     CHECK_EQ(read, static_cast<std::uint64_t>(sizeof(pixels)));
-    /* BGRA in memory: 0xAARRGGBB as a little-endian word. Half of red is 0x80
-     * after rounding on every driver; the clear is exact. */
     const std::uint32_t tinted = pixel(pixels, 4u, size / 2u);
     CHECK_EQ(tinted & 0xff00ffffu, 0xff000000u);
     CHECK((tinted >> 16u & 0xffu) >= 0x7fu && (tinted >> 16u & 0xffu) <= 0x80u);
     CHECK_EQ(pixel(pixels, size - 4u, size / 2u), 0xff0000ffu);
     CHECK_EQ(wire.refused(), 0u);
 
-    /* An id this session never made is refused, never followed as a pointer:
-     * the device that named it is removed, not the session, and the next
-     * Finish11 says why. */
     std::uint32_t removed = 1u;
     CHECK(av_d3d_Finish11(wire, &removed));
     CHECK_EQ(removed, 0u);
@@ -248,10 +223,6 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     backend.shut_down();
 }
 
-/* A batch's mark is watched by DXVK, which writes the session's eventfd once
- * the GPU reaches it: the worker is woken for it rather than polling. A
- * native DXVK whose SetEvent did nothing (tools/dxvk-patches/0009) left the
- * worker spinning on the fence for up to 100 ms after every batch. */
 namespace {
 
 std::atomic<std::uint32_t> batch_wakes{0u};
@@ -261,7 +232,7 @@ void count_batch_wake(void *count)
     static_cast<std::atomic<std::uint32_t> *>(count)->fetch_add(1u);
 }
 
-}  // namespace
+}
 
 TEST(d3d_backend_device, a_batch_the_gpu_finishes_wakes_the_worker_instead_of_being_polled_for)
 {
@@ -281,7 +252,6 @@ TEST(d3d_backend_device, a_batch_the_gpu_finishes_wakes_the_worker_instead_of_be
     bind_triangle(wire);
     CHECK(av_d3d_Draw(wire, 3u, 0u));
     CHECK_EQ(wire.refused(), 0u);
-    /* Every batch was marked and watched: nothing is left to poll for. */
     CHECK(!backend.poll());
     std::uint64_t marked = 0u, reached = 0u;
     for (std::uint32_t tries = 0u; tries < 2000u; tries++) {
@@ -296,15 +266,6 @@ TEST(d3d_backend_device, a_batch_the_gpu_finishes_wakes_the_worker_instead_of_be
     backend.shut_down();
 }
 
-/* A surface one process shares opens in another by the id the driver minted,
- * for as long as the guest holds it: past the creator's own session, as on
- * Windows DWM keeps a window's surface its creator already let go of, and
- * until the driver's release. A key already shared keeps naming what it
- * named. */
-/* A stream-output declaration with no shader streams the vertex shader's
- * output: the guest's driver writes the pass-through geometry shader it stands
- * for (PassthroughGeometryShader), and the host makes it, position declared as
- * a system value and the streamed register named by the same signatures. */
 TEST(d3d_backend_device, a_stream_output_with_no_shader_is_a_pass_through_geometry_shader)
 {
     av::LoaderHostApis apis;
@@ -335,10 +296,6 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_is_a_pass_through_geomet
     CHECK_EQ(wire.refused(), 0u);
 }
 
-/* What the pass-through geometry shader streams is what the vertex shader
- * wrote, vertex for vertex: the fixture's position (x, y, 0, 1) and its colour
- * (1, 0, 0, 1), eight floats a vertex in the declaration's order - the data a
- * game's skinning streams out and then draws from. */
 TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_shader_wrote)
 {
     av::LoaderHostApis apis;
@@ -366,10 +323,10 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_
     ResourceDesc buffer = {};
     buffer.dimension = 1u;
     buffer.width = 3u * stride;
-    buffer.bind_flags = 0x10u;   /* D3D11_BIND_STREAM_OUTPUT */
+    buffer.bind_flags = 0x10u;
     CHECK(av_d3d_CreateResource(wire, out, buffer, 0u, 0u, 0u));
     bind_triangle(wire);
-    CHECK(av_d3d_SetTopology(wire, 1u));   /* points */
+    CHECK(av_d3d_SetTopology(wire, 1u));
     CHECK(av_d3d_SetShader(wire, stage_geometry, gs));
     const StreamOutTarget target = {out, 0u};
     CHECK(av_d3d_SetStreamOutTargets(wire, 1u, &target));
@@ -452,15 +409,6 @@ TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_r
     opener.shut_down();
 }
 
-/* A process's devices share one session: objects are the session's, pipeline
- * state is each device's own. A second device starts with nothing bound, so
- * its draw leaves the first device's target as it was, and the first draws the
- * triangle when it is selected again. A command a device gets refused removes
- * that device alone: its later commands are dropped and Finish11 names the
- * reason, while the other device goes on drawing. Selecting an id the host
- * has no device for selects nothing and drops what follows, rather than
- * removing the device selected before it. Creating objects and finishing
- * need no device selected. */
 TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_state)
 {
     av::LoaderHostApis apis;
@@ -488,8 +436,6 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     CHECK_EQ(hresult, 0u);
     CHECK_EQ(pixel(pixels, 4u, size / 2u), 0xff0000ffu);
 
-    /* Device 2 names a shader nobody made: it is removed, and its draw of
-     * device 1's triangle - rebound on it - is dropped. */
     CHECK(av_d3d_SetShader(wire, 4u, 77u));
     CHECK(av_d3d_Finish11(wire, &removed));
     CHECK_EQ(removed, driver_internal_error);
@@ -507,8 +453,6 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     CHECK_EQ(tinted & 0xff00ffffu, 0xff000000u);
     CHECK((tinted >> 16u & 0xffu) >= 0x7fu && (tinted >> 16u & 0xffu) <= 0x80u);
 
-    /* A device destroyed is gone: selecting it selects nothing, and what
-     * follows is dropped without touching device 1. */
     CHECK(av_d3d_DestroyDevice11(wire, 2u));
     CHECK(av_d3d_SelectDevice11(wire, 2u));
     CHECK(av_d3d_ClearRenderTargetView(wire, 2u, Float4{{0.0f, 1.0f, 0.0f, 1.0f}}));
@@ -518,8 +462,6 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     CHECK(av_d3d_ReadSubresource(wire, 1u, 0u, &hresult, &row_pitch, &depth_pitch, pixels, sizeof(pixels), &read));
     CHECK_EQ(pixel(pixels, size - 4u, size / 2u), 0xff0000ffu);
 
-    /* With no device selected nothing touches pipeline state, but the
-     * session still finishes, and a device it still has makes objects. */
     CHECK(av_d3d_CreateDevice11(wire, 3u, 0u, 0u, &hresult, &level));
     CHECK(av_d3d_DestroyDevice11(wire, 3u));
     CHECK(av_d3d_Finish11(wire, &removed));
@@ -530,7 +472,6 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     buffer.bind_flags = bind_vertex;
     CHECK(av_d3d_CreateResource(wire, 20u, buffer, 0u, 0u, 0u));
     CHECK_EQ(wire.refused(), 0u);
-    /* A refusal with no device selected is the session's: nobody else to blame. */
     CHECK(!av_d3d_Draw(wire, 3u, 0u));
     CHECK_EQ(wire.refused(), 1u);
     CHECK(backend.invariants_hold());
@@ -538,10 +479,6 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     CHECK(backend.invariants_hold());
 }
 
-/* A present's point on a shared target stages the target as the commands
- * before it left it: a clear after it never reaches the frame. The frame is
- * mapped once the GPU has copied it and gone once let go; a point of 0, or a
- * resource never shared, stages nothing and removes no device. */
 TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it_drew)
 {
     av::LoaderHostApis apis;
@@ -569,12 +506,9 @@ TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it
     CHECK(view.row_pitch >= size * 4u);
     std::uint32_t edge = 0u;
     std::memcpy(&edge, view.pixels + (size / 2u) * view.row_pitch + (size - 4u) * 4u, sizeof edge);
-    CHECK_EQ(edge, 0xff0000ffu);   /* the blue the draw left, not the red cleared after */
+    CHECK_EQ(edge, 0xff0000ffu);
     surfaces.unmap(av::SurfacePoint(shown, 1u));
     CHECK(!surfaces.map(av::SurfacePoint(shown, 1u), 0u, view));
-    /* A flip names no frame. This session shares nothing, so its target has
-     * no copy to show - said once, not per flip - and a flip of a buffer or
-     * of a texture never shared has nothing to show at all. */
     CHECK(av_d3d_PresentPoint(wire, 1u, 0u, 0u));
     CHECK(av_d3d_PresentPoint(wire, 1u, 0u, 0u));
     CHECK(av_d3d_PresentPoint(wire, 3u, 0u, 0u));
@@ -589,9 +523,8 @@ TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it
     unshared_texture.bind_flags = bind_render_target;
     CHECK(av_d3d_CreateResource(wire, 9u, unshared_texture, 0u, 0u, 0u));
     CHECK(av_d3d_PresentPoint(wire, 9u, 0u, 0u));
-    CHECK(av_d3d_PresentPoint(wire, 3u, 0u, 2u));   /* the vertex buffer, never shared */
+    CHECK(av_d3d_PresentPoint(wire, 3u, 0u, 2u));
     CHECK(!surfaces.map(av::SurfacePoint(shown, 2u), 0u, view));
-    /* Nor does it open anything: no share answers it. */
     std::uint32_t found = 1u;
     ResourceDesc  opened = {};
     CHECK(av_d3d_OpenResource(wire, 10u, shown, &found, &opened));
@@ -602,9 +535,6 @@ TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it
     CHECK(surfaces.invariants_hold());
 }
 
-/* A flip of a target its session shares is copied to the share's own flip
- * copy, which is what a compositor opening the id reads: the copy is made at
- * the first flip and written again at each. */
 TEST(d3d_backend_device, a_flip_of_a_shared_target_is_shown_through_its_copy)
 {
     av::LoaderHostApis apis;
@@ -649,13 +579,6 @@ TEST(d3d_backend_device, a_flip_of_a_shared_target_is_shown_through_its_copy)
     device->retire_shares();
 }
 
-/* The session's tables grow in a source that runs out: what the host has no
- * memory for is told to the guest as E_OUTOFMEMORY - a device create
- * answers it, and a command refused for it removes its device for it, not
- * for an internal error - while the next command, with memory, is refused
- * for what it did, as before. Each table the backend grows is met at its
- * first growth: the object table's, a device's constant bindings, a
- * rotation's remade views and the pending queries. */
 TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the_guest)
 {
     av::LoaderHostApis apis;
@@ -684,7 +607,6 @@ TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the
         make_triangle(wire);
         CHECK_EQ(wire.refused(), 0u);
 
-        /* An object the table cannot grow for. */
         CHECK(av_d3d_CreateDevice11(wire, 2u, 0u, 0u, &hresult, &level));
         platform.fail_allocation_at(1u);
         ResourceDesc buffer = {};
@@ -697,7 +619,6 @@ TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the
         }
         CHECK_EQ(removed, out_of_memory);
 
-        /* A device's first constant binding, with nowhere to keep it. */
         CHECK(av_d3d_CreateDevice11(wire, 3u, 0u, 0u, &hresult, &level));
         platform.fail_allocation_at(1u);
         const ConstantBufferBinding constants = {4u, 0u, 0u};
@@ -705,7 +626,6 @@ TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the
         CHECK(av_d3d_Finish11(wire, &removed));
         CHECK_EQ(removed, out_of_memory);
 
-        /* A rotation whose remade view has nowhere to wait to be rebound. */
         CHECK(av_d3d_CreateDevice11(wire, 4u, 0u, 0u, &hresult, &level));
         ResourceDesc target = {};
         target.dimension = 3u;
@@ -725,14 +645,11 @@ TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the
         CHECK(av_d3d_Finish11(wire, &removed));
         CHECK_EQ(removed, out_of_memory);
 
-        /* With memory, a command refused for what it named is an internal
-         * error, as ever: the flag is the command's alone. */
         CHECK(av_d3d_CreateDevice11(wire, 5u, 0u, 0u, &hresult, &level));
         CHECK(av_d3d_SetShader(wire, 4u, 99u));
         CHECK(av_d3d_Finish11(wire, &removed));
         CHECK_EQ(removed, driver_internal_error);
 
-        /* A query ended with its results bound, and nowhere to keep it pending. */
         if (source != nullptr) {
             CHECK(av_d3d_CreateDevice11(wire, 6u, 0u, 0u, &hresult, &level));
             constexpr std::uint32_t query_event = 0u;

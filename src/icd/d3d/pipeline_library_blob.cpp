@@ -15,7 +15,7 @@ void put_word(uint8_t *into, uint32_t word)
     for (size_t byte = 0u; byte < word_bytes; byte++) into[byte] = static_cast<uint8_t>(word >> (byte * byte_bits));
 }
 
-}  // namespace
+}
 
 PipelineLibraryBlob::PipelineLibraryBlob() : header_{}
 {
@@ -48,4 +48,4 @@ void PipelineLibraryBlob::write(void *blob) const
     for (size_t byte = 0u; byte < header_bytes; byte++) into[byte] = header_[byte];
 }
 
-}  // namespace av::d3d
+}

@@ -1,10 +1,3 @@
-/* The Direct3D 9 half of a Direct3D session on this machine's GPU, through
- * DXVK's native d3d9: devices with no window made on the GPU the session is
- * on, a render target cleared and read back, judged pixel by pixel.
- *
- * DXVK's d3d9 is loaded from AV_D3D_PATH, or build-d3d/lib in this checkout
- * (tools/build_d3d_runtime.sh). A host without it returns without judging, as
- * the other device tests do. */
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
@@ -36,7 +29,7 @@ struct WatchedBlocksProbe {
     static void draw_from(WatchedBlocks &blocks, BlockSource &source) { blocks.blocks_ = &source; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -49,11 +42,10 @@ constexpr std::uint32_t size = 64u;
 constexpr std::uint32_t red = 0xffff0000u;
 constexpr std::uint32_t blue = 0xff0000ffu;
 constexpr std::uint32_t invalid_call = 0x8876086cu;
-constexpr std::uint32_t more_data = 0x88760867u;   /* D3DERR_MOREDATA */
+constexpr std::uint32_t more_data = 0x88760867u;
 
 enum Id : std::uint32_t { device = 1, target, other_device, other_target };
 
-/* The first GPU here with both devices; nulls when there is none. */
 bool host_devices(av::LoaderHostApis &apis, av::D3d11HostDevice *&device11, av::D3d9HostDevice *&device9)
 {
     if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
@@ -86,7 +78,7 @@ bool read(av::D3dLoopback &wire, std::uint32_t surface, Pixels &out)
                                 out.bytes, sizeof(out.bytes), &out.written);
 }
 
-}  // namespace
+}
 
 TEST(d3d9_session_device, a_cleared_render_target_reads_back_as_cleared)
 {
@@ -105,7 +97,6 @@ TEST(d3d9_session_device, a_cleared_render_target_reads_back_as_cleared)
     CHECK(av_d3d9_CreateSurface9(wire, target, kind_render_target, size, size, format_a8r8g8b8, 0u, 0u, 0u));
     CHECK(av_d3d9_SetRenderTarget9(wire, 0u, target, 0u));
     CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, red, 1.0f, 0u));
-    /* Only the right half, so a clear that ignored its rectangle shows. */
     const Rect right = {static_cast<std::int32_t>(size / 2u), 0, static_cast<std::int32_t>(size),
                         static_cast<std::int32_t>(size)};
     CHECK(av_d3d9_Clear9(wire, 1u, &right, clear_target, blue, 1.0f, 0u));
@@ -122,8 +113,6 @@ TEST(d3d9_session_device, a_cleared_render_target_reads_back_as_cleared)
     CHECK_EQ(pixels.at(size / 2u - 1u, size - 1u), red);
     CHECK_EQ(pixels.at(size / 2u, 0u), blue);
     CHECK_EQ(pixels.at(size - 1u, size - 1u), blue);
-    /* Room for all but its last row: refused whole, nothing written, rather
-     * than a surface answered with its bottom row missing. */
     Pixels short_of_room;
     CHECK(av_d3d9_ReadSurface9(wire, target, 0u, &short_of_room.hresult, &short_of_room.width, &short_of_room.height,
                                &short_of_room.format, &short_of_room.pitch, short_of_room.bytes,
@@ -135,8 +124,6 @@ TEST(d3d9_session_device, a_cleared_render_target_reads_back_as_cleared)
     CHECK_EQ(wire.refused(), 0u);
 }
 
-/* A surface belongs to the device that made it: naming it while another device
- * is selected is refused, and removes the device that named it. */
 TEST(d3d9_session_device, another_devices_surface_is_refused_and_removes_the_device)
 {
     av::LoaderHostApis      apis;
@@ -160,7 +147,6 @@ TEST(d3d9_session_device, another_devices_surface_is_refused_and_removes_the_dev
     CHECK(av_d3d9_Finish9(wire, &hresult));
     CHECK(hresult != 0u);
 
-    /* The first device was not the one that named it, and still draws. */
     CHECK(av_d3d9_SelectDevice9(wire, device));
     CHECK(av_d3d9_Finish9(wire, &hresult));
     CHECK_EQ(hresult, 0u);
@@ -172,7 +158,6 @@ TEST(d3d9_session_device, another_devices_surface_is_refused_and_removes_the_dev
     CHECK_EQ(pixels.at(1u, 1u), red);
 }
 
-/* What the device cannot be asked for is refused before DXVK sees it. */
 TEST(d3d9_session_device, a_surface_the_host_cannot_make_names_nothing)
 {
     av::LoaderHostApis      apis;
@@ -187,7 +172,6 @@ TEST(d3d9_session_device, a_surface_the_host_cannot_make_names_nothing)
     std::uint32_t hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
     CHECK_EQ(hresult, 0u);
-    /* Zero width, an unknown kind, and a size past what the wire allows. */
     CHECK(av_d3d9_CreateSurface9(wire, target, kind_render_target, 0u, size, format_a8r8g8b8, 0u, 0u, 0u));
     CHECK(av_d3d9_CreateSurface9(wire, target, 9u, size, size, format_a8r8g8b8, 0u, 0u, 0u));
     CHECK(av_d3d9_CreateSurface9(wire, target, kind_render_target, 0x10000u, size, format_a8r8g8b8, 0u, 0u, 0u));
@@ -220,11 +204,9 @@ enum DrawId : std::uint32_t {
     plain_surface, lockable_target, unlockable_target
 };
 
-/* vs_2_0: dcl_position v0; dcl_color v1; mov oPos, v0; mov oD0, v1. */
 constexpr std::uint32_t pass_through_vs[] = {0xfffe0200u, 0x0200001fu, 0x80000000u, 0x900f0000u, 0x0200001fu,
                                              0x8000000au, 0x900f0001u, 0x02000001u, 0xc00f0000u, 0x90e40000u,
                                              0x02000001u, 0xd00f0000u, 0x90e40001u, 0x0000ffffu};
-/* ps_2_0: dcl v0; mov oC0, v0. */
 constexpr std::uint32_t pass_through_ps[] = {0xffff0200u, 0x0200001fu, 0x80000000u, 0x900f0000u,
                                              0x02000001u, 0x800f0800u, 0x90e40000u, 0x0000ffffu};
 
@@ -250,10 +232,8 @@ void make_target(av::D3dLoopback &wire)
     CHECK(av_d3d9_SetRenderStates9(wire, 4u, states));
 }
 
-}  // namespace
+}
 
-/* A triangle over the lower-left half, the way Portal draws: a vertex buffer,
- * a declaration and shader model 2 shaders as their tokens. */
 TEST(d3d9_session_device, a_shaded_triangle_lands_where_it_was_drawn)
 {
     av::LoaderHostApis      apis;
@@ -295,8 +275,6 @@ TEST(d3d9_session_device, a_shaded_triangle_lands_where_it_was_drawn)
     CHECK_EQ(hresult, 0u);
 }
 
-/* The fixed-function pipeline with pre-transformed vertices, which menus and
- * DirectDraw-era drawing use: no shader bound at all. */
 TEST(d3d9_session_device, a_pretransformed_triangle_needs_no_shader)
 {
     av::LoaderHostApis      apis;
@@ -328,8 +306,6 @@ TEST(d3d9_session_device, a_pretransformed_triangle_needs_no_shader)
     CHECK_EQ(wire.refused(), 0u);
 }
 
-/* A write lands in the box it names and nowhere else, and a block format's
- * box is counted in blocks. */
 TEST(d3d9_session_device, a_texture_write_reads_back_where_it_was_written)
 {
     av::LoaderHostApis      apis;
@@ -372,17 +348,12 @@ TEST(d3d9_session_device, a_texture_write_reads_back_where_it_was_written)
     CHECK(std::memcmp(compressed.bytes, blocks, 16u) == 0);
     CHECK(std::memcmp(compressed.bytes + compressed.pitch, blocks + 16u, 16u) == 0);
 
-    /* A box past the level, or data short of it, is refused and removes the device. */
     CHECK(av_d3d9_WriteTexture9(wire, texture, 0u, Box{0u, 0u, 0u, 9u, 8u, 1u}, 36u, 0u, 0u,
                                 reinterpret_cast<const std::uint8_t *>(zeros), sizeof(zeros)));
     CHECK(av_d3d9_Finish9(wire, &hresult));
     CHECK(hresult != 0u);
 }
 
-/* A surface's lock in the guest, or an UpdateSurface into it, writes it: an
- * offscreen plain surface and a lockable render target where they are, a
- * render target made unlockable through system memory. Each reads back with
- * the box written and the rest as it was cleared. */
 TEST(d3d9_session_device, a_surface_write_reads_back_where_it_was_written)
 {
     av::LoaderHostApis      apis;
@@ -422,18 +393,12 @@ TEST(d3d9_session_device, a_surface_write_reads_back_where_it_was_written)
     CHECK_EQ(hresult, 0u);
     CHECK_EQ(wire.refused(), 0u);
 
-    /* A box past the surface, or data short of it, is refused and removes the device. */
     CHECK(av_d3d9_WriteTexture9(wire, plain_surface, 0u, Box{6u, 6u, 0u, 9u, 8u, 1u}, 12u, 0u, 0u,
                                 reinterpret_cast<const std::uint8_t *>(corner), sizeof(corner)));
     CHECK(av_d3d9_Finish9(wire, &hresult));
     CHECK(hresult != 0u);
 }
 
-/* A present's point stages the target as the commands before it left it - a
- * clear after it never reaches the frame - under the guest's key, mapped once
- * the GPU has copied it and gone once let go. A point of 0 or a key of 0
- * stages nothing; a surface of another format is abandoned, and the engine
- * asking for it is refused at once rather than left waiting. */
 TEST(d3d9_session_device, a_present_point_stages_the_frame_the_commands_before_it_drew)
 {
     av::LoaderHostApis   apis;
@@ -472,7 +437,6 @@ TEST(d3d9_session_device, a_present_point_stages_the_frame_the_commands_before_i
     surfaces.unmap(av::SurfacePoint(key, 1u));
     CHECK(!surfaces.map(av::SurfacePoint(key, 1u), 0u, view));
 
-    /* A multisampled target is resolved into the frame. */
     constexpr std::uint32_t four_samples = 4u;
     constexpr std::uint32_t sampled = 77u;
     CHECK(av_d3d9_CreateSurface9(wire, sampled, kind_render_target, size, size, format_a8r8g8b8, four_samples, 0u,
@@ -498,8 +462,6 @@ TEST(d3d9_session_device, a_present_point_stages_the_frame_the_commands_before_i
     CHECK(surfaces.invariants_hold());
 }
 
-/* A present point names a surface of the selected device or nothing: with
- * none selected, or for a surface that is not there, it is refused. */
 TEST(d3d9_session_device, a_present_point_of_nothing_is_refused)
 {
     av::LoaderHostApis   apis;
@@ -521,11 +483,6 @@ TEST(d3d9_session_device, a_present_point_of_nothing_is_refused)
 }
 
 
-/* A fullscreen primary's flip (point 0) is kept by D3d9FlipShares where DWM opens the primary
- * and the scanout exports it: a Direct3D 11 texture shared under its key,
- * holding what the Direct3D 9 device drew before a flip - written at the
- * next flip, once the GPU has copied it, so no flip waits for the GPU. A
- * surface of another format, or a flip of no key, shares nothing. */
 TEST(d3d9_session_device, a_flipped_primary_is_shared_under_its_key_as_it_was_drawn)
 {
     av::LoaderHostApis   apis;
@@ -550,8 +507,6 @@ TEST(d3d9_session_device, a_flipped_primary_is_shared_under_its_key_as_it_was_dr
     CHECK(av_d3d9_PresentPoint9(wire, target, 0u, key, 0u));
     CHECK(av_d3d9_Finish9(wire, &hresult));
 
-    /* A frame shows within a few flips of its own: each flip writes the copies
-     * the GPU has finished and queues its own, never waiting. */
     std::uint32_t shown[size * size] = {};
     constexpr std::uint32_t most_flips = 4u;
     const auto flips_until = [&](std::uint32_t colour) {
@@ -567,7 +522,6 @@ TEST(d3d9_session_device, a_flipped_primary_is_shared_under_its_key_as_it_was_dr
     CHECK(flips_until(red));
     CHECK_EQ(shown[0] & 0x00ffffffu, red & 0x00ffffffu);
     CHECK_EQ(shown[size * size - 1u] & 0x00ffffffu, red & 0x00ffffffu);
-    /* The next frame is written over the same texture. */
     CHECK(av_d3d9_Clear9(wire, 0u, nullptr, clear_target, blue, 1.0f, 0u));
     CHECK(flips_until(blue));
 
@@ -580,8 +534,6 @@ TEST(d3d9_session_device, a_flipped_primary_is_shared_under_its_key_as_it_was_dr
     shares->release(domain, 0u);
 }
 
-/* A GPU with no compositing context flips on the CPU: the frame still
- * reaches the texture shared under the key, a flip or two behind. */
 TEST(d3d9_session_device, a_flip_with_no_compositor_crosses_through_the_cpu)
 {
     av::LoaderHostApis   apis;
@@ -621,12 +573,6 @@ TEST(d3d9_session_device, a_flip_with_no_compositor_crosses_through_the_cpu)
     device11->use_compositor(compositor);
 }
 
-/* Every device that flips has a lane to the compositor of its own, however
- * many devices there are - the session once had four, and a device past them
- * flipped on the CPU - and gives it back when it goes, so a device made
- * later at the same address never finds a lane connected to the one before.
- * A lane the host has no memory for, in the table or for the lane itself,
- * leaves its device flipping on the CPU: the frame still arrives. */
 TEST(d3d9_session_device, each_flipping_device_has_a_lane_of_its_own_and_gives_it_back)
 {
     av::LoaderHostApis   apis;
@@ -664,12 +610,9 @@ TEST(d3d9_session_device, each_flipping_device_has_a_lane_of_its_own_and_gives_i
             platform.fail_allocation_at(0u);
             return arrived;
         };
-        /* The lane table cannot grow: the first device flips on the CPU. */
         CHECK(shows(1u, 2u, 0x9180u, true));
         CHECK(av_d3d9_Destroy9(wire, 2u));
         CHECK(av_d3d9_Destroy9(wire, 1u));
-        /* Its lane went with it, and the pool's memory too: the next lane
-         * cannot be had, and that device flips on the CPU as well. */
         CHECK(shows(1u, 2u, 0x9181u, true));
         CHECK(av_d3d9_Destroy9(wire, 2u));
         CHECK(av_d3d9_Destroy9(wire, 1u));

@@ -1,12 +1,3 @@
-"""Generate ``vk_dispatch_server.{h,cpp}``: the abstract ``ServerDispatch``
-interface (one ``on_<vk>`` per command) and the ``dispatch_command``
-function that decodes a wire frame and routes it.
-
-User-implemented backends inherit ``ServerDispatch``; concrete generated
-backends (``DefaultServerDispatch``, ``RealVulkanDispatch``) live in
-``server_backends.py``.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -31,15 +22,6 @@ def _storage_decls(name: str, elem: str) -> list[str]:
 def _storage_alloc(
     pad: str, name: str, elem: str, count_expr: str, *, zero_fill: bool = True
 ) -> list[str]:
-    """Room for an array whose length the frame gives.
-
-    The length is the sender's to choose, so the storage is the caller's
-    arena block rather than a container sized by whoever sent the frame: a
-    length the block cannot hold answers null and the command is refused.
-    Zeroed unless every byte is about to be overwritten, because the driver
-    may fill fewer elements than were asked for and the reply serializes
-    what is there.
-    """
     lines = [
         f"{pad}{name}_count = static_cast<size_t>({count_expr});",
         f"{pad}if ({name}_count != 0) {{",
@@ -56,10 +38,6 @@ def _storage_alloc(
 
 
 def _failed(cmd: Command) -> str | None:
-    """Whether the call failed, after it, or None for one that cannot.
-
-    A VkResult below zero is an error; VK_INCOMPLETE and the other positive
-    codes are successes whose outputs mean what they say."""
     if cmd.return_type.base == "VkResult" and cmd.return_type.pointer_depth == 0:
         return "static_cast<int32_t>(result) < 0"
     return None
@@ -70,10 +48,6 @@ def _cleared_storage(name: str) -> str:
             f"{{ {name}_storage[av_z] = {{}}; }}")
 
 
-# Commands that end objects without ending the one they name. vk.xml says
-# which handle a command destroys only by the command's name, and says nothing
-# of a reset that frees every set a pool gave out - so this is the one place
-# that knowledge is written down.
 _ENDS_CHILDREN = {"vkResetDescriptorPool": "descriptorPool"}
 
 
@@ -91,14 +65,6 @@ def _handles_in_struct(reg: Registry, name: str, seen: set[str]) -> set[str]:
 
 
 def _made_through(reg: Registry, cmd: Command) -> str | None:
-    """The expression naming the object a command makes its handles through.
-
-    A host that forgets what a destroy ends has to forget what was made through
-    it too - a device's buffers, a pool's command buffers - or the guest could
-    still name them after the driver freed them. vk.xml gives every handle type
-    its parent type; the object is the command's argument of that type, either
-    a parameter or a member of the create info a parameter points to.
-    """
     made: set[str] = set()
     for p in cmd.params:
         if p.direction != "out":
@@ -126,13 +92,6 @@ def _made_through(reg: Registry, cmd: Command) -> str | None:
 
 
 def _handle_slots(reg: Registry, name: str, counted: frozenset[str] = frozenset()) -> int:
-    """How many handles one of `name` carries out in its own members.
-
-    The host must have room to remember every handle a reply carries before
-    the driver makes them (ServerDispatch::room_for). Handles behind a pointer are counted
-    by the caller only where the structure is the command's own output and
-    names the room it gave (`counted`, its caller arrays); anywhere else a
-    count no member gives is refused here rather than left uncounted."""
     if name not in reg.structs:
         return 0
     slots = 0
@@ -151,7 +110,6 @@ def _handle_slots(reg: Registry, name: str, counted: frozenset[str] = frozenset(
 
 
 def _ending_lines(reg: Registry, cmd: Command) -> list[str]:
-    """What a destroy, free or reset tells the host has ended."""
     if cmd.name in _ENDS_CHILDREN:
         return [f"    s.children_ended(as_number({_ENDS_CHILDREN[cmd.name]}));"]
     if not cmd.name.startswith(("vkDestroy", "vkFree")):
@@ -171,21 +129,14 @@ def _ending_lines(reg: Registry, cmd: Command) -> list[str]:
 
 def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     is_void = cmd.return_type.base == "void"
-    # One trace scope per decoded command, inside the case's own block
-    # (docs/trace.md).
     lines: list[str] = [f"case ::av::vkproto::kCmd_{cmd.name}: {{", f'    AV_SCOPE("server:{cmd.name}");']
 
     decl_lines: list[str] = []
     decode_lines: list[str] = []
     call_args: list[str] = []
     out_after_call: list[str] = []
-    # A failed call's outputs are whatever the driver left in them, which may
-    # be a handle it never made - and serializing a handle is what makes the
-    # host accept it back. So each output is put back to nothing first.
     failed = _failed(cmd)
     cleared_on_failure: list[str] = []
-    # The handles the reply may carry, each of which the host remembers as it
-    # is serialized: room for them is asked for before the driver makes any.
     room_terms: list[str] = []
 
     i = 0
@@ -220,9 +171,6 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 room_terms.append(f"{arr.name}_storage_count")
             elif _handle_slots(reg, arr.type.base):
                 room_terms.append(f"{arr.name}_storage_count * {_handle_slots(reg, arr.type.base)}u")
-            # What the driver says it listed is sent only for a call that
-            # worked, and never past the room the guest gave: a count the
-            # driver raised would serialize arena memory beyond the array.
             sent = f"{count.name}_sent"
             listed = f"{count.name}_local" if failed is None else f"{failed} ? 0u : {count.name}_local"
             out_after_call.append(f"    uint32_t {sent} = {listed};")
@@ -257,8 +205,6 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         elif kind == "in_pod":
             decl_lines.append(f"    {p.type.cpp()} {p.name}{{}};")
             if classify.is_size_t(p.type):
-                # Read the wire's 64 bits, then narrow to this machine's
-                # size_t. See the same case on the client side.
                 decode_lines.append("    {")
                 decode_lines.append("        uint64_t av_wide = 0;")
                 decode_lines.append("        if (!r.read_pod(av_wide)) return false;")
@@ -293,9 +239,6 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         elif kind in ("in_handle_array", "in_struct_array", "in_pod_array"):
             elem = p.type.base
             srv_len = classify.server_len_expr(cmd.params, p.len_expr)
-            # Mirror the client's presence byte for a nullable array: read
-            # it, decode only when present, and pass the driver null when
-            # not.
             nullable = bool(p.optional_levels) and p.optional_levels[0]
             decl_lines.extend(_storage_decls(f"{p.name}_storage", elem))
             pad = ""
@@ -321,7 +264,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 decode_lines.append(
                     f"{pad}        if (!{serialize.deserialize_call(reg, elem, 'r', f'&{p.name}_storage[av_i]', 'arena', 's')}) return false;"
                 )
-            else:  # in_pod_array
+            else:
                 decode_lines.append(
                     f"{pad}        if (!r.read_pod({p.name}_storage[av_i])) return false;"
                 )
@@ -334,8 +277,6 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             else:
                 call_args.append(f"{p.name}_storage")
         elif kind in ("in_struct_array2", "in_pod_array2"):
-            # Rebuild the pointer-to-pointer shape in the arena: an outer
-            # array of pointers, each to its own inner array.
             sib, _, member = p.inner_len.partition(".")
             srv_outer = classify.server_len_expr(cmd.params, p.len_expr)
             elem = p.type.base
@@ -366,8 +307,6 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decl_lines.extend(_storage_decls(f"{p.name}_storage", "uint8_t"))
             decl_lines.append("    uint64_t av_blob = 0;")
             decode_lines.append("    if (!r.read_varint(av_blob)) return false;")
-            # Constitution V: the guest's length is a claim. The template this
-            # side decoded says what the length must be.
             decode_lines.append(
                 f"    if (av_blob != s.template_bytes({handle})) return false;"
             )
@@ -384,8 +323,6 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         elif kind == "in_byte_array":
             srv_len = classify.server_len_expr(cmd.params, p.len_expr)
             decl_lines.extend(_storage_decls(f"{p.name}_storage", "uint8_t"))
-            # The read fills every byte, so it goes inside the allocation's
-            # own guard and the block is not zeroed first.
             alloc = _storage_alloc(
                 "    ", f"{p.name}_storage", "uint8_t", srv_len, zero_fill=False
             )
@@ -425,17 +362,11 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decl_lines.append(f"    {p.type.base} {p.name}_out{{}};")
             if reg.structs[p.type.base].has_stype:
                 decode_lines.append(f"    if (!r.read_pod({p.name}_out.sType)) return false;")
-                # Rebuild the client's chain out of the arena before the
-                # driver call: those nodes are what the driver fills in,
-                # and serializing the struct afterwards walks the same
-                # chain back to the client.
                 decode_lines.append(
                     f"    if (!deserialize_pnext_chain(r, s, "
                     f"reinterpret_cast<VkBaseOutStructure*>(&{p.name}_out), arena)) "
                     f"return false;"
                 )
-            # The room the guest's array has, and an array of it for the
-            # driver to fill; see client_dispatch for why no elements come.
             for arr, count in serialize.caller_arrays(reg, reg.structs[p.type.base]):
                 if serialize._classify_member(reg, arr) == "struct_array":
                     raise ValueError(f"{p.type.base}::{arr.name}: a caller's structure array "
@@ -507,11 +438,6 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     lines.extend(decl_lines)
     lines.extend(decode_lines)
 
-    # Told after the driver call, whatever it answered. Every destroy and free
-    # ends its objects - the spec gives them no failure that keeps one - and
-    # were one kept anyway, forgetting it costs a leak the device's own
-    # destruction reclaims, where remembering a freed one is a pointer the
-    # guest could hand the driver again.
     after_call = _ending_lines(reg, cmd)
     parent = _made_through(reg, cmd)
     if parent is not None:
@@ -533,17 +459,9 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     else:
         call = f"s.on_{cmd.name}({', '.join(call_args)})"
         if room:
-            # Refused before the driver makes anything the host could not
-            # then remember: the guest is told the host is out of memory.
             call = f"{room} ? {call} : VK_ERROR_OUT_OF_HOST_MEMORY"
         lines.append(f"    {cmd.return_type.cpp()} result = {call};")
         lines.extend(after_call)
-        # Encode the return in its own width. Most commands return
-        # VkResult and fit in 32 bits, but the device-address and
-        # opaque-capture-address queries return 64. Forcing those through
-        # an int32 silently truncates a GPU pointer, and the shader that
-        # dereferences the result faults the device — reported as
-        # VK_ERROR_DEVICE_LOST, nowhere near the actual cause.
         if classify.returns_wide(cmd):
             lines.append(
                 "    reply.write_pod<uint64_t>(static_cast<uint64_t>(result));"
@@ -566,7 +484,6 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
 def emit(reg: Registry, out_dir: Path) -> None:
     cmds = sorted(reg.commands.values(), key=lambda c: c.cmd_id)
 
-    # ---- Header ----
     header = [
         GENERATED_BANNER,
         "",
@@ -575,9 +492,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "#include <vulkan/vulkan_core.h>",
         "",
-        # dispatch_command's signature names all three, so all three must
-        # be complete here — a forward declaration of BufferReader is not
-        # enough for the declaration to compile.
         '#include "proto/wire/wire_arena.hpp"',
         '#include "proto/wire/wire_writer.hpp"',
         '#include "proto/wire/wire_reader.hpp"',
@@ -636,7 +550,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
     header.append("")
     write(out_dir / "vk_dispatch_server.h", header_guard("\n".join(header[1:])))
 
-    # ---- Source ----
     source = [
         GENERATED_BANNER,
         "",

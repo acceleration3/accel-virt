@@ -20,4 +20,4 @@ size_t ReporterStateSource::dump(char *buffer, size_t capacity, const char *&err
     return writer.length();
 }
 
-}  // namespace av
+}

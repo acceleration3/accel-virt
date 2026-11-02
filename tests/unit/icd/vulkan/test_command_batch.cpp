@@ -1,10 +1,3 @@
-/* A command buffer's batch (research.md §5): the generated client records into
- * it as it would send, nothing reaches the host until end, and end publishes
- * every recorded command in one submission framed exactly as the device reads
- * it. A command that asks for an answer is refused; discard drops a recording; a
- * batch past the connection's command limit, or one whose memory could not be
- * had, answers no_memory at end and ships nothing; a connection that refuses
- * the batch answers invalid_state. Invariants after every step. */
 #include "core/support/status.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -44,7 +37,7 @@ struct KmtTransportProbe {
     static std::uint32_t ring(KmtTransport &t) { return t.allocations_[0]; }
 };
 
-}  // namespace av
+}
 
 namespace av::icd {
 
@@ -66,29 +59,20 @@ struct CommandBatchProbe {
     }
 };
 
-}  // namespace av::icd
+}
 
 using av::KmtTransportProbe;
 using av::icd::CommandBatchProbe;
 using av::icd::ConnectionProbe;
 
 namespace {
-
-/* A vkCmdDraw on the wire: its header, the command buffer and four counts. */
 constexpr std::uint32_t draw_bytes = 32u;
-/* What fills the connection's command limit exactly. */
 constexpr std::uint32_t draws_to_the_limit = static_cast<std::uint32_t>(Connection::command_bytes / draw_bytes);
-/* What one batch carries before the next draw no longer has its room: the block
- * at the command limit, less a header and the room a command is lent. */
 constexpr std::uint32_t draws_per_batch = static_cast<std::uint32_t>(
     (Connection::command_bytes - av::CommandHeader::encoded_size - av::icd::CommandBatch::command_room) / draw_bytes +
     1u);
-/* Not a handle the root made: it crosses as 0, which is all a batch needs. */
 const VkCommandBuffer command_buffer = VK_NULL_HANDLE;
 
-/* A connection of its own on the rig's MockKmt, under the rig's send lock, and
- * a batch shipping through it; the rig's root is what the generated encoders
- * unwrap handles through. */
 class BatchRig {
 public:
     BatchRig() : connection_(rig_.kmt(), rig_.platform(), rig_.send_lock(), rig_.log()), batch_(rig_.platform(), connection_)
@@ -110,7 +94,6 @@ public:
         CHECK(batch_.invariants_hold());
     }
 
-    /* The batch the last submission carried, as the device reads it. */
     void check_shipped_draws(ShippedBatch &shipped, std::uint32_t first, std::uint32_t count)
     {
         CHECK_STATUS(shipped.read(), Status::ok);
@@ -134,7 +117,7 @@ private:
     std::uint32_t baseline_ = 0u;
 };
 
-}  // namespace
+}
 
 TEST(command_batch, a_thousand_recorded_commands_cost_one_submission)
 { BatchRig rig;
@@ -145,7 +128,6 @@ TEST(command_batch, a_thousand_recorded_commands_cost_one_submission)
   CHECK_STATUS(rig.batch().end(), Status::ok);
   CHECK(rig.batch().invariants_hold());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted + 1u);
-  /* One publish under the send lock, and no wait: a recorded command never answers. */
   CHECK(std::strcmp(rig.rig().trace().text(), "Ss") == 0);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), 0u);
   ShippedBatch shipped(rig.kmt(), rig.ring());
@@ -161,7 +143,6 @@ TEST(command_batch, end_empties_the_batch_for_the_next_recording)
   CHECK(rig.batch().invariants_hold());
   ShippedBatch shipped(rig.kmt(), rig.ring());
   rig.check_shipped_draws(shipped, 8u, 2u);
-  /* The block is kept for the next recording rather than taken again. */
   CHECK_EQ(rig.rig().platform().live_allocations(), rig.baseline() + 1u); }
 
 TEST(command_batch, a_command_that_asks_for_an_answer_is_refused_and_not_recorded)
@@ -173,7 +154,6 @@ TEST(command_batch, a_command_that_asks_for_an_answer_is_refused_and_not_recorde
   CHECK(rig.batch().send_sync(kCmd_vkGetFenceStatus, writer, reply) == TransportResult::failed);
   CHECK_EQ(reply.remaining(), 0u);
   CHECK(rig.batch().invariants_hold());
-  /* Through the generated client: the call fails as a lost device would. */
   CHECK_EQ(av_vkGetFenceStatus(rig.batch(), VK_NULL_HANDLE, VK_NULL_HANDLE), VK_ERROR_DEVICE_LOST);
   rig.batch().end_call();
   CHECK(rig.batch().invariants_hold());
@@ -194,10 +174,6 @@ TEST(command_batch, discard_drops_what_was_recorded)
   ShippedBatch shipped(rig.kmt(), rig.ring());
   rig.check_shipped_draws(shipped, 5u, 2u); }
 
-/* A recording past what one batch holds ships the block as a batch of its own
- * once the next command no longer has its room, and goes on recording: the host
- * records a command buffer's commands in the order they arrive, whichever
- * batch carried them. */
 TEST(command_batch, a_recording_past_the_command_limit_goes_as_several_batches)
 { BatchRig rig;
   const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
@@ -210,13 +186,9 @@ TEST(command_batch, a_recording_past_the_command_limit_goes_as_several_batches)
   ShippedBatch shipped(rig.kmt(), rig.ring());
   rig.check_shipped_draws(shipped, draws_per_batch, draws_to_the_limit - draws_per_batch); }
 
-/* A full block the connection cannot ship when the next command needs its room
- * fails the recording: later commands are refused rather than recorded after a
- * gap, and end answers it with nothing shipped. The next recording ships. */
 TEST(command_batch, a_full_block_the_connection_refuses_answers_no_memory_at_end)
 { BatchRig rig;
   for (std::uint32_t index = 0u; index < draws_per_batch; index++) rig.draw(index);
-  /* A faulted transport refuses every publish. */
   rig.kmt().withhold_answer_at(1u);
   std::uint64_t instance = 0u;
   VkInstanceCreateInfo create = {};
@@ -231,9 +203,6 @@ TEST(command_batch, a_full_block_the_connection_refuses_answers_no_memory_at_end
   CHECK_EQ(CommandBatchProbe::used(rig.batch()), 0u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted); }
 
-/* The block grows 32, 64, 128 and 256 KiB: whichever of those allocations is
- * refused, end answers no_memory, nothing is shipped, and the memory the
- * batch holds afterwards is at most the block it kept. */
 TEST(command_batch, memory_refused_while_recording_answers_no_memory_at_end_and_leaks_nothing)
 { for (std::uint32_t refused = 1u; refused <= 4u; refused++) {
       BatchRig rig;
@@ -259,7 +228,6 @@ TEST(command_batch, the_block_goes_with_the_batch)
       CHECK_EQ(rig.platform().live_allocations(), baseline + 1u);
   }
   CHECK_EQ(rig.platform().live_allocations(), baseline);
-  /* A batch never recorded into holds nothing. */
   { CommandBatch batch(rig.platform(), connection);
     CHECK(batch.invariants_hold()); }
   CHECK_EQ(rig.platform().live_allocations(), baseline); }
@@ -272,10 +240,6 @@ TEST(command_batch, lends_each_command_its_room_and_records_a_larger_one_whole)
   CHECK(!writer.spilled());
   CHECK(rig.batch().send_async(kCmd_vkCmdDraw, writer) == TransportResult::ok);
   CHECK(rig.batch().invariants_hold());
-  /* Docs/protocol.md, "Long commands": what outgrows the room - a
-   * vkCmdUpdateBuffer of 64 KiB is four rooms - spills into the batch's own
-   * memory, and the block grows to record it whole between the commands
-   * around it. */
   constexpr std::size_t long_bytes = 4u * CommandBatch::command_room + 5u;
   writer = rig.batch().request_writer();
   for (std::size_t index = 0u; index < long_bytes; index++) writer.write_u8(static_cast<std::uint8_t>(index));
@@ -295,7 +259,6 @@ TEST(command_batch, lends_each_command_its_room_and_records_a_larger_one_whole)
   for (std::size_t at = 0u; at < long_bytes; at++)
       if (shipped.body(1u)[at] != static_cast<std::uint8_t>(at)) wrong++;
   CHECK_EQ(wrong, 0u);
-  /* Memory refused for the spill fails the recording, as a full block does. */
   rig.rig().platform().fail_allocation_at(1u);
   writer = rig.batch().request_writer();
   writer.write_zeros(CommandBatch::command_room + 1u);
@@ -304,11 +267,6 @@ TEST(command_batch, lends_each_command_its_room_and_records_a_larger_one_whole)
   CHECK(rig.batch().invariants_hold());
   CHECK_STATUS(rig.batch().end(), Status::no_memory); }
 
-/* A command longer than any batch - a vkCmdPipelineBarrier with thousands of
- * barriers - goes alone, after what was recorded before it, as one run of
- * pieces under one hold of the send lock. Pieces the batch published a batch
- * at a time let the lock go between them: another thread's command sent then
- * came between them, and the device took it for the one they belonged to. */
 TEST(command_batch, a_command_longer_than_any_batch_goes_alone_as_one_run_under_the_lock)
 { BatchRig rig;
   rig.draw(1u);
@@ -319,7 +277,6 @@ TEST(command_batch, a_command_longer_than_any_batch_goes_alone_as_one_run_under_
   const std::uint32_t before = rig.kmt().commands();
   const std::uint32_t held = rig.rig().send_lock().acquisitions();
   CHECK(rig.batch().send_async(kCmd_vkCmdUpdateBuffer, writer) == TransportResult::ok);
-  /* The draw recorded before it, a batch of its own, then the command. */
   CHECK_EQ(rig.rig().send_lock().acquisitions(), held + 2u);
   CHECK_EQ(rig.kmt().command_id(before), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
   const std::uint32_t last = rig.kmt().commands() - 1u;
@@ -330,9 +287,7 @@ TEST(command_batch, a_command_longer_than_any_batch_goes_alone_as_one_run_under_
   rig.draw(2u);
   CHECK_STATUS(rig.batch().end(), Status::ok);
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
-  /* The spill went back; the block is kept for the next recording. */
   CHECK_EQ(rig.rig().platform().live_allocations(), rig.baseline() + 1u);
-  /* A connection that refuses it fails the recording. */
   rig.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
   writer = rig.batch().request_writer();
   writer.write_zeros(longest);
@@ -341,7 +296,6 @@ TEST(command_batch, a_command_longer_than_any_batch_goes_alone_as_one_run_under_
 
 TEST(command_batch, a_connection_refusing_the_batch_answers_invalid_state_and_drops_it)
 { BatchRig rig;
-  /* A faulted transport refuses every publish. */
   rig.kmt().withhold_answer_at(1u);
   std::uint64_t instance = 0u;
   VkInstanceCreateInfo create = {};
@@ -376,7 +330,6 @@ TEST(command_batch, invariants_see_a_recording_that_does_not_frame_or_does_not_f
   CHECK(!batch.invariants_hold());
   last = draw_bytes;
   CHECK(batch.invariants_hold());
-  /* The last command's size, then its flags. */
   const std::uint32_t fields[] = {draw_bytes + 4u, draw_bytes + 7u};
   for (const std::uint32_t at : fields) {
       const std::uint8_t kept = CommandBatchProbe::block(batch)[at];
@@ -400,7 +353,6 @@ TEST(command_batch, invariants_see_a_recording_that_does_not_frame_or_does_not_f
   CHECK(batch.invariants_hold());
   batch.discard();
   CHECK(batch.invariants_hold());
-  /* Nothing recorded, yet a last command named. */
   last = draw_bytes;
   CHECK(!batch.invariants_hold());
   last = 0u;

@@ -7,15 +7,13 @@
 namespace av {
 
 namespace {
-
-/* A rectangle with room in it, left of its right and above its bottom. */
 bool spans(const int32_t *rect)
 {
     AV_SCOPE("spans");
     return rect[0] < rect[2] && rect[1] < rect[3];
 }
 
-}  // namespace
+}
 
 ScanoutPlaneRequest::ScanoutPlaneRequest()
     : head_(0u), layer_(0u), flags_(0u), key_(0u), source_{}, destination_{}, head_width_(0u), head_height_(0u)
@@ -150,4 +148,4 @@ uint32_t ScanoutPlaneRequest::head_height() const
     return head_height_;
 }
 
-}  // namespace av
+}

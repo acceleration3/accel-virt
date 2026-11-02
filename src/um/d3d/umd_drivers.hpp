@@ -1,7 +1,3 @@
-/* The host driver the root is built over (UmdHostDriver): the Direct3D 9,
- * 11 and 12 halves of avumd.dll, each asked by the runtime that opened the
- * adapter or made the device. One per process, in the library's
- * storage beside the root. */
 #ifndef AV_UM_UMD_DRIVERS_HPP
 #define AV_UM_UMD_DRIVERS_HPP
 
@@ -16,12 +12,12 @@
 
 namespace av {
 class KeyedLog;
-}  // namespace av
+}
 
 namespace av {
 class BlockSource;
 class Kmt;
-}  // namespace av
+}
 
 
 namespace av {
@@ -40,17 +36,15 @@ public:
     d3d::Hresult fill_table12(uint32_t table_type, void *table, size_t bytes, uint32_t index,
                               void *runtime_table) override;
     void         tear_down(d3d::UmdDevice &device, void *block) override;
-    /* The Direct3D 11 half's: which threads make shared textures as rows. */
     d3d::SharedRowsRequest &shared_rows();
 
 private:
-    /* Before the three halves: every runtime's devices write to it. */
     d3d::D3dCallTrace  trace_;
     d3d11::D3d11Driver d3d11_;
     d3d12::D3d12Driver d3d12_;
     d3d9::D3d9Driver   d3d9_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_UMD_DRIVERS_HPP
+#endif

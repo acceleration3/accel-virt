@@ -6,8 +6,6 @@
 
 namespace inspector {
 namespace {
-
-// A series of the change per second between neighbouring samples, newest last.
 DynamicArray<float> Derivative(const Series& series, usize most) {
     DynamicArray<float> rates;
     const usize count = series.values.GetSize();
@@ -19,7 +17,7 @@ DynamicArray<float> Derivative(const Series& series, usize most) {
     return rates;
 }
 
-} // namespace
+}
 
 void Inspector::ConnectionsPanel(ui::Context& ctx) {
     if (!ui::BeginWindow(ctx, "Connections", &m_show_connections)) {
@@ -31,8 +29,6 @@ void Inspector::ConnectionsPanel(ui::Context& ctx) {
         ui::EndWindow(ctx);
         return;
     }
-    // Every av context the device holds: one per guest driver context, each a ring the guest writes
-    // and the device's worker drains into the executor.
     const DynamicArray<ContextView> contexts = m_model.Contexts();
     DynamicArray<Pair<const ProcessSample*, const StateNode*>> sessions;
     for (const ProcessSample& process : current->processes) {
@@ -87,7 +83,6 @@ void Inspector::ConnectionsPanel(ui::Context& ctx) {
         ui::EndTable(ctx);
     }
 
-    // The chosen context over time: what it submits and how fast the device takes it.
     for (const ContextView& view : contexts) {
         if (view.node->path != m_selected_context) {
             continue;
@@ -146,4 +141,4 @@ void Inspector::ConnectionsPanel(ui::Context& ctx) {
     ui::EndWindow(ctx);
 }
 
-} // namespace inspector
+}

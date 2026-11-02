@@ -12,11 +12,6 @@
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <d3dkmthk.h>
 
-/* The offsets dxgkrnl writes its answers at, so a header subset that widened a
- * union cannot make a zero handle look like the runtime's answer:
- * DxgkCreateDeviceImpl writes the device handle at +0x0c of D3DKMT_CREATEDEVICE. */
-/* A 32-bit process has the x86 layout, which dxgkrnl's WoW64 path reads as
- * such. */
 #if defined(_M_IX86)
 static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, hAdapter) == 0x00u);
 static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, Flags) == 0x04u);
@@ -74,16 +69,6 @@ static_assert(__builtin_offsetof(D3DKMT_ESCAPE, hContext) == 0x1Cu);
 namespace av {
 
 namespace {
-
-/* OBJECT_ATTRIBUTES, which D3DKMTShareObjects takes a pointer to and which
- * d3dkmthk.h only forward declares. The header that defines it for user mode
- * is winternl.h, and the pinned kit's um closure does not carry it; ntdef.h,
- * which does, redefines two dozen types windows.h already has. So the six
- * fields are written out here and their offsets proven below, exactly as this
- * file proves the offsets dxgkrnl writes its answers at (feature 053).
- *
- * Nothing but Length is ever set: an object with no name is one no other
- * process can open by name, which is what a shared object wants. */
 struct ShareAttributes {
     unsigned long length;
     void         *root_directory;
@@ -110,12 +95,10 @@ static_assert(__builtin_offsetof(ShareAttributes, security_quality_of_service) =
 
 constexpr uint64_t page_bytes = 4096u;
 constexpr size_t   max_descriptor_bytes = 256u;
-/* STATUS_IO_TIMEOUT: a failure, where STATUS_TIMEOUT would read as success. */
 constexpr uint32_t timed_out = 0xC00000B5u;
-/* Node 1, the hardware-scheduled one (feature 049). */
 constexpr uint32_t hardware_queue_node = 1u;
 
-}  // namespace
+}
 
 GdiKmt::GdiKmt() : clock_(), event_(nullptr), last_code_(0u), known_adapters_{}, known_luids_{}, known_(0u)
 {
@@ -196,8 +179,6 @@ void GdiKmt::forget(uint32_t adapter)
     }
 }
 
-/* D3DKMTQueryAdapterInfo has no LUID query for an open adapter, so the LUID is
- * the one the enumeration that opened the handle reported. */
 Status GdiKmt::adapter_luid(uint32_t adapter, uint64_t &luid)
 {
     AV_SCOPE("GdiKmt::adapter_luid");
@@ -210,8 +191,6 @@ Status GdiKmt::adapter_luid(uint32_t adapter, uint64_t &luid)
     return answer(NtStatus(Status::invalid_parameter).value());
 }
 
-/* The desktop's DC, which gdi32 alone makes (the OpenCL ICD imports no
- * user32): the adapter it opens is the one the primary display is on. */
 Status GdiKmt::primary_display_luid(uint64_t &luid)
 {
     AV_SCOPE("GdiKmt::primary_display_luid");
@@ -367,10 +346,6 @@ Status GdiKmt::query_native_gpu_fences(uint32_t adapter, bool &supported)
     return status;
 }
 
-/* A millisecond on a high-resolution timer of the caller's own: Sleep(1) runs
- * on the system tick, 15.6 ms unless something raised it, which is what a
- * wait that outlasted spinning paid each round. A Windows without them
- * (before 10 1803) sleeps as before. */
 void GdiKmt::sleep_briefly()
 {
     AV_SCOPE("GdiKmt::sleep_briefly");
@@ -436,8 +411,6 @@ Status GdiKmt::destroy_shared_allocation(uint32_t device, uint32_t resource)
 {
     AV_SCOPE("GdiKmt::destroy_shared_allocation");
     if (resource == 0u) return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
-    /* Named by the resource and by no allocation: dxgkrnl builds the list of
-     * everything in it, which is the only call that takes the resource too. */
     D3DKMT_DESTROYALLOCATION2 request = {};
     request.hDevice = device;
     request.hResource = resource;
@@ -460,18 +433,9 @@ Status GdiKmt::create_shared_allocation(uint32_t device, uint8_t *private_data, 
 {
     AV_SCOPE("GdiKmt::create_shared_allocation");
     resource = 0u;
-    /* Answered as too_large rather than invalid_parameter so that last_code()
-     * tells a refusal of this file's own apart from one dxgkrnl made: both
-     * would otherwise be STATUS_INVALID_PARAMETER, and a guest report saying
-     * which call refused is worth nothing if it cannot say whose refusal it
-     * was (feature 053). */
     if (size > max_descriptor_bytes) return answer(static_cast<int32_t>(NtStatus(Status::too_large).value()));
     if (private_data == nullptr)
         return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
-    /* The runtime keeps the buffer it was handed, and the driver writes the
-     * minted id into it during the call; so unlike create_allocation this one
-     * hands D3DKMT the caller's own bytes rather than a copy, and what comes
-     * back is what the opening process will be given. */
     D3DDDI_ALLOCATIONINFO2  info = {};
     info.pPrivateDriverData = private_data;
     info.PrivateDriverDataSize = size;
@@ -479,16 +443,9 @@ Status GdiKmt::create_shared_allocation(uint32_t device, uint8_t *private_data, 
     request.hDevice = device;
     request.NumAllocations = 1u;
     request.pAllocationInfo2 = &info;
-    /* Created as a resource, shared, and shared by NT handle rather than by
-     * the old global one. D3DKMTShareObjects mints a handle over a resource
-     * and refuses anything else, silently, so a carrier that is only an
-     * allocation can never be shared at all (research.md §16). */
     request.Flags.CreateResource = 1u;
     request.Flags.CreateShared = 1u;
     request.Flags.NtSecuritySharing = 1u;
-    /* A refusal is left legible by last_code(): this file is translation only,
-     * and the ICD writes the line naming which call refused and with what
-     * (feature 053). */
     const Status status = answer(D3DKMTCreateAllocation2(&request));
     if (status != Status::ok) return status;
     resource = request.hResource;
@@ -500,9 +457,6 @@ Status GdiKmt::share_object(uint32_t device, uint32_t resource, uint64_t &handle
     AV_SCOPE("GdiKmt::share_object");
     handle = 0u;
     if (resource == 0u) return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
-    /* No name and no security descriptor: a handle nothing can open by name is
-     * a handle only a process this one duplicated it into can open, which is
-     * what a shared object is for (feature 053, spec Edge Cases). */
     ShareAttributes     attributes = {};
     attributes.length = sizeof attributes;
     const D3DKMT_HANDLE shared = resource;
@@ -512,8 +466,6 @@ Status GdiKmt::share_object(uint32_t device, uint32_t resource, uint64_t &handle
         &made));
     if (status != Status::ok) return status;
     handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(made));
-    /* The device is not named by D3DKMTShareObjects: what is shared is the
-     * resource, which the kernel already knows the device of. */
     static_cast<void>(device);
     return Status::ok;
 }
@@ -527,9 +479,6 @@ Status GdiKmt::open_shared_object(uint32_t device, uint64_t handle, uint32_t &re
     if (handle == 0u || private_data == nullptr)
         return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
     HANDLE const nt = reinterpret_cast<HANDLE>(static_cast<uintptr_t>(handle));
-    /* Two calls, because the opener cannot know how much private data the
-     * creator wrote until it asks: the first sizes the buffers, the second
-     * fills them. */
     D3DKMT_QUERYRESOURCEINFOFROMNTHANDLE sizes = {};
     sizes.hDevice = device;
     sizes.hNtHandle = nt;
@@ -556,9 +505,6 @@ Status GdiKmt::open_shared_object(uint32_t device, uint64_t handle, uint32_t &re
     open.TotalPrivateDriverDataBufferSize = capacity;
     const Status opened = answer(D3DKMTOpenResourceFromNtHandle(&open));
     if (opened != Status::ok) return opened;
-    /* The resource, not `info.hAllocation`: destroying names the resource and
-     * takes the allocation in it, and the two handles are of types dxgkrnl
-     * refuses in each other's place (research.md §17). */
     resource = open.hResource;
     written = open.TotalPrivateDriverDataBufferSize;
     return Status::ok;
@@ -568,16 +514,11 @@ Status GdiKmt::close_shared_object(uint64_t handle)
 {
     AV_SCOPE("GdiKmt::close_shared_object");
     if (handle == 0u) return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
-    /* kernel32, not gdi32: what D3DKMTShareObjects made is an ordinary NT
-     * handle, and nothing in D3DKMT closes one. */
     if (CloseHandle(reinterpret_cast<HANDLE>(static_cast<uintptr_t>(handle))) == 0)
         return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
     return answer(0);
 }
 
-/* D3DDDICB_LOCK2FLAGS is one 32-bit Reserved field in WDDM 3.2: a user-mode
- * lock asks for nothing and gets the view VidMm placed, which for an
- * allocation in a CPU-visible segment is the hostmem BAR itself. */
 Status GdiKmt::lock(uint32_t device, uint32_t allocation, void *&view)
 {
     AV_SCOPE("GdiKmt::lock");
@@ -707,14 +648,7 @@ Status GdiKmt::make_context(uint32_t device, const uint8_t *private_data, uint32
     D3DKMT_CREATECONTEXTVIRTUAL request = {};
     request.Flags.HwQueueSupported = hardware_queue ? 1u : 0u;
     request.hDevice = device;
-    /* The hardware-scheduled node is the second one: a queue, and so a
-     * doorbell, only runs on the node that reports context scheduling
-     * (feature 049, research.md §16). */
     request.NodeOrdinal = hardware_queue ? hardware_queue_node : 0u;
-    /* The engines within the node, of which each has one. dxgkrnl passes it
-     * through to DXGKARG_CREATECONTEXT unjudged (DXGCONTEXT::Initialize) and
-     * the miniport refuses any other bit: `1 << NodeOrdinal` asked node 1 for
-     * an engine it does not have, so no hardware-queue context was ever made. */
     request.EngineAffinity = 1u;
     request.ClientHint = D3DKMT_CLIENTHINT_UNKNOWN;
     request.pPrivateDriverData = const_cast<uint8_t *>(private_data);
@@ -754,8 +688,6 @@ Status GdiKmt::create_hw_queue(uint32_t, uint32_t context, GuestHwQueue &queue)
     request.hHwContext = context;
     const Status made = answer(D3DKMTCreateHwQueue(&request));
     if (made != Status::ok) return made;
-    /* The monitored fence a wait waits on, and the read-only mapping of its
-     * value: the process's own view of what the driver has finished. */
     queue = GuestHwQueue(request.hHwQueue, request.hHwQueueProgressFence,
                          static_cast<const uint64_t *>(request.HwQueueProgressFenceCPUVirtualAddress));
     return Status::ok;
@@ -775,9 +707,6 @@ Status GdiKmt::submit_to_hw_queue(uint32_t queue, uint64_t commands, uint64_t le
     return answer(D3DKMTSubmitCommandToHwQueue(&request));
 }
 
-/* The queue's progress is a monitored fence, so the wait is dxgkrnl's own:
- * it wakes when the driver reports the fence signalled and the value has been
- * reached. */
 Status GdiKmt::wait_for_hw_queue(uint32_t device, uint32_t progress_fence, uint64_t value)
 {
     AV_SCOPE("GdiKmt::wait_for_hw_queue");
@@ -812,10 +741,6 @@ Status GdiKmt::create_doorbell(uint32_t queue, uint32_t ring, uint32_t &doorbell
     D3DKMT_CREATE_DOORBELL request = {};
     request.hHwQueue = queue;
     request.hRingBuffer = ring;
-    /* The ring's head and tail live in its own header, so the ring is its own
-     * control area - and dxgkrnl refuses a doorbell without one, whatever the
-     * header's "opt" says (DXGDOORBELL::Initialize looks the handle up
-     * unconditionally). */
     request.hRingBufferControl = ring;
     const Status made = answer(D3DKMTCreateDoorbell(&request));
     if (made != Status::ok) return made;
@@ -850,7 +775,6 @@ Status GdiKmt::notify_work_submission(uint32_t doorbell)
     return answer(D3DKMTNotifyWorkSubmission(&request));
 }
 
-/* A CPU notification signalled behind everything the context has submitted. */
 Status GdiKmt::wait_for_context(uint32_t device, uint32_t context)
 {
     AV_SCOPE("GdiKmt::wait_for_context");
@@ -878,8 +802,6 @@ Status GdiKmt::wait_for_context(uint32_t device, uint32_t context)
     return status;
 }
 
-/* dxgkrnl blocks until the driver reports the next CRTC vsync for the source,
- * or answers at once when it is not reporting them. */
 Status GdiKmt::wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source)
 {
     AV_SCOPE("GdiKmt::wait_for_vertical_blank");
@@ -890,8 +812,6 @@ Status GdiKmt::wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32
     return answer(D3DKMTWaitForVerticalBlankEvent(&wait));
 }
 
-/* dxgkrnl answers from the driver's DxgkDdiGetScanLine, which reads the
- * device's display clock. */
 Status GdiKmt::scan_line(uint32_t adapter, uint32_t source, BeamPosition &position)
 {
     AV_SCOPE("GdiKmt::scan_line");
@@ -903,8 +823,6 @@ Status GdiKmt::scan_line(uint32_t adapter, uint32_t source, BeamPosition &positi
     return answered;
 }
 
-/* The current mode of the source, whose rate dxgkrnl keeps as the fraction the
- * driver's target mode stated. */
 Status GdiKmt::refresh_millihz(uint32_t adapter, uint32_t source, uint32_t &millihz)
 {
     AV_SCOPE("GdiKmt::refresh_millihz");
@@ -925,8 +843,6 @@ Status GdiKmt::refresh_millihz(uint32_t adapter, uint32_t source, uint32_t &mill
     return millihz != 0u ? Status::ok : Status::not_found;
 }
 
-/* dxgkrnl copies the data into the kernel, hands the copy to DxgkDdiEscape and
- * copies it back out, so an answer the driver wrote lands in `data`. */
 Status GdiKmt::escape(uint32_t adapter, uint32_t device, uint32_t context, uint8_t *data, uint32_t size)
 {
     AV_SCOPE("GdiKmt::escape");
@@ -953,4 +869,4 @@ uint32_t GdiKmt::last_code() const
     return last_code_;
 }
 
-}  // namespace av
+}

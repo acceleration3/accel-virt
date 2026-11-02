@@ -30,4 +30,4 @@ bool SessionTimeline::wait(uint64_t fence)
     return timeline_.wait(fence);
 }
 
-}  // namespace av::d3d
+}

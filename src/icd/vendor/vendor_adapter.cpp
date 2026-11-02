@@ -26,4 +26,4 @@ bool VendorAdapter::primary() const
     return primary_;
 }
 
-}  // namespace av::vendor
+}

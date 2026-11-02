@@ -8,7 +8,7 @@ namespace {
 
 FakeHandleTable *active_table = nullptr;
 
-}  // namespace
+}
 
 FakeHandleTable::FakeHandleTable() : data_{}, lookups_(0u), outstanding_(0u)
 {
@@ -63,7 +63,7 @@ void FakeHandleTable::release(const DxgkargcbReleaseHandleDataRecord &arguments)
 std::uint32_t FakeHandleTable::lookups() const { return lookups_; }
 std::uint32_t FakeHandleTable::outstanding() const { return outstanding_; }
 
-}  // namespace av
+}
 
 extern "C" void *AvFakeAcquireHandleData(const av::DxgkargcbGetHandleDataRecord *arguments, void **release_handle)
 {

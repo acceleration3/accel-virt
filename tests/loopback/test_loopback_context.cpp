@@ -1,6 +1,3 @@
-/* L4: the guest core's av objects against the device core in one process.
- * Requests travel as bytes, doorbell stores ring the device's worker, and the
- * test serves each fence interrupt as the driver's DPC would. */
 #include "miniport/adapter/capset_query.hpp"
 #include "miniport/adapter/device_identity.hpp"
 #include "miniport/av_context/context_memory.hpp"
@@ -44,12 +41,9 @@ using av::Status;
 using av::SubApi;
 
 namespace {
-
-/* The capset follows the 24-byte response header; its major follows its magic. */
 constexpr std::size_t   capset_major_offset = 28u;
 constexpr std::uint32_t large_batch = 1024u;
 
-/* One request straight to the device: the type it answered. */
 std::uint32_t answer_type(LoopbackRig &rig, const AvRequestWriter &writer, const std::uint8_t *request)
 {
     std::uint8_t      answer[256] = {};
@@ -58,7 +52,7 @@ std::uint32_t answer_type(LoopbackRig &rig, const AvRequestWriter &writer, const
     return reader.decode(answer, answered) == Status::ok ? reader.type() : 0u;
 }
 
-}  // namespace
+}
 
 TEST(loopback_capset, the_driver_reads_the_devices_capset_and_refuses_another_major)
 { LoopbackRig rig;
@@ -70,11 +64,6 @@ TEST(loopback_capset, the_driver_reads_the_devices_capset_and_refuses_another_ma
   CHECK(other.failed());
   CHECK(other.invariants_hold()); }
 
-/* Host memory reaches the guest only through the hostmem window
- * (docs/host-memory.md): the rig's MockHost has one, so the guest reads that
- * path, and the two bits feature 039's probes once set - exporting host GPU
- * memory and importing guest pages - are never set, since neither is a
- * choice any more. */
 TEST(loopback_capset, offers_host_visible_memory_and_no_retired_memory_path)
 { constexpr std::uint64_t gpu_exported_memory = 2u;
   constexpr std::uint64_t guest_memory_import = 4u;
@@ -98,7 +87,6 @@ TEST(loopback_capset, the_device_refuses_a_setup_of_another_major)
   AvRequestWriter writer(request, sizeof request);
   CHECK_STATUS(writer.create_context(5u, CapsetInfo::capset_id), Status::ok);
   CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
-  /* The rig's pages lie one after another, so each block is one run. */
   const av::ContextPages   pages = memory.pages();
   const av::GuestPageList  lists[3] = {pages.ring(), pages.fence(), pages.reply()};
   for (std::uint32_t blob = 0u; blob < 3u; blob++) {
@@ -231,10 +219,6 @@ TEST(loopback_faults, a_faulted_context_reports_its_code_while_another_completes
   CHECK(rig.context(0u).invariants_hold());
   CHECK(rig.context(1u).invariants_hold()); }
 
-/* US4 of feature 040: the host loses its device on one context's work. That
- * context is told - the fault code is the device's, not a framing mistake of
- * the guest's - the other keeps completing, and when both are retired the
- * device holds no context and no blob of theirs (FR-004). */
 TEST(loopback_faults, an_executor_that_loses_the_device_loses_one_context_and_no_other)
 { LoopbackRig rig;
   CHECK(rig.read_capset());
@@ -285,9 +269,6 @@ TEST(loopback_reset, after_a_device_reset_serving_finds_nothing_more_and_a_new_c
   CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 1u));
   CHECK(rig.context(0u).invariants_hold()); }
 
-/* A driver that stops clears DRIVER_OK without resetting the device, so a
- * fence its worker raises afterwards must reach no notifier - and the driver
- * that replaces it must still be able to connect them. */
 TEST(loopback_status, a_fence_raised_after_driver_ok_is_cleared_reaches_no_notifier)
 { LoopbackRig rig;
   CHECK(rig.read_capset());
@@ -302,11 +283,11 @@ TEST(loopback_status, a_fence_raised_after_driver_ok_is_cleared_reaches_no_notif
   ring.write_batch(2u, 64u);
   CHECK_STATUS(rig.submit(0u, 2u, first_end, ring.tail()), Status::ok);
   CHECK(rig.device().holding(1u));
-  rig.device().device().status(0x0Bu);   /* acknowledge, driver, features ok: it stopped */
+  rig.device().device().status(0x0Bu);
   rig.device().executor().release();
   CHECK(!rig.device().raised_past(rig.line(0u), raised));
   CHECK_STATUS(rig.serve(0u), Status::ok);
-  CHECK_EQ(rig.context(0u).completed(), 2u);   /* the page moved; the interrupt did not */
+  CHECK_EQ(rig.context(0u).completed(), 2u);
   CHECK(rig.device().device().invariants_hold());
   rig.device().device().status(av::DriverStatus::driver_ok);
   const std::uint64_t second_end = ring.tail();
@@ -315,10 +296,6 @@ TEST(loopback_status, a_fence_raised_after_driver_ok_is_cleared_reaches_no_notif
   CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 3u));
   CHECK(rig.context(0u).invariants_hold()); }
 
-/* FR-005 at L4: the device says which host GPU it is bound to, and a guest that
- * remembers what it started on refuses another one - what a hibernated guest
- * wakes up to when QEMU was started against a different GPU. The capset is read
- * the way the driver reads it, through the device core. */
 TEST(loopback_identity, a_device_bound_to_another_gpu_is_another_device)
 { constexpr std::uint8_t other_gpu[16] = {0x20, 0x0C};
   LoopbackRig rig;
@@ -332,8 +309,6 @@ TEST(loopback_identity, a_device_bound_to_another_gpu_is_another_device)
   CHECK(replaced.read_capset());
   CHECK(!identity.accept(replaced.capset()));
   CHECK(identity.changed());
-  /* The device that replaced it is a device of its own, and a guest starting on
-   * it is content. */
   av::DeviceIdentity started_again(replaced.platform());
   started_again.remember(replaced.capset());
   CHECK(started_again.accept(replaced.capset()));

@@ -14,7 +14,7 @@ bool IsSource(const char* name) {
     return view.EndsWith(".cpp") || view.EndsWith(".hpp") || view.EndsWith(".h") || view.EndsWith(".c");
 }
 
-} // namespace
+}
 
 StringView ScopeNames::DefaultRoot() noexcept {
     return AV_SOURCE_DIR;
@@ -76,4 +76,4 @@ String ScopeNames::Find(u32 id) const {
     return Format("?{:08x}", id);
 }
 
-} // namespace inspector
+}

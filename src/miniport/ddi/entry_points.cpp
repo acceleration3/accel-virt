@@ -6,7 +6,7 @@ namespace av {
 
 constinit MiniportBinding miniport_binding;
 
-}  // namespace av
+}
 
 extern "C" {
 
@@ -57,7 +57,6 @@ void AvDdiUnload(void)
 int32_t AvDdiQueryInterface(void *context, void *query)
 { return static_cast<av::Adapter *>(context)->query_interface(query); }
 
-/* The driver emits no ETW events; enabling them changes nothing. */
 void AvDdiControlEtwLogging(uint8_t, uint32_t, uint8_t)
 {}
 

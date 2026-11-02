@@ -1,7 +1,3 @@
-/* A hostile driver behind avinspect.exe's kernel escapes: each escape is
- * answered with the next bytes of the input written over the request. Whatever
- * it answers, the read ends, holds nothing unless it succeeded, holds at most
- * 64 MiB, and leaks nothing. */
 #include "guest/inspect/escape_reader.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/adapter_search.hpp"
@@ -37,7 +33,7 @@ private:
     std::size_t         used_;
 };
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

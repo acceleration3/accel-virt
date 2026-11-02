@@ -43,11 +43,6 @@ int32_t MiniportBinding::remove_device(void *context)
     return NtStatus(miniport_->remove_device(context)).value();
 }
 
-/* The image goes with the unload, not only its adapters: a thread or a
- * bugcheck callback of the platform's or the trace's that outlived it would
- * run code dxgkrnl has unmapped - a live driver upgrade bugchecked 0xCE in the
- * log thread (DebugPortLog::write_port). `leave` unbinds this, so nothing here
- * is touched after it. */
 void MiniportBinding::unload()
 {
     AV_SCOPE("MiniportBinding::unload");
@@ -55,4 +50,4 @@ void MiniportBinding::unload()
     if (exit_ != nullptr) exit_->leave();
 }
 
-}  // namespace av
+}

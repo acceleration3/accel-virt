@@ -58,7 +58,6 @@ void Inspector::Build(ui::Context& ctx) {
         dock.Dock("Threads", "", ui::DockSide::Center);
         dock.Dock("Processes", "Threads", ui::DockSide::Left, 0.24f);
         dock.Dock("State", "Threads", ui::DockSide::Right, 0.38f);
-        // The last window docked into a leaf is the tab it shows first.
         dock.Dock("Plots", "Threads", ui::DockSide::Bottom, 0.5f);
         dock.Dock("Surfaces", "Plots", ui::DockSide::Center);
         dock.Dock("Connections", "Plots", ui::DockSide::Center);
@@ -72,7 +71,7 @@ void Inspector::Build(ui::Context& ctx) {
     if (m_show_plots) PlotsPanel(ctx);
     if (ui::BeginModal(ctx, "About avinspector", &m_show_about)) {
         ui::Text(ctx, "avinspector - a live view of an accel-virt stack");
-        ui::TextDisabled(ctx, "Trace tables and state dumps, as docs/trace.md describes them.");
+        ui::TextDisabled(ctx, "Trace tables and state dumps.");
         String& line = ctx.GetScratchString();
         FormatTo(line, "{} scope names from {}", m_model.GetNames().GetSize(), m_model.GetSourceRoot());
         ui::TextDisabled(ctx, line);
@@ -192,4 +191,4 @@ String FormatRate(f64 per_second) {
     return Format("{:.1f}/s", per_second);
 }
 
-} // namespace inspector
+}

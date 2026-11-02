@@ -58,4 +58,4 @@ bool PitchedExtent::fits(uint64_t size) const
     return pitches_hold() && within(size);
 }
 
-}  // namespace av
+}

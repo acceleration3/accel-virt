@@ -1,5 +1,3 @@
-/* The capset queries (virtio 1.2 5.7.6.8): GET_CAPSET_INFO by index and
- * GET_CAPSET by id and version, both 32 bytes. */
 #ifndef AV_CAPSET_REQUEST_HPP
 #define AV_CAPSET_REQUEST_HPP
 
@@ -18,7 +16,6 @@ public:
 
     CapsetRequest();
 
-    /* From the start of the request; malformed when shorter than 32 bytes. */
     [[nodiscard]] Status decode_info(WireReader &reader);
     [[nodiscard]] Status decode_capset(WireReader &reader);
     uint32_t             index() const;
@@ -35,6 +32,6 @@ private:
     uint32_t capset_version_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_CAPSET_REQUEST_HPP
+#endif

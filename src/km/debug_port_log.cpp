@@ -1,5 +1,3 @@
-/* Before the header's ntddk.h, which it includes and must follow: waiting on a
- * thread by its handle is declared only in ntifs.h. */
 #include <ntifs.h>
 
 #include "km/debug_port_log.hpp"
@@ -10,15 +8,13 @@
 #include <intrin.h>
 
 namespace {
-
-/* KSTART_ROUTINE: the log is the context. */
 void run_log_writer(void *log)
 {
     AV_SCOPE("run_log_writer");
     static_cast<av::DebugPortLog *>(log)->drain();
 }
 
-}  // namespace
+}
 
 namespace av {
 
@@ -41,7 +37,6 @@ Status DebugPortLog::start()
     const NTSTATUS referenced = ObReferenceObjectByHandle(handle, SYNCHRONIZE, *PsThreadType, KernelMode, &thread,
                                                           nullptr);
     if (!NT_SUCCESS(referenced)) {
-        /* A thread nothing can wait for would outlive the image at unload. */
         stopping_ = true;
         KeSetEvent(&wake_, IO_NO_INCREMENT, FALSE);
         static_cast<void>(ZwWaitForSingleObject(handle, FALSE, nullptr));
@@ -68,7 +63,6 @@ void DebugPortLog::stop()
     KeSetEvent(&wake_, IO_NO_INCREMENT, FALSE);
     static_cast<void>(KeWaitForSingleObject(thread_, Executive, KernelMode, FALSE, nullptr));
     ObDereferenceObject(thread_);
-    /* A line queued after the thread's last look goes out here. */
     uint8_t chunk[chunk_bytes];
     KeAcquireSpinLock(&lock_, &previous);
     thread_ = nullptr;
@@ -84,7 +78,6 @@ void DebugPortLog::write(const char *line)
     KIRQL previous = 0;
     KeAcquireSpinLock(&lock_, &previous);
     const bool threaded = thread_ != nullptr;
-    /* A full queue counts the line, and the thread says how many it lost. */
     if (threaded) static_cast<void>(queue_.append(line));
     else write_now(line);
     KeReleaseSpinLock(&lock_, previous);
@@ -124,8 +117,6 @@ bool DebugPortLog::write_queued()
     }
 }
 
-/* WRITE_PORT_BUFFER_UCHAR expands to __outbytestring, which clang-cl does not
- * provide; one byte at a time is the same port protocol. */
 void DebugPortLog::write_port(const uint8_t *bytes, size_t count)
 {
     AV_SCOPE("DebugPortLog::write_port");
@@ -144,4 +135,4 @@ void DebugPortLog::report_dropped(uint64_t lines)
     write_now(line.text());
 }
 
-}  // namespace av
+}

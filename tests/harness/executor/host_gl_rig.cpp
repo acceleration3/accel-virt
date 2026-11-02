@@ -30,7 +30,7 @@ constexpr GLenum unsigned_byte = 0x1401u;
 constexpr GLenum pack_alignment = 0x0D05u;
 constexpr GLenum unpack_alignment = 0x0CF5u;
 
-}  // namespace
+}
 
 HostGlRig::HostGlRig()
     : host_(), device_(nullptr), display_(nullptr), gl_(), context_(nullptr), queue_(nullptr)
@@ -230,4 +230,4 @@ void HostGlRig::finish()
     done();
 }
 
-}  // namespace av
+}

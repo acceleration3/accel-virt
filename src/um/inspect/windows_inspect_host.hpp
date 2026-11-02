@@ -1,6 +1,3 @@
-/* InspectHost over Windows: Toolhelp's process list, a process's image path,
- * named sections and events opened by name, a file, and the interrupt time.
- * Translation only; every choice of name is InspectProgram's. */
 #ifndef AV_UM_WINDOWS_INSPECT_HOST_HPP
 #define AV_UM_WINDOWS_INSPECT_HOST_HPP
 
@@ -28,6 +25,6 @@ private:
     InterruptClock clock_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_WINDOWS_INSPECT_HOST_HPP
+#endif

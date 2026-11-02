@@ -1,6 +1,3 @@
-/* The context and capset request decoders over attacker-chosen bytes: whatever
- * they accept must read the fields from exactly the documented offsets, and
- * consume no more than the request holds. */
 #include "core/support/status.hpp"
 #include "proto/virtio_gpu/capset_request.hpp"
 #include "proto/virtio_gpu/context_request.hpp"
@@ -21,7 +18,7 @@ std::uint32_t field(const std::uint8_t *data, std::size_t offset)
     return value;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

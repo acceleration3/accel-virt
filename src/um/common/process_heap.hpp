@@ -1,7 +1,3 @@
-/* The ICD's memory in a Windows process: the process heap, which the loader and
- * the application already share, so the DLL creates no heap of its own and
- * leaves none behind when it unloads. User mode has no IRQL, so every ceiling
- * holds. Translation only, like src/km. */
 #ifndef AV_UM_PROCESS_HEAP_HPP
 #define AV_UM_PROCESS_HEAP_HPP
 
@@ -25,6 +21,6 @@ private:
     void *heap_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_PROCESS_HEAP_HPP
+#endif

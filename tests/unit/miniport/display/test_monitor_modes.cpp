@@ -25,7 +25,7 @@ namespace {
 constexpr std::int32_t  no_memory = static_cast<std::int32_t>(0xC0000017u);
 constexpr std::uint32_t invalid_parameter = 0xC000000Du;
 constexpr std::int32_t  srgb = 2;
-constexpr std::int32_t  origin_driver = 5;    /* D3DKMDT_MCO_DRIVER */
+constexpr std::int32_t  origin_driver = 5;
 constexpr std::int32_t  preferred = 1;
 constexpr std::int32_t  not_preferred = 2;
 
@@ -37,7 +37,7 @@ std::uint32_t recommend(MockPlatform &platform, FakeVidPn &vidpn, std::uint32_t 
     return static_cast<std::uint32_t>(MonitorModes(platform, modes, sources, request).recommend().value());
 }
 
-}  // namespace
+}
 
 TEST(monitor_modes_recommend, adds_every_mode_from_the_driver_the_preferred_one_preferred)
 { MockPlatform platform;

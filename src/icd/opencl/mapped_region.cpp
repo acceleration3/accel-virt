@@ -50,8 +50,6 @@ ClImageRegion MappedRegion::image_layout() const
 bool MappedRegion::writes_back() const
 {
     AV_SCOPE("MappedRegion::writes_back");
-    /* CL_MAP_READ alone is a promise not to write, so nothing goes back;
-     * anything else may have been written through. */
     return memory_ != Memory::shared && (flags() & (CL_MAP_WRITE | CL_MAP_WRITE_INVALIDATE_REGION)) != 0u;
 }
 
@@ -60,13 +58,9 @@ bool MappedRegion::invariants_hold() const
     AV_SCOPE("MappedRegion::invariants_hold");
     if (!StagedMapping::invariants_hold()) return false;
     if (at() == nullptr) return true;
-    /* A mapping of nothing is not a mapping; a staged one is a copy and the
-     * others are not; and one that names neither a buffer nor the host's own
-     * address could never be unmapped - except an image's, which is staged
-     * and has no host map to name. */
     if (bytes() == 0u || object() == 0u || copied() != (memory_ == Memory::staged)) return false;
     if (element_bytes_ != 0u) return host_ == 0u && memory_ == Memory::staged;
     return host_ != 0u;
 }
 
-}  // namespace av::clicd
+}

@@ -26,7 +26,7 @@ struct HwQueueSubmissionsProbe {
     static void overfill(HwQueueSubmissions &submissions) { submissions.count_ = HwQueueSubmissions::capacity + 1u; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -59,7 +59,7 @@ private:
     HwQueueSubmissions    submissions_;
 };
 
-}  // namespace
+}
 
 TEST(hw_queue_submissions_complete, writes_each_fence_in_order_then_signals_once)
 { Fixture fixture;
@@ -78,7 +78,7 @@ TEST(hw_queue_submissions_complete, writes_each_fence_in_order_then_signals_once
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).InterruptType, 11);
   CHECK_STATUS(fixture.submissions().complete(fixture.notification()), Status::ok);
-  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);   /* nothing written, nothing signalled */ }
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);   }
 
 TEST(hw_queue_submissions_submit, refuses_no_queue_no_fence_or_a_full_set)
 { Fixture fixture;
@@ -137,9 +137,6 @@ TEST(hw_queue_submissions, is_legal_up_to_dispatch)
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   while (fixture.platform().claim(Violation::irql_ceiling)) {} }
 
-/* Feature 049: a submission that carried a batch waits for the device, not for
- * the next DPC. What it waits on is the fence its context's ring completes, and
- * what it writes when that arrives is the progress a process reads. */
 TEST(hw_queue_submissions_complete, a_submission_that_carried_a_batch_waits_for_its_context)
 { Fixture fixture;
   int      first_context = 0;
@@ -147,23 +144,18 @@ TEST(hw_queue_submissions_complete, a_submission_that_carried_a_batch_waits_for_
   fixture.platform().set_irql(Irql::dispatch);
   CHECK_STATUS(fixture.submissions().submit(&queue_a, 1u, &fixture.fence_a_, &first_context, 4u), Status::ok);
   CHECK_STATUS(fixture.submissions().submit(&queue_b, 9u, &fixture.fence_b_, &second_context, 2u), Status::ok);
-  /* Neither is the DPC's to write: the device has finished nothing. */
   CHECK_STATUS(fixture.submissions().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.fence_a_, 0u);
   CHECK_EQ(fixture.fence_b_, 0u);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
   CHECK_EQ(fixture.submissions().in_flight(), 2u);
 
-  /* The first context reaches 3, which is short of what its submission
-   * queued, and the second passes what its own waited for. */
   fixture.submissions().completed_through(&first_context, 3u);
   fixture.submissions().completed_through(&second_context, 2u);
   CHECK_EQ(fixture.fence_a_, 0u);
   CHECK_EQ(fixture.fence_b_, 9u);
   CHECK_EQ(fixture.submissions().in_flight(), 1u);
   CHECK(fixture.submissions().invariants_hold());
-  /* One report covers every fence written since the last one: VidSch reads
-   * them all when it is told. */
   CHECK_STATUS(fixture.submissions().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   CHECK_STATUS(fixture.submissions().complete(fixture.notification()), Status::ok);
@@ -172,7 +164,6 @@ TEST(hw_queue_submissions_complete, a_submission_that_carried_a_batch_waits_for_
   fixture.submissions().completed_through(&first_context, 4u);
   CHECK_EQ(fixture.fence_a_, 1u);
   CHECK_EQ(fixture.submissions().in_flight(), 0u);
-  /* A context nobody submitted on, and one whose submissions are done. */
   fixture.submissions().completed_through(&first_context, 99u);
   fixture.submissions().completed_through(nullptr, 99u);
   CHECK_STATUS(fixture.submissions().complete(fixture.notification()), Status::ok);

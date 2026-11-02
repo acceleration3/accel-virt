@@ -68,4 +68,4 @@ Status ReadyMessage::decode(const uint8_t *bytes, size_t length, uint32_t descri
     return Status::ok;
 }
 
-}  // namespace av
+}

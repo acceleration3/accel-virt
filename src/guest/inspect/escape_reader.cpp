@@ -27,7 +27,6 @@ Status EscapeReader::read(TraceEscapeRecord::Kind kind, uint64_t luid)
     if (search.find_avgpu(luid) != Status::ok) return Status::not_found;
     const Status status = read_from(search.adapter(), kind);
     if (status != Status::ok) drop();
-    /* The dump is read; a failure to close the adapter changes nothing in it. */
     static_cast<void>(search.close());
     return status;
 }
@@ -61,7 +60,7 @@ Status EscapeReader::page(uint32_t adapter, TraceEscapeRecord::Kind kind, uint64
 {
     AV_SCOPE("EscapeReader::page");
     const TraceEscapeRecord request(kind, offset, window_bytes);
-    static_cast<void>(request.encode(page_, sizeof page_));   /* the page holds a record by construction */
+    static_cast<void>(request.encode(page_, sizeof page_));
     const Status escaped = kmt_.escape(adapter, 0u, 0u, page_, sizeof page_);
     if (escaped != Status::ok) return escaped;
     answer = request;
@@ -105,4 +104,4 @@ void EscapeReader::drop()
     clock_ = 0u;
 }
 
-}  // namespace av
+}

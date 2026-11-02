@@ -1,5 +1,3 @@
-/* Reading the device's av capset, one request and one answer at a time, and
- * every answer a device might give judged. */
 #include "core/platform/platform.hpp"
 #include "miniport/adapter/capset_query.hpp"
 #include "core/support/status.hpp"
@@ -38,7 +36,7 @@ struct CapsetQueryProbe {
     static void complete_without_capset(CapsetQuery &query) { query.step_ = CapsetQuery::Step::done; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -58,7 +56,6 @@ public:
     MockPlatform &platform() { return platform_; }
     CapsetQuery  &query() { return query_; }
 
-    /* The next request, decoded: whether it was GET_CAPSET_INFO (else GET_CAPSET). */
     Status next(CapsetRequest &decoded, bool &info)
     {
         std::uint8_t bytes[AvRequestWriter::max_request_size] = {};
@@ -99,7 +96,7 @@ GpuResponse plain(std::uint32_t type)
     return response;
 }
 
-}  // namespace
+}
 
 TEST(capset_query, reads_the_av_capset_in_two_requests)
 { Fixture fixture;
@@ -110,7 +107,7 @@ TEST(capset_query, reads_the_av_capset_in_two_requests)
   CHECK(is_info);
   CHECK_EQ(decoded.index(), 0u);
   CHECK(fixture.query().invariants_hold());
-  CHECK_STATUS(fixture.next(decoded, is_info), Status::invalid_state);   /* waiting for the answer */
+  CHECK_STATUS(fixture.next(decoded, is_info), Status::invalid_state);
   CHECK_STATUS(fixture.answer(info()), Status::ok);
   CHECK_STATUS(fixture.next(decoded, is_info), Status::ok);
   CHECK(!is_info);

@@ -1,6 +1,3 @@
-/* A release's copy back (docs/d3d11-sharing.md): the cl_mem over a Direct3D 11
- * subresource read into a staging resource's mapped rows, through the ICD's
- * own blocking transfers, for the bridge to copy into the resource. */
 #ifndef AV_CLICD_CL_D3D11_DOWNLOAD_HPP
 #define AV_CLICD_CL_D3D11_DOWNLOAD_HPP
 
@@ -26,6 +23,6 @@ private:
     const D3d11Object &object_;
 };
 
-}  // namespace av::clicd
+}
 
-#endif  // AV_CLICD_CL_D3D11_DOWNLOAD_HPP
+#endif

@@ -15,4 +15,4 @@ DxgkrnlInterface &VidPnFixture::dxgkrnl() { return dxgkrnl_; }
 FakeVidPn        &VidPnFixture::vidpn() { return vidpn_; }
 void             *VidPnFixture::handle() { return &vidpn_; }
 
-}  // namespace av
+}

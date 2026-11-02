@@ -30,4 +30,4 @@ Status AnswerPieceCommand::run(uint8_t *reply, size_t capacity, size_t &produced
     return Status::ok;
 }
 
-}  // namespace av
+}

@@ -1,11 +1,4 @@
-/* A guest context's programs on this host's own GPU, as the backend answers
- * for them: a program's binaries sealed in their sizes and bytes and opened
- * again into a program that builds, every refusal of a binary the API names,
- * the execution info a kernel may be given, and what a SPIR-V program's
- * module says its arguments are. A host with no OpenCL GPU judges nothing. */
 #include "device/abi/av_executor.h"
-/* The backend first: its generated server says what OpenCL's headers are
- * included with. */
 #include "executor/opencl/opencl_backend.hpp"
 #include "executor/opencl/cl_binary_envelope.hpp"
 #include "executor/shim/loader_host_apis.hpp"
@@ -44,9 +37,6 @@ using av::OpenClBackend;
 using av::clproto::KernelArgument;
 
 namespace {
-
-/* The backend bound to the first GPU the host runs OpenCL on, a context of
- * the host's own on it, and a vector add built from source in that context. */
 class BoundBackend {
 public:
     BoundBackend() : device_(nullptr), context_(nullptr), built_(nullptr)
@@ -92,7 +82,6 @@ private:
     cl_program         built_;
 };
 
-/* What the backend makes of `bytes` as a binary for `device`. */
 cl_program from(OpenClBackend &backend, cl_context context, cl_device_id device, const unsigned char *bytes,
                 std::size_t size, cl_int &status, cl_int &error)
 {
@@ -101,7 +90,7 @@ cl_program from(OpenClBackend &backend, cl_context context, cl_device_id device,
     return backend.on_clCreateProgramWithBinary(context, 1u, &device, &size, &bytes, &status, &error);
 }
 
-}  // namespace
+}
 
 TEST(opencl_backend_programs, a_program_s_binaries_are_sealed_and_open_again_into_a_program)
 { BoundBackend bound;
@@ -115,12 +104,10 @@ TEST(opencl_backend_programs, a_program_s_binaries_are_sealed_and_open_again_int
            CL_SUCCESS);
   CHECK_EQ(answered, sizeof sealed);
   CHECK_EQ(sealed, host + ClBinaryEnvelope::header_bytes);
-  /* Too little room for the sizes, and no room asked for. */
   CHECK_EQ(backend.on_clGetProgramInfo(bound.built(), CL_PROGRAM_BINARY_SIZES, 1u, &sealed, nullptr),
            CL_INVALID_VALUE);
   CHECK_EQ(backend.on_clGetProgramInfo(bound.built(), CL_PROGRAM_BINARY_SIZES, 0u, nullptr, &answered), CL_SUCCESS);
 
-  /* The binaries' bytes are the value on the wire, back to back. */
   unsigned char *const bytes = static_cast<unsigned char *>(std::malloc(sealed));
   CHECK(bytes != nullptr);
   if (bytes == nullptr) return;
@@ -144,19 +131,16 @@ TEST(opencl_backend_programs, a_program_s_binaries_are_sealed_and_open_again_int
       cl_kernel kernel = ::clCreateKernel(loaded, "vector_add", &error);
       CHECK(kernel != nullptr);
       KernelArgument argument = KernelArgument::unknown;
-      /* Made from no IL, so its module says nothing - the host says it all. */
       CHECK(!backend.declared_argument(kernel, 0u, argument));
       if (kernel != nullptr) CHECK_EQ(::clReleaseKernel(kernel), CL_SUCCESS);
       CHECK_EQ(::clReleaseProgram(loaded), CL_SUCCESS);
   }
 
-  /* Damaged, it is CL_INVALID_BINARY in both places the API says so. */
   bytes[sealed - 1u] ^= 0x01u;
   CHECK(from(backend, bound.context(), bound.device(), bytes, sealed, status, error) == nullptr);
   CHECK_EQ(error, CL_INVALID_BINARY);
   CHECK_EQ(status, CL_INVALID_BINARY);
   bytes[sealed - 1u] ^= 0x01u;
-  /* The host's own bytes, unsealed, are not a binary of this driver's. */
   CHECK(from(backend, bound.context(), bound.device(), bytes + ClBinaryEnvelope::header_bytes, host, status,
              error) == nullptr);
   CHECK_EQ(error, CL_INVALID_BINARY);
@@ -172,8 +156,6 @@ TEST(opencl_backend_programs, a_binary_for_no_device_or_another_is_refused_befor
   cl_device_id         devices[2] = {bound.device(), bound.device()};
   cl_int               status = 12345;
   cl_int               error = CL_SUCCESS;
-  /* No device, no binaries, no lengths: the API's CL_INVALID_VALUE, and no
-   * binary judged. */
   CHECK(backend.on_clCreateProgramWithBinary(bound.context(), 0u, devices, &length, &binary, &status, &error) ==
         nullptr);
   CHECK_EQ(error, CL_INVALID_VALUE);
@@ -186,7 +168,6 @@ TEST(opencl_backend_programs, a_binary_for_no_device_or_another_is_refused_befor
   CHECK(backend.on_clCreateProgramWithBinary(bound.context(), 1u, devices, &length, nullptr, &status, &error) ==
         nullptr);
   CHECK_EQ(error, CL_INVALID_VALUE);
-  /* Two devices where the context has one, and a device that is not it. */
   CHECK(backend.on_clCreateProgramWithBinary(bound.context(), 2u, devices, &length, &binary, &status, &error) ==
         nullptr);
   CHECK_EQ(error, CL_INVALID_DEVICE);
@@ -195,7 +176,6 @@ TEST(opencl_backend_programs, a_binary_for_no_device_or_another_is_refused_befor
         nullptr);
   CHECK_EQ(error, CL_INVALID_DEVICE);
   CHECK_EQ(status, 12345);
-  /* With nowhere to report either, still refused. */
   CHECK(backend.on_clCreateProgramWithBinary(bound.context(), 1u, devices, &length, &binary, nullptr, nullptr) ==
         nullptr); }
 
@@ -214,14 +194,11 @@ TEST(opencl_backend_programs, a_kernel_is_given_svm_pointers_and_never_fine_grai
            CL_INVALID_VALUE);
   CHECK_EQ(backend.on_clSetKernelExecInfo(kernel, CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM, sizeof on, nullptr),
            CL_INVALID_VALUE);
-  /* Turned off reaches the host, which answers it as it does. */
   cl_bool off = CL_FALSE;
   const cl_int host = ::clSetKernelExecInfo(kernel, CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM, sizeof off, &off);
   CHECK_EQ(backend.on_clSetKernelExecInfo(kernel, CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM, sizeof off, &off), host);
-  /* Any other name is a value the host would read as it pleases. */
   const std::uint64_t value = 0u;
   CHECK_EQ(backend.on_clSetKernelExecInfo(kernel, 0x4203u, sizeof value, &value), CL_INVALID_VALUE);
-  /* The SVM pointers, which the decoder resolved, reach the host. */
   void *const shared = backend.on_clSVMAlloc(bound.context(), CL_MEM_READ_WRITE, 64u, 0u);
   if (shared != nullptr) {
       CHECK_EQ(backend.on_clSetKernelExecInfo(kernel, CL_KERNEL_EXEC_INFO_SVM_PTRS, sizeof shared, &shared),

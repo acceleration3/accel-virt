@@ -23,7 +23,7 @@ namespace {
 constexpr size_t   answer_bytes = 24u;
 constexpr uint32_t poll_microseconds = 50u;
 
-}  // namespace
+}
 
 PresentQueue::PresentQueue(Platform &platform, VirtioGpuDevice &device, uint32_t epoch)
     : platform_(platform), device_(device), sending_(platform, LockRank::present_queue), page_(platform),
@@ -138,8 +138,6 @@ Status PresentQueue::write_payload(uint32_t slot, const PresentSurface *source, 
     return Status::ok;
 }
 
-/* The DPC harvests the control queue as its answers come; a present that
- * finds every slot taken harvests too, since the answers are already there. */
 Status PresentQueue::send(const QueuedPresentRequest &present, uint32_t slot, size_t length)
 {
     AV_SCOPE("PresentQueue::send");
@@ -195,4 +193,4 @@ bool PresentQueue::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

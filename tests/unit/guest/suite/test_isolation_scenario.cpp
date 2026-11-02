@@ -1,10 +1,3 @@
-/* Fault isolation over MockKmt, the test playing the host through ScriptedHost
- * and faulting the second context as the driver leaves it: its wait completes
- * with no reply written, since the driver completes a faulted context's work
- * and never reports DMA_FAULTED (dxgmms2.sys bugchecks 0x119/0xD on it):
- * the healthy context works before and after, the faulted one's next send
- * fails, a context made afterwards works, and every step's failure stops the
- * run with every context torn down. */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
@@ -38,9 +31,7 @@ namespace {
 
 const PciIdentity av(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
                       PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
-/* What D3DKMT answers a wait on a device that was removed. */
 constexpr std::uint32_t device_removed = 0xC00E0102u;
-/* The healthy context's three waits, then the faulted command's. */
 constexpr std::uint32_t fault_wait = ScriptedHost::isolation_waits_before_fault + 1u;
 
 bool has_line(const GuestReport &report, const char *line)
@@ -75,7 +66,7 @@ private:
     ScriptedHost  host_;
 };
 
-}  // namespace
+}
 
 TEST(isolation_scenario, a_faulted_context_changes_no_other)
 { Rig rig;
@@ -103,17 +94,12 @@ TEST(isolation_scenario, a_faulted_context_changes_no_other)
   CHECK_EQ(rig.kmt().commands(), sizeof expected / sizeof expected[0]);
   for (std::uint32_t index = 0u; index < sizeof expected / sizeof expected[0]; index++)
       CHECK_EQ(rig.kmt().command_id(index), expected[index]);
-  /* The malformed command is its structure type alone, and the faulted
-   * context sent nothing after it. */
   CHECK_EQ(rig.kmt().command_size(4u), CommandHeader::encoded_size + sizeof(std::uint32_t));
-  /* Three contexts, on one device. */
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 3u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_device), 1u);
   CHECK_EQ(report.failed(), 0u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* A healthy context that is not healthy stops the run before any fault: its
- * no-op lost, its instance refused, or the no-op after the destroy lost. */
 TEST(isolation_scenario, a_healthy_context_that_fails_first_stops_the_run)
 { struct Case { std::uint32_t answers; bool refuse_instance; };
   const Case cases[] = {{0u, false}, {1u, true}, {2u, false}};
@@ -135,8 +121,6 @@ TEST(isolation_scenario, a_healthy_context_that_fails_first_stops_the_run)
       rig.check_nothing_left_but_the_adapter();
   } }
 
-/* A host that runs the malformed command fails the step: isolation was never
- * shown. So does a second context that cannot be set up. */
 TEST(isolation_scenario, a_fault_that_never_happens_fails_fault)
 { { Rig rig;
     rig.host().healthy_context();
@@ -156,11 +140,9 @@ TEST(isolation_scenario, a_fault_that_never_happens_fails_fault)
     IsolationScenario scenario(rig.kmt(), report, rig.search());
     scenario.run();
     CHECK(has_line(report, "FAIL isolation.fault status=7"));
-    CHECK_EQ(rig.kmt().commands(), 4u);   /* the healthy context's, and none from the second */
+    CHECK_EQ(rig.kmt().commands(), 4u);
     rig.check_nothing_left_but_the_adapter(); } }
 
-/* After the fault: the healthy context lost, a relink that cannot be set up,
- * and one whose no-op is lost each fail their own step. */
 TEST(isolation_scenario, a_failure_after_the_fault_is_reported_where_it_happened)
 { { Rig rig;
     rig.host().healthy_context();
@@ -191,7 +173,7 @@ TEST(isolation_scenario, a_failure_after_the_fault_is_reported_where_it_happened
     rig.host().healthy_context();
     rig.kmt().withhold_answer_at(fault_wait);
     rig.host().healthy_context();
-    rig.host().vk_result(0);   /* bytes where the relinked context's no-op answers none */
+    rig.host().vk_result(0);
     av::MockPlatform report_memory;
     GuestReport report(report_memory);
     IsolationScenario scenario(rig.kmt(), report, rig.search());

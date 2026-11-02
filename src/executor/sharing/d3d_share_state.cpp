@@ -124,4 +124,4 @@ uint64_t D3dShareState::opens() const
     return opens_;
 }
 
-}  // namespace av
+}

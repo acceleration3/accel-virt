@@ -1,13 +1,3 @@
-/* A reserved resource's tiles on this machine's GPU, through vkd3d-proton: a
- * texture with no memory of its own, its tiles mapped to a heap on a queue,
- * filled and read back through CopyTiles from and into heaps of the GPU's
- * memory source (docs/host-memory.md), its mappings shared with a second
- * texture by CopyTileMappings and remapped by ranges that unmap, skip and
- * reuse a tile - each judged by the bytes that come back. And every region or range that would have vkd3d-proton walk past
- * a resource or a heap is refused before it gets there.
- *
- * vkd3d-proton is loaded as test_d3d12_session_device.cpp loads it; a host
- * without it, or whose GPU has no sparse residency, returns without judging. */
 #include "core/support/object_storage.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d12_session.hpp"
@@ -50,8 +40,6 @@ constexpr std::uint32_t layout_64kb_undefined_swizzle = 2u;
 constexpr std::uint32_t heap_default = 1u;
 constexpr std::uint32_t heap_upload = 2u;
 constexpr std::uint32_t heap_readback = 3u;
-/* D3D12_HEAP_FLAG_DENY_BUFFERS | DENY_RT_DS_TEXTURES: a tile pool for
- * textures that are neither, which every resource heap tier allows. */
 constexpr std::uint32_t texture_tile_pool = 0x44u;
 constexpr std::uint32_t state_copy_dest = 0x400u;
 constexpr std::uint32_t state_copy_source = 0x800u;
@@ -64,15 +52,11 @@ constexpr std::uint32_t range_reuse = 0x4u;
 constexpr std::uint32_t no_hazard = 0x1u;
 constexpr std::uint32_t driver_internal_error = 0x887A0020u;
 
-/* 256 x 256 of 4-byte texels is 2 x 2 tiles of 128 x 128, with no mips to
- * pack. */
 constexpr std::uint32_t side = 256u;
 constexpr std::uint32_t tiles = 4u;
 constexpr std::uint64_t tile_bytes = 64u * 1024u;
 constexpr std::uint64_t tiles_bytes = tiles * tile_bytes;
 
-/* The session's region lends bulk data; the upload and readback heaps are
- * memory of their own (docs/host-memory.md). */
 constexpr std::size_t   region_bytes = 1u << 20u;
 constexpr std::size_t   lent_bytes = region_bytes;
 constexpr std::uint64_t upload_address = 0x100000000ull;
@@ -87,8 +71,6 @@ enum Id : std::uint32_t {
 const av::HostMemoryRequest upload_memory(av::HostMemoryRequest::Kind::upload, 0u);
 const av::HostMemoryRequest readback_memory(av::HostMemoryRequest::Kind::readback, 0u);
 
-/* The memory the upload and readback heaps are, as the handles CreateHeap12
- * names: opened by make_tiles. */
 struct HeapMemory {
     std::uint64_t upload;
     std::uint64_t readback;
@@ -110,8 +92,6 @@ bool host_devices(av::LoaderHostApis &apis, av::D3d11HostDevice *&device11, av::
     return false;
 }
 
-/* The source's memory this vkd3d-proton opens a heap over, on a GPU with
- * sparse residency. */
 bool tiled_here(av::D3d12HostDevice &device, av::D3dLoopback &wire)
 {
     if (device.caps().tiled_resources_tier == 0u) {
@@ -169,11 +149,6 @@ TileRegion run_of(std::uint32_t x, std::uint32_t count)
     return TileRegion{TileCoordinate{x, 0u, 0u, 0u}, TileSize{count, 0u, 0u, 0u, 0u}};
 }
 
-/* A queue and a list; a tile pool of four tiles; two reserved textures of
- * 4-byte texels, one of 16-byte texels and a reserved buffer of four tiles;
- * and an upload buffer of four tiles' bytes and a readback buffer of eight,
- * both guest memory. The first texture's tiles are mapped to the pool in
- * order. */
 void make_tiles(av::D3dLoopback &wire)
 {
     std::uint32_t hresult = 1u;
@@ -206,7 +181,6 @@ void make_tiles(av::D3dLoopback &wire)
     CHECK(av_d3d12_UpdateTileMappings12(wire, queue, tiled, 1u, &whole, tile_heap, 1u, &in_order, 0u));
 }
 
-/* What was recorded, executed and waited for; the list reset for more. */
 void run_list(av::D3dLoopback &wire, std::uint64_t value)
 {
     CHECK(av_d3d12_CloseCommandList12(wire, list));
@@ -225,8 +199,6 @@ std::uint8_t mark_of(std::uint32_t tile)
     return static_cast<std::uint8_t>(0x11u * (tile + 1u));
 }
 
-/* Whether the tile at `index` of what was read back at `offset` is every byte
- * `mark`: its first, its middle and its last. */
 bool tile_is(const av::D3dLoopback &wire, std::uint64_t offset, std::uint32_t index, std::uint8_t mark)
 {
     const std::uint8_t *const bytes = wire.memory(heap_memory.readback, offset + index * tile_bytes);
@@ -239,15 +211,13 @@ void barrier(av::D3dLoopback &wire, std::uint32_t resource, std::uint32_t before
     CHECK(av_d3d12_ResourceBarrier12(wire, list, 1u, &transition));
 }
 
-/* One tile of `resource` from tile `x`, out to the readback buffer at
- * `offset`. */
 void copy_tiles(av::D3dLoopback &wire, std::uint32_t resource, std::uint32_t x, std::uint64_t offset)
 {
     const TileRegion one = run_of(x, 1u);
     CHECK(av_d3d12_CopyTiles12(wire, list, resource, one.start, one.size, readback, offset, 0u));
 }
 
-}  // namespace
+}
 
 TEST(d3d12_session_tiles_device, a_reserved_texture_keeps_what_its_mapped_tiles_were_given)
 {
@@ -270,15 +240,11 @@ TEST(d3d12_session_tiles_device, a_reserved_texture_keeps_what_its_mapped_tiles_
     CHECK_EQ(count, tiles);
     CHECK_EQ(packed_mips, 0u);
     CHECK_EQ(packed_tiles, 0u);
-    /* A reserved buffer is tiles too; a buffer of memory of its own has
-     * none. */
     CHECK(av_d3d12_ResourceTiling12(wire, sparse, &count, &packed_mips, &packed_tiles));
     CHECK_EQ(count, tiles);
     CHECK(av_d3d12_ResourceTiling12(wire, upload, &count, &packed_mips, &packed_tiles));
     CHECK_EQ(count, 0u);
 
-    /* Each tile's bytes in, and out again: what comes back is what went to
-     * that tile, so the tiles are memory and they are distinct. */
     for (std::uint32_t tile = 0u; tile < tiles; tile++)
         std::memset(wire.memory(heap_memory.upload, tile * tile_bytes), mark_of(tile), tile_bytes);
     std::memset(wire.memory(heap_memory.readback), 0, 2u * tiles_bytes);
@@ -288,22 +254,18 @@ TEST(d3d12_session_tiles_device, a_reserved_texture_keeps_what_its_mapped_tiles_
     CHECK(av_d3d12_CopyTiles12(wire, list, tiled, whole.start, whole.size, readback, 0u, copy_out_of_tiles | no_hazard));
     run_list(wire, 1u);
     for (std::uint32_t tile = 0u; tile < tiles; tile++) CHECK(tile_is(wire, 0u, tile, mark_of(tile)));
-    /* A 2 x 2 box of them is the same four tiles, row by row. */
     std::memset(wire.memory(heap_memory.readback), 0, tiles_bytes);
     const TileSize box = {tiles, 1u, 2u, 2u, 1u};
     CHECK(av_d3d12_CopyTiles12(wire, list, tiled, TileCoordinate{}, box, readback, 0u, 0u));
     run_list(wire, 5u);
     for (std::uint32_t tile = 0u; tile < tiles; tile++) CHECK(tile_is(wire, 0u, tile, mark_of(tile)));
 
-    /* The second texture given the first's mappings reads the same memory. */
     CHECK(av_d3d12_CopyTileMappings12(wire, queue, mirror, whole.start, tiled, whole.start, whole.size, 0u));
     barrier(wire, mirror, state_copy_dest, state_copy_source);
     CHECK(av_d3d12_CopyTiles12(wire, list, mirror, whole.start, whole.size, readback, tiles_bytes, 0u));
     run_list(wire, 6u);
     for (std::uint32_t tile = 0u; tile < tiles; tile++) CHECK(tile_is(wire, tiles_bytes, tile, mark_of(tile)));
 
-    /* Its first tile unmapped, its second left as it was, its last two both
-     * the pool's first tile. */
     const TileRange remap[3] = {{range_null, 0u, 1u}, {range_skip, 0u, 1u}, {range_reuse, 0u, 2u}};
     CHECK(av_d3d12_UpdateTileMappings12(wire, queue, mirror, 1u, &whole, tile_heap, 3u, remap, no_hazard));
     const TileRegion last_three = run_of(1u, 3u);
@@ -313,8 +275,6 @@ TEST(d3d12_session_tiles_device, a_reserved_texture_keeps_what_its_mapped_tiles_
     CHECK(tile_is(wire, tiles_bytes, 1u, mark_of(0u)));
     CHECK(tile_is(wire, tiles_bytes, 2u, mark_of(0u)));
 
-    /* Its right-hand column of tiles - 1 and 3, a box of 1 x 2 - to the
-     * pool's last two: read as a run of two from tile 1, it would be 1 and 2. */
     const TileRegion column = {TileCoordinate{1u, 0u, 0u, 0u}, TileSize{2u, 1u, 1u, 2u, 1u}};
     const TileRange  last_two = {0u, 2u, 2u};
     CHECK(av_d3d12_UpdateTileMappings12(wire, queue, mirror, 1u, &column, tile_heap, 1u, &last_two, 0u));
@@ -324,8 +284,6 @@ TEST(d3d12_session_tiles_device, a_reserved_texture_keeps_what_its_mapped_tiles_
     CHECK(tile_is(wire, tiles_bytes, 1u, mark_of(0u)));
     CHECK(tile_is(wire, tiles_bytes, 2u, mark_of(3u)));
 
-    /* A texture of 16-byte texels copies at whole texels, and a buffer's
-     * tiles at any byte. */
     copy_tiles(wire, wide, 0u, tiles_bytes - 16u);
     copy_tiles(wire, sparse, 0u, 2u);
     run_list(wire, 10u);
@@ -361,7 +319,6 @@ void copy_out(av::D3dLoopback &wire, std::uint32_t resource, const TileRegion &r
 constexpr TileRange in_place = {0u, 0u, 1u};
 
 constexpr Misuse misuses[] = {
-    /* Regions past the texture's four tiles, or no region at all. */
     [](av::D3dLoopback &wire) { map(wire, run_of(4u, 1u), tile_heap, in_place, 0u); },
     [](av::D3dLoopback &wire) { map(wire, run_of(3u, 2u), tile_heap, TileRange{0u, 0u, 2u}, 0u); },
     [](av::D3dLoopback &wire) { map(wire, TileRegion{TileCoordinate{0u, 0u, 0u, 1u}, TileSize{1u, 0u, 0u, 0u, 0u}}, tile_heap,
@@ -378,8 +335,6 @@ constexpr Misuse misuses[] = {
         const TileRange range = in_place;
         CHECK(av_d3d12_UpdateTileMappings12(wire, queue, tiled, 0u, nullptr, tile_heap, 1u, &range, 0u));
     },
-    /* Ranges past the pool, mapping with no pool, of no tiles, or of no
-     * flag; no range at all; a mapping flag that is not one. */
     [](av::D3dLoopback &wire) { map(wire, run_of(0u, 2u), tile_heap, TileRange{0u, 3u, 2u}, 0u); },
     [](av::D3dLoopback &wire) { map(wire, run_of(0u, 1u), 0u, in_place, 0u); },
     [](av::D3dLoopback &wire) { map(wire, run_of(0u, 1u), tile_heap, TileRange{range_null, 0u, 0u}, 0u); },
@@ -389,7 +344,6 @@ constexpr Misuse misuses[] = {
         CHECK(av_d3d12_UpdateTileMappings12(wire, queue, tiled, 1u, &region, tile_heap, 0u, nullptr, 0u));
     },
     [](av::D3dLoopback &wire) { map(wire, run_of(0u, 1u), tile_heap, in_place, 0x2u); },
-    /* A pool, queue or texture that is not one. */
     [](av::D3dLoopback &wire) { map(wire, run_of(0u, 1u), upload, in_place, 0u); },
     [](av::D3dLoopback &wire) {
         const TileRegion region = run_of(0u, 1u);
@@ -399,8 +353,6 @@ constexpr Misuse misuses[] = {
         const TileRegion region = run_of(0u, 1u);
         CHECK(av_d3d12_UpdateTileMappings12(wire, queue, upload, 1u, &region, tile_heap, 1u, &in_place, 0u));
     },
-    /* Mappings copied from or to past a texture, from a resource with no
-     * tiles, or with a flag that is not one. */
     [](av::D3dLoopback &wire) {
         CHECK(av_d3d12_CopyTileMappings12(wire, queue, mirror, TileCoordinate{}, tiled, TileCoordinate{2u, 1u, 0u, 0u},
                                           TileSize{2u, 0u, 0u, 0u, 0u}, 0u));
@@ -421,7 +373,6 @@ constexpr Misuse misuses[] = {
         CHECK(av_d3d12_CopyTileMappings12(wire, list, mirror, TileCoordinate{}, tiled, TileCoordinate{}, TileSize{1u, 0u, 0u, 0u, 0u},
                                           0u));
     },
-    /* Resources nothing made, in each place one is named. */
     [](av::D3dLoopback &wire) {
         std::uint32_t count = 0u, packed_mips = 0u, packed_tiles = 0u;
         static_cast<void>(av_d3d12_ResourceTiling12(wire, 99u, &count, &packed_mips, &packed_tiles));
@@ -439,9 +390,6 @@ constexpr Misuse misuses[] = {
                                           TileSize{1u, 0u, 0u, 0u, 0u}, 0u));
     },
     [](av::D3dLoopback &wire) { copy_out(wire, 99u, run_of(0u, 1u), readback, 0u, 0u); },
-    /* Tiles copied past the texture, both ways at once, with a flag that is
-     * not one, past the buffer's end, at a split texel, into a texture, or
-     * out of a resource with no tiles. */
     [](av::D3dLoopback &wire) { copy_out(wire, tiled, run_of(2u, 3u), readback, 0u, 0u); },
     [](av::D3dLoopback &wire) { copy_out(wire, tiled, run_of(0u, 1u), readback, 0u, copy_into_tiles | copy_out_of_tiles); },
     [](av::D3dLoopback &wire) { copy_out(wire, tiled, run_of(0u, 1u), readback, 0u, 0x8u); },
@@ -457,7 +405,7 @@ constexpr Misuse misuses[] = {
     },
 };
 
-}  // namespace
+}
 
 TEST(d3d12_session_tiles_device, each_region_or_range_past_its_resource_or_heap_removes_a_healthy_device)
 {
@@ -487,9 +435,6 @@ TEST(d3d12_session_tiles_device, each_region_or_range_past_its_resource_or_heap_
 }
 
 namespace {
-
-/* The session alone, its handlers called as the decoder would call them: in
- * static storage, as test_d3d12_session.cpp keeps it. */
 av::ObjectStorage<av::D3d12Session> session_storage;
 av::HostHeap                        session_heap;
 av::WatchedBlocks                   session_blocks(session_heap);
@@ -498,10 +443,8 @@ av::WakeSignal tenant;
 alignas(64) std::uint8_t guest[4096];
 TileRegion one_tile_regions[av::D3d12TileUpdate::most + 1u];
 
-}  // namespace
+}
 
-/* The decoder never hands the session more than one command carries; a
- * session that was handed more anyway maps none of them. */
 TEST(d3d12_session_tiles_device, more_regions_than_one_command_carries_map_none)
 {
     av::LoaderHostApis   apis;

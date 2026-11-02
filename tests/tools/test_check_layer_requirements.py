@@ -1,10 +1,3 @@
-"""Every extension a pinned layer requires is one the ICD reports, or the gate
-names the one that is not (tools/check_layer_requirements.py, feature 047
-FR-001).
-
-Driven over a repository this test builds: a policy table and a layer source,
-so what is judged is the comparison rather than today's real tables.
-"""
 import pathlib
 import tempfile
 import textwrap
@@ -35,7 +28,6 @@ class CheckLayerRequirements(unittest.TestCase):
         (table / "icd_root.cpp").write_text(TABLE)
         tools = self.root / "tools"
         tools.mkdir()
-        # The gate runs the real extractor, and the real registry header.
         (tools / "layer_requirements.py").write_text(
             (ROOT / "tools" / "layer_requirements.py").read_text().replace(
                 'ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))',

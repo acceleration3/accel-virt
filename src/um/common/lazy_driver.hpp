@@ -1,14 +1,3 @@
-/* A user-mode driver's root and everything it is built over - its Seams -
- * made on the first call into the DLL rather than at attach, where the loader
- * lock forbids opening a file or an event, and by exactly one thread however
- * many arrive at once. The Vulkan loader and opengl32 serialise their first
- * call; the Khronos OpenCL loader and the Direct3D runtimes promise nothing
- * (research 052 §3, gap 2), so the first call runs under RunOnce for all four.
- *
- * Seams has `process` (its DriverSeams: heap, log, D3DKMT and trace) and
- * `root` (what tracing reports). The process's fallible half is the D3DKMT
- * wait event: a process it fails in is refused for good, and the DLL answers
- * every call as a driver that does not serve here. */
 #ifndef AV_UM_LAZY_DRIVER_HPP
 #define AV_UM_LAZY_DRIVER_HPP
 
@@ -25,18 +14,12 @@ namespace av {
 template <typename Seams>
 class LazyDriver final : public OnceBody {
 public:
-    /* `module` names the driver's trace ("avvk"), and `crashed` is the
-     * exports' unhandled-exception filter, which forwards to crashed().
-     * Constexpr: the driver is the exports' constinit storage. */
     constexpr LazyDriver(const char *module, ProcessTrace::Filter crashed);
     LazyDriver(const LazyDriver &) = delete;
     LazyDriver &operator=(const LazyDriver &) = delete;
 
-    /* The seams, made on the first call; null in a refused process. */
     Seams *seams();
-    /* Their root, or null, likewise. */
     auto   root() -> decltype(Seams::root) *;
-    /* The process is crashing: the crash file, if tracing started. */
     long   crashed(void *pointers);
     void   run_once() override;
 
@@ -91,6 +74,6 @@ void LazyDriver<Seams>::run_once()
         lines.write("tracing is off: its section, pin or service failed");
 }
 
-}  // namespace av
+}
 
-#endif  // AV_UM_LAZY_DRIVER_HPP
+#endif

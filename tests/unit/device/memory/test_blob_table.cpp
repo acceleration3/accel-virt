@@ -1,6 +1,3 @@
-/* A device's guest blobs by resource id: ids kept unique, a pinned blob kept
- * until its last pin goes, a retired blob gone as soon as nothing pins it, and
- * every blob's pages mapped for exactly as long as it lives. */
 #include "core/support/status.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/blob_resource.hpp"
@@ -26,13 +23,11 @@ using av::Status;
 namespace av {
 
 struct BlobTableProbe {
-    /* A blob of `id`, with no pages, in a free slot behind the table's back. */
     static void place(BlobTable &table, std::uint32_t id)
     {
         for (ObjectStorage<BlobResource> &slot : table.slots_)
             if (slot.construct(table.host_, id) == Status::ok) return;
     }
-    /* A retiring mark on a slot no blob lives in. */
     static void mark_empty_slot_retiring(BlobTable &table)
     {
         for (std::uint32_t index = 0u; index < BlobTable::max_blobs; index++) {
@@ -47,14 +42,13 @@ struct BlobTableProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
 
 constexpr std::uint64_t ram = 0x100000u;
 constexpr std::size_t   entries_at = 24u;
 
-/* Memory entries naming the first `pages` pages of RAM. */
 GpuRequestBuilder entries(std::uint32_t pages)
 {
     GpuRequestBuilder bytes(0u);
@@ -62,7 +56,6 @@ GpuRequestBuilder entries(std::uint32_t pages)
     return bytes;
 }
 
-/* Guest RAM and a request naming its first `pages` pages, one entry each. */
 class Fixture {
 public:
     explicit Fixture(std::uint32_t pages = 1u)
@@ -74,7 +67,6 @@ public:
 
     MockHost  &host() { return host_; }
     BlobTable &table() { return table_; }
-    /* Blob `id` over the request's first `entries` pages. */
     Status create(std::uint32_t id, std::uint64_t size = 0x1000u, std::uint32_t entries = 1u)
     {
         return table_.create_guest(id, size, request_, entries_at, entries);
@@ -88,7 +80,7 @@ private:
     BlobTable         table_;
 };
 
-}  // namespace
+}
 
 TEST(blob_table_create_guest, keeps_ids_unique_and_leaves_nothing_behind_a_refusal)
 { Fixture fixture;
@@ -97,7 +89,7 @@ TEST(blob_table_create_guest, keeps_ids_unique_and_leaves_nothing_behind_a_refus
   CHECK(fixture.table().invariants_hold());
   CHECK_EQ(fixture.host().live_guest_mappings(), 1u);
   CHECK_STATUS(fixture.create(1u), Status::conflict);
-  CHECK_STATUS(fixture.create(2u, 0x2000u), Status::invalid_parameter);   /* one page short */
+  CHECK_STATUS(fixture.create(2u, 0x2000u), Status::invalid_parameter);
   CHECK(!fixture.table().contains(2u));
   CHECK_EQ(fixture.table().live(), 1u);
   CHECK_EQ(fixture.host().live_guest_mappings(), 1u);
@@ -144,7 +136,7 @@ TEST(blob_table_pin, keeps_a_blob_large_enough_alive_until_every_pin_is_let_go)
   CHECK_STATUS(fixture.create(1u, 0x2000u, 2u), Status::ok);
   CHECK_STATUS(fixture.table().pin(2u, 0u), Status::not_found);
   CHECK_STATUS(fixture.table().pin(1u, 0x2001u), Status::invalid_parameter);
-  CHECK_STATUS(fixture.table().release(1u), Status::ok);   /* the refused pin took nothing */
+  CHECK_STATUS(fixture.table().release(1u), Status::ok);
   CHECK_STATUS(fixture.create(1u, 0x2000u, 2u), Status::ok);
   CHECK_STATUS(fixture.table().pin(1u, 0x2000u), Status::ok);
   CHECK_STATUS(fixture.table().pin(1u, 32u), Status::ok);
@@ -152,11 +144,10 @@ TEST(blob_table_pin, keeps_a_blob_large_enough_alive_until_every_pin_is_let_go)
   fixture.table().unpin(1u);
   CHECK_STATUS(fixture.table().release(1u), Status::invalid_state);
   fixture.table().unpin(1u);
-  fixture.table().unpin(7u);   /* unknown: nothing */
+  fixture.table().unpin(7u);
   CHECK(fixture.table().invariants_hold());
   CHECK_STATUS(fixture.table().release(1u), Status::ok); }
 
-/* An unpin with no pin behind it must not leave the blob pinned for good. */
 TEST(blob_table_unpin, a_pin_never_taken_leaves_the_blob_releasable)
 { Fixture fixture;
   CHECK_STATUS(fixture.create(1u), Status::ok);
@@ -170,7 +161,7 @@ TEST(blob_table_unpin, a_pinned_blob_is_still_released_by_release_all)
   fixture.table().release_all();
   CHECK_EQ(fixture.table().live(), 0u);
   CHECK_EQ(fixture.host().live_guest_mappings(), 0u);
-  fixture.table().unpin(1u);   /* the holder's late unpin finds nothing */
+  fixture.table().unpin(1u);
   CHECK(fixture.table().invariants_hold()); }
 
 TEST(blob_table_window, is_handed_out_only_for_a_pinned_blob)
@@ -185,7 +176,6 @@ TEST(blob_table_window, is_handed_out_only_for_a_pinned_blob)
   CHECK_EQ(window.length(), 0x2000u);
   fixture.table().unpin(1u); }
 
-/* What a copy of the table in another process is built from: pinned or not. */
 TEST(blob_table_backing, answers_any_live_blob_s_pages)
 { Fixture fixture;
   BlobWindow pages;
@@ -198,8 +188,6 @@ TEST(blob_table_backing, answers_any_live_blob_s_pages)
   CHECK_STATUS(pages.write(9u, &byte, 1u), Status::ok);
   CHECK_EQ(fixture.host().guest_ram(ram + 9u)[0], 0x3Cu); }
 
-/* A display surface is drawn from one host range over a pinned blob's pages,
- * made once and kept until the blob goes. */
 TEST(blob_table_view, is_one_range_over_a_pinned_blob_kept_until_it_goes)
 { Fixture fixture(2u);
   const std::uint8_t *base = &fixture.host().guest_ram(ram)[0];
@@ -337,9 +325,9 @@ TEST(blob_table_retire, a_pinned_blob_keeps_its_id_takes_no_new_pin_and_goes_wit
   CHECK_STATUS(fixture.table().pin(1u, 0u), Status::invalid_state);
   CHECK_STATUS(fixture.create(1u), Status::conflict);
   CHECK_STATUS(fixture.table().release(1u), Status::invalid_state);
-  CHECK_STATUS(fixture.table().retire(1u), Status::ok);   /* still pinned: still retiring */
+  CHECK_STATUS(fixture.table().retire(1u), Status::ok);
   BlobWindow window;
-  CHECK_STATUS(fixture.table().window(1u, window), Status::ok);   /* a holder's window stays good */
+  CHECK_STATUS(fixture.table().window(1u, window), Status::ok);
   CHECK_EQ(window.length(), 0x1000u);
   fixture.table().unpin(1u);
   CHECK(fixture.table().contains(1u));
@@ -351,7 +339,7 @@ TEST(blob_table_retire, a_pinned_blob_keeps_its_id_takes_no_new_pin_and_goes_wit
   CHECK_EQ(fixture.host().live_guest_mappings(), 0u);
   CHECK(fixture.table().invariants_hold());
   CHECK_STATUS(fixture.create(1u), Status::ok);
-  CHECK_STATUS(fixture.table().pin(1u, 0u), Status::ok);   /* the new blob of that id is not retiring */
+  CHECK_STATUS(fixture.table().pin(1u, 0u), Status::ok);
   fixture.table().unpin(1u);
   CHECK(fixture.table().contains(1u));
   CHECK(fixture.table().invariants_hold()); }

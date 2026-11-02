@@ -1,23 +1,10 @@
 #!/usr/bin/env python3
-"""Gate for constitution Principle IV.5: no class or public method in
-src/core, src/miniport, src/device, src/proto, src/guest or src/icd without a test that names
-it.
-
-Private methods are covered through the public surface; requiring a test to
-name them would test the shape of the implementation instead of its behaviour.
-The harness is not a test: a fixture calling a method proves nothing about it.
-
-  check_symbol_tests.py [repository root]
-"""
 import os
 import re
 import sys
 
 from header_scan import declared_classes, is_shim
 
-# Headers that declare a *required* interface - what core calls and the
-# platform provides - rather than a provided one. Testing these would test the
-# mock. Every entry needs a reason; the list is short on purpose.
 EXCLUDE = {
     "src/core/platform/platform.hpp": "the platform contract, implemented by src/km and "
                              "tests/harness and exercised through every core test",
@@ -97,15 +84,8 @@ def main():
     for declared in declared_classes(root):
         if declared.header in EXCLUDE:
             continue
-        # Constitution II: the shim is the non-portable edge - dlopen, an
-        # instance, an enumeration - and a unit test on a machine that may have
-        # no GPU cannot name it into existence. L3 and L5 prove it instead, and
-        # the directory is the rule so moving a file out puts the gate back
-        # (feature 042).
         if is_shim(declared.header):
             continue
-        # A type private to its class is covered through that class's public
-        # surface, as its private methods are.
         if declared.is_private_nested:
             continue
         if not re.search(r"\b" + re.escape(declared.name) + r"\b", corpus):

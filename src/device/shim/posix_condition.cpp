@@ -55,4 +55,4 @@ void PosixCondition::broadcast()
     static_cast<void>(pthread_cond_broadcast(&condition_));
 }
 
-}  // namespace av
+}

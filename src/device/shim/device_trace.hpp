@@ -1,10 +1,3 @@
-/* What the device module adds to its trace table in QEMU's process
- * (docs/trace.md): a crash file written from the fatal signals, chained to
- * whatever handled them before, and the state socket
- * /dev/shm/av-state-device-<pid>.sock, whose answer the main loop writes
- * under the big lock because that is the lock the module's devices live
- * under. A main loop that does not answer in time is reported as such, never
- * waited on. One per process, in the ABI translation unit's storage. */
 #ifndef AV_DEVICE_TRACE_HPP
 #define AV_DEVICE_TRACE_HPP
 
@@ -36,14 +29,9 @@ public:
     DeviceTrace(const DeviceTrace &) = delete;
     DeviceTrace &operator=(const DeviceTrace &) = delete;
 
-    /* The table, the crash handler and the socket; each part that cannot start
-     * is logged to standard error and left off. */
     void start(StateReporter &root, AvMainLoopScheduler schedule, CrashHandler handler);
-    /* From the fatal signal's handler. */
     void crashed(int signal, siginfo_t *info, void *context);
-    /* The scheduled main-loop routine: the dump a socket client waits for. */
     void answer_on_main_loop();
-    /* The socket's question, handed to the main loop and waited for. */
     size_t dump(char *buffer, size_t capacity, const char *&error) override;
 
 private:
@@ -56,7 +44,6 @@ private:
     void install(CrashHandler handler);
     void write_crash(int signal, uint64_t address);
     void chain(int signal, siginfo_t *info, void *context);
-    /* The dump's length once the main loop wrote it, or false after the wait. */
     bool await_dump(size_t &length);
 
     HostTrace            trace_;
@@ -73,7 +60,6 @@ private:
     char                 dump_[dump_bytes];
 };
 
-/* The storage entry_points.cpp keeps: a DeviceTrace made on the first start. */
 class DeviceTraceRoot {
 public:
     constexpr DeviceTraceRoot() = default;
@@ -87,6 +73,6 @@ private:
     ObjectStorage<DeviceTrace> trace_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DEVICE_TRACE_HPP
+#endif

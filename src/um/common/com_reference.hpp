@@ -1,6 +1,3 @@
-/* One reference to a COM object, released when this goes or is reset: what a
- * Direct3D or DXGI object the driver made is held by, so no path forgets a
- * Release. Not copyable - a copy would release one reference twice. */
 #ifndef AV_UM_COM_REFERENCE_HPP
 #define AV_UM_COM_REFERENCE_HPP
 
@@ -17,8 +14,6 @@ public:
 
     T   *get() const;
     T   *operator->() const;
-    /* Where a creating call writes the reference it hands over; whatever was
-     * held is released first. */
     T  **receive();
     void reset();
 
@@ -63,6 +58,6 @@ template <typename T> void ComReference<T>::reset()
     object_ = nullptr;
 }
 
-}  // namespace av
+}
 
-#endif  // AV_UM_COM_REFERENCE_HPP
+#endif

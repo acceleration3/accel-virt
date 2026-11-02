@@ -1,9 +1,3 @@
-/* D3d11TirEntry over the system's d3d11.dll, which in the guest is
- * Microsoft's runtime on this driver: one device with no window, the
- * coverage atlas Direct2D draws into (an R32_UINT target here, to keep all
- * 16 bits of a mask and more), the shaders in tir_coverage_shaders.hpp, and
- * the states that make it target-independent rasterization. Translation
- * only - what the probe decides is in src/guest/probe/tir_coverage_work.cpp. */
 #ifndef AV_WINDOWS_D3D11_TIR_ENTRY_HPP
 #define AV_WINDOWS_D3D11_TIR_ENTRY_HPP
 
@@ -29,11 +23,8 @@ public:
     void    release() override;
 
 private:
-    /* The target and its staging copy, `extent` square. */
     int32_t create_targets(uint32_t extent);
-    /* The shaders and the input layout their vertices take. */
     int32_t create_shaders();
-    /* The rasterizer state forcing `samples` and the OR'ing blend state. */
     int32_t create_states(uint32_t samples);
 
     ID3D11Device1          *device_;
@@ -50,6 +41,6 @@ private:
     uint32_t                extent_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WINDOWS_D3D11_TIR_ENTRY_HPP
+#endif

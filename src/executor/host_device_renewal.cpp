@@ -48,9 +48,6 @@ void HostDeviceRenewal::declare(const char *why)
         .write();
 }
 
-/* A device never made - open's, or a renewal's that failed - is made again
- * as a lost one is: the loss is latched first, so that once made, tenants
- * may join it. */
 bool HostDeviceRenewal::renew(RenewableDevice &device, uint32_t wait_ms)
 {
     AV_SCOPE("HostDeviceRenewal::renew");
@@ -73,4 +70,4 @@ bool HostDeviceRenewal::invariants_hold() const
     return tenants_.invariants_hold();
 }
 
-}  // namespace av
+}

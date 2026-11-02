@@ -1,6 +1,3 @@
-/* DXGKARG_BUILDPAGINGBUFFER, as DxgkDdiBuildPagingBuffer receives and answers
- * it. A DDI record: Reserved is the operation union, read only through its
- * Reserved member. src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_BUILD_PAGING_BUFFER_RECORD_HPP
 #define AV_DXGKARG_BUILD_PAGING_BUFFER_RECORD_HPP
 
@@ -24,6 +21,6 @@ struct DxgkargBuildPagingBufferRecord {
     uint32_t Padding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_BUILD_PAGING_BUFFER_RECORD_HPP
+#endif

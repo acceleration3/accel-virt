@@ -17,4 +17,4 @@ icd::FrameWait BatchReady::wait(const BatchMark &mark)
     return kmt_.last_code() == BatchMark::wait_timed_out ? icd::FrameWait::later : icd::FrameWait::gone;
 }
 
-}  // namespace av::glicd
+}

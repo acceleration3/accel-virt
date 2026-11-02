@@ -1,5 +1,3 @@
-/* DXGK_PAGE_TABLE_LEVEL_DESC, as DXGKQAITYPE_PAGETABLELEVELDESC answers it. A DDI
- * record; src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGK_PAGE_TABLE_LEVEL_DESC_RECORD_HPP
 #define AV_DXGK_PAGE_TABLE_LEVEL_DESC_RECORD_HPP
 
@@ -15,6 +13,6 @@ struct DxgkPageTableLevelDescRecord {
     uint32_t PageTableAlignmentInBytes;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_PAGE_TABLE_LEVEL_DESC_RECORD_HPP
+#endif

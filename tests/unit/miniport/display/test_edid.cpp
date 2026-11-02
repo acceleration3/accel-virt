@@ -37,21 +37,21 @@ struct Block {
     std::uint32_t status;
 };
 
-}  // namespace
+}
 
 TEST(edid_copy, the_whole_block_is_edid_1_3_with_a_valid_checksum)
 { const Block block;
   CHECK_EQ(block.status, 0u);
   const std::uint8_t header[] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00};
   CHECK(std::memcmp(block.bytes, header, sizeof header) == 0);
-  CHECK_EQ(block.bytes[8], 0x4Au);    /* "AV" */
+  CHECK_EQ(block.bytes[8], 0x4Au);
   CHECK_EQ(block.bytes[9], 0xCBu);
   CHECK_EQ(block.bytes[18], 1u);
   CHECK_EQ(block.bytes[19], 3u);
-  CHECK_EQ(block.bytes[20], 0x80u);   /* digital input */
-  CHECK_EQ(block.bytes[21], 33u);     /* 96 dpi */
+  CHECK_EQ(block.bytes[20], 0x80u);
+  CHECK_EQ(block.bytes[21], 33u);
   CHECK_EQ(block.bytes[22], 21u);
-  CHECK_EQ(block.bytes[24] & 0x02u, 0x02u);   /* the first detailed timing is preferred */
+  CHECK_EQ(block.bytes[24] & 0x02u, 0x02u);
   CHECK_EQ(block.bytes[126], 0u);
   unsigned sum = 0u;
   for (std::uint8_t byte : block.bytes) sum += byte;
@@ -67,9 +67,6 @@ TEST(edid_copy, the_preferred_timing_is_the_mode_at_60_hz)
   CHECK_EQ(block.bytes[66] | ((block.bytes[68] >> 4u) << 8u), 338u);
   CHECK_EQ(block.bytes[67] | ((block.bytes[68] & 0x0Fu) << 8u), 211u); }
 
-/* The detailed timing states the preferred mode at the rate its 16 bit clock
- * holds: the real one where it fits, and a lower one, never a wrapped clock,
- * where it does not. */
 TEST(edid_copy, a_preferred_mode_too_fast_for_the_clock_is_stated_slower_not_wrapped)
 { for (const std::uint32_t millihz : {144000u, 240000u, 360000u, 1000000u}) {
       MockPlatform platform;
@@ -82,7 +79,6 @@ TEST(edid_copy, a_preferred_mode_too_fast_for_the_clock_is_stated_slower_not_wra
       const DisplayMode   stated = mode.edid_timing();
       CHECK_EQ(clock, static_cast<std::uint32_t>(stated.pixel_rate() / 10000u));
       CHECK(clock > 0u && clock <= 65535u);
-      /* Never faster than asked, and no slower than the clock forces. */
       CHECK(stated.refresh_millihz() <= millihz);
       if (millihz <= 160000u) CHECK_EQ(stated.refresh_millihz(), millihz);
       else CHECK(stated.refresh_millihz() > 150000u);
@@ -96,9 +92,9 @@ TEST(edid_copy, a_preferred_mode_too_fast_for_the_clock_is_stated_slower_not_wra
 TEST(edid_copy, names_the_monitor_and_its_range)
 { const Block block;
   CHECK_EQ(block.bytes[75], 0xFDu);
-  CHECK_EQ(block.bytes[77], 1u);     /* vertical 1 to 255 Hz */
+  CHECK_EQ(block.bytes[77], 1u);
   CHECK_EQ(block.bytes[78], 255u);
-  CHECK_EQ(block.bytes[81], 255u);   /* pixel clock to 2550 MHz */
+  CHECK_EQ(block.bytes[81], 255u);
   CHECK_EQ(block.bytes[93], 0xFCu);
   CHECK(std::memcmp(&block.bytes[95], "accel-virt\n", 11u) == 0);
   CHECK_EQ(block.bytes[111], 0x10u); }

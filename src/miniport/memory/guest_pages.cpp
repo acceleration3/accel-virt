@@ -32,7 +32,6 @@ Status GuestPages::allocate(uint64_t bytes)
     ScopeExit free_pages([this, record] { platform_.release_pages(record); });
     auto *const frames = static_cast<uint64_t *>(platform_.allocate(size_t{count} * sizeof *frames_, Pool::non_paged));
     if (frames == nullptr) return Status::no_memory;
-    /* The record was made for exactly these pages, so it covers every one. */
     static_cast<void>(platform_.read_page_frames(record, 0u, count, frames));
     free_pages.dismiss();
     record_ = record;
@@ -118,8 +117,6 @@ uint64_t GuestPages::view() const
     return view_;
 }
 
-/* Pages, frames and size come and go together, and a view is only ever of
- * pages held. */
 bool GuestPages::invariants_hold() const
 {
     AV_SCOPE("GuestPages::invariants_hold");
@@ -129,4 +126,4 @@ bool GuestPages::invariants_hold() const
     return held || mapping_ == nullptr;
 }
 
-}  // namespace av
+}

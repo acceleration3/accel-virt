@@ -1,6 +1,3 @@
-/* A run cut into pieces one command can carry (Pieces): each at most the
- * limit, the last what is left, only the first may discard, and a run of
- * nothing - or a limit of nothing - is no piece rather than one forever. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/common/pieces.hpp"
 
@@ -23,7 +20,6 @@ TEST(pieces, cuts_at_the_limit_and_leaves_the_rest_last)
   CHECK_EQ(pieces.count(), 2u);
   CHECK(!pieces.next()); }
 
-/* A run the limit divides ends on a whole piece, with no empty one after. */
 TEST(pieces, a_run_the_limit_divides_has_no_empty_last_piece)
 { Pieces pieces(8u, 4u);
   CHECK(pieces.next());

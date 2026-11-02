@@ -5,12 +5,8 @@
 namespace av {
 
 namespace {
-
-/* What CL_PLATFORM_NAME says for an implementation over a driver stack of
- * its own rather than the GPU vendor's. */
 constexpr const char *translated[] = {"rusticl", "Clover", "Portable Computing Language"};
 
-/* The vendor's own runtime is the one wanted. */
 constexpr uint32_t vendor_rank = 1u;
 constexpr uint32_t translated_rank = 0u;
 
@@ -33,7 +29,7 @@ uint32_t rank_of(const char *name)
     return vendor_rank;
 }
 
-}  // namespace
+}
 
 ClPlatformChoice::ClPlatformChoice() : platform_(nullptr), device_(nullptr), rank_(0u), name_{}
 {
@@ -81,4 +77,4 @@ void *ClPlatformChoice::device() const
     return device_;
 }
 
-}  // namespace av
+}

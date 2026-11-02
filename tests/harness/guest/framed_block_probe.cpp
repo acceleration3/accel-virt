@@ -10,4 +10,4 @@ size_t &FramedBlockProbe::capacity() { return framed.capacity_; }
 
 uint8_t *&FramedBlockProbe::block() { return framed.block_; }
 
-}  // namespace av
+}

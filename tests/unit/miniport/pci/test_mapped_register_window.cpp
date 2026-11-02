@@ -16,7 +16,7 @@ namespace {
 
 const auto bar = reinterpret_cast<std::uint8_t *>(std::uintptr_t{0x7F0000100000u});
 
-}  // namespace
+}
 
 TEST(mapped_register_window, reads_and_writes_at_its_base_plus_the_offset)
 { MockPlatform platform; FakeRegisterBytes device(32u);

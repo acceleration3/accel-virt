@@ -1,7 +1,3 @@
-/* A lock for PASSIVE-level work that waits while holding it: a control request
- * sequence waits for each answer, which a fast mutex forbids by raising to APC.
- * Holding it keeps the IRQL where it was (the kernel's KMUTEX); it must never be
- * taken above PASSIVE. Take it through a WaitMutexGuard. */
 #ifndef AV_WAIT_MUTEX_HPP
 #define AV_WAIT_MUTEX_HPP
 
@@ -15,8 +11,6 @@ namespace av {
 
 class WaitMutex {
 public:
-    /* Opaque room for the kernel's KMUTEX (56 bytes on x64); src/km proves it
-     * fits at compile time. */
     static constexpr size_t storage_bytes = 64u;
 
     WaitMutex(Platform &platform, LockRank rank);
@@ -33,6 +27,6 @@ private:
     LockMarks marks_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WAIT_MUTEX_HPP
+#endif

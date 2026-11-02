@@ -19,7 +19,7 @@ Status DisplayInfoResponse::read_scanout(WireReader &reader, uint32_t index, uin
     const uint32_t width = reader.read_u32();
     const uint32_t height = reader.read_u32();
     const uint32_t on = reader.read_u32();
-    static_cast<void>(reader.read_u32());   /* flags: the device's own */
+    static_cast<void>(reader.read_u32());
     if (reader.status() != Status::ok) return Status::malformed;
     if (on > 1u) return Status::malformed;
     if (on == 0u) return Status::ok;
@@ -84,4 +84,4 @@ bool DisplayInfoResponse::invariants_hold() const
     return enabled_ >> max_scanouts == 0u;
 }
 
-}  // namespace av
+}

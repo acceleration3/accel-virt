@@ -1,5 +1,3 @@
-/* The mock is the in-guest suite's only oracle on Linux: its bookkeeping is
- * tested like any other code. */
 #include "core/support/status.hpp"
 #include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
@@ -41,15 +39,13 @@ using av::SubmissionDescriptor;
 using av::Status;
 
 namespace {
-
-/* The av suite's transport: 1 KiB commands and a page of reply (feature 044). */
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
 const PciIdentity av_gpu(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 constexpr std::uint32_t refused_code = 0xC0000001u;
 
-}  // namespace
+}
 
 TEST(mock_kmt, opens_and_closes_every_kind_of_object_in_order)
 { MockKmt kmt;
@@ -82,9 +78,9 @@ TEST(mock_kmt, opens_and_closes_every_kind_of_object_in_order)
   CHECK_STATUS(kmt.wait_for_fence(device, fence_object, fence), Status::ok);
   std::uint32_t context = 0u;
   CHECK_STATUS(kmt.create_context(device, context), Status::ok);
-  CHECK_EQ(kmt.allocation_kind(allocation), 16u);   /* AllocationKind::client */
+  CHECK_EQ(kmt.allocation_kind(allocation), 16u);
   CHECK_EQ(kmt.allocation_pages(allocation), 2u);
-  CHECK_EQ(kmt.allocation_kind(context), 0u);        /* not an allocation */
+  CHECK_EQ(kmt.allocation_kind(context), 0u);
   CHECK_EQ(kmt.allocation_pages(context), 0u);
   CHECK_STATUS(kmt.submit(context, address + 16u, 64u, nullptr, 0u), Status::ok);
   CHECK_EQ(kmt.last_submission_size(), 0u);
@@ -105,7 +101,7 @@ TEST(mock_kmt, opens_and_closes_every_kind_of_object_in_order)
   CHECK_STATUS(kmt.destroy_device(device), Status::ok);
   CHECK_STATUS(kmt.close_adapter(adapters[0]), Status::ok);
   CHECK_EQ(kmt.open_objects(), 0u);
-  CHECK_EQ(kmt.misuses(), 2u);   /* the two mismatched private data sizes */
+  CHECK_EQ(kmt.misuses(), 2u);
   CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_fence), 2u);
   CHECK_EQ(kmt.last_code(), 0u); }
 
@@ -121,9 +117,9 @@ TEST(mock_kmt, scripted_failures_zero_answers_and_claims)
   kmt.claim_adapters(5u);
   CHECK_STATUS(kmt.enumerate_adapters(adapters, 2u, count), Status::ok);
   CHECK_EQ(count, 5u);
-  CHECK_EQ(kmt.open_objects(), 2u);   /* only what fit */
+  CHECK_EQ(kmt.open_objects(), 2u);
   PciIdentity identity;
-  CHECK_STATUS(kmt.query_identity(adapters[1], identity), Status::ok);   /* claimed, nothing behind it */
+  CHECK_STATUS(kmt.query_identity(adapters[1], identity), Status::ok);
   CHECK(identity.same_as(PciIdentity()));
   std::uint32_t version = 1u;
   CHECK_STATUS(kmt.query_driver_version(adapters[1], version), Status::ok);
@@ -134,7 +130,7 @@ TEST(mock_kmt, scripted_failures_zero_answers_and_claims)
   CHECK_STATUS(kmt.enumerate_adapters(again, 2u, count), Status::ok);
   CHECK_EQ(again[0], 0u);
   CHECK_EQ(kmt.open_objects(), 1u);
-  kmt.fail_at(MockKmt::Call::create_device, 1u, MockKmt::pending);   /* a success code */
+  kmt.fail_at(MockKmt::Call::create_device, 1u, MockKmt::pending);
   std::uint32_t device = 0u;
   CHECK_STATUS(kmt.create_device(adapters[0], device), Status::ok);
   CHECK_EQ(kmt.last_code(), MockKmt::pending);
@@ -178,8 +174,6 @@ TEST(mock_kmt, refuses_bad_descriptors_pages_fences_and_submissions)
   CHECK_STATUS(kmt.create_device(adapters[0], device), Status::ok);
   ClientDescriptor descriptor(4096u);
   std::uint32_t allocation = 0u;
-  /* A length with no shape is not_supported; the corrupt descriptor below is
-   * the right length and unreadable, which is invalid_parameter. */
   CHECK_STATUS(kmt.create_allocation(device, descriptor.bytes(), 47u, allocation), Status::not_supported);
   CHECK_EQ(kmt.last_code(), MockKmt::not_supported);
   descriptor.corrupt_magic();
@@ -192,13 +186,13 @@ TEST(mock_kmt, refuses_bad_descriptors_pages_fences_and_submissions)
   std::uint64_t address = 0u;
   std::uint64_t fence = 0u;
   CHECK_STATUS(kmt.map_gpu_virtual_address(queue, allocation, 0u, address, fence), Status::invalid_parameter);
-  CHECK_STATUS(kmt.wait_for_fence(device, fence_object, 99u), Status::invalid_state);   /* never issued: a timeout */
+  CHECK_STATUS(kmt.wait_for_fence(device, fence_object, 99u), Status::invalid_state);
   CHECK_STATUS(kmt.map_gpu_virtual_address(queue, allocation, 1u, address, fence), Status::ok);
   std::uint32_t context = 0u;
   CHECK_STATUS(kmt.create_context(device, context), Status::ok);
   CHECK_STATUS(kmt.submit(context, address, 0u, nullptr, 0u), Status::invalid_parameter);
-  CHECK_STATUS(kmt.submit(context, address + 4000u, 200u, nullptr, 0u), Status::invalid_parameter);   /* past the mapping */
-  CHECK_STATUS(kmt.submit(context, 0x10u, 16u, nullptr, 0u), Status::invalid_parameter);              /* nothing mapped */
+  CHECK_STATUS(kmt.submit(context, address + 4000u, 200u, nullptr, 0u), Status::invalid_parameter);
+  CHECK_STATUS(kmt.submit(context, 0x10u, 16u, nullptr, 0u), Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 0u); }
 
 TEST(mock_kmt, counts_every_call_naming_a_handle_it_never_gave_or_out_of_order)
@@ -229,10 +223,10 @@ TEST(mock_kmt, counts_every_call_naming_a_handle_it_never_gave_or_out_of_order)
   CHECK_STATUS(kmt.query_driver_version(bogus, version), Status::invalid_parameter);
   CHECK_STATUS(kmt.close_adapter(bogus), Status::invalid_parameter);
   CHECK_STATUS(kmt.create_device(bogus, handle), Status::invalid_parameter);
-  CHECK_STATUS(kmt.destroy_device(device), Status::invalid_parameter);           /* children still open */
+  CHECK_STATUS(kmt.destroy_device(device), Status::invalid_parameter);
   CHECK_STATUS(kmt.destroy_device(bogus), Status::invalid_parameter);
   CHECK_STATUS(kmt.create_allocation(bogus, descriptor.bytes(), descriptor.size(), handle), Status::invalid_parameter);
-  CHECK_STATUS(kmt.destroy_allocation(device, allocation), Status::invalid_parameter);   /* still mapped */
+  CHECK_STATUS(kmt.destroy_allocation(device, allocation), Status::invalid_parameter);
   CHECK_STATUS(kmt.destroy_allocation(bogus, allocation), Status::invalid_parameter);
   CHECK_STATUS(kmt.destroy_allocation(device, bogus), Status::invalid_parameter);
   CHECK_STATUS(kmt.create_paging_queue(bogus, handle, object), Status::invalid_parameter);
@@ -257,7 +251,7 @@ TEST(mock_kmt, counts_every_call_naming_a_handle_it_never_gave_or_out_of_order)
   std::uint32_t other_queue = 0u;
   std::uint32_t other_fence_object = 0u;
   CHECK_STATUS(kmt.create_paging_queue(other_device, other_queue, other_fence_object), Status::ok);
-  CHECK_STATUS(kmt.make_resident(other_queue, allocation, fence), Status::invalid_parameter);   /* another device's */
+  CHECK_STATUS(kmt.make_resident(other_queue, allocation, fence), Status::invalid_parameter);
   CHECK_STATUS(kmt.map_gpu_virtual_address(other_queue, allocation, 1u, address, fence), Status::invalid_parameter);
   CHECK_STATUS(kmt.wait_for_fence(other_device, fence_object, 1u), Status::invalid_parameter);
   CHECK_STATUS(kmt.wait_for_context(other_device, context), Status::invalid_parameter);
@@ -266,8 +260,6 @@ TEST(mock_kmt, counts_every_call_naming_a_handle_it_never_gave_or_out_of_order)
   CHECK_STATUS(kmt.submit(other_context, address, 16u, nullptr, 0u), Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 30u); }
 
-/* Several allocations can be locked at once, each with its own view, and the
- * mock keeps what is written through each. */
 TEST(mock_kmt, holds_several_views_at_once)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
@@ -286,14 +278,12 @@ TEST(mock_kmt, holds_several_views_at_once)
   CHECK_STATUS(kmt.lock(device, second, second_view), Status::ok);
   CHECK(first_view != nullptr && second_view != nullptr && first_view != second_view);
   CHECK(kmt.view_of(first) == first_view);
-  /* Locking the same allocation twice is refused. */
   void *again = nullptr;
   CHECK_STATUS(kmt.lock(device, first, again), Status::invalid_parameter);
   CHECK_STATUS(kmt.unlock(device, first), Status::ok);
   CHECK_STATUS(kmt.unlock(device, second), Status::ok);
   CHECK_EQ(kmt.open_objects(), 4u); }
 
-/* A virtual context records the private data the transport asked it with. */
 TEST(mock_kmt, a_virtual_context_records_its_private_data)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
@@ -310,14 +300,10 @@ TEST(mock_kmt, a_virtual_context_records_its_private_data)
   bool same = true;
   for (std::size_t i = 0u; i < sizeof record; i++) same = same && kmt.last_private()[i] == record[i];
   CHECK(same);
-  /* No private data at all is a misuse. */
   std::uint32_t bad = 0u;
   CHECK_STATUS(kmt.create_context_virtual(device, nullptr, 0u, bad), Status::invalid_parameter); }
 
 namespace {
-
-/* A device with a mapped command buffer and the allocation a context's record
- * names its ring by: what a transport's context stands on. */
 class AnsweringRig {
 public:
     explicit AnsweringRig(MockKmt &kmt) : kmt_(kmt), device_(0u), buffer_(0u), name_(0u), address_(0u), slot_(nullptr)
@@ -337,7 +323,6 @@ public:
         CHECK_STATUS(kmt.map_gpu_virtual_address(queue, buffer_, 1u, address_, fence), Status::ok);
     }
 
-    /* A context made with a record, whose reply slot becomes the rig's. */
     std::uint32_t context()
     {
         std::uint8_t record[AvContextRecord::encoded_size] = {};
@@ -378,17 +363,14 @@ bool slot_is_empty(const std::uint8_t *slot)
     return true;
 }
 
-}  // namespace
+}
 
-/* The device behind a transport's context writes the scripted answer for the
- * fence of the last submission, where the record said its reply slot is. */
 TEST(mock_kmt, a_wait_on_a_transport_context_finds_the_scripted_answer)
 { MockKmt kmt;
   AnsweringRig rig(kmt);
   const std::uint32_t context = rig.context();
   const std::uint8_t answer[4] = {0xA1u, 0xB2u, 0xC3u, 0xD4u};
   rig.submit_fence(context, 7u);
-  /* Nothing is written until a test scripts an answer. */
   CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
   CHECK(slot_is_empty(rig.slot()));
   kmt.answer_waits(answer, sizeof answer);
@@ -400,14 +382,12 @@ TEST(mock_kmt, a_wait_on_a_transport_context_finds_the_scripted_answer)
   CHECK_EQ(rig.slot()[ReplyHeader::encoded_size], 0xA1u);
   CHECK_EQ(rig.slot()[ReplyHeader::encoded_size + 3u], 0xD4u);
   CHECK_EQ(rig.slot()[ReplyHeader::encoded_size + 4u], 0u);
-  /* Every later wait answers again, for the fence submitted since. */
   rig.submit_fence(context, 8u);
   CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
   CHECK_STATUS(header.decode(rig.slot(), ReplyHeader::encoded_size), Status::ok);
   CHECK_EQ(header.fence_id(), 8u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* An answer longer than the mock keeps is cut to what it keeps. */
 TEST(mock_kmt, a_scripted_answer_is_cut_to_max_answer)
 { MockKmt kmt;
   AnsweringRig rig(kmt);
@@ -424,11 +404,9 @@ TEST(mock_kmt, a_scripted_answer_is_cut_to_max_answer)
            static_cast<std::uint8_t>(MockKmt::max_answer));
   CHECK_EQ(rig.slot()[ReplyHeader::encoded_size + MockKmt::max_answer], 0u); }
 
-/* No slot is written for a context made without a record - not another
- * context's - or for a submission that named no fence. */
 TEST(mock_kmt, only_a_record_context_and_a_described_submission_are_answered)
 { const std::uint8_t answer[4] = {1u, 2u, 3u, 4u};
-  { MockKmt kmt;   /* a plain context has no reply slot */
+  { MockKmt kmt;
     AnsweringRig rig(kmt);
     rig.context();
     kmt.answer_waits(answer, sizeof answer);
@@ -439,7 +417,7 @@ TEST(mock_kmt, only_a_record_context_and_a_described_submission_are_answered)
     rig.submit_fence(context, 1u);
     CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
     CHECK(slot_is_empty(rig.slot())); }
-  { MockKmt kmt;   /* private data that is no record has none either */
+  { MockKmt kmt;
     AnsweringRig rig(kmt);
     rig.context();
     kmt.answer_waits(answer, sizeof answer);
@@ -450,14 +428,14 @@ TEST(mock_kmt, only_a_record_context_and_a_described_submission_are_answered)
     rig.submit_fence(context, 1u);
     CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
     CHECK(slot_is_empty(rig.slot())); }
-  { MockKmt kmt;   /* a submission without a descriptor names no fence */
+  { MockKmt kmt;
     AnsweringRig rig(kmt);
     kmt.answer_waits(answer, sizeof answer);
     const std::uint32_t context = rig.context();
     CHECK_STATUS(kmt.submit(context, rig.address(), 64u, nullptr, 0u), Status::ok);
     CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
     CHECK(slot_is_empty(rig.slot())); }
-  { MockKmt kmt;   /* a refused wait answers nothing */
+  { MockKmt kmt;
     AnsweringRig rig(kmt);
     kmt.answer_waits(answer, sizeof answer);
     const std::uint32_t context = rig.context();
@@ -466,8 +444,6 @@ TEST(mock_kmt, only_a_record_context_and_a_described_submission_are_answered)
     CHECK(kmt.wait_for_context(rig.device(), context) != Status::ok);
     CHECK(slot_is_empty(rig.slot())); } }
 
-/* Queued answers are taken one per wait, in order, before the answer every wait
- * finds; a refused wait takes none, and past max_queued nothing more is kept. */
 TEST(mock_kmt_queue_answer, one_queued_answer_per_wait_then_the_standing_one)
 { MockKmt kmt;
   AnsweringRig rig(kmt);
@@ -497,8 +473,6 @@ TEST(mock_kmt_queue_answer, one_queued_answer_per_wait_then_the_standing_one)
   for (std::uint32_t i = 0u; i < MockKmt::max_queued + 3u; i++) full.queue_answer(first, sizeof first);
   CHECK_EQ(full.queued_answers(), MockKmt::max_queued); }
 
-/* A withheld wait succeeds with the slot untouched and leaves the queued
- * answer for the wait after it. */
 TEST(mock_kmt_withhold_answer_at, the_nth_wait_writes_nothing_and_takes_no_queued_answer)
 { MockKmt kmt;
   AnsweringRig rig(kmt);
@@ -519,10 +493,6 @@ TEST(mock_kmt_withhold_answer_at, the_nth_wait_writes_nothing_and_takes_no_queue
   CHECK_EQ(rig.slot()[ReplyHeader::encoded_size], 0x21u);
   CHECK_EQ(kmt.queued_answers(), 0u); }
 
-/* Through a real transport: every command a batch carries is journalled by id
- * and size, and a wait consumes the ring, so synchronous commands that would
- * fill an order-12 ring several times over all go through. Past max_journal
- * the journal stops, and an index past it answers 0. */
 TEST(mock_kmt_journal, records_each_command_and_a_wait_frees_the_ring)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
@@ -559,8 +529,6 @@ TEST(mock_kmt_journal, records_each_command_and_a_wait_frees_the_ring)
   CHECK_EQ(kmt.misuses(), 0u); }
 
 namespace {
-
-/* A device and a context made with a record on it: what an escape names. */
 class EscapeRig {
 public:
     explicit EscapeRig(MockKmt &kmt) : kmt_(kmt), adapter_(0u), device_(0u), name_(0u), context_(0u)
@@ -612,7 +580,6 @@ void encode_views(std::uint8_t *record)
 
 const av::HostMemoryRequest readback(av::HostMemoryRequest::Kind::readback, 0u);
 
-/* An open asks for readback memory, a close for none. */
 av::HostMemoryRequest memory_of(av::HostWindowRecord::Operation operation)
 {
     return operation == av::HostWindowRecord::Operation::open ? readback : av::HostMemoryRequest();
@@ -646,12 +613,8 @@ std::uint64_t u64_at(const std::uint8_t *bytes, std::uint32_t offset)
     return value;
 }
 
-}  // namespace
+}
 
-/* As the driver answers a ContextViewsRecord: where the context's ring - its
- * header written, at the record's order - and its reply slot are mapped,
- * written back into the request; a plain context has neither, and an escape
- * that is no record of the driver's is not supported. */
 TEST(mock_kmt_escape, a_views_escape_answers_where_the_context_memory_is)
 { MockKmt kmt;
   EscapeRig rig(kmt);
@@ -668,11 +631,10 @@ TEST(mock_kmt_escape, a_views_escape_answers_where_the_context_memory_is)
   av::RingHeader header;
   CHECK_STATUS(header.decode(kmt.ring_of(rig.context()), av::RingHeader::encoded_size), Status::ok);
   CHECK_EQ(header.capacity(), std::uint64_t{1} << 12u);
-  kmt.reply_of(rig.context())[reply_bytes - 1u] = 0x42u;   /* the whole slot is writable */
+  kmt.reply_of(rig.context())[reply_bytes - 1u] = 0x42u;
   CHECK_EQ(kmt.last_escape_size(), static_cast<std::uint32_t>(av::ContextViewsRecord::encoded_size));
   CHECK_EQ(u32_at(kmt.last_escape(), 0u), av::ContextViewsRecord::magic);
-  CHECK_EQ(u64_at(kmt.last_escape(), 8u), 0u);   /* the request as it was sent */
-  /* An answer sent back is no request, nor is a record cut short. */
+  CHECK_EQ(u64_at(kmt.last_escape(), 8u), 0u);
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
   CHECK_EQ(kmt.last_code(), MockKmt::invalid_parameter);
   encode_views(record);
@@ -690,9 +652,6 @@ TEST(mock_kmt_escape, a_views_escape_answers_where_the_context_memory_is)
   CHECK_EQ(kmt.calls(MockKmt::Call::escape), 5u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* Without a window every open is refused STATUS_NOT_SUPPORTED, as the driver
- * refuses it, with the record untouched: nothing falls back to guest RAM. A
- * close of what nobody holds is still a close of nothing. */
 TEST(mock_kmt_escape, an_open_with_no_window_is_not_supported)
 { MockKmt kmt;
   EscapeRig rig(kmt);
@@ -708,9 +667,6 @@ TEST(mock_kmt_escape, an_open_with_no_window_is_not_supported)
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* An adoption is answered as the driver answers one - with or without a
- * window - and its chunk's memory is the process's own pages; a refusal set
- * for the next open refuses it, and a full table refuses it too. */
 TEST(mock_kmt_escape, an_adoption_is_answered_with_its_own_range_and_its_memory_is_the_processs)
 { MockKmt kmt;
   EscapeRig rig(kmt);
@@ -738,8 +694,6 @@ TEST(mock_kmt_escape, an_adoption_is_answered_with_its_own_range_and_its_memory_
   CHECK_EQ(kmt.window_chunks(), MockKmt::max_window_chunks);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* The memory an open asks for is the window's record of the chunk, and of
- * the last open; an open of memory no driver makes is refused. */
 TEST(mock_kmt_escape, a_window_chunk_keeps_the_memory_it_was_opened_as)
 { MockKmt kmt;
   EscapeRig rig(kmt);
@@ -760,15 +714,11 @@ TEST(mock_kmt_escape, a_window_chunk_keeps_the_memory_it_was_opened_as)
   CHECK(kmt.window_chunk_memory(MockKmt::first_window_resource + 1u) == kmt.window_base() + 4096u);
   CHECK(kmt.window_chunk_memory(MockKmt::first_window_resource + 2u) == nullptr);
   CHECK(kmt.window_chunk_memory(0u) == nullptr);
-  /* A request no driver makes. */
   encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record, av::HostMemoryRequest(0x104u));
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
   CHECK_EQ(kmt.window_chunks(), 2u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* A context the host faulted - one whose answer was withheld - is lost to the
- * driver, which refuses every escape on it and keeps its other contexts' as
- * they were. */
 TEST(mock_kmt_escape, a_context_whose_answer_was_withheld_refuses_escapes)
 { MockKmt kmt;
   EscapeRig rig(kmt);
@@ -781,7 +731,7 @@ TEST(mock_kmt_escape, a_context_whose_answer_was_withheld_refuses_escapes)
   CHECK_STATUS(kmt.wait_for_context(rig.device(), rig.context()), Status::ok);
   CHECK_STATUS(kmt.wait_for_context(rig.device(), healthy), Status::ok);
   encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
-  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);   /* a wait that was answered loses nothing */
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
   kmt.withhold_answer_at(1u);
   CHECK_STATUS(kmt.wait_for_context(rig.device(), rig.context()), Status::ok);
   encode_window(av::HostWindowRecord::Operation::close, 0u, MockKmt::first_window_resource, record);
@@ -797,10 +747,6 @@ TEST(mock_kmt_escape, a_context_whose_answer_was_withheld_refuses_escapes)
   CHECK_EQ(kmt.window_chunks(), 3u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* Handles it never gave, or that do not belong together, or no data, are a
- * misuse; a scripted failure answers its code with the record untouched; a
- * zero answer succeeds and writes nothing back; a scripted answer replaces what
- * the driver would write, cut to the record. */
 TEST(mock_kmt_escape, misuse_failure_zero_and_scripted_answers)
 { MockKmt kmt;
   EscapeRig rig(kmt);
@@ -840,10 +786,10 @@ TEST(mock_kmt_escape, misuse_failure_zero_and_scripted_answers)
   kmt.answer_next_escape(scripted, sizeof scripted);
   CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
   CHECK_EQ(u32_at(record, 0u), 0xBBCCDDEEu);
-  CHECK_EQ(record[4], 3u);   /* the rest of the record as it was: its version */
+  CHECK_EQ(record[4], 3u);
   CHECK_EQ(kmt.window_chunks(), 0u);
   encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
-  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);   /* the script was for one escape */
+  CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
   CHECK_EQ(u32_at(record, 8u), MockKmt::first_window_resource);
   std::uint8_t too_long[MockKmt::max_private + 1u] = {};
   std::memset(too_long, 0x77, sizeof too_long);
@@ -857,9 +803,6 @@ TEST(mock_kmt_escape, misuse_failure_zero_and_scripted_answers)
   CHECK_STATUS(rig.escape(big, sizeof big), Status::ok);
   CHECK_EQ(kmt.last_escape_size(), MockKmt::max_private); }
 
-/* The Nth wait on a context from now runs what the test gave it before the
- * answer is written - how a test plays the host GPU's work between a submission
- * and its wait - and only that one. */
 TEST(mock_kmt_play_at_wait, runs_the_callback_at_the_nth_wait_only)
 { MockKmt kmt;
   AnsweringRig rig(kmt);
@@ -879,7 +822,6 @@ TEST(mock_kmt_play_at_wait, runs_the_callback_at_the_nth_wait_only)
       CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
   CHECK_EQ(played.times, 1u);
   CHECK_EQ(played.waits_seen, 2u);
-  /* A refused wait runs nothing and does not count toward it. */
   kmt.play_at_wait(1u, [](void *context_pointer) { static_cast<Played *>(context_pointer)->times++; }, &played);
   kmt.fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
   CHECK(kmt.wait_for_context(rig.device(), context) != Status::ok);
@@ -887,9 +829,6 @@ TEST(mock_kmt_play_at_wait, runs_the_callback_at_the_nth_wait_only)
   CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
   CHECK_EQ(played.times, 2u); }
 
-/* Each adapter answers the LUID a test gave it - by default one of its own -
- * whichever handle an enumeration opened it as; an adapter the enumeration
- * claimed but was never added answers 0. */
 TEST(mock_kmt_adapter_luid, answers_each_adapters_luid_by_the_order_it_was_added)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
@@ -906,7 +845,6 @@ TEST(mock_kmt_adapter_luid, answers_each_adapters_luid_by_the_order_it_was_added
   CHECK_EQ(luid, 0x0000000200000034ull);
   CHECK_STATUS(kmt.adapter_luid(adapters[2], luid), Status::ok);
   CHECK_EQ(luid, 0u);
-  /* Past the adapters the mock keeps, a LUID is not kept. */
   kmt.set_adapter_luid(8u, 9u);
   std::uint32_t again[1] = {};
   CHECK_STATUS(kmt.enumerate_adapters(again, 1u, count), Status::ok);
@@ -936,8 +874,6 @@ TEST(mock_kmt_adapter_luid, a_handle_it_never_gave_a_failure_and_a_zero_answer)
   CHECK_STATUS(kmt.adapter_luid(adapter, luid), Status::ok);
   CHECK_EQ(luid, MockKmt::first_luid); }
 
-/* The budget and usage of each segment group are what a test scripts, by
- * default the mock's own; a group D3DKMT does not define is refused. */
 TEST(mock_kmt_query_video_memory, answers_the_scripted_budget_and_usage_of_each_group)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
@@ -956,7 +892,7 @@ TEST(mock_kmt_query_video_memory, answers_the_scripted_budget_and_usage_of_each_
   CHECK_EQ(budget, 1u << 30u);
   CHECK_EQ(usage, 1u << 20u);
   CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::local, budget, usage), Status::ok);
-  CHECK_EQ(budget, MockKmt::default_local_budget);   /* the other group is untouched */
+  CHECK_EQ(budget, MockKmt::default_local_budget);
   kmt.set_video_memory(static_cast<av::MemorySegmentGroup>(2u), 5u, 5u);
   CHECK_STATUS(kmt.query_video_memory(adapter, static_cast<av::MemorySegmentGroup>(2u), budget, usage),
                Status::invalid_parameter);
@@ -987,8 +923,6 @@ TEST(mock_kmt_query_video_memory, a_handle_it_never_gave_a_failure_and_a_zero_an
   CHECK(budget == 0u && usage == 0u);
   CHECK_EQ(kmt.misuses(), 1u); }
 
-/* A lock of an allocation larger than the views the mock keeps inline addresses
- * the whole allocation, zeroed, until it is unlocked. */
 TEST(mock_kmt, a_large_allocation_is_viewed_whole)
 { MockKmt kmt;
   EscapeRig rig(kmt);
@@ -1001,19 +935,15 @@ TEST(mock_kmt, a_large_allocation_is_viewed_whole)
   CHECK_EQ(whole[0], 0u);
   CHECK_EQ(whole[bytes - 1u], 0u);
   whole[bytes - 1u] = 0x5Au;
-  CHECK_EQ(kmt.view_filled(), 0u);   /* a large view is counted when it is let go */
+  CHECK_EQ(kmt.view_filled(), 0u);
   CHECK_STATUS(kmt.unlock(rig.device(), large), Status::ok);
   CHECK_EQ(kmt.view_filled(), 1u);
   CHECK(kmt.view_of(large) == nullptr);
-  CHECK_STATUS(kmt.lock(rig.device(), large, view), Status::ok);   /* locked again: a fresh view */
+  CHECK_STATUS(kmt.lock(rig.device(), large, view), Status::ok);
   CHECK_EQ(static_cast<std::uint8_t *>(view)[bytes - 1u], 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
 namespace {
-
-/* A create asking for an identity: a descriptor and an *unassigned* record
- * behind it, which the mock mints into as the miniport does (feature 053).
- * `object_id` is what it minted, read back out of the caller's own bytes. */
 std::uint32_t shareable_allocation(MockKmt &kmt, std::uint32_t device, std::uint64_t &object_id,
                                    std::uint8_t *bytes)
 {
@@ -1042,7 +972,7 @@ std::uint32_t shareable_allocation(MockKmt &kmt, std::uint32_t device, std::uint
     return allocation;
 }
 
-}  // namespace
+}
 
 TEST(mock_kmt_share_object, a_minted_handle_opens_on_another_device_carrying_the_creators_bytes)
 { MockKmt kmt;
@@ -1072,22 +1002,16 @@ TEST(mock_kmt_share_object, a_minted_handle_opens_on_another_device_carrying_the
   CHECK(opened != allocation);
   CHECK_EQ(written, av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size);
   CHECK(std::memcmp(carried, bytes, written) == 0);
-  /* The id the opening process reads is the one the creating process's
-   * miniport minted, which is the whole point of the channel. */
   av::SharedObjectRecord read;
   CHECK_STATUS(read.decode(carried + av::AllocationDescriptor::encoded_size,
                            av::SharedObjectRecord::encoded_size),
                Status::ok);
   CHECK_EQ(read.object_id(), minted);
 
-  /* One handle opens twice: a second process, or the same one again. */
   std::uint32_t again = 0u;
   CHECK_STATUS(kmt.open_shared_object(creator, handle, again, carried, sizeof carried, written), Status::ok);
   CHECK(again != opened);
   CHECK_STATUS(kmt.close_shared_object(handle), Status::ok);
-  /* Closing the handle leaves what it named: a resource and a handle have
-   * separate lifetimes. Each open made a resource of its own process, and
-   * each is given back as one. */
   CHECK_STATUS(kmt.destroy_shared_allocation(opener, opened), Status::ok);
   CHECK_STATUS(kmt.destroy_shared_allocation(creator, again), Status::ok);
   CHECK_EQ(kmt.misuses(), 0u); }
@@ -1125,8 +1049,6 @@ TEST(mock_kmt_share_object, refuses_what_the_kernel_refuses)
   CHECK_STATUS(kmt.create_device(adapter, device), Status::ok);
   CHECK_STATUS(kmt.create_device(adapter, other), Status::ok);
 
-  /* An allocation created without asking for an identity has no record to
-   * carry, and nothing shares it. */
   const av::AllocationDescriptor plain(av::AllocationKind::shadow, true,
                                        av::SurfaceLayout(64u, 64u, 21u, 256u), 4u * 4096u,
                                        av::ScanoutTarget());
@@ -1141,26 +1063,22 @@ TEST(mock_kmt_share_object, refuses_what_the_kernel_refuses)
   std::uint8_t        bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
   std::uint64_t       minted = 0u;
   const std::uint32_t allocation = shareable_allocation(kmt, device, minted, bytes);
-  /* A handle it never gave, and an allocation of another device. */
   CHECK_STATUS(kmt.share_object(device, allocation + 0x1000u, handle), Status::invalid_parameter);
   CHECK_STATUS(kmt.share_object(other, allocation, handle), Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 2u);
 
   CHECK_STATUS(kmt.share_object(device, allocation, handle), Status::ok);
-  /* A buffer the creator's bytes do not fit in. */
   std::uint8_t  cramped[16] = {};
   std::uint32_t written = 9u;
   std::uint32_t opened = 9u;
   CHECK_STATUS(kmt.open_shared_object(other, handle, opened, cramped, sizeof cramped, written),
                Status::invalid_parameter);
   CHECK_EQ(opened, 0u);
-  /* A device this mock never gave. */
   std::uint8_t carried[128] = {};
   CHECK_STATUS(kmt.open_shared_object(other + 0x1000u, handle, opened, carried, sizeof carried, written),
                Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 3u);
 
-  /* Each call is scriptable, as every other is. */
   kmt.fail_at(MockKmt::Call::share_object, 1u, refused_code);
   std::uint64_t refused = 9u;
   CHECK(kmt.share_object(device, allocation, refused) != Status::ok);
@@ -1210,8 +1128,6 @@ TEST(mock_kmt_create_shared_allocation, mints_an_id_into_the_creators_bytes_and_
   CHECK(shareable_allocation(kmt, device, second, second_bytes) != 0u);
   CHECK(first != 0u);
   CHECK(second != first);
-  /* The adapter number is the same for both and is never 0: it is what tells
-   * one adapter's records from another's. */
   av::SharedObjectRecord one;
   av::SharedObjectRecord two;
   CHECK_STATUS(one.decode(first_bytes + av::AllocationDescriptor::encoded_size,
@@ -1242,8 +1158,6 @@ TEST(mock_kmt_create_shared_allocation, refuses_what_the_miniport_refuses)
                              av::SharedObjectRecord::encoded_size),
                Status::ok);
   std::uint32_t allocation = 9u;
-  /* The unshared length, a buffer that is not there, and a device it never
-   * gave. */
   CHECK_STATUS(kmt.create_shared_allocation(device, bytes, av::AllocationDescriptor::encoded_size, allocation),
                Status::invalid_parameter);
   CHECK_EQ(allocation, 0u);
@@ -1253,8 +1167,6 @@ TEST(mock_kmt_create_shared_allocation, refuses_what_the_miniport_refuses)
                Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 1u);
 
-  /* A record that already names an object: a creator can know neither number,
-   * so one that claims to is refused rather than believed. */
   std::uint8_t           assigned[sizeof bytes] = {};
   std::memcpy(assigned, bytes, sizeof bytes);
   av::SharedObjectRecord forged(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4u * 4096u);
@@ -1266,9 +1178,6 @@ TEST(mock_kmt_create_shared_allocation, refuses_what_the_miniport_refuses)
                Status::invalid_parameter);
   CHECK_EQ(allocation, 0u);
 
-  /* A record whose size is not the allocation's is *not* refused: the size it
-   * declares is the object's, and an ICD sharing host memory mints over a
-   * one-page carrier that is nothing like the object (feature 053, T031). */
   std::uint8_t           bigger[sizeof bytes] = {};
   std::memcpy(bigger, bytes, sizeof bytes);
   const av::SharedObjectRecord wide(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 64u * 4096u);
@@ -1278,16 +1187,12 @@ TEST(mock_kmt_create_shared_allocation, refuses_what_the_miniport_refuses)
   CHECK_STATUS(kmt.create_shared_allocation(device, bigger, sizeof bigger, allocation), Status::ok);
   CHECK(allocation != 0u);
 
-  /* And it is scriptable, as every other call is. */
   kmt.fail_at(MockKmt::Call::create_shared_allocation, 1u, refused_code);
   CHECK(kmt.create_shared_allocation(device, bytes, sizeof bytes, allocation) != Status::ok);
   CHECK_EQ(allocation, 0u);
   CHECK_STATUS(kmt.create_shared_allocation(device, bytes, sizeof bytes, allocation), Status::ok);
   CHECK(allocation != 0u); }
 
-/* The plain create takes either length, as the real one does - what it cannot
- * do is hand the minted id back, because its buffer is const. A caller that
- * wants the id calls create_shared_allocation instead. */
 TEST(mock_kmt_create_allocation, takes_the_shareable_length_but_hands_no_id_back)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
@@ -1308,27 +1213,16 @@ TEST(mock_kmt_create_allocation, takes_the_shareable_length_but_hands_no_id_back
   std::uint32_t allocation = 0u;
   CHECK_STATUS(kmt.create_allocation(device, bytes, sizeof bytes, allocation), Status::ok);
   CHECK(allocation != 0u);
-  /* The caller's bytes are untouched: the kernel minted into its own copy. */
   av::SharedObjectRecord unchanged;
   CHECK_STATUS(unchanged.decode(bytes + av::AllocationDescriptor::encoded_size,
                                 av::SharedObjectRecord::encoded_size),
                Status::ok);
   CHECK(!unchanged.assigned());
-  /* And a length that is neither is still refused. */
   std::uint32_t refused = 9u;
-  /* not_supported: a length this driver has no shape for, as the miniport
-   * answers it, which is what a guest sweep reads to tell dxgkrnl's refusal
-   * from the driver's. */
   CHECK_STATUS(kmt.create_allocation(device, bytes, av::AllocationDescriptor::encoded_size + 1u, refused),
                Status::not_supported);
   CHECK_EQ(refused, 0u); }
 
-/* dxgkrnl names a resource and the allocations in it by different handles and
- * checks the type of each: D3DKMTDestroyAllocation2's list must hold handles of
- * type 5 and its hResource one of type 4, and either named in the other's place
- * falls through to STATUS_INVALID_PARAMETER with nothing destroyed
- * (ValidateDestroyAllocation at dxgkrnl.sys 1403f7528, research.md §17). A
- * carrier is a resource, so only destroy_shared_allocation takes one. */
 TEST(mock_kmt_destroy_shared_allocation, takes_a_carrier_that_destroy_allocation_refuses)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
@@ -1342,19 +1236,16 @@ TEST(mock_kmt_destroy_shared_allocation, takes_a_carrier_that_destroy_allocation
   const std::uint32_t carrier = shareable_allocation(kmt, device, minted, bytes);
 
   CHECK_STATUS(kmt.destroy_allocation(device, carrier), Status::invalid_parameter);
-  /* Refused having done nothing: the carrier still shares. */
   std::uint64_t handle = 0u;
   CHECK_STATUS(kmt.share_object(device, carrier, handle), Status::ok);
   CHECK(handle != 0u);
   CHECK_STATUS(kmt.close_shared_object(handle), Status::ok);
 
   CHECK_STATUS(kmt.destroy_shared_allocation(device, carrier), Status::ok);
-  /* And it is gone: the number names nothing to share. */
   CHECK_STATUS(kmt.share_object(device, carrier, handle), Status::invalid_parameter);
   CHECK_EQ(handle, 0u);
   CHECK_EQ(kmt.misuses(), 1u); }
 
-/* The mismatch the other way, and the ordinary allocation it must not touch. */
 TEST(mock_kmt_destroy_shared_allocation, refuses_an_allocation_that_is_not_a_resource)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
@@ -1366,8 +1257,6 @@ TEST(mock_kmt_destroy_shared_allocation, refuses_an_allocation_that_is_not_a_res
   const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
                                             av::SurfaceLayout(64u, 64u, 21u, 256u), 4u * 4096u,
                                             av::ScanoutTarget());
-  /* Both lengths the one-way create takes: neither asked for a resource, so
-   * neither is one, whatever record the longer one carries. */
   std::uint8_t bytes[av::AllocationDescriptor::encoded_size + av::SharedObjectRecord::encoded_size] = {};
   CHECK_STATUS(descriptor.encode(bytes, av::AllocationDescriptor::encoded_size), Status::ok);
   const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 4u * 4096u);
@@ -1384,13 +1273,10 @@ TEST(mock_kmt_destroy_shared_allocation, refuses_an_allocation_that_is_not_a_res
   CHECK_STATUS(kmt.destroy_allocation(device, plain), Status::ok);
   CHECK_STATUS(kmt.destroy_allocation(device, carried), Status::ok);
 
-  /* A resource of 0, and one this mock never gave: the first is refused
-   * without looking, the second is a call with a handle it never handed out. */
   CHECK_STATUS(kmt.destroy_shared_allocation(device, 0u), Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 0u);
   CHECK_STATUS(kmt.destroy_shared_allocation(device, plain), Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 1u);
-  /* And it is scriptable, as every other call is. */
   std::uint8_t        shareable[sizeof bytes] = {};
   std::uint64_t       minted = 0u;
   const std::uint32_t carrier = shareable_allocation(kmt, device, minted, shareable);
@@ -1398,8 +1284,6 @@ TEST(mock_kmt_destroy_shared_allocation, refuses_an_allocation_that_is_not_a_res
   CHECK(kmt.destroy_shared_allocation(device, carrier) != Status::ok);
   CHECK_STATUS(kmt.destroy_shared_allocation(device, carrier), Status::ok); }
 
-/* What an open makes is a resource too: D3DKMTOpenResourceFromNtHandle answers
- * one, and it is what the opening process must give back. */
 TEST(mock_kmt_destroy_shared_allocation, takes_what_an_open_made)
 { MockKmt kmt;
   kmt.add_adapter(av_gpu, 3200u);
@@ -1426,11 +1310,6 @@ TEST(mock_kmt_destroy_shared_allocation, takes_what_an_open_made)
   CHECK_STATUS(kmt.destroy_shared_allocation(creator, carrier), Status::ok);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* As the driver answers a HostWindowRecord with a window: an open placed first
- * fit whose address is writable memory under the lowest free host blob id -
- * one with no room refused - a close only of a chunk the same context holds,
- * a record that is no request refused, and the context's teardown closing
- * what it still holds. */
 TEST(mock_kmt_escape, a_host_window_opens_and_closes_chunks_as_the_driver_does)
 { MockKmt kmt;
   EscapeRig rig(kmt);
@@ -1453,8 +1332,6 @@ TEST(mock_kmt_escape, a_host_window_opens_and_closes_chunks_as_the_driver_does)
   CHECK_STATUS(second.accept_answer(record, sizeof record), Status::ok);
   CHECK_EQ(second.address(), first.address() + 2u * 4096u);
   CHECK_EQ(second.resource_id(), MockKmt::first_window_resource + 1u);
-  /* One page left of four is no room for three, nor is a request larger than
-   * the whole window: refused, as the driver refuses them. */
   encode_window(av::HostWindowRecord::Operation::open, 3u * 4096u, 0u, record);
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
   CHECK_EQ(u32_at(record, 8u), 0u);
@@ -1462,15 +1339,12 @@ TEST(mock_kmt_escape, a_host_window_opens_and_closes_chunks_as_the_driver_does)
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
   CHECK_EQ(kmt.window_chunks(), 2u);
   CHECK_EQ(kmt.window_opens(), 2u);
-  /* A scripted refusal, once. */
   kmt.refuse_next_window_open(refused_code);
   encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_state);
-  /* Bytes with the magic that are no request. */
   encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
   record[24] = 1u;
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
-  /* A close of a resource nobody holds, then of one another context holds. */
   encode_window(av::HostWindowRecord::Operation::close, 0u, 0x7777u, record);
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
   std::uint32_t other = 0u;
@@ -1479,13 +1353,12 @@ TEST(mock_kmt_escape, a_host_window_opens_and_closes_chunks_as_the_driver_does)
   CHECK_STATUS(kmt.escape(rig.adapter(), rig.device(), other, record, sizeof record), Status::invalid_parameter);
   CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
   CHECK_EQ(kmt.window_chunks(), 1u);
-  /* The freed place is the next open's. */
   encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
   av::HostWindowRecord third(av::HostWindowRecord::Operation::open, 4096u, 0u, readback);
   CHECK_STATUS(rig.escape(record, sizeof record), Status::ok);
   CHECK_STATUS(third.accept_answer(record, sizeof record), Status::ok);
   CHECK_EQ(third.address(), first.address());
-  CHECK_EQ(third.resource_id(), first.resource_id());   /* the lowest free id again */
+  CHECK_EQ(third.resource_id(), first.resource_id());
   reinterpret_cast<std::uint8_t *>(static_cast<std::uintptr_t>(third.address()))[4095] = 0x42u;
   CHECK_EQ(kmt.window_base()[4095], 0x42u);
   CHECK_EQ(kmt.window_chunks(), 2u);
@@ -1495,7 +1368,6 @@ TEST(mock_kmt_escape, a_host_window_opens_and_closes_chunks_as_the_driver_does)
   CHECK_EQ(kmt.window_chunks(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* The chunk slots run out as the driver's do, whatever room is left. */
 TEST(mock_kmt_escape, a_host_window_refuses_past_its_chunk_slots)
 { MockKmt kmt;
   EscapeRig rig(kmt);
@@ -1508,6 +1380,5 @@ TEST(mock_kmt_escape, a_host_window_refuses_past_its_chunk_slots)
   encode_window(av::HostWindowRecord::Operation::open, 4096u, 0u, record);
   CHECK_STATUS(rig.escape(record, sizeof record), Status::invalid_parameter);
   CHECK_EQ(kmt.window_chunks(), MockKmt::max_window_chunks);
-  /* A window given again starts empty. */
   kmt.open_host_window(4096u);
   CHECK_EQ(kmt.window_chunks(), 0u); }

@@ -10,30 +10,20 @@
 namespace av::d3d9 {
 
 namespace {
-
-/* The queries the host's Direct3D 9 runs (D3DDDIQUERYTYPE); the three timestamp
- * ones go together or not at all (reverse-engineering.md §2.3). */
 constexpr D3DDDIQUERYTYPE queries[] = {D3DDDIQUERYTYPE_VCACHE,         D3DDDIQUERYTYPE_EVENT,
                                        D3DDDIQUERYTYPE_OCCLUSION,      D3DDDIQUERYTYPE_TIMESTAMP,
                                        D3DDDIQUERYTYPE_TIMESTAMPDISJOINT, D3DDDIQUERYTYPE_TIMESTAMPFREQ};
 constexpr UINT query_count = sizeof(queries) / sizeof(queries[0]);
-/* D3DPMISCCAPS_FOGINFVF in Direct3D 8's header: the runtime requires it of a
- * shader-model-2 driver and the Direct3D 9 header no longer names it. */
 constexpr DWORD fog_in_fvf = 0x2000u;
-constexpr DWORD line_pattern_rep = 0x4u;          /* D3DPMISCCAPS_LINEPATTERNREP */
-constexpr DWORD no_vsdt_ubyte4 = 0x80u;            /* D3DVTXPCAPS_NO_VSDT_UBYTE4 */
-constexpr DWORD managed_device = 0x40u;            /* D3DCAPS3's "managed device" bit */
-/* d3dhal.h's DevCaps a driver reports and an application never sees: vertex
- * and index buffers in video memory, and volume locks of a sub-box. Without
- * the first two, CVertexBuffer::Create and its index twin quietly move every
- * default-pool buffer to system memory, and every draw copies its vertices
- * from the guest (d3d9.dll @10048b04). */
-constexpr DWORD hw_vertex_buffer = 0x02000000u;    /* D3DDEVCAPS_HWVERTEXBUFFER */
-constexpr DWORD hw_index_buffer = 0x04000000u;     /* D3DDEVCAPS_HWINDEXBUFFER */
-constexpr DWORD sub_volume_lock = 0x08000000u;     /* D3DDEVCAPS_SUBVOLUMELOCK */
+constexpr DWORD line_pattern_rep = 0x4u;
+constexpr DWORD no_vsdt_ubyte4 = 0x80u;
+constexpr DWORD managed_device = 0x40u;
+constexpr DWORD hw_vertex_buffer = 0x02000000u;
+constexpr DWORD hw_index_buffer = 0x04000000u;
+constexpr DWORD sub_volume_lock = 0x08000000u;
 constexpr DWORD most_render_targets = 4u;
 
-}  // namespace
+}
 
 D3d9HostCaps::D3d9HostCaps()
     : caps_{}, formats_(), rows_{}, snapshots_(false), learned_(false)
@@ -64,8 +54,6 @@ bool D3d9HostCaps::learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter)
     return true;
 }
 
-/* DXVK answers as an application sees a device; d3d9.dll judges a driver,
- * and disables the HAL over bits an application never reads. */
 void D3d9HostCaps::fix_up()
 {
     AV_SCOPE("D3d9HostCaps::fix_up");
@@ -123,8 +111,6 @@ HRESULT D3d9HostCaps::answer_formats(const D3DDDIARG_GETCAPS &args) const
     return S_OK;
 }
 
-/* A type past the row's (or NONE, type 0) and a format not asked have no
- * quality levels. */
 HRESULT D3d9HostCaps::answer_quality(const D3DDDIARG_GETCAPS &args) const
 {
     AV_SCOPE("D3d9HostCaps::answer_quality");
@@ -140,9 +126,6 @@ HRESULT D3d9HostCaps::answer_quality(const D3DDDIARG_GETCAPS &args) const
     return S_OK;
 }
 
-/* Only what d3d9.dll asks of a Direct3D 9 driver is answered; the DirectDraw,
- * Direct3D 3-8, video and content-protection types are refused, as nothing
- * here offers what they describe. */
 HRESULT D3d9HostCaps::answer(const D3DDDIARG_GETCAPS &args) const
 {
     AV_SCOPE("D3d9HostCaps::answer");
@@ -160,4 +143,4 @@ HRESULT D3d9HostCaps::answer(const D3DDDIARG_GETCAPS &args) const
     }
 }
 
-}  // namespace av::d3d9
+}

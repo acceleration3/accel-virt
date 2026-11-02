@@ -1,9 +1,3 @@
-/* A host API that runs whatever a test says it runs.
- *
- * The fourth implementation of SessionBackend and the only one that works on a
- * machine with no GPU: it echoes a payload, refuses an id, fails to decode,
- * loses its device, or asks the arena for more than the block holds, on
- * command. */
 #ifndef AV_MOCK_SESSION_BACKEND_HPP
 #define AV_MOCK_SESSION_BACKEND_HPP
 
@@ -17,33 +11,20 @@ namespace av {
 
 class MockSessionBackend final : public SessionBackend {
 public:
-    /* Echoes the payload into the reply. */
     static constexpr std::uint32_t echo_id = 0x10001u;
-    /* Answers `answer_bytes` of zeros, whatever the payload was. */
     static constexpr std::uint32_t long_answer_id = 0x10002u;
-    /* Fails to decode, without touching the arena. */
     static constexpr std::uint32_t malformed_id = 0x10003u;
-    /* Asks the arena for more than any memory holds, then fails. */
     static constexpr std::uint32_t greedy_id = 0x10004u;
-    /* Runs, and leaves the host device lost behind it. */
     static constexpr std::uint32_t lose_id = 0x10005u;
-    /* Takes four times the block from the arena, all of it written, and runs:
-     * what a program's source of megabytes decodes into. */
     static constexpr std::uint32_t roomy_id = 0x10006u;
-    /* An adopted blob's wire handle is its id plus this. */
     static constexpr std::uint64_t wire_offset = 0x2000u;
-    /* An imported object's wire handle, which no adopted blob can be, and what
-     * its detail is: the handle with these bits flipped. */
     static constexpr std::uint64_t object_handle = 0x9000u;
     static constexpr std::uint64_t detail_mask = 0xD000000000000000u;
 
     MockSessionBackend();
 
-    /* How long long_answer_id's answer is. */
     void          set_answer_bytes(std::size_t bytes);
     std::uint32_t ran() const;
-    /* Whether adopt takes what it is offered. A backend that refuses is a real
-     * case: an API that cannot import this kind is copied through instead. */
     void          set_adopts(bool adopts);
     std::uint32_t adopted() const;
     std::uint32_t abandoned() const;
@@ -52,20 +33,13 @@ public:
     [[nodiscard]] bool run(std::uint32_t command_id, WireReader &payload, WireWriter &reply,
                            WireArena &arena) override;
     bool lost() const override;
-    /* Lost from then on, as a host device a GPU fault took; false - the host
-     * cannot - once set_losable(false). */
     [[nodiscard]] bool lose_device() override;
     void set_losable(bool losable);
-    /* Lost as another session on a shared device would find it, without a
-     * command of this one's. */
     void lose_elsewhere();
-    /* Holds nothing across a batch and waits on no GPU. */
     void end_batch() override;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
-    /* Kept, and called by signal(). */
     void bind_signal(void (*signal)(void *context), void *context) override;
-    /* The bound signal called as a host thread would; false with none bound. */
     bool signal();
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
@@ -74,27 +48,19 @@ public:
     [[nodiscard]] bool import_object(std::uint32_t kind, std::uint32_t handle_kind, int fd,
                                      std::uint64_t size, const av::SharedImageShape &shape,
                                      std::uint64_t &wire_handle, std::uint64_t &detail) override;
-    /* The image the last import was told its memory is. */
     const av::SharedImageShape &imported_shape() const { return imported_shape_; }
     void               release_object(std::uint32_t kind, std::uint64_t wire_handle, std::uint64_t detail) override;
 
-    /* Counted, with what had been abandoned and released by the time of the
-     * last one, so a test can judge the order a session ends in. */
     void          shut_down() override;
     std::uint32_t shut_downs() const;
     std::uint32_t abandoned_before_shut_down() const;
     std::uint32_t released_before_shut_down() const;
 
-    /* Whether this backend shares objects at all, so a test can be both an API
-     * that does and one that does not. */
     void          set_shares(bool shares);
     std::uint32_t exported_objects() const;
     std::uint32_t imported_objects() const;
     std::uint32_t released_objects() const;
-    /* What the last release was handed back of what its import answered. */
     std::uint64_t last_released_detail() const;
-    /* Called once, inside the next export_object, before it answers: what
-     * another session does between an export and the table it is kept in. */
     void          before_next_export(void (*during)(void *context), void *context);
 
 private:
@@ -121,6 +87,6 @@ private:
     void         *during_export_context_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MOCK_SESSION_BACKEND_HPP
+#endif

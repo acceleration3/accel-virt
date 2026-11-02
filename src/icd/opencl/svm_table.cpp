@@ -35,10 +35,7 @@ void *SvmTable::take(uint64_t host_base, size_t bytes)
 {
     AV_SCOPE("SvmTable::take");
     if (host_base == 0u || bytes == 0u) return nullptr;
-    /* A pair that cannot both be addressed is one whose translation could
-     * wrap, so it is refused here rather than arithmetically later. */
     if (static_cast<uint64_t>(bytes) > ~uint64_t{0} - host_base) return nullptr;
-    /* Rows first, so a mirror had is always one the table holds. */
     if (allocations_.reserve(allocations_.count() + 1u) != Status::ok || bases_.reserve(bases_.size() + 1u) != Status::ok)
         return nullptr;
     uint8_t *const mirror = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
@@ -56,8 +53,6 @@ uint64_t SvmTable::give_back(const void *mirror)
 {
     AV_SCOPE("SvmTable::give_back");
     SvmAllocation allocation;
-    /* The base, not an address inside: clSVMFree takes what clSVMAlloc
-     * answered. */
     if (mirror == nullptr || !allocations_.take(key_of(mirror), allocation)) return 0u;
     bases_.remove_at(row_below(key_of(mirror)));
     memory_.release(allocation.mirror());
@@ -114,8 +109,6 @@ void SvmTable::report(StateWriter &writer) const
     writer.close();
 }
 
-/* Every allocation held and keyed by its base, the bases those and ascending,
- * and no two mirrors overlapping: a pointer would then translate two ways. */
 bool SvmTable::invariants_hold() const
 {
     AV_SCOPE("SvmTable::invariants_hold");
@@ -132,4 +125,4 @@ bool SvmTable::invariants_hold() const
     return true;
 }
 
-}  // namespace av::clicd
+}

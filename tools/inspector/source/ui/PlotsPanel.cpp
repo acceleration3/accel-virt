@@ -58,4 +58,4 @@ void Inspector::PlotsPanel(ui::Context& ctx) {
     ui::EndWindow(ctx);
 }
 
-} // namespace inspector
+}

@@ -1,9 +1,3 @@
-/* WPF's presentation over a scripted Direct3D 9Ex: every step in order, one
- * present and no other, and the window watched blank by blank until it shows
- * the frame - which passes when the frame arrives late, and fails, with the
- * pixels counted, when it never does, as it never did on a host that refused
- * a buffer's first frame. A refusal at each call is kept as its HRESULT, and
- * the device is released whatever happened. */
 #include "guest/probe/wpf_present_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
@@ -24,7 +18,7 @@ struct WpfPresentWorkProbe {
     static void looked_past_the_blanks(WpfPresentWork &work) { work.looks_ = WpfPresentWork::blanks + 1u; }
 };
 
-}  // namespace av
+}
 
 using av::GuestReport;
 using av::MockKmt;
@@ -75,7 +69,7 @@ private:
     ScenarioSteps       steps_;
 };
 
-}  // namespace
+}
 
 TEST(wpf_present_work, one_present_reaches_the_window_and_every_step_passes)
 { WpfRig      rig;
@@ -90,13 +84,10 @@ TEST(wpf_present_work, one_present_reaches_the_window_and_every_step_passes)
   CHECK_EQ(rig.d3d9().width(), WpfPresentWork::extent);
   CHECK_EQ(rig.d3d9().height(), WpfPresentWork::extent);
   CHECK_EQ(rig.d3d9().calls(Call::present), 1u);
-  CHECK_EQ(rig.d3d9().calls(Call::wait_for_blank), 0u);   /* there at the first look */
+  CHECK_EQ(rig.d3d9().calls(Call::wait_for_blank), 0u);
   CHECK_EQ(rig.d3d9().calls(Call::release), 1u);
   CHECK(rig.images().size("d3d9-wpf") > 0u); }
 
-/* The frame reaching the window a few blanks after its present is a frame
- * shown: the window is read again after each blank, and nothing presents
- * again. */
 TEST(wpf_present_work, a_frame_that_arrives_late_is_waited_for)
 { WpfRig rig;
   rig.d3d9().arrive_after(5u);
@@ -106,8 +97,6 @@ TEST(wpf_present_work, a_frame_that_arrives_late_is_waited_for)
   CHECK_EQ(rig.d3d9().calls(Call::wait_for_blank), 5u);
   CHECK_EQ(rig.windows().reads(), 6u); }
 
-/* A frame lost on its way leaves the window black: the present itself
- * succeeded, and only the window says otherwise, after every blank. */
 TEST(wpf_present_work, a_frame_that_never_arrives_fails_the_window_with_the_count)
 { WpfRig rig;
   rig.d3d9().lose_the_frame();
@@ -120,8 +109,6 @@ TEST(wpf_present_work, a_frame_that_never_arrives_fails_the_window_with_the_coun
   CHECK_EQ(rig.windows().reads(), WpfPresentWork::blanks + 1u);
   CHECK(rig.images().size("d3d9-wpf") > 0u); }
 
-/* A window that cannot be read is not found, and a blank that cannot be
- * waited for ends the watch with what the window showed. */
 TEST(wpf_present_work, an_unreadable_window_and_a_refused_blank_end_the_watch)
 { { WpfRig rig;
     rig.windows().refuse_read();

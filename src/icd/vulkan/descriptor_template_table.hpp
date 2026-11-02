@@ -1,13 +1,3 @@
-/* The descriptor update templates a process made, and how long each one's blob
- * is (feature 047, contracts/descriptor_templates.md).
- *
- * `vkUpdateDescriptorSetWithTemplate` and `vkCmdPushDescriptorSetWithTemplate`
- * carry a `pData` whose length is the template's, not the call's, so the
- * generated serializer asks the translation's `template_bytes` for it while it is
- * writing the command. That happens on whatever thread called the command, and
- * templates are created and destroyed on other threads, so this table has a
- * lock of its own rather than borrowing the root's - nothing it does can reach
- * back into the root and take the root's. */
 #ifndef AV_ICD_DESCRIPTOR_TEMPLATE_TABLE_HPP
 #define AV_ICD_DESCRIPTOR_TEMPLATE_TABLE_HPP
 
@@ -21,16 +11,12 @@
 namespace av {
 class BlockSource;
 class ThreadLock;
-}  // namespace av
+}
 
 namespace av::icd {
 
 struct DescriptorTemplateTableProbe;
 
-/* One template: the device it belongs to, its handle, and the bytes one update
- * through it reads. A type of its own so the table's slots are complete
- * (tools/header_scan.py reads a class's members only to its first nested
- * type). */
 struct DescriptorTemplateSlot {
     VkDevice                   device_;
     VkDescriptorUpdateTemplate template_;
@@ -39,40 +25,27 @@ struct DescriptorTemplateSlot {
 
 class DescriptorTemplateTable {
 public:
-    /* DXVK keeps one template per pipeline layout and vkd3d-proton one per
-     * root signature: as many as an application's pipelines. */
     DescriptorTemplateTable(BlockSource &memory, ThreadLock &lock);
     DescriptorTemplateTable(const DescriptorTemplateTable &) = delete;
     DescriptorTemplateTable &operator=(const DescriptorTemplateTable &) = delete;
 
-    /* Remembers what `made` reads, from the entries it was created with.
-     * VK_ERROR_INITIALIZATION_FAILED for entries whose end leaves 64 bits or a
-     * descriptor type a template may not write, VK_ERROR_OUT_OF_HOST_MEMORY
-     * when there is no memory to remember it. A handle already known is replaced, which is
-     * what a driver reusing an address means. */
     VkResult record(VkDevice device, VkDescriptorUpdateTemplate made, const VkDescriptorUpdateTemplateCreateInfo *info);
-    /* A template destroyed, or one this table never made: both leave no slot. */
     void     forget(VkDescriptorUpdateTemplate made);
-    /* Every template of `device`, as destroying the device does. */
     void     forget_device(VkDevice device);
-    /* The bytes one update through `made` reads; 0 for a handle this table does
-     * not know, which sends no descriptors rather than bytes from nowhere. */
     uint64_t bytes_of(VkDescriptorUpdateTemplate made) const;
     uint32_t live() const;
 
-    /* Every template names itself and a device. */
     bool invariants_hold() const;
 
 private:
     uint64_t key_of(VkDescriptorUpdateTemplate made) const;
 
     ThreadLock                                   &lock_;
-    /* Each template by its handle. */
     KeyedSlots<uint64_t, DescriptorTemplateSlot> slots_;
 
     friend struct DescriptorTemplateTableProbe;
 };
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_DESCRIPTOR_TEMPLATE_TABLE_HPP
+#endif

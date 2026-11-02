@@ -1,8 +1,3 @@
-/* A Direct3D 12 pipeline library's blob: the header this driver writes, read
- * back as its own, and anything else - another driver's cache, a cut-short or
- * a longer blob, a later version of this format - refused as a mismatch, so
- * an application drops it and compiles again (the call Resident Evil 4's
- * engine makes first on a new device). */
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/hresult.hpp"
 #include "icd/d3d/pipeline_library_blob.hpp"
@@ -16,7 +11,7 @@ namespace {
 
 constexpr av::d3d::Hresult mismatch = static_cast<av::d3d::Hresult>(0x887E0002u);
 
-}  // namespace
+}
 
 TEST(pipeline_library_blob, the_header_is_avpl_and_the_version_little_endian)
 { const PipelineLibraryBlob blob;
@@ -26,7 +21,6 @@ TEST(pipeline_library_blob, the_header_is_avpl_and_the_version_little_endian)
   blob.write(written);
   const std::uint8_t expected[PipelineLibraryBlob::header_bytes] = {'A', 'V', 'P', 'L', 1u, 0u, 0u, 0u};
   CHECK(std::memcmp(written, expected, sizeof expected) == 0);
-  /* Nothing past the size it answered. */
   CHECK_EQ(written[PipelineLibraryBlob::header_bytes], 0xEEu); }
 
 TEST(pipeline_library_blob, a_new_library_and_its_own_blob_open)
@@ -35,7 +29,6 @@ TEST(pipeline_library_blob, a_new_library_and_its_own_blob_open)
   std::uint8_t written[PipelineLibraryBlob::header_bytes];
   blob.write(written);
   CHECK_EQ(blob.opened(written, sizeof written), av::d3d::hr_ok);
-  /* Another instance - another device - reads it the same. */
   const PipelineLibraryBlob other;
   CHECK_EQ(other.opened(written, sizeof written), av::d3d::hr_ok); }
 
@@ -47,14 +40,11 @@ TEST(pipeline_library_blob, any_other_blob_is_a_driver_version_mismatch)
   CHECK_EQ(blob.opened(nullptr, PipelineLibraryBlob::header_bytes), mismatch);
   CHECK_EQ(blob.opened(written, PipelineLibraryBlob::header_bytes - 1u), mismatch);
   CHECK_EQ(blob.opened(written, sizeof written), mismatch);
-  /* Every byte of the header counts: a different driver's magic, or this
-   * format's next version, at each position. */
   for (std::size_t byte = 0u; byte < PipelineLibraryBlob::header_bytes; byte++) {
       std::uint8_t changed[PipelineLibraryBlob::header_bytes];
       blob.write(changed);
       changed[byte] = static_cast<std::uint8_t>(changed[byte] + 1u);
       CHECK_EQ(blob.opened(changed, sizeof changed), mismatch);
   }
-  /* A blob of zeroes - a cache file truncated and zero-filled - too. */
   const std::uint8_t zeroes[PipelineLibraryBlob::header_bytes] = {};
   CHECK_EQ(blob.opened(zeroes, sizeof zeroes), mismatch); }

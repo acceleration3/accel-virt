@@ -1,6 +1,3 @@
-/* The value counts of state queries: the three host-length lists as learned,
- * everything else as the registry's table says, and the uniform block query
- * whose list length is not kept. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/opengl/query_shapes.hpp"
 
@@ -15,7 +12,7 @@ struct QueryShapesProbe {
     static void overflow(QueryShapes &shapes) { shapes.lengths_[1] = 0x80000000u; }
 };
 
-}  // namespace av::glicd
+}
 
 TEST(query_shapes, list_queries_answer_what_was_learned)
 { QueryShapes shapes;
@@ -35,9 +32,9 @@ TEST(query_shapes, list_queries_answer_what_was_learned)
 
 TEST(query_shapes, other_queries_answer_the_registry_count)
 { const QueryShapes shapes;
-  CHECK_EQ(shapes.values(0x0BA2u /* GL_VIEWPORT */), 4u);
-  CHECK_EQ(shapes.values(0x0BA6u /* GL_MODELVIEW_MATRIX */), 16u);
-  CHECK_EQ(shapes.values(0x0B72u /* GL_DEPTH_WRITEMASK */), 1u);
+  CHECK_EQ(shapes.values(0x0BA2u ), 4u);
+  CHECK_EQ(shapes.values(0x0BA6u ), 16u);
+  CHECK_EQ(shapes.values(0x0B72u ), 1u);
   CHECK_EQ(shapes.values(0x86A2u), 1u); }
 
 TEST(query_shapes, a_uniform_blocks_index_list_is_not_sized)

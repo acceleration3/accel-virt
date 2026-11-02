@@ -58,11 +58,11 @@ Status RingHeader::decode(const uint8_t *bytes, size_t length)
     WireReader reader(bytes, length);
     const uint32_t found_magic = reader.read_u32();
     const uint8_t  order = reader.read_u8();
-    static_cast<void>(reader.read_u8());   /* the device's awake flag, the process's to read */
+    static_cast<void>(reader.read_u8());
     reader.expect_zero(2u);
     const uint64_t tail = reader.read_u64();
     const uint64_t head = reader.read_u64();
-    static_cast<void>(reader.read_u64());   /* the fence the guest last published, the miniport's to read */
+    static_cast<void>(reader.read_u64());
     if (reader.status() != Status::ok) return reader.status();
     if (found_magic != magic || order < lowest_order || order > highest_order)
         return Status::malformed;
@@ -70,4 +70,4 @@ Status RingHeader::decode(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-}  // namespace av
+}

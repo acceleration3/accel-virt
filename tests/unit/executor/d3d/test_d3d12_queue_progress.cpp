@@ -1,10 +1,3 @@
-/* How far the host GPU has got with what a session's Direct3D 12 queues were
- * given: each execute's queue signals its own fence with the session's next
- * mark, reached() is the highest mark everything below has passed, and an
- * execute waits on the GPU for what sibling queues were given first. The
- * queue, its fences and the device are scripted stand-ins for vkd3d-proton's,
- * so which fence was signalled and waited on with which value is what is
- * judged, and a fence completes when the test says the GPU got there. */
 #include "core/log/driver_log.hpp"
 #include "executor/d3d/d3d12_fence_wake.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
@@ -51,7 +44,6 @@ public:
     ULONG  references = 1u;
 };
 
-/* A queue that records what it was told to signal and wait for. */
 class ScriptedQueue final : public ID3D12CommandQueue {
 public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override
@@ -106,7 +98,6 @@ public:
     bool          refuse_wait = false;
 };
 
-/* A device that makes its fences out of a fixed set, and can refuse. */
 class ScriptedDevice final : public ID3D12Device {
 public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override
@@ -169,7 +160,7 @@ public:
     bool          refuse_fence = false;
 };
 
-}  // namespace
+}
 
 TEST(d3d12_queue_progress_executed, each_execute_signals_its_queue_s_fence_with_the_next_mark)
 { av::MockPlatform   platform;
@@ -185,28 +176,26 @@ TEST(d3d12_queue_progress_executed, each_execute_signals_its_queue_s_fence_with_
   CHECK(progress.executed(2u, &copy, &device));
   CHECK(copy.signalled == &device.fences[1]);
   CHECK(copy.signalled_value == 2u);
-  CHECK(progress.executed(1u, &direct, &device));   /* the queue's fence, made once */
+  CHECK(progress.executed(1u, &direct, &device));
   CHECK(direct.signalled == &device.fences[0]);
   CHECK(direct.signalled_value == 3u);
   CHECK_EQ(device.made, 2u);
   CHECK(progress.marked() == 3u);
   CHECK(progress.invariants_hold()); }
 
-/* Everything at or below reached() has finished: a queue behind its last
- * signal holds the answer at its completed value, one caught up holds nothing. */
 TEST(d3d12_queue_progress_reached, is_held_by_the_queue_furthest_behind_its_last_signal)
 { av::MockPlatform   platform;
   D3d12FenceWake     wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      direct, copy;
-  CHECK(progress.executed(1u, &direct, &device));   /* mark 1 on direct */
-  CHECK(progress.executed(2u, &copy, &device));     /* mark 2 on copy */
-  CHECK(progress.executed(1u, &direct, &device));   /* mark 3 on direct */
+  CHECK(progress.executed(1u, &direct, &device));
+  CHECK(progress.executed(2u, &copy, &device));
+  CHECK(progress.executed(1u, &direct, &device));
   CHECK(progress.reached() == 0u);
-  device.fences[1].completed = 2u;                  /* copy caught up */
+  device.fences[1].completed = 2u;
   CHECK(progress.reached() == 0u);
-  device.fences[0].completed = 1u;                  /* direct passed 1 of 3 */
+  device.fences[0].completed = 1u;
   CHECK(progress.reached() == 1u);
   device.fences[0].completed = 3u;
   CHECK(progress.reached() == 3u);
@@ -221,19 +210,19 @@ TEST(d3d12_queue_progress_after_siblings, waits_on_every_other_queue_still_behin
   CHECK(progress.executed(1u, &direct, &device));
   CHECK(progress.executed(2u, &copy, &device));
   CHECK(progress.executed(3u, &compute, &device));
-  device.fences[2].completed = 3u;   /* compute finished its mark */
+  device.fences[2].completed = 3u;
   CHECK(progress.after_siblings(1u, &direct));
-  CHECK_EQ(direct.waits, 1u);        /* copy alone: its own and a finished one are not waited on */
+  CHECK_EQ(direct.waits, 1u);
   CHECK(direct.waited[0] == &device.fences[1]);
   CHECK(direct.waited_value[0] == 2u);
   device.fences[1].completed = 2u;
   CHECK(progress.after_siblings(1u, &direct));
   CHECK_EQ(direct.waits, 1u);
-  CHECK(progress.after_siblings(9u, &direct));   /* a queue never executed waits on every one behind */
+  CHECK(progress.after_siblings(9u, &direct));
   CHECK_EQ(direct.waits, 2u);
   CHECK(direct.waited[1] == &device.fences[0]);
   device.fences[0].completed = 1u;
-  CHECK(progress.after_siblings(9u, &direct));   /* and none once all have finished */
+  CHECK(progress.after_siblings(9u, &direct));
   CHECK_EQ(direct.waits, 2u);
   device.fences[0].completed = 0u;
   CHECK(progress.after_siblings(2u, &copy));
@@ -251,7 +240,7 @@ TEST(d3d12_queue_progress_after_siblings, a_refused_wait_or_no_queue_is_refused)
   CHECK(!progress.after_siblings(2u, nullptr));
   copy.refuse_wait = true;
   CHECK(!progress.after_siblings(2u, &copy));
-  CHECK(progress.after_siblings(1u, &copy));   /* nothing to wait on: no wait to refuse */ }
+  CHECK(progress.after_siblings(1u, &copy));   }
 
 TEST(d3d12_queue_progress_executed, refuses_what_cannot_be_made_or_signalled)
 { av::MockPlatform   platform;
@@ -266,13 +255,12 @@ TEST(d3d12_queue_progress_executed, refuses_what_cannot_be_made_or_signalled)
   device.refuse_fence = false;
   queue.refuse_signal = true;
   CHECK(!progress.executed(1u, &queue, &device));
-  CHECK(progress.marked() == 0u);   /* a refused signal leaves no mark */
+  CHECK(progress.marked() == 0u);
   queue.refuse_signal = false;
   CHECK(progress.executed(1u, &queue, &device));
   CHECK(progress.marked() == 1u);
   CHECK(progress.invariants_hold()); }
 
-/* The table once held sixteen queues and refused the seventeenth's execute. */
 TEST(d3d12_queue_progress_executed, serves_well_more_queues_than_the_old_table_held)
 { av::MockPlatform   platform;
   D3d12FenceWake     wake;
@@ -291,8 +279,6 @@ TEST(d3d12_queue_progress_executed, serves_well_more_queues_than_the_old_table_h
   progress.clear();
   CHECK_EQ(platform.live_allocations(), 0u); }
 
-/* No room for another queue is a refused execute, with the fence made for it
- * given back rather than leaked. */
 TEST(d3d12_queue_progress_executed, gives_the_fence_back_when_the_queue_cannot_be_kept)
 { av::MockPlatform   platform;
   D3d12FenceWake     wake;
@@ -321,10 +307,9 @@ TEST(d3d12_queue_progress_forget, lets_one_queue_s_fence_go_and_clear_every_fenc
   progress.forget(7u);
   CHECK_EQ(device.fences[0].references, 0u);
   CHECK_EQ(device.fences[1].references, 1u);
-  /* The forgotten queue no longer holds reached() back. */
   device.fences[1].completed = 2u;
   CHECK(progress.reached() == 2u);
-  CHECK(progress.executed(1u, &direct, &device));   /* a new fence for it */
+  CHECK(progress.executed(1u, &direct, &device));
   CHECK(direct.signalled == &device.fences[2]);
   CHECK(direct.signalled_value == 3u);
   progress.clear();
@@ -336,20 +321,16 @@ TEST(d3d12_queue_progress_forget, lets_one_queue_s_fence_go_and_clear_every_fenc
   CHECK(copy.signalled_value == 4u);
   CHECK(progress.invariants_hold()); }
 
-/* A drain marks every queue that executed on its own fence, so it is over
- * only once each has caught up - an idle queue finishing first reaches
- * nothing for a busy one. A queue refusing its signal is reported and leaves
- * no mark, and the others are marked all the same. */
 TEST(d3d12_queue_progress_mark_all, signals_each_queue_s_own_fence_and_is_reached_only_once_all_are)
 { av::MockPlatform   platform;
   D3d12FenceWake     wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      direct, copy;
-  CHECK(progress.mark_all());                       /* nothing executed: nothing to mark */
+  CHECK(progress.mark_all());
   CHECK(progress.marked() == 0u);
-  CHECK(progress.executed(1u, &direct, &device));   /* mark 1 */
-  CHECK(progress.executed(2u, &copy, &device));     /* mark 2 */
+  CHECK(progress.executed(1u, &direct, &device));
+  CHECK(progress.executed(2u, &copy, &device));
   device.fences[0].completed = 1u;
   device.fences[1].completed = 2u;
   CHECK(progress.mark_all());
@@ -358,7 +339,7 @@ TEST(d3d12_queue_progress_mark_all, signals_each_queue_s_own_fence_and_is_reache
   CHECK(copy.signalled == &device.fences[1]);
   CHECK(copy.signalled_value == 4u);
   CHECK(progress.marked() == 4u);
-  device.fences[1].completed = 4u;                  /* the idle queue first */
+  device.fences[1].completed = 4u;
   CHECK(progress.reached() == 1u);
   device.fences[0].completed = 3u;
   CHECK(progress.reached() == progress.marked());
@@ -366,18 +347,15 @@ TEST(d3d12_queue_progress_mark_all, signals_each_queue_s_own_fence_and_is_reache
   CHECK(!progress.mark_all());
   CHECK(direct.signalled_value == 5u);
   CHECK(progress.marked() == 5u);
-  CHECK(progress.reached() == 3u);                  /* direct behind at 3; copy, unmarked, holds nothing */
+  CHECK(progress.reached() == 3u);
   progress.forget(1u);
   copy.refuse_signal = false;
   direct.signalled_value = 0u;
   CHECK(progress.mark_all());
-  CHECK(copy.signalled_value == 6u);                /* the forgotten queue is not marked */
+  CHECK(copy.signalled_value == 6u);
   CHECK(direct.signalled_value == 0u);
   CHECK(progress.invariants_hold()); }
 
-/* A drain that never finishes says which queue it waits for: each queue's
- * guest id, the mark it last signalled and what its fence completed, one line
- * a queue, and nothing for a session with no queue. */
 TEST(d3d12_queue_progress_log_stuck, names_each_queue_with_its_signalled_and_completed_marks)
 { av::MockPlatform   platform;
   D3d12FenceWake     wake;
@@ -388,8 +366,8 @@ TEST(d3d12_queue_progress_log_stuck, names_each_queue_with_its_signalled_and_com
   av::DriverLog      lines(log, "d3d12: ");
   progress.log_stuck(lines);
   CHECK_EQ(log.lines(), 0u);
-  CHECK(progress.executed(5u, &direct, &device));   /* mark 1 */
-  CHECK(progress.executed(9u, &copy, &device));     /* mark 2 */
+  CHECK(progress.executed(5u, &direct, &device));
+  CHECK(progress.executed(9u, &copy, &device));
   device.fences[0].completed = 1u;
   device.fences[1].completed = 0u;
   progress.log_stuck(lines);

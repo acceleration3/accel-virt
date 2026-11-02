@@ -1,7 +1,3 @@
-/* av-renderer itself, spawned as QEMU spawns it: its socket on descriptor
- * 3, greeted with the library to load, answering with Ready and with each
- * request's reply, living through what it refuses, and leaving with status 0
- * when QEMU closes its end. Every wait is bounded. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "proto/context/device_uuid.hpp"
@@ -41,7 +37,6 @@ constexpr int           patience_ms = 20000;
 constexpr std::uint8_t  uuid[av::HelloMessage::uuid_bytes] = {0x42u, 7u};
 constexpr std::size_t   capacity = RendererMessageHeader::encoded_size + 8192u;
 
-/* One av-renderer, its socket's QEMU end, and its stderr. */
 class Renderer {
 public:
     Renderer() : pid_(-1), socket_(-1), log_(-1), log_text_{}
@@ -49,7 +44,6 @@ public:
         int pair[2] = {-1, -1};
         int logs[2] = {-1, -1};
         if (::socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, pair) != 0 || ::pipe2(logs, O_CLOEXEC) != 0) return;
-        /* Above 3, so the dup2 to 3 is a real one and clears close-on-exec. */
         const int child = ::fcntl(pair[1], F_DUPFD_CLOEXEC, 10);
         ::close(pair[1]);
         posix_spawn_file_actions_t actions;
@@ -104,8 +98,6 @@ public:
         }
         return ::sendmsg(socket_, &message, MSG_NOSIGNAL) == static_cast<ssize_t>(length);
     }
-    /* The next datagram within `milliseconds`: its header, body and length;
-     * false when none came. */
     bool receive(RendererMessageHeader &header, std::uint8_t *body, std::uint32_t &length, int milliseconds)
     {
         pollfd watched = {socket_, POLLIN, 0};
@@ -128,8 +120,6 @@ public:
             return Status::malformed;
         return reply.status();
     }
-    /* QEMU goes: the socket closes, and the renderer's exit status within
-     * the patience, or -1. */
     int leave()
     {
         ::close(socket_);
@@ -145,7 +135,6 @@ public:
         }
         return -1;
     }
-    /* What it wrote to stderr, once it has left. */
     const char *log()
     {
         std::size_t used = 0u;
@@ -179,11 +168,8 @@ std::uint32_t hello_body(std::uint8_t *body, std::size_t room, const char *libra
     return static_cast<std::uint32_t>(hello.encoded_length());
 }
 
-}  // namespace
+}
 
-/* Greeted with the echo executor, the renderer loads it and answers Ready
- * with what it offers; it serves each request, lives through what it
- * refuses, and leaves cleanly when QEMU does. */
 TEST(renderer_process, greets_serves_survives_refusals_and_leaves_when_qemu_does)
 { Renderer renderer;
   CHECK(renderer.started());
@@ -200,7 +186,6 @@ TEST(renderer_process, greets_serves_survives_refusals_and_leaves_when_qemu_does
   CHECK_EQ(ready.version(), 1u);
   CHECK((ready.sub_apis() & AV_EXECUTOR_SUB_API_VULKAN) != 0u);
 
-  /* Guest RAM crosses as a memfd and is answered nothing. */
   const int ram = ::memfd_create("guest-ram", MFD_CLOEXEC);
   CHECK_EQ(::ftruncate(ram, 0x10000), 0);
   std::uint8_t region[av::RegionMessage::encoded_size] = {};
@@ -213,13 +198,11 @@ TEST(renderer_process, greets_serves_survives_refusals_and_leaves_when_qemu_does
   CHECK(renderer.send(Kind::create_context, 3u, context, sizeof context));
   CHECK_STATUS(renderer.reply(3u), Status::ok);
 
-  /* Garbage is refused and answered nothing; the renderer serves on. */
   const std::uint8_t garbage[7] = {0xFFu, 1u, 2u, 3u, 4u, 5u, 6u};
   CHECK(renderer.raw(garbage, sizeof garbage, nullptr, 0u));
   CHECK(renderer.send(Kind::create_context, 4u, context, sizeof context));
   CHECK_STATUS(renderer.reply(4u), Status::conflict);
 
-  /* An image nothing published is answered as nothing found. */
   std::uint8_t key[av::ExportImageMessage::encoded_size] = {};
   CHECK_STATUS(av::ExportImageMessage(9u).encode(key, sizeof key), Status::ok);
   CHECK(renderer.send(Kind::export_image, 5u, key, sizeof key));
@@ -235,8 +218,6 @@ TEST(renderer_process, greets_serves_survives_refusals_and_leaves_when_qemu_does
   CHECK_EQ(renderer.leave(), 0);
   CHECK(std::strstr(renderer.log(), "av-renderer: a message from QEMU was refused") != nullptr); }
 
-/* A library that does not load is the hello's refusal: nothing is answered,
- * and a hello naming one that does is answered after it. */
 TEST(renderer_process, a_library_that_does_not_load_is_answered_nothing)
 { Renderer renderer;
   CHECK(renderer.started());
@@ -252,7 +233,6 @@ TEST(renderer_process, a_library_that_does_not_load_is_answered_nothing)
   CHECK_EQ(header.sequence(), 2u);
   CHECK_EQ(renderer.leave(), 0); }
 
-/* A renderer QEMU never speaks to leaves as soon as QEMU does. */
 TEST(renderer_process, leaves_at_once_when_qemu_closes_first)
 { Renderer renderer;
   CHECK(renderer.started());

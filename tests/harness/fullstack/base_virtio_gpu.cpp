@@ -10,16 +10,15 @@ namespace {
 
 enum : std::uint32_t {
     get_display_info = 0x0100u,
-    first_2d_request = 0x0101u,   /* RESOURCE_CREATE_2D */
-    last_2d_request = 0x0107u,    /* RESOURCE_DETACH_BACKING */
+    first_2d_request = 0x0101u,
+    last_2d_request = 0x0107u,
 };
 
-/* struct virtio_gpu_display_one: the rectangle, then enabled. */
 constexpr std::uint32_t width_offset = 8u;
 constexpr std::uint32_t height_offset = 12u;
 constexpr std::uint32_t enabled_offset = 16u;
 
-}  // namespace
+}
 
 BaseVirtioGpu::BaseVirtioGpu() : display_info_{}, answered_(0u)
 {
@@ -70,4 +69,4 @@ std::uint32_t BaseVirtioGpu::answer(const std::uint8_t *request, std::uint32_t l
 
 std::uint32_t BaseVirtioGpu::answered() const { return answered_; }
 
-}  // namespace av
+}

@@ -1,12 +1,3 @@
-"""Generated code opens one trace scope per API call (docs/trace.md): the ICD
-entry the application calls (`vkDestroyInstance`), the client function that
-sends the command (`av_vkDestroyInstance`) and the server's handling of one
-decoded command (`server:vkDestroyInstance`). The serializers those call run
-once per struct member and carry no scope.
-
-The emitters are driven over small registries where that is practical; the
-committed OpenGL tree - which tools/check_generated.py holds to what its
-emitter writes - is read for the API whose registry is too large to fake."""
 import pathlib
 import re
 import shutil
@@ -28,15 +19,12 @@ GENERATED = ROOT / "src" / "proto" / "generated"
 
 
 def body_start(source, at):
-    """The first line of the body whose definition starts at `at`: the line
-    after the first line ending in `{` from there, since a signature may wrap."""
     brace = re.compile(r"\{\n([^\n]*)\n").search(source, at)
     assert brace is not None, source[at:at + 80]
     return brace.group(1).strip()
 
 
 def first_line_after(source, opening):
-    """The body's first line of the first definition matching `opening`."""
     match = re.search(opening, source)
     assert match is not None, opening
     return body_start(source, match.start())
@@ -123,9 +111,6 @@ class OpenClEmittersOpenOneScopePerCall(unittest.TestCase):
 
 
 class CommittedTreesMarkEveryCall(unittest.TestCase):
-    """Every per-call function in the committed trees opens its own scope, and
-    nothing else in them does."""
-
     def scopes_of(self, path, definition, mark):
         source = (GENERATED / path).read_text()
         found = 0

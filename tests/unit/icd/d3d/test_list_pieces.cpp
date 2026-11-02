@@ -1,6 +1,3 @@
-/* A command's list in pieces (ListPieces): at most the limit each, the last
- * what is left - and an empty list one command of none, because a clear
- * naming no rectangle clears the whole view. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/list_pieces.hpp"
 

@@ -1,6 +1,3 @@
-/* A callback of dxgkrnl's VidPn, topology and mode set interfaces that
- * FakeVidPn can be told to refuse. The mode info calls apply to source,
- * target and monitor mode sets alike. */
 #ifndef AV_VIDPN_CALL_HPP
 #define AV_VIDPN_CALL_HPP
 
@@ -25,6 +22,6 @@ enum class VidPnCall : unsigned {
     count
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VIDPN_CALL_HPP
+#endif

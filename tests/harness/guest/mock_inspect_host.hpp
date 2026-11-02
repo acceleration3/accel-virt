@@ -1,7 +1,3 @@
-/* The Windows avinspect.exe reads, as a test scripts it: processes with their
- * paths, named sections holding bytes, state services that answer (or not),
- * and every file written kept for the test to read back. Each object name
- * asked for is journalled, so a test sees Global tried before Local. */
 #ifndef AV_MOCK_INSPECT_HOST_HPP
 #define AV_MOCK_INSPECT_HOST_HPP
 
@@ -30,25 +26,18 @@ public:
                              const std::uint8_t *body, std::size_t body_bytes) override;
     std::uint64_t clock() const override;
 
-    /* A process; with no path its executable cannot be read. */
     void add_process(std::uint32_t pid, const char *path);
-    /* The next enumeration claims this many processes, whatever it wrote. */
     void claim_processes(std::uint32_t count);
-    /* A section `name` holding `length` bytes the test keeps alive. */
     void add_section(const char *name, const std::uint8_t *bytes, std::size_t length);
-    /* A state service whose dump event is `dump`, answering `answer`. */
     void add_service(const char *dump, Status answer);
     void set_clock(std::uint64_t now);
-    /* The next file write answers `status` and keeps nothing. */
     void fail_next_write(Status status);
 
     const char         *written_path() const;
     const std::uint8_t *written() const;
     std::size_t         written_size() const;
     std::uint32_t       writes() const;
-    /* Every object name asked for, one per line. */
     const char         *journal() const;
-    /* The milliseconds the last state request would wait. */
     std::uint32_t       waited() const;
 
 private:
@@ -86,6 +75,6 @@ private:
     std::uint32_t  waited_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MOCK_INSPECT_HOST_HPP
+#endif

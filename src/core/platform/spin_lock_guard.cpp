@@ -16,4 +16,4 @@ SpinLockGuard::~SpinLockGuard()
     lock_.release(previous_);
 }
 
-}  // namespace av
+}

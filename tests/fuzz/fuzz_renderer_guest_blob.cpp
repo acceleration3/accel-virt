@@ -1,8 +1,3 @@
-/* A guest blob QEMU mirrors into av-renderer, fed attacker-chosen bytes: the
- * first byte is how many descriptors arrived beside it and the rest is its
- * body. What decodes must re-encode to exactly the bytes read, and every
- * extent must end inside its region and the extents cover the blob exactly -
- * the renderer reads guest memory through them. */
 #include "core/support/status.hpp"
 #include "proto/renderer/guest_blob_message.hpp"
 #include "proto/renderer/renderer_extent.hpp"

@@ -14,7 +14,7 @@ bool view_kind(D3dObjectKind kind)
            kind == D3dObjectKind::depth_stencil_view || kind == D3dObjectKind::unordered_access_view;
 }
 
-}  // namespace
+}
 
 D3dObjectTable::D3dObjectTable(BlockSource &blocks) : objects_(blocks), views_(blocks, Pool::paged)
 {
@@ -27,8 +27,6 @@ D3dObjectTable::~D3dObjectTable()
     AV_SCOPE("D3dObjectTable::~D3dObjectTable");
 }
 
-/* A view's place in views_ is made first, so the remember that follows is the
- * last thing that can fail and nothing has to be undone. */
 Status D3dObjectTable::insert(uint32_t id, D3dObjectKind kind, IUnknown *object)
 {
     AV_SCOPE("D3dObjectTable::insert");
@@ -167,8 +165,6 @@ uint32_t D3dObjectTable::count_kinds(D3dObjectKind first, D3dObjectKind last) co
     return objects_.count_kinds(first, last);
 }
 
-/* COM counts what holds an object, so the order they go in is not this
- * table's to choose: a view holds its resource. */
 void D3dObjectTable::release_all()
 {
     AV_SCOPE("D3dObjectTable::release_all");
@@ -183,8 +179,6 @@ uint32_t D3dObjectTable::count() const
     return objects_.count();
 }
 
-/* Every entry holds an object of a kind; every view is listed once, where
- * its entry says, and nothing else is. */
 bool D3dObjectTable::invariants_hold() const
 {
     AV_SCOPE("D3dObjectTable::invariants_hold");
@@ -202,4 +196,4 @@ bool D3dObjectTable::invariants_hold() const
     return listed == views_.size();
 }
 
-}  // namespace av
+}

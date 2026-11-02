@@ -1,7 +1,3 @@
-/* The order batches are published in once their process releases them by
- * packet: in ring order whatever order the packets come in, a late packet
- * holding the ones after it, a packet seen twice done once, and an order that
- * cannot be whole refused. */
 #include "harness/framework/test_registry.hpp"
 #include "miniport/av_context/release_queue.hpp"
 #include "proto/submission/submission_descriptor.hpp"
@@ -16,7 +12,7 @@ namespace {
 SubmissionDescriptor batch(std::uint64_t fence, std::uint64_t begin, std::uint64_t end)
 { return SubmissionDescriptor(fence, begin, end); }
 
-}  // namespace
+}
 
 TEST(release_queue, batches_in_order_are_released_as_they_arrive)
 { ReleaseQueue queue;

@@ -62,4 +62,4 @@ bool AdapterTable::invariants_hold() const
     return adapters_.all_of([](const UmdAdapter &adapter) { return adapter.invariants_hold(); });
 }
 
-}  // namespace av::d3d
+}

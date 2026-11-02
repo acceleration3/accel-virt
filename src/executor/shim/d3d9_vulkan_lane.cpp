@@ -78,8 +78,6 @@ BorrowedQueue &D3d9VulkanLane::queue()
     return queue_;
 }
 
-/* A transition to the layout the image is already in makes DXVK prepare the
- * image, which carries out a clear it deferred. */
 bool D3d9VulkanLane::surface_image(IDirect3DSurface9 *surface, VkImage &image, VkImageLayout &layout)
 {
     AV_SCOPE("D3d9VulkanLane::surface_image");
@@ -117,4 +115,4 @@ bool D3d9VulkanLane::surface_image(IDirect3DSurface9 *surface, VkImage &image, V
     return true;
 }
 
-}  // namespace av
+}

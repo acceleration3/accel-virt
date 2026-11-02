@@ -6,12 +6,9 @@
 namespace av {
 
 namespace {
-
-/* The least a block is: a piece is most of a guest's room, so a smaller
- * block would only be grown at once. */
 constexpr size_t least_block = size_t{1} << 20;
 
-}  // namespace
+}
 
 GatheredCommand::GatheredCommand(Host &host) : host_(host), block_(nullptr), capacity_(0u), used_(0u)
 {
@@ -48,8 +45,6 @@ Status GatheredCommand::close(const uint8_t *body, size_t length, const uint8_t 
     return Status::ok;
 }
 
-/* Doubled as it grows, so a command of n bytes is copied a logarithmic number
- * of times on its way in. */
 Status GatheredCommand::append(const uint8_t *body, size_t length)
 {
     AV_SCOPE("GatheredCommand::append");
@@ -91,4 +86,4 @@ bool GatheredCommand::invariants_hold() const
     return used_ <= capacity_ && (block_ == nullptr) == (capacity_ == 0u);
 }
 
-}  // namespace av
+}

@@ -1,7 +1,3 @@
-/* The probe's Vulkan device (feature 045, T037): an instance, the physical
- * device whose LUID is the adapter's, and a device with one queue of the first
- * family that both draws and computes, made through VulkanEntry and destroyed,
- * device first, when this goes. */
 #ifndef AV_PROBE_DEVICE_HPP
 #define AV_PROBE_DEVICE_HPP
 
@@ -16,7 +12,6 @@ struct ProbeDeviceProbe;
 
 class ProbeDevice {
 public:
-    /* More than a guest has adapters; a longer list is looked at this far. */
     static constexpr uint32_t max_physical_devices = 16u;
     static constexpr uint32_t max_queue_families = 16u;
 
@@ -25,31 +20,17 @@ public:
     ProbeDevice(const ProbeDevice &) = delete;
     ProbeDevice &operator=(const ProbeDevice &) = delete;
 
-    /* The window-system extensions an instance and a device are made with:
-     * what the present steps call is reachable only when they are enabled. */
     static const char *const  instance_extensions[];
     static const char *const  device_extensions[];
     static constexpr uint32_t instance_extension_count = 2u;
     static constexpr uint32_t device_extension_count = 1u;
-    /* The window-system one and whatever a step adds. */
     static constexpr uint32_t max_device_extensions = 8u;
 
-    /* At API version 1.3, with the window-system extensions enabled. */
     VkResult make_instance();
-    /* The physical devices listed, as far as there is room: VK_INCOMPLETE is
-     * a list, not a failure. */
     VkResult list_physical_devices();
-    /* Chooses the listed device whose valid LUID is `luid`: whether one is. */
     bool     choose(uint64_t luid);
-    /* Chooses the chosen device's first family that draws and computes:
-     * whether one does. */
     bool     choose_family();
-    /* A device on the chosen one with one queue of the chosen family, and
-     * `extra` extension names beside the window-system one. A step that needs
-     * an extension the driver reports only sometimes asks for it here rather
-     * than widening what every probe device is made with (feature 053). */
     VkResult make_device(const char *const *extra = nullptr, uint32_t extra_count = 0u);
-    /* The lowest type in `allowed` with every flag in `wanted`: whether one is. */
     bool     memory_type(uint32_t allowed, VkMemoryPropertyFlags wanted, uint32_t &type) const;
 
     VulkanEntry     &vulkan() const;
@@ -60,8 +41,6 @@ public:
     uint32_t         family() const;
     uint32_t         listed() const;
 
-    /* A device only on a chosen physical device, which only an instance lists;
-     * a queue only with a device; a family among the types' bounds. */
     bool invariants_hold() const;
 
 private:
@@ -78,6 +57,6 @@ private:
     friend struct ProbeDeviceProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_PROBE_DEVICE_HPP
+#endif

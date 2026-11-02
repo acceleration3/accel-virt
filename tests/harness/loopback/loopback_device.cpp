@@ -20,7 +20,7 @@ std::uint64_t now_ms()
     return static_cast<std::uint64_t>(time.tv_sec) * 1000u + static_cast<std::uint64_t>(time.tv_nsec) / 1000000u;
 }
 
-}  // namespace
+}
 
 LoopbackDevice::LoopbackDevice(MockPlatform &guest, const std::uint8_t *gpu, const char *record)
     : guest_(guest), host_(), executor_(AV_EXECUTOR_SUB_API_VULKAN), device_(host_), doorbells_(host_)
@@ -36,10 +36,6 @@ LoopbackDevice::LoopbackDevice(MockPlatform &guest, const AvExecutorOps &executo
 
 void LoopbackDevice::realize(const AvExecutorOps &executor, const std::uint8_t *gpu, const char *record)
 {
-    /* The device's workers watch the ring for a while before they sleep, by
-     * the host's clock: one that stood still would have them watch forever,
-     * and never see a stop asked of them. A microsecond a read ends the watch
-     * after a hundred looks. */
     constexpr std::uint64_t nanoseconds_per_read = 1000u;
     host_.advance_clock_per_read(nanoseconds_per_read);
     host_.add_gpu(gpu);
@@ -93,4 +89,4 @@ bool LoopbackDevice::holding(std::uint32_t count)
     return executor_.waiting() >= count;
 }
 
-}  // namespace av
+}

@@ -1,10 +1,3 @@
-/* What the driver keeps in the blocks the Direct3D runtime allocates for each
- * object it creates - the runtime owns that memory (pfnCalcPrivate*Size says
- * how much), so these are plain records written by assignment, never objects
- * constructed there.
- *
- * Every object is named on the wire by the 32-bit id in its record's stamp,
- * which the device hands out; the host never sees a runtime handle. */
 #ifndef AV_UM_D3D11_RECORDS_HPP
 #define AV_UM_D3D11_RECORDS_HPP
 
@@ -19,128 +12,80 @@
 
 namespace av {
 class HostAllocation;
-}  // namespace av
+}
 
 namespace av::d3d11 {
-
-/* One resource. The shadow is guest memory the CPU maps: every subresource
- * packed one after the other, rows of row_bytes, for a resource the CPU
- * writes or reads (dynamic and staging usage). The allocation is the kernel's,
- * made for a resource the kernel must see - one that is presented, scanned
- * out or shared. */
 struct ResourceRecord {
-    static constexpr uint32_t tag = 0x52524B56u; /* "VKRR" */
+    static constexpr uint32_t tag = 0x52524B56u;
 
     d3d::RecordStamp stamp;
-    uint32_t dimension;  /* D3D10DDIRESOURCE_TYPE */
-    uint32_t usage;      /* D3D10_DDI_RESOURCE_USAGE */
-    uint32_t bind;       /* D3D10_DDI_RESOURCE_BIND_FLAG */
-    uint32_t cpu_access; /* D3D10_DDI_CPU_ACCESS */
-    uint32_t misc;       /* D3D10_DDI_RESOURCE_MISC_FLAG */
+    uint32_t dimension;
+    uint32_t usage;
+    uint32_t bind;
+    uint32_t cpu_access;
+    uint32_t misc;
     uint32_t format;
     uint32_t width;
     uint32_t height;
     uint32_t depth;
     uint32_t mips;
-    uint32_t layers; /* array slices; six a cube */
+    uint32_t layers;
     uint32_t samples;
-    d3d::SwapChainBuffer::Model present_model; /* how a presented buffer's frames reach the screen */
+    d3d::SwapChainBuffer::Model present_model;
     uint32_t vidpn_source;
-    uint32_t allocation;   /* D3DKMT_HANDLE, 0 for none */
+    uint32_t allocation;
     uint32_t allocation_pitch;
-    /* This device made the allocation (D3d11Device::allocate), so destroying
-     * the resource gives it back; an opened one is its maker's. */
     uint32_t allocation_owned;
-    /* This device has asked the kernel to keep the allocation resident for a
-     * present that names it (D3d11Device::keep_present_resident). */
     uint32_t resident;
-    /* Where this process's GPU virtual space maps an opened window surface a
-     * present went into, for `gpu_pages` pages (D3d11Device::address_destination);
-     * 0 for any other resource, and for a surface not presented into yet. */
     uint64_t gpu_address;
     uint64_t gpu_pages;
-    uint32_t refreshed; /* the frame a guest surface was last refreshed in (refresh_bound_guest_surfaces) */
-    uint32_t shadow_watched; /* the shadow is WatchedShadows' write-watched region */
-    /* A deferred context's copy whose shadow is its own (D3d11Device::own_shadow),
-     * given back when the runtime destroys the copy. */
+    uint32_t refreshed;
+    uint32_t shadow_watched;
     uint32_t shadow_local;
     uint64_t shared_key;
-    /* The presents of this surface so far: the point the last one published
-     * on it (docs/shared-surfaces.md). Moves with shared_key. */
     d3d::PresentCount presents;
-    /* A guest surface's rows scanned into the shadow but not yet sent: the
-     * refresh read the pages while a present was queued into them, so what it
-     * read may be half a frame (docs/stale-blt-frames.md). The next refresh
-     * sends them with whatever it finds then. */
     d3d::RowBand pending_rows;
-    /* What GDI was last shown of this texture (D3d11Device::show_to_gdi), to see
-     * what it drew; held from the first DC asked of it to its destruction. */
     uint8_t *gdi_rows;
-    /* The calls left to look for GDI's writes in; 0 when none are expected. */
     uint32_t gdi_watch;
-    /* The thread that asked for the DC (D3d11Device::show_to_gdi), whose calls
-     * the watch counts. */
     uint32_t gdi_thread;
-    /* When the watch began, in the device's PerformanceClock ticks: another
-     * thread's call ends a watch that long outlived its own thread's. */
     uint64_t gdi_watch_began;
-    /* The runtime resolves this texture for sharing, not for GDI: its
-     * ResolveSharedResource was seen followed at once by the runtime's own
-     * Flush (D3d11Device::learn_from_flush). GDI is never shown it. */
     uint32_t resolved_for_sharing;
-    void    *runtime_resource; /* D3D10DDI_HRTRESOURCE.handle */
+    void    *runtime_resource;
     uint8_t *shadow;
     size_t   shadow_bytes;
-    /* A buffer whose shadow is a slice of the session's slice store, which the host
-     * GPU reads in place (docs/mapped-buffers-plan.md): where, and how much.
-     * on_slice is whether the host's buffer is bound to it. A deferred
-     * context's copy of the record leaves the slice at its first map, for a
-     * shadow of its own (shadow_local). */
     d3d::BufferSlices::Slice slice;
     uint32_t                 on_slice;
-    /* A cross-adapter texture's pages, lent to the host (AllocationLender), which
-     * the host made the texture over: released when the resource is destroyed. */
     HostAllocation          *lent;
 };
 
-/* A view of any kind, a shader, an input layout, a state object, a sampler. */
 struct ObjectRecord {
-    static constexpr uint32_t tag = 0x4F524B56u; /* "VKRO" */
+    static constexpr uint32_t tag = 0x4F524B56u;
 
     d3d::RecordStamp stamp;
-    uint32_t kind; /* the shader stage, for a shader */
-    uint32_t resource; /* a view's resource id */
+    uint32_t kind;
+    uint32_t resource;
 };
 
-/* A query: its type and how many bytes its answer is. */
 struct QueryRecord {
-    static constexpr uint32_t tag = 0x00515641u; /* "AVQ" */
+    static constexpr uint32_t tag = 0x00515641u;
 
     d3d::RecordStamp stamp;
     uint32_t type;
     uint32_t data_bytes;
-    /* The session's count of the query's last end; 0 before any. */
     uint64_t last_end;
-    /* When a GetData first found the host's slot behind since the last end, in
-     * performance counter ticks; 0 before any. */
     uint64_t first_miss;
-    /* Nonzero once an application has waited on the query: its end is sent at
-     * once from then on, so the host starts on it while the frame is still
-     * being recorded, as DXVK does for a query it sees stalled on. */
     uint32_t waited_on;
     uint32_t reserved;
 };
 
-/* A command list's commands, recorded by a deferred context, in memory the
- * device allocated. */
 struct CommandListRecord {
-    static constexpr uint32_t tag = 0x004C5641u; /* "AVL" */
+    static constexpr uint32_t tag = 0x004C5641u;
 
     d3d::RecordStamp stamp;
     uint8_t *commands;
     size_t   length;
 };
 
-}  // namespace av::d3d11
+}
 
-#endif  // AV_UM_D3D11_RECORDS_HPP
+#endif

@@ -1,5 +1,3 @@
-/* One session's hold on a share: what it imported, by the handle its API
- * names it by. */
 #include "executor/sharing/share_holder.hpp"
 #include "harness/executor/mock_session_backend.hpp"
 #include "harness/framework/test_registry.hpp"

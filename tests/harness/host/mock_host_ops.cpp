@@ -13,7 +13,7 @@ MockHost &host_of(void *opaque) { return *static_cast<MockHost *>(opaque); }
 
 void *created(Status status, void *handle) { return status == Status::ok ? handle : nullptr; }
 
-}  // namespace
+}
 
 MockHostOps::MockHostOps(MockHost &host) : table_{}
 {
@@ -139,8 +139,6 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         return host_of(opaque).display_takes_dmabuf(head) ? 1 : 0;
     };
     table_.show_scanout = [](void *opaque, std::uint32_t head, const void *blob, const AvScanoutFrame *frame) {
-        /* The modifier and the reserved word are the table's promise, not the
-         * mock's business; a plane that broke either is a caught ABI change. */
         if (frame == nullptr || frame->reserved != 0u || frame->modifier != 0u) return 1;
         const MockHost::Plane plane = {frame->width,          frame->height,  frame->x,      frame->y,
                                        frame->backing_width,  frame->backing_height,
@@ -173,7 +171,6 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
                               std::uint32_t count) {
         return host_of(opaque).send_renderer(bytes, length, descriptors, count) == Status::ok ? 0 : 1;
     };
-    /* 0 received, 1 nothing in time, 2 gone: the glue's three answers. */
     table_.receive_renderer = [](void *opaque, std::uint8_t *buffer, std::size_t capacity, std::size_t *length,
                                  int *descriptors, std::uint32_t capacity_descriptors, std::uint32_t *count,
                                  std::uint32_t timeout_ms) {
@@ -201,4 +198,4 @@ const AvHostOps &MockHostOps::table() const
     return table_;
 }
 
-}  // namespace av
+}

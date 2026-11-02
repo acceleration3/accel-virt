@@ -1,8 +1,3 @@
-/* DXGKARG_PRESENT, as DxgkDdiPresent receives and answers it. A DDI record:
- * the allocation union is a DXGK_ALLOCATIONLIST array when a patch list comes
- * with it, and a DXGK_PRESENTALLOCATIONINFO array for a context with GPU
- * virtual addressing, which gets none; Flags is the DXGK_PRESENTFLAGS Value;
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_PRESENT_RECORD_HPP
 #define AV_DXGKARG_PRESENT_RECORD_HPP
 
@@ -44,6 +39,6 @@ struct DxgkargPresentRecord {
     void                          *pPrivateDriverData;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_PRESENT_RECORD_HPP
+#endif

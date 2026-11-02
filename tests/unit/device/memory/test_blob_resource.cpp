@@ -1,6 +1,3 @@
-/* One guest blob: guest pages the device holds mapped, pinned while a context
- * or a head uses them, and seen through one host range once a display surface
- * is drawn from it. Nothing here is ever host GPU memory. */
 #include "core/support/status.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/blob_resource.hpp"
@@ -26,8 +23,6 @@ namespace {
 constexpr std::uint64_t ram = 0x100000u;
 constexpr std::size_t   entries_at = 24u;
 
-/* A request whose memory entries, right after the header, name `pages` pages
- * of RAM a page apart. */
 GpuRequestBuilder entries(std::uint32_t pages)
 {
     GpuRequestBuilder request(0u);
@@ -35,7 +30,7 @@ GpuRequestBuilder entries(std::uint32_t pages)
     return request;
 }
 
-}  // namespace
+}
 
 TEST(blob_resource_back_with_guest, holds_the_pages_that_cover_its_size)
 { MockHost host;
@@ -47,7 +42,7 @@ TEST(blob_resource_back_with_guest, holds_the_pages_that_cover_its_size)
     CHECK_EQ(blob.id(), 7u);
     CHECK_EQ(blob.size(), 0u);
     CHECK_STATUS(blob.back_with_guest(request, entries_at, 2u, 0x1800u), Status::ok);
-    CHECK_EQ(blob.size(), 0x2000u);   /* what the entries hold, not what was asked */
+    CHECK_EQ(blob.size(), 0x2000u);
     CHECK_EQ(host.live_guest_mappings(), 2u); }
   CHECK_EQ(host.live_guest_mappings(), 0u); }
 
@@ -73,7 +68,7 @@ TEST(blob_resource_back_with_guest, pages_short_of_its_size_or_a_mapping_failure
   CHECK_EQ(short_blob.size(), 0u);
   CHECK_EQ(short_blob.window().length(), 0u);
   BlobResource unmappable(host, 2u);
-  CHECK(unmappable.back_with_guest(request, entries_at, 2u, 0x1000u) != Status::ok);   /* entries missing */
+  CHECK(unmappable.back_with_guest(request, entries_at, 2u, 0x1000u) != Status::ok);
   CHECK_EQ(host.live_guest_mappings(), 0u);
   CHECK_EQ(unmappable.size(), 0u); }
 
@@ -103,8 +98,6 @@ TEST(blob_resource_pin, counts_pins_until_the_last_is_let_go)
   blob.unpin();
   CHECK(!blob.pinned()); }
 
-/* A pin let go that was never taken must not wrap the count: a blob that read
- * as pinned forever could never be released. */
 TEST(blob_resource_pin, letting_go_of_a_pin_never_taken_leaves_it_unpinned)
 { MockHost host;
   BlobResource blob(host, 1u);
@@ -115,8 +108,6 @@ TEST(blob_resource_pin, letting_go_of_a_pin_never_taken_leaves_it_unpinned)
   blob.unpin();
   CHECK(!blob.pinned()); }
 
-/* The pages at 0x100000 and 0x102000 are not adjacent in guest RAM: the view
- * is one host range over both, in order, and the same range every time. */
 TEST(blob_resource_view, is_one_range_over_every_page_made_once)
 { MockHost host;
   host.add_guest_ram(ram, 0x10000u);
@@ -130,11 +121,11 @@ TEST(blob_resource_view, is_one_range_over_every_page_made_once)
     const std::uint8_t *base = nullptr;
     CHECK_STATUS(blob.view(base), Status::ok);
     CHECK(base != nullptr);
-    CHECK(base != host.guest_ram(ram));   /* the alias, not the guest's own mapping */
+    CHECK(base != host.guest_ram(ram));
     CHECK_EQ(base[0x10], 0x11u);
     CHECK_EQ(base[0x1010], 0x22u);
     host.guest_ram(ram + 0x2010u)[0] = 0x33u;
-    CHECK_EQ(base[0x1010], 0x33u);   /* the same pages, not a copy */
+    CHECK_EQ(base[0x1010], 0x33u);
     const std::uint8_t *again = nullptr;
     CHECK_STATUS(blob.view(again), Status::ok);
     CHECK(again == base);
@@ -191,5 +182,5 @@ TEST(blob_resource, is_main_loop_only)
   host.join_thread(thread);
   CHECK(host.claim(HostViolation::main_loop_required));
   CHECK(host.claim(HostViolation::main_loop_required));
-  while (host.claim(HostViolation::main_loop_required)) {}   /* what the mapping itself asserts */
+  while (host.claim(HostViolation::main_loop_required)) {}
   CHECK(call.backed != Status::ok); }

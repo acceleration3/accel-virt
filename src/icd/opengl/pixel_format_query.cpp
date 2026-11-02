@@ -14,10 +14,9 @@ constexpr int32_t channel_bit_count = 8;
 constexpr int32_t red_offset = 16;
 constexpr int32_t green_offset = 8;
 constexpr int32_t alpha_offset = 24;
-/* Past this a float cannot name an attribute: they are 32-bit. */
 constexpr float   name_limit = 4294967296.0f;
 
-}  // namespace
+}
 
 PixelFormatQuery::PixelFormatQuery(const PixelFormatTable &table) : table_(table)
 {
@@ -60,7 +59,6 @@ Status PixelFormatQuery::choose(const int32_t *ints, const float *floats, uint32
     for (int32_t format = 1; table_.contains(format); format++) {
         double surplus = 0.0;
         if (!admits(table_.format(format), criteria, surplus)) continue;
-        /* An insertion that keeps equal surpluses in table order. */
         uint32_t at = matched;
         for (; at != 0u && surpluses[at - 1u] > surplus; at--) {
             chosen[at] = chosen[at - 1u];
@@ -103,7 +101,6 @@ PixelFormatQuery::Match PixelFormatQuery::match_of(uint32_t name) const
     return Match::unknown;
 }
 
-/* Only for a name match_of knows; everything the formats do not have is 0. */
 int32_t PixelFormatQuery::value_of(const PixelFormat &row, uint32_t name) const
 {
     AV_SCOPE("PixelFormatQuery::value_of");
@@ -131,12 +128,10 @@ Status PixelFormatQuery::read_ints(const int32_t *list, PixelFormatCriteria &cri
 {
     AV_SCOPE("PixelFormatQuery::read_ints");
     if (list == nullptr) return Status::ok;
-    /* The name after max_pairs pairs is read, and must end the list. */
     for (uint32_t pair = 0u;; pair++) {
         const uint32_t name = static_cast<uint32_t>(list[2u * pair]);
         if (name == 0u) return Status::ok;
         if (pair == max_pairs || match_of(name) == Match::unknown) return Status::invalid_parameter;
-        /* Two full lists fit the criteria, so this cannot be refused. */
         static_cast<void>(criteria.add(name, static_cast<double>(list[2u * pair + 1u])));
     }
 }
@@ -171,4 +166,4 @@ bool PixelFormatQuery::admits(const PixelFormat &row, const PixelFormatCriteria 
     return true;
 }
 
-}  // namespace av::glicd
+}

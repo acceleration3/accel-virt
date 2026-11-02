@@ -9,16 +9,14 @@ namespace {
 
 enum : uint8_t { type_interrupt = 2u, type_memory = 3u, type_memory_large = 7u };
 
-constexpr uint16_t interrupt_message = 0x0002u;  /* CM_RESOURCE_INTERRUPT_MESSAGE */
+constexpr uint16_t interrupt_message = 0x0002u;
 constexpr uint16_t memory_large_mask = 0x0E00u;
 constexpr uint16_t memory_large_40   = 0x0200u;
 constexpr uint16_t memory_large_48   = 0x0400u;
 constexpr uint16_t memory_large_64   = 0x0800u;
 
-}  // namespace
+}
 
-/* Little-endian reads that stop, and stay stopped, at the first one that would
- * leave the bytes. */
 class ResourceList::Cursor {
 public:
     Cursor(const uint8_t *bytes, size_t length) : bytes_(bytes), length_(length), at_(0u), failed_(false)
@@ -171,4 +169,4 @@ bool ResourceList::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

@@ -1,6 +1,3 @@
-/* An ImageSink that writes each picture to <directory>/<name>.bmp, so a
- * full-stack run on the host GPU leaves its renders where a person can open
- * them (the build's images/ directory). */
 #ifndef AV_DIRECTORY_IMAGE_SINK_HPP
 #define AV_DIRECTORY_IMAGE_SINK_HPP
 
@@ -25,6 +22,6 @@ private:
     std::size_t  written_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DIRECTORY_IMAGE_SINK_HPP
+#endif

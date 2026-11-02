@@ -84,4 +84,4 @@ bool RowPieces::first() const
     return row_ == 0u && column_ == 0u;
 }
 
-}  // namespace av::icd
+}

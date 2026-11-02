@@ -1,9 +1,3 @@
-/* GL objects reaching OpenCL through the host's own sharing
- * (DirectGlSharing), on this host's GPU: the guest's context names the
- * vehicle, a GL object is the host's own with no copy, and a renderbuffer the
- * host's sharing will not name is read through a texture of its storage. A
- * host whose OpenCL makes no context against the vehicle, or has no OpenCL
- * and EGL GPU, returns without judging. */
 #include "executor/opencl/direct_gl_sharing.hpp"
 #include "executor/opengl/gl_context_attributes.hpp"
 #include "executor/shim/gl_context.hpp"
@@ -37,9 +31,6 @@ extern "C" const char *__lsan_default_suppressions(void)
 }
 
 namespace av {
-
-/* The way a host whose GL sharing takes no renderbuffer is answered, taken on
- * one whose sharing would have taken it itself. */
 struct DirectGlSharingProbe {
     DirectGlSharing &sharing;
 
@@ -47,7 +38,7 @@ struct DirectGlSharingProbe {
     { return sharing.over_texture(context, flags, renderbuffer, error); }
 };
 
-}  // namespace av
+}
 
 using av::DirectGlSharing;
 using av::DirectGlSharingProbe;
@@ -57,8 +48,6 @@ namespace {
 
 constexpr std::uint32_t gl_rgba8 = 0x8058u;
 
-/* The vehicle in the rig's share group, the guest's context made against it,
- * and a queue on that context. */
 class Shared {
 public:
     explicit Shared(HostGlRig &rig)
@@ -102,10 +91,8 @@ private:
     cl_command_queue          queue_;
 };
 
-}  // namespace
+}
 
-/* The guest's context names the vehicle, after whatever the guest named; a
- * list longer than this copies is refused rather than cut. */
 TEST(direct_gl_sharing_device, the_guest_s_context_names_the_vehicle)
 { HostGlRig rig;
   Shared    shared(rig);
@@ -129,14 +116,10 @@ TEST(direct_gl_sharing_device, the_guest_s_context_names_the_vehicle)
   CHECK(shared.sharing().make_context(overlong, 1u, &device, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_PROPERTY);
   CHECK(shared.sharing().make_context(overlong, 1u, &device, nullptr) == nullptr);
-  /* No list of the guest's at all is the vehicle's two alone. */
   cl_context const bare = shared.sharing().make_context(nullptr, 1u, &device, &error);
   CHECK(bare != nullptr);
   ::clReleaseContext(bare); }
 
-/* A buffer and a texture are the host's own: what OpenCL writes between the
- * acquire and the release is in the GL object, and the GL queries are the
- * host's. */
 TEST(direct_gl_sharing_device, a_gl_object_is_the_host_s_own)
 { HostGlRig rig;
   Shared    shared(rig);
@@ -167,7 +150,6 @@ TEST(direct_gl_sharing_device, a_gl_object_is_the_host_s_own)
   cl_GLenum target = 0u;
   CHECK_EQ(shared.sharing().texture_info(image, CL_GL_TEXTURE_TARGET, sizeof target, &target, nullptr), CL_SUCCESS);
   CHECK_EQ(target, 0x0DE1u);
-  /* Nothing of the copy path's is made for either. */
   shared.sharing().forget(mem);
   CHECK_EQ(shared.sharing().renderbuffer_images(), 0u);
   ::clReleaseMemObject(image);
@@ -175,12 +157,6 @@ TEST(direct_gl_sharing_device, a_gl_object_is_the_host_s_own)
   rig.delete_texture(texture);
   rig.delete_buffer(buffer); }
 
-/* A renderbuffer the host would not name is named through a texture of its
- * own storage: OpenCL reads what GL cleared it to; the guest is told of the
- * renderbuffer, never of the texture; and the texture goes with the guest's
- * last reference, or with everything else. A name with no renderbuffer is
- * still the host's refusal, as is a create the host refuses for another
- * reason. */
 TEST(direct_gl_sharing_device, a_renderbuffer_the_host_will_not_name_is_read_through_a_texture_of_its_storage)
 { HostGlRig rig;
   Shared    shared(rig);
@@ -218,17 +194,14 @@ TEST(direct_gl_sharing_device, a_renderbuffer_the_host_will_not_name_is_read_thr
   CHECK_EQ(shared.sharing().renderbuffer_images(), 0u);
   ::clReleaseMemObject(over);
 
-  /* No renderbuffer by that name: nothing made, the refusal left as it was. */
   error = CL_INVALID_GL_OBJECT;
   CHECK(probe.over_texture(shared.context(), CL_MEM_READ_ONLY, renderbuffer + 1000u, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_GL_OBJECT);
-  /* A texture the host will not make a cl_mem of. */
   error = CL_INVALID_GL_OBJECT;
   CHECK(probe.over_texture(nullptr, CL_MEM_READ_ONLY, renderbuffer, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_GL_OBJECT);
   CHECK(probe.over_texture(nullptr, CL_MEM_READ_ONLY, renderbuffer, nullptr) == nullptr);
   CHECK_EQ(shared.sharing().renderbuffer_images(), 0u);
-  /* Past the 64 a context once shared at once, and one more out of room. */
   constexpr std::uint32_t many = 100u;
   static cl_mem held[many + 64u];
   for (std::uint32_t index = 0u; index < many; index++)
@@ -247,8 +220,6 @@ TEST(direct_gl_sharing_device, a_renderbuffer_the_host_will_not_name_is_read_thr
   CHECK_EQ(shared.sharing().renderbuffer_images(), 0u);
   for (std::uint32_t index = 0u; index < made; index++) ::clReleaseMemObject(held[index]);
 
-  /* Through the create: the host's own answer, or the texture where it
-   * refuses the renderbuffer; a refusal of another kind stands. */
   cl_mem const made = shared.sharing().from_renderbuffer(shared.context(), CL_MEM_READ_ONLY, renderbuffer, &error);
   CHECK(made != nullptr);
   CHECK_EQ(error, CL_SUCCESS);

@@ -20,7 +20,7 @@ ReleaseQueue::Turn ReleaseQueue::arrive(const SubmissionDescriptor &batch, uint6
     if (batch.begin() < next_) return Turn::refused;
     if (batch.begin() == next_) return Turn::release_now;
     for (uint32_t index = 0u; index < count_; index++)
-        if (held_[index].begin() == batch.begin()) return Turn::held;   /* a packet submitted again */
+        if (held_[index].begin() == batch.begin()) return Turn::held;
     if (count_ == most_held) return Turn::refused;
     held_[count_++] = batch;
     return Turn::held;
@@ -64,4 +64,4 @@ uint32_t ReleaseQueue::held() const
     return count_;
 }
 
-}  // namespace av
+}

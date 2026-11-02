@@ -1,9 +1,3 @@
-/* Device loss (US3, T040): a transport that faults loses its context and
- * every other context on the same device. A lost context answers locally - a
- * robust context's reset status, otherwise GL_OUT_OF_MEMORY once from
- * glGetError - and every other call on it reaches no Kmt at all; it is deleted
- * without the host, and a new context opens a new device. The probe's
- * avForceContextFault faults the calling thread's context on purpose. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
@@ -36,8 +30,6 @@ constexpr GLbitfield    color_buffer_bit = 0x4000u;
 constexpr GLenum        gl_out_of_memory = 0x0505u;
 constexpr GLenum        gl_context_lost = 0x0507u;
 constexpr GLenum        gl_unknown_context_reset = 0x8255u;
-/* WGL_CONTEXT_FLAGS_ARB with the robust access bit, and the lose-on-reset
- * notification strategy. */
 constexpr std::int32_t robust_attributes[] = {0x2094, 0x4, 0x8256, 0x8252, 0};
 
 struct LossRig {
@@ -72,7 +64,6 @@ struct LossRig {
         return context != nullptr && rig.opengl32().make_current(dc, context) ? context : nullptr;
     }
 
-    /* The calling thread's context faults: the host answers its next wait with nothing. */
     void fault_current()
     {
         rig.kmt().withhold_answer_at(1u);
@@ -86,10 +77,6 @@ struct LossRig {
         return reinterpret_cast<ResetStatusFn>(rig.opengl32().driver_proc_address("glGetGraphicsResetStatus"))();
     }
 
-    /* What a glClear costs the Kmt: every call it made and every command it
-     * put on a ring - a working context submits one command. */
-    /* The Kmt calls a glClear costs once it reaches the host: the context
-     * holds it in a batch, so the held calls are flushed before and after. */
     std::uint32_t clear_calls()
     {
         flush_current();
@@ -112,10 +99,8 @@ struct LossRig {
     }
 };
 
-}  // namespace
+}
 
-/* A fault on thread 1's context loses thread 2's too, on the same device:
- * neither sends anything again, each reports its loss once, and both delete. */
 TEST(gl_device_loss, a_fault_loses_every_context_on_the_device)
 { LossRig loss;
   GlIcdRig &rig = loss.rig;
@@ -131,14 +116,12 @@ TEST(gl_device_loss, a_fault_loses_every_context_on_the_device)
   CHECK_EQ(loss.get_error(), 0u);
   CHECK_EQ(loss.reset_status(), 0u);
   CHECK_EQ(rig.log().holding("is lost"), 1u);
-  /* Thread 2's context never faulted itself, and is lost all the same. */
   rig.threads().switch_to(2u);
   CHECK_EQ(loss.clear_calls(), 0u);
   CHECK(rig.root().current()->wire() == nullptr);
   CHECK_EQ(loss.get_error(), gl_out_of_memory);
   CHECK_EQ(loss.get_error(), 0u);
   CHECK(rig.root().invariants_hold());
-  /* Deleting them costs no host round trip, and closes what they held. */
   const std::uint32_t commands = rig.kmt().commands();
   CHECK(rig.opengl32().delete_context(second));
   rig.threads().switch_to(1u);
@@ -148,10 +131,6 @@ TEST(gl_device_loss, a_fault_loses_every_context_on_the_device)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
-/* A context asked for with robust access and lose-on-reset learns of the loss
- * through glGetGraphicsResetStatus, answered locally every time, and
- * glGetError says GL_CONTEXT_LOST once. Any spelling of the query is the
- * ICD's own. */
 TEST(gl_device_loss, a_robust_context_reports_an_unknown_reset)
 { LossRig loss;
   GlIcdRig &rig = loss.rig;
@@ -160,7 +139,6 @@ TEST(gl_device_loss, a_robust_context_reports_an_unknown_reset)
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.options().flags(), static_cast<std::uint8_t>(av::GlContextOptions::robust_access |
                                                                 av::GlContextOptions::lose_context_on_reset));
-  /* Before the loss, the host answers the query. */
   rig.host().gl_varint(0u);
   CHECK_EQ(loss.reset_status(), 0u);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
@@ -177,7 +155,6 @@ TEST(gl_device_loss, a_robust_context_reports_an_unknown_reset)
   CHECK_EQ(rig.kmt().commands(), commands);
   CHECK(rig.root().invariants_hold()); }
 
-/* Robust access alone, or lose-on-reset alone, is not a robust context. */
 TEST(gl_device_loss, half_of_robustness_reports_like_any_context)
 { const std::int32_t access_only[] = {0x2094, 0x4, 0};
   const std::int32_t reset_only[] = {0x8256, 0x8252, 0};
@@ -196,15 +173,11 @@ TEST(gl_device_loss, half_of_robustness_reports_like_any_context)
     CHECK_EQ(loss.get_error(), gl_out_of_memory);
   } }
 
-/* The lost device stays with the contexts on it; a context made meanwhile
- * gets a device of its own and works, and each device closes with its last
- * context. */
 TEST(gl_device_loss, a_new_context_opens_a_new_device)
 { LossRig loss;
   GlIcdRig &rig = loss.rig;
   void *const lost = loss.made_on(1u);
   loss.fault_current();
-  /* The loss is known at the faulted thread's next call. */
   CHECK_EQ(loss.clear_calls(), 0u);
   void *const fresh = loss.made_on(2u);
   CHECK(fresh != nullptr);
@@ -224,9 +197,6 @@ TEST(gl_device_loss, a_new_context_opens_a_new_device)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
-/* A context made after its device was lost, but joining nothing: a share of a
- * lost context fails the make as before, and a released lost context made
- * current again stays lost. */
 TEST(gl_device_loss, a_lost_context_made_current_again_stays_lost)
 { LossRig loss;
   GlIcdRig &rig = loss.rig;
@@ -239,10 +209,6 @@ TEST(gl_device_loss, a_lost_context_made_current_again_stays_lost)
   CHECK(rig.opengl32().delete_context(context));
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* The probe's fault: avForceContextFault sends the calling thread's context
- * a glGetString it cannot decode and answers whether the context is now
- * lost; with nothing current it answers 0 with ERROR_INVALID_OPERATION, and on
- * a lost context 1 with nothing sent. */
 TEST(gl_device_loss, the_probe_forces_a_fault_on_the_current_context)
 { LossRig loss;
   GlIcdRig &rig = loss.rig;
@@ -251,7 +217,6 @@ TEST(gl_device_loss, the_probe_forces_a_fault_on_the_current_context)
   rig.threads().switch_to(3u);
   CHECK_EQ(force(), 0);
   CHECK_EQ(rig.threads().last_error(), Root::error_invalid_operation);
-  /* Nothing current: no reset to report either. */
   CHECK_EQ(loss.reset_status(), 0u);
   CHECK(loss.made_on(1u) != nullptr);
   loss.flush_current();
@@ -266,8 +231,6 @@ TEST(gl_device_loss, the_probe_forces_a_fault_on_the_current_context)
   CHECK_EQ(rig.kmt().commands(), commands + 1u);
   CHECK(rig.root().invariants_hold()); }
 
-/* A host that answers the probe's command has not faulted the context: the
- * probe says so, and the context goes on. */
 TEST(gl_device_loss, a_host_that_answers_the_forced_fault_leaves_the_context_working)
 { LossRig loss;
   GlIcdRig &rig = loss.rig;

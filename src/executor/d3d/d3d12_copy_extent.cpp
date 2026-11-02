@@ -8,11 +8,9 @@
 namespace av {
 
 namespace {
-
-/* A depth-stencil format's stencil is a second plane of subresources. */
 constexpr uint32_t most_planes = 2u;
 
-}  // namespace
+}
 
 D3d12CopyExtent::D3d12CopyExtent(const D3D12_TEXTURE_COPY_LOCATION &source, const d3d12proto::Box *box)
     : read_{}, known_(true)
@@ -65,4 +63,4 @@ bool D3d12CopyExtent::written_at(uint32_t x, uint32_t y, uint32_t z, d3d12proto:
     return true;
 }
 
-}  // namespace av
+}

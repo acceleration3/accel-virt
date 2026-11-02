@@ -19,7 +19,7 @@ struct ResourceListProbe {
     ResourceList &list;
 };
 
-}  // namespace av
+}
 
 using av::FakeResourceList;
 using av::Irql;
@@ -33,8 +33,6 @@ namespace {
 
 constexpr std::uint64_t bar_address = 0x800000000ull;
 
-/* What QEMU's virtio-gpu-pci presents: a 64-bit memory BAR, the MSI-X table
- * BAR, and three MSI-X messages. */
 FakeResourceList qemu_virtio_gpu()
 {
     FakeResourceList list;
@@ -54,7 +52,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok || !list.invariants_hold();
 }
 
-}  // namespace
+}
 
 TEST(resource_list, starts_empty)
 { MockPlatform platform; const ResourceList list(platform);
@@ -85,9 +83,9 @@ TEST(resource_list_initialize, reads_only_as_far_as_the_counts_reach)
 TEST(resource_list_initialize, decodes_every_large_memory_encoding)
 { MockPlatform platform; ResourceList list(platform);
   FakeResourceList bytes;
-  bytes.add_large_memory(0x1000000000ull, 0x0200u, 0x100u);     /* 40: stored << 8 */
-  bytes.add_large_memory(0x2000000000ull, 0x0400u, 0x100u);     /* 48: stored << 16 */
-  bytes.add_large_memory(0x3000000000ull, 0x0800u, 0x2u);       /* 64: stored << 32 */
+  bytes.add_large_memory(0x1000000000ull, 0x0200u, 0x100u);
+  bytes.add_large_memory(0x2000000000ull, 0x0400u, 0x100u);
+  bytes.add_large_memory(0x3000000000ull, 0x0800u, 0x2u);
   CHECK_STATUS(list.initialize(bytes.bytes(), bytes.size()), Status::ok);
   std::uint64_t length = 0u;
   CHECK_STATUS(list.find_memory(0x1000000000ull, 1u, length), Status::ok);
@@ -199,19 +197,6 @@ TEST(resource_list_hostile, survives_every_mutation_of_a_real_list)
   const av::HostileSweep sweep(rejects, bytes.bytes(), bytes.size());
   sweep.run();
   CHECK(sweep.cases_run() > 100u);
-  /* The list is sized by its own counts, so a truncation always cuts a
-   * descriptor the counts promised and every one is refused, as are the
-   * all-zero list (no partial descriptor at all) and the all-ones one (more
-   * full descriptors than any list may hold). Of the flips: the 12 bytes of
-   * each full descriptor the reader skips are free (96 bits); two flips of the
-   * partial count leave a count whose descriptors are still there; each of the
-   * two memory descriptors accepts 158 - seven type flips naming a type the
-   * reader ignores, the skipped byte, the 16 flag bits a plain memory
-   * descriptor does not use, all 64 start bits, which cannot make 4 KiB wrap,
-   * 31 of the 32 length bits, the exception clearing the length to nothing, and
-   * the 32 trailing skipped bits; and each of the three interrupts accepts 159,
-   * everything but the type flip that turns it into a memory range of no
-   * length. The untouched list is the last acceptance. */
   const std::uint32_t acceptable = 96u + 2u + 2u * 158u + 3u * 159u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 

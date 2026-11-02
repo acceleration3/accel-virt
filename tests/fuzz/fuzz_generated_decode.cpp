@@ -1,13 +1,3 @@
-/* The generated decoder over attacker-chosen bytes.
- *
- * Constitution V: everything from outside is hostile, and a generated
- * deserializer is the first thing a frame from the guest reaches. Nothing
- * here checks what a decode produced - thousands of commands are generated
- * and no hand-written expectation could cover them. What it checks is what
- * must hold for every one of them: a decode stays inside the frame it was
- * given and inside the arena it was given, and what a successful decode
- * points at is arena memory rather than the frame's.
- */
 #include "proto/generated/vulkan/vk_serialize.h"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -18,9 +8,6 @@
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size);
 
 namespace {
-
-/* Small on purpose: a decoder that outgrows its block has to say so, and a
- * generous arena would never make it. */
 constexpr std::size_t arena_bytes = 2048u;
 
 class DecodedPointer
@@ -55,7 +42,7 @@ void decode_one(const std::uint8_t *data, std::size_t size, Decode decode)
     ours.must_be_ours_or_null(decoded.pNext);
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

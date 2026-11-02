@@ -73,4 +73,4 @@ Status SubmissionDescriptor::validate_against(const RingHeader &ring) const
     return length() <= ring.capacity() ? Status::ok : Status::invalid_state;
 }
 
-}  // namespace av
+}

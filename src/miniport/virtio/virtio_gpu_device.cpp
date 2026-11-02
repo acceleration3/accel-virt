@@ -25,7 +25,6 @@ VirtioGpuDevice::VirtioGpuDevice(Platform &platform, const BarMappings &mappings
           AV_SCOPE("VirtioGpuDevice::VirtioGpuDevice");
       }
 
-/* The device must stop using the rings before the members release them. */
 VirtioGpuDevice::~VirtioGpuDevice()
 {
     AV_SCOPE("VirtioGpuDevice::~VirtioGpuDevice");
@@ -74,8 +73,6 @@ Status VirtioGpuDevice::start(uint32_t message_interrupts)
     if (status == Status::ok) assign_fence_vectors(message_interrupts);
     if (status == Status::ok) status = transport_.start();
     if (status != Status::ok) return status;
-    /* The displays the device has: the driver offers a VidPn source for each,
-     * and the caller judges a count it cannot serve. */
     scanouts_ = 0u;
     static_cast<void>(transport_.read_device_u32(num_scanouts_offset, scanouts_));
     failed.dismiss();
@@ -217,8 +214,6 @@ Status VirtioGpuDevice::connect_fence_queue(uint32_t doorbell, uint32_t &message
     const auto queue = static_cast<uint16_t>(first_fence_queue + doorbell);
     if (message_interrupts_ == 0u) return queue < transport_.queue_count() ? Status::ok : Status::not_found;
     message = fence_vector_for(doorbell, message_interrupts_);
-    /* Written again, to the value start wrote: unchanged, QEMU keeps the irqfd
-     * it attached then, and a device that refused it at start refuses here. */
     return transport_.assign_queue_vector(queue, static_cast<uint16_t>(message));
 }
 
@@ -228,4 +223,4 @@ bool VirtioGpuDevice::invariants_hold() const
     return !running_ || transport_.features() != 0u;
 }
 
-}  // namespace av
+}

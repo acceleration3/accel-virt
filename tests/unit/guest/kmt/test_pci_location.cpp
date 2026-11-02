@@ -1,4 +1,3 @@
-/* Where an adapter sits on the PCI bus, as Windows reports it. */
 #include "guest/kmt/pci_location.hpp"
 #include "harness/framework/test_registry.hpp"
 

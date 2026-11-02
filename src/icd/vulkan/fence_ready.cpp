@@ -10,7 +10,7 @@ namespace {
 using WaitFences = VkResult(VKAPI_PTR *)(VkDevice, uint32_t, const VkFence *, VkBool32, uint64_t);
 using ResetFences = VkResult(VKAPI_PTR *)(VkDevice, uint32_t, const VkFence *);
 
-}  // namespace
+}
 
 FenceReady::FenceReady(EntryLookup &entries) : entries_(entries)
 {
@@ -29,4 +29,4 @@ FrameWait FenceReady::wait(const Mark &mark)
     return reset_fences(mark.device_, 1u, &mark.fence_) == VK_SUCCESS ? FrameWait::drawn : FrameWait::gone;
 }
 
-}  // namespace av::icd
+}

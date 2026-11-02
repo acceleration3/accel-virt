@@ -1,17 +1,3 @@
-/* The live maps of one context, as many as it holds open, each found by the
- * object and subresource it maps - an unmap names those - or by the pointer
- * it handed out, which is all an OpenCL unmap names.
- *
- * `Mapping` is a StagedMapping or an API's own type derived from it, carrying
- * what only that API keeps of a map (OpenGL's flush marks, OpenCL's host
- * pointer and image region). A map's private copy is allocated here and
- * freed with it; memory a map only names is never freed here.
- *
- * Two live maps may share a pointer - OpenCL lets an application map one
- * region of a buffer over its own memory twice, and hands back the same
- * address - and two may share an object, one per subresource. Each index
- * keeps the first map under its key and how many share it; only a key shared
- * makes a lookup or a close walk the maps. */
 #ifndef AV_ICD_OPEN_MAPPINGS_HPP
 #define AV_ICD_OPEN_MAPPINGS_HPP
 
@@ -42,60 +28,37 @@ public:
     OpenMappings(const OpenMappings &) = delete;
     OpenMappings &operator=(const OpenMappings &) = delete;
 
-    /* `mapping` opened over a private copy of its bytes, zeroed: memory
-     * nothing fills is still the application's to read, and reads zeros,
-     * never what the heap last held there. invalid_parameter for no object
-     * or no bytes, or more than this process can address; no_memory. Nothing
-     * is open unless ok. */
     [[nodiscard]] Status stage(const Mapping &mapping, Mapping *&opened);
-    /* `mapping` opened over `at`, memory it only names. invalid_parameter for
-     * no object or no memory; no_memory. */
     [[nodiscard]] Status lend(const Mapping &mapping, uint8_t *at, Mapping *&opened);
-    /* The live map of `subresource` of `object`, or null. */
     Mapping             *find(uint64_t object, uint32_t subresource);
     const Mapping       *find(uint64_t object, uint32_t subresource) const;
-    /* The live map of `object` that answered `pointer`, or null. */
     Mapping             *answering(uint64_t object, const void *pointer);
-    /* `mapping`, one of these, closed: its copy freed, nothing written. */
     void                 close(Mapping &mapping);
-    /* Every map `matches(mapping)` answers true for closed; how many. */
     template <typename Predicate>
     uint32_t             close_if(Predicate matches);
-    /* Every map closed: the context is going. */
     void                 close_all();
-    /* Every live map to `visit(mapping)`, in the order they were opened
-     * into their slots. */
     template <typename Visitor>
     void                 for_each(Visitor visit);
     template <typename Visitor>
     void                 for_each(Visitor visit) const;
     uint32_t             count() const;
 
-    /* Every map is whole and has memory, and each index counts every map
-     * once, its first one under a key being a map with that key. */
     bool invariants_hold() const;
 
 private:
     [[nodiscard]] Status open(const Mapping &mapping, uint8_t *at, StagedMapping::Memory memory, Mapping *&opened);
     uint64_t             pointer_key(const void *pointer) const;
-    /* The slot `mapping` lives in; KeyedSlots::no_slot for one not live here. */
     uint32_t             slot_of(const Mapping &mapping) const;
     void                 close_slot(uint32_t slot);
     void                 index(Index &index, uint64_t key, uint32_t slot);
-    /* `slot` gone from under `key`: a key no map is under any more leaves
-     * the index, and a first map that goes hands the key to another sharing
-     * it - `key_of` says which do. */
     template <typename KeyOf>
     void                 unindex(Index &index, uint64_t key, uint32_t slot, KeyOf key_of);
-    /* A live slot other than `except` whose map `matches`; no_slot for none. */
     template <typename Predicate>
     uint32_t             other_slot(uint32_t except, Predicate matches) const;
     template <typename KeyOf>
     bool                 index_holds(const Index &index, KeyOf key_of) const;
 
     BlockSource                   &memory_;
-    /* Each map by the number it was opened as, which no other map has had:
-     * its address and slot hold while it lives. */
     KeyedSlots<uint64_t, Mapping> rows_;
     Index                          objects_;
     Index                          pointers_;
@@ -147,7 +110,6 @@ Status OpenMappings<Mapping>::open(const Mapping &mapping, uint8_t *at, StagedMa
                                    Mapping *&opened)
 {
     AV_SCOPE("OpenMappings::open");
-    /* Room in all three first, so a map is in every one or in none. */
     const uint32_t wanted = rows_.count() + 1u;
     if (rows_.reserve(wanted) != Status::ok || objects_.reserve(wanted) != Status::ok ||
         pointers_.reserve(wanted) != Status::ok)
@@ -304,7 +266,6 @@ void OpenMappings<Mapping>::index(Index &index, uint64_t key, uint32_t slot)
         return;
     }
     uint32_t placed = 0u;
-    /* Reserved by open: the insert cannot fail. */
     static_cast<void>(index.insert(key, Head{slot, 1u}, placed));
 }
 
@@ -349,6 +310,6 @@ bool OpenMappings<Mapping>::index_holds(const Index &index, KeyOf key_of) const
     return first_under_key && counted == rows_.count();
 }
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_OPEN_MAPPINGS_HPP
+#endif

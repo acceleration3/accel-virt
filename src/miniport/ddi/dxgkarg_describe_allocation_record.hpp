@@ -1,6 +1,3 @@
-/* DXGKARG_DESCRIBEALLOCATION, as DxgkDdiDescribeAllocation receives and
- * answers it. A DDI record: MultisampleMethod and RefreshRate are their two
- * UINTs. src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_DESCRIBE_ALLOCATION_RECORD_HPP
 #define AV_DXGKARG_DESCRIBE_ALLOCATION_RECORD_HPP
 
@@ -22,6 +19,6 @@ struct DxgkargDescribeAllocationRecord {
     int32_t  Rotation;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_DESCRIBE_ALLOCATION_RECORD_HPP
+#endif

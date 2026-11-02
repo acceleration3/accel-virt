@@ -38,4 +38,4 @@ bool SurfacePoint::operator==(const SurfacePoint &other) const
     return surface_ == other.surface_ && point_ == other.point_;
 }
 
-}  // namespace av
+}

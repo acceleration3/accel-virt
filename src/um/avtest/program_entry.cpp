@@ -1,12 +1,3 @@
-/* avtest.exe's process entry point, which lld-link is told about (what the
- * MSVC ABI references besides is crt_stubs.cpp).
- *
- * With no C runtime there is no argv: what avtest takes - the seconds of fence
- * stress to run, 0 for none, the word `tdr` for a run of the timeout scenario
- * alone, the word `av` for the av scenarios alone and the word `loss` for the
- * host device lost under the guest (HostLossScenario) - is read from the
- * command line itself, which is the last run of digits in it and whether one of
- * those words is in it. */
 #include "core/trace/function_scope.hpp"
 #include "um/avtest/guest_program.hpp"
 
@@ -29,9 +20,6 @@ static uint32_t avtest_stress_seconds(const wchar_t *line)
     return seconds;
 }
 
-/* Whether the command line asks for the timeout scenario (feature 040, US3),
- * the av scenarios (feature 044) or the round-trip timing (`trip`) instead of
- * the suite. */
 static av::GuestProgram::Run avtest_run(const wchar_t *line)
 {
     AV_SCOPE("avtest_run");
@@ -49,9 +37,6 @@ static av::GuestProgram::Run avtest_run(const wchar_t *line)
     return av::GuestProgram::Run::suite;
 }
 
-/* avtest's trace root: the one piece of process-lifetime state this program
- * has, since its unhandled-exception filter is handed no context
- * (constitution III). */
 static constinit av::ObjectStorage<av::ProcessTrace> avtest_trace;
 
 static long WINAPI avtest_crashed(void *pointers)

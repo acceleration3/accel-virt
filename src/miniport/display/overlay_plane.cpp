@@ -6,11 +6,9 @@
 namespace av {
 
 namespace {
-
-/* DXGK_MULTIPLANE_OVERLAY_STRETCH_QUALITY_BILINEAR and _HIGH: both filter. */
 constexpr uint32_t stretch_quality_bilinear = 1u;
 
-}  // namespace
+}
 
 OverlayPlane::OverlayPlane()
     : layer_(0u), present_id_(0u), allocation_(nullptr), address_(0), source_{}, destination_{}, clip_{}, flips_(0u),
@@ -115,4 +113,4 @@ uint32_t OverlayPlane::colour_space() const
     return colour_space_;
 }
 
-}  // namespace av
+}

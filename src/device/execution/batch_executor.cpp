@@ -92,7 +92,6 @@ bool BatchExecutor::ready() const
     return executor_.created();
 }
 
-/* The copy is taken once; the ring's bytes are not read again for this batch. */
 Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHeader &batch, uint64_t *answering)
 {
     AV_SCOPE("BatchExecutor::run");
@@ -107,8 +106,6 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
         return failed(batch.fence_id(), Status::malformed);
     }
     batches_++;
-    /* Before the first command runs, and flushed: a host driver that takes
-     * QEMU down with it leaves behind the batch it was given. */
     recorder_.record_batch(context_, batch.fence_id(), staging_.payload(), static_cast<uint32_t>(length));
     CommandStream       stream(staging_.payload(), length);
     CommandHeader       header;
@@ -116,8 +113,6 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
     bool                answered = false;
     size_t              answer = 0u;
     Status              status = Status::ok;
-    /* The end publishes too - OpenGL's error word, Direct3D's query results
-     * - and the consumer's head and fence follow it. */
     ScopeExit           ended([this] {
         executor_.end_batch();
         host_.fence_stores();
@@ -133,10 +128,6 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
         fault_ = FaultCode::command_framing;
         return failed(batch.fence_id(), status);
     }
-    /* Before anything says the batch ran - its answer here, then the
-     * consumer's head and fence - what its commands stored into the guest's
-     * memory, through mappings the executor's host drivers made, has to be
-     * there when the guest looks. */
     host_.fence_stores();
     if (answered) write_reply(batch.fence_id(), answer);
     return Status::ok;
@@ -149,15 +140,10 @@ Status BatchExecutor::failed(uint64_t fence, Status status)
     return status;
 }
 
-/* Only a command that asks for an answer is given somewhere to write it, so
- * a later command cannot overwrite the answer kept. */
 FaultCode BatchExecutor::fault_for(Status status) const
 {
     AV_SCOPE("BatchExecutor::fault_for");
     if (status == Status::malformed) return FaultCode::undecodable;
-    /* A library answering outside the ABI is a different problem from a GPU
-     * that died, and the guest is told which so an operator looks in the right
-     * place (feature 042). */
     if (status == Status::not_supported) return FaultCode::broken_executor;
     return FaultCode::device_lost;
 }
@@ -172,8 +158,6 @@ Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *pa
     const size_t length = header.size() - CommandHeader::encoded_size;
     const bool   transport = header.api() == CommandHeader::transport_api;
     const bool   piece = transport && header.id() == CommandHeader::piece_id;
-    /* Pieces are followed by their own command and nothing else, and a piece
-     * asks for no answer: the command it is part of does. */
     if ((piece && header.generates_reply()) ||
         (gathered_.gathering() && !piece && (transport || header.api() != executor_.command_api()))) {
         gathered_.clear();
@@ -216,15 +200,10 @@ Status BatchExecutor::run_whole(const CommandHeader &header, const uint8_t *payl
         skipped_++;
         return Status::ok;
     }
-    /* A transport command the device refuses was framed wrong; nothing was
-     * handed to a library that could have failed to decode it. */
     if (status != Status::ok) {
         fault_ = transport ? FaultCode::command_framing : fault_for(status);
         return status;
     }
-    /* Progress is what the guest's timeout detection watches in a long batch;
-     * every command's store to the shared page is a line the guest's DPC then
-     * pulls back across, so it goes out every few hundred. */
     constexpr uint64_t commands_per_heartbeat = 256u;
     if (commands_ % commands_per_heartbeat == 0u) fences_.heartbeat();
     commands_++;
@@ -233,7 +212,6 @@ Status BatchExecutor::run_whole(const CommandHeader &header, const uint8_t *payl
     return Status::ok;
 }
 
-/* The slot was sized at setup, so both writes land inside it. */
 void BatchExecutor::write_reply(uint64_t fence_id, size_t answer)
 {
     AV_SCOPE("BatchExecutor::write_reply");
@@ -242,9 +220,6 @@ void BatchExecutor::write_reply(uint64_t fence_id, size_t answer)
         ReplyHeader(fence_id, required).within(static_cast<uint32_t>(staging_.reply_capacity()));
     uint8_t bytes[ReplyHeader::encoded_size] = {};
     static_cast<void>(header.encode(bytes, sizeof bytes));
-    /* The fence id goes last: a guest polling the slot takes the answer as
-     * soon as it sees its own fence there, so everything else must be in
-     * place first. */
     constexpr size_t fence_at = 8u;
     constexpr size_t fence_bytes = 8u;
     static_cast<void>(reply_.write(ReplyHeader::encoded_size, staging_.reply(), header.size()));
@@ -277,11 +252,10 @@ FaultCode BatchExecutor::fault() const
     return fault_;
 }
 
-/* Every command run or skipped belongs to a batch that was run. */
 bool BatchExecutor::invariants_hold() const
 {
     AV_SCOPE("BatchExecutor::invariants_hold");
     return reply_.invariants_hold() && (batches_ != 0u || (commands_ == 0u && skipped_ == 0u));
 }
 
-}  // namespace av
+}

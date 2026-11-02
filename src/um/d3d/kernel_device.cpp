@@ -76,8 +76,6 @@ HRESULT KernelDevice::allocate(KernelSurface &surface, HANDLE resource, D3DKMT_H
         info.Flags.Primary = 1u;
     }
     D3DDDICB_ALLOCATE allocate = {};
-    /* An allocation made long after its runtime resource - a Direct3D 9
-     * back buffer's, the first time it is presented - belongs to none. */
     if (resource != nullptr) {
         allocate.pPrivateDriverData = surface.resource_data();
         allocate.PrivateDriverDataSize = KernelSurface::resource_bytes;
@@ -95,9 +93,6 @@ HRESULT KernelDevice::deallocate(D3DKMT_HANDLE allocation, HANDLE resource)
     AV_SCOPE("KernelDevice::deallocate");
     if (allocation == 0u || callbacks_ == nullptr) return S_OK;
     D3DDDICB_DEALLOCATE deallocate = {};
-    /* One or the other. d3dumddi.h says the list is ignored beside a resource,
-     * but the runtime answers E_INVALIDARG to both, and the allocation stays
-     * until its device goes: measured, every shared texture a process released. */
     deallocate.hResource = resource;
     if (resource == nullptr) {
         deallocate.NumAllocations = 1u;
@@ -164,4 +159,4 @@ HRESULT KernelDevice::set_display_mode(D3DDDICB_SETDISPLAYMODE &mode)
     return callbacks_->pfnSetDisplayModeCb(runtime_, &mode);
 }
 
-}  // namespace av::d3d
+}

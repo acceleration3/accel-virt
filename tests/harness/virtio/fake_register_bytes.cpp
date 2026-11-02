@@ -58,4 +58,4 @@ std::uint32_t FakeRegisterBytes::writes() const            { return writes_; }
 std::uint64_t FakeRegisterBytes::last_write_offset() const { return last_write_offset_; }
 std::uint64_t FakeRegisterBytes::last_write_value() const  { return last_write_value_; }
 
-}  // namespace av
+}

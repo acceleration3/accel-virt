@@ -1,6 +1,3 @@
-/* Log lines queued for a slow sink: a line goes in whole with its newline or
- * not at all, the bytes come out oldest first across the wrap, and what could
- * not be queued is counted until it is asked for. */
 #include "core/log/log_queue.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -10,8 +7,6 @@
 using av::LogQueue;
 
 namespace {
-
-/* Everything queued, as text. */
 const char *drained(LogQueue &queue, std::uint8_t (&out)[64])
 {
     std::memset(out, 0, sizeof out);
@@ -19,7 +14,7 @@ const char *drained(LogQueue &queue, std::uint8_t (&out)[64])
     return reinterpret_cast<const char *>(out);
 }
 
-}  // namespace
+}
 
 TEST(log_queue_append, queues_each_line_with_its_newline_in_order)
 { std::uint8_t storage[32];
@@ -36,10 +31,10 @@ TEST(log_queue_append, a_line_that_does_not_fit_is_dropped_whole_and_counted)
   std::uint8_t out[64];
   LogQueue queue(storage, sizeof storage);
   CHECK(queue.append("abcd"));
-  CHECK(!queue.append("efghi"));     /* 5 + 5 + 1 is one past the room */
-  CHECK(queue.append("efgh"));       /* exactly the room left */
+  CHECK(!queue.append("efghi"));
+  CHECK(queue.append("efgh"));
   CHECK_EQ(queue.queued(), 10u);
-  CHECK(!queue.append(""));          /* even a bare newline needs a byte */
+  CHECK(!queue.append(""));
   CHECK_EQ(queue.take_dropped(), 2u);
   CHECK_EQ(queue.take_dropped(), 0u);
   CHECK(std::strcmp(drained(queue, out), "abcd\nefgh\n") == 0); }
@@ -56,7 +51,6 @@ TEST(log_queue_take, hands_out_part_of_the_queue_and_keeps_the_rest_in_order)
   CHECK(std::strcmp(drained(queue, out), "3456\n") == 0);
   CHECK_EQ(queue.take(part, sizeof part), 0u); }
 
-/* The ring wraps: bytes freed at the front take the next line's tail. */
 TEST(log_queue_take, a_line_that_wraps_the_end_comes_out_whole)
 { std::uint8_t storage[8];
   std::uint8_t out[64];
@@ -64,10 +58,10 @@ TEST(log_queue_take, a_line_that_wraps_the_end_comes_out_whole)
   CHECK(queue.append("abcde"));
   std::uint8_t part[4] = {};
   CHECK_EQ(queue.take(part, sizeof part), 4u);
-  CHECK(queue.append("wxyz"));        /* 2 queued + 5 fits in 8 only across the end */
+  CHECK(queue.append("wxyz"));
   CHECK_EQ(queue.queued(), 7u);
   CHECK(std::strcmp(drained(queue, out), "e\nwxyz\n") == 0);
-  CHECK(!queue.append("toolongx"));   /* 9 bytes in an empty queue of 8 */
+  CHECK(!queue.append("toolongx"));
   CHECK_EQ(queue.take_dropped(), 1u); }
 
 TEST(log_queue, without_storage_every_line_is_dropped)

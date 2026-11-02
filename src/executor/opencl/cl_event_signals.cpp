@@ -57,18 +57,12 @@ void ClEventSignals::answered()
 void ClEventSignals::shut_down()
 {
     AV_SCOPE("ClEventSignals::shut_down");
-    /* Every registration made so far goes stale at once. The slots stay where
-     * they are: the host may still hold pointers to them. */
     ++generation_;
     slots_.for_each([](uint32_t, ClEventRegistration &registration) { registration.disarm(); });
     __atomic_store_n(&taken_, 0u, __ATOMIC_RELEASE);
     wake_.clear();
 }
 
-/* Marked like anything else, though this runs on the host driver's own thread:
- * the trace table is keyed by thread and a scope on an unbound one does
- * nothing, which is the state a callback arriving after the library was torn
- * down finds. */
 void ClEventSignals::signal_from_host(uint64_t generation)
 {
     AV_SCOPE("ClEventSignals::signal_from_host");
@@ -105,8 +99,6 @@ bool ClEventSignals::invariants_hold() const
     bool     holds = true;
     slots_.for_each([this, &taken, &holds](uint32_t, const ClEventRegistration &registration) {
         holds = holds && registration.invariants_hold();
-        /* One that is not armed carries no epoch - its own invariant is what
-         * says so - so there is nothing more to ask of it here. */
         if (!registration.armed()) return;
         holds = holds && registration.generation() == generation_;
         ++taken;
@@ -114,4 +106,4 @@ bool ClEventSignals::invariants_hold() const
     return holds && taken == taken_;
 }
 
-}  // namespace av
+}

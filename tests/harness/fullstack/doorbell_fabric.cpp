@@ -7,15 +7,12 @@
 namespace av {
 
 namespace {
-
-/* What a store to a doorbell is on this device: one four-byte write at offset
- * 0 of the page (av_device.h). */
 std::uint32_t &word_of(std::uint8_t *page)
 {
     return *reinterpret_cast<std::uint32_t *>(page);
 }
 
-}  // namespace
+}
 
 DoorbellFabric::DoorbellFabric(MockPlatform &platform)
     : platform_(platform), bytes_{}, taken_{}, kernel_{}, delivered_(0u), dropped_(0u)
@@ -57,8 +54,6 @@ void DoorbellFabric::release(void *page)
 {
     const std::uint32_t index = index_of(page);
     if (index == max_pages) return;
-    /* A store still in the page when it is given back is one the device never
-     * saw, and is counted as one that reached nothing. */
     if (word_of(bytes_[index]) != 0u) dropped_++;
     taken_[index] = false;
     kernel_[index] = nullptr;
@@ -104,4 +99,4 @@ bool DoorbellFabric::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

@@ -33,7 +33,7 @@ struct DriverImageProbe<MockPlatform, MockTraceHost> {
     DriverImage<MockPlatform, MockTraceHost> &image;
 };
 
-}  // namespace av
+}
 
 using av::DriverImageProbe;
 using Image = DriverImage<MockPlatform, MockTraceHost>;
@@ -42,18 +42,13 @@ namespace {
 
 int driver_object = 0;
 int registry_path = 0;
-/* The service value that asks for the trace table; without it there is none. */
 const ServiceValue trace_scopes("TraceScopes", 1u);
 
-/* An image lives in static storage in the kernel; here each test gets one and
- * tears it down the way the shim never has to. */
 class Entered {
 public:
     ~Entered() { image_.leave(); }
     Image &image() { return image_; }
-    /* DriverEntry with no image range and nothing to run at a bugcheck. */
     std::int32_t enter() { return image_.enter(&driver_object, &registry_path, ImageRange(0u, 0u), nullptr); }
-    /* The same, with the service asking for the trace table. */
     std::int32_t enter_traced()
     {
         return image_.enter(&driver_object, &registry_path, ImageRange(0u, 0u), nullptr, 0u, trace_scopes);
@@ -63,7 +58,7 @@ private:
     Image image_;
 };
 
-}  // namespace
+}
 
 TEST(driver_image_enter, registers_the_miniport_table_and_binds_the_root)
 { Entered entered;
@@ -74,11 +69,8 @@ TEST(driver_image_enter, registers_the_miniport_table_and_binds_the_root)
   CHECK(av::miniport_binding.miniport() != nullptr);
   FakeDxgkrnl dxgkrnl;
   CHECK_STATUS(dxgkrnl.initialize(platform.registered_table()), Status::ok);
-  CHECK_EQ(platform.logged(), 1u); }   /* DriverEntry; no trace table was asked for */
+  CHECK_EQ(platform.logged(), 1u); }
 
-/* The table is up before the miniport exists, its address is where the host
- * reads it from (docs/trace.md's line, which tools/mcp/av_inspect.py parses),
- * and it is gone once the image is left. */
 TEST(driver_image_enter, lays_the_trace_table_out_first_and_logs_where_it_is)
 { Entered entered;
   CHECK_EQ(entered.enter_traced(), 0);
@@ -89,9 +81,6 @@ TEST(driver_image_enter, lays_the_trace_table_out_first_and_logs_where_it_is)
   entered.image().leave();
   CHECK(av::scope_binding.table() == nullptr); }
 
-/* Every scope costs the DPC it runs in, and dxgkrnl's other DPCs spin on the
- * lock that DPC holds: a service that does not ask for the table gets none,
- * and nothing is allocated for it. */
 TEST(driver_image_enter, keeps_no_trace_table_unless_the_service_asks)
 { Entered entered;
   CHECK_EQ(entered.enter(), 0);
@@ -107,10 +96,6 @@ TEST(driver_image_enter, a_trace_scopes_value_of_zero_keeps_none)
   CHECK_EQ(entered.image().enter(&driver_object, &registry_path, ImageRange(0u, 0u), nullptr, 0u, off), 0);
   CHECK(av::scope_binding.table() == nullptr); }
 
-/* The refusal releases the platform that logged it, so the line is asserted
- * through a record that outlives it. Without this line a driver that dxgkrnl
- * refuses says only "DriverEntry" and stops, which is what the first live run
- * of feature 036 left us reading. */
 TEST(driver_image_enter, a_registration_dxgkrnl_refuses_unbinds_and_logs_its_status)
 { av::LogRecord record;
   Entered entered;
@@ -118,7 +103,7 @@ TEST(driver_image_enter, a_registration_dxgkrnl_refuses_unbinds_and_logs_its_sta
                entered.image().enter(&driver_object, &registry_path, ImageRange(0u, 0u), nullptr, 0xC0000059u, record)),
            0xC0000059u);
   CHECK(av::miniport_binding.miniport() == nullptr);
-  CHECK_EQ(record.count(), 2u);   /* DriverEntry, then the refusal: no trace table was asked for */
+  CHECK_EQ(record.count(), 2u);
   CHECK(std::strstr(record.last(), "DxgkInitialize refused") != nullptr);
   CHECK(std::strstr(record.last(), "C0000059") != nullptr); }
 
@@ -137,10 +122,6 @@ TEST(driver_image_enter, occupied_root_storage_is_refused)
   CHECK(av::scope_binding.table() == nullptr);
   probe.release_miniport_storage(); }
 
-/* DxgkDdiUnload is the image's end, not only its adapters': the platform - its
- * log thread - and the trace table go with it, before dxgkrnl unmaps the code
- * they run. A live driver upgrade bugchecked 0xCE in the log thread when they
- * stayed. */
 TEST(driver_image_leave, unload_leaves_the_whole_image)
 { Entered entered;
   CHECK_EQ(entered.enter_traced(), 0);
@@ -151,7 +132,6 @@ TEST(driver_image_leave, unload_leaves_the_whole_image)
   AvDdiUnload();
   CHECK(av::miniport_binding.miniport() == nullptr);
   CHECK(!probe.platform_kept());
-  /* Nothing is bound to leave twice. */
   AvDdiUnload(); }
 
 TEST(driver_image_leave, unbinds_and_releases_everything)
@@ -169,11 +149,8 @@ Image *bugchecking = nullptr;
 
 void run_bugcheck(void *, std::uint32_t) { bugchecking->bugcheck(); }
 
-}  // namespace
+}
 
-/* A bugcheck writes the table - with the frames the routine itself runs in -
- * to the debug port, and the dump keeps the table's bytes. Every name is read,
- * since the whole address space stands for the driver's image here. */
 TEST(driver_image_bugcheck, writes_the_table_through_the_registered_routine)
 { Entered entered;
   bugchecking = &entered.image();

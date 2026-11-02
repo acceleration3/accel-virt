@@ -25,7 +25,7 @@ namespace av::glicd {
 namespace {
 
 
-}  // namespace
+}
 
 static_assert(BackBufferPresenter::max_edge * 4u + TransferRoom::command_bytes <= GuestGlContext::reply_bytes,
               "a read-back of one row fits a reply");
@@ -56,7 +56,6 @@ Status BackBufferPresenter::prepare(ClientTransport &wire, void *window, const P
     if (seen == icd::WindowExtent::Look::gone || width > max_edge || height > max_edge)
         return Status::invalid_parameter;
     if (framebuffers_[draw] != 0u && window == window_ && seen == icd::WindowExtent::Look::same) return Status::ok;
-    /* The thread may be showing a frame of the old size from the old room. */
     settle();
     delete_objects(wire);
     chain_refused_ = false;
@@ -122,13 +121,11 @@ bool BackBufferPresenter::present(ClientTransport &wire, const ClientArrayState 
                                             right, top, gl_color_buffer_bit, gl_nearest);
     if (loop != nullptr && draw_chained(wire, *loop, luid)) return true;
     if (loop != nullptr && queue_read(wire, state, *loop)) return true;
-    /* Shown after whatever the thread still has of this window's. */
     settle();
     const bool plain = pack_is_plain(state);
     if (!plain) set_pack(wire, state, true);
     read_back(wire);
     if (!plain) set_pack(wire, state, false);
-    /* What the window is showing now is what a read of GL_FRONT answers. */
     front_.presented(pixels_, width_, height_);
     if (surface.blit(dc, width_, height_, pixels_) || !refusal_logged_.first()) return true;
     LogLine(lines_).text("the window's DC refused a frame of ").number(width_).text("x").number(height_).write();
@@ -143,7 +140,6 @@ void BackBufferPresenter::hand_over(const BatchMark &mark)
                         GlFrame::Rows::bgra_bottom_up, width_, height_, window_, mark);
     pending_ = slot_count;
     pending_chained_ = false;
-    /* A frame the table has no row for is not shown; the next one will be. */
     static_cast<void>(loop_->hand(frame));
 }
 
@@ -161,8 +157,6 @@ bool BackBufferPresenter::read_front(int32_t x, int32_t y, int32_t width, int32_
                                      uint32_t type, void *pixels) const
 {
     AV_SCOPE("BackBufferPresenter::read_front");
-    /* A chained frame never crossed into guest memory: the host answers a read
-     * of the front buffer from the window's framebuffer instead. */
     if (chained_.opened()) return false;
     if (loop_ != nullptr) loop_->acquire();
     const bool read = front_.read(x, y, width, height, format, type, pixels);
@@ -204,8 +198,6 @@ void BackBufferPresenter::report(StateWriter &writer, uint32_t index) const
     writer.close();
 }
 
-/* A made presenter has its framebuffer, colour texture and the pixels its
- * size needs; one that is not holds no host name. */
 bool BackBufferPresenter::invariants_hold() const
 {
     AV_SCOPE("BackBufferPresenter::invariants_hold");
@@ -231,14 +223,12 @@ Status BackBufferPresenter::create(ClientTransport &wire)
     const uint32_t made_framebuffers = multisampled ? 2u : 1u;
     glproto::av_glCreateFramebuffers(wire, static_cast<GLsizei>(made_framebuffers), framebuffers_);
     glproto::av_glCreateTextures(wire, gl_texture_2d, 1, &texture_);
-    /* The colour renderbuffer first, when there is one; the depth one after. */
     uint32_t made[renderbuffers] = {};
     const uint32_t made_renderbuffers = (multisampled ? 1u : 0u) + (depth_stencil ? 1u : 0u);
     if (made_renderbuffers != 0u)
         glproto::av_glCreateRenderbuffers(wire, static_cast<GLsizei>(made_renderbuffers), made);
     renderbuffers_[colour] = multisampled ? made[0] : 0u;
     renderbuffers_[depth] = depth_stencil ? made[made_renderbuffers - 1u] : 0u;
-    /* No framebuffer at all is the one incomplete set the invariant allows. */
     if (framebuffers_[draw] == 0u || !invariants_hold()) return Status::no_memory;
     const auto     edge_width = static_cast<GLsizei>(width_ != 0u ? width_ : 1u);
     const auto     edge_height = static_cast<GLsizei>(height_ != 0u ? height_ : 1u);
@@ -265,7 +255,6 @@ Status BackBufferPresenter::create(ClientTransport &wire)
     return Status::ok;
 }
 
-/* OpenGL deletes nothing for a zero name, so a partly made set is sent as it is. */
 void BackBufferPresenter::delete_objects(ClientTransport &wire)
 {
     AV_SCOPE("BackBufferPresenter::delete_objects");
@@ -291,8 +280,6 @@ void BackBufferPresenter::forget_objects()
     renderbuffers_[depth] = 0u;
 }
 
-/* Rows of four bytes a pixel, with no pack buffer to write them into instead:
- * what the application's pack state gives, or what it has to be set to. */
 bool BackBufferPresenter::pack_is_plain(const ClientArrayState &state) const
 {
     AV_SCOPE("BackBufferPresenter::pack_is_plain");
@@ -329,10 +316,6 @@ void BackBufferPresenter::read_back(ClientTransport &wire)
                                           pixels_ + pieces.offset());
 }
 
-/* Opened at the window's size the first time a frame is drawn, and again
- * after it changed; refused once, the window's frames are read back until its
- * size changes. The thread holds no frame of this presenter's while its chain
- * is opened. */
 bool BackBufferPresenter::draw_chained(ClientTransport &wire, GlPresentQueue &loop, uint64_t luid)
 {
     AV_SCOPE("BackBufferPresenter::draw_chained");
@@ -347,25 +330,18 @@ bool BackBufferPresenter::draw_chained(ClientTransport &wire, GlPresentQueue &lo
         }
     }
     const uint32_t slot = loop.free_slot(*this, ChainedFrames::slot_count, pending_);
-    /* Nothing came free: the thread is stuck, and the frame is dropped. */
     if (slot == ChainedFrames::slot_count) return true;
-    /* The colour texture holds the frame, resolved when the format is
-     * multisampled. */
     chained_.draw(wire, texture_, slot);
     pending_ = slot;
     pending_chained_ = true;
     return true;
 }
 
-/* The present thread cannot have a frame of this presenter's before a present
- * reads one into a slot, and one read is always handed over before the next
- * present: so a free slot is one the thread is not holding. */
 bool BackBufferPresenter::queue_read(ClientTransport &wire, const ClientArrayState &state, GlPresentQueue &loop)
 {
     AV_SCOPE("BackBufferPresenter::queue_read");
     if (!loop.start() || !reserve_room(wire, loop)) return false;
     const uint32_t slot = loop.free_slot(*this, slot_count, pending_);
-    /* Nothing came free: the thread is stuck, and the frame is dropped. */
     if (slot == slot_count) return true;
     const bool plain = pack_is_plain(state);
     if (!plain) set_pack(wire, state, true);
@@ -393,8 +369,6 @@ bool BackBufferPresenter::reserve_room(ClientTransport &wire, GlPresentQueue &lo
     return true;
 }
 
-/* Only the most recent room goes back to lending; an older one is lent again
- * when the arena closes with the context. */
 void BackBufferPresenter::give_room_back()
 {
     AV_SCOPE("BackBufferPresenter::give_room_back");
@@ -421,7 +395,6 @@ size_t BackBufferPresenter::frame_bytes() const
     return static_cast<size_t>(width_) * height_ * bytes_per_pixel;
 }
 
-/* Never zero, so a 0x0 window still has storage the framebuffer can be complete with. */
 size_t BackBufferPresenter::stored_bytes() const
 {
     AV_SCOPE("BackBufferPresenter::stored_bytes");
@@ -430,4 +403,4 @@ size_t BackBufferPresenter::stored_bytes() const
     return width * height * bytes_per_pixel;
 }
 
-}  // namespace av::glicd
+}

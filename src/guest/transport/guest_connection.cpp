@@ -78,8 +78,7 @@ uint32_t GuestConnection::fence_object() const
 bool GuestConnection::invariants_hold() const
 {
     AV_SCOPE("GuestConnection::invariants_hold");
-    /* A device open means an adapter and a queue open with it. */
     return device_ == 0u || (adapter_ != 0u && queue_ != 0u);
 }
 
-}  // namespace av
+}

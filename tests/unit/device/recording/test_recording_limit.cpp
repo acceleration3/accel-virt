@@ -13,7 +13,7 @@ namespace {
 
 constexpr std::uint64_t header = RecordingHeader::encoded_size;
 
-}  // namespace
+}
 
 TEST(recording_limit, a_ceiling_of_zero_never_refuses_a_record)
 { RecordingLimit limit(0u, AtCeiling::stop);
@@ -56,7 +56,6 @@ TEST(recording_limit_verdict, a_record_larger_than_the_whole_ceiling_stops_even_
   limit.took(header);
   CHECK(limit.verdict(1024u - header) == LimitVerdict::fits);
   limit.took(1024u - header);
-  /* Full: what still fits after a wrap wraps, and what does not stops. */
   CHECK(limit.verdict(1024u - header) == LimitVerdict::wrap);
   CHECK(limit.verdict(1024u - header + 1u) == LimitVerdict::stop);
   CHECK(limit.verdict(~std::uint64_t{0}) == LimitVerdict::stop); }
@@ -78,8 +77,6 @@ TEST(recording_limit_verdict, a_record_that_would_overflow_the_count_stops)
 TEST(recording_limit_invariants, catch_a_count_that_passed_the_ceiling)
 { RecordingLimit limit(1024u, AtCeiling::stop);
   CHECK(limit.invariants_hold());
-  /* Nothing on the recording's own path does this - every write asks the
-   * verdict first - so this is what the invariant is for. */
   limit.took(1025u);
   CHECK(!limit.invariants_hold());
   limit.wrapped();

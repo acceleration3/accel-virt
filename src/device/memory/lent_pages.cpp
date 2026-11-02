@@ -22,8 +22,6 @@ GuestRamLending *LentPages::owner_of(uint64_t address) const
     return found != nullptr ? *found : nullptr;
 }
 
-/* Every page is judged, and room made for all of them, before any is marked:
- * a claim is whole or nothing. */
 Status LentPages::claim(uint64_t address, uint64_t bytes, GuestRamLending &owner)
 {
     AV_SCOPE("LentPages::claim");
@@ -58,4 +56,4 @@ bool LentPages::invariants_hold() const
     return pages_.invariants_hold();
 }
 
-}  // namespace av
+}

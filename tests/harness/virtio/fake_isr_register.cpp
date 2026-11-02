@@ -32,4 +32,4 @@ void FakeIsrRegister::write_u64(std::uint64_t, std::uint64_t) { unexpected("writ
 
 void FakeIsrRegister::raise(std::uint8_t bits) { status_ = static_cast<std::uint8_t>(status_ | bits); }
 
-}  // namespace av
+}

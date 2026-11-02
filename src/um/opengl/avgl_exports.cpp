@@ -1,23 +1,14 @@
-/* avgl.dll's entry points (contracts/icd_interface.md): the fifteen Drv*
- * exports opengl32 looks up by name, each one line into the library in this
- * translation unit's storage - the OpenGL ICD's process-lifetime state
- * (constitution III) - and a DLL entry that does nothing at attach or detach,
- * where the loader lock allows nothing. No C runtime runs constructors, so the
- * storage is constinit and the library constructs itself on the first call.
- */
 #include "core/trace/function_scope.hpp"
 #include "um/opengl/gl_icd_library.hpp"
 
 #include <windows.h>
 
-/* DrvDescribePixelFormat fills the descriptor as bytes (PixelFormatTable). */
 static_assert(sizeof(PIXELFORMATDESCRIPTOR) == 40u);
 
 static long WINAPI avgl_crashed(void *pointers);
 
 static constinit av::GlIcdLibrary avgl_library{&avgl_crashed};
 
-/* The process's unhandled-exception filter while avgl traces it. */
 static long WINAPI avgl_crashed(void *pointers)
 {
     AV_SCOPE("avgl_crashed");

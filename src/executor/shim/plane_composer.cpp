@@ -14,8 +14,6 @@ template <typename Interface> void drop(Interface *&object)
     object = nullptr;
 }
 
-/* A plane's colours as the video processor reads them: YCbCr by the matrix
- * and range its flags name; RGB as it is. */
 D3D11_VIDEO_PROCESSOR_COLOR_SPACE colour_space_of(uint32_t flags)
 {
     AV_SCOPE("colour_space_of");
@@ -33,7 +31,7 @@ RECT rect_of(const int32_t *edges)
     return RECT{edges[0], edges[1], edges[2], edges[3]};
 }
 
-}  // namespace
+}
 
 PlaneComposer::PlaneComposer()
     : video_(nullptr), video_context_(nullptr), enumerator_(nullptr), processor_(nullptr), target_(nullptr),
@@ -95,7 +93,6 @@ bool PlaneComposer::prepare(ID3D11Device5 *device, ID3D11DeviceContext4 *context
     D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC output = {};
     output.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
     if (FAILED(video_->CreateVideoProcessorOutputView(target_, enumerator_, &output, &output_))) return false;
-    /* The head is full-range RGB, as the desktop is. */
     const D3D11_VIDEO_PROCESSOR_COLOR_SPACE desktop = {};
     video_context_->VideoProcessorSetOutputColorSpace(processor_, &desktop);
     width_ = width;
@@ -136,4 +133,4 @@ ID3D11Texture2D *PlaneComposer::compose(ID3D11Device5 *device, ID3D11DeviceConte
     return composed ? target_ : nullptr;
 }
 
-}  // namespace av
+}

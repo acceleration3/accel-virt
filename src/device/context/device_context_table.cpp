@@ -67,7 +67,7 @@ Status DeviceContextTable::create(uint32_t id)
     for (ObjectStorage<DeviceContext> &slot : slots_) {
         if (slot.construct(host_, blobs_, owners_, interrupts_, library_, shares_, recorder_, ordering_, pulse_,
                            id) != Status::ok)
-            continue;   /* occupied */
+            continue;
         const Status status = slot.object().start();
         if (status != Status::ok) slot.destroy();
         return status;
@@ -118,7 +118,6 @@ uint32_t DeviceContextTable::live() const
     return count;
 }
 
-/* Every live context has a running worker and an id no other live context has. */
 bool DeviceContextTable::invariants_hold() const
 {
     AV_SCOPE("DeviceContextTable::invariants_hold");
@@ -142,4 +141,4 @@ void DeviceContextTable::report(StateWriter &writer)
     writer.close();
 }
 
-}  // namespace av
+}

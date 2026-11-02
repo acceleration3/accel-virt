@@ -1,5 +1,3 @@
-/* Where each field of a trace table lives (docs/trace.md), for a table of a
- * given slot count: the writer and every reader agree through this. */
 #ifndef AV_TRACE_LAYOUT_HPP
 #define AV_TRACE_LAYOUT_HPP
 
@@ -32,16 +30,11 @@ public:
         waiting_at = 40u, holding_at = 48u,
     };
     enum : uint32_t { name_at = 0u, level_at = 4u, entered_at = 8u, text_at = 16u };
-    /* "AVTRACE" read as a little-endian u64. */
     static constexpr uint64_t magic = 0x0045434152545641ull;
     static constexpr uint64_t ticks_per_second = 10000000ull;
     static constexpr uint64_t active = 1ull << 63u;
 
-    /* The layout of `slots` slots, clamped to max_slots. */
     explicit TraceLayout(uint32_t slots);
-    /* The most slots `region` holds, clamped to max_slots; 0 slots when not
-     * even the header fits. A region, not a byte count: on x86 a size_t is a
-     * uint32_t, and the two constructors would be one. */
     explicit TraceLayout(const ByteRange &region);
 
     uint32_t slots() const;
@@ -53,6 +46,6 @@ private:
     uint32_t slots_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_TRACE_LAYOUT_HPP
+#endif

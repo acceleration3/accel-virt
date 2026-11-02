@@ -18,18 +18,15 @@ constexpr size_t   name_bytes = 64u;
 constexpr size_t   path_bytes = 520u;
 constexpr size_t   reason_bytes = 128u;
 constexpr uint32_t state_length_bytes = 4u;
-/* The modules whose tables `list` looks for (docs/trace.md). */
 constexpr const char *listed_modules[] = {"avvk", "avgl", "avtest"};
 
-/* A process makes its objects in the global namespace when it may, and in its
- * session's otherwise, so a reader tries them in that order. */
 struct ObjectScope {
     const char *prefix;
     const char *label;
 };
 constexpr ObjectScope object_scopes[] = {{"Global\\", "global"}, {"Local\\", "local"}};
 
-}  // namespace
+}
 
 InspectProgram::InspectProgram(InspectHost &host, Kmt &kmt, BlockSource &memory)
     : host_(host), kmt_(kmt), memory_(memory), line_()
@@ -37,8 +34,6 @@ InspectProgram::InspectProgram(InspectHost &host, Kmt &kmt, BlockSource &memory)
     AV_SCOPE("InspectProgram::InspectProgram");
 }
 
-/* Every command ends with `--out <path>`, so the path is always the last
- * argument and the command's own arguments are what precedes it. */
 InspectProgram::Exit InspectProgram::run(const uint16_t *line)
 {
     AV_SCOPE("InspectProgram::run");
@@ -49,8 +44,6 @@ InspectProgram::Exit InspectProgram::run(const uint16_t *line)
     if (__builtin_strcmp(line_.argument(count - 2u), "--out") != 0) return Exit::usage;
     uint32_t pid = 0u;
     if (count == 3u && __builtin_strcmp(command, "list") == 0) return list(out);
-    /* The kernel's commands take the avgpu adapter's LUID; the first adapter
-     * when it is left out. */
     uint32_t luid = 0u;
     if ((count == 3u || (count == 4u && line_.number(1u, luid))) && __builtin_strcmp(command, "kernel-trace") == 0)
         return kernel(TraceEscapeRecord::Kind::table, luid, out);
@@ -156,7 +149,6 @@ InspectProgram::Exit InspectProgram::state(uint32_t pid, const char *module, con
     return finish(file.refuse(host_.clock(), "no state service in that process"));
 }
 
-/* The service's section: a u32 length, then that much text. */
 InspectProgram::Exit InspectProgram::dump_file(SnapshotFile &file, const char *section)
 {
     AV_SCOPE("InspectProgram::dump_file");
@@ -205,7 +197,6 @@ void InspectProgram::name(TextBuffer &out, const char *prefix, const char *kind,
     out.append_decimal(pid);
 }
 
-/* A module name goes into an object name: lower-case letters and digits only. */
 bool InspectProgram::module_name(const char *module) const
 {
     AV_SCOPE("InspectProgram::module_name");
@@ -242,4 +233,4 @@ InspectProgram::Exit InspectProgram::finish(Status written) const
     return written == Status::ok ? Exit::written : Exit::unwritten;
 }
 
-}  // namespace av
+}

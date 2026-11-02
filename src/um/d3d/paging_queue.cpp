@@ -6,14 +6,10 @@
 namespace av::d3d11 {
 
 namespace {
-
-/* A present waits on this, not the GPU: paging an aperture allocation in is a
- * page-table update the miniport answers at once, so a fence still short after
- * two seconds is a kernel that will not page it. */
 constexpr uint64_t paging_patience_ns = 2000000000u;
 constexpr uint64_t page_bytes = 4096u;
 
-}  // namespace
+}
 
 PagingQueue::PagingQueue(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, PollClock &clock)
     : kernel_(kernel), device_(device), clock_(clock), queue_(0u), fence_(nullptr)
@@ -43,8 +39,6 @@ HRESULT PagingQueue::make_resident(D3DKMT_HANDLE allocation)
     resident.NumAllocations = 1u;
     resident.AllocationList = &allocation;
     resident.PriorityList = &priority;
-    /* The kernel answers E_PENDING when it queued the paging: the allocation
-     * is resident once the queue's fence reaches the value it hands back. */
     const HRESULT made = kernel_.pfnMakeResidentCb(device_, &resident);
     if (FAILED(made) && made != E_PENDING) return made;
     return wait_for(resident.PagingFenceValue);
@@ -64,8 +58,6 @@ HRESULT PagingQueue::map_address(D3DKMT_HANDLE allocation, uint64_t pages, uint6
     map.hAllocation = allocation;
     map.SizeInPages = pages;
     map.Protection.Write = 1u;
-    /* The kernel answers E_PENDING when it queued the mapping, with the
-     * address already chosen. */
     const HRESULT made = kernel_.pfnMapGpuVirtualAddressCb(device_, &map);
     if (FAILED(made) && made != E_PENDING) return made;
     if (map.VirtualAddress == 0u) return E_FAIL;
@@ -107,4 +99,4 @@ HRESULT PagingQueue::wait_for(uint64_t fence) const
     return S_OK;
 }
 
-}  // namespace av::d3d11
+}

@@ -17,17 +17,14 @@ using av::VirtioPciLayout;
 using av::VirtioRegion;
 
 namespace {
-
-/* A config space built from scratch: capability list at 0x40, entries appended. */
 class ConfigSpace {
 public:
     ConfigSpace()
     {
-        bytes_[0x06] = 0x10u;   /* status: capability list present */
+        bytes_[0x06] = 0x10u;
         bytes_[0x34] = 0x40u;
     }
 
-    /* Appends a virtio capability; returns its offset. */
     std::size_t add(std::uint8_t type, std::uint8_t bar, std::uint32_t offset, std::uint32_t length,
                     std::uint8_t cap_len = 16u, std::uint8_t id = 0u)
     {
@@ -81,7 +78,7 @@ void check_region(const VirtioRegion &region, std::uint8_t bar, std::uint64_t of
     CHECK(region.length() == length);
 }
 
-}  // namespace
+}
 
 TEST(virtio_capability_walk, parses_qemu_virtio_gpu_pci)
 { const FixtureFile fixture("virtio_gpu_pci_config.bin");
@@ -114,10 +111,10 @@ TEST(virtio_capability_walk, the_first_instance_of_a_type_wins)
 
 TEST(virtio_capability_walk, reserved_types_and_bars_are_ignored)
 { ConfigSpace space;
-  space.add(1u, 6u, 0x0u, 0x1000u);          /* reserved bar: ignored */
-  space.add(7u, 4u, 0x0u, 0x1000u);          /* reserved type */
-  space.add(5u, 0u, 0x0u, 0x0u, 20u);        /* PCI cfg access: not used */
-  space.add(9u, 4u, 0x0u, 0x10u);            /* vendor data */
+  space.add(1u, 6u, 0x0u, 0x1000u);
+  space.add(7u, 4u, 0x0u, 0x1000u);
+  space.add(5u, 0u, 0x0u, 0x0u, 20u);
+  space.add(9u, 4u, 0x0u, 0x10u);
   space.add_standard_four();
   VirtioPciLayout layout;
   CHECK_STATUS(space.walk(layout), Status::ok);
@@ -126,8 +123,8 @@ TEST(virtio_capability_walk, reserved_types_and_bars_are_ignored)
 TEST(virtio_capability_walk, non_virtio_capabilities_are_skipped)
 { ConfigSpace space;
   space.add_standard_four();
-  space.bytes()[0x40] = 0x11u;               /* first becomes MSI-X */
-  space.add(1u, 3u, 0x0u, 0x1000u);          /* so common comes from here */
+  space.bytes()[0x40] = 0x11u;
+  space.add(1u, 3u, 0x0u, 0x1000u);
   VirtioPciLayout layout;
   CHECK_STATUS(space.walk(layout), Status::ok);
   CHECK_EQ(layout.common().bar(), 3u); }
@@ -138,7 +135,7 @@ TEST(virtio_capability_walk, a_64_bit_shared_memory_region)
   const std::size_t shm = space.add(8u, 2u, 0x1000u, 0x2000u, 24u, 7u);
   space.put32(shm + 16u, 0x1u);
   space.put32(shm + 20u, 0x2u);
-  space.add(8u, 3u, 0x0u, 0x10u, 24u, 7u);    /* duplicate id: first wins */
+  space.add(8u, 3u, 0x0u, 0x10u, 24u, 7u);
   VirtioPciLayout layout;
   CHECK_STATUS(space.walk(layout), Status::ok);
   check_region(layout.shared_memory(7u), 2u, 0x100001000ull, 0x200002000ull); }
@@ -199,12 +196,12 @@ TEST(virtio_capability_walk, no_capability_list_is_not_supported)
 TEST(virtio_capability_walk, a_looping_list_is_malformed)
 { ConfigSpace space;
   space.add_standard_four();
-  space.bytes()[0x41] = 0x40u;               /* first points at itself */
+  space.bytes()[0x41] = 0x40u;
   VirtioPciLayout layout;
   CHECK_STATUS(space.walk(layout), Status::malformed);
   ConfigSpace longer;
   longer.add_standard_four();
-  longer.bytes()[0x40u + 16u + 16u + 16u + 1u] = 0x50u;   /* last points back to the second */
+  longer.bytes()[0x40u + 16u + 16u + 16u + 1u] = 0x50u;
   CHECK_STATUS(longer.walk(layout), Status::malformed); }
 
 TEST(virtio_capability_walk, a_pointer_into_the_standard_header_is_malformed)
@@ -285,16 +282,5 @@ TEST(virtio_capability_walk, survives_the_hostile_sweep_of_a_real_config_space)
   const av::HostileSweep sweep(rejects, fixture.bytes(), fixture.size());
   sweep.run();
   CHECK(sweep.cases_run() > 2000u);
-  /* Most of a config space is bytes the walk never reads - ids, BARs, the
-   * subsystem - so most flips are acceptable and the honest floor is what the
-   * format settles on its own. The walk needs the whole 256 bytes, so every
-   * shorter input is refused (256); an all-zero space has no capability bit and
-   * an all-ones one is a chain that points at itself (2); and each of the four
-   * required structures appears exactly once, so every flip of one of their
-   * four type bytes loses that structure and is refused (32). What is left is
-   * the chain itself - a re-pointed next byte, a length, a multiplier - where
-   * the answer depends on what this device happens to have at the byte the
-   * chain lands on, not on the format, so those are bounded as acceptable and
-   * the real refusal count is well above this floor. */
   const std::uint32_t refuses_at_least = 256u + 2u + 32u;
   CHECK(sweep.rejections() >= refuses_at_least); }

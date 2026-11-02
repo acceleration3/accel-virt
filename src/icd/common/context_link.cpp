@@ -59,4 +59,4 @@ bool ContextLink::lost(const HostChannel &channel)
     return link_->lost();
 }
 
-}  // namespace av::icd
+}

@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the Khronos registries the generators read, pinned by revision and hash.
-
-The same standard as QEMU's and the Windows kit's fetch: a revision, a SHA-256,
-and nothing unpacked when they disagree. What lands in third_party/khronos/ is
-the XML the generators parse and the headers their output compiles against.
-
-The pins are data, in tools/khronos_pins.txt, one registry per line:
-
-    <name> <url> <sha256>
-
-which is what lets the tests drive this against local archives through file://
-rather than the network. A registry that moved under a regeneration is a wire
-change, so every pin names a tag or a revision - never a branch.
-"""
+"""Fetch the Khronos registries the generators read, pinned by revision and hash."""
 import argparse
 import hashlib
 import pathlib
@@ -27,18 +14,10 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT_PINS = ROOT / "tools" / "khronos_pins.txt"
 DEFAULT_INTO = ROOT / "third_party" / "khronos"
 
-# What each archive has to yield, and where it goes in the fetched tree. A
-# registry whose archive does not hold what its name promises is refused: the
-# generators would otherwise fail much later with something less obvious.
 WANTED = {
     "vulkan": (("registry/vk.xml", "vk.xml"),
                ("include/vulkan/vulkan_core.h", "include/vulkan/vulkan_core.h"),
-               # vulkan_core.h includes it; a header that cannot be compiled is
-               # not a header the generated output can be checked against.
                ("include/vulkan/vk_platform.h", "include/vulkan/vk_platform.h"))
-              # vulkan_core.h includes these too. Unfetched, a Linux build finds
-              # a different version under /usr/include and the freestanding guest
-              # build finds nothing.
               + tuple((f"include/vk_video/{name}", f"include/vk_video/{name}") for name in (
                   "vulkan_video_codec_av1std.h", "vulkan_video_codec_av1std_decode.h",
                   "vulkan_video_codec_av1std_encode.h", "vulkan_video_codec_h264std.h",
@@ -48,8 +27,6 @@ WANTED = {
     "opengl": (("xml/gl.xml", "gl.xml"),
                ("xml/wgl.xml", "wgl.xml")),
     "opencl": (("xml/cl.xml", "cl.xml"),),
-    # cl.xml describes commands over types only the headers declare, and the
-    # OpenCL registry and the OpenCL headers are two repositories.
     "opencl_headers": tuple((f"CL/{name}", f"include/CL/{name}") for name in (
         "cl.h", "cl_d3d10.h", "cl_d3d11.h", "cl_dx9_media_sharing.h", "cl_egl.h",
         "cl_ext.h", "cl_function_types.h", "cl_gl.h", "cl_gl_ext.h", "cl_half.h",
@@ -58,11 +35,10 @@ WANTED = {
 
 
 class Refused(Exception):
-    """A pin that cannot be honoured; the message names the registry."""
+    pass
 
 
 def pins_from(path):
-    """Every pin in `path`: (name, url, sha256), comments and blanks dropped."""
     pins = []
     for number, line in enumerate(path.read_text().splitlines(), 1):
         text = line.strip()
@@ -79,9 +55,6 @@ def pins_from(path):
 
 
 def download(name, url, digest, cache):
-    """The archive, cached under the hash it is pinned to - a pin that moves
-    must not find the archive it replaced - with a partial download removed
-    rather than left to be trusted next time."""
     archive = cache / f"{name}-{digest}.tar.gz"
     if archive.is_file():
         return archive
@@ -104,7 +77,6 @@ def verify(name, archive, digest):
 
 
 def unpack(name, archive, into):
-    """The files WANTED names, out of the archive's single top directory."""
     with tarfile.open(archive, "r:gz") as tar:
         members = {}
         for member in tar.getmembers():
@@ -126,14 +98,11 @@ def unpack(name, archive, into):
 
 
 def fetched_already(into, pins):
-    """Whether the tree holds exactly these pins; the marker is what says so."""
     marker = into / "VERSION"
     return marker.is_file() and marker.read_text() == marker_text(pins)
 
 
 def marker_text(pins):
-    """The pins and every file each yields: a tree fetched before a file was
-    wanted does not hold it, so it is not the tree these pins describe."""
     return "".join(f"{name} {digest}\n" + "".join(f"  {destination}\n"
                                                   for _inside, destination in WANTED[name])
                    for name, _url, digest in sorted(pins))
@@ -158,8 +127,6 @@ def main(argv=None):
 
     cache = arguments.cache
     cache.mkdir(parents=True, exist_ok=True)
-    # Into a staging tree, so a registry that fails leaves whatever was verified
-    # before exactly as it was.
     staging = pathlib.Path(tempfile.mkdtemp(prefix=".khronos.", dir=str(arguments.into.parent)
                                             if arguments.into.parent.is_dir() else None))
     try:

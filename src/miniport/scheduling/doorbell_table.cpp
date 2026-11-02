@@ -21,7 +21,6 @@ Status DoorbellTable::create(HwQueue &queue, uint32_t page, void *&handle)
     AV_SCOPE("DoorbellTable::create");
     platform_.require_irql_at_most(Irql::passive, "DoorbellTable");
     handle = nullptr;
-    /* A page past the mapping is a page no store could reach. */
     if ((uint64_t{page} + 1u) * RingSubmitter::doorbell_page_bytes > doorbells_.length())
         return Status::invalid_parameter;
     MutexGuard lock(lock_);
@@ -55,9 +54,6 @@ Status DoorbellTable::disconnect(void *handle)
     MutexGuard lock(lock_);
     QueueDoorbell *const doorbell = find(handle);
     if (doorbell == nullptr) return Status::invalid_parameter;
-    /* Nothing is remapped: a store to this device's doorbell wakes a worker
-     * that reads a ring tail, and a tail that did not move consumes nothing
-     * (research.md §10). */
     doorbell->disconnect();
     return Status::ok;
 }
@@ -87,8 +83,6 @@ DoorbellStatus DoorbellTable::status_of(void *handle)
     platform_.require_irql_at_most(Irql::dispatch, "DoorbellTable");
     MutexGuard      lock(lock_);
     QueueDoorbell *const doorbell = find(handle);
-    /* A handle this table does not know is not disconnected for a moment: it
-     * is gone, and a process holding it must make another. */
     return doorbell != nullptr ? doorbell->status() : DoorbellStatus::disconnected_abort;
 }
 
@@ -154,4 +148,4 @@ bool DoorbellTable::invariants_hold() const
     });
 }
 
-}  // namespace av
+}

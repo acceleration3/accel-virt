@@ -79,4 +79,4 @@ bool BufferMapping::invariants_hold() const
     return marks || dirty_to_ == 0u;
 }
 
-}  // namespace av::glicd
+}

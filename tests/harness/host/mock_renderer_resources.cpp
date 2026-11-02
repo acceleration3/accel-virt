@@ -137,4 +137,4 @@ const char *MockRendererResources::executor_path() const
     return path_;
 }
 
-}  // namespace av
+}

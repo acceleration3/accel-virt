@@ -1,5 +1,3 @@
-/* One context's completions as the guest sees them: the fence page, written
- * only from the device's counters, and one interrupt per service. */
 #include "core/support/status.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
@@ -48,7 +46,7 @@ struct FenceReporterProbe {
     static void open_unprepared(FenceReporter &reporter) { reporter.quiet_ = false; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -103,7 +101,7 @@ private:
     FenceReporter   reporter_;
 };
 
-}  // namespace
+}
 
 TEST(fence_reporter_prepare, writes_a_fresh_page)
 { Fixture fixture;
@@ -131,7 +129,6 @@ TEST(fence_reporter_prepare, a_blob_too_small_for_a_page_or_a_line_past_the_queu
   CHECK(!FenceWindow().invariants_hold());
   CHECK_STATUS(FenceWindow().publish(FencePage()), Status::invalid_parameter);
   CHECK_STATUS(FenceWindow().publish_beat(1u), Status::invalid_parameter);
-  /* Room for everything but the beat word is no page either. */
   void               *pointer_short = fixture.bytes();
   const std::uint64_t short_length = FencePage::beat_at;
   const FenceWindow   no_beat(BlobWindow(&pointer_short, &short_length, 1u, short_length));
@@ -216,9 +213,6 @@ TEST(fence_reporter_fault, a_faulted_context_reports_nothing_more)
   CHECK_EQ(fixture.host().raised(line), 1u);
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::invalid_state); }
 
-/* The beat word is the pulse's: it moves by one each time the pulse beats,
- * and nothing the worker writes touches it, so a page rewritten from the
- * worker's counters never carries it back. */
 TEST(fence_reporter_beat, moves_the_beat_word_alone_and_the_worker_never_writes_it)
 { Fixture fixture;
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
@@ -240,9 +234,6 @@ TEST(fence_reporter_beat, moves_the_beat_word_alone_and_the_worker_never_writes_
   CHECK_EQ(fixture.page().beat(), 3u);
   CHECK(fixture.reporter().invariants_hold()); }
 
-/* A page not yet prepared, one withdrawn and one faulted are beaten no more:
- * after a fault the page's last change is the fault. Preparing again starts
- * the count from nothing. */
 TEST(fence_reporter_beat, an_unprepared_withdrawn_or_faulted_page_is_not_beaten)
 { Fixture fixture;
   fixture.reporter().beat();
@@ -262,7 +253,6 @@ TEST(fence_reporter_beat, an_unprepared_withdrawn_or_faulted_page_is_not_beaten)
   CHECK_EQ(fixture.page().beat(), 1u);
   CHECK(fixture.page().faulted()); }
 
-/* Whether the worker is at work is its own to say, and a fault ends it. */
 TEST(fence_reporter_at_work, says_what_the_worker_last_said_until_a_fault)
 { Fixture fixture;
   CHECK(!fixture.reporter().working());
@@ -302,10 +292,6 @@ TEST(fence_reporter_fault, an_unprepared_reporter_writes_nothing_and_preparing_s
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
   CHECK(!fixture.page().faulted()); }
 
-/* Feature 052: a host OpenCL event completes on a thread the device never gave
- * the host, so the worker reports it with nothing claimed finished - progress
- * moves, the completion stays where it was, and the guest is interrupted. That
- * is the only shape an out-of-band wake may take (FenceProgress::observe). */
 TEST(fence_reporter_raise, raises_on_progress_alone_with_the_completion_where_it_was)
 { Fixture fixture;
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
@@ -322,16 +308,10 @@ TEST(fence_reporter_raise, raises_on_progress_alone_with_the_completion_where_it
   CHECK(!fixture.page().faulted());
   CHECK_EQ(fixture.reporter().completed(), 7u);
   CHECK_EQ(fixture.reporter().progress(), 3u);
-  /* Counted apart from progress, which the batch moved too: what the driver
-   * wakes a waiting process for. */
   CHECK_EQ(fixture.page().raised(), 2u);
   CHECK_EQ(fixture.reporter().raised(), 2u);
-  /* One for the batch, one for everything raised since - and not one more. */
   CHECK_EQ(fixture.host().raised(line), 2u); }
 
-/* Every page is written whole from the reporter's counters, so a batch
- * completing after a raise still carries the raises: raised never reads as
- * moving backwards to a driver that checks it does not. */
 TEST(fence_reporter_raise, the_pages_after_a_raise_keep_its_count)
 { Fixture fixture;
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
@@ -347,8 +327,6 @@ TEST(fence_reporter_raise, the_pages_after_a_raise_keep_its_count)
   CHECK(fixture.page().faulted());
   CHECK_EQ(fixture.page().raised(), 1u); }
 
-/* The wake a context gets before it has ever completed anything: the guest
- * reads a page whose completed fence is still zero. */
 TEST(fence_reporter_raise, wakes_a_context_that_has_completed_nothing)
 { Fixture fixture;
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
@@ -413,7 +391,6 @@ TEST(fence_reporter_invariants, pending_before_preparing_or_a_completion_without
   Fixture unprepared;
   av::FenceReporterProbe::fault_without_code(unprepared.reporter());
   CHECK(!unprepared.reporter().invariants_hold());
-  /* A faulted page still open to the pulse, and an unprepared one. */
   Fixture loud;
   CHECK_STATUS(loud.reporter().prepare(loud.window(), line), Status::ok);
   av::FenceReporterProbe::fault_loudly(loud.reporter());
@@ -442,7 +419,6 @@ TEST(fence_reporter_complete, records_the_fence_it_told_the_guest_about)
   CHECK_EQ(record.length(), 0u);
   CHECK(file.expect(av::RecordKind::fence_completed, record) != nullptr);
   CHECK(record.fence() == 9u);
-  /* A heartbeat is progress, not a completion, and leaves no record. */
   CHECK_EQ(file.remaining(), 0u);
   fixture.recorder().close(); }
 

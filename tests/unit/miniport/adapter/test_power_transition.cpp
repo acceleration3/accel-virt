@@ -1,6 +1,3 @@
-/* What power took away, so the way back up puts exactly that back. D3 is not
- * StopDevice: dxgkrnl keeps every allocation, VidPn and context across it, and
- * the driver's own device object is the only thing that goes. */
 #include "miniport/adapter/power_transition.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -27,12 +24,10 @@ TEST(power_transition_release, answers_once_and_forgets_it)
   CHECK(!transition.held());
   CHECK(!transition.started());
   CHECK(!transition.scanning_out(1u));
-  /* Released, it can hold the next transition. */
   CHECK_STATUS(transition.hold(false, 0u), Status::ok);
   CHECK(transition.held());
   CHECK(!transition.started()); }
 
-/* Two power-downs without a power-up between them is not a transition. */
 TEST(power_transition_hold, a_second_hold_without_a_release_is_refused)
 { PowerTransition transition;
   CHECK_STATUS(transition.hold(true, 0x1u), Status::ok);
@@ -48,8 +43,6 @@ TEST(power_transition, a_transition_that_held_nothing_restores_nothing)
   transition.release();
   CHECK(!transition.held()); }
 
-/* A source no adapter has cannot have been scanning out: the question is
- * answered rather than read past the bits that hold the answer. */
 TEST(power_transition_scanning_out, a_source_past_what_it_holds_scanned_out_nothing)
 { av::PowerTransition transition;
   CHECK_STATUS(transition.hold(true, 0xFFFFFFFFu), av::Status::ok);

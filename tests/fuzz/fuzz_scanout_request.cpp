@@ -1,8 +1,3 @@
-/* The two scanout request decoders over attacker-chosen bytes. Whatever they
- * accept must have come from exactly the documented offsets; whatever they
- * refuse must hold nothing, since the caller that shows a head reads the
- * fields and the status is the only thing standing between a refused request
- * and a dma-buf. */
 #include "core/support/status.hpp"
 #include "proto/virtio_gpu/flush_request.hpp"
 #include "proto/virtio_gpu/gpu_rect.hpp"
@@ -30,7 +25,7 @@ void refused_holds_nothing(const av::GpuRect &rect)
         __builtin_trap();
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {
@@ -48,7 +43,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
             scanout.format() != word(data, 56u) || scanout.stride() != word(data, 64u) ||
             scanout.offset() != word(data, 80u))
             __builtin_trap();
-        /* The padding word and the three planes it does not carry. */
         if (word(data, 60u) != 0u) __builtin_trap();
         for (std::size_t plane = 1u; plane < av::SetScanoutBlobRequest::planes; plane++)
             if (word(data, 64u + plane * 4u) != 0u || word(data, 80u + plane * 4u) != 0u) __builtin_trap();

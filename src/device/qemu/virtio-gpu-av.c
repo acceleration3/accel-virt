@@ -1,14 +1,4 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/*
- * virtio-gpu-av-device: the base virtio-gpu device handles the 2D protocol;
- * realize, reset, finalize and every control request reach the device core
- * through av_device.h first. Beyond stock virtio-gpu, only what the core says
- * it implements is offered: context init, when it has a capset, the doorbell
- * pages the PCI wrapper maps, and a fence queue per doorbell whose guest
- * notifier the core's workers set to interrupt the guest.
- *
- * Installed by accel-virt's tools/build_qemu.sh as hw/display/virtio-gpu-av.c.
- */
 #include "qemu/osdep.h"
 #include <sys/prctl.h>
 #include "qapi/error.h"
@@ -26,24 +16,16 @@
 
 static void (*virtio_gpu_av_parent_unrealize)(DeviceState *qdev);
 
-/* Fence queues carry no requests: a kick does nothing. */
 static void virtio_gpu_av_fence_kick(VirtIODevice *vdev, VirtQueue *vq)
 {
 }
 
-/* The device core's trace socket asks the main loop for its state dump
- * through this, with no device state behind it (docs/trace.md). */
 static void virtio_gpu_av_schedule(AvHostRoutine routine, void *context)
 {
     aio_bh_schedule_oneshot(qemu_get_aio_context(), routine, context);
 }
 
 
-/* The base device's console ops without ui_info. avgpu reads the display's
- * size once, at StartDevice, and offers no mode larger than it; a host window
- * reporting its own size (gtk's is 642x480 before the guest has drawn) would
- * pin the guest's desktop there. So the guest keeps the size xres and yres
- * name, and the window scales it. */
 static int virtio_gpu_av_console_flags(void *opaque)
 {
     VirtIOGPUBase *g = opaque;
@@ -70,9 +52,6 @@ static const GraphicHwOps virtio_gpu_av_console_ops = {
     .text_update = virtio_gpu_av_console_text,
 };
 
-/* The core's modes, and GET_DISPLAY_INFO's rectangle at the preferred one: a
- * driver that asks only for the rectangle still starts in the preferred mode.
- * None to offer leaves the rectangle xres and yres. */
 static bool virtio_gpu_av_apply_modes(VirtIOGPUAv *r, const char *modes, Error **errp)
 {
     VirtIOGPUBase *b = VIRTIO_GPU_BASE(r);
@@ -99,9 +78,6 @@ static char *virtio_gpu_av_get_modes(Object *obj, Error **errp)
     return g_strdup(r->modes ? r->modes : "");
 }
 
-/* Before realize this only keeps the text, which realize applies. After it
- * the modes change at once and the guest is told with a display event, as a
- * monitor being swapped would tell it. */
 static void virtio_gpu_av_set_modes(Object *obj, const char *value, Error **errp)
 {
     VirtIOGPUAv *r = VIRTIO_GPU_AV(obj);
@@ -126,9 +102,6 @@ static void virtio_gpu_av_get_refresh(Object *obj, Visitor *v, const char *name,
     visit_type_uint32(v, name, &value, errp);
 }
 
-/* As the modes: before realize this only keeps the number, which realize
- * applies; after it the rate changes at once - the blanks and the guest's mode
- * list - and the guest is told with a display event. */
 static void virtio_gpu_av_set_refresh(Object *obj, Visitor *v, const char *name, void *opaque, Error **errp)
 {
     VirtIOGPUAv *r = VIRTIO_GPU_AV(obj);
@@ -139,8 +112,6 @@ static void virtio_gpu_av_set_refresh(Object *obj, Visitor *v, const char *name,
         return;
     }
     if (r->core) {
-        /* The same rate again is no change, and a display event makes Windows
-         * re-read its monitor. */
         if (value == r->refresh) {
             return;
         }
@@ -156,8 +127,6 @@ static void virtio_gpu_av_set_refresh(Object *obj, Visitor *v, const char *name,
 
 static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
 {
-    /* A profiling run (AV_PERFETTO) lets any process of the user read this
-     * one's stacks: tools/perfetto_trace.py's sampler, under Yama's scope 1. */
     const char *profiled = getenv("AV_PERFETTO");
     if (profiled != NULL && profiled[0] == '1') {
         prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
@@ -179,7 +148,6 @@ static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
     for (uint32_t head = 0; head < VIRTIO_GPU_MAX_SCANOUTS; head++) {
         r->showing[head] = -1;
     }
-    /* Before the core: its capset reports host-visible memory from the region. */
     if (virtio_gpu_hostmem_enabled(b->conf)) {
         void *map = qemu_ram_mmap(-1, b->conf.hostmem, qemu_real_host_page_size(), 0, 0);
 
@@ -192,8 +160,6 @@ static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
                                    b->conf.hostmem, map);
         memory_region_add_subregion(&b->hostmem, 0, &r->hostmem_background);
     }
-    /* With a renderer, the library is loaded in that process and never here:
-     * a crash inside it must not take the VM (docs/renderer.md). */
     if (r->executor && r->executor[0] && !renderer) {
         AvExecutorOpsFunction ops = NULL;
 
@@ -208,10 +174,6 @@ static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
             return;
         }
         executor = ops();
-        /* The symbol answering NULL is a library that loaded and has nothing
-         * to say. Left unchecked it is worse than a failure: the device comes
-         * up as a plain virtio-gpu with no capset, and the guest's driver finds
-         * no av protocol with nothing anywhere saying why (feature 042). */
         if (!executor) {
             error_setg(errp, "virtio-gpu-av: executor '%s' answered no table from %s",
                        r->executor, AV_EXECUTOR_OPS_SYMBOL);
@@ -240,7 +202,6 @@ static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
     for (uint32_t i = 0; i < b->conf.max_outputs; i++) {
         qemu_graphic_console_set_hwops(b->scanout[i].con, &virtio_gpu_av_console_ops, b);
     }
-    /* After the base class, which sets the rectangle from xres and yres. */
     if (!virtio_gpu_av_apply_modes(r, r->modes, errp)) {
         return;
     }
@@ -248,7 +209,6 @@ static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
         error_setg(errp, "virtio-gpu-av: refresh %u is not between 1000 and 1000000 millihertz", r->refresh);
         return;
     }
-    /* A GPU that renders but drives no monitor, as a second host GPU is. */
     if (!r->display) {
         b->enabled_output_bitmask = 0;
     }
@@ -257,7 +217,6 @@ static void virtio_gpu_av_realize(DeviceState *qdev, Error **errp)
     }
 }
 
-/* The workers are joined and the fence interrupts released before the queues go. */
 static void virtio_gpu_av_unrealize(DeviceState *qdev)
 {
     VirtIOGPUAv *r = VIRTIO_GPU_AV(qdev);
@@ -282,11 +241,6 @@ static int virtio_gpu_av_set_status(VirtIODevice *vdev, uint8_t status)
     return 0;
 }
 
-/* A guest primary's host image, named by its key (docs/d3d-desktop.md §3.3).
- * Only a GL display consumes it. Without one it is acknowledged without
- * readback; WGC mirrors capture independently of the QEMU console. A frame
- * other than 0 is the display clock's to show, at the head's next vertical
- * blank (docs/protocol.md, "Display clock"). */
 #define VIRTIO_GPU_AV_CMD_SCANOUT_IMAGE 0x02F0
 
 struct virtio_gpu_av_scanout_image {
@@ -298,9 +252,6 @@ struct virtio_gpu_av_scanout_image {
 
 #define VIRTIO_GPU_AV_NO_HEAD UINT32_MAX
 
-/* The head scanning `resource_id` out, or VIRTIO_GPU_AV_NO_HEAD: the cursor's
- * image, for one, is on no head, and a transfer to it must leave every head
- * as it is. */
 static uint32_t virtio_gpu_av_head_of(VirtIOGPU *g, uint32_t resource_id)
 {
     VirtIOGPUBase *b = VIRTIO_GPU_BASE(g);
@@ -329,8 +280,6 @@ static void virtio_gpu_av_scanout_image(VirtIOGPU *g, VirtIOGPUAv *r, struct vir
             answer = VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID;
         } else {
             head = virtio_gpu_av_head_of(g, le32_to_cpu(request.resource_id));
-            /* Do not export either: export_image queues a desktop-sized GPU
-             * copy and waits for it on this same main loop. */
             if (r->host.display_takes_dmabuf(r->host.opaque, head) &&
                 !av_device_post_frame(r->core, head, le32_to_cpu(request.frame), le64_to_cpu(request.key)) &&
                 !(av_device_export_head(r->core, head, le64_to_cpu(request.key), &exported) &&
@@ -342,7 +291,6 @@ static void virtio_gpu_av_scanout_image(VirtIOGPU *g, VirtIOGPUAv *r, struct vir
     virtio_gpu_ctrl_response_nodata(g, cmd, answer);
 }
 
-/* The core answers the requests it owns; the base class answers the rest. */
 static void virtio_gpu_av_process_cmd(VirtIOGPU *g, struct virtio_gpu_ctrl_command *cmd)
 {
     VirtIOGPUAv *r = VIRTIO_GPU_AV(g);
@@ -350,11 +298,9 @@ static void virtio_gpu_av_process_cmd(VirtIOGPU *g, struct virtio_gpu_ctrl_comma
 
     if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &header, sizeof(header)) == sizeof(header)) {
         virtio_gpu_ctrl_hdr_bswap(&header);
-        /* virtio_gpu_ctrl_response copies fence, flags and context from here. */
         cmd->cmd_hdr = header;
         if (header.type == VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D) {
             struct virtio_gpu_transfer_to_host_2d transfer;
-            /* Guest pixels for a resource: its head shows the 2D surface again. */
             if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &transfer, sizeof(transfer)) == sizeof(transfer)) {
                 const uint32_t head = virtio_gpu_av_head_of(g, le32_to_cpu(transfer.resource_id));
                 if (head != VIRTIO_GPU_AV_NO_HEAD) {
@@ -364,10 +310,6 @@ static void virtio_gpu_av_process_cmd(VirtIOGPU *g, struct virtio_gpu_ctrl_comma
         }
         if (header.type == VIRTIO_GPU_CMD_SET_SCANOUT) {
             struct virtio_gpu_set_scanout scanout;
-            /* A resource with neither a 2D image nor a mapped blob - a blob
-             * the host keeps in hostmem - has nothing virtio-gpu can scan out,
-             * and its SET_SCANOUT reads a null image (a SIGSEGV in
-             * pixman_image_get_data): refused here instead. */
             if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &scanout, sizeof(scanout)) == sizeof(scanout)) {
                 const uint32_t id = le32_to_cpu(scanout.resource_id);
                 struct virtio_gpu_simple_resource *res = id != 0 ? virtio_gpu_find_resource(g, id) : NULL;
@@ -383,10 +325,6 @@ static void virtio_gpu_av_process_cmd(VirtIOGPU *g, struct virtio_gpu_ctrl_comma
         }
         if (header.type == VIRTIO_GPU_CMD_RESOURCE_FLUSH) {
             struct virtio_gpu_resource_flush flush;
-            /* A head showing an exported image was refreshed when the image
-             * was shown: the 2D surface behind it is not on screen, and
-             * QEMU's flush would upload it to the display's texture all the
-             * same, on the main loop, once a frame. */
             if (iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, 0, &flush, sizeof(flush)) == sizeof(flush)) {
                 const uint32_t head = virtio_gpu_av_head_of(g, le32_to_cpu(flush.resource_id));
                 if (head != VIRTIO_GPU_AV_NO_HEAD && r->showing[head] >= 0) {
@@ -410,15 +348,10 @@ static void virtio_gpu_av_reset(VirtIODevice *vdev)
     virtio_gpu_reset(vdev);
 }
 
-/* After unrealize, or after a realize that failed. The hostmem reservation
- * stays mapped, as virtio-gpu-gl's does: the region may outlive the device.
- * The executor library is closed after the core, which calls into it, and the
- * renderer ended after it, which may still send it its last messages. */
 static void virtio_gpu_av_finalize(Object *obj)
 {
     VirtIOGPUAv *r = VIRTIO_GPU_AV(obj);
 
-    /* No connection arrives once the core that would serve it starts going. */
     virtio_gpu_av_export_finish(r);
     (void)av_device_destroy(r->core);
     r->core = NULL;
@@ -431,7 +364,6 @@ static void virtio_gpu_av_finalize(Object *obj)
     r->modes = NULL;
 }
 
-/* Stores that are not a connected doorbell's ioeventfd land here and do nothing. */
 static uint64_t virtio_gpu_av_doorbell_read(void *opaque, hwaddr offset, unsigned size)
 {
     return 0;

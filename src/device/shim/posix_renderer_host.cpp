@@ -22,9 +22,6 @@
 namespace av {
 
 namespace {
-
-/* A worker's wakeup: its own eventfd, and the doorbell QEMU registered with
- * KVM once the context is bound. */
 struct RendererEvent {
     int own;
     int doorbell;
@@ -60,7 +57,7 @@ void post(int descriptor)
     }
 }
 
-}  // namespace
+}
 
 PosixRendererHost::PosixRendererHost(GuestMemoryTable &memory, DoorbellOffers &doorbells)
     : memory_(memory), doorbells_(doorbells), executor_(), main_loop_{}, main_loop_known_(false), wakeup_(-1),
@@ -99,8 +96,6 @@ int PosixRendererHost::main_loop_wakeup() const
     return wakeup_;
 }
 
-/* The wakeup is drained before the list is taken: a routine posted after the
- * take signals it again, so none waits for an unrelated message. */
 void PosixRendererHost::run_main_loop_work()
 {
     AV_SCOPE("PosixRendererHost::run_main_loop_work");
@@ -253,9 +248,6 @@ void PosixRendererHost::signal_event(void *event)
     post(static_cast<RendererEvent *>(event)->own);
 }
 
-/* Auto-reset, as the glue's is: both counters are read whole, and a signal
- * after the read is not lost because the worker drains its ring after this
- * returns. */
 void PosixRendererHost::wait_event(void *event)
 {
     AV_SCOPE("PosixRendererHost::wait_event");
@@ -268,8 +260,6 @@ void PosixRendererHost::wait_event(void *event)
     if (count == 2u && (watched[1].revents & POLLIN) != 0) drain(waited->doorbell);
 }
 
-/* The renderer runs no display clock - the device in QEMU keeps it - but the
- * contract is the Host's, so the wait is the same poll bounded by the time left. */
 bool PosixRendererHost::wait_event_until(void *event, uint64_t deadline)
 {
     AV_SCOPE("PosixRendererHost::wait_event_until");
@@ -320,8 +310,6 @@ bool PosixRendererHost::try_lock_mutex(void *mutex)
     return static_cast<PosixLock *>(mutex)->try_acquire();
 }
 
-/* A routine that cannot be queued is lost, as one QEMU could not schedule
- * would be; it is logged so the loss is not silent. */
 void PosixRendererHost::run_on_main_loop(HostRoutine routine, void *context)
 {
     AV_SCOPE("PosixRendererHost::run_on_main_loop");
@@ -406,14 +394,11 @@ void PosixRendererHost::release(void *block)
     free(block);
 }
 
-/* The renderer's threads have no IRQL: every ceiling holds. */
 void PosixRendererHost::require_irql_at_most(Irql, const char *)
 {
     AV_SCOPE("PosixRendererHost::require_irql_at_most");
 }
 
-/* An extent QEMU encoded lies inside one region, so the mapping is whole or
- * nothing. */
 void *PosixRendererHost::map_guest(uint64_t address, uint64_t &length, bool &direct)
 {
     AV_SCOPE("PosixRendererHost::map_guest");
@@ -500,7 +485,6 @@ Status PosixRendererHost::bind_gpu(uint32_t)
     return Status::not_supported;
 }
 
-/* The doorbell QEMU offered for page `index` joins the worker's wakeup. */
 void PosixRendererHost::connect_doorbell(void *event, uint32_t index)
 {
     AV_SCOPE("PosixRendererHost::connect_doorbell");
@@ -532,8 +516,6 @@ void PosixRendererHost::disconnect_fence_interrupts()
     interrupts_connected_ = false;
 }
 
-/* A write to a notifier QEMU has since torn down reaches an eventfd nothing
- * listens to, which is harmless. */
 void PosixRendererHost::raise_fence_interrupt(uint32_t line)
 {
     AV_SCOPE("PosixRendererHost::raise_fence_interrupt");
@@ -547,7 +529,6 @@ size_t PosixRendererHost::read_request(void *request, size_t offset, uint8_t *bu
     return static_cast<const ForwardedRequest *>(request)->read(offset, buffer, size);
 }
 
-/* The renderer answers QEMU with its own messages, never a virtio response. */
 void PosixRendererHost::respond(void *, const uint8_t *, size_t)
 {
     AV_SCOPE("PosixRendererHost::respond");
@@ -706,8 +687,6 @@ void PosixRendererHost::shutdown_export(int)
     AV_SCOPE("PosixRendererHost::shutdown_export");
 }
 
-/* The renderer exports nothing (its plane composes no heads), so it has no
- * descriptor to duplicate. */
 int PosixRendererHost::duplicate_export(int)
 {
     AV_SCOPE("PosixRendererHost::duplicate_export");
@@ -719,4 +698,4 @@ void PosixRendererHost::close_export(int)
     AV_SCOPE("PosixRendererHost::close_export");
 }
 
-}  // namespace av
+}

@@ -29,9 +29,7 @@ private:
     unsigned char bytes_[64] = {};
 };
 
-}  // namespace
-
-/* ---- each rule, provoked and claimed ------------------------------------ */
+}
 
 TEST(mock_platform_irql, a_call_above_its_ceiling_is_recorded)
 { MockPlatform platform;
@@ -193,8 +191,6 @@ TEST(mock_platform_invariant, a_broken_invariant_is_recorded)
   platform.report_broken_invariant("probe_invariant", "probe");
   CHECK(platform.claim(Violation::broken_invariant)); }
 
-/* ---- time --------------------------------------------------------------- */
-
 TEST(mock_platform_time, stands_still_until_advanced)
 { MockPlatform platform;
   CHECK_EQ(platform.interrupt_time(), platform.interrupt_time()); }
@@ -247,7 +243,7 @@ TEST(mock_platform_atomic, an_add_answers_the_sum_and_wraps_like_the_interlocked
   platform.set_irql(Irql::isr);
   CHECK_EQ(platform.add_atomic(word, 3u), 8u);
   CHECK_EQ(word, 8u);
-  CHECK_EQ(platform.add_atomic(word, ~std::uint64_t{0}), 7u);   /* adding the all-ones is subtracting one */
+  CHECK_EQ(platform.add_atomic(word, ~std::uint64_t{0}), 7u);
   CHECK_EQ(platform.load_atomic(word), 7u);
   platform.set_irql(Irql::passive);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
@@ -258,8 +254,6 @@ TEST(mock_platform_time, saturates_instead_of_wrapping)
   platform.advance_time(1u);
   CHECK(platform.interrupt_time() == ~std::uint64_t{0});
   CHECK(platform.claim(Violation::time_overflow)); }
-
-/* ---- a mock that is destroyed dirty fails the test ----------------------- */
 
 TEST(mock_platform_destruction, an_unclaimed_violation_fails_the_test)
 { { MockPlatform platform;
@@ -299,8 +293,6 @@ TEST(mock_platform_memory, zero_and_copy_touch_only_their_bytes)
   platform.zero(bytes + 1, 2u);
   platform.copy(copy, bytes, 3u);
   CHECK_EQ(copy[0], 1); CHECK_EQ(copy[1], 0); CHECK_EQ(copy[2], 0); CHECK_EQ(copy[3], 9); }
-
-/* ---- contiguous DMA memory and stalls -------------------------------------- */
 
 TEST(mock_platform_contiguous, blocks_get_distinct_page_aligned_physical_addresses)
 { MockPlatform platform;
@@ -355,8 +347,6 @@ TEST(mock_platform_stall, is_legal_at_dispatch_and_advances_the_clock)
   CHECK(platform.interrupt_time() - before == 10000u);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
-/* A stall holds a processor and a wait does not: the two clocks are what a
- * test of a waiter judges how it waited by. */
 TEST(mock_platform_stall, counts_the_ticks_it_held_the_processor_apart_from_sleep)
 { MockPlatform platform;
   platform.stall(30u);
@@ -370,8 +360,6 @@ TEST(mock_platform_stall, counts_the_ticks_it_held_the_processor_apart_from_slee
   CHECK_EQ(platform.stalled_ticks(), 500u);
   CHECK_EQ(platform.interrupt_time(), 7500u); }
 
-/* Only a wait that times out moves the clock or runs the device: a set event
- * is consumed at once. */
 TEST(mock_platform_wake_event, a_set_event_is_taken_without_the_device_or_the_clock)
 { MockPlatform platform;
   std::uint32_t calls = 0u;
@@ -416,7 +404,7 @@ TEST(mock_platform_register, an_access_outside_every_window_is_recorded)
 { MockPlatform platform; FakeRegisterBytes window(4u);
   const auto base = reinterpret_cast<std::uint8_t *>(std::uintptr_t{0x7F0000003000u});
   platform.attach_register_window(base, window);
-  CHECK_EQ(platform.read_register_u32(base + 1u), 0xFFFFFFFFu);   /* straddles the end */
+  CHECK_EQ(platform.read_register_u32(base + 1u), 0xFFFFFFFFu);
   CHECK(platform.claim(Violation::unmapped_register));
   CHECK_EQ(platform.read_register_u8(base - 1u), 0xFFu);
   CHECK(platform.claim(Violation::unmapped_register));
@@ -451,8 +439,6 @@ TEST(mock_platform_register, attaching_past_capacity_fails_the_test)
     CHECK_EQ(platform.attached_register_windows(), MockPlatform::max_register_windows); }
   CHECK(TestRegistry::instance().take_current_failure()); }
 
-/* A frame is the kernel's to map only if it is guest memory: here, a page of a
- * contiguous block, whose own bytes the view reaches. */
 TEST(mock_platform_map_frame, maps_a_page_of_a_contiguous_block_onto_its_bytes)
 { MockPlatform platform;
   auto *const block = static_cast<std::uint8_t *>(platform.allocate_contiguous(0x2000u));
@@ -460,7 +446,7 @@ TEST(mock_platform_map_frame, maps_a_page_of_a_contiguous_block_onto_its_bytes)
   std::uint8_t *const view = platform.map_frame(second);
   CHECK(view == block + 0x1000u);
   CHECK_EQ(platform.mapped_frames(), 1u);
-  CHECK(platform.map_frame(0x7000u) == nullptr);   /* no block holds it */
+  CHECK(platform.map_frame(0x7000u) == nullptr);
   platform.unmap_frame(view);
   CHECK_EQ(platform.mapped_frames(), 0u);
   platform.release_contiguous(block, 0x2000u); }
@@ -486,8 +472,6 @@ TEST(mock_platform_map_frame, refuses_misuse_and_fails_on_request)
   CHECK(platform.claim(Violation::blocking_at_dispatch));
   platform.release_contiguous(block, 0x1000u); }
 
-/* A process view of device memory: at a user-mode address of its own, recorded
- * against what it maps until it is unmapped. */
 TEST(mock_platform_map_to_process, gives_each_range_its_own_view_until_unmapped)
 { MockPlatform platform;
   std::uint64_t first_view = 0u, second_view = 0u;
@@ -509,8 +493,6 @@ TEST(mock_platform_map_to_process, gives_each_range_its_own_view_until_unmapped)
   CHECK_EQ(platform.process_mappings(), 0u);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
-/* A view keeps the caching it was mapped with, so a test says a process sees
- * device memory the way the device said it must. */
 TEST(mock_platform_map_to_process, counts_the_views_made_write_combined)
 { MockPlatform platform;
   std::uint64_t cached_view = 0u, combined_view = 0u;
@@ -539,14 +521,12 @@ TEST(mock_platform_map_to_process, refuses_misuse_and_fails_on_request)
   CHECK_EQ(view, 0u);
   CHECK(mapping == nullptr);
   CHECK_EQ(platform.process_mappings(), 0u);
-  /* Not whole pages, in either the address or the size, or no pages at all. */
   const std::uint64_t misuses[][2] = {{0x4000000800ull, 0x1000u}, {0x4000000000ull, 0x800u}, {0x4000000000ull, 0u}};
   for (const auto &misuse : misuses) {
       CHECK_STATUS(platform.map_to_process(misuse[0], misuse[1], av::PageCaching::write_back, view, mapping), av::Status::ok);
       CHECK(platform.claim(Violation::frame_misuse));
       platform.unmap_from_process(mapping);
   }
-  /* A mapping never made, and one already unmapped. */
   platform.unmap_from_process(&view);
   CHECK(platform.claim(Violation::frame_misuse));
   platform.unmap_from_process(mapping);
@@ -560,8 +540,6 @@ TEST(mock_platform_map_to_process, refuses_misuse_and_fails_on_request)
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
 namespace {
-
-/* A device that backs one page of its memory, at 0x4000001000. */
 std::uint8_t backed_page[0x1000] = {};
 
 void *backing_of(void *context, std::uint64_t physical, std::uint64_t)
@@ -570,10 +548,8 @@ void *backing_of(void *context, std::uint64_t physical, std::uint64_t)
     return physical == 0x4000001000ull ? backed_page : nullptr;
 }
 
-}  // namespace
+}
 
-/* A rig whose device backs its memory answers where a view really is; memory
- * it does not back still gets an address of its own. */
 TEST(mock_platform_map_to_process, a_resolver_puts_the_view_on_the_memory_behind_it)
 { MockPlatform platform;
   int asked = 0;
@@ -594,8 +570,6 @@ TEST(mock_platform_map_to_process, a_resolver_puts_the_view_on_the_memory_behind
   CHECK(backed != reinterpret_cast<std::uintptr_t>(backed_page));
   platform.unmap_from_process(first); }
 
-/* Pages the driver owns: zeroed, reachable by frame as a device reaches guest
- * memory, and one memory with the process's view of them. */
 TEST(mock_platform_pages, are_zeroed_and_reached_by_frame_and_by_process_view)
 { MockPlatform platform;
   void *const pages = platform.allocate_pages(0x3000u);
@@ -606,7 +580,6 @@ TEST(mock_platform_pages, are_zeroed_and_reached_by_frame_and_by_process_view)
   CHECK_EQ(frames[1], frames[0] + 0x1000u);
   CHECK_EQ(frames[2], frames[0] + 0x2000u);
   CHECK_EQ(frames[0] & 0xFFFu, 0u);
-  /* The last two, and nothing past the end. */
   std::uint64_t tail[2] = {};
   CHECK_STATUS(platform.read_page_frames(pages, 1u, 2u, tail), av::Status::ok);
   CHECK_EQ(tail[0], frames[1]);
@@ -628,8 +601,6 @@ TEST(mock_platform_pages, are_zeroed_and_reached_by_frame_and_by_process_view)
   CHECK_EQ(platform.owned_page_blocks(), 0u);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
-/* Blocks are numbered in the order they were handed out - a refused one takes
- * no number - and a test reaches one by its number only while it is live. */
 TEST(mock_platform_pages, are_reached_by_the_order_they_were_made_while_live)
 { MockPlatform platform;
   CHECK_EQ(platform.page_blocks_made(), 0u);
@@ -649,7 +620,7 @@ TEST(mock_platform_pages, are_reached_by_the_order_they_were_made_while_live)
   platform.unmap_frame(page);
   platform.release_pages(first);
   CHECK(platform.page_block(0u) == nullptr);
-  void *const third = platform.allocate_pages(0x1000u);   /* the freed slot, a new number */
+  void *const third = platform.allocate_pages(0x1000u);
   CHECK(platform.page_block(0u) == nullptr);
   CHECK(platform.page_block(2u) != nullptr);
   platform.release_pages(second);
@@ -671,7 +642,6 @@ TEST(mock_platform_pages, refuse_partial_pages_dispatch_and_the_requested_failur
   CHECK(platform.allocate_pages(0x1000u) == nullptr);
   void *const third = platform.allocate_pages(0x1000u);
   CHECK(third != nullptr);
-  /* A failed process map leaves nothing mapped, and counts with map_to_process. */
   std::uint64_t view = 9u;
   void *mapping = &view;
   platform.fail_process_map_at(1u);
@@ -683,8 +653,6 @@ TEST(mock_platform_pages, refuse_partial_pages_dispatch_and_the_requested_failur
   platform.release_pages(third);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
-/* Pages freed under a process's view would be memory it writes after someone
- * else owns it. */
 TEST(mock_platform_pages, releasing_pages_a_process_still_maps_is_misuse)
 { MockPlatform platform;
   void *const pages = platform.allocate_pages(0x1000u);
@@ -694,7 +662,6 @@ TEST(mock_platform_pages, releasing_pages_a_process_still_maps_is_misuse)
   platform.release_pages(pages);
   CHECK(platform.claim(Violation::frame_misuse));
   platform.unmap_from_process(mapping);
-  /* A record never allocated maps nothing. */
   int stranger = 0;
   CHECK_STATUS(platform.map_pages_to_process(&stranger, view, mapping), av::Status::no_memory);
   CHECK(platform.claim(Violation::frame_misuse));
@@ -713,9 +680,6 @@ TEST(mock_platform_destruction, a_process_view_left_mapped_fails_the_test)
     CHECK_STATUS(platform.map_to_process(0x4000000000ull, 0x1000u, av::PageCaching::write_back, view, mapping), av::Status::ok); }
   CHECK(TestRegistry::instance().take_current_failure()); }
 
-/* DriverEntry reads its service key through the platform, which a test builds
- * with the one value it wants there: the name must match, and anything else
- * reads as the caller's fallback, as a missing registry value does. */
 TEST(mock_platform_service, answers_its_one_value_and_falls_back_for_the_rest)
 { int registry_path = 0;
   const ServiceValue scopes("TraceScopes", 7u);

@@ -1,10 +1,3 @@
-/* The physical device as the guest's adapter: the host's properties with the API
- * version held to 1.3 and the adapter's LUID in VkPhysicalDeviceIDProperties.
- * The reply is the host's to write, so it is also fed cut at every length,
- * with every byte flipped, and crafted to relabel the application's own
- * structures: the chain the application passed comes back exactly as it was,
- * nothing outside a structure it labelled is written, and a chain that cannot be
- * remembered is not sent. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -33,7 +26,7 @@ struct PhysicalDeviceViewProbe {
     static void overrun(PhysicalDeviceView &view) { view.remembered_ = PhysicalDeviceView::max_chain + 1u; }
 };
 
-}  // namespace av::icd
+}
 
 using av::icd::PhysicalDeviceViewProbe;
 
@@ -46,7 +39,6 @@ constexpr std::uint32_t host_vendor = 0x10DEu;
 constexpr std::size_t   reply_bytes = 4096u;
 constexpr std::uint8_t  canary = 0xA5u;
 
-/* A physical device the root made, so its handle crosses as the host's. */
 class ViewRig {
 public:
     ViewRig()
@@ -64,7 +56,6 @@ public:
     void answer(const WireWriter &reply) { transport_.set_reply(reply_, reply.offset()); }
     std::uint8_t *reply_block() { return reply_; }
 
-    /* What the view sent: the command and the physical device it named. */
     void check_sent(std::uint32_t command)
     {
         CHECK_EQ(transport_.last_command(), command);
@@ -91,8 +82,6 @@ VkPhysicalDeviceProperties host_properties(std::uint32_t api_version)
     return properties;
 }
 
-/* The host's answer to vkGetPhysicalDeviceProperties2 with an ID node whose
- * LUID is its own and not valid, as a Linux host's is. */
 void write_properties2_with_identity(WireWriter &reply, std::uint32_t api_version)
 {
     VkPhysicalDeviceIDProperties identity = {};
@@ -115,7 +104,7 @@ bool luid_is_the_adapters(const VkPhysicalDeviceIDProperties &identity)
            identity.deviceLUIDValid == VK_TRUE;
 }
 
-}  // namespace
+}
 
 TEST(physical_device_view, holds_a_newer_host_to_the_version_this_icd_implements)
 { ViewRig view_rig;
@@ -143,7 +132,6 @@ TEST(physical_device_view, leaves_an_older_host_at_its_own_version)
   VkPhysicalDeviceProperties answer = {};
   view.properties(view_rig.physical_device(), &answer);
   CHECK_EQ(answer.apiVersion, vulkan_1_1_250);
-  /* Exactly 1.3 stays 1.3. */
   WireWriter exact(view_rig.reply_block(), reply_bytes);
   exact.write_pod<std::int32_t>(0);
   serialize_VkPhysicalDeviceProperties(exact, host_properties(vulkan_1_3));
@@ -184,7 +172,6 @@ TEST(physical_device_view, properties2_writes_the_adapters_luid_over_the_hosts)
       CHECK(identity.pNext == nullptr);
       CHECK_EQ(identity.deviceUUID[0], 0x11u);
       CHECK(luid_is_the_adapters(identity));
-      /* LowPart first: the byte order a LUID structure has. */
       CHECK_EQ(identity.deviceLUID[0], 0x34u);
       CHECK_EQ(identity.deviceLUID[4], 0x02u);
   }
@@ -212,10 +199,6 @@ TEST(physical_device_view, the_luid_goes_only_into_identity_nodes_anywhere_in_th
   CHECK(driver.pNext == &identity);
   CHECK(driver.sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES); }
 
-/* A Vulkan 1.2 client reads the LUID from the core 1.1 properties rather than
- * the ID node - vulkaninfo on a live guest printed deviceLUIDValid false there -
- * so both carry the adapter's LUID, and the node mask a valid LUID requires
- * names the one node this adapter has. */
 TEST(physical_device_view, the_luid_and_node_mask_go_into_core_1_1_properties_too)
 { ViewRig view_rig;
   WireWriter reply(view_rig.reply_block(), reply_bytes);
@@ -272,9 +255,6 @@ TEST(physical_device_view, properties2_with_no_chain_is_only_held_to_the_version
   CHECK(answer.pNext == nullptr);
   CHECK(answer.sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2); }
 
-/* The host names the application's small point-clipping node by its own type
- * but writes the identity type into the node's sType. Believed, the LUID would
- * land 48 bytes into a 24-byte structure. */
 TEST(physical_device_view, a_host_relabelling_the_applications_structures_is_undone)
 { ViewRig view_rig;
   WireWriter reply(view_rig.reply_block(), reply_bytes);
@@ -319,19 +299,16 @@ TEST(physical_device_view, a_chain_too_long_to_remember_or_cyclic_is_not_sent)
   answer.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
   answer.pNext = &nodes[0];
   answer.properties.apiVersion = 77u;
-  /* The application's structure and 32 nodes: one more than can be remembered. */
   view.properties2(view_rig.physical_device(), &answer);
   CHECK(view.invariants_hold());
   CHECK_EQ(view_rig.transport().sends(), 0u);
   CHECK_EQ(answer.properties.apiVersion, 77u);
   CHECK_EQ(view_rig.rig().log().holding("chain longer than 32"), 1u);
-  /* 31 nodes fit, and cross. */
   nodes[PhysicalDeviceView::max_chain - 2u].pNext = nullptr;
   view_rig.transport().fail_next();
   view.properties2(view_rig.physical_device(), &answer);
   CHECK_EQ(answer.properties.apiVersion, 0u);
   CHECK(nodes[PhysicalDeviceView::max_chain - 2u].pNext == nullptr);
-  /* A node pointing at itself. */
   nodes[0].pNext = &nodes[0];
   answer.properties.apiVersion = 77u;
   view.properties2(view_rig.physical_device(), &answer);
@@ -359,7 +336,6 @@ TEST(physical_device_view, a_reply_cut_at_every_length_leaves_the_chain_and_the_
       CHECK(identity.sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES);
       CHECK(answer.properties.apiVersion <= vulkan_1_3);
       CHECK(luid_is_the_adapters(identity));
-      /* Only a reply that reached the properties fills them. */
       CHECK(cut == length ? answer.properties.vendorID == host_vendor : answer.properties.vendorID != 0xFFFFu);
   }
 }
@@ -397,8 +373,6 @@ TEST(physical_device_view, invariants_refuse_more_remembered_than_it_has_room_fo
   PhysicalDeviceViewProbe::overrun(view);
   CHECK(!view.invariants_hold()); }
 
-/* The device is named as every other API names the adapter, in both queries;
- * everything else stays the host's. */
 TEST(physical_device_view, names_the_device_after_its_adapter)
 { ViewRig view_rig;
   WireWriter reply(view_rig.reply_block(), reply_bytes);
@@ -424,7 +398,6 @@ TEST(physical_device_view, names_the_device_after_its_adapter)
   CHECK(std::strcmp(answer2.properties.deviceName, "AMD Radeon(TM) Graphics") == 0);
   CHECK(luid_is_the_adapters(identity)); }
 
-/* No name from Windows keeps the host's, rather than naming the device nothing. */
 TEST(physical_device_view, an_adapter_without_a_name_keeps_the_hosts)
 { ViewRig view_rig;
   const char *const nones[] = {"", nullptr};

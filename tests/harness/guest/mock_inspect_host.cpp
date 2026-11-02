@@ -118,4 +118,4 @@ void MockInspectHost::note(const char *name)
     journal_[journal_length_] = '\0';
 }
 
-}  // namespace av
+}

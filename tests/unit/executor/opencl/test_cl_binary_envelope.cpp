@@ -1,8 +1,3 @@
-/* A host binary's envelope, on this host's own GPU: sealed, it opens to the
- * same bytes; damaged anywhere - its magic, its version, its reserved word,
- * either UUID, the driver's digest, the payload, its length - it does not; and
- * an envelope that knows no device seals and opens nothing. A host with no
- * OpenCL GPU judges only the last. */
 #include "executor/opencl/cl_binary_envelope.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -26,20 +21,15 @@ extern "C" const char *__lsan_default_suppressions(void)
 }
 
 namespace av {
-
-/* What a test reaches inside: the identity, so another device's can be made
- * without another device. */
 struct ClBinaryEnvelopeProbe {
     static void another_device(ClBinaryEnvelope &envelope) { envelope.device_uuid_[0] ^= 0x01u; }
 };
 
-}  // namespace av
+}
 
 using av::ClBinaryEnvelope;
 
 namespace {
-
-/* The first GPU any platform offers, or nothing. */
 bool first_gpu(cl_platform_id &platform, cl_device_id &device)
 {
     cl_platform_id platforms[8] = {};
@@ -58,7 +48,7 @@ bool first_gpu(cl_platform_id &platform, cl_device_id &device)
 
 constexpr std::uint8_t host_binary[] = {'a', 'n', 'y', ' ', 'h', 'o', 's', 't', ' ', 'b', 'y', 't', 'e', 's'};
 
-}  // namespace
+}
 
 TEST(cl_binary_envelope, an_envelope_that_knows_no_device_seals_and_opens_nothing)
 { ClBinaryEnvelope envelope;
@@ -92,9 +82,6 @@ TEST(cl_binary_envelope, a_sealed_binary_opens_to_its_bytes_and_a_damaged_one_do
   CHECK(opened == sealed + ClBinaryEnvelope::header_bytes);
   CHECK_EQ(bytes, sizeof host_binary);
 
-  /* Every byte of the header and the payload matters: the magic, the
-   * version, the reserved word, both UUIDs, the driver's digest, the length
-   * and the payload's digest, and the payload itself. */
   for (std::size_t at = 0u; at < sizeof sealed; ++at) {
       sealed[at] ^= 0x10u;
       const std::uint8_t *damaged = nullptr;
@@ -103,7 +90,6 @@ TEST(cl_binary_envelope, a_sealed_binary_opens_to_its_bytes_and_a_damaged_one_do
       CHECK(damaged == nullptr);
       sealed[at] ^= 0x10u;
   }
-  /* Cut short, run on, the header alone, and nothing. */
   CHECK(!envelope.open(sealed, sizeof sealed - 1u, opened, bytes));
   std::uint8_t longer[sizeof sealed + 1u] = {};
   std::memcpy(longer, sealed, sizeof sealed);
@@ -111,13 +97,11 @@ TEST(cl_binary_envelope, a_sealed_binary_opens_to_its_bytes_and_a_damaged_one_do
   CHECK(!envelope.open(sealed, ClBinaryEnvelope::header_bytes, opened, bytes));
   CHECK(!envelope.open(nullptr, sizeof sealed, opened, bytes));
 
-  /* Sealed on another device, it is not this one's. */
   ClBinaryEnvelope other;
   CHECK(other.identify(platform, device));
   CHECK(other.open(sealed, sizeof sealed, opened, bytes));
   av::ClBinaryEnvelopeProbe::another_device(other);
   CHECK(!other.open(sealed, sizeof sealed, opened, bytes));
-  /* Nothing to seal writes nothing. */
   std::uint8_t untouched[4] = {1u, 2u, 3u, 4u};
   envelope.seal(nullptr, 4u, untouched);
   envelope.seal(host_binary, 0u, untouched);

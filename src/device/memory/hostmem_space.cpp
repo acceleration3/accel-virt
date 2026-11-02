@@ -17,4 +17,4 @@ bool HostmemSpace::admits(uint64_t offset, uint64_t size) const
     return offset % page_size == 0u && size != 0u && offset <= region && size <= region - offset;
 }
 
-}  // namespace av
+}

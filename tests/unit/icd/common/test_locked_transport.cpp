@@ -1,7 +1,3 @@
-/* One command at a time through a shared transport: the lock is taken when the
- * writer is lent and let go once an asynchronous command is sent, or once a
- * synchronous call has ended - its reply decoded - whether it failed or not;
- * what is sent and answered is the inner transport's. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
@@ -25,7 +21,7 @@ struct LockedTransportProbe {
     static bool &holds(LockedTransport &transport) { return transport.holds_; }
 };
 
-}  // namespace av::icd
+}
 
 using av::ClientTransport;
 using av::LockTrace;
@@ -41,7 +37,7 @@ namespace {
 
 constexpr std::uint32_t command = 0x1234u;
 
-}  // namespace
+}
 
 TEST(locked_transport, holds_the_lock_from_the_writer_until_an_async_send_returns)
 { MockTransport inner;
@@ -98,8 +94,6 @@ TEST(locked_transport, a_failed_send_still_lets_the_lock_go_and_says_it_failed)
   CHECK_EQ(inner.sends(), 0u);
   CHECK(std::strcmp(trace.text(), "SsSs") == 0); }
 
-/* Only a synchronous call is ended: a stray end after an asynchronous send, or
- * a second end of one call, lets go of nothing it does not hold. */
 TEST(locked_transport, an_end_with_no_sync_call_open_releases_nothing)
 { MockTransport inner;
   LockTrace trace;
@@ -120,9 +114,6 @@ TEST(locked_transport, an_end_with_no_sync_call_open_releases_nothing)
   CHECK(std::strcmp(trace.text(), "SsSs") == 0);
   CHECK(transport.invariants_hold()); }
 
-/* The OpenGL client drops a payload that overflowed before any send and ends
- * the call itself: the writer's lock goes, the inner call ends, and a later
- * call takes the lock afresh (feature 050). */
 TEST(locked_transport, an_end_while_writing_lets_the_writer_go)
 { MockTransport inner;
   LockTrace trace;
@@ -141,8 +132,6 @@ TEST(locked_transport, an_end_while_writing_lets_the_writer_go)
   CHECK(!lock.held());
   CHECK(std::strcmp(trace.text(), "SsSs") == 0); }
 
-/* The lock is held exactly while a command is being written or a call's reply
- * read; a transport that says otherwise is refused. */
 TEST(locked_transport, invariants_refuse_a_held_lock_with_no_call_or_a_call_without_it)
 { MockTransport inner;
   LockTrace trace;
@@ -167,8 +156,6 @@ TEST(locked_transport, invariants_refuse_a_held_lock_with_no_call_or_a_call_with
   CHECK(transport.invariants_hold()); }
 
 namespace {
-
-/* A real mutex, so two threads contend for it. */
 class MutexLock final : public av::ThreadLock {
 public:
     MutexLock() { pthread_mutex_init(&mutex_, nullptr); }
@@ -181,10 +168,6 @@ private:
     pthread_mutex_t mutex_;
 };
 
-/* KmtTransport's shape: one reply slot every synchronous send overwrites with
- * its answer - here the command id - and a log of what happened in which order.
- * The first send hands the second thread its turn and waits a while for its
- * send before the first call's reply is read. */
 class SharedSlotTransport final : public ClientTransport {
 public:
     SharedSlotTransport()
@@ -211,7 +194,6 @@ public:
     av::WireArena   &decode_arena() override { return arena_; }
     av::ClientBlobArena &blobs() override { return blobs_; }
 
-    /* Waits until `event` has been logged, or `milliseconds` pass. */
     bool wait_for(char event, long milliseconds)
     { timespec deadline = {};
       clock_gettime(CLOCK_REALTIME, &deadline);
@@ -256,11 +238,8 @@ void *second_call(void *argument)
     return nullptr;
 }
 
-}  // namespace
+}
 
-/* Two threads' round trips on one connection: the second may not send - and so
- * overwrite the reply slot - until the first has read its answer and ended its
- * call. Without the lock held to the end, the first reads the second's answer. */
 TEST(locked_transport, a_second_thread_cannot_replace_a_reply_before_the_first_call_ends)
 { SharedSlotTransport inner;
   MutexLock lock;
@@ -289,8 +268,6 @@ TEST(locked_transport, a_generated_command_takes_the_lock_once)
   RecordingThreadLock lock(trace, 'S');
   LockedTransport transport(inner, lock);
   ClientTransport &seam = transport;
-  /* vkCreateInstance names no dispatchable handle, so nothing here needs a root
-   * to unwrap one. */
   VkInstanceCreateInfo create = {};
   create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;

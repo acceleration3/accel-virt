@@ -1,7 +1,3 @@
-/* LOSE_HOST_DEVICE (docs/protocol.md, "Losing the host device"): the context's
- * executor is asked to lose its host device and the answer says whether it
- * did; no body is framing, an executor-less context or a host that cannot
- * lose one keeps it, and a slot too small is written nothing. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/execution/context_executor.hpp"
@@ -44,7 +40,6 @@ public:
 
     av::MockExecutorOps &ops() { return ops_; }
 
-    /* `body` on the context's worker, which LOSE_HOST_DEVICE runs on. */
     template <typename Body>
     void on_worker(Body body)
     {
@@ -90,7 +85,7 @@ private:
     std::size_t         produced_ = 0u;
 };
 
-}  // namespace
+}
 
 TEST(lose_device_command_run, the_host_loses_the_device_and_says_so)
 { Fixture fixture;
@@ -100,7 +95,6 @@ TEST(lose_device_command_run, the_host_loses_the_device_and_says_so)
       CHECK_EQ(f.produced(), CommandHeader::lose_host_device_answer);
       CHECK_EQ(f.word(0u), CommandHeader::host_device_lost);
       CHECK_EQ(f.word(4u), 0u);
-      /* The context is not faulted by the command: its poll is. */
       CHECK(f.executor().poll() == av::HostPoll::lost);
       f.executor().destroy();
   });
@@ -121,9 +115,6 @@ TEST(lose_device_command_run, a_host_that_cannot_lose_one_or_no_executor_keeps_i
   });
   CHECK_EQ(fixture.ops().losses(), 0u); }
 
-/* No producer frames a body on it: that is the context's framing fault, and
- * nothing is lost. A slot short of the answer is written nothing, and the
- * length it needed is said. */
 TEST(lose_device_command_run, a_body_is_framing_and_a_short_slot_is_written_nothing)
 { Fixture fixture;
   fixture.on_worker([](Fixture &f) {

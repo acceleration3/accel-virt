@@ -1,19 +1,3 @@
-/* Rows appended from any thread, read without a lock from any thread: what a
- * driver remembers once and looks up from inside its own locks - a log line
- * already written, an answer already given. No row is ever changed or taken
- * back.
- *
- * A writer claims the next row with one atomic step, writes it and then marks
- * it ready; a reader sees a row only once it is ready, so never a half-written
- * one. The rows live in chunks that double in size as they are added and never
- * move, because a reader walking them holds no lock a growth could wait for:
- * a realloc would pull the rows out from under it. Two writers that both find
- * a chunk missing each make one; the first to publish it wins and the other
- * gives its back.
- *
- * A claimed row whose chunk could not be made is never ready: the append
- * answers no_memory and readers pass over it. Row is trivially copyable.
- * Appending allocates, so it is legal up to APC; reading is legal anywhere. */
 #ifndef AV_CLAIMED_ROWS_HPP
 #define AV_CLAIMED_ROWS_HPP
 
@@ -38,10 +22,7 @@ class ClaimedRows {
     };
 
 public:
-    /* The first chunk's rows; chunk n holds first_rows << n. */
     static constexpr uint32_t first_rows = 16u;
-    /* Chunks a table may have: each one's bytes counted by a size_t on the
-     * 32-bit guest builds as on the host. */
     static constexpr uint32_t most_chunks =
         (~size_t{0} / 4u / sizeof(Cell)) / first_rows >= (size_t{1} << 26u)
             ? 27u
@@ -50,24 +31,17 @@ public:
     static constexpr uint32_t most_rows = first_rows * ((uint32_t{1} << most_chunks) - 1u);
 
     ClaimedRows(BlockSource &blocks, Pool pool);
-    /* No append or read may still be running. */
     ~ClaimedRows();
     ClaimedRows(const ClaimedRows &) = delete;
     ClaimedRows &operator=(const ClaimedRows &) = delete;
     ClaimedRows(ClaimedRows &&) = delete;
     ClaimedRows &operator=(ClaimedRows &&) = delete;
 
-    /* `row` after every row claimed before it, and ready: no_memory when its
-     * chunk cannot be made or the table holds most_rows. */
     [[nodiscard]] Status append(const Row &row);
-    /* The first ready row `matches`, or null; the row stays where it is for
-     * as long as the table. */
     template <typename Predicate>
     const Row           *find_if(Predicate matches) const;
-    /* Every ready row to `visit`, in the order claimed. */
     template <typename Visitor>
     void                 for_each(Visitor visit) const;
-    /* Rows claimed, ready or not. */
     uint32_t             claimed() const;
 
     bool invariants_hold() const;
@@ -75,10 +49,7 @@ public:
 private:
     uint32_t chunk_of(uint32_t index) const;
     uint32_t first_of(uint32_t chunk) const;
-    /* The chunk `chunk`, made and published if no writer has yet; null when
-     * it cannot be made. */
     Cell    *chunk(uint32_t chunk);
-    /* The ready row at `index`, or null. */
     const Row *ready_at(uint32_t index) const;
 
     BlockSource &blocks_;
@@ -139,8 +110,6 @@ Status ClaimedRows<Row>::append(const Row &row)
 {
     AV_SCOPE("ClaimedRows::append");
     blocks_.require_irql_at_most(Irql::apc, "ClaimedRows::append");
-    /* One at a time, so a table at most_rows stays exactly there however
-     * many append after. */
     uint32_t index = __atomic_load_n(&claimed_, __ATOMIC_ACQUIRE);
     do {
         if (index >= most_rows) return Status::no_memory;
@@ -197,8 +166,6 @@ uint32_t ClaimedRows<Row>::claimed() const
     return __atomic_load_n(&claimed_, __ATOMIC_ACQUIRE);
 }
 
-/* Only where no writer runs: a ready row in a chunk that does not exist, or
- * past the claim, is what a broken publish would leave. */
 template <typename Row>
 bool ClaimedRows<Row>::invariants_hold() const
 {
@@ -214,6 +181,6 @@ bool ClaimedRows<Row>::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}
 
-#endif  // AV_CLAIMED_ROWS_HPP
+#endif

@@ -1,11 +1,3 @@
-/* L4 through the real driver and the real device core: host memory
- * (docs/host-memory.md) from a process's escape to the executor's
- * allocation and back. A window chunk is a host blob of executor memory made
- * for the process's context, placed in the hostmem region and mapped into the
- * process with the caching the host answered; the context imports it by its
- * resource, and nothing of it is left once the process lets go. The executor
- * is MockExecutorOps, whose memory is a real memfd: what the process writes
- * through its view is what the executor reads, and the other way round. */
 #include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
@@ -45,13 +37,10 @@ constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::uint8_t  ring_order = 12u;
 constexpr std::uint64_t chunk_bytes = 0x3000u;
-/* The context's ring, reply slot and fence page, every process view a
- * transport holds before it opens any memory. */
 constexpr std::uint32_t transport_views = 3u;
 
 const HostMemoryRequest upload(HostMemoryRequest::Kind::upload, 0u);
 
-/* One process's av context on the rig's adapter, started. */
 class Process {
 public:
     explicit Process(FullStackRig &rig)
@@ -88,9 +77,6 @@ bool descriptor_open(int fd)
     return fd >= 0 && ::fcntl(fd, F_GETFD) != -1;
 }
 
-/* Every class a guest asks for reaches the executor as asked, under the
- * blob's own id and at the chunk's whole size, and the memory is one: the
- * process's bytes are the executor's and the executor's the process's. */
 void lands_as_asked(FullStackRig &rig, Process &process, HostMemoryRequest memory)
 {
     MockExecutorOps &executor = rig.device().executor();
@@ -119,7 +105,7 @@ void lands_as_asked(FullStackRig &rig, Process &process, HostMemoryRequest memor
     CHECK_EQ(executor.live_memory(), 0u);
 }
 
-}  // namespace
+}
 
 TEST(fullstack_host_memory, every_request_class_lands_as_a_placed_host_blob_the_executor_shares)
 { FullStackRig rig;
@@ -133,9 +119,6 @@ TEST(fullstack_host_memory, every_request_class_lands_as_a_placed_host_blob_the_
   CHECK_EQ(rig.device().executor().memory_allocations(), 4u);
   CHECK_EQ(rig.platform().process_mappings(), transport_views); }
 
-/* The device answers MAP_BLOB with the host's caching, and the kernel maps
- * the process's view the same way: write-combined memory is a write-combined
- * view, write-back memory a cached one (docs/host-memory.md). */
 TEST(fullstack_host_memory, the_hosts_caching_is_the_caching_of_the_process_view)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -155,10 +138,6 @@ TEST(fullstack_host_memory, the_hosts_caching_is_the_caching_of_the_process_view
   CHECK_STATUS(cached.release(), Status::ok);
   CHECK_EQ(rig.platform().process_mappings(), transport_views); }
 
-/* An allocation opened and imported, then closed: the import is released,
- * the view unmapped, the blob unmapped and released, and the executor's
- * memory and the device's descriptor of it gone. Opening again reuses the
- * id and the window pages, which only a complete release frees. */
 TEST(fullstack_host_memory, a_closed_allocation_leaves_nothing_behind)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -191,9 +170,6 @@ TEST(fullstack_host_memory, a_closed_allocation_leaves_nothing_behind)
   CHECK_EQ(rig.device().host().last_placement().offset, 0u);
   CHECK_STATUS(again.release(), Status::ok); }
 
-/* The chunk goes before its import: the device frees its hold on the
- * memory, and the import keeps it alive - still the bytes the process
- * wrote - until the import is released too. */
 TEST(fullstack_host_memory, an_import_keeps_the_memory_after_its_chunk_is_closed)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -216,10 +192,6 @@ TEST(fullstack_host_memory, an_import_keeps_the_memory_after_its_chunk_is_closed
   CHECK_STATUS(import.release(), Status::ok);
   CHECK_EQ(executor.live_memory(), 0u); }
 
-/* Memory the executor will not give, a placement QEMU cannot make, and an
- * answer of no caching the guest can map: each refuses the open to the
- * process with nothing left anywhere - no blob, no placement, no memory, no
- * view - and the kernel's id and pages free for the next open. */
 TEST(fullstack_host_memory, a_chunk_the_host_refuses_is_refused_with_nothing_left)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -251,9 +223,6 @@ TEST(fullstack_host_memory, a_chunk_the_host_refuses_is_refused_with_nothing_lef
   CHECK_EQ(rig.device().host().last_placement().offset, 0u);
   CHECK_STATUS(chunk.release(), Status::ok); }
 
-/* A context imports only memory its own process opened: another context of
- * the same device naming the blob's resource is told it is no blob of its,
- * and the executor is never asked; the owner's import still goes through. */
 TEST(fullstack_host_memory, a_context_importing_another_contexts_blob_is_refused)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);

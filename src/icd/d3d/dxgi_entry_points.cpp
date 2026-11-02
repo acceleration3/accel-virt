@@ -1,5 +1,3 @@
-/* The ABI boundary C requires (constitution III): each thunk finds the device
- * behind its argument's hDevice and asks it. No logic here. */
 #include "icd/d3d/dxgi_entry_points.hpp"
 
 #include "core/support/runtime_call.hpp"
@@ -13,9 +11,6 @@
 
 namespace av::d3d {
 namespace {
-
-/* A device the root did not make: the argument names nothing, so there is no
- * device to answer for and no log to write it in. */
 UmdDevice *device_behind(const void *args)
 {
     AV_SCOPE("device_behind");
@@ -106,7 +101,7 @@ extern "C" Hresult AV_RUNTIME_CALL avumd_dxgi_check_multiplane_overlay_color_spa
     return device == nullptr ? hr_invalid_arg : device->dxgi().overlay_color_space(args);
 }
 
-}  // namespace
+}
 
 void fill_dxgi_base_functions(Dxgi161DdiBaseFunctionsRecord &table)
 {
@@ -136,4 +131,4 @@ void fill_dxgi_base_functions(Dxgi161DdiBaseFunctionsRecord &table)
     table.pfnReclaimResources1 = reinterpret_cast<void *>(&avumd_dxgi_reclaim_resources1);
 }
 
-}  // namespace av::d3d
+}

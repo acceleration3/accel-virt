@@ -7,8 +7,6 @@ SCRIPT = ROOT / "cmake" / "check_fuzz_corpora.cmake"
 
 
 class FuzzCorpora(unittest.TestCase):
-    """Constitution IV.3: every fuzz target has a committed seed corpus."""
-
     def setUp(self):
         self.tree = SourceTree()
         self.addCleanup(self.tree.remove)

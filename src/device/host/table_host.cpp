@@ -9,17 +9,12 @@
 namespace av {
 
 namespace {
-
-/* DRM_FORMAT_MOD_LINEAR: a scanout of guest pages is always linear, and the
- * tiled case arrives with the executor's image export (feature 058,
- * contracts/executor_scanout_export.md). */
 constexpr uint64_t drm_format_mod_linear = 0u;
 
-/* What the table's receive_renderer answers. */
 constexpr int receive_ok = 0;
 constexpr int receive_timed_out = 1;
 
-}  // namespace
+}
 
 TableHost::TableHost(const AvHostOps &ops) : ops_(ops)
 {
@@ -144,7 +139,6 @@ uint32_t TableHost::gpu_count()
     return ops_.gpu_count(ops_.opaque);
 }
 
-/* The name is cut at the field's end whatever the glue left there. */
 GpuIdentity TableHost::gpu_identity(uint32_t index)
 {
     AV_SCOPE("TableHost::gpu_identity");
@@ -201,7 +195,6 @@ void TableHost::release(void *block)
     ops_.release(ops_.opaque, block);
 }
 
-/* QEMU's threads have no IRQL: every ceiling holds. */
 void TableHost::require_irql_at_most(Irql, const char *)
 {
     AV_SCOPE("TableHost::require_irql_at_most");
@@ -289,8 +282,6 @@ uint64_t TableHost::monotonic_nanoseconds()
     return ops_.monotonic_nanoseconds(ops_.opaque);
 }
 
-/* The instruction, not the glue's: it orders this thread's own stores, which
- * no call into QEMU could. */
 void TableHost::fence_stores()
 {
     AV_SCOPE("TableHost::fence_stores");
@@ -376,8 +367,6 @@ void TableHost::close_recording(void *file)
     ops_.close_recording(ops_.opaque, file);
 }
 
-/* A table from before these four shows nothing, which is the same answer a
- * host with no GL display gives, and the guest then keeps the 2D path. */
 bool TableHost::display_takes_dmabuf(uint32_t head)
 {
     AV_SCOPE("TableHost::display_takes_dmabuf");
@@ -422,8 +411,6 @@ Status TableHost::show_image(uint32_t head, const AvExportedImage &image)
     return ops_.show_image(ops_.opaque, head, &image) == 0 ? Status::ok : Status::not_supported;
 }
 
-/* A table from before renderer mode has none of these, which is a host that
- * runs every context in QEMU: no descriptors, no regions, no renderer. */
 int TableHost::event_descriptor(void *event)
 {
     AV_SCOPE("TableHost::event_descriptor");
@@ -492,10 +479,6 @@ Status TableHost::send_renderer(const uint8_t *bytes, size_t length, const int *
     return ops_.send_renderer(ops_.opaque, bytes, length, descriptors, count) == 0 ? Status::ok : Status::not_found;
 }
 
-/* A datagram longer than the buffer arrived cut, so it is refused whole and
- * the descriptors that came with it closed: the caller never sees half a
- * message. A table claiming more descriptors than it had room for is refused
- * the same way. */
 Status TableHost::receive_renderer(uint8_t *buffer, size_t capacity, size_t &length, int *descriptors,
                                    uint32_t capacity_descriptors, uint32_t &count, uint32_t timeout_ms)
 {
@@ -561,4 +544,4 @@ void TableHost::close_export(int descriptor)
     if (ops_.close_export != nullptr) ops_.close_export(ops_.opaque, descriptor);
 }
 
-}  // namespace av
+}

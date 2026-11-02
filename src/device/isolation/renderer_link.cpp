@@ -91,9 +91,6 @@ Status RendererLink::exchange(RendererMessageHeader::Kind kind, const uint8_t *b
     return await(answered, sequence, request_timeout_ms, answer, answer_length, descriptors, capacity, count);
 }
 
-/* The renderer sends nothing unasked: anything but the answer awaited - a
- * stale reply to a request that already timed out, descriptors it had no
- * reason to send - is dropped, and the wait goes on until its deadline. */
 Status RendererLink::await(RendererMessageHeader::Kind expected, uint64_t sequence, uint32_t timeout_ms,
                            const uint8_t *&body, uint32_t &length, int *kept, uint32_t capacity, uint32_t &count)
 {
@@ -126,4 +123,4 @@ Status RendererLink::await(RendererMessageHeader::Kind expected, uint64_t sequen
     }
 }
 
-}  // namespace av
+}

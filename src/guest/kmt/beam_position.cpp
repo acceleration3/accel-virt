@@ -21,4 +21,4 @@ bool BeamPosition::earlier_than(const BeamPosition &other) const
     return line_ < other.line_;
 }
 
-}  // namespace av
+}

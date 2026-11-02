@@ -35,4 +35,4 @@ uint32_t DisplayTimingRequest::refresh_millihz() const
     return refresh_millihz_;
 }
 
-}  // namespace av
+}

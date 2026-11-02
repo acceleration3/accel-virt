@@ -1,6 +1,3 @@
-/* One application context and its host context: nothing on the host until
- * made, made whole or not at all, lost when its transport faults, and the
- * guest state and host strings it answers from. */
 #include "core/trace/state_writer.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -42,7 +39,6 @@ struct GuestGlContextProbe {
 };
 
 struct ClientArrayStateProbe {
-    /* Array 0 kept by name, which only the default is, and let go again. */
     static void name_default(ClientArrayState &state)
     {
         uint32_t slot = 0u;
@@ -52,7 +48,6 @@ struct ClientArrayStateProbe {
 };
 
 struct UniformShapesProbe {
-    /* A row of no values, which no remember writes, planted and pulled. */
     static void plant_unshaped(UniformShapes &shapes)
     {
         uint32_t slot = 0u;
@@ -77,7 +72,7 @@ struct QueryShapesProbe {
     static void overflow(QueryShapes &shapes, uint32_t length) { shapes.lengths_[1] = length; }
 };
 
-}  // namespace av::glicd
+}
 
 namespace {
 
@@ -96,7 +91,7 @@ private:
     GuestGlContext context_;
 };
 
-}  // namespace
+}
 
 TEST(guest_gl_context, nothing_is_on_the_host_until_made)
 { GlContextRig rig;
@@ -108,7 +103,6 @@ TEST(guest_gl_context, nothing_is_on_the_host_until_made)
   CHECK(context->string(GuestGlContext::gl_renderer) == nullptr);
   CHECK_EQ(context->pixel_format(), 7);
   CHECK_EQ(context->owner(), 0u);
-  /* No link yet, so no kernel device to open a shared handle through. */
   CHECK_EQ(context->guest_device(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.connection().users(), 0u); }
@@ -132,7 +126,6 @@ TEST(guest_gl_context, make_opens_an_opengl_context_with_its_options_and_learns_
   CHECK_EQ(context->queries().values(0x86A3u), 3u);
   CHECK_EQ(context->queries().values(0x87FFu), 1u);
   CHECK_EQ(context->queries().values(0x8DF8u), 0u);
-  /* The context's record carries the options it was made with. */
   av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.options().major(), 4u);
@@ -143,10 +136,6 @@ TEST(guest_gl_context, make_opens_an_opengl_context_with_its_options_and_learns_
   CHECK_STATUS(context->make(), Status::invalid_state);
   CHECK(context->state() == State::made); }
 
-/* Feature 051: what the host granted is read at the make, from
- * GL_CONTEXT_PROFILE_MASK - a version string does not say, and on one of this
- * project's host GPUs the compatibility one is identical to the core one
- * (research.md §1). */
 TEST(guest_gl_context, a_make_learns_the_profile_the_host_granted)
 { GlContextRig rig;
   Context context(rig);
@@ -160,7 +149,6 @@ TEST(guest_gl_context, a_make_learns_the_profile_the_host_granted)
   CHECK_EQ(context->profile().mask(), 2u);
   CHECK(context->profile().legacy_calls_live()); }
 
-/* A host that answers a core context, or nothing at all, unlocks nothing. */
 TEST(guest_gl_context, a_core_or_silent_host_leaves_the_legacy_calls_shut)
 { GlContextRig core;
   Context core_context(core);
@@ -178,10 +166,6 @@ TEST(guest_gl_context, a_core_or_silent_host_leaves_the_legacy_calls_shut)
   CHECK(!silent_context->profile().known());
   CHECK(!silent_context->profile().legacy_calls_live()); }
 
-/* Feature 051, research.md §2: a context created without attributes - what
- * every OpenGL application written before 2009 makes - asks for 4.6
- * compatibility, then for the driver's own default, then for 4.6 core, and
- * reports whichever it got. A context created with attributes asks once. */
 TEST(guest_gl_context, a_legacy_context_asks_for_compatibility_first)
 { GlContextRig rig;
   Context context(rig);
@@ -198,7 +182,6 @@ TEST(guest_gl_context, a_legacy_context_asks_for_compatibility_first)
 TEST(guest_gl_context, a_host_with_no_compatibility_profile_gets_the_next_rung)
 { GlContextRig rig;
   Context context(rig);
-  /* The host refuses the compatibility ask; its own default answers. */
   rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 1u, MockKmt::invalid_parameter);
   rig.host().gl_make_profile(renderer, "1.4 Mesa", 1, 4, 0);
   CHECK_STATUS(context->make(), Status::ok);
@@ -207,7 +190,6 @@ TEST(guest_gl_context, a_host_with_no_compatibility_profile_gets_the_next_rung)
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK_EQ(record.options().major(), 0u);
   CHECK(record.options().profile() == GlContextOptions::Profile::none);
-  /* A context from before profiles existed has the fixed function pipeline. */
   CHECK(context->profile().legacy_calls_live()); }
 
 TEST(guest_gl_context, a_host_with_neither_falls_to_core_and_says_so)
@@ -230,8 +212,6 @@ TEST(guest_gl_context, a_host_that_refuses_every_rung_holds_nothing)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
-/* A refusal that is not the options' is the answer: no rung is tried after a
- * device that has no memory. */
 TEST(guest_gl_context, a_refusal_that_is_not_the_profiles_stops_the_ladder)
 { GlContextRig rig;
   Context context(rig);
@@ -249,8 +229,6 @@ TEST(guest_gl_context, a_context_created_with_attributes_asks_once)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 1u);
   CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::none); }
 
-/* Feature 051: the device context it was made current on, which a flush that
- * presents puts its frame on. */
 TEST(guest_gl_context, it_remembers_the_dc_it_was_made_current_on)
 { GlContextRig rig;
   Context context(rig);
@@ -262,11 +240,9 @@ TEST(guest_gl_context, it_remembers_the_dc_it_was_made_current_on)
   CHECK(context->current_dc() == nullptr);
   CHECK(context->invariants_hold()); }
 
-/* Feature 051: a context nobody made waits for no blank. */
 TEST(guest_gl_context, an_unmade_context_paces_nothing)
 { GlContextRig rig;
   Context context(rig);
-  /* Pacing an unmade context waits for nothing at all. */
   const std::uint32_t blanks = rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank);
   context->pace();
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), blanks); }
@@ -303,11 +279,8 @@ TEST(guest_gl_context, staging_that_cannot_be_had_is_no_memory_with_nothing_held
   CHECK_EQ(rig.connection().users(), 0u);
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
-/* Each D3DKMT step of the transport's setup refused in turn: the options are
- * the driver's to refuse, and nothing is left. */
 TEST(guest_gl_context, a_driver_refusal_of_the_transport_is_invalid_parameter_with_nothing_held)
-{ /* `count` refusals from the `nth` on: the views escape is asked again in
-   * its older version, so refusing it takes both. */
+{
   struct Step { MockKmt::Call call; std::uint32_t nth; std::uint32_t count; };
   const Step steps[] = {
       {MockKmt::Call::create_allocation, 1u, 1u}, {MockKmt::Call::create_allocation, 2u, 1u},
@@ -340,8 +313,6 @@ TEST(guest_gl_context, a_transport_out_of_memory_is_no_memory)
 TEST(guest_gl_context, without_a_blob_arena_the_context_is_made_and_says_so)
 { GlContextRig rig;
   Context context(rig);
-  /* The device will not import the arena at its size, nor at the half of it
-   * that is the last size still above the least an arena is opened at. */
   rig.host().blob_import(1u, 0u);
   rig.host().blob_import(1u, 0u);
   rig.host().gl_string("vendor");
@@ -351,7 +322,6 @@ TEST(guest_gl_context, without_a_blob_arena_the_context_is_made_and_says_so)
   rig.host().gl_integer(0);
   rig.host().gl_integer(0);
   rig.host().gl_integer(0);
-  /* GL_MAJOR_VERSION, GL_MINOR_VERSION, GL_CONTEXT_PROFILE_MASK. */
   rig.host().gl_integer(4);
   rig.host().gl_integer(6);
   rig.host().gl_integer(2);
@@ -361,14 +331,11 @@ TEST(guest_gl_context, without_a_blob_arena_the_context_is_made_and_says_so)
   av::StateWriter writer(bytes, sizeof bytes);
   context->report(writer, 9u);
   CHECK(std::strstr(writer.dump(), " arena=false ") != nullptr);
-  /* Without an arena there is no error word for the host to have written. */
   std::uint32_t error = 7u;
   CHECK(!context->take_host_error(error));
   CHECK_EQ(error, 0u);
   CHECK(context->invariants_hold()); }
 
-/* The host makes its context when the first command runs: a context it
- * cannot make faults, and make answers the refusal of the options. */
 TEST(guest_gl_context, a_host_refusal_is_invalid_parameter_with_nothing_held)
 { for (std::uint32_t wait = 2u; wait <= GlContextRig::link_objects + 5u; wait++) {
       GlContextRig rig;
@@ -377,9 +344,6 @@ TEST(guest_gl_context, a_host_refusal_is_invalid_parameter_with_nothing_held)
       rig.kmt().withhold_answer_at(wait);
       CHECK_STATUS(context->make(), Status::invalid_parameter);
       CHECK(context->state() == State::created);
-      /* One line per ask the ladder made (feature 051): the host refused the
-       * compatibility context, its own default and the core one - or the
-       * ask's transport faulted on the arena, before the host was asked. */
       CHECK_EQ(rig.log().holding("the host refused the context") +
                    rig.log().holding("faulted opening its blob arena"),
                3u);
@@ -401,15 +365,10 @@ TEST(guest_gl_context, a_faulted_transport_makes_the_context_lost)
   CHECK(context->state() == State::lost);
   CHECK(context->wire() == nullptr);
   CHECK_EQ(rig.log().holding("is lost"), 1u);
-  /* A lost context still answers what it learned. */
   CHECK(std::strcmp(context->string(GuestGlContext::gl_renderer), renderer) == 0);
   CHECK(context->share_name() != 0u);
   CHECK(context->invariants_hold()); }
 
-/* A lost context reports its loss once, after any error it recorded: a robust
- * one - robust access with lose-on-reset - as GL_CONTEXT_LOST, with
- * GL_UNKNOWN_CONTEXT_RESET as its reset status every time, any other as
- * GL_OUT_OF_MEMORY with no reset status. A context not lost reports neither. */
 TEST(guest_gl_context, a_lost_context_reports_its_loss_by_its_robustness)
 { const std::uint8_t robust_flags = GlContextOptions::robust_access | GlContextOptions::lose_context_on_reset;
   const std::uint8_t flag_sets[] = {robust_flags, GlContextOptions::robust_access, 0u};
@@ -437,8 +396,6 @@ TEST(guest_gl_context, a_lost_context_reports_its_loss_by_its_robustness)
     CHECK_EQ(context->take_error(), 0u);
   } }
 
-/* Another context's fault loses this one at its next call, and its deletion
- * then asks the host nothing: the blob arena is abandoned, not closed. */
 TEST(guest_gl_context, a_fault_on_its_device_loses_it_and_it_goes_without_the_host)
 { GlContextRig rig;
   std::uint32_t commands = 0u;
@@ -547,7 +504,6 @@ TEST(guest_gl_context_invariants, fail_when_the_state_and_what_is_held_disagree)
   CHECK(!connected->invariants_hold());
   av::glicd::GuestGlContextProbe::connect(*connected, false);
   CHECK(connected->invariants_hold());
-  /* A loss reported by a context that is not lost. */
   Context reported(rig);
   av::glicd::GuestGlContextProbe::report_loss(*reported);
   CHECK(!reported->invariants_hold()); }
@@ -589,8 +545,6 @@ TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_i
   av::glicd::BufferShadowsProbe::miscount(made->shadows(), 0u);
   CHECK(made->invariants_hold()); }
 
-/* Buffers another context can write are not this one's to know: a context
- * that shares, or that another shares, keeps no copies of them. */
 TEST(guest_gl_context, sharing_either_way_ends_its_buffer_copies)
 { GlContextRig rig;
   Context      sharer(rig);
@@ -603,7 +557,6 @@ TEST(guest_gl_context, sharing_either_way_ends_its_buffer_copies)
   Context alone(rig);
   CHECK(alone->shadows().trusted()); }
 
-/* The copies are of the host context's buffers, and go with it. */
 TEST(guest_gl_context, a_make_that_fails_keeps_no_copies_of_buffers)
 { GlContextRig rig;
   Context      context(rig);
@@ -615,8 +568,6 @@ TEST(guest_gl_context, a_make_that_fails_keeps_no_copies_of_buffers)
   CHECK_EQ(context->shadows().held(), 0u);
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
-/* The newest batch the context sent, for the present thread to wait on: none
- * before the make, and one it can wait on after a batch. */
 TEST(guest_gl_context, marks_its_newest_batch_for_another_thread)
 { GlContextRig rig;
   Context      context(rig);
@@ -629,10 +580,6 @@ TEST(guest_gl_context, marks_its_newest_batch_for_another_thread)
   CHECK(mark.waitable());
   CHECK(mark.fence() != 0u); }
 
-/* What another API is about to name was made by calls the context still
- * holds: run_held sends them, then the transport's no-op behind them, and
- * returns once the host answered it - after running everything before it.
- * Nothing to run before the make. */
 TEST(guest_gl_context, run_held_has_the_host_run_the_held_calls_before_it_returns)
 { GlContextRig rig;
   Context      context(rig);
@@ -649,10 +596,6 @@ TEST(guest_gl_context, run_held_has_the_host_run_the_held_calls_before_it_return
   CHECK_EQ(rig.kmt().command_id(before + 1u), av::CommandHeader::nop_id);
   CHECK_EQ(rig.kmt().queued_answers(), 0u); }
 
-/* A held call whose array crossed in a blob lease, then the publish barrier
- * another API's context asks for: the call goes first, in the one batch the
- * barrier's answer comes back for, and its lease is lent again only once
- * that answer says the host ran it - not while the call still waits. */
 TEST(guest_gl_context, a_held_calls_lease_stays_lent_until_the_batch_carrying_it_has_run)
 { GlContextRig rig;
   Context      context(rig);
@@ -674,8 +617,6 @@ TEST(guest_gl_context, a_held_calls_lease_stays_lent_until_the_batch_carrying_it
   CHECK_EQ(arena.used(), 0u); }
 
 namespace {
-
-/* One frame as an application ends it: a call, then glFlush. */
 std::uint64_t end_a_frame(GuestGlContext &context)
 {
     av::glproto::av_glFlush(*context.wire());
@@ -683,18 +624,13 @@ std::uint64_t end_a_frame(GuestGlContext &context)
     return av::glicd::GuestGlContextProbe::channel(context).transport().published_fence();
 }
 
-}  // namespace
+}
 
 namespace {
-
-/* Each read of the clock 60 ms on: every frame ends more than
- * FramesInFlight::latency_ms after the one before it. */
 constexpr std::uint64_t frame_apart = av::MockKmt::ticks_per_second / 1000u * 60u;
 
-}  // namespace
+}
 
-/* A host that finishes each frame before the next ends is never waited for,
- * and nothing is asked of the kernel to learn it. */
 TEST(guest_gl_context, a_frame_ends_without_waiting_on_a_host_that_keeps_up)
 { GlContextRig rig;
   Context      context(rig);
@@ -712,9 +648,6 @@ TEST(guest_gl_context, a_frame_ends_without_waiting_on_a_host_that_keeps_up)
   CHECK(context->wire() != nullptr);
   CHECK_EQ(rig.kmt().calls(av::MockKmt::Call::wait_for_context), waits); }
 
-/* A frame ending while the one before it, longer ago than the latency, is
- * unfinished waits for it; a host that never finishes it, and has gone
- * quiet, loses the context, which says so. */
 TEST(guest_gl_context, a_frame_the_host_never_finishes_loses_the_context)
 { GlContextRig rig;
   Context      context(rig);
@@ -728,11 +661,8 @@ TEST(guest_gl_context, a_frame_the_host_never_finishes_loses_the_context)
   CHECK(context->wire() == nullptr);
   CHECK(context->state() == State::lost);
   CHECK_EQ(rig.log().holding("never finished an earlier frame"), 1u);
-  /* A lost context ends no frame and waits for nothing. */
   context->end_frame(); }
 
-/* Feature 053: the context owns the memory objects and semaphores it imported,
- * because a GL name belongs to the context that made it. */
 TEST(guest_gl_context, externals_is_the_contexts_own_and_starts_holding_nothing)
 { GlContextRig rig;
   Context      context(rig);
@@ -743,7 +673,6 @@ TEST(guest_gl_context, externals_is_the_contexts_own_and_starts_holding_nothing)
            av::glicd::GlExternalObjects::gl_no_error);
   CHECK(name != 0u);
   CHECK_EQ(context->externals().live(), 1u);
-  /* A second context's names are its own, not this one's. */
   Context other(rig);
   CHECK_EQ(other->externals().live(), 0u);
   CHECK_EQ(other->externals().made(av::SharedObjectKind::memory, name), 0u); }

@@ -1,7 +1,3 @@
-/* Four characters packed into the little-endian code DRM and Direct3D 9 name
- * formats by: the first character is the low byte. Each character is taken as
- * the byte it is, so one above 0x7f, negative where char is signed, fills only
- * its own byte. constexpr, so a switch can name one as a case. */
 #ifndef AV_FOUR_CC_HPP
 #define AV_FOUR_CC_HPP
 
@@ -32,6 +28,6 @@ constexpr uint32_t FourCc::value() const
     return value_;
 }
 
-}  // namespace av
+}
 
-#endif  // AV_FOUR_CC_HPP
+#endif

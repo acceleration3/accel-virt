@@ -15,7 +15,6 @@ INCLUDE = '#include "core/trace/function_scope.hpp"'
 
 
 def colliding_names():
-    """Two distinct names with one FNV-1a-32 id: a birthday search over short names."""
     seen = {}
     for number in itertools.count():
         name = f"n{number}"
@@ -77,7 +76,6 @@ class ScopeMarks(unittest.TestCase):
         self.assertIn('    : a_(a), b_(b)\n{\n    AV_SCOPE("Pool::Pool");\n    a_ += 0;\n}', text)
         self.assertIn('Pool::~Pool() {\n    AV_SCOPE("Pool::~Pool");\n    a_ = 0;\n}', text)
         self.assertIn('int Pool::sum() const {\n    AV_SCOPE("Pool::sum");\n    int total = a_;\n', text)
-        # The own header stays first; the include joins the project block in order.
         self.assertTrue(text.startswith('#include "device/pool.hpp"\n\n' + INCLUDE + '\n#include "device/zeta.hpp"\n'))
         self.assertEqual(self.check().returncode, 0, self.check().stderr)
 
@@ -130,8 +128,6 @@ class ScopeMarks(unittest.TestCase):
         self.assertIn("twice is exempt and must not be marked", result.stderr)
 
     def test_a_sample_application_is_not_judged(self):
-        """A sample builds without the driver's sources: marking it would not
-        compile, so --apply leaves it as written."""
         sample = "struct Sample {\n    void run();\n    int n_;\n};\nvoid Sample::run()\n{\n}\n"
         self.tree.write("src/um/sample/one.cpp", sample)
         result = self.check()
@@ -144,9 +140,6 @@ class ScopeMarks(unittest.TestCase):
         self.assertIn("Sample::run has no scope mark", result.stderr)
 
     def test_wire_primitives_and_trace_hosts_are_never_marked(self):
-        """The per-member wire reads and writes run dozens of times per command
-        and cannot block, and a trace host is what every scope calls: neither
-        needs a mark, apply never writes one, and one written by hand fails."""
         plain = "struct WireReader {\n    int read_u8();\n    int n_;\n};\nint WireReader::read_u8()\n{\n    return n_;\n}\n"
         for relative in ("src/proto/wire/wire_reader.cpp", "src/proto/wire/wire_writer.hpp",
                          "src/proto/wire/wire_arena.cpp", "src/device/shim/posix_trace_host.cpp",
@@ -163,7 +156,6 @@ class ScopeMarks(unittest.TestCase):
                 self.assertIn(f"{relative}:8: WireReader::read_u8 is in a file that must not be marked",
                               result.stderr)
                 self.tree.write(relative, plain)
-        # Only those files: a reader beside them is judged as any other.
         self.tree.write("src/proto/wire/wire_view.cpp", plain)
         result = self.check()
         self.assertEqual(result.returncode, 1)

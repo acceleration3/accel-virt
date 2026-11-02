@@ -1,6 +1,3 @@
-/* DisplayModeText: the `modes` property's text becomes the modes it names, in
- * its order, the first preferred, any size a display could have; text with a
- * single thing wrong in it changes nothing at all. */
 #include "device/display/display_mode_text.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/virtio_gpu/display_mode_set.hpp"
@@ -48,7 +45,6 @@ TEST(display_mode_text, text_with_anything_wrong_changes_nothing)
       CHECK_EQ(modes.count(), 1u);
       CHECK_EQ(modes.width(0u), 1920u);
   }
-  /* More modes than the set holds is no list either. */
   char text[DisplayModeSet::max_modes * 12u] = {};
   std::size_t at = 0u;
   for (unsigned width = 100u; width < 100u + DisplayModeSet::max_modes + 1u; width++) {

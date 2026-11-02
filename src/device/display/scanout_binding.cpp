@@ -25,10 +25,6 @@ Status ScanoutBinding::show(uint32_t blob, const ScanoutFramebuffer &framebuffer
 {
     AV_SCOPE("ScanoutBinding::show");
     host_.require_main_loop("ScanoutBinding::show");
-    /* The guest sets a scanout again on a mode set and after a resume with
-     * nothing changed; a new import would make the display drop the one it
-     * holds and flash. The blob stays pinned while shown, so its pages are the
-     * same ones. */
     if (shown_ && blob == blob_ && framebuffer_.same_picture(framebuffer)) return Status::ok;
     const Status pinned = blobs_.pin(blob, framebuffer.end());
     if (pinned != Status::ok) return pinned;
@@ -144,4 +140,4 @@ bool ScanoutBinding::invariants_hold() const
     return shown_ == (blob_ != 0u);
 }
 
-}  // namespace av
+}

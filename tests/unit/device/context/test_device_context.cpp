@@ -1,5 +1,3 @@
-/* Binding one context to its ring: the blobs pinned, the ring prepared, the
- * doorbell connected and the ring attached on the worker - all of it, or none. */
 #include "core/support/status.hpp"
 #include "device/context/d3d_ordering.hpp"
 #include "device/context/device_context.hpp"
@@ -65,12 +63,9 @@ struct DeviceContextProbe {
     static FenceReporter &fences(DeviceContext &context) { return context.fences_; }
 };
 
-}  // namespace av
+}
 
 namespace {
-
-/* An item that holds the context's worker until the test signals the event,
- * so what the test posts behind it stays queued. */
 struct Gate {
     av::Host *host;
     void     *event;
@@ -101,8 +96,6 @@ ContextSetup setup(std::uint32_t doorbell = 3u, std::uint32_t reply_id = 0u)
     return ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, ring, 12u, fence, doorbell, reply_id);
 }
 
-/* A guest-backed ring the test writes as the guest, a fence page and a reply
- * slot, and the device's host blobs allocated through the mock library. */
 class Fixture {
 public:
     Fixture()
@@ -143,7 +136,6 @@ public:
     GuestRing      guest() { return GuestRing(host_.guest_ram(ram), 12u); }
     std::uint8_t  *ring_bytes() { return host_.guest_ram(ram); }
 
-    /* The fence page the guest reads, through the pinned blob. */
     av::FencePage page()
     {
         av::BlobWindow window;
@@ -154,7 +146,6 @@ public:
         return page;
     }
 
-    /* Whether the worker published `head` before patience ran out. */
     bool published(std::uint64_t head)
     {
         for (std::uint32_t spins = 0u; spins < 50000000u && published_head() != head; spins++) sched_yield();
@@ -169,7 +160,6 @@ private:
         return value;
     }
 
-    /* Declared before the context, which unpins its blobs as it goes. */
     MockHost            host_;
     BlobTable           blobs_;
     av::GuestBlobMaker  maker_;
@@ -185,7 +175,7 @@ private:
     DeviceContext       context_;
 };
 
-}  // namespace
+}
 
 TEST(device_context_bind, a_bound_context_serves_its_ring_when_its_doorbell_rings)
 { Fixture fixture;
@@ -202,44 +192,29 @@ TEST(device_context_bind, a_bound_context_serves_its_ring_when_its_doorbell_ring
   CHECK(fixture.published(guest.tail()));
   for (std::uint32_t spins = 0u; spins < 50000000u && fixture.host().raised(3u) == 0u; spins++) sched_yield();
   CHECK_EQ(fixture.page().completed_fence(), 2u);
-  CHECK_EQ(fixture.page().progress(), 3u);   /* two batches and the command in the first */
+  CHECK_EQ(fixture.page().progress(), 3u);
   CHECK_EQ(fixture.host().raised(3u), 1u);
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::invalid_state);
   CHECK_EQ(fixture.host().live_doorbells(), 1u); }
 
 TEST(device_context_bind, a_host_that_finishes_on_its_own_thread_reaches_the_guest_through_the_fence)
 { Fixture fixture;
-  /* A fresh ring header, which is what the ring this binds to needs. */
   GuestRing guest = fixture.guest();
   static_cast<void>(guest.tail());
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok);
-  /* The executor is made on the worker, when the ring attaches, and the
-   * library is given somewhere to call straight after - so the wait is for
-   * the second of the two. Waiting for create() alone and then asking about
-   * the signal is a race: the worker is between them often enough to see. */
   for (std::uint32_t spins = 0u; spins < 50000000u && fixture.ops().signals_set() == 0u; spins++)
       sched_yield();
-  /* signals_through hands the context's landing pad to create(), and a
-   * version 5 library takes it. */
   CHECK_EQ(fixture.ops().created(), 1u);
   CHECK(fixture.ops().signal_bound());
   CHECK_EQ(fixture.ops().signals_set(), 1u);
 
   const std::uint32_t before = fixture.host().raised(3u);
   const std::uint64_t completed = fixture.page().completed_fence();
-  /* The worker watches its ring for a spell of the host's clock before it
-   * sleeps, and only a wake or a pass through its loop drains the signal:
-   * on a clock that never moves the spell never ends. */
   fixture.host().advance_clock_per_read(1000u);
-  /* The host's own thread, which is neither the worker nor the main loop, says
-   * a callback fired. */
   CHECK(fixture.ops().fire_signal());
   for (std::uint32_t spins = 0u;
        spins < 50000000u && fixture.host().raised(3u) == before; spins++)
       sched_yield();
-  /* The guest is interrupted and told to ask what completed. What it was
-   * already promised never moves backwards, and nothing was submitted, so the
-   * completed fence is exactly where it was. */
   CHECK_EQ(fixture.host().raised(3u), before + 1u);
   CHECK_EQ(fixture.page().completed_fence(), completed); }
 
@@ -296,7 +271,7 @@ TEST(device_context_bind, a_ring_without_a_fresh_header_binds_nothing)
   CHECK_STATUS(fixture.blobs().release(ring), Status::ok);
   Fixture again;
   static_cast<void>(again.guest());
-  again.ring_bytes()[16] = 1u;   /* head already moved */
+  again.ring_bytes()[16] = 1u;
   CHECK_STATUS(again.context().bind(setup(), capset()), Status::invalid_parameter);
   static_cast<void>(again.guest());
   CHECK_STATUS(again.context().bind(setup(), capset()), Status::ok); }
@@ -314,9 +289,6 @@ TEST(device_context_bind, a_fence_page_that_cannot_be_prepared_binds_nothing)
   CHECK(!fixture.context().binding().bound());
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok); }
 
-/* While the worker is held inside a host call, nothing it writes moves, and
- * the pulse beats the context's page; the beat is what tells the guest it is
- * still at work. */
 TEST(device_context_bind, a_bound_context_s_page_beats_while_its_worker_is_in_a_host_call)
 { Fixture fixture;
   GuestRing guest = fixture.guest();
@@ -337,8 +309,6 @@ TEST(device_context_bind, a_bound_context_s_page_beats_while_its_worker_is_in_a_
   fixture.ops().release();
   CHECK(fixture.published(guest.tail())); }
 
-/* A pulse with no room for the page binds nothing, and leaves nothing
- * connected or carried. */
 TEST(device_context_bind, a_pulse_with_no_room_for_the_page_binds_nothing)
 { Fixture fixture;
   static_cast<void>(fixture.guest());
@@ -374,7 +344,7 @@ TEST(device_context_bind, a_full_work_queue_disconnects_unpins_and_withdraws_the
   Gate    gate{&fixture.host(), nullptr};
   CHECK_STATUS(fixture.host().create_event(gate.event), Status::ok);
   CHECK_STATUS(worker.post(av::WorkItem(&wait_at, nullptr, &gate)), Status::ok);
-  while (worker.pending() != 0u) sched_yield();   /* the gate holds the worker */
+  while (worker.pending() != 0u) sched_yield();
   for (std::uint32_t index = 0u; index < Worker::queue_capacity; index++)
       CHECK_STATUS(worker.post(av::WorkItem(&no_work, nullptr, nullptr)), Status::ok);
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::no_space);
@@ -392,13 +362,8 @@ TEST(device_context, destroying_a_bound_context_disconnects_before_the_worker_go
 { Fixture fixture;
   static_cast<void>(fixture.guest());
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok);
-  /* The mock fails the test if the context's event is destroyed while its
-   * doorbell is connected, or a doorbell outlives the context. */
 }
 
-/* A host blob made for this context imports through the ring like any
- * command (docs/host-memory.md); one made for another context does not, and
- * the guest releasing the blob leaves the import holding its memory. */
 std::uint8_t *import_through_ring(Fixture &fixture, GuestRing &guest, std::uint32_t resource,
                                   std::uint8_t (&answer)[32u + av::BlobImportAnswer::encoded_size])
 {
@@ -440,14 +405,11 @@ TEST(device_context_bind, a_bound_context_imports_a_host_blob_made_for_it_and_no
   std::uint64_t key = 0u;
   CHECK(fixture.ops().import_of(1u, key));
   CHECK_EQ(key, mine);
-  /* The guest lets go of the blob; the import keeps its memory alive. */
   CHECK_STATUS(fixture.host_blobs().release(mine), Status::ok);
   CHECK_STATUS(fixture.host_blobs().release(theirs), Status::ok);
   CHECK_EQ(fixture.ops().held_memory(), 0u);
   CHECK_EQ(fixture.ops().live_memory(), 1u); }
 
-/* Feature 050: the options a setup carries are what the worker's executor is
- * made with; options the library cannot make bind nothing. */
 TEST(device_context_bind, an_opengl_setups_options_reach_the_executor_it_makes)
 { Fixture fixture;
   const CapsetInfo gl(ProtocolVersion(1u, 1u), static_cast<std::uint32_t>(SubApi::opengl), 64u, 12u, 24u, 0u,
@@ -455,9 +417,8 @@ TEST(device_context_bind, an_opengl_setups_options_reach_the_executor_it_makes)
   const av::GlContextOptions options(4u, 5u, av::GlContextOptions::Profile::compatibility,
                                      av::GlContextOptions::robust_access, 0u);
   const ContextSetup with_options(ProtocolVersion(1u, 1u), SubApi::opengl, ring, 12u, fence, 3u, 0u, options);
-  static_cast<void>(fixture.guest());   /* writes the fresh ring header */
+  static_cast<void>(fixture.guest());
   CHECK_STATUS(fixture.context().bind(with_options, gl), Status::ok);
-  /* Counted once the create has returned, so everything it recorded is there. */
   for (std::uint32_t spins = 0u; spins < 50000000u && fixture.ops().created() == 0u; spins++) sched_yield();
   CHECK_EQ(fixture.ops().option_creates(), 1u);
   const AvContextOptions asked = fixture.ops().last_options();
@@ -476,7 +437,6 @@ TEST(device_context_bind, records_the_setup_it_bound_and_nothing_for_a_bind_it_r
                                        av::ProtocolVersion(1u, 1u)),
                Status::ok);
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok);
-  /* A second bind of a bound context is refused and leaves no second record. */
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::invalid_state);
   av::RecordedFile    file(fixture.host(), "setup.av");
   av::RecordHeader    record;

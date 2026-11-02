@@ -1,12 +1,3 @@
-/* D3d9Device's flush and present, and what the kernel sees of the device
- * (d3d9_device.hpp).
- *
- * A windowed Direct3D 9 present is a blt: the runtime flushes, then asks the
- * driver to present a back buffer, and the driver hands dxgkrnl that buffer's
- * allocation on a context of its own (reverse-engineering.md §4.3). The
- * kernel copies the frame from the allocation's pages into the window, so
- * the host's pixels are read back into them first. A buffer gets its
- * allocation the first time it is presented. */
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
@@ -30,9 +21,6 @@ HRESULT D3d9Device::follow_host()
     return present_order_.constructed() ? present_order_.object().follow() : E_FAIL;
 }
 
-/* The runtime flushes before every present, and before it waits on anything
- * the kernel signals: what the device recorded goes to the host, and the
- * device's context waits for it. */
 HRESULT D3d9Device::flush()
 {
     AV_SCOPE("D3d9Device::flush");
@@ -41,8 +29,6 @@ HRESULT D3d9Device::flush()
     return follow_host();
 }
 
-/* A blt-model present the kernel reads from the buffer's pages, so it needs
- * an allocation of the buffer's size and format. */
 HRESULT D3d9Device::allocate(D3d9Resource &resource)
 {
     AV_SCOPE("D3d9Device::allocate");
@@ -51,8 +37,6 @@ HRESULT D3d9Device::allocate(D3d9Resource &resource)
     if (!presented.take_ddi(static_cast<uint32_t>(resource.format))) return E_INVALIDARG;
     d3d::KernelSurface surface(top.width, top.height, presented.dxgi());
     if (surface.make() != Status::ok) return E_INVALIDARG;
-    /* An allocation of its own, made long after the runtime made the
-     * resource: it belongs to no kernel resource. */
     D3DKMT_HANDLE allocation = 0u;
     const HRESULT made = allocations_.make(surface, nullptr, allocation);
     if (FAILED(made)) return made;
@@ -62,10 +46,6 @@ HRESULT D3d9Device::allocate(D3d9Resource &resource)
     return S_OK;
 }
 
-/* A fullscreen primary: an allocation dxgkrnl scans out at the resource's
- * VidPn source, made under the runtime's resource as the resource is - the
- * runtime asks the kernel about the shared primary before its first present,
- * and a resource with no allocation is a null handle there (E_INVALIDARG). */
 HRESULT D3d9Device::allocate_primary(D3d9Resource &resource, const D3DDDIARG_CREATERESOURCE &create)
 {
     AV_SCOPE("D3d9Device::allocate_primary");
@@ -84,14 +64,9 @@ HRESULT D3d9Device::allocate_primary(D3d9Resource &resource, const D3DDDIARG_CRE
     resource.vidpn_source = create.VidPnSourceId;
     resource.allocation_pitch = surface.pitch();
     resource.shared_key = surface.key();
-    /* DWM may open the key as soon as the kernel hands it the handle: the
-     * host keeps something under it from the start. */
     return resource.shared_key != 0u ? show_primary(resource, 0u) : S_OK;
 }
 
-/* A keyed primary's pixels go to the host's texture under its key (point 0,
- * D3d9FlipShares), where DWM and the scanout read it - never through its
- * pages, which nothing reads once it is keyed. */
 HRESULT D3d9Device::show_primary(D3d9Resource &primary, uint32_t index)
 {
     AV_SCOPE("D3d9Device::show_primary");
@@ -104,8 +79,6 @@ HRESULT D3d9Device::show_primary(D3d9Resource &primary, uint32_t index)
     return follow_host();
 }
 
-/* The pixels a present hands the kernel: a keyed primary's on the host,
- * anything else's staged there at a point (publish_point). */
 HRESULT D3d9Device::publish_presented(D3d9Resource &resource, uint32_t index)
 {
     AV_SCOPE("D3d9Device::publish_presented");
@@ -113,10 +86,6 @@ HRESULT D3d9Device::publish_presented(D3d9Resource &resource, uint32_t index)
     return publish_point(resource, index);
 }
 
-/* d3d9.dll's PresentCB builds the kernel's present itself and drops the
- * private driver data a point rides in, so the point reaches the miniport by
- * escape instead (NextPointRecord), before the present. The host stages only
- * the two formats a window is drawn from (D3d9Session::on_PresentPoint9). */
 HRESULT D3d9Device::publish_point(D3d9Resource &resource, uint32_t index)
 {
     AV_SCOPE("D3d9Device::publish_point");
@@ -140,9 +109,6 @@ HRESULT D3d9Device::publish_point(D3d9Resource &resource, uint32_t index)
             .number(static_cast<uint32_t>(named))
             .text("; its frames are read back")
             .write();
-    /* A miniport that took points before reads the pages only when told this
-     * present has none: its absence of a point would keep the window's last
-     * frame instead. */
     static_cast<void>(send_point(resource, 0u, NextPointRecord::Action::pages));
     return publish(resource, index);
 }
@@ -164,8 +130,6 @@ void D3d9Device::withdraw_point(D3d9Resource &resource)
     resource.named_point = 0u;
 }
 
-/* Fullscreen: the primary dxgkrnl scans out from now on, with the host's
- * pixels in it. */
 HRESULT D3d9Device::set_display_mode(const D3DDDIARG_SETDISPLAYMODE *args)
 {
     AV_SCOPE("D3d9Device::set_display_mode");
@@ -179,7 +143,6 @@ HRESULT D3d9Device::set_display_mode(const D3DDDIARG_SETDISPLAYMODE *args)
     return kernel_.set_display_mode(mode);
 }
 
-/* The host's pixels, row by row into the allocation's pitch. */
 HRESULT D3d9Device::publish(D3d9Resource &resource, uint32_t index)
 {
     AV_SCOPE("D3d9Device::publish");
@@ -248,4 +211,4 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
     return presented;
 }
 
-}  // namespace av::d3d9
+}

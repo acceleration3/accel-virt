@@ -1,8 +1,3 @@
-/* A present's pixels moved by the miniport through its own view of the pages:
- * every row of every region, at the offsets the regions name, red and blue
- * traded when the surfaces disagree - through the sixteen-byte path and the
- * pixels on either side of it - and a colour written over a fill's regions.
- * A surface it cannot map moves nothing. */
 #include "miniport/present/mapped_pixels.hpp"
 #include "miniport/present/present_surface.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -26,10 +21,9 @@ namespace {
 
 constexpr std::uint32_t side = 16u;
 constexpr std::uint32_t pitch = side * PresentSurface::pixel_bytes;
-constexpr std::uint32_t blue_first = 21u;   /* D3DDDIFMT_A8R8G8B8 */
-constexpr std::uint32_t red_first = 32u;    /* D3DDDIFMT_A8B8G8R8 */
+constexpr std::uint32_t blue_first = 21u;
+constexpr std::uint32_t red_first = 32u;
 
-/* One 16x16 surface in a page of the mock platform's. */
 class Surface {
 public:
     explicit Surface(MockPlatform &platform) : platform_(platform)
@@ -47,7 +41,6 @@ public:
     {
         return PresentSurface(SurfaceLayout(side, side, format, pitch), GuestPageList(&frame_, 1u));
     }
-    /* Pixel (x, y) is its own number, so a pixel moved from the wrong place shows. */
     void number()
     {
         for (std::uint32_t y = 0u; y < side; y++)
@@ -75,11 +68,8 @@ std::uint32_t swapped(std::uint32_t pixel)
     return (pixel & 0xFF00FF00u) | ((pixel >> 16u) & 0xFFu) | ((pixel & 0xFFu) << 16u);
 }
 
-}  // namespace
+}
 
-/* A region starting one pixel into a row reads its first three pixels one at a
- * time, the next eight sixteen bytes at a time, and the last one alone: every
- * one lands where the region says, and nothing beside it moves. */
 TEST(mapped_pixels, each_region_s_rows_land_where_it_names_them)
 { MockPlatform platform;
   MappedPixels pixels(platform);
@@ -98,8 +88,6 @@ TEST(mapped_pixels, each_region_s_rows_land_where_it_names_them)
   CHECK_EQ(destination.at(0u, 15u), source.at(0u, 0u));
   CHECK_EQ(platform.mapped_frames(), 0u); }
 
-/* Surfaces whose bytes run in opposite orders trade red and blue on every
- * path a pixel can take; surfaces of one order move byte for byte. */
 TEST(mapped_pixels, surfaces_of_opposite_orders_trade_red_and_blue)
 { MockPlatform platform;
   MappedPixels pixels(platform);
@@ -129,11 +117,8 @@ TEST(mapped_pixels, a_fill_writes_the_colour_over_each_region)
   CHECK_EQ(destination.at(15u, 15u), 0xFF102030u);
   CHECK_EQ(destination.at(6u, 3u), 0u);
   CHECK_EQ(destination.at(2u, 5u), 0u);
-  /* A fill reads no source, the region's source corner included. */
   CHECK_EQ(destination.at(0u, 0u), 0u); }
 
-/* A surface whose pages the platform will not map is not_found, the
- * destination's or the source's, and leaves nothing mapped or moved. */
 TEST(mapped_pixels, a_surface_that_cannot_be_mapped_moves_nothing)
 { MockPlatform platform;
   MappedPixels pixels(platform);

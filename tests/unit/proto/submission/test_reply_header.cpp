@@ -28,7 +28,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(reply_header_encode, places_every_field_at_its_offset)
 { std::uint8_t bytes[ReplyHeader::encoded_size] = {};
@@ -63,11 +63,11 @@ TEST(reply_header, an_answer_that_fits_or_one_too_large_round_trips)
 TEST(reply_header_decode, rejects_each_inconsistent_field)
 { struct Case { std::size_t offset; std::uint8_t value; };
   const Case cases[] = {
-      {0u, 0u},     /* magic */
-      {4u, 2u},     /* unknown status */
-      {8u, 0u},     /* fence 0 (low byte of 3) */
-      {16u, 11u},   /* ok, but size and required disagree */
-      {26u, 1u},    /* reserved */
+      {0u, 0u},
+      {4u, 2u},
+      {8u, 0u},
+      {16u, 11u},
+      {26u, 1u},
   };
   for (const Case &c : cases) {
       std::uint8_t bytes[ReplyHeader::encoded_size] = {};
@@ -79,11 +79,11 @@ TEST(reply_header_decode, rejects_each_inconsistent_field)
   }
   std::uint8_t too_large[ReplyHeader::encoded_size] = {};
   CHECK_STATUS(ReplyHeader(3u, 12u).within(4u).encode(too_large, sizeof too_large), Status::ok);
-  too_large[16] = 1u;   /* too large, yet bytes follow */
+  too_large[16] = 1u;
   ReplyHeader decoded;
   CHECK_STATUS(decoded.decode(too_large, sizeof too_large), Status::malformed);
   too_large[16] = 0u;
-  std::memset(too_large + 20, 0, 4u);   /* too large, needing nothing */
+  std::memset(too_large + 20, 0, 4u);
   CHECK_STATUS(decoded.decode(too_large, sizeof too_large), Status::malformed); }
 
 TEST(reply_header_encode, a_short_destination_is_too_large_and_untouched)
@@ -97,11 +97,5 @@ TEST(reply_header_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 256u);
-  /* Only the fence is free: 77 has four bits set, so no single flip can zero
-   * it, and all 64 are acceptable. Every other field is pinned by the answer's
-   * own consistency - a flipped status leaves an answer of 900 bytes claiming
-   * to be too large, and a flipped size or required makes the two disagree.
-   * Every shorter input is short of 32 bytes, all-zero and all-ones carry no
-   * magic, and the untouched input is the last acceptance. */
   const std::uint32_t acceptable = 64u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

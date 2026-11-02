@@ -23,7 +23,7 @@ void *const pdo = &pdo_storage;
 const GpuIdentity radeon(0x1002u, 0x7550u, GpuIdentity::discrete_gpu, uuid, sixteen_gib, 0u,
                          "AMD Radeon RX 9070 XT");
 
-}  // namespace
+}
 
 TEST(adapter_description, names_the_device_and_fills_what_wmi_reads)
 { MockPlatform platform;
@@ -38,7 +38,6 @@ TEST(adapter_description, names_the_device_and_fills_what_wmi_reads)
   CHECK(platform.driver_text_is("HardwareInformation.DacType", "Internal"));
   CHECK_EQ(platform.driver_value_type("HardwareInformation.qwMemorySize"), 11u);
   CHECK_EQ(platform.driver_number("HardwareInformation.qwMemorySize"), sixteen_gib);
-  /* Sixteen GiB does not fit the 32-bit value; it saturates rather than wraps to 0. */
   CHECK_EQ(platform.driver_value_type("HardwareInformation.MemorySize"), 4u);
   CHECK_EQ(platform.driver_number("HardwareInformation.MemorySize"), 0xFFFFFFFFu);
   CHECK_EQ(platform.device_writes(), 6u); }
@@ -56,8 +55,6 @@ TEST(adapter_description, a_size_that_fits_is_written_exactly_in_both)
   CHECK(platform.device_description_is("x"));
   CHECK_EQ(description.published(), 2u); }
 
-/* A GPU that names nothing leaves the INF's name standing: an empty
- * description would be worse than a generic one. */
 TEST(adapter_description, a_gpu_with_no_name_leaves_the_description_alone)
 { MockPlatform platform;
   AdapterDescription description(platform);
@@ -70,8 +67,6 @@ TEST(adapter_description, a_gpu_with_no_name_leaves_the_description_alone)
   CHECK_EQ(platform.driver_value_type("HardwareInformation.MemorySize"), 4u);
   CHECK_EQ(platform.device_writes(), 3u); }
 
-/* Each value is its own write: one refused does not keep the rest from
- * Windows, and the first refusal is the one reported. */
 TEST(adapter_description, a_refused_write_is_reported_and_the_rest_still_written)
 { for (std::uint32_t refused = 1u; refused <= 6u; refused++) {
     MockPlatform platform;
@@ -83,7 +78,7 @@ TEST(adapter_description, a_refused_write_is_reported_and_the_rest_still_written
   MockPlatform platform;
   AdapterDescription description(platform);
   platform.refuse_device_write_at(2u);
-  platform.refuse_device_write_at(0u);   /* taken back */
+  platform.refuse_device_write_at(0u);
   CHECK_STATUS(description.publish(pdo, radeon), Status::ok); }
 
 TEST(adapter_description, publishes_only_at_passive)
@@ -92,7 +87,6 @@ TEST(adapter_description, publishes_only_at_passive)
   platform.set_irql(av::Irql::dispatch);
   static_cast<void>(description.publish(pdo, radeon));
   platform.set_irql(av::Irql::passive);
-  /* The description's own ceiling, then each write's. */
   std::uint32_t refusals = 0u;
   while (platform.claim(av::Violation::irql_ceiling)) refusals++;
   CHECK_EQ(refusals, 7u); }

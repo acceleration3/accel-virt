@@ -35,9 +35,6 @@ bool DeviceMemory::learn(VkPhysicalDevice physical)
     return true;
 }
 
-/* One host allocation of exactly the type asked: a driver that sub-allocates
- * does so itself, as on real hardware, and memory a guest frees is the host's
- * again at once (docs/host-memory.md). */
 VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, const VkMemoryAllocateInfo &info,
                                 const VkAllocationCallbacks *allocator, VkDeviceMemory &memory)
 {
@@ -61,10 +58,6 @@ VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, cons
     return VK_SUCCESS;
 }
 
-/* The spec has the application keep the pointer and the size aligned to
- * minImportedHostPointerAlignment - a page, as every host answers - and the
- * type one vkGetMemoryHostPointerPropertiesEXT offered; anything else is
- * refused as the spec says, not passed on. */
 VkResult DeviceMemory::lend(const VkMemoryAllocateInfo &info, const VkImportMemoryHostPointerInfoEXT &import,
                             VkDeviceMemory &memory)
 {
@@ -163,4 +156,4 @@ bool DeviceMemory::invariants_hold() const
     return types_.invariants_hold();
 }
 
-}  // namespace av::icd
+}

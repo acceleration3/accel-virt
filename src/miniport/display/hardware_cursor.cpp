@@ -51,8 +51,6 @@ void HardwareCursor::forget_device()
     visible_ = false;
 }
 
-/* Every request here fits the buffer; one that did not would have length
- * zero, which the queue refuses, so the writer's own answer adds nothing. */
 Status HardwareCursor::create_resource(VirtioGpuDevice &device)
 {
     AV_SCOPE("HardwareCursor::create_resource");
@@ -99,7 +97,6 @@ Status HardwareCursor::set_shape(const DxgkargSetPointerShapeRecord &shape)
     return visible_ ? update(device, resource_id) : Status::ok;
 }
 
-/* A pointer made visible before any shape is shown when the shape arrives. */
 Status HardwareCursor::set_position(const DxgkargSetPointerPositionRecord &position)
 {
     AV_SCOPE("HardwareCursor::set_position");
@@ -120,4 +117,4 @@ Status HardwareCursor::set_position(const DxgkargSetPointerPositionRecord &posit
     return device.send_cursor(request, writer.length());
 }
 
-}  // namespace av
+}

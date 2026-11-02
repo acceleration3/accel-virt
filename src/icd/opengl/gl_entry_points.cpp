@@ -31,8 +31,6 @@ int32_t APIENTRY DrvSetPixelFormat(void *dc, int32_t index)
     return gl_icd_binding.root().set_pixel_format(dc, index);
 }
 
-/* A handle is a 16-bit generation over a 16-bit slot (GlContextTable), so it
- * is whole in a 32-bit process's DHGLRC. */
 uintptr_t APIENTRY DrvCreateContext(void *dc)
 {
     AV_SCOPE("DrvCreateContext");
@@ -181,8 +179,6 @@ void APIENTRY get_integerv(GLenum pname, GLint *data)
 }
 
 
-/* ---- GL_EXT_memory_object_win32 and GL_EXT_semaphore_win32 (feature 053) -- */
-
 
 void APIENTRY glDeleteMemoryObjectsEXT(GLsizei n, const GLuint *memoryObjects)
 {
@@ -325,7 +321,7 @@ void APIENTRY glTextureStorageMem3DMultisampleEXT(GLuint texture, GLsizei sample
         offset);
 }
 
-}  // namespace av::glicd::entry
+}
 
 namespace av::glicd {
 
@@ -368,4 +364,4 @@ const char *DriverExports::name(uint32_t index) const
     return index < count ? names_[index] : nullptr;
 }
 
-}  // namespace av::glicd
+}

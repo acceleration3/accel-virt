@@ -1,8 +1,3 @@
-/* atiadlxx.dll's answers (docs/vendor-libraries.md): the avgpu adapters that
- * present an AMD GPU, as ADL describes a GPU - and exactly what DaVinci
- * Resolve's GPU detection reads: the vendor, the bus, device and function, the
- * PnP string it parses for the hardware ID, the ASIC family it tells an
- * integrated GPU by, and the primary adapter. */
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/pci_location.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -34,8 +29,6 @@ const PciIdentity on_radeon(0x1002u, 0x7550u, 0x1AF4u, 0x5256u, 0xC0u);
 const PciIdentity on_geforce(0x10DEu, 0x2684u, 0x1AF4u, 0x5256u, 0xA1u);
 constexpr std::uint64_t version = 0x0000002300050000ull;
 
-/* A machine with an integrated AMD GPU the primary display is on, a discrete
- * one beside it, and an NVIDIA card ADL has nothing to say of. */
 class Machine {
 public:
     Machine() : kmt_(), trace_(), lock_(trace_, 'A'), root_(kmt_, lock_)
@@ -62,7 +55,7 @@ private:
     AdlRoot                 root_;
 };
 
-}  // namespace
+}
 
 TEST(adl_root, describes_each_amd_adapter_as_resolve_reads_an_adl_gpu)
 { Machine machine;
@@ -83,7 +76,6 @@ TEST(adl_root, describes_each_amd_adapter_as_resolve_reads_an_adl_gpu)
   CHECK(std::strcmp(infos[0].strAdapterName, "AMD Radeon(TM) Graphics") == 0);
   CHECK(std::strcmp(infos[0].strPNPString, "PCI\\VEN_1002&DEV_13C0&SUBSYS_52561AF4&REV_C9") == 0);
   CHECK(std::strcmp(infos[0].strUDID, "PCI_VEN_1002&DEV_13C0&SUBSYS_52561AF4&REV_C9") == 0);
-  /* No display path and no registry key is named rather than guessed. */
   CHECK_EQ(infos[0].strDisplayName[0], '\0');
   CHECK_EQ(infos[0].strDriverPath[0], '\0');
   CHECK_EQ(infos[0].iOSDisplayIndex, -1);
@@ -123,8 +115,6 @@ TEST(adl_root, the_primary_display_on_no_amd_adapter_is_no_primary)
   CHECK_EQ(machine.root().primary(&primary), AdlRoot::error);
   CHECK_EQ(primary, -1); }
 
-/* The driver package's version, as Windows writes it; the Catalyst and
- * Crimson versions are empty, because this is neither driver. */
 TEST(adl_root, the_versions_are_the_driver_package_s_and_no_catalyst_s)
 { Machine machine;
   CHECK_EQ(machine.root().create(true), AdlRoot::ok);
@@ -141,16 +131,12 @@ TEST(adl_root, the_versions_are_the_driver_package_s_and_no_catalyst_s)
   CHECK_EQ(versions_x2.strCrimsonVersion[0], '\0');
   CHECK_EQ(machine.root().versions(nullptr), AdlRoot::null_pointer);
   CHECK_EQ(machine.root().versions_x2(nullptr), AdlRoot::null_pointer);
-  /* A refresh that cannot enumerate leaves no adapter, and so no driver to
-   * give a version of. */
   machine.kmt().fail_at(MockKmt::Call::enumerate_adapters, 1u, MockKmt::invalid_parameter);
   CHECK_EQ(machine.root().refresh(), AdlRoot::error);
   std::memset(&versions, 'x', sizeof versions);
   CHECK_EQ(machine.root().versions(&versions), AdlRoot::ok);
   CHECK_EQ(versions.strDriverVer[0], '\0'); }
 
-/* An AdapterInfo array too small for every adapter is refused whole, and a
- * missing one is a null pointer. */
 TEST(adl_root, adapter_info_into_too_little_room_is_refused)
 { Machine machine;
   CHECK_EQ(machine.root().create(true), AdlRoot::ok);
@@ -165,9 +151,6 @@ TEST(adl_root, adapter_info_into_too_little_room_is_refused)
   CHECK_EQ(machine.root().asic_family_type(0, nullptr, &valids), AdlRoot::null_pointer);
   CHECK_EQ(machine.root().asic_family_type(0, &types, nullptr), AdlRoot::null_pointer); }
 
-/* Nothing is answered before a create or after its destroy; creates and
- * destroys pair, ADL's and ADL2's alike, so one caller's destroy does not
- * end another's. */
 TEST(adl_root, every_call_waits_for_a_create_and_each_destroy_undoes_one)
 { Machine machine;
   int count = 0;
@@ -197,12 +180,9 @@ TEST(adl_root, every_call_waits_for_a_create_and_each_destroy_undoes_one)
   CHECK_EQ(machine.root().destroy(), AdlRoot::ok);
   CHECK(machine.root().holds(machine.root().context()));
   CHECK(!machine.root().holds(&count));
-  CHECK(machine.root().holds(nullptr));   /* ADL1's context */
+  CHECK(machine.root().holds(nullptr));
   CHECK(machine.unlocked()); }
 
-/* Where no AMD GPU is presented ADL will not start, as on any machine with no
- * AMD driver; where the kernel will not enumerate, neither. A refresh that
- * cannot enumerate is an error. */
 TEST(adl_root, no_amd_adapter_or_no_enumeration_is_no_adl)
 { MockKmt               kmt;
   av::LockTrace         trace;

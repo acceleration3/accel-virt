@@ -1,6 +1,3 @@
-"""The frame-pacing report: what the trace's DWM frames did, whether the
-capture rule explains every skipped capture, and where the render thread's
-time went in the frames a skip was measured against, beside normal frames."""
 import collections
 
 from etw.dwm import median, percentile
@@ -94,8 +91,6 @@ TRACER_FUNCTIONS = ("StackWalk", "RtlpUnwind", "RtlVirtualUnwind", "RtlWalkFrame
 
 
 def tracer_rows(pid, normal, before, symbols, sample_ms):
-    """The trace's own cost on the thread: the kernel walking its stack for
-    each sample and switch, which a run without the trace does not pay."""
     if symbols is None:
         return []
 
@@ -108,8 +103,6 @@ def tracer_rows(pid, normal, before, symbols, sample_ms):
 
 
 def sample_rows(pid, normal, before, symbols, sample_ms, top):
-    """Where the CPU samples of the two groups landed, as ms a frame, and the
-    functions the extra time of the slow frames was spent in."""
     if symbols is None:
         return []
     out = []
@@ -150,7 +143,6 @@ CALLER_DEPTH = 4
 
 
 def called_from(pid, name, group, symbols):
-    """The commonest chains of callers into `name` among the group's samples."""
     chains = collections.Counter()
     for frame in group:
         for sample in frame.samples:

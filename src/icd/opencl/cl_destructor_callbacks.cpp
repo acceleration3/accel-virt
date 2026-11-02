@@ -68,8 +68,6 @@ bool ClDestructorCallbacks::names_gone(const Row &row, const void *const *gone, 
 void ClDestructorCallbacks::take(const void *const *gone, uint32_t count, Due &due)
 {
     AV_SCOPE("ClDestructorCallbacks::take");
-    /* Object by object in the order they went - a buffer before the context
-     * it held - and each object's latest registered first. */
     for (uint32_t object = 0u; object < count; ++object) {
         for (uint32_t index = rows_.size(); index > 0u; --index) {
             if (rows_.at(index - 1u).object_ != gone[object]) continue;
@@ -94,10 +92,9 @@ bool ClDestructorCallbacks::invariants_hold() const
     AV_SCOPE("ClDestructorCallbacks::invariants_hold");
     if (!rows_.invariants_hold()) return false;
     for (const Row &row : rows_) {
-        /* Exactly one callback, of the kind its registration named. */
         if (row.object_ == nullptr || (row.mem_ == nullptr) == (row.context_ == nullptr)) return false;
     }
     return true;
 }
 
-}  // namespace av::clicd
+}

@@ -15,4 +15,4 @@ void *LoadedOpengl32::create_context(void *dc)
     return create != nullptr ? reinterpret_cast<CreateContext>(create)(static_cast<HDC>(dc)) : nullptr;
 }
 
-}  // namespace av
+}

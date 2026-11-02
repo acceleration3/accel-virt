@@ -1,13 +1,3 @@
-"""The device with its contexts in a renderer process (docs/renderer.md): the
-echo executor runs in av-renderer, not in QEMU. A renderer that crashes - the
-executor aborting, or the process killed from outside - takes its contexts
-with it: each bound context's fence page reads faulted with device_lost and its
-fence queue interrupts, QEMU goes on answering, and a new renderer runs the
-next context. A guest whose RAM is no shared memfd cannot have one.
-
-Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
-AV_QEMU_BUILD, AV_EXECUTOR and AV_RENDERER.
-"""
 import os
 import signal
 import subprocess
@@ -25,7 +15,6 @@ CRASH = 0x10007
 
 
 def renderers_of(pid):
-    """The renderer processes QEMU `pid` started."""
     listing = subprocess.run(["pgrep", "-P", str(pid), "-f", "av-renderer"], capture_output=True, text=True)
     return [int(line) for line in listing.stdout.split()]
 
@@ -56,8 +45,6 @@ class VirtioGpuRenderer(unittest.TestCase):
         self.assertTrue(context.completed(context.send(command(ECHO, b"\x01\x02\x03\x04"))))
 
     def lost_and_recovered(self, gpu, msix, context, end):
-        """`end` ends the renderer; the context is lost, QEMU answers, and a
-        context made after it runs in a renderer that is not the first."""
         first = renderers_of(gpu.qtest.process.pid)
         self.assertTrue(context.completed(context.send(command(ECHO))))
         self.assertTrue(wait_for(lambda: msix.pending(3)))
@@ -66,7 +53,6 @@ class VirtioGpuRenderer(unittest.TestCase):
         msix.mask(3)
         end(context)
         self.assertTrue(context.faulted_with(DEVICE_LOST), context.fence_page())
-        # The completed fence stays where it was: the guest never sees one go back.
         self.assertEqual(context.fence_page()[2], 1)
         self.assertTrue(wait_for(lambda: msix.pending(3)))
         self.assertTrue(wait_for(lambda: len(renderers_of(gpu.qtest.process.pid)) == 1))

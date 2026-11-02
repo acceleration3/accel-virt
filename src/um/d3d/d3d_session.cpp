@@ -92,8 +92,6 @@ HRESULT D3dSession::open(uint32_t adapter)
         lines_.write("no device on the adapter for a Direct3D session");
         return E_FAIL;
     }
-    /* An arena of the shape's size is the host window's when it has room
-     * and guest RAM's when not (the kernel decides). */
     const Status opened = channel_.open(connection_);
     if (opened != Status::ok) return opened == Status::no_memory ? E_OUTOFMEMORY : E_FAIL;
     static_cast<void>(stream_.construct(channel_.transport()));
@@ -106,7 +104,6 @@ HRESULT D3dSession::open(uint32_t adapter)
     return S_OK;
 }
 
-/* Nothing is lent yet, so the call needs no room in the arena. */
 bool D3dSession::host_has_slices()
 {
     AV_SCOPE("D3dSession::host_has_slices");
@@ -120,8 +117,6 @@ bool D3dSession::host_has_slices()
     return false;
 }
 
-/* A store the device cannot give leaves the session copying its buffers, as
- * a host that draws nothing in place does. */
 void D3dSession::open_slices()
 {
     AV_SCOPE("D3dSession::open_slices");
@@ -177,8 +172,6 @@ void D3dSession::retire_memory(HostAllocation &allocation)
     }
     const uint64_t fence = timeline_.object().recording();
     while (channel_.retire_memory_after(allocation, fence) != Status::ok) {
-        /* No room to note it: the oldest is waited for and closed, which
-         * makes room; with none to wait for, this one is. */
         HostAllocation *oldest = nullptr;
         uint64_t        oldest_fence = fence;
         const bool      waited = channel_.take_oldest_retired(oldest, oldest_fence);
@@ -274,4 +267,4 @@ ObjectPool<d3d11::D3d11Device> &D3dSession::contexts()
     return contexts_;
 }
 
-}  // namespace av::d3d
+}

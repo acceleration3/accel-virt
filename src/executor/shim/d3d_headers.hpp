@@ -1,34 +1,19 @@
-/* The Direct3D 9, 11 and DXGI API as DXVK's native build declares it, and the
- * DXVK interop interfaces the executor calls - declared here rather than taken
- * from DXVK's source tree, whose header drags in the whole of DXVK's internals.
- *
- * Included only by translation units that call into DXVK. Its headers define
- * the Windows base types and a handful of macros, so nothing else in the
- * device may see them. */
 #ifndef AV_D3D_HEADERS_HPP
 #define AV_D3D_HEADERS_HPP
 
 #include <d3d11_4.h>
 #include <d3d9.h>
-/* vkd3d-proton returns a struct from a COM method through a pointer, as the
- * Windows ABI does (vkd3d_d3d12.idl defines this for itself); the native
- * d3d12.h declares that shape only when asked. Only d3d12.h has such methods. */
 #define WIDL_EXPLICIT_AGGREGATE_RETURNS
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <vulkan/vulkan_core.h>
 
-/* DXVK's IDXGIVkInteropAdapter (src/dxgi/dxgi_interfaces.h): which Vulkan
- * physical device a DXGI adapter is, which is how the executor puts a device
- * on the GPU the guest's adapter stands for. */
 MIDL_INTERFACE("3a6d8f2c-b0e8-4ab4-b4dc-4fd24891bfa5")
 IDXGIVkInteropAdapter : public IUnknown {
     virtual void STDMETHODCALLTYPE GetVulkanHandles(VkInstance *instance, VkPhysicalDevice *physical_device) = 0;
 };
 __CRT_UUID_DECL(IDXGIVkInteropAdapter, 0x3a6d8f2c, 0xb0e8, 0x4ab4, 0xb4, 0xdc, 0x4f, 0xd2, 0x48, 0x91, 0xbf, 0xa5);
 
-/* DXVK's ID3D9VkInteropInterface (src/d3d9/d3d9_interfaces.h): which Vulkan
- * physical device a Direct3D 9 adapter ordinal is. */
 MIDL_INTERFACE("3461a81b-ce41-485b-b6b5-fcf08ba6a6bd")
 ID3D9VkInteropInterface : public IUnknown {
     virtual void STDMETHODCALLTYPE GetInstanceHandle(VkInstance *instance) = 0;
@@ -36,9 +21,6 @@ ID3D9VkInteropInterface : public IUnknown {
 };
 __CRT_UUID_DECL(ID3D9VkInteropInterface, 0x3461a81b, 0xce41, 0x485b, 0xb6, 0xb5, 0xfc, 0xf0, 0x8b, 0xa6, 0xa6, 0xbd);
 
-/* DXVK's ID3D9VkInteropTexture (src/d3d9/d3d9_interfaces.h): the Vulkan
- * image behind a Direct3D 9 surface or texture, which the compositor copies
- * from on the device's own queue. */
 MIDL_INTERFACE("d56344f5-8d35-46fd-806d-94c351b472c1")
 ID3D9VkInteropTexture : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE GetVulkanImageInfo(VkImage *handle, VkImageLayout *layout,
@@ -46,9 +28,6 @@ ID3D9VkInteropTexture : public IUnknown {
 };
 __CRT_UUID_DECL(ID3D9VkInteropTexture, 0xd56344f5, 0x8d35, 0x46fd, 0x80, 0x6d, 0x94, 0xc3, 0x51, 0xb4, 0x72, 0xc1);
 
-/* DXVK's ID3D9VkInteropDevice: a Direct3D 9 device's Vulkan device and queue,
- * and the hold on that queue a submission of the embedder's takes. Declared
- * through the last slot called, in DXVK's order. */
 MIDL_INTERFACE("2eaa4b89-0107-4bdb-87f7-0f541c493ce0")
 ID3D9VkInteropDevice : public IUnknown {
     virtual void STDMETHODCALLTYPE GetVulkanHandles(VkInstance *instance, VkPhysicalDevice *physical_device,
@@ -66,9 +45,6 @@ ID3D9VkInteropDevice : public IUnknown {
 };
 __CRT_UUID_DECL(ID3D9VkInteropDevice, 0x2eaa4b89, 0x0107, 0x4bdb, 0x87, 0xf7, 0x0f, 0x54, 0x1c, 0x49, 0x3c, 0xe0);
 
-/* ID3D12DeviceFactory (d3d12.h of the Agility SDK, vkd3d-proton's
- * include/vkd3d_d3d12.idl), which DXVK's native d3d12.h predates: how the
- * executor makes one independent device per GPU. */
 MIDL_INTERFACE("61f307d3-d34e-4e7c-8374-3ba4de23cccb")
 ID3D12DeviceFactory : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE InitializeFromGlobalState() = 0;
@@ -83,12 +59,6 @@ ID3D12DeviceFactory : public IUnknown {
 };
 __CRT_UUID_DECL(ID3D12DeviceFactory, 0x61f307d3, 0xd34e, 0x4e7c, 0x83, 0x74, 0x3b, 0xa4, 0xde, 0x23, 0xcc, 0xcb);
 
-/* ID3D12CommandQueue's first slot as vkd3d-proton implements it
- * (include/vkd3d_d3d12.idl): DXVK's native d3d12.h comes from a Wine IDL that
- * left UpdateTileMappings' heap out, so a call through it would hand
- * vkd3d-proton the range count where it reads the heap, and every argument
- * after it one place late. The same object, the slot declared with the API's
- * ten parameters, under ID3D12CommandQueue's own IID. */
 MIDL_INTERFACE("0ec870a6-5d7e-4c22-8cfc-5baae07616ed")
 ID3D12CommandQueueTileMappings : public ID3D12Pageable {
     virtual void STDMETHODCALLTYPE UpdateTileMappings(ID3D12Resource *resource, UINT region_count,
@@ -99,8 +69,6 @@ ID3D12CommandQueueTileMappings : public ID3D12Pageable {
                                                       D3D12_TILE_MAPPING_FLAGS flags) = 0;
 };
 
-/* vkd3d-proton's ID3D12DeviceExt (include/vkd3d_device_vkd3d_ext.idl): a
- * Direct3D 12 device's Vulkan device. Declared through the one slot called. */
 MIDL_INTERFACE("11ea7a1a-0f6a-49bf-b612-3e30f8e201dd")
 ID3D12DeviceExt : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE GetVulkanHandles(VkInstance *instance, VkPhysicalDevice *physical_device,
@@ -108,7 +76,6 @@ ID3D12DeviceExt : public IUnknown {
 };
 __CRT_UUID_DECL(ID3D12DeviceExt, 0x11ea7a1a, 0x0f6a, 0x49bf, 0xb6, 0x12, 0x3e, 0x30, 0xf8, 0xe2, 0x01, 0xdd);
 
-/* CLSID_D3D12DeviceFactory, what D3D12GetInterface makes a factory from. */
 constexpr GUID clsid_d3d12_device_factory = {0x114863bf, 0xc386, 0x4aee, {0xb3, 0x9d, 0x8f, 0x0b, 0xbb, 0x06, 0x29, 0x55}};
 
-#endif  // AV_D3D_HEADERS_HPP
+#endif

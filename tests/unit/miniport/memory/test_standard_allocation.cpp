@@ -61,7 +61,7 @@ private:
     GuardedBuffer                                bytes_;
 };
 
-}  // namespace
+}
 
 TEST(standard_allocation_describe, without_a_buffer_reports_only_the_sizes)
 { MockPlatform platform; Request request(shared_primary, nullptr);
@@ -103,7 +103,6 @@ TEST(standard_allocation_describe, shadow_and_staging_answer_their_pitch)
 
 TEST(standard_allocation_describe, gdi_surfaces_are_cpu_visible_only_when_they_say_so)
 { MockPlatform platform;
-  /* The CPU-visible texture is the surface DWM composes from lent rows. */
   struct Case { std::int32_t type; bool cpu_visible; std::uint32_t pitch; };
   const Case cases[] = {{1, false, 64u}, {2, true, 64u}, {3, false, 64u}, {6, true, 128u}};
   for (const Case &c : cases) {
@@ -116,9 +115,6 @@ TEST(standard_allocation_describe, gdi_surfaces_are_cpu_visible_only_when_they_s
       CHECK(descriptor.cpu_visible() == c.cpu_visible);
   } }
 
-/* An existing heap is dxgkrnl's cross-adapter GDI texture: as wide as the
- * heap's bytes, one row, no format. It is the process's own memory, which
- * the processor reads and writes, a row of bytes. */
 TEST(standard_allocation_describe, an_existing_heap_is_a_cpu_visible_row_of_its_bytes)
 { MockPlatform platform;
   D3dkmdtGdiSurfaceDataRecord surface = {0x30000u, 1u, 0, 7, 0u, 0xEEu};
@@ -131,16 +127,12 @@ TEST(standard_allocation_describe, an_existing_heap_is_a_cpu_visible_row_of_its_
   CHECK(descriptor.size() == 0x30000u);
   CHECK_EQ(descriptor.layout().pitch(), 0x30000u);
   CHECK_EQ(descriptor.layout().height(), 1u);
-  /* No bytes, or more than a row with no format: not an existing heap. */
   const D3dkmdtGdiSurfaceDataRecord refused[] = {{0u, 1u, 0, 7, 0u, 0xEEu}, {0x1000u, 2u, 0, 7, 0u, 0xEEu}};
   for (D3dkmdtGdiSurfaceDataRecord heap : refused) {
       CHECK_STATUS(Request(gdi, &heap).describe(platform), Status::invalid_parameter);
       CHECK_EQ(heap.Pitch, 0xEEu);
   } }
 
-/* Affinity's textures: any size, in dxgkrnl's pitch and height - 1249x805 is
- * 5120 bytes a row and 808 rows, 1010 pages; the descriptor keeps the real
- * height. */
 TEST(standard_allocation_describe, a_cross_adapter_texture_has_dxgkrnls_pitch_and_pages)
 { MockPlatform platform;
   D3dkmdtGdiSurfaceDataRecord surface = {1249u, 805u, a8r8g8b8, 7, 0u, 0xEEu};
@@ -165,8 +157,6 @@ TEST(standard_allocation_describe, a_cross_adapter_texture_has_dxgkrnls_pitch_an
   CHECK_STATUS(Request(gdi, &unknown).describe(platform), Status::invalid_parameter);
   CHECK_EQ(unknown.Pitch, 0xEEu); }
 
-/* The OS's own CPU-visible cross-adapter bitmap (D3DKMDT_GDISURFACETYPE_TEXTURE_CPUVISIBLE_CROSSADAPTER)
- * is the process's pages as type 7 is: the same pitch dxgkrnl checks, the same pages. */
 TEST(standard_allocation_describe, a_cpu_visible_cross_adapter_texture_is_laid_out_as_a_cross_adapter_texture)
 { MockPlatform platform;
   D3dkmdtGdiSurfaceDataRecord plain = {1249u, 805u, a8r8g8b8, 7, 0u, 0xEEu};
@@ -205,8 +195,8 @@ TEST(standard_allocation_describe, refuses_an_unsupported_format_zero_dimensions
       {16u, 16u, r5g6b5},
       {0u, 16u, a8r8g8b8},
       {16u, 0u, a8r8g8b8},
-      {0x40000000u, 1u, a8r8g8b8},    /* pitch overflows 32 bits */
-      {0x10000u, 0x4000u, a8r8g8b8},  /* size overflows 32 bits */
+      {0x40000000u, 1u, a8r8g8b8},
+      {0x10000u, 0x4000u, a8r8g8b8},
   };
   for (const Case &c : cases) {
       D3dkmdtShadowSurfaceDataRecord surface = {c.width, c.height, c.format, 0xEEu};

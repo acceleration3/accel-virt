@@ -10,4 +10,4 @@ uint64_t HandleBits::value() const
     return bits_;
 }
 
-}  // namespace av::icd
+}

@@ -1,7 +1,3 @@
-/* avglprobe.exe's proof (feature 050, T042): GlProbe's nine steps over the
- * system opengl32.dll on the probe's own window, `ok opengl.<step>` and
- * `fail opengl.<step>` lines and `avglprobe: N passed, M failed` on standard
- * output, the failure count as the exit code. Translation only. */
 #ifndef AV_UM_GL_PROBE_PROGRAM_HPP
 #define AV_UM_GL_PROBE_PROGRAM_HPP
 
@@ -35,6 +31,6 @@ private:
     WindowsImageSink images_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_GL_PROBE_PROGRAM_HPP
+#endif

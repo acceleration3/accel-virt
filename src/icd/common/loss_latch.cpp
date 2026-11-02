@@ -46,8 +46,6 @@ bool LossLatch::guilty() const
            code <= static_cast<uint32_t>(FaultCode::undecodable);
 }
 
-/* Keyed by the entry and the cause: an application keeps calling a lost
- * context, and every call after the first says nothing new. */
 bool LossLatch::refuses(const char *entry)
 {
     AV_SCOPE("LossLatch::refuses");
@@ -78,4 +76,4 @@ bool LossLatch::invariants_hold() const
     return now == 0u || (now & lost_bit) != 0u;
 }
 
-}  // namespace av::icd
+}

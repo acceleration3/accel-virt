@@ -40,4 +40,4 @@ void HostChannelProbe::build_transport(GuestConnection &device)
 
 void HostChannelProbe::drop_transport() { channel.transport_.destroy(); }
 
-}  // namespace av::icd
+}

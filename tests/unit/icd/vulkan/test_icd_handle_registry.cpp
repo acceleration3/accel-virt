@@ -1,8 +1,3 @@
-/* Dispatchable handles as the loader sees them: the loader's magic in the first
- * word, one handle per host object per connection however often it is wrapped,
- * only live handles of this registry recognised, and a destroyed handle taking
- * everything made through it. Invariants after every mutation; the pool's
- * allocation failure at every chunk boundary. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -61,7 +56,7 @@ struct HandleRegistryProbe {
     static ObjectPool<LoaderHandle> &pool(HandleRegistry &registry) { return HandleTreeProbe::pool(registry.tree_); }
 };
 
-}  // namespace av::icd
+}
 
 namespace av {
 
@@ -70,16 +65,13 @@ struct ObjectPoolProbe {
     static void miscount(ObjectPool<T> &pool, std::int32_t by) { pool.live_ += static_cast<std::uint32_t>(by); }
 };
 
-}  // namespace av
+}
 
 using av::ObjectPoolProbe;
 using av::icd::HandleRegistryProbe;
 using av::icd::LoaderHandleProbe;
 
 namespace {
-
-/* The registry keeps a connection only to compare it, so two addresses the test
- * owns stand for two connections. */
 int first_token = 0;
 int second_token = 0;
 Connection *const first = reinterpret_cast<Connection *>(&first_token);
@@ -116,14 +108,13 @@ private:
     HandleRegistry &registry_;
 };
 
-}  // namespace
+}
 
 TEST(loader_handle, keeps_the_loader_word_first_holding_the_magic)
 { CHECK_EQ(LoaderHandleProbe::loader_data_offset(), 0u);
   CHECK_EQ(LoaderHandle::loader_magic, 0x01CDC0DEu);
   int token = 0;
   LoaderHandle handle(Kind::instance, instance_host, reinterpret_cast<Connection *>(&token), nullptr);
-  /* What the loader reads: the first pointer-sized word at the address. */
   void *first_word = *static_cast<void **>(static_cast<void *>(&handle));
   CHECK(first_word == reinterpret_cast<void *>(LoaderHandle::loader_magic));
   CHECK(handle.invariants_hold()); }
@@ -199,7 +190,6 @@ TEST(handle_registry, the_same_host_object_on_the_same_connection_is_the_same_ha
   CHECK(registry.invariants_hold());
   CHECK(again == tree.physical_device);
   CHECK_EQ(registry.live(), 5u);
-  /* Another host object, another connection, another kind: each a new handle. */
   LoaderHandle *other = nullptr;
   CHECK_STATUS(registry.wrap(Kind::physical_device, physical_device_host + 1u, first, tree.instance, other),
                Status::ok);
@@ -229,14 +219,14 @@ TEST(handle_registry, refuses_a_handle_it_could_not_keep_its_invariants_with)
       LoaderHandle *parent;
   };
   const Refusal refusals[] = {
-      {Kind::physical_device, 0u, first, tree.instance},              /* the host never names 0 */
-      {Kind::physical_device, 0x2201u, nullptr, tree.instance},       /* no connection */
-      {Kind::instance, 0x1101u, first, tree.instance},                /* an instance with a parent */
-      {Kind::device, 0x3301u, first, nullptr},                        /* anything else without one */
-      {Kind::device, 0x3301u, first, &stack_instance},                /* a parent this never made */
-      {Kind::device, 0x3301u, first, tree.queue},                     /* a parent of a higher kind */
-      {Kind::queue, 0x4401u, first, tree.queue},                      /* a parent of the same kind */
-      {Kind::device, 0x3301u, first, other_instance},                 /* a parent on another connection */
+      {Kind::physical_device, 0u, first, tree.instance},
+      {Kind::physical_device, 0x2201u, nullptr, tree.instance},
+      {Kind::instance, 0x1101u, first, tree.instance},
+      {Kind::device, 0x3301u, first, nullptr},
+      {Kind::device, 0x3301u, first, &stack_instance},
+      {Kind::device, 0x3301u, first, tree.queue},
+      {Kind::queue, 0x4401u, first, tree.queue},
+      {Kind::device, 0x3301u, first, other_instance},
   };
   for (const Refusal &refusal : refusals) {
       LoaderHandle *handle = tree.instance;
@@ -262,7 +252,6 @@ TEST(handle_registry, made_answers_only_live_handles_of_the_kind_asked)
   LoaderHandle stack(Kind::device, device_host, first, tree.instance);
   CHECK(registry.made(&stack, Kind::device) == nullptr);
   CHECK(registry.made(nullptr, Kind::instance) == nullptr);
-  /* An address inside a live handle is not a handle. */
   CHECK(registry.made(static_cast<char *>(static_cast<void *>(tree.device)) + 1, Kind::device) == nullptr);
   CHECK_STATUS(registry.destroy(tree.device), Status::ok);
   CHECK(registry.invariants_hold());
@@ -350,8 +339,6 @@ TEST(handle_registry, destroy_refuses_what_is_not_a_live_handle)
   CHECK(registry.invariants_hold());
   CHECK_EQ(registry.live(), 5u); }
 
-/* Many handles cross chunk boundaries; a teardown with interleaved chunks must
- * not walk a chain through a chunk already released. */
 TEST(handle_registry, destroys_a_wide_tree_spread_over_several_chunks)
 { MockPlatform platform;
   HandleRegistry registry(platform);
@@ -374,15 +361,12 @@ TEST(handle_registry, destroys_a_wide_tree_spread_over_several_chunks)
   CHECK_EQ(registry.live(), 0u);
   CHECK_EQ(platform.live_allocations(), 0u); }
 
-/* 129 handles need three chunks: the refusal of the second or third chunk's
- * allocation refuses exactly the handle that needed it, and the next wrap takes
- * a chunk again; a refusal no wrap reaches refuses nothing. */
 TEST(handle_registry, a_refused_allocation_refuses_only_the_handle_that_needed_a_chunk)
 { constexpr std::uint32_t slots = av::ObjectPool<LoaderHandle>::chunk_slots;
   constexpr std::uint32_t handles = 2u * slots + 1u;
   struct Case {
       std::uint32_t failing;
-      std::uint32_t refused_index;   /* 0 for none */
+      std::uint32_t refused_index;
   };
   const Case cases[] = {{1u, slots}, {2u, 2u * slots}, {3u, 0u}};
   for (const Case &check : cases) {
@@ -436,9 +420,6 @@ TEST(handle_registry, invariants_see_a_dangling_parent_and_a_duplicate)
   CHECK(registry.invariants_hold()); }
 
 namespace {
-
-/* A connection a batch can name: a batch records into memory and reaches its
- * connection only at end, which these tests never call. */
 class BatchSource {
 public:
     BatchSource() : lock_(trace_, 'S'), log_(), connection_(kmt_, platform_, lock_, log_), batches_(platform_), memories_(platform_) {}
@@ -472,7 +453,7 @@ private:
     av::ObjectPool<av::icd::DeviceMemory> memories_;
 };
 
-}  // namespace
+}
 
 TEST(loader_handle, a_command_buffer_owns_its_batch_until_it_is_destroyed)
 { BatchSource source;
@@ -565,7 +546,6 @@ TEST(handle_registry, child_answers_each_live_handle_of_a_kind_made_through_a_pa
   Tree tree(registry);
   LoaderHandle *second_queue = nullptr;
   CHECK_STATUS(registry.wrap(Kind::queue, 0x4401u, first, tree.device, second_queue), Status::ok);
-  /* A queue of the instance is not the device's. */
   LoaderHandle *elsewhere = nullptr;
   CHECK_STATUS(registry.wrap(Kind::queue, 0x4402u, first, tree.instance, elsewhere), Status::ok);
   CHECK(registry.invariants_hold());

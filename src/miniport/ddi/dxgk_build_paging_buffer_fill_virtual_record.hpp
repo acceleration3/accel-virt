@@ -1,5 +1,3 @@
-/* DXGK_BUILDPAGINGBUFFER_FILLVIRTUAL, the operation union for DXGK_OPERATION_VIRTUAL_FILL.
- * A DDI record; src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGK_BUILD_PAGING_BUFFER_FILL_VIRTUAL_RECORD_HPP
 #define AV_DXGK_BUILD_PAGING_BUFFER_FILL_VIRTUAL_RECORD_HPP
 
@@ -16,6 +14,6 @@ struct DxgkBuildPagingBufferFillVirtualRecord {
     uint64_t DestinationVirtualAddress;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_BUILD_PAGING_BUFFER_FILL_VIRTUAL_RECORD_HPP
+#endif

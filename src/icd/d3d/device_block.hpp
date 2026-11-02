@@ -1,9 +1,3 @@
-/* The device a runtime's device block names: the address the driver wrote
- * into the block's extension slot (DeviceTable::extension_offset) when it made
- * the device. Every table thunk of Direct3D 11 and 12 goes through one of
- * these, so it is a read of one word - no search, no lock. The block is the
- * runtime's and was the driver's to write; a thunk is only ever reached with a
- * block the runtime got from a successful CreateDevice. */
 #ifndef AV_D3D_DEVICE_BLOCK_HPP
 #define AV_D3D_DEVICE_BLOCK_HPP
 
@@ -18,7 +12,6 @@ public:
     explicit DeviceBlock(void *block);
 
     Device &device() const;
-    /* Writes where `device` lives into the block. */
     void    bind(Device &device);
 
 private:
@@ -48,6 +41,6 @@ void DeviceBlock<Device>::bind(Device &device)
     __builtin_memcpy(static_cast<char *>(block_) + DeviceTable::extension_offset, &address, sizeof(address));
 }
 
-}  // namespace av::d3d
+}
 
-#endif  // AV_D3D_DEVICE_BLOCK_HPP
+#endif

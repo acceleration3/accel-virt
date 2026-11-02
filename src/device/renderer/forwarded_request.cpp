@@ -18,4 +18,4 @@ size_t ForwardedRequest::read(size_t offset, uint8_t *buffer, size_t size) const
     return count;
 }
 
-}  // namespace av
+}

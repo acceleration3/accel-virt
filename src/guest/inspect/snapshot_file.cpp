@@ -7,11 +7,9 @@
 namespace av {
 
 namespace {
-
-/* "AVSNAP1" read as a little-endian u64. */
 constexpr uint64_t snapshot_magic = 0x003150414E535641ull;
 
-}  // namespace
+}
 
 SnapshotFile::SnapshotFile(InspectHost &host, const char *path) : host_(host), path_(path)
 {
@@ -39,4 +37,4 @@ Status SnapshotFile::refuse(uint64_t clock, const char *text)
     return write(Kind::error, clock, static_cast<const uint8_t *>(static_cast<const void *>(text)), length);
 }
 
-}  // namespace av
+}

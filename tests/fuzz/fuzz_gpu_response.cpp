@@ -1,6 +1,3 @@
-/* Control answers as a hostile device writes them, read as the driver reads
- * them: whatever is accepted says exactly what the bytes at the documented
- * offsets say, and a capset accepted re-encodes to the bytes it came from. */
 #include "core/support/status.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
@@ -20,7 +17,7 @@ std::uint32_t field(const std::uint8_t *data, std::size_t offset)
     return value;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

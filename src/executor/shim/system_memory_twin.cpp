@@ -10,11 +10,9 @@
 namespace av {
 
 namespace {
-
-/* DRM_FORMAT_MOD_LINEAR, from drm_fourcc.h. */
 constexpr uint64_t drm_format_mod_linear = 0u;
 
-}  // namespace
+}
 
 SystemMemoryTwin::SystemMemoryTwin(ExportableImages &owner)
     : TextureHold(owner), image_(), texture_(nullptr), width_(0u), height_(0u), format_(0u), copied_writes_(0u),
@@ -29,10 +27,6 @@ SystemMemoryTwin::~SystemMemoryTwin()
     free();
 }
 
-/* Linear under the one modifier every driver reads alike, as the display's
- * image is (HostImageExport), and in system memory only: a twin in VRAM would
- * be read across the bus all the same, but VRAM that is not host visible is
- * no memory another GPU can open, so a GPU with no such type has no twin. */
 bool SystemMemoryTwin::make(DxvkVulkanDevice &vulkan, ID3D11Texture2D *source)
 {
     AV_SCOPE("SystemMemoryTwin::make");
@@ -99,4 +93,4 @@ void SystemMemoryTwin::free()
     image_.release();
 }
 
-}  // namespace av
+}

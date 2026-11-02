@@ -1,6 +1,3 @@
-/* One av context through its life as the driver drives it, with the device's
- * answers, head and fence page written by hand; the loopback suite runs the
- * same context against the device core. */
 #include "core/platform/platform.hpp"
 #include "miniport/av_context/context_memory.hpp"
 #include "miniport/av_context/context_pages.hpp"
@@ -56,7 +53,7 @@ struct GuestContextProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -73,8 +70,6 @@ ContextSetup setup(std::uint8_t order = 12u, SubApi api = SubApi::vulkan)
     return ContextSetup(ProtocolVersion(1u, 0u), api, 10u, order, 11u, 2u, 12u);
 }
 
-/* The memory a context runs on, the driver's own, which outlives the context
- * set up on it. */
 class Fixture {
 public:
     Fixture() : memory_(platform_), context_(platform_, doorbells_) { CHECK_STATUS(memory_.allocate(12u, 4096u), Status::ok); }
@@ -86,7 +81,6 @@ public:
     GuestContext      &context() { return context_; }
     ContextPages       pages() const { return memory_.pages(); }
 
-    /* Answers every request the context has with `type`: how many there were. */
     std::uint32_t answer_all(std::uint32_t type = GpuResponse::ok_nodata)
     {
         std::uint32_t answered = 0u;
@@ -134,7 +128,7 @@ private:
     GuestContext      context_;
 };
 
-}  // namespace
+}
 
 TEST(guest_context, sets_up_submits_serves_and_tears_down)
 { Fixture fixture;
@@ -185,10 +179,10 @@ TEST(guest_context, a_device_that_lies_fails_the_context)
   CHECK_STATUS(ring_lie.at_dispatch(&GuestContext::serve), Status::invalid_state);
   Fixture page_lie;
   page_lie.established();
-  static_cast<void>(FencePage(5u, 1u).encode(page_lie.page(), av::FencePage::encoded_size));   /* nothing was submitted */
+  static_cast<void>(FencePage(5u, 1u).encode(page_lie.page(), av::FencePage::encoded_size));
   CHECK_STATUS(page_lie.at_dispatch(&GuestContext::serve), Status::invalid_state);
   CHECK(page_lie.context().state() == GuestContext::State::failed);
-  CHECK_STATUS(page_lie.at_dispatch(&GuestContext::tear_down), Status::ok);   /* the device still holds it */
+  CHECK_STATUS(page_lie.at_dispatch(&GuestContext::tear_down), Status::ok);
   CHECK_EQ(page_lie.answer_all(), 4u);
   CHECK_STATUS(page_lie.context().release(), Status::ok); }
 
@@ -202,15 +196,15 @@ TEST(guest_context, a_refused_setup_fails_the_context_and_releases_what_was_crea
   GpuResponse ok;
   ok.set(GpuResponse::ok_nodata);
   CHECK_STATUS(fixture.context().accept(ok.bytes(), ok.length()), Status::ok);
-  CHECK_STATUS(fixture.context().submit(SubmissionDescriptor(1u, 0u, 24u)), Status::invalid_state);   /* not yet */
-  CHECK_STATUS(fixture.context().tear_down(), Status::invalid_state);   /* setup still running */
+  CHECK_STATUS(fixture.context().submit(SubmissionDescriptor(1u, 0u, 24u)), Status::invalid_state);
+  CHECK_STATUS(fixture.context().tear_down(), Status::invalid_state);
   CHECK_STATUS(fixture.context().next_request(bytes, sizeof bytes, length), Status::ok);
   GpuResponse refused;
   refused.set(GpuResponse::err_out_of_memory);
   CHECK_STATUS(fixture.context().accept(refused.bytes(), refused.length()), Status::not_supported);
   fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.context().state() == GuestContext::State::failed);
-  CHECK_STATUS(fixture.context().release(), Status::invalid_state);   /* the device holds the context */
+  CHECK_STATUS(fixture.context().release(), Status::invalid_state);
   CHECK_STATUS(fixture.at_dispatch(&GuestContext::tear_down), Status::ok);
   CHECK_EQ(fixture.answer_all(), 1u);
   CHECK_STATUS(fixture.context().release(), Status::ok); }
@@ -235,8 +229,6 @@ TEST(guest_context_set_up, a_setup_the_capset_does_not_allow_sets_nothing_up)
   CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup(), fixture.pages()), Status::ok);
   CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup(), fixture.pages()), Status::invalid_state); }
 
-/* Pages with a part missing - here, memory never allocated - carry no context,
- * and nothing is sent for them. */
 TEST(guest_context_set_up, pages_not_complete_set_nothing_up)
 { Fixture fixture;
   ContextMemory unallocated(fixture.platform());
@@ -247,8 +239,6 @@ TEST(guest_context_set_up, pages_not_complete_set_nothing_up)
   CHECK_EQ(fixture.answer_all(), 0u);
   fixture.established(); }
 
-/* The context runs on exactly the pages it is handed: the ring header it
- * publishes a tail into is the caller's own. */
 TEST(guest_context_set_up, publishes_into_the_ring_it_was_handed)
 { Fixture fixture;
   fixture.established();
@@ -266,7 +256,7 @@ TEST(guest_context_abandon, a_device_reset_releases_everything_the_device_held)
   CHECK(fixture.context().state() == GuestContext::State::torn_down);
   CHECK_STATUS(fixture.submit(1u, 0u, 24u), Status::invalid_state);
   CHECK_STATUS(fixture.context().release(), Status::ok);
-  CHECK_STATUS(fixture.context().release(), Status::ok);   /* idle: nothing */ }
+  CHECK_STATUS(fixture.context().release(), Status::ok);   }
 
 TEST(guest_context, runs_at_the_levels_it_declares)
 { Fixture fixture;
@@ -307,10 +297,6 @@ TEST(guest_context_invariants, an_established_context_with_nothing_attached_is_d
   av::GuestContextProbe::establish_unattached(released.context());
   CHECK(!released.context().invariants_hold()); }
 
-/* Feature 049: a process with a doorbell publishes this context's tail and
- * rings the page itself, so what the context does for it is the other half -
- * it stops judging submissions it never saw, and it writes what the device has
- * finished where the process reads the hardware queue's progress. */
 TEST(guest_context, a_context_user_mode_submits_on_reports_its_progress_where_the_process_reads_it)
 { Fixture      fixture;
   std::uint64_t progress = 0u;
@@ -319,22 +305,16 @@ TEST(guest_context, a_context_user_mode_submits_on_reports_its_progress_where_th
   fixture.context().user_mode_submits(&progress);
   fixture.platform().set_irql(Irql::passive);
 
-  /* Four batches the process wrote and rang for, and a completion the driver
-   * never submitted: it is believed, and reported. */
   std::uint64_t tail = 96u;
   std::memcpy(fixture.memory().pages().ring_view() + 8u, &tail, 8u);
   static_cast<void>(FencePage(3u, 96u).encode(fixture.page(), av::FencePage::encoded_size));
   CHECK_STATUS(fixture.at_dispatch(&GuestContext::serve), Status::ok);
   CHECK_EQ(progress, 3u);
 
-  /* A batch it falls back with is one the process already published the tail
-   * for: the driver takes it from where the submission begins. */
   tail = 128u;
   std::memcpy(fixture.memory().pages().ring_view() + 8u, &tail, 8u);
   CHECK_STATUS(fixture.submit(4u, 96u, 128u), Status::ok);
 
-  /* Handed back, the progress location is let go of and nothing more is
-   * written through it. */
   fixture.platform().set_irql(Irql::dispatch);
   fixture.context().driver_submits();
   fixture.platform().set_irql(Irql::passive);
@@ -343,10 +323,6 @@ TEST(guest_context, a_context_user_mode_submits_on_reports_its_progress_where_th
   CHECK_EQ(progress, 3u);
   CHECK_EQ(fixture.context().completed(), 4u); }
 
-/* A context the device faulted - its host device lost - finishes nothing more:
- * the progress a process submitting for itself waits on in the kernel is the
- * counter's end, so that wait ends, as one on a removed device's fence does;
- * and so for a page the driver could not believe. */
 TEST(guest_context, a_faulted_or_failed_context_reports_its_progress_finished)
 { Fixture      fixture;
   std::uint64_t progress = 0u;
@@ -370,14 +346,11 @@ TEST(guest_context, a_faulted_or_failed_context_reports_its_progress_finished)
   lied_to.platform().set_irql(Irql::dispatch);
   lied_to.context().user_mode_submits(&lied_progress);
   lied_to.platform().set_irql(Irql::passive);
-  std::memset(lied_to.page(), 0xFF, av::FencePage::encoded_size);   /* no magic: malformed */
+  std::memset(lied_to.page(), 0xFF, av::FencePage::encoded_size);
   static_cast<void>(lied_to.at_dispatch(&GuestContext::serve));
   CHECK(lied_to.context().state() == GuestContext::State::failed);
   CHECK_EQ(lied_progress, UINT64_MAX); }
 
-/* A hardware queue going takes its progress fence with it, and dxgkrnl frees
- * that memory: the context stops writing there only when it is that queue's
- * progress it still writes, and a stale or absent location changes nothing. */
 TEST(guest_context, forget_progress_lets_go_of_the_going_queues_progress_only)
 { Fixture      fixture;
   std::uint64_t progress = 0u;
@@ -398,16 +371,11 @@ TEST(guest_context, forget_progress_lets_go_of_the_going_queues_progress_only)
   CHECK(!fixture.context().forget_progress(&progress));
   fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.context().invariants_hold());
-  /* Nothing more is written through the freed location, and the driver
-   * judges submissions again: one it never saw completing is not believed. */
   static_cast<void>(FencePage(3u, 96u).encode(fixture.page(), av::FencePage::encoded_size));
   static_cast<void>(fixture.at_dispatch(&GuestContext::serve));
   CHECK_EQ(progress, 2u);
   CHECK_EQ(other, 0u); }
 
-/* A kick rings the context's doorbell only once it is established - before
- * then there is no ring the device could look at, and once it is being torn
- * down there is nothing more to look for. */
 TEST(guest_context_kick, rings_an_established_context_only)
 { Fixture fixture;
   fixture.platform().set_irql(Irql::dispatch);

@@ -1,6 +1,3 @@
-/* Which frame a head shows: nothing moves until a blank, the newest post
- * before the blank is the one taken, a blank with nothing new keeps the frame
- * it had, and each latched frame is handed to the display exactly once. */
 #include "device/display/frame_latch.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -42,7 +39,7 @@ TEST(frame_latch, a_blank_with_nothing_new_keeps_the_frame_and_shows_it_no_secon
   CHECK(!latch.latch());
   CHECK_EQ(latch.latched(), 4u);
   CHECK(!latch.take_unshown(key));
-  latch.post(4u, 0x44u);   /* posted again: the same frame, not a new one */
+  latch.post(4u, 0x44u);
   CHECK(!latch.latch());
   CHECK(!latch.take_unshown(key));
   CHECK(latch.invariants_hold()); }
@@ -81,5 +78,5 @@ TEST(frame_latch, a_reset_forgets_what_was_posted_latched_and_waiting)
   std::uint64_t key = 0u;
   CHECK(!latch.take_unshown(key));
   CHECK(!latch.latch());
-  latch.post(5u, 0x55u);   /* the frame before the reset is a new one after it */
+  latch.post(5u, 0x55u);
   CHECK(latch.latch()); }

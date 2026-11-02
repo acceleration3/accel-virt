@@ -81,22 +81,7 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
     info.Alignment = 0u;
     info.PitchAlignedSize = 0u;
     info.HintedBank = 0u;
-    /* A primary must live where the display can read it. The implicit system
-     * memory segment is VidMm's own: an allocation there is never mapped into
-     * the aperture, so DXGK_OPERATION_MAP_APERTURE_SEGMENT never runs and the
-     * driver never learns the guest pages the host has to read the frame from -
-     * SetVidPnSourceAddress answers segment 0, address 0. The aperture segment
-     * is the one this driver reports, and a primary pinned there arrives as an
-     * address with pages behind it. */
     const bool scanned_out = descriptor_.kind() == AllocationKind::shared_primary;
-    /* A user-mode driver's surface is blitted by the miniport from its pages
-     * and read back into by the host, so it wants them known too - and so does
-     * a staging or GDI surface, which is where an application's blt-model
-     * present lands: the window's redirection surface is a staging surface
-     * for the legacy path and a GDI one once the driver reports software
-     * device bitmaps, and the miniport writes either through its pages. A GDI
-     * surface left in VidMm's own system memory is never mapped into the
-     * aperture, so the present would find no pages to write. */
     const AllocationKind kind = descriptor_.kind();
     const bool pinned = scanned_out || kind == AllocationKind::surface || kind == AllocationKind::staging ||
                         kind == AllocationKind::gdi;
@@ -107,26 +92,6 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
     info.EvictionSegmentSet = 0u;
     info.MaximumRenamingListLength = 0u;
     info.hAllocation = this;
-    /* A primary is read by the display, which has no GPU MMU to go through, so
-     * it must be pinned in a physical segment: without AccessedPhysically
-     * VidMm leaves it in its own implicit system memory segment and
-     * SetVidPnSourceAddress answers segment 0, address 0 - an address with no
-     * pages behind it (feature 038). */
-    /* A window's redirection surface is read by the CPU after every blt-model
-     * present: dxgkrnl's redirected blt locks it and copies the frame out for
-     * DWM while the application's present waits. Write-combined, as an
-     * aperture allocation is unless it asks otherwise, that was an uncached
-     * read of the whole frame - seventeen milliseconds at 1280x800, which held
-     * a game to every other vblank. Only processors write a staging surface -
-     * the host's present copy and GDI - unlike the reply slot a host GPU writes,
-     * whose Cached mapping was reverted for resetting the GPU (b911e084). The
-     * aperture segment is cache coherent, which is what Cached asks of it. */
-    /* A cross-adapter texture is lent to the host, which lays write-back
-     * memory under the process's own pages (docs/host-memory.md): the
-     * processor's mapping of it must be cached too. It stays in the implicit
-     * system memory segment, where the process's pages are. The one-row heap
-     * (an existing heap's allocation, of no format) keeps the flags it always
-     * had: only the texture is known to be accepted cached. */
     const bool cached = kind == AllocationKind::staging || kind == AllocationKind::gdi ||
                         (kind == AllocationKind::cross_adapter && descriptor_.layout().format() != 0u);
     info.Flags = (descriptor_.cpu_visible() ? flag_cpu_visible : 0u) | (cached ? flag_cached : 0u) |
@@ -207,8 +172,6 @@ GuestPageList Allocation::pages() const
     return aperture_.whole();
 }
 
-/* A context shares with another by this name only within the device, or the
- * process, that made it (feature 050), so no other device opens it. */
 bool Allocation::names_a_context() const
 {
     AV_SCOPE("Allocation::names_a_context");
@@ -224,4 +187,4 @@ bool Allocation::invariants_hold() const
            aperture_.invariants_hold();
 }
 
-}  // namespace av
+}

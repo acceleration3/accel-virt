@@ -1,13 +1,3 @@
-"""The two shapes the OpenCL wire had never carried, before it carried them.
-
-Nothing on this wire returned a raw address, and nothing took one: OpenCL's
-maps and its shared virtual memory both do, and feature 052 puts them on it.
-Both are load-bearing in a way the existing roles are not, so what the emitter
-writes for them is asserted here rather than read off the committed tree.
-
-Registries are built in memory and emitted into a temporary directory, as
-test_client_call_scope.py and test_generated_trace_scopes.py do.
-"""
 import pathlib
 import re
 import shutil
@@ -28,19 +18,12 @@ from av_codegen.opencl import profile as cl_profile              # noqa: E402
 
 CL_XML = ROOT / "third_party" / "khronos" / "cl.xml"
 
-# The ten commands feature 052 adds, and the five of them that name an address
-# the guest did not choose.
 ADDED = ("clEnqueueMapBuffer", "clEnqueueUnmapMemObject", "clSVMAlloc", "clSVMFree",
          "clEnqueueSVMMap", "clEnqueueSVMUnmap", "clEnqueueSVMMemcpy", "clEnqueueSVMMemFill",
          "clSetKernelArgSVMPointer", "clSetEventCallback")
 
 
 def function_body(text, name):
-    """The one function of that name, by matching braces from its own.
-
-    The client writes `av_<name>`, the server `decode_<name>`, and the default
-    dispatch `on_<name>` - and the server also *calls* `on_<name>`, so the
-    server's own spelling is looked for first."""
     for spelling in (f"decode_{name}(", f"av_{name}(", f"on_{name}("):
         if spelling in text:
             start = text.rindex("\n", 0, text.index(spelling)) + 1
@@ -60,14 +43,11 @@ def function_body(text, name):
 
 
 class Emitted(unittest.TestCase):
-    """A registry with one command of each new shape, emitted."""
-
     @classmethod
     def setUpClass(cls):
         cls.out = pathlib.Path(tempfile.mkdtemp())
         registry = cl_model.Registry()
         registry.handles = {"cl_command_queue", "cl_mem", "cl_context", "cl_kernel", "cl_event"}
-        # An address return: a size in, an address out. clSVMAlloc's shape.
         registry.commands["clAllocTest"] = cl_model.Command(
             name="clAllocTest",
             return_type=CType(base="void", pointer_depth=1),
@@ -76,7 +56,6 @@ class Emitted(unittest.TestCase):
             params=[cl_model.Param("context", CType(base="cl_context"), cl_model.Role.HANDLE,
                                    element="cl_context"),
                     cl_model.Param("size", CType(base="size_t"), cl_model.Role.SCALAR)])
-        # An address in, with an extent. clEnqueueSVMMemFill's shape.
         registry.commands["clFillTest"] = cl_model.Command(
             name="clFillTest",
             return_type=CType(base="cl_int"),
@@ -100,12 +79,7 @@ class Emitted(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.out)
 
-    # --- the address return -------------------------------------------------
-
     def test_an_address_returning_client_answers_a_wire_word_not_a_pointer(self):
-        """A host address is not a pointer the guest may hold, let alone
-        dereference. It crosses as a number, exactly as a handle does, and the
-        ICD is what decides what the application is handed instead."""
         self.assertIn("uint64_t av_clAllocTest(", self.client_header)
         self.assertNotIn("void* av_clAllocTest(", self.client_header)
 
@@ -115,8 +89,6 @@ class Emitted(unittest.TestCase):
         self.assertIn("return 0;", body)
 
     def test_an_address_returning_client_reads_the_reply_whole(self):
-        """read_pod, not a varint: an address is eight bytes and is not
-        sign-extended on the way through."""
         body = function_body(self.client, "clAllocTest")
         self.assertIn("read_pod(ret)", body)
         self.assertNotIn("read_varint", body)
@@ -130,8 +102,6 @@ class Emitted(unittest.TestCase):
         body = function_body(self.default, "clAllocTest")
         self.assertIn("return nullptr;", body)
 
-    # --- the SVM pointer ----------------------------------------------------
-
     def test_an_svm_pointer_crosses_as_a_wire_word(self):
         self.assertIn("uint64_t svm_ptr", self.client_header)
 
@@ -140,9 +110,6 @@ class Emitted(unittest.TestCase):
         self.assertRegex(body, r"write_pod<uint64_t>\(svm_ptr\)")
 
     def test_the_server_resolves_an_svm_pointer_against_its_extent(self):
-        """An address the guest invented must never reach the host's OpenCL,
-        and an address inside a live allocation whose extent runs past its end
-        must not either - so the size is part of the question."""
         body = function_body(self.server, "clFillTest")
         self.assertIn("svm_for(", body)
         self.assertRegex(body, r"svm_for\(\s*svm_ptr_wire\s*,[^)]*size")
@@ -157,8 +124,6 @@ class Emitted(unittest.TestCase):
 
 
 class LoweredFromTheRegistry(unittest.TestCase):
-    """The ten commands lower against the real cl.xml and the real profile."""
-
     @classmethod
     def setUpClass(cls):
         if not CL_XML.is_file():
@@ -173,20 +138,12 @@ class LoweredFromTheRegistry(unittest.TestCase):
                         sorted(set(ADDED) - set(self.profile.commands)))
 
     def test_every_added_command_lowers(self):
-        """Eight of the ten raise against the untouched inference, because a
-        raw void* is sent to bytes_in or bytes_out and then has no length."""
         registry = cl_lower.lower(self.raw, self.profile)
         for name in ADDED:
             with self.subTest(command=name):
                 self.assertIn(name, registry.commands)
 
     def test_an_extension_is_carried_only_where_every_command_of_it_is(self):
-        """The rule the ICD's policy rows are held to.
-
-        cl_khr_external_memory is carried because its two commands are
-        answered by the driver, and cl_khr_external_memory_win32 because it
-        adds no command of its own to one that is. cl_khr_gl_event is not:
-        clCreateEventFromGLsyncKHR crosses nowhere and nothing answers it."""
         registry = cl_lower.lower(self.raw, self.profile)
         carried = set(registry.carried_extensions)
         self.assertIn("cl_khr_external_memory", carried)
@@ -196,8 +153,6 @@ class LoweredFromTheRegistry(unittest.TestCase):
         self.assertNotIn("cl_khr_command_buffer", carried)
 
     def test_an_extension_whose_dependency_is_not_carried_is_not_carried(self):
-        """The `depends` half of the rule: a name with no command of its own
-        rides on the one it is written over, so dropping that drops it too."""
         profile = cl_profile.load(
             ROOT / "tools" / "codegen" / "profiles" / "opencl.toml",
             ROOT / "tools" / "codegen" / "profiles" / "opencl_ids.toml")
@@ -230,7 +185,6 @@ class LoweredFromTheRegistry(unittest.TestCase):
             self.assertEqual(params[name].len_param, "size", name)
 
     def test_a_fill_pattern_is_still_bytes_with_its_own_length(self):
-        """The one parameter of the ten the existing machinery handles."""
         registry = cl_lower.lower(self.raw, self.profile)
         pattern = {p.name: p for p in registry.commands["clEnqueueSVMMemFill"].params}["pattern"]
         self.assertEqual(pattern.role, cl_model.Role.BYTES_IN)
@@ -254,8 +208,6 @@ class LoweredFromTheRegistry(unittest.TestCase):
 
 
 class CommittedTreeCarriesThem(unittest.TestCase):
-    """What is committed under src/proto/generated/opencl is regenerated."""
-
     def test_the_client_declares_every_added_command(self):
         header = (ROOT / "src" / "proto" / "generated" / "opencl" / "cl_dispatch_client.h").read_text()
         for name in ADDED:
@@ -278,11 +230,6 @@ class CommittedTreeCarriesThem(unittest.TestCase):
         self.assertIn("extension_is_carried(const char* name)", header)
 
     def test_exec_info_resolves_svm_pointers_and_refuses_the_ones_nothing_carries(self):
-        """CL_KERNEL_EXEC_INFO_SVM_PTRS passes an untyped blob of addresses:
-        each is resolved by svm_for and rewritten in place before the host
-        sees it, and a blob that is not whole addresses, or names one outside
-        every allocation, is refused. ARM's spelling and Intel's USM are
-        carried by nothing, so they are refused outright."""
         server = (ROOT / "src" / "proto" / "generated" / "opencl" / "cl_dispatch_server.cpp").read_text()
         self.assertNotIn("if (param_name == CL_KERNEL_EXEC_INFO_SVM_PTRS) return false;", server)
         self.assertIn("!resolve_svm_pointers(s, arena, param_value_size, param_value)) return false;", server)
@@ -291,9 +238,6 @@ class CommittedTreeCarriesThem(unittest.TestCase):
         self.assertIn("if (param_name == 0x4203) return false;  // CL_KERNEL_EXEC_INFO_USM_PTRS_INTEL", server)
 
     def test_an_argument_the_server_cannot_vouch_for_is_answered_not_faulted(self):
-        """A kernel argument whose kind neither the host nor the server can
-        say is refused with CL_INVALID_ARG_VALUE - the command was well formed
-        - and an address space alone is enough to say global memory."""
         server = (ROOT / "src" / "proto" / "generated" / "opencl" / "cl_dispatch_server.cpp").read_text()
         self.assertIn("reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(CL_INVALID_ARG_VALUE)));", server)
         self.assertIn("if (!s.declared_argument(kernel, index, argument)) argument = KernelArgument::unknown;", server)

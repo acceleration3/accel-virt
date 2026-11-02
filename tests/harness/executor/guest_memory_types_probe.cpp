@@ -14,4 +14,4 @@ void GuestMemoryTypesProbe::set_flags(uint32_t guest, VkMemoryPropertyFlags flag
     types.properties_.memoryTypes[guest].propertyFlags = flags;
 }
 
-}  // namespace av
+}

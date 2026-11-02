@@ -48,9 +48,6 @@ constexpr uint32_t dimension_texture1d = 2u;
 constexpr uint32_t dimension_texture2d = 3u;
 constexpr uint32_t dimension_texture3d = 4u;
 
-/* The misc flags the host's resources may carry: sharing is the executor's
- * own table, and a keyed mutex or GDI surface has no meaning on a device no
- * other process opens. */
 constexpr uint32_t kept_misc_flags = D3D11_RESOURCE_MISC_GENERATE_MIPS | D3D11_RESOURCE_MISC_TEXTURECUBE |
                                      D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS |
                                      D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS |
@@ -64,11 +61,8 @@ constexpr uint32_t max_buffer_bytes = 1u << 30u;
 constexpr uint32_t no_stream = 0xffffffffu;
 constexpr size_t   container_slack = 64u * 1024u;
 
-/* A Direct3D 11 present's frame, staged through its GPU's device: a 2D
- * texture of four-byte texels, or nothing. */
 class PresentedTexture final : public FrameStager {
 public:
-    /* `texture` null for a resource that is no 2D texture. */
     PresentedTexture(D3d11HostDevice &device, ID3D11Texture2D *texture, uint32_t subresource, uint32_t width,
                      uint32_t height, uint32_t format);
 
@@ -97,7 +91,7 @@ StagedFrame *PresentedTexture::stage()
     return device_.stage_frame(texture_, subresource_, width_, height_, format_);
 }
 
-}  // namespace
+}
 
 D3dObjectKind D3dBackend::shader_kind(uint32_t stage) const
 {
@@ -145,12 +139,9 @@ bool D3dBackend::initialize(SessionShares &shares, ImportTable &imports, D3d11Ho
 void D3dBackend::shut_down()
 {
     AV_SCOPE("D3dBackend::shut_down");
-    /* Direct3D 12's and 9's first: their objects are in the session's table
-     * too, and 12 drains its queues through its own before letting them go. */
     d3d12_.shut_down();
     d3d9_.shut_down();
     if (device11_ != nullptr) {
-        /* forget_state takes the device's lock itself. */
         for (ID3DDeviceContextState *state = states_.remove_any(); state != nullptr; state = states_.remove_any()) {
             device11_->forget_state(state);
             device11_->lock(nullptr);
@@ -160,8 +151,6 @@ void D3dBackend::shut_down()
         device11_->lock(nullptr);
         published_.unbind();
         constants_.close();
-        /* While the table still names the dynamic buffers: each is discarded
-         * off the store before the store goes, then the table lets them go. */
         release_slice_storage();
         objects_.release_all();
         progress11_.release();
@@ -189,15 +178,10 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
     AV_SCOPE("D3dBackend::run");
     if (device11_ == nullptr) return false;
     blocks_.forget();
-    /* Direct3D 12 has no immediate context to share: its commands take no
-     * Direct3D 11 lock, and a batch mixing both holds it only across the 11
-     * ones - a 12 command can take it itself (sharing a surface does), and
-     * the lock is not recursive. */
     if (d3d12_.knows(command_id)) {
         end_batch();
         return d3d12_.run(command_id, payload, reply, arena);
     }
-    /* Direct3D 9's devices are their own, as 12's queues are. */
     if (d3d9_.knows(command_id)) {
         end_batch();
         return d3d9_.run(command_id, payload, reply, arena);
@@ -213,12 +197,6 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
                           blocks_.refusal(static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR)));
 }
 
-/* A batch that ended queries is flushed, so DXVK starts the work their
- * results wait on rather than when the guest next asks. */
-/* A batch is marked and flushed, so the ring completes it only once the GPU
- * has run it (D3d11BatchProgress); a batch that ended queries is flushed even
- * when it cannot be marked, so DXVK starts the work their results wait on
- * rather than when the guest next asks. */
 void D3dBackend::end_batch()
 {
     AV_SCOPE("D3dBackend::end_batch");
@@ -246,12 +224,9 @@ bool D3dBackend::poll()
     AV_SCOPE("D3dBackend::poll");
     const bool unwatched = progress11_.polled();
     if (device11_ == nullptr || held_ || !published_.pending()) return unwatched;
-    /* GetData reads no pipeline state, so no device's state is selected. */
     device11_->lock(nullptr);
     const bool pending = published_.publish(device11_->context());
     device11_->unlock();
-    /* Either still waiting keeps the worker polling: queries all published
-     * say nothing of a batch no wake watches. */
     return pending || unwatched;
 }
 
@@ -262,10 +237,6 @@ void D3dBackend::bind_signal(void (*signal)(void *context), void *context)
     fence_wake_.bind(signal, context);
 }
 
-/* A session is one runtime's (avumd makes one per runtime a process uses), so
- * a session whose Direct3D 12 queues ever marked work answers with theirs, and
- * any other with its Direct3D 11 batches': the two count apart, and the ring
- * compares one answer with the next. */
 void D3dBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 {
     AV_SCOPE("D3dBackend::gpu_progress");
@@ -274,8 +245,6 @@ void D3dBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
         marked = progress11_.marked();
         reached = progress11_.reached();
     }
-    /* A lost device finishes nothing more: what it was given is not waited
-     * for, or a ring holding its batches would never let them go. */
     if (lost()) reached = marked;
 }
 
@@ -312,12 +281,6 @@ void D3dBackend::abandon(const SourceMemory &memory, uint64_t)
     region_.abandon(memory);
 }
 
-/* A texture the guest shared is made over memory other APIs can open: as rows
- * when the guest asked, for an API that reads it so (feature 053) - a window
- * those APIs draw presented through it, an OpenCL image over it - and
- * otherwise in the GPU's own tiling, which Direct3D draws and samples at full
- * speed (ResourceMisc). Null for anything else, which DXVK makes as it makes
- * any texture. */
 ID3D11Texture2D *D3dBackend::shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc)
 {
     AV_SCOPE("D3dBackend::shareable");
@@ -340,9 +303,6 @@ ID3D11Texture2D *D3dBackend::lent_texture(const D3D11_TEXTURE2D_DESC &texture, u
 {
     AV_SCOPE("D3dBackend::lent_texture");
     const SourceMemory *const backing = imports_ != nullptr ? imports_->named(memory) : nullptr;
-    /* Every number came off the wire: the rows must be at least a row of
-     * texels apart, and the last of them end inside the memory - an image
-     * the host GPU is made to read past its memory faults it. */
     const uint64_t row_bytes = uint64_t{texture.Width} * DxgiFormatLayout(static_cast<uint32_t>(texture.Format)).element_bytes();
     if (backing == nullptr || texture.MipLevels != 1u || texture.ArraySize != 1u || texture.SampleDesc.Count != 1u ||
         texture.Height == 0u || row_bytes == 0u || row_pitch < row_bytes ||
@@ -372,9 +332,6 @@ ID3D11Texture2D *D3dBackend::lent_texture(const D3D11_TEXTURE2D_DESC &texture, u
     return made;
 }
 
-/* A shared texture's memory, as the dma-buf OpenGL and Vulkan import. The
- * Direct3D 11 lock a batch holds is held across this command too; one that
- * arrives on its own takes it. */
 bool D3dBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind, OwnedFd &descriptor)
 {
     AV_SCOPE("D3dBackend::export_object");
@@ -507,8 +464,6 @@ ID3D11Resource *D3dBackend::staging_for(ID3D11Resource *resource, uint32_t, uint
     return SUCCEEDED(device->CreateTexture3D(&texture, nullptr, &made)) ? made : nullptr;
 }
 
-/* ---------------------------------------------------------------- device */
-
 bool D3dBackend::on_CreateDevice11(uint32_t device, uint32_t feature_level, uint32_t, uint32_t &hresult,
                                    uint32_t &level)
 {
@@ -516,7 +471,6 @@ bool D3dBackend::on_CreateDevice11(uint32_t device, uint32_t feature_level, uint
     hresult = static_cast<uint32_t>(E_FAIL);
     level = 0u;
     if (device == 0u || states_.find(device) != nullptr) return false;
-    /* make_state takes the device's lock itself, and run holds it. */
     device11_->unlock();
     uint32_t made = 0u;
     ID3DDeviceContextState *const state = device11_->make_state(made);
@@ -531,11 +485,6 @@ bool D3dBackend::on_CreateDevice11(uint32_t device, uint32_t feature_level, uint
     return true;
 }
 
-/* run holds the device's lock with the state that was selected when the
- * command began; taking it again swaps the new one in. An id the host has no
- * device for selects nothing, and what follows until the next selection is
- * dropped: refusing the selection would remove whichever device spoke before
- * it, which did nothing wrong. */
 bool D3dBackend::on_SelectDevice11(uint32_t device)
 {
     AV_SCOPE("D3dBackend::on_SelectDevice11");
@@ -552,7 +501,6 @@ bool D3dBackend::on_DestroyDevice11(uint32_t device)
     ID3DDeviceContextState *const state = states_.remove(device);
     if (state == nullptr) return false;
     constants_.forget_device(device);
-    /* forget_state takes the device's lock itself, and run holds it. */
     device11_->unlock();
     device11_->forget_state(state);
     device11_->lock(states_.selected());
@@ -577,10 +525,6 @@ bool D3dBackend::on_RotateResources11(uint32_t count, const uint32_t *resources)
     return remake_views(textures, count) == Status::ok;
 }
 
-/* Every view of a rotated texture is made again, with its own description, on
- * the texture its resource's id now names: the next one in the rotation. A
- * remade view's place in remade_ is had before it replaces the old one, so
- * a view either is remade and rebound or stays as it was. */
 Status D3dBackend::remake_views(IUnknown *const *textures, uint32_t count)
 {
     AV_SCOPE("D3dBackend::remake_views");
@@ -589,7 +533,6 @@ Status D3dBackend::remake_views(IUnknown *const *textures, uint32_t count)
         const uint32_t slot = objects_.view_slot(view);
         uint32_t      id = 0u;
         D3dObjectKind kind = D3dObjectKind::none;
-        /* The table lists only slots holding a view, so `object` is one. */
         IUnknown *const object = objects_.at(slot, id, kind);
         IUnknown *viewed = objects_.viewed(slot);
         if (viewed == nullptr) {
@@ -617,9 +560,6 @@ Status D3dBackend::remake_views(IUnknown *const *textures, uint32_t count)
     return remade;
 }
 
-/* What was bound of a remade view is bound as its replacement, here on the
- * host, so the guest need not have the runtime re-send every slot of every
- * stage after each present. */
 void D3dBackend::rebind_remade()
 {
     AV_SCOPE("D3dBackend::rebind_remade");
@@ -656,8 +596,6 @@ void D3dBackend::rebind_remade()
     remade_.truncate(0u);
 }
 
-/* Each bound remade view in `bound` becomes its replacement, the reference
- * the Get gave moving with it. */
 bool D3dBackend::swap_remade(IUnknown **bound, uint32_t count) const
 {
     AV_SCOPE("D3dBackend::swap_remade");
@@ -742,11 +680,6 @@ bool D3dBackend::on_Finish11(uint32_t &hresult)
 {
     AV_SCOPE("D3dBackend::on_Finish11");
     if (!has_device()) return false;
-    /* Every session records into the one immediate context, so what the guest
-     * needs of a finish - its commands ahead of anything another session
-     * sends next, and the arena read - holds once they have run here. Waiting
-     * for the GPU as well, under the device lock, stalled every session and
-     * the scanout behind it: 7 to 50 ms a present. */
     device11_->context()->Flush();
     const HRESULT removed = device11_->device()->GetDeviceRemovedReason();
     lost_ = FAILED(removed);
@@ -760,16 +693,12 @@ bool D3dBackend::on_DestroyObject(uint32_t id)
     AV_SCOPE("D3dBackend::on_DestroyObject");
     D3dObjectKind kind = D3dObjectKind::none;
     IUnknown *const found = objects_.find_any(id, kind);
-    /* Direct3D 12's and 9's share the session's table; they are not
-     * DestroyObject's. */
     if (found == nullptr || kind >= D3dObjectKind::heap12) return false;
     published_.forget(id);
     constants_.forget(id);
     objects_.remove(id);
     return true;
 }
-
-/* ---------------------------------------------------------------- creation */
 
 bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &desc, uint64_t shared_key,
                                    uint64_t memory, uint32_t row_pitch)
@@ -783,9 +712,6 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
     HRESULT result = E_INVALIDARG;
     if (desc.dimension == dimension_buffer) {
         if (desc.width > max_buffer_bytes) return false;
-        /* A buffer the guest rewrites with Map(DISCARD) stays one DXVK can
-         * rename: as a default buffer every rewrite is a copy on the GPU's
-         * timeline, with the barriers that go with it. */
         constexpr uint32_t ddi_usage_dynamic = 2u;
         constexpr uint32_t not_dynamic = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_STREAM_OUTPUT;
         const bool dynamic = desc.usage == ddi_usage_dynamic && (desc.bind_flags & not_dynamic) == 0u &&
@@ -817,8 +743,6 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
                                               0u,
                                               misc};
         ID3D11Texture2D *out = memory != 0u ? lent_texture(texture, memory, row_pitch) : shareable(texture, desc.misc_flags);
-        /* Memory the guest named is the texture's or nothing: another
-         * texture would not be the pages the other adapter reads. */
         if (memory != 0u) result = out != nullptr ? S_OK : E_FAIL;
         else result = out != nullptr ? S_OK : device->CreateTexture2D(&texture, nullptr, &out);
         made = out;
@@ -833,20 +757,14 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
     } else {
         return false;
     }
-    /* A resource the host will not make is the guest's to learn about at its
-     * next Finish, as a real driver's out-of-memory would be; the id then names
-     * nothing and every command naming it is refused. */
     if (FAILED(result) || made == nullptr) return true;
     if (objects_.keep(id, D3dObjectKind::resource, made) != Status::ok) return false;
-    /* The surface a present of it publishes on (SharedSurfaces). */
     ID3D11DeviceChild *child = nullptr;
     if (shared_key != 0u &&
         SUCCEEDED(made->QueryInterface(__uuidof(ID3D11DeviceChild), reinterpret_cast<void **>(&child)))) {
         static_cast<void>(SurfaceIdentity(shared_key).mark(child));
         child->Release();
     }
-    /* A key refused is one no other process can open: the host log is where
-     * the refusal is seen, since the creator is not told. */
     const Status published =
         shared_key != 0u ? shares_->publish_resource(shared_key, made, ShareOrigin::d3d11) : Status::ok;
     if (published != Status::ok)
@@ -859,8 +777,6 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
     if (published == Status::ok) describe_shared_image(shared_key, made);
     if (published == Status::ok && ResourceMisc(desc.misc_flags).presented() &&
         desc.dimension == dimension_texture2d) {
-        /* A compositor may open the key before the first present: it must
-         * find the copy a present refreshes, never the live buffer. */
         ID3D11Texture2D *texture = nullptr;
         if (SUCCEEDED(made->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)))) {
             static_cast<void>(device11_->prepare_shown(shares_->domain(), shared_key, texture));
@@ -870,9 +786,6 @@ bool D3dBackend::on_CreateResource(uint32_t id, const d3dproto::ResourceDesc &de
     return true;
 }
 
-/* A 2D texture made over exportable memory is described as the image it is,
- * so an API that opens its memory - OpenCL - views it as that image with no
- * copy (SharedImageShape). */
 void D3dBackend::describe_shared_image(uint64_t shared_key, IUnknown *made)
 {
     AV_SCOPE("D3dBackend::describe_shared_image");
@@ -894,7 +807,6 @@ bool D3dBackend::on_OpenResource(uint32_t id, uint64_t shared_key, uint32_t &fou
     found = 0u;
     desc = d3dproto::ResourceDesc{};
     if (!has_device()) return false;
-    /* A flip-model buffer is read as its latest present's copy (show). */
     IUnknown *const shared = device11_->open_shared(shares_->domain(), shared_key);
     if (shared == nullptr) {
         if (shared_key != missed_key_)
@@ -949,8 +861,6 @@ bool D3dBackend::on_CreateShaderResourceView(uint32_t id, const d3dproto::ViewDe
     view.Format = static_cast<DXGI_FORMAT>(desc.format);
     view.ViewDimension = static_cast<D3D11_SRV_DIMENSION>(desc.dimension);
     static_assert(sizeof(view.Buffer) <= sizeof(desc.args));
-    /* Every SRV dimension's union arm is up to four UINTs, BufferEx's flags
-     * the fourth's third; they are laid out as the API lays them. */
     __builtin_memcpy(&view.Buffer, desc.args, sizeof(uint32_t) * 4u);
     if (view.ViewDimension == D3D11_SRV_DIMENSION_BUFFEREX) view.BufferEx.Flags = desc.flags;
     if (desc.dimension > D3D11_SRV_DIMENSION_BUFFEREX) return false;
@@ -1017,8 +927,6 @@ bool D3dBackend::on_CreateShader(uint32_t id, uint32_t stage, uint32_t input_cou
     AV_SCOPE("D3dBackend::on_CreateShader");
     const D3dObjectKind kind = shader_kind(stage);
     if (!has_device() || kind == D3dObjectKind::none || code == nullptr) return false;
-    /* The container is the code and three signatures: as big as the code plus
-     * what the signatures' tables and names can take. */
     const size_t capacity = static_cast<size_t>(code_size) + container_slack;
     uint8_t *const storage = arena_ == nullptr ? nullptr : arena_->allocate<uint8_t>(capacity);
     if (storage == nullptr) return false;
@@ -1234,8 +1142,6 @@ bool D3dBackend::on_CreateQuery(uint32_t id, uint32_t type, uint32_t misc_flags)
     if (FAILED(device11_->device()->CreateQuery(&query, &made))) return true;
     return objects_.keep(id, D3dObjectKind::query, made) == Status::ok;
 }
-
-/* ---------------------------------------------------------------- binding */
 
 bool D3dBackend::on_SetShader(uint32_t stage, uint32_t shader)
 {
@@ -1503,8 +1409,6 @@ bool D3dBackend::on_SetResourceMinLod(uint32_t resource, float min_lod)
     return true;
 }
 
-/* ---------------------------------------------------------------- work */
-
 bool D3dBackend::on_Draw(uint32_t vertex_count, uint32_t start_vertex)
 {
     AV_SCOPE("D3dBackend::on_Draw");
@@ -1581,8 +1485,6 @@ bool D3dBackend::on_DispatchIndirect(uint32_t buffer, uint32_t offset)
     device11_->context()->DispatchIndirect(found, offset);
     return true;
 }
-
-/* ---------------------------------------------------------------- clears, copies, data */
 
 bool D3dBackend::on_ClearRenderTargetView(uint32_t view, const d3dproto::Float4 &color)
 {
@@ -1687,9 +1589,6 @@ bool D3dBackend::on_CopySubresourceRegion(uint32_t destination, uint32_t destina
     return true;
 }
 
-/* A copy into a surface the guest shared is counted, under the device lock
- * every command holds, so a process outside QEMU reading the surface can
- * tell which of the guest's copies the host has run (docs/external-export.md). */
 void D3dBackend::counted(ID3D11Resource *destination)
 {
     AV_SCOPE("D3dBackend::counted");
@@ -1735,9 +1634,6 @@ bool D3dBackend::on_UpdateSubresource(uint32_t resource, uint32_t subresource, u
     AV_SCOPE("D3dBackend::on_UpdateSubresource");
     ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
     if (!ready() || found == nullptr || data == nullptr) return false;
-    /* The bytes DXVK will read are rows of row_pitch and slices of
-     * depth_pitch over the box; the data that crossed must cover them, or
-     * DXVK reads past what the guest sent. */
     uint32_t width = 0u, height = 0u, depth = 0u, format = 0u;
     if (!extent_of(found, subresource, width, height, depth, format)) return false;
     if (has_box != 0u) {
@@ -1759,9 +1655,6 @@ bool D3dBackend::on_UpdateSubresource(uint32_t resource, uint32_t subresource, u
     return true;
 }
 
-/* A dynamic buffer takes its bytes the way the guest wrote them: mapped with
- * DISCARD, or with NO_OVERWRITE for a write beside data the GPU may still be
- * reading. False for anything else, which UpdateSubresource then handles. */
 bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, uint32_t offset, const uint8_t *data,
                                        uint64_t bytes, uint32_t copy_flags)
 {
@@ -1787,9 +1680,6 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
     return true;
 }
 
-/* A host that answers 1 draws a buffer bound to a slice of a slice store in
- * place; 0 leaves the guest copying what it writes, as before. The session
- * asks once, before it has a device of its own, so none need be selected. */
 bool D3dBackend::on_QueryBufferSlices11(uint32_t &supported)
 {
     AV_SCOPE("D3dBackend::on_QueryBufferSlices11");
@@ -1797,11 +1687,6 @@ bool D3dBackend::on_QueryBufferSlices11(uint32_t &supported)
     return true;
 }
 
-/* A buffer bound to a slice is the guest's memory from then on: whatever the
- * constant ring kept of it goes back to its own storage first, so that what
- * the guest bound last is what draws read. Only a dynamic buffer is bound -
- * the only kind the guest places on a slice, and the only kind DXVK can give
- * storage of its own again when the store goes (release_slice_storage). */
 bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t offset, uint64_t bytes)
 {
     AV_SCOPE("D3dBackend::on_BindBufferSlice");
@@ -1826,10 +1711,6 @@ bool D3dBackend::dynamic_buffer(ID3D11Resource *resource) const
     return desc.Usage == D3D11_USAGE_DYNAMIC;
 }
 
-/* By the store's dma-buf: its memory is the GPU's own (docs/host-memory.md),
- * which DXVK's device imports as any device of the same driver does. A
- * session has one store: another, while one is held, is refused, since
- * letting the held one go would take storage from buffers still on it. */
 bool D3dBackend::slice_storage_for(const SourceMemory &store)
 {
     AV_SCOPE("D3dBackend::slice_storage_for");
@@ -1845,14 +1726,6 @@ bool D3dBackend::slice_storage_for(const SourceMemory &store)
     return false;
 }
 
-/* DXVK renamed each buffer bound to a slice to the store's buffer without
- * owning it: a buffer left on it would draw from a buffer destroyed, and a
- * map of it on the host would write where the store's mapping was. So every
- * dynamic buffer - which buffers are on the store is not kept - is discarded
- * first, which renames it to storage of DXVK's own; the guest lets go of its
- * store only as its session goes, when what they held is moot. DXVK may
- * still have recorded draws that read the store, or the GPU be running them:
- * they finish before the buffer they read goes. */
 void D3dBackend::release_slice_storage()
 {
     AV_SCOPE("D3dBackend::release_slice_storage");
@@ -1869,19 +1742,11 @@ void D3dBackend::release_slice_storage()
     slice_memory_ = nullptr;
 }
 
-/* What a read back waits for, without the device's lock: every session on the
- * GPU records into one immediate context, and DXVK's Map(READ) flushes it and
- * waits for the GPU to finish all of it, holding every other session - DWM's
- * composition among them - for as long. An application reading one back each
- * frame held DWM a frame at a time, and the compositor skipped captures. The
- * copy is marked on the session's fence instead, the lock let go while the GPU
- * runs it, and taken again - the session's state with it - to map what is by
- * then finished. A mark the device refuses leaves the Map to wait, as before. */
 void D3dBackend::await_gpu_unlocked()
 {
     AV_SCOPE("D3dBackend::await_gpu_unlocked");
     constexpr uint64_t pause_nanoseconds = 20000u;
-    constexpr uint64_t deadline_nanoseconds = 2000000000u; /* past which the Map waits */
+    constexpr uint64_t deadline_nanoseconds = 2000000000u;
     if (progress11_.fence() == nullptr) progress11_.adopt(device11_->make_fence(progress11_.marked()));
     if (!device11_->signal(progress11_.fence(), progress11_.next())) return;
     progress11_.signalled();
@@ -1893,10 +1758,6 @@ void D3dBackend::await_gpu_unlocked()
     device11_->lock(states_.selected());
 }
 
-/* A frame the host cannot stage - a resource never shared, not a 2D texture
- * of four-byte pixels, no frame free - is a present the engine refuses: the
- * session goes on, and the application sees at most a frame not shown. A
- * blt-model buffer's every present stages: Direct3D 11 knows its model. */
 bool D3dBackend::on_PresentPoint(uint32_t resource, uint32_t subresource, uint32_t point)
 {
     AV_SCOPE("D3dBackend::on_PresentPoint");
@@ -1905,7 +1766,6 @@ bool D3dBackend::on_PresentPoint(uint32_t resource, uint32_t subresource, uint32
     const SurfacePoint frame(SurfaceIdentity(found).surface(), point);
     D3D11_RESOURCE_DIMENSION dimension = D3D11_RESOURCE_DIMENSION_UNKNOWN;
     found->GetType(&dimension);
-    /* A flip names no frame: its present is the copy its compositor reads. */
     if (point == 0u) {
         if (dimension == D3D11_RESOURCE_DIMENSION_TEXTURE2D && frame.surface() != 0u &&
             !device11_->show(shares_->domain(), frame.surface(), static_cast<ID3D11Texture2D *>(found)) &&
@@ -1942,8 +1802,6 @@ bool D3dBackend::on_ReadSubresource(uint32_t resource, uint32_t subresource, uin
     if (staging == nullptr) return true;
     device11_->context()->CopySubresourceRegion(staging, 0u, 0u, 0u, 0u, found, subresource, nullptr);
     await_gpu_unlocked();
-    /* Nothing is read back from a lost device: the guest's Map answers
-     * removed, and the session is faulted after this command. */
     if (device11_->lost()) {
         staging->Release();
         hresult = static_cast<uint32_t>(DXGI_ERROR_DEVICE_REMOVED);
@@ -1981,8 +1839,6 @@ bool D3dBackend::on_ReadSubresource(uint32_t resource, uint32_t subresource, uin
     return true;
 }
 
-/* ---------------------------------------------------------------- queries */
-
 bool D3dBackend::on_BeginQuery(uint32_t query)
 {
     AV_SCOPE("D3dBackend::on_BeginQuery");
@@ -1998,7 +1854,6 @@ bool D3dBackend::on_EndQuery(uint32_t query)
     ID3D11Query *const found = objects_.find_as<ID3D11Query>(query, D3dObjectKind::query);
     const bool         usable = ready() && found != nullptr;
     if (usable) device11_->context()->End(found);
-    /* Counted whether or not it ran: the guest counted it when it sent it. */
     if (published_.ended(query, usable ? found : nullptr) != Status::ok) return false;
     return usable;
 }
@@ -2021,10 +1876,6 @@ bool D3dBackend::on_GetQueryData(uint32_t query, uint32_t flags, uint32_t &ready
     if (!ready() || found == nullptr) return false;
     const UINT size = found->GetDataSize();
     if (size > data_capacity) return false;
-    /* The guest's thread is stopped on this answer, and each "not yet" costs
-     * it a round trip through the kernel and back: a flushing poll waits here
-     * for a result that is a millisecond away, and still answers "not yet"
-     * after that, as GetData must. */
     constexpr uint64_t patience_ns = 1000000u;
     const UINT         donotflush = flags & D3D11_ASYNC_GETDATA_DONOTFLUSH;
     PollBudget         polls(clock_, 0u, 0u, patience_ns);
@@ -2051,4 +1902,4 @@ bool D3dBackend::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

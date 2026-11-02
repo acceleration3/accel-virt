@@ -9,7 +9,7 @@ namespace {
 
 constexpr std::uint32_t header_bytes = 24u;
 
-}  // namespace
+}
 
 VirtioBridge::VirtioBridge(MockPlatform &platform, FakeCommonConfig &common, LoopbackDevice &device)
     : platform_(platform), common_(common), device_(device), base_(), views_(), placed_{}, completed_{},
@@ -21,7 +21,6 @@ VirtioBridge::VirtioBridge(MockPlatform &platform, FakeCommonConfig &common, Loo
 
 VirtioBridge::~VirtioBridge() { common_.on_status(nullptr, nullptr); }
 
-/* virtio_pci_common_write: set_status sees every value, and 0 then resets. */
 void VirtioBridge::follow_status(std::uint8_t status)
 {
     device_.device().status(status);
@@ -52,8 +51,6 @@ void VirtioBridge::write_u8(std::uint64_t offset, std::uint8_t) { unexpected("wr
 void VirtioBridge::write_u32(std::uint64_t offset, std::uint32_t) { unexpected("write_u32", offset); }
 void VirtioBridge::write_u64(std::uint64_t offset, std::uint64_t) { unexpected("write_u64", offset); }
 
-/* virtio 1.2 4.1.4.4: without VIRTIO_F_NOTIFICATION_DATA the driver stores
- * the queue's index. */
 void VirtioBridge::write_u16(std::uint64_t, std::uint16_t value)
 {
     if (value >= served_queues) {
@@ -123,4 +120,4 @@ bool VirtioBridge::take_completion(std::uint16_t queue)
 std::uint32_t VirtioBridge::answered_by_core() const { return by_core_; }
 std::uint32_t VirtioBridge::answered_by_base() const { return base_.answered(); }
 
-}  // namespace av
+}

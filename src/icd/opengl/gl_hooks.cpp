@@ -1,8 +1,3 @@
-/* The hooks the generated OpenGL entries and client call by name (gl_icd_support
- * and gl_helpers.h), each one line into the bound root or the calling thread's
- * context, and the binding they reach it through - the OpenGL ICD's process
- * state (constitution III). A hook asked with nothing current answers as if
- * nothing were bound: no wire, no bytes, nothing to skip. */
 #include "core/trace/function_scope.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_entry_points.hpp"
@@ -23,16 +18,12 @@ namespace av::glicd {
 constinit GlIcdBinding gl_icd_binding;
 
 namespace {
-
-/* The calling thread's context, or null - also with no root bound, as for a
- * transport a test drives without one. */
 GuestGlContext *current_context()
 {
     AV_SCOPE("current_context");
     return gl_icd_binding.bound() ? gl_icd_binding.root().current() : nullptr;
 }
 
-/* The calling thread's context's client state, or null. */
 ClientArrayState *arrays()
 {
     AV_SCOPE("arrays");
@@ -40,7 +31,7 @@ ClientArrayState *arrays()
     return context != nullptr ? &context->arrays() : nullptr;
 }
 
-}  // namespace
+}
 
 ClientTransport *wire() noexcept
 {
@@ -62,10 +53,6 @@ size_t compressed_bytes(GLsizei, GLsizei, GLsizei, GLsizei image_size, bool pack
     return state != nullptr ? state->compressed_bytes(image_size, packing) : 0u;
 }
 
-/* A level's size is the host's, and no hook may ask it inside a call: a
- * download sized from a level answers nothing (research.md §5). */
-/* A whole level's download is sized by the host's answer for the level: the
- * host refuses one whose buffer is short of it. */
 size_t level_bytes(GLenum target, GLint level, GLenum format, GLenum type) noexcept
 {
     AV_SCOPE("level_bytes");
@@ -83,7 +70,6 @@ const uint64_t *offsets_of(const void *const *offsets, size_t count) noexcept
     GuestGlContext *const context = current_context();
     if (context == nullptr) return nullptr;
     const uint64_t *const converted = context->arrays().offsets_of(offsets, count);
-    /* A list there is no memory to convert is the application's error to see. */
     if (converted == nullptr && offsets != nullptr) context->record(GuestGlContext::gl_out_of_memory);
     return converted;
 }
@@ -102,7 +88,6 @@ bool query_buffer_bound() noexcept
     return state != nullptr && state->query_buffer_bound();
 }
 
-/* Framebuffer 0 is the calling context's current window. */
 GLuint framebuffer_name(GLuint name) noexcept
 {
     AV_SCOPE("framebuffer_name");
@@ -110,7 +95,6 @@ GLuint framebuffer_name(GLuint name) noexcept
     return context != nullptr ? context->framebuffers().name_of(name) : name;
 }
 
-/* What a persistent map wrote goes to the host before a command reads it. */
 void flush_persistent_mappings() noexcept
 {
     AV_SCOPE("flush_persistent_mappings");
@@ -260,13 +244,9 @@ void refuse_legacy() noexcept
     static_cast<void>(gl_icd_binding.root().record_legacy());
 }
 
-}  // namespace av::glicd
+}
 
 namespace av::glproto {
-
-/* With nothing current - a context asking its own list lengths as it is
- * made - only the registry's counts are known, and those are all a length
- * query needs. */
 size_t pname_count(ClientTransport &, uint32_t pname) noexcept
 {
     AV_SCOPE("pname_count");
@@ -288,9 +268,6 @@ size_t uniform_block_value_count(ClientTransport &, GLuint, GLuint, GLenum pname
     return context != nullptr ? context->queries().block_values(pname) : 0u;
 }
 
-/* The evaluator, pixel map, stipple, bitmap and ARB program queries are the
- * compatibility profile's (051): their lengths are not kept, so nothing is
- * written. */
 size_t map_value_count(ClientTransport &, GLenum, GLenum) noexcept
 {
     AV_SCOPE("map_value_count");
@@ -334,7 +311,7 @@ GLenum av_glGetError(ClientTransport &av_t)
     return glicd::GlErrorQuery(av_t).ask();
 }
 
-}  // namespace av::glproto
+}
 
 namespace av::icd {
 
@@ -344,4 +321,4 @@ void payload_dropped(const char *api, const char *command, size_t written) noexc
     if (glicd::gl_icd_binding.bound()) glicd::gl_icd_binding.root().note_dropped(api, command, written);
 }
 
-}  // namespace av::icd
+}

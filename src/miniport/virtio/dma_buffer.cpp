@@ -53,4 +53,4 @@ bool DmaBuffer::invariants_hold() const
     return (bytes_ == nullptr) == (size_ == 0u) && (bytes_ != nullptr || physical_address_ == 0u);
 }
 
-}  // namespace av
+}

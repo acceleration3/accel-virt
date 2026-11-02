@@ -35,7 +35,7 @@ struct VirtQueueProbe {
     VirtQueue &queue;
 };
 
-}  // namespace av
+}
 
 using av::VirtQueueProbe;
 
@@ -68,7 +68,7 @@ private:
     VirtQueue    queue_;
 };
 
-}  // namespace
+}
 
 TEST(virt_queue_initialize, allocates_a_ring_of_the_device_size_capped_by_the_driver)
 { Queue small(64u);
@@ -118,9 +118,9 @@ TEST(virt_queue_add, publishes_a_chain_the_device_can_follow)
   CHECK_EQ(device.seen_count(), 2u);
   CHECK(device.seen(0u).address == 0x5000u);
   CHECK_EQ(device.seen(0u).length, 24u);
-  CHECK_EQ(device.seen(0u).flags, 1u);    /* NEXT */
+  CHECK_EQ(device.seen(0u).flags, 1u);
   CHECK(device.seen(1u).address == 0x6000u);
-  CHECK_EQ(device.seen(1u).flags, 2u);    /* WRITE, last */ }
+  CHECK_EQ(device.seen(1u).flags, 2u);    }
 
 TEST(virt_queue_take_used, returns_the_head_and_written_length_and_frees_the_chain)
 { Queue queue(8u);
@@ -177,9 +177,9 @@ TEST(virt_queue, survives_the_16_bit_index_wrapping)
 TEST(virt_queue_take_used, hostile_elements_are_rejected_and_the_queue_stays_usable)
 { struct Case { std::uint32_t id; std::uint32_t length; };
   const Case cases[] = {
-      {8u, 0u},          /* id out of range */
-      {1u, 0u},          /* id is not a head in flight (head is 0) */
-      {0u, 65u},         /* longer than the chain's writable bytes */
+      {8u, 0u},
+      {1u, 0u},
+      {0u, 65u},
   };
   for (const Case &c : cases) {
       Queue queue(8u);
@@ -251,8 +251,6 @@ TEST(virt_queue_invariants, corruption_is_detected)
   probe.set_size(8u);
   probe.set_free_count(8u); }
 
-/* ---- activation through the transport -------------------------------------- */
-
 namespace {
 
 class Transport {
@@ -278,7 +276,7 @@ private:
     VirtioPciTransport transport_;
 };
 
-}  // namespace
+}
 
 TEST(virtio_pci_transport_activate_queue, programs_the_device_and_enables_the_queue)
 { Transport t;

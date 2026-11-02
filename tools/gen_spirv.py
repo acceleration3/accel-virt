@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the guest probes' GLSL into SPIR-V headers, or check the committed ones.
-
-Every *.comp, *.vert and *.frag in src/guest/probe/shaders/ is compiled with
-`glslangValidator -V` into <name>_spv.hpp beside it: the module as a constexpr
-uint32_t array and its word count, in namespace av. Every *.spvasm - an OpenCL
-kernel, which no GLSL compiler writes - is assembled with
-`spirv-as --target-env spv1.0` the same way. The guest suite is freestanding
-and pushed alone into a guest, so the module is compiled in.
-
-  gen_spirv.py [--shaders DIR] [--check]
-
---check writes nothing and fails naming every header that differs from what
-would be written, is missing, or has no source left. It fails as well when
-glslangValidator is absent: a check that cannot compile has checked nothing.
-"""
+"""Compile the guest probes' GLSL into SPIR-V headers, or check the committed ones."""
 import argparse
 import pathlib
 import shutil
@@ -27,8 +13,6 @@ DEFAULT_SHADERS = ROOT / "src" / "guest" / "probe" / "shaders"
 HEADER_SUFFIX = "_spv.hpp"
 COMPILER = "glslangValidator"
 ASSEMBLER = "spirv-as"
-# Each source's tool, and what goes before the output's path. An OpenCL kernel
-# is assembled for SPIR-V 1.0, the lowest version an OpenCL 2.1 device takes.
 TOOLS = {".comp": COMPILER, ".vert": COMPILER, ".frag": COMPILER, ".spvasm": ASSEMBLER}
 ARGUMENTS = {COMPILER: ["-V", "-o"], ASSEMBLER: ["--target-env", "spv1.0", "-o"]}
 STAGES = tuple(TOOLS)
@@ -37,11 +21,10 @@ WORDS_PER_LINE = 8
 
 
 class Refused(Exception):
-    """A shader that cannot become a header; the message names it."""
+    pass
 
 
 def sources_in(shaders):
-    """{header path: source path}, refusing two sources that would write one header."""
     headers = {}
     for source in sorted(path for path in shaders.iterdir() if path.suffix in STAGES):
         header = shaders / f"{source.stem}{HEADER_SUFFIX}"
@@ -52,7 +35,6 @@ def sources_in(shaders):
 
 
 def words_of(source, tools, scratch):
-    """The SPIR-V `source`'s tool makes of it, as little-endian words."""
     tool = TOOLS[source.suffix]
     output = scratch / f"{source.name}.spv"
     compiled = subprocess.run([tools[tool], *ARGUMENTS[tool], str(output), source.name], cwd=str(source.parent),
@@ -111,8 +93,6 @@ def main(argv=None):
     except Refused as refused:
         print(f"spirv: {refused}", file=sys.stderr)
         return 1
-    # The compiler is always wanted, as the check has always failed without
-    # it; the assembler only where there is assembly to assemble.
     needed = sorted({COMPILER} | {TOOLS[source.suffix] for source in headers.values()})
     tools = {tool: shutil.which(tool) for tool in needed}
     for tool in needed:

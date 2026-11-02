@@ -39,4 +39,4 @@ bool ReentrantCallLock::invariants_hold() const
     return (owner_ == 0u) == (depth_ == 0u);
 }
 
-}  // namespace av::d3d
+}

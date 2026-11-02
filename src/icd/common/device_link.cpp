@@ -81,4 +81,4 @@ bool DeviceLink::invariants_hold() const
     return users_ == 0u || device_.opened();
 }
 
-}  // namespace av::icd
+}

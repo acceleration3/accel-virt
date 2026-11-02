@@ -1,8 +1,3 @@
-/* The virtio-gpu requests a driver sends to use av contexts (virtio 1.2
- * 5.7.6, docs/protocol.md): the capset queries, context creation and
- * destruction, a guest blob of one entry and its release, and the context
- * setup carried by SUBMIT_3D. Each request replaces what the destination held;
- * one that does not fit writes nothing. The device's decoders read them. */
 #ifndef AV_AV_REQUEST_WRITER_HPP
 #define AV_AV_REQUEST_WRITER_HPP
 
@@ -22,9 +17,6 @@ class WireWriter;
 class AvRequestWriter {
 public:
     static constexpr size_t max_request_size = 96u;
-    /* What a create-blob request costs before its memory entries, and what
-     * each entry costs: a caller sizing a buffer for one over N pages needs
-     * both (feature 058's scanout blob). */
     static constexpr size_t guest_blob_fixed_size = 56u;
     static constexpr size_t guest_blob_entry_size = 16u;
 
@@ -32,51 +24,23 @@ public:
 
     [[nodiscard]] Status capset_info(uint32_t index);
     [[nodiscard]] Status capset(uint32_t capset_id, uint32_t version);
-    /* No debug name. */
     [[nodiscard]] Status create_context(uint32_t context_id, uint32_t capset_id);
     [[nodiscard]] Status destroy_context(uint32_t context_id);
-    /* Guest memory at `address` of `length` bytes, one entry covering the blob. */
     [[nodiscard]] Status guest_blob(uint32_t resource_id, uint64_t address, uint32_t length);
-    /* The scattered guest pages of an aperture allocation as one GUEST blob,
-     * one memory entry per run of adjacent pages, its size their total - what a
-     * ring, fence or reply is. The device already decodes many entries; this is
-     * the writer catching up, mirroring attach_backing_pages. */
     [[nodiscard]] Status guest_blob_pages(uint32_t resource_id, const GuestPageList &pages);
-    /* Host GPU memory of the kind `memory` names, for the device's context
-     * `context_id`, mappable into the hostmem region: no memory entries, a
-     * page-multiple size, and nothing of the guest behind it
-     * (docs/host-memory.md). */
     [[nodiscard]] Status host_blob(uint32_t context_id, uint32_t resource_id, HostMemoryRequest memory, uint64_t size);
-    /* Host GPU memory of the kind `memory` names over `size` bytes of guest
-     * pages a process lent (HOST3D_GUEST): not mappable, since the pages are
-     * already where the process sees them, and no entries yet - the pages
-     * follow as RESOURCE_ATTACH_BACKING pieces (docs/host-memory.md,
-     * "Application memory"). */
     [[nodiscard]] Status adopted_blob(uint32_t context_id, uint32_t resource_id, HostMemoryRequest memory,
                                       uint64_t size);
-    /* Where in the hostmem region the device is to place it: the offset is the
-     * guest's to choose, and the device refuses one that does not fit
-     * (docs/protocol.md). */
     [[nodiscard]] Status map_blob(uint32_t resource_id, uint64_t offset);
     [[nodiscard]] Status unmap_blob(uint32_t resource_id);
     [[nodiscard]] Status unref(uint32_t resource_id);
-    /* The shared object `object_id` is gone from the guest: every process let
-     * go of the allocation it was minted over (SharedReleaseRequest). */
     [[nodiscard]] Status release_shared(uint64_t object_id);
-    /* GET_DISPLAY_MODES: the modes the host's display offers (DisplayModeSet). */
     [[nodiscard]] Status display_modes();
-    /* DISPLAY_CLOCK: the page the device publishes vertical blanks in, 0 for
-     * none (PageRequest). */
     [[nodiscard]] Status display_clock(uint64_t address);
-    /* PRESENT_ENGINE: the page the device says which queued presents it has
-     * moved in, 0 for none (PageRequest). */
     [[nodiscard]] Status present_engine(uint64_t address);
-    /* DISPLAY_TIMING: head `head` blanks at `refresh_millihz` (DisplayTimingRequest). */
     [[nodiscard]] Status display_timing(uint32_t head, uint32_t refresh_millihz);
-    /* SCANOUT_PLANE: one overlay plane of a head (ScanoutPlaneRequest). */
     [[nodiscard]] Status scanout_plane(const ScanoutPlaneRequest &plane);
     [[nodiscard]] Status setup(uint32_t context_id, const ContextSetup &setup);
-    /* Bytes of the last request written; zero after one that did not fit. */
     size_t               length() const;
 
 private:
@@ -103,9 +67,7 @@ private:
     static constexpr uint32_t blob_memory_host3d_guest = 3u;
     static constexpr uint32_t blob_flag_mappable = 1u;
 
-    /* Starts a request of `size` bytes with its header; false when it cannot fit. */
     bool begin(WireWriter &writer, uint32_t type, uint32_t context_id, size_t size);
-    /* A request naming one page, of `type` (PageRequest). */
     [[nodiscard]] Status page(uint32_t type, uint64_t address);
 
     uint8_t *bytes_;
@@ -113,6 +75,6 @@ private:
     size_t   length_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_AV_REQUEST_WRITER_HPP
+#endif

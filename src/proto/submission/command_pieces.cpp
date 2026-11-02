@@ -6,11 +6,9 @@
 namespace av {
 
 namespace {
-
-/* The most payload one header can carry. */
 constexpr size_t most_body = CommandHeader::max_size - CommandHeader::encoded_size;
 
-}  // namespace
+}
 
 CommandPieces::CommandPieces(uint32_t command_id, uint8_t flags, const uint8_t *body, size_t length)
     : command_id_(command_id), flags_(flags), body_(body), length_(length), framed_(0u), pieces_(0u),
@@ -32,7 +30,6 @@ size_t CommandPieces::frame_next(uint8_t *into, size_t room)
     const uint32_t id = last ? command_id_ : CommandHeader::piece_id;
     const uint8_t  flags = last ? flags_ : 0u;
     const uint32_t size = static_cast<uint32_t>(CommandHeader::encoded_size + body);
-    /* The size is at most max_size and the flags are the caller's or none. */
     static_cast<void>(CommandHeader(id, size, flags).encode(into, CommandHeader::encoded_size));
     if (body != 0u) __builtin_memcpy(into + CommandHeader::encoded_size, body_ + framed_, body);
     framed_ += body;
@@ -65,4 +62,4 @@ bool CommandPieces::invariants_hold() const
     return framed_ <= length_ && (!done_ || framed_ == length_) && (body_ != nullptr || length_ == 0u);
 }
 
-}  // namespace av
+}

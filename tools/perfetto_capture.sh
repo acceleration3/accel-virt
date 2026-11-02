@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# One Perfetto trace of a running guest: the host kernel's scheduling of every
-# QEMU thread (tracebox, which needs root for ftrace) and the device's and
-# executor's scopes (AV_PERFETTO rings), merged on one timeline.
-#
-#   tools/perfetto_capture.sh [seconds] [output.pftrace]
-#
-# QEMU must have been started with AV_PERFETTO=1 (run_guest_suite.py --perfetto).
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 seconds=${1:-5}

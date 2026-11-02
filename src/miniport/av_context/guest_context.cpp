@@ -24,7 +24,6 @@ Status GuestContext::set_up(const CapsetInfo &capset, uint32_t context_id, const
     if (state_ != State::idle) return Status::invalid_state;
     if (setup.validate_against(capset) != Status::ok || !pages.complete()) return Status::invalid_parameter;
     SpinLockGuard guard(lock_);
-    /* Complete pages and a sequence left idle by the last teardown: begin_setup has nothing to refuse. */
     static_cast<void>(sequence_.begin_setup(context_id, setup, pages));
     pages_ = pages;
     fences_ = FenceProgress();
@@ -52,7 +51,6 @@ Status GuestContext::accept(const uint8_t *bytes, size_t length)
     return status;
 }
 
-/* A setup attaches the ring and page only when every answer was OK. */
 void GuestContext::finish_sequence()
 {
     AV_SCOPE("GuestContext::finish_sequence");
@@ -65,8 +63,6 @@ void GuestContext::finish_sequence()
         state_ = State::failed;
         return;
     }
-    /* The pages and order were accepted at set_up, and nothing is attached
-     * before a setup finishes: neither can refuse. */
     static_cast<void>(submitter_.attach(pages_.ring_view(), order_, doorbell_));
     static_cast<void>(observer_.attach(pages_.fence_view()));
     state_ = State::established;
@@ -129,13 +125,6 @@ Status GuestContext::serve()
     if (state_ != State::established) return Status::invalid_state;
     const Status status = observer_.observe();
     if (observer_.failed()) state_ = State::failed;
-    /* What the device has finished, where the process that submits for itself
-     * reads it: the hardware queue's progress is the only thing it has to wait
-     * on, since none of its submissions passed through the driver. A context
-     * the device faulted - its host device lost - or whose page failed will
-     * finish nothing more, and its progress is the counter's end, as a removed
-     * device's monitored fences are signalled: a wait in the kernel on it
-     * would otherwise never end, as the driver's own packets already do not. */
     const bool lost = observer_.faulted() || observer_.failed();
     if (progress_ != nullptr) *progress_ = lost ? UINT64_MAX : fences_.completed_fence();
     return status;
@@ -153,8 +142,6 @@ Status GuestContext::tear_down()
         state_ = State::tearing_down;
         return Status::ok;
     }
-    /* The device holds nothing of a setup refused at its first step; the
-     * finished sequence still has to go idle for the next setup to begin. */
     sequence_.abandon();
     state_ = State::torn_down;
     return Status::ok;
@@ -242,8 +229,6 @@ uint32_t            GuestContext::fault_code() const
     return observer_.fault_code();
 }
 
-/* Pages are held from setup until release, and an established context has
- * both its ring and its page to work on. */
 bool GuestContext::invariants_hold() const
 {
     AV_SCOPE("GuestContext::invariants_hold");
@@ -251,4 +236,4 @@ bool GuestContext::invariants_hold() const
     return pages_.complete() && (state_ != State::established || (submitter_.attached() && observer_.attached()));
 }
 
-}  // namespace av
+}

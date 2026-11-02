@@ -20,7 +20,6 @@ void VsyncScenario::run()
     if (steps_.check("adapter", search_.found() ? Status::ok : Status::not_found) != Status::ok) return;
     GuestSession session(kmt_, search_.adapter());
     Status       status = steps_.check("device", session.open_device());
-    /* The rate dxgkrnl reports for the source; the default where it does not. */
     uint32_t millihz = 0u;
     if (status == Status::ok && kmt_.refresh_millihz(search_.adapter(), source, millihz) == Status::ok)
         expected_centihertz_ = millihz / 10u;
@@ -28,14 +27,10 @@ void VsyncScenario::run()
     if (status == Status::ok)
         static_cast<void>(steps_.check_measured("rate", paced() ? Status::ok : Status::conflict,
                                                 rate_centihertz()));
-    /* What this process caught, which a missed pulse lowers: reported, never
-     * judged, so a busy guest does not fail the driver. */
     if (status == Status::ok) static_cast<void>(steps_.check_measured("caught", Status::ok, caught_centihertz()));
     steps_.check_teardown(session);
 }
 
-/* The wait that opens the window may have begun anywhere inside a frame, so the
- * blank it returns is where the clock starts and is not counted. */
 Status VsyncScenario::count(GuestSession &session)
 {
     AV_SCOPE("VsyncScenario::count");
@@ -81,4 +76,4 @@ bool VsyncScenario::paced() const
            rate <= fastest + fastest * tolerance_percent / 100u;
 }
 
-}  // namespace av
+}

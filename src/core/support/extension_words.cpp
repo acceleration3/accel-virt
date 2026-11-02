@@ -19,7 +19,6 @@ Status ExtensionWords::hold(const char *text, size_t bytes)
     if (text_.reserve(static_cast<uint32_t>(letters) + 1u) != Status::ok) return Status::no_memory;
     for (size_t at = 0u; at < letters; at++) {
         const bool space = text[at] == ' ';
-        /* Room for all of them was made, so no append fails. */
         if (!space || (text_.size() != 0u && text_.at(text_.size() - 1u) != ' '))
             static_cast<void>(text_.append(text[at]));
     }
@@ -69,15 +68,12 @@ Status ExtensionWords::add(const char *name)
     if (total > GrowableArray<char>::most_values) return Status::no_memory;
     if (text_.reserve(static_cast<uint32_t>(total)) != Status::ok) return Status::no_memory;
     if (text_.size() != 0u) text_.truncate(text_.size() - 1u);
-    /* Room for all of it was made, so no append fails. */
     if (separator != 0u) static_cast<void>(text_.append(' '));
     for (size_t letter = 0u; letter < letters; letter++) static_cast<void>(text_.append(name[letter]));
     static_cast<void>(text_.append('\0'));
     return Status::ok;
 }
 
-/* Written back over what has already been read, and never past it: a word
- * that stays moves up by however many letters were dropped before it. */
 void ExtensionWords::strike(const char *name)
 {
     AV_SCOPE("ExtensionWords::strike");
@@ -130,4 +126,4 @@ bool ExtensionWords::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

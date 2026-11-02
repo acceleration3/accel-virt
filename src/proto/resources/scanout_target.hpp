@@ -1,5 +1,3 @@
-/* The VidPn source a primary surface is created for, and the refresh rate it
- * was created with. Zero for every other allocation. */
 #ifndef AV_SCANOUT_TARGET_HPP
 #define AV_SCANOUT_TARGET_HPP
 
@@ -23,6 +21,6 @@ private:
     uint32_t refresh_denominator_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCANOUT_TARGET_HPP
+#endif

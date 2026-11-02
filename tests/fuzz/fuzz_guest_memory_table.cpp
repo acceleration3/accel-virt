@@ -1,7 +1,3 @@
-/* Guest extents and control requests as QEMU forwards them to the renderer,
- * which a guest steers: an extent that resolves lies wholly inside one mapped
- * region and locates back to the offset it named, and a forwarded request is
- * never read past its end. */
 #include "core/support/status.hpp"
 #include "device/renderer/forwarded_request.hpp"
 #include "device/renderer/guest_memory_table.hpp"
@@ -50,7 +46,7 @@ void check_request(const std::uint8_t *data, std::size_t size, std::size_t offse
     if (count != 0u && std::memcmp(buffer, data + offset, count) != 0) __builtin_trap();
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

@@ -37,4 +37,4 @@ void *Device::process() const
     return process_;
 }
 
-}  // namespace av
+}

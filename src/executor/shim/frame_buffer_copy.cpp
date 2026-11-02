@@ -15,8 +15,6 @@ namespace {
 
 constexpr uint32_t   texel_bytes = 4u;
 constexpr uint64_t   nanoseconds_per_ms = 1000000u;
-/* A buffer waited for before it goes: a copy not done in a second is a GPU
- * that is gone. */
 constexpr uint64_t   most_wait_nanoseconds = 1000000000u;
 
 bool four_byte_colour(VkFormat format)
@@ -27,7 +25,7 @@ bool four_byte_colour(VkFormat format)
            format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 || format == VK_FORMAT_A2R10G10B10_UNORM_PACK32;
 }
 
-}  // namespace
+}
 
 FrameBufferCopy::FrameBufferCopy()
     : table_(nullptr), lock_(), timeline_(), work_(), imports_{}, value_(0u), clock_(0u), waiters_(0u), closing_(0u), epoch_(0u)
@@ -62,10 +60,6 @@ bool FrameBufferCopy::opened() const
     return table_ != nullptr;
 }
 
-/* A thread in wait() is on the timeline, which goes with this: it is turned
- * away from now on and the ones inside are waited out - each is bounded by
- * its own wait_ms - before the timeline is let go. The queue is idle before
- * any import goes, so nothing is freed under a copy. */
 void FrameBufferCopy::close()
 {
     AV_SCOPE("FrameBufferCopy::close");
@@ -90,8 +84,6 @@ void FrameBufferCopy::release(Import &import)
     import.value_ = 0u;
 }
 
-/* Never freed under a copy that has not finished: an import whose last copy
- * is not reached in a second stays, and the caller declines. */
 bool FrameBufferCopy::forget(Import &import)
 {
     AV_SCOPE("FrameBufferCopy::forget");
@@ -112,8 +104,6 @@ FrameBufferCopy::Import *FrameBufferCopy::room(uint64_t oldest_live)
     return forget(*oldest) ? oldest : nullptr;
 }
 
-/* Imports of lendings given back are dropped as they are found, so a dead
- * lending's gigabyte does not wait for the cache to fill. */
 void FrameBufferCopy::drop_dead(uint64_t oldest_live)
 {
     AV_SCOPE("FrameBufferCopy::drop_dead");
@@ -135,8 +125,6 @@ FrameBufferCopy::Import *FrameBufferCopy::import_for(const AvFrameCopy &target)
     return slot;
 }
 
-/* Whether two regions' rectangles in the buffer share a byte; the layout
- * forbids it, and the CPU would have let the later region win. */
 bool FrameBufferCopy::overlap(const AvFrameRegion &first, const AvFrameRegion &second) const
 {
     AV_SCOPE("FrameBufferCopy::overlap");
@@ -146,11 +134,6 @@ bool FrameBufferCopy::overlap(const AvFrameRegion &first, const AvFrameRegion &s
            uint64_t{second.destination_y} < uint64_t{first.destination_y} + first.height;
 }
 
-/* Rows of the region land `pitch` bytes apart from the byte its first texel
- * is at, in `pitch / 4` texels. Every product is of values already bounded by
- * the buffer: a row is counted before it is multiplied, a region stays inside
- * its rows, and a region whose row would run into the next is declined, as is
- * one that overlaps an earlier one. */
 bool FrameBufferCopy::place(const VkImageCreateInfo &described, const AvFrameCopy &target,
                             VkBufferImageCopy *placed) const
 {
@@ -183,9 +166,6 @@ bool FrameBufferCopy::place(const VkImageCreateInfo &described, const AvFrameCop
     return true;
 }
 
-/* A copy into a lending waits for the last one into it: they would write the
- * same bytes in the order they were asked, and a late one, whose present was
- * refused, must not land over this one. */
 bool FrameBufferCopy::submit(VkImage image, VkImageLayout layout, const VkImageCreateInfo &described,
                              const AvFrameCopy &target, uint64_t &value)
 {
@@ -229,4 +209,4 @@ bool FrameBufferCopy::finished(uint32_t epoch, uint64_t value, uint32_t wait_ms)
     return value == 0u || !opened() || epoch != this->epoch() || wait(value, wait_ms);
 }
 
-}  // namespace av
+}

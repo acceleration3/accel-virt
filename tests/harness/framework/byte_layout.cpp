@@ -23,4 +23,4 @@ std::uint64_t ByteLayout::at(std::size_t offset, std::size_t width) const
     return value;
 }
 
-}  // namespace av
+}

@@ -1,12 +1,3 @@
-"""The virtio-gpu 2D protocol the driver talks to, against the real device: the
-patched QEMU's stock virtio-gpu-pci and virtio-gpu-av-pci must answer alike,
-because the av device leaves the 2D protocol to its base class. Requests the
-driver sends are the driver's own bytes (gpu_request_bytes); the display
-requests it will send next are laid out here from the virtio 1.2 structures.
-
-Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
-AV_QEMU_BUILD and AV_GPU_REQUEST_BYTES.
-"""
 import os
 import struct
 import subprocess
@@ -36,8 +27,6 @@ FEATURE_VIRGL = 1 << 0
 FEATURE_RESOURCE_BLOB = 1 << 3
 FEATURE_CONTEXT_INIT = 1 << 4
 
-# Pin the mode: accel-virt's default follows the host's connected monitors,
-# so comparing it with stock's 1280x800 default is otherwise machine-dependent.
 DEVICES = {"stock": "virtio-gpu-pci", "av": "virtio-gpu-av-pci,host-gpu=auto,modes=1280x800",
            "av with an executor": av_context.av_device(",modes=1280x800")}
 
@@ -51,7 +40,6 @@ def response_type(response):
 
 
 def driver_request(*arguments):
-    """The bytes avgpu.sys's GpuRequestWriter writes for a request."""
     result = subprocess.run([REQUEST_BYTES, *map(str, arguments)], capture_output=True, text=True, check=True)
     return bytes.fromhex(result.stdout.strip())
 

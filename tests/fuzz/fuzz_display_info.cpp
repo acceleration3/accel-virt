@@ -1,7 +1,3 @@
-/* GET_DISPLAY_INFO answers as a hostile device writes them. Whatever is
- * accepted says exactly what the bytes at the documented offsets say, every
- * enabled scanout has a rectangle a display could have, and a refused answer
- * leaves the last accepted one untouched. */
 #include "miniport/display/display_info_response.hpp"
 #include "core/support/status.hpp"
 
@@ -20,7 +16,7 @@ std::uint32_t field(const std::uint8_t *data, std::size_t offset)
     return value;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

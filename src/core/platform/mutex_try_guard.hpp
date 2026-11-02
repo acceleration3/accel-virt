@@ -1,6 +1,3 @@
-/* One attempt at a Mutex that does not wait, released when the scope ends if it
- * was taken: how a state dump reads what a lock guards without ever blocking
- * on a thread that holds it. */
 #ifndef AV_MUTEX_TRY_GUARD_HPP
 #define AV_MUTEX_TRY_GUARD_HPP
 
@@ -22,6 +19,6 @@ private:
     bool  held_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MUTEX_TRY_GUARD_HPP
+#endif

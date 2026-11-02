@@ -1,9 +1,3 @@
-/* What an OpenGL context is made with (feature 050, contracts/context_options.md):
- * a version, a profile, the WGL_ARB_create_context flags and the context whose
- * objects it shares. All zero is the host's default context, sharing nothing.
- * The share context is a D3DKMT handle in the record a process writes and a
- * device context id in the setup the miniport writes; this carries either. It
- * is decoded from bytes the other side wrote and judged by valid(). */
 #ifndef AV_GL_CONTEXT_OPTIONS_HPP
 #define AV_GL_CONTEXT_OPTIONS_HPP
 
@@ -34,26 +28,14 @@ public:
     Profile  profile() const;
     uint8_t  flags() const;
     uint32_t share_context() const;
-    /* The same options sharing `share_context` instead. */
     GlContextOptions sharing(uint32_t share_context) const;
 
-    /* Every field zero. */
     bool defaults() const;
-    /* Every field zero but the share context: all an OpenCL context's record
-     * carries, naming the OpenGL context whose objects it shares
-     * (cl_khr_gl_sharing). */
     bool shares_only() const;
-    /* A version OpenGL has (1.0-1.5, 2.0-2.1, 3.0-3.3, 4.0-4.6), a defined
-     * profile and only the defined flags; or the defaults. */
     bool valid() const;
-    /* What a context of `sub_api` (SubApi) may carry: OpenGL's are valid(),
-     * OpenCL's shares_only(), and every other API's the defaults. The setup
-     * the device reads and the record the miniport keeps hold this one rule. */
     bool fit_for(uint32_t sub_api) const;
 
-    /* Its eight bytes: major, minor, profile, flags, then the share context. */
     void write(WireWriter &writer) const;
-    /* Reads eight bytes, whatever they hold; valid() judges them. */
     void read(WireReader &reader);
 
 private:
@@ -66,6 +48,6 @@ private:
     uint32_t share_context_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_GL_CONTEXT_OPTIONS_HPP
+#endif

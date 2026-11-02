@@ -1,7 +1,3 @@
-/* Keys a guest names, in any order and of any value, inserted, found, taken
- * and erased by key or by slot: the table agrees with a plain list of what is
- * live after every step, an entry never moves while it lives, its invariants
- * hold, and a failed allocation changes nothing. */
 #include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -64,7 +60,7 @@ bool agrees(const Table &table, const Model &model)
     return true;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {
@@ -107,7 +103,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
             break;
         }
         case 3u: {
-            /* The key as a slot: a hostile slot erases only what is in it. */
             const std::uint32_t slot = key % 8192u;
             for (std::size_t index = 0u; index < model.count(); index++)
                 if (model.slot(index) == slot) {

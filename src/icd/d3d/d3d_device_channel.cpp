@@ -54,8 +54,6 @@ Status D3dDeviceChannel::application_flush()
 {
     AV_SCOPE("D3dDeviceChannel::application_flush");
     const ThreadLockHold release(lock_);
-    /* The flush is the speaking device's: a host whose selected device was
-     * just destroyed has none to flush. */
     if (!stream_.speak_as(device_)) return Status::invalid_state;
     return stream_.application_flush();
 }
@@ -117,8 +115,6 @@ bool D3dDeviceChannel::close()
     return sent;
 }
 
-/* A selection that could not be sent fails the stream, and the writer the
- * stream lends then has no room, so the command fails where it is sent. */
 bool D3dDeviceChannel::close9()
 {
     AV_SCOPE("D3dDeviceChannel::close9");
@@ -170,4 +166,4 @@ bool D3dDeviceChannel::invariants_hold() const
     return locked_.invariants_hold() && stream_.invariants_hold();
 }
 
-}  // namespace av::d3d
+}

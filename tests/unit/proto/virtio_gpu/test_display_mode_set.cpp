@@ -1,7 +1,3 @@
-/* DisplayModeSet: any resolution a display could have, not only the standard
- * ones, round-trips between the device's encode and the driver's decode; the
- * preferred mode is one of the set; and a response that breaks a rule leaves
- * the last good set as it was. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/virtio_gpu/display_mode_set.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -13,8 +9,6 @@ using av::DisplayModeSet;
 using av::Status;
 
 namespace {
-
-/* A response of `count` modes written by hand, as a hostile device would. */
 std::size_t response(std::uint8_t (&bytes)[DisplayModeSet::max_encoded_size + 16u], std::uint32_t type,
                      std::uint32_t count, std::uint32_t preferred, const std::uint32_t *edges)
 {
@@ -22,13 +16,12 @@ std::size_t response(std::uint8_t (&bytes)[DisplayModeSet::max_encoded_size + 16
     std::memcpy(bytes, &type, sizeof type);
     std::memcpy(bytes + 24u, &count, sizeof count);
     std::memcpy(bytes + 28u, &preferred, sizeof preferred);
-    /* Every edge array below holds at most two modes. */
     const std::uint32_t written = count <= 2u ? count : 2u;
     std::memcpy(bytes + 32u, edges, written * 8u);
     return 32u + written * 8u;
 }
 
-}  // namespace
+}
 
 TEST(display_mode_set, an_unusual_resolution_round_trips_and_stays_preferred)
 { DisplayModeSet set;
@@ -65,7 +58,6 @@ TEST(display_mode_set, a_mode_is_offered_once_and_the_set_is_bounded)
   CHECK_STATUS(set.prefer(DisplayModeSet::max_modes), Status::invalid_parameter);
   CHECK_EQ(set.width(DisplayModeSet::max_modes), 0u);
   CHECK(set.invariants_hold());
-  /* An empty set has nothing to say. */
   set.clear();
   std::uint8_t   bytes[DisplayModeSet::max_encoded_size] = {};
   av::WireWriter writer(bytes, sizeof bytes);
@@ -84,13 +76,13 @@ TEST(display_mode_set, a_response_that_breaks_a_rule_is_refused_and_changes_noth
       const std::uint32_t *edges;
       std::size_t          trim;
   } refused[] = {
-      {0x1101u, 2u, 0u, good, 0u},                           /* another response's type */
-      {DisplayModeSet::response_type, 0u, 0u, good, 0u},     /* no mode */
-      {DisplayModeSet::response_type, 2u, 2u, good, 0u},     /* preferred past the count */
-      {DisplayModeSet::response_type, 2u, 0u, good, 1u},     /* the last mode cut short */
-      {DisplayModeSet::response_type, 2u, 0u, repeated, 0u}, /* a mode twice */
-      {DisplayModeSet::response_type, 1u, 0u, zero, 0u},     /* an edge of 0 */
-      {DisplayModeSet::response_type, 1u, 0u, huge, 0u},     /* an edge past the bound */
+      {0x1101u, 2u, 0u, good, 0u},
+      {DisplayModeSet::response_type, 0u, 0u, good, 0u},
+      {DisplayModeSet::response_type, 2u, 2u, good, 0u},
+      {DisplayModeSet::response_type, 2u, 0u, good, 1u},
+      {DisplayModeSet::response_type, 2u, 0u, repeated, 0u},
+      {DisplayModeSet::response_type, 1u, 0u, zero, 0u},
+      {DisplayModeSet::response_type, 1u, 0u, huge, 0u},
       {DisplayModeSet::response_type, DisplayModeSet::max_modes + 1u, 0u, good, 0u},
   };
   for (const auto &row : refused) {
@@ -122,14 +114,12 @@ TEST(display_mode_set, the_refresh_follows_the_modes_and_a_set_without_one_is_60
   CHECK_STATUS(read.decode(bytes, writer.offset()), Status::ok);
   CHECK_EQ(read.refresh_millihz(), 359980u);
   CHECK(read.same_as(set));
-  /* A device older than the refresh ends its answer after the modes; a zero is as good as none. */
   DisplayModeSet old;
   CHECK_STATUS(old.decode(bytes, writer.offset() - DisplayModeSet::refresh_size), Status::ok);
   CHECK_EQ(old.refresh_millihz(), 60000u);
   std::memset(bytes + writer.offset() - DisplayModeSet::refresh_size, 0, DisplayModeSet::refresh_size);
   CHECK_STATUS(old.decode(bytes, writer.offset()), Status::ok);
   CHECK_EQ(old.refresh_millihz(), 60000u);
-  /* A rate out of range refuses the answer. */
   const std::uint32_t slow = 500u;
   std::memcpy(bytes + writer.offset() - DisplayModeSet::refresh_size, &slow, sizeof slow);
   CHECK_STATUS(old.decode(bytes, writer.offset()), Status::malformed);

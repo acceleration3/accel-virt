@@ -14,8 +14,6 @@
 namespace av {
 
 namespace {
-
-/* What the log says of a present the CPU moved, by QueuedPresent::Fallback. */
 constexpr const char *fallback_texts[] = {
     nullptr,
     "virtio-gpu-av: presents are copied through the CPU: the guest swaps their red and blue",
@@ -30,7 +28,7 @@ constexpr const char *fallback_texts[] = {
 static_assert(sizeof fallback_texts / sizeof fallback_texts[0] == static_cast<uint32_t>(QueuedPresent::Fallback::count),
               "every fallback has its words");
 
-}  // namespace
+}
 
 PresentEngine::PresentEngine(Host &host, FenceInterrupts &interrupts)
     : host_(host), interrupts_(interrupts), lock_(nullptr), wake_(nullptr), idle_(nullptr), thread_(nullptr), stopping_(false), holding_(false), moving_(false),
@@ -83,7 +81,6 @@ Status PresentEngine::attach(uint64_t address, const PresentFrames &snapshots, G
     snapshots_ = snapshots;
     const Status mapped = page_.map(address);
     if (mapped != Status::ok) return mapped;
-    /* Known to the swaps of guest RAM before it can move a present. */
     const Status known = lendings.swaps().add(*this);
     if (known != Status::ok) {
         page_.release();
@@ -154,9 +151,6 @@ void PresentEngine::release_moved()
     for (; moved_ != 0u; moved_--, held_--, first_ = (first_ + 1u) % depth) slot(first_).release();
 }
 
-/* Only the main loop changes first_ and held_, so the slot past the held ones
- * is its own to fill without the lock; the thread learns of it once held_
- * counts it. */
 uint32_t PresentEngine::take(ControlRequest &request, uint64_t ticket)
 {
     AV_SCOPE("PresentEngine::take");
@@ -273,4 +267,4 @@ bool PresentEngine::invariants_hold() const
     return thread_ == nullptr || (lock_ != nullptr && wake_ != nullptr && page_.mapped());
 }
 
-}  // namespace av
+}

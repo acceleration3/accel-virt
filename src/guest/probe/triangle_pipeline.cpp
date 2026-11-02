@@ -22,8 +22,6 @@ TrianglePipeline::~TrianglePipeline()
     release();
 }
 
-/* No vertex input, one viewport over the attachment, nothing culled or
- * blended. */
 bool TrianglePipeline::make(ProbeOutcome &outcome, VkRenderPass pass, uint32_t width, uint32_t height)
 {
     AV_SCOPE("TrianglePipeline::make");
@@ -126,4 +124,4 @@ bool TrianglePipeline::invariants_hold() const
     return pipeline_ == VK_NULL_HANDLE || layout_ != VK_NULL_HANDLE;
 }
 
-}  // namespace av
+}

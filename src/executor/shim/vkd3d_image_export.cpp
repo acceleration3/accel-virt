@@ -13,7 +13,6 @@ Vkd3dImageExport::Vkd3dImageExport()
     AV_SCOPE("Vkd3dImageExport::Vkd3dImageExport");
 }
 
-/* fd_ is a member vkd3d-proton writes, so it cannot be a OwnedFd itself. */
 Vkd3dImageExport::~Vkd3dImageExport()
 {
     AV_SCOPE("Vkd3dImageExport::~Vkd3dImageExport");
@@ -57,4 +56,4 @@ const VkImageCreateInfo &Vkd3dImageExport::image()
     return image_;
 }
 
-}  // namespace av
+}

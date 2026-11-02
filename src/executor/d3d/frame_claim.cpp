@@ -28,4 +28,4 @@ bool FrameClaim::out() const
     return __atomic_load_n(&out_, __ATOMIC_ACQUIRE) != 0u;
 }
 
-}  // namespace av
+}

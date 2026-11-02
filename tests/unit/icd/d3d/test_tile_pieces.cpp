@@ -1,8 +1,3 @@
-/* An UpdateTileMappings in pieces (TilePieces): each piece whole regions and
- * the ranges their tiles take, a range running on across regions cut at each
- * region's end and its rest moved on through the heap - unless it reuses one
- * tile - and the update ending where its regions or its ranges do. A region
- * no piece can hold the ranges of stops the update there. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/d3d/tile_mapping_source.hpp"
 #include "icd/d3d/tile_pieces.hpp"
@@ -23,7 +18,6 @@ constexpr std::uint32_t range_null = 0x1u;
 constexpr std::uint32_t range_reuse = 0x4u;
 constexpr std::uint32_t as_many_as_are_left = 0xFFFFFFFFu;
 
-/* An update's regions and ranges as plain arrays. */
 class ScriptedSource final : public TileMappingSource {
 public:
     ScriptedSource(const TileRegion *regions, std::uint32_t region_count, const TileRange *ranges,
@@ -57,7 +51,7 @@ bool same(const TileRange &range, std::uint32_t flags, std::uint32_t offset, std
 TileRegion many_regions[most + 1u];
 TileRange  many_ranges[most + 1u];
 
-}  // namespace
+}
 
 TEST(tile_pieces, an_update_that_fits_is_one_piece_of_itself)
 { const TileRegion regions[1] = {run_at(3u, 4u)};
@@ -136,7 +130,7 @@ TEST(tile_pieces, a_region_no_piece_holds_the_ranges_of_stops_the_update_there)
   CHECK(!pieces.next()); }
 
 TEST(tile_pieces, the_update_ends_where_its_regions_or_its_ranges_run_out)
-{ /* Ranges out mid-region: the region goes, mapped as far as they reach. */
+{
   const TileRegion five[1] = {run_at(0u, 5u)};
   const TileRange three[1] = {{0u, 0u, 3u}};
   const ScriptedSource short_ranges(five, 1u, three, 1u);
@@ -147,7 +141,6 @@ TEST(tile_pieces, the_update_ends_where_its_regions_or_its_ranges_run_out)
   CHECK(same(cut.ranges()[0], 0u, 0u, 3u));
   CHECK(!cut.next());
   CHECK(!cut.cut_short());
-  /* Regions out: the ranges left map nothing. */
   const TileRegion one[1] = {run_at(0u, 1u)};
   const TileRange two[2] = {{0u, 0u, 1u}, {0u, 5u, 1u}};
   const ScriptedSource short_regions(one, 1u, two, 2u);
@@ -155,7 +148,6 @@ TEST(tile_pieces, the_update_ends_where_its_regions_or_its_ranges_run_out)
   CHECK(done.next());
   CHECK_EQ(done.range_count(), 1u);
   CHECK(!done.next());
-  /* None of either is no piece, and nothing cut short. */
   const ScriptedSource nothing(one, 0u, two, 2u);
   TilePieces empty(nothing);
   CHECK(!empty.next());
@@ -174,7 +166,6 @@ TEST(tile_pieces, a_range_of_no_tiles_ends_at_once_and_one_of_all_takes_every_ti
   CHECK_EQ(pieces.range_count(), 2u);
   CHECK(same(pieces.ranges()[0], 0u, 0u, 2u));
   CHECK(same(pieces.ranges()[1], 0u, 2u, 3u));
-  /* A region of no tiles takes no range. */
   const TileRegion none[1] = {run_at(0u, 0u)};
   const ScriptedSource empty_region(none, 1u, ranges, 2u);
   TilePieces taken(empty_region);

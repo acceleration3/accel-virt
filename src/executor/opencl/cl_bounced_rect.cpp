@@ -25,8 +25,6 @@ bool ClBouncedRect::bounces() const
     return refused_;
 }
 
-/* The host lays the rows out in the private memory exactly as it would have in
- * `ptr`, so a row's offset is the same in both. */
 cl_int ClBouncedRect::read(cl_command_queue queue, cl_mem buffer, const size_t *buffer_origin,
                            const size_t *host_origin, const size_t *region, size_t buffer_row_pitch,
                            size_t buffer_slice_pitch, size_t host_row_pitch, size_t host_slice_pitch, void *ptr,
@@ -39,7 +37,6 @@ cl_int ClBouncedRect::read(cl_command_queue queue, cl_mem buffer, const size_t *
     const size_t row = host_row_pitch != 0u ? host_row_pitch : region[0];
     size_t       slice = host_slice_pitch;
     if (slice == 0u && __builtin_mul_overflow(region[1], row, &slice)) return CL_INVALID_VALUE;
-    /* OpenCL's own rule: a slice is whole rows. */
     if (row < region[0] || slice / row < region[1]) return CL_INVALID_VALUE;
     const PitchedExtent extent(region[0], region[1], region[2], row, slice);
     uint64_t            first = 0u, reach = 0u;
@@ -60,4 +57,4 @@ cl_int ClBouncedRect::read(cl_command_queue queue, cl_mem buffer, const size_t *
     return CL_SUCCESS;
 }
 
-}  // namespace av
+}

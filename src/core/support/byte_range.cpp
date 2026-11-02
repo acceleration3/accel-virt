@@ -50,4 +50,4 @@ bool ByteRange::encloses(const ByteRange &inner) const
     return inner.base_ >= base_ && inner.end() <= end();
 }
 
-}  // namespace av
+}

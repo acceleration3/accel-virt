@@ -82,26 +82,22 @@ D3d12HostDevice *MockHostApis::d3d12_device(uint32_t)
     return nullptr;
 }
 
-/* Every GPU this host has shares the one table: no test here has two GPUs
- * presenting at once. */
 SharedSurfaces *MockHostApis::surfaces(uint32_t index)
 {
     questions_++;
     return index < count_ ? &surfaces_ : nullptr;
 }
 
-/* Likewise one table of shares, every GPU's. */
 HostShares *MockHostApis::shares(uint32_t index)
 {
     questions_++;
     return index < count_ ? &shares_ : nullptr;
 }
 
-/* And one memory source, every GPU's. */
 HostMemorySource *MockHostApis::memory_source(uint32_t index)
 {
     questions_++;
     return index < count_ && !memory_withheld_ ? &source_ : nullptr;
 }
 
-}  // namespace av
+}

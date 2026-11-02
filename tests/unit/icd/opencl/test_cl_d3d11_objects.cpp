@@ -1,6 +1,3 @@
-/* What one context made from a Direct3D 11 device keeps: its device, an
- * object per subresource, and acquire and release over a whole list or none of
- * it. */
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -22,7 +19,7 @@ const D3d11Resource buffer(D3d11Resource::Kind::buffer, 0u, 64u, 0u, 0u, 0u, 1u,
 
 cl_mem as_mem(int &object) { return reinterpret_cast<cl_mem>(&object); }
 
-}  // namespace
+}
 
 TEST(cl_d3d11_objects, it_keeps_one_object_per_subresource_and_forgets_it)
 { MockPlatform   platform;
@@ -54,7 +51,6 @@ TEST(cl_d3d11_objects, a_list_is_taken_and_given_whole_or_not_at_all)
   CHECK_STATUS(objects.keep(&second, &other, 0u, buffer, CL_MEM_READ_WRITE), Status::ok);
   const cl_mem both[2] = {as_mem(first), as_mem(second)};
   const cl_mem with_stranger[2] = {as_mem(first), as_mem(stranger)};
-  /* Nothing is taken when one of the list is no object here. */
   CHECK_EQ(objects.take(with_stranger, 2u), CL_INVALID_MEM_OBJECT);
   CHECK(!objects.find(&first)->acquired());
   CHECK_EQ(objects.take(both, 0u), CL_INVALID_VALUE);
@@ -63,16 +59,13 @@ TEST(cl_d3d11_objects, a_list_is_taken_and_given_whole_or_not_at_all)
   CHECK_EQ(objects.take(both, 2u), CL_SUCCESS);
   CHECK(objects.find(&first)->acquired());
   CHECK(objects.find(&second)->acquired());
-  /* Taking one OpenCL already has refuses the list, and changes nothing. */
   CHECK_EQ(objects.take(both, 1u), ClD3d11Objects::already_acquired);
   CHECK_EQ(objects.give(both, 2u), CL_SUCCESS);
   CHECK(!objects.find(&second)->acquired());
-  /* An acquire whose copies failed gives back what it took. */
   CHECK_EQ(objects.take(both, 2u), CL_SUCCESS);
   objects.untake(with_stranger, 2u);
   CHECK(!objects.find(&first)->acquired());
   CHECK(objects.find(&second)->acquired());
-  /* And a release whose copies failed leaves OpenCL what it gave back. */
   CHECK_EQ(objects.give(both, 1u), ClD3d11Objects::not_acquired);
   objects.ungive(with_stranger, 2u);
   CHECK(objects.find(&first)->acquired());
@@ -85,7 +78,6 @@ TEST(cl_d3d11_objects, an_object_without_a_device_is_one_nothing_could_have_made
   CHECK(!objects.invariants_hold());
   objects.share_with(&device);
   CHECK(objects.invariants_hold());
-  /* An object over no resource is one no create made. */
   CHECK_STATUS(objects.keep(&second, nullptr, 0u, buffer, CL_MEM_READ_WRITE), Status::ok);
   CHECK(!objects.invariants_hold()); }
 

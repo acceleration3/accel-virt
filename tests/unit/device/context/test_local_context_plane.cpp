@@ -1,6 +1,3 @@
-/* The contexts a device runs in QEMU's own process: every answer is the
- * table's or the library's, and a reset takes the shared objects with the
- * contexts. */
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/context/local_context_plane.hpp"
@@ -62,7 +59,6 @@ private:
     av::HostBlobTable owners_;
     FenceInterrupts   interrupts_;
     av::WireRecorder  recorder_;
-    /* Before the plane, which closes its domain in the library as it goes. */
     MockExecutorOps   ops_;
     LocalContextPlane plane_;
 };
@@ -80,11 +76,8 @@ av::ContextSetup setup(std::uint32_t doorbell)
     return av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, ring, 12u, fence, doorbell, 0u);
 }
 
-}  // namespace
+}
 
-/* What the library was given is what the capset is described from; no
- * library is a device with nothing to offer, and a table of another ABI is
- * refused. */
 TEST(local_context_plane, answers_what_the_library_it_accepted_offers)
 { Fixture fixture;
   CHECK_STATUS(fixture.plane().accept(nullptr), Status::ok);
@@ -96,9 +89,6 @@ TEST(local_context_plane, answers_what_the_library_it_accepted_offers)
   CHECK_EQ(fixture.plane().sub_apis(), vulkan_only);
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::invalid_state); }
 
-/* Host memory is the library's, in the device's domain under the key the
- * device names it by: none before the domain is open, the library's refusal
- * as no_memory, and a free reaching the same key. */
 TEST(local_context_plane, allocates_and_frees_host_memory_in_the_device_s_domain)
 { Fixture fixture;
   AvHostMemory memory = {-1, 0u, 0u};
@@ -127,8 +117,6 @@ TEST(local_context_plane, allocates_and_frees_host_memory_in_the_device_s_domain
   CHECK_EQ(fixture.ops().live_memory(), 0u);
   fixture.host().close_descriptor(memory.fd); }
 
-/* Frames are the library's: read through the plane from any thread, and
- * none from a plane with no library. */
 TEST(local_context_plane, reads_staged_frames_through_its_library)
 { Fixture fixture;
   const av::SurfacePoint frame(3u, 9u);
@@ -139,7 +127,7 @@ TEST(local_context_plane, reads_staged_frames_through_its_library)
   fixture.ops().serve_frame(3u, 9u, AvFrameView{pixels, 16u, 4u, 1u, 0u});
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
   CHECK(fixture.plane().reads_frames());
-  CHECK(!fixture.plane().map_frame(uuid, frame, 1u, view));   /* no domain until started */
+  CHECK(!fixture.plane().map_frame(uuid, frame, 1u, view));
   CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
   CHECK(!fixture.plane().map_frame(uuid, av::SurfacePoint(3u, 8u), 1u, view));
   CHECK(fixture.plane().map_frame(uuid, frame, 1u, view));
@@ -149,8 +137,6 @@ TEST(local_context_plane, reads_staged_frames_through_its_library)
   CHECK_EQ(fixture.ops().frame_unmaps(), 1u);
   CHECK(!fixture.plane().map_frame(uuid, frame, 1u, view)); }
 
-/* Either lock missing is no_memory; a second initialize after both were made
- * is not a failure. */
 TEST(local_context_plane, initialize_fails_only_when_a_lock_cannot_be_made)
 { { Fixture fixture;
     fixture.host().fail_mutex_at(1u);
@@ -163,9 +149,6 @@ TEST(local_context_plane, initialize_fails_only_when_a_lock_cannot_be_made)
   CHECK_STATUS(fixture.plane().initialize(), Status::ok);
   CHECK(fixture.plane().invariants_hold()); }
 
-/* Create, find, bind and destroy are the table's, reached as the device
- * reaches them, through the ContextPlane; a bind for a context that is not
- * there is refused before any setup is looked at. */
 TEST(local_context_plane, runs_contexts_through_its_table)
 { Fixture fixture;
   av::ContextPlane &plane = fixture.plane();
@@ -183,7 +166,6 @@ TEST(local_context_plane, runs_contexts_through_its_table)
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::ok);
   CHECK(LocalContextPlaneProbe::table(fixture.plane()).find(3u)->binding().bound());
   CHECK(fixture.plane().holds_doorbell(5u));
-  /* Vulkan is no OpenGL: nothing may share it. */
   CHECK_STATUS(fixture.plane().create(6u), Status::ok);
   CHECK(!fixture.plane().can_share(6u, 3u));
   CHECK(fixture.plane().invariants_hold());
@@ -192,10 +174,6 @@ TEST(local_context_plane, runs_contexts_through_its_table)
   CHECK(!fixture.plane().holds_doorbell(5u));
   CHECK_EQ(fixture.plane().live(), 1u); }
 
-/* The device's domain opens in the library as the plane starts, once, on the
- * GPU it starts for; the plane closes it as it goes, after its contexts. A
- * GPU the library has not got is a plane whose contexts are refused, not one
- * that fails to start. */
 TEST(local_context_plane, opens_the_device_s_domain_once_and_closes_it_as_it_goes)
 { MockExecutorOps ops(vulkan_only);
   { MockHost          host;
@@ -224,8 +202,6 @@ TEST(local_context_plane, opens_the_device_s_domain_once_and_closes_it_as_it_goe
   CHECK_STATUS(plane.start(uuid, capset()), Status::ok);
   CHECK_EQ(ops.domains_opened(), 1u); }
 
-/* The guest let go of an object everywhere: the library is told so, in the
- * device's domain. Object 0 is every object. */
 TEST(local_context_plane, a_guest_release_tells_the_library_in_the_device_s_domain)
 { Fixture fixture;
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
@@ -239,7 +215,6 @@ TEST(local_context_plane, a_guest_release_tells_the_library_in_the_device_s_doma
   CHECK_EQ(fixture.ops().shared_releases(), 2u);
   CHECK(fixture.ops().last_shared_release() == 0u); }
 
-/* An image nothing published is no image, from either path. */
 TEST(local_context_plane, an_image_nothing_published_is_neither_exported_nor_read)
 { Fixture fixture;
   CHECK_STATUS(fixture.plane().initialize(), Status::ok);
@@ -249,7 +224,6 @@ TEST(local_context_plane, an_image_nothing_published_is_neither_exported_nor_rea
   std::uint32_t pixels[4] = {};
   CHECK(!fixture.plane().read_image(uuid, 9u, pixels, 8u, 2u, 2u)); }
 
-/* The contexts' line: what they share is the library's to report. */
 TEST(local_context_plane, reports_its_contexts)
 { Fixture fixture;
   CHECK_STATUS(fixture.plane().initialize(), Status::ok);
@@ -260,9 +234,6 @@ TEST(local_context_plane, reports_its_contexts)
   CHECK(std::strstr(writer.dump(), "contexts/0 live=0") != nullptr);
   CHECK(std::strstr(writer.dump(), "shared/0") == nullptr); }
 
-/* Contexts in QEMU's own process read QEMU's own blob table and raise QEMU's
- * own interrupts, and there is no renderer to lose: the hooks a renderer
- * needs change nothing here. */
 TEST(local_context_plane, the_renderers_hooks_change_nothing_in_process)
 { Fixture fixture;
   CHECK_STATUS(fixture.plane().initialize(), Status::ok);
@@ -286,8 +257,6 @@ TEST(local_context_plane, the_renderers_hooks_change_nothing_in_process)
   CHECK_EQ(fixture.host().raised(5u), 0u);
   CHECK(plane.invariants_hold()); }
 
-/* Shared surfaces leave through the library, from any thread; a plane with no
- * library exports none. */
 TEST(local_context_plane, exports_surfaces_through_its_library)
 { Fixture fixture;
   CHECK(!fixture.plane().exports_surfaces());
@@ -296,7 +265,7 @@ TEST(local_context_plane, exports_surfaces_through_its_library)
   fixture.ops().serve_surface(5u, AvExportedImage{11, 0u, 8u, 8u, 32u, 0u, 0x34325241u, 0u, 0u}, 3u, 12);
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
   CHECK(fixture.plane().exports_surfaces());
-  CHECK(!fixture.plane().export_surface(uuid, 5u, 0u, image));   /* no domain until started */
+  CHECK(!fixture.plane().export_surface(uuid, 5u, 0u, image));
   CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
   CHECK(fixture.plane().export_surface(uuid, 5u, 0u, image));
   CHECK_EQ(image.fd, 11);

@@ -1,9 +1,3 @@
-// The loopback build's platform: the guest's whole OpenCL path in this one Linux
-// process - avcl's core, the driver, the device core and the executor library
-// on this machine's GPU, the L4 rig the full-stack tests run on
-// (tests/harness/fullstack) - so the suite runs through the ICD with no VM. What
-// it measures is the rig's speed, which is sanitized and single-threaded, not
-// the VM's; what it is for is its outputs, which must match the host's.
 #include "framework.h"
 
 #include "harness/executor/executor_library_file.hpp"
@@ -27,7 +21,6 @@
 #include <string.h>
 #include <time.h>
 
-// The executor's drivers never give everything back; this run judges outputs, not leaks.
 extern "C" const char *__asan_default_options(void) { return "detect_leaks=0"; }
 
 namespace samples {
@@ -38,8 +31,6 @@ av::clicd::ClIcdRoot *icd = nullptr;
 
 const cl_icd_dispatch &table(const void *object) { return **reinterpret_cast<const cl_icd_dispatch *const *>(object); }
 
-// What the Khronos loader does with each call: the ICD's own enumeration for
-// platforms, and the table in the first argument's first word for the rest.
 cl_int CL_API_CALL get_platform_ids(cl_uint count, cl_platform_id *platforms, cl_uint *found)
 {
     return icd->platform_ids(count, platforms, found);
@@ -198,7 +189,7 @@ const Entry entries[] = {
 };
 #undef SAMPLES_ENTRY
 
-}  // namespace
+}
 
 void log(const char *text)
 {
@@ -234,11 +225,10 @@ void *cl_entry(const char *name)
     return nullptr;
 }
 
-}  // namespace samples
+}
 
 int main(int argc, char **argv)
 {
-    // Found before the executor library opens its own displays, as the full-stack tests do.
     const av::WidestHostGpu gpu;
     if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
         fprintf(stderr, "this host's widest GPU runs no OpenCL\n");

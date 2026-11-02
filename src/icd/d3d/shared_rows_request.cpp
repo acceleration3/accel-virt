@@ -42,4 +42,4 @@ uint32_t SharedRowsRequest::slot_of(uint32_t thread) const
     return most_threads;
 }
 
-}  // namespace av::d3d
+}

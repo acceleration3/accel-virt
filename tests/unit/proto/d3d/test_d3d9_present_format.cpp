@@ -1,7 +1,3 @@
-/* A presentable format both ways it is named (D3d9PresentFormat): the DXGI
- * format a surface is made in and the D3DDDIFORMAT it is scanned out as, read
- * off the one DXGI table, and the format Direct3D 10 to 12 opens a kernel
- * surface as. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/d3d/d3d9_present_format.hpp"
 
@@ -16,12 +12,8 @@ constexpr std::uint32_t ddi_a8r8g8b8 = 21u, ddi_x8r8g8b8 = 22u, ddi_a2b10g10r10 
 constexpr std::uint32_t dxgi_b8g8r8a8_unorm = 87u, dxgi_b8g8r8x8_unorm = 88u, dxgi_r10g10b10a2_unorm = 24u,
                         dxgi_r16g16b16a16_float = 10u, dxgi_r8g8b8a8_unorm = 28u;
 
-}  // namespace
+}
 
-/* Each Direct3D 9 back buffer format presents in its DXGI twin, and comes
- * back out as itself - A8B8G8R8 too, the desktop mode a kernel surface of
- * R8G8B8A8 is named by, which Direct3D 11 once opened as the DXGI value 32
- * (R8G8B8A8_SINT). */
 TEST(d3d9_present_format, a_direct3d_9_format_round_trips)
 { const std::uint32_t formats[] = {ddi_a8r8g8b8, ddi_x8r8g8b8, ddi_a2b10g10r10, ddi_a16b16g16r16f, ddi_a8b8g8r8};
   const std::uint32_t dxgi[] = {dxgi_b8g8r8a8_unorm, dxgi_b8g8r8x8_unorm, dxgi_r10g10b10a2_unorm,
@@ -40,8 +32,6 @@ TEST(d3d9_present_format, a_format_the_kernel_cannot_present_is_refused)
   CHECK(!format.take_ddi(0xFFFFFFFFu));
   CHECK_EQ(format.dxgi(), dxgi_b8g8r8a8_unorm); }
 
-/* sRGB and typeless twins scan out as their plain format; anything else as
- * A8B8G8R8. */
 TEST(d3d9_present_format, every_dxgi_variant_scans_out_as_its_family)
 { CHECK_EQ(D3d9PresentFormat(91u).ddi(), ddi_a8r8g8b8);
   CHECK_EQ(D3d9PresentFormat(90u).ddi(), ddi_a8r8g8b8);
@@ -52,8 +42,6 @@ TEST(d3d9_present_format, every_dxgi_variant_scans_out_as_its_family)
   CHECK_EQ(D3d9PresentFormat(41u).ddi(), ddi_a8b8g8r8);
   CHECK_EQ(D3d9PresentFormat(500u).ddi(), ddi_a8b8g8r8); }
 
-/* Video a plane shows is named to the miniport by its fourcc - NV12 and YUY2
- * - which it reads to tell video from RGB (OverlaySupport), and comes back. */
 TEST(d3d9_present_format, video_is_named_by_its_fourcc_both_ways)
 { constexpr std::uint32_t ddi_nv12 = 0x3231564Eu, ddi_yuy2 = 0x32595559u;
   CHECK_EQ(D3d9PresentFormat(103u).ddi(), ddi_nv12);
@@ -64,10 +52,6 @@ TEST(d3d9_present_format, video_is_named_by_its_fourcc_both_ways)
   CHECK(format.take_ddi(ddi_yuy2));
   CHECK_EQ(format.dxgi(), 107u); }
 
-/* The X8 decision: Direct3D 9 presents an X8R8G8B8 surface as B8G8R8X8 - the
- * kernel scans it out as X8 and the host's flip makes it so - but Direct3D 10
- * to 12 opens a kernel surface of it as B8G8R8A8, the BGRA DWM samples every
- * GDI window as. Every other format is opened as itself. */
 TEST(d3d9_present_format, an_x8_surface_presents_as_x8_and_is_opened_as_bgra)
 { D3d9PresentFormat x8(0u);
   CHECK(x8.take_ddi(ddi_x8r8g8b8));

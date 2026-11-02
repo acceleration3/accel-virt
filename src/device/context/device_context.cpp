@@ -37,9 +37,6 @@ DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostBlobOwners &owner
           AV_SCOPE("DeviceContext::DeviceContext");
       }
 
-/* Out of the order and the pulse before the worker, the ring and the fence
- * page go, so no other stream looks at a ring, and no beat lands on a page,
- * that is no longer there. */
 DeviceContext::~DeviceContext()
 {
     AV_SCOPE("DeviceContext::~DeviceContext");
@@ -60,9 +57,6 @@ Status DeviceContext::post(const WorkItem &item)
     return worker_.post(item);
 }
 
-/* The attachment is posted last: once the worker may read the ring, nothing
- * here can fail. */
-/* Which step of a setup the device refused: the guest only learns that one was. */
 Status DeviceContext::refused(const char *step, Status status) const
 {
     AV_SCOPE("DeviceContext::refused");
@@ -99,9 +93,6 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
     status = staging_.allocate(uint64_t{1} << setup.ring_order(), answer_bytes);
     if (status != Status::ok) return refused("staging", status);
     executor_.configure(setup.sub_api(), capset.gpu().uuid(), setup.options());
-    /* And what a host thread's completion reaches this context through: the
-     * landing pad the worker drains. Given here, on the main loop, because
-     * the executor is made on the worker and has to have it by then. */
     executor_.signals_through(signal_);
     batches_.prepare(reply);
     status = worker_.connect_doorbell(setup.doorbell());
@@ -171,4 +162,4 @@ void DeviceContext::report(StateWriter &writer)
     writer.close();
 }
 
-}  // namespace av
+}

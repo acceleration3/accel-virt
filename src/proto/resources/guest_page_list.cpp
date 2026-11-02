@@ -74,4 +74,4 @@ uint64_t GuestPageList::fingerprint() const
     return digest.value();
 }
 
-}  // namespace av
+}

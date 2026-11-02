@@ -1,8 +1,3 @@
-/* The driver's own release of a shared object, request byte by request byte:
- * a well-formed one tells the contexts with this device's host GPU, then the
- * consumers outside QEMU it was exported to, and is answered; a malformed one
- * is refused and tells nobody, and every other type is left to the rest of
- * the device. */
 #include "device/display/head_planes.hpp"
 #include "device/control/control_request.hpp"
 #include "device/control/shared_commands.hpp"
@@ -34,7 +29,6 @@ namespace {
 constexpr std::uint32_t ok_nodata = 0x1100u, err_invalid_parameter = 0x1205u;
 const std::uint8_t      gpu[16] = {0x10u, 0x20u};
 
-/* No page is registered, so the display clock never shows anything. */
 void unshown(void *) {}
 
 class Fixture {
@@ -46,7 +40,6 @@ public:
         exports_.attach(plane_, gpu, av::ExportGreeting(gpu), heads_);
     }
 
-    /* The response type, or 0 when the core left the request to the rest. */
     std::uint32_t send(std::uint32_t type, const GpuRequestBuilder &builder)
     {
         MockRequest    mock(builder.bytes(), builder.size());
@@ -74,7 +67,7 @@ GpuRequestBuilder release(std::uint64_t id)
     return request;
 }
 
-}  // namespace
+}
 
 TEST(shared_commands, a_release_tells_the_contexts_on_this_gpu_and_is_answered)
 { Fixture fixture;
@@ -82,12 +75,9 @@ TEST(shared_commands, a_release_tells_the_contexts_on_this_gpu_and_is_answered)
   CHECK_EQ(fixture.plane().shared_count(), 1u);
   CHECK(fixture.plane().shared(0u) == 0x2Au);
   CHECK(fixture.plane().shared_gpu() == gpu);
-  /* An id nothing holds is still the driver's word, and still answered. */
   CHECK_EQ(fixture.send(SharedReleaseRequest::type, release(0x2Au)), ok_nodata);
   CHECK_EQ(fixture.plane().shared_count(), 2u); }
 
-/* The consumer that exported the surface is told after the executor let go of
- * it; a malformed release tells it nothing. */
 TEST(shared_commands, a_release_revokes_the_surface_from_the_consumer_that_exported_it)
 { Fixture fixture;
   fixture.plane().export_as(0x2Au, AvExportedImage{-1, 0u, 64u, 64u, 256u, 0u, 0x34325241u, 0u, 0u}, 0u);

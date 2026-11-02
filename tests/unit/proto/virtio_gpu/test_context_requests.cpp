@@ -16,13 +16,13 @@ namespace {
 
 void put32(std::uint8_t *bytes, std::size_t offset, std::uint32_t value) { std::memcpy(bytes + offset, &value, 4); }
 
-}  // namespace
+}
 
 TEST(context_request_decode_destroy, reads_the_context_id_from_the_header)
 { std::uint8_t bytes[ContextRequest::header_size] = {};
   put32(bytes, 0u, 0x0201u);
   put32(bytes, 16u, 42u);
-  bytes[20] = 3u;   /* ring_idx is not the context */
+  bytes[20] = 3u;
   WireReader reader(bytes, sizeof bytes);
   ContextRequest request;
   CHECK_STATUS(request.decode_destroy(reader), Status::ok);

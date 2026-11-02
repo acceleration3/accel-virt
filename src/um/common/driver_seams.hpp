@@ -1,10 +1,3 @@
-/* What every graphics driver's root is built over, whichever API it serves:
- * the process heap, the driver's log - its file and the one KeyedLog every
- * line of the driver goes through, prefixed with the driver's name - D3DKMT
- * through gdi32 and the process's trace. Each driver library's Seams holds
- * one first, so the root and everything else it makes are built over it and
- * gone before it; its fallible half - the D3DKMT wait event every driver's
- * waits need - is what LazyDriver refuses a process for. Translation only. */
 #ifndef AV_UM_DRIVER_SEAMS_HPP
 #define AV_UM_DRIVER_SEAMS_HPP
 
@@ -19,8 +12,6 @@ namespace av {
 
 class DriverSeams {
 public:
-    /* `stem` names the driver's log file (L"avvk") and `prefix` starts each
-     * of its lines ("avvk: "); both are literals. */
     DriverSeams(const wchar_t *stem, const char *prefix);
     DriverSeams(const DriverSeams &) = delete;
     DriverSeams &operator=(const DriverSeams &) = delete;
@@ -40,6 +31,6 @@ private:
     ProcessTrace trace_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_DRIVER_SEAMS_HPP
+#endif

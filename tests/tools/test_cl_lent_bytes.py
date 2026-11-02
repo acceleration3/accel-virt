@@ -1,16 +1,3 @@
-"""Bytes the guest lends rather than sends, on the OpenCL wire.
-
-A transfer's bytes marked `lent` in the profile cross as an offset into the
-context's blob arena whenever every one of them is already there, and the host
-reads or writes them in place: no copy into the command, none back through the
-reply. What the emitter writes for a lent parameter - and only for one - is
-asserted here, and which parameters the real profile lends, since a lent
-parameter is guest memory the guest can change while the host reads it and so
-only plain data may be.
-
-Registries are built in memory and emitted into a temporary directory, as
-test_cl_emit.py does.
-"""
 import pathlib
 import shutil
 import sys
@@ -32,14 +19,12 @@ from test_cl_emit import function_body                           # noqa: E402
 
 CL_XML = ROOT / "third_party" / "khronos" / "cl.xml"
 
-# Every parameter the real profile lends: the six transfers' host memory.
 LENT = {("clEnqueueReadBuffer", "ptr"), ("clEnqueueWriteBuffer", "ptr"),
         ("clEnqueueReadImage", "ptr"), ("clEnqueueWriteImage", "ptr"),
         ("clEnqueueReadBufferRect", "ptr"), ("clEnqueueWriteBufferRect", "ptr")}
 
 
 def transfer(name, cmd_id, role, lent):
-    """A transfer's shape: a queue, a size, and `size` bytes one way."""
     return cl_model.Command(
         name=name, return_type=CType(base="cl_int"), cmd_id=cmd_id, since="CL_VERSION_1_0",
         params=[cl_model.Param("command_queue", CType(base="cl_command_queue"), cl_model.Role.HANDLE,
@@ -50,8 +35,6 @@ def transfer(name, cmd_id, role, lent):
 
 
 class Emitted(unittest.TestCase):
-    """A lent read and write beside the same two not lent."""
-
     @classmethod
     def setUpClass(cls):
         cls.out = pathlib.Path(tempfile.mkdtemp())
@@ -109,8 +92,6 @@ class Emitted(unittest.TestCase):
 
 
 class LoweredFromTheRegistry(unittest.TestCase):
-    """The real profile lends the six transfers and nothing else."""
-
     @classmethod
     def setUpClass(cls):
         if not CL_XML.is_file():

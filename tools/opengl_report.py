@@ -61,14 +61,11 @@ def sample_arguments(args, out):
 
 
 def run_guest(args, out):
-    """The guest's run, and everything it wrote brought back."""
     work = args.work
     guest_shell(work, "ps", f"Remove-Item -Recurse -Force {GUEST_DIR} -ErrorAction SilentlyContinue; "
                             f"New-Item -ItemType Directory -Force {GUEST_DIR}\\out | Out-Null")
     guest_shell(work, "push", str(ROOT / "build" / "guest" / "avglsamples.exe"), GUEST_EXE)
     print("guest: rendering", flush=True)
-    # The user's interactive session: opengl32 loads the display driver's ICD
-    # for a window on the adapter's desktop.
     only = f" --only {args.only}" if args.only else ""
     command = (f"/c {GUEST_EXE} --out {GUEST_DIR}\\out --frames {args.frames} --warmup {args.warmup} "
                f"--width {args.width} --height {args.height}{only} > {GUEST_DIR}\\run.txt 2>&1")
@@ -85,7 +82,6 @@ while ((Get-ScheduledTask avglsamples).State -eq 'Running') {{ Start-Sleep 1 }}
 Get-Content {GUEST_DIR}\\run.txt -ErrorAction SilentlyContinue""", timeout=1800)
     print(output, flush=True)
     (out / "guest.log").write_text(output)
-    # Everything in one gzip-compressed bundle: file name, length, bytes.
     bundle = f"{GUEST_DIR}\\bundle.gz"
     guest_shell(work, "ps", f"""
 $out = [IO.File]::Create('{bundle}')
@@ -121,7 +117,6 @@ $writer.Close()""")
 
 
 def run_loopback(args, out):
-    """The ICD's path on the host: the guest column, less the VM."""
     print("loopback: rendering", flush=True)
     target = out / "guest"
     target.mkdir(parents=True, exist_ok=True)
@@ -146,7 +141,6 @@ def run_host(args, out):
 
 
 def renderer(log):
-    """The `renderer:` line a run printed, or nothing."""
     if not log.exists():
         return None
     for line in log.read_text(errors="replace").splitlines():

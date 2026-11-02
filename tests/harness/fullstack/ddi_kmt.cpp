@@ -52,38 +52,28 @@ void *lend_chunk_ram(void *context, std::uint64_t bytes, std::uint64_t &physical
 {
     return static_cast<DdiKmt *>(context)->lend_pages(bytes, physical);
 }
-/* DXGK_CREATEALLOCATIONFLAGS::Resource, and DXGK_DESTROYALLOCATIONFLAGS::
- * DestroyResource: each is bit 0 of its own Value. */
 constexpr std::uint32_t resource_flag = 1u;
 constexpr std::uint32_t destroy_resource_flag = 1u;
-}  // namespace
+}
 
 namespace {
 
-constexpr std::int32_t  map_aperture_segment = 5;     /* DXGK_OPERATION_MAP_APERTURE_SEGMENT */
-constexpr std::int32_t  unmap_aperture_segment = 6;   /* DXGK_OPERATION_UNMAP_APERTURE_SEGMENT */
-constexpr std::uint32_t accessed_physically = 0x8000u; /* DXGK_ALLOCATIONINFOFLAGS */
-constexpr std::uint32_t virtual_addressing = 0x4u;     /* DXGK_CREATECONTEXTFLAGS */
-/* What dxgkrnl sets for a context a process may hang a hardware queue off,
- * which is every context here: the rig's processes all ask for a doorbell. */
+constexpr std::int32_t  map_aperture_segment = 5;
+constexpr std::int32_t  unmap_aperture_segment = 6;
+constexpr std::uint32_t accessed_physically = 0x8000u;
+constexpr std::uint32_t virtual_addressing = 0x4u;
 constexpr std::uint32_t hw_queue_supported = 0x10u;
 constexpr std::uint32_t first_engine = 1u;
-constexpr std::uint32_t segment_aperture = 0x1u;              /* DXGK_SEGMENTFLAGS */
+constexpr std::uint32_t segment_aperture = 0x1u;
 constexpr std::uint32_t segment_from_system_memory = 0x40u;
-/* VidSch's root for a context: the implicit system memory segment, one page
- * of 512 entries (FakeVidSch::set_root_page_table). */
 constexpr std::uint32_t root_segment = 2u;
 constexpr std::uint64_t root_offset = 0x7000u;
 constexpr std::uint32_t root_entries = 512u;
-constexpr std::int32_t  crtc_vsync = 3;              /* DXGK_INTERRUPT_CRTC_VSYNC */
-constexpr std::int32_t  vsync_enable = 0;            /* DXGK_CRTC_VSYNC_STATE */
+constexpr std::int32_t  crtc_vsync = 3;
+constexpr std::int32_t  vsync_enable = 0;
 constexpr std::int32_t  vsync_disable_no_phase = 2;
-/* A second of the guest's clock, 100 ns a tick, without a blank is a device
- * with no clock running. */
 constexpr std::uint64_t blank_patience = 10000000u;
-/* The guest's clock counts 100 ns; the host's, nanoseconds. */
 constexpr std::uint64_t ns_per_tick = 100u;
-/* Real time the device's clock thread is given to publish a blank. */
 constexpr std::uint32_t clock_patience_ms = 2000u;
 constexpr std::uint16_t subsystem_vendor_offset = 0x2Cu;
 constexpr std::uint16_t subsystem_offset = 0x2Eu;
@@ -107,7 +97,7 @@ std::uint16_t config_u16(const std::uint8_t *config, std::uint16_t offset)
     return static_cast<std::uint16_t>(config[offset] | config[offset + 1u] << 8u);
 }
 
-}  // namespace
+}
 
 DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fdo, FakeDxgkrnlAdapter &dxgkrnl,
                FakeVirtioGpuFunction &function, InterruptPump &pump, MockHost &host)
@@ -122,8 +112,6 @@ DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fd
     platform_.back_pages_with(&lend_chunk_ram, this);
     std::uint64_t frequency = 0u;
     guest_origin_ = performance_counter(frequency);
-    /* A doorbell and its queue are the adapter's, and dxgkrnl gives them back
-     * before the adapter stops. */
     fdo_.on_stopping(
         [](void *context) {
             DdiKmt &kmt = *static_cast<DdiKmt *>(context);
@@ -138,7 +126,6 @@ DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fd
         this);
 }
 
-/* Whatever the process still held after the adapter went away is only memory. */
 DdiKmt::~DdiKmt()
 {
     platform_.back_pages_with(nullptr, nullptr);
@@ -220,8 +207,6 @@ Status DdiKmt::enumerate_adapters(std::uint32_t *adapters, std::uint32_t capacit
     return refuse(Status::ok);
 }
 
-/* KMTQAITYPE_PHYSICALADAPTERDEVICEIDS: dxgkrnl reads the PCI identity from the
- * function's configuration space. */
 Status DdiKmt::query_identity(std::uint32_t adapter, PciIdentity &identity)
 {
     if (adapter != adapter_handle) return refuse(Status::invalid_parameter);
@@ -231,8 +216,6 @@ Status DdiKmt::query_identity(std::uint32_t adapter, PciIdentity &identity)
     return refuse(Status::ok);
 }
 
-/* dxgkrnl answers these from PnP and the registry, neither of which the
- * full-stack rig plays. */
 Status DdiKmt::query_adapter_location(std::uint32_t, PciLocation &location)
 {
     location = PciLocation();
@@ -258,7 +241,6 @@ Status DdiKmt::query_segment_sizes(std::uint32_t, std::uint64_t &dedicated_video
     return refuse(Status::not_supported);
 }
 
-/* KMT_DRIVERVERSION from DRIVERCAPS.WDDMVersion: 0x3200 is 3200. */
 Status DdiKmt::query_driver_version(std::uint32_t adapter, std::uint32_t &version)
 {
     version = 0u;
@@ -268,7 +250,6 @@ Status DdiKmt::query_driver_version(std::uint32_t adapter, std::uint32_t &versio
     return refuse(Status::ok);
 }
 
-/* The miniport's own answer, through DXGADAPTER::DdiQueryAdapterInfo. */
 Status DdiKmt::query_adapter_features(std::uint32_t adapter, UmdAdapterInfo &info)
 {
     if (adapter != adapter_handle) return refuse(Status::invalid_parameter);
@@ -366,10 +347,6 @@ Status DdiKmt::create_with(std::uint32_t device, const std::uint8_t *descriptor,
             DdiSlot::DxgkDdiCreateAllocation)(fdo_.context(), &request));
         if (created != Status::ok) return created;
         slot.resource = request.hResource;
-        /* What dxgkrnl does before the open it runs inside every create: the
-         * caller's own bytes, back over whatever the driver wrote. A rig that
-         * skips this passes a driver that writes the record at create time,
-         * which no caller would ever read (research.md §15). */
         std::memcpy(slot.private_data, descriptor, size);
         slot.driver = info.hAllocation;
         slot.bytes = info.Size;
@@ -381,16 +358,12 @@ Status DdiKmt::create_with(std::uint32_t device, const std::uint8_t *descriptor,
     return refuse(Status::no_space);
 }
 
-/* VidMm backs the allocation and dxgkrnl opens it on the device that made it;
- * a failure destroys what the driver made, as dxgkrnl unwinds a create. */
 Status DdiKmt::admit(Allocation &slot, std::uint32_t device, void *driver_device)
 {
     const std::uint64_t pages = slot.bytes / page_bytes;
     Status status = slot.bytes == 0u || slot.bytes % page_bytes != 0u || pages > max_pages ? Status::no_memory
                                                                                            : Status::ok;
     if (status == Status::ok) status = back(slot);
-    /* The frame list outlives the paging call that attaches it: the MDL the
-     * driver keeps names it until the allocation is freed. */
     if (status == Status::ok) {
         slot.frames = static_cast<std::uint64_t *>(std::malloc(pages * sizeof *slot.frames));
         status = slot.frames != nullptr ? Status::ok : Status::no_memory;
@@ -417,11 +390,6 @@ Status DdiKmt::back(Allocation &slot)
     return slot.block != nullptr ? Status::ok : Status::no_memory;
 }
 
-/* The host GPU imports a chunk of guest RAM through a second mapping of its
- * pages, which only file-backed guest RAM allows - what the runner's shared
- * memory backend gives QEMU - so the driver's own pages come from there while
- * there is room. It is handed out once and never reused, so it is still the
- * zero pages the file began as. */
 void *DdiKmt::lend_pages(std::uint64_t bytes, std::uint64_t &physical)
 {
     if (bytes > chunk_ram_address + chunk_ram_bytes - next_chunk_address_) return nullptr;
@@ -435,9 +403,6 @@ Status DdiKmt::open_on(Allocation &slot, void *driver_device)
     DxgkOpenAllocationInfoRecord info = {};
     info.hAllocation = slot.handle;
     info.pPrivateDriverData = slot.private_data;
-    /* The length the create carried, not the buffer's: the miniport takes 48
-     * bytes or 88 and refuses every other, so a shared allocation could not be
-     * opened at all if this named the whole buffer (feature 053). */
     info.PrivateDriverDataSize = slot.private_size;
     DxgkargOpenAllocationRecord request = {};
     request.NumAllocations = 1u;
@@ -448,8 +413,6 @@ Status DdiKmt::open_on(Allocation &slot, void *driver_device)
     return opened;
 }
 
-/* Everything the harness holds for the slot, and the driver's allocation if
- * it still has one; what the driver refuses to destroy stays its own. */
 void DdiKmt::release(Allocation &slot)
 {
     if (slot.driver != nullptr && slot.opened == nullptr && fdo_.started()) {
@@ -497,9 +460,6 @@ Status DdiKmt::page(Allocation &slot, std::int32_t operation)
 Status DdiKmt::destroy_allocation(std::uint32_t device, std::uint32_t allocation)
 {
     const Allocation *const named = find_allocation(allocation);
-    /* The list D3DKMTDestroyAllocation2 walks holds allocation handles: a
-     * resource named in it is a handle type mismatch, and the caller wanted
-     * destroy_shared_allocation (research.md §17). */
     if (named != nullptr && named->resource != nullptr) return refuse(Status::invalid_parameter);
     return destroy_slot(device, allocation, nullptr);
 }
@@ -523,8 +483,6 @@ Status DdiKmt::destroy_slot(std::uint32_t device, std::uint32_t allocation, void
     if (closed != Status::ok) return closed;
     found->opened = nullptr;
     if (found->opened_only) {
-        /* A second device's open of somebody else's allocation: closing it is
-         * all this slot ever owned. */
         found->driver = nullptr;
         release(*found);
         return refuse(Status::ok);
@@ -533,8 +491,6 @@ Status DdiKmt::destroy_slot(std::uint32_t device, std::uint32_t allocation, void
     DxgkargDestroyAllocationRecord request = {};
     request.NumAllocations = 1u;
     request.pAllocationList = list;
-    /* A resource is taken by naming it, with every allocation in it listed:
-     * the driver refuses one that would leave the resource behind. */
     request.hResource = resource;
     request.Flags = resource != nullptr ? destroy_resource_flag : 0u;
     const Status destroyed = answer(routine<std::int32_t (*)(void *, const DxgkargDestroyAllocationRecord *)>(
@@ -584,8 +540,6 @@ Status DdiKmt::destroy_paging_queue(std::uint32_t queue)
     return refuse(Status::ok);
 }
 
-/* Only the aperture segment is the driver's to map: VidMm keeps an allocation
- * in its own system memory segment without asking. */
 Status DdiKmt::make_resident(std::uint32_t queue, std::uint32_t allocation, std::uint64_t &paging_fence)
 {
     paging_fence = 0u;
@@ -613,7 +567,6 @@ Status DdiKmt::map_gpu_virtual_address(std::uint32_t queue, std::uint32_t alloca
         pages > found->bytes / page_bytes || found->gpu_address != 0u)
         return refuse(Status::invalid_parameter);
     found->gpu_address = next_gpu_address_;
-    /* A guard page between ranges, so an address past one is in none. */
     next_gpu_address_ += (pages + 1u) * page_bytes;
     address = found->gpu_address;
     paging_fence = ++paging_fence_;
@@ -651,8 +604,6 @@ Status DdiKmt::create_context_virtual(std::uint32_t device, const std::uint8_t *
     return create_context_on(device, private_data, size, false, context);
 }
 
-/* Hardware scheduling is the OS's decision, and dxgkrnl gives a process a
- * context a queue may run on only where it is on (feature 049). */
 Status DdiKmt::create_hw_queue_context(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
                                        std::uint32_t &context)
 {
@@ -662,8 +613,6 @@ Status DdiKmt::create_hw_queue_context(std::uint32_t device, const std::uint8_t 
     return create_context_on(device, private_data, size, true, context);
 }
 
-/* dxgkrnl copies the private data into its own memory before the driver sees
- * it, and VidSch gives the context its root before anything is submitted. */
 Status DdiKmt::create_context_on(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
                                  bool hardware_queue, std::uint32_t &context)
 {
@@ -696,9 +645,6 @@ Status DdiKmt::destroy_context(std::uint32_t context)
 {
     Context *const found = find_context(context);
     if (found == nullptr) return refuse(Status::invalid_parameter);
-    /* dxgkrnl lets a context's queued packets finish before it destroys it:
-     * a packet the driver still holds for its host belongs to the context and
-     * would otherwise stay on the node, ahead of every other context's work. */
     const std::uint64_t deadline = now_ms() + patience_ms;
     while (fences_.settled(slot_of(*found)) == Status::not_found && now_ms() < deadline) {
         static_cast<void>(fabric_.deliver());
@@ -713,9 +659,6 @@ Status DdiKmt::destroy_context(std::uint32_t context)
     return destroyed;
 }
 
-/* DXGCONTEXT::SubmitCommand refuses private data larger than the context asked
- * for before anything reaches the driver; whether a context can still take a
- * submission is the driver's answer. */
 Status DdiKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length,
                       const std::uint8_t *private_data, std::uint32_t private_size)
 {
@@ -724,9 +667,6 @@ Status DdiKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint64
         (private_data == nullptr && private_size != 0u))
         return refuse(Status::invalid_parameter);
     if (private_size != 0u) std::memcpy(kernel_copy_, private_data, private_size);
-    /* What the device finished since the process last called the kernel has
-     * interrupted the driver by now on a machine: a process that watched for
-     * its answers in its own memory made no call to deliver them in. */
     if (watching_) pump_.deliver();
     DxgkargSubmitCommandVirtualRecord request = {};
     request.hContext = found->driver;
@@ -748,13 +688,8 @@ Status DdiKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
     if (found == nullptr || found->device != device) return refuse(Status::invalid_parameter);
     const std::uint64_t deadline = now_ms() + patience_ms;
     for (;;) {
-        /* A store the process made reaches the device here, as it reaches it
-         * on the bus while the process waits. */
         static_cast<void>(fabric_.deliver());
         pump_.deliver();
-        /* Everything this context has outstanding, on both paths: what it
-         * queued through a doorbell is answered by the queue's progress, what
-         * it submitted through the driver by the node's fences. */
         const Status settled = fences_.settled(slot_of(*found));
         if (hardware_queue_idle(context) == Status::ok && settled != Status::not_found) return refuse(settled);
         if (now_ms() >= deadline) break;
@@ -764,12 +699,6 @@ Status DdiKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
     return Status::not_found;
 }
 
-/* What this context queued through a doorbell that is still connected is not
- * in the driver's fences, so what dxgkrnl waits on for it is the queue's
- * progress against the value user mode queued. A doorbell that was
- * disconnected is not waited on: what it queued is behind whatever the process
- * submitted through the kernel instead, and the device finishes a ring in
- * order. */
 Status DdiKmt::hardware_queue_idle(std::uint32_t context)
 {
     for (const Doorbell &doorbell : doorbells_) {
@@ -802,27 +731,16 @@ Status DdiKmt::scan_line(std::uint32_t adapter, std::uint32_t source, BeamPositi
     return answered;
 }
 
-/* dxgkrnl turns the blank on for a waiter and off once it is woken. The blanks
- * are the device's (docs/protocol.md, "Display clock"): its clock thread
- * sleeps toward the next on the mock host's clock, which is the guest's own
- * since the rig began - the time the process spends between waits passes for
- * the device too. The wait moves both clocks to the deadline, lets the thread
- * publish the blank and raise the display line - it is asleep toward a later
- * one once it has - and delivers the interrupt. */
 Status DdiKmt::wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source)
 {
     if (adapter != adapter_handle || find_device(device) == nullptr || source != 0u)
         return refuse(Status::invalid_parameter);
     const auto control = routine<std::int32_t (*)(void *, DxgkargControlInterrupt2Record)>(
         DdiSlot::DxgkDdiControlInterrupt2);
-    /* The device's clock ran while nobody waited: what came due by now is on
-     * the page before the waiter asks, as it would be. */
     catch_up();
     const Status enabled = answer(control(fdo_.context(), DxgkargControlInterrupt2Record{crtc_vsync, vsync_enable}));
     if (enabled != Status::ok) return enabled;
     const std::uint32_t before = fences_.vertical_blanks();
-    /* The steps are the time the wait took; the real time the rig spent taking
-     * them is not the guest's, or a slower build would catch fewer blanks. */
     const std::uint64_t entered_ns = now_ns();
     for (std::uint64_t waited = 0u; fences_.vertical_blanks() == before && waited < blank_patience;) {
         std::uint64_t deadline = 0u;
@@ -847,9 +765,6 @@ Status DdiKmt::wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t devi
     return disabled;
 }
 
-/* D3DKMTEscape as dxgkrnl makes it: the handles translated to the driver's, the
- * data copied into the kernel and the copy copied back out whatever the driver
- * answered, as DxgkEscape does. */
 Status DdiKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
                       std::uint32_t size)
 {
@@ -875,12 +790,6 @@ Status DdiKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t
     return escaped;
 }
 
-/* The platform's clock stands still between the rig's own steps, and a guest
- * that spins on it for a budget - the transport watching for a reply before it
- * asks the kernel to wait, or for one the device's own worker thread is still
- * writing - would spin forever. The guest's view is the platform's clock moved
- * on by the real time since the rig began, as a guest's counter runs while the
- * host works: a spin lasts the time it says, whatever thread answers it. */
 std::uint64_t DdiKmt::performance_counter(std::uint64_t &frequency) const
 {
     const std::uint64_t base = platform_.performance_counter(frequency);
@@ -898,8 +807,6 @@ void DdiKmt::catch_up()
     pump_.deliver();
 }
 
-/* The guest's clock since the rig began, in nanoseconds: what the mock host's
- * clock reads, so the device's blanks keep the time the guest keeps. */
 std::uint64_t DdiKmt::guest_ns() const
 {
     std::uint64_t       frequency = 0u;
@@ -911,8 +818,6 @@ std::uint32_t DdiKmt::last_code() const { return last_code_; }
 
 void DdiKmt::end_process()
 {
-    /* A process's hardware queues go before its contexts, as dxgkrnl's do: a
-     * queue names the context it runs on. */
     for (HardwareQueue &queue : hardware_queues_)
         if (queue.handle != 0u) static_cast<void>(destroy_hw_queue(queue.handle));
     for (Context &context : contexts_)
@@ -954,17 +859,12 @@ Status DdiKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, Gues
         slot.handle = next_handle_++;
         slot.context = context;
         slot.driver = request.hHwQueue;
-        /* Read-only to the process, as dxgkrnl maps it; the monitored fence it
-         * is reported on is named by the queue itself here. */
         made = GuestHwQueue(slot.handle, slot.handle, &slot.progress);
         return Status::ok;
     }
     return refuse(Status::no_space);
 }
 
-/* What a hardware-scheduled context submits through, as dxgkrnl carries it:
- * DxgkDdiSubmitCommandToHwQueue with the descriptor as private data and the
- * progress fence value the queue reaches when the device has run it. */
 Status DdiKmt::submit_to_hw_queue(std::uint32_t queue, std::uint64_t commands, std::uint64_t length,
                                   const std::uint8_t *private_data, std::uint32_t private_size,
                                   std::uint64_t progress_fence_id)
@@ -987,8 +887,6 @@ Status DdiKmt::submit_to_hw_queue(std::uint32_t queue, std::uint64_t commands, s
     return submitted;
 }
 
-/* Until the queue's progress fence reaches `value`, which the driver writes
- * when the device has finished what the queue carried. */
 Status DdiKmt::wait_for_hw_queue(std::uint32_t device, std::uint32_t progress_fence, std::uint64_t value)
 {
     const HardwareQueue *const on = find_hardware_queue(progress_fence);
@@ -1010,9 +908,6 @@ Status DdiKmt::destroy_hw_queue(std::uint32_t queue)
 {
     HardwareQueue *const found = find_hardware_queue(queue);
     if (found == nullptr) return refuse(Status::invalid_parameter);
-    /* A queue destroyed takes its doorbells, as dxgkrnl's does: the driver is
-     * told about the doorbell first, because it is the thing that names the
-     * queue. */
     for (Doorbell &doorbell : doorbells_)
         if (doorbell.handle != 0u && doorbell.queue == queue) static_cast<void>(destroy_doorbell(doorbell.handle));
     const Status destroyed =
@@ -1044,8 +939,6 @@ Status DdiKmt::create_doorbell(std::uint32_t queue, std::uint32_t ring, std::uin
         slot.driver = request.hDoorbell;
         slot.page = fabric_.reserve();
         if (slot.page == nullptr) return refuse(Status::no_space);
-        /* Created is not connected: what the process reads says to submit the
-         * other way until it asks for a connection. */
         slot.status = static_cast<std::uint32_t>(DoorbellStatus::disconnected_retry);
         slot.queued = 0u;
         doorbell = slot.handle;
@@ -1066,8 +959,6 @@ Status DdiKmt::connect_doorbell(std::uint32_t doorbell)
     const Status connected = answer(routine<std::int32_t (*)(DxgkargConnectDoorbellRecord *)>(
         DdiSlot::DxgkDdiConnectDoorbell)(&request));
     if (connected != Status::ok) return connected;
-    /* Connected, the page the process holds carries to the device page the
-     * driver just named. */
     fabric_.aim(found->page, request.KernelCpuVirtualAddress);
     found->status = request.Status;
     return Status::ok;
@@ -1082,9 +973,6 @@ Status DdiKmt::disconnect_doorbell(std::uint32_t doorbell, DoorbellStatus says)
     const Status                          gone = answer(routine<std::int32_t (*)(const DxgkargDisconnectDoorbellRecord *)>(
         DdiSlot::DxgkDdiDisconnectDoorbell)(&request));
     if (gone != Status::ok) return gone;
-    /* The page goes with the connection: a store the process makes after this
-     * reaches nothing, which is what dxgkrnl's dummy page is for on a machine
-     * whose device needs one (research.md §10). */
     fabric_.blind(found->page);
     found->status = static_cast<std::uint32_t>(says);
     return Status::ok;
@@ -1145,25 +1033,14 @@ DoorbellFabric &DdiKmt::fabric()
     return fabric_;
 }
 
-/* Feature 053. The miniport is real here - this rig drives DxgkDdiCreateAllocation
- * and DxgkDdiOpenAllocation - so the identity that comes back is the driver's
- * own. What is modelled is dxgkrnl's NT handle table, which is dxgkrnl's and
- * not the driver's, and which this class is standing in for. Nothing about the
- * miniport's half is faked: an open here really calls the driver with the
- * creating device's own bytes, which is the whole thing under test. */
 Status DdiKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *private_data, std::uint32_t size,
                                         std::uint32_t &resource)
 {
     resource = 0u;
     if (private_data == nullptr || size > max_private_data) return refuse(Status::invalid_parameter);
-    /* Asked for as a resource, because that is the only thing a share will
-     * name (research.md §16). */
     std::uint32_t allocation = 0u;
     const Status  created = create_with(device, private_data, size, resource_flag, allocation);
     if (created != Status::ok) return created;
-    /* The open dxgkrnl ran inside the create wrote the minted id into the
-     * slot's copy; the caller keeps the bytes an opening process would be
-     * given (research.md §15). */
     const Allocation *const slot = find_allocation(allocation);
     if (slot == nullptr || slot->resource == nullptr) return refuse(Status::invalid_state);
     std::memcpy(private_data, slot->private_data, size);
@@ -1173,8 +1050,6 @@ Status DdiKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *priv
 
 Status DdiKmt::destroy_shared_allocation(std::uint32_t device, std::uint32_t resource)
 {
-    /* One carrier is one resource holding one allocation, so this rig names
-     * them by the same number; what reaches the driver names the resource. */
     const Allocation *const slot = find_allocation(resource);
     if (slot == nullptr || slot->resource == nullptr) return refuse(Status::invalid_parameter);
     return destroy_slot(device, resource, slot->resource);
@@ -1194,8 +1069,6 @@ Status DdiKmt::share_object(std::uint32_t device, std::uint32_t resource, std::u
     const std::uint32_t     allocation = resource;
     const Allocation *const slot = find_allocation(allocation);
     if (slot == nullptr || slot->device != device) return refuse(Status::invalid_parameter);
-    /* dxgkrnl's handle-table type check: an allocation that is not a resource
-     * is refused, and refused with no message (research.md §16). */
     if (slot->resource == nullptr) return refuse(Status::not_supported);
     if (slot->private_size != AllocationDescriptor::encoded_size + SharedObjectRecord::encoded_size)
         return refuse(Status::not_supported);
@@ -1223,9 +1096,6 @@ Status DdiKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, st
     if (created->private_size > capacity) return refuse(Status::invalid_parameter);
     for (Allocation &slot : allocations_) {
         if (slot.handle != 0u || slot.block != nullptr) continue;
-        /* A second handle on the same driver allocation, opened on the other
-         * device with the *creating* device's bytes - which is exactly what
-         * dxgkrnl carries between two processes. */
         slot.driver = created->driver;
         slot.bytes = created->bytes;
         slot.private_size = created->private_size;
@@ -1245,8 +1115,6 @@ Status DdiKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, st
         }
         std::memcpy(private_data, created->private_data, created->private_size);
         written = created->private_size;
-        /* An open answers a resource of the opening process, as the kernel's
-         * does; this rig names it by the same number as the allocation in it. */
         slot.resource = created->resource;
         resource = slot.handle;
         return refuse(Status::ok);
@@ -1276,11 +1144,10 @@ void DdiKmt::refuse_host_windows() { refuse_host_windows_ = true; }
 
 void DdiKmt::let_process_watch() { watching_ = true; }
 
-/* No display here: every search takes the first adapter it finds. */
 Status DdiKmt::primary_display_luid(std::uint64_t &answered)
 {
     answered = 0u;
     return Status::not_supported;
 }
 
-}  // namespace av
+}

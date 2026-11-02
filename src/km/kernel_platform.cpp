@@ -1,5 +1,3 @@
-/* Before the header's ntddk.h, which it includes and must follow: attaching to
- * another process to take a view out of it is declared only in ntifs.h. */
 #include <ntifs.h>
 
 #include "km/kernel_platform.hpp"
@@ -8,12 +6,10 @@
 
 #include <intrin.h>
 
-/* dispmprt.h, unlike ntddk.h, declares its imports without a C linkage guard. */
 extern "C" {
 #include <dispmprt.h>
 }
 
-/* DEVPKEY_Device_DeviceDesc is defined, not only declared, in this one unit. */
 #include <initguid.h>
 #include <devpkey.h>
 
@@ -60,8 +56,6 @@ void KernelPlatform::release(void *block)
     ExFreePoolWithTag(block, pool_tag_);
 }
 
-/* Any physical address, cached: virtio without ACCESS_PLATFORM addresses guest
- * physical memory directly. */
 void *KernelPlatform::allocate_contiguous(size_t bytes)
 {
     AV_SCOPE("KernelPlatform::allocate_contiguous");
@@ -78,12 +72,6 @@ uint64_t KernelPlatform::physical_address(void *block)
     return static_cast<uint64_t>(MmGetPhysicalAddress(block).QuadPart);
 }
 
-/* A committed pagefile section whose pages are locked through a view of it in
- * system space: they stay where they are until release_pages, as a device
- * holding their addresses needs, and a process maps the section itself (see
- * map_pages_to_process). Demand-zero, so zeroed. The record is the locked MDL,
- * which read_page_frames reads like any other, with the section and its
- * system view ahead of it in the same block. The MDL's byte count is a ULONG. */
 void *KernelPlatform::allocate_pages(uint64_t bytes)
 {
     AV_SCOPE("KernelPlatform::allocate_pages");
@@ -125,7 +113,6 @@ void *KernelPlatform::allocate_pages(uint64_t bytes)
     return mdl;
 }
 
-/* The section itself lives on in any view a process still has of it. */
 void KernelPlatform::release_pages(void *pages)
 {
     AV_SCOPE("KernelPlatform::release_pages");
@@ -137,9 +124,6 @@ void KernelPlatform::release_pages(void *pages)
     ExFreePoolWithTag(block, pool_tag_);
 }
 
-/* MmGetMdlPfnArray is the only way to the pages of a locked MDL; the span the
- * MDL describes bounds the read, because dxgkrnl's page count and ours coming
- * apart would have the device read memory the allocation does not own. */
 Status KernelPlatform::read_page_frames(void *mdl, uint32_t first, uint32_t count, uint64_t *frames)
 {
     AV_SCOPE("KernelPlatform::read_page_frames");
@@ -154,8 +138,6 @@ Status KernelPlatform::read_page_frames(void *mdl, uint32_t first, uint32_t coun
     return Status::ok;
 }
 
-/* RAM is mapped cached, as the kernel's own mapping of it is: a view with any
- * other cache type is a conflict Driver Verifier reports. */
 uint8_t *KernelPlatform::map_frame(uint64_t frame)
 {
     AV_SCOPE("KernelPlatform::map_frame");
@@ -170,11 +152,6 @@ void KernelPlatform::unmap_frame(uint8_t *view)
     MmUnmapIoSpace(view, PAGE_SIZE);
 }
 
-/* The MDL's page array is written from the list, as map_to_process writes a
- * BAR's: the pages are an allocation's, which dxgkrnl keeps locked while the
- * aperture maps them. Write-combined, like every CPU mapping of this adapter's
- * allocations: the memory manager keeps one cache type per page, and a view
- * asked for as cached still read uncached (PresentBlit::copy_pixels). */
 uint8_t *KernelPlatform::map_pages(const GuestPageList &pages, void *&mapping)
 {
     AV_SCOPE("KernelPlatform::map_pages");
@@ -203,11 +180,6 @@ void KernelPlatform::unmap_pages(uint8_t *view, void *mapping)
     IoFreeMdl(static_cast<PMDL>(mapping));
 }
 
-/* The BAR's pages have no PFN database entries for MmBuildMdlForNonPagedPool
- * to read, so the MDL's page array is written by hand; they never move, which
- * is what MDL_PAGES_LOCKED claims. Write-back, because the host maps the same
- * pages write-back and an alias of any other type reads stale data
- * (docs/host-memory.md). */
 Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, PageCaching caching, uint64_t &view,
                                       void *&mapping)
 {
@@ -225,15 +197,6 @@ Status KernelPlatform::map_to_process(uint64_t physical, uint64_t bytes, PageCac
                               mapping);
 }
 
-/* A view of the pages' section: the process's own memory, which stays valid
- * for as long as the process has the view, whatever the driver has let go of
- * since (see unmap_from_process). A 32-bit process addresses only its low
- * 4 GiB; a zero-bits value past 32 is the mask the view must fit under. */
-/* Probed as the process's own access would be, for writing: a page the
- * process may not write - or has not got - raises, and is refused, rather
- * than being locked for a device that will write it. Copy-on-write and
- * demand-zero pages become the process's own here, so the frames read back
- * are the ones its view goes on using. */
 Status KernelPlatform::lock_process_pages(uint64_t address, uint64_t bytes, void *&locked)
 {
     AV_SCOPE("KernelPlatform::lock_process_pages");
@@ -267,9 +230,6 @@ Status KernelPlatform::map_pages_to_process(void *pages, uint64_t &view, void *&
     return map_section_to_process(pages, SECTION_MAP_READ | SECTION_MAP_WRITE, PAGE_READWRITE, view, mapping);
 }
 
-/* The handle can map only for reading, so the process cannot make the view
- * writable: measured in a Windows 11 guest, VirtualProtect to PAGE_READWRITE
- * on such a view fails with ERROR_INVALID_PARAMETER. */
 Status KernelPlatform::map_pages_to_process_read_only(void *pages, uint64_t &view, void *&mapping)
 {
     AV_SCOPE("KernelPlatform::map_pages_to_process_read_only");
@@ -313,8 +273,6 @@ Status KernelPlatform::map_section_to_process(void *pages, ACCESS_MASK access, U
     return Status::ok;
 }
 
-/* A user-mode mapping the process's address space refuses is raised as an
- * exception, not answered with null. */
 Status KernelPlatform::map_mdl_to_process(PMDL mdl, uint64_t bytes, MEMORY_CACHING_TYPE caching, uint64_t &view,
                                           void *&mapping)
 {
@@ -331,9 +289,6 @@ Status KernelPlatform::map_mdl_to_process(PMDL mdl, uint64_t bytes, MEMORY_CACHI
         user = nullptr;
     }
     if (user == nullptr) return Status::no_memory;
-    /* A 32-bit process addresses only its low 4 GiB. The memory manager places
-     * a WoW64 process's views there; one that ended past it would be truncated
-     * by the process into some other address, so it is taken back. */
     if (IoIs32bitProcess(nullptr) && reinterpret_cast<uint64_t>(user) + bytes > wow64_address_limit) {
         MmUnmapLockedPages(user, mdl);
         return Status::no_memory;
@@ -348,22 +303,12 @@ Status KernelPlatform::map_mdl_to_process(PMDL mdl, uint64_t bytes, MEMORY_CACHI
     return Status::ok;
 }
 
-/* A view comes down in the process it was made in, and not at all if that has
- * exited, which took the view with its address space. A device memory view is
- * taken out of a process still running by attaching to it. A view of a pages
- * section is not: a teardown from another process is dxgkrnl stopping the
- * adapter under this one, whose threads may be in the ring this moment - a
- * live driver upgrade faulted DWM and every Direct3D process in
- * TransportRing::read_head. That view stays, memory the section keeps valid,
- * until the process unmaps it or exits. dxgkrnl tears down attached to the
- * process, so it is the calling thread's own process that is asked. */
 void KernelPlatform::unmap_from_process(void *mapping)
 {
     AV_SCOPE("KernelPlatform::unmap_from_process");
     auto *const record = static_cast<ProcessMapping *>(mapping);
     const bool  here = PsGetCurrentProcess() == record->process;
     if (record->mdl == nullptr) {
-        /* A process that unmapped the view itself leaves nothing to take. */
         if (PsGetThreadProcess(PsGetCurrentThread()) == record->process)
             static_cast<void>(ZwUnmapViewOfSection(ZwCurrentProcess(), record->view));
     } else if (here) {
@@ -403,8 +348,6 @@ Irql KernelPlatform::current_irql() const
     return static_cast<Irql>(KeGetCurrentIrql());
 }
 
-/* Driver Verifier's IRQL checking enforces ceilings at the real kernel calls;
- * the declared ceiling is checked by MockPlatform in every unit test. */
 void KernelPlatform::require_irql_at_most(Irql, const char *)
 {
     AV_SCOPE("KernelPlatform::require_irql_at_most");
@@ -422,8 +365,6 @@ void KernelPlatform::release_spin_lock(uintptr_t &word, LockRank, Irql previous)
     KeReleaseSpinLock(&word, static_cast<KIRQL>(previous));
 }
 
-/* KeTryToAcquireSpinLockAtDpcLevel wants DISPATCH already; a refusal gives the
- * raise back so the caller sees no change. */
 bool KernelPlatform::try_acquire_spin_lock(uintptr_t &word, LockRank, Irql &previous)
 {
     AV_SCOPE("KernelPlatform::try_acquire_spin_lock");
@@ -479,9 +420,6 @@ void KernelPlatform::release_wait_mutex(void *storage, LockRank)
     static_cast<void>(KeReleaseMutex(static_cast<PKMUTEX>(storage), FALSE));
 }
 
-/* Precise, not KeQueryInterruptTime: that one moves only on the clock tick -
- * 15.6 ms unless some process asked the system for finer - and the display's
- * phase and scanline are read off this clock (VblankPhase). */
 uint64_t KernelPlatform::interrupt_time() const
 {
     AV_SCOPE("KernelPlatform::interrupt_time");
@@ -489,7 +427,6 @@ uint64_t KernelPlatform::interrupt_time() const
     return KeQueryInterruptTimePrecise(&counter);
 }
 
-/* LONG64 and uint64_t may alias: they differ only in signedness. */
 void KernelPlatform::store_atomic(uint64_t &target, uint64_t value)
 {
     AV_SCOPE("KernelPlatform::store_atomic");
@@ -504,7 +441,6 @@ uint64_t KernelPlatform::add_atomic(uint64_t &target, uint64_t delta)
     return before + delta;
 }
 
-/* Adding zero answers the value as one atomic read. */
 uint64_t KernelPlatform::load_atomic(uint64_t &source)
 {
     AV_SCOPE("KernelPlatform::load_atomic");
@@ -538,8 +474,6 @@ void KernelPlatform::set_wake_event(void *storage)
     static_cast<void>(KeSetEvent(static_cast<PKEVENT>(storage), IO_NO_INCREMENT, FALSE));
 }
 
-/* A negative timeout is relative, so a change of the system time cannot
- * lengthen it. */
 bool KernelPlatform::wait_wake_event(void *storage, uint64_t ticks)
 {
     AV_SCOPE("KernelPlatform::wait_wake_event");
@@ -603,8 +537,6 @@ void KernelPlatform::log_at_bugcheck(const char *message)
     log_.write_now(message);
 }
 
-/* BugcheckRoutine is KBUGCHECK_CALLBACK_ROUTINE with ULONG spelled uint32_t,
- * which on this ABI is the same type in the same register. */
 bool KernelPlatform::register_bugcheck(void *buffer, size_t bytes, BugcheckRoutine routine)
 {
     AV_SCOPE("KernelPlatform::register_bugcheck");
@@ -620,8 +552,6 @@ void KernelPlatform::deregister_bugcheck()
     static_cast<void>(KeDeregisterBugCheckCallback(&bugcheck_record_));
 }
 
-/* UserMode: the handle came from a process, so its access is checked against
- * what that process was granted - an event it may only wait on is refused. */
 Status KernelPlatform::reference_event(uint64_t handle, void *&event)
 {
     AV_SCOPE("KernelPlatform::reference_event");
@@ -647,8 +577,6 @@ void KernelPlatform::release_event(void *event)
     ObDereferenceObject(event);
 }
 
-/* The table's layout is proven identical to DRIVER_INITIALIZATION_DATA by
- * ddi_table_layout.cpp. */
 int32_t KernelPlatform::register_miniport(void *driver_object, void *registry_path,
                                           const DdiTable &table)
 {
@@ -731,8 +659,6 @@ Status KernelPlatform::write_driver_u64(void *physical_device_object, const char
     return write_driver_value(physical_device_object, name, REG_QWORD, &value, sizeof value);
 }
 
-/* Broken invariants mean corrupted state; the kernel's own response to that is
- * a fail-fast, not continuing. */
 void KernelPlatform::report_broken_invariant(const char *what, const char *function)
 {
     AV_SCOPE("KernelPlatform::report_broken_invariant");
@@ -741,4 +667,4 @@ void KernelPlatform::report_broken_invariant(const char *what, const char *funct
     __fastfail(FAST_FAIL_INVALID_ARG);
 }
 
-}  // namespace av
+}

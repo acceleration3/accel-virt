@@ -20,8 +20,6 @@ constexpr std::uint32_t max32 = 0xFFFFFFFFu;
 
 void put32(std::uint8_t *bytes, std::size_t offset, std::uint32_t value) { std::memcpy(bytes + offset, &value, 4); }
 
-/* SET_SCANOUT_BLOB showing the whole of a 1280x800 BGRA framebuffer on head 0
- * out of resource 7, which is what a guest desktop sends. */
 struct Scanout {
     std::uint8_t bytes[SetScanoutBlobRequest::encoded_size] = {};
 
@@ -29,12 +27,12 @@ struct Scanout {
     {
         put32(bytes, 0u, 0x010Du);
         rect(0u, 0u, 1280u, 800u);
-        put32(bytes, 40u, 0u);        /* scanout_id */
-        put32(bytes, 44u, 7u);        /* resource_id */
-        put32(bytes, 48u, 1280u);     /* width */
-        put32(bytes, 52u, 800u);      /* height */
-        put32(bytes, 56u, 1u);        /* B8G8R8A8_UNORM */
-        put32(bytes, 64u, 5120u);     /* strides[0] */
+        put32(bytes, 40u, 0u);
+        put32(bytes, 44u, 7u);
+        put32(bytes, 48u, 1280u);
+        put32(bytes, 52u, 800u);
+        put32(bytes, 56u, 1u);
+        put32(bytes, 64u, 5120u);
     }
 
     void rect(std::uint32_t x, std::uint32_t y, std::uint32_t width, std::uint32_t height)
@@ -72,9 +70,7 @@ struct Flush {
     }
 };
 
-}  // namespace
-
-/* ---- GpuRect ------------------------------------------------------------- */
+}
 
 TEST(gpu_rect_decode, reads_the_four_fields_in_wire_order)
 { std::uint8_t bytes[GpuRect::encoded_size] = {};
@@ -142,10 +138,7 @@ TEST(gpu_rect_inside, an_origin_that_would_wrap_a_32_bit_sum_is_not_inside)
   WireReader reader(bytes, sizeof bytes);
   GpuRect rect;
   CHECK_STATUS(rect.decode(reader), Status::ok);
-  /* x + width is 0x100000000: inside anything only if the sum was truncated. */
   CHECK(!rect.inside(max32, max32)); }
-
-/* ---- SET_SCANOUT_BLOB ---------------------------------------------------- */
 
 TEST(set_scanout_blob_request, reads_the_desktop_a_guest_sends)
 { Scanout wire;
@@ -226,8 +219,6 @@ TEST(set_scanout_blob_request, a_disable_names_resource_zero_and_is_well_formed)
   CHECK_STATUS(wire.decode(request), Status::ok);
   CHECK_EQ(request.resource_id(), 0u);
   CHECK(request.decoded()); }
-
-/* ---- RESOURCE_FLUSH ------------------------------------------------------ */
 
 TEST(flush_request, reads_the_resource_and_the_rectangle)
 { Flush wire;

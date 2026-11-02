@@ -1,7 +1,3 @@
-/* The driver side of one split virtqueue (virtio 1.2 2.7). Descriptor chains
- * are tracked in a private shadow table, never read back from the shared
- * rings, so a device can only lie through the used ring - and every used
- * element is checked against the shadow before anything is freed. */
 #ifndef AV_VIRT_QUEUE_HPP
 #define AV_VIRT_QUEUE_HPP
 
@@ -19,7 +15,6 @@ struct VirtQueueProbe;
 
 class VirtQueue {
 public:
-    /* Enough for control and cursor traffic; the device's maximum is capped here. */
     static constexpr uint16_t max_size = 1024u;
 
     VirtQueue(Platform &platform, uint16_t index);
@@ -27,13 +22,10 @@ public:
     VirtQueue(const VirtQueue &) = delete;
     VirtQueue &operator=(const VirtQueue &) = delete;
 
-    /* `device_max_size` is the device's queue_size: a power of two. */
     [[nodiscard]] Status initialize(uint16_t device_max_size);
     void                 bind_notify_offset(uint64_t offset);
 
-    /* Publishes one chain; `head` identifies it when it comes back. */
     [[nodiscard]] Status add(const VirtqSegment *segments, uint16_t count, uint16_t &head);
-    /* not_found when nothing new has completed. */
     [[nodiscard]] Status take_used(uint16_t &head, uint32_t &written);
 
     uint16_t index() const;
@@ -74,6 +66,6 @@ private:
     friend struct VirtQueueProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VIRT_QUEUE_HPP
+#endif

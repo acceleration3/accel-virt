@@ -39,7 +39,6 @@ uint64_t BatchHeader::fence_id() const
     return fence_id_;
 }
 
-/* A u32 payload plus the header cannot wrap a u64. */
 uint64_t BatchHeader::span() const
 {
     AV_SCOPE("BatchHeader::span");
@@ -80,4 +79,4 @@ Status BatchHeader::decode(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-}  // namespace av
+}

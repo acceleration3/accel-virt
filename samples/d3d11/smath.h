@@ -1,6 +1,3 @@
-// Small vector math shared by the host and guest builds (the guest has no C
-// runtime, so sin/cos/sqrt are ours). Row vectors: v * M, and HLSL declares
-// its matrices row_major to match.
 #pragma once
 
 #include <xmmintrin.h>
@@ -9,7 +6,6 @@ namespace sm {
 
 constexpr float pi = 3.14159265358979323846f;
 
-// The instruction itself: a builtin may become a call to a C runtime the guest lacks.
 inline float sqrt(float x) { return _mm_cvtss_f32(_mm_sqrt_ss(_mm_set_ss(x))); }
 inline float abs(float x) { return x < 0.0f ? -x : x; }
 inline float floor(float x)
@@ -19,7 +15,6 @@ inline float floor(float x)
 }
 inline float fract(float x) { return x - floor(x); }
 
-// sin on [-pi, pi] by a minimax polynomial after range reduction; max error ~1e-6.
 inline float sin(float x)
 {
     const float two_pi = 2.0f * pi;
@@ -36,7 +31,6 @@ inline float max(float a, float b) { return a > b ? a : b; }
 inline float clamp(float x, float a, float b) { return min(max(x, a), b); }
 inline float mix(float a, float b, float t) { return a + (b - a) * t; }
 
-// Deterministic generator: the same particles and noise on both machines.
 struct Random {
     unsigned state = 0x9E3779B9u;
     explicit Random(unsigned seed) : state(seed ? seed : 1u) {}
@@ -125,7 +119,6 @@ inline float4x4 rotate_z(float a)
     r.m[1][0] = -sin(a); r.m[1][1] = cos(a);
     return r;
 }
-// Left-handed, depth 0..1.
 inline float4x4 perspective(float fov_y, float aspect, float z_near, float z_far)
 {
     const float y = 1.0f / tan(fov_y * 0.5f);
@@ -161,4 +154,4 @@ inline float4x4 look_at(float3 eye, float3 at, float3 up)
     return r;
 }
 
-}  // namespace sm
+}

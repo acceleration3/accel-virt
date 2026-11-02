@@ -44,7 +44,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(exported_image_message_encode, lays_out_found_fresh_slot_then_the_layout)
 { GuardedBuffer bytes(ExportedImageMessage::encoded_size);
@@ -61,7 +61,6 @@ TEST(exported_image_message_encode, lays_out_found_fresh_slot_then_the_layout)
   CHECK(layout.at(32u, 8u) == 0x0100000000000002u);
   CHECK(bytes.guards_intact()); }
 
-/* Nothing found is all zeros, with no descriptor. */
 TEST(exported_image_message_encode, nothing_found_is_all_zeros)
 { std::uint8_t bytes[ExportedImageMessage::encoded_size];
   std::memset(bytes, 0xEE, sizeof bytes);
@@ -72,7 +71,6 @@ TEST(exported_image_message_encode, nothing_found_is_all_zeros)
   CHECK_STATUS(none.encode(bytes, sizeof bytes), Status::ok);
   for (const std::uint8_t byte : bytes) CHECK_EQ(byte, 0u); }
 
-/* A dma-buf comes with the message only when the image is found and fresh. */
 TEST(exported_image_message, carries_a_descriptor_only_when_found_and_fresh)
 { CHECK_EQ(image(true).descriptors(), 1u);
   CHECK_EQ(image(false).descriptors(), 0u);
@@ -96,8 +94,6 @@ TEST(exported_image_message, round_trips_through_its_encoding)
       CHECK_EQ(decoded.modifier(), original.modifier());
   } }
 
-/* A found image with no size, no stride or a slot past the last is what no
- * executor exports; the sender is refused as the receiver would refuse it. */
 TEST(exported_image_message_encode, refuses_what_decode_would_refuse)
 { std::uint8_t bytes[ExportedImageMessage::encoded_size] = {};
   CHECK_STATUS(ExportedImageMessage(true, ExportedImageMessage::slots, 1u, 1u, 4u, 0u, xr24, 0u).encode(bytes, sizeof bytes),
@@ -116,7 +112,6 @@ TEST(exported_image_message_encode, refuses_what_decode_would_refuse)
   CHECK(short_buffer.guards_intact());
   CHECK_STATUS(image().encode(nullptr, ExportedImageMessage::encoded_size), Status::too_large); }
 
-/* Every field that can be wrong, alone, and the message left as it was. */
 TEST(exported_image_message_decode, refuses_each_malformed_field_and_changes_nothing)
 { std::uint8_t valid[ExportedImageMessage::encoded_size] = {};
   CHECK_STATUS(image(true, 1u).encode(valid, sizeof valid), Status::ok);
@@ -125,12 +120,12 @@ TEST(exported_image_message_decode, refuses_each_malformed_field_and_changes_not
       std::uint32_t value;
   };
   const Case cases[] = {
-      {0u, 2u},                               /* found neither 0 nor 1 */
-      {4u, 2u},                               /* fresh neither 0 nor 1 */
-      {8u, ExportedImageMessage::slots},      /* a slot past the last */
-      {12u, 0u},                              /* no width */
-      {16u, 0u},                              /* no height */
-      {20u, 0u},                              /* no stride */
+      {0u, 2u},
+      {4u, 2u},
+      {8u, ExportedImageMessage::slots},
+      {12u, 0u},
+      {16u, 0u},
+      {20u, 0u},
   };
   for (const Case &test : cases) {
       std::uint8_t bytes[sizeof valid];
@@ -141,14 +136,12 @@ TEST(exported_image_message_decode, refuses_each_malformed_field_and_changes_not
       CHECK_EQ(decoded.slot(), 0u);
       CHECK(!decoded.fresh());
   }
-  /* Not found, but with anything but zeros after. */
   for (std::size_t offset = 4u; offset < ExportedImageMessage::encoded_size; offset += 4u) {
       std::uint8_t bytes[ExportedImageMessage::encoded_size] = {};
       bytes[offset] = 1u;
       ExportedImageMessage decoded;
       CHECK_STATUS(decoded.decode(bytes, sizeof bytes, 0u), Status::malformed);
   }
-  /* The descriptor count must be what the flags say. */
   ExportedImageMessage decoded;
   CHECK_STATUS(decoded.decode(valid, sizeof valid, 0u), Status::malformed);
   CHECK_STATUS(decoded.decode(valid, sizeof valid, 2u), Status::malformed);

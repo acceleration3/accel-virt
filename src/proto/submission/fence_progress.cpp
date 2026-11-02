@@ -21,8 +21,6 @@ void FenceProgress::driver_submits()
 {
     AV_SCOPE("FenceProgress::driver_submits");
     driver_submits_ = true;
-    /* What user mode queued while it had the doorbell is not known here, and
-     * what it completed is: the driver starts again from that. */
     if (completed_ > submitted_) submitted_ = completed_;
 }
 
@@ -85,9 +83,7 @@ bool     FenceProgress::faulted() const
 bool FenceProgress::invariants_hold() const
 {
     AV_SCOPE("FenceProgress::invariants_hold");
-    /* While user mode submits, what was submitted is not this object's to
-     * know, and there is nothing left to order the completion against. */
     return !driver_submits_ || completed_ <= submitted_;
 }
 
-}  // namespace av
+}

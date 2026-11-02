@@ -1,4 +1,3 @@
-/* One acquisition of a SpinLock, released when the scope ends. */
 #ifndef AV_SPIN_LOCK_GUARD_HPP
 #define AV_SPIN_LOCK_GUARD_HPP
 
@@ -20,6 +19,6 @@ private:
     Irql      previous_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SPIN_LOCK_GUARD_HPP
+#endif

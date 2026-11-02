@@ -15,18 +15,13 @@ namespace {
 
 const PciIdentity stock(0x1AF4u, 0x1050u, 0x1AF4u, 0x1100u);
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
-/* virtio-gpu-av-pci presenting the host's GPUs, and a real card of the same
- * model passed through beside them. */
 const PciIdentity on_radeon(0x1002u, 0x7550u, 0x1AF4u, 0x5256u);
 const PciIdentity on_raphael(0x1002u, 0x13C0u, 0x1AF4u, 0x5256u);
 const PciIdentity on_geforce(0x10DEu, 0x2C05u, 0x1AF4u, 0x5256u);
 const PciIdentity real_radeon(0x1002u, 0x7550u, 0x1002u, 0x0E3Bu);
 
-}  // namespace
+}
 
-/* Every adapter presenting the device's subsystem is avgpu's, whatever GPU it
- * presents; the stock virtio-gpu, Basic Render and a real card of the same
- * model are not, and are closed at once. */
 TEST(avgpu_adapters, holds_every_avgpu_adapter_and_closes_every_other)
 { MockKmt kmt;
   kmt.add_adapter(basic_render, 3100u);
@@ -48,17 +43,13 @@ TEST(avgpu_adapters, holds_every_avgpu_adapter_and_closes_every_other)
     CHECK(adapters.identity(1u).same_as(on_raphael));
     CHECK(adapters.adapter(0u) != 0u && adapters.adapter(1u) != 0u);
     CHECK(adapters.adapter(0u) != adapters.adapter(1u));
-    /* Past the end is nothing. */
     CHECK_EQ(adapters.adapter(2u), 0u);
     CHECK_EQ(adapters.luid(2u), 0u);
     CHECK(!adapters.identity(2u).same_subsystem_as(on_radeon));
     CHECK(!adapters.primary(0u)); }
-  CHECK_EQ(kmt.open_objects(), 0u);   /* the destructor closed both */
+  CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* The kernel's order changes from boot to boot; the adapter the primary
- * display is on is the one DXGI lists first and the one a single-device ICD
- * shows, so it comes first and the rest keep their order. */
 TEST(avgpu_adapters, the_primary_displays_adapter_comes_first_and_the_rest_keep_their_order)
 { MockKmt kmt;
   kmt.add_adapter(on_raphael, 3200u);
@@ -81,13 +72,12 @@ TEST(avgpu_adapters, the_primary_displays_adapter_comes_first_and_the_rest_keep_
   CHECK(!adapters.primary(1u));
   std::uint64_t luid = 0u;
   CHECK_STATUS(kmt.adapter_luid(adapters.adapter(0u), luid), Status::ok);
-  CHECK_EQ(luid, 0x33u);   /* the handle moved with its facts */
-  /* A primary display on a GPU that is not avgpu's leaves the kernel's order. */
+  CHECK_EQ(luid, 0x33u);
   kmt.set_primary_display_luid(0x77u);
   CHECK_STATUS(adapters.learn(), Status::ok);
   CHECK_EQ(adapters.luid(0u), 0x11u);
   CHECK(!adapters.primary(0u));
-  CHECK_EQ(kmt.open_objects(), 3u);   /* the first learn's handles were let go */
+  CHECK_EQ(kmt.open_objects(), 3u);
   adapters.close();
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
@@ -105,7 +95,6 @@ TEST(avgpu_adapters, finds_an_adapter_by_its_luid_and_none_by_zero)
   CHECK_EQ(adapters.index_of(0x99u), 2u);
   CHECK_EQ(adapters.index_of(0u), 2u); }
 
-/* A taken handle is the taker's to close: the list never closes it again. */
 TEST(avgpu_adapters, a_taken_adapter_is_left_open_for_the_taker)
 { MockKmt kmt;
   kmt.add_adapter(on_radeon, 3200u);
@@ -117,9 +106,9 @@ TEST(avgpu_adapters, a_taken_adapter_is_left_open_for_the_taker)
     CHECK(taken != 0u);
     CHECK(adapters.invariants_hold());
     CHECK_EQ(adapters.adapter(1u), 0u);
-    CHECK_EQ(adapters.take(1u), 0u);   /* only once */
+    CHECK_EQ(adapters.take(1u), 0u);
     CHECK_EQ(adapters.take(2u), 0u);
-    CHECK_EQ(adapters.count(), 2u);    /* still listed, with its facts */
+    CHECK_EQ(adapters.count(), 2u);
     CHECK(adapters.luid(1u) != 0u); }
   CHECK_EQ(kmt.open_objects(), 1u);
   CHECK_STATUS(kmt.close_adapter(taken), Status::ok);
@@ -133,7 +122,7 @@ TEST(avgpu_adapters, an_adapter_whose_luid_windows_will_not_give_is_held_without
   CHECK_STATUS(adapters.learn(), Status::ok);
   CHECK_EQ(adapters.count(), 1u);
   CHECK_EQ(adapters.luid(0u), 0u);
-  CHECK_EQ(adapters.index_of(0u), 1u);   /* and no LUID names it */
+  CHECK_EQ(adapters.index_of(0u), 1u);
   CHECK(adapters.invariants_hold()); }
 
 TEST(avgpu_adapters, a_refused_enumeration_or_identity_holds_nothing_of_it)
@@ -162,7 +151,7 @@ TEST(avgpu_adapters, hostile_enumerations_claiming_too_many_or_a_zero_handle)
   CHECK(adapters.invariants_hold());
   kmt.zero_next(MockKmt::Call::enumerate_adapters);
   CHECK_STATUS(adapters.learn(), Status::ok);
-  CHECK_EQ(adapters.count(), 1u);   /* the zero handle was the Radeon's slot */
+  CHECK_EQ(adapters.count(), 1u);
   CHECK(adapters.identity(0u).same_as(on_raphael));
   adapters.close();
   CHECK_EQ(kmt.open_objects(), 0u);

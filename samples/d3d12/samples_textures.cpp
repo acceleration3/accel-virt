@@ -1,12 +1,9 @@
-// texturearray, texturecubemap, distancefieldfonts, textoverlay, debugmarker, occlusionquery, multithreading
 #include "framework.h"
 
 
 namespace samples {
 
 namespace {
-
-// ---------------------------------------------------------------- small math and noise
 
 float saturate(float x) { return clamp(x, 0.0f, 1.0f); }
 float smooth01(float t) { return t * t * (3.0f - 2.0f * t); }
@@ -97,8 +94,6 @@ float4 transform4(const float4x4 &m, float3 p)
     return r;
 }
 
-// ---------------------------------------------------------------- pipeline state helpers
-
 enum class Blend { alpha, additive, no_color };
 
 void set_blend(D3D12_GRAPHICS_PIPELINE_STATE_DESC &desc, Blend mode)
@@ -122,9 +117,6 @@ void set_depth(D3D12_GRAPHICS_PIPELINE_STATE_DESC &desc, bool test, bool write,
     desc.DepthStencilState.DepthFunc = func;
 }
 
-// A colour target (with its render target view and a shader resource view in
-// its own table) and a depth buffer, for off-screen passes. The colour starts
-// in PIXEL_SHADER_RESOURCE; draw() brackets a pass with the transitions.
 struct RenderTexture {
     ID3D12Resource             *texture = nullptr;
     ID3D12Resource             *depth_texture = nullptr;
@@ -173,8 +165,6 @@ struct RenderTexture {
     }
 };
 
-// ---------------------------------------------------------------- mesh building
-
 void paint(Mesh &mesh, float3 color, float mask)
 {
     for (uint32_t i = 0; i < mesh.vertex_count; i++) {
@@ -183,7 +173,6 @@ void paint(Mesh &mesh, float3 color, float mask)
     }
 }
 
-// Many parts, transformed, into one mesh.
 struct MeshBuilder {
     Mesh     mesh;
     uint32_t vertex_capacity = 0, index_capacity = 0;
@@ -219,7 +208,6 @@ struct MeshBuilder {
         }
         for (uint32_t i = 0; i < part.index_count; i++) mesh.indices[mesh.index_count++] = base + part.indices[i];
     }
-    // Adds the part and frees it.
     void take(Mesh part, const float4x4 &transform)
     {
         add(part, transform);
@@ -234,14 +222,11 @@ struct MeshBuilder {
     }
 };
 
-// A surface of revolution about y. `profile` holds (radius, height) from the bottom up; a
-// repeated point makes a hard edge.
 Mesh lathe_mesh(const float2 *profile, uint32_t count, uint32_t sides, float3 color)
 {
     Mesh mesh;
     mesh.vertices = static_cast<Vertex *>(allocate(sizeof(Vertex) * count * (sides + 1)));
     mesh.indices = static_cast<uint32_t *>(allocate(sizeof(uint32_t) * (count - 1) * sides * 6));
-    // The normal of the segment from point i to i + 1, (0, 0) when the two points coincide.
     auto segment_normal = [&](uint32_t i) -> float2 {
         const float dr = profile[i + 1].x - profile[i].x, dy = profile[i + 1].y - profile[i].y;
         const float l = sqrt(dr * dr + dy * dy);
@@ -252,7 +237,6 @@ Mesh lathe_mesh(const float2 *profile, uint32_t count, uint32_t sides, float3 co
         const float2 after = i + 1 < count ? segment_normal(i) : float2{0, 0};
         const bool hard_before = i > 0 && before.x == 0 && before.y == 0;
         const bool hard_after = i + 1 < count && after.x == 0 && after.y == 0;
-        // A duplicated point is a hard edge: each copy takes the normal of its own side only.
         float2 n = hard_before ? after : hard_after ? before : float2{before.x + after.x, before.y + after.y};
         const float nl = sqrt(n.x * n.x + n.y * n.y);
         if (nl > 0) n = {n.x / nl, n.y / nl};
@@ -284,7 +268,6 @@ float3 bezier(float3 p0, float3 p1, float3 p2, float3 p3, float t)
     return p0 * (u * u * u) + p1 * (3 * u * u * t) + p2 * (3 * u * t * t) + p3 * (t * t * t);
 }
 
-// A tube along a cubic Bezier lying in the xy plane, its radius going from r0 to r1.
 Mesh tube_mesh(float3 p0, float3 p1, float3 p2, float3 p3, float r0, float r1, uint32_t segments, uint32_t sides,
                float3 color)
 {
@@ -320,9 +303,6 @@ Mesh tube_mesh(float3 p0, float3 p1, float3 p2, float3 p3, float r0, float r1, u
     return mesh;
 }
 
-// ---------------------------------------------------------------- the built-in 5x7 font
-
-// Columns left to right, bit 0 the top row: ASCII 32..126.
 const uint8_t font5x7[95][5] = {
     {0x00, 0x00, 0x00, 0x00, 0x00}, {0x00, 0x00, 0x5F, 0x00, 0x00}, {0x00, 0x07, 0x00, 0x07, 0x00},
     {0x14, 0x7F, 0x14, 0x7F, 0x14}, {0x24, 0x2A, 0x7F, 0x2A, 0x12}, {0x23, 0x13, 0x08, 0x64, 0x62},
@@ -371,14 +351,12 @@ uint32_t text_length(const char *text)
     return n;
 }
 
-// "+1.25" / "-0.50": always signed, two decimals.
 void append_signed(char *to, size_t capacity, float value)
 {
     append_text(to, capacity, value <= -0.005f ? "-" : "+");
     append_number(to, capacity, abs(value), 2);
 }
 
-// Screen-space text from the 5x7 font: one dynamic vertex buffer rebuilt each frame.
 const char *const bitmap_text_source = R"(
 cbuffer Screen : register(b0) { float4 screen; float4 color; };
 Texture2D atlas : register(t0);
@@ -450,7 +428,6 @@ public:
             count_++;
         }
     }
-    // The glyphs go into this frame's upload ring, read as a vertex buffer.
     void draw(Gpu &gpu, float4 color = {1, 1, 1, 1})
     {
         if (count_ == 0) return;
@@ -488,15 +465,12 @@ private:
     uint32_t             count_ = 0;
 };
 
-// Pixel position of a world point, as the text overlay places its labels.
 float2 project(const float4x4 &world_view_projection, float3 p, const Gpu &gpu)
 {
     const float4 clip = transform4(world_view_projection, p);
     return {(clip.x / clip.w * 0.5f + 0.5f) * static_cast<float>(gpu.width),
             (0.5f - clip.y / clip.w * 0.5f) * static_cast<float>(gpu.height)};
 }
-
-// ================================================================ texturearray
 
 const char *const texturearray_source = R"(
 cbuffer Frame : register(b0) { row_major float4x4 view_projection; row_major float4x4 world[7]; float4 layer[7]; };
@@ -513,7 +487,6 @@ Out vs(In v, uint instance : SV_InstanceID) {
 float4 ps(Out p) : SV_Target { return layers.Sample(filter, p.uv); }
 )";
 
-// One texel of each of the seven layers: snow, grass, water, moss, sandstone, gravel, lava.
 uint32_t array_texel(int layer, int x, int y, int size)
 {
     const float u = static_cast<float>(x) / static_cast<float>(size), v = static_cast<float>(y) / static_cast<float>(size);
@@ -567,7 +540,6 @@ struct TextureArrayFrame {
     float4   layer[7];
 };
 
-// Seven textures in one Texture2DArray, each instance of one quad picking its slice.
 class TextureArray final : public Sample {
 public:
     const char *name() const override { return "texturearray"; }
@@ -623,9 +595,6 @@ private:
     Texture              array_;
 };
 
-// ================================================================ texturecubemap
-
-// A night plaza: tiled ground, a lit balustrade, and towers with windows under a dark sky.
 float3 city_environment(float3 d)
 {
     const float horizontal = sqrt(d.x * d.x + d.z * d.z);
@@ -673,7 +642,6 @@ float3 city_environment(float3 d)
     return float3{0.02f, 0.025f, 0.05f} + float3{0.05f, 0.05f, 0.07f} * sky + float3{1, 1, 1} * (star > 0.9993f ? 0.8f : 0.0f);
 }
 
-// D3D's cube faces in order +x, -x, +y, -y, +z, -z; u right, v down.
 float3 cube_direction(int face, float u, float v)
 {
     switch (face) {
@@ -731,7 +699,6 @@ struct CubemapFrame {
     float4   eye, right, up, forward;
 };
 
-// A TextureCube as a skybox and in a mirror sphere's reflection.
 class TextureCubemap final : public Sample {
 public:
     const char *name() const override { return "texturecubemap"; }
@@ -805,13 +772,10 @@ private:
     Texture              cube_;
 };
 
-// ================================================================ distancefieldfonts
-
 struct Segment {
     float ax, ay, bx, by;
 };
 
-// The glyph's lit pixels joined to their lit neighbours: a stroke skeleton for a smooth, bold letter.
 uint32_t glyph_skeleton(char c, Segment *out)
 {
     uint32_t n = 0;
@@ -867,14 +831,12 @@ float4 bitmap_ps(Out p) : SV_Target { return float4(1, 1, 1, atlas.Sample(filter
 )";
 
 struct DistanceFieldFrame {
-    float4 place;   // x: pixels per glyph unit, yz: pixel offset
+    float4 place;
     float4 screen;
     float4 outline_color;
     float4 outline;
 };
 
-// A signed distance field atlas, made on the CPU from the 5x7 font, drawn sharp with an
-// outline at any scale; below it, the same glyphs as a plain coverage bitmap, magnified.
 class DistanceFieldFonts final : public Sample {
 public:
     const char *name() const override { return "distancefieldfonts"; }
@@ -965,7 +927,6 @@ private:
         release_memory(sdf);
         release_memory(bitmap);
     }
-    // One quad per glyph cell, in glyph units from the text's top-left.
     void build_text(Gpu &gpu, const char *line)
     {
         const uint32_t n = text_length(line);
@@ -997,9 +958,6 @@ private:
     float                    text_width_ = 1.0f;
 };
 
-// ================================================================ textoverlay
-
-// A riveted metal panel with a round teal hatch; alpha is the specular strength.
 uint32_t panel_texel(int x, int y, int size)
 {
     const float u = (x + 0.5f) / size * 2.0f - 1.0f, v = (y + 0.5f) / size * 2.0f - 1.0f;
@@ -1087,8 +1045,6 @@ struct TextOverlayFrame {
     float4   light, eye, screen;
 };
 
-// Screen text over a 3D scene: a bitmap font written into the frame's upload
-// ring, alpha blended, with labels following the projected corners of a textured cube.
 class TextOverlay final : public Sample {
 public:
     const char *name() const override { return "textoverlay"; }
@@ -1193,7 +1149,6 @@ private:
     BitmapText           text_;
 };
 
-// WKPDID_D3DDebugObjectName, spelled out: taking it from d3dcommon.h needs INITGUID or dxguid.lib.
 const GUID debug_object_name = {0x429b8c22, 0x9188, 0x4b0c, {0x87, 0x42, 0xac, 0xb0, 0xbf, 0x85, 0xc2, 0x00}};
 
 const char *const debugmarker_source = R"(
@@ -1266,7 +1221,6 @@ Mesh recolored(Mesh mesh, float3 color)
     return mesh;
 }
 
-// The debug marker scene's named parts; the glowing ones are drawn again into the glow target.
 enum ScenePart { hill, rocks, tree, stems, blue_caps, red_caps, grass, chest_box, chest_fittings, part_count };
 
 const char16_t *const part_events[part_count] = {u"Draw \"hill\"", u"Draw \"rocks\"", u"Draw \"tree\"",
@@ -1370,9 +1324,6 @@ struct DebugMarkerFrame {
     float4   light;
 };
 
-// PIX-style events and markers on the command list around every pass and draw, debug object
-// names on the resources; the scene is toon shaded on the left, wireframe on the right
-// (scissored), with a blurred glow pass rendered off-screen and added on top.
 class DebugMarker final : public Sample {
 public:
     const char *name() const override { return "debugmarker"; }
@@ -1474,7 +1425,6 @@ public:
     }
 
 private:
-    // PIX's legacy event encoding: the payload is a UTF-16 string.
     static constexpr UINT event_unicode = 0;
 
     void name_object(ID3D12Object *object, const char *label)
@@ -1507,9 +1457,6 @@ private:
     RenderTexture        glow_;
 };
 
-// ================================================================ occlusionquery
-
-// A teapot of revolved body and lid, with a spout and a handle swept along curves.
 Mesh teapot_mesh(float3 color)
 {
     const float2 body[] = {{0, 0},       {1.4f, 0},     {1.4f, 0},     {1.72f, 0.12f}, {1.95f, 0.45f}, {2.02f, 0.8f},
@@ -1558,8 +1505,6 @@ struct OcclusionFrame {
     float4   light, eye, params;
 };
 
-// Two objects either side of a translucent plane; occlusion queries in a query heap, run in a
-// depth-only pass and resolved into a readback buffer, decide whether each is shaded or drawn dark.
 class OcclusionQuery final : public Sample {
 public:
     const char *name() const override { return "occlusionquery"; }
@@ -1617,8 +1562,6 @@ public:
     void render(Gpu &gpu, float time) override
     {
         auto *l = gpu.list;
-        // As the original: the scene shows what the previous frame counted, which
-        // this frame waits for.
         if (counted_before_) read_counts(gpu);
         gpu.begin_frame(0.03f, 0.03f, 0.03f);
         const float a = radians(-52.0f) + 0.5f * sin(time * 0.5f);
@@ -1626,7 +1569,6 @@ public:
         view_projection_ = look_at(eye_, {0, 0, 0}, {0, 1, 0}) * perspective(radians(60), gpu.aspect(), 0.1f, 256);
         l->SetGraphicsRootSignature(root_);
 
-        // The occlusion pass: depth only, the occluder first, then each object counted against it.
         l->SetPipelineState(occluder_);
         draw(gpu, plane_, occluder_world(), {0, 0, 1, 0});
         l->SetPipelineState(counted_);
@@ -1692,7 +1634,6 @@ private:
         gpu.list->SetGraphicsRootConstantBufferView(0, gpu.constants(&frame, sizeof frame));
         mesh.draw(gpu.list);
     }
-    // The previous frame, the last one submitted, finished and its counts read.
     void read_counts(Gpu &gpu)
     {
         gpu.wait(gpu.submitted());
@@ -1721,9 +1662,6 @@ private:
     float4x4             view_projection_ = float4x4::identity();
 };
 
-// ================================================================ multithreading
-
-// A flying saucer: a tinted hull and antenna (uv.x = 1), a glass dome, portholes and a rim.
 Mesh ufo_mesh()
 {
     MeshBuilder b;
@@ -1817,8 +1755,6 @@ struct UfoState {
 };
 
 
-// Command lists recorded on worker threads, one each, executed after the frame's own list
-// in one ExecuteCommandLists: D3D12's answer to the original's secondary command buffers.
 class Multithreading final : public Sample {
 public:
     const char *name() const override { return "multithreading"; }
@@ -1871,8 +1807,6 @@ public:
                 continue;
             }
             w.list->Close();
-            // The pool lives as long as the sample, as the original's does: a
-            // frame hands each worker its share and waits for the lists.
             w.go = make_signal();
             w.done = make_signal();
             w.thread = start_thread(thread_entry, &w);
@@ -1887,7 +1821,6 @@ public:
         const float a = radians(37.5f) + time * 0.04f;
         eye_ = {sin(a) * 30.0f, 1.2f, -cos(a) * 30.0f};
         view_projection_ = look_at(eye_, {0, 2.5f, 0}, {0, 1, 0}) * perspective(radians(60), gpu.aspect(), 0.1f, 256);
-        // Each worker's constants, taken from the frame's ring here: the ring is not the workers' to share.
         for (Worker &w : workers_) {
             w.constants = gpu.upload(w.count * constant_stride);
             start(w);
@@ -1963,7 +1896,6 @@ private:
         if (w.thread != nullptr) wait_signal(w.done);
     }
 
-    // On the worker's thread: its share of the saucers, into its own command list.
     void record(Worker &w)
     {
         Gpu &gpu = *gpu_;
@@ -2010,7 +1942,7 @@ private:
     float4x4             view_projection_ = float4x4::identity();
 };
 
-}  // namespace
+}
 
 void register_textures(Sample **all, uint32_t &made)
 {
@@ -2023,4 +1955,4 @@ void register_textures(Sample **all, uint32_t &made)
     all[made++] = new Multithreading();
 }
 
-}  // namespace samples
+}

@@ -11,13 +11,11 @@ registries, by the generator vendored in `tools/codegen/`; what it writes is
 committed under `src/proto/generated/` and never hand-edited.
 
 **Read before writing code:** `docs/constitution.md` (the rules that
-govern the project), `docs/architecture.md` (the code map: which directory
-holds what, and which may include which), `docs/testing.md` (how a display
-miniport is unit tested), `docs/roadmap.md` (what to build, in order).
+govern the project).
 
 ## Repository organization
 
-`docs/architecture.md` is the map; these are the rules that keep it true.
+These are the rules that keep the directory layout true.
 
 - **Organize by subsystem and domain.** A file lives in the directory of the
   binary and subsystem that owns it (`src/miniport/vidpn/`,
@@ -28,9 +26,7 @@ miniport is unit tested), `docs/roadmap.md` (what to build, in order).
   foundation every binary links), `proto` (what crosses a boundary),
   `miniport` + `km` (avgpu.sys), `device` (the QEMU device), `executor`
   (libav_executor.so), `icd` + `um` (the guest's user-mode drivers), `guest`
-  (kmt, transport and the guest programs). Search this architecture before
-  introducing a new top-level directory, and add one only for a new binary or
-  layer.
+  (kmt, transport and the guest programs). Add one only for a new binary or layer.
 - **Prefer shallow directories.** Two levels under `src/` is the norm. Do not
   create a directory for one small class without a strong reason; put it
   beside its owner.
@@ -49,9 +45,8 @@ miniport is unit tested), `docs/roadmap.md` (what to build, in order).
   coverage gate and holds translation only; `generated` holds generator
   output; `src/miniport/ddi/`, `src/icd/d3d/ddi/` and `src/icd/vendor/ddi/`
   are record directories. Never reuse those names for anything else.
-- **Moving files** is `git mv` plus every path the build and gates name
-  (`docs/architecture.md`, "Paths the build and the gates name"), with the
-  unit test moved to the mirrored path in the same change.
+- **Moving files** is `git mv` plus every path the build and gates name,
+  with the unit test moved to the mirrored path in the same change.
 
 ## C++ rules
 
@@ -97,7 +92,7 @@ a collection and is injected where it is needed - `GpuVirtualAddressSpace`,
 state. A class with no members is a mistake being written down.
 
 **Files.** Each class lives in the semantic folder for its area (`src/miniport/memory/`,
-`src/miniport/display/`, ... - docs/architecture.md lists them), and its test mirrors that path under
+`src/miniport/display/`, ...), and its test mirrors that path under
 `tests/unit/`. Includes name the path from `src/` or `tests/` -
 `"miniport/display/edid.hpp"`, `"harness/vidsch/fake_vidsch.hpp"` - never a relative
 one. One class per header, named after the class in snake_case; nested and
@@ -133,7 +128,7 @@ Never leave commented-out code; git has it.
 
 **Every function opens with its trace scope**: `AV_SCOPE("Class::method");`
 as the first line of every function definition in `src/`, naming the function
-as written (docs/trace.md). `tools/scope_marks.py --apply` writes them;
+as written. `tools/scope_marks.py --apply` writes them;
 `ctest -R scope_marks` fails a definition without one. The exceptions are the
 one-line ABI entry points, `constexpr` functions, `src/core/trace/` itself,
 every `TraceHost` and the clock it reads (a scope there recurses), and the
@@ -188,8 +183,7 @@ bugcheck in a VM.
 invariants after every mutation, hostile input, and a fuzz target for anything
 that reads bytes it did not write. Coverage is the floor, not the goal: a test
 asserts the outcome a caller would care about, at the values that are actually
-interesting, and must fail if a comparison is flipped or a line deleted. A test
-that only walks a branch without judging what it produced is not a test. This is not aspirational; `tools/gate.sh`
+interesting, and must fail if a comparison is flipped or a line deleted. `tools/gate.sh`
 runs every gate - `tools/check_design.py`, `tools/check_symbol_tests.py`, the
 kernel cross-build, 100% branch coverage and fuzz smoke - and fails the build.
 

@@ -15,9 +15,6 @@ GlContextRig::GlContextRig()
                              PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
     kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     kmt_.open_host_window(MockKmt::rig_window_bytes);
-    /* The transport watches the reply slot for a budget of the guest's clock
-     * before it asks the kernel to wait, and a command no answer was queued
-     * for is one it would watch for ever on a clock that never moves. */
     kmt_.reads_clock(nullptr, transport_clock_step);
 }
 
@@ -35,4 +32,4 @@ av::icd::SharedHandles &GlContextRig::handles()
     return handles_;
 }
 
-}  // namespace av
+}

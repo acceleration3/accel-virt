@@ -23,4 +23,4 @@ std::uint32_t CountedWakeSignal::raises() const { return raises_; }
 std::uint32_t CountedWakeSignal::waits() const { return waits_; }
 std::uint32_t CountedWakeSignal::last_wait() const { return last_wait_; }
 
-}  // namespace av
+}

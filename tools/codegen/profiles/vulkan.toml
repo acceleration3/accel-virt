@@ -1,68 +1,20 @@
-# LSW codegen profile.
-#
-# Drives the entire generated/ directory: the codegen walks vk.xml's
-# <feature> + <extension> elements to derive the command set, then
-# emits serialize/deserialize/dispatch C++ for everything in it.
-#
-# Adding a new extension is one line in [extensions].include and a
-# regeneration. The only commands the codegen does NOT touch are listed
-# in [commands].exclude — typically platform-tied entry points whose
-# create-info can't cross a process boundary (xcb_connection_t*,
-# wl_display*, etc.); those are hand-written in src/client.
-
 api_version = "1.3"
 
 [extensions]
 include = [
-    # Surface + per-platform surface creation.
-    #
-    # Xlib only. This build presents with XPutImage and has no xcb or
-    # wayland presenter, and an extension listed here is one the ICD
-    # claims to an application — so listing the other two would offer a
-    # surface nothing can present through.
     "VK_KHR_surface",
     "VK_KHR_xlib_surface",
-    # The "2" spelling of the surface queries. Not optional in practice:
-    # DXVK resolves vkGetPhysicalDeviceSurfaceCapabilities2KHR whether or
-    # not it enabled the extension, and Wine's winevulkan forwards it
-    # straight through. Answering null there does not make DXVK fall
-    # back — it makes D3D device creation fail, and a D3D8 title reports
-    # that by exiting with status 1 and no message at all.
     "VK_KHR_get_surface_capabilities2",
-    # Headless: the windowless surface. The ICD emulates it like the
-    # platform surfaces — present publishes to the shared framebuffer,
-    # there is just no window to blit to afterwards — so it is claimed
-    # here and its creation is hand-written, not forwarded. It is what
-    # the benchmark uses when there is no window to open.
     "VK_EXT_headless_surface",
 
-    # Swapchain.
     "VK_KHR_swapchain",
 
-    # Promoted to core in 1.1, but apps still ask for the extension by
-    # name and check for it before using the *KHR-suffixed entry points.
-    # The core commands are already generated (api_version = 1.3); what
-    # this adds is the aliases, without which every framework that
-    # queries "is VK_KHR_get_physical_device_properties2 present" refuses
-    # to start. It is the single most requested extension in the Khronos
-    # sample corpus.
     "VK_KHR_get_physical_device_properties2",
 
-    # Same story, device side. VMA resolves these through
-    # vkGetDeviceProcAddr and caches whatever it gets — including a
-    # null, which it then calls. A missing alias here is not a clean
-    # "unsupported" error but a jump to address 0 inside the allocator.
     "VK_KHR_get_memory_requirements2",
     "VK_KHR_bind_memory2",
     "VK_KHR_dedicated_allocation",
 
-    # The rest of the promoted-to-core set. Every command in these is an
-    # alias of one the codegen already emits, so they cost a name and
-    # nothing else — but without the name, an application that resolves
-    # vkCmdBeginRenderingKHR through vkGetDeviceProcAddr gets a null
-    # pointer back and calls it. That is a jump to address 0 inside the
-    # application, not a clean "extension unsupported" path, and it is
-    # what most of the sample corpus was crashing on.
     "VK_KHR_dynamic_rendering",
     "VK_KHR_synchronization2",
     "VK_KHR_copy_commands2",
@@ -70,11 +22,6 @@ include = [
     "VK_KHR_timeline_semaphore",
     "VK_KHR_buffer_device_address",
     "VK_KHR_draw_indirect_count",
-    # DXVK before 2.0 requires this one by name (khrImageFormatList,
-    # DxvkExtMode::Required) and refuses the device without it: Portal's
-    # Vulkan renderer, DXVK 1.8.1, failed "Required Vulkan extension
-    # VK_KHR_image_format_list not supported". No commands, one core struct
-    # the chain codec already carries.
     "VK_KHR_image_format_list",
     "VK_KHR_descriptor_update_template",
     "VK_KHR_maintenance1",
@@ -88,11 +35,6 @@ include = [
     "VK_KHR_external_semaphore_capabilities",
     "VK_KHR_external_fence_capabilities",
 
-    # Genuine extensions — not promoted, so the loader exports no symbol
-    # for their commands and the server resolves them through
-    # vkGetInstanceProcAddr at first use (see server_backends.py). A host
-    # driver that lacks one answers null and the command reports
-    # VK_ERROR_EXTENSION_NOT_PRESENT rather than crashing.
     "VK_EXT_conditional_rendering",
     "VK_EXT_color_write_enable",
     "VK_EXT_extended_dynamic_state",
@@ -104,35 +46,6 @@ include = [
     "VK_EXT_line_rasterization",
     "VK_EXT_host_image_copy",
 
-    # Deliberately NOT here: VK_EXT_descriptor_buffer.
-    #
-    # Claiming it cost two days of blank frames. DXVK prefers descriptor
-    # buffers when they are offered and builds every descriptor through
-    # them, so the whole of a frame's binding goes down that path — and
-    # this proxy cannot carry it. vkGetDescriptorEXT hands back an opaque
-    # blob whose size is a size_t parameter, its capture-replay commands
-    # have no size parameter at all, and the host driver in the server
-    # does not resolve the entry point either. Every call failed and the
-    # application was told every call had worked, so it drew with nothing
-    # bound: frames arrived at the right rate, the right size, and empty.
-    #
-    # Without the offer, DXVK uses ordinary descriptor sets, which this
-    # proxy does carry — that is how the same game renders correctly on
-    # the GPU whose driver never exposed the extension in the first
-    # place.
-
-    # What DXVK refuses to run without.
-    #
-    # These are mostly feature-struct extensions carrying few or no
-    # commands, and they were absent for a reason that no longer holds:
-    # the ICD used to forward the driver's whole extension list, so
-    # anything the GPU had appeared supported whether or not it was
-    # generated here. Now that it advertises only this list, each name
-    # missing from it is a device DXVK declines — "No adapters found" —
-    # and D3D titles do not start at all.
-    #
-    # DXVK names the one it wants each time it rejects a device, so this
-    # list grew by running a game and reading the log.
     "VK_EXT_robustness2",
     "VK_KHR_pipeline_library",
     "VK_EXT_graphics_pipeline_library",
@@ -141,63 +54,15 @@ include = [
     "VK_EXT_transform_feedback",
     "VK_EXT_custom_border_color",
     "VK_EXT_4444_formats",
-    # Feature 047. Neither carries a command: what they add is a feature
-    # structure and, for min LOD, one create-info node, and the chain
-    # allowlist already serializes both. vkd3d-proton requires mutable
-    # descriptor types (its own list says so) and prefers min LOD; DXVK reads
-    # both when they are offered.
     "VK_EXT_image_view_min_lod",
     "VK_EXT_mutable_descriptor_type",
     "VK_EXT_attachment_feedback_loop_layout",
     "VK_EXT_memory_priority",
-    # Answered by the Windows ICD itself from D3DKMTQueryVideoMemoryInfo
-    # (feature 045): it carries no command, and is listed so the ICD's
-    # extension policy may report it.
     "VK_EXT_memory_budget",
     "VK_EXT_pageable_device_local_memory",
 
-    # How a 32-bit application maps memory at all under wine.
-    #
-    # wow64 hands the guest a pointer it must be able to hold in 32
-    # bits, and winevulkan gets one by asking the driver to place the
-    # mapping at an address it chose — vkMapMemory2 plus
-    # VkMemoryMapPlacedInfoEXT. Without these it probes for
-    # "vkMapMemory2"/"vkMapMemory2KHR", finds neither, and every
-    # vkMapMemory from the 32-bit side fails: DXVK reports
-    # "Failed to map Vulkan memory: VK_ERROR_OUT_OF_HOST_MEMORY" for an
-    # 8 KiB buffer, gives up on the device, and the game shows its own
-    # "cannot initialize Direct3D" box.
     "VK_KHR_map_memory2",
 
-    # VK_EXT_map_memory_placed is deliberately NOT here, and IS
-    # supported.
-    #
-    # This list is what the codegen emits entry points for, and the ICD
-    # offers the intersection of it with what the real driver reports.
-    # Placement belongs in neither: it decides where in the GUEST's
-    # address space the pages appear, so the driver on the other side
-    # has no part in it and its opinion should not filter the offer.
-    # icd_entry.cpp appends the extension itself, the way it appends
-    # VK_KHR_swapchain, and answers the feature and property structs
-    # from the layer rather than forwarding them.
-    #
-    # It was in this list for a while with no entry points behind it at
-    # all, which is strictly worse than not advertising it: an
-    # application takes the branch, asks for vkMapMemory2KHR, and gets a
-    # null pointer back from a driver that said it could.
-
-    # What current DXVK (3.1) and vkd3d-proton (3.0) use and this did not
-    # carry (audit of third_party/, 2026-09-30). DXVK 3.1 will not make a
-    # device without load_store_op_none and maintenance6; the rest each
-    # enable a path the libraries take when offered - most are a feature
-    # structure, a SPIR-V capability or an enum and no command. The window
-    # system ones (present_id, present_wait, swapchain_maintenance1,
-    # incremental_present, swapchain_mutable_format, hdr_metadata) are the
-    # ICD's own to implement, not the host's to carry, and are not here.
-    # Nor is VK_EXT_device_fault: vkGetDeviceFaultInfoEXT's vendor binary is
-    # an application buffer the struct gives no length for, and a host
-    # writing through a pointer that never crossed would take the device
-    # down to report that it went down.
     "VK_KHR_load_store_op_none",
     "VK_KHR_maintenance6",
     "VK_KHR_maintenance7",
@@ -245,15 +110,6 @@ include = [
     "VK_KHR_shader_relaxed_extended_instruction",
     "VK_KHR_shader_non_semantic_info",
 
-    # Shared-memory native framebuffers.
-    #
-    # The whole point of the render server: the host GPU renders straight
-    # into the ivshmem region the guest can see, with no blit and no copy.
-    # VK_EXT_external_memory_host is what makes that legal — the server
-    # imports the mapped shmbus framebuffer pointer as VkDeviceMemory via
-    # VkImportMemoryHostPointerInfoEXT and binds a VkImage to it. The fd
-    # and dma_buf variants are here so a guest app can import a shared
-    # allocation itself rather than only receiving one.
     "VK_KHR_external_memory",
     "VK_KHR_external_memory_fd",
     "VK_EXT_external_memory_host",
@@ -261,91 +117,41 @@ include = [
     "VK_KHR_external_fence_fd",
     "VK_KHR_external_semaphore_fd",
 
-    # What DXGI interop is spelt as on Windows (feature 047, US3). Every
-    # command of both is in [commands].exclude, so nothing generated names a
-    # HANDLE - a type the host build's headers do not declare - and the ICD
-    # answers all four itself, over the FD extensions above: an export
-    # remembers the object, and an import asks the host for a fresh fd of it
-    # and forwards VkImportMemoryFdInfoKHR in the Win32 structure's place.
     "VK_KHR_external_memory_win32",
     "VK_KHR_external_semaphore_win32",
 ]
 
 [commands]
-# These ICD entry points are intercepted client-side and never go on
-# the wire as their codegen'd shape. Surface creation is per-platform
-# and carries process-local pointers (xcb_connection_t*, wl_display*);
-# the client sends a custom kCmdCreateXcbSurface frame instead, and
-# the server creates the real VkSurfaceKHR via its own xcb connection.
-# vkDestroySurfaceKHR is similarly overridden on the client.
 exclude = [
-    # Loader-negotiation entries: handled in icd_entry.cpp before any
-    # transport exists. They can't be wire-routed.
     "vkEnumerateInstanceVersion",
     "vkEnumerateInstanceExtensionProperties",
     "vkEnumerateInstanceLayerProperties",
     "vkGetInstanceProcAddr",
     "vkGetDeviceProcAddr",
 
-    # Surface creation: per-platform, and it carries process-local
-    # pointers — a Display*, a window id — so there is nothing to send.
-    #
-    # Xlib only, matching [extensions].include. This list means "the ICD
-    # answers this", and the ICD checks it at startup: naming the xcb,
-    # wayland and win32 spellings here claimed entry points nobody had
-    # written, which is the same silent null the list exists to prevent.
-    # A host pointer is this process's memory: the ICD lends its pages to
-    # the device, which makes them host memory where they are, and answers
-    # which types such memory can be (docs/host-memory.md, "Application
-    # memory"). VkImportMemoryHostPointerInfoEXT never crosses either.
     "vkGetMemoryHostPointerPropertiesEXT",
 
     "vkCreateXlibSurfaceKHR",
     "vkGetPhysicalDeviceXlibPresentationSupportKHR",
     "vkDestroySurfaceKHR",
     "vkCreateHeadlessSurfaceEXT",
-    # Every surface query, for the same reason one level up: a
-    # VkSurfaceKHR here is an ICD-side object naming a window in this
-    # process. It is never sent, so the server has nothing to answer
-    # with and these are written by hand in icd/src/wsi_entry.cpp.
     "vkGetPhysicalDeviceSurfaceSupportKHR",
     "vkGetPhysicalDeviceSurfaceCapabilitiesKHR",
     "vkGetPhysicalDeviceSurfaceFormatsKHR",
     "vkGetPhysicalDeviceSurfacePresentModesKHR",
     "vkGetPhysicalDeviceSurfaceCapabilities2KHR",
     "vkGetPhysicalDeviceSurfaceFormats2KHR",
-    # The swapchain is the shared framebuffer, so every one of these is
-    # this side's own — see icd/src/swapchain.cpp.
     "vkCreateSwapchainKHR",
     "vkDestroySwapchainKHR",
     "vkGetSwapchainImagesKHR",
     "vkAcquireNextImageKHR",
     "vkQueuePresentKHR",
 
-    # Mapping hands back a host pointer, which no wire format can carry
-    # — the memory the application writes through is this side's, so it
-    # is written by hand in icd/src/memory_entry.cpp.
-    #
-    # Only the core spellings are listed, and that is not an oversight.
-    # This list means "the ICD provides these", so naming vkMapMemory2KHR
-    # here would claim VK_KHR_map_memory2 on behalf of an entry point
-    # nobody has written — the same silent null this list exists to
-    # prevent, arrived at from the other direction.
     "vkMapMemory",
     "vkUnmapMemory",
-    # The same two in their VkMemoryMapInfoKHR shape (feature 047). A mapping
-    # is guest memory at a guest address and nothing about it crosses the wire,
-    # so these are the ICD's own for the same reason the pair above is - and
-    # `void** ppData` is a shape the classifier cannot lower anyway, which is
-    # what withdrew VK_KHR_map_memory2 from the emitted list until now.
     "vkMapMemory2KHR",
     "vkUnmapMemory2KHR",
 
-    # A HANDLE is not a thing the wire carries and not a type this build's
-    # headers declare, so all four of the Win32 external-object commands are
-    # the ICD's own (feature 047, US3). They are answered over the fd
-    # extensions, which is why naming them here claims nothing that is not
-    # written: src/icd/vulkan/external_objects.cpp.
     "vkGetMemoryWin32HandleKHR",
     "vkGetMemoryWin32HandlePropertiesKHR",
     "vkGetSemaphoreWin32HandleKHR",
@@ -353,28 +159,10 @@ exclude = [
 ]
 
 [chain_extras]
-# Structs the chain codec must carry even though vk.xml gives them no
-# ``structextends``. VK_KHR_pipeline_binary inverts the usual pattern:
-# VkPipelineCreateInfoKHR is a near-empty wrapper whose pNext points at a
-# full pipeline create-info. Without these the wrapper arrives with a
-# null chain and the driver wedges on it — the server stops replying and
-# the connection stalls behind it.
 VkGraphicsPipelineCreateInfo = "VkPipelineCreateInfoKHR"
 VkComputePipelineCreateInfo = "VkPipelineCreateInfoKHR"
 
 [inner_lens]
-# Inner length for pointer-to-pointer array parameters.
-#
-# vk.xml gives the OUTER length of ``ppBuildRangeInfos`` (``infoCount``)
-# and says nothing about how long each pointed-to array is; the spec
-# states it in prose — one entry per geometry in the matching
-# ``pInfos`` element. Without that the shape is unencodable, and the
-# acceleration-structure build commands are what every ray tracing
-# sample needs first.
-#
-# Form: "<sibling array param>.<member>", meaning "for outer index i,
-# use <sibling>[i].<member>". Each emitter substitutes its own local
-# name for the sibling.
 "vkCmdBuildAccelerationStructuresKHR.ppBuildRangeInfos" = "pInfos.geometryCount"
 "vkBuildAccelerationStructuresKHR.ppBuildRangeInfos" = "pInfos.geometryCount"
 "vkCmdBuildAccelerationStructuresIndirectKHR.ppMaxPrimitiveCounts" = "pInfos.geometryCount"
@@ -383,44 +171,11 @@ VkComputePipelineCreateInfo = "VkPipelineCreateInfoKHR"
 include = ["common", "linux"]
 
 [sync_overrides]
-# Default sync detection: void return + no out-param = async; anything
-# with an out-param or VkResult return is sync. Override here when the
-# Vulkan spec lets us be optimistic.
-#
-# A blocking round trip is the dominant cost of a proxied frame, and
-# most of them buy nothing. Measured against the real guest: 7.05
-# blocking round trips per frame, ~1.2 ms each, which was essentially
-# the whole 8.6 ms frame. The command stream itself was not the problem
-# — batching had already collapsed 7 vkCmd* calls into one message.
-#
-# A command belongs here when its VkResult carries no information the
-# caller can act on at the point of the call:
-#
-#   * it can only return VK_SUCCESS or an out-of-memory / device-lost
-#     condition, and
-#   * that condition is fatal anyway, so it will resurface at the next
-#     call that genuinely has to block.
-#
-# Errors come back out-of-band on the control stream (kCmdAsyncError).
 "vkQueueSubmit" = "async"
 "vkQueueSubmit2" = "async"
-# Presentation. The result an application acts on is
-# VK_ERROR_OUT_OF_DATE_KHR / VK_SUBOPTIMAL_KHR, and it learns the same
-# thing from the next vkAcquireNextImageKHR, which it must call before it
-# can draw again and which still blocks. Waiting for the present's own
-# answer costs a round trip per frame to hear something one call later.
 "vkQueuePresentKHR" = "async"
-# Command-buffer lifecycle. Begin/End/Reset can each only fail with
-# out-of-memory; nothing here is a decision point. Begin and End are
-# additionally RECORDED into the buffer's batch (see icd_entries.py),
-# so they cost no message at all — End is what ships the batch.
 "vkBeginCommandBuffer" = "async"
 "vkEndCommandBuffer" = "async"
 "vkResetCommandBuffer" = "async"
-# Same reasoning one level up: resetting a pool can only fail with
-# out-of-memory, and the application has no decision to make at the call.
-# Applications reset their pool once a frame, so this was a blocking
-# round trip per frame for an answer nobody branches on.
 "vkResetCommandPool" = "async"
-# vkResetFences cannot fail except on device loss.
 "vkResetFences" = "async"

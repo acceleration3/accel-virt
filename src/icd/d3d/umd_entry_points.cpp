@@ -1,7 +1,3 @@
-/* The ABI boundary C requires (constitution III), and the translation unit
- * that defines UmdBinding's one pointer - the D3D user-mode driver's
- * process-lifetime state, for the reason the Vulkan and OpenGL ICDs' roots
- * have theirs. No logic here: each thunk is one line into the root. */
 #include "icd/d3d/umd_entry_points.hpp"
 
 #include "core/support/runtime_call.hpp"
@@ -53,7 +49,7 @@ extern "C" Hresult AV_RUNTIME_CALL avumd_get_optional_ddi_tables(void *adapter, 
 extern "C" Hresult AV_RUNTIME_CALL avumd_fill_ddi_table(void *adapter, uint32_t table_type, void *table, size_t bytes, uint32_t index, void *runtime_table)
 { return umd_binding.root().fill_ddi_table(adapter, table_type, table, bytes, index, runtime_table); }
 
-}  // namespace
+}
 
 void fill_d3d10_adapter_funcs(D3d102ddiAdapterFuncsRecord &table)
 {
@@ -65,7 +61,6 @@ void fill_d3d10_adapter_funcs(D3d102ddiAdapterFuncsRecord &table)
     table.pfnGetCaps = reinterpret_cast<void *>(&avumd_get_caps);
 }
 
-/* Direct3D 9's GetCaps and CloseAdapter take what Direct3D 10's do. */
 void fill_d3d9_adapter_funcs(D3dddiAdapterFuncsRecord &table)
 {
     AV_SCOPE("fill_d3d9_adapter_funcs");
@@ -87,4 +82,4 @@ void fill_d3d12_adapter_funcs(D3d12ddiAdapterFuncsRecord &table)
     table.pfnDestroyDevice = reinterpret_cast<void *>(&avumd_destroy_device);
 }
 
-}  // namespace av::d3d
+}

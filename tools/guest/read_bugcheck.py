@@ -1,22 +1,8 @@
-"""Reads a paused Windows guest's bugcheck from QEMU's gdbstub, for a panic the
-crash MSRs carried no parameters for (docs/testing.md, "A bugcheck with no dump").
-
-  gdb -q -batch -ex 'target remote 127.0.0.1:1234' -x tools/guest/read_bugcheck.py
-
-ntoskrnl's base is found by walking down from the stopped CPU's instruction
-pointer to the page holding its PE image; KiBugCheckData is read at the RVA
-the guest kernel's own PDB gives (re/guest-26200/publics.txt, section .data),
-and every loaded module is named from PsLoadedModuleList so the stack's
-return addresses can be attributed. The guest is left stopped.
-"""
 import os
 import struct
 
 import gdb
 
-# RVAs in the 26200 guest's ntoskrnl, from its PDB: section 26 (.data at
-# 0xE00000) plus the publics' offsets. Override with the environment when the
-# guest's build changes.
 KI_BUGCHECK_DATA = int(os.environ.get("AV_KI_BUGCHECK_DATA", "0xf22740"), 16)
 PS_LOADED_MODULE_LIST = int(os.environ.get("AV_PS_LOADED_MODULE_LIST", "0xef50c0"), 16)
 PAGE = 0x1000

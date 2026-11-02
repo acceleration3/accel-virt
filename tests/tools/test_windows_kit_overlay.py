@@ -10,8 +10,6 @@ OVERLAY = ROOT / "tools" / "windows_kit_overlay.py"
 
 
 class WindowsKitOverlay(unittest.TestCase):
-    """The kit's headers were written for a case-insensitive filesystem."""
-
     def setUp(self):
         self.kit = pathlib.Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.kit)

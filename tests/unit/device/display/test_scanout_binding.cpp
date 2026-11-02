@@ -1,9 +1,3 @@
-/* One display head: what it shows, what it lets go of, and what it keeps when
- * it is refused.
- *
- * The head is shown the device's own mapping of the blob's pages - a real
- * alias of MockHost's file-backed guest RAM - so a test reads through what
- * the display was handed and finds the guest's bytes there. */
 #include "core/support/status.hpp"
 #include "device/control/control_request.hpp"
 #include "device/display/scanout_binding.hpp"
@@ -40,7 +34,6 @@ namespace {
 
 constexpr std::uint64_t ram = 0x40000000u;
 constexpr std::uint64_t ram_bytes = 0x40000u;
-/* 64x16 BGRA is 4096 bytes: one page, so a blob can be exactly a framebuffer. */
 constexpr std::uint32_t picture_width = 64u;
 constexpr std::uint32_t picture_height = 16u;
 constexpr std::uint64_t picture_bytes = 4096u;
@@ -99,7 +92,6 @@ public:
         CHECK_STATUS(blobs_.create_guest(id, picture_bytes, request, 24u, 1u), Status::ok);
     }
 
-    /* The whole 64x16 picture out of blob `id`. */
     ScanoutFramebuffer whole(std::uint32_t id)
     {
         ScanoutFramebuffer framebuffer;
@@ -117,9 +109,6 @@ private:
     BlobTable blobs_;
 };
 
-/* Whether what the display was handed is the guest's own page: the first and
- * last byte of the framebuffer read `fill`, and a byte the guest writes now
- * reads through it too. */
 bool shows_guest_page(Fixture &fixture, const std::uint8_t *blob, std::uint64_t address, std::uint8_t fill)
 {
     if (blob == nullptr || blob[0] != fill || blob[picture_bytes - 1u] != fill) return false;
@@ -130,7 +119,7 @@ bool shows_guest_page(Fixture &fixture, const std::uint8_t *blob, std::uint64_t 
     return seen;
 }
 
-}  // namespace
+}
 
 TEST(scanout_binding, a_new_head_shows_nothing_and_hiding_it_is_not_an_error)
 { Fixture        fixture;
@@ -162,16 +151,13 @@ TEST(scanout_binding_show, the_head_is_told_the_picture_and_the_blob_is_pinned)
   CHECK_EQ(shown.plane.stride, picture_width * 4u);
   CHECK_EQ(shown.plane.offset, 0u);
   CHECK_EQ(shown.plane.fourcc, ScanoutFormat(ScanoutFormat::b8g8r8a8).fourcc());
-  /* The display reads the guest's page itself, through one alias of it. */
   CHECK(shows_guest_page(fixture, shown.blob, ram, 0x11u));
   CHECK_EQ(fixture.host().live_ranges(), 1u);
-  /* Pinned: the table refuses to release it while the head shows it. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::invalid_state);
   binding.hide();
   CHECK(binding.invariants_hold());
   CHECK(!fixture.host().head(0u).shown);
   CHECK_EQ(fixture.host().head(0u).hides, 1u);
-  /* The alias lives with the blob, not the head; releasing the blob ends it. */
   CHECK_EQ(fixture.host().live_ranges(), 1u);
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
   CHECK_EQ(fixture.host().live_ranges(), 0u); }
@@ -183,7 +169,6 @@ TEST(scanout_binding_show, the_same_picture_again_is_not_shown_twice)
   CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
   CHECK_EQ(fixture.host().head(0u).shows, 1u);
   CHECK_EQ(binding.frames(), 1u);
-  /* A different picture out of the same blob is a new show, and keeps one pin. */
   ScanoutFramebuffer half;
   std::uint64_t      size = 0u;
   CHECK_STATUS(fixture.blobs().size(1u, size), Status::ok);
@@ -206,7 +191,6 @@ TEST(scanout_binding_show, a_rebind_never_hides_the_head_in_between)
   CHECK_EQ(fixture.host().head(0u).shows, 2u);
   CHECK_EQ(fixture.host().head(0u).hides, 0u);
   CHECK(shows_guest_page(fixture, fixture.host().head(0u).blob, ram + 0x10000u, 0x22u));
-  /* One pin at a time: the first blob is releasable again. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
   CHECK_STATUS(fixture.blobs().release(2u), Status::invalid_state);
   binding.hide();
@@ -222,8 +206,6 @@ TEST(scanout_binding_show, a_rebind_the_display_refuses_leaves_the_head_showing_
   CHECK(binding.shows());
   CHECK_EQ(binding.blob(), 1u);
   CHECK_EQ(binding.frames(), 1u);
-  /* The refused blob's pin is gone; the shown one is not, and the head
-   * still reads the first blob's page. */
   CHECK(shows_guest_page(fixture, fixture.host().head(0u).blob, ram, 0x11u));
   CHECK_STATUS(fixture.blobs().release(2u), Status::ok);
   CHECK_STATUS(fixture.blobs().release(1u), Status::invalid_state);
@@ -238,8 +220,6 @@ TEST(scanout_binding_show, a_first_show_the_display_refuses_leaves_the_head_show
   CHECK(!binding.shows());
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok); }
 
-/* A blob whose pages cannot be mapped as one range is the alias's refusal:
- * the display is never asked, and no pin is left behind. */
 TEST(scanout_binding_show, pages_the_host_cannot_map_as_one_range_refuse_and_hold_nothing)
 { Fixture fixture;
   fixture.host().fail_reserve_at(1u);
@@ -249,7 +229,6 @@ TEST(scanout_binding_show, pages_the_host_cannot_map_as_one_range_refuse_and_hol
   CHECK(!binding.shows());
   CHECK_EQ(fixture.host().live_ranges(), 0u);
   CHECK_EQ(fixture.host().head(0u).shows, 0u);
-  /* No pin was left behind, so the blob is still the guest's to release. */
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok); }
 
 TEST(scanout_binding_show, a_blob_the_table_does_not_hold_is_the_tables_refusal)
@@ -262,7 +241,6 @@ TEST(scanout_binding_show, a_blob_the_table_does_not_hold_is_the_tables_refusal)
 TEST(scanout_binding_update, only_the_part_of_the_picture_that_changed_is_updated)
 { Fixture fixture;
   ScanoutBinding     binding(fixture.host(), fixture.blobs(), 0u);
-  /* A picture that is the right half of the framebuffer. */
   ScanoutFramebuffer half;
   std::uint64_t      size = 0u;
   CHECK_STATUS(fixture.blobs().size(1u, size), Status::ok);
@@ -270,20 +248,15 @@ TEST(scanout_binding_update, only_the_part_of_the_picture_that_changed_is_update
   CHECK_STATUS(binding.show(1u, half), Status::ok);
 
   std::uint32_t x = 0u, y = 0u, width = 0u, height = 0u;
-  /* A flush of the whole framebuffer updates the picture's own 32x16. */
   CHECK_STATUS(binding.update(rect(0u, 0u, picture_width, picture_height)), Status::ok);
   fixture.host().last_update(0u, x, y, width, height);
   CHECK_EQ(x, 0u); CHECK_EQ(y, 0u); CHECK_EQ(width, 32u); CHECK_EQ(height, picture_height);
 
-  /* A flush of a square straddling the picture's left edge is clipped and
-   * translated into the picture's coordinates. */
   CHECK_STATUS(binding.update(rect(28u, 4u, 8u, 4u)), Status::ok);
   fixture.host().last_update(0u, x, y, width, height);
   CHECK_EQ(x, 0u); CHECK_EQ(y, 4u); CHECK_EQ(width, 4u); CHECK_EQ(height, 4u);
   CHECK_EQ(fixture.host().head(0u).updates, 2u);
 
-  /* A flush wholly in the half the head is not showing changes nothing, and
-   * is not an error: the guest flushed what it wrote. */
   CHECK_STATUS(binding.update(rect(0u, 0u, 32u, 4u)), Status::ok);
   CHECK_EQ(fixture.host().head(0u).updates, 2u);
   CHECK_STATUS(binding.update(rect(0u, 0u, 8u, picture_height)), Status::ok);
@@ -330,7 +303,6 @@ TEST(scanout_binding_report, a_state_dump_names_the_blob_the_geometry_and_the_fr
   CHECK(std::strstr(writer.dump(), "frames=1") != nullptr);
   binding.hide(); }
 
-/* Each of the two things a head keeps in step with showing, broken on its own. */
 TEST(scanout_binding_invariants, each_term_fails_on_its_own_and_a_fresh_head_holds)
 { Fixture fixture;
   ScanoutBinding binding(fixture.host(), fixture.blobs(), 0u);
@@ -340,19 +312,16 @@ TEST(scanout_binding_invariants, each_term_fails_on_its_own_and_a_fresh_head_hol
   CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
   CHECK(binding.invariants_hold());
 
-  /* Showing, with no framebuffer to show. */
   probe.forget_framebuffer();
   CHECK(!binding.invariants_hold());
   CHECK_STATUS(binding.show(1u, fixture.whole(1u)), Status::ok);
   CHECK(binding.invariants_hold());
 
-  /* Showing, naming no blob: the pin would belong to nobody. */
   probe.set_blob(0u);
   CHECK(!binding.invariants_hold());
   probe.set_blob(1u);
   CHECK(binding.invariants_hold());
 
-  /* Showing nothing, while naming a blob. */
   probe.set_shown(false);
   CHECK(!binding.invariants_hold());
   probe.set_shown(true);
@@ -360,10 +329,8 @@ TEST(scanout_binding_invariants, each_term_fails_on_its_own_and_a_fresh_head_hol
   binding.hide();
   CHECK(binding.invariants_hold());
   CHECK_STATUS(fixture.blobs().release(1u), Status::ok);
-  /* The frames a head showed are not forgotten when it stops showing. */
   CHECK_EQ(binding.frames(), 2u); }
 
-/* A flush that misses the picture vertically is the other way to miss it. */
 TEST(scanout_binding_update, a_flush_above_the_picture_updates_nothing)
 { Fixture fixture;
   ScanoutBinding     binding(fixture.host(), fixture.blobs(), 0u);

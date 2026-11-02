@@ -60,7 +60,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(context_setup_encode, places_every_field_at_its_offset)
 { Encoded encoded(sample());
@@ -94,17 +94,17 @@ TEST(context_setup, round_trips_through_its_encoding)
 TEST(context_setup_decode, rejects_each_malformed_field)
 { struct Case { std::size_t offset; std::uint8_t value; };
   const Case cases[] = {
-      {0u, 0u},      /* magic */
-      {8u, 0u},      /* no sub-API */
-      {8u, 3u},      /* two sub-APIs */
-      {8u, 16u},     /* unknown sub-API */
-      {12u, 0u},     /* ring resource 0 (low byte of 17) */
-      {16u, 11u},    /* order below 12 */
-      {16u, 25u},    /* order above 24 */
-      {18u, 1u},     /* reserved */
-      {20u, 17u},    /* fence resource equals ring resource */
-      {28u, 17u},    /* reply resource equals ring resource */
-      {28u, 18u},    /* reply resource equals fence resource */
+      {0u, 0u},
+      {8u, 0u},
+      {8u, 3u},
+      {8u, 16u},
+      {12u, 0u},
+      {16u, 11u},
+      {16u, 25u},
+      {18u, 1u},
+      {20u, 17u},
+      {28u, 17u},
+      {28u, 18u},
   };
   for (const Case &c : cases) {
       Encoded encoded(sample());
@@ -146,7 +146,6 @@ TEST(context_setup_validate_against, rejects_a_ring_order_outside_the_capset_ran
 { const ContextSetup setup(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 22u, 18u, 0u, 0u);
   CHECK_STATUS(setup.validate_against(offering(0x7u)), Status::not_supported); }
 
-/* One doorbell page per context the capset allows: offering() allows 8. */
 TEST(context_setup_validate_against, accepts_the_last_doorbell_the_capset_allows)
 { const ContextSetup setup(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 16u, 18u, 7u, 0u);
   CHECK_STATUS(setup.validate_against(offering(0x2u)), Status::ok); }
@@ -168,17 +167,6 @@ TEST(context_setup_decode, survives_the_hostile_sweep)
   sweep.run();
   CHECK(sweep.cases_run() > ContextSetup::base_size * 8u);
   CHECK(rejects(nullptr, ContextSetup::encoded_size));
-  /* A minor-0 setup is judged whole: the major it was written by is the only
-   * field no reader checks (16 bits), and the doorbell is judged against the
-   * capset rather than the bytes (32). Any flip of the minor asks for a
-   * 48-byte setup in 32 bytes, and no flip of the sub-API reaches another one,
-   * since 1, 2, 4 and 8 are a bit apart each. The three resource ids must differ
-   * and none may be zero: 31 flips of the ring survive (not the one making it
-   * the reply's 19), 31 of the fence (the same), and 30 of the reply (not the
-   * two making it the ring's 17 or the fence's 18); four flips of ring order
-   * 16 stay inside [12, 24]. Every shorter input is a length its version does
-   * not give, all-zero and all-ones carry no magic, and the untouched setup is
-   * the last acceptance. */
   const std::uint32_t acceptable = 16u + 32u + 31u + 31u + 30u + 4u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
@@ -190,8 +178,6 @@ TEST(context_setup_decode, accepts_each_sub_api)
       CHECK_STATUS(decoded.decode(encoded.bytes(), ContextSetup::base_size), Status::ok);
       CHECK(decoded.sub_api() == api);
   } }
-
-/* ---- the options a GL context is made with, under minor 1 (feature 050) ---- */
 
 namespace {
 
@@ -207,7 +193,7 @@ ContextSetup with_options(const GlContextOptions &options, SubApi api = SubApi::
 
 const GlContextOptions core_46(4u, 6u, Profile::core, GlContextOptions::debug, share_device_id);
 
-}  // namespace
+}
 
 TEST(context_setup, the_next_minor_carries_the_options_and_the_share_contexts_device_id)
 { CHECK_EQ(ProtocolVersion::current_minor, ContextSetup::options_minor);
@@ -236,8 +222,6 @@ TEST(context_setup, the_next_minor_carries_the_options_and_the_share_contexts_de
   Encoded again(decoded);
   CHECK(std::memcmp(again.bytes(), encoded.bytes(), 48u) == 0); }
 
-/* A minor-0 setup is 32 bytes, means the default options, and cannot carry
- * any other; every sub-API may use the new minor with the defaults. */
 TEST(gl_context_options, fit_for_takes_gl_options_for_opengl_a_share_for_opencl_and_nothing_else)
 { const GlContextOptions share_only = GlContextOptions().sharing(share_device_id);
   CHECK(core_46.fit_for(static_cast<std::uint32_t>(SubApi::opengl)));
@@ -274,23 +258,21 @@ TEST(context_setup_decode, a_length_that_is_not_its_minors_is_malformed)
   CHECK_STATUS(decoded.decode(current.bytes(), 47u), Status::malformed);
   CHECK_STATUS(decoded.decode(old.bytes(), 48u), Status::malformed);
   CHECK_STATUS(decoded.decode(old.bytes(), 33u), Status::malformed);
-  /* The previous minor's setup relabelled as the new one is too short. */
   std::uint8_t relabelled[ContextSetup::encoded_size] = {};
   std::memcpy(relabelled, old.bytes(), 32u);
   relabelled[6] = 1u;
   CHECK(decoded.decode(relabelled, 32u) != Status::ok);
-  /* Nothing was taken from any of them. */
   CHECK_EQ(decoded.ring_resource(), 0u); }
 
 TEST(context_setup_decode, options_the_contract_forbids_are_malformed)
 { struct Case { std::size_t offset; std::uint8_t value; };
   const Case cases[] = {
-      {32u, 5u},    /* major 5 */
-      {33u, 7u},    /* 4.7 */
-      {34u, 3u},    /* profile 3 */
-      {35u, 0x11u}, /* an undefined flag */
-      {40u, 1u},    /* reserved */
-      {47u, 0x80u}, /* reserved */
+      {32u, 5u},
+      {33u, 7u},
+      {34u, 3u},
+      {35u, 0x11u},
+      {40u, 1u},
+      {47u, 0x80u},
   };
   for (const Case &c : cases) {
       Encoded encoded(with_options(core_46));
@@ -300,14 +282,12 @@ TEST(context_setup_decode, options_the_contract_forbids_are_malformed)
   }
   for (SubApi api : {SubApi::vulkan, SubApi::opencl}) {
       Encoded encoded(with_options(GlContextOptions(), api));
-      encoded.bytes()[32] = 4u;   /* a version, which only OpenGL has */
+      encoded.bytes()[32] = 4u;
       ContextSetup decoded;
       CHECK_STATUS(decoded.decode(encoded.bytes(), 48u), Status::malformed);
       CHECK_STATUS(with_options(core_46, api).encode(encoded.bytes(), ContextSetup::encoded_size),
                    Status::invalid_parameter);
   }
-  /* A share context on a Vulkan context, which shares nothing; an OpenCL one
-   * shares a GL context's objects (cl_khr_gl_sharing), and decodes. */
   Encoded vulkan(with_options(GlContextOptions(), SubApi::vulkan));
   vulkan.bytes()[36] = 1u;
   ContextSetup refused;
@@ -323,17 +303,6 @@ TEST(context_setup_decode, a_setup_with_options_survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, encoded.bytes(), 48u);
   sweep.run();
   CHECK(sweep.cases_run() > 48u * 8u);
-  /* The base fields are judged as they are without options - 16 free bits of
-   * major, 32 of doorbell, 31 + 31 + 30 of the three distinct resource ids and
-   * 4 of the ring order - and 15 flips of the minor still ask for a 48-byte
-   * setup, only the one clearing it to 0 asking for 32. The options are judged
-   * against the versions OpenGL has: no flip of major 4 leaves a version that
-   * exists, two flips of minor 6 stay at or under 4.6's ceiling, clearing the
-   * core profile to "none" is the one profile flip that is defined, and four
-   * flips of the flags stay inside the four WGL flags. The share context is
-   * the context's own business, 32 bits. The eight trailing bytes must be
-   * zero. Every shorter input is short of its version's 48, all-zero and
-   * all-ones carry no magic, and the untouched setup is the last acceptance. */
   const std::uint32_t acceptable =
       16u + 32u + 31u + 31u + 30u + 4u + 15u + 2u + 1u + 4u + 32u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
@@ -344,8 +313,6 @@ TEST(context_setup_encode, a_setup_with_options_needs_48_bytes)
   CHECK(buffer.guards_intact()); }
 
 
-/* What a setup can carry is judged before it is written: options only at the
- * options minor, and only for OpenGL, and only valid ones. */
 TEST(context_setup, options_fit_only_a_gl_setup_of_the_options_minor)
 { CHECK(with_options(core_46).options_fit());
   CHECK(with_options(GlContextOptions()).options_fit());

@@ -1,7 +1,3 @@
-/* SCANOUT_PLANE as the device answers it: a well-formed plane is kept for its
- * head and answered ok; a malformed one, or one for a head past the last, is
- * refused and nothing kept; every other type is left to the rest of the
- * device. */
 #include "device/control/control_request.hpp"
 #include "device/control/scanout_plane_commands.hpp"
 #include "device/display/head_planes.hpp"
@@ -30,7 +26,6 @@ struct Rig {
     HeadPlanes planes;
     Rig() : host(), planes(host) { CHECK_STATUS(planes.initialize(), Status::ok); }
 
-    /* The response type, or 0 when the commands left the request alone. */
     std::uint32_t send(const GpuRequestBuilder &built, std::uint32_t type)
     {
         MockRequest    mock(built.bytes(), built.size());
@@ -39,7 +34,6 @@ struct Rig {
     }
 };
 
-/* A shown plane of `head` at layer 1. */
 GpuRequestBuilder plane(std::uint32_t head, std::uint64_t key)
 {
     GpuRequestBuilder built(ScanoutPlaneRequest::type);
@@ -55,7 +49,7 @@ GpuRequestBuilder plane(std::uint32_t head, std::uint64_t key)
     return built;
 }
 
-}  // namespace
+}
 
 TEST(scanout_plane_commands, a_plane_is_kept_for_its_head)
 { Rig rig;
@@ -69,7 +63,7 @@ TEST(scanout_plane_commands, a_plane_is_kept_for_its_head)
 
 TEST(scanout_plane_commands, a_malformed_plane_or_head_is_refused_and_another_type_left_alone)
 { Rig rig;
-  CHECK_EQ(rig.send(plane(2u, 0u), ScanoutPlaneRequest::type), 0x1205u);           /* shown with no key */
+  CHECK_EQ(rig.send(plane(2u, 0u), ScanoutPlaneRequest::type), 0x1205u);
   CHECK_EQ(rig.send(plane(HeadPlanes::heads, 0x77u), ScanoutPlaneRequest::type), 0x1205u);
   GpuRequestBuilder short_request(ScanoutPlaneRequest::type);
   short_request.u32(0u);

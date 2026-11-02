@@ -1,6 +1,3 @@
-/* DXGKARG_CREATEPROCESS, as DxgkDdiCreateProcess receives and answers it. A DDI
- * record: Flags is DXGK_CREATEPROCESSFLAGS' UINT; src/km/ddi_record_layout.cpp
- * proves each offset. */
 #ifndef AV_DXGKARG_CREATE_PROCESS_RECORD_HPP
 #define AV_DXGKARG_CREATE_PROCESS_RECORD_HPP
 
@@ -20,6 +17,6 @@ struct DxgkargCreateProcessRecord {
     const uint16_t *pProcessName;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_CREATE_PROCESS_RECORD_HPP
+#endif

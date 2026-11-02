@@ -1,5 +1,3 @@
-/* Every host GPU this process found. The device names one by its Vulkan device
- * UUID, because enumeration order does not survive a reboot. */
 #include "device/abi/av_executor.h"
 #include "executor/host_gpu_set.hpp"
 #include "harness/executor/mock_host_apis.hpp"
@@ -32,7 +30,7 @@ void fill(MockHostApis &apis, std::uint32_t how_many)
       apis.add_gpu(uuid, AV_EXECUTOR_SUB_API_VULKAN);
   } }
 
-}  // namespace
+}
 
 TEST(host_gpu_set, finds_each_gpu_by_the_name_the_device_uses)
 { MockHostApis apis;
@@ -54,7 +52,6 @@ TEST(host_gpu_set, finds_each_gpu_by_the_name_the_device_uses)
   CHECK_EQ(second->sub_apis(), std::uint32_t{AV_EXECUTOR_SUB_API_VULKAN});
   CHECK(set.invariants_hold()); }
 
-/* A domain remembers its GPU by index once the device named it by UUID. */
 TEST(host_gpu_set, answers_each_gpu_by_its_index)
 { MockHostApis apis;
   apis.add_gpu(intel, all_three);
@@ -74,9 +71,6 @@ TEST(host_gpu_set, a_uuid_no_gpu_has_is_not_found)
   CHECK(set.find(absent) == nullptr);
   CHECK(set.find(nullptr) == nullptr); }
 
-/* A host with no GPU is an answer, not a failure: the library still loads and
- * offers nothing, which is what stops the device advertising a capset it
- * cannot honour. */
 TEST(host_gpu_set, a_host_with_no_gpu_is_empty_and_offers_nothing)
 { MockHostApis apis;
   HostGpuSet set;
@@ -87,8 +81,6 @@ TEST(host_gpu_set, a_host_with_no_gpu_is_empty_and_offers_nothing)
   CHECK(set.find(intel) == nullptr);
   CHECK(set.invariants_hold()); }
 
-/* What the ABI answers is every API any GPU can run, because a context names
- * one GPU and one API and the capset carries the union. */
 TEST(host_gpu_set, offers_the_union_of_what_its_gpus_run)
 { MockHostApis apis;
   apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN | AV_EXECUTOR_SUB_API_OPENCL);
@@ -107,8 +99,6 @@ TEST(host_gpu_set, exactly_as_many_as_it_holds_is_not_an_overflow)
   CHECK_EQ(set.count(), HostGpuSet::max_gpus);
   CHECK(set.invariants_hold()); }
 
-/* A host with more GPUs than the set holds keeps the ones it can and says the
- * rest did not fit, rather than pretending they are not there. */
 TEST(host_gpu_set, more_gpus_than_it_holds_keeps_what_it_can_and_says_so)
 { MockHostApis apis;
   fill(apis, MockHostApis::max_gpus);
@@ -118,8 +108,6 @@ TEST(host_gpu_set, more_gpus_than_it_holds_keeps_what_it_can_and_says_so)
   CHECK_EQ(set.count(), HostGpuSet::max_gpus);
   CHECK(set.invariants_hold()); }
 
-/* A count past the array is one `find` would walk off the end of. Every slot
- * holds a GPU that is itself sound, so nothing but the count is wrong. */
 TEST(host_gpu_set_invariants, a_count_past_the_array_breaks_them)
 { MockHostApis apis;
   fill(apis, HostGpuSet::max_gpus);
@@ -129,8 +117,6 @@ TEST(host_gpu_set_invariants, a_count_past_the_array_breaks_them)
   HostGpuSetProbe(set).set_count(HostGpuSet::max_gpus + 1u);
   CHECK(!set.invariants_hold()); }
 
-/* The set answers the capset from its GPUs, so one broken GPU is a broken set:
- * here a slot counted in that was never described yet claims to run Vulkan. */
 TEST(host_gpu_set_invariants, a_gpu_that_breaks_its_own_breaks_them)
 { MockHostApis apis;
   apis.add_gpu(intel, all_three);

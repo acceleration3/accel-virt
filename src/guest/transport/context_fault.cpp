@@ -32,4 +32,4 @@ Status ContextFault::send()
     return sent == TransportResult::failed ? Status::ok : Status::conflict;
 }
 
-}  // namespace av
+}

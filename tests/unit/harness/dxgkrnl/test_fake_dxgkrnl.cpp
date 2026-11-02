@@ -16,8 +16,6 @@ namespace {
 
 void routine() {}
 
-/* The slots DpiInitializeInternal requires, in the order it tests them. The
- * child-status slot is required unless QueryConnectionChange stands in for it. */
 const DdiSlot required[] = {
     DdiSlot::DxgkDdiAddDevice,         DdiSlot::DxgkDdiStartDevice,
     DdiSlot::DxgkDdiStopDevice,        DdiSlot::DxgkDdiRemoveDevice,
@@ -42,7 +40,7 @@ private:
     DdiTable table_;
 };
 
-}  // namespace
+}
 
 TEST(fake_dxgkrnl_initialize, accepts_a_table_with_every_required_slot)
 { Registrable registrable; FakeDxgkrnl dxgkrnl;

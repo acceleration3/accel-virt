@@ -28,10 +28,8 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
-/* The line count, a reserved word, and the 64-bit mask: one line per
- * doorbell page, so the last line is the mask's top bit. */
 TEST(interrupt_lines_message_encode, is_the_line_count_a_reserved_word_and_the_present_mask)
 { GuardedBuffer bytes(InterruptLinesMessage::encoded_size);
   CHECK_STATUS(InterruptLinesMessage(64u, 0x8000000000000001ull).encode(bytes.data(), bytes.size()), Status::ok);
@@ -43,8 +41,6 @@ TEST(interrupt_lines_message_encode, is_the_line_count_a_reserved_word_and_the_p
   CHECK_EQ(InterruptLinesMessage::encoded_size, 16u);
   CHECK(bytes.guards_intact()); }
 
-/* The eventfds arrive in line order for present lines only, so the count of
- * set bits is how many the receiver must find. */
 TEST(interrupt_lines_message, round_trips_with_one_descriptor_per_present_line)
 { std::uint8_t bytes[InterruptLinesMessage::encoded_size] = {};
   CHECK_STATUS(InterruptLinesMessage(4u, 0x5u).encode(bytes, sizeof bytes), Status::ok);
@@ -90,11 +86,11 @@ TEST(interrupt_lines_message_encode, a_short_or_missing_destination_is_too_large
 TEST(interrupt_lines_message_decode, refuses_bad_fields_and_wrong_descriptor_counts_and_stays_unchanged)
 { struct Case { std::uint32_t lines; std::uint64_t present; std::uint32_t descriptors; };
   const Case cases[] = {
-      {0u, 0u, 0u},                                         /* no lines */
-      {InterruptLinesMessage::max_lines + 1u, 1u, 1u},      /* more lines than doorbell pages */
-      {2u, 0x4u, 1u},                                       /* a line past the last */
-      {4u, 0x5u, 1u},                                       /* too few eventfds */
-      {4u, 0x5u, 3u},                                       /* too many */
+      {0u, 0u, 0u},
+      {InterruptLinesMessage::max_lines + 1u, 1u, 1u},
+      {2u, 0x4u, 1u},
+      {4u, 0x5u, 1u},
+      {4u, 0x5u, 3u},
   };
   for (const Case &c : cases) {
       std::uint8_t bytes[InterruptLinesMessage::encoded_size] = {};
@@ -129,10 +125,5 @@ TEST(interrupt_lines_message_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 64u);
-  /* Four lines flipped at bit 0, 1, 3, 4 or 5 are 5, 6, 12, 20 or 36 lines,
-   * still covering the mask; bit 2 leaves none and bit 6 and up pass
-   * max_lines. The reserved word takes no flip, and every present flip
-   * changes how many eventfds the two given must match. With the untouched
-   * message, 5 + 1. */
   const std::uint32_t acceptable = 5u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

@@ -1,5 +1,3 @@
-/* A D3DDDIFORMAT the driver can lay out. Only 32-bpp formats until a mode
- * needs another. */
 #ifndef AV_PIXEL_FORMAT_HPP
 #define AV_PIXEL_FORMAT_HPP
 
@@ -11,7 +9,6 @@ class PixelFormat {
 public:
     explicit PixelFormat(uint32_t format);
 
-    /* Zero for a format the driver does not lay out. */
     uint32_t bytes_per_pixel() const;
 
 private:
@@ -20,6 +17,6 @@ private:
     uint32_t format_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_PIXEL_FORMAT_HPP
+#endif

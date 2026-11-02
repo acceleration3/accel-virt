@@ -17,7 +17,6 @@ VulkanBuffer::~VulkanBuffer()
     release();
 }
 
-/* A buffer whose device address is taken needs memory allocated for it. */
 bool VulkanBuffer::import(const VulkanDeviceTable &table, OwnedFd &descriptor, VkDeviceSize size,
                           VkBufferUsageFlags usage, Placement placement)
 {
@@ -37,7 +36,6 @@ bool VulkanBuffer::import(const VulkanDeviceTable &table, OwnedFd &descriptor, V
     const void *const next = (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) != 0u
                                  ? static_cast<const void *>(&addressed)
                                  : static_cast<const void *>(&dedicated);
-    /* The memory is the dma-buf's size: a buffer needing more cannot be bound. */
     const uint32_t allowed = types & needs.memoryTypeBits;
     const uint32_t chosen = placement == Placement::coherent ? table.coherent_memory_type(allowed)
                                                               : table.memory_type(allowed);
@@ -49,8 +47,6 @@ bool VulkanBuffer::import(const VulkanDeviceTable &table, OwnedFd &descriptor, V
     return false;
 }
 
-/* Everything Direct3D 11 binds a buffer as, and its device address, which
- * DXVK takes of storage it renames a buffer to. */
 bool VulkanBuffer::import_dma_buf_to_draw(const VulkanDeviceTable &table, OwnedFd &descriptor, VkDeviceSize size)
 {
     AV_SCOPE("VulkanBuffer::import_dma_buf_to_draw");
@@ -92,4 +88,4 @@ VkBuffer VulkanBuffer::buffer() const
     return buffer_;
 }
 
-}  // namespace av
+}

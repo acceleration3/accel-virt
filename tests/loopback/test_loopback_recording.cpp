@@ -1,7 +1,3 @@
-/* L4, feature 065 US1: a device started with recording on, driven by the real
- * guest core, writes down what crossed the wire. The recording is read back
- * with the same format classes the device wrote it with; what the reader and
- * the tools make of a recording is their own suites' business. */
 #include "miniport/av_context/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "device/recording/record_header.hpp"
@@ -37,7 +33,6 @@ namespace {
 
 constexpr const char *path = "loopback.av";
 
-/* A batch of one command that echoes `text` back as its answer. */
 class EchoBatch {
 public:
     explicit EchoBatch(const char *text) : bytes_{}, length_(CommandHeader::encoded_size + 8u)
@@ -56,11 +51,8 @@ private:
     std::size_t  length_;
 };
 
-}  // namespace
+}
 
-/* US1's independent test: a context's setup, three batches, their replies and
- * their fences, in the order the device took them, with the bytes the executor
- * received. */
 TEST(loopback_recording, a_run_leaves_the_setup_the_batches_the_replies_and_the_fences)
 { LoopbackRig rig(av::LoopbackDevice::default_gpu, path);
   CHECK(rig.read_capset());
@@ -79,8 +71,6 @@ TEST(loopback_recording, a_run_leaves_the_setup_the_batches_the_replies_and_the_
   RecordedFile        file(rig.device().host(), path);
   RecordHeader        record;
   const std::uint8_t *payload = nullptr;
-  /* The context's three blobs - its ring, its fence page and its reply slot -
-   * are created before it is set up, and each is a record (US1 scenario 2). */
   for (std::uint32_t blob = 0u; blob < 3u; blob++) {
       payload = file.expect(RecordKind::blob, record);
       CHECK(payload != nullptr);
@@ -125,8 +115,6 @@ TEST(loopback_recording, a_run_leaves_the_setup_the_batches_the_replies_and_the_
   CHECK_EQ(file.remaining(), 0u);
   CHECK(rig.retire(0u)); }
 
-/* US1 scenario 2: a fault is a record of its own, naming the batch that caused
- * it, and nothing is recorded after a context stops. */
 TEST(loopback_recording, a_batch_the_executor_could_not_decode_leaves_a_fault_record)
 { LoopbackRig rig(av::LoopbackDevice::default_gpu, path);
   CHECK(rig.read_capset());
@@ -151,14 +139,9 @@ TEST(loopback_recording, a_batch_the_executor_could_not_decode_leaves_a_fault_re
   CHECK(fault != nullptr);
   CHECK(record.fence() == 1u);
   if (fault != nullptr) CHECK_EQ(fault[0], static_cast<std::uint8_t>(av::FaultCode::undecodable));
-  /* A faulted context completes nothing, so no fence record follows. */
   CHECK_EQ(file.remaining(), 0u);
   CHECK(rig.retire(0u)); }
 
-/* US3 scenario 1, over the real wire: what the guest core sent and the device
- * core recorded replays into an executor library, context by context and
- * command by command, and every recorded reply is the answer the replay
- * produced. */
 TEST(loopback_recording, a_recorded_run_replays_into_a_library_with_the_same_replies)
 { LoopbackRig rig(av::LoopbackDevice::default_gpu, path);
   CHECK(rig.read_capset());

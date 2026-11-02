@@ -1,6 +1,3 @@
-/* An acquire's copy in (docs/d3d11-sharing.md): a Direct3D 11 subresource's
- * mapped rows written into the cl_mem over it, through the ICD's own blocking
- * transfers, so the bytes are the host's before the acquire returns. */
 #ifndef AV_CLICD_CL_D3D11_UPLOAD_HPP
 #define AV_CLICD_CL_D3D11_UPLOAD_HPP
 
@@ -26,6 +23,6 @@ private:
     const D3d11Object &object_;
 };
 
-}  // namespace av::clicd
+}
 
-#endif  // AV_CLICD_CL_D3D11_UPLOAD_HPP
+#endif

@@ -1,9 +1,3 @@
-/* A D3D11 sample application: a coloured triangle spinning in a 640x480
- * window, its shaders compiled at run time by d3dcompiler_47 as samples do,
- * its rotation in a constant buffer, presented through a flip-model swap
- * chain at vsync. Runs AV_SAMPLE_FRAMES frames (600 by default) and writes
- * what it drew - the frame count, the present results and the centre and a
- * corner pixel read back - to standard output. No C runtime. */
 #include <d3d11.h>
 #include <d3dcommon.h>
 #include <windows.h>
@@ -114,8 +108,6 @@ private:
         wchar_t flag[4] = {};
         uncapped_ = GetEnvironmentVariableW(L"AV_SAMPLE_UNCAPPED", flag, 4u) != 0u && flag[0] == L'1';
         if (uncapped_) described.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-        /* The legacy blt model, as a game written for it asks: the runtime
-         * copies each present into the window's surface rather than flipping. */
         if (GetEnvironmentVariableW(L"AV_SAMPLE_BLT", flag, 4u) != 0u && flag[0] == L'1') {
             described.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
             described.BufferUsage = DXGI_USAGE_SHADER_INPUT | DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -274,6 +266,6 @@ private:
     uint32_t                centre_ = 0u, corner_ = 0u;
 };
 
-}  // namespace
+}
 
 extern "C" void avd3d11sample_entry() { ExitProcess(static_cast<UINT>(Sample().run())); }

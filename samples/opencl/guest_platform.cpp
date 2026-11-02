@@ -1,6 +1,3 @@
-// The guest build's platform: Windows, no C runtime, the Khronos loader beside
-// the program (OpenCL.dll), which finds the repository's ICD through the
-// display adapter's OpenCLDriverName.
 #include <windows.h>
 
 #include "framework.h"
@@ -57,7 +54,7 @@ void write_out(const char *text, size_t length)
     WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), text, static_cast<DWORD>(length), &wrote, nullptr);
 }
 
-}  // namespace
+}
 
 void log(const char *text)
 {
@@ -106,12 +103,10 @@ void *cl_entry(const char *name)
     return reinterpret_cast<void *>(GetProcAddress(loader, name));
 }
 
-}  // namespace samples
+}
 
 extern "C" void avclsamples_entry()
 {
-    // The command line split on spaces outside double quotes, as ASCII:
-    // shell32's CommandLineToArgvW would be one more import for this.
     const wchar_t *line = GetCommandLineW();
     char         **argv = static_cast<char **>(samples::allocate(sizeof(char *) * 64));
     int            argc = 0;

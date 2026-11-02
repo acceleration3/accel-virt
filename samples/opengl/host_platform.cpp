@@ -1,4 +1,3 @@
-// The host build's platform: Linux, EGL on a render node, no window.
 #include "framework.h"
 
 #include <EGL/egl.h>
@@ -11,8 +10,6 @@
 namespace samples {
 
 namespace {
-
-// This host reports more EGL devices than it has GPUs; none has sixteen.
 constexpr EGLint max_devices = 16;
 
 using QueryDevices = EGLBoolean (*)(EGLint, EGLDeviceEXT *, EGLint *);
@@ -23,7 +20,6 @@ using GetError = GLenum (*)();
 EGLDisplay display = EGL_NO_DISPLAY;
 EGLContext context = EGL_NO_CONTEXT;
 
-// A 4.5 core context on `on`, current, or none.
 bool open_on(EGLDisplay on)
 {
     if (eglInitialize(on, nullptr, nullptr) != EGL_TRUE || eglBindAPI(EGL_OPENGL_API) != EGL_TRUE) return false;
@@ -48,7 +44,7 @@ void close_current()
     context = EGL_NO_CONTEXT;
 }
 
-}  // namespace
+}
 
 void log(const char *text)
 {
@@ -90,10 +86,6 @@ bool read_file(const char *path, Blob &blob)
     return ok;
 }
 
-// Every EGL device is tried in turn: the first whose renderer names `gpu`, or
-// with none named, the one with the most video memory - the discrete GPU,
-// which is the one the VM's device takes when it is given host-gpu=auto. A
-// surfaceless display would be whichever GPU Mesa chose.
 bool create_context(const char *gpu)
 {
     if (gpu == nullptr) gpu = getenv("AV_GL_GPU");
@@ -111,8 +103,6 @@ bool create_context(const char *gpu)
         const EGLDisplay on = eglGetPlatformDisplay(EGL_PLATFORM_DEVICE_EXT, devices[i], nullptr);
         if (on == EGL_NO_DISPLAY || !open_on(on)) continue;
         const char *renderer = reinterpret_cast<const char *>(get_string(GL_RENDERER));
-        /* GL_ATI_meminfo's first word, or GL_NVX_gpu_memory_info's: an error
-         * where neither is supported leaves the value as it was. */
         GLint memory[4] = {0, 0, 0, 0};
         get_integers(GL_TEXTURE_FREE_MEMORY_ATI, memory);
         if (memory[0] == 0) get_integers(GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX, memory);
@@ -136,6 +126,6 @@ bool create_context(const char *gpu)
 
 void *gl_proc(const char *name) { return reinterpret_cast<void *>(eglGetProcAddress(name)); }
 
-}  // namespace samples
+}
 
 int main(int argc, char **argv) { return samples::run(argc, argv); }

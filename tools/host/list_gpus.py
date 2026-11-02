@@ -1,24 +1,5 @@
 #!/usr/bin/env python3
-"""List the host's Vulkan physical devices, and generate the configuration that
-gives each one its own guest adapter (docs/kb/11-implementation-plan.md, "One
-adapter per host GPU").
-
-Each host GPU becomes one virtio-gpu-av-pci device bound by its Vulkan device
-UUID, which, unlike enumeration order, survives reboots and driver updates.
-With no GPU, llvmpipe is listed as a CPU device, so there is always one.
-
-  list_gpus.py                     a table: index, UUID, vendor:device, type, local memory, name
-  list_gpus.py --qemu              one -device argument pair per GPU, for a QEMU command line
-  list_gpus.py --libvirt           a libvirt domain fragment passing the same arguments
-  list_gpus.py --adapter-names     what provision.ps1 names each GPU's INF model with (C:\\av\\adapters.txt):
-                                   "<vendor>\t<device>\t<name>" a line, hex in lowercase, CPU devices left out
-  list_gpus.py --vulkaninfo FILE   read captured `vulkaninfo` output instead of running it
-
-What a guest will call each one is here too, by the device's own rules: the
-adapter name the capset carries (src/device/gpu/adapter_name.hpp) and the PCI
-identity the function presents (src/device/gpu/host_pci_identity.hpp), which
-tools/guest/run_guest_suite.py --all-gpus checks Windows against.
-"""
+"""List the host's Vulkan physical devices, and generate the configuration that"""
 import argparse
 import pathlib
 import re
@@ -38,9 +19,7 @@ FIELD = re.compile(r"^\s*(deviceName|vendorID|deviceID|deviceType|deviceUUID|pci
                    r"\s*=\s*(.+?)\s*$", re.M)
 PCI_FIELDS = ("pciDomain", "pciBus", "pciDevice", "pciFunction")
 SYSFS_PCI = "/sys/bus/pci/devices"
-# The capset's name field: 48 bytes, one of them the NUL (GpuIdentity::name_bytes).
 NAME_BYTES = 47
-# virtio-gpu's own identity, which the function keeps for a GPU with no PCI function.
 VIRTIO_GPU = (0x1AF4, 0x1050, 0x01)
 HEAP = re.compile(r"^\s*memoryHeaps\[\d+\]:\s*$")
 HEAP_SIZE = re.compile(r"^\s*size\s*=\s*(\d+)")
@@ -73,10 +52,6 @@ class Gpu:
         return f"virtio-gpu-av-pci,host-gpu={self.uuid},max_outputs=1"
 
     def adapter_name(self, sysfs=SYSFS_PCI):
-        """What Windows would call the adapter: AMD's own product table first,
-        then, for an integrated GPU (which RADV names after its processor),
-        integrated_name; else the Vulkan name, trimmed. The same choice the
-        device makes (virtio-gpu-av-host.c)."""
         vendor, device, revision = self.pci_identity(sysfs)
         name = amdgpu_name(vendor, device, revision)
         if name is None and self.kind == "integrated":
@@ -84,9 +59,6 @@ class Gpu:
         return adapter_name(name if name is not None else self.name)
 
     def pci_identity(self, sysfs=SYSFS_PCI):
-        """(vendor, device, revision) the device's PCI function presents: its
-        GPU's, read from sysfs, or virtio-gpu's own when the GPU has no PCI
-        function or sysfs does not describe it."""
         if self.pci_address is None:
             return VIRTIO_GPU
         try:
@@ -108,14 +80,7 @@ def sysfs_number(sysfs, address, attribute):
 
 AMDGPU_IDS = "/usr/share/libdrm/amdgpu.ids"
 PCI_IDS = ("/usr/share/hwdata/pci.ids", "/usr/share/misc/pci.ids")
-# The prefix each vendor's Windows driver puts before a product, and the word
-# the PCI ID database may already start a product with, which the prefix
-# replaces rather than repeats ("Intel Graphics" is "Intel(R) Graphics").
 VENDOR_NAMES = {0x1002: ("AMD", "AMD"), 0x8086: ("Intel(R)", "Intel"), 0x10DE: ("NVIDIA", "NVIDIA")}
-# An AMD integrated GPU AMD's table leaves out. The PCI ID database's bracket
-# lists whatever the device ID was sold as ("Granite Ridge [Radeon 610M]" for
-# a desktop Ryzen 9000's GPU, never called that), and AMD's own Windows
-# driver names these "AMD Radeon(TM) Graphics".
 AMD_INTEGRATED = "AMD Radeon(TM) Graphics"
 
 
@@ -137,8 +102,6 @@ def amdgpu_name(vendor, device, revision, table=AMDGPU_IDS):
 
 
 def integrated_name(vendor, device, databases=PCI_IDS):
-    """An integrated GPU AMD's table does not name: AMD's generic name for an
-    AMD one, the PCI ID database's for another vendor's."""
     return AMD_INTEGRATED if vendor == 0x1002 else pci_ids_name(vendor, device, databases)
 
 
@@ -163,9 +126,6 @@ def pci_ids_name(vendor, device, databases=PCI_IDS):
 
 
 def adapter_name(vulkan_name):
-    """The Vulkan deviceName without a trailing parenthesised group set off by
-    a space - the driver suffix Mesa appends - cut to the capset's field at a
-    UTF-8 character boundary: AdapterName's rule, byte for byte."""
     name = vulkan_name.encode()
     kept = len(name)
     end = len(name.rstrip(b" "))
@@ -187,7 +147,6 @@ def adapter_name(vulkan_name):
 
 
 def local_memory(section):
-    """Bytes in heaps flagged MEMORY_HEAP_DEVICE_LOCAL_BIT."""
     total, size, local = 0, 0, False
     for line in section.splitlines() + [""]:
         if HEAP.match(line) or line.startswith("memoryTypes"):
@@ -202,7 +161,6 @@ def local_memory(section):
 
 
 def parse(text):
-    """The GPUs in full `vulkaninfo` output, from its per-device sections."""
     starts = list(SECTION.finditer(text))
     gpus = []
     for position, start in enumerate(starts):

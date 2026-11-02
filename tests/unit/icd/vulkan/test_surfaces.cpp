@@ -1,6 +1,3 @@
-/* The surfaces vkCreateWin32SurfaceKHR makes (feature 046, contracts/wsi.md):
- * a handle per window, only for the instance that made it, gone with its
- * instance, and a hostile create structure refused. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/icd_rig.hpp"
 #include "harness/icd/scripted_vulkan_device.hpp"
@@ -11,13 +8,11 @@
 #include <cstdint>
 
 namespace av::icd {
-
-/* A slot with a window and no instance: what the table must never hold. */
 struct SurfaceTableProbe {
     static void orphan(SurfaceTable &table) { table.slots_[0].window_ = reinterpret_cast<void *>(0x99u); }
 };
 
-}  // namespace av::icd
+}
 
 using av::IcdRig;
 using av::ScriptedVulkanDevice;
@@ -40,8 +35,6 @@ Win32SurfaceCreateRecord surface_of(void *window)
   record.window_ = window;
   return record; }
 
-/* The WSI over the rig's root: the ICD's own windows and log, and a device the
- * entries would be called on. */
 class WsiRig {
 public:
     WsiRig() : wsi_(rig_.platform(), rig_.kmt(), rig_.windows(), rig_.chains(), rig_.log(), rig_.root(), host_) {}
@@ -55,7 +48,7 @@ private:
     Presentation         wsi_;
 };
 
-}  // namespace
+}
 
 TEST(surface_table, a_surface_is_its_window_until_it_is_destroyed)
 { SurfaceTable surfaces;
@@ -71,26 +64,20 @@ TEST(surface_table, a_surface_is_its_window_until_it_is_destroyed)
   CHECK_EQ(surfaces.live(), 2u);
   CHECK(surfaces.window_of(first) == as_window(0x10u));
   CHECK(surfaces.window_of(second) == as_window(0x20u));
-  /* A surface's handle is its slot's address, which is what makes a handle
-   * from anywhere else answer nothing. */
   const SurfaceSlot *const slot = reinterpret_cast<const SurfaceSlot *>(first);
   CHECK(slot->window_ == as_window(0x10u));
   CHECK(slot->instance_ == as_instance(1u));
-  /* A handle this table never made names no window. */
   CHECK(surfaces.window_of(reinterpret_cast<VkSurfaceKHR>(0x30u)) == nullptr);
   CHECK(surfaces.window_of(VK_NULL_HANDLE) == nullptr);
   surfaces.destroy(as_instance(1u), first);
   CHECK(surfaces.invariants_hold());
   CHECK_EQ(surfaces.live(), 1u);
   CHECK(surfaces.window_of(first) == nullptr);
-  /* Destroying it twice, and destroying a handle from nowhere, do nothing. */
   surfaces.destroy(as_instance(1u), first);
   surfaces.destroy(as_instance(1u), reinterpret_cast<VkSurfaceKHR>(0x40u));
   CHECK_EQ(surfaces.live(), 1u);
   CHECK(surfaces.invariants_hold()); }
 
-/* The handle belongs to the instance that made it: another instance's
- * destruction must not take it. */
 TEST(surface_table, only_the_instance_that_made_a_surface_destroys_or_forgets_it)
 { SurfaceTable surfaces;
   VkSurfaceKHR mine = VK_NULL_HANDLE;
@@ -122,7 +109,6 @@ TEST(surface_table, a_surface_without_a_window_is_refused_and_a_full_table_is_ou
   CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x900u), past), VK_ERROR_OUT_OF_HOST_MEMORY);
   CHECK(past == VK_NULL_HANDLE);
   CHECK(surfaces.invariants_hold());
-  /* A destroyed slot is the one the next surface takes. */
   surfaces.destroy(as_instance(1u), made[3u]);
   VkSurfaceKHR again = VK_NULL_HANDLE;
   CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x900u), again), VK_SUCCESS);
@@ -138,7 +124,6 @@ TEST(icd_presentation, a_win32_surface_is_made_from_its_window_and_nothing_else)
   CHECK(surface != VK_NULL_HANDLE);
   CHECK_EQ(rig.wsi().surfaces(), 1u);
   CHECK(rig.wsi().invariants_hold());
-  /* Every hostile create structure: no structure, another type, no window. */
   Win32SurfaceCreateRecord wrong_type = good;
   wrong_type.type_ = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   Win32SurfaceCreateRecord no_window = good;
@@ -155,8 +140,6 @@ TEST(icd_presentation, a_win32_surface_is_made_from_its_window_and_nothing_else)
   CHECK_EQ(rig.wsi().surfaces(), 0u);
   CHECK(rig.wsi().invariants_hold()); }
 
-/* Every queue of this driver presents - the copy runs on the one it is handed -
- * so support is a live surface and nothing more. */
 TEST(icd_presentation, every_queue_supports_a_live_surface_and_none_supports_a_lost_one)
 { WsiRig rig;
   const Win32SurfaceCreateRecord info = surface_of(as_window(0x10u));
@@ -170,8 +153,6 @@ TEST(icd_presentation, every_queue_supports_a_live_surface_and_none_supports_a_l
   CHECK_EQ(rig.wsi().surface_support(surface, &supported), VK_ERROR_SURFACE_LOST_KHR);
   CHECK_EQ(supported, VK_FALSE); }
 
-/* vkDestroyInstance takes the instance's surfaces with it, as the loader
- * expects; another instance's are untouched. */
 TEST(icd_presentation, an_instance_that_goes_takes_its_surfaces)
 { WsiRig rig;
   const Win32SurfaceCreateRecord info = surface_of(as_window(0x10u));
@@ -187,8 +168,6 @@ TEST(icd_presentation, an_instance_that_goes_takes_its_surfaces)
   CHECK_EQ(rig.wsi().surface_support(theirs, &supported), VK_ERROR_SURFACE_LOST_KHR);
   CHECK(rig.wsi().invariants_hold()); }
 
-/* The invariant is what holds the handles apart from nothing: a window in a
- * slot that names no instance would be a surface no instance can destroy. */
 TEST(surface_table, its_invariants_refuse_a_window_no_instance_owns)
 { SurfaceTable surfaces;
   CHECK(surfaces.invariants_hold());

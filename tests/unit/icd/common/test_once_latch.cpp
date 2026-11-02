@@ -1,5 +1,3 @@
-/* Whether something happens for the first time (OnceLatch): yes once, then
- * never again, and each latch its own. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/common/once_latch.hpp"
 

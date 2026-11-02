@@ -1,7 +1,3 @@
-/* The private-data record a process puts on D3DKMTCreateContextVirtual to ask
- * for an av context. The kernel side decodes it from memory a process wrote,
- * so every field is judged as hostile input, the way ContextSetup judges the
- * wire (feature 043). */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/context/gl_context_options.hpp"
@@ -21,8 +17,6 @@ namespace {
 
 constexpr std::uint32_t reply_bytes = 0x10000u;
 
-/* Named by allocation 2, with a 64 KiB reply slot, an order the wire allows,
- * one sub-API. */
 AvContextRecord sample()
 {
     return AvContextRecord(SubApi::vulkan, 16u, 2u, reply_bytes);
@@ -45,8 +39,6 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return record.decode(bytes, length) != Status::ok;
 }
 
-/* Encode a record the constructor accepts but the wire rules forbid, then check
- * decode refuses it - the caller side does not validate, the kernel side does. */
 bool rejects_encoded(const AvContextRecord &record)
 {
     std::uint8_t bytes[AvContextRecord::encoded_size] = {};
@@ -54,7 +46,7 @@ bool rejects_encoded(const AvContextRecord &record)
     return rejects(bytes, sizeof bytes);
 }
 
-}  // namespace
+}
 
 TEST(av_context_record, a_well_formed_record_round_trips)
 { Encoded encoded(sample());
@@ -65,14 +57,12 @@ TEST(av_context_record, a_well_formed_record_round_trips)
   CHECK_EQ(decoded.ring_order(), std::uint8_t{16u});
   CHECK_EQ(decoded.ring(), 2u);
   CHECK_EQ(decoded.reply_bytes(), reply_bytes);
-  /* Where the contract puts the name and the size. */
   CHECK_EQ(encoded.bytes()[12], 2u);
   CHECK_EQ(encoded.bytes()[18], 1u);
   std::uint8_t again[AvContextRecord::encoded_size] = {};
   CHECK_STATUS(decoded.encode(again, sizeof again), Status::ok);
   CHECK(std::memcmp(again, encoded.bytes(), sizeof again) == 0); }
 
-/* Each known sub-API decodes: OpenGL, OpenCL and Direct3D as well as Vulkan. */
 TEST(av_context_record, every_known_sub_api_decodes)
 { for (SubApi api : {SubApi::vulkan, SubApi::opengl, SubApi::opencl, SubApi::d3d}) {
       AvContextRecord record(api, 16u, 2u, reply_bytes);
@@ -83,8 +73,6 @@ TEST(av_context_record, every_known_sub_api_decodes)
       CHECK(decoded.sub_api() == api);
   } }
 
-/* The reply slot is locked guest RAM for the context's life: at least a byte
- * - every context reads answers - and no more than the protocol's bound. */
 TEST(av_context_record, a_reply_slot_is_sized_within_its_bounds)
 { for (std::uint32_t bytes : {1u, 4096u, AvContextRecord::max_reply_bytes}) {
       Encoded encoded(AvContextRecord(SubApi::opencl, 12u, 2u, bytes));
@@ -106,8 +94,6 @@ TEST(av_context_record, a_bad_magic_is_refused)
   encoded.bytes()[0] ^= 0xFFu;
   CHECK(rejects(encoded.bytes(), AvContextRecord::encoded_size)); }
 
-/* Exactly one sub-API bit; zero, two, or an undefined value is refused. The
- * sub_api field is the u32 at offset 4, past the magic. */
 TEST(av_context_record, a_sub_api_that_is_not_one_known_bit_is_refused)
 { for (std::uint32_t api : {0u, 3u, 16u, 7u}) {
       std::uint8_t bytes[AvContextRecord::encoded_size] = {};
@@ -116,7 +102,6 @@ TEST(av_context_record, a_sub_api_that_is_not_one_known_bit_is_refused)
       CHECK(rejects(bytes, sizeof bytes));
   } }
 
-/* The wire's ring order range, 12..24. */
 TEST(av_context_record, an_order_outside_the_wire_range_is_refused)
 { for (std::uint8_t order : {std::uint8_t{0u}, std::uint8_t{11u}, std::uint8_t{25u}, std::uint8_t{255u}}) {
       std::uint8_t bytes[AvContextRecord::encoded_size] = {};
@@ -126,12 +111,10 @@ TEST(av_context_record, an_order_outside_the_wire_range_is_refused)
       CHECK(rejects(bytes, sizeof bytes));
   } }
 
-/* A context with no name is one no driver can resolve. */
 TEST(av_context_record, a_context_named_by_no_allocation_is_refused)
 { CHECK(rejects_encoded(AvContextRecord(SubApi::vulkan, 16u, 0u, reply_bytes)));
   CHECK(!rejects_encoded(AvContextRecord(SubApi::vulkan, 16u, 1u, reply_bytes))); }
 
-/* The padding after the order and the word after the reply size. */
 TEST(av_context_record, a_reserved_byte_that_is_not_zero_is_refused)
 { for (std::size_t at : {std::size_t{9u}, std::size_t{11u}, std::size_t{20u}, std::size_t{23u}}) {
       std::uint8_t bytes[AvContextRecord::encoded_size] = {};
@@ -139,8 +122,6 @@ TEST(av_context_record, a_reserved_byte_that_is_not_zero_is_refused)
       bytes[at] = 1u;
       CHECK(rejects(bytes, sizeof bytes));
   } }
-
-/* ---- an OpenGL context's options, in the reserved tail (feature 050) ---- */
 
 namespace {
 
@@ -154,7 +135,6 @@ AvContextRecord gl_record(const GlContextOptions &options)
     return AvContextRecord(SubApi::opengl, 20u, 2u, reply_bytes, options);
 }
 
-/* The options' eight bytes at offset 24 of an OpenGL record, `tail` given. */
 bool rejects_tail(SubApi api, const std::uint8_t tail[8])
 {
     std::uint8_t bytes[AvContextRecord::encoded_size] = {};
@@ -163,14 +143,13 @@ bool rejects_tail(SubApi api, const std::uint8_t tail[8])
     return rejects(bytes, sizeof bytes);
 }
 
-}  // namespace
+}
 
 TEST(av_context_record, gl_options_round_trip_in_the_reserved_tail)
 { const GlContextOptions options(4u, 6u, Profile::core,
                                  GlContextOptions::debug | GlContextOptions::lose_context_on_reset, share_handle);
   Encoded encoded(gl_record(options));
   CHECK_STATUS(encoded.status(), Status::ok);
-  /* Where the contract puts each field. */
   const std::uint8_t expected_tail[8] = {4u, 6u, 1u, 0x09u, 0x42u, 0x02u, 0x00u, 0x40u};
   CHECK(std::memcmp(encoded.bytes() + 24u, expected_tail, sizeof expected_tail) == 0);
   AvContextRecord decoded;
@@ -187,7 +166,6 @@ TEST(av_context_record, gl_options_round_trip_in_the_reserved_tail)
   CHECK_STATUS(decoded.encode(again, sizeof again), Status::ok);
   CHECK(std::memcmp(again, encoded.bytes(), sizeof again) == 0); }
 
-/* All eight zero is 043's record: the host's default context, no sharing. */
 TEST(av_context_record, an_all_zero_tail_is_the_default_options)
 { for (SubApi api : {SubApi::vulkan, SubApi::opengl, SubApi::opencl}) {
       Encoded encoded(AvContextRecord(api, 20u, 2u, reply_bytes));
@@ -201,7 +179,6 @@ TEST(av_context_record, an_all_zero_tail_is_the_default_options)
   CHECK(GlContextOptions().defaults());
   CHECK(GlContextOptions().valid()); }
 
-/* Every version a major has, and each profile and flag, is accepted. */
 TEST(av_context_record, every_gl_version_profile_and_flag_the_contract_names_decodes)
 { struct Version { std::uint8_t major; std::uint8_t highest_minor; };
   const Version versions[] = {{1u, 5u}, {2u, 1u}, {3u, 3u}, {4u, 6u}};
@@ -246,10 +223,6 @@ TEST(av_context_record, gl_options_the_contract_forbids_are_refused)
                  .valid());
   } }
 
-/* Options belong to OpenGL. An OpenCL record carries one - the GL context
- * whose objects it shares, the tail's last four bytes (cl_khr_gl_sharing) -
- * and any other non-zero byte, on it or on a Vulkan record, is refused, even
- * one an OpenGL record may carry. */
 TEST(av_context_record, an_option_on_a_vulkan_record_or_an_opencl_one_past_its_share_is_refused)
 { for (std::size_t at = 0u; at < 8u; at++) {
       std::uint8_t tail[8] = {};
@@ -261,8 +234,6 @@ TEST(av_context_record, an_option_on_a_vulkan_record_or_an_opencl_one_past_its_s
   CHECK(!rejects_tail(SubApi::opengl, valid_for_gl));
   CHECK(rejects_tail(SubApi::vulkan, valid_for_gl)); }
 
-/* Any byte of a valid OpenGL record flipped either decodes to a record whose
- * encoding is exactly those bytes, or is refused. */
 TEST(av_context_record, a_byte_flip_sweep_decodes_exactly_or_is_refused)
 { Encoded encoded(gl_record(GlContextOptions(3u, 3u, Profile::compatibility, GlContextOptions::robust_access,
                                               share_handle)));
@@ -281,6 +252,4 @@ TEST(av_context_record, a_byte_flip_sweep_decodes_exactly_or_is_refused)
           CHECK_STATUS(decoded.encode(again, sizeof again), Status::ok);
           CHECK(std::memcmp(again, bytes, sizeof again) == 0);
       }
-  /* The magic's 32 bits, the reserved padding's 24 and word's 32, and the
-   * flags' high 4 at least. */
   CHECK(refused >= 92u); }

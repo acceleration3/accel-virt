@@ -11,7 +11,6 @@ constexpr uint32_t shifts[64] = {7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7,
                                  4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
                                  6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21};
 
-/* floor(abs(sin(i + 1)) * 2^32), RFC 1321. */
 constexpr uint32_t sines[64] = {
     0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
     0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be, 0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
@@ -24,12 +23,11 @@ constexpr uint32_t sines[64] = {
 
 constexpr uint32_t initial[4] = {0x67452301u, 0xefcdab89u, 0x98badcfeu, 0x10325476u};
 
-/* The bytes of the padding MD5 starts with: a one bit, then zeroes. */
 constexpr uint8_t padding[64] = {0x80u};
 
 constexpr size_t tail_room = 56u;
 
-}  // namespace
+}
 
 DxbcDigest::DxbcDigest() : state_{}, pending_{}, buffered_(0u)
 {
@@ -125,4 +123,4 @@ void DxbcDigest::compute(const uint8_t *container, size_t size, uint8_t *out)
         for (uint32_t byte = 0u; byte < 4u; byte++) out[word * 4u + byte] = static_cast<uint8_t>(state_[word] >> (8u * byte));
 }
 
-}  // namespace av
+}

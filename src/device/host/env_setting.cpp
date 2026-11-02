@@ -2,7 +2,6 @@
 
 #include "core/trace/function_scope.hpp"
 
-/* Freestanding: the declaration <stdlib.h> would give, for libc's own. */
 extern "C" char *getenv(const char *name);
 
 namespace av {
@@ -30,4 +29,4 @@ bool EnvSetting::number(uint64_t &value) const
     return value_.number(value);
 }
 
-}  // namespace av
+}

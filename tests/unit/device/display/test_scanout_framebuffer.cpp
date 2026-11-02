@@ -22,8 +22,6 @@ constexpr std::uint64_t desktop_bytes = 1280ull * 800ull * 4ull;
 
 void put32(std::uint8_t *bytes, std::size_t offset, std::uint32_t value) { std::memcpy(bytes + offset, &value, 4); }
 
-/* A decoded SET_SCANOUT_BLOB for a 1280x800 BGRA framebuffer, tweakable field
- * by field, so every test below differs from the accepted one in one place. */
 struct Request {
     std::uint8_t bytes[SetScanoutBlobRequest::encoded_size] = {};
 
@@ -70,7 +68,7 @@ void refused(Request wire, std::uint64_t blob_size = desktop_bytes)
     CHECK_EQ(framebuffer.fourcc(), 0u);
 }
 
-}  // namespace
+}
 
 TEST(scanout_framebuffer_adopt, a_blob_that_is_exactly_the_framebuffer_is_taken)
 { Request wire;
@@ -88,10 +86,7 @@ TEST(scanout_framebuffer_adopt, a_blob_that_is_exactly_the_framebuffer_is_taken)
   CHECK_EQ(framebuffer.rect().width(), 1280u); }
 
 TEST(scanout_framebuffer_adopt, the_last_row_needs_only_its_own_pixels)
-{ /* Padded rows: 800 rows of 8192 bytes would be 6553600, but the last row
-   * reads 5120 of its 8192, so a blob 3072 bytes short of the rectangle is
-   * still enough. A framebuffer that demanded the whole last stride would
-   * refuse a blob that is exactly a framebuffer. */
+{
   Request wire;
   wire.stride(8192u);
   const std::uint64_t needed = 799ull * 8192u + 5120u;
@@ -120,8 +115,6 @@ TEST(scanout_framebuffer_adopt, a_stride_one_byte_short_of_a_row_is_refused)
 
 TEST(scanout_framebuffer_adopt, a_stride_above_what_qemu_holds_in_an_int_is_refused)
 { refused(Request().size(4u, 2u).stride(ScanoutFramebuffer::max_stride + 1u), 0xFFFFFFFFFFull);
-  /* The cap is also what keeps the last-row sum inside 64 bits: with it in
-   * force the largest reachable end is under 2^63. */
   ScanoutFramebuffer framebuffer;
   CHECK_STATUS(framebuffer.adopt(Request().size(4u, 2u).stride(ScanoutFramebuffer::max_stride).decoded(),
                                  0xFFFFFFFFFFull),
@@ -189,7 +182,7 @@ TEST(scanout_framebuffer_invariants, each_term_of_the_fit_fails_the_invariant_on
   CHECK(framebuffer.invariants_hold());
 
   probe.set_width(1279u);
-  CHECK(!framebuffer.invariants_hold());   /* the rectangle no longer fits */
+  CHECK(!framebuffer.invariants_hold());
   probe.set_width(0u);
   CHECK(!framebuffer.invariants_hold());
   probe.set_width(1280u);
@@ -199,8 +192,6 @@ TEST(scanout_framebuffer_invariants, each_term_of_the_fit_fails_the_invariant_on
   probe.set_height(800u);
   CHECK(framebuffer.invariants_hold()); }
 
-/* Every field of a framebuffer that holds nothing, set on its own: each is a
- * framebuffer claiming to hold nothing while holding something. */
 TEST(scanout_framebuffer_invariants, a_framebuffer_that_holds_something_while_claiming_not_to_fails)
 { ScanoutFramebuffer framebuffer;
   ScanoutFramebufferProbe probe(framebuffer);
@@ -224,12 +215,9 @@ TEST(scanout_framebuffer_invariants, a_framebuffer_that_holds_something_while_cl
   CHECK(!framebuffer.invariants_hold());
   probe.set_format(0u);
   CHECK(framebuffer.invariants_hold());
-  /* And one that claims to hold something while holding nothing. */
   probe.set_adopted(true);
   CHECK(!framebuffer.invariants_hold()); }
 
-/* Two adoptions show the same picture only when every field a display reads
- * agrees: one differing field, or either side never adopted, is another one. */
 TEST(scanout_framebuffer_same_picture, every_field_a_display_reads_must_agree)
 { ScanoutFramebuffer shown;
   CHECK_STATUS(shown.adopt(Request().decoded(), desktop_bytes), Status::ok);
@@ -247,8 +235,6 @@ TEST(scanout_framebuffer_same_picture, every_field_a_display_reads_must_agree)
                         Request().stride(5184u), Request().offset(4096u), Request().rect(1u, 0u, 1279u, 800u),
                         Request().rect(0u, 1u, 1280u, 799u), Request().rect(0u, 0u, 1279u, 800u),
                         Request().rect(0u, 0u, 1280u, 799u)};
-  /* In a blob with room for every variant, so the blob size is not what
-   * tells them apart. */
   ScanoutFramebuffer roomy;
   CHECK_STATUS(roomy.adopt(Request().decoded(), desktop_bytes + 65536u), Status::ok);
   for (Request &variant : variants) {

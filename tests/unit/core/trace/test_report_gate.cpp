@@ -1,6 +1,3 @@
-/* A state dump's hold on its root's lock (ReportGate): the section opened,
- * busy=false and the lock held until the gate goes when the lock is free;
- * busy=true and the section closed at once, never waiting, when it is not. */
 #include "core/trace/report_gate.hpp"
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -35,7 +32,6 @@ TEST(report_gate, a_lock_held_elsewhere_is_busy_and_closes_the_section)
   writer.open("next", 0u);
   writer.close();
   CHECK(std::strstr(writer.dump(), "umd/0 busy=true") != nullptr);
-  /* Closed: what follows is not inside it. */
   CHECK(std::strstr(writer.dump(), "next/0") != nullptr);
   CHECK(std::strstr(writer.dump(), "umd/0/next") == nullptr);
   lock.held_elsewhere(false); }

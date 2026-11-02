@@ -43,8 +43,6 @@ Status ExportConnection::open(int descriptor)
     return Status::no_memory;
 }
 
-/* One byte past a request, so a datagram too long for one still arrives too
- * long, and decodes to nothing. */
 void ExportConnection::serve()
 {
     AV_SCOPE("ExportConnection::serve");
@@ -57,8 +55,6 @@ void ExportConnection::serve()
         answering = answer(bytes, length < sizeof bytes ? length : sizeof bytes);
         host_.unlock_mutex(lock_);
     }
-    /* The consumer learns it is done with at once - an answer it would not
-     * take ends it too - while the descriptor waits for the main loop. */
     host_.shutdown_export(descriptor_);
     host_.lock_mutex(lock_);
     held_ = 0u;
@@ -79,11 +75,6 @@ bool ExportConnection::answer(const uint8_t *bytes, size_t length)
     return sent;
 }
 
-/* Sync and release name a surface this consumer exported: what it holds is
- * what it is told of when the surface goes. A release of one it does not hold
- * is answered ok all the same - releasing is idempotent. A timing the clock
- * cannot take yet - the device not realized - is unavailable. A timing moves
- * the guest's blanks and never changes their rate. */
 ExportAnswer ExportConnection::respond(const ExportRequest &request, int &descriptor)
 {
     AV_SCOPE("ExportConnection::respond");
@@ -97,8 +88,6 @@ ExportAnswer ExportConnection::respond(const ExportRequest &request, int &descri
     case ExportOperation::sync:
         if (!holds(surface)) return ExportAnswer(request, Status::not_found);
     {
-        /* Every frame's sync says the rate the guest's blanks run at now, so a
-         * consumer follows a change of it without asking. */
         ExportAnswer synced = gpu_.sync(request, descriptor);
         if (synced.status() == Status::ok) synced.tell_refresh(clock_.refresh_microhz());
         return synced;
@@ -107,23 +96,16 @@ ExportAnswer ExportConnection::respond(const ExportRequest &request, int &descri
         return ExportAnswer(request, clock_.align(request.shift_ns()) == Status::ok
                                          ? Status::ok
                                          : Status::invalid_state);
-    /* A head is nothing this consumer holds: a new picture each time. */
     case ExportOperation::head: return gpu_.export_head(request, descriptor);
     default: break;
     }
     const bool held = holds(surface);
-    /* Room first: a surface exported with nowhere to record it is one the
-     * consumer would never be told is gone. */
     if (!held && !room_for_one()) return ExportAnswer(request, Status::no_space);
     const ExportAnswer exported = gpu_.export_surface(request, descriptor);
     if (exported.status() == Status::ok && !held) surfaces_[held_++] = surface;
     return exported;
 }
 
-/* Every answer here is built from a decoded request or a revocation, and
- * every body from what ExportedGpu checked, so each encodes into the 64 bytes
- * it is given. A consumer that does not read its answers is one that has
- * gone: the send does not wait. */
 bool ExportConnection::send(const ExportAnswer &answer, int descriptor)
 {
     AV_SCOPE("ExportConnection::send");
@@ -140,8 +122,6 @@ void ExportConnection::revoke(uint64_t surface, ExportRevocation reason)
     const bool told = !ended_ && (surface == 0u || holds(surface));
     if (surface == 0u) held_ = 0u;
     else drop(surface);
-    /* A consumer that cannot be told is one that reads nothing: its next
-     * receive ends it. */
     if (told && !send(ExportAnswer(reason, surface), -1)) host_.shutdown_export(descriptor_);
     host_.unlock_mutex(lock_);
 }
@@ -213,8 +193,6 @@ void ExportConnection::drop(uint64_t surface)
     }
 }
 
-/* Held surfaces are named, once each; a connection that serves nothing holds
- * none and has no descriptor. */
 bool ExportConnection::invariants_hold() const
 {
     AV_SCOPE("ExportConnection::invariants_hold");
@@ -228,4 +206,4 @@ bool ExportConnection::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

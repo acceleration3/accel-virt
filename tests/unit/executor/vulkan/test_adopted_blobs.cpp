@@ -1,6 +1,3 @@
-/* The blobs a Vulkan backend made memory of, found by that memory. What a
- * caller acts on is which blob a freed handle names - the wrong one, or one
- * already given back, is an import released twice. */
 #include "core/support/status.hpp"
 #include "executor/exported_memory.hpp"
 #include "executor/source_memory.hpp"
@@ -20,18 +17,15 @@ namespace {
 
 std::uint8_t backing[4096];
 
-/* Memory a source keeps, which every blob here imports: what tells the blobs
- * apart is what the backend made of each. */
 av::SourceMemory &memory()
 { static av::SourceMemory shared(1u, 1u, 0u, 1u, av::ExportedMemory(0x10u, -1, backing, sizeof backing));
   return shared; }
 
-/* A blob taken and holding `object`, as a backend leaves one it adopted. */
 void adopted(ImportedBlob &blob, std::uint64_t id, std::uint64_t object)
 { CHECK_STATUS(blob.take(id, memory()), Status::ok);
   blob.record(object, object); }
 
-}  // namespace
+}
 
 TEST(adopted_blobs, finds_a_blob_by_the_memory_it_holds)
 { AdoptedBlobs adopted_blobs;
@@ -46,11 +40,8 @@ TEST(adopted_blobs, finds_a_blob_by_the_memory_it_holds)
   CHECK(adopted_blobs.find(0x1000u) == &first);
   CHECK(adopted_blobs.find(0x2000u) == &second);
   CHECK(adopted_blobs.find(0x3000u) == nullptr);
-  /* Null memory is what an empty blob holds, so it names none of them. */
   CHECK(adopted_blobs.find(0u) == nullptr); }
 
-/* A blob holding nothing, one already here, or another blob naming the same
- * memory would each let one free release something twice. */
 TEST(adopted_blobs, refuses_a_blob_it_could_not_tell_apart)
 { AdoptedBlobs adopted_blobs;
   ImportedBlob empty;
@@ -69,7 +60,6 @@ TEST(adopted_blobs, refuses_a_blob_it_could_not_tell_apart)
   CHECK_EQ(adopted_blobs.count(), 1u);
   CHECK(adopted_blobs.invariants_hold()); }
 
-/* Full is a refusal, and a removal makes the room again. */
 TEST(adopted_blobs, a_full_table_refuses_the_next_until_one_is_removed)
 { static ImportedBlob blobs[AdoptedBlobs::capacity + 1u];
   AdoptedBlobs adopted_blobs;
@@ -84,8 +74,6 @@ TEST(adopted_blobs, a_full_table_refuses_the_next_until_one_is_removed)
   CHECK_EQ(adopted_blobs.count(), AdoptedBlobs::capacity);
   CHECK(adopted_blobs.invariants_hold()); }
 
-/* Removing one leaves the others found, removing it again or one never added
- * is nothing, and clearing forgets all of them. */
 TEST(adopted_blobs, removing_forgets_one_and_clearing_forgets_all)
 { AdoptedBlobs adopted_blobs;
   ImportedBlob first;
@@ -115,8 +103,6 @@ TEST(adopted_blobs, removing_forgets_one_and_clearing_forgets_all)
   CHECK(adopted_blobs.find(0x2000u) == nullptr);
   CHECK(adopted_blobs.invariants_hold()); }
 
-/* Past the room, an empty entry, a blob given back or holding nothing, and one
- * blob twice: each is a free that finds the wrong blob or none. */
 TEST(adopted_blobs_invariants, a_count_past_the_room_breaks_them)
 { AdoptedBlobs adopted_blobs;
   AdoptedBlobsProbe(adopted_blobs).set_count(AdoptedBlobs::capacity + 1u);

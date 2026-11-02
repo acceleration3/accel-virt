@@ -1,20 +1,3 @@
-/* What the host GPU's Direct3D 12 device can do, asked once per adapter, and
- * every GetCaps question D3D12Core asks answered from it.
- *
- * D3D12Core asks an adapter's capabilities before it makes a device and
- * checks them hard: an options query it gets no answer to, wave lane counts
- * out of order, a shader model list without 5.1 or with gaps, memory that is
- * not IO coherent - each fails the device (d3d12core's
- * CDevice::LLOCompleteLayerConstruction). So this opens a session of its own,
- * asks the host once (QueryCaps12: the device's caps and every format's row),
- * closes it, and answers from what it kept.
- *
- * What is reported is what this driver implements over what the host has:
- * feature level 11_1 at most, since 12_0 promises tiled resources tier 2,
- * which no command here maps; multisampling only where every member of a
- * format's cast family agrees; no tiled resources, raytracing, mesh shaders,
- * view instancing or render passes. A device's CheckFormatSupport is answered from the same
- * table, so the runtime is told one story. */
 #ifndef AV_UM_D3D12_HOST_CAPS_HPP
 #define AV_UM_D3D12_HOST_CAPS_HPP
 
@@ -28,7 +11,7 @@
 namespace av {
 class ClientTransport;
 class Kmt;
-}  // namespace av
+}
 
 namespace av::d3d12 {
 
@@ -38,30 +21,19 @@ public:
     D3d12HostCaps(const D3d12HostCaps &) = delete;
     D3d12HostCaps &operator=(const D3d12HostCaps &) = delete;
 
-    /* Asks the host through `adapter` (a D3DKMT adapter handle). False when
-     * the adapter runs no Direct3D 12, which the runtime is told as a failed
-     * GetCaps. */
     [[nodiscard]] bool learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter);
     bool               learned() const;
 
-    /* One GetCaps question, answered into the caller's buffer. */
     HRESULT answer(const D3D12DDIARG_GETCAPS &args) const;
-    /* D3D12DDI_FORMAT_SUPPORT_* bits for `format`. */
     UINT    format_support(DXGI_FORMAT format) const;
-    /* Quality levels of `format` at `samples`: one level at one sample for a
-     * format there is at all, and at more samples a level count its whole cast
-     * family shares, or none. */
     UINT    quality_levels(DXGI_FORMAT format, UINT samples) const;
 
 private:
     uint32_t pipeline_level() const;
-    /* The host's tier of tiled resources, as far as this driver carries it. */
     uint32_t tiled_tier() const;
     HRESULT  options(void *data, UINT bytes) const;
     HRESULT  shader(void *data, UINT bytes) const;
     HRESULT  shader_models(void *data, UINT bytes) const;
-    /* Writes `bytes` of `answer` over the caller's buffer, zeroing the rest:
-     * the runtime sizes each question by the revision it speaks. */
     HRESULT  fill(void *data, UINT bytes, const void *answer, UINT answer_bytes) const;
 
     d3d12proto::Caps12 caps_;
@@ -69,6 +41,6 @@ private:
     bool               learned_;
 };
 
-}  // namespace av::d3d12
+}
 
-#endif  // AV_UM_D3D12_HOST_CAPS_HPP
+#endif

@@ -28,7 +28,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(blob_retired_message_encode, is_the_blob)
 { GuardedBuffer bytes(BlobRetiredMessage::encoded_size);
@@ -46,7 +46,6 @@ TEST(blob_retired_message, round_trips_through_its_encoding)
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes, 0u), Status::ok);
   CHECK_EQ(decoded.blob(), 0xFFFFFFFFu); }
 
-/* Blob 0 names no virtio-gpu resource, so retiring it is a sender's bug. */
 TEST(blob_retired_message, blob_zero_is_refused_both_ways_and_leaves_the_message_unchanged)
 { std::uint8_t bytes[BlobRetiredMessage::encoded_size] = {};
   CHECK_STATUS(BlobRetiredMessage(0u).encode(bytes, sizeof bytes), Status::invalid_parameter);
@@ -60,8 +59,6 @@ TEST(blob_retired_message_encode, a_short_or_missing_destination_is_too_large)
   CHECK(buffer.guards_intact());
   CHECK_STATUS(BlobRetiredMessage(1u).encode(nullptr, BlobRetiredMessage::encoded_size), Status::too_large); }
 
-/* A descriptor on a message that takes none would be leaked by a receiver
- * that trusted the kind. */
 TEST(blob_retired_message_decode, any_descriptor_other_length_or_no_bytes_is_malformed)
 { std::uint8_t bytes[BlobRetiredMessage::encoded_size + 1u] = {};
   CHECK_STATUS(BlobRetiredMessage(9u).encode(bytes, sizeof bytes), Status::ok);
@@ -78,7 +75,5 @@ TEST(blob_retired_message_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 32u);
-  /* Blob 3 has two bits set, so no single flip zeroes it: its 32 flips, the
-   * all-ones word and the untouched message are acceptances. */
   const std::uint32_t acceptable = 32u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

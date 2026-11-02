@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Build the Vulkan samples (samples/vulkan) for the host, the guest, or both:
-#   tools/build_vulkan_samples.sh [host|guest|all] [-jN]
-# host  -> build-vulkan-samples/host/avvksamples       (the host's Vulkan loader)
-# guest -> build-vulkan-samples/guest/avvksamples.exe  (MinGW, the pinned vulkan-1.dll)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -55,9 +55,6 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
     static_cast<void>(locked_.construct(transport_.object(), lock_));
     device_ = &device;
     if (arena_bytes_ != 0u && open_arena(device) != Status::ok) {
-        /* A device that will not import leaves the channel usable, with bulk
-         * data inline; a transport that faulted while asking has taken the
-         * context with it. */
         if (transport_.object().faulted()) {
             lines_.write("the context faulted opening its blob arena");
             return Status::invalid_state;
@@ -85,17 +82,12 @@ Status HostChannel::open_arena(GuestConnection &device)
 void HostChannel::close(bool lost)
 {
     AV_SCOPE("HostChannel::close");
-    /* What was sent last still reaches the host before its context goes. */
     if (!lost && transport_.constructed()) static_cast<void>(transport_.object().flush());
-    /* Retired or not, every allocation goes with the context: the host's work
-     * over them goes with it too. */
     retired_.reclaim([](HostAllocation *) {});
     fenced_.reclaim([](const Fenced &) {});
     close_memories(lost);
     device_ = nullptr;
     if (arena_.constructed()) {
-        /* Neither answer changes what is torn down next: a close the device
-         * is not told of is one it does with the context. */
         const Status closed = lost ? arena_.object().abandon() : arena_.object().close();
         if (closed != Status::ok) lines_.write("the blob arena did not close whole");
         arena_.destroy();
@@ -131,15 +123,13 @@ Status HostChannel::adopt_memory(void *address, uint64_t bytes, HostMemoryReques
     return settle(kept, kept->allocation_.object().adopt(address, bytes, memory), made);
 }
 
-/* The index has room before the host is asked, so an allocation the host
- * made is never one this cannot keep. */
 Status HostChannel::keep(const void *owner, Kept *&kept)
 {
     AV_SCOPE("HostChannel::keep");
     if (!opened() || faulted()) return Status::invalid_state;
     if (handles_.reserve(handles_.count() + 1u) != Status::ok) return Status::no_memory;
     if (memories_.create(kept) != Status::ok) return Status::no_memory;
-    static_cast<void>(kept->allocation_.construct(*device_, transport_.object()));   /* a fresh slot */
+    static_cast<void>(kept->allocation_.construct(*device_, transport_.object()));
     kept->owner_ = owner;
     return Status::ok;
 }
@@ -207,8 +197,6 @@ void HostChannel::retire_memory(HostAllocation &allocation)
     static_cast<void>(close_memory(allocation));
 }
 
-/* Taken out of the list one at a time under the lock and closed after it: a
- * close takes the lock itself. */
 void HostChannel::reclaim_retired()
 {
     AV_SCOPE("HostChannel::reclaim_retired");
@@ -240,8 +228,6 @@ bool HostChannel::take_oldest_retired(HostAllocation *&allocation, uint64_t &fen
     return true;
 }
 
-/* Taken out one at a time under the lock and closed after it, as
- * reclaim_retired does. */
 void HostChannel::reclaim_retired_through(uint64_t completed)
 {
     AV_SCOPE("HostChannel::reclaim_retired_through");
@@ -393,4 +379,4 @@ bool HostChannel::invariants_hold() const
     return handles_.count() == memories_.live() && transport_.object().invariants_hold();
 }
 
-}  // namespace av::icd
+}

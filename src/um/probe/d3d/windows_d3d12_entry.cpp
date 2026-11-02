@@ -10,7 +10,6 @@ namespace {
 
 constexpr uint32_t channels = 4u;
 constexpr float    full = 255.0F;
-/* What D3D12 rounds a texture copy's rows up to. */
 constexpr uint32_t row_alignment = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
 
 uint32_t aligned_row(uint32_t width)
@@ -20,7 +19,7 @@ uint32_t aligned_row(uint32_t width)
     return (row + row_alignment - 1u) / row_alignment * row_alignment;
 }
 
-}  // namespace
+}
 
 WindowsD3d12Entry::WindowsD3d12Entry()
     : factory_(nullptr), adapter_(nullptr), device_(nullptr), queue_(nullptr), allocator_(nullptr),
@@ -46,8 +45,6 @@ int32_t WindowsD3d12Entry::create_device(uint32_t &feature_level)
     asked = D3D12CreateDevice(adapter_, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device),
                               reinterpret_cast<void **>(&device_));
     if (asked < 0) return asked;
-    /* What the device answers when asked for the levels in order: the highest
-     * it supports of the two vkd3d-proton offers. */
     const D3D_FEATURE_LEVEL offered[] = {D3D_FEATURE_LEVEL_12_1, D3D_FEATURE_LEVEL_12_0,
                                          D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
     D3D12_FEATURE_DATA_FEATURE_LEVELS levels = {};
@@ -99,8 +96,6 @@ int32_t WindowsD3d12Entry::pipeline_library(uint32_t &serialized)
     }
     device->Release();
     if (asked < 0) return asked;
-    /* A driver that refused a slot may have had the runtime remove the
-     * device instead of failing the call. */
     return device_->GetDeviceRemovedReason();
 }
 
@@ -222,8 +217,6 @@ int32_t WindowsD3d12Entry::wait()
     if (fence_->GetCompletedValue() >= signalled_) return 0;
     const HRESULT asked = fence_->SetEventOnCompletion(signalled_, static_cast<HANDLE>(reached_));
     if (asked < 0) return asked;
-    /* Two seconds: a clear the host has not finished by then is a hang, not a
-     * slow GPU. */
     return WaitForSingleObject(static_cast<HANDLE>(reached_), 2000u) == WAIT_OBJECT_0
                ? 0
                : static_cast<int32_t>(E_FAIL);
@@ -256,8 +249,6 @@ int32_t WindowsD3d12Entry::place_buffer(ID3D12Heap *heap, uint64_t offset, uint3
     described.Format = DXGI_FORMAT_UNKNOWN;
     described.SampleDesc.Count = 1u;
     described.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    /* An existing heap is D3D12_HEAP_FLAG_SHARED_CROSS_ADAPTER, and D3D12Core
-     * refuses a resource placed in one without this flag (E_INVALIDARG). */
     described.Flags = D3D12_RESOURCE_FLAG_ALLOW_CROSS_ADAPTER;
     return device_->CreatePlacedResource(heap, offset, &described, D3D12_RESOURCE_STATE_COMMON, nullptr,
                                          __uuidof(ID3D12Resource), reinterpret_cast<void **>(&buffer));
@@ -320,8 +311,6 @@ int32_t WindowsD3d12Entry::existing_heap(const uint8_t *pattern, uint8_t *copied
     if (asked >= 0) asked = copy_within(heap, memory, bytes, aliased);
     if (heap != nullptr) heap->Release();
     if (device != nullptr) device->Release();
-    /* Read once the heap is gone: the application's pages keep what the GPU
-     * wrote into them after the driver let go. */
     for (uint32_t index = 0u; index < bytes; index++) copied[index] = memory[bytes + index];
     static_cast<void>(VirtualFree(memory, 0u, MEM_RELEASE));
     return asked;
@@ -332,7 +321,6 @@ int32_t WindowsD3d12Entry::write_watch(uint32_t &pages)
     AV_SCOPE("WindowsD3d12Entry::write_watch");
     pages = 0u;
     constexpr uint32_t buffer_pages = 16u;
-    /* GetWriteWatch refused the mapping: memory no write watch covers. */
     constexpr uint32_t unwatched = 0xFFFFFFFFu;
     constexpr uint32_t page = 4096u;
     D3D12_HEAP_PROPERTIES heap = {};
@@ -398,4 +386,4 @@ void WindowsD3d12Entry::release()
     factory_ = nullptr;
 }
 
-}  // namespace av
+}

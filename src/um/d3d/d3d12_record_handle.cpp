@@ -22,4 +22,4 @@ D3d12Recorder &D3d12RecordHandle::recorder() const
     return *static_cast<const RecordHeader *>(block_)->recorder;
 }
 
-}  // namespace av::d3d12
+}

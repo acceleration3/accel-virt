@@ -10,4 +10,4 @@ void ScanoutBindingProbe::set_blob(uint32_t blob) { binding.blob_ = blob; }
 
 void ScanoutBindingProbe::forget_framebuffer() { binding.framebuffer_.forget(); }
 
-}  // namespace av
+}

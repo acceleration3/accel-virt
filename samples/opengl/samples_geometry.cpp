@@ -1,11 +1,8 @@
-// geometryshader, tessellation, displacement, instancing, mesh, pipelines, multisampling
 #include "framework.h"
 
 namespace samples {
 
 namespace {
-
-// ---------------------------------------------------------------- small math
 
 float3 transform_point(const float4x4 &m, float3 p)
 {
@@ -21,7 +18,6 @@ float3 transform_vector(const float4x4 &m, float3 v)
             v.x * m.m[0][2] + v.y * m.m[1][2] + v.z * m.m[2][2]};
 }
 
-// Rows are the images of the x, y and z axes, then the origin (row vectors).
 float4x4 basis(float3 x, float3 y, float3 z, float3 origin)
 {
     float4x4 r = float4x4::identity();
@@ -34,7 +30,6 @@ float4x4 basis(float3 x, float3 y, float3 z, float3 origin)
     return r;
 }
 
-// A frame whose y axis runs from `from` along `axis`.
 float4x4 along(float3 from, float3 axis)
 {
     const float3 y = normalize(axis);
@@ -47,8 +42,6 @@ float4x4 along(float3 from, float3 axis)
 float3 mul3(float3 a, float3 b) { return {a.x * b.x, a.y * b.y, a.z * b.z}; }
 float  smoothstep01(float t) { return t * t * (3.0f - 2.0f * t); }
 float  saturate(float x) { return clamp(x, 0.0f, 1.0f); }
-
-// ---------------------------------------------------------------- noise
 
 uint32_t hash_u32(uint32_t x)
 {
@@ -70,7 +63,6 @@ float lattice(int x, int y, int z, uint32_t seed)
     return static_cast<float>(h & 0xFFFFFFu) / 16777216.0f;
 }
 
-// Value noise in [0, 1); with a period, it tiles in x and y.
 float noise3(float3 p, uint32_t seed, int period = 0)
 {
     const float fx = floor(p.x), fy = floor(p.y), fz = floor(p.z);
@@ -86,7 +78,6 @@ float noise3(float3 p, uint32_t seed, int period = 0)
     return mix(a, b, tz);
 }
 
-// Tileable fractal noise over [0,1)^2 starting at `cells` lattice cells across.
 float fbm2(float u, float v, int cells, int octaves, uint32_t seed)
 {
     float sum = 0.0f, amplitude = 0.5f, total = 0.0f;
@@ -107,10 +98,6 @@ uint32_t rgba(float3 c)
     return 0xFF000000u | (b << 16u) | (g << 8u) | r;
 }
 
-// ---------------------------------------------------------------- mesh building
-
-// Grows a Mesh within a fixed capacity; triangles are wound to face along
-// their vertices' normals, so shapes need not care about winding.
 struct MeshBuilder {
     Mesh     mesh;
     uint32_t vertex_capacity = 0;
@@ -154,9 +141,6 @@ struct MeshBuilder {
         triangle(a, c, d);
     }
 
-    // A surface of revolution about y. The profile's (radius, height) points
-    // run counterclockwise in that half-plane, so its normals face outward.
-    // `stretch` scales the shape before `place` (normals follow correctly).
     void lathe(const float2 *profile, uint32_t count, uint32_t segments, const float4x4 &place, float3 color,
                bool faceted = false, float3 stretch = {1, 1, 1})
     {
@@ -236,7 +220,6 @@ struct MeshBuilder {
         cube.release();
     }
 
-    // A two-sided triangle: one face along n, one against it.
     void blade(float3 a, float3 b, float3 c, float3 n, float3 color)
     {
         triangle(vertex(a, n, {0, 1}, color), vertex(b, n, {1, 1}, color), vertex(c, n, {0.5f, 0}, color));
@@ -246,14 +229,12 @@ struct MeshBuilder {
 };
 
 
-// ---------------------------------------------------------------- shared GPU bits
-
 struct Frame {
     float4x4 world;
     float4x4 view_projection;
-    float4   light;    // xyz: light position in world space
-    float4   eye;      // xyz: camera position in world space
-    float4   params;   // per-sample
+    float4   light;
+    float4   eye;
+    float4   params;
 };
 
 const char *const geometry_frame = R"(
@@ -269,8 +250,6 @@ layout(std140, binding = 0, row_major) uniform Frame {
     "layout(location = 2) in vec2 uv;\n"            \
     "layout(location = 3) in vec3 color;\n"
 
-// Direct3D's rasterizer state: fill, cull, and a depth bias in its units -
-// the same two numbers glPolygonOffset takes, the other way round.
 void raster(bool wireframe, bool cull, int depth_bias = 0, float slope_bias = 0.0f)
 {
     glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
@@ -285,9 +264,6 @@ void raster(bool wireframe, bool cull, int depth_bias = 0, float slope_bias = 0.
     }
 }
 
-// ================================================================ geometryshader
-
-// A monkey-like head: skull, ears and muzzle, one smooth-shaded mesh.
 Mesh head_mesh()
 {
     MeshBuilder b;
@@ -303,8 +279,6 @@ Mesh head_mesh()
 }
 
 
-// The geometry shader draws each vertex's normal as a line, red at the
-// surface and blue at its tip, over the lit mesh.
 class GeometryShader final : public Sample {
 public:
     const char *name() const override { return "geometryshader"; }
@@ -404,10 +378,6 @@ private:
     GLuint   constants_ = 0;
 };
 
-// ================================================================ tessellation
-
-// PN triangles: a coarse mesh on the left through a pass-through hull and
-// domain shader, the same mesh on the right curved by PN triangle patches.
 const char *const tessellation_vertex = R"(
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -601,15 +571,11 @@ public:
     }
 
 private:
-    GLuint   programs_[2][2] = {};   // [flat, pn][solid, wire]
+    GLuint   programs_[2][2] = {};
     DrawMesh torus_;
     GLuint   constants_ = 0;
 };
 
-// ================================================================ displacement
-
-// Stone blocks in dark mortar; alpha holds the height the domain shader raises
-// the surface by.
 uint32_t *brick_texels(uint32_t size)
 {
     uint32_t *texels = static_cast<uint32_t *>(allocate(size * size * 4));
@@ -673,8 +639,6 @@ void main() {
     }
 }
 )";
-        // The flat side and the displaced one differ in the strength the
-        // uniform buffer gives: params.y is zero on the left.
         static const char *const evaluation = R"(
 // Direct3D's triangle_cw, as for the tessellation sample.
 layout(triangles, equal_spacing, ccw) in;
@@ -769,9 +733,6 @@ private:
     GLuint   constants_ = 0;
 };
 
-// ================================================================ instancing
-
-// A lumpy sphere with welded, recomputed normals.
 Mesh rock_mesh(uint32_t seed)
 {
     Mesh mesh = sphere_mesh(1.0f, 20, 14);
@@ -791,7 +752,6 @@ Mesh rock_mesh(uint32_t seed)
         b.normal = b.normal + face;
         c.normal = c.normal + face;
     }
-    // Seam and pole vertices share a position: give them one normal.
     for (uint32_t i = 0; i < mesh.vertex_count; i++) {
         float3 sum = mesh.vertices[i].normal;
         for (uint32_t j = 0; j < mesh.vertex_count; j++)
@@ -804,7 +764,6 @@ Mesh rock_mesh(uint32_t seed)
         mesh.vertices[i].normal = mesh.vertices[i].color;
         mesh.vertices[i].color = {1, 1, 1};
     }
-    // The face normals point along the winding's cross product; make them outward.
     const Vertex &top = mesh.vertices[mesh.vertex_count / 2];
     if (dot(top.normal, top.position) < 0.0f)
         for (uint32_t i = 0; i < mesh.vertex_count; i++) mesh.vertices[i].normal = -mesh.vertices[i].normal;
@@ -914,7 +873,6 @@ void main() {
         }
         instances_ = gpu.buffer(instances, sizeof(RockInstance) * instance_count);
         release_memory(instances);
-        // The mesh's own layout, and the instance stream beside it.
         layout_ = gpu.mesh_layout(rock_.vertices, rock_.indices);
         const GLuint offsets[3] = {0, 12, 24};
         const GLint sizes[3] = {3, 3, 1};
@@ -981,9 +939,6 @@ private:
     GLuint   constants_ = 0;
 };
 
-// ================================================================ mesh / multisampling: a space probe
-
-// Three longerons and their zig-zag bracing, from `from` to `to`.
 void truss(MeshBuilder &b, float3 from, float3 to, float width, uint32_t bays, float3 color)
 {
     const float4x4 frame = along(from, to - from);
@@ -1013,7 +968,6 @@ Mesh probe_mesh()
     const float3 white = {0.92f, 0.92f, 0.9f}, dark = {0.22f, 0.22f, 0.24f}, metal = {0.6f, 0.6f, 0.62f};
     const float3 gold = {0.85f, 0.65f, 0.25f}, brown = {0.55f, 0.4f, 0.2f};
 
-    // The dish: a paraboloid shell, concave side up.
     const float radius = 1.8f, depth = 0.35f, shell = 0.04f, k = depth / (radius * radius);
     float2 dish[27];
     for (int i = 0; i <= 12; i++) {
@@ -1026,7 +980,6 @@ Mesh probe_mesh()
         dish[26 - i] = {r, k * r * r + shell};
     }
     b.lathe(dish, 27, 64, translate({0, 0.08f, 0}), white);
-    // The dish's feed: four struts to a subreflector.
     const float3 apex = {0, 1.25f, 0};
     for (int i = 0; i < 4; i++) {
         const float a = radians(45.0f + 90.0f * static_cast<float>(i));
@@ -1036,18 +989,16 @@ Mesh probe_mesh()
     b.cylinder(apex - float3{0, 0.05f, 0}, apex + float3{0, 0.08f, 0}, 0.16f, 0.12f, 16, gold);
     b.cylinder(apex, apex + float3{0, 0.3f, 0}, 0.03f, 0.02f, 8, metal);
 
-    // The bus: a ten-sided box under the dish, a collar between them.
     const float2 bus[4] = {{0, -0.65f}, {0.9f, -0.65f}, {0.9f, -0.15f}, {0, -0.15f}};
     b.lathe(bus, 4, 10, float4x4::identity(), dark, true);
     const float2 collar[4] = {{0, -0.15f}, {0.62f, -0.15f}, {0.62f, 0.1f}, {0, 0.1f}};
     b.lathe(collar, 4, 32, float4x4::identity(), white);
-    b.cylinder({0, -0.4f, -0.84f}, {0, -0.4f, -0.9f}, 0.16f, 0.16f, 24, gold);   // the record
+    b.cylinder({0, -0.4f, -0.84f}, {0, -0.4f, -0.9f}, 0.16f, 0.16f, 24, gold);
     for (int i = 0; i < 10; i += 3) {
         const float a = radians(36.0f * static_cast<float>(i) + 18.0f);
         b.box(rotate_y(-a) * translate({cos(a) * 0.87f, -0.4f, sin(a) * 0.87f}), {0.06f, 0.35f, 0.4f}, metal);
     }
 
-    // Legs under the bus.
     for (int i = 0; i < 6; i++) {
         const float a = radians(60.0f * static_cast<float>(i));
         const float a2 = radians(60.0f * static_cast<float>(i) + 60.0f);
@@ -1057,7 +1008,6 @@ Mesh probe_mesh()
         b.cylinder({cos(a2) * 0.8f, -0.65f, sin(a2) * 0.8f}, foot, 0.012f, 0.012f, 4, metal, false);
     }
 
-    // The science boom and its scan platform.
     const float3 science_root = {0.85f, -0.35f, 0.1f}, science_tip = {4.4f, -0.1f, 0.3f};
     truss(b, science_root, science_tip, 0.2f, 16, metal);
     b.box(translate(science_tip + float3{0.25f, -0.1f, 0}), {0.5f, 0.35f, 0.4f}, dark);
@@ -1067,7 +1017,6 @@ Mesh probe_mesh()
                20, brown);
     b.cylinder(science_tip + float3{0.55f, 0.1f, 0}, science_tip + float3{0.55f, 0.6f, 0}, 0.03f, 0.03f, 6, dark);
 
-    // The generators' boom: a short truss with three finned cylinders.
     const float3 rtg_root = {-0.85f, -0.4f, -0.1f}, rtg_tip = {-2.9f, -0.55f, -0.6f};
     truss(b, rtg_root, rtg_tip, 0.16f, 8, metal);
     const float3 rtg_axis = normalize(rtg_tip - rtg_root);
@@ -1081,7 +1030,6 @@ Mesh probe_mesh()
     }
     b.cylinder(rtg_tip + rtg_axis * 0.5f, rtg_tip - rtg_axis * 1.0f, 0.02f, 0.02f, 6, metal);
 
-    // The long, thin booms: magnetometer and plasma wave antennas.
     b.cylinder({0.2f, -0.45f, 0.6f}, {-4.6f, 4.9f, 3.6f}, 0.02f, 0.012f, 6, brown, false);
     b.cylinder({-0.4f, -0.6f, 0.4f}, {-3.5f, -5.5f, 1.4f}, 0.01f, 0.008f, 5, brown, false);
     b.cylinder({-0.4f, -0.6f, 0.4f}, {-4.4f, -3.8f, 3.2f}, 0.01f, 0.008f, 5, brown, false);
@@ -1136,7 +1084,6 @@ void main() {
 }
 )";
 
-// The probe's pieces drawn once: its buffers, texture and program.
 struct Probe {
     GLuint   program = 0;
     DrawMesh mesh;
@@ -1188,7 +1135,6 @@ Frame probe_frame(const Gpu &gpu, float time, float3 eye, float3 at, float ambie
     return frame;
 }
 
-// A textured, lit model built from vertex and index buffers.
 class MeshSample final : public Sample {
 public:
     const char *name() const override { return "mesh"; }
@@ -1208,8 +1154,6 @@ private:
     Probe probe_;
 };
 
-// The probe's thin struts drawn into a 4x multisampled target, resolved into
-// the frame.
 class Multisampling final : public Sample {
 public:
     const char *name() const override { return "multisampling"; }
@@ -1260,8 +1204,6 @@ private:
     GLuint                   target_ = 0;
 };
 
-// ================================================================ pipelines
-
 float ground_height(float x, float z)
 {
     const float r2 = (x * x + z * z) / 9.0f;
@@ -1269,12 +1211,10 @@ float ground_height(float x, float z)
     return mound + (noise3({x * 0.8f, z * 0.8f, 0.5f}, 9u) - 0.5f) * 0.3f;
 }
 
-// A treasure chest under a tree, with mushrooms and grass on a mound.
 Mesh glade_mesh()
 {
     MeshBuilder b;
     b.begin(60000, 90000);
-    // Dark materials: the Phong pipeline adds the colour itself as ambient, the toon one triples it.
     const float3 grass = {0.08f, 0.12f, 0.05f}, bark = {0.1f, 0.05f, 0.035f}, wood = {0.12f, 0.06f, 0.03f};
     const float3 gold = {0.35f, 0.27f, 0.12f}, cap = {0.17f, 0.12f, 0.33f}, stem = {0.3f, 0.28f, 0.26f};
 
@@ -1297,7 +1237,6 @@ Mesh glade_mesh()
             b.quad(a, a + 1, c + 1, c);
         }
 
-    // The tree: a flared trunk behind the chest and roots spreading from it.
     const float3 trunk_base = {0.3f, ground_height(0.3f, 2.6f) - 0.2f, 2.6f};
     const float2 trunk[6] = {{0, 0}, {1.3f, 0}, {0.8f, 0.6f}, {0.6f, 1.6f}, {0.55f, 9.0f}, {0, 9.0f}};
     b.lathe(trunk, 6, 24, translate(trunk_base), bark);
@@ -1309,7 +1248,6 @@ Mesh glade_mesh()
         b.cylinder(trunk_base + float3{cos(a) * 0.6f, 0.9f, sin(a) * 0.6f}, tip, 0.35f, 0.06f, 10, bark);
     }
 
-    // The chest: a box, a rounded lid, gold bands and a gem behind it.
     const float chest_y = ground_height(0, 0) + 0.3f;
     b.box(translate({0, chest_y, 0}), {1.4f, 0.6f, 0.8f}, wood);
     b.cylinder({-0.7f, chest_y + 0.3f, 0}, {0.7f, chest_y + 0.3f, 0}, 0.4f, 0.4f, 20, wood);
@@ -1347,7 +1285,6 @@ Mesh glade_mesh()
     return b.mesh;
 }
 
-// One scene through three pipeline states: Phong, toon, and wireframe.
 class Pipelines final : public Sample {
 public:
     const char *name() const override { return "pipelines"; }
@@ -1447,12 +1384,12 @@ void main() { target = vec4(v_color * 1.5, 1); }
     }
 
 private:
-    GLuint   programs_[3] = {};   // Phong, toon, wireframe
+    GLuint   programs_[3] = {};
     DrawMesh glade_;
     GLuint   constants_ = 0;
 };
 
-}  // namespace
+}
 
 void register_geometry(Sample **all, uint32_t &made)
 {
@@ -1465,4 +1402,4 @@ void register_geometry(Sample **all, uint32_t &made)
     all[made++] = new Multisampling();
 }
 
-}  // namespace samples
+}

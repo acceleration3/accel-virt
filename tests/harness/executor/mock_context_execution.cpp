@@ -10,7 +10,7 @@ namespace {
 
 constexpr std::uint8_t no_uuid[ContextExecutor::uuid_bytes] = {};
 
-}  // namespace
+}
 
 MockContextExecution::MockContextExecution(Host &host, FenceReporter &fences, std::uint8_t order)
     : ops_(AV_EXECUTOR_SUB_API_VULKAN), recorder_(host), library_(), shares_(host, library_),
@@ -29,4 +29,4 @@ MockExecutorOps &MockContextExecution::ops() { return ops_; }
 WireRecorder    &MockContextExecution::recorder() { return recorder_; }
 BatchExecutor   &MockContextExecution::batches() { return batches_; }
 
-}  // namespace av
+}

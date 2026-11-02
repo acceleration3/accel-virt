@@ -82,8 +82,7 @@ bool StagedMapping::invariants_hold() const
 {
     AV_SCOPE("StagedMapping::invariants_hold");
     if (at_ == nullptr) return memory_ == Memory::named;
-    /* A copy holds the bytes it stands for, so it has some. */
     return object_ != 0u && (memory_ == Memory::named || bytes_ != 0u);
 }
 
-}  // namespace av::icd
+}

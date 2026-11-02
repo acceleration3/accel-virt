@@ -1,8 +1,3 @@
-/* The ICD's pixel formats as opengl32 reads them through
- * DrvDescribePixelFormat: the count for any index, a descriptor only for an
- * index in range and room for one, every row a composited window format with
- * no palette or bitmap bits, and indices that name the same format in every
- * table. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/opengl/pixel_format_table.hpp"
 
@@ -17,12 +12,11 @@ namespace {
 constexpr std::uint32_t rows = 24u;
 constexpr std::uint32_t pfd_type_rgba = 0u;
 constexpr std::uint32_t pfd_main_plane = 0u;
-/* Every PFD_ flag a hardware OpenGL format may not carry here. */
-constexpr std::uint32_t forbidden_flags = 0x00000002u /* PFD_STEREO */ | 0x00000008u /* PFD_DRAW_TO_BITMAP */ |
-                                         0x00000010u /* PFD_SUPPORT_GDI */ | 0x00000040u /* PFD_GENERIC_FORMAT */ |
-                                         0x00000080u /* PFD_NEED_PALETTE */ |
-                                         0x00000100u /* PFD_NEED_SYSTEM_PALETTE */ |
-                                         0x00001000u /* PFD_GENERIC_ACCELERATED */;
+constexpr std::uint32_t forbidden_flags = 0x00000002u | 0x00000008u |
+                                         0x00000010u | 0x00000040u |
+                                         0x00000080u |
+                                         0x00000100u |
+                                         0x00001000u ;
 
 std::uint16_t u16(const std::uint8_t *bytes, std::uint32_t at)
 { return static_cast<std::uint16_t>(bytes[at] | (bytes[at + 1u] << 8u)); }
@@ -31,7 +25,7 @@ std::uint32_t u32(const std::uint8_t *bytes, std::uint32_t at)
 { return std::uint32_t{bytes[at]} | (std::uint32_t{bytes[at + 1u]} << 8u) | (std::uint32_t{bytes[at + 2u]} << 16u) |
          (std::uint32_t{bytes[at + 3u]} << 24u); }
 
-}  // namespace
+}
 
 TEST(pixel_format_table, answers_the_count_for_any_index_and_describes_only_rows_in_range)
 { const PixelFormatTable table;
@@ -46,7 +40,6 @@ TEST(pixel_format_table, answers_the_count_for_any_index_and_describes_only_rows
       const bool in_range = index >= 1 && index <= static_cast<std::int32_t>(rows);
       CHECK_EQ(table.contains(index), in_range);
       CHECK_EQ(descriptor[0] == 0xee, !in_range);
-      /* Nothing past the descriptor's own 40 bytes is written. */
       CHECK_EQ(descriptor[40], 0xeeu);
   }
   CHECK_EQ(table.describe(1, 0u, nullptr), rows); }
@@ -70,25 +63,25 @@ TEST(pixel_format_table, every_row_is_a_composited_rgba8_window_format_with_no_p
       std::uint8_t d[40] = {};
       CHECK_EQ(table.describe(index, sizeof d, d), rows);
       const av::glicd::PixelFormat &format = table.format(index);
-      CHECK_EQ(u16(d, 0u), 40u);                     /* nSize */
-      CHECK_EQ(u16(d, 2u), 1u);                      /* nVersion */
+      CHECK_EQ(u16(d, 0u), 40u);
+      CHECK_EQ(u16(d, 2u), 1u);
       const std::uint32_t flags = u32(d, 4u);
-      CHECK_EQ(flags & 0x4u, 0x4u);                  /* PFD_DRAW_TO_WINDOW */
-      CHECK_EQ(flags & 0x20u, 0x20u);                /* PFD_SUPPORT_OPENGL */
-      CHECK_EQ(flags & 0x8000u, 0x8000u);            /* PFD_SUPPORT_COMPOSITION */
+      CHECK_EQ(flags & 0x4u, 0x4u);
+      CHECK_EQ(flags & 0x20u, 0x20u);
+      CHECK_EQ(flags & 0x8000u, 0x8000u);
       CHECK_EQ(flags & forbidden_flags, 0u);
       CHECK_EQ((flags & 0x1u) != 0u, format.double_buffer());
       CHECK_EQ(flags, format.flags());
-      CHECK_EQ(d[8], pfd_type_rgba);                 /* iPixelType */
-      CHECK_EQ(d[9], 32u);                           /* cColorBits */
-      CHECK_EQ(d[10], 8u);  CHECK_EQ(d[11], 16u);    /* red bits and shift: BGRA */
+      CHECK_EQ(d[8], pfd_type_rgba);
+      CHECK_EQ(d[9], 32u);
+      CHECK_EQ(d[10], 8u);  CHECK_EQ(d[11], 16u);
       CHECK_EQ(d[12], 8u);  CHECK_EQ(d[13], 8u);
       CHECK_EQ(d[14], 8u);  CHECK_EQ(d[15], 0u);
       CHECK_EQ(d[16], 8u);  CHECK_EQ(d[17], 24u);
       for (std::uint32_t accumulation = 18u; accumulation <= 22u; accumulation++) CHECK_EQ(d[accumulation], 0u);
       CHECK_EQ(d[23], format.depth_bits());
       CHECK_EQ(d[24], format.stencil_bits());
-      CHECK_EQ(d[25], 0u);                           /* cAuxBuffers */
+      CHECK_EQ(d[25], 0u);
       CHECK_EQ(d[26], pfd_main_plane);
       CHECK_EQ(d[27], 0u);
       CHECK_EQ(u32(d, 28u), 0u);
@@ -113,8 +106,6 @@ TEST(pixel_format_table, holds_each_combination_exactly_once)
       for (const auto &by_buffer : by_depth)
           for (const auto &by_srgb : by_buffer)
               for (const std::uint32_t count : by_srgb) CHECK_EQ(count, 1u);
-  /* The first row is what an application asking for nothing special gets:
-   * double buffered, D24S8, no sRGB, no samples. */
   const av::glicd::PixelFormat &first = table.format(1);
   CHECK(first.double_buffer());
   CHECK_EQ(first.depth_bits(), 24u);
@@ -142,7 +133,7 @@ struct PixelFormatTableProbe {
     { table.rows_[row] = format; }
 };
 
-}  // namespace av::glicd
+}
 
 TEST(pixel_format_table, invariants_refuse_a_repeated_row_or_a_depth_it_does_not_offer)
 { using av::glicd::PixelFormatTableProbe;

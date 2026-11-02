@@ -1,12 +1,8 @@
-"""The av requests a guest driver sends to set a context up, and the guest's
-side of its ring (docs/protocol.md), for the qtest suites."""
 import os
 import struct
 import time
 
-# The echo executor (tests/qemu/echo_executor.cpp) the qemu_virtio_gpu ctest builds.
 EXECUTOR = os.environ.get("AV_EXECUTOR", "")
-# This project's executor library, the one that answers on the host's GPU.
 REAL_EXECUTOR = os.environ.get("AV_REAL_EXECUTOR", "")
 
 CMD_RESOURCE_UNREF = 0x0102
@@ -31,22 +27,18 @@ RING_MAGIC = 0x00525641
 BATCH_MAGIC = 0x00425641
 SUB_API_VULKAN = 1
 SUB_API_OPENGL = 2
-# The setup's minor that carries an OpenGL context's options (feature 050).
 OPTIONS_MINOR = 1
 DOORBELL_SHM_ID = 0x72
 DOORBELLS = 64
 PAGE = 0x1000
 RING_HEADER = 32
 BATCH_HEADER = 32
-# The worker's awake flag, the device's to write: while it is set the worker
-# is watching the ring and consumes a published tail without a doorbell.
 AWAKE_OFFSET = 5
 TAIL_OFFSET = 8
 HEAD_OFFSET = 16
 
 
 def av_device(options="", executor=EXECUTOR):
-    """virtio-gpu-av-pci on the first host GPU, executing with the echo executor unless told another."""
     return f"virtio-gpu-av-pci,host-gpu=auto,executor={executor}{options}"
 
 
@@ -72,7 +64,6 @@ def setup(ring, fence, order=12, doorbell=0, major=1, minor=0, sub_api=SUB_API_V
 
 
 def setup_with_options(ring, fence, doorbell, reply, sub_api, major=0, minor=0, profile=0, flags=0, share=0):
-    """The 48-byte setup of the options minor: `share` is the device id of the context to share."""
     return struct.pack("<IHHIIB3xIII", SETUP_MAGIC, 1, OPTIONS_MINOR, sub_api, ring, 12, fence, doorbell, reply) + \
         struct.pack("<BBBBI8x", major, minor, profile, flags, share)
 
@@ -92,7 +83,6 @@ def guest_blob(resource, address, size):
 
 
 def guest_blob_pages(resource, addresses):
-    """A GUEST blob over one page at each of `addresses`, in that order."""
     return header(CMD_RESOURCE_CREATE_BLOB) + struct.pack("<IIIIQQ", resource, BLOB_MEM_GUEST, 0, len(addresses), 0,
                                                           PAGE * len(addresses)) + \
         b"".join(struct.pack("<QI4x", address, PAGE) for address in addresses)
@@ -123,13 +113,10 @@ GENERATE_REPLY = 1
 
 
 def command(command_id, payload=b"", flags=0):
-    """One command as the echo executor reads it: id, size with flags in the top byte, payload."""
     return struct.pack("<II", command_id, (8 + len(payload)) | flags << 24) + payload
 
 
 def batch_header(length, fence, magic=BATCH_MAGIC):
-    """A batch's 32-byte header: magic, payload length, fence, the guest's
-    publish time (0 here) and eight reserved bytes."""
     return struct.pack("<IIQQ8x", magic, length, fence, 0)
 
 
@@ -139,16 +126,12 @@ def batch_of(fence, commands):
 
 
 def batch(fence, length):
-    """A batch of `length` payload bytes: one echo command when it can hold one."""
     if length < 8:
         return batch_of(fence, bytes((0xB0 + i) & 0xFF for i in range(length)))
     return batch_of(fence, command(ECHO, bytes((0xB0 + i) & 0xFF for i in range(length - 8))))
 
 
 class GuestRing:
-    """A ring in guest memory at `address`: the guest writes batches and
-    publishes its tail; the device publishes head."""
-
     def __init__(self, qtest, address, order=12):
         self.qtest = qtest
         self.address = address
@@ -165,7 +148,6 @@ class GuestRing:
         return (RING_HEADER + self.capacity + PAGE - 1) & ~(PAGE - 1)
 
     def write(self, data):
-        """Bytes at the unpublished tail, wrapping at the end of the data area."""
         position = self.tail % self.capacity
         first = data[:self.capacity - position]
         self.qtest.write_bytes(self.address + RING_HEADER + position, first)
@@ -186,7 +168,6 @@ class GuestRing:
         return self.qtest.read(8, self.address + AWAKE_OFFSET) != 0
 
     def wait_head(self, expected, seconds=10.0):
-        """Whether head reached `expected` in time."""
         deadline = time.monotonic() + seconds
         while self.head() != expected:
             if time.monotonic() > deadline:

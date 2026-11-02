@@ -1,11 +1,3 @@
-"""Load profile.toml and protocol_ids.toml.
-
-The profile is now Vulkan-version + extension driven; ``lower.py`` walks
-``vk.xml`` to compute the actual command set. ``protocol_ids.toml``
-remains the source of truth for stable wire IDs but is auto-extended on
-each regeneration so the developer never hand-edits it.
-"""
-
 from __future__ import annotations
 
 import sys
@@ -21,15 +13,9 @@ class Profile:
     excluded_commands: set[str] = field(default_factory=set)
     platforms: list[str] = field(default_factory=lambda: ["common", "linux"])
     sync_overrides: dict[str, str] = field(default_factory=dict)
-    # "<command>.<param>" -> "<sibling array>.<member>": the inner length
-    # of a pointer-to-pointer array, which vk.xml states only in prose.
     inner_lens: dict[str, str] = field(default_factory=dict)
-    # Struct -> the struct it should be treated as extending via pNext,
-    # for cases vk.xml does not mark with ``structextends``.
     chain_extras: dict[str, str] = field(default_factory=dict)
     command_ids: dict[str, int] = field(default_factory=dict)
-    # Path back to protocol_ids.toml so the lowering stage can append
-    # newly-discovered commands without losing the existing IDs.
     ids_path: Path | None = None
 
 
@@ -64,12 +50,6 @@ def _parse_api_version(raw: str | int | float) -> tuple[int, int]:
 
 
 def assign_missing_ids(profile: Profile, command_names: list[str]) -> list[str]:
-    """Make sure every command in ``command_names`` has a stable wire ID.
-
-    Existing IDs in ``profile.command_ids`` are never moved. New commands
-    are appended at the highest-id+1. Returns the list of newly-assigned
-    command names so the caller can persist them via ``write_ids``.
-    """
     new: list[str] = []
     next_id = max(profile.command_ids.values(), default=0x10000) + 1
     for name in command_names:
@@ -81,11 +61,6 @@ def assign_missing_ids(profile: Profile, command_names: list[str]) -> list[str]:
 
 
 def write_ids(profile: Profile) -> None:
-    """Re-serialize protocol_ids.toml with all current IDs.
-
-    Sorted by ID so the file stays human-readable and merge conflicts are
-    rare. Existing entries keep their numeric value.
-    """
     if profile.ids_path is None:
         return
     rows = sorted(profile.command_ids.items(), key=lambda kv: kv[1])

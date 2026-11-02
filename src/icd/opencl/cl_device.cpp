@@ -71,8 +71,6 @@ void ClDevice::report(StateWriter &writer) const
     writer.close();
 }
 
-/* A device is shown only once it is open, which takes its adapter: an open
- * device's connection holds a link. Its report names its own adapter. */
 bool ClDevice::invariants_hold() const
 {
     AV_SCOPE("ClDevice::invariants_hold");
@@ -82,4 +80,4 @@ bool ClDevice::invariants_hold() const
     return report_.names_adapter(luid_);
 }
 
-}  // namespace av::clicd
+}

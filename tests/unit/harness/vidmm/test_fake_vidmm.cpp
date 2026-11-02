@@ -1,5 +1,3 @@
-/* The harness's VidMm segment model, proven against crafted answers, then
- * against the driver's own through the registered table. */
 #include "miniport/ddi/dxgk_query_segment_out4_record.hpp"
 #include "miniport/ddi/dxgk_segment_descriptor4_record.hpp"
 #include "miniport/ddi/dxgkarg_query_adapter_info_record.hpp"
@@ -76,7 +74,7 @@ private:
     DxgkSegmentDescriptor4Record descriptors_[4];
 };
 
-}  // namespace
+}
 
 TEST(fake_vidmm_create_segments, accepts_one_aperture_segment)
 { MockPlatform platform; CraftedSegments miniport;
@@ -123,7 +121,6 @@ TEST(fake_vidmm_validate, refuses_each_descriptor_validate_segment_descriptors_r
       {[](CraftedSegments &m) { m.descriptor(0).Flags = 0x380u; }, SegmentRule::invalid_flags},
       {[](CraftedSegments &m) { m.descriptor(0).Flags = 0x2004u; }, SegmentRule::cpu_host_aperture_with_aperture},
       {[](CraftedSegments &m) { m.set_paging_segment(2u); }, SegmentRule::paging_buffer_segment_out_of_range},
-      /* Zero is not a segment: identifiers are one-based. */
       {[](CraftedSegments &m) { m.set_paging_segment(0u); }, SegmentRule::paging_buffer_segment_out_of_range},
   };
   for (const Case &c : cases) {
@@ -148,10 +145,6 @@ TEST(fake_vidmm_validate, accepts_standby_with_one_hibernate_preservation_flag_a
   std::memcpy(descriptors + FakeVidMm::stride, &descriptor, sizeof descriptor);
   CHECK(vidmm.validate(descriptors, 2u, 2u) == SegmentRule::none); }
 
-/* What dxdiag and DXGI report: a plain memory segment is dedicated video
- * memory, one populated from system memory is dedicated system memory, and
- * neither an aperture nor reserved system memory is dedicated at all. Each
- * counts no more than its commit limit. */
 TEST(fake_vidmm_totals, classify_each_segment_as_get_total_segment_size_does)
 { MockPlatform platform; CraftedSegments miniport;
   miniport.set_count(4u);

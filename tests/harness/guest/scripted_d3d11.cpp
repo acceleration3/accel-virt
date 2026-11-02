@@ -3,11 +3,9 @@
 #include "harness/framework/test_registry.hpp"
 
 namespace {
-
-/* No channel: what a frame that comes back whole is asked for. */
 constexpr unsigned no_channel = 4u;
 
-}  // namespace
+}
 
 namespace av {
 
@@ -89,14 +87,12 @@ std::int32_t ScriptedD3d11::read_back(std::uint8_t *pixels, std::uint32_t bytes)
     const std::int32_t refused = refusal(Call::read_back);
     if (refused != 0) return refused;
     CHECK(target_);
-    /* What a staging texture of the back buffer holds: BGRA rows. */
     for (std::uint32_t pixel = 0u; pixel * 4u < bytes; pixel++) {
         pixels[pixel * 4u] = cleared_[2];
         pixels[pixel * 4u + 1u] = cleared_[1];
         pixels[pixel * 4u + 2u] = cleared_[0];
         pixels[pixel * 4u + 3u] = cleared_[3];
     }
-    /* BGRA out, so the channel a caller names is that byte of the pixel. */
     if (miscoloured_ < 4u && bytes >= 4u)
         pixels[miscoloured_] = static_cast<std::uint8_t>(pixels[miscoloured_] + 8u);
     return 0;
@@ -127,4 +123,4 @@ std::uint32_t ScriptedD3d11::width() const
     return width_;
 }
 
-}  // namespace av
+}

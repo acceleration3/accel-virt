@@ -1,10 +1,3 @@
-/* The Vulkan object chain on the host GPU from a guest process (feature 044,
- * US1): an instance, its physical devices, a device with one queue, a buffer,
- * memory for it and the binding, each encoded by the generated client and run
- * by the host's executor over one Vulkan context's transport. Every object
- * made is destroyed in reverse whatever failed, and a transport no-op after the
- * destroys - which the host sends no answer for - proves the context ran them
- * all without faulting. */
 #ifndef AV_VULKAN_SCENARIO_HPP
 #define AV_VULKAN_SCENARIO_HPP
 
@@ -35,7 +28,6 @@ public:
 private:
     [[nodiscard]] Status bind_buffer();
     [[nodiscard]] Status allocate_memory();
-    /* The no-op's status after every destroy was sent. */
     [[nodiscard]] Status destroy();
 
     ScenarioSteps     steps_;
@@ -45,6 +37,6 @@ private:
     VkDeviceMemory    memory_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VULKAN_SCENARIO_HPP
+#endif

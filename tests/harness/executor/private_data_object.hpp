@@ -1,9 +1,3 @@
-/* A Direct3D 12 object that keeps private data as vkd3d-proton's do, for a
- * test of what the device keeps on its objects without a GPU: one blob under
- * one GUID, answered with the size it holds, DXGI_ERROR_MORE_DATA to a
- * buffer too small for it and DXGI_ERROR_NOT_FOUND under any other GUID.
- * A root signature and a command signature add no methods to
- * ID3D12DeviceChild, so this is either. */
 #ifndef AV_PRIVATE_DATA_OBJECT_HPP
 #define AV_PRIVATE_DATA_OBJECT_HPP
 
@@ -53,10 +47,7 @@ public:
         return E_NOTIMPL;
     }
 
-    /* An object that will keep nothing, as one out of memory would. */
     void refuse() { refuse_ = true; }
-    /* Whatever it holds, `size` bytes of it: what another writer under the
-     * same GUID would have left. */
     void resize(std::size_t size) { size_ = size; }
 
 private:
@@ -66,6 +57,6 @@ private:
     bool          refuse_ = false;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_PRIVATE_DATA_OBJECT_HPP
+#endif

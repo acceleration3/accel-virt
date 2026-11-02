@@ -1,9 +1,3 @@
-/* A batch payload as a hostile guest writes it, run through the batch executor
- * over a mock executor: whatever the bytes, nothing reaches the executor from
- * outside the staged copy (ASan), the executor stays consistent, and a reply
- * slot that was written decodes.
- *
- * Input: u8 flags (bit 0: the context has a reply slot), then the payload. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/execution/batch_executor.hpp"
@@ -38,7 +32,7 @@ constexpr std::size_t   capacity = 4096u;
 constexpr std::uint8_t  uuid[16] = {};
 constexpr std::uint64_t reply_length = 32u + 128u;
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

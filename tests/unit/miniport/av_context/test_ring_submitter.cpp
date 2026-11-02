@@ -1,5 +1,3 @@
-/* Publishing a context's submissions into its ring: in order, within what the
- * device has not consumed, with a head the device cannot lie about. */
 #include "miniport/av_context/ring_submitter.hpp"
 #include "core/support/status.hpp"
 #include "harness/virtio/fake_doorbell_pages.hpp"
@@ -30,7 +28,7 @@ struct RingSubmitterProbe {
     static void rewind(RingSubmitter &submitter) { submitter.published_ = 0u; submitter.tail_ = 1u; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -58,7 +56,6 @@ public:
         return tail;
     }
     void device_consumes(std::uint64_t head) { std::memcpy(ring_ + 16u, &head, 8u); }
-    /* What a process publishing its own tail writes into the header. */
     void publish_tail(std::uint64_t tail) { std::memcpy(ring_ + 8u, &tail, 8u); }
     void user_mode_publishes()
     {
@@ -83,11 +80,11 @@ private:
     RingSubmitter     submitter_;
 };
 
-}  // namespace
+}
 
 TEST(ring_submitter_submit, publishes_the_tail_and_rings_the_doorbell)
 { Fixture fixture;
-  CHECK_STATUS(fixture.submit(1u, 0u, 16u), Status::invalid_state);   /* not attached */
+  CHECK_STATUS(fixture.submit(1u, 0u, 16u), Status::invalid_state);
   CHECK_STATUS(fixture.attach(), Status::ok);
   CHECK(fixture.submitter().invariants_hold());
   CHECK_STATUS(fixture.submit(1u, 0u, 64u), Status::ok);
@@ -136,7 +133,7 @@ TEST(ring_submitter_submit, bytes_the_device_has_not_consumed_hold_back_the_next
   fixture.device_consumes(3000u);
   CHECK_STATUS(fixture.submit(3u, 4000u, 4200u), Status::ok);
   CHECK(fixture.submitter().head() == 3000u);
-  CHECK_STATUS(fixture.submit(4u, 4200u, 3000u + capacity), Status::ok);   /* exactly full */
+  CHECK_STATUS(fixture.submit(4u, 4200u, 3000u + capacity), Status::ok);
   CHECK_STATUS(fixture.submit(5u, 3000u + capacity, 3001u + capacity), Status::no_space); }
 
 TEST(ring_submitter_submit, a_head_the_device_could_not_have_written_fails_the_ring)
@@ -156,7 +153,7 @@ TEST(ring_submitter_submit, a_head_the_device_could_not_have_written_fails_the_r
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
       CHECK(fixture.published_tail() == 1100u);
       fixture.device_consumes(1100u);
-      CHECK_STATUS(fixture.submit(3u, 1100u, 1200u), Status::invalid_state);   /* failed for good */
+      CHECK_STATUS(fixture.submit(3u, 1100u, 1200u), Status::invalid_state);
       CHECK_EQ(fixture.platform().logged(), 1u);
   } }
 
@@ -194,72 +191,49 @@ TEST(ring_submitter_invariants, a_published_tail_the_driver_never_wrote_is_detec
   Fixture rewound;
   CHECK_STATUS(rewound.attach(), Status::ok);
   CHECK_STATUS(rewound.submit(1u, 0u, 64u), Status::ok);
-  CHECK_STATUS(rewound.submit(2u, 64u, 128u), Status::ok);   /* the device's view now has tail 64 */
+  CHECK_STATUS(rewound.submit(2u, 64u, 128u), Status::ok);
   av::RingSubmitterProbe::rewind(rewound.submitter());
   CHECK(!rewound.submitter().invariants_hold()); }
 
-/* Feature 049: once a doorbell is connected the process publishes this ring's
- * tail, and a batch it falls back to the driver with is one the header already
- * ends at. The driver takes the submission's own beginning as its tail then -
- * and judges it, because the header is memory a process writes. */
 TEST(ring_submitter_submit, a_tail_the_process_published_is_taken_and_judged)
 { Fixture fixture;
   CHECK_STATUS(fixture.attach(), Status::ok);
   CHECK_STATUS(fixture.submit(1u, 0u, 64u), Status::ok);
   fixture.user_mode_publishes();
 
-  /* Four batches the process wrote and published for itself, and a fifth it
-   * falls back to the driver with: the driver's own tail is 64, the ring's is
-   * 320, and the submission is what closes the gap. */
   fixture.publish_tail(320u);
   CHECK_STATUS(fixture.submit(6u, 256u, 320u), Status::ok);
   CHECK(fixture.submitter().tail() == 320u);
   CHECK(fixture.fences().highest_submitted() == 6u);
   CHECK_EQ(fixture.doorbells().rings(5u), 2u);
 
-  /* A header short of the submission's end, and not at its beginning, is no
-   * header of this batch. */
   fixture.publish_tail(360u);
   CHECK_STATUS(fixture.submit(7u, 320u, 384u), Status::invalid_parameter);
-  /* Nor is a batch that begins behind what the driver already published. */
   fixture.publish_tail(300u);
   CHECK_STATUS(fixture.submit(7u, 256u, 300u), Status::invalid_parameter);
   CHECK(fixture.submitter().tail() == 320u);
   CHECK_EQ(fixture.doorbells().rings(5u), 2u);
 
-  /* A header past the end is a process that published later batches before
-   * the scheduler handed this one over: the batch is taken, and the newer tail
-   * is never stored back over. */
   fixture.publish_tail(400u);
   CHECK_STATUS(fixture.submit(7u, 320u, 384u), Status::ok);
   CHECK(fixture.submitter().tail() == 384u);
   CHECK_EQ(fixture.published_tail(), 400u);
   CHECK_EQ(fixture.doorbells().rings(5u), 3u);
 
-  /* And the ring still fills up: a batch longer than the ring is refused,
-   * however it was published. */
   fixture.publish_tail(384u + capacity + 1u);
   CHECK_STATUS(fixture.submit(8u, 384u, 384u + capacity + 1u), Status::invalid_parameter);
   CHECK(fixture.submitter().invariants_hold()); }
 
-/* The driver's own tail is short of the one a process published, and the
- * store that ends the submission moves the header only while it is: a newer
- * tail the process stored meanwhile is left where it is. */
 TEST(ring_submitter_submit, a_shared_tail_is_only_ever_moved_forward)
 { Fixture fixture;
   CHECK_STATUS(fixture.attach(), Status::ok);
   CHECK_STATUS(fixture.submit(1u, 0u, 64u), Status::ok);
   fixture.user_mode_publishes();
-  /* A process that has stopped publishing for itself leaves the header where
-   * the submission begins, and the driver writes the tail again. */
   fixture.publish_tail(64u);
   CHECK_STATUS(fixture.submit(2u, 64u, 128u), Status::ok);
   CHECK_EQ(fixture.published_tail(), 128u);
   CHECK_EQ(fixture.doorbells().rings(5u), 2u); }
 
-/* A kick rings the doorbell with nothing submitted - the device looks at a
- * tail the process moved itself - and never on a ring that is not there or
- * has failed. */
 TEST(ring_submitter_kick, rings_the_doorbell_of_an_attached_ring_only)
 { Fixture fixture;
   fixture.platform().set_irql(Irql::dispatch);
@@ -274,7 +248,6 @@ TEST(ring_submitter_kick, rings_the_doorbell_of_an_attached_ring_only)
   CHECK_EQ(fixture.doorbells().rings(5u), 2u);
   CHECK(fixture.submitter().tail() == 0u);
   CHECK(fixture.fences().highest_submitted() == 0u);
-  /* A head the device could not have written fails the ring; no kick after. */
   fixture.device_consumes(64u);
   CHECK_STATUS(fixture.submit(1u, 0u, 32u), Status::invalid_state);
   CHECK(fixture.submitter().failed());
@@ -284,28 +257,19 @@ TEST(ring_submitter_kick, rings_the_doorbell_of_an_attached_ring_only)
   CHECK_EQ(fixture.doorbells().rings(5u), 2u);
   CHECK_EQ(fixture.doorbells().stray_stores(), 0u); }
 
-/* The tail goes out before the store (SubmissionPath::submit), so a batch a
- * process falls back to the driver with may be one the device has already
- * taken from the ring. It must run once: the driver publishes nothing, rings
- * nothing, and answers the caller as if it had. */
 TEST(ring_submitter_submit, a_batch_the_device_already_took_is_not_published_again)
 { Fixture fixture;
   CHECK_STATUS(fixture.attach(), Status::ok);
   CHECK_STATUS(fixture.submit(1u, 0u, 64u), Status::ok);
   fixture.user_mode_publishes();
-  /* The process published 128 and the device consumed all of it before the
-   * fallback reached the driver. */
   fixture.publish_tail(128u);
   fixture.device_consumes(128u);
   CHECK_STATUS(fixture.submit(2u, 64u, 128u), Status::ok);
-  CHECK_EQ(fixture.doorbells().rings(5u), 1u);          /* the first submission's, and no second */
+  CHECK_EQ(fixture.doorbells().rings(5u), 1u);
   CHECK_EQ(fixture.published_tail(), 128u);
   CHECK(fixture.submitter().tail() == 128u);
-  /* The fence was the device's to complete, not the driver's to record. */
   CHECK(fixture.fences().highest_submitted() == 1u);
 
-  /* A batch it has not taken yet is published and rung as always, even where
-   * the device is partway through the one before it. */
   fixture.publish_tail(192u);
   CHECK_STATUS(fixture.submit(3u, 128u, 192u), Status::ok);
   CHECK_EQ(fixture.doorbells().rings(5u), 2u);

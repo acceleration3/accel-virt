@@ -1,12 +1,3 @@
-/* A host's memory properties into the ICD's memory type table (feature 045,
- * T033). Whatever the host wrote, the table either holds exactly the host's
- * types over heaps of the adapter's budgets - when every count is inside its
- * array, there is a heap, and every type names one - or holds nothing; it never
- * reads past the arrays, never answers a type it does not hold, and its
- * invariants hold either way.
- *
- * An input is the bytes of a VkPhysicalDeviceMemoryProperties as the decoder
- * would have typed them; a shorter input is zero-filled. */
 #include "core/support/status.hpp"
 #include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
@@ -66,7 +57,7 @@ void check_empty(const av::icd::MemoryTypeTable &table)
     for (std::uint32_t type = 0u; type < VK_MAX_MEMORY_TYPES; type++) require(!table.host_visible(type));
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

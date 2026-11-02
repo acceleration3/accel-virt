@@ -1,10 +1,3 @@
-/* The device's vertical blanks, run on their own thread against the mock's
- * scripted clock. Each blank is published once it is due and not before,
- * every blank a late wake passed is counted, the frame posted last before a
- * blank is the one it latches and the one shown - once, on the main loop -
- * and the display line is raised on exactly the blanks the guest asked for.
- * A new rate takes over from the last blank; a reset stops the thread and
- * forgets every frame, and the count never goes back. */
 #include "device/display/display_clock.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -29,9 +22,8 @@ constexpr std::uint64_t ram = 0x200000u;
 constexpr std::uint64_t page = ram + 0x1000u;
 constexpr std::uint64_t other_page = ram + 0x4000u;
 constexpr std::uint64_t start_at = 1000u;
-constexpr std::uint64_t period_60 = 16666667u;   /* at least one 60 Hz period */
+constexpr std::uint64_t period_60 = 16666667u;
 
-/* What the main-loop routine saw: the clock it serves, and the keys it took. */
 struct Shows {
     DisplayClock *clock;
     std::uint32_t runs;
@@ -66,8 +58,6 @@ struct Rig {
     }
     ~Rig() { clock.detach(); }
 
-    /* Head `head`'s record, whole: false when it never read an even generation
-     * on both sides of the copy. */
     bool read(std::uint64_t at, std::uint32_t head, VblankRecord &record)
     {
         const std::uint8_t *const base = host.guest_ram(at + 32u + 64u * head);
@@ -82,8 +72,6 @@ struct Rig {
         }
         return false;
     }
-    /* Waits up to two seconds for head `head` of the page at `at` to reach
-     * `sequence`: the thread runs when the scripted clock moves. */
     bool reaches(std::uint64_t at, std::uint32_t head, std::uint64_t sequence, VblankRecord &record)
     {
         const timespec pause = {0, 100000};
@@ -99,7 +87,7 @@ struct Rig {
     }
 };
 
-}  // namespace
+}
 
 TEST(display_clock, a_registered_page_is_headed_and_every_head_published_before_its_first_blank)
 { Rig rig;
@@ -133,7 +121,7 @@ TEST(display_clock, each_blank_is_published_when_it_is_due_and_a_late_wake_count
   CHECK_STATUS(rig.clock.initialize(), Status::ok);
   CHECK_STATUS(rig.clock.attach(page), Status::ok);
   CHECK(rig.host.wait_for_sleepers(1u, 2000u));
-  rig.host.set_clock(start_at + 16666665u);   /* a nanosecond early */
+  rig.host.set_clock(start_at + 16666665u);
   CHECK(rig.host.wait_for_sleepers(1u, 2000u));
   VblankRecord record;
   CHECK(rig.read(page, 0u, record));
@@ -142,7 +130,7 @@ TEST(display_clock, each_blank_is_published_when_it_is_due_and_a_late_wake_count
   CHECK(rig.reaches(page, 0u, 1u, record));
   CHECK_EQ(record.sequence(), 1u);
   CHECK_EQ(record.vblank_ns(), start_at + 16666666u);
-  CHECK(rig.reaches(page, 15u, 1u, record));   /* every head keeps its own count */
+  CHECK(rig.reaches(page, 15u, 1u, record));
   rig.host.set_clock(start_at + 5u * period_60 + 10u);
   CHECK(rig.reaches(page, 0u, 5u, record));
   CHECK_EQ(record.sequence(), 5u);
@@ -157,7 +145,7 @@ TEST(display_clock, the_frame_posted_last_before_a_blank_is_latched_and_shown_on
   rig.clock.post(2u, 7u, 0x77u);
   VblankRecord record;
   CHECK(rig.read(page, 2u, record));
-  CHECK_EQ(record.latched(), 0u);   /* nothing moves before the blank */
+  CHECK_EQ(record.latched(), 0u);
   rig.host.set_clock(start_at + period_60);
   CHECK(rig.reaches(page, 2u, 1u, record));
   CHECK_EQ(record.latched(), 7u);
@@ -166,12 +154,12 @@ TEST(display_clock, the_frame_posted_last_before_a_blank_is_latched_and_shown_on
   CHECK_EQ(rig.shows.taken, 1u);
   CHECK_EQ(rig.shows.keys[2], 0x77u);
   CHECK(rig.read(page, 0u, record));
-  CHECK_EQ(record.latched(), 0u);   /* other heads latched nothing */
+  CHECK_EQ(record.latched(), 0u);
   rig.host.set_clock(start_at + 2u * period_60);
   CHECK(rig.reaches(page, 2u, 2u, record));
-  CHECK_EQ(record.latched(), 7u);   /* a blank with nothing new keeps the frame */
+  CHECK_EQ(record.latched(), 7u);
   CHECK(rig.host.wait_for_sleepers(1u, 2000u));
-  CHECK_EQ(rig.host.run_main_loop(), 0u);   /* and shows it no second time */
+  CHECK_EQ(rig.host.run_main_loop(), 0u);
   CHECK(rig.clock.invariants_hold()); }
 
 TEST(display_clock, blanks_that_latch_before_the_show_runs_queue_it_once_and_it_shows_the_newest)
@@ -192,7 +180,7 @@ TEST(display_clock, blanks_that_latch_before_the_show_runs_queue_it_once_and_it_
   CHECK_EQ(rig.shows.taken, 2u);
   CHECK_EQ(rig.shows.keys[0], 0x20u);
   CHECK_EQ(rig.shows.keys[1], 0x90u);
-  rig.clock.post(0u, 3u, 0x30u);   /* a latch after the show ran queues it again */
+  rig.clock.post(0u, 3u, 0x30u);
   rig.host.set_clock(start_at + 3u * period_60);
   CHECK(rig.host.wait_for_main_loop_work(1u, 2000u));
   CHECK_EQ(rig.host.run_main_loop(), 1u);
@@ -207,21 +195,21 @@ TEST(display_clock, the_display_line_is_raised_on_the_blanks_the_guest_asked_for
   VblankRecord record;
   rig.host.set_clock(start_at + period_60);
   CHECK(rig.reaches(page, 0u, 1u, record));
-  CHECK_EQ(rig.host.raised(FenceInterrupts::display_line), 0u);   /* nobody asked */
+  CHECK_EQ(rig.host.raised(FenceInterrupts::display_line), 0u);
   rig.ask_every(page, 0u, 2u);
   for (std::uint64_t blank = 2u; blank <= 5u; blank++) {
       rig.host.set_clock(start_at + blank * period_60);
       CHECK(rig.reaches(page, 0u, blank, record));
       CHECK(rig.host.wait_for_sleepers(1u, 2000u));
   }
-  CHECK_EQ(rig.host.raised(FenceInterrupts::display_line), 2u);   /* blanks 2 and 4 */
+  CHECK_EQ(rig.host.raised(FenceInterrupts::display_line), 2u);
   rig.ask_every(page, 0u, 1u);
   rig.ask_every(page, 3u, 1u);
-  rig.host.set_clock(start_at + 9u * period_60);   /* four blanks at once, two heads asking */
+  rig.host.set_clock(start_at + 9u * period_60);
   CHECK(rig.reaches(page, 3u, 9u, record));
   CHECK(rig.host.wait_for_sleepers(1u, 2000u));
   CHECK_EQ(rig.host.raised(FenceInterrupts::display_line), 3u);
-  rig.ask_every(page, 0u, 0xFFFFFFFFu);   /* any value is a divisor: no blank reaches this one */
+  rig.ask_every(page, 0u, 0xFFFFFFFFu);
   rig.ask_every(page, 3u, 0u);
   rig.host.set_clock(start_at + 10u * period_60);
   CHECK(rig.reaches(page, 0u, 10u, record));
@@ -237,7 +225,7 @@ TEST(display_clock, a_new_rate_takes_over_from_the_last_blank_and_the_earliest_h
   rig.host.set_clock(start_at + period_60);
   CHECK(rig.reaches(page, 5u, 1u, record));
   const std::uint64_t last = record.vblank_ns();
-  CHECK_STATUS(rig.clock.retime(5u, 1000000u), Status::ok);   /* 1 kHz on head 5 alone */
+  CHECK_STATUS(rig.clock.retime(5u, 1000000u), Status::ok);
   CHECK(rig.host.wait_for_sleepers(1u, 2000u));
   rig.host.set_clock(last + 1000000u);
   CHECK(rig.reaches(page, 5u, 2u, record));
@@ -245,7 +233,7 @@ TEST(display_clock, a_new_rate_takes_over_from_the_last_blank_and_the_earliest_h
   CHECK_EQ(record.period_ns(), 1000000u);
   CHECK_EQ(record.vblank_ns(), last + 1000000u);
   CHECK(rig.read(page, 0u, record));
-  CHECK_EQ(record.sequence(), 1u);   /* head 0 is still waiting for its second */
+  CHECK_EQ(record.sequence(), 1u);
   CHECK_EQ(record.refresh_millihz(), 60000u);
   CHECK(rig.clock.invariants_hold()); }
 
@@ -263,7 +251,7 @@ TEST(display_clock, rates_and_heads_the_protocol_does_not_allow_are_refused)
 TEST(display_clock, nothing_is_latched_without_a_page_and_a_reset_forgets_every_frame)
 { Rig rig;
   CHECK_STATUS(rig.clock.initialize(), Status::ok);
-  rig.clock.post(0u, 4u, 0x40u);   /* no page: shown at once by the caller, never here */
+  rig.clock.post(0u, 4u, 0x40u);
   CHECK_STATUS(rig.clock.attach(page), Status::ok);
   VblankRecord record;
   rig.host.set_clock(start_at + period_60);
@@ -275,11 +263,11 @@ TEST(display_clock, nothing_is_latched_without_a_page_and_a_reset_forgets_every_
   CHECK(!rig.clock.take_unshown(0u, key));
   CHECK_STATUS(rig.clock.attach(page), Status::ok);
   CHECK(rig.read(page, 0u, record));
-  CHECK_EQ(record.sequence(), 1u);   /* the count carries on across the reset */
+  CHECK_EQ(record.sequence(), 1u);
   CHECK_EQ(record.latched(), 0u);
   rig.host.set_clock(start_at + 3u * period_60);
   CHECK(rig.reaches(page, 0u, 2u, record));
-  CHECK_EQ(record.latched(), 0u);   /* the post before the reset is gone */
+  CHECK_EQ(record.latched(), 0u);
   CHECK_EQ(rig.host.run_main_loop(), 0u); }
 
 TEST(display_clock, a_page_registered_again_is_published_by_the_same_thread)
@@ -292,7 +280,7 @@ TEST(display_clock, a_page_registered_again_is_published_by_the_same_thread)
   VblankRecord record;
   rig.host.set_clock(start_at + period_60);
   CHECK(rig.reaches(other_page, 0u, 1u, record));
-  CHECK_STATUS(rig.clock.attach(0u), Status::ok);   /* none: publishing stops */
+  CHECK_STATUS(rig.clock.attach(0u), Status::ok);
   CHECK_EQ(rig.host.live_threads(), 0u);
   CHECK_EQ(rig.host.live_guest_mappings(), 0u);
   CHECK(!rig.clock.latches(0u)); }
@@ -330,7 +318,7 @@ TEST(display_clock, a_stopped_clock_ticks_no_more_and_one_destroyed_running_stop
       shows.clock = &clock;
       CHECK_STATUS(clock.initialize(), Status::ok);
       std::uint64_t next = 0u;
-      CHECK(clock.tick(start_at, next));   /* no page: counts nothing, and says when */
+      CHECK(clock.tick(start_at, next));
       CHECK_EQ(next, 16666666u);
       CHECK_STATUS(clock.attach(page), Status::ok);
       clock.detach();
@@ -342,9 +330,6 @@ TEST(display_clock, a_stopped_clock_ticks_no_more_and_one_destroyed_running_stop
   CHECK_EQ(host.live_events(), 0u);
   CHECK_EQ(host.live_mutexes(), 0u); }
 
-/* The host's display, through its export socket: every head takes its shift
- * from the next blank on and keeps the rate it had, which the device was
- * given (retime_all); a clock not yet made refuses. */
 TEST(display_clock, aligned_every_head_blanks_at_its_own_rate_and_the_shift)
 { Rig rig;
   constexpr std::uint64_t period_144 = 6944444u;
@@ -362,7 +347,6 @@ TEST(display_clock, aligned_every_head_blanks_at_its_own_rate_and_the_shift)
   const std::uint64_t last = record.vblank_ns();
   CHECK_STATUS(rig.clock.align(77), Status::ok);
   CHECK(rig.host.wait_for_sleepers(1u, 2000u));
-  /* The shift is from the blank the 144 Hz schedule had next. */
   rig.host.set_clock(last + period_144 - 78u);
   CHECK(rig.read(page, 0u, record));
   CHECK_EQ(record.sequence(), 1u);
@@ -376,8 +360,6 @@ TEST(display_clock, aligned_every_head_blanks_at_its_own_rate_and_the_shift)
   CHECK_EQ(rig.clock.refresh_microhz(), 144000000u);
   CHECK(rig.clock.invariants_hold()); }
 
-/* A rate set live reaches the page from the next blank, in the nearest
- * millihertz it can say, and the device keeps it exact. */
 TEST(display_clock, a_live_retime_of_every_head_reaches_the_page)
 { Rig rig;
   CHECK_STATUS(rig.clock.initialize(), Status::ok);

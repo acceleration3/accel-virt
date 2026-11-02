@@ -166,4 +166,4 @@ bool RecordingHeader::invariants_hold() const
     return limit_ == 0u || limit_ >= encoded_size;
 }
 
-}  // namespace av
+}

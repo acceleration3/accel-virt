@@ -24,8 +24,6 @@ std::uint32_t InterruptPump::deliver()
     return total;
 }
 
-/* The fence counts are read before their interrupts run, so a raise that
- * lands while the DPC reads a fence page is seen by the next pass. */
 std::uint32_t InterruptPump::pass()
 {
     std::uint32_t delivered = 0u;
@@ -57,4 +55,4 @@ bool InterruptPump::interrupt(std::uint16_t queue)
 
 std::uint32_t InterruptPump::delivered() const { return delivered_; }
 
-}  // namespace av
+}

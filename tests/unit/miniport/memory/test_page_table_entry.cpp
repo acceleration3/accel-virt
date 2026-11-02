@@ -8,11 +8,9 @@ using av::DxgkPteRecord;
 using av::PageTableEntry;
 
 namespace {
-
-/* DXGK_PTE bits: Valid 0, Zero 1, CacheCoherent 2, ReadOnly 3, NoExecute 4, Segment 5-9, LargePage 10. */
 constexpr std::uint64_t valid = 1u, zero = 2u, cache_coherent = 4u, read_only = 8u, no_execute = 16u;
 
-}  // namespace
+}
 
 TEST(page_table_entry_encoded, keeps_the_frame_segment_and_access_in_the_device_layout)
 { const DxgkPteRecord pte = {valid | cache_coherent | read_only | no_execute | (2u << 5u), 0x12345u};

@@ -1,27 +1,5 @@
 #!/usr/bin/env python3
-"""Microsoft's OpenGL 1.1 dispatch-table order, read from opengl32.dll.
-
-`DrvSetContext` answers opengl32 a table of function pointers in the order of
-opengl32's own `glCltRGBAProcTable` (feature 050, research.md §2): a u32 entry
-count, four bytes of padding, then one pointer per entry, each to a `glclt*`
-function. This reads that table from the pinned binary and its public PDB in
-the reverse-engineering workspace (tools/re/build_workspace.sh) and writes the
-order as data the OpenGL generator reads:
-
-    # opengl32.dll sha256 <hash>
-    0 glNewList
-    ...
-    335 glPushClientAttrib
-
-Identical-code folding can leave two `glclt*` names at one address (on
-10.0.26100.5074, `glcltFinish` and `glcltFlush` are slots 216 and 217 of one
-function). Such a slot is named by the exported `gl*` stub that dispatches to
-it: the stub loads the thread's table and jumps through `offset(%rax)`, and the
-offset is the slot's.
-
-`--check` compares the committed file with the binary, and says it skipped when
-the workspace has no binary or PDB to read.
-"""
+"""Microsoft's OpenGL 1.1 dispatch-table order, read from opengl32.dll."""
 import argparse
 import hashlib
 import pathlib
@@ -48,12 +26,10 @@ SLOT_LOAD = re.compile(r"movq\s+0x([0-9a-f]+)\(%rax\), %rax")
 
 
 class TableError(Exception):
-    """What makes a table, read from a binary or a file, not the order."""
+    pass
 
 
 class ProcTable:
-    """The order: entry names without the client prefix, index by position."""
-
     def __init__(self, binary_hash, names):
         if len(names) != ENTRIES:
             raise TableError(f"{len(names)} entries, not {ENTRIES}")
@@ -74,8 +50,6 @@ class ProcTable:
 
 
 class ProcTableFile:
-    """The committed order, read back line by line."""
-
     def __init__(self, text):
         self.text = text
 
@@ -96,8 +70,6 @@ class ProcTableFile:
 
 
 class BinaryProcTable:
-    """The order as one opengl32.dll holds it, located through its PDB."""
-
     def __init__(self, binary, pdb):
         self.binary = pathlib.Path(binary)
         self.pdb = pathlib.Path(pdb)
@@ -160,7 +132,6 @@ class BinaryProcTable:
                          "dispatches through it")
 
     def stub_slot(self, address):
-        """The slot a `gl*` export jumps through, or None for another shape."""
         listing = subprocess.run(["llvm-objdump", "-d", "--no-show-raw-insn",
                                   f"--start-address=0x{address:X}",
                                   f"--stop-address=0x{address + STUB_BYTES:X}", str(self.binary)],

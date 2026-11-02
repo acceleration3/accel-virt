@@ -53,4 +53,4 @@ bool HeldCompletions::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

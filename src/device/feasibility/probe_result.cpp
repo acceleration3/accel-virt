@@ -90,4 +90,4 @@ void ProbeResult::describe(TextBuffer &line) const
     line.append_decimal(static_cast<uint64_t>(errno_));
 }
 
-}  // namespace av
+}

@@ -74,12 +74,9 @@ std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
     return static_cast<std::uint32_t>(u64(bytes, offset));
 }
 
-/* A paging request over a poisoned DMA buffer, its operation record placed in
- * the union the way dxgkrnl places it. */
 constexpr std::int64_t segment_bytes = std::int64_t{1} << 30u;
 constexpr std::uint64_t page = GuestPageList::page_bytes;
 
-/* A four-page allocation: enough for a mapping to describe every page of it. */
 const AllocationDescriptor four_pages(AllocationKind::shadow, true, SurfaceLayout(16u, 16u, 21u, 1024u),
                                       4u * page, ScanoutTarget());
 
@@ -106,7 +103,6 @@ public:
         return PagingRequest(platform_, allocations_, budget_, request_).build().value();
     }
 
-    /* One allocation of four pages, as CreateAllocation would leave it. */
     Allocation *allocate()
     {
         std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
@@ -151,10 +147,10 @@ DxgkBuildPagingBufferCopyRangeRecord range(std::uint32_t count, std::uint32_t so
     return {count, 0u, 0x1000u, 0x2000u, source_start, destination_start};
 }
 
-}  // namespace
+}
 
 TEST(paging_request_build, an_aperture_or_residency_operation_needs_no_dma_bytes)
-{ const std::int32_t operations[] = {2, 5, 6, 15};   /* DISCARD_CONTENT, MAP/UNMAP_APERTURE_SEGMENT, NOTIFY_RESIDENCY */
+{ const std::int32_t operations[] = {2, 5, 6, 15};
   for (std::int32_t operation : operations) {
       Paging paging(operation);
       CHECK_EQ(paging.build(), 0);
@@ -330,8 +326,6 @@ TEST(paging_request, is_passive_only)
   CHECK(platform.claim(Violation::irql_ceiling)); }
 
 namespace {
-
-/* The address the aperture segment gives an allocation mapped at `offset`. */
 std::uint64_t aperture_address(std::uint64_t offset_in_pages)
 {
     return static_cast<std::uint64_t>(ApertureSegment::base_address) + offset_in_pages * page;
@@ -349,7 +343,7 @@ DxgkBuildPagingBufferMapApertureSegmentRecord aperture_map(void *allocation, voi
     return request;
 }
 
-}  // namespace
+}
 
 TEST(paging_request_map_aperture, records_the_pages_the_allocation_is_mapped_from)
 { Paging paging(5);
@@ -394,8 +388,6 @@ TEST(paging_request_map_aperture, answers_a_mapping_of_an_allocation_it_never_ma
   paging.place(aperture_map(&not_an_allocation, mdl, 0u, 1u));
   CHECK_EQ(paging.build(), 0); }
 
-/* dxgkrnl has no answer for a driver that refuses to map a segment it
- * reported, so a mapping we cannot record is logged and left unrecorded. */
 TEST(paging_request_map_aperture, answers_a_mapping_whose_mdl_does_not_cover_it)
 { Paging paging(5);
   Allocation *allocation = paging.allocate();
@@ -445,7 +437,6 @@ TEST(paging_request_unmap_aperture, answers_an_unmapping_of_an_allocation_it_nev
   paging.place(unmap);
   CHECK_EQ(paging.build(), 0); }
 
-/* An unmap from another segment names nothing of the aperture's. */
 TEST(paging_request_unmap_aperture, leaves_the_pages_of_an_unmap_from_another_segment)
 { Paging paging(5);
   Allocation *allocation = paging.allocate();
@@ -464,8 +455,6 @@ TEST(paging_request_unmap_aperture, leaves_the_pages_of_an_unmap_from_another_se
   CHECK_EQ(allocation->pages_at(aperture_address(0x30u), 4u).count(), 4u);
   CHECK(std::strstr(paging.platform().last_log(), "aperture unmap segment 2 offset 48 pages 4 status") != nullptr); }
 
-/* A storm of mappings the driver cannot record spends the window and then goes
- * quiet: the log is evidence, not a flood. */
 TEST(paging_request_map_aperture, stops_talking_once_the_window_is_spent)
 { Paging paging(5);
   paging.place(aperture_map(nullptr, nullptr, 0x30u, 1u));
@@ -474,10 +463,8 @@ TEST(paging_request_map_aperture, stops_talking_once_the_window_is_spent)
   CHECK_EQ(paging.build(), 0);
   CHECK_EQ(paging.platform().logged(), spent); }
 
-/* An operation this phase does not implement is named once, then the window is
- * spent and the refusal goes on being silent. */
 TEST(paging_request_build, names_an_operation_it_refuses_until_the_window_is_spent)
-{ Paging paging(17);   /* DXGK_OPERATION_MAP_APERTURE_SEGMENT2 */
+{ Paging paging(17);
   CHECK_EQ(paging.build(), invalid_parameter);
   CHECK(std::strstr(paging.platform().last_log(), "paging operation 17 refused") != nullptr);
   for (std::uint32_t line = 0u; line < LogBudget::lines_per_window; line++)

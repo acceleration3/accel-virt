@@ -22,16 +22,15 @@ std::uint32_t kept(const RecordKinds &kinds)
     return count;
 }
 
-}  // namespace
+}
 
 namespace av {
 
 struct RecordKindsProbe {
-    /* A mask no parse could make, for the invariant to catch. */
     static void set(RecordKinds &kinds, std::uint32_t mask) { kinds.mask_ = mask; }
 };
 
-}  // namespace av
+}
 
 TEST(record_kinds, keeps_every_kind_but_a_blobs_bytes_by_default)
 { const RecordKinds kinds;

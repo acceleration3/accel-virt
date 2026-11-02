@@ -20,11 +20,8 @@ uint64_t *HwQueue::progress() const
 Context &HwQueue::context() const
 {
     AV_SCOPE("HwQueue::context");
-    /* A submission to a hardware queue arrives at DISPATCH and reaches its
-     * context from the handle alone (feature 049): the reference is fixed at
-     * construction, so reading it blocks on nothing. */
     platform_.require_irql_at_most(Irql::dispatch, "HwQueue::context");
     return context_;
 }
 
-}  // namespace av
+}

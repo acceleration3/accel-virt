@@ -1,15 +1,3 @@
-"""Execution against the real device: a bound context's batches run command by
-command through the executor library the device loaded - here the echo
-executor (echo_executor.cpp) - and the last answer asked for lands in the
-context's reply slot before head passes the batch. The transport's NOP is
-answered by the device, under the echo executor and this project's own, and
-IMPORT_BLOB hands the echo executor a guest chunk's pages as one host pointer,
-and a host chunk placed in the hostmem window (docs/host-window.md) as its own
-mapping, with the contexts in QEMU or in a renderer.
-
-Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
-AV_QEMU_BUILD and AV_EXECUTOR.
-"""
 import os
 import struct
 import time
@@ -45,11 +33,7 @@ def wait_for(condition, seconds=10.0):
 
 
 class Context:
-    """A context with a guest-backed ring, fence page and, if asked, reply slot."""
-
     def __init__(self, test, gpu, context, doorbell, reply_bytes=PAGE, options=None, answer=RESP_OK_NODATA):
-        """`options` is (sub_api, major, minor, profile, flags, share) for the options minor's setup, whose
-        answer is `answer`."""
         self.ring_resource = 200 + 3 * context
         self.test = test
         self.gpu = gpu
@@ -74,7 +58,6 @@ class Context:
         self.fence = 0
 
     def run(self, *commands):
-        """One batch of these commands through the doorbell: whether head passed it."""
         self.fence += 1
         self.ring.write(batch_header(len(b"".join(commands)), self.fence) + b"".join(commands)
                         + bytes(-(32 + len(b"".join(commands))) % 8))
@@ -83,7 +66,6 @@ class Context:
         return self.ring.wait_head(self.ring.tail, seconds=2.0)
 
     def answer(self):
-        """(status, fence, size, required) and the bytes that follow."""
         header = struct.unpack("<IIQIIQ", self.gpu.qtest.read_bytes(self.reply, 32))
         self.test.assertEqual(header[0], REPLY_MAGIC)
         return header[1:5], self.gpu.qtest.read_bytes(self.reply + 32, header[3]) if header[3] else b""
@@ -103,8 +85,6 @@ FLAG_DEBUG = 1
 
 
 class EchoEnvironment:
-    """The echo executor reads its controls from the environment QEMU starts in."""
-
     def __init__(self, test, **values):
         for name, value in values.items():
             previous = os.environ.get(name)
@@ -121,8 +101,6 @@ class EchoEnvironment:
 
 @unittest.skipUnless(BUILD and EXECUTOR, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuContextOptions(unittest.TestCase):
-    """Feature 050: an OpenGL context's options and share context reach the executor library."""
-
     def open(self, **environment):
         EchoEnvironment(self, AV_ECHO_OPENGL="1", **environment)
         qtest = virtio_qtest.Qtest(BUILD, av_device(), False)
@@ -150,7 +128,6 @@ class VirtioGpuContextOptions(unittest.TestCase):
         for context, share in ((2, 1), (3, 9), (4, 4)):
             Context(self, gpu, context, context, options=(SUB_API_OPENGL, 4, 6, PROFILE_CORE, 0, share),
                     answer=RESP_ERR_INVALID_PARAMETER)
-        # Options on another sub-API cannot even be written.
         Context(self, gpu, 5, 5, options=(SUB_API_VULKAN, 4, 6, PROFILE_CORE, 0, 0),
                 answer=RESP_ERR_INVALID_PARAMETER)
 
@@ -178,9 +155,6 @@ class VirtioGpuExecution(unittest.TestCase):
     def test_commands_run_in_order_on_one_thread_and_unknown_ones_are_skipped(self):
         gpu = self.open()
         context = Context(self, gpu, 1, 2)
-        # 0x00007 is the transport id nothing answers: 0x4 to 0x6 became the
-        # shared-object commands in feature 053, and a device that answered one
-        # of those would be answering rather than skipping.
         self.assertTrue(context.run(command(ECHO, b"1"), command(0x10099), command(0x20001, b"cl"),
                                     command(0x00007), command(ECHO), command(COUNT, b"", GENERATE_REPLY)))
         (status, _, size, _), answer = context.answer()
@@ -198,9 +172,9 @@ class VirtioGpuExecution(unittest.TestCase):
         self.assertTrue(context.run(command(NOP), command(NOP), command(COUNT, b"", GENERATE_REPLY)))
         (status, fence, size, _), answer = context.answer()
         self.assertEqual((status, fence, size), (STATUS_OK, 2, 12))
-        self.assertEqual(struct.unpack("<QI", answer), (0, 1))   # no NOP ever reached the executor
+        self.assertEqual(struct.unpack("<QI", answer), (0, 1))
         self.assertTrue(context.run(command(NOP)))
-        self.assertEqual(context.answer()[0][1], 2)   # asking for nothing leaves the slot as it was
+        self.assertEqual(context.answer()[0][1], 2)
 
     @unittest.skipUnless(REAL_EXECUTOR, "needs this project's executor library")
     def test_a_nop_is_answered_the_same_under_the_real_executor(self):
@@ -242,10 +216,6 @@ class VirtioGpuExecution(unittest.TestCase):
                 self.assertEqual(healthy.answer()[1], b"still")
 
     def test_a_fault_aimed_at_one_executor_leaves_the_other_running(self):
-        """What the guest suite's tdr and fault runs need: a host that goes
-        wrong for one context only, so that losing that context can be told
-        apart from losing the device (feature 040, US3 and US4). The executors
-        are created in the order their contexts are set up."""
         os.environ["AV_ECHO_ONLY_NTH"], os.environ["AV_ECHO_FAULT_AFTER"] = "2", "1"
         try:
             gpu = self.open()
@@ -284,9 +254,6 @@ class VirtioGpuExecution(unittest.TestCase):
 
 
     def chunk(self, gpu, context, pages):
-        """Guest pages allocated with a page between each, written 0xA0 + their
-        index, as one GUEST blob in the context's first chunk slot, listed last
-        page first: the resource id and the pages' addresses, in blob order."""
         addresses = [gpu.device.memory.allocate(2 * PAGE) for _ in range(pages)][::-1]
         for index, address in enumerate(addresses):
             gpu.qtest.write_bytes(address, bytes([0xA0 + index]) * PAGE)
@@ -295,7 +262,6 @@ class VirtioGpuExecution(unittest.TestCase):
         return resource, addresses
 
     def imported(self, context, *import_arguments):
-        """(status, device_memory) IMPORT_BLOB answered, the context still running."""
         self.assertTrue(context.run(command(IMPORT_BLOB, import_body(*import_arguments), GENERATE_REPLY)))
         (status, _, size, _), answer = context.answer()
         self.assertEqual((status, size), (STATUS_OK, 16))
@@ -309,30 +275,25 @@ class VirtioGpuExecution(unittest.TestCase):
         resource, addresses = self.chunk(gpu, context, 3)
         self.assertEqual(self.imported(context, resource, PAGE, 2 * PAGE, 5), (IMPORTED, 1 | HANDLE_BIT))
         handle = 1 | HANDLE_BIT
-        # The executor reads, through the pointer it was handed, what the guest wrote at the second and third pages.
         self.assertTrue(context.run(command(PEEK, peek_body(handle, PAGE - 4, 8), GENERATE_REPLY)))
         memory_type, live, size = struct.unpack("<IIQ", context.answer()[1][:16])
         self.assertEqual((memory_type, live, size), (5, 1, 2 * PAGE))
         self.assertEqual(context.answer()[1][16:], bytes([0xA1]) * 4 + bytes([0xA2]) * 4)
-        # And the guest reads what the executor writes, on its own page.
         self.assertTrue(context.run(command(POKE, struct.pack("<QQ", handle, PAGE + 3) + b"host gpu", GENERATE_REPLY)))
         self.assertEqual(context.answer()[1], struct.pack("<I", 1))
         self.assertEqual(gpu.qtest.read_bytes(addresses[2] + 3, 8), b"host gpu")
-        # A second import of the same chunk shares its pages; the blob is kept while either holds it.
         self.assertEqual(self.imported(context, resource, 0, PAGE, 1), (IMPORTED, 2 | HANDLE_BIT))
         self.expect(gpu, unref(resource), RESP_ERR_INVALID_PARAMETER)
         self.assertTrue(context.run(command(RELEASE_BLOB, struct.pack("<Q", handle), GENERATE_REPLY)))
         self.assertEqual(context.answer()[0][2], 0)
         self.assertTrue(context.run(command(PEEK, peek_body(handle, 0, 1), GENERATE_REPLY)))
-        self.assertEqual(context.answer()[1], bytes(16))   # released: the executor holds nothing under it
+        self.assertEqual(context.answer()[1], bytes(16))
         self.assertTrue(context.run(command(RELEASE_BLOB, struct.pack("<Q", 2 | HANDLE_BIT)),
                                     command(RELEASE_BLOB, struct.pack("<Q", 0x1234))))
         self.expect(gpu, unref(resource), RESP_OK_NODATA)
         self.assertNotIn("context faulted", gpu.qtest.printed())
 
     def host_chunk(self, gpu, context, pages, offset):
-        """A mappable HOST3D blob in the context's first chunk slot, placed at `offset` of the hostmem window
-        as the driver places a window chunk: the resource id and the guest address of its first byte."""
         resource = context.ring_resource + 3
         self.expect(gpu, host_blob(resource, pages * PAGE), RESP_OK_NODATA)
         self.assertEqual(hex(response_type(gpu.control(map_blob(resource, offset), 32))), hex(RESP_OK_MAP_INFO))
@@ -349,17 +310,14 @@ class VirtioGpuExecution(unittest.TestCase):
         gpu.qtest.write_bytes(window + 2 * PAGE, bytes([0xB2]) * PAGE)
         self.assertEqual(self.imported(context, resource, PAGE, 2 * PAGE, 3), (IMPORTED, 1 | HANDLE_BIT))
         handle = 1 | HANDLE_BIT
-        # The executor reads, through what it was handed, what the guest wrote through the window.
         self.assertTrue(context.run(command(PEEK, peek_body(handle, PAGE - 4, 8), GENERATE_REPLY)))
         memory_type, live, size = struct.unpack("<IIQ", context.answer()[1][:16])
         self.assertEqual((memory_type, live, size), (3, 1, 2 * PAGE))
         self.assertEqual(context.answer()[1][16:], bytes([0xB1]) * 4 + bytes([0xB2]) * 4)
-        # And the guest reads, through the window, what the executor writes.
         self.assertTrue(context.run(command(POKE, struct.pack("<QQ", handle, PAGE + 3) + b"host gpu", GENERATE_REPLY)))
         self.assertEqual(context.answer()[1], struct.pack("<I", 1))
         self.assertEqual(gpu.qtest.read_bytes(window + 2 * PAGE + 3, 8), b"host gpu")
         if not renderer:
-            # QEMU's table holds the blob for the import; a renderer holds its own mirror instead.
             self.expect(gpu, unref(resource), RESP_ERR_INVALID_PARAMETER)
         self.assertTrue(context.run(command(RELEASE_BLOB, struct.pack("<Q", handle), GENERATE_REPLY)))
         self.assertEqual(context.answer()[0][2], 0)
@@ -409,7 +367,7 @@ class VirtioGpuExecution(unittest.TestCase):
         context = Context(self, gpu, 1, 12)
         resource, _ = self.chunk(gpu, context, 1)
         self.assertEqual(self.imported(context, resource, 0, PAGE), (UNMAPPABLE_PAGES, 0))
-        self.expect(gpu, unref(resource), RESP_OK_NODATA)   # a refused import holds nothing
+        self.expect(gpu, unref(resource), RESP_OK_NODATA)
 
 
 if __name__ == "__main__":

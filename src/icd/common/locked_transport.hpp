@@ -1,17 +1,3 @@
-/* A connection's transport as the generated wrappers see it: every command
- * encoded and sent, and every synchronous reply decoded, by one thread at a
- * time.
- *
- * The generated client asks for a writer, encodes into the room it lends - the
- * inner transport's one staging buffer - and sends. A synchronous call then
- * decodes its reply from the inner transport's one reply slot and ends the call
- * (SyncCallScope). So the lock is taken when the writer is lent and let go when
- * an asynchronous command has been sent, or when a synchronous call ends -
- * otherwise another thread's round trip could replace the reply mid-decode.
- * A command whose payload was dropped before any send is ended by the thread
- * writing it (the OpenGL client), which lets its writer's lock go. Only the
- * thread whose call is open ends it; an end with no call open lets go of
- * nothing. */
 #ifndef AV_ICD_LOCKED_TRANSPORT_HPP
 #define AV_ICD_LOCKED_TRANSPORT_HPP
 
@@ -21,7 +7,7 @@
 
 namespace av {
 class ThreadLock;
-}  // namespace av
+}
 
 namespace av::icd {
 
@@ -37,11 +23,9 @@ public:
     void             end_call() override;
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;
-    /* Under the lock. */
     [[nodiscard]] bool make_room_for_blobs(size_t bytes) override;
     const TransferRoom &room() const override;
 
-    /* The lock is held exactly while a command is written or a reply read. */
     bool invariants_hold() const;
 
 private:
@@ -57,6 +41,6 @@ private:
     friend struct LockedTransportProbe;
 };
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_LOCKED_TRANSPORT_HPP
+#endif

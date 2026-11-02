@@ -15,11 +15,10 @@ namespace av::icd {
 namespace {
 
 constexpr uint32_t pixel_bytes = 4u;
-/* An acquire waiting for the present thread looks again this often. */
 constexpr uint32_t acquire_milliseconds = 1u;
 constexpr uint64_t nanoseconds_per_millisecond = 1000000u;
 
-}  // namespace
+}
 
 Swapchain::Swapchain(WindowSurface &windows, WindowChains &chains, EntryLookup &entries, VkDevice device,
                      uint64_t host_device, VkPhysicalDevice physical, Kmt &kmt, DriverLog &log,
@@ -32,7 +31,6 @@ Swapchain::Swapchain(WindowSurface &windows, WindowChains &chains, EntryLookup &
       through_chain_(false), retired_(false), presented_(0u), window_refused_(), chain_refused_()
 {
     AV_SCOPE("Swapchain::Swapchain");
-    /* Fresh, so the bind cannot be refused. */
     static_cast<void>(pacing_.bind(kmt, lines_, connection.adapter(), connection.device()));
 }
 
@@ -49,8 +47,6 @@ VkResult Swapchain::initialize(const VkSwapchainCreateInfoKHR &info, void *windo
     const VkResult judged = judge(info, surface);
     if (judged != VK_SUCCESS) return judged;
     format_ = foreign_enum(info.imageFormat);
-    /* judge() has held the format to one this driver presents, so the
-     * application's value is a format the host knows. */
     const auto format = static_cast<VkFormat>(format_);
     VkResult   made = make_destination(window, format, info.imageExtent);
     for (uint32_t index = 0u; made == VK_SUCCESS && index < info.minImageCount; index++) {
@@ -64,8 +60,6 @@ VkResult Swapchain::initialize(const VkSwapchainCreateInfoKHR &info, void *windo
     }
     window_ = window;
     extent_ = info.imageExtent;
-    /* judge() has held the mode to FIFO or IMMEDIATE: a blank a present, or
-     * none. */
     static_cast<void>(pacing_.ask(foreign_enum(info.presentMode) == static_cast<int32_t>(VK_PRESENT_MODE_FIFO_KHR) ? 1 : 0));
     count_ = info.minImageCount;
     return VK_SUCCESS;
@@ -93,9 +87,6 @@ VkResult Swapchain::judge(const VkSwapchainCreateInfoKHR &info, SurfacePropertie
         refused("height, the window's", info.imageExtent.height, capabilities.currentExtent.height);
         return VK_ERROR_OUT_OF_DATE_KHR;
     }
-    /* Each check is named in the log, so a refusal says which; an application
-     * reports only that the swapchain failed (Portal: "Failed to create swap
-     * chain"). */
     struct Check {
         bool        holds;
         const char *what;
@@ -187,9 +178,6 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
         give(index, Holder::none);
         return device_.skip(queue, wait_count, waits);
     }
-    /* A retired swapchain gave its slot back, and the window's chain shows
-     * its successor's frames: what it presents is consumed and shown
-     * nowhere. */
     if (through_chain_ && !chained_.opened()) {
         give(index, Holder::none);
         const VkResult skipped = device_.skip(queue, wait_count, waits);
@@ -203,9 +191,6 @@ VkResult Swapchain::present(VkQueue queue, uint32_t index, uint32_t wait_count, 
     return VK_SUCCESS;
 }
 
-/* A chain has one slot, so its frames go one at a time; read-back frames
- * take turns in two. A thread that freed no slot in time drops the frame,
- * whose semaphores are consumed all the same. */
 VkResult Swapchain::hand_over(VkQueue queue, uint32_t index, uint32_t wait_count, const VkSemaphore *waits)
 {
     AV_SCOPE("Swapchain::hand_over");
@@ -225,7 +210,6 @@ VkResult Swapchain::hand_over(VkQueue queue, uint32_t index, uint32_t wait_count
     slot_images_[slot] = index;
     presents_.release();
     if (presents_.hand(frame(slot))) return VK_SUCCESS;
-    /* No row for it: the copy is seen through here, and the frame dropped. */
     const VkResult finished = device_.finish(slot);
     give(index, Holder::none);
     return finished;
@@ -288,7 +272,6 @@ void Swapchain::give(uint32_t index, Holder holder)
     presents_.release();
 }
 
-/* The window as it is now: gone, a different size, or the swapchain's. */
 VkResult Swapchain::window_state() const
 {
     AV_SCOPE("Swapchain::window_state");
@@ -307,8 +290,6 @@ bool Swapchain::shows_bgra() const
     return slot.take_vk(static_cast<uint32_t>(format_)) && slot.bgra();
 }
 
-/* What the thread holds of this swapchain is shown first: it may be
- * presenting the slot that goes back. */
 void Swapchain::retire()
 {
     AV_SCOPE("Swapchain::retire");
@@ -335,7 +316,6 @@ PresentPacing &Swapchain::pacing()
     return pacing_;
 }
 
-/* A retired swapchain's window is its successor's, chain and all. */
 void Swapchain::release()
 {
     AV_SCOPE("Swapchain::release");
@@ -348,9 +328,6 @@ void Swapchain::release()
     for (Holder &holder : holders_) holder = Holder::none;
 }
 
-/* A made swapchain has its images and the device's; one that goes through a
- * chain has its slot until it is retired; it holds only images it has; an
- * unmade one holds nothing. */
 bool Swapchain::invariants_hold() const
 {
     AV_SCOPE("Swapchain::invariants_hold");
@@ -358,11 +335,9 @@ bool Swapchain::invariants_hold() const
     if (count_ > PresentDevice::max_images) return false;
     if (count_ != 0u && device_.images() != count_) return false;
     if (count_ != 0u && through_chain_ && !retired_ && !chained_.opened()) return false;
-    /* Every counted image is the device's own invariant; what is this one's is
-     * that nothing past the count is held. */
     for (uint32_t index = count_; index < PresentDevice::max_images; index++)
         if (holders_[index] != Holder::none) return false;
     return next_ < (count_ != 0u ? count_ : 1u);
 }
 
-}  // namespace av::icd
+}

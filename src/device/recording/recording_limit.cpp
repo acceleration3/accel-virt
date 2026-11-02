@@ -17,8 +17,6 @@ RecordingLimit::RecordingLimit(uint64_t ceiling, AtCeiling at_ceiling)
     AV_SCOPE("RecordingLimit::RecordingLimit");
 }
 
-/* Subtraction rather than addition throughout: `written_` never passes
- * `ceiling_`, so neither side can wrap. */
 LimitVerdict RecordingLimit::verdict(uint64_t bytes) const
 {
     AV_SCOPE("RecordingLimit::verdict");
@@ -60,4 +58,4 @@ bool RecordingLimit::invariants_hold() const
     return ceiling_ == 0u || written_ <= ceiling_;
 }
 
-}  // namespace av
+}

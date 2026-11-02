@@ -1,5 +1,3 @@
-/* Reaches into a HostGpu so invariant tests can corrupt it. Declared a friend
- * by HostGpu; nothing outside the tests uses it. */
 #ifndef AV_HOST_GPU_PROBE_HPP
 #define AV_HOST_GPU_PROBE_HPP
 
@@ -17,6 +15,6 @@ struct HostGpuProbe {
     HostGpu &gpu;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_HOST_GPU_PROBE_HPP
+#endif

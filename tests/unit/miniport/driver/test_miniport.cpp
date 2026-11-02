@@ -29,7 +29,7 @@ struct MiniportProbe {
     Miniport &miniport;
 };
 
-}  // namespace av
+}
 
 using av::MiniportProbe;
 
@@ -85,9 +85,6 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiCreateHwQueue,       DdiSlot::DxgkDdiDestroyHwQueue,
     DdiSlot::DxgkDdiSubmitCommandToHwQueue, DdiSlot::DxgkDdiResetHwEngine,
     DdiSlot::DxgkDdiResumeHwEngine,
-    /* The doorbells a process submits through, and the native fences the OS
-     * demands before it will hand one out (feature 049): the nine WDDM 3.1
-     * left NULL until there was something behind them. */
     DdiSlot::DxgkDdiCreateDoorbell, DdiSlot::DxgkDdiConnectDoorbell,
     DdiSlot::DxgkDdiDisconnectDoorbell, DdiSlot::DxgkDdiDestroyDoorbell,
     DdiSlot::DxgkDdiNotifyWorkSubmission,
@@ -102,8 +99,6 @@ bool is_implemented(std::uint16_t index)
     return false;
 }
 
-/* Binds a miniport for the scope and unbinds it on exit, as DriverEntry and
- * Unload do in the kernel. */
 class Bound {
 public:
     Bound() : miniport_(platform_) { av::miniport_binding.bind(miniport_); }
@@ -116,7 +111,7 @@ private:
     Miniport     miniport_;
 };
 
-}  // namespace
+}
 
 TEST(miniport, fills_exactly_the_slots_this_feature_implements)
 { MockPlatform platform; Miniport miniport(platform);
@@ -126,9 +121,6 @@ TEST(miniport, fills_exactly_the_slots_this_feature_implements)
       exact = exact && ((miniport.ddi_table().routine(DdiSlot{index}) != nullptr) == is_implemented(index));
   CHECK(exact); }
 
-/* Overlay planes are the MPO3 generation's alone - its flip, check and caps
- * DDIs (test_adapter) - so the older generations' checks and flip stay empty,
- * as do PostMultiPlaneOverlayPresent, which no build calls, and gamma. */
 TEST(miniport, offers_only_the_mpo3_overlay_slots_and_no_gamma_slot)
 { MockPlatform platform; Miniport miniport(platform);
   const DdiSlot overlays[] = {
@@ -158,8 +150,6 @@ TEST(miniport_add_device, gives_each_device_its_own_context_up_to_the_limit)
   for (void *context : contexts) CHECK_STATUS(miniport.remove_device(context), Status::ok);
   CHECK_EQ(miniport.adapter_count(), 0u); }
 
-/* The guest log's first line after DriverEntry, and the one that says why a
- * device was refused (feature 037, FR-003). */
 TEST(miniport_add_device, logs_the_device_it_added_and_the_one_it_refused)
 { MockPlatform platform; Miniport miniport(platform);
   int pdo = 0; void *context = nullptr;
@@ -215,8 +205,6 @@ TEST(miniport_binding, binds_and_unbinds_one_root)
   binding.unbind();
   CHECK(binding.miniport() == nullptr); }
 
-/* ---- the entry points, through the table ------------------------------------ */
-
 TEST(ddi_entry_points, add_and_remove_device_reach_the_bound_root)
 { Bound bound;
   int pdo = 0; void *context = nullptr;
@@ -258,8 +246,6 @@ TEST(ddi_entry_points, each_forwards_to_the_adapter_behind_the_context)
   CHECK_EQ(AvDdiNotifyAcpiEvent(context, 0, 0u, nullptr, &acpi_flags), 0);
   CHECK_EQ(acpi_flags, 0u);
   AvDdiResetDevice(context);
-  /* A query with no record is a caller's mistake; the interface this driver
-   * does answer is tested with the adapter (feature 049). */
   CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryInterface(context, nullptr)), 0xC000000Du);
   AvDdiControlEtwLogging(1u, 0u, 0u);
   CHECK_EQ(static_cast<std::uint32_t>(AvDdiUpdateOverlay(nullptr, nullptr)), 0xC00000BBu);
@@ -283,9 +269,6 @@ TEST(miniport_invariants, a_corrupted_table_is_detected)
   CHECK(!miniport.invariants_hold()); }
 
 namespace {
-
-/* An image that records its leaving, and how many adapters were still there
- * when it left: none, since the code they run is about to be unmapped. */
 class RecordingExit final : public av::ImageExit {
 public:
     explicit RecordingExit(const Miniport &miniport) : miniport_(miniport) {}
@@ -298,11 +281,8 @@ private:
     const Miniport &miniport_;
 };
 
-}  // namespace
+}
 
-/* DxgkDdiUnload ends with the whole image leaving, after the adapters are
- * gone (1729ac46: a log thread outlived the unload and ran unmapped code). A
- * root bound without an ImageExit, or unbound, leaves nothing. */
 TEST(miniport_binding, unload_ends_with_the_image_exit_after_the_adapters)
 { MockPlatform platform; Miniport miniport(platform); MiniportBinding binding;
   RecordingExit exit(miniport);

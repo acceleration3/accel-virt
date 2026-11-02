@@ -1,9 +1,3 @@
-// d3d11_cube.exe: a cube map made with initial data for each face, then read
-// back face by face, which is what a game's environment map does at load.
-// Prints each face's first texel; a driver that counts the faces wrong reads
-// past the initial data it was given.
-//
-//   d3d11_cube.exe
 #include <cstdio>
 #include <d3d11.h>
 

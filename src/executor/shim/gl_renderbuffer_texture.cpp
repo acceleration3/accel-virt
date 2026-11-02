@@ -14,7 +14,7 @@ namespace {
 using CreateImage = void *(*)(void *, void *, unsigned, void *, const int32_t *);
 using DestroyImage = unsigned (*)(void *, void *);
 
-}  // namespace
+}
 
 GlRenderbufferTexture::GlRenderbufferTexture()
     : create_image_(nullptr), destroy_image_(nullptr), image_target_texture_(nullptr), gen_textures_(nullptr),
@@ -62,8 +62,6 @@ GlContext *GlRenderbufferTexture::current()
     return context_;
 }
 
-/* The texture is left unbound: the binding was only how the image is named,
- * and this context's state is nobody else's to find changed. */
 bool GlRenderbufferTexture::make(uint32_t renderbuffer, uint32_t &texture, void *&image)
 {
     AV_SCOPE("GlRenderbufferTexture::make");
@@ -99,4 +97,4 @@ void GlRenderbufferTexture::destroy(uint32_t texture, void *image)
     if (image != nullptr) static_cast<void>(destroy_image_(display_->handle(), image));
 }
 
-}  // namespace av
+}

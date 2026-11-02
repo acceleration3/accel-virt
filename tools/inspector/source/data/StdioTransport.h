@@ -1,10 +1,6 @@
 #ifndef DATA_STDIO_TRANSPORT_H
 #define DATA_STDIO_TRANSPORT_H
 
-// MCP's stdio transport: one JSON-RPC message per line on stdin, each reply one line on stdout.
-// What an MCP client that launches the server as a subprocess speaks. Nothing else may write to
-// stdout while it serves.
-
 #include "mcp/Transport.h"
 
 namespace inspector {
@@ -26,6 +22,6 @@ private:
     bool m_closed = false;
 };
 
-} // namespace inspector
+}
 
 #endif

@@ -49,7 +49,6 @@ void RetiredSyncTokens::remove(uint64_t token)
         run.last_--;
         return;
     }
-    /* `token` is strictly inside the run, so both halves keep at least one. */
     const Run after{token + 1u, run.last_};
     if (runs_.insert_at(index + 1u, after) == Status::ok) runs_.at(index).last_ = token - 1u;
 }
@@ -72,8 +71,6 @@ uint32_t RetiredSyncTokens::runs() const
     return runs_.size();
 }
 
-/* Runs ascend and never touch, so the last run starting at or below `token`
- * is the only one that can hold it. */
 uint32_t RetiredSyncTokens::run_of(uint64_t token) const
 {
     AV_SCOPE("RetiredSyncTokens::run_of");
@@ -81,8 +78,6 @@ uint32_t RetiredSyncTokens::run_of(uint64_t token) const
     return row != runs_.size() && token <= runs_.at(row).last_ ? row : runs_.size();
 }
 
-/* The oldest tokens are the likeliest to be signaled wherever they were
- * made, so the gap given up is the oldest one. */
 void RetiredSyncTokens::join_oldest()
 {
     AV_SCOPE("RetiredSyncTokens::join_oldest");
@@ -93,8 +88,6 @@ void RetiredSyncTokens::join_oldest()
 bool RetiredSyncTokens::invariants_hold() const
 {
     AV_SCOPE("RetiredSyncTokens::invariants_hold");
-    /* Ascending, never zero, and a token apart: runs that touched would have
-     * been one. */
     uint64_t after = 0u;
     for (uint32_t i = 0u; i < runs_.size(); i++) {
         const Run &run = runs_.at(i);
@@ -105,4 +98,4 @@ bool RetiredSyncTokens::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

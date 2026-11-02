@@ -1,10 +1,3 @@
-/* The GL probe's GlEntry over FakeOpengl32 (feature 050, T038): WGL through
- * its exports, GL 1.1 through the calling thread's proc table, the rest
- * through DrvGetProcAddress, as an application on the system opengl32 reaches
- * them; GetLastError from the thread slot the ICD sets it in. The window is
- * one DC the caller declared. ChoosePixelFormat is GDI's, which the full-stack
- * rig does not have: it answers the ICD's first format, the double-buffered
- * RGBA8 D24S8 one GDI would match. */
 #ifndef AV_OPENGL32_GL_ENTRY_HPP
 #define AV_OPENGL32_GL_ENTRY_HPP
 
@@ -75,7 +68,6 @@ public:
     void          delete_texture(std::uint32_t texture) override;
 
 private:
-    /* ERROR_PROC_NOT_FOUND. */
     static constexpr std::uint32_t proc_not_found = 127u;
     static constexpr std::uint32_t elsewhere = 7u;
 
@@ -89,6 +81,6 @@ private:
     std::uint32_t       height_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_OPENGL32_GL_ENTRY_HPP
+#endif

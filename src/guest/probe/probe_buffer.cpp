@@ -13,7 +13,6 @@ ProbeBuffer::ProbeBuffer(ProbeDevice &device)
         AV_SCOPE("ProbeBuffer::ProbeBuffer");
     }
 
-/* Vulkan makes destroying and freeing VK_NULL_HANDLE a no-op. */
 ProbeBuffer::~ProbeBuffer()
 {
     AV_SCOPE("ProbeBuffer::~ProbeBuffer");
@@ -69,4 +68,4 @@ bool ProbeBuffer::invariants_hold() const
     return memory_ == VK_NULL_HANDLE || buffer_ != VK_NULL_HANDLE;
 }
 
-}  // namespace av
+}

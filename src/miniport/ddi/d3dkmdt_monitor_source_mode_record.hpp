@@ -1,5 +1,3 @@
-/* D3DKMDT_MONITOR_SOURCE_MODE. A DDI record: ColorCoeffDynamicRanges is its
- * four channels; src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_D3DKMDT_MONITOR_SOURCE_MODE_RECORD_HPP
 #define AV_D3DKMDT_MONITOR_SOURCE_MODE_RECORD_HPP
 
@@ -20,6 +18,6 @@ struct D3dkmdtMonitorSourceModeRecord {
     uint32_t                     Padding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_D3DKMDT_MONITOR_SOURCE_MODE_RECORD_HPP
+#endif

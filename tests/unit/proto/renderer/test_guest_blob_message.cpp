@@ -47,7 +47,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(guest_blob_message_encode, is_the_blob_the_count_the_size_then_each_extent)
 { GuardedBuffer bytes(two_length);
@@ -81,8 +81,6 @@ TEST(guest_blob_message, round_trips_into_the_extents_it_was_given)
   CHECK(decoded.extent(2u).length() == 0u);
   CHECK_EQ(extents[1].region(), 2u); }
 
-/* A 64 MiB blob scattered page by page is what the device accepts from the
- * guest, and it has to cross in one datagram. */
 TEST(guest_blob_message, the_most_extents_fit_one_datagram_and_round_trip)
 { static RendererExtent extents[GuestBlobMessage::max_extents];
   static RendererExtent decoded_extents[GuestBlobMessage::max_extents];
@@ -150,8 +148,6 @@ TEST(guest_blob_message_decode, any_descriptor_or_a_length_other_than_the_count_
   CHECK_STATUS(decoded.decode(nullptr, two_length, 0u, extents, 2u), Status::malformed);
   CHECK_EQ(decoded.count(), 0u); }
 
-/* A count past the bound is refused before it sizes anything, whatever
- * arrived after it. */
 TEST(guest_blob_message_decode, a_count_past_the_bound_is_malformed)
 { static std::uint8_t bytes[GuestBlobMessage::fixed_size +
                             (GuestBlobMessage::max_extents + 1u) * RendererExtent::encoded_size];
@@ -165,13 +161,13 @@ TEST(guest_blob_message_decode, a_count_past_the_bound_is_malformed)
 TEST(guest_blob_message_decode, refuses_bad_fields_and_stays_unchanged)
 { struct Case { std::size_t offset; std::size_t width; std::uint64_t value; };
   const Case cases[] = {
-      {0u, 4u, 0u},                                              /* blob 0 */
-      {8u, 8u, 0u},                                              /* an empty blob */
-      {8u, 8u, 0x2FFFu},                                         /* extents longer than the blob */
-      {8u, 8u, 0x3001u},                                         /* extents shorter than the blob */
-      {24u, 8u, 0u},                                             /* an empty extent */
-      {16u, 8u, (std::uint64_t{1} << 40) | 0xFFFFFFFFFFull},     /* an extent past its region */
-      {40u, 8u, ~std::uint64_t{0} - 0xFFFu},                     /* a length past its region */
+      {0u, 4u, 0u},
+      {8u, 8u, 0u},
+      {8u, 8u, 0x2FFFu},
+      {8u, 8u, 0x3001u},
+      {24u, 8u, 0u},
+      {16u, 8u, (std::uint64_t{1} << 40) | 0xFFFFFFFFFFull},
+      {40u, 8u, ~std::uint64_t{0} - 0xFFFu},
   };
   for (const Case &c : cases) {
       std::uint8_t bytes[two_length] = {};
@@ -201,11 +197,5 @@ TEST(guest_blob_message_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 256u);
-  /* Blob 3 has two bits set: its 32 flips keep it non-zero. Any count flip
-   * changes the length the extents need, and any flip of the size or an
-   * extent's length breaks the sum. An address is free: every region is
-   * nameable, and both extents are a page or two long starting at most a page
-   * in, so no offset flip runs one past its region - 64 flips each. With the
-   * untouched message, 32 + 128 + 1. */
   const std::uint32_t acceptable = 32u + 128u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

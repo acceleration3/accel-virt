@@ -45,4 +45,4 @@ void *PresentedAllocations::at(uint32_t index) const
         .hDeviceSpecificAllocation;
 }
 
-}  // namespace av
+}

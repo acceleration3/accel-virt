@@ -25,4 +25,4 @@ void FakeDoorbellPages::store(std::uint64_t offset, unsigned width)
 std::uint32_t FakeDoorbellPages::rings(std::uint32_t page) const { return page < pages ? rings_[page] : 0u; }
 std::uint32_t FakeDoorbellPages::stray_stores() const { return stray_; }
 
-}  // namespace av
+}

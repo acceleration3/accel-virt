@@ -1,5 +1,3 @@
-/* The harness is trusted by every adapter test, so it is tested against the
- * core classes that consume it. */
 #include "miniport/driver/dxgkrnl_interface.hpp"
 #include "miniport/pci/mapped_register_window.hpp"
 #include "miniport/pci/pci_base_addresses.hpp"
@@ -52,7 +50,7 @@ TEST(fake_dxgkrnl_adapter, presents_a_function_core_can_find_and_map)
   CHECK_STATUS(interface.map_memory(address, static_cast<std::uint32_t>(length), mapped), Status::ok);
   CHECK_EQ(dxgkrnl.live_mappings(), 1u);
   MappedRegisterWindow common(platform, mapped, layout.common().length());
-  CHECK_EQ(common.read_u16(0x12u), 2u);   /* num_queues */
+  CHECK_EQ(common.read_u16(0x12u), 2u);
   CHECK_STATUS(interface.unmap_memory(mapped), Status::ok);
   CHECK_EQ(dxgkrnl.live_mappings(), 0u);
   CHECK_EQ(common.read_u16(0x12u), 0xFFFFu);
@@ -91,9 +89,6 @@ TEST(fake_dxgkrnl_adapter, a_mapping_left_behind_fails_the_test)
                                 0u, 0u, 0, &mapped), 0); }
   CHECK(TestRegistry::instance().take_current_failure()); }
 
-/* dxgmms2.sys bugchecks 0x119/0xD on DMA_FAULTED from this adapter
- * (VidSchDdiNotifyInterruptWorker @140031b80), so a driver that reports one
- * fails the test and nothing is delivered; a completion still is. */
 TEST(fake_dxgkrnl_adapter, a_dma_faulted_interrupt_fails_the_test_and_is_not_delivered)
 { MockPlatform platform; FakeVirtioGpuFunction function;
   FakeDxgkrnlAdapter dxgkrnl(platform, function);

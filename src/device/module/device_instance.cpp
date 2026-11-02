@@ -15,4 +15,4 @@ VirtioGpuAv &DeviceInstance::device()
     return device_;
 }
 
-}  // namespace av
+}

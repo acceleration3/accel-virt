@@ -35,4 +35,4 @@ bool Win32HandleKind::invariants_hold() const
     return one_bit && win32_bit_ != fd_bit_;
 }
 
-}  // namespace av::icd
+}

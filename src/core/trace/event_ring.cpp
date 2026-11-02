@@ -18,7 +18,7 @@ void put64(uint8_t *at, uint64_t value)
     __builtin_memcpy(at, &value, sizeof value);
 }
 
-}  // namespace
+}
 
 EventRing::EventRing() : region_(nullptr), slots_(0u), events_per_slot_(0u) {}
 
@@ -48,10 +48,6 @@ bool EventRing::recording() const
 
 void EventRing::record(uint32_t slot, uint64_t time, uint32_t name, uint32_t thread, bool begin)
 {
-    /* Header bytes 24..31 are a stop time a reader sets: events from then on
-     * are not recorded, so a ring stops at the same instant as the others a
-     * capture reads, and holds still while it is copied. 0 records; 1 - a
-     * reader setting byte 24 alone - stops it now. */
     if (region_ == nullptr || slot >= slots_) return;
     const uint64_t stop = __atomic_load_n(reinterpret_cast<const uint64_t *>(region_ + 24u), __ATOMIC_RELAXED);
     if (stop != 0u && time >= stop) return;
@@ -63,9 +59,7 @@ void EventRing::record(uint32_t slot, uint64_t time, uint32_t name, uint32_t thr
     put64(event, time);
     put32(event + 8u, name);
     put32(event + 12u, (thread & ~begin_bit) | (begin ? begin_bit : 0u));
-    /* The count moves after the event is whole, so a reader never takes a
-     * half-written one as the newest. */
     __atomic_store_n(reinterpret_cast<uint64_t *>(base), written + 1u, __ATOMIC_RELEASE);
 }
 
-}  // namespace av
+}

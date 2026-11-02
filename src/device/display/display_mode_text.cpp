@@ -8,10 +8,9 @@ namespace av {
 namespace {
 
 constexpr uint32_t decimal_base = 10u;
-/* More digits than any edge the set takes, which is refused anyway. */
 constexpr uint32_t max_digits = 6u;
 
-}  // namespace
+}
 
 DisplayModeText::DisplayModeText(const char *text) : text_(text)
 {
@@ -44,7 +43,6 @@ Status DisplayModeText::read(DisplayModeSet &modes) const
         const uint32_t before = read.count();
         const Status   added = read.add(width, height);
         if (added != Status::ok) return Status::invalid_parameter;
-        /* The same mode twice is a list that says less than it seems to. */
         if (read.count() == before) return Status::invalid_parameter;
         if (*at == '\0') break;
         if (*at != ',') return Status::invalid_parameter;
@@ -67,4 +65,4 @@ bool DisplayModeText::edge(const char *&at, uint32_t &value) const
     return digits != 0u;
 }
 
-}  // namespace av
+}

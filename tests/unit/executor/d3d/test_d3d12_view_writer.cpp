@@ -1,9 +1,3 @@
-/* Descriptors written from the wire's view descriptions: each kind's
- * dimension and union members as the guest's driver sends them, turned into
- * the Direct3D 12 description with the resource the guest's id names. The
- * device records what it was asked to write, so the description itself is
- * judged; a dimension the kind has not got, a member count past the wire's, a
- * resource id naming nothing and an unbound writer are each nothing written. */
 #include "executor/d3d/d3d12_address_map.hpp"
 #include "executor/d3d/d3d12_view_writer.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
@@ -25,7 +19,6 @@ namespace {
 
 enum class Made : std::uint8_t { nothing, srv, uav, rtv, dsv, cbv, sampler };
 
-/* A device that keeps the last view it was asked to write. */
 class RecordingDevice final : public ID3D12Device {
 public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override
@@ -144,7 +137,6 @@ public:
     ULONG STDMETHODCALLTYPE Release() override { return 1u; }
 };
 
-/* Most of a megabyte each: kept out of the stack. */
 D3dObjectTable &session_objects()
 {
     static av::HostHeap   heap;
@@ -159,12 +151,11 @@ D3d12AddressMap &session_addresses()
     return map;
 }
 
-constexpr std::uint32_t texture = 5u;    /* a Direct3D 12 resource */
-constexpr std::uint32_t counter = 6u;    /* another */
-constexpr std::uint32_t sampler_id = 7u; /* not a resource */
+constexpr std::uint32_t texture = 5u;
+constexpr std::uint32_t counter = 6u;
+constexpr std::uint32_t sampler_id = 7u;
 constexpr std::uint32_t nobody = 9u;
 
-/* The writer over a session's tables, bound to a recording device. */
 class Rig {
 public:
     Rig() : writer_(session_objects(), session_addresses())
@@ -208,7 +199,7 @@ ViewDesc view(std::uint32_t resource, std::uint32_t dimension, std::uint32_t for
     return desc;
 }
 
-}  // namespace
+}
 
 TEST(d3d12_view_writer_bind, an_unbound_writer_writes_nothing)
 { Rig rig;
@@ -222,8 +213,6 @@ TEST(d3d12_view_writer_bind, an_unbound_writer_writes_nothing)
   CHECK(!rig.writer().sampler(64u, SamplerDesc{}));
   CHECK(rig.device().made == Made::nothing); }
 
-/* A null description is the resource's own format and whole extent: it needs
- * a resource, and names it. */
 TEST(d3d12_view_writer_shader_resource, a_null_description_views_the_whole_resource)
 { Rig rig;
   CHECK(rig.writer().shader_resource(0x40u, false, view(texture, 0u)));
@@ -240,12 +229,12 @@ TEST(d3d12_view_writer_shader_resource, a_null_description_views_the_whole_resou
 
 TEST(d3d12_view_writer_shader_resource, a_texture2d_s_members_and_its_lod_clamp_land_in_the_union)
 { Rig rig;
-  ViewDesc desc = view(texture, 4u /* D3D12_SRV_DIMENSION_TEXTURE2D */);
+  ViewDesc desc = view(texture, 4u );
   desc.mapping = 0x1688u;
-  desc.args[0] = 1u;   /* MostDetailedMip */
-  desc.args[1] = 2u;   /* MipLevels */
-  desc.args[2] = 3u;   /* PlaneSlice */
-  desc.args[3] = 99u;  /* not a member of this dimension */
+  desc.args[0] = 1u;
+  desc.args[1] = 2u;
+  desc.args[2] = 3u;
+  desc.args[3] = 99u;
   desc.min_lod = 0.5f;
   CHECK(rig.writer().shader_resource(0x80u, true, desc));
   const D3D12_SHADER_RESOURCE_VIEW_DESC &made = rig.device().srv;
@@ -274,13 +263,12 @@ TEST(d3d12_view_writer_shader_resource, a_buffer_takes_its_first_element_count_s
 
 TEST(d3d12_view_writer_shader_resource, refuses_an_unknown_dimension_format_or_resource)
 { Rig rig;
-  CHECK(!rig.writer().shader_resource(0u, true, view(texture, 0u)));     /* UNKNOWN */
-  CHECK(!rig.writer().shader_resource(0u, true, view(texture, 11u)));    /* past the last */
+  CHECK(!rig.writer().shader_resource(0u, true, view(texture, 0u)));
+  CHECK(!rig.writer().shader_resource(0u, true, view(texture, 11u)));
   CHECK(!rig.writer().shader_resource(0u, true, view(texture, 4u, 192u)));
   CHECK(!rig.writer().shader_resource(0u, true, view(nobody, 4u)));
-  CHECK(!rig.writer().shader_resource(0u, true, view(sampler_id, 4u)));   /* not a resource */
+  CHECK(!rig.writer().shader_resource(0u, true, view(sampler_id, 4u)));
   CHECK(rig.device().made == Made::nothing);
-  /* No resource with a description is a null descriptor, which is written. */
   CHECK(rig.writer().shader_resource(0u, true, view(0u, 10u, 191u)));
   CHECK(rig.device().resource == nullptr); }
 
@@ -300,13 +288,13 @@ TEST(d3d12_view_writer_unordered_access, names_its_counter_and_writes_the_counte
   CHECK_EQ(rig.device().uav.Buffer.StructureByteStride, 4u);
   CHECK(rig.device().uav.Buffer.CounterOffsetInBytes == 4096u);
   ViewDesc texture2d = view(texture, 4u);
-  texture2d.args[0] = 3u;   /* MipSlice */
-  texture2d.args[1] = 1u;   /* PlaneSlice */
+  texture2d.args[0] = 3u;
+  texture2d.args[1] = 1u;
   CHECK(rig.writer().unordered_access(0x20u, true, texture2d));
   CHECK_EQ(rig.device().uav.Texture2D.MipSlice, 3u);
   CHECK_EQ(rig.device().uav.Texture2D.PlaneSlice, 1u);
   CHECK(rig.device().counter == nullptr);
-  CHECK(rig.writer().unordered_access(0x30u, false, desc));   /* null description, still its counter */
+  CHECK(rig.writer().unordered_access(0x30u, false, desc));
   CHECK(!rig.device().described);
   CHECK(rig.device().counter == rig.counter_object()); }
 
@@ -315,7 +303,7 @@ TEST(d3d12_view_writer_unordered_access, refuses_a_counter_naming_nothing_and_di
   ViewDesc desc = view(texture, 4u);
   desc.counter_resource = nobody;
   CHECK(!rig.writer().unordered_access(0u, true, desc));
-  CHECK(!rig.writer().unordered_access(0u, true, view(texture, 6u)));   /* no UAV of a cube */
+  CHECK(!rig.writer().unordered_access(0u, true, view(texture, 6u)));
   CHECK(!rig.writer().unordered_access(0u, true, view(texture, 7u)));
   CHECK(!rig.writer().unordered_access(0u, true, view(texture, 9u)));
   CHECK(!rig.writer().unordered_access(0u, true, view(nobody, 4u)));
@@ -349,7 +337,7 @@ TEST(d3d12_view_writer_render_target, writes_a_texture2d_or_a_buffer_and_refuses
 
 TEST(d3d12_view_writer_depth_stencil, writes_its_flags_and_members_and_refuses_what_it_has_not_got)
 { Rig rig;
-  ViewDesc desc = view(texture, 3u /* D3D12_DSV_DIMENSION_TEXTURE2D */, 45u);
+  ViewDesc desc = view(texture, 3u , 45u);
   desc.flags = 2u;
   desc.args[0] = 1u;
   CHECK(rig.writer().depth_stencil(0x200u, true, desc));
@@ -366,23 +354,21 @@ TEST(d3d12_view_writer_depth_stencil, writes_its_flags_and_members_and_refuses_w
   CHECK(!rig.writer().depth_stencil(0u, true, view(texture, 3u, 192u)));
   CHECK(rig.device().made == Made::nothing); }
 
-/* A constant buffer is 256-byte aligned and at most 64 KiB; its guest address
- * is the host buffer's plus the same offset, and one in no buffer is refused. */
 TEST(d3d12_view_writer_constant_buffer, translates_the_guest_address_and_refuses_what_d3d12_would)
 { Rig rig;
   CHECK(rig.writer().constant_buffer(0x300u, 0x100200u, 512u));
   CHECK(rig.device().made == Made::cbv);
   CHECK(rig.device().cbv.BufferLocation == 0xABC00200u);
   CHECK_EQ(rig.device().cbv.SizeInBytes, 512u);
-  CHECK(rig.writer().constant_buffer(0x300u, 0u, 256u));   /* a null view */
+  CHECK(rig.writer().constant_buffer(0x300u, 0u, 256u));
   CHECK(rig.device().cbv.BufferLocation == 0u);
   rig.device().forget();
   CHECK(!rig.writer().constant_buffer(0u, 0x100000u, 255u));
   CHECK(!rig.writer().constant_buffer(0u, 0x100000u, 65536u + 256u));
-  CHECK(!rig.writer().constant_buffer(0u, 0x200000u, 256u));   /* in no buffer */
-  CHECK(!rig.writer().constant_buffer(0u, 0x10FF00u, 512u));   /* running past its buffer */
+  CHECK(!rig.writer().constant_buffer(0u, 0x200000u, 256u));
+  CHECK(!rig.writer().constant_buffer(0u, 0x10FF00u, 512u));
   CHECK(rig.device().made == Made::nothing);
-  CHECK(rig.writer().constant_buffer(0u, 0x100000u, 65536u));   /* the largest */ }
+  CHECK(rig.writer().constant_buffer(0u, 0x100000u, 65536u));   }
 
 TEST(d3d12_view_writer_sampler, carries_every_field_of_the_wire_s_description)
 { Rig rig;

@@ -1,31 +1,3 @@
-// Windows.Graphics.Capture probe: how many frames a capture delivers, when, and
-// whether they hold what was on screen.
-//
-//   wgc_probe.exe <mode> [--seconds S] [--render-ms M] [--swap-buffers N]
-//                        [--pool-buffers N] [--out FILE] [--thumbs FILE]
-//
-// Modes:
-//   window, monitor          the probe's own window, repainted with GDI once a
-//                            DWM frame, captured as a window or as the monitor
-//   window-d3d, monitor-d3d  the same window drawn by a D3D11 swapchain
-//                            presenting at sync interval 1, as a game does;
-//                            --swap-buffers 1 makes it a blt-model swapchain,
-//                            --sync-interval 0 presents uncapped
-//   title:TEXT               the first visible window whose title holds TEXT
-//   screen                   the primary monitor as it is, with no window of
-//                            the probe's: what another program's window
-//                            showed on screen, frame by frame
-//
-// Every line is `key value...`: `frame` once per captured frame (its
-// SystemRelativeTime, which is QPC in 100 ns, and when it arrived), then
-// `capture`, `intervals` and `pixels` for the run, then `WGC PASS|FAIL`.
-// --thumbs writes each captured frame as a 96x54 luminance thumbnail, one
-// after the other: what the window showed frame by frame, to see whether it
-// ever steps back to an older frame.
-// tools/frame_pacing.py reads the frames to line captures up with its ETW
-// trace. Each paint and each captured frame also calls D3DKMTGetScanLine, which
-// dxgkrnl's profiler keyword logs with the calling thread: a marker on the
-// ETW timeline.
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi1_2.h>
@@ -33,8 +5,6 @@
 #include <roapi.h>
 #include <timeapi.h>
 #include <winstring.h>
-// llvm-mingw's windows.foundation.h specializes IReference for boolean and for
-// BYTE, which are one type there (unsigned char); the probe uses neither.
 #define ____FIReference_1_boolean_INTERFACE_DEFINED__
 #include <windows.graphics.capture.h>
 #include <windows.graphics.capture.interop.h>
@@ -76,16 +46,14 @@ template <class T> void release(T *&object)
 struct Options {
     const wchar_t *mode = L"monitor-d3d";
     double seconds = 8.0;
-    double render_ms = 0.0;   // busy time before each present, as a game renders
+    double render_ms = 0.0;
     UINT swap_buffers = 2;
-    UINT sync_interval = 1;   // 0 presents uncapped, as a game with vsync off
+    UINT sync_interval = 1;
     int pool_buffers = 3;
-    double min_update_ms = -1.0;   // GraphicsCaptureSession.MinUpdateInterval; below 0, DWM's 16 ms
+    double min_update_ms = -1.0;
     const wchar_t *thumbs = nullptr;
 };
 
-// A marker on the ETW timeline: dxgkrnl's profiler keyword logs each
-// DxgkGetScanLine with the thread that called it.
 class Marker {
 public:
     Marker()
@@ -113,9 +81,6 @@ private:
 
 Marker *marker = nullptr;
 
-// The probe's window and what animates it. (x, y) of a GDI frame holds
-// R = (x + 8 * step) & 255, G = y & 255, B = 128, so a stride, scale or channel
-// fault shows along a captured row; a D3D frame clears to R = 8 * step.
 class ProbeWindow {
 public:
     static constexpr int width = 512;
@@ -139,8 +104,6 @@ public:
     HWND hwnd() const { return hwnd_; }
     bool d3d() const { return d3d_; }
     LONG painted() const { return painted_; }
-    // Where the client area starts inside a window capture, which includes
-    // the frame DWM draws around it.
     POINT client_offset() const
     {
         RECT frame = {};
@@ -202,8 +165,6 @@ private:
         bitmap.bmiHeader.biCompression = BI_RGB;
         SetDIBitsToDevice(dc, 0, 0, width, height, 0, 0, 0, height, pixels_, &bitmap, DIB_RGB_COLORS);
     }
-    // One step painted, then DWM waited for: every step is on screen for
-    // exactly one composition, so a step no capture shows was dropped.
     DWORD animate_gdi()
     {
         while (animating_) {
@@ -291,7 +252,6 @@ template <class T> HRESULT activation_factory(const wchar_t *runtime_class, T **
     return hr;
 }
 
-// The texture behind a captured frame, and a CPU copy of all or part of it.
 class FrameReader {
 public:
     FrameReader(ID3D11Device *device, ID3D11DeviceContext *context) : device_(device), context_(context) {}
@@ -303,8 +263,6 @@ public:
 
     static constexpr unsigned thumb_width = 96, thumb_height = 54;
 
-    // The frame's luminance on a 96x54 grid, into `thumb`; false when it
-    // cannot be read.
     bool thumbnail(IDirect3D11CaptureFrame *frame, unsigned char *thumb)
     {
         ID3D11Texture2D *texture = texture_of(frame);
@@ -358,8 +316,6 @@ public:
         return texture;
     }
 
-    // The animation step a window capture shows: R at the client's first
-    // column is 8 * step. -1 when the frame cannot be read.
     int step(IDirect3D11CaptureFrame *frame, POINT client)
     {
         ID3D11Texture2D *texture = texture_of(frame);
@@ -390,8 +346,6 @@ public:
         return seen;
     }
 
-    // Whether the frame holds the window's gradient (a GDI window capture) or
-    // is mostly not black (anything else).
     bool holds_content(IDirect3D11CaptureFrame *frame, const ProbeWindow *window)
     {
         ID3D11Texture2D *texture = texture_of(frame);
@@ -477,8 +431,6 @@ double refresh_period_ms()
     return 1000.0 / 60.0;
 }
 
-// Captures `item` for the run's seconds, polling the pool every millisecond
-// as a capture application's frame loop would, and reports what arrived.
 bool capture(IGraphicsCaptureItem *item, Device &device, const Options &options, const ProbeWindow *window,
              bool track_steps)
 {
@@ -492,7 +444,6 @@ bool capture(IGraphicsCaptureItem *item, Device &device, const Options &options,
                                     size, &pool));
     CHECK(pool->CreateCaptureSession(item, &session));
     if (options.min_update_ms >= 0) {
-        // IGraphicsCaptureSession5 (Windows 11 24H2), which the MinGW headers do not declare yet.
         struct Session5 : IInspectable {
             virtual HRESULT STDMETHODCALLTYPE get_MinUpdateInterval(INT64 *hundred_ns) = 0;
             virtual HRESULT STDMETHODCALLTYPE put_MinUpdateInterval(INT64 hundred_ns) = 0;
@@ -704,7 +655,7 @@ bool parse(int argc, wchar_t **argv, Options &options, const wchar_t *&path)
     return options.seconds > 0 && options.swap_buffers >= 1 && options.pool_buffers >= 1;
 }
 
-}  // namespace
+}
 
 int wmain(int argc, wchar_t **argv)
 {

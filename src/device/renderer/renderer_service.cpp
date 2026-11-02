@@ -26,12 +26,10 @@
 namespace av {
 
 namespace {
-
-/* virtio_gpu_mem_entry: the address, the length, and four bytes of padding. */
 constexpr size_t   entry_size = 16u;
 constexpr uint64_t largest_entry = 0xFFFFFFFFu;
 
-}  // namespace
+}
 
 RendererService::RendererService(Host &host, RendererResources &resources, GuestMemoryTable &memory,
                                  DoorbellOffers &doorbells)
@@ -57,7 +55,6 @@ Status RendererService::receive(const uint8_t *datagram, size_t length, const in
     host_.require_main_loop("RendererService::receive");
     answer_length = 0u;
     answer_descriptor = -1;
-    /* The memory answered last time has been sent by now. */
     close_answered_memory();
     RendererMessageHeader header;
     if (datagram == nullptr || header.decode(datagram, length) != Status::ok) {
@@ -67,14 +64,10 @@ Status RendererService::receive(const uint8_t *datagram, size_t length, const in
     const uint8_t *const body = datagram + RendererMessageHeader::encoded_size;
     const uint32_t       body_length = header.body_length();
     using Kind = RendererMessageHeader::Kind;
-    /* Only region, bind_context and interrupt_lines carry descriptors; any
-     * that came with another kind are closed here, whatever the message turns
-     * out to be. */
     const bool takes_descriptors = header.kind() == Kind::region || header.kind() == Kind::bind_context ||
                                    header.kind() == Kind::interrupt_lines;
     if (!takes_descriptors) close_all(descriptors, count);
     if (header.kind() == Kind::hello) return hello(header, body, count, answer, capacity, answer_length);
-    /* Nothing but a hello is taken before the executor is loaded. */
     if (!ready_ && header.kind() != Kind::interrupts_off) {
         if (takes_descriptors) close_all(descriptors, count);
         return Status::invalid_state;
@@ -105,8 +98,6 @@ Status RendererService::receive(const uint8_t *datagram, size_t length, const in
     return answer_with(header.sequence(), outcome, answer, capacity, answer_length);
 }
 
-/* The executor is loaded once; a second hello - a restarted QEMU would not
- * send one to a renderer it did not start - is refused. */
 Status RendererService::hello(const RendererMessageHeader &header, const uint8_t *body, uint32_t count,
                               uint8_t *answer, size_t capacity, size_t &answer_length)
 {
@@ -122,7 +113,6 @@ Status RendererService::hello(const RendererMessageHeader &header, const uint8_t
     if (blobs_.initialize() == Status::no_memory || owners_.initialize() == Status::no_memory ||
         interrupts_.initialize() == Status::no_memory || plane_.initialize() == Status::no_memory)
         return Status::no_memory;
-    /* The device's domain is opened here, where the library runs. */
     static_cast<void>(plane_.start(hello.gpu_uuid(), capset_));
     const uint32_t     sub_apis = plane_.sub_apis() & ((1u << ReadyMessage::lanes) - 1u);
     const ReadyMessage ready(HelloMessage::protocol_version, ops->abi_version, sub_apis);
@@ -159,9 +149,6 @@ Status RendererService::region(const uint8_t *body, uint32_t length, const int *
     return added;
 }
 
-/* The mirror is made by the table QEMU's own blob requests go through: its
- * extents become the memory entries BlobTable reads, the addresses left in
- * the form this process's host resolves. */
 Status RendererService::guest_blob(const uint8_t *body, uint32_t length, uint32_t count)
 {
     AV_SCOPE("RendererService::guest_blob");
@@ -181,9 +168,6 @@ Status RendererService::guest_blob(const uint8_t *body, uint32_t length, uint32_
     return blobs_.create_guest(message.blob(), message.size(), request, 0u, message.count());
 }
 
-/* The memory is allocated where the contexts that import it run, and its
- * owner kept beside it; the dma-buf goes back with the answer for QEMU to map
- * into the BAR, and this copy of it is closed once it has been sent. */
 Status RendererService::allocate_memory(const RendererMessageHeader &header, const uint8_t *body, uint32_t count,
                                         uint8_t *answer, size_t capacity, size_t &answer_length,
                                         int &answer_descriptor)
@@ -195,9 +179,6 @@ Status RendererService::allocate_memory(const RendererMessageHeader &header, con
     AllocatedMemoryMessage allocated;
     if (plane_.allocate_memory(request.context(), request.key(), request.size(), request.request(), memory) ==
         Status::ok) {
-        /* Owned only once there is memory to hand over: an owner kept for
-         * memory QEMU never got would name it to an import. A key that is no
-         * host blob's id the owners refuse. */
         const bool kept = memory.fd >= 0 && request.key() <= UINT32_MAX &&
                           owners_.adopt(static_cast<uint32_t>(request.key()), request.context()) == Status::ok;
         if (kept) {
@@ -267,8 +248,6 @@ Status RendererService::context(RendererMessageHeader::Kind kind, const uint8_t 
     return Status::ok;
 }
 
-/* The doorbell is offered before the bind that connects it; one the bind did
- * not take is closed rather than left for a later context. */
 Status RendererService::bind(const uint8_t *body, uint32_t length, const int *descriptors, uint32_t count,
                              Status &outcome)
 {
@@ -363,7 +342,6 @@ void RendererService::close_all(const int *descriptors, uint32_t count)
         if (descriptors != nullptr && descriptors[index] >= 0) resources_.close_descriptor(descriptors[index]);
 }
 
-/* The contexts first: they unpin the blobs and stop raising interrupts. */
 void RendererService::shut_down()
 {
     AV_SCOPE("RendererService::shut_down");
@@ -389,4 +367,4 @@ bool RendererService::invariants_hold() const
            memory_.invariants_hold() && doorbells_.invariants_hold() && (ready_ || plane_.live() == 0u);
 }
 
-}  // namespace av
+}

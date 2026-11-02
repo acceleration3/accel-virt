@@ -1,12 +1,3 @@
-/* The native GPU fences dxgkrnl makes on this adapter (WDDM 3.1, feature 049).
- *
- * The OS owns the memory a fence's two values live in and hands the driver the
- * address each time it wants one written, so what these tests judge is what
- * the driver owns: which fences exist, that a handle it never gave is refused
- * rather than followed, and that a request naming one bad fence writes nothing
- * at all - a half-written update would leave the OS's waiters reading a
- * mixture of what it asked for and what it did not.
- */
 #include "miniport/ddi/dxgkarg_native_fence_records.hpp"
 #include "miniport/scheduling/native_fence_table.hpp"
 #include "core/support/status.hpp"
@@ -29,8 +20,6 @@ using av::Status;
 using av::Violation;
 
 namespace {
-
-/* One fence and the two values the OS keeps for it. */
 class Fence {
 public:
     Fence(NativeFenceTable &table, std::uint32_t type = av::native_fence_type_default)
@@ -50,7 +39,6 @@ private:
     void *handle_ = nullptr;
 };
 
-/* What the OS passes: which fences, what values, and where to write them. */
 class Update {
 public:
     Update(void *const *handles, const std::uint64_t *values, void *const *addresses, std::uint32_t count)
@@ -75,7 +63,7 @@ private:
     DxgkargUpdateNativeFenceValuesRecord record_ = {};
 };
 
-}  // namespace
+}
 
 TEST(native_fence_table, writes_what_the_os_asks_where_the_os_says)
 { MockPlatform     platform;
@@ -106,8 +94,6 @@ TEST(native_fence_table, writes_what_the_os_asks_where_the_os_says)
   CHECK_EQ(fences.current_value(second.handle()), 9u);
   CHECK(fences.invariants_hold());
 
-  /* Destroyed, a fence is one this driver no longer has: nothing of it is
-   * remembered and nothing is written for it again. */
   const DxgkargDestroyNativeFenceRecord destroy = {first.handle(), 0u, {}};
   CHECK_STATUS(fences.destroy(destroy), Status::ok);
   CHECK_EQ(fences.live(), 1u);
@@ -116,8 +102,6 @@ TEST(native_fence_table, writes_what_the_os_asks_where_the_os_says)
   CHECK_STATUS(fences.destroy(destroy), Status::invalid_parameter);
   CHECK(fences.invariants_hold()); }
 
-/* Everything the OS could pass that names no fence of this driver's, and a
- * request with one bad entry among good ones - which writes nothing. */
 TEST(native_fence_table, a_request_naming_anything_it_did_not_make_writes_nothing)
 { MockPlatform     platform;
   NativeFenceTable fences(platform);
@@ -143,7 +127,6 @@ TEST(native_fence_table, a_request_naming_anything_it_did_not_make_writes_nothin
   CHECK_STATUS(fences.update_monitored(mixed.record()), Status::invalid_parameter);
   CHECK_EQ(fence.monitored, 0u);
 
-  /* And every shape of request that is no request. */
   void *const         one[] = {fence.handle()};
   const std::uint64_t value[] = {5u};
   void *const         address[] = {&fence.current};
@@ -167,12 +150,10 @@ TEST(native_fence_table, a_request_naming_anything_it_did_not_make_writes_nothin
   Update              unaddressed(one, value, nowhere, 1u);
   CHECK_STATUS(fences.update_current(unaddressed.record()), Status::invalid_parameter);
   CHECK_EQ(fence.current, 0u);
-  /* The good one still writes. */
   CHECK_STATUS(fences.update_current(good.record()), Status::ok);
   CHECK_EQ(fence.current, 5u);
   CHECK(fences.invariants_hold()); }
 
-/* A table with no room refuses rather than handing out a fence nobody tracks. */
 TEST(native_fence_table, a_table_with_no_room_refuses)
 { MockPlatform     platform;
   NativeFenceTable fences(platform);
@@ -191,8 +172,6 @@ TEST(native_fence_table, a_table_with_no_room_refuses)
   CHECK_STATUS(fences.destroy(destroy), Status::ok);
   CHECK_STATUS(fences.create(past), Status::ok); }
 
-/* What av-inspect reads out of a running driver (docs/trace.md), and nothing
- * but `busy` while another thread holds the table. */
 TEST(native_fence_table_report, writes_each_fence_and_says_when_it_cannot)
 { MockPlatform     platform;
   NativeFenceTable fences(platform);
@@ -224,8 +203,6 @@ TEST(native_fence_table, runs_at_the_levels_it_declares)
   void *const         address[] = {&fence.current};
   Update              update(one, value, address, 1u);
 
-  /* The updates are the OS's own: monitored values arrive as high as PROFILE,
-   * and the ones from the CPU at DISPATCH. */
   platform.set_irql(Irql::isr);
   CHECK_STATUS(fences.update_monitored(update.record()), Status::ok);
   platform.set_irql(Irql::dispatch);
@@ -235,7 +212,6 @@ TEST(native_fence_table, runs_at_the_levels_it_declares)
   static_cast<void>(fences.monitored_value(fence.handle()));
   CHECK_EQ(platform.unclaimed_violations(), 0u);
 
-  /* Creating and destroying one is PASSIVE, and the report is APC. */
   DxgkargCreateNativeFenceRecord request = {};
   static_cast<void>(fences.create(request));
   const DxgkargDestroyNativeFenceRecord destroy = {fence.handle(), 0u, {}};
@@ -259,10 +235,8 @@ struct NativeFenceTableProbe {
     }
 };
 
-}  // namespace av
+}
 
-/* A slot nobody holds holds nothing: a value left in a destroyed fence would
- * be read by the next process handed that slot. */
 TEST(native_fence_table_invariants, a_value_left_in_a_dead_slot_is_caught)
 { MockPlatform     platform;
   NativeFenceTable fences(platform);

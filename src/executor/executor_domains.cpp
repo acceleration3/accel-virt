@@ -15,8 +15,6 @@ uint32_t ExecutorDomains::open(uint32_t gpu_index)
     AV_SCOPE("ExecutorDomains::open");
     const uint32_t entry = entry_of(0u);
     if (entry == max_domains) return 0u;
-    /* Four billion devices realized in one process is not a case: an id that
-     * wrapped to 0 would read as a refusal, and nothing worse. */
     next_++;
     __atomic_store_n(&gpus_[entry], gpu_index, __ATOMIC_RELAXED);
     __atomic_store_n(&ids_[entry], next_, __ATOMIC_RELEASE);
@@ -75,4 +73,4 @@ uint32_t ExecutorDomains::entry_of(uint32_t domain) const
     return max_domains;
 }
 
-}  // namespace av
+}

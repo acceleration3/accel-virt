@@ -1,13 +1,3 @@
-"""The present engine against the real device (docs/protocol.md, "Present
-engine"): a registered page is headed; a queued blt is answered at once and
-its pixels land in the destination's pages later, off the main loop, when the
-page says its ticket completed; a refused ticket completes in its turn and is
-counted; and the present line - queue 67, after the display line - pends its
-vector as tickets complete.
-
-Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
-AV_QEMU_BUILD.
-"""
 import os
 import struct
 import time
@@ -90,7 +80,7 @@ class VirtioGpuPresentEngine(unittest.TestCase):
         gpu = virtio_qtest.VirtioGpu(self.qtest(), WANTED)
         page = self.registered(gpu)
         source, destination, _ = self.surfaces(gpu)
-        answer = gpu.control(blt(5, source, destination))   # the first is ticket 1
+        answer = gpu.control(blt(5, source, destination))
         self.assertEqual(hex(response_type(answer)), hex(RESP_ERR_INVALID_PARAMETER))
         self.assertEqual(self.progress(gpu, page), (1, 1))
         self.assertEqual(gpu.qtest.read_bytes(destination, 8), bytes(8))

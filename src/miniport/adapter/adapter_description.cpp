@@ -13,10 +13,9 @@ constexpr char chip_type[]      = "HardwareInformation.ChipType";
 constexpr char dac_type[]       = "HardwareInformation.DacType";
 constexpr char memory_size[]    = "HardwareInformation.MemorySize";
 constexpr char wide_memory[]    = "HardwareInformation.qwMemorySize";
-/* There is no DAC: the host composites whatever the device scans out. */
 constexpr char no_dac[]         = "Internal";
 
-}  // namespace
+}
 
 AdapterDescription::AdapterDescription(Platform &platform) : platform_(platform), published_(0u)
 {
@@ -40,8 +39,6 @@ Status AdapterDescription::publish(void *physical_device_object, const GpuIdenti
         keep(platform_.write_driver_text(physical_device_object, chip_type, name.units(), name.bytes()));
     }
     keep(platform_.write_driver_text(physical_device_object, dac_type, dac.units(), dac.bytes()));
-    /* WMI's AdapterRAM is 32 bits: the narrow value saturates, the wide one is
-     * the whole size for whatever reads it. */
     keep(platform_.write_driver_u32(physical_device_object, memory_size,
                                     static_cast<uint32_t>(memory > largest_u32 ? largest_u32 : memory)));
     keep(platform_.write_driver_u64(physical_device_object, wide_memory, memory));
@@ -56,4 +53,4 @@ uint32_t AdapterDescription::published() const
     return published_;
 }
 
-}  // namespace av
+}

@@ -13,7 +13,7 @@ namespace {
 constexpr uint32_t level_11_1 = 0xb100u;
 constexpr uint32_t level_11_0 = 0xb000u;
 
-}  // namespace
+}
 
 D3d11HostCaps::D3d11HostCaps() : caps_{}, formats_{}, snapshots_(false), learned_(false)
 {
@@ -28,8 +28,6 @@ bool D3d11HostCaps::learn(ClientTransport &transport, Kmt &kmt, uint32_t adapter
     d3dproto::FormatCaps rows[DxgiFormat::count] = {};
     if (!d3dproto::av_d3d_QueryCaps11(transport, &caps_, rows, sizeof(rows), &answered)) return false;
     formats_.learn(rows, static_cast<uint32_t>(answered / sizeof(rows[0])));
-    /* A miniport that does not answer offers nothing past the capset: its
-     * presents keep their read-back. */
     UmdAdapterInfo info;
     snapshots_ = kmt.query_adapter_features(adapter, info) == Status::ok &&
                  info.offers(UmdAdapterInfo::feature_present_snapshots);
@@ -65,10 +63,6 @@ UINT D3d11HostCaps::pipeline_levels() const
                   D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11_1DDI_3DPIPELINELEVEL_9_2) |
                   D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11_1DDI_3DPIPELINELEVEL_9_3);
     if (level >= level_11_0) levels |= D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_11_0);
-    /* Not 12_0 or 12_1 through Direct3D 11: the runtime refuses a feature
-     * level 12 driver that reports no tiled resources tier 2 ("FL12+ driver
-     * incorrectly did not report support for tiled resources tier 2+", its
-     * journal), and the tile-mapping commands do not cross this wire. */
     if (level >= level_11_1) levels |= D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11_1DDI_3DPIPELINELEVEL_11_1);
     return levels;
 }
@@ -80,11 +74,6 @@ HRESULT D3d11HostCaps::answer(const D3D10_2DDIARG_GETCAPS &args) const
     UINT                 word = 0u;
     switch (static_cast<UINT>(args.Type)) {
     case D3D11DDICAPS_THREADING:
-        /* Command lists, not free-threaded: a deferred context records its
-         * commands in guest memory (D3d11Device::initialize_deferred) and an
-         * executed list is appended to the immediate stream, so recording runs
-         * on the application's threads instead of being replayed by the
-         * runtime on the immediate one. */
         word = D3D11DDICAPS_FREETHREADED | D3D11DDICAPS_COMMANDLISTS_BUILD_2;
         break;
     case D3D11DDICAPS_SHADER:
@@ -124,15 +113,8 @@ HRESULT D3d11HostCaps::answer(const D3D10_2DDIARG_GETCAPS &args) const
     case D3DWDDM2_0DDICAPS_GPUVA_CAPS: word = 40u; break;
     case D3DWDDM2_2DDICAPS_SHADERCACHE: word = FALSE; break;
     default:
-        /* Every other question is about a feature this driver does not
-         * expose - texture layouts, swizzle patterns, ASTC - and all zeroes is
-         * each one's "none": the runtime refuses a driver that fails one
-         * outright (its journal: "Driver failed GetCaps with
-         * D3DWDDM2_2DDICAPS_TEXTURE_LAYOUT and NULL pInfo"). */
         return reply.give_none() ? S_OK : E_INVALIDARG;
     }
-    /* One word, which a buffer shorter than it is refused rather than
-     * written past. */
     return reply.give_whole(&word, sizeof word) ? S_OK : E_INVALIDARG;
 }
 
@@ -148,4 +130,4 @@ UINT D3d11HostCaps::quality_levels(DXGI_FORMAT format, UINT samples) const
     return formats_.quality_levels(static_cast<uint32_t>(format), samples);
 }
 
-}  // namespace av::d3d11
+}

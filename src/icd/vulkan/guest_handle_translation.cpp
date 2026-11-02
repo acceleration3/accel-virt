@@ -45,4 +45,4 @@ uint64_t GuestHandleTranslation::template_bytes(VkDescriptorUpdateTemplate made)
     return templates_.bytes_of(made);
 }
 
-}  // namespace av::icd
+}

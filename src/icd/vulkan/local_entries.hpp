@@ -1,8 +1,3 @@
-/* The entry points the ICD answers itself rather than through a generated
- * wrapper (contracts/loader_interface.md). The loader calls each through a bare
- * function pointer with Vulkan's arguments and nothing else, so each is the ABI
- * boundary CLAUDE.md permits: one line into the bound IcdRoot, no logic.
- * IcdRoot's table names them. */
 #ifndef AV_ICD_LOCAL_ENTRIES_HPP
 #define AV_ICD_LOCAL_ENTRIES_HPP
 
@@ -26,9 +21,6 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumerateInstanceVersion(uint32_t *pApiVe
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL local_vk_icdGetPhysicalDeviceProcAddr(VkInstance instance,
                                                                                const char *pName);
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL local_vkGetDeviceProcAddr(VkDevice device, const char *pName);
-/* The loader passes a LUID structure by value: 8 bytes, which the x64 calling
- * conventions carry exactly as a 64-bit integer: LowPart in its low half, as
- * Kmt::adapter_luid answers it. */
 VKAPI_ATTR VkResult VKAPI_CALL local_vk_icdEnumerateAdapterPhysicalDevices(VkInstance instance, uint64_t adapterLUID,
                                                                            uint32_t *pPhysicalDeviceCount,
                                                                            VkPhysicalDevice *pPhysicalDevices);
@@ -39,9 +31,6 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumerateDeviceExtensionProperties(VkPhys
 VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
                                                     const VkAllocationCallbacks *pAllocator, VkDevice *pDevice);
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator);
-/* The four that keep the descriptor template table honest (feature 047):
- * each forwards to the generated wrapper, and what it made or destroyed
- * is remembered or forgotten around it. */
 VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDescriptorUpdateTemplate(
     VkDevice device, const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
     const VkAllocationCallbacks *pAllocator, VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate);
@@ -82,19 +71,9 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkGetQueryPoolResults(VkDevice device, VkQu
                                                            uint32_t queryCount, size_t dataSize, void *pData,
                                                            VkDeviceSize stride, VkQueryResultFlags flags);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkDeviceWaitIdle(VkDevice device);
-/* Not Vulkan's: the probe's forced fault. Device level, so vkGetDeviceProcAddr
- * answers the driver's own pointer: a loader reaches a physical-device or
- * instance function it does not know only through a trampoline of its own,
- * and a loader built without its assembly has none. */
 VKAPI_ATTR VkResult VKAPI_CALL local_vkAvForceContextFault(VkDevice device);
-/* The NTSTATUS of the last D3DKMT call this driver made (feature 053): what a
- * probe reports when an entry point refused, since every one of the kernel
- * calls behind sharing answers the same VK_ERROR_TOO_MANY_OBJECTS. Device
- * level, as the forced fault is, and for the same reason; the device is
- * checked like any other handle. */
 VKAPI_ATTR VkResult VKAPI_CALL local_vkAvLastKernelStatus(VkDevice device, uint32_t *status);
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator);
-/* Every adapter's devices and groups, through the instances it spans. */
 VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysicalDeviceCount,
                                                                 VkPhysicalDevice *pPhysicalDevices);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumeratePhysicalDeviceGroups(
@@ -114,14 +93,7 @@ VKAPI_ATTR void VKAPI_CALL local_vkFreeMemory(VkDevice device, VkDeviceMemory me
                                               const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkMapMemory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset,
                                                  VkDeviceSize size, VkMemoryMapFlags flags, void **ppData);
-/* Mapped memory is the chunk itself - a host window chunk the host maps too,
- * or the process's own RAM - so there is nothing to unmap, flush or
- * invalidate: the host GPU reads and writes the same bytes. */
 VKAPI_ATTR void VKAPI_CALL local_vkUnmapMemory(VkDevice device, VkDeviceMemory memory);
-/* The VkMemoryMapInfoKHR shape of the two above (feature 047). Placement is
- * refused rather than ignored: the ICD cannot place a mapping, and a caller
- * that asked for one must not be handed a mapping somewhere else
- * (contracts/placed_mappings.md). */
 VKAPI_ATTR VkResult VKAPI_CALL local_vkMapMemory2KHR(VkDevice device, const VkMemoryMapInfoKHR *pMemoryMapInfo,
                                                      void **ppData);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkUnmapMemory2KHR(VkDevice device,
@@ -131,17 +103,9 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkFlushMappedMemoryRanges(VkDevice device, 
 VKAPI_ATTR VkResult VKAPI_CALL local_vkInvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount,
                                                                     const VkMappedMemoryRange *pMemoryRanges);
 
-/* The Win32 external objects (feature 047, US3). A HANDLE is Windows' own type
- * and no portable header declares it, so the structures arrive as the records
- * beside these declarations and a handle as the opaque pointer it is; the
- * layouts are the same either way (memory_win32_handle_record.hpp). All four
- * are this ICD's own because what a handle names is a row of its own table,
- * shared with the host by fd (research.md §10). */
 VKAPI_ATTR VkResult VKAPI_CALL local_vkGetMemoryWin32HandleKHR(VkDevice device,
                                                                const MemoryGetWin32HandleRecord *pGetWin32HandleInfo,
                                                                void                            **pHandle);
-/* Which memory types a handle from *outside* may be imported as, which is
- * nothing here: a handle this ICD did not export names no object. */
 VKAPI_ATTR VkResult VKAPI_CALL local_vkGetMemoryWin32HandlePropertiesKHR(VkDevice device, VkFlags handleType,
                                                                          void *handle,
                                                                          void *pMemoryWin32HandleProperties);
@@ -149,12 +113,8 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkGetSemaphoreWin32HandleKHR(
     VkDevice device, const SemaphoreGetWin32HandleRecord *pGetWin32HandleInfo, void **pHandle);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkImportSemaphoreWin32HandleKHR(
     VkDevice device, const ImportSemaphoreWin32HandleRecord *pImportSemaphoreWin32HandleInfo);
-/* A semaphore destroyed takes any handle that named it with it. */
 VKAPI_ATTR void VKAPI_CALL local_vkDestroySemaphore(VkDevice device, VkSemaphore semaphore,
                                                     const VkAllocationCallbacks *pAllocator);
-/* What the host says of its own opaque fd, said in Win32's spelling; every
- * other handle type is answered as absent rather than asked of a host that
- * means something else by it. */
 VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceExternalBufferProperties(
     VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalBufferInfo *pExternalBufferInfo,
     VkExternalBufferProperties *pExternalBufferProperties);
@@ -162,7 +122,6 @@ VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceExternalSemaphoreProperties(
     VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo *pExternalSemaphoreInfo,
     VkExternalSemaphoreProperties *pExternalSemaphoreProperties);
 
-/* WSI (feature 046). */
 VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateWin32SurfaceKHR(VkInstance instance,
                                                              const Win32SurfaceCreateRecord *pCreateInfo,
                                                              const VkAllocationCallbacks *pAllocator,
@@ -203,6 +162,6 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkAcquireNextImageKHR(VkDevice device, VkSw
                                                            uint32_t *pImageIndex);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo);
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_LOCAL_ENTRIES_HPP
+#endif

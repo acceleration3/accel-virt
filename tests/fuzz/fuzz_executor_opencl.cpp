@@ -1,21 +1,3 @@
-/* Hostile batches into the OpenCL server dispatch.
- *
- * A guest's context is a run of commands, and the ones that matter name
- * objects earlier ones made - so an input is a batch, decoded one command
- * after another over one RecordingClDispatch, which holds handles the way
- * OpenClBackend does and has no OpenCL behind it. What must hold after every
- * command, whatever the bytes: no call was handed an object this host did not
- * make as that kind (feature 044's handle hole) - a kernel argument the
- * kernel reads as an object included (T030) - no build left the ICD without
- * the argument information that check needs, no call was handed a span
- * outside what the decode arena gave out, nothing was written past the reply,
- * and the registry is whole.
- *
- * Each record is a two-byte command within OpenCL's range, a two-byte length
- * and that many payload bytes. The objects the dispatch makes live at
- * addresses no corpus can know, so eight payload bytes reading 0xC1C1C1C1 in
- * their top half stand for the number of the object whose index is in their
- * bottom half - the number a guest would have been answered. */
 #include "harness/executor/recording_cl_dispatch.hpp"
 #include "proto/generated/opencl/cl_dispatch_server.h"
 #include "proto/wire/wire_arena.hpp"
@@ -41,8 +23,6 @@ constexpr std::uint8_t  guard = 0xABu;
 
 alignas(16) std::uint8_t block[arena_bytes];
 
-/* `payload`, with every marked eight bytes replaced by a made object's
- * number. An index past what was made becomes zero, the API's null. */
 void substitute(const av::RecordingClDispatch &dispatch, std::uint8_t *payload, std::size_t length)
 {
     for (std::size_t at = 0u; at + sizeof(std::uint64_t) <= length; at++) {
@@ -55,7 +35,7 @@ void substitute(const av::RecordingClDispatch &dispatch, std::uint8_t *payload, 
     }
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

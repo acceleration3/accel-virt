@@ -7,17 +7,13 @@
 namespace av {
 
 namespace {
-
-/* Every byte of a page different from its neighbours and from the same byte
- * of the next page, so a page copied to the wrong place, or a stale one, is
- * a mismatch. */
 uint8_t pattern_byte(uint32_t index)
 {
     AV_SCOPE("pattern_byte");
     return static_cast<uint8_t>((index * 31u + 7u) ^ (index >> 12u));
 }
 
-}  // namespace
+}
 
 AppPointerCheck::AppPointerCheck() : pattern_{}, copied_{}
 {
@@ -62,4 +58,4 @@ bool AppPointerCheck::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

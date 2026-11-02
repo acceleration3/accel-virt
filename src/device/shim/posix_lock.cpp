@@ -16,8 +16,6 @@ PosixLock::~PosixLock()
     static_cast<void>(pthread_mutex_destroy(&mutex_));
 }
 
-/* Marked waiting only when the mutex is taken already: an uncontended
- * acquire is no wait worth showing. */
 void PosixLock::acquire()
 {
     AV_SCOPE("PosixLock::acquire");
@@ -44,4 +42,4 @@ void PosixLock::release()
     static_cast<void>(pthread_mutex_unlock(&mutex_));
 }
 
-}  // namespace av
+}

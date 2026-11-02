@@ -1,9 +1,3 @@
-/* The renderer process's host, for real: its control thread and the
- * routines posted to it, workers woken by their own eventfd or by the
- * doorbell QEMU registered, guest RAM mapped from the memfds QEMU sent,
- * host blobs over the memfd QEMU placed, fence interrupts written to the
- * notifiers QEMU passed, recordings on disk - and everything only QEMU has
- * answered not_supported. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/display/scanout_framebuffer.hpp"
@@ -80,7 +74,6 @@ void post_one(int descriptor)
     static_cast<void>(::write(descriptor, &one, sizeof one));
 }
 
-/* What the process writes to stderr while `run` runs. */
 class StderrCapture {
 public:
     StderrCapture() : saved_(::dup(2)), ends_{-1, -1}, text_{}
@@ -113,7 +106,6 @@ private:
     char text_[1024];
 };
 
-/* What a posted routine writes: its number, in the order routines ran. */
 struct Ledger {
     std::uint32_t ran[8];
     std::uint32_t count;
@@ -177,17 +169,15 @@ void try_elsewhere(void *context)
     if (locker->took) locker->host->unlock_mutex(locker->mutex);
 }
 
-}  // namespace
+}
 
-/* Routines posted from any thread run on the control thread, in the order
- * posted, when it runs them; the wakeup is readable exactly while some wait. */
 TEST(posix_renderer_host_main_loop, runs_posted_routines_in_order_when_the_control_thread_asks)
 { Rig rig;
   PosixRendererHost &host = rig.host();
   CHECK_EQ(host.main_loop_wakeup(), -1);
   Ledger ledger = {};
   Entry  early = {&ledger, 0u};
-  host.run_on_main_loop(&note, &early);   /* before there is a wakeup to signal */
+  host.run_on_main_loop(&note, &early);
   CHECK_STATUS(host.become_main_loop(), Status::ok);
   const int wakeup = host.main_loop_wakeup();
   CHECK(wakeup >= 0);
@@ -198,7 +188,7 @@ TEST(posix_renderer_host_main_loop, runs_posted_routines_in_order_when_the_contr
   CHECK_STATUS(host.start_thread(&post_all, &poster, thread), Status::ok);
   host.join_thread(thread);
   CHECK(readable(wakeup));
-  CHECK_EQ(ledger.count, 0u);   /* nothing runs until the control thread runs it */
+  CHECK_EQ(ledger.count, 0u);
   host.run_main_loop_work();
   CHECK_EQ(ledger.count, 4u);
   CHECK_EQ(ledger.ran[0], 0u);
@@ -208,11 +198,9 @@ TEST(posix_renderer_host_main_loop, runs_posted_routines_in_order_when_the_contr
   CHECK(!readable(wakeup));
   host.run_main_loop_work();
   CHECK_EQ(ledger.count, 4u);
-  /* A second become keeps the wakeup it made. */
   CHECK_STATUS(host.become_main_loop(), Status::ok);
   CHECK_EQ(host.main_loop_wakeup(), wakeup); }
 
-/* Routines never run are freed with the host: LeakSanitizer is the judge. */
 TEST(posix_renderer_host_main_loop, routines_never_run_go_with_the_host)
 { Ledger ledger = {};
   Entry  entries[2] = {{&ledger, 1u}, {&ledger, 2u}};
@@ -222,7 +210,6 @@ TEST(posix_renderer_host_main_loop, routines_never_run_go_with_the_host)
     rig.host().run_on_main_loop(&note, &entries[1]); }
   CHECK_EQ(ledger.count, 0u); }
 
-/* The thread checks only complain; they complain about the right thread. */
 TEST(posix_renderer_host_main_loop, names_a_call_on_the_wrong_thread)
 { Rig rig;
   PosixRendererHost &host = rig.host();
@@ -246,7 +233,6 @@ TEST(posix_renderer_host_main_loop, names_a_call_on_the_wrong_thread)
     host.log("hello there");
     CHECK(std::strcmp(capture.finish(), "av-renderer: hello there\n") == 0); } }
 
-/* A worker's event wakes on its own signal, auto-resetting. */
 TEST(posix_renderer_host_event, wakes_on_its_own_signal_and_resets)
 { Rig rig;
   PosixRendererHost &host = rig.host();
@@ -267,14 +253,12 @@ TEST(posix_renderer_host_event, wakes_on_its_own_signal_and_resets)
   CHECK(waiter.woke.load());
   host.destroy_event(event); }
 
-/* The doorbell QEMU offered for the page joins the worker's wakeup: a guest
- * store - a write to QEMU's eventfd - wakes it, and both are drained. */
 TEST(posix_renderer_host_event, wakes_on_the_doorbell_qemu_offered)
 { Rig rig;
   PosixRendererHost &host = rig.host();
   void *event = nullptr;
   CHECK_STATUS(host.create_event(event), Status::ok);
-  host.connect_doorbell(event, 4u);   /* nothing offered: nothing joins */
+  host.connect_doorbell(event, 4u);
   const int kvm_side = ::eventfd(0u, EFD_CLOEXEC | EFD_NONBLOCK);
   const int offered = ::fcntl(kvm_side, F_DUPFD_CLOEXEC, 0);
   CHECK_STATUS(rig.offers().offer(4u, offered), Status::ok);
@@ -288,28 +272,25 @@ TEST(posix_renderer_host_event, wakes_on_the_doorbell_qemu_offered)
   host.join_thread(thread);
   CHECK(waiter.woke.load());
   CHECK(!readable(kvm_side));
-  /* Both at once: both drained. */
   post_one(kvm_side);
   host.signal_event(event);
   host.wait_event(event);
   CHECK(!readable(kvm_side));
   CHECK(!readable(host.event_descriptor(event)));
-  /* A new offer at the page replaces the old descriptor, which is closed. */
   const int replacement = ::fcntl(kvm_side, F_DUPFD_CLOEXEC, 0);
   CHECK_STATUS(rig.offers().offer(4u, replacement), Status::ok);
   host.connect_doorbell(event, 4u);
   CHECK(!is_open(offered));
   host.disconnect_doorbell(event, 4u);
   CHECK(!is_open(replacement));
-  host.disconnect_doorbell(event, 4u);   /* twice is nothing */
+  host.disconnect_doorbell(event, 4u);
   post_one(kvm_side);
   host.signal_event(event);
   host.wait_event(event);
-  CHECK(readable(kvm_side));   /* no longer drained: no longer joined */
+  CHECK(readable(kvm_side));
   ::close(kvm_side);
   host.destroy_event(event); }
 
-/* The event goes with the doorbell it holds. */
 TEST(posix_renderer_host_event, destroying_an_event_closes_its_doorbell)
 { Rig rig;
   void *event = nullptr;
@@ -339,8 +320,6 @@ TEST(posix_renderer_host_mutex, excludes_another_thread_until_unlocked)
   host.unlock_mutex(mutex);
   host.destroy_mutex(mutex); }
 
-/* A region is QEMU's memfd mapped shared: what one side writes the other
- * reads. One that does not map is no_memory. */
 TEST(posix_renderer_host_region, maps_qemus_memfd_shared_and_refuses_what_does_not_map)
 { Rig rig;
   const int region = memfd(4u * page);
@@ -357,8 +336,6 @@ TEST(posix_renderer_host_region, maps_qemus_memfd_shared_and_refuses_what_does_n
   CHECK(!is_open(region));
   rig.host().close_descriptor(-1); }
 
-/* Guest memory is what the regions hold: an extent resolves to the mapped
- * bytes, directly, and one outside every region to nothing. */
 TEST(posix_renderer_host_guest, maps_extents_and_aliases_runs_through_the_regions)
 { Rig rig;
   PosixRendererHost &host = rig.host();
@@ -379,7 +356,6 @@ TEST(posix_renderer_host_guest, maps_extents_and_aliases_runs_through_the_region
   CHECK_EQ(length, 0u);
   length = page;
   CHECK(host.map_guest(std::uint64_t{5u} << GuestMemoryTable::region_shift, length, direct) == nullptr);
-  /* A run aliased at a reserved range is the same pages. */
   void *range = nullptr;
   CHECK_STATUS(host.reserve_range(2u * page, range), Status::ok);
   CHECK_STATUS(host.alias_guest_run(static_cast<std::uint8_t *>(base) + 2u * page, page, range), Status::ok);
@@ -389,8 +365,6 @@ TEST(posix_renderer_host_guest, maps_extents_and_aliases_runs_through_the_region
   CHECK_EQ(static_cast<std::uint8_t *>(base)[2u * page + 6u], 0x4Fu);
   std::uint8_t outside[page] = {};
   CHECK_STATUS(host.alias_guest_run(outside, page, range), Status::not_supported);
-  /* Host blobs live in QEMU's process: the renderer lays none over its view
-   * of guest RAM, and has none to restore. */
   CHECK_STATUS(host.overlay_guest_run(static_cast<std::uint8_t *>(base) + 2u * page, page, region, 0u),
                Status::not_supported);
   CHECK_STATUS(host.restore_guest_run(static_cast<std::uint8_t *>(base) + 2u * page, page), Status::not_supported);
@@ -401,8 +375,6 @@ TEST(posix_renderer_host_guest, maps_extents_and_aliases_runs_through_the_region
   host.unmap_region(base, size);
   host.close_descriptor(removed); }
 
-/* A fence interrupt is a write to the guest notifier of its line, while the
- * lines are connected and only for a line QEMU gave. */
 TEST(posix_renderer_host_interrupts, raising_a_line_writes_its_notifier_while_connected)
 { Rig rig;
   PosixRendererHost &host = rig.host();
@@ -410,12 +382,12 @@ TEST(posix_renderer_host_interrupts, raising_a_line_writes_its_notifier_while_co
   const int line2 = ::eventfd(0u, EFD_CLOEXEC | EFD_NONBLOCK);
   const int given[3] = {::fcntl(line0, F_DUPFD_CLOEXEC, 0), -1, ::fcntl(line2, F_DUPFD_CLOEXEC, 0)};
   host.take_interrupt_lines(given, 3u);
-  host.raise_fence_interrupt(2u);   /* not connected */
+  host.raise_fence_interrupt(2u);
   CHECK(!readable(line2));
   CHECK_STATUS(host.connect_fence_interrupts(), Status::ok);
   host.raise_fence_interrupt(2u);
   host.raise_fence_interrupt(2u);
-  host.raise_fence_interrupt(1u);   /* no notifier */
+  host.raise_fence_interrupt(1u);
   host.raise_fence_interrupt(PosixRendererHost::max_interrupt_lines);
   CHECK_EQ(read_counter(line2), 2u);
   CHECK(!readable(line0));
@@ -424,7 +396,6 @@ TEST(posix_renderer_host_interrupts, raising_a_line_writes_its_notifier_while_co
   host.disconnect_fence_interrupts();
   host.raise_fence_interrupt(0u);
   CHECK(!readable(line0));
-  /* New lines replace the old, which are closed. */
   const int replacement[1] = {::fcntl(line0, F_DUPFD_CLOEXEC, 0)};
   host.take_interrupt_lines(replacement, 1u);
   CHECK(!is_open(given[0]));
@@ -434,8 +405,6 @@ TEST(posix_renderer_host_interrupts, raising_a_line_writes_its_notifier_while_co
   ::close(line0);
   ::close(line2); }
 
-/* More lines than there are doorbell pages: those past the last are closed
- * at once. */
 TEST(posix_renderer_host_interrupts, lines_past_the_last_page_are_closed)
 { Rig rig;
   constexpr std::uint32_t count = PosixRendererHost::max_interrupt_lines + 2u;
@@ -450,7 +419,6 @@ TEST(posix_renderer_host_interrupts, lines_past_the_last_page_are_closed)
   CHECK(!is_open(given[0]));
   ::close(source); }
 
-/* A recording is a file: appended to, truncated back to nothing, closed. */
 TEST(posix_renderer_host_recording, writes_truncates_and_closes_a_file)
 { Rig rig;
   PosixRendererHost &host = rig.host();
@@ -481,7 +449,6 @@ TEST(posix_renderer_host_recording, writes_truncates_and_closes_a_file)
   ::unlink(path);
   ::rmdir(directory); }
 
-/* The requests the renderer's blob table reads are the bytes QEMU forwarded. */
 TEST(posix_renderer_host, reads_forwarded_requests_and_answers_none)
 { Rig rig;
   const std::uint8_t    bytes[6] = {1u, 2u, 3u, 4u, 5u, 6u};
@@ -494,8 +461,6 @@ TEST(posix_renderer_host, reads_forwarded_requests_and_answers_none)
   rig.host().respond(&request, bytes, sizeof bytes);
   CHECK(!rig.host().resource_exists(1u)); }
 
-/* What only QEMU has - the GPU catalog, the hostmem BAR, the display, guest
- * RAM blocks, the renderer itself - the renderer does not pretend to. */
 TEST(posix_renderer_host, what_only_qemu_has_is_not_supported)
 { Rig rig;
   PosixRendererHost &host = rig.host();
@@ -506,7 +471,7 @@ TEST(posix_renderer_host, what_only_qemu_has_is_not_supported)
   CHECK_EQ(host.hostmem_size(), 0u);
   const int placed = memfd(page);
   CHECK_STATUS(host.place_in_hostmem(placed, page, 0u), Status::not_supported);
-  CHECK(is_open(placed));   /* the caller's, untouched */
+  CHECK(is_open(placed));
   ::close(placed);
   host.remove_from_hostmem(0u, page);
   std::uint8_t buffer[8] = {};
@@ -533,9 +498,6 @@ TEST(posix_renderer_host, what_only_qemu_has_is_not_supported)
   CHECK_EQ(count, 0u);
   host.kill_renderer(); }
 
-/* The executor is the library QEMU named; a path that does not open, is
- * empty or does not fit is not_found, and a library already loaded is not
- * loaded again. */
 TEST(posix_renderer_host_executor, loads_the_library_the_hello_named)
 { Rig rig;
   const AvExecutorOps *ops = reinterpret_cast<const AvExecutorOps *>(&rig);
@@ -546,7 +508,6 @@ TEST(posix_renderer_host_executor, loads_the_library_the_hello_named)
   static char longest[4096];
   std::memset(longest, 'a', sizeof longest);
   CHECK_STATUS(rig.host().load_executor(longest, sizeof longest, ops), Status::not_found);
-  /* The path is `length` bytes, not a C string: what follows is not read. */
   char padded[sizeof AV_ECHO_EXECUTOR + 4u] = {};
   std::memcpy(padded, AV_ECHO_EXECUTOR, sizeof AV_ECHO_EXECUTOR - 1u);
   std::memcpy(padded + sizeof AV_ECHO_EXECUTOR - 1u, "xyz", 3u);

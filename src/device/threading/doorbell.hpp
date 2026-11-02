@@ -1,7 +1,3 @@
-/* One context's doorbell page, connected to the event its worker waits on: a
- * guest store to the page wakes the worker without QEMU's main loop. The page
- * index is the guest's choice, validated against the capset before it gets
- * here. Main loop. */
 #ifndef AV_DOORBELL_HPP
 #define AV_DOORBELL_HPP
 
@@ -24,10 +20,7 @@ public:
     Doorbell(const Doorbell &) = delete;
     Doorbell &operator=(const Doorbell &) = delete;
 
-    /* invalid_state when connected; invalid_parameter for no event or a page
-     * past the region. */
     [[nodiscard]] Status connect(void *event, uint32_t index);
-    /* Before the event is destroyed. */
     void                 disconnect();
     bool                 connected() const;
     uint32_t             index() const;
@@ -43,6 +36,6 @@ private:
     friend struct DoorbellProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DOORBELL_HPP
+#endif

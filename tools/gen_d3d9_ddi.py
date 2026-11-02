@@ -1,40 +1,11 @@
 #!/usr/bin/env python3
-"""The Direct3D 9 device-function table's thunks, from the WDK's own header.
-
-The table d3d9.dll hands a user-mode driver is D3DDDI_DEVICEFUNCS (d3dumddi.h):
-some 130 function pointers, each typed by its own PFN typedef. As for Direct3D
-11 (tools/gen_d3d11_ddi.py), clang reads the kit's header for the Windows
-target and this writes, from the types it reports:
-
-  src/um/d3d/generated/d3d9_device_thunks.cpp   one ABI thunk per slot, each one
-                                                 line into D3d9Device, and the
-                                                 function that fills the table
-  src/um/d3d/generated/d3d9_device_ddi.inc       the D3d9Device methods they
-                                                 call, included in its class
-
-Every slot is the device's own: a Direct3D 9 device is named by the HANDLE
-CreateDevice handed back, which is the D3d9Device itself.
-
-    tools/gen_d3d9_ddi.py            # regenerate
-    tools/gen_d3d9_ddi.py --check    # fail if the committed files differ
-"""
 import re
 import sys
 
 from ddi_table import DdiTable
 
-# Slots the driver answers rather than the device: a device cannot give
-# itself back to the pool it lives in.
 ROOT_SLOTS = {"pfnDestroyDevice": "destroy_device9"}
-# Reserved slots, typed void *, which nothing calls.
 RESERVED = re.compile(r"^pfnReserved")
-# Slots left NULL on purpose, because d3d9.dll reads a NULL as "feature off"
-# and a filled slot as a promise (docs/research/d3d9/reverse-engineering.md
-# §1.4, §3.3): capture, async locks, the video, authenticated-channel, crypto
-# and content-protection groups (each all-or-nothing), CreateResource2 and the
-# 1-suffixed blts (the driver answers DriverVersion 0x2003, where the old slots
-# are the ones used and filling both fails CreateDevice above 0x4001), the
-# WDDM 1.3 present path, residency trimming and the WDDM 2.1 sync DDIs.
 NULL_SLOTS = {
     "pfnGetCaptureAllocationHandle", "pfnCaptureToSysMem", "pfnLockAsync", "pfnUnlockAsync", "pfnRename",
     "pfnCreateVideoProcessor", "pfnSetVideoProcessBltState", "pfnGetVideoProcessBltStatePrivate",

@@ -9,8 +9,6 @@
 
 namespace inspector {
 namespace {
-
-// "<module>-<pid>" into its two halves; the module may itself hold dashes.
 bool SplitName(StringView rest, String& module, u32& pid) {
     const usize dash = rest.RFind('-');
     if (dash == StringView::Npos || dash == 0) {
@@ -38,7 +36,7 @@ Source& SourceFor(DynamicArray<Source>& sources, const String& module, u32 pid) 
     return made;
 }
 
-} // namespace
+}
 
 String Source::Key() const {
     return Format("{}/{}", module, pid);
@@ -67,7 +65,6 @@ DynamicArray<Source> ScanSources(StringView directory) {
         }
     }
     closedir(dir);
-    // Insertion sort: a host runs a handful of these.
     for (usize i = 1; i < sources.GetSize(); ++i) {
         for (usize j = i; j > 0; --j) {
             const Source& a = sources[j - 1];
@@ -82,4 +79,4 @@ DynamicArray<Source> ScanSources(StringView directory) {
     return sources;
 }
 
-} // namespace inspector
+}

@@ -10,7 +10,7 @@ namespace {
 
 constexpr uint64_t nanoseconds_per_second = 1000000000u;
 
-}  // namespace
+}
 
 MonotonicClock::MonotonicClock() : clock_(CLOCK_MONOTONIC)
 {
@@ -44,4 +44,4 @@ timespec MonotonicClock::ahead(uint64_t nanoseconds) const
     return timespec{static_cast<time_t>(at / nanoseconds_per_second), static_cast<long>(at % nanoseconds_per_second)};
 }
 
-}  // namespace av
+}

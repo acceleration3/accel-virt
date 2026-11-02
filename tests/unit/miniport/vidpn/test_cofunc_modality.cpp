@@ -26,17 +26,16 @@ namespace {
 
 constexpr std::int32_t no_memory = static_cast<std::int32_t>(0xC0000017u);
 constexpr std::uint32_t invalid_parameter = 0xC000000Du;
-constexpr std::int32_t pivot_source = 1;    /* D3DKMDT_EPT_VIDPNSOURCE */
+constexpr std::int32_t pivot_source = 1;
 constexpr std::int32_t pivot_target = 2;
 constexpr std::int32_t pivot_scaling = 3;
 constexpr std::int32_t pivot_rotation = 4;
 constexpr std::int32_t no_pivot = 5;
-constexpr std::uint32_t preferred = 1u;         /* D3DKMDT_MP_PREFERRED */
+constexpr std::uint32_t preferred = 1u;
 constexpr std::uint32_t not_preferred = 2u;
 constexpr std::uint32_t rgb_8_bits = 0x02u << 2u;
-constexpr std::int32_t identity = 1;            /* D3DKMDT_VPPS_IDENTITY / D3DKMDT_VPPR_IDENTITY */
+constexpr std::int32_t identity = 1;
 constexpr std::uint32_t identity_supported = 1u;
-/* Identity | Offset0: without Offset0 dxgkrnl bugchecks 0x113 subcode 0x1C. */
 constexpr std::uint32_t rotation_supported = 0x11u;
 
 D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t height)
@@ -74,14 +73,13 @@ private:
     av::D3dkmdtVidPnPresentPathRecord     &path_;
 };
 
-}  // namespace
+}
 
 TEST(cofunc_modality_enumerate, nothing_pinned_offers_every_mode_on_both_ends)
 { Enumeration enumeration;
   CHECK_EQ(enumeration.run(), 0u);
   const auto &sources = enumeration.vidpn().source_modes(0u);
   const auto &targets = enumeration.vidpn().target_modes(0u);
-  /* Every mode blue first, then every mode again red first. */
   CHECK_EQ(sources.modes(), DisplayModeList::standard_count * 2u);
   CHECK_EQ(targets.modes(), DisplayModeList::standard_count);
   CHECK_EQ(sources.mode(0u).PrimSurfSizeCx, 640u);
@@ -109,8 +107,6 @@ TEST(cofunc_modality_visit, a_pinned_source_mode_leaves_its_set_and_constrains_t
   CHECK_EQ(targets.mode(0u).VideoSignalInfo.ActiveSizeCx, 1024u);
   CHECK_EQ(targets.mode(0u).WireFormatAndPreference, not_preferred | rgb_8_bits); }
 
-/* Assigning the empty set that would otherwise be built is what SetCofuncModeSet
- * refuses with STATUS_GRAPHICS_EMPTY_ADAPTER_MONITOR_MODE_SUPPORT_INTERSECTION. */
 TEST(cofunc_modality_visit, a_pinned_source_mode_the_adapter_lacks_leaves_the_target_set_alone)
 { Enumeration enumeration;
   D3dkmdtVidPnTargetModeRecord existing = {};
@@ -153,9 +149,6 @@ TEST(cofunc_modality_visit, the_pivot_mode_set_is_left_alone)
   CHECK_EQ(other_ids.run(), 0u);
   CHECK_EQ(other_ids.vidpn().target_modes(0u).modes(), DisplayModeList::standard_count); }
 
-/* dxgkrnl closes an enumeration only when it has been told about every path -
- * UpdatePathSupportInfo's countdown - so a pivot does not buy the path a skip.
- * A pivot changes what is pinned, never what the adapter supports. */
 TEST(cofunc_modality_visit, a_pivot_does_not_stop_the_path_being_told_what_is_supported)
 { const std::int32_t pivots[] = {pivot_source, pivot_target, pivot_scaling, pivot_rotation, no_pivot};
   for (std::int32_t pivot : pivots) {
@@ -167,10 +160,6 @@ TEST(cofunc_modality_visit, a_pivot_does_not_stop_the_path_being_told_what_is_su
       CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, rotation_supported);
   } }
 
-/* What the path already carries does not change the answer: identity is all the
- * adapter does, whether the transformation is unpinned (254, what dxgkrnl
- * presents), uninitialized (0, what a caller-built record carries) or already
- * pinned to identity. */
 TEST(cofunc_modality_visit, every_path_is_offered_identity_whatever_it_carries)
 { const std::int32_t carried[] = {0, 254, identity};
   for (std::int32_t transformation : carried) {
@@ -183,8 +172,6 @@ TEST(cofunc_modality_visit, every_path_is_offered_identity_whatever_it_carries)
       CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, rotation_supported);
   } }
 
-/* The line is the only way to see, from a guest that will not settle a topology,
- * what dxgkrnl asked about each path and what it already had pinned. */
 TEST(cofunc_modality_visit, each_path_says_what_it_was_asked_and_what_was_pinned)
 { Enumeration unpinned;
   CHECK_EQ(unpinned.run(), 0u);
@@ -199,8 +186,6 @@ TEST(cofunc_modality_visit, each_path_says_what_it_was_asked_and_what_was_pinned
   CHECK(std::strcmp(pinned.fixture().platform().last_log(),
                     "avgpu: cofunc path 0->0 pivot 5 scaling 254 rotation 254 source 1024x768 target pinned") == 0); }
 
-/* dxgkrnl repeats the VidPn DDIs while it settles a topology, so the line comes
- * out of the budget like every other repeated one. */
 TEST(cofunc_modality_visit, the_path_line_stops_when_the_window_is_spent)
 { Enumeration enumeration;
   while (enumeration.budget().allows()) {}

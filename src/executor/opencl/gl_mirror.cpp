@@ -109,4 +109,4 @@ bool GlMirror::described() const
     return mem_ != nullptr && object_type_ != 0u && name_ != 0u && bytes_ != 0u;
 }
 
-}  // namespace av
+}

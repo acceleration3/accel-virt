@@ -85,11 +85,10 @@ bool     FenceObserver::failed() const
     return failed_;
 }
 
-/* Only an attached page can have been judged a lie. */
 bool FenceObserver::invariants_hold() const
 {
     AV_SCOPE("FenceObserver::invariants_hold");
     return page_ != nullptr || !failed_;
 }
 
-}  // namespace av
+}

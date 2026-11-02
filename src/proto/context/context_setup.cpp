@@ -97,9 +97,6 @@ Status ContextSetup::encode(uint8_t *bytes, size_t capacity) const
 bool ContextSetup::options_fit() const
 {
     AV_SCOPE("ContextSetup::options_fit");
-    /* A setup of the previous minor has no room for options at all. OpenGL
-     * takes every option; OpenCL only the GL context whose objects it shares
-     * (cl_khr_gl_sharing); the rest none. */
     if (size() != encoded_size) return options_.defaults();
     return options_.fit_for(sub_api_);
 }
@@ -154,4 +151,4 @@ Status ContextSetup::validate_against(const CapsetInfo &capset) const
     return Status::ok;
 }
 
-}  // namespace av
+}

@@ -25,8 +25,6 @@ RemoteContext::~RemoteContext()
     unbind();
 }
 
-/* The ioeventfd is registered here, in QEMU, over an eventfd QEMU made: the
- * renderer only ever reads the descriptor it is given. */
 Status RemoteContext::connect_doorbell(uint32_t index, int &descriptor)
 {
     AV_SCOPE("RemoteContext::connect_doorbell");
@@ -87,9 +85,6 @@ void RemoteContext::unbind()
     binding_.unbind();
 }
 
-/* What the page last said is kept - the guest must not see a completed fence
- * go back - and one more step of progress, with the fault, is what makes its
- * waiters look. */
 void RemoteContext::lose()
 {
     AV_SCOPE("RemoteContext::lose");
@@ -135,11 +130,10 @@ uint32_t RemoteContext::doorbell() const
     return binding_.doorbell();
 }
 
-/* A doorbell is connected only while bound and not lost. */
 bool RemoteContext::invariants_hold() const
 {
     AV_SCOPE("RemoteContext::invariants_hold");
     return doorbell_event_ == nullptr || (binding_.bound() && !lost_);
 }
 
-}  // namespace av
+}

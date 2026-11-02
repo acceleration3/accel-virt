@@ -1,8 +1,3 @@
-/* The two exports, driven as d3d11.dll and D3D12Core.dll drive them
- * (contracts/umd_interface.md). The fake checks the table the way the real
- * runtime does - D3D12Core zeroes all eight slots and refuses the driver
- * unless the last six come back non-null (research.md §12) - so a table with a
- * hole is a failing test rather than a silent pass. */
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -27,7 +22,6 @@ TEST(umd_root_open, the_d3d11_runtime_opens_the_adapter_and_gets_a_whole_table)
   CHECK(runtime.table_is_whole());
   CHECK(runtime.adapter() != nullptr);
   CHECK(rig.root().invariants_hold());
-  /* One kernel adapter for the one open, and the identity learned off it. */
   CHECK_EQ(runtime.close_adapter(), hr_ok);
   CHECK(rig.root().invariants_hold());
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
@@ -41,8 +35,6 @@ TEST(umd_root_open, the_d3d12_runtime_opens_the_adapter_and_gets_all_eight_slots
   CHECK_EQ(runtime.close_adapter(), hr_ok);
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* Two opens in one process are two adapters over one kernel adapter: the D3D
- * DDI has no instance, so both must reach the same kernel object. */
 TEST(umd_root_open, two_runtimes_in_one_process_share_one_kernel_adapter)
 { UmdRig rig;
   FakeD3dRuntime eleven(rig.root(), RuntimeKind::d3d10_11);
@@ -54,7 +46,6 @@ TEST(umd_root_open, two_runtimes_in_one_process_share_one_kernel_adapter)
   CHECK(eleven.adapter() != twelve.adapter());
   CHECK(rig.root().invariants_hold());
   CHECK_EQ(eleven.close_adapter(), hr_ok);
-  /* The kernel adapter is still held: the other open still needs it. */
   CHECK_EQ(rig.kmt().open_objects(), after_one);
   CHECK_EQ(twelve.close_adapter(), hr_ok);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
@@ -78,9 +69,6 @@ TEST(umd_root_open, a_runtime_that_offers_no_callbacks_is_refused)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
-/* A runtime asking for a DDI revision past what this driver implements, or
- * another major's, gets E_NOINTERFACE and no adapter: answering it would be
- * claiming a version (constitution VI). */
 TEST(umd_root_open, an_interface_this_driver_does_not_serve_is_refused)
 { const std::uint32_t neighbours[] = {0u, FakeD3dRuntime::d3d11_interface + 1u, (10u << 16) | 45u,
                                       (12u << 16) | 45u, 0xFFFFFFFFu};
@@ -95,9 +83,6 @@ TEST(umd_root_open, an_interface_this_driver_does_not_serve_is_refused)
       CHECK(rig.root().invariants_hold());
   } }
 
-/* d3d11.dll on 26100 opens with WDDM 2.0's interface, the oldest of the family
- * it negotiates in, and settles the device's through GetSupportedVersions: an
- * open at or below the served interface of the same major is an adapter. */
 TEST(umd_root_open, an_older_interface_of_the_same_major_opens)
 { const std::uint32_t older[] = {(11u << 16) | 17u, FakeD3dRuntime::d3d11_interface - 1u};
   for (const std::uint32_t asked : older) {
@@ -120,8 +105,6 @@ TEST(umd_root_open, no_avgpu_adapter_is_a_failure_and_a_log_line)
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.root().invariants_hold()); }
 
-/* Every allocation the open makes, failed in turn: the documented code, no
- * kernel object left open, no memory leaked, and one line saying why. */
 TEST(umd_root_open, an_open_with_no_memory_answers_out_of_memory_and_leaks_nothing)
 { UmdRig rig;
   rig.platform().fail_allocation_at(1u);
@@ -147,7 +130,6 @@ TEST(umd_root_open, the_table_slots_refuse_an_adapter_handle_this_driver_never_g
   CHECK_EQ(rig.root().close_adapter(&forged), hr_invalid_arg);
   CHECK_EQ(rig.root().optional_ddi_tables(&forged, &entries, nullptr), hr_invalid_arg);
   CHECK_EQ(rig.root().fill_ddi_table(&forged, 0u, &forged, sizeof forged, 0u, nullptr), hr_invalid_arg);
-  /* A null handle is the same answer and is never dereferenced. */
   CHECK_EQ(rig.root().close_adapter(nullptr), hr_invalid_arg);
   CHECK(rig.root().invariants_hold());
   CHECK_EQ(runtime.close_adapter(), hr_ok); }
@@ -164,9 +146,6 @@ TEST(umd_root_open, the_supported_versions_slot_answers_the_one_word_this_driver
   CHECK_EQ(words[0] >> 32, FakeD3dRuntime::d3d11_interface);
   CHECK_EQ(runtime.close_adapter(), hr_ok); }
 
-/* No D3D capability is implemented here, so none is claimed. D3D12Core's two
- * pipeline-level types are named because they are the first it asks and the
- * ones 057 owes (research.md §12). */
 TEST(umd_root_open, every_cap_is_refused_and_logged_with_the_type_asked_for)
 { const std::uint32_t types[] = {128u, 129u, 130u, 1007u, 1074u, 0u, 0xFFFFFFFFu};
   UmdRig rig;
@@ -175,16 +154,11 @@ TEST(umd_root_open, every_cap_is_refused_and_logged_with_the_type_asked_for)
   std::uint64_t answer = 0xA5A5A5A5A5A5A5A5ull;
   for (const std::uint32_t type : types) {
       CHECK_EQ(runtime.caps(type, &answer, sizeof answer), hr_invalid_arg);
-      /* Refused means nothing written, not zeroed. */
       CHECK_EQ(answer, 0xA5A5A5A5A5A5A5A5ull);
   }
   CHECK_EQ(rig.log().holding("cap refused, type"), 7u);
   CHECK_EQ(runtime.close_adapter(), hr_ok); }
 
-/* With no host driver only the DXGI table - the root's own seam - is filled;
- * the device, command list and command queue tables are the host driver's,
- * and each refusal is logged. A table smaller than DXGI's 22 slots is refused
- * before a slot is written past it. */
 TEST(umd_root_open, d3d12_answers_no_optional_tables_and_fills_only_dxgi_without_a_host_driver)
 { const std::uint32_t needed[] = {0u, 1u, 2u};
   constexpr std::uint32_t dxgi = 3u;
@@ -212,7 +186,6 @@ TEST(umd_root_open, a_state_dump_names_the_adapters_and_the_connection)
   CHECK(std::strstr(writer.dump(), "opens=1") != nullptr);
   CHECK_EQ(runtime.close_adapter(), hr_ok); }
 
-/* A state dump must never wait on the thread that is inside the driver. */
 TEST(umd_root_open, a_state_dump_says_busy_rather_than_waiting)
 { UmdRig rig;
   rig.lock().held_elsewhere(true);

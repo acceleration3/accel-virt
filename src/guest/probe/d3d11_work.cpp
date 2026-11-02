@@ -10,11 +10,9 @@
 namespace av {
 
 namespace {
-
-/* A driver may round a clear colour either way at the half step. */
 constexpr uint8_t tolerance = 1u;
 
-}  // namespace
+}
 
 D3d11Work::D3d11Work(D3d11Entry &d3d11, ImageSink &images)
     : d3d11_(d3d11), images_(images), adapter_(0u), feature_level_(0u), made_(false), read_(false), frame_{}
@@ -40,8 +38,6 @@ void D3d11Work::run(ScenarioSteps &steps, void *window)
     d3d11_.clear(colour);
     if (steps.check_result("readback", d3d11_.read_back(frame_, sizeof frame_)) != Status::ok) return;
     read_ = true;
-    /* The mapping is BGRA rows from the top, as a D3D11 staging texture holds
-     * them. */
     images_.save("d3d11-clear", BmpImage(frame_, extent, extent, BmpImage::Rows::top_first,
                                          BmpImage::Order::blue_first));
     const uint32_t right = coloured();
@@ -67,7 +63,6 @@ uint32_t D3d11Work::coloured() const
     uint32_t right = 0u;
     for (uint32_t pixel = 0u; pixel < pixels; pixel++) {
         const uint8_t *const bytes = &frame_[pixel * pixel_bytes];
-        /* BGRA against the colour's red-first bytes. */
         const bool blue = bytes[0] + tolerance >= colour[2] && colour[2] + tolerance >= bytes[0];
         const bool green = bytes[1] + tolerance >= colour[1] && colour[1] + tolerance >= bytes[1];
         const bool red = bytes[2] + tolerance >= colour[0] && colour[0] + tolerance >= bytes[2];
@@ -83,4 +78,4 @@ bool D3d11Work::invariants_hold() const
     return coloured() <= pixels;
 }
 
-}  // namespace av
+}

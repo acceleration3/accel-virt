@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""Gate for feature 048's FR-005: every extension the Vulkan ICD reports is
-exercised by a group in the CTS subset.
-
-Constitution VI says nothing is reported that is not implemented; this says
-nothing is reported that is not *measured*. The two lists are read from where
-they live - the ICD's policy table and tools/cts_subset.txt - so a new policy
-row without a group here fails the build naming it, rather than quietly adding
-an extension no conformance run touches.
-
-What the loader answers rather than the driver is not this subset's to cover;
-that list is tools/check_layer_requirements.py's NOT_A_DRIVER_S, and it is
-shared rather than copied.
-
-  check_cts_subset.py [repository root]
-"""
 import os
 import pathlib
 import re
@@ -28,8 +13,6 @@ POLICY_TABLE = os.path.join("src", "icd", "vulkan", "icd_root.cpp")
 SUBSET = os.path.join("tools", "cts_subset.txt")
 
 class SubsetCheck:
-    """One repository: what its ICD reports, and what its subset covers."""
-
     def __init__(self, root):
         self.root = pathlib.Path(root)
 

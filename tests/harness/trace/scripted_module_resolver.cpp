@@ -6,8 +6,6 @@ namespace av {
 
 ScriptedModuleResolver::ScriptedModuleResolver() : modules_{}, count_(0u), asked_(0u) {}
 
-/* Writes the whole name with no terminator of its own when it does not fit, as
- * a careless resolver would: the report must terminate it itself. */
 bool ScriptedModuleResolver::resolve(std::uint64_t address, char *name, std::size_t capacity, std::uint64_t &offset)
 {
     asked_++;
@@ -29,4 +27,4 @@ void ScriptedModuleResolver::add(std::uint64_t base, std::uint64_t size, const c
 
 std::uint32_t ScriptedModuleResolver::asked() const { return asked_; }
 
-}  // namespace av
+}

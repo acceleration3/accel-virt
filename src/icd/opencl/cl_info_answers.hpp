@@ -1,19 +1,3 @@
-/* Answers to info queries that cannot change, kept so asking again costs no
- * round trip.
- *
- * A device's properties and a buffer's type, flags, size and offset are fixed
- * for its life, and an application may ask for them on every operation:
- * Affinity asks each tile's buffer and the device hundreds of times a second
- * while a layer moves, from every worker thread at once, and each answer the
- * host gave was a round trip under the lock all of them share. Here the first
- * answer is kept and every later one is the guest's own.
- *
- * Entries are only ever added, so a reader takes no lock (ClaimedRows): a
- * reader passes any entry not yet written. Two threads keeping the same
- * answer at once keep it twice, which costs an entry and answers the same.
- * As many are kept as there are answers; one longer than `Bytes`, or one
- * there is no memory for, is never kept and is asked of the host every time,
- * as before. */
 #ifndef AV_CLICD_CL_INFO_ANSWERS_HPP
 #define AV_CLICD_CL_INFO_ANSWERS_HPP
 
@@ -28,7 +12,7 @@
 
 namespace av {
 class BlockSource;
-}  // namespace av
+}
 
 namespace av::clicd {
 
@@ -39,11 +23,7 @@ public:
     ClInfoAnswers(const ClInfoAnswers &) = delete;
     ClInfoAnswers &operator=(const ClInfoAnswers &) = delete;
 
-    /* The answer kept for `name` of `object` given to `asked`, as the API
-     * gives one, with `result` what the call returns; false when none is kept. */
     [[nodiscard]] bool answer(uint64_t object, uint32_t name, const ClInfoRequest &asked, cl_int &result) const;
-    /* Keeps the `bytes` at `value` as that answer: nothing for one longer than
-     * `Bytes` or one there is no memory for. */
     void               keep(uint64_t object, uint32_t name, const void *value, size_t bytes);
     uint32_t           kept() const;
 
@@ -95,6 +75,6 @@ uint32_t ClInfoAnswers<Bytes>::kept() const
     return entries_.claimed();
 }
 
-}  // namespace av::clicd
+}
 
-#endif  // AV_CLICD_CL_INFO_ANSWERS_HPP
+#endif

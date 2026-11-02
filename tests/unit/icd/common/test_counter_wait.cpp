@@ -1,7 +1,3 @@
-/* A wait timed on the guest's performance counter (CounterWait): the first
- * slice at once, then slices while the deadline has not passed on the counter
- * the Kmt reads, and none after it. MockKmt's clock moves half a second each
- * time it is read, so the deadline passes on its own. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "icd/common/counter_wait.hpp"
@@ -16,7 +12,7 @@ namespace {
 
 constexpr std::uint64_t half_second = av::MockKmt::ticks_per_second / 2u;
 
-}  // namespace
+}
 
 TEST(counter_wait, slices_until_the_counter_passes_the_deadline)
 { av::MockKmt kmt;
@@ -28,7 +24,6 @@ TEST(counter_wait, slices_until_the_counter_passes_the_deadline)
       CHECK(slice <= SlicedWait::slice_ns);
       asked++;
   }
-  /* A second and a half of half-second reads: a few slices, never forever. */
   CHECK(asked >= 2u && asked <= 4u); }
 
 TEST(counter_wait, a_zero_timeout_still_asks_once)
@@ -40,7 +35,6 @@ TEST(counter_wait, a_zero_timeout_still_asks_once)
   CHECK_EQ(slice, 0u);
   CHECK(!wait.next(slice)); }
 
-/* Forever never passes, however far the clock moves. */
 TEST(counter_wait, forever_keeps_asking)
 { av::MockKmt kmt;
   kmt.reads_clock(nullptr, 100u * av::MockKmt::ticks_per_second);

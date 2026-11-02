@@ -1,6 +1,3 @@
-/* DXGKARG_RECOMMENDFUNCTIONALVIDPN, as DxgkDdiRecommendFunctionalVidPn
- * receives it. A DDI record; src/km/ddi_record_layout.cpp proves each offset.
- * */
 #ifndef AV_DXGKARG_RECOMMEND_FUNCTIONAL_VIDPN_RECORD_HPP
 #define AV_DXGKARG_RECOMMEND_FUNCTIONAL_VIDPN_RECORD_HPP
 
@@ -20,6 +17,6 @@ struct DxgkargRecommendFunctionalVidPnRecord {
     uint32_t       Padding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_RECOMMEND_FUNCTIONAL_VIDPN_RECORD_HPP
+#endif

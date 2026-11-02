@@ -1,8 +1,3 @@
-/* The DDI entry points registered in the miniport's DdiTable. Constitution III's
- * ABI exception: extern "C", one statement each, forwarding to the adapter
- * behind the context or, for the context-less DDIs, to the bound root.
- * Signatures mirror dispmprt.h at DXGKDDI_INTERFACE_VERSION_WDDM3_2: ULONG is
- * uint32_t, BOOLEAN and UCHAR uint8_t, NTSTATUS and enums int32_t. */
 #ifndef AV_DDI_ENTRY_POINTS_HPP
 #define AV_DDI_ENTRY_POINTS_HPP
 
@@ -83,7 +78,7 @@ namespace av {
 
 extern MiniportBinding miniport_binding;
 
-}  // namespace av
+}
 
 extern "C" {
 
@@ -114,7 +109,6 @@ int32_t AvDdiCreateAllocation(void *context, av::DxgkargCreateAllocationRecord *
 int32_t AvDdiDestroyAllocation(void *context, const av::DxgkargDestroyAllocationRecord *request);
 int32_t AvDdiDescribeAllocation(void *context, av::DxgkargDescribeAllocationRecord *request);
 int32_t AvDdiGetStandardAllocationDriverData(void *context, av::DxgkargGetStandardAllocationDriverDataRecord *request);
-/* The WDK passes the argument block as const; the driver answers in it. */
 int32_t AvDdiOpenAllocation(void *device, av::DxgkargOpenAllocationRecord *request);
 int32_t AvDdiCloseAllocation(void *device, const av::DxgkargCloseAllocationRecord *request);
 int32_t AvDdiSetDisplayPrivateDriverFormat(void *context, const av::DxgkargSetDisplayPrivateDriverFormatRecord *request);
@@ -181,9 +175,6 @@ void    AvDdiSetStablePowerState(void *context, const av::DxgkargSetStablePowerS
 int32_t AvDdiControlModeBehavior(void *context, av::DxgkargControlModeBehaviorRecord *request);
 int32_t AvDdiUpdateMonitorLinkInfo(void *context, av::DxgkargUpdateMonitorLinkInfoRecord *request);
 int32_t AvDdiCreateHwQueue(void *context, av::DxgkargCreateHwQueueRecord *request);
-/* The doorbell DDIs (feature 049): each names a hardware queue or a doorbell,
- * and every one of them reaches the adapter behind it. */
-/* The native fences WDDM 3.1 asks for beside the doorbells (feature 049). */
 int32_t AvDdiQueryFeatureSupport(void *context, av::DxgkargQueryFeatureSupportRecord *request);
 int32_t AvDdiCreateNativeFence(void *context, av::DxgkargCreateNativeFenceRecord *request);
 int32_t AvDdiDestroyNativeFence(void *context, const av::DxgkargDestroyNativeFenceRecord *request);
@@ -198,13 +189,11 @@ int32_t AvDdiDestroyHwQueue(void *queue);
 int32_t AvDdiSubmitCommandToHwQueue(void *context, const av::DxgkargSubmitCommandToHwQueueRecord *request);
 int32_t AvDdiResetHwEngine(void *context, const av::DxgkargResetHwEngineRecord *request);
 int32_t AvDdiResumeHwEngine(void *context, const av::DxgkargResumeHwEngineRecord *request);
-/* An overlay handle this driver never creates: nothing behind it to reach. */
 int32_t AvDdiUpdateOverlay(void *overlay, const void *request);
 int32_t AvDdiFlipOverlay(void *overlay, const void *request);
 int32_t AvDdiDestroyOverlay(void *overlay);
-/* The KSYNCHRONIZE_ROUTINE DxgkCbSynchronizeExecution runs at device IRQL. */
 uint8_t AvSynchronizedNotify(void *notification);
 
 }
 
-#endif  // AV_DDI_ENTRY_POINTS_HPP
+#endif

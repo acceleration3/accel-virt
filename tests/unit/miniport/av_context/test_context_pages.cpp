@@ -1,5 +1,3 @@
-/* The pages a context runs on, as the device and the driver each reach them.
- * Only memory with every part present can carry a context. */
 #include "miniport/av_context/context_pages.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/resources/guest_page_list.hpp"
@@ -13,7 +11,6 @@ namespace {
 
 constexpr std::uint64_t page = GuestPageList::page_bytes;
 
-/* A scattered two-run ring, and one page each for the fence and reply. */
 constexpr std::uint64_t ring_frames[] = {0x10u * page, 0x11u * page, 0x40u * page};
 constexpr std::uint64_t fence_frame[] = {0x20u * page};
 constexpr std::uint64_t reply_frame[] = {0x30u * page};
@@ -30,7 +27,7 @@ private:
     std::uint8_t fence_[32] = {};
 };
 
-}  // namespace
+}
 
 TEST(context_pages, is_empty_and_incomplete_by_default)
 { const ContextPages pages;
@@ -73,8 +70,6 @@ TEST(context_pages_complete, every_missing_or_unmapped_part_is_incomplete)
   CHECK(!ContextPages(ring, fence, reply, views.ring(), nullptr).complete());
   CHECK(ContextPages(ring, fence, reply, views.ring(), views.fence()).complete()); }
 
-/* The driver reads the fence page through one page of view; a fence blob of
- * more than one page would have the device write where the driver never looks. */
 TEST(context_pages_complete, a_fence_of_more_than_one_page_is_incomplete)
 { Views views;
   CHECK(!ContextPages(GuestPageList(ring_frames, 3u), GuestPageList(two_pages, 2u), GuestPageList(reply_frame, 1u),

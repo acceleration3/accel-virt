@@ -44,8 +44,6 @@ UmdRoot::~UmdRoot()
     binding_.unbind();
 }
 
-/* The LUID avgpu.sys answers UMDRIVERPRIVATE with: which adapter the runtime
- * opened. 0 - an older driver, or a refusal - takes the first avgpu adapter. */
 uint64_t UmdRoot::adapter_luid(void *runtime_adapter, const void *callbacks)
 {
     AV_SCOPE("UmdRoot::adapter_luid");
@@ -132,7 +130,7 @@ Hresult UmdRoot::open_adapter9(D3dddiargOpenAdapterRecord *args)
 {
     AV_SCOPE("UmdRoot::open_adapter9");
     constexpr uint32_t interface9 = 9u;
-    constexpr uint32_t win7_interface = 0x2003u;   /* D3D_UMD_INTERFACE_VERSION_WIN7 */
+    constexpr uint32_t win7_interface = 0x2003u;
     if (args == nullptr || args->pAdapterFuncs == nullptr) return hr_invalid_arg;
     if (args->Interface != interface9 || args->Version < win7_interface) {
         lines_.note("open9 refused, version", args->Version);
@@ -188,9 +186,6 @@ Hresult UmdRoot::caps(void *adapter, D3d102ddiargGetCapsRecord *args)
     UmdAdapter *const open_adapter = adapters_.adapter_of(adapter);
     if (open_adapter == nullptr || args == nullptr) return hr_invalid_arg;
     if (builder_ != nullptr) return builder_->caps(*open_adapter, *args, open_adapter->connection().adapter());
-    /* No host to ask, so no capability is claimed (constitution VI). D3D12Core
-     * survives this: it falls back and records generic pipeline level 1
-     * (research.md §12). */
     lines_.note("cap refused, type", args->Type);
     return hr_invalid_arg;
 }
@@ -198,10 +193,6 @@ Hresult UmdRoot::caps(void *adapter, D3d102ddiargGetCapsRecord *args)
 size_t UmdRoot::private_device_bytes(void *adapter) const
 {
     AV_SCOPE("UmdRoot::private_device_bytes");
-    /* The cookie is a magic and a pointer whatever the device becomes, so this
-     * does not depend on the adapter, the interface or the flags - but a
-     * handle this root never handed out is answered zero, which makes the
-     * runtime's create fail rather than hand over a block of the wrong size. */
     return adapters_.adapter_of(adapter) == nullptr ? 0u : DeviceTable::private_bytes;
 }
 
@@ -240,9 +231,6 @@ Hresult UmdRoot::create_device(void *adapter, D3d10ddiargCreateDeviceRecord *cre
     UmdDevice    *device = nullptr;
     const Hresult adopted = adopt_device(*open_adapter, *create, device);
     if (adopted != hr_ok) return adopted;
-    /* The runtime frees its own block and never calls pfnDestroyDevice for a
-     * create that failed, so the object model built above is given back here
-     * rather than leaked. */
     const Hresult built =
         builder_ == nullptr ? hr_not_impl : builder_->build(*device, *create, open_adapter->connection().adapter());
     if (built != hr_ok) forget_device(create->hDrvDevice);
@@ -261,8 +249,6 @@ Hresult UmdRoot::create_device12(void *adapter, D3d12ddiargCreateDeviceRecord *c
         lines_.note("no device, status", static_cast<uint64_t>(made));
         return hr_out_of_memory;
     }
-    /* As for Direct3D 11, a failed create is given back here: the runtime
-     * never destroys a device it was told was not made. */
     const Hresult built =
         builder_ == nullptr ? hr_not_impl : builder_->build12(*device, *create, open_adapter->connection().adapter());
     if (built != hr_ok) forget_device(create->hDrvDevice);
@@ -273,7 +259,6 @@ Hresult UmdRoot::close_adapter(void *adapter)
 {
     AV_SCOPE("UmdRoot::close_adapter");
     const ThreadLockHold release(lock_);
-    /* Taken before the close, which frees the adapter that names it. */
     UmdAdapter *const    open_adapter = adapters_.adapter_of(adapter);
     UmdConnection *const connection = open_adapter != nullptr ? &open_adapter->connection() : nullptr;
     const Status         closed = adapters_.close(adapter);
@@ -302,7 +287,6 @@ Hresult UmdRoot::optional_ddi_tables(void *adapter, uint32_t *entries, D3d12ddiT
     const ThreadLockHold release(lock_);
     if (adapters_.adapter_of(adapter) == nullptr || entries == nullptr) return hr_invalid_arg;
     static_cast<void>(requests);
-    /* None: 057 names the optional tables it fills. */
     *entries = 0u;
     return hr_ok;
 }
@@ -348,10 +332,8 @@ bool UmdRoot::invariants_hold() const
     AV_SCOPE("UmdRoot::invariants_hold");
     if (!connections_.invariants_hold()) return false;
     if (!adapters_.invariants_hold() || !devices_.invariants_hold()) return false;
-    /* A connection is held once per open adapter and by nothing else, so a
-     * process with no adapter open holds no kernel adapter either. */
     if (connections_.opens() != adapters_.open_adapters()) return false;
     return (connections_.open() != 0u) == (adapters_.open_adapters() != 0u);
 }
 
-}  // namespace av::d3d
+}

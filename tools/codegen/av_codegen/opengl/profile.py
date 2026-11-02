@@ -1,14 +1,3 @@
-"""What the registry does not say: which commands, in which tier, and
-what a COMPSIZE stands for.
-
-The tiers are the plan. OpenGL is three thousand commands and no
-application uses more than a few hundred of them, so they are taken in
-order: what a modern core-profile application calls first, then the
-rest of 4.6, then the compatibility profile. A tier is a list of
-feature names — the registry's own — and everything those features
-require is in.
-"""
-
 from __future__ import annotations
 
 import tomllib
@@ -18,32 +7,17 @@ from pathlib import Path
 
 @dataclass
 class Profile:
-    # Tier name -> the features whose commands it takes.
     tiers: dict[str, list[str]] = field(default_factory=dict)
-    # Commands named one at a time, for the ones no feature list gets.
     extra: list[str] = field(default_factory=list)
-    # Commands left out even though their feature asked for them.
     excluded: set[str] = field(default_factory=set)
-    # Commands the guest and the server implement by hand.
     handwritten: set[str] = field(default_factory=set)
     answered_by_guest: set[str] = field(default_factory=set)
-    # Commands the guest driver answers itself, which do not cross but
-    # do exist. See the profile's own note.
     driver_implemented: set[str] = field(default_factory=set)
-    # Extension -> the extension it is written on top of, where the
-    # registry does not say. See [extension_requires] in the profile.
     extension_requires: dict[str, str] = field(default_factory=dict)
-    # Commands that must not be sent one-way. See Registry.synchronous.
     synchronous: set[str] = field(default_factory=set)
-    # Reads that may also be sent one-way into blob room the caller keeps.
-    # See Registry.read_into_blob.
     read_into_blob: set[str] = field(default_factory=set)
-    # Other spellings of a generated command, where the registry
-    # declares no alias of its own.
     aliases: dict[str, str] = field(default_factory=dict)
-    # "command.param" -> {role/len/...}, for what the rules cannot decide.
     params: dict[str, dict] = field(default_factory=dict)
-    # Enum name -> how many values a query with it answers with.
     pname_counts: dict[str, int] = field(default_factory=dict)
     ids: dict[str, int] = field(default_factory=dict)
     ids_path: Path | None = None

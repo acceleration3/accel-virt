@@ -63,4 +63,4 @@ void WatchedShadows::forget_writes(uint8_t *start, size_t bytes)
     ResetWriteWatch(start, bytes);
 }
 
-}  // namespace av::d3d11
+}

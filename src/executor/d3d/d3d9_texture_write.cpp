@@ -25,8 +25,6 @@ bool D3d9TextureWrite::fits(uint32_t width, uint32_t height, uint32_t depth) con
     if (layout_.element_bytes() == 0u || !spans(box_.left, box_.right, width, layout_.element_width()) ||
         !spans(box_.top, box_.bottom, height, layout_.element_height()) || !spans(box_.front, box_.back, depth, 1u))
         return false;
-    /* The guest's driver measures the same box the same way (TextureUpload):
-     * a write it found readable is one this takes. */
     return PitchedExtent(row_bytes(), rows(), slices(), row_pitch_, slice_pitch_).fits(data_size_);
 }
 
@@ -48,4 +46,4 @@ uint32_t D3d9TextureWrite::slices() const
     return box_.back - box_.front;
 }
 
-}  // namespace av
+}

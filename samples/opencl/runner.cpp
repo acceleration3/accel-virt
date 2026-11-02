@@ -1,6 +1,3 @@
-// Runs every sample: warm-up iterations, timed iterations, then the capture both
-// machines are compared by. The D3D11 suite's runner, with a kernel's iteration
-// where it has a frame and clFinish where it has an event query.
 #include "framework.h"
 
 namespace samples {
@@ -61,8 +58,6 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
         sample.release();
         return;
     }
-    /* The GPU's clocks climb over the first few hundred milliseconds of load,
-     * so the warm-up runs for a time as well as a count. */
     const double warm_from = seconds();
     for (uint32_t i = 0; !gpu.failed && (i < options.warmup || seconds() - warm_from < options.warmup_seconds); i++) {
         sample.step(gpu);
@@ -70,8 +65,6 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
         if (i % 8u == 7u) gpu.finish();
     }
     gpu.finish();
-    /* Blocks of the iterations asked for, each finished, until a second has
-     * gone: nothing bounds how much a queue takes ahead of the device. */
     const double timed = seconds();
     uint32_t     iterations = 0;
     double       looped = 0.0;
@@ -102,7 +95,7 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
     sample.release();
 }
 
-}  // namespace
+}
 
 int run(int argc, const char *const *argv)
 {
@@ -164,4 +157,4 @@ int run(int argc, const char *const *argv)
     return 0;
 }
 
-}  // namespace samples
+}

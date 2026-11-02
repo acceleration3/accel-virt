@@ -1,15 +1,3 @@
-/* What a destroy, a free or a reset ends, as the backend that decides a
- * guest's handles sees it.
- *
- * The driver freed the object, so a handle still known afterwards is a freed
- * pointer the guest can hand the driver again - from the QEMU process, a
- * guest-to-host escape (feature 044, T031). And the driver freed everything
- * made through it, so the same holds for a device's buffers and a pool's
- * command buffers.
- *
- * Decoded through the generated dispatch into a driver that invents its
- * handles, so none of this needs a GPU: what is judged is which numbers the
- * backend still accepts, which is all a guest can reach. */
 #include "executor/vulkan/handle_registry.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "harness/executor/vulkan_backend_probe.hpp"
@@ -45,9 +33,6 @@ H as_handle(std::uint64_t raw)
   std::memcpy(&handle, &raw, sizeof handle);
   return handle; }
 
-/* A driver with nothing behind it: every create answers a number nobody has
- * used, and the two calls a freed buffer could reach count themselves, so a
- * test can say the driver never saw one. */
 class InventingDriver final : public vkproto::DefaultServerDispatch {
 public:
     VkResult on_vkCreateInstance(const VkInstanceCreateInfo *, const VkAllocationCallbacks *,
@@ -102,8 +87,6 @@ private:
     std::uint32_t asked_requirements_ = 0u;
 };
 
-/* One guest context: frames in through the generated decoder with the backend
- * deciding, and the registry's invariants judged after every one. */
 class GuestContext {
 public:
     GuestContext() : backend_(), probe_(backend_), driver_(), block_{}, reply_{}, answered_(0u) {}
@@ -121,7 +104,6 @@ public:
       CHECK(probe_.handles().invariants_hold());
       return ran; }
 
-    /* The handle at `index` after a reply's leading result and `skip` bytes. */
     std::uint64_t answered(std::size_t index, std::size_t skip = 0u) const
     { std::uint64_t handle = 0u;
       const std::size_t at = sizeof(std::int32_t) + skip + index * sizeof handle;
@@ -224,13 +206,11 @@ public:
       for (std::uint32_t i = 0u; i < count; i++) out[i] = answered(i);
       return true; }
 
-    /* The destroy every dispatchable root takes: the handle and nothing else. */
     bool end(std::uint32_t command, std::uint64_t handle)
     { WireWriter writer = frame();
       writer.write_pod(handle);
       return send(command, writer); }
 
-    /* The destroy and free of everything a device owns. */
     bool end(std::uint32_t command, std::uint64_t device, std::uint64_t handle)
     { WireWriter writer = frame();
       writer.write_pod(device);
@@ -263,8 +243,6 @@ private:
     std::size_t        answered_;
 };
 
-/* An instance, its physical device and a device on it, which every other
- * object is made through. */
 struct Chain {
     explicit Chain(GuestContext &guest)
         : instance(guest.instance()), physical(guest.physical_device(instance)),
@@ -276,11 +254,8 @@ struct Chain {
     std::uint64_t device;
 };
 
-}  // namespace
+}
 
-/* The simplest shape of the hole: a buffer the guest destroyed and names
- * again. The driver freed it, so the host refuses the frame before the driver
- * is called at all. */
 TEST(vulkan_backend_lifetime, a_destroyed_buffer_is_refused_before_the_driver_sees_it)
 { GuestContext guest;
   const Chain chain(guest);
@@ -298,9 +273,6 @@ TEST(vulkan_backend_lifetime, a_destroyed_buffer_is_refused_before_the_driver_se
   CHECK(!guest.end(vkproto::kCmd_vkDestroyBuffer, chain.device, buffer));
   CHECK_EQ(guest.driver().destroyed_buffers(), 1u); }
 
-/* Every destroy and free the profile carries of a handle a device owns, each
- * of which the generator was told to end: the handle is gone, the device it
- * belongs to is not, and naming it again is refused. */
 TEST(vulkan_backend_lifetime, every_destroy_and_free_of_a_device_s_object_ends_it)
 { constexpr std::uint32_t commands[] = {
       vkproto::kCmd_vkFreeMemory,
@@ -345,7 +317,6 @@ TEST(vulkan_backend_lifetime, every_destroy_and_free_of_a_device_s_object_ends_i
       CHECK(!guest.end(command, device, object));
   } }
 
-/* The two roots, which take only themselves. */
 TEST(vulkan_backend_lifetime, destroying_an_instance_or_a_device_ends_it)
 { constexpr std::uint32_t commands[] = {vkproto::kCmd_vkDestroyInstance,
                                         vkproto::kCmd_vkDestroyDevice};
@@ -361,9 +332,6 @@ TEST(vulkan_backend_lifetime, destroying_an_instance_or_a_device_ends_it)
       CHECK(!guest.end(command, root));
   } }
 
-/* A device's destruction frees everything made through it, whatever made it -
- * a queue it answered, a buffer, memory, a pool and the pool's own command
- * buffers - and nothing of the device beside it. */
 TEST(vulkan_backend_lifetime, destroying_a_device_ends_everything_made_through_it)
 { GuestContext guest;
   const Chain chain(guest);
@@ -393,8 +361,6 @@ TEST(vulkan_backend_lifetime, destroying_a_device_ends_everything_made_through_i
   CHECK(guest.knows(chain.physical));
   CHECK(guest.knows(chain.instance)); }
 
-/* An instance's destruction takes its physical devices, their devices, and
- * what those made - and leaves a second instance's alone. */
 TEST(vulkan_backend_lifetime, destroying_an_instance_ends_its_physical_devices_and_their_devices)
 { GuestContext guest;
   const Chain chain(guest);
@@ -412,8 +378,6 @@ TEST(vulkan_backend_lifetime, destroying_an_instance_ends_its_physical_devices_a
   CHECK(guest.knows(second.physical));
   CHECK(guest.knows(second.device)); }
 
-/* A command buffer is made through its pool, not its device: destroying the
- * pool ends the pool's and no other pool's. */
 TEST(vulkan_backend_lifetime, destroying_a_command_pool_ends_its_command_buffers)
 { GuestContext guest;
   const Chain chain(guest);
@@ -432,7 +396,6 @@ TEST(vulkan_backend_lifetime, destroying_a_command_pool_ends_its_command_buffers
   CHECK(guest.knows(other));
   CHECK(guest.knows(chain.device)); }
 
-/* Freeing a list ends each one listed and not the one left out. */
 TEST(vulkan_backend_lifetime, freeing_command_buffers_ends_each_listed_one)
 { GuestContext guest;
   const Chain chain(guest);
@@ -446,7 +409,6 @@ TEST(vulkan_backend_lifetime, freeing_command_buffers_ends_each_listed_one)
   CHECK(!guest.knows(buffers[2]));
   CHECK(guest.knows(buffers[1]));
   CHECK(guest.knows(pool));
-  /* Freed twice is naming a freed one. */
   CHECK(!guest.end_listed(vkproto::kCmd_vkFreeCommandBuffers, chain.device, pool, 1u, listed)); }
 
 TEST(vulkan_backend_lifetime, freeing_descriptor_sets_ends_each_listed_one)
@@ -464,8 +426,6 @@ TEST(vulkan_backend_lifetime, freeing_descriptor_sets_ends_each_listed_one)
   CHECK(guest.knows(pool));
   CHECK(!guest.end_listed(vkproto::kCmd_vkFreeDescriptorSets, chain.device, pool, 1u, listed)); }
 
-/* A reset frees every set the pool gave out and keeps the pool; another
- * pool's sets are not its to free. */
 TEST(vulkan_backend_lifetime, resetting_a_descriptor_pool_ends_its_sets_and_keeps_it)
 { GuestContext guest;
   const Chain chain(guest);
@@ -494,8 +454,6 @@ TEST(vulkan_backend_lifetime, destroying_a_descriptor_pool_ends_its_sets)
   CHECK(!guest.knows(sets[0]));
   CHECK(!guest.knows(sets[1])); }
 
-/* What a command makes through is the command's own: an instance made after a
- * device is nobody's child, and neither is a handle recorded between runs. */
 TEST(vulkan_backend_lifetime, a_command_s_parent_does_not_outlive_the_command)
 { GuestContext guest;
   const Chain chain(guest);
@@ -506,7 +464,6 @@ TEST(vulkan_backend_lifetime, a_command_s_parent_does_not_outlive_the_command)
   CHECK(guest.knows(0x7000u));
   CHECK(guest.knows(second)); }
 
-/* The backend's own surface, which is what the hooks call. */
 TEST(vulkan_backend_lifetime, made_through_ended_and_children_ended_follow_the_parent)
 { VulkanBackend backend;
   backend.made(0x1000u);
@@ -524,8 +481,6 @@ TEST(vulkan_backend_lifetime, made_through_ended_and_children_ended_follow_the_p
   CHECK(!backend.knows_handle(0x1000u));
   CHECK(backend.knows_handle(0x4000u)); }
 
-/* Outside a dispatch nobody is deciding: the guest side, where nothing was
- * remembered, so an ending there forgets nothing on anybody's behalf. */
 TEST(vulkan_backend_lifetime, outside_a_dispatch_an_ending_forgets_nothing)
 { VulkanBackend backend;
   backend.made(0x1000u);

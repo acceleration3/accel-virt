@@ -1,6 +1,3 @@
-/* TableHost forwards every Host call through the glue's C table; run here over
- * a table that reaches the MockHost, so the forwarding and the big-lock checks
- * are proven with real threads. */
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/trace/scope_binding.hpp"
@@ -100,13 +97,11 @@ TEST(table_host, forwards_where_a_gpu_sits_on_pci_and_the_files_the_host_reads)
   char        bytes[4] = {};
   std::size_t length = 99u;
   CHECK_STATUS(host.read_file("/sys/x", bytes, sizeof bytes, length), Status::ok);
-  CHECK_EQ(length, 4u);   /* cut at the buffer */
+  CHECK_EQ(length, 4u);
   CHECK(std::memcmp(bytes, "0x10", 4u) == 0);
   CHECK_STATUS(host.read_file("/sys/absent", bytes, sizeof bytes, length), Status::not_found);
   CHECK_EQ(length, 0u); }
 
-/* A glue with no file reader, and one claiming more than it was given room for,
- * are both a host that read nothing. */
 TEST(table_host, a_missing_or_overlong_file_reader_reads_nothing)
 { MockHost mock; MockHostOps ops(mock);
   AvHostOps table = ops.table();
@@ -148,8 +143,6 @@ TEST(table_host, forwards_a_try_lock_and_its_answer)
   host.destroy_mutex(mutex);
   CHECK_EQ(mock.live_mutexes(), 0u); }
 
-/* Every device lock goes through the table, so the table names it in the
- * trace: waited on, then held, then given back; a refused try holds nothing. */
 TEST(table_host, marks_each_mutex_in_the_bound_trace)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   av::MockTraceHost clock;
@@ -230,10 +223,6 @@ TEST(table_host, forwards_memory_hostmem_and_requests)
   CHECK(host.resource_exists(9u));
   CHECK(!host.resource_exists(10u)); }
 
-/* The executor's dma-buf placed where the guest reads it, through the C
- * table: the descriptor, its size and the offset reach QEMU unchanged, what
- * the guest then reads is the descriptor's memory, and a refusal is no
- * memory. */
 TEST(table_host, places_a_dma_buf_in_the_hostmem_region_and_takes_it_out)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   mock.set_hostmem_size(0x4000u);
@@ -246,7 +235,7 @@ TEST(table_host, places_a_dma_buf_in_the_hostmem_region_and_takes_it_out)
   CHECK_EQ(mock.last_placement().size, 0x2000u);
   CHECK_EQ(mock.last_placement().offset, 0x1000u);
   CHECK_EQ(static_cast<std::uint8_t *>(mock.placed_at(0x1000u))[0x1800], 0x39u);
-  CHECK(mock.descriptor_open(memory));   /* the descriptor stays the caller's */
+  CHECK(mock.descriptor_open(memory));
   host.remove_from_hostmem(0x1000u, 0x2000u);
   CHECK_EQ(mock.live_placements(), 0u);
   mock.fail_placement_at(1u);
@@ -266,9 +255,6 @@ TEST(table_host, forwards_the_clock_and_the_gpu_binding)
   CHECK_STATUS(host.bind_gpu(0u), Status::not_supported);
   CHECK_EQ(mock.bound_gpu(), 1u); }
 
-/* The fence orders the calling thread's own stores, so it is the instruction
- * on whichever thread asks, never a call into the glue: the mock behind the
- * table sees none, from the main loop or a worker. */
 TEST(table_host, fences_stores_itself_on_any_thread_without_the_glue)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   host.fence_stores();
@@ -324,9 +310,6 @@ TEST(table_host, forwards_ranges_and_aliases_and_reads_their_refusals)
   CHECK(refused == nullptr);
   host.unmap_guest(run, length); }
 
-/* A run laid under a dma-buf is the dma-buf's memory, holding what the RAM
- * held; restored, the RAM holds what the memory held; each refusal reads back
- * as not_supported. */
 TEST(table_host, forwards_overlays_and_restores_and_reads_their_refusals)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   mock.add_guest_ram(0x1000u, 0x1000u);
@@ -372,15 +355,11 @@ TEST(table_host, forwards_the_recording_file_and_reads_each_refusal)
   CHECK_STATUS(host.truncate_recording(file), Status::no_space);
   host.close_recording(file);
   CHECK_EQ(mock.live_recordings(), 0u);
-  /* The bytes outlive the close, as a file does. */
   CHECK(mock.recording_bytes("run.av") != nullptr);
   mock.fail_recording_create_at(1u);
   void *refused = &mock;
   CHECK_STATUS(host.create_recording("again.av", refused), Status::no_memory);
   CHECK(refused == nullptr); }
-/* The four display operations, over the same C table. What the guest sends is
- * geometry; what the glue is handed is one plane with a DRM fourcc and a
- * modifier, and nothing left for it to decide. */
 TEST(table_host_scanout, a_head_is_asked_shown_updated_and_hidden_through_the_table)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   constexpr std::uint64_t ram = 0x40000000u;
@@ -394,7 +373,7 @@ TEST(table_host_scanout, a_head_is_asked_shown_updated_and_hidden_through_the_ta
 
   std::uint8_t bytes[av::SetScanoutBlobRequest::encoded_size] = {};
   const auto put32 = [&bytes](std::size_t at, std::uint32_t value) { std::memcpy(bytes + at, &value, 4); };
-  put32(24u, 8u);                             /* the picture's origin in the framebuffer */
+  put32(24u, 8u);
   put32(28u, 4u);
   put32(32u, 16u);
   put32(36u, 8u);
@@ -431,8 +410,6 @@ TEST(table_host_scanout, a_head_is_asked_shown_updated_and_hidden_through_the_ta
       CHECK(!mock.head(0u).shown);
   }
 
-  /* A table from before these four: the display shows nothing, which is the
-   * same answer a host with no GL display gives. */
   AvHostOps older = ops.table();
   older.display_takes_dmabuf = nullptr;
   older.show_scanout = nullptr;
@@ -445,8 +422,6 @@ TEST(table_host_scanout, a_head_is_asked_shown_updated_and_hidden_through_the_ta
   before.hide_scanout(0u);
   CHECK_EQ(mock.head(0u).updates, mock.head(0u).updates); }
 
-/* A display that will not take the surface: not the guest's fault, and the
- * core is told so rather than being left to believe the head is showing. */
 TEST(table_host_scanout, a_display_that_refuses_the_surface_answers_not_supported)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   mock.add_display_heads(1u);
@@ -455,8 +430,6 @@ TEST(table_host_scanout, a_display_that_refuses_the_surface_answers_not_supporte
   mock.refuse_scanout_at(1u);
   CHECK_STATUS(host.show_scanout(0u, blob, framebuffer), Status::not_supported);
   CHECK(!mock.head(0u).shown);
-  /* A head the host does not have is refused; no mapping to read from, and
-   * an update of a head showing nothing, are recorded contract breaks. */
   CHECK_STATUS(host.show_scanout(1u, blob, framebuffer), Status::not_supported);
   CHECK_STATUS(host.show_scanout(0u, nullptr, framebuffer), Status::not_supported);
   host.update_scanout(0u, 0u, 0u, 1u, 1u);
@@ -465,9 +438,6 @@ TEST(table_host_scanout, a_display_that_refuses_the_surface_answers_not_supporte
   CHECK(!mock.claim(av::HostViolation::scanout_misuse)); }
 
 namespace {
-
-/* The renderer's end of the socket, scripted: it keeps what it was sent and
- * answers what the test queued, including answers no glue should give. */
 class ScriptedPeer final : public av::RendererPeer {
 public:
     void deliver(const std::uint8_t *bytes, std::size_t length, const int *descriptors,
@@ -509,29 +479,25 @@ private:
     std::uint32_t answer_count_ = 0u;
 };
 
-}  // namespace
+}
 
-/* What a renderer is handed of QEMU's: an event's own eventfd, a fence line's
- * notifier while the lines are connected, each guest RAM block's memfd and
- * where a pointer falls in one, and a host blob's memfd. Everything but the
- * event's is a duplicate the caller closes through the table. */
 TEST(table_host_renderer, forwards_the_descriptors_and_regions_a_renderer_is_handed)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   void *event = nullptr;
   CHECK_STATUS(host.create_event(event), Status::ok);
   const int eventfd = host.event_descriptor(event);
   CHECK(mock.descriptor_open(eventfd));
-  CHECK_EQ(host.event_descriptor(event), eventfd);   /* the event's own, not a copy */
+  CHECK_EQ(host.event_descriptor(event), eventfd);
   CHECK_EQ(mock.live_descriptors(), 0u);
   host.destroy_event(event);
   CHECK(!mock.descriptor_open(eventfd));
 
-  CHECK_EQ(host.fence_interrupt_descriptor(0u), -1);  /* nothing connected yet */
+  CHECK_EQ(host.fence_interrupt_descriptor(0u), -1);
   CHECK_STATUS(host.connect_fence_interrupts(), Status::ok);
   const int line = host.fence_interrupt_descriptor(63u);
   CHECK(mock.descriptor_open(line));
   CHECK_EQ(mock.live_descriptors(), 1u);
-  CHECK_EQ(host.fence_interrupt_descriptor(66u), -1);  /* past the fence queues, the display line and the present line */
+  CHECK_EQ(host.fence_interrupt_descriptor(66u), -1);
   host.close_descriptor(line);
   CHECK(!mock.descriptor_open(line));
   CHECK_EQ(mock.live_descriptors(), 0u);
@@ -556,7 +522,7 @@ TEST(table_host_renderer, forwards_the_descriptors_and_regions_a_renderer_is_han
   CHECK_EQ(mock.live_descriptors(), 0u);
   CHECK(mock.descriptor_open(owned));
   int refused = 7;
-  CHECK_STATUS(host.guest_region(1u, region, refused, size), Status::not_supported);  /* no shared file */
+  CHECK_STATUS(host.guest_region(1u, region, refused, size), Status::not_supported);
   CHECK_EQ(refused, -1);
   CHECK_STATUS(host.guest_region(2u, region, refused, size), Status::not_supported);
   std::uint64_t offset = 0u;
@@ -571,20 +537,16 @@ TEST(table_host_renderer, forwards_the_descriptors_and_regions_a_renderer_is_han
   CHECK_EQ(mock.live_descriptors(), 1u);
   host.close_descriptor(counted);
   CHECK(!mock.descriptor_open(counted));
-  host.close_descriptor(-1);   /* nothing to close is not a close */
+  host.close_descriptor(-1);
   CHECK_EQ(mock.live_descriptors(), 0u);
   CHECK_EQ(mock.unclaimed_violations(), 0u); }
 
-/* The renderer's socket through the table: a start that fails and one that
- * does, a datagram whose descriptor the peer gets its own copy of, a receive
- * with nothing to receive, an answer with a descriptor that becomes the
- * device's, and answers no glue may give, refused whole. */
 TEST(table_host_renderer, starts_sends_receives_and_kills_the_renderer_through_the_table)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   ScriptedPeer peer;
   mock.connect_renderer(peer);
   const std::uint8_t datagram[] = {0x11u, 0x22u};
-  CHECK_STATUS(host.send_renderer(datagram, sizeof datagram, nullptr, 0u), Status::not_found);  /* none started */
+  CHECK_STATUS(host.send_renderer(datagram, sizeof datagram, nullptr, 0u), Status::not_found);
   mock.fail_renderer_start_at(1u);
   CHECK_STATUS(host.start_renderer("/opt/av-renderer"), Status::not_found);
   CHECK(!mock.renderer_running());
@@ -598,7 +560,7 @@ TEST(table_host_renderer, starts_sends_receives_and_kills_the_renderer_through_t
   CHECK_EQ(peer.last_length_, sizeof datagram);
   CHECK_EQ(peer.last_byte_, 0x11u);
   CHECK(peer.last_descriptor_ != sent && mock.descriptor_open(peer.last_descriptor_));
-  CHECK(mock.descriptor_open(sent));   /* the caller's stays the caller's */
+  CHECK(mock.descriptor_open(sent));
   ::close(peer.last_descriptor_);
   host.close_descriptor(sent);
 
@@ -619,7 +581,6 @@ TEST(table_host_renderer, starts_sends_receives_and_kills_the_renderer_through_t
   CHECK(mock.descriptor_open(descriptors[0]));
   host.close_descriptor(descriptors[0]);
 
-  /* Longer than the buffer: the descriptor that came with it is closed. */
   const int cut = mock.open_descriptor();
   peer.script(sizeof buffer + 1u, cut, 1u);
   CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u),
@@ -627,7 +588,6 @@ TEST(table_host_renderer, starts_sends_receives_and_kills_the_renderer_through_t
   CHECK_EQ(length, 0u);
   CHECK_EQ(count, 0u);
   CHECK(!mock.descriptor_open(cut));
-  /* More descriptors than there was room for: those that fit are closed. */
   const int excess = mock.open_descriptor();
   peer.script(1u, excess, 2u);
   CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u),
@@ -643,8 +603,6 @@ TEST(table_host_renderer, starts_sends_receives_and_kills_the_renderer_through_t
   CHECK_STATUS(host.receive_renderer(buffer, sizeof buffer, length, descriptors, 1u, count, 10u), Status::not_found);
   CHECK_EQ(mock.renderer_datagrams(), 1u); }
 
-/* A table from before renderer mode: a host that runs every context in QEMU,
- * with nothing to hand a renderer and no renderer to start. */
 TEST(table_host_renderer, a_table_from_before_renderer_mode_offers_none_of_it)
 { MockHost mock; MockHostOps ops(mock);
   AvHostOps older = ops.table();
@@ -687,8 +645,6 @@ TEST(table_host_renderer, a_table_from_before_renderer_mode_offers_none_of_it)
   CHECK_EQ(mock.renderer_kills(), 0u);
   mock.disconnect_fence_interrupts(); }
 
-/* The glue's directory listing reaches the core as it gave it; none, or one
- * claiming more than it was given room for, is a host that lists nothing. */
 TEST(table_host, a_directory_is_listed_through_the_glue_or_not_at_all)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   mock.add_file("/sys/class/drm/card1-DP-2/status", "connected\n", 10u);
@@ -713,30 +669,24 @@ TEST(table_host, a_directory_is_listed_through_the_glue_or_not_at_all)
   CHECK_STATUS(overlong.list_directory("/sys/class/drm", names, sizeof names, length), Status::not_found);
   CHECK_EQ(length, 0u); }
 
-/* The display clock's wait: a signal wakes it with true, the deadline with
- * false, a deadline already past answers at once - and takes a signal that was
- * already there. */
 TEST(table_host, wait_event_until_answers_whether_the_signal_or_the_deadline_came_first)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   void *event = nullptr;
   CHECK_STATUS(host.create_event(event), Status::ok);
   mock.set_clock(100u);
-  CHECK(!host.wait_event_until(event, 50u));   /* already past */
+  CHECK(!host.wait_event_until(event, 50u));
   host.signal_event(event);
-  CHECK(host.wait_event_until(event, 50u));    /* past, and signalled */
+  CHECK(host.wait_event_until(event, 50u));
   host.signal_event(event);
   CHECK(host.wait_event_until(event, 1000u));
   void *thread = nullptr;
   CHECK_STATUS(host.start_thread([](void *context) { static_cast<MockHost *>(context)->set_clock(2000u); }, &mock,
                                  thread),
                Status::ok);
-  CHECK(!host.wait_event_until(event, 2000u));  /* the clock reached it */
+  CHECK(!host.wait_event_until(event, 2000u));
   host.join_thread(thread);
   host.destroy_event(event); }
 
-/* An image a head is to show goes through the glue, which says whether the
- * head's console could; a table from before the display clock has no glue
- * for it, and no head can. */
 TEST(table_host_scanout, show_image_goes_through_the_table_or_is_not_supported)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   mock.add_display_heads(1u);
@@ -754,10 +704,6 @@ TEST(table_host_scanout, show_image_goes_through_the_table_or_is_not_supported)
   CHECK_STATUS(old_host.show_image(0u, image), Status::not_supported);
   CHECK_EQ(mock.images_shown(0u), 1u); }
 
-/* An export connection's datagrams cross the table as the glue gives them: one
- * datagram each way with the descriptor beside it, a datagram longer than the
- * buffer known by its whole length, a shut-down connection answering not_found,
- * and the close counted once. A table with no export calls offers none. */
 TEST(table_host_export, a_connection_s_datagrams_cross_the_table_or_none_do)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   int ends[2] = {-1, -1};
@@ -767,7 +713,7 @@ TEST(table_host_export, a_connection_s_datagrams_cross_the_table_or_none_do)
   std::uint8_t got[2] = {};
   std::size_t  length = 0u;
   CHECK_STATUS(host.receive_export(ends[0], got, sizeof got, length), Status::ok);
-  CHECK_EQ(length, 3u);   /* longer than the buffer, known by its length */
+  CHECK_EQ(length, 3u);
   CHECK_EQ(got[1], 2u);
   const int passed = mock.open_descriptor();
   CHECK_STATUS(host.send_export(ends[0], sent, sizeof sent, passed), Status::ok);
@@ -787,7 +733,7 @@ TEST(table_host_export, a_connection_s_datagrams_cross_the_table_or_none_do)
   std::memcpy(&arrived, CMSG_DATA(header), sizeof arrived);
   CHECK(arrived >= 0 && arrived != passed);
   ::close(arrived);
-  CHECK(mock.descriptor_open(passed));   /* still the sender's */
+  CHECK(mock.descriptor_open(passed));
   mock.close_descriptor(passed);
   CHECK_STATUS(host.send_export(ends[0], sent, sizeof sent, -1), Status::ok);
   mock.fail_export_send_at(1u);
@@ -795,8 +741,6 @@ TEST(table_host_export, a_connection_s_datagrams_cross_the_table_or_none_do)
   host.shutdown_export(ends[0]);
   CHECK_STATUS(host.receive_export(ends[0], got, sizeof got, length), Status::not_found);
   CHECK_EQ(length, 0u);
-  /* Host::duplicate_export: a descriptor of the export path's own, which a
-   * send may close while the executor keeps the one it duplicated. */
   const int copied = host.duplicate_export(ends[1]);
   CHECK(copied >= 0 && copied != ends[1]);
   ::close(copied);
@@ -812,7 +756,7 @@ TEST(table_host_export, a_connection_s_datagrams_cross_the_table_or_none_do)
   older.close_export = nullptr;
   older.duplicate_export = nullptr;
   TableHost before(older);
-  CHECK_EQ(before.duplicate_export(ends[1]), -1);   /* a QEMU with no duplicate makes none */
+  CHECK_EQ(before.duplicate_export(ends[1]), -1);
   length = 5u;
   CHECK_STATUS(before.receive_export(ends[1], got, sizeof got, length), Status::not_found);
   CHECK_EQ(length, 0u);

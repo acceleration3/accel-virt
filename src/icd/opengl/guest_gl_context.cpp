@@ -26,11 +26,10 @@ namespace {
 
 constexpr uint32_t latest_major = 4u;
 constexpr uint32_t latest_minor = 6u;
-/* GLSL 4.60, the language OpenGL 4.6 carries. */
 constexpr uint32_t latest_language_minor = 60u;
 constexpr uint32_t no_error = 0u;
 
-}  // namespace
+}
 
 GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
                                KeyedLog &lines, const GlExtensionPolicy &extensions,
@@ -57,11 +56,6 @@ Status GuestGlContext::make()
     AV_SCOPE("GuestGlContext::make");
     if (state_ != State::created) return Status::invalid_state;
     if (!asked_for_itself()) return make_once();
-    /* A context created without attributes is what an application written
-     * before profiles existed makes, and what it wants is the fixed-function
-     * pipeline. So it asks for a compatibility context, then for the driver's
-     * own default, then for core - and reports whichever it got (feature 051,
-     * research.md §2). Only a refusal of the options moves down the ladder. */
     static constexpr struct Rungs {
         GrantedProfile::Rung      rung;
         uint32_t                  major;
@@ -99,10 +93,6 @@ Status GuestGlContext::make_once()
     return Status::ok;
 }
 
-/* Whether the application said what it wanted. A version is the thing that
- * says so: wglCreateContextAttribsARB names one, and a context that shares is
- * given 1.0 by `share` before it is made - only a plain wglCreateContext
- * arrives here with none, which is the context the ladder is for. */
 bool GuestGlContext::asked_for_itself() const
 {
     AV_SCOPE("GuestGlContext::asked_for_itself");
@@ -209,8 +199,6 @@ uint32_t GuestGlContext::guest_device() const
     return link_.device().device();
 }
 
-/* Outside the send lock: the wait is this context's alone, and WGL lets it be
- * current on this thread only. */
 void GuestGlContext::end_frame()
 {
     AV_SCOPE("GuestGlContext::end_frame");
@@ -232,10 +220,6 @@ ClientTransport *GuestGlContext::wire()
         loss_.lose(channel_.fault_code());
         static_cast<void>(loss_.refuses("an OpenGL call"));
     }
-    /* The transport itself, with no lock: WGL lets a context be current on
-     * one thread at a time, and it is only ever called on that one. The lock
-     * every call took serialised each context's calls against every other
-     * context's, and cost a sixth of a draw-heavy thread's time. */
     return state_ == State::made ? &channel_.transport() : nullptr;
 }
 
@@ -415,8 +399,6 @@ void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
     writer.close();
 }
 
-/* Made or lost is exactly when the host context's pieces are held, and a
- * string kept is terminated inside its row. */
 bool GuestGlContext::invariants_hold() const
 {
     AV_SCOPE("GuestGlContext::invariants_hold");
@@ -465,9 +447,6 @@ bool GuestGlContext::learn()
         glproto::av_glGetIntegerv(wire, QueryShapes::length_queries[list], &length);
         queries_.learn(static_cast<QueryShapes::List>(list), length);
     }
-    /* What the host granted, which its version string does not say: on one of
-     * this project's two host GPUs the compatibility string is identical to
-     * the core one (feature 051, research.md §1). */
     int32_t major = 0, minor = 0, mask = 0;
     glproto::av_glGetIntegerv(wire, GrantedProfile::major_query, &major);
     glproto::av_glGetIntegerv(wire, GrantedProfile::minor_query, &minor);
@@ -480,9 +459,6 @@ bool GuestGlContext::learn()
     return !channel_.lost();
 }
 
-/* A host newer than the ICD implements is reported as OpenGL 4.6 and GLSL
- * 4.60: the string's leading "major.minor" is rewritten, and the rest of the
- * host's string kept. */
 void GuestGlContext::cap_version(uint32_t row, uint32_t most_minor)
 {
     AV_SCOPE("GuestGlContext::cap_version");
@@ -501,19 +477,13 @@ void GuestGlContext::cap_version(uint32_t row, uint32_t most_minor)
 void GuestGlContext::teardown()
 {
     AV_SCOPE("GuestGlContext::teardown");
-    /* The host's framebuffer objects go with its context. */
     framebuffers_.release(nullptr);
     mappings_.release();
     shadows_.forget_all();
-    /* A made context's host is still there to delete its staging buffer: a
-     * buffer outlives its context while another shares its objects. */
     if (state_ == State::made)
         staging_.release(channel_.transport());
     else
         staging_.forget();
-    /* What the application sent last still reaches the host before its
-     * context goes; a lost context's goes with DestroyContext, and its arena
-     * import with it, so nothing is asked of the host. */
     channel_.close(state_ == State::lost);
     pacing_.unbind();
     frames_.forget();
@@ -526,4 +496,4 @@ void GuestGlContext::teardown()
     for (auto &row : strings_) row[0] = '\0';
 }
 
-}  // namespace av::glicd
+}

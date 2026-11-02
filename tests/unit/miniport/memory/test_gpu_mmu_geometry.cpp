@@ -37,7 +37,7 @@ DxgkargQueryAdapterInfoRecord query_of(std::int32_t type, void *input, std::uint
     return record;
 }
 
-}  // namespace
+}
 
 TEST(gpu_mmu_geometry_report_caps, describes_four_levels_over_48_bits_updated_through_the_cpu)
 { MockPlatform platform; const GpuMmuGeometry geometry(platform);
@@ -46,7 +46,7 @@ TEST(gpu_mmu_geometry_report_caps, describes_four_levels_over_48_bits_updated_th
   std::memset(&caps, 0xEE, sizeof caps);
   const DxgkargQueryAdapterInfoRecord record = query_of(13, &physical_adapter, 4u, &caps, sizeof caps);
   CHECK_STATUS(geometry.report_caps(AdapterInfoQuery(platform, record)), Status::ok);
-  CHECK_EQ(caps.Flags, 0x10u);   /* CacheCoherentMemorySupported */
+  CHECK_EQ(caps.Flags, 0x10u);
   CHECK_EQ(caps.PageTableUpdateMode, 0);
   CHECK_EQ(caps.VirtualAddressBitCount, 48u);
   CHECK_EQ(caps.LeafPageTableSizeFor64KPagesInBytes, 0u);

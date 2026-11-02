@@ -7,8 +7,6 @@
 namespace av {
 
 namespace {
-
-/* virtio 1.2 4.1.4.3 common configuration offsets. */
 enum : uint64_t {
     device_feature_select = 0x00u,
     device_feature        = 0x04u,
@@ -27,7 +25,6 @@ enum : uint64_t {
     queue_device          = 0x30u,
 };
 
-/* 2.1 device status bits. */
 enum : uint8_t {
     acknowledge        = 1u,
     driver             = 2u,
@@ -37,7 +34,7 @@ enum : uint8_t {
     failed             = 0x80u,
 };
 
-}  // namespace
+}
 
 VirtioPciTransport::VirtioPciTransport(Platform &platform, RegisterWindow &common,
                                        RegisterWindow &notify, RegisterWindow &isr,
@@ -253,4 +250,4 @@ bool VirtioPciTransport::invariants_hold() const
     return (configured || features_ == 0u) && notify_multiplier_ <= notify_.length();
 }
 
-}  // namespace av
+}

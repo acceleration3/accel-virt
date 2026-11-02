@@ -13,27 +13,23 @@ enum : uint32_t {
     gl_pack_image_height = 0x806Cu, gl_unpack_skip_images = 0x806Du, gl_unpack_image_height = 0x806Eu,
 };
 
-/* The buffer targets whose bindings are kept, in slot order; the element
- * array buffer is each vertex array's own. */
 constexpr uint32_t buffer_targets_kept[] = {
-    0x8892u /* ARRAY */,         0x88EBu /* PIXEL_PACK */,        0x88ECu /* PIXEL_UNPACK */,
-    0x9192u /* QUERY */,         0x8A11u /* UNIFORM */,           0x8C2Au /* TEXTURE */,
-    0x8C8Eu /* TRANSFORM_FEEDBACK */, 0x8F36u /* COPY_READ */,    0x8F37u /* COPY_WRITE */,
-    0x8F3Fu /* DRAW_INDIRECT */, 0x90D2u /* SHADER_STORAGE */,    0x90EEu /* DISPATCH_INDIRECT */,
-    0x92C0u /* ATOMIC_COUNTER */,
+    0x8892u ,         0x88EBu ,        0x88ECu ,
+    0x9192u ,         0x8A11u ,           0x8C2Au ,
+    0x8C8Eu , 0x8F36u ,    0x8F37u ,
+    0x8F3Fu , 0x90D2u ,    0x90EEu ,
+    0x92C0u ,
 };
 
-/* The targets with indexed bindings as well as their own. */
 constexpr uint32_t indexed_targets[] = {0x8A11u, 0x8C8Eu, 0x90D2u, 0x92C0u};
 
-/* The texture targets whose bindings are kept, in slot order. */
 constexpr uint32_t texture_targets_kept[] = {
-    0x0DE0u /* 1D */,       0x0DE1u /* 2D */,       0x806Fu /* 3D */,         0x8C18u /* 1D_ARRAY */,
-    0x8C1Au /* 2D_ARRAY */, 0x84F5u /* RECTANGLE */, 0x8513u /* CUBE_MAP */,  0x9009u /* CUBE_MAP_ARRAY */,
-    0x8C2Au /* BUFFER */,   0x9100u /* 2D_MULTISAMPLE */, 0x9102u /* 2D_MULTISAMPLE_ARRAY */,
+    0x0DE0u ,       0x0DE1u ,       0x806Fu ,         0x8C18u ,
+    0x8C1Au , 0x84F5u , 0x8513u ,  0x9009u ,
+    0x8C2Au ,   0x9100u , 0x9102u ,
 };
 
-}  // namespace
+}
 
 ClientArrayState::ClientArrayState(BlockSource &memory)
     : buffers_{}, buffers_restored_(false), pack_(), unpack_(), vertex_array_(0u), default_elements_(0u),
@@ -48,7 +44,6 @@ bool ClientArrayState::store_pixel(uint32_t pname, int32_t value)
 {
     AV_SCOPE("ClientArrayState::store_pixel");
     PixelStore::Field field = PixelStore::Field::alignment;
-    /* The store found is one of this object's own, which this call may change. */
     PixelStore *const store = const_cast<PixelStore *>(store_for(pname, field));
     return store != nullptr && store->set(field, value);
 }
@@ -196,7 +191,6 @@ const uint64_t *ClientArrayState::offsets_of(const void *const *pointers, size_t
     AV_SCOPE("ClientArrayState::offsets_of");
     if (pointers == nullptr && count != 0u) return nullptr;
     if (count == 0u) return &no_offsets_;
-    /* No GLsizei counts past it: a negative drawcount arrives as one. */
     if (count > 0x7FFFFFFFu || offsets_.resize(static_cast<uint32_t>(count), 0u) != Status::ok) return nullptr;
     for (size_t index = 0u; index < count; index++)
         offsets_.at(static_cast<uint32_t>(index)) = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointers[index]));
@@ -307,4 +301,4 @@ const uint32_t *ClientArrayState::elements_of(uint32_t array) const
     return array == 0u ? &default_elements_ : elements_.find(array);
 }
 
-}  // namespace av::glicd
+}

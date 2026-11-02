@@ -81,4 +81,4 @@ bool LockedTransport::invariants_hold() const
     return holds_ == (phase_ != Phase::idle);
 }
 
-}  // namespace av::icd
+}

@@ -23,7 +23,7 @@ struct TraceSnapshotProbe {
     static void claim_slots(TraceSnapshot &snapshot) { snapshot.layout_ = TraceLayout(std::uint32_t{1}); }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -56,8 +56,6 @@ struct WrittenTable {
 
 void put32(std::uint8_t *bytes, std::size_t offset, std::uint32_t value) { std::memcpy(bytes + offset, &value, sizeof value); }
 
-/* A table that reads is one whose every slot view stays inside it; the sweep
- * only asks for an answer and no fault. */
 bool reject(const std::uint8_t *bytes, std::size_t length)
 {
     TraceSnapshot snapshot;
@@ -71,7 +69,7 @@ bool reject(const std::uint8_t *bytes, std::size_t length)
     return false;
 }
 
-}  // namespace
+}
 
 TEST(trace_snapshot_read, reads_back_what_a_table_wrote)
 { WrittenTable written;
@@ -104,7 +102,6 @@ TEST(trace_snapshot_read, reads_back_what_a_table_wrote)
   CHECK_EQ(view.name(1u), inner.id());
   CHECK_EQ(view.level(1u), 2u);
   CHECK_EQ(view.entered(1u), 60u);
-  /* Past the stored frames, and past the slots, everything reads as zero. */
   CHECK_EQ(view.name(2u), 0u);
   CHECK_EQ(view.entered(2u), 0u);
   const TraceSlotView other = snapshot.slot(1u - written.slot);
@@ -168,7 +165,6 @@ TEST(trace_snapshot_read, refuses_every_broken_header_field_and_keeps_what_it_he
   CHECK_STATUS(snapshot.read(written.bytes, 0u), Status::malformed);
   CHECK_STATUS(snapshot.read(nullptr, sizeof written.bytes), Status::malformed);
   CHECK_EQ(snapshot.process(), 777u);
-  /* A header with no slots is a table, and fits in its 96 bytes. */
   std::uint8_t empty[96];
   std::memcpy(empty, written.bytes, sizeof empty);
   put32(empty, 16u, 0u);
@@ -204,16 +200,6 @@ TEST(trace_snapshot_read, hostile_tables_never_read_outside_the_bytes)
   av::HostileSweep sweep(&reject, written.bytes, sizeof written.bytes);
   sweep.run();
   CHECK(sweep.cases_run() > sizeof written.bytes);
-  /* A read judges the header's structure and nothing else, so the acceptable
-   * flips are the ones outside it: the two slots' 1648 bytes, which the slot
-   * views judge when they are walked (13184 bits), and the 48 bytes of process,
-   * crash and clock fields, which are values rather than structure (384). The
-   * module name is 16 bytes holding six, so every flip leaves a terminator
-   * behind it (128). Of the slot count only the flip to zero still fits the
-   * bytes, every other count asking for more table than arrived. Every
-   * truncation is either short of the 96-byte header or short of the two slots
-   * the count promises, all-zero and all-ones carry no magic, and the untouched
-   * table is the last acceptance. */
   const std::uint32_t acceptable = 13184u + 384u + 128u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 

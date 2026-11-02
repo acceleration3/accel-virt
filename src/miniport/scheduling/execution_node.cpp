@@ -72,8 +72,6 @@ uint32_t ExecutionNode::release_overdue(uint64_t now, void **owners, uint32_t ro
     uint32_t listed = 0u;
     for (uint32_t index = 0u; index < count_; index++) {
         const uint32_t slot = (head_ + index) % capacity;
-        /* Added rather than subtracted: the DPC reads `now` before this, and a
-         * packet queued on another processor in between is younger than it. */
         if (awaited_[slot] == 0u || now < queued_at_[slot] + park_deadline) continue;
         awaited_[slot] = 0u;
         released++;
@@ -109,13 +107,6 @@ bool ExecutionNode::take(uint32_t &fence)
     return true;
 }
 
-/* The host cannot give back a batch it was handed, so nothing queued is ever
- * preempted: the request is answered once the queue has run dry, naming the
- * last packet as completed. Answered earlier, VidSch would take the queued
- * packets as preempted and move its last completed fence to the preemption
- * fence, and their completions would then bugcheck 0x119/1. The INF turns
- * scheduler preemption off, so this is the path for a driver that asks for it
- * anyway; a held packet is never kept past its deadline (release_overdue). */
 bool ExecutionNode::take_preemption(uint32_t &fence, uint32_t &last_completed)
 {
     AV_SCOPE("ExecutionNode::take_preemption");
@@ -127,8 +118,6 @@ bool ExecutionNode::take_preemption(uint32_t &fence, uint32_t &last_completed)
     return true;
 }
 
-/* Reports run without the lock held: DxgkCbSynchronizeExecution raises to
- * device IRQL, and a submission on another processor must not wait for it. */
 Status ExecutionNode::complete(InterruptNotification &notification)
 {
     AV_SCOPE("ExecutionNode::complete");
@@ -209,9 +198,6 @@ uint32_t ExecutionNode::pending()
     return count_;
 }
 
-/* Queued fences strictly increase, lie above the last completed fence, and
- * end at the last submitted one; a packet awaiting its host has an owner to
- * finish it. */
 void ExecutionNode::report(StateWriter &writer)
 {
     AV_SCOPE("ExecutionNode::report");
@@ -253,4 +239,4 @@ bool ExecutionNode::invariants_hold() const
     return count_ == 0u || previous == last_submitted_;
 }
 
-}  // namespace av
+}

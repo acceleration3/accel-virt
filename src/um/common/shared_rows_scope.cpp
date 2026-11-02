@@ -12,15 +12,13 @@ namespace {
 
 constexpr uint32_t max_modules = 512u;
 
-/* The Direct3D user-mode driver as a process of this bitness loads it on a
- * guest of one GPU vendor (avgpu.inf's UserModeDriverName and its Wow value). */
 #if defined(_WIN64)
 constexpr wchar_t umd_name[] = L"avumd.dll";
 #else
 constexpr wchar_t umd_name[] = L"avumd32.dll";
 #endif
 
-}  // namespace
+}
 
 SharedRowsScope::SharedRowsScope() : withdraw_(), asked_(0u)
 {
@@ -32,8 +30,6 @@ SharedRowsScope::SharedRowsScope() : withdraw_(), asked_(0u)
         count = static_cast<uint32_t>(needed / sizeof(HMODULE));
     if (count > max_modules) count = max_modules;
     for (uint32_t at = 0u; at < count; ++at) ask(loaded[at]);
-    /* By name as well: a large application holds more modules than the walk
-     * sees, and the driver may be past them. */
     ask(GetModuleHandleW(umd_name));
 }
 
@@ -59,4 +55,4 @@ SharedRowsScope::~SharedRowsScope()
     for (uint32_t at = 0u; at < asked_; ++at) withdraw_[at]();
 }
 
-}  // namespace av
+}

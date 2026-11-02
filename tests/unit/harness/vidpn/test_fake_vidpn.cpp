@@ -22,7 +22,7 @@ constexpr std::uint32_t no_more_elements = 0x401E034Cu;
 constexpr std::uint32_t dataset_is_empty = 0x401E034Bu;
 constexpr std::uint32_t mode_already_in_mode_set = 0xC01E0314u;
 constexpr std::uint32_t mode_not_in_mode_set = 0xC01E034Au;
-constexpr std::uint32_t rotation_supported = 0x11u;   /* Identity | Offset0 */
+constexpr std::uint32_t rotation_supported = 0x11u;
 constexpr std::uint32_t empty_source_mode_set = 0xC01E0308u;
 constexpr std::uint32_t empty_target_mode_set = 0xC01E0309u;
 
@@ -44,7 +44,7 @@ D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t heig
     return mode;
 }
 
-}  // namespace
+}
 
 TEST(fake_vidpn_query, answers_version_1_only)
 { FakeVidPn vidpn;
@@ -174,8 +174,6 @@ TEST(fake_vidpn_source_mode_set, a_new_set_replaces_the_current_one_when_assigne
   CHECK_EQ(vidpn.source_modes(0u).mode(0u).PrimSurfSizeCx, 1920u);
   CHECK(!vidpn.source_modes(0u).pinned()); }
 
-/* SetCofuncModeSet refuses an empty cofunctional set, on either end, and leaves
- * it to the driver to release - so the current set is unchanged. */
 TEST(fake_vidpn_source_mode_set, an_empty_set_is_refused_and_still_held)
 { FakeVidPn vidpn;
   vidpn.source_modes(0u).seed(source_mode(800u, 600u), false);

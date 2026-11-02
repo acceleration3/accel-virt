@@ -25,8 +25,6 @@ bool ArenaSpans::slots(uint32_t count, uint8_t *&view, uint64_t &offset)
     return true;
 }
 
-/* The part page under what is set aside goes with the span: a span is whole
- * pages, and nothing else could use it. */
 bool ArenaSpans::span(uint64_t bytes, uint8_t *&view, uint64_t &length)
 {
     AV_SCOPE("ArenaSpans::span");
@@ -66,4 +64,4 @@ bool ArenaSpans::invariants_hold() const
                                             : low_ <= PublishedSlotLayout(channel_.arena_bytes()).error_word();
 }
 
-}  // namespace av::icd
+}

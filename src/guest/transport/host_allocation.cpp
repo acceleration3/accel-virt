@@ -100,7 +100,6 @@ uint32_t HostAllocation::host_status() const
     return import_.host_status();
 }
 
-/* An allocation held is a chunk imported, and none held imports nothing. */
 bool HostAllocation::invariants_hold() const
 {
     AV_SCOPE("HostAllocation::invariants_hold");
@@ -108,4 +107,4 @@ bool HostAllocation::invariants_hold() const
     return chunk_.resource_id() != 0u ? import_.memory() != 0u : import_.memory() == 0u;
 }
 
-}  // namespace av
+}

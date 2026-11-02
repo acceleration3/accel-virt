@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""The committed generated sources are what the generators write.
-
-Every emitted tree is re-generated into a temporary directory and compared.
-A file that differs, a file nobody would have written, or a file that vanished
-fails the gate naming it - which is what makes "never hand-edit the output"
-a rule rather than a hope.
-
-Without the fetched registries there is nothing to generate from, and a
-developer who has not fetched them has broken nothing: the gate says it skipped
-and how to stop it skipping.
-
-The plan is data, in tools/generated_sources.txt, one tree per line:
-
-    <api> <generator-module-or-script> <registry> <out> [extra arguments...]
-"""
+"""The committed generated sources are what the generators write."""
 import argparse
 import pathlib
 import subprocess
@@ -25,7 +11,6 @@ FETCH = "tools/fetch_khronos_registries.py"
 
 
 def plan_from(path):
-    """Every tree in `path`: (api, generator, registry, out, extra)."""
     trees = []
     for number, line in enumerate(path.read_text().splitlines(), 1):
         text = line.strip()
@@ -39,8 +24,6 @@ def plan_from(path):
 
 
 def command_for(generator, registry, out, extra):
-    """A module is run with -m, a script by path; the generator's own --check
-    is what does the comparing."""
     if generator.endswith(".py"):
         argv = [sys.executable, str(ROOT / generator)]
     else:
@@ -50,7 +33,6 @@ def command_for(generator, registry, out, extra):
 
 
 def check(api, generator, registry, out, extra):
-    """Whether this tree matches, and what to say about it."""
     environment = {"PYTHONPATH": str(ROOT / "tools" / "codegen")}
     result = subprocess.run(command_for(generator, registry, out, extra), capture_output=True,
                             text=True, cwd=str(ROOT), env={**_environ(), **environment})

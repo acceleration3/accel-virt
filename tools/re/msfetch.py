@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Fetch Windows PE binaries + matching PDBs from Microsoft's public symbol
-server, using winbindex to resolve (filename, windows-version) -> PE key.
-
-No Windows install required.
-
-  msfetch.py list   dxgkrnl.sys --winver 11-24H2
-  msfetch.py get    dxgkrnl.sys --winver 11-24H2 --outdir re/bin --pdbdir re/bin
-  msfetch.py get    dxgkrnl.sys --sha256 ab420f66... --outdir re/bin --pdbdir re/bin
-"""
 import argparse, gzip, hashlib, io, json, os, re, struct, sys, urllib.request
 
 WINBINDEX = "https://winbindex.m417z.com/data/by_filename_compressed/{}.json.gz"
@@ -31,7 +22,6 @@ def index(filename):
 
 
 def verkey(v):
-    """sortable numeric tuple from '10.0.26100.4652'"""
     m = re.match(r"(\d+)\.(\d+)\.(\d+)\.(\d+)", v or "")
     return tuple(int(x) for x in m.groups()) if m else (0, 0, 0, 0)
 
@@ -58,7 +48,6 @@ def candidates(filename, winver=None, arch=34404):
     return out
 
 
-# ---- PE parsing: find the RSDS CodeView record for the PDB key -------------
 def pdb_key(data):
     pe = struct.unpack_from("<I", data, 0x3C)[0]
     assert data[pe:pe + 4] == b"PE\0\0", "not a PE"
@@ -90,7 +79,7 @@ def pdb_key(data):
         e = off + i * 28
         typ, = struct.unpack_from("<I", data, e + 12)
         sz, _rva, ptr = struct.unpack_from("<III", data, e + 16)
-        if typ != 2:      # IMAGE_DEBUG_TYPE_CODEVIEW
+        if typ != 2:
             continue
         cv = data[ptr:ptr + sz]
         if cv[:4] != b"RSDS":

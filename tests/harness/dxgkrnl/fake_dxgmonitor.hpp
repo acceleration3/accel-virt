@@ -1,7 +1,3 @@
-/* One monitor's link information as dxgkrnl keeps it: DXGMONITOR::_UpdateLinkInfo
- * @ 14028e4a0 calls DxgkDdiUpdateMonitorLinkInfo on monitor arrival and on a
- * usage change, then filters the capabilities it trusts. `driver_version` is the
- * D3DKMT driver version dxgkrnl derives from WDDMVersion (2100 for 2.1). */
 #ifndef AV_FAKE_DXGMONITOR_HPP
 #define AV_FAKE_DXGMONITOR_HPP
 
@@ -19,9 +15,6 @@ public:
 
     FakeDxgmonitor(MockPlatform &platform, const DdiTable &table, void *adapter, std::uint32_t driver_version);
 
-    /* For `usage` 0 (a desktop monitor), 1 (head mounted) or another
-     * (specialized): the hints go down as Hidden and HeadMounted. Answers what
-     * the caller sees: a failure below driver version 2400 is swallowed. */
     std::int32_t update_link_info(std::uint32_t target, std::uint32_t usage);
 
     std::uint32_t usage_hints() const;
@@ -50,6 +43,6 @@ private:
     std::uint32_t   dithering_support_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FAKE_DXGMONITOR_HPP
+#endif

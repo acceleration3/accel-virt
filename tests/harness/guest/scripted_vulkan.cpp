@@ -26,7 +26,7 @@ Handle as_handle(std::uint64_t value)
     return reinterpret_cast<Handle>(static_cast<std::uintptr_t>(value));
 }
 
-}  // namespace
+}
 
 ScriptedVulkan::ScriptedVulkan()
     : calls_{}, fail_at_{}, fail_with_{}, physical_devices_(1u), luids_{}, luid_valid_{}, queue_families_(1u),
@@ -153,7 +153,6 @@ ScriptedVulkan::Object *ScriptedVulkan::find(Kind kind, std::uint64_t handle)
     return nullptr;
 }
 
-/* Destroying VK_NULL_HANDLE is the no-op Vulkan makes it. */
 void ScriptedVulkan::destroy(Kind kind, std::uint64_t handle)
 {
     if (handle == 0u) return;
@@ -492,8 +491,6 @@ VkResult ScriptedVulkan::create_compute_pipeline(VkDevice, const VkComputePipeli
     return result;
 }
 
-/* A graphics pipeline's link is its viewport, width high and height low: the
- * area its draw covers. */
 VkResult ScriptedVulkan::create_graphics_pipeline(VkDevice, const VkGraphicsPipelineCreateInfo *info,
                                                   VkPipeline *pipeline)
 {
@@ -520,7 +517,6 @@ void ScriptedVulkan::destroy_descriptor_pool(VkDevice, VkDescriptorPool pool)
     destroy(Kind::descriptor_pool, raw(pool));
 }
 
-/* A set is not an object of its own: it goes with its pool. */
 VkResult ScriptedVulkan::allocate_descriptor_set(VkDevice, const VkDescriptorSetAllocateInfo *info,
                                                  VkDescriptorSet *set)
 {
@@ -569,7 +565,6 @@ VkResult ScriptedVulkan::create_command_pool(VkDevice, const VkCommandPoolCreate
 
 void ScriptedVulkan::destroy_command_pool(VkDevice, VkCommandPool pool) { destroy(Kind::command_pool, raw(pool)); }
 
-/* A command buffer goes with its pool. */
 VkResult ScriptedVulkan::allocate_command_buffer(VkDevice, const VkCommandBufferAllocateInfo *info,
                                                  VkCommandBuffer *command_buffer)
 {
@@ -597,8 +592,6 @@ VkResult ScriptedVulkan::wait_for_fence(VkDevice, VkFence fence, std::uint64_t)
     return object != nullptr && object->link != 0u ? VK_SUCCESS : VK_TIMEOUT;
 }
 
-/* The set the last descriptor update named survives a begin: the probe
- * updates before it records. */
 VkResult ScriptedVulkan::begin_command_buffer(VkCommandBuffer, const VkCommandBufferBeginInfo *)
 {
     const VkResult result = use(Call::begin_command_buffer);
@@ -772,8 +765,6 @@ VkResult ScriptedVulkan::create_win32_surface(VkInstance instance, void *, void 
 
 void ScriptedVulkan::destroy_surface(VkInstance, VkSurfaceKHR surface) { destroy(Kind::surface, raw(surface)); }
 
-/* The window's own size, unless a test holds the surface at another: a
- * swapchain of the wrong extent is what an application meets mid-resize. */
 VkResult ScriptedVulkan::surface_capabilities(VkPhysicalDevice, VkSurfaceKHR surface,
                                               VkSurfaceCapabilitiesKHR *capabilities)
 {
@@ -845,8 +836,6 @@ VkResult ScriptedVulkan::create_swapchain(VkDevice device, const VkSwapchainCrea
     if (result != VK_SUCCESS) return result;
     if (find(Kind::device, raw(device)) == nullptr) misuses_++;
     if (find(Kind::surface, raw(info->surface)) == nullptr) return VK_ERROR_SURFACE_LOST_KHR;
-    /* One swapchain is retired by the next, as the specification has it: the
-     * old one is still there until the application destroys it. */
     if (swapchain_ != 0u) {
         if (retired_ != 0u || raw(info->oldSwapchain) != swapchain_) return VK_ERROR_OUT_OF_HOST_MEMORY;
         retired_ = swapchain_;
@@ -895,8 +884,6 @@ VkResult ScriptedVulkan::swapchain_images(VkDevice, VkSwapchainKHR swapchain, st
     return written < available ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
-/* The window is what decides: one of another size than the swapchain has left
- * it out of date, as the driver's own acquire does. */
 VkResult ScriptedVulkan::acquire_next_image(VkDevice, VkSwapchainKHR swapchain, std::uint64_t, std::uint32_t *index)
 {
     const VkResult result = use(Call::acquire_next_image);
@@ -911,8 +898,6 @@ VkResult ScriptedVulkan::acquire_next_image(VkDevice, VkSwapchainKHR swapchain, 
     return VK_SUCCESS;
 }
 
-/* What the driver's present does, as far as the probe can see it: the drawn
- * frame on the window, in the window's channel order. */
 VkResult ScriptedVulkan::queue_present(VkQueue, const VkPresentInfoKHR *info)
 {
     const VkResult result = use(Call::queue_present);
@@ -935,4 +920,4 @@ VkResult ScriptedVulkan::queue_present(VkQueue, const VkPresentInfoKHR *info)
     return VK_SUCCESS;
 }
 
-}  // namespace av
+}

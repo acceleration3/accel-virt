@@ -56,8 +56,6 @@ uint32_t HostBlobTable::placed_from(uint64_t offset) const
     return SortedSearch<Placed, &Placed::offset_>(placed_).at_or_after(offset);
 }
 
-/* Placements are apart from each other, so only the one before `offset` and
- * the one at or after it can reach into the range. */
 bool HostBlobTable::overlaps_placed(uint64_t offset, uint64_t size) const
 {
     AV_SCOPE("HostBlobTable::overlaps_placed");
@@ -80,8 +78,6 @@ void HostBlobTable::drop(uint32_t id)
     HostBlob *blob = nullptr;
     if (ids_.take(id, blob)) {
         if (blob->mapped()) unplace(blob->offset());
-        /* The pages go back to the guest's RAM only when no adapter's blob
-         * is over them any more. */
         if (blob->lending() != nullptr) lendings_->leave(host_, *blob->lending(), *contexts_, id);
         static_cast<void>(blobs_.destroy(blob));
     }
@@ -95,11 +91,6 @@ void HostBlobTable::destroy(uint32_t id)
     contexts_->free_memory(id);
 }
 
-/* The library may answer more than was asked - a driver rounds an allocation
- * up - but the blob is exactly what the guest placed a window range for, or
- * its mapping would run into the next range. Room to keep the blob is made
- * before the library is asked, so memory it allocated is never memory there
- * is nowhere to note. */
 Status HostBlobTable::create(uint32_t id, uint32_t context, HostMemoryRequest request, uint64_t size)
 {
     AV_SCOPE("HostBlobTable::create");
@@ -135,8 +126,6 @@ Status HostBlobTable::create(uint32_t id, uint32_t context, HostMemoryRequest re
     return Status::ok;
 }
 
-/* No memory is made: whether this blob makes it or joins a lending another
- * adapter's device made depends on the pages, which come later. */
 Status HostBlobTable::create_over_guest(uint32_t id, uint32_t context, HostMemoryRequest request, uint64_t size)
 {
     AV_SCOPE("HostBlobTable::create_over_guest");
@@ -187,10 +176,6 @@ Status HostBlobTable::adopt(uint32_t id, ControlRequest &request, size_t offset,
     return verified;
 }
 
-/* The first piece's first entry names the pages' first address, which is all
- * a join is judged by; the rest of the pieces are checked against what the
- * lender laid as they come. A blob that joins has no memory of its own to
- * make: the executor is told to name the lender's under this blob's key. */
 Status HostBlobTable::begin_lending(uint32_t id, HostBlob &blob, ControlRequest &request, size_t offset)
 {
     AV_SCOPE("HostBlobTable::begin_lending");
@@ -203,8 +188,6 @@ Status HostBlobTable::begin_lending(uint32_t id, HostBlob &blob, ControlRequest 
         uint64_t      holder_key = 0u;
         AvHostMemory  aliased = {-1, 0u, 0u};
         bool          aliased_ok = false;
-        /* Any other holder's memory is the lending's, the lender's included
-         * while it lives; this blob is the lending's last holder in the list. */
         for (uint32_t tried = 0u; tried < joined->holders() && !aliased_ok; tried++) {
             if (!joined->holder_at(tried, holder, holder_key) || holder == contexts_) continue;
             aliased_ok = contexts_->alias_memory(id, *holder, holder_key, aliased) == Status::ok;
@@ -235,8 +218,6 @@ Status HostBlobTable::begin_lending(uint32_t id, HostBlob &blob, ControlRequest 
     return Status::ok;
 }
 
-/* Room to note the placement first: a blob the host placed must never be one
- * the next placement could land on. */
 Status HostBlobTable::map(uint32_t id, uint64_t offset, uint32_t &caching)
 {
     AV_SCOPE("HostBlobTable::map");
@@ -289,8 +270,6 @@ bool HostBlobTable::contains(uint32_t id) const
     return blob_of(id) != nullptr;
 }
 
-/* The lookup takes the lock: a creation or a release on the main loop writes
- * the table a worker would otherwise be reading. */
 bool HostBlobTable::owns(uint32_t context, uint32_t id)
 {
     AV_SCOPE("HostBlobTable::owns");
@@ -327,9 +306,6 @@ void HostBlobTable::report(StateWriter &writer) const
     writer.close();
 }
 
-/* Placements are sorted and apart, there is one for each placed blob and no
- * other, and a blob lives only once there is a lock to hold it apart from a
- * worker's hold. */
 bool HostBlobTable::invariants_hold() const
 {
     AV_SCOPE("HostBlobTable::invariants_hold");
@@ -351,4 +327,4 @@ bool HostBlobTable::invariants_hold() const
     return found && mapped == placed_.size();
 }
 
-}  // namespace av
+}

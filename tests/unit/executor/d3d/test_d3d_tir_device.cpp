@@ -1,21 +1,3 @@
-/* Target-independent rasterization (D3D11.1: ForcedSampleCount with a
- * single-sample render target, or with no target at all) on every GPU here
- * that runs Direct3D, through DXVK: Direct2D draws its anti-aliased geometry
- * this way, a pixel shader writing SV_Coverage into an R*_UINT target with
- * the logic op OR'ing or XOR'ing the masks, and reads the bits back as
- * coverage. No Vulkan driver rasterizes 16 samples into one, so DXVK
- * emulates it (D3D11TirShaders): what these tests hold it to is a D3D
- * rasterizer's answer, sample for sample.
- *
- * The reference here is that rasterizer for one pixel: vertices snapped to
- * 16.8 fixed point, edge functions with the top-left rule, D3D's standard
- * sample patterns, clip distances interpolated to every sample. The geometry
- * puts edges exactly through sample positions, so a rule broken anywhere -
- * a top edge counted, a shared edge counted twice, a sample off by a
- * subpixel - changes a bit.
- *
- * DXVK is loaded from AV_D3D_PATH, or from build-d3d/lib in this checkout
- * (tools/build_d3d_runtime.sh). A host without it returns without judging. */
 #include "fixtures/d3d/tir_shaders.hpp"
 #include "core/support/object_storage.hpp"
 #include "executor/d3d/d3d_backend.hpp"
@@ -62,18 +44,13 @@ constexpr std::uint32_t blend_one = 2u;
 constexpr std::uint32_t blend_zero = 1u;
 constexpr std::uint32_t blend_op_add = 1u;
 constexpr std::uint32_t size = 64u;
-/* Subpixels per pixel: D3D's 16.8 fixed point. */
 constexpr std::int64_t subpixels = 256;
-/* What the target is cleared to where a test needs to see untouched pixels:
- * no pattern sets the high half. */
 constexpr std::uint32_t untouched = 0xffff0000u;
 constexpr std::uint32_t max_triangles = 256u;
-/* The forced sample counts besides 1. */
 constexpr std::uint32_t forced_counts[] = {2u, 4u, 8u, 16u};
 constexpr std::uint32_t multisample_counts[] = {4u, 8u, 16u};
 constexpr std::uint32_t high_counts[] = {8u, 16u};
 
-/* Wire object ids. */
 enum : std::uint32_t {
     target_id = 1u,
     target_view_id,
@@ -95,7 +72,6 @@ enum : std::uint32_t {
     rasterizer_forced_base_id,
 };
 
-/* A vertex in pixels, its clip-space w, and two clip distances. */
 struct Vertex {
     double x, y;
     double clip0, clip1;
@@ -106,8 +82,6 @@ struct Triangle {
     Vertex v[3];
 };
 
-/* What the vertex buffer holds: the clip-space position and the clip
- * distances. */
 struct WireVertex {
     float x, y, z, w;
     float clip0, clip1;
@@ -117,7 +91,6 @@ struct Sample {
     int x, y;
 };
 
-/* D3D's standard sample patterns, in 1/16 pixel from the pixel center. */
 constexpr Sample pattern2[2] = {{4, 4}, {-4, -4}};
 constexpr Sample pattern4[4] = {{-2, -6}, {6, -2}, {-6, 2}, {2, 6}};
 constexpr Sample pattern8[8] = {{1, -3}, {-1, 3}, {5, 1}, {-3, -5}, {-5, 5}, {-7, -1}, {3, 7}, {7, -7}};
@@ -134,11 +107,6 @@ const Sample *pattern(std::uint32_t samples)
     }
 }
 
-/* D3D's rasterizer for one triangle and one forced pattern, the way the
- * functional spec defines it: x and y snapped to 16.8 fixed point (round to
- * nearest even), a sample inside when every edge function is positive or
- * zero on a top or left edge (y down), and kept when every clip distance
- * interpolated to it is at least zero. */
 class ReferenceTriangle {
 public:
     ReferenceTriangle(const Triangle &triangle, std::uint32_t samples) : samples_(samples), valid_(false)
@@ -146,9 +114,6 @@ public:
         for (std::uint32_t i = 0u; i < 3u; i++) {
             x_[i] = static_cast<std::int64_t>(std::nearbyint(triangle.v[i].x * double(subpixels)));
             y_[i] = static_cast<std::int64_t>(std::nearbyint(triangle.v[i].y * double(subpixels)));
-            /* Over w: a clip distance interpolates perspective-correctly,
-             * and its sign along the triangle is that of the screen-space
-             * barycentrics weighting each distance over its w. */
             clip_[0][i] = triangle.v[i].clip0 / triangle.v[i].w;
             clip_[1][i] = triangle.v[i].clip1 / triangle.v[i].w;
         }
@@ -200,7 +165,6 @@ private:
             const bool top_left = dy < 0 || (dy == 0 && dx > 0);
             if (edge[e] < 0 || (edge[e] == 0 && !top_left)) return false;
         }
-        /* The weight of a vertex is the edge function of the edge facing it. */
         const double total = double(edge[0] + edge[1] + edge[2]);
         for (const double(&plane)[3] : clip_) {
             const double d = (double(edge[1]) * plane[0] + double(edge[2]) * plane[1] + double(edge[0]) * plane[2]) / total;
@@ -216,7 +180,6 @@ private:
     double        clip_[2][3];
 };
 
-/* A set of triangles drawn in one call, and what D3D makes of it. */
 class Scene {
 public:
     Scene() : count_(0u) {}
@@ -227,7 +190,6 @@ public:
         if (count_ < max_triangles) triangles_[count_++] = Triangle{{a, b, c}};
     }
 
-    /* A quad as two triangles sharing the diagonal from (x0, y0) to (x1, y1). */
     void quad(double x0, double y0, double x1, double y1)
     {
         add(point(x0, y0), point(x1, y0), point(x1, y1));
@@ -239,9 +201,6 @@ public:
     std::uint32_t count() const { return count_; }
     const Triangle &triangle(std::uint32_t index) const { return triangles_[index]; }
 
-    /* Every pixel's value after drawing the scene onto `clear`: the masks
-     * combined by `combine` (OR or XOR), or with `write` the last covering
-     * triangle's mask, as a target without a logic op takes it. */
     enum class Combine { logic_or, logic_xor, write };
 
     void expect(std::uint32_t samples, Combine combine, std::uint32_t clear, std::uint32_t *pixels) const
@@ -267,9 +226,6 @@ private:
     std::uint32_t count_;
 };
 
-/* Hairlines, as Direct2D strokes them: quads a fraction of a pixel thin,
- * horizontal, vertical and slanted, at offsets that put their edges on
- * sample rows and columns of every pattern and between them. */
 Scene hairlines()
 {
     Scene scene;
@@ -280,7 +236,6 @@ Scene hairlines()
         const double x = 2.0 + 3.0 * i + double(i) / 16.0 + 1.0 / 32.0;
         scene.quad(x, 26.0, x + width, 62.0 - i / 4.0);
     }
-    /* Slanted strokes, one sixteenth of a pixel across. */
     for (std::uint32_t i = 0u; i < 4u; i++) {
         const double x0 = 28.0 + 8.0 * i, y0 = 27.0 + i / 16.0;
         const double x1 = 36.0 + 6.0 * i, y1 = 62.0;
@@ -290,9 +245,6 @@ Scene hairlines()
     return scene;
 }
 
-/* A region tessellated into triangles that share their edges, with grid
- * lines through sample positions: drawn with XOR, a sample counted by two
- * triangles cancels, and one counted by none is missing. */
 Scene tiling()
 {
     Scene scene;
@@ -302,9 +254,6 @@ Scene tiling()
     for (std::uint32_t r = 0u; r <= rows; r++) {
         for (std::uint32_t c = 0u; c <= columns; c++) {
             seed = seed * 1664525u + 1013904223u;
-            /* Jitter in subpixels on the inside, so edges cross the patterns
-             * at every angle; the grid's own lines at x.5 + n/16 and y.5 +
-             * n/16 run through sample positions. */
             const bool inside = r > 0u && r < rows && c > 0u && c < columns;
             const double jx = inside ? double(int(seed >> 8u & 0x1ffu) - 256) / 256.0 : 0.0;
             const double jy = inside ? double(int(seed >> 20u & 0x1ffu) - 256) / 256.0 : 0.0;
@@ -326,10 +275,6 @@ Scene tiling()
     return scene;
 }
 
-/* Large triangles clipped by both clip distances: x - 20.03 and a slanted
- * plane, neither through any sample position (both lie on the 1/64 pixel
- * grid, off the patterns' 1/16), so the answer is the same at any
- * precision. */
 Scene clipped()
 {
     Scene scene;
@@ -341,10 +286,6 @@ Scene clipped()
     return scene;
 }
 
-/* The tiling and the clipped triangles in perspective: each vertex at its
- * own w (1, 2 or 4, so that x / w stays exact), and the clip distances
- * scaled by it, which keeps their planes where they were on screen only if
- * the distances are divided by w where they are interpolated. */
 Scene perspective()
 {
     Scene scene;
@@ -365,9 +306,6 @@ Scene perspective()
     return scene;
 }
 
-/* Triangles too thin to cover a sample in most pixels they cross, apart from
- * each other: drawn with no logic op onto a cleared target, a pixel shader
- * run where no sample is covered would overwrite the clear with zero. */
 Scene slivers()
 {
     Scene scene;
@@ -378,8 +316,6 @@ Scene slivers()
     return scene;
 }
 
-/* One device on one GPU with everything the scenes draw with: a 64x64
- * R32_UINT target and a UAV texture like it, the shaders, and the states. */
 class TirRig {
 public:
     explicit TirRig(av::D3dLoopback &wire) : wire_(wire) {}
@@ -447,8 +383,6 @@ public:
         CHECK_EQ(wire_.refused(), 0u);
     }
 
-    /* `scene` drawn in one call at `samples` (0: not forced) into the target
-     * cleared to `clear`, with `blend`, read back into `pixels`. */
     void draw_to_target(const Scene &scene, std::uint32_t samples, std::uint32_t blend, std::uint32_t clear,
                         std::uint32_t *pixels, std::uint32_t ps = coverage_ps_id)
     {
@@ -461,8 +395,6 @@ public:
         read(target_id, pixels);
     }
 
-    /* `scene` drawn at `samples` by the attribute shaders, the target
-     * cleared to zero and the values OR'd in. */
     void draw_attribute(const Scene &scene, std::uint32_t samples, std::uint32_t *pixels)
     {
         const std::uint32_t targets[1] = {target_view_id};
@@ -474,8 +406,6 @@ public:
         read(target_id, pixels);
     }
 
-    /* `scene` drawn at `samples` with only the UAV bound, its pixel shader
-     * OR'ing the coverage into the UAV cleared to zero. */
     void draw_to_uav(const Scene &scene, std::uint32_t samples, std::uint32_t *pixels)
     {
         const UavBinding uav = {uav_view_id, 0xffffffffu};
@@ -527,8 +457,6 @@ private:
         for (std::uint32_t t = 0u; t < scene.count(); t++) {
             for (std::uint32_t i = 0u; i < 3u; i++) {
                 const Vertex &v = scene.triangle(t).v[i];
-                /* Clip space for a 64x64 viewport: exact for any vertex on
-                 * the subpixel grid, and w a power of two. */
                 const float x = float(v.x / 32.0 - 1.0), y = float(1.0 - v.y / 32.0), w = float(v.w);
                 vertices[3u * t + i] = WireVertex{x * w, y * w, 0.0f, w, float(v.clip0), float(v.clip1)};
                 positions[3u * t + i][0] = x;
@@ -565,7 +493,6 @@ private:
     av::D3dLoopback &wire_;
 };
 
-/* How many pixels differ, the first few printed. */
 std::uint32_t mismatches(const char *what, std::uint32_t samples, const std::uint32_t *actual,
                          const std::uint32_t *expected)
 {
@@ -579,10 +506,8 @@ std::uint32_t mismatches(const char *what, std::uint32_t samples, const std::uin
     return count;
 }
 
-/* A backend is several megabytes, so it lives in static storage. */
 av::ObjectStorage<av::D3dBackend> backend_storage;
 
-/* `judge` run against a device on every GPU of this host that runs DXVK. */
 template <typename Judge>
 void on_every_gpu(Judge judge)
 {
@@ -602,7 +527,6 @@ void on_every_gpu(Judge judge)
             std::uint32_t hresult = 1u, level = 0u;
             CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
             CHECK_EQ(hresult, 0u);
-            /* Target-independent rasterization is feature level 11_1's. */
             CHECK(level >= 0xb100u);
             TirRig rig(wire);
             rig.make();
@@ -620,12 +544,8 @@ void on_every_gpu(Judge judge)
 std::uint32_t actual[size * size];
 std::uint32_t expected[size * size];
 
-}  // namespace
+}
 
-/* Direct2D's hairlines at every forced count, OR'd into a single-sample
- * target: every pixel's mask is the D3D pattern's, bit for bit. Before the
- * emulation, rows of these strokes went missing - a 16-sample state drawn
- * at one sample. */
 TEST(d3d_tir_device, hairlines_or_into_a_single_sample_target_cover_the_forced_pattern)
 {
     const Scene scene = hairlines();
@@ -638,9 +558,6 @@ TEST(d3d_tir_device, hairlines_or_into_a_single_sample_target_cover_the_forced_p
     });
 }
 
-/* Triangles sharing edges, XOR'd: each sample on a shared edge belongs to
- * exactly one of the two triangles (the top-left rule), so the target holds
- * the union's coverage and no bit cancels. */
 TEST(d3d_tir_device, a_tiling_drawn_with_xor_counts_every_sample_on_a_shared_edge_once)
 {
     const Scene scene = tiling();
@@ -649,14 +566,11 @@ TEST(d3d_tir_device, a_tiling_drawn_with_xor_counts_every_sample_on_a_shared_edg
             rig.draw_to_target(scene, samples, blend_xor_id, 0u, actual);
             scene.expect(samples, Scene::Combine::logic_xor, 0u, expected);
             CHECK_EQ(mismatches("tiling", samples, actual, expected), 0u);
-            /* The union is solid inside: XOR and OR agree there. */
             CHECK_EQ(actual[30u * size + 30u], (1u << samples) - 1u);
         }
     });
 }
 
-/* Clip distances clip at every sample of the forced pattern, not at the
- * pixel the emulation rasterizes. */
 TEST(d3d_tir_device, clip_distances_clip_each_sample_of_the_forced_pattern)
 {
     const Scene scene = clipped();
@@ -669,9 +583,6 @@ TEST(d3d_tir_device, clip_distances_clip_each_sample_of_the_forced_pattern)
     });
 }
 
-/* A pixel the triangle touches without covering any sample of the pattern
- * runs no pixel shader: with no logic op, one that ran would write a zero
- * mask over the clear. */
 TEST(d3d_tir_device, a_pixel_with_no_covered_sample_runs_no_pixel_shader)
 {
     const Scene scene = slivers();
@@ -685,11 +596,6 @@ TEST(d3d_tir_device, a_pixel_with_no_covered_sample_runs_no_pixel_shader)
     });
 }
 
-/* Without a render target (UAV-only rendering) the forced pattern is the
- * same: emulated too, though Vulkan could rasterize up to 8 samples with no
- * attachments here - its hardware clips clip distances geometrically, which
- * moved an edge past a sample of this scene on RADV, where D3D clips each
- * sample. */
 TEST(d3d_tir_device, uav_only_rendering_covers_the_forced_pattern_as_a_render_target_does)
 {
     const Scene lines = hairlines();
@@ -706,8 +612,6 @@ TEST(d3d_tir_device, uav_only_rendering_covers_the_forced_pattern_as_a_render_ta
     });
 }
 
-/* After an emulated draw the next one without a forced count is drawn as
- * before, at one sample, and the one after that is emulated again. */
 TEST(d3d_tir_device, a_draw_without_a_forced_count_after_an_emulated_one_rasterizes_at_one_sample)
 {
     const Scene scene = tiling();
@@ -720,7 +624,6 @@ TEST(d3d_tir_device, a_draw_without_a_forced_count_after_an_emulated_one_rasteri
             CHECK(actual[i] <= 1u);
             covered += actual[i];
         }
-        /* The tiling spans 54x54 pixels around its jitter. */
         CHECK(covered > 2700u && covered < 3100u);
         rig.draw_to_target(scene, 16u, blend_xor_id, 0u, actual);
         scene.expect(16u, Scene::Combine::logic_xor, 0u, expected);
@@ -728,10 +631,6 @@ TEST(d3d_tir_device, a_draw_without_a_forced_count_after_an_emulated_one_rasteri
     });
 }
 
-/* Pull-model interpolation by sample index evaluates at the forced pattern's
- * sample, not at the one sample the emulation rasterizes: sample 12 of 16 is
- * half a pixel left of the center, so each covered pixel gets its left edge,
- * in sixteenths of a pixel. */
 TEST(d3d_tir_device, interpolation_by_sample_index_reads_the_forced_pattern)
 {
     Scene scene;
@@ -749,8 +648,6 @@ TEST(d3d_tir_device, interpolation_by_sample_index_reads_the_forced_pattern)
     });
 }
 
-/* Perspective: window coordinates divide by each vertex's own w before they
- * are snapped, and clip distances are interpolated perspective-correctly. */
 TEST(d3d_tir_device, triangles_in_perspective_snap_and_clip_as_d3d_projects_them)
 {
     const Scene scene = perspective();
@@ -763,8 +660,6 @@ TEST(d3d_tir_device, triangles_in_perspective_snap_and_clip_as_d3d_projects_them
     });
 }
 
-/* A pixel shader reading SV_ClipDistance gets it from the stage the
- * emulation puts before it, and the coverage is clipped all the same. */
 TEST(d3d_tir_device, a_pixel_shader_reading_clip_distances_still_sees_the_forced_pattern)
 {
     const Scene scene = clipped();

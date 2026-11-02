@@ -1,5 +1,3 @@
-/* DXGKARG_SUBMITCOMMANDTOHWQUEUE, as DxgkDdiSubmitCommandToHwQueue receives it.
- * A DDI record; src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_SUBMIT_COMMAND_TO_HW_QUEUE_RECORD_HPP
 #define AV_DXGKARG_SUBMIT_COMMAND_TO_HW_QUEUE_RECORD_HPP
 
@@ -20,6 +18,6 @@ struct DxgkargSubmitCommandToHwQueueRecord {
     void     *HwQueueProgressFenceCpuVa;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_SUBMIT_COMMAND_TO_HW_QUEUE_RECORD_HPP
+#endif

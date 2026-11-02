@@ -1,9 +1,3 @@
-/* Where a reader of presented pages sleeps: until no present is being written
- * into them and the engine's page says the last one queued into them has
- * moved. The engine and the present threads act while the reader sleeps, so
- * each test scripts them from the platform's stall callback - the point at
- * which the reader is waiting - and judges the sequence the reader may begin
- * at, the time it slept, and what the waiters counted. */
 #include "miniport/present/present_waiters.hpp"
 #include "core/platform/lock_rank.hpp"
 #include "core/support/status.hpp"
@@ -29,7 +23,7 @@ struct PresentWaitersProbe {
     }
 };
 
-}  // namespace av
+}
 
 using av::Irql;
 using av::LockRank;
@@ -46,9 +40,8 @@ using av::Violation;
 
 namespace {
 
-constexpr std::uint64_t ample = 100000000u;   /* ten seconds, which no test sleeps */
+constexpr std::uint64_t ample = 100000000u;
 
-/* What the device wrote into the engine's page, as the engine does it. */
 class EnginePage {
 public:
     explicit EnginePage(MockPlatform &platform) : platform_(platform), view_(platform)
@@ -69,8 +62,6 @@ private:
     PresentPageView view_;
 };
 
-/* One callback for the stall point: the steps a test scripted run in order,
- * and then nothing happens. */
 struct Script {
     using Step = void (*)(Script &);
 
@@ -96,8 +87,6 @@ struct Script {
 };
 
 
-/* Whether the platform recorded the ceiling being broken, taking every one it
- * recorded: the locks under the call say so too. */
 bool ceiling_broken(MockPlatform &platform)
 {
     bool broken = false;
@@ -105,7 +94,7 @@ bool ceiling_broken(MockPlatform &platform)
     return broken;
 }
 
-}  // namespace
+}
 
 TEST(present_waiters, settled_pages_are_read_at_once_without_a_slot_or_a_sleep)
 { MockPlatform   platform;
@@ -164,7 +153,7 @@ TEST(present_waiters, sleeps_until_the_engine_says_the_ticket_has_moved)
   CHECK_STATUS(waiters.wait_for(writes, &engine.view(), 1u, ample, sequence), Status::ok);
   CHECK_EQ(sequence, 2u);
   CHECK_EQ(script.ran, 1u);
-  CHECK_EQ(platform.slept_ticks(), 0u);   /* woken, not timed out */
+  CHECK_EQ(platform.slept_ticks(), 0u);
   CHECK_EQ(waiters.waits(), 1u);
   CHECK_EQ(waiters.timeouts(), 0u);
   CHECK(waiters.invariants_hold());
@@ -193,7 +182,6 @@ TEST(present_waiters, sleeps_while_a_present_is_being_written_and_begins_after_i
   CHECK_EQ(waiters.waits(), 1u);
   CHECK(writes.invariants_hold()); }
 
-/* A wake says only that something finished: the DPC wakes for any ticket. */
 TEST(present_waiters, a_wake_that_leaves_the_ticket_short_is_one_more_look_and_one_more_sleep)
 { MockPlatform   platform;
   PresentWaiters waiters(platform);
@@ -219,7 +207,7 @@ TEST(present_waiters, a_wake_that_leaves_the_ticket_short_is_one_more_look_and_o
   CHECK_STATUS(waiters.wait_for(writes, &engine.view(), 1u, ample, sequence), Status::ok);
   CHECK_EQ(script.ran, 2u);
   CHECK_EQ(sequence, 2u);
-  CHECK_EQ(waiters.waits(), 1u);   /* one wait, however many looks */
+  CHECK_EQ(waiters.waits(), 1u);
   CHECK_EQ(waiters.timeouts(), 0u); }
 
 TEST(present_waiters, a_wake_that_finds_a_present_open_again_is_one_more_look_too)
@@ -236,7 +224,7 @@ TEST(present_waiters, a_wake_that_finds_a_present_open_again_is_one_more_look_to
   script.engine = &engine;
   script.steps[0] = [](Script &now) {
       now.engine->completed(3u);
-      now.writes->opening();   /* the next present opened before the reader looked */
+      now.writes->opening();
       now.waiters->wake();
   };
   script.steps[1] = [](Script &now) {
@@ -251,8 +239,6 @@ TEST(present_waiters, a_wake_that_finds_a_present_open_again_is_one_more_look_to
   CHECK_EQ(sequence, 4u);
   CHECK_EQ(script.ran, 2u); }
 
-/* The count is read on both sides of the ticket. A present that opens between
- * the two reads is one the ticket may not name. */
 TEST(present_waiters, a_present_opening_during_the_look_is_looked_at_again)
 { MockPlatform   platform;
   PresentWaiters waiters(platform);
@@ -265,7 +251,7 @@ TEST(present_waiters, a_present_opening_during_the_look_is_looked_at_again)
   platform.on_load(
       [](void *context) {
           auto *const hook = static_cast<Landing *>(context);
-          if (hook->landing || ++hook->loads != 5u) return;   /* the count, the writers, the ticket, its epoch, then the count again */
+          if (hook->landing || ++hook->loads != 5u) return;
           hook->landing = true;
           hook->writes->opening();
           hook->landing = false;
@@ -283,7 +269,7 @@ TEST(present_waiters, a_present_opening_during_the_look_is_looked_at_again)
   script.install();
   std::uint64_t sequence = 0u;
   CHECK_STATUS(waiters.wait_for(writes, nullptr, 1u, ample, sequence), Status::ok);
-  CHECK_EQ(sequence, 2u);   /* not the 0 the first look saw */
+  CHECK_EQ(sequence, 2u);
   CHECK_EQ(script.ran, 1u);
   CHECK_EQ(waiters.waits(), 1u);
   platform.on_load(nullptr, nullptr); }
@@ -297,8 +283,6 @@ TEST(present_waiters, the_last_look_is_taken_with_the_slot_held_so_a_present_fin
       PresentWrites *writes;
       std::uint32_t  locks;
   } landing{&writes, 0u};
-  /* The first lock acquired is the slot being taken: the present finishes as
-   * the reader takes it, after the first look and before the last. */
   platform.on_acquire(
       [](void *context) {
           auto *const hook = static_cast<Landing *>(context);
@@ -316,7 +300,7 @@ TEST(present_waiters, a_page_that_says_nothing_valid_is_a_ticket_that_has_not_co
 { MockPlatform   platform;
   PresentWaiters waiters(platform);
   PresentWrites  writes(platform);
-  EnginePage     engine(platform);   /* zeroed: no header the driver knows */
+  EnginePage     engine(platform);
   writes.opening();
   writes.written(1u, 1u);
   std::uint64_t sequence = 0u;
@@ -330,7 +314,7 @@ TEST(present_waiters, gives_up_when_the_time_runs_out_and_gives_its_slot_back)
   writes.opening();
   std::uint64_t sequence = 77u;
   CHECK_STATUS(waiters.wait_for(writes, nullptr, 1u, 5000u, sequence), Status::not_found);
-  CHECK_EQ(sequence, 77u);   /* only a settled wait answers one */
+  CHECK_EQ(sequence, 77u);
   CHECK_EQ(platform.slept_ticks(), 5000u);
   CHECK_EQ(waiters.waits(), 1u);
   CHECK_EQ(waiters.timeouts(), 1u);
@@ -340,7 +324,7 @@ TEST(present_waiters, gives_up_when_the_time_runs_out_and_gives_its_slot_back)
   waiters.report(writer);
   CHECK(std::strcmp(writer.dump(), "present_waiters/0 busy=false waiting=0 waits=1 timeouts=1") == 0);
   for (std::uint32_t again = 0u; again < PresentWaiters::slots + 1u; again++)
-      CHECK_STATUS(waiters.wait_for(writes, nullptr, 1u, 10u, sequence), Status::not_found);   /* every one had a slot */
+      CHECK_STATUS(waiters.wait_for(writes, nullptr, 1u, 10u, sequence), Status::not_found);
   CHECK_EQ(waiters.timeouts(), 1u + PresentWaiters::slots + 1u);
   writes.written(0u, 0u);
   CHECK_STATUS(waiters.wait_for(writes, nullptr, 1u, 10u, sequence), Status::ok);
@@ -379,8 +363,6 @@ TEST(present_waiters, a_wait_that_never_ends_is_bounded_by_the_clock_and_not_wra
   CHECK_EQ(sequence, 2u);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
-/* Readers beyond the slots are told, not queued: each of the first four is
- * asleep when the fifth asks. */
 TEST(present_waiters, more_sleepers_than_slots_leaves_the_last_to_be_told_no_space)
 { MockPlatform   platform;
   PresentWaiters waiters(platform);
@@ -391,7 +373,6 @@ TEST(present_waiters, more_sleepers_than_slots_leaves_the_last_to_be_told_no_spa
   script.waiters = &waiters;
   script.writes = &writes;
   const Script::Step sleeper = [](Script &now) {
-      /* Each sleeper's stall is where the next reader arrives. */
       const std::uint32_t at = now.ran - 1u;
       now.nested[at] = now.waiters->wait_for(*now.writes, nullptr, 1u, ample, now.nested_sequence[at]);
   };
@@ -429,22 +410,20 @@ TEST(present_waiters, more_sleepers_than_slots_leaves_the_last_to_be_told_no_spa
   CHECK(waiters.invariants_hold());
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
-/* ---- a reader's gate: presents wait for the reads open on their pages ---- */
-
 TEST(present_waiters, a_ticket_of_an_engine_that_is_gone_is_not_waited_for)
 { MockPlatform   platform;
   PresentWaiters waiters(platform);
   PresentWrites  writes(platform);
   EnginePage     engine(platform);
   writes.opening();
-  writes.written(500u, 1u);   /* numbered by the engine before a power cycle; the next engine is epoch 2 and has moved 2 */
+  writes.written(500u, 1u);
   engine.completed(2u);
   std::uint64_t sequence = 0u;
   CHECK_STATUS(waiters.wait_for(writes, &engine.view(), 2u, ample, sequence), Status::ok);
   CHECK_EQ(sequence, 2u);
   CHECK_EQ(platform.slept_ticks(), 0u);
   CHECK_EQ(waiters.waits(), 0u);
-  CHECK_STATUS(waiters.wait_for(writes, &engine.view(), 1u, 1000u, sequence), Status::not_found);   /* the same epoch still is */
+  CHECK_STATUS(waiters.wait_for(writes, &engine.view(), 1u, 1000u, sequence), Status::not_found);
   CHECK_EQ(waiters.timeouts(), 1u); }
 
 TEST(present_waiters, a_present_is_admitted_at_once_when_no_read_is_open_and_is_opened)
@@ -474,8 +453,8 @@ TEST(present_waiters, a_present_is_held_while_a_read_is_open_and_goes_in_when_it
   script.writes = &writes;
   script.reads = &reads;
   script.steps[0] = [](Script &now) {
-      CHECK_EQ(now.writes->sequence(), 0u);   /* held: nothing opened while the read is */
-      now.waiters->wake();                    /* a wake that finds the read still open is one more sleep */
+      CHECK_EQ(now.writes->sequence(), 0u);
+      now.waiters->wake();
   };
   script.steps[1] = [](Script &now) {
       now.reads->close();
@@ -486,10 +465,10 @@ TEST(present_waiters, a_present_is_held_while_a_read_is_open_and_goes_in_when_it
   CHECK_STATUS(waiters.admit_write(reads, writes, ample), Status::ok);
   CHECK_EQ(script.ran, 2u);
   CHECK_EQ(writes.sequence(), 1u);
-  CHECK_EQ(platform.slept_ticks(), 0u);   /* woken, not timed out */
+  CHECK_EQ(platform.slept_ticks(), 0u);
   CHECK_EQ(waiters.holds(), 1u);
   CHECK_EQ(waiters.hold_timeouts(), 0u);
-  CHECK_EQ(waiters.waits(), 0u);   /* a reader's wait is counted apart */
+  CHECK_EQ(waiters.waits(), 0u);
   CHECK(waiters.invariants_hold());
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
@@ -501,7 +480,7 @@ TEST(present_waiters, a_present_held_past_its_time_is_told_so_and_is_not_opened)
   CHECK(!reads.open());
   CHECK_STATUS(waiters.admit_write(reads, writes, 5000u), Status::not_found);
   CHECK_EQ(platform.slept_ticks(), 5000u);
-  CHECK_EQ(writes.sequence(), 0u);   /* the caller opens it */
+  CHECK_EQ(writes.sequence(), 0u);
   CHECK_EQ(waiters.holds(), 1u);
   CHECK_EQ(waiters.hold_timeouts(), 1u);
   CHECK_STATUS(waiters.admit_write(reads, writes, 0u), Status::not_found);
@@ -514,8 +493,6 @@ TEST(present_waiters, a_present_held_past_its_time_is_told_so_and_is_not_opened)
   CHECK(std::strcmp(writer.dump(), "present_waiters/0 busy=false waiting=0 waits=0 timeouts=0") == 0);
   CHECK(waiters.invariants_hold()); }
 
-/* A reader that died never ended its read; the gate lets go of it by itself,
- * and a present that waited through it is admitted rather than timed out. */
 TEST(present_waiters, a_read_that_expires_while_a_present_waits_lets_it_in)
 { MockPlatform   platform;
   PresentWaiters waiters(platform);
@@ -557,7 +534,7 @@ TEST(present_waiters, a_present_beyond_the_slots_is_told_no_space_and_is_not_ope
   CHECK_STATUS(script.nested[1], Status::ok);
   CHECK_STATUS(script.nested[2], Status::ok);
   CHECK_STATUS(script.nested[3], Status::no_space);
-  CHECK_EQ(writes.sequence(), 4u);   /* the four that slept were each admitted, the fifth was not */
+  CHECK_EQ(writes.sequence(), 4u);
   CHECK_EQ(waiters.holds(), 4u);
   CHECK_EQ(waiters.hold_timeouts(), 0u);
   CHECK(waiters.invariants_hold());
@@ -615,7 +592,7 @@ TEST(present_waiters, is_woken_from_dispatch_by_the_dpc_and_counts_and_reports_t
   CHECK_STATUS(waiters.wait_for(writes, nullptr, 1u, ample, sequence), Status::ok);
   CHECK_EQ(sequence, 2u);
   platform.set_irql(Irql::dispatch);
-  waiters.wake();   /* nobody asleep: nothing to set */
+  waiters.wake();
   CHECK_EQ(waiters.waits(), 1u);
   CHECK_EQ(waiters.timeouts(), 0u);
   platform.set_irql(Irql::passive);

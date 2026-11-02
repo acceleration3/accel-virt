@@ -42,8 +42,6 @@ cl_int ClTransferChunks::read_image(uint64_t image, const ClImageRegion &region,
 {
     AV_SCOPE("ClTransferChunks::read_image");
     uint8_t *const to = static_cast<uint8_t *>(into);
-    /* Inline, rows with gaps between them come back one round trip a row, so
-     * any block at all is worth staging them in. */
     ClStagingBlock staging(blocks_);
     if (staging.take(region.row_bytes() * region.rows() * region.slices(),
                      region.rows_packed() ? ClStagingBlock::least : 1u))
@@ -61,8 +59,6 @@ cl_int ClTransferChunks::write_image(uint64_t image, const ClImageRegion &region
     return write_image_inline(image, region, source);
 }
 
-/* As read_image: a rectangle with gaps between its rows is staged whatever its
- * size, since inline it comes back a row at a time. */
 cl_int ClTransferChunks::read_buffer_rect(uint64_t buffer, const ClBufferRect &rect, void *into)
 {
     AV_SCOPE("ClTransferChunks::read_buffer_rect");
@@ -86,8 +82,6 @@ cl_int ClTransferChunks::write_buffer_rect(uint64_t buffer, const ClBufferRect &
     return write_rect_inline(buffer, rect, source);
 }
 
-/* One piece a reply slot holds at a time, straight into the application's
- * memory. */
 cl_int ClTransferChunks::read_inline(uint64_t buffer, size_t offset, size_t bytes, uint8_t *to)
 {
     AV_SCOPE("ClTransferChunks::read_inline");
@@ -106,9 +100,6 @@ cl_int ClTransferChunks::read_inline(uint64_t buffer, size_t offset, size_t byte
 cl_int ClTransferChunks::write_inline(uint64_t buffer, size_t offset, size_t bytes, const uint8_t *source)
 {
     AV_SCOPE("ClTransferChunks::write_inline");
-    /* The host makes every write blocking, in queue order, before the next
-     * command, so a piece needs no answer of its own: the caller's drain after
-     * the last one is the answer for all of them. */
     icd::UnansweredTransport unanswered(wire_);
     icd::Pieces              pieces(bytes, wire_.room().inline_write());
     while (pieces.next()) {
@@ -121,9 +112,6 @@ cl_int ClTransferChunks::write_inline(uint64_t buffer, size_t offset, size_t byt
     return CL_SUCCESS;
 }
 
-/* Packed rows come back as one span; anything else a row at a time, so the
- * gaps between them - the application's memory, not the host's to write -
- * are never written: a piece no larger than a row holds no more than one. */
 cl_int ClTransferChunks::read_image_inline(uint64_t image, const ClImageRegion &region, uint8_t *to)
 {
     AV_SCOPE("ClTransferChunks::read_image_inline");
@@ -149,9 +137,6 @@ cl_int ClTransferChunks::read_image_inline(uint64_t image, const ClImageRegion &
     return CL_SUCCESS;
 }
 
-/* Rows with gaps between them go together: the gaps are read, which the
- * application's memory allows, and the host skips them by the pitch. A row cut
- * into runs is one run of packed texels, which names no pitch at all. */
 cl_int ClTransferChunks::write_image_inline(uint64_t image, const ClImageRegion &region, const uint8_t *source)
 {
     AV_SCOPE("ClTransferChunks::write_image_inline");
@@ -176,8 +161,6 @@ cl_int ClTransferChunks::write_image_inline(uint64_t image, const ClImageRegion 
     return CL_SUCCESS;
 }
 
-/* As read_image: packed rows come back as one span and anything else a row at
- * a time, since what comes back is packed and a gap is the application's. */
 cl_int ClTransferChunks::read_rect_inline(uint64_t buffer, const ClBufferRect &rect, uint8_t *to)
 {
     AV_SCOPE("ClTransferChunks::read_rect_inline");
@@ -207,8 +190,6 @@ cl_int ClTransferChunks::read_rect_inline(uint64_t buffer, const ClBufferRect &r
     return CL_SUCCESS;
 }
 
-/* As write_image: rows with gaps go together at the application's pitch, and
- * a row cut into runs is one packed run. */
 cl_int ClTransferChunks::write_rect_inline(uint64_t buffer, const ClBufferRect &rect, const uint8_t *source)
 {
     AV_SCOPE("ClTransferChunks::write_rect_inline");
@@ -237,8 +218,6 @@ cl_int ClTransferChunks::write_rect_inline(uint64_t buffer, const ClBufferRect &
     return CL_SUCCESS;
 }
 
-/* A block's worth at a time: the host writes it into the block, and it is
- * copied out before the block takes the next. */
 cl_int ClTransferChunks::read_staged(const ClStagingBlock &staging, uint64_t buffer, size_t offset, size_t bytes,
                                      uint8_t *to)
 {
@@ -256,8 +235,6 @@ cl_int ClTransferChunks::read_staged(const ClStagingBlock &staging, uint64_t buf
     return CL_SUCCESS;
 }
 
-/* Each piece answered before the next is copied over it: the host reads the
- * block when it runs the command, which may be after its send. */
 cl_int ClTransferChunks::write_staged(const ClStagingBlock &staging, uint64_t buffer, size_t offset, size_t bytes,
                                       const uint8_t *source)
 {
@@ -275,9 +252,6 @@ cl_int ClTransferChunks::write_staged(const ClStagingBlock &staging, uint64_t bu
     return CL_SUCCESS;
 }
 
-/* Rows packed tight in the block whatever the application's pitch, so a piece
- * is as many whole rows as the block holds, or a run of one, and names no
- * pitch at all. */
 cl_int ClTransferChunks::read_image_staged(const ClStagingBlock &staging, uint64_t image,
                                            const ClImageRegion &region, uint8_t *to)
 {
@@ -325,8 +299,6 @@ cl_int ClTransferChunks::write_image_staged(const ClStagingBlock &staging, uint6
     return CL_SUCCESS;
 }
 
-/* As an image's, in bytes: the buffer's side at its own pitches, the block's
- * packed from its start. */
 cl_int ClTransferChunks::read_rect_staged(const ClStagingBlock &staging, uint64_t buffer, const ClBufferRect &rect,
                                           uint8_t *to)
 {
@@ -389,4 +361,4 @@ uint32_t ClTransferChunks::commands() const
     return commands_;
 }
 
-}  // namespace av::clicd
+}

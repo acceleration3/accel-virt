@@ -1,12 +1,8 @@
-// vectoradd, reduction, prefixsum, matmul, matmultiled, transpose, histogram, bitonicsort, blackscholes:
-// the classic data-parallel kernels, each checked against the CPU.
 #include "framework.h"
 
 namespace samples {
 
 namespace {
-
-// Every `stride`th element of `from`, for a capture that need not carry all of it.
 template <typename T> T *strided(const T *from, uint32_t count, uint32_t stride, uint32_t &kept)
 {
     kept = count / stride;
@@ -21,8 +17,6 @@ bool close_to(double value, double expected, double relative, double absolute)
     const double magnitude = expected < 0 ? -expected : expected;
     return difference <= absolute || difference <= relative * magnitude;
 }
-
-// ---------------------------------------------------------------- vectoradd
 
 class VectorAdd final : public Sample {
 public:
@@ -87,8 +81,6 @@ private:
     cl_kernel                 kernel_ = nullptr;
     cl_mem                    a_ = nullptr, b_ = nullptr, c_ = nullptr;
 };
-
-// ---------------------------------------------------------------- reduction
 
 class Reduction final : public Sample {
 public:
@@ -162,10 +154,6 @@ private:
     cl_mem                    input_ = nullptr, partials_ = nullptr, total_ = nullptr;
 };
 
-// ---------------------------------------------------------------- prefixsum
-
-// An exclusive scan: Blelloch's work-efficient scan of 512-element blocks, the
-// blocks' totals scanned the same way, and the scanned totals added back.
 class PrefixSum final : public Sample {
 public:
     const char *name() const override { return "prefixsum"; }
@@ -278,7 +266,6 @@ __kernel void add_block(__global uint *out, __global const uint *scanned, uint n
 private:
     static constexpr uint32_t count = 4u << 20;
     static constexpr uint32_t block = 512;
-    // 4M elements, 8192 block totals, 16, then one.
     static constexpr uint32_t levels = 3;
     static size_t             blocks(uint32_t n) { return (n + block - 1) / block; }
     cl_program                program_ = nullptr;
@@ -287,8 +274,6 @@ private:
     cl_mem                    out_[levels] = {}, sums_[levels] = {};
     uint32_t                  sizes_[levels] = {};
 };
-
-// ---------------------------------------------------------------- matmul, matmultiled
 
 const char *const matmul_source = R"(
 #define TILE 16
@@ -377,16 +362,12 @@ private:
     float                    *a_host_ = nullptr, *b_host_ = nullptr;
 };
 
-// ---------------------------------------------------------------- transpose
-
 class Transpose final : public Sample {
 public:
     const char *name() const override { return "transpose"; }
     Work        work() const override { return {2.0 * n * n * 4.0 / 1e9, "GB/s"}; }
     bool        init(Gpu &gpu) override
     {
-        // The tile is one column wider than it is tall, so a column read from
-        // local memory touches every bank once.
         program_ = gpu.program(R"(
 #define TILE 16
 __kernel void transpose(__global const float *in, __global float *out, uint n) {
@@ -439,8 +420,6 @@ private:
     cl_mem                    in_ = nullptr, out_ = nullptr;
 };
 
-// ---------------------------------------------------------------- histogram
-
 class Histogram final : public Sample {
 public:
     const char *name() const override { return "histogram"; }
@@ -467,7 +446,6 @@ __kernel void histogram(__global const uint *in, __global uint *bins, uint words
         uint8_t *values = static_cast<uint8_t *>(allocate(bytes));
         Random   random(0xC0FFEEu);
         for (uint32_t i = 0; i < bytes; i++) {
-            // Roughly bell-shaped: the sum of four uniform bytes, scaled back.
             const uint32_t r = random.next();
             values[i] = static_cast<uint8_t>(((r & 0xFF) + ((r >> 8) & 0xFF) + ((r >> 16) & 0xFF) + (r >> 24)) / 4);
         }
@@ -515,10 +493,6 @@ private:
     uint32_t                  expected_[256] = {};
 };
 
-// ---------------------------------------------------------------- bitonicsort
-
-// A bitonic sorting network over 2^20 keys: 210 launches of one compare-exchange
-// step each, so what it measures is as much launch cost as memory.
 class BitonicSort final : public Sample {
 public:
     const char *name() const override { return "bitonicsort"; }
@@ -597,8 +571,6 @@ private:
     uint32_t                  sum_ = 0, xor_ = 0;
 };
 
-// ---------------------------------------------------------------- blackscholes
-
 class BlackScholes final : public Sample {
 public:
     const char *name() const override { return "blackscholes"; }
@@ -658,7 +630,6 @@ __kernel void price(__global const float *spot, __global const float *strike, __
         float *call = static_cast<float *>(allocate(count * 4u)), *put = static_cast<float *>(allocate(count * 4u));
         gpu.read(call_, call, count * 4u);
         gpu.read(put_, put, count * 4u);
-        // Put-call parity: C - P = S - X e^(-rT), whatever the distribution function.
         Random random(0xB5u);
         bool   right = !gpu.failed;
         for (uint32_t i = 0; i < count && right; i++) {
@@ -697,7 +668,7 @@ private:
     cl_mem spot_ = nullptr, strike_ = nullptr, years_ = nullptr, call_ = nullptr, put_ = nullptr;
 };
 
-}  // namespace
+}
 
 void register_linear(Sample **all, uint32_t &made)
 {
@@ -712,4 +683,4 @@ void register_linear(Sample **all, uint32_t &made)
     all[made++] = new BlackScholes();
 }
 
-}  // namespace samples
+}

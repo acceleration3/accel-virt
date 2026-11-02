@@ -1,7 +1,3 @@
-/* The host's error word as glGetError reads it (docs/protocol.md, "Error
- * word"): only a word with the host's marker is read, each kind whose count
- * moved is one error reported once, lowest kind first, and a count that
- * wrapped past 255 is still a move. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/opengl/reported_gl_errors.hpp"
 
@@ -20,7 +16,7 @@ std::uint64_t word(std::uint8_t enums, std::uint8_t values, std::uint8_t operati
            std::uint64_t{operations} << 16u | std::uint64_t{framebuffers} << 48u;
 }
 
-}  // namespace
+}
 
 TEST(reported_gl_errors, reads_only_a_word_the_host_marked)
 { ReportedGlErrors reported;
@@ -38,7 +34,6 @@ TEST(reported_gl_errors, reports_each_kind_that_moved_once_lowest_first)
   CHECK_EQ(reported.take(raised), invalid_framebuffer_operation);
   CHECK_EQ(reported.take(raised), 0u);
   CHECK_EQ(reported.take(raised), 0u);
-  /* More of a kind already reported is one error again, not one per count. */
   CHECK_EQ(reported.take(word(1u, 7u, 1u, 3u)), invalid_enum);
   CHECK_EQ(reported.take(word(1u, 7u, 1u, 3u)), invalid_value);
   CHECK_EQ(reported.take(word(1u, 7u, 1u, 3u)), 0u); }

@@ -1,10 +1,3 @@
-"""Clients for the two sockets tools/guest/run_guest_suite.py drives a guest
-through: the QEMU guest agent inside Windows, and QMP on QEMU itself.
-
-Both speak one JSON object per line. Every read has a deadline, and anything
-that is not the answer asked for - garbage, a stale reply, an error object, a
-closed connection - raises AgentError instead of hanging or guessing.
-"""
 import base64
 import json
 import os
@@ -14,26 +7,21 @@ import threading
 import time
 
 CHUNK = 48 * 1024
-# The agent caps one read at 48 MiB, but the Windows agent never answers a
-# read of 4 MiB (2 MiB still does): the reply is lost, not refused.
 PULL_CHUNK = 1024 * 1024
 RECEIVE = 1024 * 1024
-# One connection attempt while the guest boots: its agent may not listen yet.
 ATTEMPT = 5.0
 DELIMITER = b"\xff"
 
 
 class AgentError(Exception):
-    """The guest agent or QMP did not give the answer asked for."""
+    pass
 
 
 class AgentTimeout(AgentError):
-    """Nothing arrived before the deadline."""
+    pass
 
 
 class Channel:
-    """One unix socket carrying JSON lines, read against a deadline."""
-
     def __init__(self, path, timeout):
         self.timeout = timeout
         self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -91,7 +79,6 @@ class Channel:
         return line.strip()
 
     def message(self, deadline):
-        """The next JSON object, skipping lines that are not one."""
         while True:
             line = self.line(deadline)
             try:
@@ -113,13 +100,9 @@ def answer_of(message):
 
 
 class GuestAgent:
-    """The QEMU guest agent: commands, processes and files in the guest."""
-
     def __init__(self, path, timeout):
         self.channel = Channel(path, timeout)
         self.timeout = timeout
-        # One request and its answer at a time: the runner and the relay
-        # (AgentRelay) share this connection, and the agent answers in order.
         self.lock = threading.RLock()
 
     def close(self):
@@ -127,7 +110,6 @@ class GuestAgent:
             self.channel.close()
 
     def sync(self):
-        """Resynchronizes the stream: whatever an earlier session left unread is dropped."""
         token = random.randrange(1, 2**31)
         with self.lock:
             deadline = time.monotonic() + self.timeout
@@ -139,7 +121,6 @@ class GuestAgent:
                     return
 
     def exchange(self, request):
-        """One request and the agent's whole answer, an error object included."""
         with self.lock:
             self.channel.send(request)
             return self.channel.message(time.monotonic() + self.timeout)
@@ -151,12 +132,10 @@ class GuestAgent:
         return answer_of(self.exchange(request))
 
     def notify(self, command, arguments):
-        """A command the agent does not answer, such as a shutdown."""
         with self.lock:
             self.channel.send({"execute": command, "arguments": arguments})
 
     def run(self, path, arguments, timeout, poll=0.25):
-        """Runs a program in the guest: its exit code, standard output and error."""
         started = self.execute("guest-exec", {"path": path, "arg": list(arguments), "capture-output": True})
         if not isinstance(started, dict) or "pid" not in started:
             raise AgentError(f"guest-exec answered {started}")
@@ -184,7 +163,6 @@ class GuestAgent:
             self.execute("guest-file-close", {"handle": handle})
 
     def pull(self, guest_path, local_path, chunk=PULL_CHUNK):
-        """Copies a guest file to `local_path`: the number of bytes copied."""
         handle = self.execute("guest-file-open", {"path": guest_path, "mode": "rb"})
         copied = 0
         try:
@@ -202,18 +180,11 @@ class GuestAgent:
             self.execute("guest-file-close", {"handle": handle})
 
 
-# Commands the agent never answers, or answers outside the line protocol: a
-# relayed one would leave the shared connection waiting or out of step.
 UNRELAYED = ("guest-sync", "guest-sync-delimited", "guest-shutdown", "guest-suspend-disk", "guest-suspend-ram",
              "guest-suspend-hybrid")
 
 
 class AgentRelay:
-    """Lets another program - tools/mcp/av_inspect.py - reach the guest while
-    a run holds the agent's only connection: a unix socket taking one JSON
-    request per line and answering each with one line, forwarded over whatever
-    connection the run holds now (it changes at every reboot)."""
-
     def __init__(self, path, current):
         self.path = str(path)
         self.current = current
@@ -292,7 +263,6 @@ class AgentRelay:
         try:
             message = agent.exchange(forwarded)
         except AgentTimeout:
-            # The late answer would be read as the next request's: drop it.
             try:
                 agent.sync()
             except AgentError:
@@ -317,8 +287,6 @@ def decode(text):
 
 
 class Qmp:
-    """QEMU's machine protocol: events and a quit."""
-
     def __init__(self, path, timeout):
         self.channel = Channel(path, timeout)
         self.timeout = timeout
@@ -349,7 +317,6 @@ class Qmp:
             return answer_of(message)
 
     def take_events(self, name):
-        """Every event `name` seen so far, which are then no longer pending."""
         taken = [message for message in self.pending if message["event"] == name]
         self.pending = [message for message in self.pending if message["event"] != name]
         return taken
@@ -358,7 +325,6 @@ class Qmp:
         return any(message["event"] == name for message in self.pending)
 
     def wait_event(self, name, timeout):
-        """Waits for event `name`, counting ones already seen: the event."""
         for index, message in enumerate(self.pending):
             if message["event"] == name:
                 return self.pending.pop(index)
@@ -371,7 +337,6 @@ class Qmp:
                 self.pending.append(message)
 
     def drain(self, seconds):
-        """Reads the events QEMU sends for `seconds`: a guest in a bugcheck loop never goes quiet."""
         deadline = time.monotonic() + seconds
         while True:
             try:
@@ -386,8 +351,6 @@ class Qmp:
 
 
 def wait_for_agent(path, deadline, timeout, pause=1.0, abandoned=None):
-    """Connects and syncs with the guest agent once it answers, or raises at the
-    deadline, or as soon as `abandoned` names a reason it never will."""
     last = None
     while time.monotonic() < deadline:
         reason = abandoned() if abandoned is not None else None

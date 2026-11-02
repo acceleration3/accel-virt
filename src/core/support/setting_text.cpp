@@ -45,4 +45,4 @@ SettingText SettingText::after(char mark) const
     return SettingText(nullptr);
 }
 
-}  // namespace av
+}

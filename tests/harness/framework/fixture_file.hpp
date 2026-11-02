@@ -1,4 +1,3 @@
-/* A committed test fixture (tests/fixtures/), read whole into a fixed buffer. */
 #ifndef AV_FIXTURE_FILE_HPP
 #define AV_FIXTURE_FILE_HPP
 
@@ -11,7 +10,6 @@ class FixtureFile {
 public:
     static constexpr std::size_t capacity = 65536u;
 
-    /* `name` is relative to tests/fixtures; a missing file fails the test. */
     explicit FixtureFile(const char *name);
 
     const std::uint8_t *bytes() const;
@@ -23,6 +21,6 @@ private:
     std::size_t  size_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_FIXTURE_FILE_HPP
+#endif

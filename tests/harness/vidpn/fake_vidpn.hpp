@@ -1,13 +1,3 @@
-/* dxgkrnl's VidPn object for one adapter: a topology of paths, the mode sets of
- * each source and target, and the interface tables DxgkCbQueryVidPnInterface
- * answers (DXGK_VIDPN_INTERFACE, DXGK_VIDPNTOPOLOGY_INTERFACE and the source and
- * target mode set interfaces). The handles are addresses of this object's parts,
- * so a capture-less thunk finds its way back. Every mode set, path info and mode
- * info the driver acquires must be released; outstanding ones fail the test when
- * the VidPn is destroyed. Also the monitor source mode set RecommendMonitorModes
- * fills. A refused call answers its status with null outputs; a refusal with a
- * success status is dxgkrnl answering success without the object (or, for an
- * assign or an add, taking what it was given without keeping it). */
 #ifndef AV_FAKE_VIDPN_HPP
 #define AV_FAKE_VIDPN_HPP
 
@@ -29,7 +19,6 @@ public:
     FakeVidPn(const FakeVidPn &) = delete;
     FakeVidPn &operator=(const FakeVidPn &) = delete;
 
-    /* A path with uninitialized transformation and the default gamma ramp. */
     D3dkmdtVidPnPresentPathRecord &add_path(std::uint32_t source, std::uint32_t target);
     FakeModeSet<D3dkmdtVidPnSourceModeRecord> &source_modes(std::uint32_t source);
     FakeModeSet<D3dkmdtVidPnTargetModeRecord> &target_modes(std::uint32_t target);
@@ -58,7 +47,6 @@ private:
         FakeModeSet<D3dkmdtMonitorSourceModeRecord> *set;
     };
 
-    /* Whether `call` is refused, and with what. */
     bool refusing(VidPnCall call, std::int32_t &status) const;
     void install_vidpn_interface();
     void install_topology_interface();
@@ -75,7 +63,6 @@ private:
     std::int32_t update_path(const D3dkmdtVidPnPresentPathRecord &path);
     std::uint32_t index_of(const D3dkmdtVidPnPresentPathRecord *path) const;
 
-    /* Two sets per owner: the current one, and the one CreateNewModeSet fills. */
     FakeModeSet<D3dkmdtVidPnSourceModeRecord> sources_[max_owners][2];
     FakeModeSet<D3dkmdtVidPnTargetModeRecord> targets_[max_owners][2];
     std::uint32_t                             current_source_[max_owners];
@@ -99,9 +86,9 @@ private:
     DxgkMonitorSourceModeSetInterfaceRecord   monitor_interface_;
 };
 
-}  // namespace av
+}
 
 extern "C" std::int32_t AvFakeQueryVidPnInterface(void *vidpn, std::int32_t version,
                                                   const av::DxgkVidPnInterfaceRecord **table);
 
-#endif  // AV_FAKE_VIDPN_HPP
+#endif

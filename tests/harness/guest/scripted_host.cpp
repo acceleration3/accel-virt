@@ -16,7 +16,7 @@ constexpr std::uint32_t two_physical_devices = 2u;
 constexpr std::int32_t  cl_device_not_found = -1;
 constexpr std::uint64_t memory_heap_bytes = std::uint64_t{1} << 30u;
 
-}  // namespace
+}
 
 ScriptedHost::ScriptedHost(MockKmt &kmt) : kmt_(kmt), cut_(uncut), answer_{} {}
 
@@ -182,7 +182,7 @@ void ScriptedHost::gl_resource_property(std::int32_t value)
 
 void ScriptedHost::gl_make(const char *renderer, const char *version)
 {
-    gl_make_profile(renderer, version, 4, 6, 0x2 /* compatibility */);
+    gl_make_profile(renderer, version, 4, 6, 0x2 );
 }
 
 void ScriptedHost::gl_make_profile(const char *renderer, const char *version, std::int32_t major,
@@ -208,7 +208,6 @@ void ScriptedHost::gl_policy(std::int32_t listed)
 
 void ScriptedHost::gl_window(std::uint32_t framebuffers, std::uint32_t renderbuffers, std::uint32_t first)
 {
-    /* Two framebuffers, a texture and two renderbuffers at most. */
     std::uint32_t names[5] = {};
     for (std::uint32_t index = 0u; index < 5u; index++) names[index] = first + index;
     gl_bytes(reinterpret_cast<const std::uint8_t *>(names), framebuffers * sizeof names[0]);
@@ -311,7 +310,6 @@ void ScriptedHost::cl_ids(std::int32_t result, const std::uint64_t *ids, std::ui
 
 void ScriptedHost::cl_formats(std::int32_t result, const void *formats, std::uint32_t sent, std::uint32_t total)
 {
-    /* Eight bytes a format: the channel order and the data type. */
     constexpr std::uint32_t format_bytes = 8u;
     WireWriter              writer(answer_, sizeof answer_);
     writer.write_varint(static_cast<std::int64_t>(result));
@@ -453,4 +451,4 @@ void ScriptedHost::host_visible_import_run()
     host_visible_import_releases();
 }
 
-}  // namespace av
+}

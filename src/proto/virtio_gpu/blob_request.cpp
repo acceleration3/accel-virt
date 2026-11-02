@@ -40,4 +40,4 @@ uint64_t BlobRequest::offset() const
     return offset_;
 }
 
-}  // namespace av
+}

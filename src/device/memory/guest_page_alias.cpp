@@ -17,8 +17,6 @@ GuestPageAlias::~GuestPageAlias()
     release();
 }
 
-/* Everything the host will be asked is judged first, so a refusal reserves
- * nothing and a blob the host cannot hold spends none of its mappings. */
 Status GuestPageAlias::map(const BlobWindow &pages)
 {
     AV_SCOPE("GuestPageAlias::map");
@@ -103,8 +101,6 @@ uint32_t GuestPageAlias::runs() const
     return runs_;
 }
 
-/* A range is whole pages and held exactly while it has a base, and no run is
- * shorter than a page. */
 bool GuestPageAlias::invariants_hold() const
 {
     AV_SCOPE("GuestPageAlias::invariants_hold");
@@ -112,4 +108,4 @@ bool GuestPageAlias::invariants_hold() const
     return runs_ <= max_runs && uint64_t{runs_} * page_size <= length_;
 }
 
-}  // namespace av
+}

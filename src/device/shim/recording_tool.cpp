@@ -1,10 +1,3 @@
-/* avrecord: prints a wire recording, or replays it into an executor library
- * (contracts/avrecord.md). The shim, so it holds the platform and nothing
- * else - argv, a mapping, a dlopen, and writing to standard output. Every
- * decision is in src/device/recording/, where the coverage gate measures it:
- * what the arguments mean is RecordingToolRequest's, what a line says is
- * RecordingPrinter's, and what differs is RecordingReplay's.
- */
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/execution/executor_library.hpp"
@@ -61,7 +54,7 @@ int replay(av::RecordingReader &reader, const av::RecordingFilter &filter,
     return (ran == av::Status::ok && replay_run.findings() == 0u) ? 0 : 1;
 }
 
-}  // namespace
+}
 
 int main(int count, char **arguments)
 {

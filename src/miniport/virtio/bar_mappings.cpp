@@ -11,11 +11,9 @@
 namespace av {
 
 namespace {
-
-/* DxgkCbMapMemory takes a ULONG length. */
 constexpr uint64_t max_mapping_length = 0xFFFFFFFFu;
 
-}  // namespace
+}
 
 BarMappings::BarMappings(Platform &platform, DxgkrnlInterface &dxgkrnl)
     : platform_(platform), dxgkrnl_(dxgkrnl), addresses_(), lengths_()
@@ -121,4 +119,4 @@ bool BarMappings::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

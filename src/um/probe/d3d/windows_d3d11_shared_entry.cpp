@@ -11,7 +11,7 @@ constexpr HRESULT  invalid_argument = static_cast<HRESULT>(0x80070057u);
 constexpr uint32_t channels = 4u;
 constexpr float    full = 255.0F;
 
-}  // namespace
+}
 
 WindowsD3d11SharedEntry::WindowsD3d11SharedEntry()
     : device_(nullptr), context_(nullptr), textures_{}, views_{}, staging_(nullptr)
@@ -25,8 +25,6 @@ WindowsD3d11SharedEntry::~WindowsD3d11SharedEntry()
     release();
 }
 
-/* The staging texel is made with the device: every target is read through
- * it. */
 int32_t WindowsD3d11SharedEntry::create_device()
 {
     AV_SCOPE("WindowsD3d11SharedEntry::create_device");
@@ -116,4 +114,4 @@ void WindowsD3d11SharedEntry::release()
     device_ = nullptr;
 }
 
-}  // namespace av
+}

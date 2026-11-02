@@ -52,4 +52,4 @@ GpuRequestBuilder &GpuRequestBuilder::truncate(std::size_t size)
 const std::uint8_t *GpuRequestBuilder::bytes() const { return bytes_; }
 std::size_t GpuRequestBuilder::size() const { return size_; }
 
-}  // namespace av
+}

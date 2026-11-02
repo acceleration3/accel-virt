@@ -1,5 +1,3 @@
-/* The driver's root: the DDI table registered with dxgkrnl, and the adapters
- * AddDevice creates. One per driver image. */
 #ifndef AV_MINIPORT_HPP
 #define AV_MINIPORT_HPP
 
@@ -18,7 +16,6 @@ struct MiniportProbe;
 
 class Miniport {
 public:
-    /* One adapter per av device the VM has. */
     static constexpr uint32_t max_adapters = most_av_devices;
 
     explicit Miniport(Platform &platform);
@@ -39,14 +36,12 @@ private:
 
     Platform              &platform_;
     DdiTable               table_;
-    /* The bitwise OR of every table set; the slots are constants, so a
-     * non-zero value means the table layout itself is wrong. */
     unsigned               table_status_;
     ObjectStorage<Adapter> adapters_[max_adapters];
 
     friend struct MiniportProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MINIPORT_HPP
+#endif

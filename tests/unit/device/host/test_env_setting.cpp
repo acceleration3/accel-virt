@@ -1,6 +1,3 @@
-/* One host environment variable (EnvSetting): a switch is on only when set
- * and starting with '1' - set to 0, empty or unset is off - and its text is
- * what it was set to. */
 #include "device/host/env_setting.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -13,7 +10,7 @@ namespace {
 
 constexpr const char *name = "AV_ENV_SETTING_TEST";
 
-}  // namespace
+}
 
 TEST(env_setting, on_only_when_set_and_starting_with_one)
 { unsetenv(name);

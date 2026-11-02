@@ -1,11 +1,3 @@
-/* A descriptor update template through the whole stack (feature 047,
- * contracts/descriptor_templates.md): the ICD's own entry points, the real
- * driver and device core, the executor library, and this machine's GPU.
- *
- * What only this layer can prove is that the two halves of the blob's length
- * agree. The guest sizes it from the template it remembers; the device refuses
- * a length its own template does not account for. A host without Vulkan has
- * nothing here to judge, and the test returns without checking. */
 #include "device/abi/av_executor.h"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
@@ -53,8 +45,6 @@ using av::RecordingThreadLock;
 using av::WidestHostGpu;
 
 namespace {
-
-/* The ICD as one guest process holds it. */
 class IcdProcess {
 public:
     explicit IcdProcess(DdiKmt &kmt)
@@ -78,16 +68,12 @@ private:
     av::icd::IcdRoot          root_;
 };
 
-/* One device on the av adapter, through the ICD's entry points as the Windows
- * loader would call them. */
 class IcdDevice {
 public:
     explicit IcdDevice(av::icd::IcdRoot &root) : root_(root), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE)
     {
         VkApplicationInfo application = {};
         application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        /* 1.3, written out: VK_API_VERSION_1_3 is an old-style cast the build
-         * refuses. */
         application.apiVersion = (1u << 22) | (3u << 12);
         VkInstanceCreateInfo create = {};
         create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -137,10 +123,8 @@ private:
     VkDevice          device_;
 };
 
-}  // namespace
+}
 
-/* A template made, a descriptor set updated through it, and the device still
- * answering afterwards - which is what says the frame was not refused. */
 TEST(fullstack_templates, a_descriptor_set_updated_through_a_template_reaches_the_host)
 { const WidestHostGpu gpu;
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_VULKAN) == 0u) return;
@@ -156,8 +140,6 @@ TEST(fullstack_templates, a_descriptor_set_updated_through_a_template_reaches_th
     if (guest.device() == VK_NULL_HANDLE) return;
     const VkDevice device = guest.device();
 
-    /* One storage buffer binding, so a template of one buffer descriptor has
-     * something to be made for. */
     VkDescriptorSetLayoutBinding binding = {};
     binding.binding = 0u;
     binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -194,7 +176,6 @@ TEST(fullstack_templates, a_descriptor_set_updated_through_a_template_reaches_th
                                                                                                      &allocate, &set),
              VK_SUCCESS);
 
-    /* The template: one buffer descriptor at offset 0. */
     VkDescriptorUpdateTemplateEntry entry = {};
     entry.dstBinding = 0u;
     entry.descriptorCount = 1u;
@@ -213,11 +194,8 @@ TEST(fullstack_templates, a_descriptor_set_updated_through_a_template_reaches_th
                  device, &template_create, nullptr, &made),
              VK_SUCCESS);
     CHECK(made != VK_NULL_HANDLE);
-    /* Both sides sized it the same way, which is the point of the whole
-     * mechanism: the guest's number is what the device expects. */
     CHECK_EQ(process.root().templates().bytes_of(made), sizeof(VkDescriptorBufferInfo));
 
-    /* A buffer to point the descriptor at, and the update itself. */
     VkBufferCreateInfo buffer_create = {};
     buffer_create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     buffer_create.size = 256u;
@@ -237,9 +215,6 @@ TEST(fullstack_templates, a_descriptor_set_updated_through_a_template_reaches_th
     guest.entry<PFN_vkUpdateDescriptorSetWithTemplate>(guest.instance(), "vkUpdateDescriptorSetWithTemplate")(
         device, set, made, &described);
 
-    /* The device answering afterwards is what says the frame was carried: a
-     * length the host's own template did not account for would have refused the
-     * frame and faulted the context. */
     CHECK_EQ(guest.entry<PFN_vkDeviceWaitIdle>(guest.instance(), "vkDeviceWaitIdle")(device), VK_SUCCESS);
     CHECK_EQ(process.log().holding("fault"), 0u);
 

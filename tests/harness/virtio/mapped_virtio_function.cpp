@@ -37,4 +37,4 @@ FakeVirtqueueDevice MappedVirtioFunction::queue_device(std::uint16_t index)
     return FakeVirtqueueDevice(platform_, queue.desc, queue.driver, queue.device, queue.size);
 }
 
-}  // namespace av
+}

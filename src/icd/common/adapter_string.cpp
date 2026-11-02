@@ -58,4 +58,4 @@ const char *AdapterString::text() const
     return text_;
 }
 
-}  // namespace av::icd
+}

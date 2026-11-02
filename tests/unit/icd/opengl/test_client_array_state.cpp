@@ -1,6 +1,3 @@
-/* What a context remembers between calls that shapes the next one: pixel
- * stores by name, the buffers a transfer or draw reads, vertex arrays' element
- * buffers, attribute pointers, multi-draw offsets and redundant binds. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opengl/client_array_state.hpp"
@@ -18,7 +15,6 @@ struct PixelStoreProbe {
 
 struct ClientArrayStateProbe {
     static void break_unit(ClientArrayState &state) { state.active_unit_ = 40u; }
-    /* Array 0 kept by name, as only the default is. */
     static void name_default(ClientArrayState &state)
     {
         std::uint32_t slot = 0u;
@@ -30,20 +26,19 @@ struct ClientArrayStateProbe {
     }
 };
 
-}  // namespace av::glicd
+}
 
 namespace {
 
 constexpr std::uint32_t rgba = 0x1908u, ubyte = 0x1401u;
 constexpr std::uint32_t texture_2d = 0x0DE1u, texture_3d = 0x806Fu, texture0 = 0x84C0u;
 
-}  // namespace
+}
 
 TEST(client_array_state, pixel_stores_are_kept_by_name_for_pack_and_unpack)
 { av::MockPlatform platform;
   ClientArrayState state(platform);
   CHECK(state.invariants_hold());
-  /* Four bytes per pixel, alignment 4: 2x2 is 8 + 8. */
   CHECK_EQ(state.pixel_bytes(rgba, ubyte, 2, 2, 1, true), 16u);
   const std::uint32_t pack_names[] = {0x0D05u, 0x0D02u, 0x806Cu, 0x0D04u, 0x0D03u, 0x806Bu};
   const std::uint32_t unpack_names[] = {0x0CF5u, 0x0CF2u, 0x806Eu, 0x0CF4u, 0x0CF3u, 0x806Du};
@@ -52,13 +47,12 @@ TEST(client_array_state, pixel_stores_are_kept_by_name_for_pack_and_unpack)
       CHECK(state.store_pixel(pack_names[index], values[index]));
       CHECK(state.invariants_hold());
   }
-  /* Row length 3 and one skipped row and pixel: 3*4 + (1 + 2) * 4. */
   CHECK_EQ(state.pixel_bytes(rgba, ubyte, 2, 1, 1, true), 12u + 12u);
   CHECK_EQ(state.pixel_bytes(rgba, ubyte, 2, 1, 1, false), 8u);
   for (std::uint32_t index = 0u; index < 6u; index++) CHECK(state.store_pixel(unpack_names[index], values[index]));
   CHECK_EQ(state.pixel_bytes(rgba, ubyte, 2, 1, 1, false), 24u);
   CHECK(!state.store_pixel(0x0D05u, 3));
-  CHECK(!state.store_pixel(0x0CF0u /* GL_UNPACK_SWAP_BYTES */, 1));
+  CHECK(!state.store_pixel(0x0CF0u , 1));
   CHECK_EQ(state.pixel_bytes(rgba, ubyte, 2, 1, 1, true), 24u);
   CHECK(state.invariants_hold()); }
 
@@ -80,14 +74,13 @@ TEST(client_array_state, buffers_are_kept_per_target_and_unbound_when_deleted)
   state.bind_buffer(ClientArrayState::pixel_unpack_buffer, 5u);
   state.bind_buffer(ClientArrayState::query_buffer, 4u);
   state.bind_buffer(ClientArrayState::array_buffer, 6u);
-  state.bind_buffer(0x8A11u /* GL_UNIFORM_BUFFER */, 9u);
+  state.bind_buffer(0x8A11u , 9u);
   CHECK(state.invariants_hold());
   CHECK(state.pixel_buffer_bound(true));
   CHECK(state.pixel_buffer_bound(false));
   CHECK(state.query_buffer_bound());
   CHECK_EQ(state.bound_buffer(ClientArrayState::array_buffer), 6u);
   CHECK_EQ(state.bound_buffer(0x8A11u), 9u);
-  /* Not a buffer target. */
   state.bind_buffer(0x0DE1u, 3u);
   CHECK_EQ(state.bound_buffer(0x0DE1u), 0u);
   const std::uint32_t deleted[] = {0u, 4u, 12u};
@@ -100,8 +93,6 @@ TEST(client_array_state, buffers_are_kept_per_target_and_unbound_when_deleted)
   CHECK_EQ(state.bound_buffer(ClientArrayState::array_buffer), 6u);
   CHECK(state.invariants_hold()); }
 
-/* Every target a command can write through is kept, so the guest knows whose
- * bytes change. */
 TEST(client_array_state, every_buffer_target_is_kept)
 { constexpr std::uint32_t targets[] = {0x8892u, 0x88EBu, 0x88ECu, 0x9192u, 0x8A11u, 0x8C2Au, 0x8C8Eu,
                                        0x8F36u, 0x8F37u, 0x8F3Fu, 0x90D2u, 0x90EEu, 0x92C0u};
@@ -113,9 +104,6 @@ TEST(client_array_state, every_buffer_target_is_kept)
   for (const std::uint32_t target : targets) CHECK_EQ(state.bound_buffer(target), buffer++);
   CHECK(state.invariants_hold()); }
 
-/* glBindBuffersBase binds by index; what it leaves at an indexed target's own
- * binding is not relied on. A target with no indices keeps its binding, and a
- * deletion leaves a binding not known as it was. */
 TEST(client_array_state, an_indexed_target_bound_several_at_once_is_no_longer_known)
 { av::MockPlatform platform;
   ClientArrayState state(platform);
@@ -132,22 +120,17 @@ TEST(client_array_state, an_indexed_target_bound_several_at_once_is_no_longer_kn
   const std::uint32_t deleted[] = {5u};
   state.delete_buffers(1, deleted);
   CHECK_EQ(state.bound_buffer(0x8A11u), ClientArrayState::unknown);
-  /* A bind makes it known again. */
   state.bind_buffer(0x8A11u, 7u);
   CHECK_EQ(state.bound_buffer(0x8A11u), 7u);
   CHECK(state.invariants_hold()); }
 
-/* A map through a target is answered from the guest only where nothing can
- * have moved the binding out of its sight: not the element array buffer, which
- * a vertex array holds, not a binding lost to a bind of several, and none at
- * all once glPopClientAttrib restored some. */
 TEST(client_array_state, a_binding_is_known_only_where_nothing_can_move_it_out_of_sight)
 { av::MockPlatform platform;
   ClientArrayState state(platform);
   std::uint32_t    buffer = 99u;
   CHECK(state.known_buffer(ClientArrayState::array_buffer, buffer));
   CHECK_EQ(buffer, 0u);
-  state.bind_buffer(0x8F37u /* GL_COPY_WRITE_BUFFER */, 4u);
+  state.bind_buffer(0x8F37u , 4u);
   CHECK(state.known_buffer(0x8F37u, buffer));
   CHECK_EQ(buffer, 4u);
   CHECK(!state.known_buffer(0x0DE1u, buffer));
@@ -165,7 +148,6 @@ TEST(client_array_state, a_binding_is_known_only_where_nothing_can_move_it_out_o
 TEST(client_array_state, each_vertex_array_keeps_its_element_buffer)
 { av::MockPlatform platform;
   ClientArrayState state(platform);
-  /* Array 0 starts known, with nothing bound. */
   CHECK(!state.indices_are_offset());
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
   CHECK_STATUS(state.bind_vertex_array(3u), av::Status::ok);
@@ -177,12 +159,10 @@ TEST(client_array_state, each_vertex_array_keeps_its_element_buffer)
   CHECK_STATUS(state.bind_vertex_array(3u), av::Status::ok);
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 8u);
   CHECK(state.invariants_hold());
-  /* Deleting the element buffer unbinds it from the array that held it. */
   const std::uint32_t buffer[] = {8u};
   state.delete_buffers(1, buffer);
   CHECK(!state.indices_are_offset());
   state.bind_buffer(ClientArrayState::element_array_buffer, 9u);
-  /* Deleting the bound array binds 0; array 0 and unknown names stay. */
   const std::uint32_t arrays[] = {0u, 3u, 77u};
   state.delete_vertex_arrays(3, arrays);
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
@@ -195,8 +175,6 @@ TEST(client_array_state, each_vertex_array_keeps_its_element_buffer)
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
   CHECK(state.invariants_hold()); }
 
-/* Well past the 64 arrays once kept, each keeps its own element buffer; one
- * there is no memory for has its draws take their indices as an offset. */
 TEST(client_array_state, every_vertex_array_keeps_its_element_buffer)
 { av::MockPlatform platform;
   ClientArrayState state(platform);
@@ -247,11 +225,8 @@ TEST(client_array_state, multi_draw_offsets_are_the_pointers_values)
   CHECK_EQ(offsets[2], 0xFFFFFFFFFFFFFFF0ull);
   CHECK(state.offsets_of(nullptr, 0u) != nullptr);
   CHECK(state.offsets_of(nullptr, 1u) == nullptr);
-  /* A negative drawcount, as the generated call casts it. */
   CHECK(state.offsets_of(pointers, static_cast<std::size_t>(-1)) == nullptr); }
 
-/* Well past the 1024 pointers one multi-draw once converted, and a list
- * there is no memory to convert is null. */
 TEST(client_array_state, multi_draw_offsets_go_past_the_old_bound)
 { av::MockPlatform platform;
   ClientArrayState state(platform);

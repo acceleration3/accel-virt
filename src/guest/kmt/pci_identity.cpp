@@ -73,4 +73,4 @@ void PciIdentity::append_hardware_id(TextBuffer &text) const
     text.append_hex(revision_, 2u);
 }
 
-}  // namespace av
+}

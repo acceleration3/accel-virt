@@ -1,5 +1,3 @@
-/* What a test of the device's control plane reaches behind a
- * LocalContextPlane: the table of contexts and the library they run on. */
 #ifndef AV_LOCAL_CONTEXT_PLANE_PROBE_HPP
 #define AV_LOCAL_CONTEXT_PLANE_PROBE_HPP
 
@@ -12,6 +10,6 @@ struct LocalContextPlaneProbe {
     static ExecutorLibrary    &library(LocalContextPlane &plane) { return plane.library_; }
 };
 
-}  // namespace av
+}
 
-#endif  // AV_LOCAL_CONTEXT_PLANE_PROBE_HPP
+#endif

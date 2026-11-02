@@ -1,27 +1,3 @@
-"""C++ for the OpenCL half of the wire.
-
-Seven files, all from the same lowered registry:
-
-  cl_protocol_ids.h    the id constants
-  cl_command_names.*   an id to a name, for the log
-  cl_dispatch_client.* one wrapper per command, encoding and sending
-  cl_dispatch_server.* the interface the server implements, and the
-                       decode-and-call table
-  cl_default_dispatch.h that interface answered with no OpenCL, for tests
-  cl_real_dispatch.h   that interface implemented by calling the host's
-                       own OpenCL, which is what the render server runs
-  cl_icd_stubs.h       a refusal for every ICD slot nothing else fills
-
-Everything goes out through emit.common.write, which is what puts a null
-check behind each arena allocation and leaves an identical file alone.
-
-The encoding is deliberately plain. Scalars are varints, handles are
-eight bytes, and every pointer that may be null is preceded by a
-presence byte — including the out parameters, where the byte says
-whether the caller wants the value at all so the server can skip
-producing it.
-"""
-
 from __future__ import annotations
 
 import re
@@ -33,16 +9,8 @@ from .model import Command, Param, Registry, Role
 HEADER = ("// THIS FILE IS GENERATED. DO NOT EDIT.\n"
           "// Regenerate with: python -m av_codegen.opencl --xml cl.xml --out ...\n")
 
-# Handles cross as the server's own pointer value, widened. The guest
-# never dereferences one — its ICD keeps its own objects and carries
-# this alongside — so the two address spaces do not have to agree on
-# anything but the width.
 HANDLE_T = "uint64_t"
 
-# cl.h picks a version by #pragma message when nobody says, and marks
-# everything 1.2 and 2.x retired with a deprecation attribute. This wire
-# carries those commands deliberately - a guest calling clEnqueueTask is
-# the case this exists for - so it asks for them by name.
 CL_PREAMBLE = [
     "#ifndef CL_TARGET_OPENCL_VERSION",
     "#define CL_TARGET_OPENCL_VERSION 300",
@@ -64,25 +32,12 @@ def _is_handle(reg: Registry, base: str) -> bool:
     return base in reg.handles
 
 
-# ---------------------------------------------------------------------
-# What the server refuses before the host's OpenCL sees it
-#
-# A handle crosses as a number, and on the host the ICD dereferences
-# whatever it is handed. So every number a guest sends where an object
-# belongs is looked up, by kind, in what this server made (feature
-# 044), and a number that is not one is a command the server refuses.
-# The same goes for a count the ICD reads past what crossed, and for the
-# few values that are host pointers by definition.
-# ---------------------------------------------------------------------
-
 def _kind(base: str) -> str:
-    """The HandleKind enumerator for an OpenCL object type."""
     name = base[len("cl_"):]
     return name[:-len("_id")] if name.endswith("_id") else name
 
 
 def _kinds(reg: Registry) -> list[str]:
-    """Every object type a carried command names, returns or holds."""
     used = {p.element or p.type.base for cmd in reg.commands.values() for p in cmd.params
             if p.role in (Role.HANDLE, Role.HANDLE_ARRAY, Role.HANDLE_OUT,
                           Role.HANDLE_ARRAY_OUT)}
@@ -90,49 +45,19 @@ def _kinds(reg: Registry) -> list[str]:
     return sorted(used)
 
 
-# Handles inside a struct the wire carries as bytes. cl.xml puts
-# cl_image_desc's buffer in an anonymous union and names no field, so it
-# is written down here.
 STRUCT_HANDLES = {
     "cl_image_desc": (("buffer", "mem"),),
 }
 
-# Context properties are an allow-list because most of the rest are a
-# host pointer by definition - a GL context, an EGL or X display, a D3D
-# device - which no guest can know. CL_CONTEXT_PLATFORM names an object
-# and is looked up like any other handle.
 CONTEXT_PROPERTY_SCALARS = ("CL_CONTEXT_INTEROP_USER_SYNC",)
 
-# Memory properties whose value is a list of devices rather than a scalar
-# (cl_khr_external_memory's CL_MEM_DEVICE_HANDLE_LIST_KHR). cl_ext.h is
-# not included here, so it is spelled as its value.
 MEM_PROPERTY_REFUSED = (("0x2051", "CL_MEM_DEVICE_HANDLE_LIST_KHR"),)
 
-# Commands whose whole point is the callback the lowering drops, so
-# forwarding them to the host's OpenCL with a null one cannot work:
-# clSetEventCallback refuses a null pfn_notify outright. RealDispatch leaves
-# these pure, and the server that derives from it has to answer them with a
-# callback of its own and tell the guest some other way (feature 052).
-#
-# clCreateContext is not one of them: a null notify is legal there, and the
-# host simply reports its errors nowhere.
 CALLBACK_COMMANDS = ("clSetEventCallback",)
 
-# clSetKernelExecInfo names that pass an array of pointers the wire does not
-# carry. CL_KERNEL_EXEC_INFO_SVM_PTRS is not among them: its value is a
-# whole number of addresses the guest was answered (feature 052), and each
-# is judged by svm_for and rewritten as the pointer it resolves to before the
-# host sees it (resolve_svm_pointers). ARM's spelling of it and Intel's USM
-# are carried by nothing, so a guest naming them is refused - not passed on,
-# because a kernel told nothing about its indirect allocations reads the
-# wrong memory.
 EXEC_INFO_POINTERS = (("0x40B8", "CL_KERNEL_EXEC_INFO_SVM_PTRS_ARM"),
                       ("0x4203", "CL_KERNEL_EXEC_INFO_USM_PTRS_INTEL"))
 
-# The implicit transfer sizes the server works out itself, from the
-# arguments and, for an image, the image's own element size. An image
-# created from a host pointer is not among them: its element size is the
-# format's, before any image exists to ask.
 TRANSFER_PITCHES = {
     "clEnqueueReadImage": ("image", "region", "row_pitch", "slice_pitch"),
     "clEnqueueWriteImage": ("image", "region", "input_row_pitch", "input_slice_pitch"),
@@ -140,13 +65,8 @@ TRANSFER_PITCHES = {
     "clEnqueueWriteBufferRect": ("host_origin", "region", "host_row_pitch", "host_slice_pitch"),
 }
 
-# The four float, int or uint components clEnqueueFillImage reads.
 FILL_COLOR_BYTES = 16
 
-# An image made from a host pointer copies the format's elements over the
-# description's extent out of it. The extent is spelled differently by each
-# command; (image type, width, height, depth, array size, row pitch, slice
-# pitch), as C in the decoder's scope once the refusal runs.
 IMAGE_HOST_EXTENTS = {
     "clCreateImage": ("image_desc->image_type", "image_desc->image_width",
                       "image_desc->image_height", "image_desc->image_depth",
@@ -163,16 +83,10 @@ IMAGE_HOST_EXTENTS = {
                         "1", "image_row_pitch", "image_slice_pitch"),
 }
 
-# The commands that build a program from source. Each has
-# -cl-kernel-arg-info appended to its options, because that is the only
-# way the ICD can later say which kernel arguments are memory objects and
-# samplers - see kernel_argument.
 KERNEL_ARG_INFO_BUILDS = ("clBuildProgram", "clCompileProgram")
 
 
 def _decode_property_keys(p: Param, out: list[str]) -> None:
-    """Looks up the handles a property list holds, refusing the keys whose
-    value is a host pointer."""
     if p.type.base == "cl_context_properties":
         allowed = " && ".join(f"wire_items[i] != {key}" for key in CONTEXT_PROPERTY_SCALARS)
         out.append("            for (uint64_t i = 0; wire_items[i] != 0; i += 2) {")
@@ -194,8 +108,6 @@ def _decode_property_keys(p: Param, out: list[str]) -> None:
 
 
 def _count_of(cmd: Command, len_param: str | None) -> str | None:
-    """How many the ICD reads, as an expression, or None when the profile
-    leaves it to a helper."""
     if len_param is None or len_param.startswith("@"):
         return None
     if len_param.isdigit():
@@ -207,9 +119,6 @@ def _count_of(cmd: Command, len_param: str | None) -> str | None:
 
 
 def _refusals(cmd: Command) -> list[str]:
-    """Checks between decoding a command and calling it: whatever the ICD
-    would read or write past what crossed, and the flags and names that
-    make it keep or follow a pointer."""
     out: list[str] = []
     for p in cmd.params:
         n = p.name
@@ -235,8 +144,6 @@ def _refusals(cmd: Command) -> list[str]:
         elif p.role == Role.BYTES_IN and p.len_param == "@fill_bytes":
             out.append(f"    if ({n} != nullptr && {n}_count < {FILL_COLOR_BYTES}u) return false;")
         elif p.role == Role.BYTES_IN and cmd.name in IMAGE_HOST_EXTENTS:
-            # The ICD reads the format's elements over the extent whatever
-            # the flags say, so any bytes that crossed are held to it.
             kind, width, height, depth, array, row, slice_ = IMAGE_HOST_EXTENTS[cmd.name]
             described = "image_desc == nullptr || " if kind.startswith("image_desc") else ""
             out.append(f"    if ({n} != nullptr) {{")
@@ -260,8 +167,6 @@ def _refusals(cmd: Command) -> list[str]:
         out.append("    if (options == nullptr) return false;")
     if any(q.role == Role.BYTES_IN for q in cmd.params) and \
             any(q.name == "flags" and q.type.base == "cl_mem_flags" for q in cmd.params):
-        # The bytes crossed into a block the next command reuses; an ICD
-        # told to use them in place would go on reading and writing it.
         out.append("    if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;")
     if cmd.name == "clSetKernelExecInfo":
         for value, name in EXEC_INFO_POINTERS:
@@ -271,7 +176,6 @@ def _refusals(cmd: Command) -> list[str]:
     return out
 
 
-# Emitted once, above the decoders that call them.
 SIZE_HELPERS = [
     "// How far into a host pointer a transfer reaches: `offset`, then whole",
     "// rows and slices at the pitches given, and the last row only as far as",
@@ -534,14 +438,6 @@ SIZE_HELPERS = [
 
 
 def _resolve_addresses(cmd: Command) -> list[str]:
-    """Turn each address the guest sent into a pointer, or refuse the command.
-
-    Zero stays null: a null SVM pointer is the API's own error and the host
-    answers it, exactly as it does for a null handle. Anything else has to lie
-    inside something this server handed out, together with whatever the
-    command says it will read or write from there - so an address one byte
-    inside a live allocation with a size that runs past its end is refused
-    here, before the host's OpenCL is given a pointer at all."""
     out: list[str] = []
     for p in cmd.params:
         if p.role != Role.SVM_POINTER:
@@ -556,7 +452,6 @@ def _resolve_addresses(cmd: Command) -> list[str]:
 
 
 def _succeeded(cmd: Command) -> str:
-    """Whether the call worked, in the decoder's scope after it."""
     if cmd.returns_handle or cmd.returns_address:
         return "ret != nullptr"
     if cmd.return_type.base == "cl_int" and cmd.return_type.pointer_depth == 0:
@@ -565,7 +460,6 @@ def _succeeded(cmd: Command) -> str:
 
 
 def _lifecycle(cmd: Command) -> tuple[str, Param] | None:
-    """("retained" or "released", the object) for a reference-counting call."""
     handles = [q for q in cmd.params if q.role == Role.HANDLE]
     if len(handles) != 1 or cmd.return_type.base != "cl_int":
         return None
@@ -577,7 +471,6 @@ def _lifecycle(cmd: Command) -> tuple[str, Param] | None:
 
 
 def _client_param_decl(reg: Registry, p: Param) -> list[str]:
-    """How a parameter appears in the client wrapper's signature."""
     t = p.type
     if p.role == Role.IGNORED:
         return [f"{t.cpp()} {p.name}"]
@@ -598,9 +491,6 @@ def _client_param_decl(reg: Registry, p: Param) -> list[str]:
     decl = [f"{t.cpp()} {p.name}"]
     if p.role in (Role.BYTES_IN, Role.BYTES_OUT) and \
             (p.len_param or "").startswith("@"):
-        # OpenCL leaves this one implicit — an image transfer's size is
-        # its region, its pitches and its format — so the caller, which
-        # knows all three, passes it.
         decl.append(f"size_t {p.name}_bytes")
     return decl
 
@@ -630,8 +520,6 @@ def _client_signature(reg: Registry, cmd: Command) -> str:
     params = ["::av::ClientTransport& t"]
     for p in cmd.params:
         if p.role == Role.IGNORED:
-            # Not on the wire, but a string array's lengths are read by
-            # the encoder, so the caller still passes them.
             if _lengths_owner(cmd, p) is not None:
                 params.append(f"const size_t* {p.name}")
             continue
@@ -645,10 +533,6 @@ def _server_signature(reg: Registry, cmd: Command) -> str:
               if p.role != Role.IGNORED]
     return f"{ret} on_{cmd.name}({', '.join(params)})"
 
-
-# ---------------------------------------------------------------------
-# Request encoding, client side
-# ---------------------------------------------------------------------
 
 def _encode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None:
     n = p.name
@@ -721,8 +605,6 @@ def _encode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
         out.append(f"    if ({n} != nullptr) b.write({n}, sizeof(*{n}));")
     elif p.role == Role.PROPERTIES:
-        # Zero-terminated key/value pairs. Counted here so the far side
-        # does not have to trust a terminator that may not be there.
         out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
         out.append(f"    if ({n} != nullptr) {{")
         out.append("        uint64_t wire_count = 0;")
@@ -744,8 +626,6 @@ def _encode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append("    }")
     elif p.role in (Role.HANDLE_OUT, Role.SCALAR_OUT, Role.STRUCT_OUT,
                     Role.HANDLE_ARRAY_OUT, Role.INFO_VALUE):
-        # The byte says whether the caller wants it; the server skips
-        # producing what nobody asked for.
         out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
     elif p.role == Role.BYTES_OUT and p.lent:
         size = f"{n}_bytes" if (p.len_param or "").startswith("@") else p.len_param
@@ -760,15 +640,10 @@ def _encode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         raise AssertionError(f"no encoder for {p.role}")
 
 
-# The byte before a lent parameter: absent, its bytes inline, or where they
-# already are in the blob arena.
 WIRE_ABSENT, WIRE_INLINE, WIRE_LENT = 0, 1, 2
 
 
 def _encode_lent(n: str, size: str, out: list[str]) -> None:
-    """The presence byte of a lent parameter, which says which way its bytes
-    cross: by offset when every one of them is in the arena already, which
-    is a copy fewer each way, and inline when any is not."""
     out.append(f"    uint64_t {n}_lent_at = 0;")
     out.append(f"    const bool {n}_lent = {n} != nullptr &&")
     out.append(f"        t.blobs().holds({n}, static_cast<size_t>({size}), {n}_lent_at);")
@@ -777,9 +652,6 @@ def _encode_lent(n: str, size: str, out: list[str]) -> None:
 
 
 def _client_failure(cmd: Command) -> str:
-    """What a call the client could not complete returns: a send that failed,
-    and a reply that is short or answers more than the caller had room for,
-    which is the same failure seen from the caller."""
     if cmd.returns_handle or cmd.returns_address:
         return "return 0;"
     if cmd.returns_void:
@@ -788,7 +660,6 @@ def _client_failure(cmd: Command) -> str:
 
 
 def _client_room(p: Param) -> str:
-    """The caller's own capacity for an output, in elements or bytes."""
     if p.role == Role.HANDLE_ARRAY_OUT:
         return p.len_param
     if p.role == Role.INFO_VALUE:
@@ -797,11 +668,6 @@ def _client_room(p: Param) -> str:
 
 
 def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
-    """Client side: pull the return value and the out parameters back.
-
-    Every count and length a reply carries is the host's word, and the
-    caller's buffer holds what the caller said it does: an answer larger
-    than that is refused before anything is written into it."""
     fail = _client_failure(cmd)
     if cmd.returns_handle or cmd.returns_address:
         out.append("    " + HANDLE_T + " ret = 0;")
@@ -820,12 +686,6 @@ def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
         elif p.role == Role.SCALAR_OUT:
             out.append("        uint64_t wire_value = 0;")
             out.append(f"        if (!r.read_varint(wire_value)) {fail}")
-            # A value that fit is no larger than its buffer: an info query
-            # into a buffer succeeds only when the value fits, so a size past
-            # the room on success is the host's word against the caller's
-            # memory - an application reads that many bytes back. A list's
-            # count is not this: it is how many exist, and may exceed the room.
-            # Found by tests/fuzz/fuzz_generated_client_replies.cpp (T036).
             reported = _reported_output(cmd, p)
             if reported is not None and reported.role == Role.INFO_VALUE:
                 out.append(f"        if (ret == CL_SUCCESS && {reported.name} != nullptr &&")
@@ -841,8 +701,6 @@ def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
             out.append(f"            if (!r.read_pod({n}[i])) {fail}")
             out.append("        }")
         elif p.role in (Role.BYTES_OUT, Role.INFO_VALUE):
-            # Lent bytes are already where the caller wanted them: the host
-            # wrote them there, and the reply says only how many.
             inline = f"!{n}_lent && " if p.lent else ""
             out.append("        uint64_t wire_count = 0;")
             out.append(f"        if (!r.read_varint(wire_count)) {fail}")
@@ -872,15 +730,12 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         sig = _client_signature(reg, cmd)
         h.append(f"{sig};")
         c.append(f"{sig} {{")
-        # One trace scope per command sent (docs/trace.md).
         c.append(f'    AV_SCOPE("av_{cmd.name}");')
         c.append("    ::av::WireWriter b = t.request_writer();")
         for p in cmd.params:
             _encode_param(reg, cmd, p, c)
         fail = "        " + _client_failure(cmd)
         if cmd.is_async:
-            # A writer that overflowed its slot is a failed call, not a short
-            # command on the wire.
             c.append(f"    if (t.send_async(kCmd_{cmd.name}, b) != ::av::TransportResult::ok) {{")
             c.append(fail)
             c.append("    }")
@@ -889,8 +744,6 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             elif not cmd.returns_void:
                 c.append("    return CL_SUCCESS;")
         else:
-            # send_sync points r at the answer, valid until the call ends,
-            # which the scope does on every return path below.
             c.append("    const ::av::SyncCallScope av_call{t};")
             c.append("    ::av::WireReader r{nullptr, 0u};")
             c.append(f"    if (t.send_sync(kCmd_{cmd.name}, b, r) !=")
@@ -910,10 +763,6 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
     write(out_dir / "cl_dispatch_client.cpp", "\n".join(c))
 
 
-# ---------------------------------------------------------------------
-# Server side
-# ---------------------------------------------------------------------
-
 def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None:
     n = p.name
     if p.role == Role.IGNORED:
@@ -925,8 +774,6 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append(f"        {n} = static_cast<{p.type.base}>(wire_value);")
         out.append("    }")
     elif p.role == Role.HANDLE:
-        # Null is the API's own and the ICD answers it with an error code;
-        # anything else must be an object this server made, of this kind.
         out.append(f"    {{ {HANDLE_T} wire_handle = 0;")
         out.append("      if (!r.read_pod(wire_handle)) return false;")
         out.append("      if (wire_handle != 0) {")
@@ -935,9 +782,6 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append(f"          if ({n} == nullptr) return false;")
         out.append("      } }")
     elif p.role == Role.SVM_POINTER:
-        # Read only. What bounds it may be a parameter still to come -
-        # clEnqueueSVMMemcpy names its size after both of its addresses - so
-        # the address is turned into a pointer after the whole command is in.
         out.append(f"    if (!r.read_pod({n}_wire)) return false;")
     elif p.role in (Role.HANDLE_ARRAY, Role.SCALAR_ARRAY):
         elem = p.element if p.role == Role.HANDLE_ARRAY else p.type.base
@@ -951,7 +795,6 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append("            if (wire_items == nullptr) return false;")
         out.append("            for (uint64_t i = 0; i < wire_count; ++i) {")
         if p.role == Role.HANDLE_ARRAY:
-            # No null inside a list: the ICD dispatches on every element.
             out.append(f"                {HANDLE_T} wire_handle = 0;")
             out.append("                if (!r.read_pod(wire_handle)) return false;")
             out.append(f"                wire_items[i] = static_cast<{elem}>("
@@ -1030,8 +873,6 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
             out.append("        if (wire_present != 0) {")
         out.append("            uint64_t wire_count = 0;")
         out.append("            if (!r.read_varint(wire_count)) return false;")
-        # The reader hands out no view of its own buffer, so the bytes are
-        # copied into the caller's block like everything else pointed at.
         out.append("            auto* wire_bytes = arena.allocate<uint8_t>("
                    "static_cast<size_t>(wire_count) + 1);")
         out.append("            if (wire_bytes == nullptr) return false;")
@@ -1067,10 +908,6 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append("        if (wire_present != 0) {")
         out.append("            uint64_t wire_count = 0;")
         out.append("            if (!r.read_varint(wire_count)) return false;")
-        # Two terminators: a list whose last key has no value reads the
-        # first as that value and still stops at the second, here and in
-        # the ICD, which walks it the same way. The arena refuses a count
-        # the addition wraps.
         out.append(f"            auto* wire_items = arena.allocate<{p.type.base}>(static_cast<size_t>(wire_count) + 2);")
         out.append("            if (wire_items == nullptr) return false;")
         out.append("            for (uint64_t i = 0; i < wire_count; ++i) {")
@@ -1109,7 +946,6 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
 
 
 def _lengths_consumer(cmd: Command, array: Param) -> Param | None:
-    """The parameter this string array's per-string lengths are handed to."""
     if not array.lengths_param:
         return None
     for other in cmd.params:
@@ -1119,7 +955,6 @@ def _lengths_consumer(cmd: Command, array: Param) -> Param | None:
 
 
 def _lengths_owner(cmd: Command, p: Param) -> Param | None:
-    """The string array, if this ignored parameter is its lengths."""
     for other in cmd.params:
         if other.role == Role.STRING_ARRAY and other.lengths_param == p.name:
             return other
@@ -1127,14 +962,11 @@ def _lengths_owner(cmd: Command, p: Param) -> Param | None:
 
 
 def _server_params(reg: Registry, cmd: Command) -> list[tuple[Param, str]]:
-    """(param, declaration) for everything the implementation is handed."""
     result: list[tuple[Param, str]] = []
     for p in cmd.params:
         if p.role == Role.IGNORED:
             owner = _lengths_owner(cmd, p)
             if owner is not None:
-                # Not on the wire — the lengths travel inside the strings
-                # — but the call underneath still takes them.
                 result.append((p, f"const size_t* {p.name}"))
             continue
         result.append((p, _server_param_decl(reg, p)))
@@ -1146,13 +978,10 @@ def _server_signature2(reg: Registry, cmd: Command) -> str:
     return f"{cmd.return_type.cpp()} on_{cmd.name}({decls})"
 
 
-# The bytes one reported element of a byte output occupies, for the byte
-# outputs whose call counts elements rather than bytes.
 REPORTED_ELEMENTS = {"@image_format_bytes": "cl_image_format"}
 
 
 def _reported_output(cmd: Command, p: Param) -> Param | None:
-    """The output whose count or size this scalar output reports, if any."""
     for q in cmd.out_params:
         if q.role in (Role.HANDLE_ARRAY_OUT, Role.INFO_VALUE, Role.BYTES_OUT) and \
                 q.size_ret_param == p.name:
@@ -1161,20 +990,12 @@ def _reported_output(cmd: Command, p: Param) -> Param | None:
 
 
 def _answered_scalar(cmd: Command, p: Param) -> str:
-    """A scalar output as the reply carries it. A cl_int output is the call's
-    own report of what failed - errcode_ret, binary_status - and is sent
-    whatever the call answered; any other is an answer only a call that
-    worked gave."""
     if p.type.base == "cl_int":
         return f"static_cast<uint64_t>({p.name}_storage)"
     return f"({_succeeded(cmd)}) ? static_cast<uint64_t>({p.name}_storage) : 0u"
 
 
 def _produced_expr(cmd: Command, p: Param) -> str:
-    """How much of an output the call says it wrote, in the units of its
-    capacity, or 0 for a call that failed. Only the count the call reported
-    is trusted, since that is how much of the output it wrote; an output
-    nothing reports is as large as its room."""
     cap = f"static_cast<uint64_t>({_capacity_expr(cmd, p)})"
     count = p.size_ret_param
     if count is None:
@@ -1264,12 +1085,10 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                  "::av::WireReader& r,")
         c.append(f"{' ' * (len(cmd.name) + 19)}::av::WireWriter& reply, "
                  "::av::WireArena& arena) {")
-        # One trace scope per decoded command (docs/trace.md).
         c.append(f'    AV_SCOPE("server:{cmd.name}");')
         c.append("    (void)r;")
         c.append("    (void)reply;")
         c.append("    (void)arena;")
-        # Locals, in declaration order.
         for p in cmd.params:
             if p.role == Role.IGNORED:
                 owner = _lengths_owner(cmd, p)
@@ -1315,7 +1134,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         c.extend(_refusals(cmd))
         c.extend(_resolve_addresses(cmd))
 
-        # Storage for whatever the caller asked for.
         for p in cmd.out_params:
             n = p.name
             if p.role == Role.HANDLE_OUT:
@@ -1324,9 +1142,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             elif p.role == Role.SCALAR_OUT:
                 c.append(f"    {p.type.base} {n}_storage{{}};")
                 reported = _reported_output(cmd, p)
-                # The call is always asked how much it wrote into an output
-                # the guest wants, whether or not the guest asked to be told:
-                # the reply sends only that much.
                 wanted = f"({n}_wanted || {reported.name}_wanted)" if reported else f"{n}_wanted"
                 c.append(f"    {p.type.base}* {n} = {wanted} ? &{n}_storage : nullptr;")
             elif p.role == Role.STRUCT_OUT:
@@ -1344,7 +1159,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 ptr_t = "void*" if p.type.base == "void" else f"{p.type.base}*"
                 c.append(f"    {ptr_t} {n} = nullptr;")
                 if p.lent:
-                    # Written where the guest lent, and not sent back.
                     c.append(f"    if ({n}_lent != nullptr) {{")
                     c.append(f"        {n} = static_cast<{ptr_t}>({n}_lent);")
                     c.append(f"    }} else if ({n}_wanted) {{")
@@ -1355,15 +1169,12 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"        if ({n} == nullptr) return false;")
                 c.append("    }")
 
-        # The lengths a string array carried inside itself.
         for p in cmd.params:
             if p.role == Role.IGNORED and _lengths_owner(cmd, p) is not None:
                 owner = _lengths_owner(cmd, p)
                 c.append(f"    {p.name} = {owner.name}_lengths;")
 
         args = ", ".join(p.name for p, _ in _server_params(reg, cmd))
-        # Every object the reply may carry is remembered as it goes out, so
-        # room for them is asked for before the ICD makes any.
         room_terms = ["1u"] if cmd.returns_handle else []
         for p in cmd.out_params:
             if p.role == Role.HANDLE_OUT:
@@ -1378,8 +1189,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         elif room is None:
             c.append(f"    const {cmd.return_type.cpp()} ret = {call};")
         elif cmd.returns_handle or cmd.returns_address:
-            # Refused before the ICD makes anything the server could not then
-            # remember: the guest is told the host is out of memory.
             errcode = [p for p in cmd.out_params if p.role == Role.SCALAR_OUT and p.name == "errcode_ret"]
             c.append(f"    {cmd.return_type.cpp()} ret = nullptr;")
             c.append(f"    if ({room}) ret = {call};")
@@ -1395,15 +1204,11 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             hook, obj = lifecycle
             c.append(f"    if ({succeeded}) s.{hook}(HandleKind::{_kind(obj.type.base)}, {obj.name});")
 
-        # Reply: the return value, then what was asked for.
         if cmd.returns_handle:
             c.append(f"    if ({succeeded}) s.made(HandleKind::{_kind(cmd.return_type.base)}, ret);")
             c.append("    reply.write_pod<" + HANDLE_T +
                      ">(static_cast<" + HANDLE_T + ">(reinterpret_cast<uintptr_t>(ret)));")
         elif cmd.returns_address:
-            # Not an object, so nothing is told to `made`: what the guest may
-            # do with this number is hand it back, and svm_for is what judges
-            # it when it does.
             c.append("    reply.write_pod<" + HANDLE_T +
                      ">(static_cast<" + HANDLE_T + ">(reinterpret_cast<uintptr_t>(ret)));")
         elif not cmd.returns_void:
@@ -1414,7 +1219,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             n = p.name
             c.append(f"    if ({n}_wanted) {{")
             if p.role == Role.HANDLE_OUT:
-                # A failed call made nothing, whatever it left in the output.
                 c.append(f"        if (!({succeeded})) {n}_storage = nullptr;")
                 c.append(f"        if ({n}_storage != nullptr) "
                          f"s.made(HandleKind::{_kind(p.element)}, {n}_storage);")
@@ -1425,8 +1229,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             elif p.role == Role.STRUCT_OUT:
                 c.append(f"        reply.write(&{n}_storage, sizeof({n}_storage));")
             elif p.role == Role.HANDLE_ARRAY_OUT:
-                # However many the call actually produced, never more
-                # than the caller's room for them.
                 cap = _capacity_expr(cmd, p)
                 c.append(f"        const uint64_t wire_produced = {_produced_expr(cmd, p)};")
                 c.append(f"        const uint64_t wire_sent = wire_produced < static_cast<uint64_t>({cap})")
@@ -1483,9 +1285,6 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
 
 
 
-# Vendor and Khronos extension suffixes. A command spelled with one of these is
-# resolved through the loader at first use rather than linked, because which
-# extension symbols a loader exports is a property of the machine.
 _EXTENSION_SUFFIXES = ("KHR", "EXT", "INTEL", "AMD", "APPLE", "ARM", "NV", "QCOM", "IMG")
 
 
@@ -1494,21 +1293,16 @@ def _is_extension(name: str) -> bool:
 
 
 def _absent_result(cmd) -> str:
-    """What a command answers on a loader that does not have it."""
     base = cmd.return_type.base if hasattr(cmd, "return_type") else "cl_int"
     if base == "cl_int":
         return "CL_INVALID_OPERATION"
     return "nullptr"
 
 
-# How many objects a DefaultDispatch enumeration answers with: more than
-# one, so a decoder that only looks at the first is caught.
 DEFAULT_ENUMERATED = 2
 
 
 def _default_body(reg: Registry, cmd: Command) -> list[str]:
-    """One DefaultDispatch entry point: report what it was given, then
-    succeed."""
     body = [f"        (void){p.name};" for p, _ in _server_params(reg, cmd)]
     body.append(f"        called(kCmd_{cmd.name});")
     for p in cmd.params:
@@ -1550,7 +1344,6 @@ def _default_body(reg: Registry, cmd: Command) -> list[str]:
         body.append(f"        return static_cast<{cmd.return_type.base}>("
                     f"produce(HandleKind::{_kind(cmd.return_type.base)}));")
     elif cmd.returns_address:
-        # A fake with no OpenCL behind it allocates nothing and maps nothing.
         body.append("        return nullptr;")
     elif cmd.return_type.base == "cl_int":
         body.append("        return CL_SUCCESS;")
@@ -1560,7 +1353,6 @@ def _default_body(reg: Registry, cmd: Command) -> list[str]:
 
 
 def emit_default_dispatch(reg: Registry, out_dir: Path) -> None:
-    """The interface answered with no OpenCL at all, for testing the decoder."""
     out = [HEADER, "#pragma once\n", "#include <stddef.h>", ""] + CL_PREAMBLE + ["",
            '#include "cl_dispatch_server.h"',
            '#include "cl_protocol_ids.h"', "",
@@ -1588,7 +1380,6 @@ def emit_default_dispatch(reg: Registry, out_dir: Path) -> None:
 
 
 def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
-    """The interface implemented by calling the host's own OpenCL."""
     out = [HEADER, "#pragma once\n"] + CL_PREAMBLE + ["",
            '#include "cl_dispatch_server.h"', "",
            "namespace av::clproto {", "",
@@ -1608,10 +1399,6 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
         decls = _server_params(reg, cmd)
         sig = _server_signature2(reg, cmd)
         if cmd.name in CALLBACK_COMMANDS:
-            # Not forwarded: the host would be handed the null callback the
-            # lowering left behind and answer CL_INVALID_VALUE. Left pure, so
-            # a server that carries this command has to say how it tells the
-            # guest, and one that does not carry it does not compile.
             out.append(f"    {sig} override = 0;")
             continue
         args = []
@@ -1620,9 +1407,6 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
                 if _lengths_owner(cmd, p) is not None:
                     args.append(p.name)
                 else:
-                    # A callback and its user data cannot cross a
-                    # process boundary; the guest keeps both and calls
-                    # the callback itself once the reply lands.
                     args.append("nullptr")
                 continue
             args.append(p.name)
@@ -1656,7 +1440,6 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
         else:
             out.append(f"        return {call};")
         out.append("    }")
-    # The host's own answers are all this class knows of an argument.
     out.append("    bool declared_argument(cl_kernel, cl_uint, KernelArgument&) override { return false; }")
     out += ["", "private:"] + members
     out += ["};", "", "}  // namespace av::clproto", ""]
@@ -1712,13 +1495,6 @@ def emit_all(reg: Registry, out_dir: Path, raw=None) -> None:
         emit_icd_stubs(raw, reg, out_dir)
 
 
-# ---------------------------------------------------------------------
-# What the driver may report
-#
-# An extension is the API's promise that a set of entry points exists
-# and works. The ICD's policy table decides which of them this driver
-# offers; this list is what that table is held to, so that a row can
-# never name an extension whose commands nothing here answers.
 def emit_supported_extensions(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n", "#include <stddef.h>", "",
            "namespace av::clproto {", "",
@@ -1745,41 +1521,15 @@ def emit_supported_extensions(reg: Registry, out_dir: Path) -> None:
     write(out_dir / "cl_supported_extensions.h", "\n".join(out))
 
 
-# ---------------------------------------------------------------------
-# Stubs for everything not implemented
-#
-# A null slot in the ICD dispatch table is worse than a missing entry
-# point: the loader calls through it. And a stub cannot be generic,
-# because a command returning cl_int must answer CL_INVALID_OPERATION
-# while one returning an object must answer null — the same bit pattern
-# means "fine" in one and "failed" in the other.
-#
-# So every command in the registry gets a stub with its own signature,
-# whether or not the wire carries it, and the table is swept once at
-# load: any slot still null after the real entry points are in gets its
-# stub. What an application then sees is a clean CL_INVALID_OPERATION
-# rather than a jump to address zero.
-# ---------------------------------------------------------------------
-
 def _stub_signature(raw, name: str) -> tuple[str, str, str]:
-    """(return type, parameter list, what the stub answers)."""
     ret = raw.return_type.cpp()
     params = []
     has_errcode = False
     for i, p in enumerate(raw.params):
         if p.is_callback:
-            # A function pointer's declaration cannot be rebuilt from a
-            # base type and a pointer count, so the registry's own text is
-            # used as written - minus the name, which a stub never reads
-            # and -Wunused-parameter would refuse. The first occurrence is
-            # the pointer's own name; later ones name the callback's
-            # parameters, where a name costs nothing.
             params.append(re.sub(rf"\b{p.name}\b", f"/*{p.name}*/", p.text,
                                  count=1))
             continue
-        # A create-shaped command reports through errcode_ret, and an
-        # application that reads it deserves the real reason rather
-        # than whatever was in that variable before the call.
         if p.name == "errcode_ret" and p.type.cpp() == "cl_int*":
             has_errcode = True
             params.append("cl_int* errcode_ret")
@@ -1812,11 +1562,6 @@ def emit_icd_stubs(raw, reg: Registry, out_dir: Path) -> None:
            "// proto/client/icd_stub_report.hpp.",
            "namespace stubs {", ""]
 
-    # A stub can only be written for a command whose types this
-    # translation unit has. The sharing extensions name D3D interfaces,
-    # EGL displays and GL objects, which live in headers an ICD that
-    # does not implement them has no business including — so those
-    # slots are left exactly as the loader found them.
     def declarable(t) -> bool:
         base = t.base
         if base.startswith("cl_GL") or base.startswith("cl_gl"):
@@ -1831,13 +1576,6 @@ def emit_icd_stubs(raw, reg: Registry, out_dir: Path) -> None:
     names: list[str] = []
     everything: list[str] = list(raw.commands)
     for name, cmd in raw.commands.items():
-        # Core commands only. Their types are always declared, and they
-        # are the ones that matter: the loader exports every core entry
-        # point and dispatches it straight through this table, so a null
-        # core slot is a crash waiting for the first application that
-        # calls it. An extension slot is only reached through
-        # clGetExtensionFunctionAddress, which this driver answers with
-        # null — the documented way to say "not here".
         if not cmd.since.startswith("CL_VERSION_"):
             continue
         if not declarable(cmd.return_type):

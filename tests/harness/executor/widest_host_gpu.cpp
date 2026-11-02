@@ -20,4 +20,4 @@ WidestHostGpu::WidestHostGpu() : uuid_{}, sub_apis_(0u)
 const std::uint8_t *WidestHostGpu::uuid() const { return uuid_; }
 std::uint32_t       WidestHostGpu::sub_apis() const { return sub_apis_; }
 
-}  // namespace av
+}

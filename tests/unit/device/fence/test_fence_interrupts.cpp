@@ -1,5 +1,3 @@
-/* The gate between workers raising fence interrupts and the main loop
- * connecting and releasing the notifiers that carry them. */
 #include "core/support/status.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/feasibility/interrupt_stress_probe.hpp"
@@ -26,7 +24,7 @@ struct FenceInterruptsProbe {
     static void repair(FenceInterrupts &interrupts) { interrupts.connected_ = false; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -45,7 +43,7 @@ void raise_until_stopped(void *context)
     }
 }
 
-}  // namespace
+}
 
 TEST(fence_interrupts_raise, reaches_the_host_only_while_connected)
 { MockHost host;
@@ -58,10 +56,10 @@ TEST(fence_interrupts_raise, reaches_the_host_only_while_connected)
   CHECK_STATUS(interrupts.connect(), Status::ok);
   CHECK(interrupts.connected());
   CHECK(interrupts.invariants_hold());
-  CHECK_STATUS(interrupts.connect(), Status::ok);   /* already: the host is not asked twice */
+  CHECK_STATUS(interrupts.connect(), Status::ok);
   interrupts.raise(2u);
   interrupts.raise(Doorbell::pages - 1u);
-  interrupts.raise(Doorbell::pages);                 /* no such line */
+  interrupts.raise(Doorbell::pages);
   CHECK_EQ(host.raised(2u), 1u);
   CHECK_EQ(host.raised(Doorbell::pages - 1u), 1u);
   interrupts.disconnect();
@@ -144,12 +142,8 @@ TEST(fence_interrupts, connects_on_the_main_loop)
                    &interrupts, thread),
                Status::ok);
   host.join_thread(thread);
-  /* initialize, connect and disconnect, and the host's own connect and disconnect */
   for (int count = 0; count < 5; count++) CHECK(host.claim(HostViolation::main_loop_required)); }
 
-/* Feature 039 US3: what the device injected, counted where the guest's own
- * report can be set against it. An interrupt nothing carried is not an
- * injection. */
 TEST(fence_interrupts_report_to, counts_only_what_reached_the_guest)
 { MockHost host;
   FenceInterrupts interrupts(host);
@@ -157,17 +151,17 @@ TEST(fence_interrupts_report_to, counts_only_what_reached_the_guest)
   CHECK_STATUS(stress.initialize(), Status::ok);
   CHECK_STATUS(interrupts.initialize(), Status::ok);
   interrupts.report_to(stress);
-  interrupts.raise(0u);                       /* nothing is connected yet */
+  interrupts.raise(0u);
   CHECK_STATUS(interrupts.connect(), Status::ok);
   interrupts.raise(0u);
   interrupts.raise(1u);
-  interrupts.raise(FenceInterrupts::display_line);   /* the display's, after the fence queues' */
-  interrupts.raise(FenceInterrupts::present_line);   /* the present engine's, after the display's */
-  interrupts.raise(FenceInterrupts::lines);          /* no such line */
+  interrupts.raise(FenceInterrupts::display_line);
+  interrupts.raise(FenceInterrupts::present_line);
+  interrupts.raise(FenceInterrupts::lines);
   interrupts.disconnect();
   interrupts.raise(0u);
   CHECK_EQ(host.raised(FenceInterrupts::display_line), 1u);
-  CHECK_EQ(host.raised(Doorbell::pages), 1u);        /* the display line is the one after the doorbells' */
+  CHECK_EQ(host.raised(Doorbell::pages), 1u);
   CHECK_EQ(host.raised(Doorbell::pages + 1u), 1u);
   CHECK_EQ(host.raised(FenceInterrupts::lines), 0u);
   stress.acknowledged(4u, 700u);

@@ -13,7 +13,7 @@ FakeVirtioGpuFunction::FakeVirtioGpuFunction()
 {
     const FixtureFile fixture("virtio_gpu_pci_config.bin");
     std::memcpy(config_, fixture.bytes(), config_bytes);
-    const std::uint32_t low = static_cast<std::uint32_t>(virtio_bar_address) | 0xCu;  /* 64-bit, prefetchable */
+    const std::uint32_t low = static_cast<std::uint32_t>(virtio_bar_address) | 0xCu;
     const std::uint32_t high = static_cast<std::uint32_t>(virtio_bar_address >> 32u);
     std::memcpy(config_ + 0x10u + 4u * virtio_bar, &low, 4u);
     std::memcpy(config_ + 0x14u + 4u * virtio_bar, &high, 4u);
@@ -22,8 +22,8 @@ FakeVirtioGpuFunction::FakeVirtioGpuFunction()
 
     common_.offer_features(feature_version_1 | feature_edid | feature_resource_blob | feature_context_init);
     common_.set_queues(2u, 256u);
-    device_config_.set_u32(8u, 1u);   /* num_scanouts */
-    device_config_.set_u32(12u, 1u);  /* num_capsets */
+    device_config_.set_u32(8u, 1u);
+    device_config_.set_u32(12u, 1u);
     rebuild_resources();
 }
 
@@ -36,7 +36,7 @@ void FakeVirtioGpuFunction::add_shared_memory_region(std::uint8_t id, std::uint8
     const std::uint8_t at = next_capability_;
     next_capability_ = static_cast<std::uint8_t>(at + capability_bytes);
     config_[at] = vendor_capability;
-    config_[at + 1u] = config_[0x34u];   /* the chain this one goes in front of */
+    config_[at + 1u] = config_[0x34u];
     config_[at + 2u] = capability_bytes;
     config_[at + 3u] = shared_memory_type;
     config_[at + 4u] = bar;
@@ -61,7 +61,6 @@ void FakeVirtioGpuFunction::add_doorbell_region()
 {
     constexpr std::uint64_t length = FakeDoorbellPages::pages * FakeDoorbellPages::page_bytes;
     add_shared_memory_region(doorbell_region_id, 0u, 0u, length, doorbell_bar_address);
-    /* A 32-bit BAR, unlike the regions the helper assumes. */
     const std::uint32_t low = static_cast<std::uint32_t>(doorbell_bar_address);
     std::memcpy(config_ + 0x10u, &low, 4u);
     common_.set_queues(67u, 256u);
@@ -144,4 +143,4 @@ FakeRegisterBytes &FakeVirtioGpuFunction::device_config() { return device_config
 FakeRegisterBytes &FakeVirtioGpuFunction::notify() { return notify_; }
 FakeDoorbellPages &FakeVirtioGpuFunction::doorbells() { return doorbells_; }
 
-}  // namespace av
+}

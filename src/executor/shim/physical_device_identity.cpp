@@ -45,4 +45,4 @@ bool PhysicalDeviceIdentity::is(const uint8_t *uuid) const
     return known_ && uuid_.equals(uuid);
 }
 
-}  // namespace av
+}

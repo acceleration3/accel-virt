@@ -61,7 +61,6 @@ ID3D12CommandSignature *D3d12IndirectSignature::make(ID3D12Device *device, ID3D1
         const d3d12proto::IndirectArgument &from = arguments_[index];
         D3D12_INDIRECT_ARGUMENT_DESC       &to = descs[index];
         to.Type = static_cast<D3D12_INDIRECT_ARGUMENT_TYPE>(from.type);
-        /* The union's widest member lays the three words out in order. */
         to.Constant = {from.a, from.b, from.c};
     }
     const D3D12_COMMAND_SIGNATURE_DESC desc = {stride_, count_, descs, 0u};
@@ -74,4 +73,4 @@ ID3D12CommandSignature *D3d12IndirectSignature::make(ID3D12Device *device, ID3D1
     return nullptr;
 }
 
-}  // namespace av
+}

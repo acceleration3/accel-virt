@@ -1,9 +1,3 @@
-/* A Direct3D 11 the target-independent rasterization scenario's tests drive:
- * every call counted and refusable, a draw rasterized as a stack that honours
- * the forced sample count does (CoverageTriangle, every triangle's mask OR'd
- * into its texels) or as one that rasterizes it at one sample, which puts a
- * single bit where any sample is covered, as the host's DXVK did before it
- * emulated the forced count. */
 #ifndef AV_SCRIPTED_D3D11_TIR_HPP
 #define AV_SCRIPTED_D3D11_TIR_HPP
 
@@ -24,9 +18,7 @@ public:
     ScriptedD3d11Tir &operator=(const ScriptedD3d11Tir &) = delete;
 
     void          fail(Call call, std::uint32_t nth, std::int32_t result);
-    /* Draws put one bit where the forced pattern has any. */
     void          rasterize_at_one_sample();
-    /* The device lost: it says it hung. */
     void          lose();
     void          set_layered(bool layered);
     std::uint32_t calls(Call call) const;
@@ -59,6 +51,6 @@ private:
     bool          live_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_D3D11_TIR_HPP
+#endif

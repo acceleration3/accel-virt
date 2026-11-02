@@ -32,8 +32,6 @@ HRESULT PresentedAllocations::make(KernelSurface &surface, HANDLE resource, D3DK
                 .write();
         return made;
     }
-    /* An identity is asked for, which the miniport mints and dxgkrnl hands
-     * whoever opens the surface: with none, nothing can open it. */
     if (surface.key() == 0u) lines_.once("the miniport minted no identity for a presented surface; nothing can open it");
     static_cast<void>(keep_resident(allocation));
     return S_OK;
@@ -99,4 +97,4 @@ HRESULT PresentedAllocations::make_context(HANDLE &context)
     return made;
 }
 
-}  // namespace av::d3d
+}

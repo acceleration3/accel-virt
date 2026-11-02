@@ -57,4 +57,4 @@ bool Doorbell::invariants_hold() const
     return connected_ == (event_ != nullptr) && index_ < pages;
 }
 
-}  // namespace av
+}

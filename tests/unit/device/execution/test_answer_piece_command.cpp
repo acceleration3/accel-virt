@@ -1,6 +1,3 @@
-/* ANSWER_PIECE (docs/protocol.md, "Long commands"): part of the answer the
- * executor kept, from the body's u64 offset, behind the answer's u64 length;
- * a body of any other length, or one asking no answer, is framing. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/execution/answer_piece_command.hpp"
@@ -74,7 +71,7 @@ private:
     std::size_t         produced_ = 0u;
 };
 
-}  // namespace
+}
 
 TEST(answer_piece_command_run, hands_on_the_kept_answer_from_an_offset_behind_its_length)
 { Fixture fixture;
@@ -109,7 +106,6 @@ TEST(answer_piece_command_run, a_body_of_another_length_or_no_answer_asked_is_fr
       CHECK_STATUS(f.run(0u, 8u, CommandHeader::generate_reply, 0u), Status::malformed);
       CHECK_STATUS(f.run(0u, 8u, CommandHeader::generate_reply, 7u), Status::malformed);
       CHECK_EQ(f.produced(), 0u);
-      /* Nothing kept: the length alone, 0. */
       CHECK_STATUS(f.run(0u, 8u, CommandHeader::generate_reply, 24u), Status::ok);
       CHECK_EQ(f.produced(), 8u);
       f.executor().destroy();

@@ -24,24 +24,19 @@ using CreateFactory = HRESULT(WINAPI *)(REFIID, void **);
 using Compile = HRESULT(WINAPI *)(LPCVOID, SIZE_T, LPCSTR, const D3D_SHADER_MACRO *, ID3DInclude *, LPCSTR, LPCSTR,
                                   UINT, UINT, ID3DBlob **, ID3DBlob **);
 
-/* Three vertices covering the target: a triangle twice its size, with no
- * vertex buffer behind it. */
 constexpr char corners_source[] = "float4 main(uint id : SV_VertexID) : SV_Position {"
                                   " float2 at = float2((id << 1) & 2, id & 2);"
                                   " return float4(at * float2(2, -2) + float2(-1, 1), 0, 1); }";
-/* A slot's texel of the row as far from the bottom as this pixel is from the
- * top: OpenGL's rows start at the bottom. */
 constexpr char flipped_source[] = "Texture2D slot : register(t0);"
                                   "float4 main(float4 at : SV_Position) : SV_Target {"
                                   " uint width, height; slot.GetDimensions(width, height);"
                                   " return slot.Load(int3(int(at.x), int(height) - 1 - int(at.y), 0)); }";
 
-/* What the first chain opened and presented are logged once under. */
 constexpr char chain_open_key[] = "chain open";
 constexpr char chain_presented_key[] = "chain presented";
 constexpr uint32_t buffer_count = 2u;
 
-}  // namespace
+}
 
 DxgiWindowChains::DxgiWindowChains(BlockSource &memory, Kmt &kmt, ThreadLock &lock, KeyedLog &log)
     : kmt_(kmt), lock_(lock), lines_(log), d3d11_(nullptr), dxgi_(nullptr), create_device_(nullptr),
@@ -99,10 +94,6 @@ bool DxgiWindowChains::open(void *window, uint64_t luid, uint32_t width, uint32_
     return made;
 }
 
-/* The copy or draw runs on the host's queue after the frame the slot holds,
- * which the caller waited for; the query after the present ends once it has.
- * A top-down slot is the back buffer's format and size, so it is copied as it
- * is. */
 bool DxgiWindowChains::present(void *window, uint32_t slot)
 {
     AV_SCOPE("DxgiWindowChains::present");
@@ -272,8 +263,6 @@ void DxgiWindowChains::draw_flipped(Chain &chain, Device &device, ID3D11Texture2
     context->PSSetShader(device.flipped.get(), nullptr, 0u);
     context->PSSetShaderResources(0u, 1u, read);
     context->Draw(3u, 0u);
-    /* Bound as a source, a slot could not be copied into by the next frame
-     * without Direct3D unbinding it first. */
     context->PSSetShaderResources(0u, 1u, none);
     context->OMSetRenderTargets(0u, nullptr, nullptr);
 }
@@ -294,7 +283,6 @@ DxgiWindowChains::Chain *DxgiWindowChains::new_chain(void *window)
         refuse("no memory for another window's chain");
         return nullptr;
     }
-    /* Room was made above, so the insert cannot fail. */
     static_cast<void>(windows_.insert(reinterpret_cast<uintptr_t>(window), chain, slot));
     return chain;
 }
@@ -308,8 +296,6 @@ void DxgiWindowChains::forget_chain(void *window)
     static_cast<void>(chains_.destroy(chain));
 }
 
-/* A chain of this window is made again at a new size: its slots go first, so
- * nothing holds its buffers when they are resized. */
 bool DxgiWindowChains::make_chain(Chain &chain, Device &device, uint32_t width, uint32_t height)
 {
     AV_SCOPE("DxgiWindowChains::make_chain");
@@ -358,8 +344,6 @@ bool DxgiWindowChains::make_slots(Chain &chain, Device &device, uint32_t count)
     described.SampleDesc = {1u, 0u};
     described.Usage = D3D11_USAGE_DEFAULT;
     described.BindFlags = icd::SlotFormat(chain.layout).bind_flags();
-    /* The ICD opens each slot's memory as an image of rows (ChainedImage,
-     * OpenGL's memory object), by the id and bytes it was published as. */
     for (uint32_t slot = 0u; slot < count; slot++) {
         SharedRowsTexture made(kmt_);
         if (!made.make(*device.device.get(), device.kmt_device, described)) {
@@ -391,11 +375,6 @@ void DxgiWindowChains::drop_slots(Chain &chain)
     chain.count = 0u;
 }
 
-/* Direct3D defers destroying what was released until its context lets go,
- * and DXGI makes a window another chain only once the last is destroyed: the
- * flush is what lets a window closed by one swapchain be opened by the next
- * (ID3D11DeviceContext::Flush, "Deferred Destruction Issues with Flip
- * Presentation Swap Chains"). */
 void DxgiWindowChains::drop_chain(Chain &chain)
 {
     AV_SCOPE("DxgiWindowChains::drop_chain");
@@ -441,4 +420,4 @@ void DxgiWindowChains::refuse(const char *why)
         .write();
 }
 
-}  // namespace av
+}

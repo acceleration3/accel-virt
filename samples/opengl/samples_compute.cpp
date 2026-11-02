@@ -1,11 +1,8 @@
-// computeparticles, computeshader, particlefire, raytracing, bloom, radialblur, offscreen, shaderstream
 #include "framework.h"
 
 namespace samples {
 
 namespace {
-
-// ---------------------------------------------------------------- shared pieces
 
 #define MESH_INPUTS                                  \
     "layout(location = 0) in vec3 position;\n"      \
@@ -13,7 +10,6 @@ namespace {
     "layout(location = 2) in vec2 uv;\n"            \
     "layout(location = 3) in vec3 color;\n"
 
-// A full-screen triangle from gl_VertexID alone: no vertex buffer, no layout.
 const char *const quad_vertex = R"(
 out vec2 v_uv;
 void main() {
@@ -45,7 +41,6 @@ void depth_state(bool test, bool write)
     glDepthFunc(GL_LEQUAL);
 }
 
-// Direct3D's default depth state: test, write, LESS.
 void default_depth()
 {
     glEnable(GL_DEPTH_TEST);
@@ -53,7 +48,6 @@ void default_depth()
     glDepthFunc(GL_LESS);
 }
 
-// An off-screen colour target, optionally with its own depth, readable as a texture.
 struct RenderTexture {
     GLuint   texture = 0;
     GLuint   depth = 0;
@@ -61,7 +55,6 @@ struct RenderTexture {
     uint32_t width = 0;
     uint32_t height = 0;
 
-    // `renders` false: a texture compute writes, with no framebuffer.
     void create(Gpu &gpu, uint32_t w, uint32_t h, GLenum format, bool renders, bool with_depth)
     {
         width = w;
@@ -91,8 +84,6 @@ struct RenderTexture {
     }
 };
 
-// ---- CPU-side procedural content
-
 float smooth(float a, float b, float x)
 {
     const float t = clamp((x - a) / (b - a), 0.0f, 1.0f);
@@ -107,7 +98,6 @@ float lattice(int x, int y, uint32_t seed)
     return static_cast<float>(h & 0xFFFFFFu) / 16777216.0f;
 }
 
-// Value noise that tiles with `period` lattice cells (period 0: no tiling).
 float value_noise(float x, float y, uint32_t seed, int period)
 {
     const float fx = floor(x), fy = floor(y);
@@ -141,7 +131,6 @@ uint32_t pack_rgba(float r, float g, float b, float a)
     return byte(r) | (byte(g) << 8u) | (byte(b) << 16u) | (byte(a) << 24u);
 }
 
-// A tangent-space normal map from a tiling height field.
 void normal_map(const float *height, uint32_t size, float strength, uint32_t *texels)
 {
     for (uint32_t y = 0; y < size; y++)
@@ -159,7 +148,6 @@ float3 transform_direction(float3 v, const float4x4 &m)
             v.x * m.m[0][2] + v.y * m.m[1][2] + v.z * m.m[2][2]};
 }
 
-// A rotation taking +y to `d`.
 float4x4 basis_from_y(float3 d)
 {
     const float3 x = normalize(cross(d, abs(d.x) < 0.9f ? float3{1, 0, 0} : float3{0, 0, 1}));
@@ -171,7 +159,6 @@ float4x4 basis_from_y(float3 d)
     return r;
 }
 
-// A capped frustum around +y from 0 to `height`: a cylinder when both radii match, a cone when top is 0.
 Mesh frustum_mesh(uint32_t sides, float bottom, float top, float height)
 {
     Mesh mesh;
@@ -211,8 +198,6 @@ Mesh frustum_mesh(uint32_t sides, float bottom, float top, float height)
     return mesh;
 }
 
-// Several meshes baked into one, each placed, coloured, and given a glow
-// amount (carried in uv.x) that the bloom and radial-blur passes read.
 struct MeshBuilder {
     Mesh     mesh;
     uint32_t vertex_capacity = 0;
@@ -251,7 +236,6 @@ struct MeshBuilder {
     }
 };
 
-// Lit geometry that also glows: the bloom and radial blur scenes.
 const char *const glow_scene_common = R"(
 layout(std140, binding = 0, row_major) uniform Scene {
     mat4 world;
@@ -302,10 +286,6 @@ struct GlowScene {
     float4   eye;
 };
 
-// ---------------------------------------------------------------- computeparticles
-
-// A compute shader moves 256K particles between two texture buffers; a
-// geometry shader expands each one into a sprite, blended additively.
 class ComputeParticles final : public Sample {
 public:
     const char *name() const override { return "computeparticles"; }
@@ -423,8 +403,6 @@ void main() {
     }
     void render(Gpu &gpu, float time) override
     {
-        // The state at `time` is a fixed number of fixed steps from the start,
-        // so a jump back in time replays from the initial particles.
         const uint32_t target = static_cast<uint32_t>((time + preroll) * steps_per_second + 0.001f);
         if (target < steps_) {
             glCopyNamedBufferSubData(initial_, particles_[0], 0, 0, count * static_cast<GLsizeiptr>(sizeof(Particle)));
@@ -440,8 +418,6 @@ void main() {
             const SimConstants sim = {2.5f / 60.0f, sin(t * 0.04f * 2 * pi) * 0.75f, 0, count, force, {0, 0, 0}};
             gpu.update(sim_constants_, &sim, sizeof sim);
             glDispatchCompute(count / 256, 1, 1);
-            // Direct3D orders a dispatch's writes before the next read of
-            // them; OpenGL is told.
             glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
             current_ = 1 - current_;
         }
@@ -489,18 +465,13 @@ private:
         float4 gradient;
     };
     static constexpr uint32_t count = 256u * 1024u;
-    // Two steps a frame with the forces scaled up stand in for the original's
-    // one step per frame at the ~1000 fps it was shown running at.
     static constexpr float steps_per_second = 120.0f;
     static constexpr float force = 8.0f;
-    // Time zero shows the swarm already settled into its streams, as the
-    // original looks after running a while; replaying reaches it in one frame.
     static constexpr float preroll = 8.0f;
 
     GLuint   simulate_ = 0;
     GLuint   draw_ = 0;
     GLuint   initial_ = 0;
-    // Ping-pong, as the D3D11 port: one buffer read while the other is written.
     GLuint   particles_[2] = {};
     GLuint   views_[2] = {};
     GLuint   ramp_ = 0;
@@ -511,10 +482,6 @@ private:
     uint32_t current_ = 0;
 };
 
-// ---------------------------------------------------------------- computeshader
-
-// A painting generated on the CPU, filtered by a compute shader into an image
-// texture, shown beside the original. The filter changes every two seconds.
 class ComputeShader final : public Sample {
 public:
     const char *name() const override { return "computeshader"; }
@@ -610,8 +577,6 @@ void main() { target = texture(image, v_uv); }
 private:
     static constexpr uint32_t size = 512;
 
-    // Sky, clouds and smoke over a brown sea, and a tall ship: the original's
-    // painting, in spirit.
     static void paint(uint32_t *texels)
     {
         for (uint32_t y = 0; y < size; y++)
@@ -636,7 +601,6 @@ private:
         const float cloud = smooth(0.42f, 0.7f, n + v * 0.25f - 0.1f);
         const float shade = 0.45f + 0.5f * fbm(u * 9.0f + 3.0f, v * 9.0f, 23u, 4, 0);
         c = c * (1 - cloud) + float3{shade, shade, shade * 1.02f} * cloud;
-        // gun smoke low beside the hull
         const float dx = (u - 0.45f) / 0.18f, dy = (v - 0.72f) / 0.1f;
         const float puff = smooth(1.0f, 0.3f, dx * dx + dy * dy) * smooth(0.3f, 0.6f, fbm(u * 12, v * 12, 41u, 4, 0));
         const float white = 0.85f + 0.12f * fbm(u * 20, v * 20, 43u, 3, 0);
@@ -673,11 +637,6 @@ private:
     GLuint        sampler_ = 0;
 };
 
-// ---------------------------------------------------------------- particlefire
-
-// A camp fire: normal-mapped ground and logs lit by the flickering fire, and
-// flame and smoke billboards whose every property is a closed-form function
-// of time and the instance id, expanded from gl_VertexID in the vertex shader.
 class ParticleFire final : public Sample {
 public:
     const char *name() const override { return "particlefire"; }
@@ -998,10 +957,6 @@ private:
     GLuint   particle_constants_ = 0;
 };
 
-// ---------------------------------------------------------------- raytracing
-
-// A compute shader ray traces three spheres over a plane (shadows, one
-// reflection bounce, fog) into an image texture that a full-screen pass shows.
 class Raytracing final : public Sample {
 public:
     const char *name() const override { return "raytracing"; }
@@ -1120,8 +1075,6 @@ private:
     GLuint        constants_ = 0;
 };
 
-// ---------------------------------------------------------------- bloom
-
 const char *const blur_fragment = R"(
 layout(binding = 0) uniform sampler2D image;
 layout(std140, binding = 0) uniform Blur { vec2 texel_step; float strength; float unused; };
@@ -1138,8 +1091,6 @@ void main() {
 }
 )";
 
-// A flying saucer whose glowing parts are drawn again into a small target,
-// blurred vertically there, then horizontally onto the frame, additively.
 class Bloom final : public Sample {
 public:
     const char *name() const override { return "bloom"; }
@@ -1317,10 +1268,6 @@ private:
     GLuint        sampler_ = 0;
 };
 
-// ---------------------------------------------------------------- radialblur
-
-// A caged glowing sphere: its glowing faces drawn into an off-screen target,
-// then blurred radially from the centre and added over the lit scene.
 class RadialBlur final : public Sample {
 public:
     const char *name() const override { return "radialblur"; }
@@ -1401,8 +1348,6 @@ void main() {
 private:
     static constexpr uint32_t glow_size = 512;
 
-    // A once-subdivided icosahedron; each face becomes a glowing inner
-    // triangle, set back a little, inside a dark frame.
     void build_cage(Gpu &gpu)
     {
         const float g = (1.0f + sqrt(5.0f)) * 0.5f;
@@ -1461,10 +1406,6 @@ private:
     GLuint        sampler_ = 0;
 };
 
-// ---------------------------------------------------------------- offscreen
-
-// A mirror floor: the scene, reflected and clipped at the floor plane, is rendered into a texture that the floor samples
-// with projected coordinates.
 class Offscreen final : public Sample {
 public:
     const char *name() const override { return "offscreen"; }
@@ -1627,7 +1568,6 @@ private:
         ball_.draw();
     }
 
-    // A (2,3) torus knot tube, standing in for the original's dragon.
     static Mesh knot_mesh(uint32_t rings, uint32_t sides)
     {
         Mesh mesh;
@@ -1664,7 +1604,6 @@ private:
         return mesh;
     }
 
-    // Riveted, scratched metal plates.
     void make_plate(Gpu &gpu)
     {
         const uint32_t n = 512, panel = 256;
@@ -1700,19 +1639,8 @@ private:
     GLuint        clamp_ = 0;
 };
 
-}  // namespace
+}
 
-// ---------------------------------------------------------------- shaderstream
-
-// Eight programs whose fragment shaders carry 300 KB of source each - past the
-// room one command is lent, so each crosses in pieces over several batches -
-// made one after another with a 16 KB uniform buffer uploaded between each
-// two, its data crossing in a blob lease. Each program paints one band of the
-// picture in its own buffer's colour, scaled by its own band's pattern. The
-// guest driver holds what it sends, and a lease used to be lent again once
-// the batch carrying a command's first piece had run, before the host read
-// it with the last; the host then drew a band from another band's buffer -
-// another's colour here - or built a program from another's source.
 class ShaderStream final : public Sample {
 public:
     const char *name() const override { return "shaderstream"; }
@@ -1766,9 +1694,6 @@ private:
     static constexpr uint32_t padding_bytes = 300u * 1024u;
     static constexpr uint32_t colour_floats = 4096;
 
-    // A band's shader: its buffer's colour, and a wave of its own band's
-    // frequencies; the buffer's last word, which only that band's upload
-    // wrote, picks the wave's phase.
     static void band_source(uint32_t band, char *source, size_t capacity)
     {
         copy_text(source, capacity, "#define BAND ");
@@ -1803,4 +1728,4 @@ void register_compute(Sample **all, uint32_t &made)
     all[made++] = new ShaderStream();
 }
 
-}  // namespace samples
+}

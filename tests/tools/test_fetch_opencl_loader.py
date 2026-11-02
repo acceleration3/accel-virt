@@ -1,8 +1,3 @@
-"""The OpenCL ICD loader's source arrives pinned and verified, or none of it does.
-
-Driven against a local archive through `file://`: the tool takes its source as
-data, so no test touches the network.
-"""
 import hashlib
 import io
 import pathlib
@@ -17,7 +12,6 @@ from tool_run import ROOT, run
 FETCH = ROOT / "tools" / "fetch_opencl_loader.py"
 PINS = ROOT / "tools" / "opencl_loader_pins.txt"
 TOP = "OpenCL-ICD-Loader-9.9.9"
-# The list the tool refuses an archive for not holding.
 WANTED = (
     "loader/icd.c",
     "loader/icd.h",
@@ -39,8 +33,6 @@ WANTED = (
     "loader/windows/icd_windows_hkr.h",
     "loader/windows/OpenCL.def",
 )
-# Two the archive carries and the tool leaves behind: a separate tool, and the
-# platform half this does not build.
 UNWANTED = ("loader/cllayerinfo.c", "loader/linux/icd_linux.c")
 
 
@@ -49,7 +41,6 @@ def sha256(raw):
 
 
 def bundle(names=WANTED, extra=UNWANTED):
-    """A tar.gz laid out as GitHub's source archives are: one top directory."""
     raw = io.BytesIO()
     with tarfile.open(fileobj=raw, mode="w:gz") as archive:
         for name in tuple(names) + tuple(extra):
@@ -93,7 +84,6 @@ class FetchOpenClLoader(unittest.TestCase):
             self.assertEqual((self.tree / name).read_bytes(), f"/* {name} */\n".encode())
         for name in UNWANTED:
             self.assertFalse((self.tree / name).exists(), name)
-        # The config the loader's own CMake would have written.
         self.assertIn("HAVE_SECURE_GETENV", (self.tree / "loader" / "icd_cmake_config.h").read_text())
         self.assertEqual((self.tree / "PINNED").read_text().strip(), self.archive_digest)
 

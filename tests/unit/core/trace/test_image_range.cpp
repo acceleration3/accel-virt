@@ -11,7 +11,7 @@ struct ImageRangeProbe {
     static void wrap(ImageRange &image) { image.size_ = 0xFFFFFFFFFFFFFFFFull; }
 };
 
-}  // namespace av
+}
 
 TEST(image_range, contains_whole_spans_inside_it_only)
 { const ImageRange image(0x1000u, 0x100u);
@@ -38,7 +38,6 @@ TEST(image_range, a_range_that_would_wrap_holds_nothing)
   CHECK(!wrapped.contains(0xFFFFFFFFFFFFF000ull, 1u));
   CHECK_EQ(wrapped.end(), 0xFFFFFFFFFFFFF000ull);
   CHECK(wrapped.invariants_hold());
-  /* Ending exactly at 2^64 wraps its end to zero, so it is empty too. */
   const ImageRange top(0xFFFFFFFFFFFFF000ull, 0x1000u);
   CHECK(!top.contains(0xFFFFFFFFFFFFFFFFull, 1u));
   CHECK_EQ(top.end(), 0xFFFFFFFFFFFFF000ull);

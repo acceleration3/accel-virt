@@ -9,19 +9,12 @@
 namespace av {
 
 namespace {
-
-/* The only handle type GL_EXT_memory_object_fd and GL_EXT_semaphore_fd define.
- * On the Mesa stack this device runs against, an "opaque" fd of that type is a
- * dma-buf, which is why the device refuses to hand GL a descriptor Vulkan
- * exported as an opaque fd: that one is a driver-private handle of another
- * API and GL cannot read it (research.md §7). */
 constexpr GLenum handle_type_opaque_fd = 0x9586u;
-/* GL_DEDICATED_MEMORY_OBJECT_EXT. */
 constexpr GLenum dedicated_memory_object = 0x9581u;
 constexpr GLenum num_extensions = 0x821Du;
 constexpr GLenum extensions_name = 0x1F03u;
 
-}  // namespace
+}
 
 GlHostImport::GlHostImport()
     : create_memory_objects_(nullptr), import_memory_fd_(nullptr), memory_parameter_(nullptr),
@@ -102,11 +95,6 @@ bool GlHostImport::import_memory(int fd, uint64_t size, uint32_t &name)
     GLuint made = 0u;
     create_memory_objects_(1, &made);
     static_cast<void>(errors_.clear());
-    /* Shared memory is one image's own allocation - a Direct3D surface's, or a
-     * Vulkan dedicated one - and radeonsi reads such an image's layout from the
-     * dma-buf only when told it is dedicated: otherwise it lays the texture out
-     * its own way over memory RADV laid out, and every texel lands elsewhere
-     * (test_d3d_gl_interop_device). */
     const GLint dedicated = 1;
     memory_parameter_(made, dedicated_memory_object, &dedicated);
     import_memory_fd_(made, static_cast<GLuint64>(size), handle_type_opaque_fd, taken.fd());
@@ -115,7 +103,6 @@ bool GlHostImport::import_memory(int fd, uint64_t size, uint32_t &name)
         static_cast<void>(errors_.clear());
         return false;
     }
-    /* A successful glImportMemoryFdEXT owns the descriptor and GL closes it. */
     static_cast<void>(taken.take());
     name = made;
     return true;
@@ -135,7 +122,6 @@ bool GlHostImport::import_semaphore(int fd, uint32_t &name)
         static_cast<void>(errors_.clear());
         return false;
     }
-    /* A successful glImportSemaphoreFdEXT owns the descriptor. */
     static_cast<void>(taken.take());
     name = made;
     return true;
@@ -159,4 +145,4 @@ void GlHostImport::delete_semaphore(uint32_t name)
     static_cast<void>(errors_.clear());
 }
 
-}  // namespace av
+}

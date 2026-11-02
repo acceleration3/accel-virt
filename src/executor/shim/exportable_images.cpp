@@ -15,19 +15,13 @@
 namespace av {
 
 namespace {
-
-/* The private data a texture made here carries: its ExportableImage. */
 constexpr GUID image_data = {0x5e1b7c42, 0x93d0, 0x4f6a, {0x8c, 0x2e, 0x71, 0x0b, 0xd4, 0x96, 0x3a, 0x58}};
-/* The private data a texture carries once a consumer on another GPU asked
- * for its copy in system memory: its SystemMemoryTwin. */
 constexpr GUID twin_data = {0x2f9d4a16, 0x7be3, 0x4c81, {0x95, 0x0a, 0xe3, 0x6c, 0x18, 0xb7, 0x4d, 0x20}};
-/* From drm_fourcc.h. */
 constexpr uint64_t drm_format_mod_linear = 0u;
 constexpr uint64_t drm_format_mod_invalid = 0x00ffffffffffffffull;
-/* More tilings than any driver lists for one format and layout here. */
 constexpr uint32_t most_tilings = 16u;
 
-}  // namespace
+}
 
 ExportableImages::ExportableImages(DxvkVulkanDevice &vulkan, DriverLog &lines)
     : vulkan_(vulkan), heap_(), images_(heap_), twins_(heap_), twin_refused_(false), retired_(0u), lines_(lines)
@@ -41,11 +35,6 @@ ExportableImages::~ExportableImages()
     release();
 }
 
-/* The image is made as vkd3d-proton made its own, so the two lay the memory
- * out alike; memory that is not what this image asks for is a layout they do
- * not agree on, and is refused rather than shown wrong. Each refusal says why
- * in the host log, the only place it is seen: the guest learns only that its
- * buffer could not be shown. */
 ID3D11Texture2D *ExportableImages::import(Vkd3dImageExport &image, const D3D11_TEXTURE2D_DESC1 &desc)
 {
     AV_SCOPE("ExportableImages::import");
@@ -89,8 +78,6 @@ ID3D11Texture2D *ExportableImages::import(Vkd3dImageExport &image, const D3D11_T
     return wrap(*made, drm_format_mod_invalid, desc);
 }
 
-/* The same description the compositor made the image from, so both devices
- * read one layout from the memory; dedicated, as the compositor's is. */
 ID3D11Texture2D *ExportableImages::adopt(OwnedFd &descriptor, const D3D11_TEXTURE2D_DESC1 &desc)
 {
     AV_SCOPE("ExportableImages::adopt");
@@ -125,11 +112,6 @@ ID3D11Texture2D *ExportableImages::adopt_laid_out(OwnedFd &descriptor, const Exp
     return wrap(*made, modifier, desc);
 }
 
-/* Rows, over memory whose bytes are kept as they are: an OpenCL that names no
- * image over a buffer opens the texture as its bytes
- * (OpenClBackend::image_over). A GPU that cannot draw into rows of the format
- * leaves the texture to DXVK, with memory nothing else opens: its pictures
- * then cross as pixels. */
 ID3D11Texture2D *ExportableImages::make_rows(const D3D11_TEXTURE2D_DESC1 &desc)
 {
     AV_SCOPE("ExportableImages::make_rows");
@@ -149,13 +131,6 @@ ID3D11Texture2D *ExportableImages::make_rows(const D3D11_TEXTURE2D_DESC1 &desc)
     return wrap(*made, drm_format_mod_linear, desc);
 }
 
-/* Laid out by a tiling the driver picks among the GPU's own, over memory of
- * the GPU's choosing: what Direct3D draws and samples at full speed. On
- * Intel's Xe graphics a full-screen draw into rows takes three and a half
- * times as long as into the same image tiled, and one from rows six times
- * (tools/host/shared_image_bench.c): DWM composing a captured monitor into
- * shared rows and from them every frame was what dropped its frames. A GPU
- * with no tiling it exports in one plane gets rows. */
 ID3D11Texture2D *ExportableImages::make_tiled(const D3D11_TEXTURE2D_DESC1 &desc)
 {
     AV_SCOPE("ExportableImages::make_tiled");
@@ -214,7 +189,6 @@ bool ExportableImages::export_memory(ID3D11Texture2D *texture, OwnedFd &descript
     return made != nullptr && made->rows() && made->image().export_dma_buf(descriptor);
 }
 
-/* The dma-buf is the caller's, as AvExportedImage hands it. */
 bool ExportableImages::export_image(ID3D11Texture2D *texture, AvExportedImage &image)
 {
     AV_SCOPE("ExportableImages::export_image");
@@ -312,10 +286,7 @@ ExportableImage *ExportableImages::image_of(ID3D11Texture2D *texture)
     IUnknown *held = nullptr;
     UINT      size = sizeof held;
     if (FAILED(texture->GetPrivateData(image_data, &size, &held)) || held == nullptr) return nullptr;
-    /* The reference the read took is the image's own count, given straight back. */
     held->Release();
-    /* The pool knows its images by their own addresses, which are the
-     * hold's: it is their only base. */
     ExportableImage *const image = images_.find(static_cast<void *>(held));
     return image != nullptr && !image->retired() ? image : nullptr;
 }
@@ -332,10 +303,6 @@ SystemMemoryTwin *ExportableImages::twin_of(ID3D11Texture2D *texture)
     return twin != nullptr && !twin->retired() ? twin : nullptr;
 }
 
-/* The reasons are the GPU's: no host-visible system memory type, no linear
- * image of the format, or DXVK would not wrap one. A texture that is refused
- * once is refused each time, and the consumer is told at once
- * (AV_EXPORT_UNAVAILABLE) rather than asked to wait. */
 SystemMemoryTwin *ExportableImages::make_twin(ID3D11Texture2D *texture)
 {
     AV_SCOPE("ExportableImages::make_twin");
@@ -385,11 +352,10 @@ ID3D11Texture2D *ExportableImages::wrap(ExportableImage &made, uint64_t modifier
                                                 reinterpret_cast<IUnknown *>(static_cast<TextureHold *>(&made))))) {
         lines_.write("DXVK made no texture over an image of its own device");
         if (texture != nullptr) texture->Release();
-        /* Collected with the rest when the texture held it; freed here when not. */
         if (!made.retired()) discard(made);
         return nullptr;
     }
     return texture;
 }
 
-}  // namespace av
+}

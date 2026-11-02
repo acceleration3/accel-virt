@@ -1,12 +1,3 @@
-/* cl_khr_gl_sharing in the guest ICD: which OpenGL context a context is made
- * from, what reaches the miniport for it, and which entries refuse a context
- * that was made from none.
- *
- * What is asserted is what an application sees - the context or the error it
- * is handed, the device clGetGLContextInfoKHR names - and what the ICD decides
- * the miniport is told: the OpenGL ICD's share name for the context, in the
- * record of the virtual context the ICD makes, and nothing at all for a GL
- * context the OpenGL ICD cannot vouch for. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
@@ -28,11 +19,8 @@ constexpr std::uint64_t host_platform = 0x7200u;
 constexpr std::uint64_t host_device = 0x7300u;
 constexpr std::uint64_t host_context = 0x7400u;
 constexpr std::uint64_t host_buffer = 0x7500u;
-/* What the OpenGL ICD would answer for its context: a D3DKMT handle, so
- * nothing a pointer or a host number could be mistaken for. */
 constexpr std::uint32_t gl_share_name = 0x40000C42u;
 
-/* The one device, found as the loader finds it. */
 class Found {
 public:
     explicit Found(ClIcdRig &rig) : rig_(rig)
@@ -50,8 +38,6 @@ public:
 
     cl_device_id device() const { return device_; }
 
-    /* A context made through the table with `properties`, the host answering
-     * it as `host_context`. */
     cl_context create(const cl_context_properties *properties, cl_int &error)
     {
         rig_.host().blob_import(0u, 0x78u);
@@ -71,7 +57,7 @@ void *const current_gl = reinterpret_cast<void *>(static_cast<std::uintptr_t>(0x
 void *const other_gl = reinterpret_cast<void *>(static_cast<std::uintptr_t>(0x10040u));
 void *const window_dc = reinterpret_cast<void *>(static_cast<std::uintptr_t>(0x2B010u));
 
-}  // namespace
+}
 
 TEST(cl_gl_sharing, a_context_made_from_the_current_gl_context_names_its_objects)
 { ClIcdRig rig;
@@ -84,14 +70,11 @@ TEST(cl_gl_sharing, a_context_made_from_the_current_gl_context_names_its_objects
   const cl_context context = found.create(properties, error);
   CHECK_EQ(error, CL_SUCCESS);
   CHECK(context != nullptr);
-  /* The miniport is asked for an OpenCL context sharing the GL context's
-   * objects, by the name the OpenGL ICD gave. */
   av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), av::Status::ok);
   CHECK(record.sub_api() == av::SubApi::opencl);
   CHECK_EQ(record.options().share_context(), gl_share_name);
   CHECK(record.options().shares_only());
-  /* And the GL name a buffer is made over reaches the host as it was given. */
   rig.host().cl_handle(host_buffer, CL_SUCCESS);
   cl_int     made = CL_INVALID_VALUE;
   const cl_mem buffer = rig.loader().dispatch_of(context)->clCreateFromGLBuffer(context, CL_MEM_READ_WRITE, 7u, &made);
@@ -111,7 +94,6 @@ TEST(cl_gl_sharing, a_gl_context_that_is_not_current_is_no_share_group_and_makes
         nullptr);
   CHECK_EQ(error, CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR);
   CHECK_EQ(rig.gl_share().asked(), 1u);
-  /* Refused before any virtual context was asked for. */
   CHECK_EQ(rig.kmt().last_private_size(), made_before); }
 
 TEST(cl_gl_sharing, a_context_made_from_no_gl_context_opens_no_gl_object)
@@ -142,7 +124,6 @@ TEST(cl_gl_sharing, the_device_of_the_current_gl_context_is_the_one_device)
                                            CL_WGL_HDC_KHR, reinterpret_cast<cl_context_properties>(window_dc), 0};
   cl_device_id named = nullptr;
   std::size_t  size = 0u;
-  /* The device's extensions, asked once and kept: it reports the extension. */
   rig.host().cl_info(CL_SUCCESS, "cl_khr_icd cl_khr_gl_sharing", 29u);
   CHECK_EQ(table->clGetGLContextInfoKHR(current, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof named, &named, &size),
            CL_SUCCESS);
@@ -152,8 +133,6 @@ TEST(cl_gl_sharing, the_device_of_the_current_gl_context_is_the_one_device)
   CHECK_EQ(table->clGetGLContextInfoKHR(current, CL_DEVICES_FOR_GL_CONTEXT_KHR, sizeof named, &named, nullptr),
            CL_SUCCESS);
   CHECK(named == found.device());
-  /* A context nobody vouches for has no device, and a question the extension
-   * does not ask is refused, not answered. */
   const cl_context_properties other[] = {CL_GL_CONTEXT_KHR, reinterpret_cast<cl_context_properties>(other_gl),
                                          CL_WGL_HDC_KHR, reinterpret_cast<cl_context_properties>(window_dc), 0};
   CHECK_EQ(table->clGetGLContextInfoKHR(other, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof named, &named, nullptr),
@@ -163,10 +142,6 @@ TEST(cl_gl_sharing, the_device_of_the_current_gl_context_is_the_one_device)
            CL_INVALID_VALUE); }
 
 
-/* A buffer over a GL buffer is the host's object over that name, and what it
- * says of itself is the host's answer: a buffer made, then asked which GL
- * object it is. A host that made nothing is CL_INVALID_GL_OBJECT whether or
- * not it said why, and a cl_mem the ICD never made is refused without asking. */
 TEST(cl_gl_sharing, create_from_gl_buffer_makes_the_host_s_object_and_gl_object_info_answers_for_it)
 { ClIcdRig rig;
   Found     found(rig);
@@ -204,10 +179,6 @@ TEST(cl_gl_sharing, create_from_gl_buffer_makes_the_host_s_object_and_gl_object_
   CHECK(rig.root().create_from_gl_buffer(nullptr, CL_MEM_READ_WRITE, 7u, &made) == nullptr);
   CHECK_EQ(made, CL_INVALID_CONTEXT); }
 
-/* A host whose OpenCL makes no context against its GL - NVIDIA's refuses every
- * EGL context, and the executor strikes the extension - leaves the device
- * without cl_khr_gl_sharing, and the current GL context then has no device:
- * an application that asks is not led to a clCreateContext that must fail. */
 TEST(cl_gl_sharing, a_device_without_the_extension_is_no_device_of_the_gl_context)
 { ClIcdRig rig;
   Found     found(rig);
@@ -228,8 +199,6 @@ TEST(cl_gl_sharing, a_device_without_the_extension_is_no_device_of_the_gl_contex
   CHECK(named == nullptr);
   CHECK_EQ(size, 0u); }
 
-/* A host that will not say which extensions its device has leaves the question
- * unanswered, with the host's own error. */
 TEST(cl_gl_sharing, a_host_that_will_not_list_the_extensions_answers_its_error)
 { ClIcdRig rig;
   Found     found(rig);
@@ -247,16 +216,8 @@ namespace {
 
 std::uint32_t commands_sent(void *kmt) { return static_cast<const av::MockKmt *>(kmt)->commands(); }
 
-}  // namespace
+}
 
-/* Our OpenGL ICD holds a context's calls and sends them a batch at a time, and
- * the host runs the GL context and the OpenCL one on workers of their own: a
- * texture glGenTextures named and a bind still held made is nothing on the
- * host yet. So each create from a GL object has the calling thread's GL
- * context's held calls run first, before anything of the create is sent -
- * DaVinci Resolve registers its viewer textures on the thread that made them,
- * and was refused every one (CL_INVALID_GL_OBJECT). A refused context asks
- * nothing of GL. */
 TEST(cl_gl_sharing, each_create_from_a_gl_object_runs_the_held_gl_calls_before_it_is_sent)
 { ClIcdRig rig;
   Found     found(rig);
@@ -291,7 +252,6 @@ TEST(cl_gl_sharing, each_create_from_a_gl_object_runs_the_held_gl_calls_before_i
   CHECK_EQ(rig.gl_share().runs(), 3u);
   CHECK_EQ(rig.gl_share().commands_at_run(), sent);
 
-  /* A context made from no GL context is refused before GL is asked. */
   const cl_context plain = found.create(nullptr, error);
   CHECK_EQ(error, CL_SUCCESS);
   if (plain == nullptr) return;

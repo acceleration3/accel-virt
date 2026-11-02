@@ -108,4 +108,4 @@ Status FencePage::decode(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-}  // namespace av
+}

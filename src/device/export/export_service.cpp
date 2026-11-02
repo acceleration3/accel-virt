@@ -12,7 +12,6 @@ ExportService::ExportService(Host &host, DisplayClock &clock) : host_(host), gpu
         static_cast<void>(storage.construct(host, gpu_, clock));
 }
 
-/* Every connection's thread ends before the GPU it asks goes. */
 ExportService::~ExportService()
 {
     AV_SCOPE("ExportService::~ExportService");
@@ -26,8 +25,6 @@ void ExportService::attach(ContextPlane &contexts, const uint8_t *gpu_uuid, cons
     gpu_.attach(contexts, gpu_uuid, greeting, heads);
 }
 
-/* The consumers that have gone are reaped first, so a full service still
- * takes a connection while one of its slots only waits to be closed. */
 Status ExportService::accept(int connection, bool same_user)
 {
     AV_SCOPE("ExportService::accept");
@@ -72,4 +69,4 @@ bool ExportService::invariants_hold() const
     return live() <= max_connections;
 }
 
-}  // namespace av
+}

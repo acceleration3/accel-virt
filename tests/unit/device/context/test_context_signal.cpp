@@ -1,6 +1,3 @@
-/* The landing pad for a completion that arrives on a thread the device never
- * gave the host: everything that thread is allowed to do, and what the context's
- * worker does with it afterwards. */
 #include "core/support/status.hpp"
 #include "device/context/context_signal.hpp"
 #include "device/fence/fence_interrupts.hpp"
@@ -46,7 +43,7 @@ struct ContextSignalProbe {
     static void pend_without_raising(ContextSignal &signal) { signal.pending_ = true; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -95,7 +92,6 @@ public:
         return decoded;
     }
 
-    /* Whether the page reached `progress` before patience ran out. */
     bool progressed(std::uint64_t progress)
     {
         for (std::uint32_t spins = 0u; spins < patience && page().progress() != progress; spins++) sched_yield();
@@ -132,12 +128,8 @@ private:
     ContextSignal            signal_;
 };
 
-}  // namespace
+}
 
-/* The whole budget of a thread the device does not own is a flag and a wake.
- * The fence page, the handle registry and the decode arena each open with
- * require_worker, so if raise() reached any of them this call - made from the
- * main loop, which is not the worker - would record a violation. */
 TEST(context_signal_raise, a_thread_that_is_not_the_worker_touches_nothing_the_worker_owns)
 { Fixture fixture;
   fixture.prepare_page();
@@ -147,7 +139,6 @@ TEST(context_signal_raise, a_thread_that_is_not_the_worker_touches_nothing_the_w
   CHECK(fixture.signal().pending());
   CHECK_EQ(fixture.signal().raised(), 2u);
   CHECK_EQ(fixture.signal().delivered(), 0u);
-  /* Nothing the guest reads has moved: the page is as prepare left it. */
   CHECK_EQ(fixture.page().progress(), 0u);
   CHECK_EQ(fixture.page().completed_fence(), 0u);
   CHECK(!fixture.page().faulted());
@@ -162,13 +153,11 @@ TEST(context_signal_drain, the_worker_raises_once_for_everything_raised_since)
   fixture.signal().raise();
   fixture.on_another_thread(&drain_as_worker, &fixture.signal());
   CHECK_EQ(fixture.page().progress(), 1u);
-  /* Coalesced: one raise on the page for three on the signal. */
   CHECK_EQ(fixture.page().raised(), 1u);
   CHECK_EQ(fixture.page().completed_fence(), 0u);
   CHECK_EQ(fixture.signal().delivered(), 1u);
   CHECK_EQ(fixture.signal().raised(), 3u);
   CHECK(!fixture.signal().pending());
-  /* A drain with nothing raised since writes nothing at all. */
   fixture.on_another_thread(&drain_as_worker, &fixture.signal());
   CHECK_EQ(fixture.page().progress(), 1u);
   CHECK_EQ(fixture.signal().delivered(), 1u);
@@ -180,9 +169,6 @@ TEST(context_signal_drain, the_worker_raises_once_for_everything_raised_since)
   CHECK_EQ(fixture.signal().delivered(), 2u);
   CHECK(fixture.signal().invariants_hold()); }
 
-/* End to end, on the worker the device really runs: a host thread raises, the
- * worker wakes, the page moves with nothing claimed completed, and the guest's
- * line is raised once. */
 TEST(context_signal, a_raise_from_another_thread_wakes_the_worker_and_interrupts_the_guest)
 { Fixture fixture;
   fixture.prepare_page();
@@ -202,8 +188,6 @@ TEST(context_signal, a_raise_from_another_thread_wakes_the_worker_and_interrupts
   CHECK_EQ(fixture.host().unclaimed_violations(), 0u);
   CHECK(fixture.signal().invariants_hold()); }
 
-/* A wake has nowhere to go until the worker runs, and the flag is what keeps
- * the completion from being lost. */
 TEST(context_signal, a_raise_a_stopped_worker_never_saw_is_delivered_when_it_next_wakes)
 { Fixture fixture;
   fixture.prepare_page();
@@ -226,8 +210,8 @@ TEST(context_signal, the_drain_is_the_workers_and_the_landing_pad_is_attached_on
   fixture.prepare_page();
   fixture.signal().raise();
   fixture.signal().drain();
-  CHECK(fixture.host().claim(HostViolation::worker_required));   /* ContextSignal::drain */
-  CHECK(fixture.host().claim(HostViolation::worker_required));   /* FenceReporter::raise */
+  CHECK(fixture.host().claim(HostViolation::worker_required));
+  CHECK(fixture.host().claim(HostViolation::worker_required));
   struct Attachment {
       Worker        *worker;
       ContextSignal *signal;

@@ -1,13 +1,3 @@
-/* The five traits src/proto/generated/opencl/cl_icd_stubs.h names, for the
- * guest build alone.
- *
- * That header is generated against a hosted compiler and includes
- * <type_traits>; avcl.dll is built with /X against the Windows kit, which
- * carries no C++ standard library, so the include resolves here through this
- * target's include path and nowhere else. Same device as
- * src/um/opencl_loader/compat/, which answers the C library names the pinned
- * Khronos loader calls. Everything below is what the compiler already knows -
- * these are builtins - written out because no header here declares them. */
 #ifndef AV_UM_OPENCL_COMPAT_TYPE_TRAITS
 #define AV_UM_OPENCL_COMPAT_TYPE_TRAITS
 
@@ -30,6 +20,6 @@ inline constexpr bool is_void_v = __is_void(T);
 template <typename T>
 inline constexpr bool is_pointer_v = __is_pointer(T);
 
-}  // namespace std
+}
 
-#endif  // AV_UM_OPENCL_COMPAT_TYPE_TRAITS
+#endif

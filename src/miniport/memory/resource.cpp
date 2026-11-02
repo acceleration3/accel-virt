@@ -32,4 +32,4 @@ uint32_t Resource::allocations() const
     return allocations_;
 }
 
-}  // namespace av
+}

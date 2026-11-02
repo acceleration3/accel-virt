@@ -1,7 +1,3 @@
-/* A function's name as AV_SCOPE writes it, and the 32-bit id a trace table
- * stores for it: FNV-1a over the name's bytes, computed while compiling, so a
- * reader holding only the table maps an id back by hashing the names in the
- * source tree (docs/trace.md). Constexpr, so its body is here. */
 #ifndef AV_SCOPE_NAME_HPP
 #define AV_SCOPE_NAME_HPP
 
@@ -28,6 +24,6 @@ private:
     uint32_t    id_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCOPE_NAME_HPP
+#endif

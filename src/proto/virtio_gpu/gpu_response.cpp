@@ -78,4 +78,4 @@ size_t GpuResponse::length() const
     return length_;
 }
 
-}  // namespace av
+}

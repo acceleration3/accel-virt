@@ -1,8 +1,3 @@
-/* DISPLAY_CLOCK, PRESENT_ENGINE and DISPLAY_TIMING as the driver writes them
- * and the device reads them: the header, then the page's address, or the head
- * and its rate.
- * A page address that is not a page's, a rate outside 1 Hz to 1 kHz, or a
- * request too short for its fields decodes to nothing. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/virtio_gpu/page_request.hpp"
@@ -28,7 +23,7 @@ std::uint32_t type_of(const std::uint8_t *bytes)
     return type;
 }
 
-}  // namespace
+}
 
 TEST(display_clock_request, the_writer_s_request_decodes_to_its_page)
 { std::uint8_t bytes[AvRequestWriter::max_request_size] = {};
@@ -42,7 +37,6 @@ TEST(display_clock_request, the_writer_s_request_decodes_to_its_page)
   CHECK_EQ(clock.address(), 0x1234567000u);
   CHECK_EQ(reader.offset(), PageRequest::encoded_size); }
 
-/* The present engine's page travels as the clock's does, under its own type. */
 TEST(display_clock_request, the_present_engine_s_page_is_named_under_its_own_type)
 { std::uint8_t bytes[AvRequestWriter::max_request_size] = {};
   AvRequestWriter writer(bytes, sizeof bytes);
@@ -82,7 +76,7 @@ TEST(display_clock_request, an_address_off_a_page_or_a_short_request_is_malforme
       CHECK_STATUS(clock.decode(reader), Status::malformed);
       CHECK_EQ(clock.address(), 0u);
   }
-  bytes[31] = 0x80u;   /* the address's top byte: the whole u64 is read */
+  bytes[31] = 0x80u;
   bytes[24] = 0u;
   bytes[25] = 0u;
   WireReader high_reader(bytes, PageRequest::encoded_size);

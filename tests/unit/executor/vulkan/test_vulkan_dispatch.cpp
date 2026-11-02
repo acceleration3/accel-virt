@@ -1,14 +1,3 @@
-/* What the generated Vulkan decoder answers for a call the driver failed, or
- * answered past the room it was given (feature 044, T033).
- *
- * A driver that fails may leave anything in an output, and serializing a
- * handle is what makes the backend accept it back: a failed create whose
- * output held a stale pointer would hand the guest a number the host then
- * dereferences. And a driver that reports more entries than the array it was
- * handed would have the reply serialize the arena past the array. Decoded into
- * a driver with no GPU behind it that fails the way a careless one does, with
- * the backend deciding the handles - which numbers it knows is what a guest can
- * reach. */
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "harness/executor/vulkan_backend_probe.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -44,9 +33,6 @@ H as_handle(std::uint64_t raw)
   std::memcpy(&handle, &raw, sizeof handle);
   return handle; }
 
-/* A driver that makes an instance and a device, lists its physical devices the
- * way a test tells it to, and fails every buffer create with a stale pointer
- * left in the output. */
 class CarelessDriver final : public vkproto::DefaultServerDispatch {
 public:
     VkResult on_vkCreateInstance(const VkInstanceCreateInfo *, const VkAllocationCallbacks *,
@@ -55,8 +41,6 @@ public:
     VkResult on_vkCreateDevice(VkPhysicalDevice, const VkDeviceCreateInfo *,
                                const VkAllocationCallbacks *, VkDevice *out) override
     { *out = as_handle<VkDevice>(first_invented + 0x200u); return VK_SUCCESS; }
-    /* Every slot of the array stale, then the first `listed_` of them real,
-     * for a call that succeeds; the count the driver claims either way. */
     VkResult on_vkEnumeratePhysicalDevices(VkInstance, uint32_t *count, VkPhysicalDevice *out) override
     { if (out != nullptr) {
           for (uint32_t i = 0u; i < *count; i++) out[i] = as_handle<VkPhysicalDevice>(stale);
@@ -69,8 +53,6 @@ public:
                                VkBuffer *out) override
     { *out = as_handle<VkBuffer>(stale); return VK_ERROR_OUT_OF_DEVICE_MEMORY; }
 
-    /* The next enumeration answers `result`, writes `listed` devices and
-     * claims `claimed`. */
     void enumerate(VkResult result, std::uint32_t listed, std::uint32_t claimed)
     { result_ = result;
       listed_ = listed;
@@ -82,8 +64,6 @@ private:
     std::uint32_t claimed_ = 1u;
 };
 
-/* One guest context: a frame in, the answer out, the registry judged after
- * every one. */
 class GuestContext {
 public:
     GuestContext() : backend_(), probe_(backend_), driver_(), block_{}, frame_{}, reply_{}, answered_(0u) {}
@@ -102,7 +82,6 @@ public:
       CHECK(probe_.handles().invariants_hold());
       return ran; }
 
-    /* The handle a create answered, after its result. */
     std::uint64_t created() const
     { WireReader reply = answer();
       std::int32_t  result = 0;
@@ -119,7 +98,6 @@ public:
       CHECK(send(vkproto::kCmd_vkCreateInstance, writer));
       return created(); }
 
-    /* vkEnumeratePhysicalDevices with room for `room`. */
     bool enumerate(std::uint64_t instance, std::uint32_t room)
     { WireWriter writer = frame();
       writer.write_pod(instance);
@@ -146,8 +124,6 @@ private:
     std::size_t        answered_;
 };
 
-/* An enumeration's answer: its result and count, into `listed` as many
- * handles as fit; how many followed the count. */
 std::uint32_t read_enumeration(const GuestContext &guest, std::int32_t &result, std::uint32_t &count,
                                std::uint64_t *listed, std::uint32_t room)
 { WireReader reply = guest.answer();
@@ -161,7 +137,7 @@ std::uint32_t read_enumeration(const GuestContext &guest, std::int32_t &result, 
   CHECK_EQ(reply.remaining(), 0u);
   return followed; }
 
-}  // namespace
+}
 
 TEST(vulkan_dispatch, a_failed_create_answers_a_null_handle_the_host_never_learns)
 { GuestContext guest;
@@ -190,9 +166,6 @@ TEST(vulkan_dispatch, a_failed_create_answers_a_null_handle_the_host_never_learn
   CHECK_EQ(buffer, 0u);
   CHECK(!guest.knows(stale)); }
 
-/* The driver failed and claims seven devices over an array of stale pointers:
- * the answer is the failure and an empty list, whether or not the guest gave
- * room. */
 TEST(vulkan_dispatch, a_failed_enumeration_answers_no_devices_whatever_the_driver_claims)
 { GuestContext guest;
   const std::uint64_t instance = guest.instance();
@@ -208,9 +181,6 @@ TEST(vulkan_dispatch, a_failed_enumeration_answers_no_devices_whatever_the_drive
   }
   CHECK(!guest.knows(stale)); }
 
-/* A driver that claims more devices than the array it was handed is held to
- * the array: the reply lists the room the guest gave and not a slot past it.
- * VK_INCOMPLETE is a success, and what it listed is answered. */
 TEST(vulkan_dispatch, an_enumeration_answers_no_more_devices_than_the_guest_had_room_for)
 { GuestContext guest;
   const std::uint64_t instance = guest.instance();

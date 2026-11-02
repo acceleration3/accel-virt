@@ -27,11 +27,6 @@ uint64_t RingWindow::capacity() const
     return order_ != 0u ? uint64_t{1} << order_ : 0u;
 }
 
-/* The tail is stored whole, by the process or its driver, while this reads:
- * read a byte at a time with the rest of the header, a tail crossing a
- * multiple of 256 is seen half old and half new - a tail ahead of anything
- * written, which faults the context on the stale bytes it points past. It is
- * read again as one word, after the rest. */
 Status RingWindow::snapshot(RingHeader &header) const
 {
     AV_SCOPE("RingWindow::snapshot");
@@ -56,16 +51,12 @@ Status RingWindow::copy(uint64_t counter, uint8_t *bytes, size_t count) const
     return status;
 }
 
-/* One store, for the reason the tail is one load: the process and its driver
- * read the head while this writes it. */
 Status RingWindow::publish_head(uint64_t head) const
 {
     AV_SCOPE("RingWindow::publish_head");
     return blob_.store_u64(head_offset, head);
 }
 
-/* Byte 5 of the header: whether the worker is watching the ring. A process
- * that sees it set may leave the kernel out of a submission. */
 Status RingWindow::announce_awake(bool awake) const
 {
     AV_SCOPE("RingWindow::announce_awake");
@@ -82,4 +73,4 @@ bool RingWindow::invariants_hold() const
            blob_.length() >= RingHeader::encoded_size + capacity();
 }
 
-}  // namespace av
+}

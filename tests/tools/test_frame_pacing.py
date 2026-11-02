@@ -1,8 +1,3 @@
-"""The frame-pacing analysis (tools/frame_pacing.py, tools/etw/): reading ETL
-records with their processor, decoding manifest events by the guest's schema,
-the kernel's scheduling model, a thread's account of its time, and DWM's
-frames against the capture rule - on bytes and events built here, so every
-number a test checks is one it chose."""
 import pathlib
 import struct
 import sys
@@ -23,7 +18,7 @@ from etw.threads import ThreadTimeline  # noqa: E402
 from etw.trace import Event, Trace  # noqa: E402
 
 DWM_GUID = "9e9bba3c-2e38-40cb-99f4-9e8281425164"
-MS = 10_000          # ticks of a 10 MHz clock in a millisecond
+MS = 10_000
 
 
 def aligned(record):
@@ -159,8 +154,8 @@ class KernelModel(unittest.TestCase):
         kernel.add(dpc(50, 60, 1))
         kernel.finish()
         self.assertEqual([item.time for item in kernel.switches[1]], [10, 20])
-        self.assertEqual((kernel.readies[0].tid, kernel.readies[0].readier), (9, 7))   # 7 was running on CPU 1
-        self.assertEqual(kernel.samples[0].stack, (0xFFFF800000001000, 0x100, 0x7000))  # kernel frames, then user
+        self.assertEqual((kernel.readies[0].tid, kernel.readies[0].readier), (9, 7))
+        self.assertEqual(kernel.samples[0].stack, (0xFFFF800000001000, 0x100, 0x7000))
         self.assertEqual((kernel.interrupts[1][0].start, kernel.interrupts[1][0].end), (50, 60))
 
     def test_processes_images_and_their_pdbs_name_addresses(self):
@@ -184,25 +179,23 @@ class KernelModel(unittest.TestCase):
 class Timeline(unittest.TestCase):
     def test_a_thread_s_time_splits_into_running_interrupted_ready_and_blocked(self):
         kernel = Kernel()
-        for record in [switch(0, 2, 5, 0, "Waiting"),              # 5 runs on CPU 2 from 0
-                       dpc(2 * MS, 3 * MS, 2),                        # 1 ms of it is a DPC
-                       switch(4 * MS, 2, 0, 5, "Waiting", reason=6),  # blocks on UserRequest
-                       ready(6 * MS, 3, 5),                           # woken at 6
-                       switch(7 * MS, 2, 5, 0, "Waiting"),            # runs again at 7
-                       switch(8 * MS, 2, 0, 5, "Ready")]:             # preempted at 8
+        for record in [switch(0, 2, 5, 0, "Waiting"),
+                       dpc(2 * MS, 3 * MS, 2),
+                       switch(4 * MS, 2, 0, 5, "Waiting", reason=6),
+                       ready(6 * MS, 3, 5),
+                       switch(7 * MS, 2, 5, 0, "Waiting"),
+                       switch(8 * MS, 2, 0, 5, "Ready")]:
             kernel.add(record)
         kernel.finish()
         account = ThreadTimeline(kernel, 5, lambda ticks: ticks / MS).account(0, 10 * MS)
         self.assertAlmostEqual(account.running, 5.0)
         self.assertAlmostEqual(account.interrupted, 1.0)
-        self.assertAlmostEqual(account.ready, 1.0 + 2.0)   # woken to running, and preempted to the end
+        self.assertAlmostEqual(account.ready, 1.0 + 2.0)
         self.assertEqual(dict(account.blocked), {"UserRequest": 2.0})
         self.assertAlmostEqual(account.unknown, 0.0)
 
 
 def frames_trace(check_offsets, delayed=(), vblank_ms=16.667):
-    """A trace of DWM frames, one a vblank, each checking its capture at the
-    offset given after its vblank; frames in `delayed` skip the capture."""
     events = []
     vblanks = [int(index * vblank_ms * MS) for index in range(len(check_offsets) + 1)]
     for index, vblank in enumerate(vblanks):
@@ -227,14 +220,12 @@ def frames_trace(check_offsets, delayed=(), vblank_ms=16.667):
 
 class Frames(unittest.TestCase):
     def test_a_check_earlier_after_its_vblank_than_the_last_captured_one_is_predicted_to_skip(self):
-        # 2.0 ms then 1.0 ms after the vblank: 15.67 ms apart, under 16.
         trace = frames_trace([0.5, 0.6, 2.0, 1.0, 1.0, 1.1], delayed={3})
         frames = DwmFrames(trace)
         self.assertEqual((frames.pid, frames.render_tid, frames.capture_manager), (44, 55, 3))
         self.assertEqual([frame.captured for frame in frames.frames], [True, True, True, False, True, True])
         self.assertEqual([frame.predicted_skip for frame in frames.frames], [False, False, False, True, False, False])
         self.assertAlmostEqual(frames.frames[3].elapsed_ms, 16.667 - 1.0, places=2)
-        # The frame after the skip is measured from frame 2's check: two vblanks on.
         self.assertAlmostEqual(frames.frames[4].elapsed_ms, 2 * 16.667 - 1.0, places=2)
         self.assertEqual(frames.rule_agreement(), (1, 0, 0, 4))
 

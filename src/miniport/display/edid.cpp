@@ -10,19 +10,11 @@
 namespace av {
 
 namespace {
-
-/* Header, "AV" product 1 of 2026, version 1.3, digital input, then (after the
- * size in centimetres) gamma 2.2, RGB colour with sRGB primaries and a
- * preferred timing, the sRGB chromaticity, 640x480, 800x600 and 1024x768 at
- * 60 Hz established, and no standard timings. */
 constexpr uint8_t identity[] = {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x4A, 0xCB, 0x01, 0x00,
                                 0x00, 0x00, 0x00, 0x00, 0x00, 0x2E, 0x01, 0x03, 0x80};
 constexpr uint8_t colour[] = {0x78, 0x0E, 0xEE, 0x91, 0xA3, 0x54, 0x4C, 0x99, 0x26, 0x0F, 0x50, 0x54,
                               0x21, 0x08, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
                               0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
-/* Vertical 1-255 Hz, horizontal 1-255 kHz, pixel clock to 2550 MHz: the widest
- * EDID 1.3 states, so a mode the driver offers is outside the monitor's own
- * range only above 255 Hz or 255 kHz. */
 constexpr uint8_t range_limits[] = {0x00, 0x00, 0x00, 0xFD, 0x00, 1u, 255u, 1u, 255u, 255u,
                                     0x00, 0x0A, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20};
 constexpr uint8_t monitor_name[] = {0x00, 0x00, 0x00, 0xFC, 0x00, 'a', 'c', 'c', 'e', 'l', '-', 'v',
@@ -39,7 +31,7 @@ constexpr uint8_t  vertical_front_porch = 3u;
 constexpr uint8_t  vertical_sync = 6u;
 constexpr uint8_t  digital_separate_sync_positive_hsync = 0x1Au;
 
-}  // namespace
+}
 
 Edid::Edid(Platform &platform, const DisplayMode &preferred) : platform_(platform), bytes_{}
 {
@@ -82,7 +74,6 @@ NtStatus Edid::copy(DxgkDeviceDescriptorRecord &descriptor) const
     return NtStatus(Status::ok);
 }
 
-/* Every field is 8 bits plus a high nibble packed with its neighbour's. */
 void Edid::describe(DxgkChildContainerIdRecord &container) const
 {
     AV_SCOPE("Edid::describe");
@@ -93,9 +84,6 @@ void Edid::describe(DxgkChildContainerIdRecord &container) const
     container.EldInfoProductCode = static_cast<uint16_t>(bytes_[product_offset] | bytes_[product_offset + 1u] << 8u);
 }
 
-/* The pixel clock is sixteen bits of 10 kHz, so a mode too fast for it is
- * stated at the fastest rate that fits (DisplayMode::edid_timing) rather than
- * with a clock that wrapped; the monitor source modes carry the real rate. */
 void Edid::write_preferred_timing(const DisplayMode &preferred, uint32_t width_mm, uint32_t height_mm)
 {
     AV_SCOPE("Edid::write_preferred_timing");
@@ -132,7 +120,7 @@ void Edid::write_display_descriptors()
     writer.copy_bytes(range_limits, sizeof range_limits);
     writer.copy_bytes(monitor_name, sizeof monitor_name);
     writer.copy_bytes(dummy, sizeof dummy);
-    writer.write_u8(0u);   /* no extension blocks */
+    writer.write_u8(0u);
 }
 
 void Edid::write_checksum()
@@ -152,4 +140,4 @@ void Edid::describe_link(DxgkargUpdateMonitorLinkInfoRecord &link) const
     link.MonitorLinkInfoDitheringSupport = 0u;
 }
 
-}  // namespace av
+}

@@ -1,6 +1,3 @@
-/* What one session shares through: its GPU's HostShares, in its domain, as
- * that session. Unbound it shares nothing and opens nothing, which is a
- * session slot nobody opened. */
 #include "core/log/driver_log.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
@@ -28,7 +25,7 @@ constexpr std::uint32_t domain = 3u;
 constexpr std::uint32_t kind = 7u;
 constexpr std::uint64_t size = 4096u;
 
-}  // namespace
+}
 
 TEST(session_shares, unbound_shares_and_opens_nothing)
 { SessionShares unbound;
@@ -46,8 +43,6 @@ TEST(session_shares, unbound_shares_and_opens_nothing)
   unbound.end();
   CHECK_EQ(resource.references(), 1u); }
 
-/* Bound, each call is the session's in its domain: what it publishes another
- * session opens there, and nowhere else. */
 TEST(session_shares, bound_it_shares_and_opens_as_its_session_in_its_domain)
 { CountedObject      resource;
   MockPlatform       platform;
@@ -77,15 +72,13 @@ TEST(session_shares, bound_it_shares_and_opens_as_its_session_in_its_domain)
   CHECK(shares.writes(domain, 0x2Bu, count));
   CHECK_EQ(count, 1u);
 
-  /* Its end releases what it imported, through its backend, and leaves it
-   * unbound for the next session in its slot. */
   CHECK_STATUS(reader.open(0x2Au, kind, size, made), Status::ok);
   reader.end();
   CHECK(!reader.bound());
   CHECK_EQ(reader.domain(), 0u);
   CHECK_EQ(reader_backend.released_objects(), 2u);
   shares.release(domain, 0x2Au);
-  CHECK_EQ(shares.live(), 1u);   /* 0x2B, the guest's still */
+  CHECK_EQ(shares.live(), 1u);
   shares.clear();
   IUnknown *objects[1] = {};
   while (shares.take_retired(objects, 1u) != 0u) objects[0]->Release();

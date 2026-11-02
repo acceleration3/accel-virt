@@ -1,8 +1,3 @@
-/* IMPORT_BLOB and RELEASE_BLOB as the device answers them (docs/host-memory.md):
- * an import of a host blob the context's process opened answers status 0 and
- * the executor's handle; every refusal is an answer with its own status and
- * the context runs on; only a body of the wrong length is framing. Run over
- * ImportRig, on the context's worker, with library memory behind every blob. */
 #include "core/support/status.hpp"
 #include "device/execution/blob_import_command.hpp"
 #include "device/execution/blob_imports.hpp"
@@ -29,8 +24,6 @@ namespace {
 
 constexpr std::uint8_t  untouched = 0xEEu;
 
-/* One command run on the worker, as the batch runs it: its status, what it
- * produced, and the reply slot it wrote. */
 class Run {
 public:
     Run(ImportRig &rig, std::uint32_t id, const std::uint8_t *body, std::size_t length,
@@ -86,7 +79,6 @@ Run release(ImportRig &rig, std::uint64_t device_memory)
     return Run(rig, CommandHeader::release_blob_id, bytes, sizeof bytes);
 }
 
-/* A rig whose host blob 0 is three pages the context opened. */
 class Chunked {
 public:
     Chunked() { CHECK_STATUS(rig_.create_host_blob(rig_.blob(0u), ImportRig::context, 3u), Status::ok); }
@@ -96,7 +88,7 @@ private:
     ImportRig rig_;
 };
 
-}  // namespace
+}
 
 TEST(blob_import_command_run, an_import_of_a_host_blob_answers_status_0_and_the_executors_handle)
 { Chunked chunked;
@@ -108,7 +100,7 @@ TEST(blob_import_command_run, an_import_of_a_host_blob_answers_status_0_and_the_
   CHECK_EQ(run.answer().device_memory(), 1u | MockExecutorOps::handle_bit);
   std::uint64_t key = 0u;
   CHECK(rig.ops().import_of(1u, key));
-  CHECK_EQ(key, rig.blob(0u));   /* the memory allocated under the blob's id */
+  CHECK_EQ(key, rig.blob(0u));
   CHECK_EQ(rig.imports().imports(), 1u);
   CHECK_STATUS(release(rig, run.answer().device_memory()).status(), Status::ok);
   CHECK_EQ(rig.imports().imports(), 0u); }
@@ -139,22 +131,17 @@ TEST(blob_import_command_run, every_refusal_is_its_own_status_with_no_handle_and
                                                       run.answer().status());
       CHECK_EQ(run.answer().device_memory(), 0u);
   }
-  rig.host().fail_allocation_at(1u);   /* the first import grows the context's table */
+  rig.host().fail_allocation_at(1u);
   CHECK_EQ(import(rig, ImportBody(rig.blob(0u))).answer().status(), BlobImportAnswer::no_room);
   rig.ops().refuse_import_at(1u);
   CHECK_EQ(import(rig, ImportBody(rig.blob(0u))).answer().status(), BlobImportAnswer::executor_refused);
   CHECK_EQ(rig.imports().imports(), 0u);
   CHECK_EQ(rig.ops().imported(), 0u);
-  /* After all of that, the context imports as if nothing happened. */
   CHECK_EQ(import(rig, ImportBody(rig.blob(0u))).answer().status(), BlobImportAnswer::imported); }
 
-/* A context past the 4096 imports its table once held is answered imported:
- * no_room is the host out of memory, never a count. */
 TEST(blob_import_command_run, a_context_past_the_old_table_still_imports)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
-  /* Filled on the worker directly: a Run per import would judge the whole
-   * table's invariants thousands of times over. */
   Status filled = Status::ok;
   rig.on_worker([&] {
       std::uint64_t handle = 0u;
@@ -215,7 +202,7 @@ TEST(blob_import_command_run, a_slot_too_small_for_the_answer_is_written_nothing
   CHECK_STATUS(small.status(), Status::ok);
   CHECK_EQ(small.produced(), BlobImportAnswer::encoded_size);
   CHECK_EQ(small.reply()[0], untouched);
-  CHECK_EQ(rig.imports().imports(), 1u);   /* the import stands: the guest asked for it */
+  CHECK_EQ(rig.imports().imports(), 1u);
   const Run none(rig, CommandHeader::import_blob_id, body.bytes(), BlobImportRequest::encoded_size, 0u);
   CHECK_EQ(none.produced(), BlobImportAnswer::encoded_size); }
 
@@ -228,15 +215,11 @@ TEST(blob_import_command_run, a_transport_id_that_is_neither_is_not_its_to_answe
       CHECK_EQ(run.produced(), 0u);
   } }
 
-/* Every single-bit corruption of a valid import: always an answer - the length
- * is right - whose status the contract decides. A flip in the resource names
- * another id, no blob of this context's - or, for the one bit set, no resource
- * at all; a flip in the reserved half is a request no driver writes. */
 TEST(blob_import_command_run, every_bit_flip_of_an_import_is_an_answer_and_leaves_the_context_consistent)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
   const ImportBody    valid(rig.blob(0u));
-  const std::uint32_t only_bit = 24u;   /* HostBlobId::first is 1 << 24 */
+  const std::uint32_t only_bit = 24u;
   for (std::uint32_t bit = 0u; bit < BlobImportRequest::encoded_size * 8u; bit++) {
       ImportBody flipped = valid;
       flipped.bytes()[bit / 8u] = static_cast<std::uint8_t>(flipped.bytes()[bit / 8u] ^ (1u << (bit % 8u)));

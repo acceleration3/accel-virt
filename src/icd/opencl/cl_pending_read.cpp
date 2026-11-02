@@ -57,4 +57,4 @@ bool ClPendingRead::invariants_hold() const
            bytes_ == 0u && !ours_;
 }
 
-}  // namespace av::clicd
+}

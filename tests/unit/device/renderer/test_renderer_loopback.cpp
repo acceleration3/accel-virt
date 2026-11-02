@@ -1,7 +1,3 @@
-/* The device's host and the renderer's service in one process, joined by
- * MockHost's renderer socket: what QEMU sends crosses as bytes and duplicated
- * descriptors and comes back as the renderer's answer, so the protocol is
- * proven end to end before a process boundary is involved. */
 #include "core/support/status.hpp"
 #include "device/renderer/guest_memory_table.hpp"
 #include "device/renderer/renderer_service.hpp"
@@ -32,8 +28,6 @@ namespace {
 constexpr char        executor_path[] = "/opt/av/libav_executor.so";
 constexpr std::size_t datagram_capacity = RendererMessageHeader::encoded_size + 4096u + 256u;
 
-/* The hello QEMU sends a new renderer: protocol 1, the bound GPU's UUID, the
- * library to load and a capset offering Vulkan. */
 std::size_t hello(std::uint8_t (&datagram)[datagram_capacity], std::uint64_t sequence)
 {
     const std::uint8_t uuid[av::HelloMessage::uuid_bytes] = {0x42u, 7u};
@@ -68,7 +62,7 @@ std::size_t region(std::uint8_t (&datagram)[datagram_capacity], std::uint32_t nu
     return RendererMessageHeader::encoded_size + av::RegionMessage::encoded_size;
 }
 
-}  // namespace
+}
 
 TEST(renderer_loopback, a_hello_loads_the_executor_and_is_answered_ready)
 { MockHost qemu;
@@ -98,20 +92,15 @@ TEST(renderer_loopback, a_hello_loads_the_executor_and_is_answered_ready)
   CHECK_EQ(ready.version(), av::HelloMessage::protocol_version);
   CHECK_EQ(ready.executor_abi(), static_cast<std::uint32_t>(AV_EXECUTOR_ABI_VERSION));
   CHECK_EQ(ready.sub_apis(), static_cast<std::uint32_t>(av::SubApi::vulkan));
-  /* One hello, one answer: the next receive has nothing to take. */
   CHECK_STATUS(qemu.receive_renderer(answer, sizeof answer, answered, nullptr, 0u, count, 100u),
                Status::invalid_state);
 
-  /* A second hello is not a renderer's to accept, and is answered nothing. */
   CHECK_STATUS(qemu.send_renderer(datagram, length, nullptr, 0u), Status::ok);
   CHECK_STATUS(peer.last_outcome(), Status::malformed);
   CHECK_EQ(peer.queued(), 0u);
   CHECK_EQ(peer.resources().executor_loads(), 1u);
   CHECK(peer.service().invariants_hold()); }
 
-/* A region's memfd crosses as the renderer's own copy; the renderer maps it
- * and a guest extent resolves to the very bytes QEMU registered, while the
- * device's descriptor is still its own to close. */
 TEST(renderer_loopback, a_guest_region_maps_to_the_bytes_qemu_registered)
 { MockHost qemu;
   MockExecutorOps executor(static_cast<std::uint32_t>(av::SubApi::vulkan));
@@ -143,12 +132,10 @@ TEST(renderer_loopback, a_guest_region_maps_to_the_bytes_qemu_registered)
   CHECK(seen == ram + 0x10);
   CHECK_EQ(*seen, 0xC3u);
   CHECK_EQ(peer.resources().live_mappings(), 1u);
-  CHECK_EQ(peer.resources().live_descriptors(), 1u);   /* the table keeps the region's */
-  CHECK_EQ(peer.queued(), 0u);                         /* a region is answered nothing */
+  CHECK_EQ(peer.resources().live_descriptors(), 1u);
+  CHECK_EQ(peer.queued(), 0u);
   CHECK(peer.service().invariants_hold()); }
 
-/* Before a hello nothing is taken, and whatever came with the datagram is
- * closed on the renderer's side rather than left open there. */
 TEST(renderer_loopback, a_datagram_before_the_hello_is_refused_and_its_descriptor_closed)
 { MockHost qemu;
   MockExecutorOps executor(static_cast<std::uint32_t>(av::SubApi::vulkan));

@@ -1,10 +1,3 @@
-"""The pinned translation layers, fetched (tools/fetch_layers.py, feature 047).
-
-Driven over archives this test builds and serves through file://, so what is
-judged is the tool's own promises: nothing written when a hash disagrees, a
-partial download not trusted, --check answering what is on disk, and the source
-tree landing where tools/layer_requirements.py reads it.
-"""
 import hashlib
 import io
 import pathlib
@@ -29,7 +22,6 @@ def digest_of(raw):
 
 
 def tar_gz(members):
-    """A .tar.gz with one top directory, as a release archive has."""
     raw = io.BytesIO()
     with tarfile.open(fileobj=raw, mode="w:gz") as bundle:
         for name, content in members.items():
@@ -79,11 +71,8 @@ class FetchLayers(unittest.TestCase):
         result = self.fetch()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((self.into / "d3d12.dll").read_bytes(), b"MZ the layer")
-        # The top directory the archive carried is not part of the path: the
-        # required list is read from source/libs/vkd3d/device.c.
         self.assertIn("VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME",
                       (self.into / "source" / "libs" / "vkd3d" / "device.c").read_text())
-        # And what landed is what the extractor then reads.
         listing = run(ROOT / "tools" / "layer_requirements.py", self.into / "source", "--json")
         self.assertEqual(listing.returncode, 0, listing.stdout + listing.stderr)
         self.assertIn("VK_KHR_push_descriptor", listing.stdout)
@@ -97,7 +86,6 @@ class FetchLayers(unittest.TestCase):
         after = self.fetch(self.pins(), "--check")
         self.assertEqual(after.returncode, 0, after.stdout + after.stderr)
         self.assertIn("the pinned files are in", after.stdout)
-        # A file that changed on disk is not the pinned one any more.
         (self.into / "d3d12.dll").write_bytes(b"MZ something else")
         changed = self.fetch(self.pins(), "--check")
         self.assertEqual(changed.returncode, 1)
@@ -110,16 +98,12 @@ class FetchLayers(unittest.TestCase):
         self.assertIn("want " + wrong, result.stderr)
         self.assertFalse((self.into / "source").exists())
         self.assertFalse((self.into / "d3d12.dll").exists())
-        # The archive it could not vouch for is not left in the cache to be
-        # trusted next time.
         self.assertEqual(list(self.cache.glob("*source*")), [])
 
     def test_a_file_whose_hash_disagrees_writes_nothing_at_all(self):
         result = self.fetch(self.pins(file_digest="1" * 64))
         self.assertEqual(result.returncode, 1)
         self.assertIn("d3d12.dll sha256", result.stderr)
-        # Not even the source tree, which verified: a half-fetched layer is
-        # worse than none.
         self.assertFalse((self.into / "source").exists())
 
     def test_a_file_the_release_does_not_hold_is_named(self):
@@ -159,8 +143,6 @@ class FetchLayers(unittest.TestCase):
         self.assertEqual(self.fetch().returncode, 0)
         cached = sorted(path.name for path in self.cache.iterdir())
         self.assertEqual(len(cached), 2, cached)
-        # The archives are gone from where they were served; the cache is what
-        # answers now.
         self.source_archive.unlink()
         self.release_archive.unlink()
         again = self.fetch()

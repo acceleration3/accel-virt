@@ -53,7 +53,7 @@ struct HwQueueTableProbe {
     static void corrupt_pool(HwQueueTable &table) { ObjectPoolProbe::corrupt_live_count(table.queues_); }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -108,7 +108,7 @@ private:
     void            *plain_context_;
 };
 
-}  // namespace
+}
 
 TEST(hw_queue_table_create, answers_a_queue_on_a_hardware_queue_context)
 { Fixture fixture;
@@ -129,10 +129,10 @@ TEST(hw_queue_table_create, refuses_what_this_driver_cannot_run)
       Fixture fixture;
       DxgkargCreateHwQueueRecord request = fixture.request();
       void *context = fixture.hw_context();
-      if (knob == 0) context = &fixture;                                    /* not a context */
-      if (knob == 1) context = fixture.plain_context();                     /* no HwQueueSupported */
-      if (knob == 2) request.Flags = 0x8u;                                  /* NoKmdAccess */
-      if (knob == 3) request.PrivateDriverDataSize = 4u;                    /* no private data defined */
+      if (knob == 0) context = &fixture;
+      if (knob == 1) context = fixture.plain_context();
+      if (knob == 2) request.Flags = 0x8u;
+      if (knob == 3) request.PrivateDriverDataSize = 4u;
       if (knob == 4) request.HwQueueProgressFenceCPUVirtualAddress = nullptr;
       if (knob == 5) fixture.platform().fail_allocation_at(1u);
       const Status status = fixture.queues().create(context, request);
@@ -184,8 +184,6 @@ TEST(hw_queue_table_report, writes_each_queue_and_its_context)
   fixture.platform().released_elsewhere();
   CHECK_STATUS(fixture.queues().destroy(request.hHwQueue), Status::ok); }
 
-/* Feature 049: a doorbell is created on the queue dxgkrnl names, so the table
- * is asked for queues by handle - including handles nobody made. */
 TEST(hw_queue_table, finds_the_queue_a_handle_names_and_nothing_for_one_nobody_made)
 { Fixture fixture;
   DxgkargCreateHwQueueRecord request = fixture.request();

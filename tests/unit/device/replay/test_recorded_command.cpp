@@ -12,8 +12,6 @@ using av::RecordedCommand;
 using av::Status;
 
 namespace {
-
-/* A batch payload of framed commands, as a guest writes one. */
 class Batch {
 public:
     Batch() : bytes_{}, length_(0u) {}
@@ -37,13 +35,13 @@ private:
     std::uint32_t length_;
 };
 
-}  // namespace
+}
 
 TEST(recorded_command_decode, names_each_api_from_the_table_its_generator_wrote)
 { Batch batch;
-  batch.add(0x00010006u, 16u)            /* vkCreateInstance */
-       .add(0x00020001u, 4u)             /* an OpenCL id */
-       .add(0x00030001u, 0u)             /* an OpenGL id */
+  batch.add(0x00010006u, 16u)
+       .add(0x00020001u, 4u)
+       .add(0x00030001u, 0u)
        .add(CommandHeader::nop_id, 0u);
   RecordedCommand command;
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), 0u), Status::ok);
@@ -86,7 +84,6 @@ TEST(recorded_command_decode, an_id_no_table_knows_is_unknown_and_never_null)
   batch.add(0x0001FFFEu, 0u).add(0x0002FFFEu, 0u).add(0x0003FFFEu, 0u).add(0x00090001u, 0u);
   RecordedCommand command;
   std::uint32_t   offset = 0u;
-  /* Each table's own unknown, then an API no table belongs to. */
   const char *const apis[] = {"vulkan", "opencl", "opengl", "api"};
   for (const char *api : apis) {
       CHECK_STATUS(command.decode(batch.bytes(), batch.length(), offset), Status::ok);
@@ -100,8 +97,6 @@ TEST(recorded_command_decode, refuses_a_command_the_batch_cannot_hold)
 { Batch batch;
   batch.add(0x00010006u, 8u);
   RecordedCommand command;
-  /* Nothing at all, a header cut short, an offset past the batch, and a size
-   * that passes the end. */
   CHECK_STATUS(command.decode(nullptr, batch.length(), 0u), Status::malformed);
   for (std::uint32_t length = 0u; length < CommandHeader::encoded_size; length++)
       CHECK_STATUS(command.decode(batch.bytes(), length, 0u), Status::malformed);
@@ -109,9 +104,6 @@ TEST(recorded_command_decode, refuses_a_command_the_batch_cannot_hold)
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), batch.length()), Status::malformed);
   CHECK_STATUS(command.decode(batch.bytes(), batch.length() - 1u, 0u), Status::malformed); }
 
-/* The bound is what is left from the offset, not the whole batch: the printer
- * and the replay walk a batch command by command, and a second command that
- * claims more than the rest of the record would be read past its end. */
 TEST(recorded_command_decode, refuses_a_later_command_that_claims_more_than_is_left)
 { Batch batch;
   batch.add(0x00010006u, 4u).add(0x00010007u, 4u);
@@ -120,14 +112,11 @@ TEST(recorded_command_decode, refuses_a_later_command_that_claims_more_than_is_l
   const std::uint32_t left = batch.length() - second;
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), second), Status::ok);
   CHECK_EQ(command.next_offset(), batch.length());
-  /* One byte more than the rest of the batch holds, and less than the batch. */
   CHECK_STATUS(CommandHeader(0x00010007u, left + 1u, 0u).encode(batch.bytes() + second, left), Status::ok);
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), second), Status::malformed);
-  /* And a size the whole batch could hold is still past what is left here. */
   CHECK_STATUS(CommandHeader(0x00010007u, batch.length(), 0u).encode(batch.bytes() + second, left), Status::ok);
   CHECK_STATUS(command.decode(batch.bytes(), batch.length(), second), Status::malformed); }
 
-/* Every accepted command's payload lies inside the bytes it was given. */
 TEST(recorded_command_decode, an_accepted_command_never_names_a_byte_past_the_batch)
 { Batch batch;
   batch.add(0x00010006u, 16u).add(0x00020001u, 0u).add(CommandHeader::nop_id, 7u);

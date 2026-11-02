@@ -1,9 +1,3 @@
-/* The host behind the av scenarios, played over MockKmt: each answer queued
- * for the wait that will find it, encoded as the generated server dispatch
- * writes it - a Vulkan result as an int32 before its outputs, handles as
- * uint64, structures through vk_serialize.h; an OpenCL result or error as a
- * varint, an array as its count and elements. The handles are made-up numbers a
- * test can recognise; the guest only passes them back. */
 #ifndef AV_SCRIPTED_HOST_HPP
 #define AV_SCRIPTED_HOST_HPP
 
@@ -23,16 +17,11 @@ public:
     static constexpr std::uint64_t vk_device = 0x3300u;
     static constexpr std::uint64_t vk_buffer = 0x4400u;
     static constexpr std::uint64_t vk_memory = 0x5500u;
-    /* A buffer that can live in memory types 3 and 5: the lowest is 3. */
     static constexpr std::uint32_t vk_memory_types = 0x28u;
     static constexpr std::uint64_t vk_command_pool = 0x7100u;
     static constexpr std::uint64_t vk_command_buffer = 0x7200u;
     static constexpr std::uint64_t vk_queue = 0x7300u;
     static constexpr std::uint64_t vk_fence = 0x7400u;
-    /* The host's memory types for an import: four, of which 1 and 2 are host
-     * visible, and a buffer that can live in 0 to 2 - so the first host-visible
-     * type it can live in is 1. The device memory each import answers is
-     * vk_memory numbered on by side. */
     static constexpr std::uint32_t vk_host_memory_types = 4u;
     static constexpr std::uint32_t vk_host_visible_types = 0x6u;
     static constexpr std::uint32_t vk_importable_types = 0x7u;
@@ -41,21 +30,15 @@ public:
     static constexpr std::uint64_t cl_device = 0x6300u;
     static constexpr std::uint64_t cl_context = 0x6400u;
     static constexpr std::uint64_t cl_queue = 0x6500u;
-    /* The first of three buffers, numbered on from here. */
     static constexpr std::uint64_t cl_buffer = 0x6600u;
     static constexpr std::uint64_t cl_program = 0x6700u;
     static constexpr std::uint64_t cl_kernel = 0x6800u;
     static constexpr std::uint32_t cl_elements = 64u;
-    /* Waits a whole successful run of each scenario takes. */
-    static constexpr std::uint32_t transport_waits = 32u;   /* the first no-op and 31 warm ones */
+    static constexpr std::uint32_t transport_waits = 32u;
     static constexpr std::uint32_t vulkan_waits = 9u;
     static constexpr std::uint32_t opencl_waits = 24u;
     static constexpr std::uint32_t isolation_waits_before_fault = 3u;
-    /* The submit benchmark's (feature 049): the warm no-op, and the drain at
-     * the end of every timed block on each path. */
     static constexpr std::uint32_t submit_waits = 1u + 2u * SubmitBenchmark::rounds;
-    /* The import scenario's waits, and the one of them that waits for the fence
-     * of the submitted copy - where a test plays the host GPU's copy. */
     static constexpr std::uint32_t host_visible_import_waits = 21u;
     static constexpr std::uint32_t host_visible_import_copy_wait = 18u;
 
@@ -63,126 +46,57 @@ public:
     ScriptedHost(const ScriptedHost &) = delete;
     ScriptedHost &operator=(const ScriptedHost &) = delete;
 
-    /* The transport's no-op: nothing. */
     void nop();
-    /* A whole transport scenario's no-ops. */
     void transport_run();
-    /* A whole submit benchmark's: every one of them is a no-op. */
     void submit_run();
     void vk_result(std::int32_t result);
     void vk_handle(std::int32_t result, std::uint64_t handle);
-    /* How many physical devices, for the call that asks only that. */
     void vk_count(std::int32_t result, std::uint32_t count);
-    /* An fd the host exported, as vkGetMemoryFdKHR and vkGetSemaphoreFdKHR
-     * answer one (feature 047, US3). */
     void vk_fd(std::int32_t result, int fd);
-    /* What the host says of an external handle type: the features, and the
-     * types it can be exported from and is compatible with. */
     void vk_external_buffer_properties(std::uint32_t features, std::uint32_t export_from,
                                        std::uint32_t compatible);
     void vk_external_semaphore_properties(std::uint32_t features, std::uint32_t export_from,
                                           std::uint32_t compatible);
-    /* `count` devices numbered from vk_physical_device. */
     void vk_physical_devices(std::int32_t result, std::uint32_t count);
     void vk_memory_requirements(std::uint32_t memory_types);
-    /* `count` memory types, those whose bit is set in `host_visible` host
-     * visible, as a void command answers: a zero, then the structure. */
     void vk_memory_properties(std::uint32_t count, std::uint32_t host_visible);
-    /* IMPORT_BLOB's answer: the host's status, a reserved word and the device
-     * memory. */
     void blob_import(std::uint32_t status, std::uint64_t memory);
-    /* What a shared-object command answers: the device's status, a reserved
-     * word, and the wire handle an open made - 0 for a share, a release and
-     * every refusal (feature 053). */
     void shared_object(std::uint32_t status, std::uint64_t wire_handle);
-    /* `count` queue families, each with `count` graphics queues: a void
-     * command's zero, the count, and the structures. */
     void vk_queue_families(std::uint32_t count);
     void cl_result(std::int32_t result);
-    /* clGetGLObjectInfo's answer: its result, then the object's type and
-     * name, as the call asked for both. */
     void cl_gl_object(std::int32_t result, std::uint32_t type, std::uint32_t name);
     void cl_handle(std::uint64_t handle, std::int32_t error);
-    /* clCreateProgramWithBinary's answer: the program, its binary's status,
-     * then the error. */
     void cl_from_binary(std::uint64_t handle, std::int32_t status, std::int32_t error);
-    /* A query that asked for a count alone: the result and the count. */
     void cl_count(std::int32_t result, std::uint32_t count);
-    /* What a map answers when an event was asked for as well: the address,
-     * then the event, then the error - which is the order the emitter writes
-     * an address-returning command's outputs in. */
     void cl_mapped(std::uint64_t address, std::uint64_t event, std::int32_t error);
-    /* An ID query's answer: the result, the `sent` ids that fit the room the
-     * guest gave, and the `total` the host has. */
     void cl_ids(std::int32_t result, const std::uint64_t *ids, std::uint32_t sent, std::uint32_t total);
-    /* A blocking read's answer: the result and `count` floats. */
     void cl_read(std::int32_t result, const float *values, std::uint32_t count);
-    /* A read of bytes rather than floats, which is what a deferred read
-     * fetches: the same reply shape, without pretending the buffer holds
-     * anything in particular. */
     void cl_bytes(std::int32_t result, const void *values, std::uint32_t count);
-    /* An enqueue that answers only a result and the event it made: a marker,
-     * a kernel, a write. */
     void cl_enqueued(std::int32_t result, std::uint64_t event);
-    /* clGetSupportedImageFormats' answer: the result, `sent` formats as
-     * bytes, and the `total` the host has - or, with no formats, the answer
-     * to a query that asked for the count alone. */
     void cl_formats(std::int32_t result, const void *formats, std::uint32_t sent, std::uint32_t total);
-    /* An info query's answer: the result, `size` bytes of `value`, and the
-     * size again as the size it reports. */
     void cl_info(std::int32_t result, const char *value, std::uint32_t size);
-    /* An OpenGL string query's answer: present, the length, the bytes. */
     void gl_string(const char *text);
-    /* An OpenGL scalar return - an error, a location, an index. */
     void gl_varint(std::uint64_t value);
-    /* An OpenGL query's filled buffer: its length, then its bytes. */
     void gl_bytes(const std::uint8_t *bytes, std::uint32_t size);
-    /* glGetIntegerv's answer of one value. */
     void gl_integer(std::int32_t value);
-    /* A resource property query's answer: one value written, and `value`. */
     void gl_resource_property(std::int32_t value);
-    /* Everything a GL context's make waits for: the blob import, the vendor,
-     * renderer, version and shading language strings, and the three list
-     * lengths. */
     void gl_make(const char *renderer, const char *version);
-    /* The same, with the GL_MAJOR_VERSION, GL_MINOR_VERSION and
-     * GL_CONTEXT_PROFILE_MASK a host answers at the end of a make (feature
-     * 051): what profile a context got is read from the mask, since a version
-     * string does not say (research.md §1). */
     void gl_make_profile(const char *renderer, const char *version, std::int32_t major, std::int32_t minor,
                          std::int32_t mask);
-    /* What a context whose policy reports a row asks after the make: how many
-     * extensions the host lists. */
     void gl_policy(std::int32_t listed);
-    /* What the first make-current of a context on a window waits for: the
-     * names of its framebuffer objects (two when multisampled), its colour
-     * texture and its renderbuffers (a multisampled colour one, then the
-     * depth one), numbered from `first`. */
     void gl_window(std::uint32_t framebuffers, std::uint32_t renderbuffers, std::uint32_t first = 100u);
-    /* Waits a GL make takes. */
     static constexpr std::uint32_t gl_make_waits = 11u;
-    /* One more wait when the context's policy reports a row: the make asks
-     * GL_NUM_EXTENSIONS before it asks for any name (feature 051). */
     static constexpr std::uint32_t gl_policy_waits = 1u;
 
-    /* The next answer queued stops after its first `bytes`, as a host that
-     * wrote a short reply leaves it. */
     void cut_next(std::uint32_t bytes);
 
-    /* Whole successful runs, every wait from a scenario's first to its last. */
     void vulkan_run();
-    /* Through the read, whose floats are `sum`, before the releases. */
     void opencl_run_to_read(const float *sum);
     void opencl_releases();
     void opencl_run();
-    /* The healthy context's no-op, instance and no-op. */
     void healthy_context();
-    /* Through the instance, physical devices, device and memory types; then
-     * one side's buffer, requirements, import and bind. */
     void host_visible_import_device();
     void host_visible_import_side(std::uint32_t side);
-    /* Pool, command buffer, queue, fence and the fence wait; then both
-     * releases and the no-op. */
     void host_visible_import_copy();
     void host_visible_import_releases();
     void host_visible_import_run();
@@ -200,6 +114,6 @@ private:
     std::uint8_t  answer_[answer_bytes];
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_HOST_HPP
+#endif

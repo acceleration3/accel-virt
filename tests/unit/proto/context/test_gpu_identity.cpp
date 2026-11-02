@@ -47,7 +47,7 @@ Status decode(GpuIdentity &identity, const std::uint8_t *bytes)
     return identity.decode(reader);
 }
 
-}  // namespace
+}
 
 TEST(gpu_identity_encode, places_every_field_at_its_offset)
 { Encoded encoded(sample());
@@ -132,8 +132,6 @@ TEST(gpu_identity_decode, a_short_reader_is_malformed)
   GpuIdentity decoded;
   CHECK_STATUS(decoded.decode(reader), Status::malformed); }
 
-/* A context started on a GPU is on the same one while the UUID matches, what
- * else the identity says notwithstanding. */
 TEST(gpu_identity, the_same_gpu_is_the_one_with_the_same_uuid)
 { const GpuIdentity started = sample();
   const GpuIdentity renamed(0x10DEu, 0x2684u, GpuIdentity::discrete_gpu, uuid, 1u, 1u, "renamed");

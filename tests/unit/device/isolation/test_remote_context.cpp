@@ -1,6 +1,3 @@
-/* One context whose worker runs in the renderer: QEMU pins what it runs on
- * and owns its doorbell, and when the renderer dies it is QEMU that tells the
- * guest, through the fence page it can still reach. */
 #include "core/support/status.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/isolation/remote_context.hpp"
@@ -67,7 +64,6 @@ public:
 
     MockHost             &host() { return host_; }
     BlobTable            &blobs() { return blobs_; }
-    /* Blob `id` over `size` bytes of guest RAM at `offset`. */
     void guest_blob(std::uint32_t id, std::uint64_t offset, std::uint64_t size)
     {
         av::GpuRequestBuilder entries(0u);
@@ -86,7 +82,6 @@ public:
     {
         return context_.bind(with, capset(), link_, outcome);
     }
-    /* Whether the blob is pinned: a window is only given for a pinned one. */
     bool pinned(std::uint32_t id)
     {
         av::BlobWindow window;
@@ -120,10 +115,8 @@ private:
     std::uint32_t        events_ = 0u;
 };
 
-}  // namespace
+}
 
-/* QEMU pins the blobs, registers the doorbell over an event of its own and
- * hands the renderer that event's descriptor with the setup, byte for byte. */
 TEST(remote_context_bind, pins_registers_the_doorbell_and_sends_its_descriptor_with_the_setup)
 { Fixture fixture;
   CHECK(!fixture.context().bound());
@@ -154,19 +147,16 @@ TEST(remote_context_bind, pins_registers_the_doorbell_and_sends_its_descriptor_w
   CHECK_EQ(message.setup_length(), static_cast<std::uint32_t>(setup().size()));
   CHECK(std::memcmp(message.setup(), expected, setup().size()) == 0);
   CHECK(fixture.context().invariants_hold());
-  /* A context bound once is not bound again, and nothing more is sent. */
   CHECK_STATUS(fixture.bind(outcome), Status::ok);
   CHECK_STATUS(outcome, Status::invalid_state);
   CHECK_EQ(fixture.peer().delivered(), 1u);
   CHECK_EQ(fixture.host().live_doorbells(), 1u);
   CHECK(fixture.context().invariants_hold()); }
 
-/* Whatever refuses the bind - the renderer, its silence, its absence - the
- * pins, the doorbell and its event are all undone. */
 TEST(remote_context_bind, every_refusal_unwinds_pins_doorbell_and_event)
 { struct Case {
       const char *name;
-      int         script;   /* 0 refuses, 1 silent, 2 gone, 3 dies mid-wait */
+      int         script;
       Status      link;
       Status      outcome;
   };
@@ -194,12 +184,10 @@ TEST(remote_context_bind, every_refusal_unwinds_pins_doorbell_and_event)
       CHECK(fixture.context().invariants_hold());
   } }
 
-/* QEMU's own refusals come before anything reaches the renderer, as the
- * outcome, with the link untouched. */
 TEST(remote_context_bind, qemus_own_refusals_send_nothing)
 { { Fixture fixture;
     Status outcome = Status::ok;
-    CHECK_STATUS(fixture.bind(outcome, setup(77u)), Status::ok);   /* no such ring */
+    CHECK_STATUS(fixture.bind(outcome, setup(77u)), Status::ok);
     CHECK_STATUS(outcome, Status::not_found);
     CHECK(!fixture.pinned(fence));
     CHECK_EQ(fixture.peer().delivered(), 0u); }
@@ -210,7 +198,6 @@ TEST(remote_context_bind, qemus_own_refusals_send_nothing)
     CHECK_STATUS(outcome, Status::not_supported);
     CHECK_EQ(fixture.peer().delivered(), 0u); }
   { Fixture fixture;
-    /* Options a Vulkan setup cannot carry do not encode. */
     Status outcome = Status::ok;
     const av::ContextSetup vulkan_with_gl(
         av::ProtocolVersion(1u, 1u), av::SubApi::vulkan, ring, 12u, fence, doorbell, 0u,
@@ -220,7 +207,6 @@ TEST(remote_context_bind, qemus_own_refusals_send_nothing)
     CHECK(!fixture.pinned(ring));
     CHECK_EQ(fixture.peer().delivered(), 0u); }
   { Fixture fixture;
-    /* An event with no descriptor to hand over is no doorbell, and goes. */
     fixture.host().fail_event_descriptor_at(1u);
     Status outcome = Status::ok;
     CHECK_STATUS(fixture.bind(outcome), Status::ok);
@@ -230,7 +216,6 @@ TEST(remote_context_bind, qemus_own_refusals_send_nothing)
     CHECK_EQ(fixture.host().live_doorbells(), 0u);
     CHECK_EQ(fixture.peer().delivered(), 0u); }
   { Fixture fixture;
-    /* Context 0 is no context a message can name. */
     RemoteContext nameless(fixture.host(), fixture.blobs(), fixture.interrupts(), 0u);
     Status outcome = Status::ok;
     CHECK_STATUS(nameless.bind(setup(), capset(), fixture.link(), outcome), Status::ok);
@@ -249,9 +234,6 @@ TEST(remote_context_bind, qemus_own_refusals_send_nothing)
   CHECK_EQ(fixture.host().live_events(), fixture.events());
   CHECK_EQ(fixture.peer().delivered(), 0u); }
 
-/* The loss keeps what the guest was already promised, steps progress once
- * so its waiters look, says device_lost, raises the context's interrupt and
- * lets go of the doorbell; the pins stay until the guest destroys it. */
 TEST(remote_context_lose, republishes_the_fence_page_as_device_lost_and_raises_the_interrupt)
 { Fixture fixture;
   Status outcome = Status::invalid_state;
@@ -273,25 +255,20 @@ TEST(remote_context_lose, republishes_the_fence_page_as_device_lost_and_raises_t
   CHECK(!fixture.host().ring_doorbell(doorbell));
   CHECK(fixture.pinned(ring));
   CHECK(fixture.context().invariants_hold());
-  /* A second loss says nothing more. */
   fixture.context().lose();
   CHECK_EQ(fixture.page().progress(), 91u);
   CHECK_EQ(fixture.host().raised(doorbell), 1u);
-  /* A lost context is not bound again. */
   CHECK_STATUS(fixture.bind(outcome), Status::ok);
   CHECK_STATUS(outcome, Status::invalid_state);
   CHECK_EQ(fixture.peer().delivered(), 1u);
   fixture.context().unbind();
   CHECK(!fixture.pinned(ring));
   CHECK(fixture.context().invariants_hold());
-  /* Unbound, it is still lost: the renderer that knew it is gone. */
   CHECK_STATUS(fixture.bind(outcome), Status::ok);
   CHECK_STATUS(outcome, Status::invalid_state);
   CHECK(!fixture.pinned(ring));
   CHECK_EQ(fixture.peer().delivered(), 1u); }
 
-/* A page nothing published yet - or one that does not decode - is reported
- * from nothing: no fence completed, one step of progress. */
 TEST(remote_context_lose, a_page_that_does_not_decode_is_reported_from_nothing)
 { Fixture fixture;
   Status outcome = Status::invalid_state;
@@ -309,11 +286,9 @@ TEST(remote_context_lose, an_unbound_context_has_nothing_to_lose)
   CHECK(!fixture.context().lost());
   CHECK_EQ(fixture.host().raised(doorbell), 0u);
   Status outcome = Status::invalid_state;
-  CHECK_STATUS(fixture.bind(outcome), Status::ok);   /* and it may still be bound */
+  CHECK_STATUS(fixture.bind(outcome), Status::ok);
   CHECK_STATUS(outcome, Status::ok); }
 
-/* Unbinding - or the context going - lets go of the pins and the doorbell
- * without a word to the renderer: the plane tells it. */
 TEST(remote_context_unbind, releases_pins_and_doorbell_and_sends_nothing)
 { Fixture fixture;
   Status outcome = Status::invalid_state;

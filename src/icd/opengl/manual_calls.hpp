@@ -1,15 +1,3 @@
-/* What the OpenGL entries the generator leaves to the ICD do (research.md §2,
- * the profile's driver_implemented list and the calls whose guest state the
- * generated client needs): each works on the calling thread's current context
- * and does nothing without one, as OpenGL does. The entries themselves
- * (manual_entries.cpp) are one line each into this.
- *
- * A map is a guest copy of the range (MappedBuffers); a target names the
- * buffer bound there, which the host is asked only where the guest cannot
- * know it (ClientArrayState::known_buffer). The GL extensions answered
- * are the context's own list (GlExtensionPolicy). A client-side
- * vertex or index array, which the core profile removed, is
- * GL_INVALID_OPERATION with no host call. */
 #ifndef AV_GLICD_MANUAL_CALLS_HPP
 #define AV_GLICD_MANUAL_CALLS_HPP
 
@@ -18,7 +6,7 @@
 
 namespace av {
 class Kmt;
-}  // namespace av
+}
 
 namespace av::glicd {
 
@@ -40,7 +28,6 @@ public:
     ManualCalls(const ManualCalls &) = delete;
     ManualCalls &operator=(const ManualCalls &) = delete;
 
-    /* Buffer mapping. glMapBuffer's access is the enum, the others' the bits. */
     void *map_buffer(uint32_t target, uint32_t access);
     void *map_buffer_range(uint32_t target, intptr_t offset, intptr_t length, uint32_t access);
     void *map_named_buffer(uint32_t buffer, uint32_t access);
@@ -51,78 +38,39 @@ public:
     void  flush_mapped_named_range(uint32_t buffer, intptr_t offset, intptr_t length);
     void  buffer_pointer(uint32_t target, uint32_t pname, void **params);
     void  named_buffer_pointer(uint32_t buffer, uint32_t pname, void **params);
-    /* glGetBufferParameter for a map-state name (MappedBuffers::map_state):
-     * true once answered here - with `value`, or with the error a bad target
-     * records - and false for a name the host answers. */
     bool  buffer_map_state(uint32_t target, uint32_t pname, int64_t &value);
-    /* The same by name; buffer 0 is the host's to refuse. */
     bool  named_buffer_map_state(uint32_t buffer, uint32_t pname, int64_t &value);
-    /* A call only a direct-state extension this ICD does not report has. */
     void  refuse();
 
-    /* What changes a buffer's bytes on the host is told to the current
-     * context's copies of them (BufferShadows): a target names the buffer the
-     * guest saw bound there, and where that is not known every copy goes.
-     *
-     * glBufferSubData and its named spellings: the copy takes the bytes, and
-     * the bytes go in pieces where one command cannot carry them
-     * (BufferPieces). */
     void  buffer_sub_data(uint32_t target, intptr_t offset, intptr_t size, const void *data);
     void  named_buffer_sub_data(uint32_t buffer, intptr_t offset, intptr_t size, const void *data);
     void  named_buffer_sub_data_ext(uint32_t buffer, intptr_t offset, intptr_t size, const void *data);
-    /* glGetBufferSubData and its named spellings, in pieces where one reply
-     * cannot hold the bytes. */
     void  get_buffer_sub_data(uint32_t target, intptr_t offset, intptr_t size, void *data);
     void  get_named_buffer_sub_data(uint32_t buffer, intptr_t offset, intptr_t size, void *data);
     void  get_named_buffer_sub_data_ext(uint32_t buffer, intptr_t offset, intptr_t size, void *data);
-    /* A pixel transfer of `bytes` too large to cross with its command, staged
-     * in the current context's PixelStagingBuffer around it: true when it
-     * was, and the command is to name offset 0. Nothing with nothing current. */
     bool  stage_upload(const void *pixels, size_t bytes);
     void  finish_upload();
     bool  stage_download(const void *pixels, size_t bytes);
     void  finish_download(void *pixels, size_t bytes);
-    /* A command the host runs writes the buffer at `target`, or `buffer`: a
-     * copy, a clear, an invalidation, a download into a pack or query
-     * buffer. */
     void  host_writes_target(uint32_t target);
     void  host_writes_buffer(uint32_t buffer);
-    /* glBindBufferBase and glBindBufferRange, which bind the target's own
-     * binding too; a buffer bound where a shader writes ends the copies. */
     void  bind_buffer_indexed(uint32_t target, uint32_t buffer);
-    /* glBindBuffersBase and glBindBuffersRange. */
     void  bind_buffers_indexed(uint32_t target);
-    /* An image unit, a transform feedback, a resident address: a shader can
-     * write buffers the guest cannot follow. */
     void  shaders_write_buffers();
-    /* glPopClientAttrib: bindings come back out of sight. */
     void  bindings_restored();
 
-    /* GL_EXT_memory_object and GL_EXT_semaphore over a Win32 handle
-     * (feature 053). The first four are answered here and never sent: an
-     * object is made by the device inside the import, so a create has nothing
-     * to ask the host and an import is the open. The last four *are* sent, but
-     * not as the application wrote them - the name it holds is this ICD's and
-     * the host knows another, so each substitutes before the generated command
-     * goes out, and a name that was never imported names nothing and is
-     * GL_INVALID_OPERATION with nothing sent. */
     void  create_memory_objects(int32_t count, uint32_t *objects);
     void  delete_memory_objects(int32_t count, const uint32_t *objects);
     void  import_memory_win32(uint32_t memory, uint64_t size, uint32_t handle_type, void *handle);
     void  gen_semaphores(int32_t count, uint32_t *semaphores);
     void  delete_semaphores(int32_t count, const uint32_t *semaphores);
     void  import_semaphore_win32(uint32_t semaphore, uint32_t handle_type, void *handle);
-    /* glIsMemoryObjectEXT and glIsSemaphoreEXT, and the parameter pair beside
-     * each: answered by the context's table, because a created name is an
-     * object before the host has heard of it (feature 053, T037). */
     bool  is_memory_object(uint32_t memory);
     bool  is_semaphore(uint32_t semaphore);
     void  memory_object_parameter(uint32_t memory, uint32_t pname, const int32_t *params);
     void  get_memory_object_parameter(uint32_t memory, uint32_t pname, int32_t *params);
     void  semaphore_parameter(uint32_t semaphore, uint32_t pname, const uint64_t *params);
     void  get_semaphore_parameter(uint32_t semaphore, uint32_t pname, uint64_t *params);
-    /* The two name imports, which this path refuses: a named section is what
-     * another process opens *by name*, and these share by handle. */
     void  import_memory_win32_name(uint32_t memory, uint64_t size, uint32_t handle_type, const void *name);
     void  import_semaphore_win32_name(uint32_t semaphore, uint32_t handle_type, const void *name);
     void  buffer_storage_mem(uint32_t target, intptr_t size, uint32_t memory, uint64_t offset);
@@ -167,9 +115,6 @@ public:
     void gen_vertex_arrays(int32_t count, uint32_t *arrays);
     void bind_vertex_array(uint32_t array);
     void delete_vertex_arrays(int32_t count, const uint32_t *arrays);
-    /* Storage, and its bytes: where one command cannot carry them, the
-     * storage goes empty and the bytes after it in pieces. Storage is always
-     * made dynamic, so the pieces - and a map's write-back - may write it. */
     void buffer_data(uint32_t target, intptr_t size, const void *data, uint32_t usage);
     void buffer_storage(uint32_t target, intptr_t size, const void *data, uint32_t flags);
     void named_buffer_data(uint32_t buffer, intptr_t size, const void *data, uint32_t usage);
@@ -180,75 +125,48 @@ public:
                                const void *pointer);
     void enable_vertex_attrib_array(uint32_t index, bool enable);
     void draw_arrays(uint32_t mode, int32_t first, int32_t count, int32_t instances);
-    /* `instances` below 0 is a draw that names none (glDrawElements). */
     void draw_elements(uint32_t mode, int32_t count, uint32_t type, const void *indices, int32_t instances);
     void draw_range_elements(uint32_t mode, uint32_t start, uint32_t end, int32_t count, uint32_t type,
                              const void *indices);
     void flush();
-    /* The window's framebuffer and buffers, translated for the host
-     * (WindowFramebuffers). */
     void bind_framebuffer(uint32_t target, uint32_t framebuffer);
     void draw_buffer(uint32_t buffer);
     void read_buffer(uint32_t buffer);
     uint32_t client_wait_sync(void *sync, uint32_t flags, uint64_t timeout);
-    /* glFinish as a fence the host signals once everything before it has
-     * run, waited for a slice at a time, and deleted. */
     void     finish();
     void debug_message_callback(void *callback, const void *user);
     void link_program(uint32_t program);
     void delete_program(uint32_t program);
     int32_t attrib_location(uint32_t program, const char *name);
     int32_t uniform_location(uint32_t program, const char *name);
-    /* The bytes a glGetTexImage of the bound texture's `level` writes, its
-     * size asked of the host; 0 with nothing current. */
     size_t level_bytes(uint32_t target, int32_t level, uint32_t format, uint32_t type);
-    /* GL_TEXTURE_COMPRESSED_IMAGE_SIZE of the bound texture's `level`. */
     size_t compressed_level_bytes(uint32_t target, int32_t level);
-    /* glGetIntegerv, but GL_NUM_EXTENSIONS answers the context's list. */
     void           integers(uint32_t pname, int32_t *data);
-    /* glReadPixels: a read of the window's GL_FRONT is answered from the frame
-     * the swap put there, since the host has no front buffer; everything else
-     * goes to the host as it did (feature 051). */
     void           read_pixels(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format, uint32_t type,
                                void *pixels);
     const uint8_t *string(uint32_t name);
     const uint8_t *string_i(uint32_t name, uint32_t index);
 
 private:
-    /* The current context's transport's context, when it can send. */
     GuestGlContext *sending();
-    /* The context and the host's own name for `name`, or false with the GL
-     * error already recorded: a name never imported names no host object, and
-     * sending it would name whatever the host has under that number. */
     bool            substituted(uint32_t kind, uint32_t name, GuestGlContext *&context, uint32_t &made);
     void            record(uint32_t error);
-    /* Whether a draw's indices can cross: an offset, or none. */
     bool            indices_cross(const void *indices);
-    /* The buffer bound at `target`, asked of the host where the guest does
-     * not know it; false, with GL_INVALID_ENUM recorded, for a target that
-     * binds no buffer. */
     bool            bound_to(GuestGlContext &context, uint32_t target, uint32_t &buffer);
     void           *map_name(GuestGlContext &context, uint32_t buffer, int64_t offset, int64_t length,
                              uint32_t access);
     bool            unmap_name(GuestGlContext &context, uint32_t buffer);
     void            mark_name(GuestGlContext &context, uint32_t buffer, intptr_t offset, intptr_t length);
-    /* The host wrote the buffer the guest saw bound at `target`. */
     void            forget_bound(GuestGlContext &context, uint32_t target);
-    /* glBufferData or glBufferStorage gave the buffer at `target` new
-     * storage of `size` bytes. */
     void            respecify_bound(GuestGlContext &context, uint32_t target, intptr_t size, bool with_data);
-    /* GL_AMD_pinned_memory's glBufferData: the bound pinned buffer given
-     * storage over the application's own `size` bytes at `data`. */
     void            pin_storage(GuestGlContext &context, intptr_t size, const void *data);
-    /* The bytes glBufferSubData at `target` wrote, told to the copies. */
     void            wrote_bound(GuestGlContext &context, uint32_t target, intptr_t offset, intptr_t size,
                                 const void *data);
 
     CurrentContexts &currents_;
-    /* Whose performance counter times a sync wait. */
     const Kmt       &kmt_;
 };
 
-}  // namespace av::glicd
+}
 
-#endif  // AV_GLICD_MANUAL_CALLS_HPP
+#endif

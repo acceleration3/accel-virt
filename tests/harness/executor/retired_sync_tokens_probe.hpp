@@ -1,5 +1,3 @@
-/* Reaches into a RetiredSyncTokens so invariant tests can corrupt it. Declared
- * a friend by RetiredSyncTokens; nothing outside the tests uses it. */
 #ifndef AV_RETIRED_SYNC_TOKENS_PROBE_HPP
 #define AV_RETIRED_SYNC_TOKENS_PROBE_HPP
 
@@ -17,6 +15,6 @@ struct RetiredSyncTokensProbe {
     RetiredSyncTokens &retired;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_RETIRED_SYNC_TOKENS_PROBE_HPP
+#endif

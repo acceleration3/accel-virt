@@ -11,17 +11,10 @@
 namespace av::d3d11 {
 
 namespace {
-
-/* Cached host memory bulk data crosses through, with the slice store's
- * bookkeeping and the query results at its end (D3dSession). The slices
- * themselves are a host allocation of their own. */
 constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
-/* The upload memory dynamic buffers are drawn from in place: what a game's
- * constant buffers - renamed every draw while the GPU runs a frame behind -
- * take of it. */
 constexpr uint64_t slice_store_bytes = uint64_t{128} << 20u;
 
-}  // namespace
+}
 
 D3d11Driver::D3d11Driver(BlockSource &memory, Kmt &kmt, KeyedLog &log, d3d::D3dCallTrace &trace)
     : memory_(memory), lines_(log), trace_(trace), rows_(), devices_(memory),
@@ -37,7 +30,6 @@ d3d::Hresult D3d11Driver::caps(d3d::UmdAdapter &, d3d::D3d102ddiargGetCapsRecord
     bool           learned = false;
     const uint32_t slot = adapters_.slot_of(kmt_adapter, learned);
     if (slot == AdapterSessions<D3d11HostCaps>::none) return d3d::hr_fail;
-    /* The record is D3D10_2DDIARG_GETCAPS byte for byte (umd_record_layout.cpp). */
     return adapters_.caps(slot).answer(*reinterpret_cast<const D3D10_2DDIARG_GETCAPS *>(&args));
 }
 
@@ -78,9 +70,7 @@ void D3d11Driver::tear_down(void *block)
     static_cast<void>(devices_.destroy(&device));
 }
 
-}  // namespace av::d3d11
+}
 
-/* A deferred context's DestroyDevice slot: its block holds no device cookie,
- * so the table's root would not find it; the context goes back to its pool. */
 extern "C" VOID APIENTRY avumd_d3d11_DestroyDeferredContext(D3D10DDI_HDEVICE device)
 { av::d3d::DeviceBlock<av::d3d11::D3d11Device>(device.pDrvPrivate).device().retire(); }

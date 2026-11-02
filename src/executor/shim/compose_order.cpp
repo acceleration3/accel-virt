@@ -46,7 +46,6 @@ bool ComposeOrder::presented()
     return device11_->vulkan().wait(waited_, value_);
 }
 
-/* DXVK's idle flushes the immediate context: under the Direct3D 11 lock. */
 void ComposeOrder::release()
 {
     AV_SCOPE("ComposeOrder::release");
@@ -60,4 +59,4 @@ void ComposeOrder::release()
     value_ = 0u;
 }
 
-}  // namespace av
+}

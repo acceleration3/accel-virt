@@ -11,7 +11,6 @@ FlipView::FlipView() : kind_(Kind::address), address_(0u), planes_(), attributes
     AV_SCOPE("FlipView::FlipView");
 }
 
-/* Attributes only a base plane has; a null pointer is none. */
 FlipView::FlipView(Kind kind, uint64_t address, const uint32_t *attributes)
     : kind_(kind), address_(address), planes_(), attributes_{}
 {
@@ -68,4 +67,4 @@ const OverlayPlane &FlipView::plane(uint32_t layer) const
     return planes_[layer < OverlayPlane::max_planes ? layer : 0u];
 }
 
-}  // namespace av
+}

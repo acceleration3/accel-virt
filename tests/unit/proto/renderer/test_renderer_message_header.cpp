@@ -29,7 +29,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(renderer_message_header_encode, is_the_kind_the_body_length_and_the_sequence)
 { GuardedBuffer bytes(RendererMessageHeader::encoded_size);
@@ -41,8 +41,6 @@ TEST(renderer_message_header_encode, is_the_kind_the_body_length_and_the_sequenc
   CHECK(layout.at(8u, 8u) == 0x1122334455667788ull);
   CHECK(bytes.guards_intact()); }
 
-/* The values are the protocol: a renderer built from another tree must read
- * the same kinds. */
 TEST(renderer_message_header, kinds_are_numbered_from_one_in_protocol_order)
 { CHECK_EQ(static_cast<std::uint32_t>(Kind::hello), 1u);
   CHECK_EQ(static_cast<std::uint32_t>(Kind::ready), 2u);
@@ -102,8 +100,6 @@ TEST(renderer_message_header_encode, a_short_or_missing_destination_is_too_large
   CHECK_STATUS(RendererMessageHeader(Kind::hello, 0u, 1u).encode(nullptr, RendererMessageHeader::encoded_size),
                Status::too_large); }
 
-/* A kind neither side knows would be dispatched nowhere; zero is a buffer
- * nobody wrote. */
 TEST(renderer_message_header_decode, refuses_kinds_zero_and_past_free_memory_and_stays_unchanged)
 { std::uint8_t last[RendererMessageHeader::encoded_size] = {};
   CHECK_STATUS(RendererMessageHeader(Kind::free_memory, 0u, 5u).encode(last, sizeof last), Status::ok);
@@ -121,8 +117,6 @@ TEST(renderer_message_header_decode, refuses_kinds_zero_and_past_free_memory_and
       CHECK(decoded.sequence() == 7u);
   } }
 
-/* A datagram cut short (MSG_TRUNC) or carrying bytes past its body is not the
- * message the header describes. */
 TEST(renderer_message_header_decode, a_body_other_than_what_arrived_is_malformed)
 { std::uint8_t datagram[RendererMessageHeader::encoded_size + 9u] = {};
   CHECK_STATUS(RendererMessageHeader(Kind::region, 8u, 1u).encode(datagram, sizeof datagram), Status::ok);
@@ -166,9 +160,5 @@ TEST(renderer_message_header_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 128u);
-  /* Kind 1 flipped at bit 1, 2, 3 or 4 is kind 3, 5, 9 or 17, all known and
-   * with a body allowed; every other kind flip is 0 or past free_memory. Any
-   * body length flip claims bytes that did not arrive. The sequence is free:
-   * 64 flips. With the untouched header, 4 + 64 + 1 acceptances. */
   const std::uint32_t acceptable = 4u + 64u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

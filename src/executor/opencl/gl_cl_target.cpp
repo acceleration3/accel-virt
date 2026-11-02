@@ -18,23 +18,22 @@ struct Named {
     uint32_t dimensions;
 };
 
-/* Targets on the left, as glcorearb.h numbers them. */
 constexpr Named targets[] = {
-    {0x0DE0u, 0x0DE0u, CL_MEM_OBJECT_IMAGE1D, CL_GL_OBJECT_TEXTURE1D, 1u},                /* TEXTURE_1D */
-    {0x8C18u, 0x8C18u, CL_MEM_OBJECT_IMAGE1D_ARRAY, CL_GL_OBJECT_TEXTURE1D_ARRAY, 2u},    /* TEXTURE_1D_ARRAY */
-    {0x0DE1u, 0x0DE1u, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},                /* TEXTURE_2D */
-    {0x84F5u, 0x84F5u, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},                /* TEXTURE_RECTANGLE */
-    {0x8515u, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},    /* CUBE_MAP_POSITIVE_X */
-    {0x8516u, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},    /* CUBE_MAP_NEGATIVE_X */
-    {0x8517u, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},    /* CUBE_MAP_POSITIVE_Y */
-    {0x8518u, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},    /* CUBE_MAP_NEGATIVE_Y */
-    {0x8519u, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},    /* CUBE_MAP_POSITIVE_Z */
-    {0x851Au, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},    /* CUBE_MAP_NEGATIVE_Z */
-    {0x8C1Au, 0x8C1Au, CL_MEM_OBJECT_IMAGE2D_ARRAY, CL_GL_OBJECT_TEXTURE2D_ARRAY, 3u},    /* TEXTURE_2D_ARRAY */
-    {0x806Fu, 0x806Fu, CL_MEM_OBJECT_IMAGE3D, CL_GL_OBJECT_TEXTURE3D, 3u},                /* TEXTURE_3D */
+    {0x0DE0u, 0x0DE0u, CL_MEM_OBJECT_IMAGE1D, CL_GL_OBJECT_TEXTURE1D, 1u},
+    {0x8C18u, 0x8C18u, CL_MEM_OBJECT_IMAGE1D_ARRAY, CL_GL_OBJECT_TEXTURE1D_ARRAY, 2u},
+    {0x0DE1u, 0x0DE1u, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},
+    {0x84F5u, 0x84F5u, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},
+    {0x8515u, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},
+    {0x8516u, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},
+    {0x8517u, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},
+    {0x8518u, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},
+    {0x8519u, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},
+    {0x851Au, gl_texture_cube_map, CL_MEM_OBJECT_IMAGE2D, CL_GL_OBJECT_TEXTURE2D, 2u},
+    {0x8C1Au, 0x8C1Au, CL_MEM_OBJECT_IMAGE2D_ARRAY, CL_GL_OBJECT_TEXTURE2D_ARRAY, 3u},
+    {0x806Fu, 0x806Fu, CL_MEM_OBJECT_IMAGE3D, CL_GL_OBJECT_TEXTURE3D, 3u},
 };
 
-}  // namespace
+}
 
 GlClTarget::GlClTarget(uint32_t target)
     : image_target_(target), bind_target_(0u), image_type_(0u), object_type_(0u), dimensions_(0u)
@@ -99,4 +98,4 @@ void GlClTarget::describe(uint32_t width, uint32_t height, uint32_t depth, cl_im
     if (image_type_ == CL_MEM_OBJECT_IMAGE3D) desc.image_depth = depth;
 }
 
-}  // namespace av
+}

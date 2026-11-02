@@ -13,8 +13,6 @@ constexpr const char *drm_class = "/sys/class/drm";
 constexpr uint32_t    decimal_base = 10u;
 constexpr uint32_t    max_digits = 6u;
 
-/* One line of a connector's modes file, "2560x1440", as its two edges; false
- * for anything else - an interlaced "1920x1080i" among them. */
 bool line_mode(const char *line, size_t length, uint32_t &width, uint32_t &height)
 {
     AV_SCOPE("line_mode");
@@ -36,7 +34,7 @@ bool line_mode(const char *line, size_t length, uint32_t &width, uint32_t &heigh
     return at == length;
 }
 
-}  // namespace
+}
 
 HostMonitorModes::HostMonitorModes(Host &host) : host_(host)
 {
@@ -60,7 +58,6 @@ Status HostMonitorModes::read(DisplayModeSet &modes)
         listing[end] = '\0';
         const char *const name = &listing[start];
         start = end + 1u;
-        /* A connector is its card's name, a dash and the port: card1-DP-2. */
         bool connector = name[0] == 'c';
         for (const char *at = name; *at != '\0' && connector; at++)
             if (*at == '-') break;
@@ -96,7 +93,6 @@ bool HostMonitorModes::connected(const char *name)
     size_t      length = 0u;
     const char  word[] = "connected";
     if (host_.read_file(path.text(), status, sizeof status, length) != Status::ok) return false;
-    /* "disconnected" ends the same way, so the whole word from the start. */
     for (size_t at = 0u; at + 1u < sizeof word; at++)
         if (at >= length || status[at] != word[at]) return false;
     return length == sizeof word - 1u || status[sizeof word - 1u] == '\n';
@@ -125,8 +121,6 @@ void HostMonitorModes::add_modes(const char *name, DisplayModeSet &modes, uint32
                             height >= least_height;
         start = end + 1u;
         if (!usable) continue;
-        /* The first usable line is the monitor's best: its kernel lists the
-         * preferred mode first. */
         if (best_width == 0u) {
             best_width = width;
             best_height = height;
@@ -135,4 +129,4 @@ void HostMonitorModes::add_modes(const char *name, DisplayModeSet &modes, uint32
     }
 }
 
-}  // namespace av
+}

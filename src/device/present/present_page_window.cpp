@@ -64,4 +64,4 @@ void PresentPageWindow::publish(const PresentProgress &progress)
     __atomic_store_n(word(PresentProgress::refused_at), progress.refused(), __ATOMIC_RELEASE);
 }
 
-}  // namespace av
+}

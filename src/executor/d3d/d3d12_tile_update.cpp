@@ -14,7 +14,7 @@ constexpr uint32_t range_null = D3D12_TILE_RANGE_FLAG_NULL;
 constexpr uint32_t range_skip = D3D12_TILE_RANGE_FLAG_SKIP;
 constexpr uint32_t range_reuse = D3D12_TILE_RANGE_FLAG_REUSE_SINGLE_TILE;
 
-}  // namespace
+}
 
 D3d12TileUpdate::D3d12TileUpdate() : starts_{}, sizes_{}, flags_{}, offsets_{}, counts_{}, regions_(0u), ranges_(0u)
 {
@@ -59,7 +59,6 @@ bool D3d12TileUpdate::add_range(const d3d12proto::TileRange &range, uint64_t hea
 void D3d12TileUpdate::apply(ID3D12CommandQueue *queue, ID3D12Resource *resource, ID3D12Heap *heap, uint32_t flags)
 {
     AV_SCOPE("D3d12TileUpdate::apply");
-    /* The arrays are handed to vkd3d-proton as the API's own. */
     using Coordinate = D3D12_TILED_RESOURCE_COORDINATE;
     using Region = D3D12_TILE_REGION_SIZE;
     static_assert(sizeof(Start) == sizeof(Coordinate) && offsetof(Start, x_) == offsetof(Coordinate, X) &&
@@ -89,4 +88,4 @@ uint32_t D3d12TileUpdate::ranges() const
     return ranges_;
 }
 
-}  // namespace av
+}

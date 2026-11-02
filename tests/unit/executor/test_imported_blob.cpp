@@ -1,7 +1,3 @@
-/* One import a session holds: memory of its GPU's memory source under the id
- * the device chose, and what the session's host API made of it. The slot
- * holds the memory's reference for the session and hands it back exactly
- * once. */
 #include "executor/exported_memory.hpp"
 #include "executor/imported_blob.hpp"
 #include "executor/source_memory.hpp"
@@ -22,7 +18,6 @@ constexpr std::uint64_t page = 4096u;
 
 std::uint8_t backing[page];
 
-/* Memory as a source keeps it; no descriptor, since nothing here opens one. */
 class Memory {
 public:
     Memory() : memory(1u, 0x10u, 2u, 1u, ExportedMemory(0x77u, -1, backing, page)) {}
@@ -30,7 +25,7 @@ public:
     SourceMemory memory;
 };
 
-}  // namespace
+}
 
 TEST(imported_blob, an_empty_slot_holds_nothing)
 { ImportedBlob blob;
@@ -54,8 +49,6 @@ TEST(imported_blob, takes_memory_under_the_id_and_answers_it)
   CHECK(blob.memory().pointer() == backing);
   CHECK(blob.invariants_hold()); }
 
-/* Id 0 is a valid id to the slot - the device never hands it out, but the
- * slot does not judge that - and an id the slot holds under 0 still answers. */
 TEST(imported_blob, an_id_of_zero_is_held_like_any_other)
 { Memory       held;
   ImportedBlob blob;
@@ -78,8 +71,6 @@ TEST(imported_blob, a_slot_already_holding_one_is_not_overwritten)
   CHECK_EQ(blob.wire_handle(), 0x20u);
   CHECK(blob.invariants_hold()); }
 
-/* What give_back answers is the reference the session must let go of; the
- * slot keeps nothing of the import, so a second give_back answers nothing. */
 TEST(imported_blob, giving_it_back_answers_the_memory_once_and_leaves_nothing_behind)
 { Memory       held;
   ImportedBlob blob;
@@ -95,8 +86,6 @@ TEST(imported_blob, giving_it_back_answers_the_memory_once_and_leaves_nothing_be
   CHECK(blob.give_back() == nullptr);
   CHECK(blob.invariants_hold()); }
 
-/* A slot given back takes the next import afresh: nothing the last one
- * recorded carries over. */
 TEST(imported_blob, a_slot_taken_again_starts_with_nothing_recorded)
 { Memory       first;
   Memory       second;
@@ -110,9 +99,6 @@ TEST(imported_blob, a_slot_taken_again_starts_with_nothing_recorded)
   CHECK(&blob.memory() == &second.memory);
   CHECK(blob.invariants_hold()); }
 
-/* What the host API made of it: a VkDeviceMemory, a heap, a buffer - all of
- * them fit one number - and the number the guest names it by, which is none
- * for an API whose guest never names it. */
 TEST(imported_blob, remembers_what_the_host_api_made_of_it_and_what_the_guest_names)
 { Memory       held;
   ImportedBlob blob;
@@ -127,8 +113,6 @@ TEST(imported_blob, remembers_what_the_host_api_made_of_it_and_what_the_guest_na
   CHECK_EQ(blob.object(), 0u);
   CHECK(blob.invariants_hold()); }
 
-/* A free slot that still names an id, an object or a handle is one whose
- * import a later one would be answered with: each field on its own. */
 TEST(imported_blob_invariants, an_empty_slot_with_an_id_breaks_them)
 { ImportedBlob blob;
   ImportedBlobProbe(blob).set_id(4u);
@@ -144,7 +128,6 @@ TEST(imported_blob_invariants, an_empty_slot_with_a_wire_handle_breaks_them)
   ImportedBlobProbe(blob).set_wire_handle(0x1000u);
   CHECK(!blob.invariants_hold()); }
 
-/* A live slot may carry any of them: they are the import's. */
 TEST(imported_blob_invariants, a_live_slot_holds_them_whatever_it_records)
 { Memory       held;
   ImportedBlob blob;

@@ -42,7 +42,6 @@ Status ShareIndex::insert(uint32_t domain, uint64_t id, Share *share)
         const Status made = tables_.create(table, blocks_);
         if (made != Status::ok) return made;
         uint32_t slot = 0u;
-        /* Room was made above. */
         static_cast<void>(domains_.insert(domain, table, slot));
     }
     uint32_t     slot = 0u;
@@ -74,4 +73,4 @@ uint32_t ShareIndex::count() const
     return count_;
 }
 
-}  // namespace av
+}

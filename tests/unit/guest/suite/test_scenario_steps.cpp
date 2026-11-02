@@ -44,14 +44,12 @@ TEST(scenario_steps, a_teardown_is_recorded_with_its_first_failure_s_ntstatus)
   CHECK_STATUS(session.open_device(), Status::ok);
   kmt.fail_at(MockKmt::Call::destroy_device, 1u, 0xC0000001u);
   steps.check_teardown(session);
-  steps.check_teardown(session);   /* the refused device is not kept: nothing left to destroy */
+  steps.check_teardown(session);
   CHECK(std::strcmp(report.text(),
                     "FAIL probe.teardown status=7 code=0xC0000001\n"
                     "ok probe.teardown\n") == 0);
   CHECK_STATUS(kmt.close_adapter(adapter), Status::ok); }
 
-/* A rate is not an NTSTATUS: the measurement is on the line either way, because
- * the number is what the step was for and the runner reads it back. */
 TEST(scenario_steps_check_measured, puts_the_measurement_on_the_line_passed_or_not)
 { MockKmt kmt;
   av::MockPlatform report_memory;
@@ -62,9 +60,6 @@ TEST(scenario_steps_check_measured, puts_the_measurement_on_the_line_passed_or_n
   CHECK_STATUS(steps.check_measured("rate", Status::ok, 6000u), Status::ok);
   CHECK(std::strstr(report.text(), "ok vsync.rate 6000") != nullptr); }
 
-/* A graphics API's result is not an NTSTATUS either: success is a bare line, and
- * a refusal carries the API's own code - VK_ERROR_OUT_OF_DEVICE_MEMORY (-2) as
- * its bits, VK_INCOMPLETE (5) as itself - with the status a failed step has. */
 TEST(scenario_steps_check_result, zero_passes_and_anything_else_fails_with_the_code_on_the_line)
 { MockKmt kmt;
   av::MockPlatform report_memory;
@@ -80,10 +75,6 @@ TEST(scenario_steps_check_result, zero_passes_and_anything_else_fails_with_the_c
   CHECK_EQ(report.passed(), 1u);
   CHECK_EQ(report.failed(), 2u); }
 
-/* Feature 053: a step whose kernel call was made by somebody else's Kmt. A
- * probe calling a driver through an API of its own never touches the kernel
- * itself, so its own last_code() is 0 and reporting that would say no kernel
- * call was involved - the opposite of the truth. */
 TEST(scenario_steps, check_kernel_reports_a_status_this_kmt_never_answered)
 { MockKmt       kmt;
   av::MockPlatform report_memory;

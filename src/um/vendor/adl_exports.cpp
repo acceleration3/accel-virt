@@ -1,14 +1,3 @@
-/* atiadlxx.dll's entry points (docs/vendor-libraries.md): the AMD Display
- * Library calls this library answers, ADL1's and ADL2's, each one line into
- * the library in this translation unit's storage - the vendor library's
- * process-lifetime state (constitution III) - and a DLL entry that does
- * nothing at attach or detach, where the loader lock allows nothing. Every
- * other ADL call is simply not exported: what an application meets on a
- * driver that predates it.
- *
- * ADL's functions are cdecl; its allocation callback alone is stdcall, and
- * this library allocates nothing with it - every answer here fits the
- * caller's own buffer. */
 #include "icd/vendor/ddi/adl_adapter_info_record.hpp"
 #include "icd/vendor/ddi/adl_versions_info_record.hpp"
 #include "icd/vendor/ddi/adl_versions_info_x2_record.hpp"

@@ -107,4 +107,4 @@ bool SetScanoutBlobRequest::decoded() const
     return decoded_;
 }
 
-}  // namespace av
+}

@@ -1,7 +1,3 @@
-/* ClIcdRoot's answers about what the platform and its devices are, and the
- * calls that make or watch an object without crossing to the host for it:
- * a context from a device type, the destructor callbacks, sub-devices no
- * device here can be split into, and a sampler's own answers. */
 #include "icd/opencl/cl_icd_root.hpp"
 
 #include "core/platform/thread_lock.hpp"
@@ -15,9 +11,6 @@
 namespace av::clicd {
 
 namespace {
-
-/* The OpenCL C feature a kernel enqueues work from the device with, which
- * needs the device queue no queue here is. */
 constexpr char device_enqueue_feature[] = "__opencl_c_device_enqueue";
 
 bool names_feature(const cl_name_version &entry, const char *feature)
@@ -30,7 +23,7 @@ bool names_feature(const cl_name_version &entry, const char *feature)
     return at < CL_NAME_VERSION_MAX_NAME_SIZE && entry.name[at] == '\0';
 }
 
-}  // namespace
+}
 
 cl_int ClIcdRoot::device_extension_versions(ClDevice &device, size_t value_bytes, void *value, size_t *size_ret)
 {
@@ -64,8 +57,6 @@ cl_int ClIcdRoot::c_features(ClDevice &device, size_t value_bytes, void *value, 
 cl_int ClIcdRoot::platform_extension_versions(size_t value_bytes, void *value, size_t *size_ret) const
 {
     AV_SCOPE("ClIcdRoot::platform_extension_versions");
-    /* What CL_PLATFORM_EXTENSIONS names, as platform_info finds it: the rows
-     * this ICD answers alone, before any host is asked. */
     const ClExtensionPolicy platform_wide(reported_extensions, reported_extension_count);
     const ExtensionWords    no_host(memory_, Pool::paged);
     cl_name_version         listed[ClExtensionPolicy::max_rows] = {};
@@ -111,8 +102,6 @@ cl_int ClIcdRoot::create_sub_devices(cl_device_id device, const cl_device_partit
 {
     AV_SCOPE("ClIcdRoot::create_sub_devices");
     if (judged(device, ClObject::Kind::device) == nullptr) return CL_INVALID_DEVICE;
-    /* The specification's word for a partition the device does not support,
-     * which is every one: CL_DEVICE_PARTITION_PROPERTIES says none. */
     return CL_INVALID_VALUE;
 }
 
@@ -142,4 +131,4 @@ cl_int ClIcdRoot::sampler_info(cl_sampler sampler, cl_sampler_info name, size_t 
     return av::clproto::av_clGetSamplerInfo(*wire, held->wire(), name, value_bytes, value, size_ret);
 }
 
-}  // namespace av::clicd
+}

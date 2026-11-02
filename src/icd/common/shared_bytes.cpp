@@ -18,4 +18,4 @@ uint64_t SharedBytes::pages() const
     return (asked_ + page - 1u) & ~(page - 1u);
 }
 
-}  // namespace av
+}

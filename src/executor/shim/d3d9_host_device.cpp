@@ -10,14 +10,10 @@
 namespace av {
 
 namespace {
-
-/* What a device with no window still needs: one back buffer, which nothing draws. */
 constexpr UINT unused_back_buffer = 16u;
-/* What every check is made against: the desktop's format. */
 constexpr D3DFORMAT display = D3DFMT_X8R8G8B8;
 constexpr uint32_t  last_multisample = D3DMULTISAMPLE_16_SAMPLES;
 
-/* FormatCaps9's support bits (d3d9.toml), each a CheckDeviceFormat question. */
 struct FormatCheck {
     uint32_t usage;
     uint32_t type;
@@ -41,7 +37,7 @@ constexpr uint32_t offscreen_bit = 13u;
 constexpr uint32_t bump_bit = 14u;
 constexpr uint32_t depth_texture_bit = 15u;
 
-}  // namespace
+}
 
 D3d9HostDevice::D3d9HostDevice() : d3d9_(nullptr), adapter_(~0u), frames_()
 {
@@ -112,9 +108,6 @@ uint32_t D3d9HostDevice::adapter_for(const uint8_t *uuid)
     return found;
 }
 
-/* FPU_PRESERVE: Direct3D 9 otherwise sets the calling thread's FPU to single
- * precision, and the thread is the executor's, not the guest's. MULTITHREADED:
- * the present engine reads a device's frames from a thread of its own. */
 int32_t D3d9HostDevice::make_device(IDirect3DDevice9 *&device) const
 {
     AV_SCOPE("D3d9HostDevice::make_device");
@@ -147,8 +140,6 @@ bool D3d9HostDevice::checks(uint32_t usage, uint32_t type, uint32_t format) cons
                                     static_cast<D3DFORMAT>(format)) == D3D_OK;
 }
 
-/* NONMASKABLE is asked only of a format that renders at some count: the
- * runtime offers it beside the counts and never alone. */
 d3d9proto::FormatCaps9 D3d9HostDevice::format_caps(uint32_t format) const
 {
     AV_SCOPE("D3d9HostDevice::format_caps");
@@ -188,4 +179,4 @@ int32_t D3d9HostDevice::multisample(uint32_t format, uint32_t type, uint32_t &qu
     return answer;
 }
 
-}  // namespace av
+}

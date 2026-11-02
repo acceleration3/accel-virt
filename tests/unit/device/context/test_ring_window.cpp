@@ -1,4 +1,3 @@
-/* A ring's header and wrapped data, read through the blob that holds it. */
 #include "core/support/status.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/context/ring_window.hpp"
@@ -19,7 +18,6 @@ namespace {
 
 constexpr std::uint64_t data_bytes = 4096u;
 
-/* A ring of order 12 split into two extents in the middle of its data area. */
 class RingBlob {
 public:
     RingBlob() : bytes_{}, pointers_{bytes_, bytes_ + split}, lengths_{split, sizeof bytes_ - split}
@@ -39,7 +37,7 @@ private:
     std::uint64_t lengths_[2];
 };
 
-}  // namespace
+}
 
 TEST(ring_window_snapshot, decodes_the_header_the_guest_wrote)
 { RingBlob blob;
@@ -54,8 +52,6 @@ TEST(ring_window_snapshot, decodes_the_header_the_guest_wrote)
   CHECK(header.tail() == 0x5000u);
   CHECK(header.head() == 0x4800u); }
 
-/* The tail is read as one word, apart from the header around it: a header
- * whose tail no single extent holds is one it cannot read. */
 TEST(ring_window_snapshot, reads_the_tail_as_one_word_and_refuses_a_header_that_splits_it)
 { RingBlob blob;
   static_cast<void>(RingHeader(12u, 0x0102030405060708u, 0x10u).encode(blob.bytes(), 32u));

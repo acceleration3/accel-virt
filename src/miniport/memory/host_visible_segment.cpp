@@ -68,4 +68,4 @@ bool HostVisibleSegment::invariants_hold() const
     return size_ != 0u && (size_ & (page_bytes - 1u)) == 0u && (base_ & (page_bytes - 1u)) == 0u;
 }
 
-}  // namespace av
+}

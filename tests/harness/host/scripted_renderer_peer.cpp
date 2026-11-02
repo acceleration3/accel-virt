@@ -199,4 +199,4 @@ std::uint32_t ScriptedRendererPeer::body_length_at(std::uint32_t index) const
     return index < max_datagrams ? datagrams_[index].body_length : 0u;
 }
 
-}  // namespace av
+}

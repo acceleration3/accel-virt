@@ -36,4 +36,4 @@ long ClIcdLibrary::crashed(void *pointers)
     return driver_.crashed(pointers);
 }
 
-}  // namespace av
+}

@@ -13,11 +13,8 @@ constexpr int32_t known_names[] = {ContextAttributes::major_version, ContextAttr
                                    ContextAttributes::profile_mask,  ContextAttributes::reset_strategy};
 constexpr int32_t defined_flags = ContextAttributes::flag_debug | ContextAttributes::flag_forward_compatible |
                                   ContextAttributes::flag_robust_access | ContextAttributes::flag_reset_isolation;
-/* The last minor each major has: 1.5, 2.1, 3.3, 4.6. */
 constexpr int32_t last_minor[] = {0, 5, 1, 3, 6};
 constexpr int32_t last_major = 4;
-/* Six names, each at most once: a seventh pair is a repeat or unknown and
- * ends the read, so the ARB's 64-pair limit is never reached. */
 static_assert(sizeof known_names / sizeof known_names[0] < ContextAttributes::max_pairs);
 
 bool has(uint32_t seen, Name name)
@@ -26,7 +23,7 @@ bool has(uint32_t seen, Name name)
     return (seen & (1u << name)) != 0u;
 }
 
-}  // namespace
+}
 
 ContextAttributes::ContextAttributes(const int32_t *list) : list_(list), seen_(0u), values_{}, accepted_(false)
 {
@@ -107,8 +104,7 @@ bool ContextAttributes::invariants_hold() const
     if ((seen_ >> names) != 0u) return false;
     for (uint32_t name = 0u; name < names; name++)
         if (!has(seen_, static_cast<Name>(name)) && values_[name] != 0) return false;
-    /* judge() refuses everything GlContextOptions::valid() would. */
     return !accepted_ || judge() == 0u;
 }
 
-}  // namespace av::glicd
+}

@@ -39,17 +39,13 @@ StagedFrame *D3d12FramePool::stage(ID3D12CommandQueue *queue, ID3D12Resource *so
     const uint32_t            typed = DxgiFormat(static_cast<uint32_t>(desc.Format)).resolved();
     if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D || !DxgiFormatLayout(static_cast<uint32_t>(desc.Format)).word_texels() || (resolve && typed == 0u))
         return nullptr;
-    /* The frame's image: the source's first subresource at one sample. */
     D3D12_RESOURCE_DESC single = desc;
     single.MipLevels = 1u;
     single.DepthOrArraySize = 1u;
     single.SampleDesc = {1u, 0u};
-    /* A multisampled texture's 4 MiB placement is no single-sample one's. */
     single.Alignment = 0u;
     single.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
     single.Flags = D3D12_RESOURCE_FLAG_NONE;
-    /* A typeless source resolved into a typed texture is drawn, not resolved
-     * by the transfer engine, on the host's drivers: into a render target. */
     if (resolve) {
         single.Format = static_cast<DXGI_FORMAT>(typed);
         single.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
@@ -94,8 +90,6 @@ bool D3d12FramePool::Frame::claim()
     return idle() && StagedFrame::claim();
 }
 
-/* A frame given back before its copy finished - evicted for a newer one -
- * keeps its allocator busy: it is not recorded into again until then. */
 bool D3d12FramePool::Frame::idle() const
 {
     AV_SCOPE("D3d12FramePool::Frame::idle");
@@ -174,10 +168,6 @@ bool D3d12FramePool::Frame::prepare(ID3D12Device *device, uint64_t bytes, const 
                                                               reinterpret_cast<void **>(&fence_)));
 }
 
-/* A presented texture is in the PRESENT state, which is COMMON: a copy source
- * by implicit promotion, decaying back as the list's work ends. No promotion
- * makes it a resolve source, so a multisampled one is moved there and back
- * explicitly (record_resolve). */
 bool D3d12FramePool::Frame::copy(ID3D12CommandQueue *queue, ID3D12Resource *source, const void *footprint,
                                  uint32_t width, uint32_t height, bool resolve)
 {
@@ -264,10 +254,9 @@ StagedFrame::Reading D3d12FramePool::Frame::map_when_copied(const uint8_t *&pixe
     return Reading::mapped;
 }
 
-/* The readback buffer stays mapped for the frame's life. */
 void D3d12FramePool::Frame::unmap()
 {
     AV_SCOPE("D3d12FramePool::Frame::unmap");
 }
 
-}  // namespace av
+}

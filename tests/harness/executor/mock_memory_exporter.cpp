@@ -166,4 +166,4 @@ std::uint32_t MockMemoryExporter::last_type() const { return last_type_; }
 std::uint64_t MockMemoryExporter::last_size() const { return last_size_; }
 std::uint32_t MockMemoryExporter::misuses() const { return misuses_; }
 
-}  // namespace av
+}

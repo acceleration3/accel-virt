@@ -56,8 +56,6 @@ bool SvmAllocation::covers(const void *address) const
     AV_SCOPE("SvmAllocation::covers");
     if (mirror_ == nullptr || address == nullptr) return false;
     const uint8_t *const at = static_cast<const uint8_t *>(address);
-    /* The last byte is inside; one past the end is not, and is also the first
-     * byte of whatever the allocator put next. */
     return at >= mirror_ && at < mirror_ + bytes_;
 }
 
@@ -94,9 +92,7 @@ bool SvmAllocation::invariants_hold() const
     AV_SCOPE("SvmAllocation::invariants_hold");
     if (mirror_ == nullptr) return host_base_ == 0u && bytes_ == 0u && map_depth_ == 0u;
     if (bytes_ == 0u || host_base_ == 0u) return false;
-    /* The pair is the same size, so a host address inside it is representable
-     * from a mirror address inside it. */
     return bytes_ <= ~uint64_t{0} - host_base_;
 }
 
-}  // namespace av::clicd
+}

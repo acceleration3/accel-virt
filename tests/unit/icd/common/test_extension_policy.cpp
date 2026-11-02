@@ -1,10 +1,3 @@
-/* Which of the host's device extensions the guest is told of (research.md §9):
- * only one on the host's list, implemented by the generator and named by a
- * policy row, at no newer a spec version than the row's - and never an
- * instance extension or the host-memory import, whatever the host and the
- * policy say. The host's list is hostile: names without a terminator,
- * hundreds of entries, a name listed many times. A device may be created with
- * exactly what would be reported. */
 #include "harness/framework/test_registry.hpp"
 #include "icd/common/extension_policy.hpp"
 
@@ -21,10 +14,8 @@ namespace {
 const Row rows[] = {
     {"VK_KHR_timeline_semaphore", 2u, "extension_policy.test"},
     {"VK_KHR_spirv_1_4", 1u, "extension_policy.test"},
-    /* Named by the policy but not implemented by the generator. */
     {"VK_NV_ray_tracing", 1u, "extension_policy.test"},
     {"VK_KHR_swapchain", 70u, "extension_policy.test"},
-    /* Never reported, whatever names them. */
     {"VK_KHR_surface", 25u, "extension_policy.test"},
     {"VK_KHR_win32_surface", 6u, "extension_policy.test"},
     {"VK_EXT_external_memory_host", 1u, "extension_policy.test"},
@@ -40,7 +31,6 @@ VkExtensionProperties extension(const char *name, std::uint32_t spec_version)
     return made;
 }
 
-/* A host list as the host sent it: at most 512 entries. */
 class HostList {
 public:
     void add(const VkExtensionProperties &entry) { entries_[count_++] = entry; }
@@ -53,7 +43,7 @@ private:
     std::uint32_t         count_ = 0u;
 };
 
-}  // namespace
+}
 
 TEST(extension_policy, reports_only_the_host_implemented_policy_extensions)
 { ExtensionPolicy policy(rows, row_count);
@@ -76,17 +66,13 @@ TEST(extension_policy, reports_only_the_host_implemented_policy_extensions)
   count = 4u;
   CHECK_EQ(policy.report(host.entries(), host.count(), &count, reported), VK_SUCCESS);
   CHECK_EQ(count, 3u);
-  /* In the policy's order. */
   CHECK(std::strcmp(reported[0].extensionName, "VK_KHR_timeline_semaphore") == 0);
   CHECK_EQ(reported[0].specVersion, 2u);
   CHECK(std::strcmp(reported[1].extensionName, "VK_KHR_spirv_1_4") == 0);
-  /* The swapchain is this ICD's own (feature 046), so it is reported. */
   CHECK(std::strcmp(reported[2].extensionName, "VK_KHR_swapchain") == 0);
   CHECK_EQ(reported[2].specVersion, 70u);
   CHECK_EQ(reported[3].specVersion, 0xC0FFEEu); }
 
-/* A surface extension is an instance extension: a device list naming one is a
- * driver bug, whatever the host says. */
 TEST(extension_policy, the_surface_and_host_memory_extensions_are_never_reported)
 { ExtensionPolicy policy(rows, row_count);
   const char *const withheld[] = {"VK_KHR_surface", "VK_KHR_win32_surface", "VK_EXT_external_memory_host"};
@@ -132,8 +118,6 @@ TEST(extension_policy, room_for_fewer_than_are_reported_answers_incomplete)
   CHECK_EQ(policy.report(host, 0u, &count, reported), VK_SUCCESS);
   CHECK_EQ(count, 0u); }
 
-/* A name is the host's to write: without a terminator in its 256 bytes, or
- * with one a byte early or late, it is not the extension. */
 TEST(extension_policy, a_host_name_that_is_not_exactly_the_extension_is_not_it)
 { ExtensionPolicy policy(rows, row_count);
   VkExtensionProperties unterminated = extension("VK_KHR_timeline_semaphore", 2u);
@@ -147,7 +131,6 @@ TEST(extension_policy, a_host_name_that_is_not_exactly_the_extension_is_not_it)
   std::uint32_t count = 3u;
   CHECK_EQ(policy.report(host, sizeof host / sizeof host[0], &count, nullptr), VK_SUCCESS);
   CHECK_EQ(count, 0u);
-  /* Bytes after the terminator are not part of the name. */
   VkExtensionProperties padded = extension("VK_KHR_timeline_semaphore", 2u);
   std::memset(padded.extensionName + std::strlen("VK_KHR_timeline_semaphore") + 1u, 'x',
               sizeof padded.extensionName - std::strlen("VK_KHR_timeline_semaphore") - 1u);
@@ -180,7 +163,6 @@ TEST(extension_policy, a_host_listing_512_extensions_is_reported_from_whole_and_
   count = 2u;
   CHECK_EQ(policy.report(repeated.entries(), repeated.count(), &count, reported), VK_SUCCESS);
   CHECK_EQ(count, 1u);
-  /* The first the host listed. */
   CHECK_EQ(reported[0].specVersion, 0u); }
 
 TEST(extension_policy, a_device_may_enable_exactly_what_would_be_reported)
@@ -205,7 +187,6 @@ TEST(extension_policy, invariants_refuse_a_row_that_names_nothing_no_test_no_ver
       {{nullptr, 1u, "extension_policy.test"}}, {{"", 1u, "extension_policy.test"}},
       {{long_name, 1u, "extension_policy.test"}}, {{"VK_KHR_spirv_1_4", 0u, "extension_policy.test"}},
       {{"VK_KHR_spirv_1_4", 1u, nullptr}}, {{"VK_KHR_spirv_1_4", 1u, ""}},
-      /* A row answered over a host extension has to name one. */
       {{"VK_KHR_external_memory_win32", 1u, "extension_policy.test", ""}},
   };
   for (const auto &row : broken) CHECK(!ExtensionPolicy(row, 1u).invariants_hold());
@@ -216,10 +197,6 @@ TEST(extension_policy, invariants_refuse_a_row_that_names_nothing_no_test_no_ver
   CHECK(!ExtensionPolicy(twice, 3u).invariants_hold());
   CHECK(ExtensionPolicy(twice, 2u).invariants_hold()); }
 
-/* A row may be answered over a different host extension: no Linux driver has a
- * Win32 handle to give, so VK_KHR_external_memory_win32 is reported when the
- * host lists VK_KHR_external_memory_fd, at the row's own version - the host's
- * is a different extension's number (feature 047, US3, research.md §10). */
 TEST(extension_policy, a_row_is_reported_over_the_host_extension_it_names)
 { const Row translated[] = {
       {"VK_KHR_external_memory_win32", 1u, "extension_policy.test", "VK_KHR_external_memory_fd"},
@@ -235,13 +212,10 @@ TEST(extension_policy, a_row_is_reported_over_the_host_extension_it_names)
   CHECK_EQ(policy.report(host.entries(), host.count(), &count, reported), VK_SUCCESS);
   CHECK_EQ(count, 2u);
   CHECK(std::strcmp(reported[0].extensionName, "VK_KHR_external_memory_win32") == 0);
-  /* The row's version, not the host's 7: what was tested is this ICD's
-   * translation, whatever revision the mechanism behind it is at. */
   CHECK_EQ(reported[0].specVersion, 1u);
   CHECK(std::strcmp(reported[1].extensionName, "VK_KHR_timeline_semaphore") == 0);
   CHECK_EQ(reported[1].specVersion, 2u);
 
-  /* A host without the mechanism is a host this is not reported on. */
   HostList without;
   without.add("VK_KHR_external_memory_win32", 1u);
   without.add("VK_KHR_timeline_semaphore", 2u);
@@ -249,7 +223,5 @@ TEST(extension_policy, a_row_is_reported_over_the_host_extension_it_names)
   CHECK_EQ(policy.report(without.entries(), without.count(), &count, reported), VK_SUCCESS);
   CHECK_EQ(count, 1u);
   CHECK(std::strcmp(reported[0].extensionName, "VK_KHR_timeline_semaphore") == 0);
-  /* And a device may be created with it exactly when it is reported: the row
-   * is what a create is judged against, as every other row is. */
   const char *const asked[] = {"VK_KHR_external_memory_win32"};
   CHECK_EQ(policy.first_refused(asked, 1u), 1u); }

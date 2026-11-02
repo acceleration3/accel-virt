@@ -29,4 +29,4 @@ bool GuardedBuffer::guards_intact() const
     return true;
 }
 
-}  // namespace av
+}

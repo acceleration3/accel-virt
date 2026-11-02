@@ -22,4 +22,4 @@ bool MutexTryGuard::held() const
     return held_;
 }
 
-}  // namespace av
+}

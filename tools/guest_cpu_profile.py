@@ -48,7 +48,6 @@ def guest(work, *command, timeout=120):
 
 
 def record(work, process, seconds, scratch):
-    """The process's id, the guest's CPU count and a trace of `seconds` of every CPU."""
     listing = guest(work, "ps", f"""
 wpr -cancel 2>&1 | Out-Null
 $p = Get-Process {process} -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -70,8 +69,6 @@ wpr -stop {REMOTE_TRACE} 2>&1 | Out-Null""", timeout=int(seconds) + 120)
 
 
 class Names:
-    """Addresses of one process named `module!function` (tools/etw/symbols.py)."""
-
     def __init__(self, symbols, pid):
         self.symbols, self.pid = symbols, pid
 
@@ -107,8 +104,6 @@ def report_thread(names, tid, samples, stacks, top, callers):
         print(f"  {share(count, total)}  {name}")
     if not own:
         return
-    # A stack counts once toward every function on it: what a call cost with
-    # everything it called, as a share of the stacks the thread has.
     inclusive = collections.Counter()
     for _, frames in own:
         inclusive.update({names[frame] for frame in frames})
@@ -146,8 +141,6 @@ def main():
         if not args.process:
             parser.error("name the process to profile, or pass --again")
         pid, cpus, path = record(args.work, args.process, args.seconds, scratch)
-        # A process that exits during the trace is found in it by name; one
-        # still running is asked for its threads as well.
         threads = [int(tid) for tid in guest(args.work, "ps", f"(Get-Process -Id {pid} -ErrorAction SilentlyContinue)"
                                                                ".Threads | ForEach-Object { $_.Id }").split()] if pid else []
         recording.write_text(json.dumps({"cpus": cpus, "threads": threads, "trace": str(path),

@@ -55,9 +55,6 @@ uint32_t ScanoutCommands::show(ControlRequest &request)
     return shown_answer(heads_.show(shown.scanout_id(), shown.resource_id(), framebuffer));
 }
 
-/* A refusal that is the guest's own is invalid_parameter; everything else is
- * the host declining to show the descriptor, which is not the guest's fault
- * and not a thing it can fix. */
 uint32_t ScanoutCommands::shown_answer(Status status) const
 {
     AV_SCOPE("ScanoutCommands::shown_answer");
@@ -74,8 +71,6 @@ bool ScanoutCommands::flush(ControlRequest &request, uint32_t &response)
     uint8_t      bytes[FlushRequest::encoded_size] = {};
     WireReader   reader(bytes, request.read(0u, bytes, sizeof bytes));
     FlushRequest flushed;
-    /* A malformed flush is the base class's to refuse, as it always was; only
-     * a well-formed one naming a blob is ours. */
     if (flushed.decode(reader) != Status::ok) return false;
     if (!blobs_.contains(flushed.resource_id())) return false;
     response = heads_.flush(flushed.resource_id(), flushed.rect()) == Status::ok
@@ -84,4 +79,4 @@ bool ScanoutCommands::flush(ControlRequest &request, uint32_t &response)
     return true;
 }
 
-}  // namespace av
+}

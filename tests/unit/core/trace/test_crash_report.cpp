@@ -30,7 +30,7 @@ struct CrashReportProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -72,7 +72,7 @@ void render(CrashReport &report, char *joined, std::size_t capacity)
     }
 }
 
-}  // namespace
+}
 
 TEST(crash_report, writes_the_crash_the_trace_and_the_native_stack)
 { Crashed crashed;

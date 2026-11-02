@@ -13,9 +13,9 @@ namespace {
 
 constexpr std::uint32_t ok_nodata = 0x1100u;
 constexpr std::uint32_t err_invalid_parameter = 0x1205u;
-constexpr std::uint32_t head_record = 32u;   /* head 0, after the header */
+constexpr std::uint32_t head_record = 32u;
 
-}  // namespace
+}
 
 FakeDisplayClock::FakeDisplayClock(MockPlatform &platform)
     : platform_(platform), page_(0u), sequence_(0u), refusing_(false) {}
@@ -41,7 +41,6 @@ std::uint8_t *FakeDisplayClock::bytes() const
 
 void FakeDisplayClock::blank(std::uint32_t latched) { blank_at(sequence_ + 1u, latched); }
 
-/* Odd while written and even once whole, as the device's clock writes it. */
 void FakeDisplayClock::blank_at(std::uint64_t sequence, std::uint32_t latched)
 {
     if (page_ == 0u) return;
@@ -65,4 +64,4 @@ std::uint32_t FakeDisplayClock::interrupt_every() const
     return every;
 }
 
-}  // namespace av
+}

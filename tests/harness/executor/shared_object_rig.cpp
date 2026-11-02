@@ -11,7 +11,7 @@ namespace {
 
 constexpr std::uint8_t no_uuid[ContextExecutor::uuid_bytes] = {};
 
-}  // namespace
+}
 
 SharedObjectContext::SharedObjectContext(MockHost &host, const ExecutorLibrary &library, ExecutorShares &shares,
                                          std::uint32_t id)
@@ -91,4 +91,4 @@ bool SharedObjectRig::invariants_hold()
     return ops_.misuses() == 0u;
 }
 
-}  // namespace av
+}

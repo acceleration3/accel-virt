@@ -15,10 +15,6 @@ ClEventsProbe::ClEventsProbe(ClientTransport &wire, Kmt &kmt, ClEventWatcher &wa
     AV_SCOPE("ClEventsProbe::ClEventsProbe");
 }
 
-/* What the wait was woken by is read before it asks: a wake that comes after
- * the host was asked - its raise on the very event this then finds pending -
- * is past what was seen, so the pause that follows ends at once rather than
- * missing it. */
 bool ClEventsProbe::ask(uint64_t)
 {
     AV_SCOPE("ClEventsProbe::ask");
@@ -29,14 +25,10 @@ bool ClEventsProbe::ask(uint64_t)
         size_t       answered = 0u;
         const cl_int asked = av::clproto::av_clGetEventInfo(wire_, events_[index], CL_EVENT_COMMAND_EXECUTION_STATUS,
                                                             sizeof status, &status, &answered);
-        /* An event the host will not answer about is one this wait can never
-         * end on; the caller is told rather than left here. */
         if (asked != CL_SUCCESS) {
             answer_ = asked;
             return true;
         }
-        /* A negative status is the command's own failure, which ends the wait
-         * with the error the API names for it rather than another round. */
         if (status < 0) {
             answer_ = CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST;
             return true;
@@ -50,16 +42,6 @@ bool ClEventsProbe::ask(uint64_t)
     return true;
 }
 
-/* Back to back for the first millisecond: the wake is the host's callback, its
- * worker, an interrupt, a DPC and two threads scheduled, and work that ends
- * that soon is seen sooner by asking - which is what most of Affinity's drains
- * are. Past it a round trip each few microseconds is the transport and a
- * processor taken from the application for nothing - a drain behind a kernel
- * asked over a thousand times in 4 ms. The raise is asked for after the round
- * that found the event pending, and an event already finished by then has its
- * callback run at once, raising all the same. A host that will not raise on
- * one, or a watcher with no thread to tell this, leaves the wait asking on a
- * timer. */
 void ClEventsProbe::pause(uint64_t slice)
 {
     AV_SCOPE("ClEventsProbe::pause");
@@ -82,4 +64,4 @@ cl_int ClEventsProbe::answer() const
     return answer_;
 }
 
-}  // namespace av::clicd
+}

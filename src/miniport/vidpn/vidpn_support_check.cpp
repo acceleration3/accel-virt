@@ -18,7 +18,6 @@ VidPnSupportCheck::VidPnSupportCheck(Platform &platform, DxgkrnlInterface &dxgkr
           AV_SCOPE("VidPnSupportCheck::VidPnSupportCheck");
       }
 
-/* A null VidPn asks whether the adapter can have no display at all. */
 NtStatus VidPnSupportCheck::decide()
 {
     AV_SCOPE("VidPnSupportCheck::decide");
@@ -36,7 +35,6 @@ NtStatus VidPnSupportCheck::decide()
     return NtStatus(Status::ok);
 }
 
-/* Refusing the path ends the walk; supported_ tells the refusal from a failure. */
 Status VidPnSupportCheck::visit(const D3dkmdtVidPnPresentPathRecord &path)
 {
     AV_SCOPE("VidPnSupportCheck::visit");
@@ -71,10 +69,6 @@ const D3dkmdtVidPnSourceModeRecord &VidPnSupportCheck::refused_mode() const
     return refused_mode_;
 }
 
-/* CommitVidPn refuses a source mode the adapter does not offer, but by then DMM
- * has chosen it: at boot it pins what it saved last time, which the host may no
- * longer offer, or which is an older driver's X8R8G8B8. Refused here, DMM asks
- * for the recommended VidPn instead. */
 Status VidPnSupportCheck::offers_pinned_source(uint32_t source)
 {
     AV_SCOPE("VidPnSupportCheck::offers_pinned_source");
@@ -89,11 +83,6 @@ Status VidPnSupportCheck::offers_pinned_source(uint32_t source)
     return Status::not_supported;
 }
 
-/* The target mode a saved configuration pins carries the refresh it was made at.
- * A rate the device no longer states is refused here as a size it no longer
- * offers is, so that a refresh changed while the VM runs is taken up by the
- * next VidPn Windows asks for and not kept by the pinned one. A target set that
- * cannot be read is no reason to refuse. */
 Status VidPnSupportCheck::offers_pinned_target(uint32_t target)
 {
     AV_SCOPE("VidPnSupportCheck::offers_pinned_target");
@@ -104,4 +93,4 @@ Status VidPnSupportCheck::offers_pinned_target(uint32_t target)
     return Status::not_supported;
 }
 
-}  // namespace av
+}

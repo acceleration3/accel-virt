@@ -1,7 +1,3 @@
-/* D3d9ExEntry over the system's d3d9.dll, as WPF's renderer calls it: a
- * device on a 1x1 swap chain, the window's own COPY swap chain beside it, a
- * frame cleared into its buffer and presented once with a dirty region.
- * Translation only. */
 #ifndef AV_WINDOWS_D3D9EX_ENTRY_HPP
 #define AV_WINDOWS_D3D9EX_ENTRY_HPP
 
@@ -31,6 +27,6 @@ private:
     IDirect3DSwapChain9 *chain_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WINDOWS_D3D9EX_ENTRY_HPP
+#endif

@@ -1,8 +1,3 @@
-/* The Vulkan object chain over MockKmt, the test playing the host through
- * ScriptedHost: every step passes on VK_SUCCESS in the order an application
- * makes them; a failure at each is reported with the rest skipped; whatever
- * was made is destroyed in reverse and a no-op proves the destroys were sent;
- * and nothing is left open but the adapter the search owns. */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
@@ -64,7 +59,6 @@ public:
     AdapterSearch &search() { return search_; }
     ScriptedHost  &host() { return host_; }
 
-    /* The ids of every command the scenario sent, in order, into `ids`. */
     std::uint32_t sent(std::uint32_t *ids, std::uint32_t capacity) const
     {
         const std::uint32_t count = kmt_.commands() < capacity ? kmt_.commands() : capacity;
@@ -87,7 +81,6 @@ private:
     ScriptedHost  host_;
 };
 
-/* The first `answers` of a successful run's answers, in the order it waits. */
 void answer_until(ScriptedHost &host, std::uint32_t answers)
 {
     for (std::uint32_t answer = 0u; answer < answers; answer++) {
@@ -108,7 +101,7 @@ bool same_ids(const std::uint32_t *sent, std::uint32_t count, const std::uint32_
     return count == length && std::memcmp(sent, expected, length * sizeof *sent) == 0;
 }
 
-}  // namespace
+}
 
 TEST(vulkan_scenario, the_chain_passes_on_the_host_and_is_destroyed_in_reverse)
 { Rig rig;
@@ -138,15 +131,11 @@ TEST(vulkan_scenario, the_chain_passes_on_the_host_and_is_destroyed_in_reverse)
                                     kCmd_vkDestroyDevice, kCmd_vkDestroyInstance, CommandHeader::nop_id};
   CHECK(same_ids(ids, count, expected, sizeof expected / sizeof expected[0]));
   CHECK(report.invariants_hold());
-  /* The context the chain ran on asked the host for Vulkan. */
   av::AvContextRecord record;
   CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
   CHECK(record.sub_api() == av::SubApi::vulkan);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* What crossed is what the host needs: the device it made named back, and the
- * memory type the lowest set bit of the buffer's requirements names (3 of
- * 0x28), for the size they asked; the buffer is 4 KiB of transfer destination. */
 TEST(vulkan_scenario, allocates_the_lowest_memory_type_for_the_size_the_buffer_needs)
 { Rig rig;
   rig.host().vulkan_run();
@@ -174,16 +163,13 @@ TEST(vulkan_scenario, allocates_the_lowest_memory_type_for_the_size_the_buffer_n
     CHECK_EQ(allocate.allocationSize, 8192u); }
   rig.check_nothing_left_but_the_adapter(); }
 
-/* Each step's failure is the last step reported, with the host's own result on
- * the line; whatever was made before it is destroyed, device before instance,
- * and nothing that was never made is named to the host. */
 TEST(vulkan_scenario, a_failure_at_each_step_destroys_only_what_was_made)
 { struct Case {
-      std::uint32_t answers;      /* successful answers before the failing one */
-      std::uint32_t failing;      /* which answer fails: 0 instance, 1 count, 2 list, 3 device, 4 buffer, 5 requirements, 6 allocate, 7 bind */
+      std::uint32_t answers;
+      std::uint32_t failing;
       const char   *line;
       const char   *skipped;
-      std::uint32_t destroys;     /* commands between the last answered one and the no-op */
+      std::uint32_t destroys;
   };
   const Case cases[] = {
       {0u, 0u, "FAIL vulkan.instance status=7 4294967287\n", "vulkan.physical_device", 0u},
@@ -216,7 +202,6 @@ TEST(vulkan_scenario, a_failure_at_each_step_destroys_only_what_was_made)
       CHECK(!has_line(report, failure.skipped));
       CHECK(!has_line(report, "vulkan.destroy"));
       CHECK_EQ(report.failed(), 1u);
-      /* After the command that failed come the destroys, then the no-op. */
       const std::uint32_t commands = rig.kmt().commands();
       CHECK_EQ(rig.kmt().command_id(commands - 1u), CommandHeader::nop_id);
       std::uint32_t destroyed = 0u;
@@ -235,8 +220,6 @@ TEST(vulkan_scenario, a_failure_at_each_step_destroys_only_what_was_made)
       rig.check_nothing_left_but_the_adapter();
   } }
 
-/* A host with no GPU answers a count of zero: the step fails with the count on
- * the line, the list is never asked for, and only the instance is destroyed. */
 TEST(vulkan_scenario, zero_physical_devices_fails_the_step_with_its_count)
 { Rig rig;
   rig.host().vk_handle(0, ScriptedHost::vk_instance);
@@ -255,13 +238,11 @@ TEST(vulkan_scenario, zero_physical_devices_fails_the_step_with_its_count)
   CHECK(same_ids(ids, rig.sent(ids, 8u), expected, 4u));
   rig.check_nothing_left_but_the_adapter(); }
 
-/* The destroys are sent without waiting, so only the no-op after them says the
- * context took them: an answer with bytes in it fails the step. */
 TEST(vulkan_scenario, a_no_op_after_the_destroys_answered_wrong_fails_destroy)
 { Rig rig;
   answer_until(rig.host(), 7u);
   rig.host().vk_result(0);
-  rig.host().vk_result(0);   /* four bytes where the no-op answers none */
+  rig.host().vk_result(0);
   av::MockPlatform report_memory;
   GuestReport report(report_memory);
   VulkanScenario scenario(rig.kmt(), report, rig.search());
@@ -271,9 +252,6 @@ TEST(vulkan_scenario, a_no_op_after_the_destroys_answered_wrong_fails_destroy)
   CHECK_EQ(report.failed(), 1u);
   rig.check_nothing_left_but_the_adapter(); }
 
-/* A context the device lost mid-chain: the client answers VK_ERROR_DEVICE_LOST,
- * which is reported, and the destroys and no-op after it fail unreported
- * without leaving anything open. */
 TEST(vulkan_scenario, a_lost_context_reports_device_lost_and_still_tears_down)
 { Rig rig;
   rig.host().vk_handle(0, ScriptedHost::vk_instance);
@@ -288,7 +266,6 @@ TEST(vulkan_scenario, a_lost_context_reports_device_lost_and_still_tears_down)
   CHECK(has_line(report, line));
   CHECK_EQ(report.failed(), 1u);
   CHECK(!has_line(report, "vulkan.destroy"));
-  /* The lost context sends nothing more, not even its destroys. */
   CHECK_EQ(rig.kmt().commands(), 2u);
   rig.check_nothing_left_but_the_adapter(); }
 

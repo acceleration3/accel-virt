@@ -27,4 +27,4 @@ uint64_t SharedReleaseRequest::object_id() const
     return object_id_;
 }
 
-}  // namespace av
+}

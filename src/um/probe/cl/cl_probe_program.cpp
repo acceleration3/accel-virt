@@ -28,7 +28,6 @@ uint32_t ClProbeProgram::run()
     return report_.failed();
 }
 
-/* A report the console does not take is still the exit code. */
 void ClProbeProgram::write_report() const
 {
     AV_SCOPE("ClProbeProgram::write_report");
@@ -37,4 +36,4 @@ void ClProbeProgram::write_report() const
                                 static_cast<DWORD>(report_.length()), &written, nullptr));
 }
 
-}  // namespace av
+}

@@ -12,8 +12,6 @@
 
 namespace inspector {
 namespace {
-
-// A dump far past any binary's: one that keeps coming is not a dump.
 constexpr usize kMaxDumpBytes = 64u << 20;
 
 int RemainingMs(u64 deadline) {
@@ -21,7 +19,7 @@ int RemainingMs(u64 deadline) {
     return now >= deadline ? 0 : static_cast<int>((deadline - now) / (kTicksPerSecond / 1000));
 }
 
-} // namespace
+}
 
 Optional<String> FetchState(StringView socket_path, int timeout_ms, String& why) {
     sockaddr_un address{};
@@ -78,4 +76,4 @@ Optional<String> FetchState(StringView socket_path, int timeout_ms, String& why)
     return text;
 }
 
-} // namespace inspector
+}

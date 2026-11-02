@@ -1,6 +1,3 @@
-/* Proves at compile time that each DDI record in src/miniport/ddi/ is laid out
- * byte-for-byte as the WDK structure dxgkrnl passes, so core can be driven on
- * Linux through the same memory the kernel hands it. */
 #include <ntddk.h>
 #include <dispmprt.h>
 
@@ -115,8 +112,6 @@
 
 #define AV_SAME_SIZE(record, wdk) \
     static_assert(sizeof(av::record) == sizeof(wdk), #record " size differs from " #wdk)
-/* An anonymous struct in DXGKARG_BUILDPAGINGBUFFER's operation union: offsets
- * are relative to the union, which is where the record is copied from. */
 #define AV_SAME_UNION_SIZE(record, wdk, group) \
     static_assert(sizeof(av::record) == sizeof(static_cast<wdk *>(nullptr)->group), #record " size differs from " #wdk "::" #group)
 #define AV_SAME_UNION_OFFSET(record, field, wdk, group, wdk_field)                          \
@@ -219,8 +214,6 @@ AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, ValueKernelCpuVa, DXGKARG_U
                MonitoredValueKernelCpuVa);
 AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, NumFences, DXGKARG_UPDATEMONITOREDVALUES, NumFences);
 AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, Flags, DXGKARG_UPDATEMONITOREDVALUES, Flags);
-/* The same three arrays and the same offsets, which is why one record carries
- * both updates. */
 AV_SAME_SIZE(DxgkargUpdateNativeFenceValuesRecord, DXGKARG_UPDATECURRENTVALUESFROMCPU);
 AV_SAME_OFFSET(DxgkargUpdateNativeFenceValuesRecord, NativeFenceArray, DXGKARG_UPDATECURRENTVALUESFROMCPU,
                NativeFenceArray);
@@ -625,7 +618,6 @@ AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Argument1, DXGKARGCB_NOTIFY_I
 AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Argument2, DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaPreempted.NodeOrdinal);
 AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Argument3, DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaPreempted.EngineOrdinal);
 AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Flags, DXGKARGCB_NOTIFY_INTERRUPT_DATA, Flags);
-/* CRTC_VSYNC reuses the leading UINTs: the target, the 64-bit address over two, the adapter mask. */
 AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, FenceId, DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsync.VidPnTargetId);
 AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Argument2, DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsync.PhysicalAddress);
 AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, UnionRemainder, DXGKARGCB_NOTIFY_INTERRUPT_DATA,
@@ -682,9 +674,6 @@ AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfoRecord, PhysicalAddress, DXGK_MULTI
                PhysicalAddress);
 AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfoRecord, PlaneAttributes, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO,
                PlaneAttributes);
-/* CrtcVsyncWithMultiPlaneOverlay overlays the union as InterruptNotification
- * writes it: the target, the adapter mask and the count in the first three
- * UINTs, the layers' address at the start of the remainder. */
 static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay.VidPnTargetId) ==
               offsetof(av::DxgkargcbNotifyInterruptDataRecord, FenceId));
 static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay.PhysicalAdapterMask) ==
@@ -823,7 +812,6 @@ AV_SAME_SIZE(DxgkMultiplaneOverlayVsyncInfo2Record, DXGK_MULTIPLANE_OVERLAY_VSYN
 AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfo2Record, LayerIndex, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO2, LayerIndex);
 AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfo2Record, PresentId, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO2, PresentId);
 AV_SAME_OFFSET(DxgkMultiplaneOverlayVsyncInfo2Record, Flags, DXGK_MULTIPLANE_OVERLAY_VSYNC_INFO2, Flags);
-/* CrtcVsyncWithMultiPlaneOverlay2 lays the union out as the first one does. */
 static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay2.VidPnTargetId) ==
               offsetof(av::DxgkargcbNotifyInterruptDataRecord, FenceId));
 static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsyncWithMultiPlaneOverlay2.PhysicalAdapterMask) ==
@@ -1150,7 +1138,6 @@ AV_SAME_OFFSET(DxgkPresentAllocationInfoRecord, PhysicalAddress, DXGK_PRESENTALL
 AV_SAME_OFFSET(DxgkPresentAllocationInfoRecord, SegmentId, DXGK_PRESENTALLOCATIONINFO, SegmentId);
 AV_SAME_OFFSET(DxgkPresentAllocationInfoRecord, PhysicalAdapterIndex, DXGK_PRESENTALLOCATIONINFO, PhysicalAdapterIndex);
 
-/* The operation records overlay DXGKARG_BUILDPAGINGBUFFER's union, which they copy from. */
 AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, Reserved, DXGKARG_BUILDPAGINGBUFFER, UpdatePageTable);
 static_assert(sizeof(DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL) <= sizeof(av::DxgkargBuildPagingBufferRecord::Reserved),
               "the largest operation this driver reads fits the union copy");
@@ -1319,7 +1306,6 @@ AV_SAME_OFFSET(DxgkargEnumVidPnCofuncModalityRecord, EnumPivotType, DXGKARG_ENUM
 AV_SAME_OFFSET(DxgkargEnumVidPnCofuncModalityRecord, EnumPivotVidPnSourceId, DXGKARG_ENUMVIDPNCOFUNCMODALITY, EnumPivot.VidPnSourceId);
 AV_SAME_OFFSET(DxgkargEnumVidPnCofuncModalityRecord, EnumPivotVidPnTargetId, DXGKARG_ENUMVIDPNCOFUNCMODALITY, EnumPivot.VidPnTargetId);
 
-/* Adapter::update_active_vidpn_present_path reads the argument block as the path. */
 AV_SAME_SIZE(D3dkmdtVidPnPresentPathRecord, DXGKARG_UPDATEACTIVEVIDPNPRESENTPATH);
 AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, VidPnSourceId, DXGKARG_UPDATEACTIVEVIDPNPRESENTPATH, VidPnPresentPathInfo);
 AV_SAME_SIZE(DxgkargCommitVidPnRecord, DXGKARG_COMMITVIDPN);
@@ -1357,7 +1343,6 @@ static_assert(DXGK_VIDPN_INTERFACE_VERSION_V1 == 1 && D3DKMDT_EPT_VIDPNSOURCE ==
                   DXGK_INTERRUPT_CRTC_VSYNC == 3,
               "VidPn enumerations");
 
-/* ResourceList reads CM_RESOURCE_LIST as bytes; these pin the offsets it reads at. */
 static_assert(offsetof(CM_RESOURCE_LIST, List) == av::ResourceList::list_header_bytes, "CM_RESOURCE_LIST::List");
 static_assert(offsetof(CM_FULL_RESOURCE_DESCRIPTOR, PartialResourceList.PartialDescriptors) ==
                   av::ResourceList::full_header_bytes, "PartialDescriptors");

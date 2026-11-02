@@ -1,7 +1,3 @@
-/* ClIcdRoot's programs and kernels beyond the one-source build: binaries, IL,
- * built-in kernels, separate compilation and linking, and what a program and
- * a kernel say about themselves. A context here has one device, so every
- * device list judged here names that device or none. */
 #include "icd/opencl/cl_icd_root.hpp"
 
 #include "core/log/keyed_log.hpp"
@@ -21,7 +17,7 @@ void report_program_error(cl_int *error, cl_int value)
     if (error != nullptr) *error = value;
 }
 
-}  // namespace
+}
 
 cl_int ClIcdRoot::program_devices(ClObject &context, cl_uint num_devices, const cl_device_id *device_list)
 {
@@ -62,18 +58,12 @@ cl_int ClIcdRoot::build_program(cl_program program, cl_uint num_devices, const c
     if (devices != CL_SUCCESS) return devices;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    /* Built for the context's one device, which a list of none names too. */
     const cl_int built = av::clproto::av_clBuildProgram(*wire, held->wire(), 0u, nullptr, options);
     if (built == CL_BUILD_PROGRAM_FAILURE) note_build_log(*wire, held->wire(), host_device_of(*held), options);
     if (built == CL_SUCCESS || built == CL_BUILD_PROGRAM_FAILURE) notify.tell(program);
     return built;
 }
 
-/* The host compiler's own words for a program that did not build: an
- * application that reports only "a problem" leaves them nowhere else. Its
- * first lines, since a large program's log runs long - however long, the
- * whole log crosses, since an answer longer than the reply slot comes in
- * parts. */
 void ClIcdRoot::note_build_log(ClientTransport &wire, uint64_t program, uint64_t device, const char *options)
 {
     AV_SCOPE("ClIcdRoot::note_build_log");
@@ -128,8 +118,6 @@ cl_program ClIcdRoot::create_program_with_binary(cl_context context, cl_uint num
         if (binary_status != nullptr) binary_status[index] = empty ? CL_INVALID_VALUE : CL_SUCCESS;
         if (empty) judged_binaries = CL_INVALID_VALUE;
     }
-    /* The context's one device, once: a list naming it twice names a device
-     * the context has only one binary for. */
     cl_int judged_devices = program_devices(*held, num_devices, device_list);
     if (judged_devices == CL_SUCCESS && num_devices != 1u) judged_devices = CL_INVALID_DEVICE;
     if (judged_binaries != CL_SUCCESS || judged_devices != CL_SUCCESS) {
@@ -308,10 +296,6 @@ cl_int ClIcdRoot::program_info(cl_program program, cl_program_info name, size_t 
     return av::clproto::av_clGetProgramInfo(*wire, held->wire(), name, value_bytes, value, size_ret);
 }
 
-/* The application's value is an array of pointers, one per device - one here
- * - and on the wire CL_PROGRAM_BINARIES is the bytes themselves, which the
- * host answers into the application's own memory: the size it was told by
- * CL_PROGRAM_BINARY_SIZES is the room it gave. */
 cl_int ClIcdRoot::program_binaries(ClientTransport &wire, ClObject &program, size_t value_bytes, void *value,
                                    size_t *size_ret)
 {
@@ -321,8 +305,6 @@ cl_int ClIcdRoot::program_binaries(ClientTransport &wire, ClObject &program, siz
     if (value == nullptr) return CL_SUCCESS;
     if (value_bytes < sizeof into) return CL_INVALID_VALUE;
     __builtin_memcpy(&into, value, sizeof into);
-    /* A null entry is one the application does not want, which the API
-     * skips. */
     if (into == nullptr) return CL_SUCCESS;
     size_t       size = 0u;
     size_t       answered = 0u;
@@ -382,8 +364,6 @@ cl_int ClIcdRoot::create_kernels_in_program(cl_program program, cl_uint num_kern
         kernels[index] = static_cast<cl_kernel>(wrap(*wire, ClObject::Kind::kernel, handles[index], held->context(),
                                                      held, &kept));
         if (kept == CL_SUCCESS) continue;
-        /* All or none: the kernels already handed over go back, and the
-         * host's for the rest with them. */
         for (cl_uint made_before = 0u; made_before < index; ++made_before)
             static_cast<void>(release(kernels[made_before], ClObject::Kind::kernel));
         for (cl_uint rest = index + 1u; rest < made && rest < room; ++rest)
@@ -461,7 +441,6 @@ cl_int ClIcdRoot::kernel_sub_group_info(cl_kernel kernel, cl_device_id device, c
     AV_SCOPE("ClIcdRoot::kernel_sub_group_info");
     ClObject *const held = judged(kernel, ClObject::Kind::kernel);
     if (held == nullptr) return CL_INVALID_KERNEL;
-    /* A null device is the kernel's only one, which the API allows. */
     if (device != nullptr && program_devices(*held, 1u, &device) != CL_SUCCESS) return CL_INVALID_DEVICE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
@@ -487,10 +466,7 @@ cl_int ClIcdRoot::set_kernel_exec_info(cl_kernel kernel, cl_kernel_exec_info nam
     if (name != CL_KERNEL_EXEC_INFO_SVM_PTRS) return CL_INVALID_VALUE;
     if (value == nullptr || bytes == 0u || bytes % sizeof(void *) != 0u) return CL_INVALID_VALUE;
     const size_t count = bytes / sizeof(void *);
-    /* No list of pointers a process could hold is longer. */
     if (count > 0x3FFFFFFFu) return CL_INVALID_VALUE;
-    /* Each the host address of the allocation it is in, as a pointer
-     * argument crosses; one inside none is the application's mistake. */
     ClHostNumbers   hosts_room(memory_);
     uint64_t *const hosts = hosts_room.room(static_cast<uint32_t>(count));
     if (hosts == nullptr) return CL_OUT_OF_HOST_MEMORY;
@@ -503,4 +479,4 @@ cl_int ClIcdRoot::set_kernel_exec_info(cl_kernel kernel, cl_kernel_exec_info nam
     return av::clproto::av_clSetKernelExecInfo(*wire, held->wire(), name, count * sizeof(uint64_t), hosts);
 }
 
-}  // namespace av::clicd
+}

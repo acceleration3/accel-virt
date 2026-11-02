@@ -1,7 +1,3 @@
-/* Timing each guest submission on the host's own Vulkan: only when
- * AV_VK_SUBMIT_TIMING asks, only on the one queue it was told of, and a
- * submission it times is still the guest's - its fence signals as the guest
- * asked. A host with no Vulkan GPU returns after the part it can judge. */
 #include "executor/vulkan/vulkan_submit_timing.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -17,9 +13,6 @@
 using av::VulkanSubmitTiming;
 
 namespace {
-
-/* An instance, the first physical device and a device with one queue of its
- * first graphics or compute family, or nothing. */
 class HostQueue {
 public:
     HostQueue() : instance_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE),
@@ -69,7 +62,6 @@ public:
     VkQueue          queue() const { return queue_; }
     std::uint32_t    family() const { return family_; }
 
-    /* An empty submission through `timing`, awaited by its fence. */
     bool submit_and_wait(VulkanSubmitTiming &timing, std::uint32_t count)
     {
         VkFenceCreateInfo made = {};
@@ -92,7 +84,6 @@ private:
     std::uint32_t    family_;
 };
 
-/* What the timing writes to stderr while `body` runs. */
 template <typename Body>
 void capture_stderr(char *text, std::size_t capacity, Body body)
 {
@@ -109,7 +100,7 @@ void capture_stderr(char *text, std::size_t capacity, Body body)
     close(file);
 }
 
-}  // namespace
+}
 
 TEST(vulkan_submit_timing, is_enabled_only_where_the_environment_asks)
 { unsetenv("AV_VK_SUBMIT_TIMING");
@@ -119,7 +110,6 @@ TEST(vulkan_submit_timing, is_enabled_only_where_the_environment_asks)
   VulkanSubmitTiming on;
   CHECK(on.enabled());
   unsetenv("AV_VK_SUBMIT_TIMING");
-  /* Nothing was made: forgetting any device is nothing. */
   on.forget(VK_NULL_HANDLE); }
 
 TEST(vulkan_submit_timing_queue_made, a_disabled_timing_takes_no_queue_and_passes_submissions_through)
@@ -141,17 +131,14 @@ TEST(vulkan_submit_timing_queue_made, an_enabled_timing_takes_the_first_queue_it
   unsetenv("AV_VK_SUBMIT_TIMING");
   char said[512] = {};
   capture_stderr(said, sizeof said, [&] {
-      timing.queue_made(host.physical(), host.device(), host.family(), VK_NULL_HANDLE);   /* no queue: ignored */
+      timing.queue_made(host.physical(), host.device(), host.family(), VK_NULL_HANDLE);
       timing.queue_made(host.physical(), host.device(), host.family(), host.queue());
-      timing.queue_made(host.physical(), host.device(), host.family(), host.queue());   /* one queue is timed */
+      timing.queue_made(host.physical(), host.device(), host.family(), host.queue());
   });
   char expected[64];
   std::snprintf(expected, sizeof expected, "av-vk-timing: timing queue family %u\n", host.family());
   CHECK(std::strcmp(said, expected) == 0);
-  /* Timed submissions - one, two, and none at all - still signal the guest's fence. */
   for (std::uint32_t round = 0u; round < 70u; round++) CHECK(host.submit_and_wait(timing, round % 3u));
-  /* Forgetting another device keeps this one's timing; forgetting this one
-   * lets it go, twice harmlessly, and submissions pass straight through. */
   timing.forget(VK_NULL_HANDLE);
   CHECK(host.submit_and_wait(timing, 1u));
   timing.forget(host.device());

@@ -1,13 +1,3 @@
-/* Every extension DXVK and vkd3d-proton require that this ICD reports
- * (feature 047, US1 and US2). A policy row is a promise that the extension
- * works through this driver, so each one is judged by the thing that makes it
- * real: for the feature-structure extensions, that the structure an application
- * chains reaches the host rather than being dropped on the way; for the ones
- * with commands, that the command does.
- *
- * The chain is read back off the wire rather than answered by a scripted
- * reply, because what a policy row claims is that the ICD carries the
- * extension - not that a particular host answers it. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -32,10 +22,6 @@ using av::WireReader;
 using namespace av::vkproto;
 
 namespace {
-
-/* A structure of any of these extensions: its own sType, a chain pointer, and
- * room for the fields the serializer will read. Every feature structure of the
- * ones below is far smaller than this. */
 struct Node {
     VkStructureType sType;
     void           *pNext;
@@ -50,8 +36,6 @@ Node node_of(VkStructureType type, void *next)
     return made;
 }
 
-/* One device and physical device on the scripted host, and the commands the
- * ICD sent while a test used them. */
 class ExtensionsRig {
 public:
     ExtensionsRig() : instance_(rig_.create_instance()), physical_(rig_.physical_device(instance_)),
@@ -83,22 +67,16 @@ public:
     template <typename Function>
     Function entry(const char *name) { return rig_.entry<Function>(instance_, name); }
 
-    /* The host's answer for a features2 query whose chain holds a node of
-     * `type`, with that node's first feature set: what an application reads
-     * back through the extension's own structure. A node the wire dropped
-     * leaves the application's own zero there, which is what this catches. */
     void answer_features(VkStructureType type)
     {
         Node                      answered = node_of(type, nullptr);
-        answered.fields[0] = 1u;   /* the first VkBool32 after pNext */
+        answered.fields[0] = 1u;
         VkPhysicalDeviceFeatures2 features = {};
         features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         features.pNext = &answered;
         features.features.robustBufferAccess = VK_TRUE;
         std::uint8_t answer[MockKmt::max_answer] = {};
         av::WireWriter writer(answer, sizeof answer);
-        /* Every reply starts with the command's own result, even where the
-         * command answers void (ScriptedHost does the same). */
         writer.write_pod<std::int32_t>(0);
         serialize_VkPhysicalDeviceFeatures2(writer, features);
         CHECK_STATUS(writer.status(), av::Status::ok);
@@ -112,13 +90,8 @@ private:
     VkDevice         device_;
 };
 
-}  // namespace
+}
 
-/* The nine extensions whose whole content is a feature structure: what makes
- * each real is that an application's node of it reaches the host. A node the
- * wire dropped would have the application read back whatever the ICD left in
- * its own memory, which is how a driver claims a feature it never asked about.
- */
 TEST(reported_extensions, every_feature_structure_an_application_chains_reaches_the_host)
 { ExtensionsRig rig;
   struct Carried {
@@ -181,20 +154,13 @@ TEST(reported_extensions, every_feature_structure_an_application_chains_reaches_
       asked.pNext = &chained;
       rig.answer_features(one.type);
       features2(rig.physical(), &asked);
-      /* The host's yes reached the application's own node, and the core
-       * features came back beside it. */
       CHECK_EQ(chained.fields[0], 1u);
       CHECK_EQ(asked.features.robustBufferAccess, VK_TRUE);
-      /* The chain the application built is the chain it still has. */
       CHECK(asked.pNext == &chained);
       CHECK(chained.pNext == nullptr);
   }
   CHECK(rig.rig().root().invariants_hold()); }
 
-/* Extensions whose substance is a SPIR-V capability, an enum value or a
- * property the host answers, with no feature structure to carry: what makes
- * each real is that the host's device is made with it enabled, so the value an
- * application then uses is legal there. */
 TEST(reported_extensions, an_extension_with_no_structure_of_its_own_is_enabled_on_the_host)
 { ExtensionsRig rig;
   const char *const names[] = {
@@ -210,8 +176,6 @@ TEST(reported_extensions, an_extension_with_no_structure_of_its_own_is_enabled_o
   const auto create = rig.entry<VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo *,
                                              const VkAllocationCallbacks *, VkDevice *)>("vkCreateDevice");
   const auto destroy = rig.entry<void (*)(VkDevice, const VkAllocationCallbacks *)>("vkDestroyDevice");
-  /* One a device: the journal keeps a command's first bytes, and one name
-   * is what fits beside the rest of the create. */
   for (const char *const name : names) {
       VkDeviceCreateInfo info = {};
       info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -227,7 +191,7 @@ TEST(reported_extensions, an_extension_with_no_structure_of_its_own_is_enabled_o
       const std::uint8_t *bytes = rig.rig().kmt().command_bytes(sent - 1u);
       WireReader          body(bytes + CommandHeader::encoded_size,
                                MockKmt::journal_bytes - CommandHeader::encoded_size);
-      static_cast<void>(body.read_u64());   /* the physical device */
+      static_cast<void>(body.read_u64());
       std::uint8_t block[1024] = {};
       WireArena    arena(block, sizeof block);
       VkDeviceCreateInfo decoded = {};
@@ -238,20 +202,15 @@ TEST(reported_extensions, an_extension_with_no_structure_of_its_own_is_enabled_o
       destroy(made, nullptr);
   } }
 
-/* A node of an extension the generator does not carry is not sent: the
- * application reads back what it wrote, which is what "not supported" looks
- * like, rather than the ICD inventing an answer. */
 TEST(reported_extensions, a_structure_the_wire_does_not_carry_is_not_sent)
 { ExtensionsRig rig;
   const auto    features2 =
       rig.entry<void (*)(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *)>("vkGetPhysicalDeviceFeatures2");
-  /* Descriptor buffers are deliberately out of the profile (FR-002). */
   Node                      chained = node_of(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
                                               nullptr);
   VkPhysicalDeviceFeatures2 asked = {};
   asked.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
   asked.pNext = &chained;
-  /* The host is asked and answers the core features only. */
   VkPhysicalDeviceFeatures2 answered = {};
   answered.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
   answered.features.robustBufferAccess = VK_TRUE;
@@ -262,11 +221,9 @@ TEST(reported_extensions, a_structure_the_wire_does_not_carry_is_not_sent)
   CHECK_STATUS(writer.status(), av::Status::ok);
   rig.rig().kmt().queue_answer(answer, static_cast<std::uint32_t>(writer.offset()));
   features2(rig.physical(), &asked);
-  /* The application's own node is untouched: no feature was invented for it. */
   CHECK_EQ(chained.fields[0], 0u);
   CHECK_EQ(asked.features.robustBufferAccess, VK_TRUE); }
 
-/* The two whose content is a command rather than a structure. */
 TEST(reported_extensions, a_memory_priority_and_a_transform_feedback_command_reach_the_host)
 { ExtensionsRig rig;
   const auto    set_priority =
@@ -277,14 +234,10 @@ TEST(reported_extensions, a_memory_priority_and_a_transform_feedback_command_rea
   CHECK_EQ(rig.rig().kmt().command_id(rig.rig().kmt().commands() - 1u),
            static_cast<std::uint32_t>(kCmd_vkSetDeviceMemoryPriorityEXT));
 
-  /* Transform feedback records into a command buffer, so its command is the
-   * one a test can see reach the host without a pipeline. */
   const auto begin_query = rig.entry<void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t)>(
       "vkCmdBeginQueryIndexedEXT");
   CHECK(begin_query != nullptr); }
 
-/* A pipeline library is a structure in a pipeline create, and what makes the
- * two library extensions real is that it crosses with the create. */
 TEST(reported_extensions, a_pipeline_library_in_a_create_reaches_the_host)
 { ExtensionsRig rig;
   const auto    create_pipelines =
@@ -309,12 +262,11 @@ TEST(reported_extensions, a_pipeline_library_in_a_create_reaches_the_host)
   static_cast<void>(create_pipelines(rig.device(), VK_NULL_HANDLE, 1u, &create, nullptr, &made));
   CHECK_EQ(rig.rig().kmt().command_id(rig.rig().kmt().commands() - 1u),
            static_cast<std::uint32_t>(kCmd_vkCreateGraphicsPipelines));
-  /* The create's own chain, read back: both library structures crossed. */
   const std::uint8_t *bytes = rig.rig().kmt().command_bytes(rig.rig().kmt().commands() - 1u);
   WireReader          body(bytes + CommandHeader::encoded_size,
                            MockKmt::journal_bytes - CommandHeader::encoded_size);
-  static_cast<void>(body.read_u64());   /* the device */
-  static_cast<void>(body.read_u64());   /* the cache */
+  static_cast<void>(body.read_u64());
+  static_cast<void>(body.read_u64());
   std::uint8_t block[4096] = {};
   WireArena    arena(block, sizeof block);
   std::uint32_t count = 0u;
@@ -332,9 +284,6 @@ TEST(reported_extensions, a_pipeline_library_in_a_create_reaches_the_host)
   CHECK(library_list);
   CHECK(library_parts); }
 
-/* An image's list of the formats its views take is a structure in its create,
- * and it is what VK_KHR_image_format_list is: it crosses with the create, each
- * format in order. DXVK before 2.0 will not make a device without it. */
 TEST(reported_extensions, an_image_s_format_list_reaches_the_host)
 { ExtensionsRig rig;
   const auto    create_image =
@@ -365,7 +314,7 @@ TEST(reported_extensions, an_image_s_format_list_reaches_the_host)
   const std::uint8_t *bytes = rig.rig().kmt().command_bytes(rig.rig().kmt().commands() - 1u);
   WireReader          body(bytes + CommandHeader::encoded_size,
                            MockKmt::journal_bytes - CommandHeader::encoded_size);
-  static_cast<void>(body.read_u64());   /* the device */
+  static_cast<void>(body.read_u64());
   std::uint8_t block[4096] = {};
   WireArena    arena(block, sizeof block);
   VkImageCreateInfo decoded = {};
@@ -379,18 +328,11 @@ TEST(reported_extensions, an_image_s_format_list_reaches_the_host)
   CHECK_EQ(static_cast<std::uint32_t>(list->pViewFormats[1]), static_cast<std::uint32_t>(VK_FORMAT_R8G8B8A8_SRGB));
   CHECK(list->pNext == nullptr); }
 
-/* US2 scenarios 1 and 2. What vkd3d-proton requires is mostly core features of
- * Vulkan 1.2 and 1.3 rather than extensions: dynamic rendering,
- * synchronization2, timeline semaphores, buffer device address, descriptor
- * indexing, demote-to-helper. None of them is this driver's to decide - they
- * are the host GPU's - so what must be true is that the host's answer arrives
- * unchanged, and that a host without one reports its absence here too. */
 TEST(reported_extensions, the_core_features_vkd3d_requires_are_the_host_s_answer)
 { ExtensionsRig rig;
   const auto    features2 =
       rig.entry<void (*)(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *)>("vkGetPhysicalDeviceFeatures2");
 
-  /* The host says yes to every one of them. */
   VkPhysicalDeviceVulkan13Features thirteen = {};
   thirteen.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
   thirteen.dynamicRendering = VK_TRUE;
@@ -427,7 +369,6 @@ TEST(reported_extensions, the_core_features_vkd3d_requires_are_the_host_s_answer
   CHECK_EQ(asked_twelve.timelineSemaphore, VK_TRUE);
   CHECK_EQ(asked_twelve.bufferDeviceAddress, VK_TRUE);
   CHECK_EQ(asked_twelve.descriptorIndexing, VK_TRUE);
-  /* Nothing else was invented along with them. */
   CHECK_EQ(asked_twelve.hostQueryReset, VK_FALSE);
   CHECK_EQ(asked_thirteen.inlineUniformBlock, VK_FALSE); }
 
@@ -435,9 +376,6 @@ TEST(reported_extensions, a_feature_the_host_does_not_have_is_absent_here_too)
 { ExtensionsRig rig;
   const auto    features2 =
       rig.entry<void (*)(VkPhysicalDevice, VkPhysicalDeviceFeatures2 *)>("vkGetPhysicalDeviceFeatures2");
-  /* A host missing dynamic rendering, which vkd3d-proton cannot do without:
-   * the guest must say so, so that the layer fails device creation with its own
-   * diagnostic rather than drawing into nothing. */
   VkPhysicalDeviceVulkan13Features without = {};
   without.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
   without.synchronization2 = VK_TRUE;
@@ -453,12 +391,10 @@ TEST(reported_extensions, a_feature_the_host_does_not_have_is_absent_here_too)
 
   VkPhysicalDeviceVulkan13Features asked_thirteen = {};
   asked_thirteen.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-  asked_thirteen.dynamicRendering = VK_TRUE;   /* what the application hoped for */
+  asked_thirteen.dynamicRendering = VK_TRUE;
   VkPhysicalDeviceFeatures2 asked = {};
   asked.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
   asked.pNext = &asked_thirteen;
   features2(rig.physical(), &asked);
-  /* The host's no overwrote the application's hope: the answer is the host's,
-   * not whatever was in the structure before. */
   CHECK_EQ(asked_thirteen.dynamicRendering, VK_FALSE);
   CHECK_EQ(asked_thirteen.synchronization2, VK_TRUE); }

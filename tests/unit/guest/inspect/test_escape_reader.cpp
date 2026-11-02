@@ -29,7 +29,7 @@ struct EscapeReaderProbe {
     }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -55,7 +55,7 @@ struct Rig {
     }
 };
 
-}  // namespace
+}
 
 TEST(escape_reader_read, reads_every_window_of_the_driver_s_table_in_order)
 { Rig rig;
@@ -69,7 +69,6 @@ TEST(escape_reader_read, reads_every_window_of_the_driver_s_table_in_order)
     CHECK(std::memcmp(reader.bytes(), rig.data, sizeof rig.data) == 0);
     CHECK_EQ(reader.clock(), 4242u);
     CHECK_EQ(rig.driver.answers(), 4u);
-    /* The escape names the adapter alone, with a 16 KiB window after the record. */
     CHECK_EQ(rig.kmt.last_escape_size(), MockKmt::max_private);
     std::uint8_t sent[40u + window] = {};
     std::memcpy(sent, rig.kmt.last_escape(), 40u);
@@ -111,7 +110,6 @@ TEST(escape_reader_read, refuses_a_driver_that_misbehaves_at_any_window_and_hold
       rig.driver.fault_at(nth, fault);
       EscapeReader reader(rig.kmt, rig.platform);
       const Status read = reader.read(Kind::table);
-      /* A total grown at the first answer is contradicted by the second. */
       CHECK(read != Status::ok);
       CHECK_EQ(reader.length(), 0u);
       CHECK(reader.bytes() == nullptr);

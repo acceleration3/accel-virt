@@ -39,4 +39,4 @@ bool WakeSignal::raise() const
     return true;
 }
 
-}  // namespace av
+}

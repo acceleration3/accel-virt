@@ -1,5 +1,3 @@
-/* ClRefusalLog: an entry point this ICD does not serve is named in the log the
- * first time it is called and never again (KeyedLog), however many there are. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -15,7 +13,7 @@ namespace {
 const char image_2d[] = "clCreateImage2D";
 const char mem_info[] = "clGetMemObjectInfo";
 
-}  // namespace
+}
 
 TEST(cl_refusal_log, each_refused_entry_point_is_named_once_and_in_the_order_called)
 { av::MockPlatform        platform;
@@ -52,7 +50,6 @@ TEST(cl_refusal_log, each_error_an_entry_point_answers_is_named_once_and_success
   refusals.note_failure(image_2d, -38);
   refusals.note_failure(image_2d, -30);
   refusals.note_failure(mem_info, -38);
-  /* Not errors: success, and the positive counts some calls answer. */
   refusals.note_failure(mem_info, 0);
   refusals.note_failure(mem_info, 5);
   refusals.note_failure(nullptr, -38);
@@ -60,12 +57,9 @@ TEST(cl_refusal_log, each_error_an_entry_point_answers_is_named_once_and_success
   CHECK(std::strcmp(log.line(0u), "avcl: clCreateImage2D answered -38") == 0);
   CHECK(std::strcmp(log.line(1u), "avcl: clCreateImage2D answered -30") == 0);
   CHECK(std::strcmp(log.line(2u), "avcl: clGetMemObjectInfo answered -38") == 0);
-  /* A refusal and a failure of one entry point are two things to name. */
   refusals.note(image_2d);
   CHECK_EQ(log.lines(), 4u); }
 
-/* A refused query is named with the query, once per query, so the log says
- * which of an application's questions the device could not answer. */
 TEST(cl_refusal_log, each_query_an_entry_point_refuses_is_named_with_it_once)
 { av::MockPlatform        platform;
   av::RecordingLog        log;
@@ -79,9 +73,6 @@ TEST(cl_refusal_log, each_query_an_entry_point_refuses_is_named_with_it_once)
   CHECK(std::strcmp(log.line(0u), "avcl: clGetMemObjectInfo 0x4039 answered -30") == 0);
   CHECK(std::strcmp(log.line(1u), "avcl: clGetMemObjectInfo 0x1002 answered -30") == 0); }
 
-/* A refused map says which limit it met, its size and how many mappings were
- * held - once for each reason - and a buffer released while mapped is named
- * the first time with how many went with it, never for one that held none. */
 TEST(cl_refusal_log, a_refused_map_and_a_buffer_released_mapped_say_how_many_were_held)
 { av::MockPlatform platform;
   av::RecordingLog log;

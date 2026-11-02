@@ -76,4 +76,4 @@ bool TextureUpload::send(UploadSink &sink, const uint8_t *data) const
     return true;
 }
 
-}  // namespace av::d3d
+}

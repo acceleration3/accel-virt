@@ -21,9 +21,6 @@ ClEventWatcher::ClEventWatcher(BlockSource &memory, icd::ServiceThread &thread, 
 ClEventWatcher::~ClEventWatcher()
 {
     AV_SCOPE("ClEventWatcher::~ClEventWatcher");
-    /* The thread holds a pointer to this loop, so it stops before the loop
-     * goes. What makes its turn return is the transport it is waiting on
-     * being torn down with the context. */
     thread_.stop();
 }
 
@@ -42,11 +39,6 @@ cl_int ClEventWatcher::watch(ClObject *event, uint64_t wire, ClientTransport *wi
         else if (rows_.append(row) != Status::ok) return CL_OUT_OF_HOST_MEMORY;
         ++held_;
     }
-    /* The thread starts with the first registration, so a process that never
-     * asks for a callback never starts one; from then on it rests while
-     * nothing is registered, and this ends the rest. Started already is the
-     * start refused as invalid_state - asked by two threads at once, one of
-     * them started it. */
     const Status started = thread_.start(*this);
     if (started == Status::invalid_state) {
         thread_.wake();
@@ -96,8 +88,6 @@ bool ClEventWatcher::completed(const ClWatchedEvent &registration, cl_int &statu
         *registration.transport(), registration.wire(), CL_EVENT_COMMAND_EXECUTION_STATUS,
         sizeof execution, &execution, &answered);
     if (asked != CL_SUCCESS) {
-        /* An event this can no longer ask about is one whose callback will
-         * never be right to run; it is dropped rather than left for ever. */
         status = asked;
         return true;
     }
@@ -108,10 +98,6 @@ bool ClEventWatcher::completed(const ClWatchedEvent &registration, cl_int &statu
 bool ClEventWatcher::turn()
 {
     AV_SCOPE("ClEventWatcher::turn");
-    /* Nothing registered is nothing to do for now, never the end: a thread
-     * that ended when the last callback ran was one the next registration
-     * found still "running" and never started again, and no callback after
-     * the first batch ever came (Affinity waits on one to make a document). */
     bool     driven = false;
     uint32_t rows = 0u;
     {
@@ -121,7 +107,6 @@ bool ClEventWatcher::turn()
             rows = rows_.size();
         }
     }
-    /* Left at 0 while nothing is registered: every held registration is a row. */
     if (rows == 0u) {
         thread_.rest();
         return true;
@@ -149,10 +134,6 @@ bool ClEventWatcher::turn()
     return true;
 }
 
-/* Each queue's registration with the lowest place on it, and every one of no
- * queue. A queue's events are few next to the table, so the queues seen are a
- * short list searched as the table is walked; one there is no memory to list
- * is marked as it is met, which only asks about it sooner than it needs. */
 bool ClEventWatcher::mark_oldest()
 {
     AV_SCOPE("ClEventWatcher::mark_oldest");
@@ -184,10 +165,6 @@ bool ClEventWatcher::mark_oldest()
 bool ClEventWatcher::deliver(uint32_t slot, const ClWatchedEvent &asked, cl_int status)
 {
     AV_SCOPE("ClEventWatcher::deliver");
-    /* Claimed and given up before it runs - and only if the row is still the
-     * one asked about, since a context released meanwhile forgets it: a
-     * callback that releases its own event, or the context it belongs to, is
-     * releasing something this is no longer holding. */
     bool still = false;
     {
         const ThreadLockHold locked(lock_);
@@ -200,16 +177,8 @@ bool ClEventWatcher::deliver(uint32_t slot, const ClWatchedEvent &asked, cl_int 
         }
     }
     if (!still) return false;
-    /* Whatever the event owes the application arrives before the callback
-     * does: a callback on a non-blocking read that could not see the bytes
-     * would be a callback about nothing. */
     owner_.deliver_watched(*asked.event());
-    /* No ICD lock is held here, and the callback may call back into the ICD -
-     * which is the whole reason it is not run under one. */
     asked.run(status);
-    /* And the reference the registration held goes back, after the callback
-     * rather than before: the cl_event it was handed had to still be an
-     * object while it ran. */
     owner_.release_watched(*asked.event());
     return true;
 }
@@ -257,4 +226,4 @@ bool ClEventWatcher::invariants_hold() const
     return held == held_ && rows_.invariants_hold() && queues_.invariants_hold();
 }
 
-}  // namespace av::clicd
+}

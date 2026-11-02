@@ -92,4 +92,4 @@ bool HwQueueTable::invariants_hold() const
     return queues_.invariants_hold();
 }
 
-}  // namespace av
+}

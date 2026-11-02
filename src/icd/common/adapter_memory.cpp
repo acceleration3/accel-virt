@@ -10,7 +10,7 @@ namespace {
 constexpr uint32_t local_group = static_cast<uint32_t>(MemorySegmentGroup::local);
 constexpr uint32_t non_local_group = static_cast<uint32_t>(MemorySegmentGroup::non_local);
 
-}  // namespace
+}
 
 AdapterMemory::AdapterMemory(Kmt &kmt, uint32_t adapter)
     : kmt_(kmt), adapter_(adapter), read_(false), budgets_(), usages_()
@@ -79,4 +79,4 @@ bool AdapterMemory::invariants_hold() const
     return true;
 }
 
-}  // namespace av::icd
+}

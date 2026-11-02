@@ -1,6 +1,3 @@
-/* The root of the page tables one context runs on, as DxgkDdiSetRootPageTable
- * names it: where VidMm put the root table and how many of its entries are in
- * use. The device walks a submission's DMA buffer from it. */
 #ifndef AV_ROOT_PAGE_TABLE_HPP
 #define AV_ROOT_PAGE_TABLE_HPP
 
@@ -21,12 +18,7 @@ public:
     RootPageTable(const RootPageTable &) = delete;
     RootPageTable &operator=(const RootPageTable &) = delete;
 
-    /* invalid_parameter, keeping the root it had, for a root with no entries or
-     * more than one table holds. */
     [[nodiscard]] Status assign(const DxgkargSetRootPageTableRecord &root);
-    /* Whether a DMA buffer at `address` can be walked from this root. Any
-     * address before a root is assigned: VidSchiEnsureRootPageTableUpdated
-     * skips DxgkDdiSetRootPageTable for some contexts. */
     bool                 admits(uint64_t address) const;
 
     bool invariants_hold() const;
@@ -39,6 +31,6 @@ private:
     friend struct RootPageTableProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_ROOT_PAGE_TABLE_HPP
+#endif

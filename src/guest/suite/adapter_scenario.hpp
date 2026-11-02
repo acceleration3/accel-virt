@@ -1,5 +1,3 @@
-/* The virtio-gpu-av adapter is found and reports WDDM 3.2.
- * The adapter stays open in the search for the scenarios after it. */
 #ifndef AV_ADAPTER_SCENARIO_HPP
 #define AV_ADAPTER_SCENARIO_HPP
 
@@ -27,6 +25,6 @@ private:
     ScenarioSteps  steps_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_ADAPTER_SCENARIO_HPP
+#endif

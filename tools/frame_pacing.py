@@ -51,11 +51,10 @@ OUTPUT = ROOT / "build-perfetto" / "frame-pacing"
 PROBES = ROOT / "build" / "guest-probes"
 GUEST_DIR = "C:\\av\\frame-pacing"
 PROFILE_NAME = "FramePacing"
-# (provider, keywords, level, logs from raised IRQL): what the analysis reads.
 PROVIDERS = [
-    ("Microsoft-Windows-DxgKrnl", 0x8000003, 5, True),     # Base, Profiler, Present
-    ("Microsoft-Windows-Dwm-Core", 0xC8, 5, False),        # frame rate, scribble, scheduling
-    ("Microsoft-Windows-Win32k", 0x1000, 5, True),         # flip manager updates
+    ("Microsoft-Windows-DxgKrnl", 0x8000003, 5, True),
+    ("Microsoft-Windows-Dwm-Core", 0xC8, 5, False),
+    ("Microsoft-Windows-Win32k", 0x1000, 5, True),
 ]
 KERNEL_KEYWORDS = ["ProcessThread", "Loader", "CSwitch", "ReadyThread", "SampledProfile", "DPC", "Interrupt"]
 KERNEL_STACKS = ["SampledProfile", "CSwitch", "ReadyThread"]
@@ -63,9 +62,6 @@ WORKLOADS = ("monitor-d3d", "window-d3d", "monitor", "window", "none")
 
 
 def profile_xml():
-    """A WPR profile: the kernel's scheduling, samples and interrupts with
-    stacks, and the providers. A provider logging from DISPATCH_LEVEL needs
-    non-paged buffers or its events are dropped."""
     keywords = "\n".join(f'        <Keyword Value="{keyword}"/>' for keyword in KERNEL_KEYWORDS)
     stacks = "\n".join(f'        <Stack Value="{stack}"/>' for stack in KERNEL_STACKS)
     providers = []
@@ -113,8 +109,6 @@ def profile_xml():
 
 
 class Guest:
-    """The held guest, through its agent."""
-
     def __init__(self, work):
         self.work = work
 
@@ -144,7 +138,6 @@ def ensure_probes():
 
 
 def schema_for(guest, build):
-    """The guest's description of the providers' events, one per Windows build."""
     cached = OUTPUT / f"schema-{build}.json"
     if cached.exists():
         return cached
@@ -168,14 +161,12 @@ def record(args):
     build = guest.ps("$v = Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion'; "
                      "\"$($v.CurrentBuildNumber).$($v.UBR)\"").strip().splitlines()[-1]
     schema = schema_for(guest, build)
-    interval = max(int(args.sample_us * 10), 1221)   # 100 ns units; WPR's floor is 0.1221 ms
+    interval = max(int(args.sample_us * 10), 1221)
     if args.workload == "none":
         workload = f"Start-Sleep -Milliseconds {int(args.seconds * 1000)}"
     else:
         command = (f"{GUEST_DIR}\\wgc_probe.exe {args.workload} --seconds {args.seconds} "
                    f"--out {GUEST_DIR}\\probe.txt {args.probe_args}").strip()
-        # The capture has to run in the user's session: a scheduled task as the
-        # logged-on user, interactively.
         workload = f"""
 $user = (Get-CimInstance Win32_ComputerSystem).UserName
 schtasks /create /tn avframepacing /tr '{command}' /sc once /st 23:59 /ru $user /it /f | Out-Null

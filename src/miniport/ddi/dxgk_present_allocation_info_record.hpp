@@ -1,6 +1,3 @@
-/* DXGK_PRESENTALLOCATIONINFO: an allocation DxgkDdiPresent reads for a context
- * with GPU virtual addressing. A DDI record; src/km/ddi_record_layout.cpp proves
- * each offset. */
 #ifndef AV_DXGK_PRESENT_ALLOCATION_INFO_RECORD_HPP
 #define AV_DXGK_PRESENT_ALLOCATION_INFO_RECORD_HPP
 
@@ -17,6 +14,6 @@ struct DxgkPresentAllocationInfoRecord {
     uint32_t Padding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_PRESENT_ALLOCATION_INFO_RECORD_HPP
+#endif

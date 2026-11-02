@@ -14,8 +14,6 @@ SyncTokens::SyncTokens(BlockSource &blocks)
 Status SyncTokens::bind(uint64_t token, void *fence)
 {
     AV_SCOPE("SyncTokens::bind");
-    /* A null fence is glFenceSync having failed, and a token of zero - at or
-     * below every newest - the guest failing to mint one. */
     if (fence == nullptr || token <= newest_) return Status::invalid_parameter;
     const Status held = live_.append(Live{token, fence});
     if (held != Status::ok) return held;
@@ -40,7 +38,6 @@ Status SyncTokens::retire_oldest(void *&deleted)
     AV_SCOPE("SyncTokens::retire_oldest");
     deleted = nullptr;
     if (live_.size() == 0u) return Status::ok;
-    /* Older than every live token and newer than every retired one. */
     const Status kept = retired_.add(live_.at(0u).token_);
     if (kept != Status::ok) return kept;
     void *const fence = live_.at(0u).fence_;
@@ -104,11 +101,7 @@ bool SyncTokens::invariants_hold() const
 {
     AV_SCOPE("SyncTokens::invariants_hold");
     if (!retired_.invariants_hold()) return false;
-    /* A retired token answers through the stand-in, so there is one. */
     if (retired_.runs() != 0u && stand_in_ == nullptr) return false;
-    /* Live tokens ascend from above every retired one to no further than the
-     * newest bound, each with a sync of its own: a slot sharing the stand-in
-     * would be deleted twice. */
     uint64_t below = retired_.newest();
     for (const Live &live : live_) {
         if (live.token_ <= below || live.fence_ == nullptr || live.fence_ == stand_in_) return false;
@@ -117,4 +110,4 @@ bool SyncTokens::invariants_hold() const
     return below <= newest_;
 }
 
-}  // namespace av
+}

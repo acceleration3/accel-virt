@@ -11,10 +11,9 @@ namespace {
 
 constexpr VkPresentModeKHR offered_modes[SurfaceProperties::mode_count] = {VK_PRESENT_MODE_FIFO_KHR,
                                                                            VK_PRESENT_MODE_IMMEDIATE_KHR};
-/* The largest image a window is presented from: the host's usual limit. */
 constexpr uint32_t max_extent = 16384u;
 
-}  // namespace
+}
 
 SurfaceProperties::SurfaceProperties(WindowSurface &windows, void *window)
     : windows_(windows), window_(window), formats_{}
@@ -36,7 +35,6 @@ VkResult SurfaceProperties::capabilities(VkSurfaceCapabilitiesKHR &answer)
     if (seen == WindowExtent::Look::gone) return VK_ERROR_SURFACE_LOST_KHR;
     const uint32_t width = window.width();
     const uint32_t height = window.height();
-    /* A minimized window has no area, and nothing can be made for it. */
     const bool     empty = seen == WindowExtent::Look::empty;
     answer = VkSurfaceCapabilitiesKHR{};
     answer.minImageCount = min_images;
@@ -114,4 +112,4 @@ uint32_t SurfaceProperties::fits(uint32_t &count, uint32_t available) const
     return count;
 }
 
-}  // namespace av::icd
+}

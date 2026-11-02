@@ -27,8 +27,6 @@ Status VersionText::read(const char *host, size_t bytes, const char *&rest)
     if (host == nullptr) return Status::malformed;
     size_t end = 0u;
     while (end < bytes && host[end] != '\0') end++;
-    /* No terminator in the bytes the host gave: whatever follows is somebody
-     * else's memory, not the rest of a version. */
     if (end == bytes) return Status::malformed;
     size_t at = 0u;
     for (; prefix_[at] != '\0'; at++)
@@ -86,4 +84,4 @@ bool VersionText::invariants_hold() const
     return at_most_implemented(major_, minor_);
 }
 
-}  // namespace av::icd
+}

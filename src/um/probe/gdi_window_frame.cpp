@@ -16,14 +16,6 @@ bool GdiWindowFrame::size(void *window, uint32_t &width, uint32_t &height)
     return true;
 }
 
-/* The window's client area as the desktop composes it, into a DIB section of
- * the same shape. Not BitBlt from the window's DC: that reads GDI's
- * redirection bitmap, which a flip-model swap chain never draws into - it
- * keeps the first frame DWM copied there, and on a resize that frame at its
- * old size with black around it, while the desktop shows every later one
- * (measured on avgpu and on Microsoft's Basic Render Driver alike).
- * PW_RENDERFULLCONTENT has DWM render the window as it shows it, whichever
- * way its frames arrive, and whatever overlaps it. */
 bool GdiWindowFrame::read(void *window, uint32_t width, uint32_t height, uint8_t *bgra)
 {
     AV_SCOPE("GdiWindowFrame::read");
@@ -57,4 +49,4 @@ bool GdiWindowFrame::resize(void *window, uint32_t width, uint32_t height)
                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) != 0;
 }
 
-}  // namespace av
+}

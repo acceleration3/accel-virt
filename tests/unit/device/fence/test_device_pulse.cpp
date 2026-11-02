@@ -1,6 +1,3 @@
-/* The device's pulse: while any context it carries is at work for the guest,
- * every carried fence page's beat word moves each period, and nothing moves
- * while none is. */
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "device/fence/device_pulse.hpp"
@@ -54,13 +51,11 @@ struct DevicePulseProbe {
     }
 };
 
-}  // namespace av
+}
 
 using av::DevicePulseProbe;
 
 namespace {
-
-/* A context's fence page and its reporter, prepared as a bind prepares it. */
 class Page {
 public:
     Page(MockHost &host, FenceInterrupts &interrupts, WireRecorder &recorder, std::uint32_t id)
@@ -108,7 +103,7 @@ private:
     Page            second_;
 };
 
-}  // namespace
+}
 
 TEST(device_pulse_initialize, makes_its_lock_and_event_once)
 { Fixture fixture;
@@ -172,9 +167,6 @@ TEST(device_pulse_carry, a_thread_that_cannot_start_carries_nothing)
   CHECK_STATUS(fixture.pulse().carry(fixture.first().reporter()), Status::ok);
   CHECK_EQ(fixture.host().live_threads(), 1u); }
 
-/* One context at work beats every page carried, the idle one's too: its work
- * may be waiting behind the busy one's on the same device. The pulse's own
- * thread may beat as well, so a beat is judged as at least one more. */
 TEST(device_pulse_tick, one_context_at_work_beats_every_page)
 { Fixture fixture;
   CHECK_STATUS(fixture.pulse().initialize(), Status::ok);
@@ -190,8 +182,6 @@ TEST(device_pulse_tick, one_context_at_work_beats_every_page)
   CHECK(fixture.second().beat() > second);
   CHECK(fixture.pulse().invariants_hold()); }
 
-/* Nothing at work, nothing beats: a guest waiting on a device that dropped its
- * work sees it go quiet. A page dropped is beaten no more either. */
 TEST(device_pulse_tick, nothing_at_work_or_nothing_carried_beats_nothing)
 { Fixture fixture;
   CHECK_STATUS(fixture.pulse().initialize(), Status::ok);
@@ -208,15 +198,13 @@ TEST(device_pulse_tick, nothing_at_work_or_nothing_carried_beats_nothing)
   CHECK(fixture.first().beat() > 0u);
   CHECK_EQ(fixture.second().beat(), 0u); }
 
-/* A context that faulted is beaten no more, though another keeps the pulse
- * going: after a fault the page's last change is the fault. */
 TEST(device_pulse_tick, a_faulted_page_is_not_beaten_while_others_are)
 { Fixture fixture;
   CHECK_STATUS(fixture.pulse().initialize(), Status::ok);
   CHECK_STATUS(fixture.pulse().carry(fixture.first().reporter()), Status::ok);
   CHECK_STATUS(fixture.pulse().carry(fixture.second().reporter()), Status::ok);
   fixture.second().reporter().fault(FaultCode::device_lost);
-  CHECK(fixture.host().claim(HostViolation::worker_required));   /* faulted here, not on a worker */
+  CHECK(fixture.host().claim(HostViolation::worker_required));
   fixture.first().reporter().at_work(true);
   bool working = false;
   CHECK(fixture.pulse().tick(working));
@@ -232,10 +220,8 @@ TEST(device_pulse_tick, a_stopping_pulse_beats_nothing_and_says_so)
   bool working = false;
   CHECK(!fixture.pulse().tick(working));
   CHECK_EQ(fixture.first().beat(), 0u);
-  CHECK(!fixture.pulse().rest());   /* a stopping pulse does not sleep */ }
+  CHECK(!fixture.pulse().rest());   }
 
-/* With nothing at work the pulse may sleep until stirred - and may not if a
- * worker went to work after it looked. A worker going to work wakes it. */
 TEST(device_pulse_rest, sleeps_only_while_nothing_works_and_a_worker_stirs_it)
 { Fixture fixture;
   CHECK_STATUS(fixture.pulse().initialize(), Status::ok);
@@ -249,8 +235,6 @@ TEST(device_pulse_rest, sleeps_only_while_nothing_works_and_a_worker_stirs_it)
   fixture.first().reporter().at_work(true);
   CHECK(!DevicePulseProbe::dormant(fixture.pulse())); }
 
-/* A stir wakes a dormant pulse and costs nothing to one awake. Carrying
- * nothing, the pulse has no thread of its own to rest it again. */
 TEST(device_pulse_stir, wakes_a_dormant_pulse_and_leaves_an_awake_one_be)
 { Fixture fixture;
   CHECK_STATUS(fixture.pulse().initialize(), Status::ok);
@@ -261,8 +245,6 @@ TEST(device_pulse_stir, wakes_a_dormant_pulse_and_leaves_an_awake_one_be)
   fixture.pulse().stir();
   CHECK(!DevicePulseProbe::dormant(fixture.pulse())); }
 
-/* A reporter going to work stirs the pulse it is beaten by (beat_by, which
- * carry calls), and one beaten by none stirs nothing. */
 TEST(device_pulse_stir, a_reporter_stirs_the_pulse_it_is_beaten_by)
 { Fixture fixture;
   CHECK_STATUS(fixture.pulse().initialize(), Status::ok);
@@ -271,13 +253,11 @@ TEST(device_pulse_stir, a_reporter_stirs_the_pulse_it_is_beaten_by)
   CHECK(DevicePulseProbe::dormant(fixture.pulse()));
   fixture.first().reporter().at_work(false);
   fixture.first().reporter().beat_by(fixture.pulse());
-  fixture.first().reporter().at_work(false);   /* going idle stirs nothing */
+  fixture.first().reporter().at_work(false);
   CHECK(DevicePulseProbe::dormant(fixture.pulse()));
   fixture.first().reporter().at_work(true);
   CHECK(!DevicePulseProbe::dormant(fixture.pulse())); }
 
-/* The thread itself: asleep with nothing at work, beating within moments of
- * a worker going to work, with no clock having moved. */
 TEST(device_pulse_run, a_dormant_thread_wakes_and_beats_when_a_worker_goes_to_work)
 { Fixture fixture;
   CHECK_STATUS(fixture.pulse().initialize(), Status::ok);
@@ -290,7 +270,6 @@ TEST(device_pulse_run, a_dormant_thread_wakes_and_beats_when_a_worker_goes_to_wo
   for (std::uint32_t spin = 0u; spin < 100000000u && fixture.first().beat() == 0u; spin++) sched_yield();
   CHECK(fixture.first().beat() > 0u); }
 
-/* The thread runs only while a page is carried. */
 TEST(device_pulse_drop, the_last_page_dropped_stops_the_thread)
 { Fixture fixture;
   CHECK_STATUS(fixture.pulse().initialize(), Status::ok);
@@ -308,8 +287,6 @@ TEST(device_pulse_drop, the_last_page_dropped_stops_the_thread)
   CHECK(fixture.pulse().tick(working));
   CHECK(working); }
 
-/* The thread beats on its own, period after period, while a context works,
- * and goes when the pulse does. */
 TEST(device_pulse_run, the_thread_beats_each_period_while_a_context_works)
 { MockHost host;
   {
@@ -320,8 +297,6 @@ TEST(device_pulse_run, the_thread_beats_each_period_while_a_context_works)
       CHECK_STATUS(pulse.initialize(), Status::ok);
       CHECK_STATUS(pulse.carry(page.reporter()), Status::ok);
       page.reporter().at_work(true);
-      /* The scripted clock moves a period at a time; the thread is given a
-       * moment to wake at each, within a bound far past two beats. */
       for (std::uint64_t period = 1u; period <= 2000u && page.beat() < 2u; period++) {
           host.set_clock(period * DevicePulse::period_ns);
           for (std::uint32_t spin = 0u; spin < 1000u && page.beat() < (period + 1u) / 2u; spin++) sched_yield();

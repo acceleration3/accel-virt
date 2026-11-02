@@ -1,20 +1,3 @@
-/* The OpenCL ICD on this machine's GPU (feature 052, T031, T040, T051):
- * FakeClLoader drives the ICD's entries as the Khronos loader would - through
- * the dispatch table in each object's first word, never by name - and the ICD
- * root, over DdiKmt, carries every command through the real driver and device
- * core to the executor library, loaded from its file and bound to the host GPU
- * that runs the most sub-APIs. A host without OpenCL has nothing here to
- * judge, and the test returns without checking.
- *
- * The watcher's thread is ScriptedThread rather than a real one. Everything
- * below the ICD here - MockPlatform, the recording locks, the driver's own
- * core and the device core - is single-threaded by construction, and the
- * recording locks report a second owner as a violation, so a real thread
- * turning the watcher's loop would be a race against the very rig that is
- * meant to be judging. Stepped instead, a turn is something the test can state
- * exactly: after this call, this many turns, with this answer. The one place a
- * second thread is the point - a user event set from off the application's
- * thread - uses a real one, and hands the ICD over rather than sharing it. */
 #include "device/abi/av_executor.h"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
@@ -48,12 +31,6 @@
 #include <pthread.h>
 #include <unistd.h>
 
-/* The executor library opens every host API when it loads, and a real OpenCL
- * platform, VkDevice and EGL display allocate from driver modules that never
- * give everything back. The host's OpenCL drivers are named one by one - the
- * Khronos loader itself, Mesa's rusticl over gallium and LLVM, Intel's two,
- * NVIDIA's - as the other full-stack tests name them, rather than leak
- * detection turned off, so a leak of this repository's own still fails. */
 extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
 {
@@ -79,8 +56,6 @@ extern "C" const char *__lsan_default_suppressions(void)
            "leak:libav_executor\n";
 }
 
-/* An ABI boundary C requires: a signal handler is handed a number and nothing
- * else, so there is nowhere to put a `this`. */
 extern "C" void opencl_icd_gave_up(int);
 extern "C" void opencl_icd_gave_up(int)
 {
@@ -108,14 +83,8 @@ namespace {
 constexpr std::uint32_t elements = 64u;
 constexpr std::size_t   vector_bytes = elements * sizeof(float);
 constexpr std::size_t   device_name_bytes = 256u;
-/* Long enough for a cold compile of the kernel on any host driver, short
- * enough that a wait that will never end is reported in a person's lifetime. */
 constexpr unsigned      patience_seconds = 120u;
 
-/* The smallest kernel that proves a GPU ran something: every element of the
- * output is the sum of two inputs, so an output that was never written, or
- * written by the wrong work item, shows. The guest's own ClProbe builds this
- * one, and the loopback runs the same source. */
 constexpr const char *vector_add =
     "__kernel void vector_add(__global const float *a, __global const float *b,\n"
     "                        __global float *c)\n"
@@ -124,9 +93,6 @@ constexpr const char *vector_add =
     "    c[i] = a[i] + b[i];\n"
     "}\n";
 
-/* A wait that would otherwise hang ends the process with a failure instead.
- * ctest reports a non-zero exit; a hang reports nothing until someone
- * notices. */
 class Deadline {
 public:
     explicit Deadline(unsigned seconds)
@@ -141,8 +107,6 @@ public:
     Deadline &operator=(const Deadline &) = delete;
 };
 
-/* The ICD as one guest process holds it: its own memory, locks, log, the
- * thread its event watcher runs on, and the loader that found it. */
 class ClProcess {
 public:
     explicit ClProcess(DdiKmt &kmt)
@@ -178,17 +142,11 @@ private:
     FakeClLoader        loader_;
 };
 
-/* What the loader dispatches through: the table in the object's first word. */
 const cl_icd_dispatch *table_of(const void *object)
 {
     return object != nullptr ? *reinterpret_cast<const cl_icd_dispatch *const *>(object) : nullptr;
 }
 
-/* CL_DEVICE_NAME as the executor answers it with no guest in between: the
- * host GPU's own name, which the ICD must hand the application unchanged. The
- * three frames are the ones the ICD's own device query sends - a platform, a
- * device of it, then the name - encoded here by hand because nothing but a
- * transport can run the generated client. */
 class HostClDevice {
 public:
     HostClDevice(const AvExecutorOps &ops, const std::uint8_t *uuid)
@@ -205,7 +163,6 @@ public:
     HostClDevice(const HostClDevice &) = delete;
     HostClDevice &operator=(const HostClDevice &) = delete;
 
-    /* False when this host answered no platform, no device or no name. */
     bool name(char *into, std::size_t room)
     {
         if (executor_ == nullptr) return false;
@@ -221,9 +178,6 @@ public:
     }
 
 private:
-    /* clGetPlatformIDs and clGetDeviceIDs differ by the two fields in front:
-     * the device query names a platform and a type, the platform query names
-     * neither. Both answer a count, one handle and a count again. */
     bool one_handle(std::uint32_t command, std::uint64_t platform, cl_device_type type,
                     std::uint64_t &answer)
     {
@@ -283,10 +237,6 @@ private:
     AvExecutor          *executor_;
 };
 
-/* The probe's US1 steps as one object, in ClProbe's own order: a device, a
- * context and a queue on it, three buffers with the inputs written, the vector
- * add built and its arguments set. What every test below starts from, and what
- * releases it all again. */
 class ClVectorAdd {
 public:
     explicit ClVectorAdd(FakeClLoader &loader)
@@ -295,9 +245,6 @@ public:
     {
         for (std::uint32_t index = 0u; index < elements; ++index) {
             first_[index] = static_cast<float>(index);
-            /* Distinct per element and distinct from both inputs, so a kernel
-             * that wrote one constant everywhere, or transposed its work-item
-             * index, fails the sum rather than passing it. */
             second_[index] = static_cast<float>(2u * index + 1u);
             sum_[index] = first_[index] + second_[index];
         }
@@ -318,8 +265,6 @@ public:
     ClVectorAdd(const ClVectorAdd &) = delete;
     ClVectorAdd &operator=(const ClVectorAdd &) = delete;
 
-    /* Each step judged as the probe's report judges it. False stops the test
-     * rather than dereferencing what was not made. */
     bool make()
     {
         cl_uint devices = 0u;
@@ -335,11 +280,6 @@ public:
         CHECK_EQ(error, CL_SUCCESS);
         if (queue_ == nullptr) return false;
 
-        /* The first is the one the mapping case maps, and it asks for host
-         * memory the way an application that intends to map does - which is
-         * what takes it down the arena path, where the device makes its
-         * cl_mem over the very bytes the guest is handed (T033). The other
-         * two are ordinary, so both paths are live in one run. */
         const cl_mem_flags flags[3] = {CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR, CL_MEM_READ_ONLY,
                                        CL_MEM_READ_WRITE};
         for (std::uint32_t index = 0u; index < 3u; ++index) {
@@ -366,15 +306,6 @@ public:
         return true;
     }
 
-    /* Writes `from` into buffer `index`, blocking, as the probe does.
-     *
-     * The blocking write is the interesting one: the ICD answers it by
-     * enqueueing without blocking and asking the host for the event's status
-     * in a loop, so it owes the queue a flush of its own - a host driver that
-     * starts nothing until a flush would otherwise never complete the event
-     * and this call would never return. That flush is T050's, and this is
-     * what proves it: no clFlush here, and a Deadline rather than a poll that
-     * sits. */
     bool write(std::uint32_t index, const float *from)
     {
         const cl_int written = table_of(queue_)->clEnqueueWriteBuffer(
@@ -394,12 +325,6 @@ public:
 
     cl_int finish() { return table_of(queue_)->clFinish(queue_); }
 
-    /* Pushes the queue, waits for `event`, and gives it back.
-     *
-     * The flush is the application's own and stays here: clWaitForEvents is
-     * the one wait the ICD does not flush for, because OpenCL puts that on
-     * the application and flushing anyway would hide the bug in an
-     * application that forgot. */
     cl_int settle(cl_event event)
     {
         if (event == nullptr) return CL_INVALID_EVENT;
@@ -416,9 +341,6 @@ public:
                                                      vector_bytes, into, 0u, nullptr, event);
     }
 
-    /* How many of `read` are not what the inputs add to. Exactly, not nearly:
-     * a sum of whole numbers this size is exact in a float, so anything else
-     * is the wrong answer rather than a rounding. */
     std::uint32_t wrong(const float *read) const
     {
         std::uint32_t count = 0u;
@@ -428,8 +350,6 @@ public:
         return count;
     }
 
-    /* What the sum would be if buffer 0 held `replaced` instead of its own
-     * input, which is what a mapped write has to show up as. */
     void sum_with(const float *replaced, float *into) const
     {
         for (std::uint32_t index = 0u; index < elements; ++index) {
@@ -443,10 +363,6 @@ public:
     cl_program       program() const { return program_; }
     cl_kernel        kernel() const { return kernel_; }
 
-    /* How many elements of the sum `kernel` gets wrong, run over the three
-     * buffers with the output cleared first - so a kernel that never ran is
-     * every element wrong rather than the last run's right answer. `extra`,
-     * when not null, is a fourth argument of eight bytes. */
     std::uint32_t wrong_from(cl_kernel kernel, const std::uint64_t *extra = nullptr)
     {
         if (kernel == nullptr) return elements;
@@ -489,9 +405,6 @@ private:
     float            sum_[elements];
 };
 
-/* The host GPU is found once, before the executor library opens its own
- * displays: finding it opens and terminates the same ones, and a display
- * terminated under the library stays terminated for it. */
 const WidestHostGpu &widest_gpu()
 {
     static const WidestHostGpu gpu;
@@ -505,21 +418,12 @@ const ExecutorLibraryFile &shared_library()
     return library;
 }
 
-/* A user event set from off the application's thread, and what sets it. The
- * handover is a join rather than an overlap: the ICD's locks here record a
- * second owner rather than blocking one, and the driver and device core below
- * it are the single-threaded rig, so what this proves is that the ICD holds
- * nothing thread-local - not that two threads may be inside it at once, which
- * on Windows the real SRWLOCKs answer for. */
 class GateSetter {
 public:
     explicit GateSetter(cl_event gate) : gate_(gate), thread_(), answered_(CL_INVALID_EVENT) {}
 
-    /* Runs the set on a thread of its own and waits for it. False when the
-     * thread could not be started, which is not this test's subject. */
     bool set_from_another_thread();
 
-    /* What the set answered, on the thread that made it. */
     cl_int answered() const { return answered_; }
     void   record(cl_int answered) { answered_ = answered; }
     cl_event gate() const { return gate_; }
@@ -530,8 +434,6 @@ private:
     cl_int    answered_;
 };
 
-/* An ABI boundary C requires: pthread hands a thread one pointer and there is
- * nowhere to put a `this`. */
 void *set_the_gate(void *self)
 {
     GateSetter &setter = *static_cast<GateSetter *>(self);
@@ -545,10 +447,6 @@ bool GateSetter::set_from_another_thread()
     return pthread_join(thread_, nullptr) == 0;
 }
 
-/* A callback that completes a user event of its own, which is the third way
- * US3 says a gate may be set: from inside the ICD's own delivery. It records
- * what it found the ICD's two locks in while it ran, because "with no ICD
- * lock held" is the thing that keeps a callback from deadlocking. */
 class GateFromCallback {
 public:
     GateFromCallback(cl_event gate, RecordingThreadLock &lock, RecordingThreadLock &send_lock)
@@ -562,8 +460,6 @@ public:
         ++calls_;
         status_ = status;
         held_ = lock_.held() || send_lock_.held();
-        /* Straight back into the ICD, from the watcher's own thread: a
-         * callback run under either lock would deadlock here. */
         answered_ = table_of(gate_)->clSetUserEventStatus(gate_, CL_COMPLETE);
     }
 
@@ -582,19 +478,13 @@ private:
     bool                 held_;
 };
 
-/* An ABI boundary C requires: clSetEventCallback takes a bare function and one
- * argument, so the object is the argument and this forwards into it. */
 void CL_CALLBACK callback_arrived(cl_event, cl_int status, void *user_data)
 {
     static_cast<GateFromCallback *>(user_data)->arrived(status);
 }
 
-}  // namespace
+}
 
-/* T031, US1: the loader's own seven steps find this ICD, its one device is the
- * avgpu adapter's by LUID and vendor and the host GPU's by name - the same
- * bytes the executor answers with no guest in between - and a kernel built
- * from source on it adds two vectors the guest wrote and reads them back. */
 TEST(fullstack_opencl_icd, the_loader_finds_the_device_the_executor_names_and_runs_a_kernel_on_it)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
@@ -614,8 +504,6 @@ TEST(fullstack_opencl_icd, the_loader_finds_the_device_the_executor_names_and_ru
   CHECK_EQ(rig.started(), 0);
   { ClProcess process(rig.kmt());
     FakeClLoader &loader = process.loader();
-    /* Steps 1 to 7 of contracts/icd_interface.md, which is what a loader does
-     * before an application has asked for anything. */
     CHECK(loader.load() == FakeClLoader::Load::kept);
     CHECK_EQ(loader.platforms(), 1u);
     CHECK(std::strcmp(loader.suffix(), "AV") == 0);
@@ -623,8 +511,6 @@ TEST(fullstack_opencl_icd, the_loader_finds_the_device_the_executor_names_and_ru
     ClVectorAdd run(loader);
     if (!run.make()) return;
 
-    /* The name is the host's, byte for byte: an ICD that answered its own
-     * would be telling an application it is on a device that does not exist. */
     char   name[device_name_bytes] = {};
     size_t bytes = 0u;
     CHECK_EQ(loader.device_info(run.device(), CL_DEVICE_NAME, sizeof name, name, &bytes),
@@ -632,7 +518,6 @@ TEST(fullstack_opencl_icd, the_loader_finds_the_device_the_executor_names_and_ru
     CHECK(std::strcmp(name, expected_name) == 0);
     CHECK_EQ(bytes, std::strlen(expected_name) + 1u);
 
-    /* And the identity is the avgpu adapter's, not the host GPU's. */
     cl_uint vendor = 0u;
     CHECK_EQ(loader.device_info(run.device(), CL_DEVICE_VENDOR_ID, sizeof vendor, &vendor, nullptr),
              CL_SUCCESS);
@@ -643,7 +528,6 @@ TEST(fullstack_opencl_icd, the_loader_finds_the_device_the_executor_names_and_ru
     std::uint64_t named = 0u;
     std::memcpy(&named, luid, sizeof named);
     CHECK_EQ(named, DdiKmt::rig_luid);
-    /* Capped at what this ICD implements, whatever the host answers. */
     char version[64] = {};
     CHECK_EQ(loader.device_info(run.device(), CL_DEVICE_VERSION, sizeof version, version, nullptr),
              CL_SUCCESS);
@@ -664,15 +548,6 @@ TEST(fullstack_opencl_icd, the_loader_finds_the_device_the_executor_names_and_ru
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* T040, US2: a buffer mapped, written through and given back is what the
- * kernel then reads - the whole point of a map, and the one thing a staged
- * mapping that never wrote back would fail. Then shared memory: an allocation
- * that survives a map, a write into the mirror, an unmap and being a kernel's
- * argument. What it deliberately does not assert is that the kernel sees what
- * was written into the mirror: no command on this wire carries bytes between
- * guest memory and a host SVM address (research 052 §7.3), the ICD says so
- * once per allocation, and asserting otherwise would be asserting a thing the
- * feature records as not built. */
 TEST(fullstack_opencl_icd, a_mapped_write_reaches_the_kernel_and_shared_memory_is_an_argument)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
@@ -689,8 +564,6 @@ TEST(fullstack_opencl_icd, a_mapped_write_reaches_the_kernel_and_shared_memory_i
     if (!run.make()) return;
     const cl_icd_dispatch *const table = table_of(run.queue());
 
-    /* Every element replaced through the mapping, by values the run's own
-     * inputs never hold, so a kernel reading the old bytes shows. */
     float replaced[elements];
     for (std::uint32_t index = 0u; index < elements; ++index)
         replaced[index] = static_cast<float>(1000u + index);
@@ -702,8 +575,6 @@ TEST(fullstack_opencl_icd, a_mapped_write_reaches_the_kernel_and_shared_memory_i
     CHECK(mapped != nullptr);
     if (mapped == nullptr) return;
     std::memcpy(mapped, replaced, sizeof replaced);
-    /* A pointer that is not the one the map answered is refused, and the
-     * mapping survives being asked. */
     CHECK_EQ(table->clEnqueueUnmapMemObject(run.queue(), run.input(),
                                             static_cast<std::uint8_t *>(mapped) + 4u, 0u, nullptr,
                                             nullptr),
@@ -711,8 +582,6 @@ TEST(fullstack_opencl_icd, a_mapped_write_reaches_the_kernel_and_shared_memory_i
     const cl_int given_back =
         table->clEnqueueUnmapMemObject(run.queue(), run.input(), mapped, 0u, nullptr, nullptr);
     CHECK_EQ(given_back, CL_SUCCESS);
-    /* A failed unmap has taken the context with it, so every later call would
-     * fail for that reason rather than its own. */
     if (given_back != CL_SUCCESS) return;
 
     cl_event ran = nullptr;
@@ -729,12 +598,8 @@ TEST(fullstack_opencl_icd, a_mapped_write_reaches_the_kernel_and_shared_memory_i
     for (std::uint32_t index = 0u; index < elements; ++index)
         if (read[index] != wanted[index]) ++wrong;
     CHECK_EQ(wrong, 0u);
-    /* And they are the mapped bytes rather than the buffer's original input,
-     * which a map that never wrote back would have left: 0 + 1. */
     CHECK(read[0] != 1.0f);
 
-    /* Shared memory, where the device offers it. A device that offers none is
-     * not a failure; it is a device without it, and the run says so. */
     cl_device_svm_capabilities svm = 0u;
     CHECK_EQ(loader.device_info(run.device(), CL_DEVICE_SVM_CAPABILITIES, sizeof svm, &svm, nullptr),
              CL_SUCCESS);
@@ -752,30 +617,18 @@ TEST(fullstack_opencl_icd, a_mapped_write_reaches_the_kernel_and_shared_memory_i
              CL_SUCCESS);
     std::memcpy(shared, replaced, sizeof replaced);
     CHECK_EQ(table->clEnqueueSVMUnmap(run.queue(), shared, 0u, nullptr, nullptr), CL_SUCCESS);
-    /* The address the application holds is the mirror; what crosses the wire
-     * is the host's, and an address inside no allocation never reaches it. */
     CHECK_EQ(table->clSetKernelArgSVMPointer(run.kernel(), 2u, shared), CL_SUCCESS);
     CHECK_EQ(table->clSetKernelArgSVMPointer(run.kernel(), 2u,
                                              static_cast<std::uint8_t *>(shared) + vector_bytes),
              CL_INVALID_ARG_VALUE);
-    /* The output buffer goes back into the slot this borrowed, so the release
-     * below frees a kernel whose arguments are the objects it was made with. */
     const cl_mem output = run.output();
     CHECK_EQ(table->clSetKernelArg(run.kernel(), 2u, sizeof(cl_mem), &output), CL_SUCCESS);
     table->clSVMFree(run.context(), shared);
-    /* Said once, rather than pretended: the mirror and the host's view of a
-     * coarse-grained allocation are not synchronised on this wire. */
     CHECK_EQ(process.log().holding("not synchronised"), 1u);
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* T051, US3, scenario 1: a non-blocking read the application does not wait
- * for, gated on a user event the same guest thread completes afterwards. The
- * enqueue has to come back with that gate still outstanding - an ICD that made
- * the transfer blocking, or that waited on the gate's host event inside the
- * enqueue, would never reach the line that sets it. The deadline is what turns
- * that from a hang into a failure. */
 TEST(fullstack_opencl_icd, a_non_blocking_read_gated_on_a_user_event_this_thread_sets_completes)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
@@ -805,8 +658,6 @@ TEST(fullstack_opencl_icd, a_non_blocking_read_gated_on_a_user_event_this_thread
     CHECK(delivered != nullptr);
     CHECK_EQ(run.flush(), CL_SUCCESS);
 
-    /* The enqueue came back, and the gate it is nominally waiting on has not
-     * been set: nothing in the guest is blocked on the application. */
     cl_int status = CL_COMPLETE;
     CHECK_EQ(loader.event_info(gate, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof status, &status,
                                nullptr),
@@ -829,10 +680,6 @@ TEST(fullstack_opencl_icd, a_non_blocking_read_gated_on_a_user_event_this_thread
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* T051, US3, scenario 2: the same, with the gate set from a thread that is not
- * the application's. What would hang is an ICD holding its transport's lock
- * across the wait, or keeping any of the state a set touches on the thread
- * that made it. */
 TEST(fullstack_opencl_icd, a_non_blocking_read_gated_on_a_user_event_another_thread_sets_completes)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
@@ -879,10 +726,6 @@ TEST(fullstack_opencl_icd, a_non_blocking_read_gated_on_a_user_event_another_thr
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* T051, US3, scenario 3: the gate is set from inside a callback, which is the
- * one path where the ICD is re-entered from its own watcher. A callback run
- * under either ICD lock would deadlock on a real SRWLOCK; here the lock trace
- * says outright that none was held while it ran. */
 TEST(fullstack_opencl_icd, a_user_event_set_from_inside_a_callback_releases_the_wait)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
@@ -903,7 +746,6 @@ TEST(fullstack_opencl_icd, a_user_event_set_from_inside_a_callback_releases_the_
     CHECK_EQ(error, CL_SUCCESS);
     if (gate == nullptr) return;
 
-    /* The work whose completion the callback hangs off. */
     cl_event ran = nullptr;
     CHECK_EQ(run.enqueue(&ran), CL_SUCCESS);
     CHECK(ran != nullptr);
@@ -916,24 +758,15 @@ TEST(fullstack_opencl_icd, a_user_event_set_from_inside_a_callback_releases_the_
     CHECK_EQ(loader.set_event_callback(delivered, CL_COMPLETE, &callback_arrived, &watched),
              CL_SUCCESS);
     CHECK_EQ(watched.calls(), 0u);
-    /* The work is pushed and reached before the watcher is turned, so that a
-     * turn that runs no callback is the ICD's answer rather than a race. */
     CHECK_EQ(run.flush(), CL_SUCCESS);
     CHECK_EQ(loader.wait_for_events(1u, &delivered), CL_SUCCESS);
-    /* The watcher's own thread, turned by the test: one turn delivers the one
-     * registration, and the thread goes on - it rests rather than ends, so the
-     * next registration finds it. */
     CHECK(process.watcher().step());
     CHECK_EQ(process.watcher().turns(), 1u);
     CHECK_EQ(watched.calls(), 1u);
     CHECK_EQ(watched.status(), CL_COMPLETE);
     CHECK_EQ(watched.answered(), CL_SUCCESS);
-    /* Neither the ICD's lock nor its transport's was held while the callback
-     * ran, which is what lets the callback call back in at all. */
     CHECK(!watched.under_a_lock());
 
-    /* Only where the callback ran: a wait on a gate nothing set would hang
-     * instead of reporting the callback that did not arrive. */
     if (watched.calls() == 1u) CHECK_EQ(loader.wait_for_events(1u, &gate), CL_SUCCESS);
     CHECK_EQ(run.wrong(read), 0u);
 
@@ -944,13 +777,6 @@ TEST(fullstack_opencl_icd, a_user_event_set_from_inside_a_callback_releases_the_
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* T065, US2: the read an application asks for blocking. Every other read here
- * is the deferred kind, whose bytes are fetched once the marker says the queue
- * has reached them; a blocking read is answered inside the one call, so it is
- * the only read whose bytes the host must already have written when it
- * serialises the reply. This is the guest probe's own sequence - write, run,
- * clFinish, clEnqueueReadBuffer with CL_TRUE - and a device asked to read
- * without blocking answers it with whatever its decode arena last held. */
 TEST(fullstack_opencl_icd, a_blocking_read_answers_with_the_bytes_the_kernel_wrote)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
@@ -975,12 +801,9 @@ TEST(fullstack_opencl_icd, a_blocking_read_answers_with_the_bytes_the_kernel_wro
     CHECK_EQ(run.finish(), CL_SUCCESS);
     float read[elements];
     std::memset(read, 0xEE, sizeof read);
-    /* No event: an application that blocks wants the bytes, not a handle. */
     CHECK_EQ(run.read(read, CL_TRUE, nullptr), CL_SUCCESS);
     CHECK_EQ(run.wrong(read), 0u);
 
-    /* And once more with an event, because the two answer the read through
-     * different halves of the call and only one of them was ever run. */
     std::memset(read, 0xEE, sizeof read);
     cl_event delivered = nullptr;
     CHECK_EQ(run.read(read, CL_TRUE, &delivered), CL_SUCCESS);
@@ -991,11 +814,6 @@ TEST(fullstack_opencl_icd, a_blocking_read_answers_with_the_bytes_the_kernel_wro
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* cl_khr_d3d11_sharing on the host's own OpenCL (docs/d3d11-sharing.md): a
- * context made from a Direct3D 11 device, a buffer resource whose bytes a
- * kernel adds one to between acquire and release, and a texture whose rows -
- * further apart in the mapping than in the image - come back where they went
- * in. The Direct3D side is the tests' bridge; everything OpenCL is the host's. */
 TEST(fullstack_opencl_icd, a_d3d11_resource_s_bytes_reach_the_kernel_and_come_back_changed)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
@@ -1016,7 +834,6 @@ TEST(fullstack_opencl_icd, a_d3d11_resource_s_bytes_reach_the_kernel_and_come_ba
     cl_uint      devices = 0u;
     CHECK_EQ(loader.device_ids(CL_DEVICE_TYPE_GPU, 1u, &device, &devices), CL_SUCCESS);
     if (device == nullptr) return;
-    /* The Direct3D device is on the adapter the device says it is on. */
     std::uint64_t luid = 0u;
     CHECK_EQ(loader.device_info(device, CL_DEVICE_LUID_KHR, sizeof luid, &luid, nullptr), CL_SUCCESS);
     int d3d_device = 0, buffer_resource = 0, texture_resource = 0;
@@ -1029,7 +846,6 @@ TEST(fullstack_opencl_icd, a_d3d11_resource_s_bytes_reach_the_kernel_and_come_ba
                                   av::clicd::D3d11Resource(av::clicd::D3d11Resource::Kind::buffer, 0u, bytes, 0u, 0u,
                                                            0u, 1u, 1u, 1u),
                                   buffer_bytes, bytes, bytes, bytes);
-    /* 8x4 R8G8B8A8_UNORM texels, 32 bytes a row, mapped 64 bytes apart. */
     constexpr std::size_t pitch = 64u, rows = 4u, row_bytes = 32u;
     std::uint8_t          texels[pitch * rows] = {};
     for (std::size_t row = 0u; row < rows; ++row)
@@ -1098,10 +914,6 @@ TEST(fullstack_opencl_icd, a_d3d11_resource_s_bytes_reach_the_kernel_and_come_ba
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* cl_khr_byte_addressable_store, through the ICD on the host's own OpenCL:
- * each work-item stores one byte, and none disturbs its neighbours - what a
- * device without byte stores would get wrong as soon as two work-items share
- * a word. */
 TEST(fullstack_opencl_icd, a_kernel_stores_single_bytes_and_leaves_their_neighbours)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
@@ -1160,12 +972,6 @@ TEST(fullstack_opencl_icd, a_kernel_stores_single_bytes_and_leaves_their_neighbo
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
 namespace {
-
-/* Real code, and more of it than every room on the way: DaVinci Resolve's
- * image pipeline builds a 293 KB source, and the ICD answered it
- * CL_OUT_OF_RESOURCES because its command outgrew the 256 KiB the transport
- * lent it. Helpers the kernel never calls make the bulk, so a compiler judges
- * all of it and the build stays quick. */
 constexpr std::uint32_t long_helpers = 30000u;
 constexpr std::uint32_t long_defines = 12000u;
 
@@ -1199,8 +1005,6 @@ public:
     const char *options() const { return options_; }
     std::size_t options_bytes() const { return options_bytes_; }
 
-    /* The kernel, as a second string: c = a + b, through a helper of the
-     * long first string and two of the long options' defines. */
     static constexpr const char *kernel =
         "__kernel void long_sum(__global const float *a, __global const float *b, __global float *c)\n"
         "{\n"
@@ -1215,12 +1019,8 @@ private:
     std::size_t options_bytes_;
 };
 
-}  // namespace
+}
 
-/* A program longer than the transport's room, the batch, the ring and the
- * executor's decode block, in two strings, built with options longer than a
- * room too: it builds, its kernel runs, and the context carries on - the
- * calls before and after are the ordinary ones. */
 TEST(fullstack_opencl_icd, a_program_longer_than_every_room_builds_and_runs)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) {
@@ -1304,8 +1104,6 @@ TEST(fullstack_opencl_icd, a_program_longer_than_every_room_builds_and_runs)
 
 
 namespace {
-
-/* What a program says of itself that is the same however it was made. */
 std::uint32_t program_answers_wrong(const cl_program program, const cl_context context, const cl_device_id device)
 {
     std::uint32_t wrong = 0u;
@@ -1338,8 +1136,6 @@ std::uint32_t program_answers_wrong(const cl_program program, const cl_context c
     return wrong;
 }
 
-/* A program's one binary, as an application caching it fetches it: the size,
- * then the bytes into memory of its own. Empty on any refusal. */
 class FetchedBinary {
 public:
     explicit FetchedBinary(cl_program program) : bytes_(nullptr), size_(0u)
@@ -1368,7 +1164,6 @@ private:
     std::size_t    size_;
 };
 
-/* What a program made from `bytes` answers, and the status it gives them. */
 cl_int from_binary(cl_context context, cl_device_id device, const unsigned char *bytes, std::size_t size,
                    cl_int &status, cl_program &made)
 {
@@ -1378,8 +1173,6 @@ cl_int from_binary(cl_context context, cl_device_id device, const unsigned char 
     return error;
 }
 
-/* Counts pfn_notify's calls and keeps what it was told, as an application
- * waiting on a build would. */
 class BuildNotices {
 public:
     BuildNotices() : calls_(0u), last_(nullptr) {}
@@ -1396,19 +1189,13 @@ private:
     cl_program    last_;
 };
 
-/* An ABI boundary C requires: pfn_notify is a bare function with one
- * argument, so the object is the argument and this forwards into it. */
 void CL_CALLBACK build_heard(cl_program program, void *user_data)
 {
     static_cast<BuildNotices *>(user_data)->heard(program);
 }
 
-}  // namespace
+}
 
-/* An application that caches binaries (DaVinci Resolve, Affinity): the
- * program's binary fetched, made into a program again, built, and its kernel
- * run - and a binary damaged in its cache, cut short or another device's is
- * CL_INVALID_BINARY, which the application answers by building its source. */
 TEST(fullstack_opencl_icd, a_program_s_binary_made_into_a_program_again_runs_and_a_damaged_one_is_refused)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
@@ -1451,8 +1238,6 @@ TEST(fullstack_opencl_icd, a_program_s_binary_made_into_a_program_again_runs_and
              CL_SUCCESS);
     CHECK_EQ(type, static_cast<cl_program_binary_type>(CL_PROGRAM_BINARY_TYPE_EXECUTABLE));
 
-    /* Every kernel of it at once, which is how Resolve takes them, and what
-     * each says of itself. */
     cl_kernel kernel = nullptr;
     cl_uint   kernels = 0u;
     CHECK_EQ(table_of(loaded)->clCreateKernelsInProgram(loaded, 1u, &kernel, &kernels), CL_SUCCESS);
@@ -1476,14 +1261,11 @@ TEST(fullstack_opencl_icd, a_program_s_binary_made_into_a_program_again_runs_and
     CHECK_EQ(address, static_cast<cl_kernel_arg_address_qualifier>(CL_KERNEL_ARG_ADDRESS_GLOBAL));
     CHECK_EQ(run.wrong_from(kernel), 0u);
 
-    /* A clone carries the arguments set so far, and runs as its original. */
     cl_int    error = CL_INVALID_VALUE;
     cl_kernel clone = table_of(kernel)->clCloneKernel(kernel, &error);
     CHECK_EQ(error, CL_SUCCESS);
     CHECK_EQ(run.wrong_from(clone), 0u);
 
-    /* Damaged: a byte of the payload flipped, the envelope's device changed,
-     * a byte short, and bytes that were never a binary. */
     unsigned char *const bytes = binary.bytes();
     cl_program refused = nullptr;
     bytes[binary.size() - 1u] ^= 0x5Au;
@@ -1497,7 +1279,6 @@ TEST(fullstack_opencl_icd, a_program_s_binary_made_into_a_program_again_runs_and
     CHECK_EQ(from_binary(run.context(), run.device(), bytes, binary.size() - 1u, status, refused), CL_INVALID_BINARY);
     static const unsigned char never[] = "not a binary any driver made";
     CHECK_EQ(from_binary(run.context(), run.device(), never, sizeof never, status, refused), CL_INVALID_BINARY);
-    /* And whole again, it is taken again. */
     cl_program again = nullptr;
     CHECK_EQ(from_binary(run.context(), run.device(), bytes, binary.size(), status, again), CL_SUCCESS);
 
@@ -1508,9 +1289,6 @@ TEST(fullstack_opencl_icd, a_program_s_binary_made_into_a_program_again_runs_and
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* Separate compilation: a helper compiled alone, a kernel compiled against a
- * header program naming it, and the two linked into a program whose kernel
- * runs - each step telling its pfn_notify once it is done. */
 TEST(fullstack_opencl_icd, two_programs_compiled_apart_and_linked_run_as_one)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
@@ -1568,7 +1346,6 @@ TEST(fullstack_opencl_icd, two_programs_compiled_apart_and_linked_run_as_one)
     const cl_kernel kernel = loader.create_kernel(linked, "vector_add", &error);
     CHECK_EQ(run.wrong_from(kernel), 0u);
 
-    /* A link of nothing, and of something that is not a program. */
     CHECK(table_of(run.context())->clLinkProgram(run.context(), 0u, nullptr, nullptr, 0u, nullptr, nullptr, nullptr,
                                                  &error) == nullptr);
     CHECK_EQ(error, CL_INVALID_VALUE);
@@ -1583,10 +1360,6 @@ TEST(fullstack_opencl_icd, two_programs_compiled_apart_and_linked_run_as_one)
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* SPIR-V on a host that takes it: the probe's own module, its vector add run
- * over buffers, and offset_add's eight private bytes - which a host keeping no
- * type names for IL cannot tell from a sampler - set as the ulong they are,
- * read off the module. Its binary goes round as any program's does. */
 TEST(fullstack_opencl_icd, a_program_from_spir_v_runs_its_kernels_and_says_what_it_was_made_of)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
@@ -1612,8 +1385,6 @@ TEST(fullstack_opencl_icd, a_program_from_spir_v_runs_its_kernels_and_says_what_
     }
     CHECK_EQ(error, CL_SUCCESS);
     if (program == nullptr) return;
-    /* A device that takes SPIR-V reports cl_khr_il_program, whose create the
-     * loader finds by name. */
     static char extensions[8192] = {};
     CHECK_EQ(loader.device_info(run.device(), CL_DEVICE_EXTENSIONS, sizeof extensions, extensions, nullptr),
              CL_SUCCESS);
@@ -1641,11 +1412,6 @@ TEST(fullstack_opencl_icd, a_program_from_spir_v_runs_its_kernels_and_says_what_
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
 namespace {
-
-/* One device, context and queue on the host GPU, for a kernel that proves an
- * extension the ICD reports because the host compiles: what the device
- * offers is read through the ICD, and a host without the extension has
- * nothing here to judge. */
 class ExtensionRun {
 public:
     explicit ExtensionRun(FakeClLoader &loader)
@@ -1663,8 +1429,6 @@ public:
     ExtensionRun(const ExtensionRun &) = delete;
     ExtensionRun &operator=(const ExtensionRun &) = delete;
 
-    /* False, saying so, when the device does not report `extension` - a host
-     * GPU without it - or nothing could be made. */
     bool offers(const char *extension)
     {
         if (device_ == nullptr) {
@@ -1685,7 +1449,6 @@ public:
         return queue_ != nullptr;
     }
 
-    /* `source` built and its kernel `name` made; false, judged, otherwise. */
     bool kernel(const char *source, const char *name)
     {
         cl_int error = CL_INVALID_VALUE;
@@ -1700,8 +1463,6 @@ public:
         return kernel_ != nullptr;
     }
 
-    /* Runs the kernel over `global` items in groups of `local` (0: the
-     * driver's choice) and waits for it. */
     cl_int run(std::size_t global, std::size_t local)
     {
         const cl_int ran = table_of(queue_)->clEnqueueNDRangeKernel(queue_, kernel_, 1u, nullptr, &global,
@@ -1738,7 +1499,6 @@ public:
     FakeClLoader    &loader() { return loader_; }
 
 private:
-    /* Whether the space-separated `list` names `wanted` as a whole word. */
     bool named(const char *list, const char *wanted) const
     {
         const std::size_t length = std::strlen(wanted);
@@ -1759,7 +1519,6 @@ private:
     char             extensions_[4096];
 };
 
-/* Whether this host runs OpenCL, saying so when it does not. */
 bool runs_opencl(const WidestHostGpu &gpu)
 {
     if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) != 0u) return true;
@@ -1769,8 +1528,6 @@ bool runs_opencl(const WidestHostGpu &gpu)
 
 constexpr std::uint32_t extension_items = 64u;
 
-/* A kernel that computes value * 2 + 1 in the type `scalar` stands for, over
- * whole numbers small enough to be exact in a half, read back as floats. */
 std::uint32_t wrong_in_precision(ExtensionRun &run, const char *source)
 {
     if (!run.kernel(source, "precise")) return extension_items;
@@ -1791,10 +1548,8 @@ std::uint32_t wrong_in_precision(ExtensionRun &run, const char *source)
     return wrong;
 }
 
-}  // namespace
+}
 
-/* cl_khr_fp16: a kernel computes in half precision through this ICD, and
- * every result is exact. */
 TEST(fullstack_opencl_icd, a_kernel_computes_in_half_precision_where_the_host_has_it)
 { const WidestHostGpu &gpu = widest_gpu();
   if (!runs_opencl(gpu)) return;
@@ -1815,7 +1570,6 @@ TEST(fullstack_opencl_icd, a_kernel_computes_in_half_precision_where_the_host_ha
              0u); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* cl_khr_fp64: the same in double precision. */
 TEST(fullstack_opencl_icd, a_kernel_computes_in_double_precision_where_the_host_has_it)
 { const WidestHostGpu &gpu = widest_gpu();
   if (!runs_opencl(gpu)) return;
@@ -1836,9 +1590,6 @@ TEST(fullstack_opencl_icd, a_kernel_computes_in_double_precision_where_the_host_
              0u); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* The four 32-bit atomics extensions: base and extended atomics on global
- * and on local memory, from every work item of four groups, each landing
- * exactly once. */
 TEST(fullstack_opencl_icd, a_kernel_s_32_bit_atomics_on_global_and_local_memory_all_land)
 { const WidestHostGpu &gpu = widest_gpu();
   if (!runs_opencl(gpu)) return;
@@ -1882,7 +1633,6 @@ TEST(fullstack_opencl_icd, a_kernel_s_32_bit_atomics_on_global_and_local_memory_
     CHECK_EQ(run.loader().release_mem(counts), CL_SUCCESS); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* The two 64-bit atomics extensions, on global memory from every item. */
 TEST(fullstack_opencl_icd, a_kernel_s_64_bit_atomics_all_land_where_the_host_has_them)
 { const WidestHostGpu &gpu = widest_gpu();
   if (!runs_opencl(gpu)) return;
@@ -1914,8 +1664,6 @@ TEST(fullstack_opencl_icd, a_kernel_s_64_bit_atomics_all_land_where_the_host_has
     CHECK_EQ(run.loader().release_mem(counts), CL_SUCCESS); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* cl_khr_3d_image_writes: a kernel writes every texel of a 3D image, each
- * its own coordinates, and the image read back holds them all. */
 TEST(fullstack_opencl_icd, a_kernel_writes_a_3d_image_and_its_texels_come_back)
 { const WidestHostGpu &gpu = widest_gpu();
   if (!runs_opencl(gpu)) return;
@@ -1963,8 +1711,6 @@ TEST(fullstack_opencl_icd, a_kernel_writes_a_3d_image_and_its_texels_come_back)
     CHECK_EQ(run.loader().release_mem(image), CL_SUCCESS); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* cl_khr_image2d_from_buffer: a 2D image made over a buffer reads the
- * buffer's own bytes, row by row at the pitch the device asks for. */
 TEST(fullstack_opencl_icd, a_2d_image_over_a_buffer_reads_the_buffer_s_bytes)
 { const WidestHostGpu &gpu = widest_gpu();
   if (!runs_opencl(gpu)) return;
@@ -2023,8 +1769,6 @@ TEST(fullstack_opencl_icd, a_2d_image_over_a_buffer_reads_the_buffer_s_bytes)
     CHECK_EQ(run.loader().release_mem(backing), CL_SUCCESS); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* cl_khr_depth_images: a depth image a kernel writes reads back as the
- * floats it wrote. */
 TEST(fullstack_opencl_icd, a_depth_image_a_kernel_writes_reads_back)
 { const WidestHostGpu &gpu = widest_gpu();
   if (!runs_opencl(gpu)) return;
@@ -2067,11 +1811,6 @@ TEST(fullstack_opencl_icd, a_depth_image_a_kernel_writes_reads_back)
     CHECK_EQ(run.loader().release_mem(image), CL_SUCCESS); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* A kernel and a non-blocking read of its output, each behind a wait list:
- * the kernel behind a user event the application sets only afterwards, the
- * read behind the kernel. Both enqueues come back with the gate outstanding -
- * the host holds the kernel, and the read's marker behind it - nothing has
- * run or been delivered until it is set, and then the sum arrives. */
 TEST(fullstack_opencl_icd, a_kernel_and_a_read_gated_on_a_user_event_run_only_once_it_is_set)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
@@ -2132,10 +1871,6 @@ TEST(fullstack_opencl_icd, a_kernel_and_a_read_gated_on_a_user_event_run_only_on
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* A sub-buffer is a region of its buffer on the host: what a read of it
- * answers is the buffer's bytes there, and a write through its map lands in
- * the buffer - over the arena, where the buffer's memory is the guest's own,
- * as well as staged. Released first, it gives the buffer its reference back. */
 TEST(fullstack_opencl_icd, a_sub_buffer_reads_and_maps_its_region_of_the_buffer)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
@@ -2157,7 +1892,6 @@ TEST(fullstack_opencl_icd, a_sub_buffer_reads_and_maps_its_region_of_the_buffer)
     if (context == nullptr) return;
     const cl_command_queue queue = loader.create_queue(context, device, &error);
     const cl_icd_dispatch *const table = table_of(queue);
-    /* The region starts where the device says a sub-buffer may. */
     cl_uint align_bits = 0u;
     CHECK_EQ(loader.device_info(device, CL_DEVICE_MEM_BASE_ADDR_ALIGN, sizeof align_bits, &align_bits, nullptr),
              CL_SUCCESS);
@@ -2214,9 +1948,6 @@ TEST(fullstack_opencl_icd, a_sub_buffer_reads_and_maps_its_region_of_the_buffer)
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* An image mapped, written through and unmapped; its region copied into a
- * buffer and read back; a fill of part of it and a copy of the buffer back
- * into it - each judged by the bytes the host's image ends up holding. */
 TEST(fullstack_opencl_icd, an_image_is_mapped_filled_and_copied_through_a_buffer)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
@@ -2251,7 +1982,6 @@ TEST(fullstack_opencl_icd, an_image_is_mapped_filled_and_copied_through_a_buffer
     CHECK_EQ(error, CL_SUCCESS);
     if (image == nullptr) return;
 
-    /* The map hands back the region packed, its pitch a row of it. */
     const size_t origin[3] = {2u, 1u, 0u}, region[3] = {4u, 3u, 1u};
     std::size_t  row_pitch = 0u;
     std::uint32_t *const mapped = static_cast<std::uint32_t *>(table->clEnqueueMapImage(
@@ -2268,7 +1998,6 @@ TEST(fullstack_opencl_icd, an_image_is_mapped_filled_and_copied_through_a_buffer
     for (std::size_t index = 0u; index < 12u; ++index) mapped[index] = 0xC0DE0000u + static_cast<std::uint32_t>(index);
     CHECK_EQ(table->clEnqueueUnmapMemObject(queue, image, mapped, 0u, nullptr, nullptr), CL_SUCCESS);
 
-    /* The whole image into a buffer, behind the unmap's write. */
     const cl_mem buffer = loader.create_buffer(context, CL_MEM_READ_WRITE, sizeof texels, &error);
     const size_t whole[3] = {width, height, 1u}, corner[3] = {0u, 0u, 0u};
     cl_event     copied = nullptr;
@@ -2287,8 +2016,6 @@ TEST(fullstack_opencl_icd, an_image_is_mapped_filled_and_copied_through_a_buffer
         }
     CHECK_EQ(wrong, 0u);
 
-    /* A fill of the top-left corner, then the buffer copied back over the
-     * rest of the image's first row: the corner past it keeps the fill. */
     const cl_uint4 colour = {{7u, 8u, 9u, 10u}};
     const size_t   square[3] = {2u, 2u, 1u};
     CHECK_EQ(table->clEnqueueFillImage(queue, image, &colour, corner, square, 0u, nullptr, nullptr), CL_SUCCESS);
@@ -2316,10 +2043,6 @@ TEST(fullstack_opencl_icd, an_image_is_mapped_filled_and_copied_through_a_buffer
     CHECK(process.root().invariants_hold()); }
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
-/* Shared memory filled from the application's memory by a queue copy, read by
- * a kernel, filled by the host and copied back out - so every way bytes reach
- * an allocation that has no mapping of the guest's is judged by what a kernel
- * or the application reads - and freed behind the queue. */
 TEST(fullstack_opencl_icd, shared_memory_is_copied_in_read_by_a_kernel_filled_and_copied_out)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;
@@ -2348,7 +2071,6 @@ TEST(fullstack_opencl_icd, shared_memory_is_copied_in_read_by_a_kernel_filled_an
     for (std::uint32_t index = 0u; index < elements; ++index) replaced[index] = static_cast<float>(500u + index);
     CHECK_EQ(table->clEnqueueSVMMemcpy(run.queue(), CL_TRUE, shared, replaced, vector_bytes, 0u, nullptr, nullptr),
              CL_SUCCESS);
-    /* The kernel's first input is the allocation. */
     CHECK_EQ(table->clSetKernelArgSVMPointer(run.kernel(), 0u, shared), CL_SUCCESS);
     cl_event ran = nullptr;
     CHECK_EQ(run.enqueue(&ran), CL_SUCCESS);
@@ -2362,7 +2084,6 @@ TEST(fullstack_opencl_icd, shared_memory_is_copied_in_read_by_a_kernel_filled_an
         if (read[index] != wanted[index]) ++wrong;
     CHECK_EQ(wrong, 0u);
 
-    /* Filled by the host, then copied back out into the application's memory. */
     const float pattern = 2.5f;
     CHECK_EQ(table->clEnqueueSVMMemFill(run.queue(), shared, &pattern, sizeof pattern, vector_bytes, 1u, &ran,
                                         nullptr),
@@ -2388,10 +2109,6 @@ TEST(fullstack_opencl_icd, shared_memory_is_copied_in_read_by_a_kernel_filled_an
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
-/* A non-blocking write gated on a user event this same thread sets only after
- * the write returns: the write must return - a call that waited for the gate
- * would wait forever - and once the gate is set the bytes are there, and a
- * kernel gated on the same event runs after it. */
 TEST(fullstack_opencl_icd, a_non_blocking_write_gated_on_a_user_event_set_after_it_returns)
 { const WidestHostGpu &gpu = widest_gpu();
   if ((gpu.sub_apis() & AV_EXECUTOR_SUB_API_OPENCL) == 0u) return;

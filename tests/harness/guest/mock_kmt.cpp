@@ -27,7 +27,7 @@ namespace {
 constexpr std::uint32_t first_handle = 0x40000000u;
 constexpr std::uint32_t handle_step = 4u;
 
-}  // namespace
+}
 
 MockKmt::MockKmt()
     : identities_{}, versions_{}, luids_{}, budgets_{default_local_budget, default_non_local_budget}, usages_{},
@@ -45,7 +45,6 @@ MockKmt::MockKmt()
       doorbell_count_(0u), queue_progress_{}, queue_progress_taken_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
       journal_count_(0u) {}
 
-/* ---- feature 049: hardware queues and doorbells -------------------------- */
 
 Status MockKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, GuestHwQueue &queue)
 {
@@ -53,22 +52,13 @@ Status MockKmt::create_hw_queue(std::uint32_t device, std::uint32_t context, Gue
     queue = GuestHwQueue{};
     const Object *const on = find(Kind::context, context);
     if (on == nullptr || on->owner != device) return misuse();
-    /* Hardware scheduling is the OS's decision, not the driver's
-     * (049 research.md §11): a machine without it gives out no queue, and the
-     * transport submits the way it always has. */
     if (!hardware_scheduling_) return refuse(not_supported);
-    /* Where dxgkrnl writes what this queue has finished, read-only to the
-     * process, as the real mapping is; the monitored fence it is reported on
-     * is named by the queue itself here. */
     const std::uint32_t slot = queue_progress_taken_++ % max_doorbells;
     const std::uint32_t handle = open(Kind::hw_queue, context, slot, 0u);
     queue = GuestHwQueue(handle, handle, &queue_progress_[slot]);
     return succeed();
 }
 
-/* What a hardware-scheduled context submits through: the same batch the
- * kernel path carries, and the progress fence value the queue reaches when the
- * device has run it (feature 049, research.md §13). */
 Status MockKmt::submit_to_hw_queue(std::uint32_t queue, std::uint64_t commands, std::uint64_t length,
                                    const std::uint8_t *private_data, std::uint32_t private_size,
                                    std::uint64_t progress_fence_id)
@@ -82,8 +72,6 @@ Status MockKmt::submit_to_hw_queue(std::uint32_t queue, std::uint64_t commands, 
     return carry(*context, commands, length, private_data, private_size);
 }
 
-/* Until the queue's progress fence reaches `value`: the device runs what was
- * queued while the process waits, as it does for a wait on a context. */
 Status MockKmt::wait_for_hw_queue(std::uint32_t device, std::uint32_t progress_fence, std::uint64_t value)
 {
     if (!begin(Call::wait_for_hw_queue)) return refuse(last_code_);
@@ -96,7 +84,6 @@ Status MockKmt::wait_for_hw_queue(std::uint32_t device, std::uint32_t progress_f
     if (withheld()) context->lost = true;
     else write_answer(*context);
     consume(*context);
-    /* The driver writes what the device finished where the process reads it. */
     queue_progress_[on->address % max_doorbells] = value;
     return succeed();
 }
@@ -106,7 +93,6 @@ Status MockKmt::destroy_hw_queue(std::uint32_t queue)
     if (!begin(Call::destroy_hw_queue)) return refuse(last_code_);
     Object *const found = find(Kind::hw_queue, queue);
     if (found == nullptr) return misuse();
-    /* A queue destroyed takes its doorbells, as dxgkrnl's does. */
     for (std::uint32_t index = 0u; index < doorbell_count_; index++)
         if (doorbells_[index].queue == queue) doorbells_[index].handle = 0u;
     found->kind = Kind::none;
@@ -128,8 +114,6 @@ Status MockKmt::create_doorbell(std::uint32_t queue, std::uint32_t ring, std::ui
     made = DoorbellPages{};
     made.handle = open(Kind::doorbell, queue, 0u, 0u);
     made.queue = queue;
-    /* Created is not connected: what a process reads says to submit the other
-     * way until it connects. */
     made.status = static_cast<std::uint32_t>(DoorbellStatus::disconnected_retry);
     doorbell = made.handle;
     if (doorbell_page_missing_ != 1u) page = &made.page;
@@ -408,17 +392,8 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
     if (!begin(Call::create_allocation)) return refuse(last_code_);
     if (find(Kind::device, device) == nullptr) return misuse();
     AllocationDescriptor decoded;
-    /* Either length, as the real one takes either: the descriptor is the first
-     * 48 bytes and a record may follow it. What this one cannot do is hand the
-     * minted id back - its buffer is const, and the real kernel copies the
-     * caller's bytes before the driver writes into them, so a caller that
-     * wants the id calls create_shared_allocation instead (feature 053). */
     const std::uint32_t shareable =
         AllocationDescriptor::encoded_size + static_cast<std::uint32_t>(SharedObjectRecord::encoded_size);
-    /* A length the driver has no shape for is not_supported; data of a length
-     * it knows but cannot read is invalid_parameter. The miniport tells them
-     * apart and so must this, or a guest sweep cannot say whether dxgkrnl
-     * refused a create before the driver saw it (feature 053). */
     if (size != AllocationDescriptor::encoded_size && size != shareable) return refuse(not_supported);
     if (decoded.decode(descriptor, AllocationDescriptor::encoded_size) != Status::ok)
         return refuse(invalid_parameter);
@@ -427,10 +402,6 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
     Object *const created = find(Kind::allocation, allocation);
     if (created != nullptr) {
         created->allocation_kind = static_cast<std::uint16_t>(decoded.kind());
-        /* Kept as the runtime keeps it: these are the bytes dxgkrnl hands the
-         * opening process, and nothing else crosses with the allocation. The
-         * miniport mints into *this* copy, which is why a one-way caller never
-         * sees an id. */
         created->created_size = size;
         for (std::uint32_t index = 0u; index < size; index++) created->created_with[index] = descriptor[index];
         if (size == shareable) {
@@ -448,12 +419,6 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
     return succeed();
 }
 
-/* The miniport's half, as MockKmt plays it: a create that carries an unassigned
- * record has an id and an adapter number minted into the caller's own bytes,
- * which is what the opening process is later handed (feature 053). */
-/* The carrier is one object standing for a resource and the single allocation
- * in it, because nothing here ever needs them apart: what a create answers, a
- * share names and a destroy takes is the same number (research.md §16). */
 Status MockKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *private_data, std::uint32_t size,
                                          std::uint32_t &resource)
 {
@@ -470,10 +435,6 @@ Status MockKmt::create_shared_allocation(std::uint32_t device, std::uint8_t *pri
         record.decode(private_data + AllocationDescriptor::encoded_size, SharedObjectRecord::encoded_size) !=
             Status::ok)
         return refuse(invalid_parameter);
-    /* A record that already names an object is one the miniport would refuse:
-     * a creator can know neither number. Its size is the *object's* and need
-     * not be the allocation's - an ICD sharing host memory mints over a
-     * one-page carrier (feature 053, T031). */
     if (record.assigned()) return refuse(invalid_parameter);
     if (scribble_record_) {
         scribble_record_ = false;
@@ -512,10 +473,6 @@ Status MockKmt::share_object(std::uint32_t device, std::uint32_t resource, std::
     const std::uint32_t allocation = resource;
     const Object *const object = find(Kind::allocation, allocation);
     if (object == nullptr || object->owner != device) return misuse();
-    /* An allocation created without asking for an identity is not a resource,
-     * and D3DKMTShareObjects takes nothing else: the handle type check falls
-     * through to STATUS_INVALID_PARAMETER with no message at all
-     * (research.md §16). */
     if (!object->resource) return refuse(invalid_parameter);
     for (SharedHandle &row : shared_) {
         if (row.handle != 0u) continue;
@@ -538,9 +495,6 @@ Status MockKmt::destroy_shared_allocation(std::uint32_t device, std::uint32_t re
     if (resource == 0u) return refuse(invalid_parameter);
     const Object *const object = find(Kind::allocation, resource);
     if (object == nullptr || object->owner != device) return misuse();
-    /* hResource takes a handle of the resource type and nothing else: an
-     * ordinary allocation named here is the same mismatch the other way, and
-     * is refused having destroyed nothing (research.md §17). */
     if (!object->resource) return refuse(invalid_parameter);
     return close(Kind::allocation, resource);
 }
@@ -552,8 +506,6 @@ Status MockKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, s
     written = 0u;
     if (!begin(Call::open_shared_object)) return refuse(last_code_);
     if (find(Kind::device, device) == nullptr) return misuse();
-    /* A handle this mock never minted is a handle from nowhere, which is the
-     * case the whole table exists for. */
     const SharedHandle *const row = shared_row(handle);
     if (row == nullptr) return refuse(not_found);
     if (private_data == nullptr || row->carried_size > capacity) return refuse(invalid_parameter);
@@ -566,8 +518,6 @@ Status MockKmt::open_shared_object(std::uint32_t device, std::uint64_t handle, s
     Object *const made = find(Kind::allocation, opened);
     made->allocation_kind = kind;
     made->created_size = row->carried_size;
-    /* D3DKMTOpenResourceFromNtHandle answers a resource of this process, which
-     * is what the opener gives back. */
     made->resource = true;
     for (std::uint32_t index = 0u; index < row->carried_size; index++) {
         made->created_with[index] = row->carried[index];
@@ -596,18 +546,12 @@ Status MockKmt::destroy_allocation(std::uint32_t device, std::uint32_t allocatio
     if (!begin(Call::destroy_allocation)) return refuse(last_code_);
     const Object *const object = find(Kind::allocation, allocation);
     if (object == nullptr || object->owner != device || is_locked(allocation)) return misuse();
-    /* The list D3DKMTDestroyAllocation2 walks holds allocation handles: a
-     * resource named in it is a handle type mismatch, refused with nothing
-     * destroyed, and the caller wanted destroy_shared_allocation
-     * (research.md §17). */
     if (object->resource) return refuse(invalid_parameter);
     for (const Object &mapping : objects_)
         if (mapping.kind == Kind::mapping && mapping.owner == allocation) return misuse();
     return close(Kind::allocation, allocation);
 }
 
-/* Several allocations can be locked at once, each its own view; a second lock of
- * the same one, or more than this mock owns, is refused. */
 Status MockKmt::lock(std::uint32_t device, std::uint32_t allocation, void *&view)
 {
     view = nullptr;
@@ -615,14 +559,12 @@ Status MockKmt::lock(std::uint32_t device, std::uint32_t allocation, void *&view
     const Object *const object = find(Kind::allocation, allocation);
     if (object == nullptr || object->owner != device) return misuse();
     for (std::uint32_t slot = 0u; slot < max_locks; slot++)
-        if (locked_[slot] == allocation) return misuse();   /* already locked */
+        if (locked_[slot] == allocation) return misuse();
     if (zeroed(Call::lock)) return succeed();
     for (std::uint32_t slot = 0u; slot < max_locks; slot++)
         if (locked_[slot] == 0u) {
             const std::uint64_t bytes = object->pages * page_bytes;
             if (bytes > view_capacity) {
-                /* Anonymous pages are zero and cost nothing until touched, so a
-                 * 64 MiB chunk's view is only what a test writes into it. */
                 void *const mapped = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
                 if (mapped == MAP_FAILED) return refuse(invalid_parameter);
                 large_views_[slot] = static_cast<std::uint8_t *>(mapped);
@@ -632,10 +574,9 @@ Status MockKmt::lock(std::uint32_t device, std::uint32_t allocation, void *&view
             view = view_of(allocation);
             return succeed();
         }
-    return misuse();   /* more views held than this mock owns */
+    return misuse();
 }
 
-/* The view keeps what was written through it, as the host's memory does. */
 Status MockKmt::unlock(std::uint32_t device, std::uint32_t allocation)
 {
     if (!begin(Call::unlock)) return refuse(last_code_);
@@ -756,9 +697,6 @@ Status MockKmt::create_context_virtual(std::uint32_t device, const std::uint8_t 
     return succeed();
 }
 
-/* A context a hardware queue may run on, which is what dxgkrnl gives only
- * where hardware scheduling is on (feature 049, research.md §13): refused here
- * otherwise, exactly as a machine without it refuses. */
 Status MockKmt::create_hw_queue_context(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
                                         std::uint32_t &context)
 {
@@ -792,8 +730,6 @@ Status MockKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint6
     return carry(*submitting, commands, length, private_data, private_size);
 }
 
-/* The batch both submission paths carry: the descriptor is kept for the answer
- * a wait writes, and the command at its front is journalled. */
 Status MockKmt::carry(const Object &context, std::uint64_t commands, std::uint64_t length,
                       const std::uint8_t *private_data, std::uint32_t private_size)
 {
@@ -849,10 +785,6 @@ Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
     return succeed();
 }
 
-/* A store the process made to a doorbell of this context, which this mock
- * never saw made: the device does the work while the process waits, so the
- * wait is where it is noticed. What it queued is in the fence word the process
- * wrote, which is what the answer is written against (feature 049). */
 void MockKmt::take_doorbell_store(const Object &context)
 {
     for (DoorbellPages &doorbell : doorbells_) {
@@ -860,8 +792,6 @@ void MockKmt::take_doorbell_store(const Object &context)
         const Object *const queue = find(Kind::hw_queue, doorbell.queue);
         if (queue == nullptr || queue->owner != context.handle) continue;
         doorbell.page = 0u;
-        /* What the process published is what the device consumes: the ring's
-         * own tail, since nothing of this went through a submission. */
         RingHeader                header;
         const std::uint8_t *const ring = context.ring_memory;
         if (ring == nullptr || header.decode(ring, RingHeader::encoded_size) != Status::ok ||
@@ -874,8 +804,6 @@ void MockKmt::take_doorbell_store(const Object &context)
     }
 }
 
-/* A queued answer is taken by the wait that finds it whether or not the slot
- * can be written, so a script stays in step with the calls that awaited it. */
 void MockKmt::write_answer(const Object &context)
 {
     if (queued_taken_ < queued_count_) {
@@ -903,8 +831,6 @@ void MockKmt::write_bytes(const Object &context, const std::uint8_t *answer, std
     for (std::uint32_t i = 0u; i < size; i++) slot[ReplyHeader::encoded_size + i] = answer[i];
 }
 
-/* Every command of every batch the last submission named, read from the ring
- * as the device would: a transport frames many commands into one batch. */
 void MockKmt::journal(const Object &context)
 {
     SubmissionDescriptor submitted;
@@ -937,8 +863,6 @@ void MockKmt::journal(const Object &context)
     }
 }
 
-/* Everything submitted is finished once the context is: the head moves to the
- * last submission's end, freeing the ring for the next. */
 void MockKmt::consume(const Object &context) const
 {
     SubmissionDescriptor submitted;
@@ -955,8 +879,6 @@ void MockKmt::consume(const Object &context) const
                               .encode(fence_memory(context), FencePage::encoded_size));
 }
 
-/* Time passes only at a vertical blank: the clock is what the scenario
- * measures, so nothing else may move it. */
 Status MockKmt::wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source)
 {
     if (!begin(Call::wait_for_vertical_blank)) return refuse(last_code_);
@@ -1100,7 +1022,6 @@ std::uint8_t *MockKmt::reply_of(std::uint32_t context)
     return on != nullptr ? on->reply_memory : nullptr;
 }
 
-/* Every refusal the driver makes of a record is INVALID_PARAMETER. */
 Status MockKmt::window_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size)
 {
     HostWindowRecord record;
@@ -1129,8 +1050,6 @@ std::uint32_t MockKmt::free_window_resource() const
     }
 }
 
-/* The driver judges the request before it places anything, as the device
- * would refuse a blob of memory no GPU has. */
 Status MockKmt::open_window_chunk(std::uint32_t context, std::uint8_t *data, std::uint32_t size,
                                   const HostWindowRecord &request)
 {
@@ -1139,8 +1058,6 @@ Status MockKmt::open_window_chunk(std::uint32_t context, std::uint8_t *data, std
         window_refusal_ = 0u;
         return refuse(code);
     }
-    /* A device with no window is STATUS_NOT_SUPPORTED, every other refusal
-     * STATUS_INVALID_PARAMETER, as the driver answers. */
     if (window_pages_ == 0u) return refuse(not_supported);
     const std::uint64_t bytes = request.bytes();
     const std::uint64_t pages = (bytes + page_bytes - 1u) / page_bytes;
@@ -1287,8 +1204,6 @@ std::uint64_t MockKmt::performance_counter(std::uint64_t &frequency) const
         consume(*late_context_);
         late_context_ = nullptr;
     }
-    /* Told before the answer moves, so that what a reader does is seen by the
-     * read that told it rather than by the one after. */
     if (clock_reader_ != nullptr) clock_reader_->clock_read();
     read_ticks_ += clock_step_;
     if (clock_step_ == 0u && ++idle_reads_ > spin_reads) {
@@ -1315,9 +1230,6 @@ void MockKmt::answer_waits(const std::uint8_t *answer, std::uint32_t size)
 
 void MockKmt::queue_answer(const std::uint8_t *answer, std::uint32_t size)
 {
-    /* A script longer than this mock can hold would be answered by silence
-     * halfway through, which reads as a driver failure: it is the test's own
-     * mistake, and is recorded as one. */
     if (queued_count_ == max_queued) {
         misuses_++;
         return;
@@ -1648,7 +1560,6 @@ Status MockKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
 
 void MockKmt::sleep_briefly() {}
 
-/* No display here: every search takes the first adapter it finds. */
 Status MockKmt::primary_display_luid(std::uint64_t &answered)
 {
     answered = primary_display_luid_;
@@ -1657,4 +1568,4 @@ Status MockKmt::primary_display_luid(std::uint64_t &answered)
 
 void MockKmt::set_primary_display_luid(std::uint64_t luid) { primary_display_luid_ = luid; }
 
-}  // namespace av
+}

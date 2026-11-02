@@ -1,9 +1,3 @@
-/* What the Direct3D 9 driver keeps of each resource and query d3d9.dll made
- * through it, under the handle it handed back. A resource is a host object
- * named by an id - a texture, a buffer, or for a surface resource one host
- * surface per subresource - or, in system memory, only the runtime's own
- * memory the driver copies from when it is blitted or drawn. A subresource a
- * lock may write has a guest shadow, sent to the host when it is unlocked. */
 #ifndef AV_UM_D3D9_RECORDS_HPP
 #define AV_UM_D3D9_RECORDS_HPP
 
@@ -19,18 +13,14 @@ struct D3d9Subresource {
     uint32_t width;
     uint32_t height;
     uint32_t depth;
-    /* System memory: the runtime's, as CreateResource named it. */
     const uint8_t *system;
     uint32_t       system_pitch;
     uint32_t       system_slice_pitch;
-    /* A surface resource's host surface for this subresource. */
     uint32_t       id;
-    /* The guest copy a lock hands out, made on its first lock. */
     uint8_t       *shadow;
     size_t         shadow_bytes;
     uint32_t       shadow_pitch;
     uint32_t       shadow_slice_pitch;
-    /* What the lock open now covers, sent when it is unlocked. */
     bool             locked;
     D3DDDI_LOCKFLAGS lock_flags;
     D3DDDIARG_LOCK   lock;
@@ -40,7 +30,6 @@ struct D3d9Resource {
     enum class Kind : uint8_t { system, texture, cube, volume, surface, vertex_buffer, index_buffer };
 
     Kind                 kind;
-    /* The host object; for a surface resource, see each subresource's. */
     uint32_t             id;
     D3DDDIFORMAT         format;
     D3DDDI_POOL          pool;
@@ -48,43 +37,25 @@ struct D3d9Resource {
     uint32_t             levels;
     uint32_t             count;
     D3d9Subresource     *subresources;
-    /* The runtime's handle, which an allocation for the resource names. */
     HANDLE               runtime;
-    /* The kernel allocation a present names, made at its first present -
-     * or, for a fullscreen primary, as the resource is made, since the
-     * runtime hands it to dxgkrnl before anything is presented. */
     D3DKMT_HANDLE        allocation;
-    /* The runtime resource that allocation was made under: `runtime` for a
-     * primary's, null for one made at a present. */
     HANDLE               allocation_resource;
-    /* The VidPn source a primary is shown on; 0 for anything else. */
     uint32_t             vidpn_source;
     uint32_t             allocation_pitch;
-    /* A kernel surface another party made - the redirection surface of a
-     * window - which the runtime opened into this device to present into: the
-     * kernel moves a present's pixels into its pages, the host never hears of
-     * it, and the allocation is the runtime's to free, not this device's. */
     bool                 opened;
-    /* Where this process's GPU virtual space maps an opened surface, for
-     * `gpu_pages` pages: dxgkrnl rejects a present whose destination has no
-     * address. 0 for a surface the device made, or one not yet mapped. */
     uint64_t             gpu_address;
     uint64_t             gpu_pages;
     uint64_t             shared_key;
-    /* Each present of the resource, counted from 1 (PresentPointRecord). */
     d3d::PresentCount    presents;
-    /* The point named to the miniport for the present in progress, 0 once
-     * that present went through or the name was taken back. */
     uint32_t             named_point;
 };
 
 struct D3d9Query {
     uint32_t        id;
     D3DDDIQUERYTYPE type;
-    /* What GetData answers for this type, in bytes. */
     uint32_t        data_bytes;
 };
 
-}  // namespace av::d3d9
+}
 
-#endif  // AV_UM_D3D9_RECORDS_HPP
+#endif

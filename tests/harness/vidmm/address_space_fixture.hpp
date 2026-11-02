@@ -1,5 +1,3 @@
-/* A mock platform and an address space built on it, with the leak check on
- * destruction so no test has to remember it. */
 #ifndef AV_ADDRESS_SPACE_FIXTURE_HPP
 #define AV_ADDRESS_SPACE_FIXTURE_HPP
 
@@ -13,7 +11,7 @@ namespace av {
 class AddressSpaceFixture {
 public:
     static constexpr std::uint64_t base = 0x1000000000ull;
-    static constexpr std::uint64_t size = 0x100000ull;   /* 1 MiB */
+    static constexpr std::uint64_t size = 0x100000ull;
     static constexpr std::uint64_t page = GpuVirtualAddressSpace::page_size;
 
     AddressSpaceFixture();
@@ -24,7 +22,6 @@ public:
     MockPlatform           &platform();
     GpuVirtualAddressSpace &space();
 
-    /* Reserves and asserts success, returning the base. */
     std::uint64_t reserve_page();
 
 private:
@@ -32,8 +29,6 @@ private:
     GpuVirtualAddressSpace space_;
 };
 
-/* Reaches into the address space so invariant tests can corrupt it. Declared a
- * friend by both classes; nothing outside the tests uses it. */
 struct GpuVirtualAddressSpaceProbe {
     explicit GpuVirtualAddressSpaceProbe(GpuVirtualAddressSpace &space);
 
@@ -50,6 +45,6 @@ struct GpuVirtualAddressSpaceProbe {
     GpuVirtualAddressSpace &space;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_ADDRESS_SPACE_FIXTURE_HPP
+#endif

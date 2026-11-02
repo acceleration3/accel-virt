@@ -1,9 +1,3 @@
-/* Waking a session's worker when the host GPU reaches a mark a fence was
- * signalled with. The runtime's part - writing the eventfd it is handed once
- * its fence reaches a value - is played by ScriptedFence (vkd3d-proton's) and
- * ScriptedFence11 (DXVK's), which keep the descriptor they were given and
- * write it when the test says the GPU got there; everything else is the real
- * thread, poll() and signal. */
 #include "executor/eventfd_wake.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -50,7 +44,6 @@ public:
         return S_OK;
     }
 
-    /* The GPU reached the mark: vkd3d-proton writes the eventfd. */
     void reach()
     {
         const std::uint64_t one = 1u;
@@ -105,7 +98,6 @@ void wake(void *context)
     static_cast<std::atomic<std::uint32_t> *>(context)->fetch_add(1u);
 }
 
-/* The wake runs on its own thread: wait, boundedly, for it to have woken. */
 bool woken_reaches(std::uint32_t count)
 {
     for (std::uint32_t tries = 0u; tries < 5000u; tries++) {
@@ -116,10 +108,8 @@ bool woken_reaches(std::uint32_t count)
     return false;
 }
 
-}  // namespace
+}
 
-/* Unbound there is no worker to wake: nothing is watched and nothing started,
- * which is still success for the caller. */
 TEST(eventfd_wake_watch, unbound_watches_nothing)
 { EventfdWake wake;
   ScriptedFence fence;
@@ -134,19 +124,16 @@ TEST(eventfd_wake_watch, a_reached_mark_raises_the_signal_once_per_reach)
   ScriptedFence fence;
   CHECK(wake.watch(fence, 5u));
   CHECK(fence.asked == 5u);
-  CHECK(fence.descriptor > 0);   /* never 0: vkd3d-proton reads 0 as no event */
+  CHECK(fence.descriptor > 0);
   CHECK_EQ(woken.load(), 0u);
   fence.reach();
   CHECK(woken_reaches(1u));
-  /* The same descriptor for the next mark: one thread, one eventfd. */
   const int first = fence.descriptor;
   CHECK(wake.watch(fence, 9u));
   CHECK_EQ(fence.descriptor, first);
   fence.reach();
   CHECK(woken_reaches(2u));
   wake.stop();
-  /* Stopped, the descriptor stays - a fence let go may still write it - and
-   * a later watch starts another thread on it. */
   CHECK(fcntl(first, F_GETFD) != -1);
   CHECK(wake.watch(fence, 11u));
   CHECK_EQ(fence.descriptor, first);
@@ -155,10 +142,6 @@ TEST(eventfd_wake_watch, a_reached_mark_raises_the_signal_once_per_reach)
   wake.stop();
   wake.stop(); }
 
-/* A session that ends unbinds: the thread goes, a fence of the old session
- * that writes the eventfd afterwards raises nobody - not the old context, and
- * not the next session's either - and a watch before the next binding
- * watches nothing. */
 TEST(eventfd_wake_watch, an_ended_session_unbinds_and_its_fences_wake_nobody)
 { woken = 0u;
   EventfdWake wake;
@@ -202,7 +185,6 @@ TEST(eventfd_wake_watch, a_mark_vkd3d_proton_refuses_is_refused)
   CHECK(fence.asked == 6u);
   CHECK_EQ(woken.load(), 0u); }
 
-/* The destructor stops a running thread: nothing outlives the wake. */
 TEST(eventfd_wake, a_running_wake_stops_with_its_owner)
 { woken = 0u;
   ScriptedFence fence;
@@ -216,8 +198,6 @@ TEST(eventfd_wake, a_running_wake_stops_with_its_owner)
   CHECK(descriptor > 0);
   CHECK_EQ(fcntl(descriptor, F_GETFD), -1); }
 
-/* A session's Direct3D 11 fence and its Direct3D 12 queues' fences share the
- * one eventfd: whichever reaches its mark wakes the worker. */
 TEST(eventfd_wake_watch, a_direct3d_11_fence_and_a_direct3d_12_one_wake_through_one_eventfd)
 { woken = 0u;
   EventfdWake wake;

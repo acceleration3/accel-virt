@@ -1,6 +1,3 @@
-/* The harness's DXGADAPTER::Initialize model, proven against crafted answers so
- * a later feature that claims a capability without its DDIs fails for the
- * reason dxgkrnl would give. */
 #include "miniport/ddi/dxgk_driver_caps_record.hpp"
 #include "miniport/ddi/dxgkarg_control_mode_behavior_record.hpp"
 #include "miniport/ddi/dxgkarg_query_adapter_info_record.hpp"
@@ -33,7 +30,6 @@ constexpr std::int32_t no_memory = static_cast<std::int32_t>(0xC0000017u);
 constexpr std::int32_t not_supported = static_cast<std::int32_t>(0xC00000BBu);
 constexpr std::uint32_t max_type = 48u;
 
-/* A miniport whose QueryAdapterInfo answers from what the test set. */
 class CraftedMiniport {
 public:
     CraftedMiniport() : caps_{}, nodes_(1u), save_size_(0u), statuses_{}
@@ -74,7 +70,7 @@ private:
     std::int32_t         statuses_[max_type + 1u];
 };
 
-}  // namespace
+}
 
 TEST(fake_dxgadapter_initialize, accepts_wddm_1_0_with_no_capability)
 { MockPlatform platform; CraftedMiniport miniport;
@@ -82,7 +78,7 @@ TEST(fake_dxgadapter_initialize, accepts_wddm_1_0_with_no_capability)
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
   CHECK(adapter.failed_rule() == CapabilityRule::none);
   CHECK_EQ(adapter.driver_caps().WDDMVersion, 0x1000);
-  CHECK_EQ(adapter.queries(), 2u);   /* DRIVERCAPS, 64BITONLYCAPS */ }
+  CHECK_EQ(adapter.queries(), 2u);   }
 
 TEST(fake_dxgadapter_initialize, a_failed_driver_caps_query_fails_start_with_its_status)
 { MockPlatform platform; CraftedMiniport miniport;
@@ -98,8 +94,6 @@ TEST(fake_dxgadapter_initialize, no_query_adapter_info_is_a_revision_mismatch)
   CHECK(adapter.failed_rule() == CapabilityRule::driver_caps_query_failed); }
 
 namespace {
-
-/* ControlModeBehavior answers: the status, then what it writes. */
 std::int32_t mode_status = 0;
 std::uint32_t mode_satisfied = 0u;
 std::uint32_t mode_not_satisfied = 0u;
@@ -113,17 +107,17 @@ std::int32_t control_mode_behavior(void *, av::DxgkargControlModeBehaviorRecord 
     return mode_status;
 }
 
-}  // namespace
+}
 
 TEST(fake_dxgadapter_initialize, an_adapter_with_outputs_is_asked_to_prioritize_hdr_first)
 { MockPlatform platform; CraftedMiniport miniport;
   FakeDxgadapter adapter(platform, miniport.table());
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
-  CHECK_EQ(adapter.mode_behavior().Request, 0u);   /* NULL: the default declines */
+  CHECK_EQ(adapter.mode_behavior().Request, 0u);
   miniport.set(DdiSlot::DxgkDdiControlModeBehavior, reinterpret_cast<DdiRoutine>(&control_mode_behavior));
   mode_status = 0; mode_satisfied = 0u; mode_not_satisfied = 1u; mode_requests = 0u;
   CHECK_EQ(adapter.initialize(&miniport, 0u), 0);
-  CHECK_EQ(mode_requests, 0u);                     /* no outputs: not asked */
+  CHECK_EQ(mode_requests, 0u);
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
   CHECK_EQ(mode_requests, 1u);
   CHECK_EQ(adapter.mode_behavior().NotSatisfied, 1u);
@@ -134,7 +128,7 @@ TEST(fake_dxgadapter_initialize, an_adapter_with_outputs_is_asked_to_prioritize_
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
   CHECK(!av::TestRegistry::instance().take_current_failure());
   mode_status = invalid_parameter;
-  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);  /* logged, start goes on */
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
   CHECK(av::TestRegistry::instance().take_current_failure());
   mode_status = 0; mode_satisfied = 1u;
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
@@ -151,12 +145,12 @@ TEST(fake_dxgadapter_initialize, a_wddm_2_display_adapter_is_asked_for_its_caps_
   const std::uint32_t asked = adapter.queries();
   miniport.caps().WDDMVersion = 0x2200;
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
-  CHECK_EQ(adapter.display_caps_extension(), 0x2u);   /* VirtualModeSupport by default */
+  CHECK_EQ(adapter.display_caps_extension(), 0x2u);
   miniport.fail_query(16, 0);
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
   CHECK_EQ(adapter.display_caps_extension(), 0u);
   CHECK_EQ(adapter.initialize(&miniport, 0u), 0);
-  CHECK_EQ(adapter.queries(), asked - 1u);           /* no outputs: not asked */
+  CHECK_EQ(adapter.queries(), asked - 1u);
   miniport.caps().WDDMVersion = 0x1000;
   miniport.caps().SchedulingCaps = 0u;
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
@@ -169,7 +163,7 @@ TEST(fake_dxgadapter_initialize, a_wddm_3_2_display_adapter_needs_monitor_link_i
   FakeDxgadapter adapter(platform, miniport.table());
   CHECK_EQ(adapter.initialize(&miniport, 1u), revision_mismatch);
   CHECK(adapter.failed_rule() == CapabilityRule::wddm_3_2_display_without_monitor_link_info);
-  CHECK_EQ(adapter.initialize(&miniport, 0u), 0);   /* render only */
+  CHECK_EQ(adapter.initialize(&miniport, 0u), 0);
   miniport.fail_query(1, no_memory);
   CHECK_EQ(adapter.initialize(&miniport, 1u), no_memory);
   miniport.fail_query(1, 0);
@@ -188,8 +182,6 @@ TEST(fake_dxgadapter_query, a_status_dxgkrnl_logs_as_invalid_fails_the_test)
   miniport.fail_query(13, invalid_parameter);
   CHECK_EQ(adapter.query(&miniport, 13, nullptr, 0u, output, sizeof output), invalid_parameter);
   CHECK(!av::TestRegistry::instance().take_current_failure()); }
-
-/* ---- DRIVERCAPS rules, one crafted answer each ------------------------------ */
 
 TEST(fake_dxgadapter_validate, refuses_each_claim_dxgadapter_initialize_refuses)
 { using Mutate = void (*)(DxgkDriverCapsRecord &);
@@ -225,7 +217,6 @@ TEST(fake_dxgadapter_validate, refuses_each_claim_dxgadapter_initialize_refuses)
   for (const Case &c : cases) {
       MockPlatform platform; CraftedMiniport miniport;
       c.mutate(miniport.caps());
-      /* A WDDMv2 answer reaches these checks only past MultiEngineAware. */
       if (miniport.caps().WDDMVersion >= 0x2000) miniport.caps().SchedulingCaps |= 0x1u;
       FakeDxgadapter adapter(platform, miniport.table());
       adapter.validate_wddm_caps();
@@ -300,8 +291,6 @@ TEST(fake_dxgadapter_validate, without_validate_wddm_caps_level_claims_pass)
   caps.MemoryManagementCaps = 0x10u;
   CHECK(adapter.validate(caps, 1u) == CapabilityRule::none); }
 
-/* ---- The queries that follow DRIVERCAPS ------------------------------------ */
-
 TEST(fake_dxgadapter_initialize, a_wddm_2_driver_is_asked_for_physical_adapter_caps)
 { MockPlatform platform; CraftedMiniport miniport;
   miniport.caps().WDDMVersion = 0x2000;
@@ -314,7 +303,7 @@ TEST(fake_dxgadapter_initialize, a_wddm_2_driver_is_asked_for_physical_adapter_c
   CHECK(adapter.failed_rule() == CapabilityRule::too_many_nodes);
   miniport.caps().WDDMVersion = 0x2500;
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
-  CHECK_EQ(adapter.queries(), 4u);   /* DRIVERCAPS, PHYSICALADAPTERCAPS, DISPLAY_DRIVERCAPS_EXTENSION, 64BITONLYCAPS */ }
+  CHECK_EQ(adapter.queries(), 4u);   }
 
 TEST(fake_dxgadapter_initialize, a_failed_physical_adapter_query_keeps_defaults)
 { MockPlatform platform; CraftedMiniport miniport;
@@ -370,12 +359,10 @@ TEST(fake_dxgadapter_initialize, native_gpu_fence_requires_its_caps_and_wddm_3_2
   miniport.register_slot(DdiSlot::DxgkDdiUpdateMonitorLinkInfo);
   FakeDxgadapter adapter(platform, miniport.table());
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
-  CHECK_EQ(adapter.queries(), 6u);   /* DRIVERCAPS, PHYSICAL, DISPLAY EXTENSION, DIRTYBIT, 64BITONLY, NATIVE_FENCE */
+  CHECK_EQ(adapter.queries(), 6u);
   miniport.fail_query(37, no_memory);
   CHECK_EQ(adapter.initialize(&miniport, 1u), no_memory);
   CHECK(adapter.failed_rule() == CapabilityRule::native_fence_caps_query_failed); }
-
-/* ---- CreateRenderCore's DDI rule -------------------------------------------- */
 
 namespace {
 
@@ -388,7 +375,7 @@ const DdiSlot full_wddm_1_render_set[] = {
     DdiSlot::DxgkDdiPresent, DdiSlot::DxgkDdiCreateAllocation, DdiSlot::DxgkDdiPatch, DdiSlot::DxgkDdiRender,
 };
 
-}  // namespace
+}
 
 TEST(fake_dxgadapter_create_render_core, no_render_ddi_is_a_display_only_adapter)
 { MockPlatform platform; CraftedMiniport miniport;
@@ -441,7 +428,7 @@ TEST(fake_dxgadapter_create_render_core, alternatives_wddm_2_and_compute_only_re
   miniport.register_slot(DdiSlot::DxgkDdiCollectDbgInfo2);
   miniport.caps().WDDMVersion = 0x2000;
   miniport.caps().SchedulingCaps = 0x1u;
-  miniport.caps().MiscCaps = 0x8u;   /* ComputeOnly */
+  miniport.caps().MiscCaps = 0x8u;
   FakeDxgadapter adapter(platform, miniport.table());
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
   CHECK_EQ(adapter.create_render_core(), 0);

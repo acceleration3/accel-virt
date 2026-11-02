@@ -1,6 +1,3 @@
-/* A mark names a batch only with a device, a context and a fence; one missing
- * any of them is waited on by no one. The waits themselves, on a hardware
- * queue and on a context, are the transport's to show (test_kmt_transport). */
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
 #include "harness/framework/test_registry.hpp"

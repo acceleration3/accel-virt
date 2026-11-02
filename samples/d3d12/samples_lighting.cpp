@@ -1,11 +1,8 @@
-// shadowmapping, shadowmappingomni, deferred, parallaxmapping, sphericalenvmapping, skeletalanimation, vulkanscene
 #include "framework.h"
 
 namespace samples {
 
 namespace {
-
-// ---------------------------------------------------------------- procedural helpers
 
 uint32_t mix_bits(uint32_t x)
 {
@@ -47,7 +44,6 @@ float power(float base, int exponent)
 float3 mix3(float3 a, float3 b, float t) { return a + (b - a) * t; }
 float3 mul3(float3 a, float3 b) { return {a.x * b.x, a.y * b.y, a.z * b.z}; }
 
-// Value noise on an integer lattice; x and y repeat every `period` cells when it is positive.
 float value_noise(float x, float y, float z, uint32_t seed, int period)
 {
     const float fx = floor(x), fy = floor(y), fz = floor(z);
@@ -90,8 +86,6 @@ uint32_t rgba(float r, float g, float b, float a = 1.0f)
     return (A << 24u) | (B << 16u) | (G << 8u) | R;
 }
 
-// A tiling field of rounded stones (a jittered Voronoi pattern): a height in
-// [0, 1] and the stone each texel belongs to.
 struct StoneField {
     float    *height = nullptr;
     uint32_t *stone = nullptr;
@@ -134,7 +128,6 @@ struct StoneField {
             }
     }
 
-    // Tangent-space normal in rgb, height in alpha.
     uint32_t *normal_height(float strength) const
     {
         uint32_t *texels = static_cast<uint32_t *>(allocate(sizeof(uint32_t) * size * size));
@@ -177,8 +170,6 @@ struct StoneField {
     }
 };
 
-// ---------------------------------------------------------------- meshes
-
 float3 transform_point(float3 p, const float4x4 &m)
 {
     return {p.x * m.m[0][0] + p.y * m.m[1][0] + p.z * m.m[2][0] + m.m[3][0],
@@ -186,7 +177,6 @@ float3 transform_point(float3 p, const float4x4 &m)
             p.x * m.m[0][2] + p.y * m.m[1][2] + p.z * m.m[2][2] + m.m[3][2]};
 }
 
-// Front faces are clockwise as seen: wind every triangle to face along its vertices' normals.
 void orient(Mesh &mesh)
 {
     for (uint32_t t = 0; t + 2 < mesh.index_count; t += 3) {
@@ -221,7 +211,6 @@ void grid_indices(Mesh &mesh, uint32_t base, uint32_t rows, uint32_t columns)
         }
 }
 
-// Along y, centred on the origin, closed at both ends.
 Mesh cylinder_mesh(float radius, float height, uint32_t segments)
 {
     Mesh mesh = new_mesh((segments + 1) * 4 + 2, segments * 12);
@@ -256,7 +245,6 @@ Mesh cylinder_mesh(float radius, float height, uint32_t segments)
     return mesh;
 }
 
-// A (p, q) torus knot: the stand-in for the originals' scanned models.
 Mesh knot_mesh(float scale_by, float tube, uint32_t p, uint32_t q, uint32_t rings, uint32_t sides)
 {
     Mesh mesh = new_mesh((rings + 1) * (sides + 1), rings * sides * 6);
@@ -265,7 +253,7 @@ Mesh knot_mesh(float scale_by, float tube, uint32_t p, uint32_t q, uint32_t ring
         return float3{r * cos(static_cast<float>(p) * t), r * sin(static_cast<float>(p) * t),
                       sin(static_cast<float>(q) * t)} * (scale_by / 3.0f);
     };
-    const float e = 0.02f;   // a second difference any smaller drowns in sin's rounding
+    const float e = 0.02f;
     for (uint32_t r = 0; r <= rings; r++) {
         const float t = static_cast<float>(r % rings) / static_cast<float>(rings) * 2.0f * pi;
         const float3 c = curve(t), before = curve(t - e), after = curve(t + e);
@@ -287,7 +275,6 @@ Mesh knot_mesh(float scale_by, float tube, uint32_t p, uint32_t q, uint32_t ring
     return mesh;
 }
 
-// A capsule from a (radius r0) to b (radius r1) with round ends.
 Mesh capsule_mesh(float3 a, float3 b, float r0, float r1, uint32_t body, uint32_t sides, float3 color)
 {
     const uint32_t cap = 5, total = cap * 2 + body;
@@ -329,10 +316,6 @@ Mesh capsule_mesh(float3 a, float3 b, float r0, float r1, uint32_t body, uint32_
     return mesh;
 }
 
-// Merges transformed, recoloured parts into one mesh. Normals go through the
-// cofactor matrix, which is right under any scale; `inside` turns a part inside
-// out (a room seen from within). Every triangle is then wound to face along its
-// normals, whatever winding the part came with.
 class MeshBuilder {
 public:
     MeshBuilder(uint32_t vertices, uint32_t indices) : vertex_capacity_(vertices), index_capacity_(indices)
@@ -369,7 +352,6 @@ public:
         orient(added);
         mesh_.index_count += part.index_count;
     }
-    // Adds and releases a generated part.
     void take(Mesh part, const float4x4 &t, float3 color, bool inside = false)
     {
         add(part, t, color, inside);
@@ -384,8 +366,6 @@ private:
 };
 
 const float3 white = {1, 1, 1};
-
-// ---------------------------------------------------------------- GPU helpers
 
 D3D12_RESOURCE_DESC texture_desc(uint32_t w, uint32_t h, DXGI_FORMAT format, uint32_t layers,
                                  D3D12_RESOURCE_FLAGS flags)
@@ -402,8 +382,6 @@ D3D12_RESOURCE_DESC texture_desc(uint32_t w, uint32_t h, DXGI_FORMAT format, uin
     return desc;
 }
 
-// A depth buffer; `readable` makes it a 16-bit shadow map a shader can sample
-// (its view written at `srv`). Starts in DEPTH_WRITE.
 struct DepthMap {
     ID3D12Resource             *texture = nullptr;
     D3D12_CPU_DESCRIPTOR_HANDLE view = {};
@@ -434,8 +412,6 @@ struct DepthMap {
     void release() { safe_release(texture); }
 };
 
-// A texture drawn into and then read, starting in RENDER_TARGET: one render
-// target view per layer, and a shader resource view written at `srv`.
 struct ColorMap {
     ID3D12Resource             *texture = nullptr;
     D3D12_CPU_DESCRIPTOR_HANDLE views[6] = {};
@@ -478,7 +454,6 @@ struct ColorMap {
     void release() { safe_release(texture); }
 };
 
-// The pipeline a full-screen triangle made from SV_VertexID draws with.
 D3D12_GRAPHICS_PIPELINE_STATE_DESC fullscreen(Gpu &gpu, ID3D12RootSignature *root, D3D12_SHADER_BYTECODE vs,
                                               D3D12_SHADER_BYTECODE ps)
 {
@@ -493,10 +468,6 @@ void draw_fullscreen(ID3D12GraphicsCommandList *list)
     list->DrawInstanced(3, 1, 0, 0);
 }
 
-// ================================================================ shadowmapping
-
-// A spot light's depth, rendered with slope-scaled bias into a 16-bit shadow
-// map, compared in hardware (SampleCmp) with a 3x3 PCF kernel.
 const char *const shadowmapping_source = R"(
 cbuffer Frame : register(b0) {
     row_major float4x4 view_projection;
@@ -566,7 +537,6 @@ public:
     {
         RootLayout layout;
         layout.cbv(0).srv_table(0, 1, D3D12_SHADER_VISIBILITY_PIXEL);
-        // Outside the shadow map counts as lit: the border compares as the far plane.
         layout.sampler(0, D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT, D3D12_TEXTURE_ADDRESS_MODE_BORDER,
                        D3D12_SHADER_VISIBILITY_PIXEL, D3D12_COMPARISON_FUNC_LESS_EQUAL);
         layout.samplers[0].BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE;
@@ -579,7 +549,6 @@ public:
         depth.NumRenderTargets = 0;
         depth.RTVFormats[0] = DXGI_FORMAT_UNKNOWN;
         depth.DSVFormat = DXGI_FORMAT_D16_UNORM;
-        // Vulkan's depthBiasConstant 1.25 and slope 1.75, in units of the 16-bit map.
         depth.RasterizerState.DepthBias = 2;
         depth.RasterizerState.SlopeScaledDepthBias = 1.75f;
         depth_ = gpu.pipeline(depth);
@@ -661,13 +630,6 @@ private:
     bool                 readable_ = false;
 };
 
-// ================================================================ shadowmappingomni
-
-// A point light's distance to everything, drawn into the six faces of an
-// R32_FLOAT cube map (one render target view per face) and looked up by
-// direction. A geometry shader writing SV_RenderTargetArrayIndex would do it
-// in one pass, but the host's bytecode comes from wine's d3dcompiler, which
-// rejects that semantic.
 const char *const shadowmappingomni_source = R"(
 cbuffer Frame : register(b0) {
     row_major float4x4 view_projection;
@@ -814,10 +776,6 @@ private:
     bool                 readable_ = false;
 };
 
-// ================================================================ deferred
-
-// A knight made of primitives: legs, armoured torso, outstretched arms, a
-// sword in one hand and a shield in the other.
 void build_knight(MeshBuilder &b)
 {
     const float3 steel = {0.85f, 0.85f, 0.88f}, dark = {0.45f, 0.45f, 0.48f}, gold = {1.0f, 0.55f, 0.15f};
@@ -837,11 +795,9 @@ void build_knight(MeshBuilder &b)
     b.take(sphere_mesh(0.1f, 14, 8), translate({0, 2.35f, -0.36f}), gold);
     b.take(sphere_mesh(0.28f, 24, 12), scale({1.0f, 1.2f, 1.05f}) * translate({0, 3.3f, 0}), steel);
     b.add(cube, scale({0.05f, 0.25f, 0.55f}) * translate({0, 3.6f, 0}), gold);
-    // sword, in the hand on -x, pointing up and out
     const float4x4 sword = rotate_z(0.9f) * translate({-1.75f, 2.3f, -0.22f});
     b.add(cube, scale({0.08f, 1.6f, 0.03f}) * translate({0, 0.95f, 0}) * sword, {1.0f, 1.0f, 1.0f});
     b.add(cube, scale({0.45f, 0.07f, 0.08f}) * translate({0, 0.15f, 0}) * sword, gold);
-    // shield on +x, facing the viewer
     b.take(cylinder_mesh(0.7f, 0.1f, 6), scale({1.0f, 1.0f, 1.3f}) * rotate_x(0.5f * pi) * rotate_y(-0.2f) *
                                               translate({1.95f, 2.2f, -0.4f}), dark);
     b.take(sphere_mesh(0.14f, 12, 8), scale({1, 1, 0.5f}) * translate({1.92f, 2.2f, -0.49f}), gold);
@@ -960,7 +916,6 @@ public:
             }
         albedo_ = gpu.texture(texels, size, size);
         release_memory(texels);
-        // t0 the albedo map, t1..t3 the G-buffer.
         const Texture *albedo[1] = {&albedo_};
         table_ = gpu.table(albedo, 1);
         const Descriptors gbuffer_views = gpu.views(3);
@@ -1040,10 +995,6 @@ private:
     bool                 readable_ = false;
 };
 
-// ================================================================ parallaxmapping
-
-// Left: parallax offset mapping (the original's technique). Right: parallax
-// occlusion mapping, a ray march through the height field with SampleGrad.
 const char *const parallaxmapping_source = R"(
 cbuffer Frame : register(b0) {
     row_major float4x4 view_projection;
@@ -1148,7 +1099,6 @@ public:
         ParallaxFrame frame;
         frame.view_projection = rotate_y(time * 0.1f) * look_at(eye, {0.2f, 0, 0.5f}, {0, 1, 0}) *
                                 perspective(radians(60), half / h, 0.05f, 50);
-        // The camera turns with the floor: the eye is fixed in the floor's frame, so rotate it back.
         const float4x4 turn = rotate_y(-time * 0.1f);
         const float3 world_eye = transform_point(eye, turn);
         frame.eye = {world_eye.x, world_eye.y, world_eye.z, 1};
@@ -1185,10 +1135,6 @@ private:
     Descriptors          table_;
 };
 
-// ================================================================ sphericalenvmapping
-
-// Material caps: pictures of a lit sphere, looked up by the view-space
-// reflection vector, one per layer of a texture array.
 const char *const sphericalenvmapping_source = R"(
 cbuffer Frame : register(b0) {
     row_major float4x4 world_view;
@@ -1223,7 +1169,6 @@ struct EnvFrame {
     float4   layer;
 };
 
-// A lit sphere as seen head-on: `kind` 0 pearl, 1 gold, 2 jade, 3 chrome.
 uint32_t matcap_texel(int kind, float nx, float ny)
 {
     const float r2 = nx * nx + ny * ny;
@@ -1310,10 +1255,6 @@ private:
     Texture              matcaps_;
 };
 
-// ================================================================ skeletalanimation
-
-// A goblin skinned to 16 bones: each vertex blends up to two bone matrices in
-// the vertex shader; the pose is a function of time.
 const char *const skeletalanimation_source = R"(
 cbuffer Frame : register(b0) {
     row_major float4x4 view_projection;
@@ -1473,7 +1414,6 @@ public:
     }
 
 private:
-    // Rest-pose joints (the pivot each bone turns about) and each bone's parent.
     static constexpr float joints[bone_count][3] = {
         {0, 1.55f, 0},     {0, 2.1f, 0},       {0, 2.65f, 0},     {0, 3.05f, 0},
         {0.5f, 2.85f, 0},  {0.72f, 2.1f, 0},   {0.82f, 1.4f, 0},
@@ -1484,8 +1424,6 @@ private:
 
     float3 joint(int i) const { return {joints[i][0], joints[i][1], joints[i][2]}; }
 
-    // Appends a capsule on `bone`, blended half and half with `parent` at its
-    // start and with `child` at its end so the joints bend smoothly.
     void add_part(SkinVertex *vertices, uint32_t *indices, uint32_t &vertex_count, uint32_t &index_count, int bone,
                   int parent, int child, float3 a, float3 b, float r0, float r1, float3 color, float boot_below)
     {
@@ -1553,7 +1491,6 @@ private:
         release_memory(indices);
     }
 
-    // Each bone turns about its joint in the rest pose's frame, then follows its parent.
     void pose(float time, float4x4 *bones) const
     {
         const float w = 2.0f * time;
@@ -1586,7 +1523,7 @@ private:
     ID3D12RootSignature *root_ = nullptr;
     ID3D12PipelineState *skin_pipeline_ = nullptr;
     ID3D12PipelineState *floor_pipeline_ = nullptr;
-    DrawMesh             goblin_;   // SkinVertex, not Vertex
+    DrawMesh             goblin_;
     DrawMesh             floor_;
     Texture              floor_normal_;
     Texture              floor_color_;
@@ -1594,11 +1531,6 @@ private:
     Descriptors          table_;
 };
 
-// ================================================================ vulkanscene
-
-// The demo scene: a skybox cube map of a red night sky, glossy red models
-// with the original's hard-saturating "mesh" shading in front of a pale disc,
-// and an emblem above and a plate below drawn with the plainer "logo" shading.
 const char *const vulkanscene_source = R"(
 cbuffer Frame : register(b0) {
     row_major float4x4 view_projection;
@@ -1657,7 +1589,6 @@ struct SceneFrame {
     float4   light;
 };
 
-// The direction a cube-map face's texel looks along (D3D's face order and orientation).
 float3 cube_direction(uint32_t face, float s, float t)
 {
     switch (face) {
@@ -1806,7 +1737,7 @@ private:
     Texture              sky_;
 };
 
-}  // namespace
+}
 
 void register_lighting(Sample **all, uint32_t &made)
 {
@@ -1819,4 +1750,4 @@ void register_lighting(Sample **all, uint32_t &made)
     all[made++] = new VulkanScene();
 }
 
-}  // namespace samples
+}

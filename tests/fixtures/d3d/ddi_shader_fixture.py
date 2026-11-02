@@ -1,22 +1,7 @@
 #!/usr/bin/env python3
-"""A compiled DXBC shader, as the Direct3D runtime hands it to a driver.
-
-The runtime never gives a user-mode driver the container an application
-compiled: it gives the token stream and each signature as registers, masks and
-system values (D3D11_1DDIARG_STAGE_IO_SIGNATURES). The executor rebuilds a
-container from exactly that, so the tests that prove it must start from exactly
-that too. This splits a real fxc/d3dcompiler container the way the runtime
-does and writes it as a C++ header:
-
-    ddi_shader_fixture.py <name> <shader.dxbc> > <name>.hpp
-
-The system values are D3D10_SB_NAME, the token format's, which is what the DDI
-carries; a pixel shader's render-target outputs carry none.
-"""
 import struct
 import sys
 
-# D3D_NAME -> D3D10_SB_NAME, for the values the two spell differently.
 TARGET = 64
 DEPTH = 65
 

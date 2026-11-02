@@ -1,13 +1,3 @@
-/* The NT handles this process holds for shared objects, and the ids behind
- * them (feature 053, US1).
- *
- * 047's handles were the ICD's own numbers and meant nothing outside the
- * process. These are kernel objects: one is minted by the kernel for an
- * allocation this process created, or adopted from one another process sent,
- * and either way the id behind it came out of the creating process's own
- * private driver data. So what every test here asks is which handles resolve:
- * a handle from nowhere must not, or a guest could name an object it never
- * opened. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -25,15 +15,12 @@
 #include <cstdint>
 
 namespace av::icd {
-
-/* Rows a mint or an adopt never leaves behind. */
 struct SharedHandlesProbe {
-    /* The row holding `object_id`. */
     static SharedHandleSlot &slot_for(SharedHandles &handles, std::uint64_t object_id)
     { return *handles.row_for(object_id); }
 };
 
-}  // namespace av::icd
+}
 
 namespace {
 
@@ -44,9 +31,6 @@ using av::icd::SharedHandlesProbe;
 
 constexpr std::uint64_t object_bytes = 4u * 4096u;
 
-/* One process's kernel: an adapter, a device, and allocations created the way
- * a shareable one is - a descriptor with a record behind it, the id already
- * minted, because that is what the miniport hands back. */
 class Kernel {
 public:
     Kernel() : trace_(), lock_(trace_, 'S'), kmt_(), device_(0u)
@@ -63,8 +47,6 @@ public:
     av::RecordingThreadLock &lock() { return lock_; }
     std::uint32_t         device() const { return device_; }
 
-    /* A create that asks for an identity, with the id the kernel minted read
-     * back out of the caller's own bytes - which is where an export gets it. */
     std::uint32_t create(std::uint64_t &object_id)
     {
         const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
@@ -97,7 +79,7 @@ private:
                                    av::SharedObjectRecord::encoded_size] = {};
 };
 
-}  // namespace
+}
 
 TEST(shared_handles, a_new_table_resolves_nothing)
 { Kernel        kernel;
@@ -123,8 +105,6 @@ TEST(shared_handles_mint, a_minted_handle_resolves_to_the_id_it_was_minted_for)
   CHECK_EQ(id, minted);
   CHECK_EQ(handles.live(), 1u);
   CHECK(handles.invariants_hold());
-  /* The same object minted again is the same handle: one object, one handle,
-   * as Windows answers for a handle to one object. */
   std::uint64_t again = 0u;
   CHECK_STATUS(handles.mint(kernel.device(), allocation, minted, again), Status::ok);
   CHECK_EQ(again, handle);
@@ -140,7 +120,6 @@ TEST(shared_handles_mint, refuses_an_id_of_zero_and_what_the_kernel_will_not_sha
   CHECK_STATUS(handles.mint(kernel.device(), allocation, 0u, handle), Status::invalid_parameter);
   CHECK_EQ(handle, 0u);
   CHECK_EQ(kernel.kmt().calls(MockKmt::Call::share_object), 0u);
-  /* An allocation the kernel does not know. */
   CHECK(handles.mint(kernel.device(), allocation + 0x1000u, minted, handle) != Status::ok);
   CHECK_EQ(handle, 0u);
   CHECK_EQ(handles.live(), 0u);
@@ -154,7 +133,6 @@ TEST(shared_handles_adopt, a_handle_another_process_sent_is_opened_and_its_id_re
   std::uint64_t       handle = 0u;
   CHECK_STATUS(exporter.mint(kernel.device(), allocation, minted, handle), Status::ok);
 
-  /* A second table is a second process: it minted nothing and knows no ids. */
   av::LockTrace           trace;
   av::RecordingThreadLock lock(trace, 'T');
   SharedHandles           importer(kernel.kmt(), lock, kernel.memory());
@@ -166,13 +144,11 @@ TEST(shared_handles_adopt, a_handle_another_process_sent_is_opened_and_its_id_re
   CHECK_EQ(id, minted);
   CHECK_EQ(importer.live(), 1u);
   CHECK(importer.invariants_hold());
-  /* Adopting it twice opens nothing again. */
   std::uint64_t once_more = 0u;
   CHECK_STATUS(importer.adopt(kernel.device(), handle, once_more), Status::ok);
   CHECK_EQ(once_more, minted);
   CHECK_EQ(kernel.kmt().calls(MockKmt::Call::open_shared_object), 1u); }
 
-/* The refusal the whole table exists for. */
 TEST(shared_handles_adopt, a_handle_from_nowhere_is_refused_and_resolves_to_nothing)
 { Kernel        kernel;
   SharedHandles handles(kernel.kmt(), kernel.lock(), kernel.memory());
@@ -185,8 +161,6 @@ TEST(shared_handles_adopt, a_handle_from_nowhere_is_refused_and_resolves_to_noth
   CHECK_EQ(handles.live(), 0u);
   CHECK(handles.invariants_hold()); }
 
-/* A handle whose bytes carry no record, or one whose record has no id, names
- * no object: the kernel opened it, and the table still refuses it. */
 TEST(shared_handles_adopt, a_handle_whose_bytes_carry_no_identity_is_refused_and_given_back)
 { Kernel              kernel;
   SharedHandles       handles(kernel.kmt(), kernel.lock(), kernel.memory());
@@ -200,7 +174,6 @@ TEST(shared_handles_adopt, a_handle_whose_bytes_carry_no_identity_is_refused_and
   handles.forget(handle);
   CHECK(!handles.resolve(handle, id));
   CHECK_EQ(handles.live(), 0u);
-  /* Forgetting one it does not hold changes nothing. */
   handles.forget(handle);
   handles.forget(0u);
   CHECK_EQ(handles.live(), 0u);
@@ -230,15 +203,9 @@ TEST(shared_handles_forget_device, a_device_destroyed_takes_every_handle_it_hold
   CHECK_EQ(kernel.kmt().calls(MockKmt::Call::close_shared_object), 2u);
   CHECK(handles.invariants_hold()); }
 
-/* No count of handles past which one is refused: the table this replaced
- * stopped at 64, and a mirror's capture keeps three per window. 65 is past
- * that and past one block of the pool, which is as many as the mock kernel
- * shares. */
 TEST(shared_handles, holds_more_than_any_fixed_table_did)
 { Kernel        kernel;
   SharedHandles handles(kernel.kmt(), kernel.lock(), kernel.memory());
-  /* One allocation shared under many ids: what fills a table is rows, and
-   * the mock keeps far fewer allocations than this asks of it. */
   std::uint64_t       minted = 0u;
   const std::uint32_t allocation = kernel.create(minted);
   std::uint64_t       handle = 0u;
@@ -250,8 +217,6 @@ TEST(shared_handles, holds_more_than_any_fixed_table_did)
   CHECK_EQ(id, av::MockKmt::max_shared);
   CHECK(handles.invariants_hold()); }
 
-/* A row that cannot be had is refused before the kernel is asked: nothing is
- * shared or opened that the table could not name. */
 TEST(shared_handles, no_memory_for_a_row_mints_and_opens_nothing)
 { Kernel        kernel;
   SharedHandles handles(kernel.kmt(), kernel.lock(), kernel.memory());
@@ -300,11 +265,6 @@ TEST(shared_handles_invariants, refuse_a_row_with_no_handle_no_id_or_either_held
   row.object_id_ = two;
   CHECK(handles.invariants_hold()); }
 
-/* The bytes that come back from an open are the creating process's, which this
- * one did not write, so each of the three things that can be wrong with them is
- * refused on its own and the allocation the kernel opened is given back. A
- * handle that resolved to an id read out of bytes like these would name
- * whatever object happened to hold that number (feature 053). */
 TEST(shared_handles_adopt, bytes_that_carry_no_usable_record_are_each_refused_and_given_back)
 { constexpr std::uint32_t whole =
       av::AllocationDescriptor::encoded_size + static_cast<std::uint32_t>(av::SharedObjectRecord::encoded_size);
@@ -312,7 +272,7 @@ TEST(shared_handles_adopt, bytes_that_carry_no_usable_record_are_each_refused_an
                                             av::SurfaceLayout(64u, 64u, 21u, 256u), object_bytes,
                                             av::ScanoutTarget());
 
-  { /* Too few bytes to hold a record at all. */
+  {
     Kernel        kernel;
     SharedHandles handles(kernel.kmt(), kernel.lock(), kernel.memory());
     std::uint64_t minted = 0u;
@@ -325,14 +285,10 @@ TEST(shared_handles_adopt, bytes_that_carry_no_usable_record_are_each_refused_an
     CHECK_EQ(id, 0u);
     CHECK_EQ(handles.live(), 0u);
     CHECK(handles.invariants_hold());
-    /* And the resource the open made was destroyed rather than left behind:
-     * named as the resource it is, which is the only call that takes one. */
     CHECK_EQ(kernel.kmt().calls(MockKmt::Call::destroy_shared_allocation), 1u);
     CHECK_EQ(kernel.kmt().calls(MockKmt::Call::destroy_allocation), 0u); }
 
-  { /* The right length, and no record decodes from it. The bytes are the
-     * creating process's, so they are scripted onto the share rather than
-     * created here: nothing this kernel would make looks like this. */
+  {
     Kernel        kernel;
     SharedHandles handles(kernel.kmt(), kernel.lock(), kernel.memory());
     std::uint64_t minted = 0u;
@@ -351,8 +307,7 @@ TEST(shared_handles_adopt, bytes_that_carry_no_usable_record_are_each_refused_an
     CHECK(handles.invariants_hold());
     CHECK_EQ(kernel.kmt().calls(MockKmt::Call::destroy_shared_allocation), 1u); }
 
-  { /* A record that decodes and names nothing: the creating process asked and
-     * its kernel never answered. */
+  {
     Kernel        kernel;
     SharedHandles handles(kernel.kmt(), kernel.lock(), kernel.memory());
     std::uint64_t minted = 0u;

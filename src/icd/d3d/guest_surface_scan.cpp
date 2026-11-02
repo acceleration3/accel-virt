@@ -10,11 +10,9 @@ namespace {
 
 constexpr uintptr_t vector_mask = 15u;
 constexpr size_t    vector_bytes = 16u;
-/* MOVNTDQA fills a streaming buffer a line (64 bytes) at a time, and the
- * four loads of a line are what makes it fast. */
 constexpr size_t    line_bytes = 64u;
 
-}  // namespace
+}
 
 GuestSurfaceScan::GuestSurfaceScan(uint8_t *shadow, size_t pitch, uint32_t height)
     : shadow_(shadow), pitch_(pitch), height_(height)
@@ -22,12 +20,6 @@ GuestSurfaceScan::GuestSurfaceScan(uint8_t *shadow, size_t pitch, uint32_t heigh
     AV_SCOPE("GuestSurfaceScan::GuestSurfaceScan");
 }
 
-/* The bytes before the first sixteen-byte boundary and after the last whole
- * line or vector are compared as they are: MOVNTDQA wants an aligned address,
- * and a pitch need not be a multiple of sixteen. The shadow is read with
- * unaligned loads. Windows on these guests requires SSE4.1 (Windows 11
- * requires SSE4.2), so there is no runtime fallback; the target attribute keeps
- * the rest of the build's flags as they are. */
 __attribute__((target("sse4.1"))) bool GuestSurfaceScan::row_differs(const uint8_t *pages, uint32_t row) const
 {
     AV_SCOPE("GuestSurfaceScan::row_differs");
@@ -59,8 +51,6 @@ __attribute__((target("sse4.1"))) bool GuestSurfaceScan::row_differs(const uint8
     return left != 0u && __builtin_memcmp(page, shadow, left) != 0;
 }
 
-/* The band is one run of bytes from the first row's start, so only its start
- * can be unaligned. */
 __attribute__((target("sse4.1"))) void GuestSurfaceScan::copy_rows(const uint8_t *pages, uint32_t first, uint32_t end)
 {
     AV_SCOPE("GuestSurfaceScan::copy_rows");
@@ -98,4 +88,4 @@ void GuestSurfaceScan::copy_all(const uint8_t *pages)
     copy_rows(pages, 0u, height_);
 }
 
-}  // namespace av::d3d
+}

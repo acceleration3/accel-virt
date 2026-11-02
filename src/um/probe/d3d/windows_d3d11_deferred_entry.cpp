@@ -2,8 +2,6 @@
 
 #include "core/trace/function_scope.hpp"
 
-/* psapi.h is not in the pinned SDK subset; PROCESS_MEMORY_COUNTERS_EX and the
- * call as that header declares them (SDK 10.0.26100, um/psapi.h). */
 extern "C" {
 struct AvProcessMemoryCountersEx {
     DWORD  cb;
@@ -27,7 +25,7 @@ namespace {
 
 constexpr HRESULT invalid_argument = static_cast<HRESULT>(0x80070057u);
 
-}  // namespace
+}
 
 WindowsD3d11DeferredEntry::WindowsD3d11DeferredEntry()
     : swapchain_(nullptr), device_(nullptr), immediate_(nullptr), constants_{}, constant_count_(0u),
@@ -208,4 +206,4 @@ void WindowsD3d11DeferredEntry::release()
     context_count_ = 0u;
 }
 
-}  // namespace av
+}

@@ -46,4 +46,4 @@ bool TextureHold::retired() const
     return __atomic_load_n(&held_, __ATOMIC_ACQUIRE) && __atomic_load_n(&references_, __ATOMIC_ACQUIRE) == 0u;
 }
 
-}  // namespace av
+}

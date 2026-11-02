@@ -55,9 +55,6 @@ Status GpuBinding::bind_uuid(const char *selection, TextBuffer &message)
     return refuse(Status::not_found, message);
 }
 
-/* The glue creates what it needs on the physical device this names, so a host
- * that cannot take the GPU leaves the device unbound rather than running on
- * whichever one the glue would have picked. */
 Status GpuBinding::take(uint32_t index, TextBuffer &message)
 {
     AV_SCOPE("GpuBinding::take");
@@ -91,4 +88,4 @@ uint32_t GpuBinding::index() const
     return index_;
 }
 
-}  // namespace av
+}

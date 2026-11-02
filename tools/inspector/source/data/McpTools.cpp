@@ -60,7 +60,6 @@ JsonValue Rate(const Optional<f64>& rate) {
     return rate ? JsonValue(*rate) : JsonValue();
 }
 
-// "device/1240628", "1240628", or "device" (the first live process of that module).
 const ProcessSample* ResolveProcess(const Sample& sample, StringView wanted) {
     if (const ProcessSample* exact = sample.Find(wanted)) {
         return exact;
@@ -117,7 +116,6 @@ JsonValue ThreadJson(const ThreadView& view) {
     return thread;
 }
 
-// What a table with no thread in it means, said where a caller would otherwise read "no threads".
 JsonValue TracingNote(const ProcessSample& process) {
     if (!process.trace) {
         return JsonValue(process.trace_error.IsEmpty() ? String("no trace table") : process.trace_error);
@@ -129,7 +127,7 @@ JsonValue TracingNote(const ProcessSample& process) {
     return JsonValue();
 }
 
-} // namespace
+}
 
 McpTools::McpTools(Model& model) : m_model(model) {}
 
@@ -530,4 +528,4 @@ mcp::ToolResult McpTools::SampleNow(const JsonValue&) {
     return result;
 }
 
-} // namespace inspector
+}

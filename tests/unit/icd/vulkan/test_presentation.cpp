@@ -1,7 +1,3 @@
-/* The swapchain entries as the loader calls them (feature 046,
- * contracts/wsi.md): made on a device this ICD made and a surface it made,
- * images handed out and presented on the window, the old swapchain retired, and
- * everything of a device gone when the device is. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
@@ -17,10 +13,7 @@
 #include <cstring>
 
 namespace av::icd {
-
-/* Breaks what the WSI holds under it: a surface slot, and a swapchain. */
 struct SurfaceTableProbe {
-    /* A window in a slot no instance owns: nothing would ever destroy it. */
     static void strip_the_instance(SurfaceTable &table) { table.slots_[0].instance_ = VK_NULL_HANDLE; }
 };
 
@@ -35,7 +28,7 @@ struct PresentationProbe {
           if (slot.chain_.constructed()) SwapchainProbe::hold_past_the_count(slot.chain_.object()); }
 };
 
-}  // namespace av::icd
+}
 
 using av::IcdRig;
 using av::ScriptedHost;
@@ -74,8 +67,6 @@ VkSwapchainCreateInfoKHR create_info(VkSurfaceKHR surface)
   info.clipped = VK_TRUE;
   return info; }
 
-/* The WSI of a process: the ICD's root with an instance and a device it made,
- * a window, and a surface on it. */
 class PresentationRig {
 public:
     PresentationRig() : wsi_(rig_.platform(), rig_.kmt(), rig_.windows(), rig_.chains(), rig_.log(), rig_.root(), host_)
@@ -115,13 +106,12 @@ private:
     VkSurfaceKHR         surface_ = VK_NULL_HANDLE;
 };
 
-}  // namespace
+}
 
 TEST(icd_presentation, a_swapchain_presents_its_frame_on_the_window)
 { PresentationRig rig;
   const VkSwapchainKHR swapchain = rig.create(create_info(rig.surface()));
   CHECK(swapchain != VK_NULL_HANDLE);
-  /* A swapchain's handle is its slot's address. */
   CHECK(reinterpret_cast<const SwapchainSlot *>(swapchain)->chain_.constructed());
   CHECK_EQ(rig.wsi().swapchains(), 1u);
   CHECK(rig.wsi().invariants_hold());
@@ -147,8 +137,6 @@ TEST(icd_presentation, a_swapchain_presents_its_frame_on_the_window)
   CHECK_EQ(rig.wsi().swapchains(), 0u);
   CHECK(rig.wsi().invariants_hold()); }
 
-/* A swapchain calls the ICD's own entries, which is how a present's copy runs
- * through the same path an application's own commands do. */
 TEST(icd_presentation, the_entries_a_swapchain_calls_are_the_icd_s_own)
 { PresentationRig rig;
   av::icd::IcdEntryLookup lookup(rig.rig().root());
@@ -158,8 +146,6 @@ TEST(icd_presentation, the_entries_a_swapchain_calls_are_the_icd_s_own)
   CHECK(lookup.entry("vkCmdCopyImageToBuffer") != nullptr);
   CHECK(lookup.entry("vkNotAnEntryPoint") == nullptr); }
 
-/* A swapchain is made on a device this ICD made, for a surface it made, and
- * nothing else. */
 TEST(icd_presentation, a_swapchain_needs_this_driver_s_own_device_and_surface)
 { PresentationRig rig;
   VkSwapchainKHR swapchain = reinterpret_cast<VkSwapchainKHR>(0x1u);
@@ -171,8 +157,6 @@ TEST(icd_presentation, a_swapchain_needs_this_driver_s_own_device_and_surface)
   CHECK_EQ(rig.wsi().create_swapchain(rig.device(), nullptr, &swapchain), VK_ERROR_INITIALIZATION_FAILED);
   const VkSwapchainCreateInfoKHR nowhere = create_info(reinterpret_cast<VkSurfaceKHR>(0x40u));
   CHECK_EQ(rig.wsi().create_swapchain(rig.device(), &nowhere, &swapchain), VK_ERROR_SURFACE_LOST_KHR);
-  /* A create structure the swapchain itself refuses is that refusal, and
-   * leaves no slot taken. */
   VkSwapchainCreateInfoKHR mailbox = info;
   mailbox.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
   CHECK_EQ(rig.wsi().create_swapchain(rig.device(), &mailbox, &swapchain), VK_ERROR_INITIALIZATION_FAILED);
@@ -192,9 +176,6 @@ TEST(icd_presentation, more_swapchains_than_the_process_holds_are_out_of_memory)
   CHECK_EQ(rig.wsi().swapchains(), Presentation::max_swapchains - 1u);
   CHECK(rig.wsi().invariants_hold()); }
 
-/* The application recreates with the old swapchain named: the old one hands
- * nothing out after it, as the specification says, and is destroyed by the
- * application on its own. */
 TEST(icd_presentation, the_old_swapchain_a_recreation_names_is_retired)
 { PresentationRig rig;
   const VkSwapchainKHR first = rig.create(create_info(rig.surface()));
@@ -210,8 +191,6 @@ TEST(icd_presentation, the_old_swapchain_a_recreation_names_is_retired)
   CHECK_EQ(rig.wsi().swapchains(), 1u);
   CHECK(rig.wsi().invariants_hold()); }
 
-/* Retired even when the recreation fails, as the specification has it: the
- * old one gave its window's chain up before the new one was asked for. */
 TEST(icd_presentation, the_old_swapchain_is_retired_even_when_its_recreation_fails)
 { PresentationRig rig;
   const VkSwapchainKHR first = rig.create(create_info(rig.surface()));
@@ -225,8 +204,6 @@ TEST(icd_presentation, the_old_swapchain_is_retired_even_when_its_recreation_fai
   CHECK_EQ(rig.wsi().acquire(rig.device(), first, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_ERROR_OUT_OF_DATE_KHR);
   CHECK_EQ(rig.wsi().swapchains(), 1u); }
 
-/* A handle from nowhere, and a handle of another device: each entry answers
- * what the specification's caller can act on. */
 TEST(icd_presentation, a_swapchain_this_driver_did_not_make_is_out_of_date_or_refused)
 { PresentationRig rig;
   const VkSwapchainKHR swapchain = rig.create(create_info(rig.surface()));
@@ -239,15 +216,11 @@ TEST(icd_presentation, a_swapchain_this_driver_did_not_make_is_out_of_date_or_re
   int stack = 0;
   VkDevice other = reinterpret_cast<VkDevice>(&stack);
   CHECK_EQ(rig.wsi().acquire(other, swapchain, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_ERROR_OUT_OF_DATE_KHR);
-  /* Destroying it through another device does nothing. */
   rig.wsi().destroy_swapchain(other, swapchain);
   rig.wsi().destroy_swapchain(rig.device(), nowhere);
   CHECK_EQ(rig.wsi().swapchains(), 1u);
   CHECK(rig.wsi().invariants_hold()); }
 
-/* A present names several swapchains: each result is its own, and the answer
- * is the worst of them - an error over a success code, a success code over
- * plain success. */
 TEST(icd_presentation, a_present_of_several_swapchains_answers_the_worst_result)
 { PresentationRig rig;
   const VkSwapchainKHR first = rig.create(create_info(rig.surface()));
@@ -270,8 +243,6 @@ TEST(icd_presentation, a_present_of_several_swapchains_answers_the_worst_result)
   CHECK_EQ(rig.rig().windows().blits(), 2u);
   CHECK(rig.wsi().invariants_hold()); }
 
-/* Only the first copy waits on the present's semaphores: they are waited on
- * once, as vkQueuePresentKHR's own submission would. */
 TEST(icd_presentation, the_present_s_semaphores_are_waited_on_once)
 { PresentationRig rig;
   const VkSwapchainKHR first = rig.create(create_info(rig.surface()));
@@ -289,18 +260,14 @@ TEST(icd_presentation, the_present_s_semaphores_are_waited_on_once)
   present.pSwapchains = chains;
   present.pImageIndices = indices;
   CHECK_EQ(rig.wsi().present(rig.host().queue(), &present), VK_SUCCESS);
-  /* The second copy's submit, the last one, waited on nothing. */
   CHECK_EQ(rig.host().submits(), 2u);
   CHECK_EQ(rig.host().last_wait_count(), 0u); }
 
-/* vkDestroyDevice takes its swapchains with it - an application that destroys
- * the device first must not leave host objects behind. */
 TEST(icd_presentation, a_device_that_goes_takes_its_swapchains)
 { PresentationRig rig;
   static_cast<void>(rig.create(create_info(rig.surface())));
   CHECK_EQ(rig.wsi().swapchains(), 1u);
   CHECK_EQ(rig.host().images(), images);
-  /* Another device's destruction leaves it alone. */
   int stack = 0;
   rig.wsi().forget_device(reinterpret_cast<VkDevice>(&stack));
   CHECK_EQ(rig.wsi().swapchains(), 1u);
@@ -309,7 +276,6 @@ TEST(icd_presentation, a_device_that_goes_takes_its_swapchains)
   CHECK_EQ(rig.host().images(), 0u);
   CHECK(rig.wsi().invariants_hold()); }
 
-/* The trace names the WSI's state: what a live inspection reads. */
 TEST(icd_presentation, its_report_names_the_surfaces_and_each_swapchain_s_presents)
 { PresentationRig rig;
   const VkSwapchainKHR swapchain = rig.create(create_info(rig.surface()));
@@ -330,8 +296,6 @@ TEST(icd_presentation, its_report_names_the_surfaces_and_each_swapchain_s_presen
   CHECK(std::strstr(text, "swapchain/0") != nullptr);
   CHECK(std::strstr(text, "presented=1") != nullptr); }
 
-/* What the WSI holds must hold: a surface slot no instance owns, or a
- * swapchain that lost an invariant, is the whole driver's invariant broken. */
 TEST(icd_presentation, its_invariants_refuse_a_swapchain_that_lost_one)
 { PresentationRig rig;
   static_cast<void>(rig.create(create_info(rig.surface())));
@@ -339,15 +303,12 @@ TEST(icd_presentation, its_invariants_refuse_a_swapchain_that_lost_one)
   PresentationProbe::break_a_swapchain(rig.wsi());
   CHECK(!rig.wsi().invariants_hold()); }
 
-/* A surface slot no instance owns is the whole driver's invariant broken. */
 TEST(icd_presentation, its_invariants_refuse_a_surface_no_instance_owns)
 { PresentationRig rig;
   CHECK(rig.wsi().invariants_hold());
   PresentationProbe::orphan_a_surface(rig.wsi());
   CHECK(!rig.wsi().invariants_hold()); }
 
-/* A handle whose swapchain is destroyed is a handle from nowhere: the slot is
- * still there, and must answer nothing. */
 TEST(icd_presentation, a_destroyed_swapchain_s_handle_answers_nothing)
 { PresentationRig rig;
   const VkSwapchainKHR live = rig.create(create_info(rig.surface()));
@@ -357,7 +318,6 @@ TEST(icd_presentation, a_destroyed_swapchain_s_handle_answers_nothing)
   CHECK_EQ(rig.wsi().acquire(rig.device(), swapchain, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_ERROR_OUT_OF_DATE_KHR);
   std::uint32_t count = 0u;
   CHECK_EQ(rig.wsi().swapchain_images(rig.device(), swapchain, &count, nullptr), VK_ERROR_INITIALIZATION_FAILED);
-  /* A present that starts with an error keeps it, whatever follows. */
   CHECK_EQ(rig.wsi().acquire(rig.device(), live, 0u, VK_NULL_HANDLE, VK_NULL_HANDLE, &index), VK_SUCCESS);
   const VkSwapchainKHR chains[] = {swapchain, live};
   std::uint32_t indices[2] = {0u, index};

@@ -1,8 +1,3 @@
-/* What PlaneScanout tells the device of a plane: its image's host key, its
- * destination cut by its clip and the head's edges and its source cut in the
- * same proportion, its filter, and for video how the host converts it; a
- * plane with nothing left on the head, or no key, is turned off. Sending
- * needs a device (DisplayScanout's tests carry planes to one). */
 #include "miniport/ddi/dxgk_multiplane_overlay_attributes3_record.hpp"
 #include "miniport/display/overlay_plane.hpp"
 #include "miniport/display/plane_scanout.hpp"
@@ -69,11 +64,10 @@ DxgkMultiplaneOverlayAttributes3Record attributes(av::RectRecord from, av::RectR
     return made;
 }
 
-}  // namespace
+}
 
 TEST(plane_scanout_request, cuts_a_plane_to_its_clip_and_the_head_in_proportion)
 { Fixture fixture;
-  /* 640x480 shown at twice its size from 100,100; clipped at 400,300; the head 1280x800. */
   DxgkMultiplaneOverlayAttributes3Record shown = attributes({0, 0, 640, 480}, {100, 100, 1380, 1060}, {400, 300, 2000, 2000});
   shown.StretchQuality = 1u;
   const ScanoutPlaneRequest request =
@@ -87,9 +81,9 @@ TEST(plane_scanout_request, cuts_a_plane_to_its_clip_and_the_head_in_proportion)
   CHECK_EQ(request.destination()[1], 300);
   CHECK_EQ(request.destination()[2], 1280);
   CHECK_EQ(request.destination()[3], 800);
-  CHECK_EQ(request.source()[0], 150);   /* (400 - 100) / 2 */
+  CHECK_EQ(request.source()[0], 150);
   CHECK_EQ(request.source()[1], 100);
-  CHECK_EQ(request.source()[2], 590);   /* (1280 - 100) / 2 */
+  CHECK_EQ(request.source()[2], 590);
   CHECK_EQ(request.source()[3], 350); }
 
 TEST(plane_scanout_request, a_clip_of_no_size_is_none_and_a_plane_off_the_head_is_off)
@@ -108,8 +102,6 @@ TEST(plane_scanout_request, a_clip_of_no_size_is_none_and_a_plane_off_the_head_i
   CHECK(!unkeyed.shown());
   CHECK(!fixture.planes().request(0u, OverlayPlane(1u, 9u), 1280u, 800u).shown()); }
 
-/* OverlayPlane::colour_space as the host's conversion: 5 full-range BT.601,
- * 6 studio BT.601, 7 full BT.601, 8 studio BT.709, 9 full BT.709; RGB none. */
 TEST(plane_scanout_request, a_video_plane_says_how_the_host_converts_it)
 { Fixture fixture;
   struct Case {

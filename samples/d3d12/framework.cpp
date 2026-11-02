@@ -2,8 +2,6 @@
 
 namespace samples {
 
-// ---------------------------------------------------------------- text
-
 void copy_text(char *to, size_t capacity, const char *from)
 {
     size_t i = 0;
@@ -60,8 +58,6 @@ bool same_text(const char *a, const char *b)
     return *a == *b;
 }
 
-// ---------------------------------------------------------------- meshes
-
 void Mesh::release()
 {
     release_memory(vertices);
@@ -87,8 +83,6 @@ void push_vertex(Mesh &mesh, float3 p, float3 n, float2 uv, float3 color)
 
 void push_quad(Mesh &mesh, uint32_t a, uint32_t b, uint32_t c, uint32_t d)
 {
-    // Front faces are clockwise as seen: every generator winds its quads to
-    // face the way its normals point, whatever order it listed them in.
     const Vertex *v = mesh.vertices;
     const float3 facing = cross(v[b].position - v[a].position, v[c].position - v[a].position);
     if (dot(facing, v[a].normal + v[b].normal + v[c].normal + v[d].normal) < 0) {
@@ -102,7 +96,7 @@ void push_quad(Mesh &mesh, uint32_t a, uint32_t b, uint32_t c, uint32_t d)
     mesh.index_count += 6;
 }
 
-}  // namespace
+}
 
 Mesh cube_mesh(float size)
 {
@@ -183,8 +177,6 @@ Mesh plane_mesh(float size, uint32_t cells, float uv_scale)
     return mesh;
 }
 
-// The gears sample's gear: a toothed ring with front, back, outer and inner
-// faces, flat shaded, as the old OpenGL gears demo built it.
 Mesh gear_mesh(float inner, float outer, float width, uint32_t teeth, float tooth_depth, float3 color)
 {
     Mesh mesh = allocate_mesh(teeth * 40, teeth * 60);
@@ -192,7 +184,6 @@ Mesh gear_mesh(float inner, float outer, float width, uint32_t teeth, float toot
     const float da = 2.0f * pi / static_cast<float>(teeth) / 4.0f;
     const float hw = width * 0.5f;
     auto quad = [&](float3 a, float3 b, float3 c, float3 d, float3 n) {
-        // Front faces are clockwise as seen: wind every quad to face along its normal.
         if (dot(cross(b - a, c - a), n) < 0) {
             const float3 swap = b;
             b = d;
@@ -213,12 +204,9 @@ Mesh gear_mesh(float inner, float outer, float width, uint32_t teeth, float toot
         for (int side = 0; side < 2; side++) {
             const float z = side == 0 ? hw : -hw;
             const float3 n = {0, 0, side == 0 ? 1.0f : -1.0f};
-            // ring face between the teeth's root and the hole
             quad({r0 * c0, r0 * s0, z}, {r1 * c0, r1 * s0, z}, {r1 * c4, r1 * s4, z}, {r0 * c4, r0 * s4, z}, n);
-            // the tooth's face
             quad({r1 * c0, r1 * s0, z}, {r2 * c1, r2 * s1, z}, {r2 * c2, r2 * s2, z}, {r1 * c3, r1 * s3, z}, n);
         }
-        // outward faces: rising flank, top, falling flank, root
         const float3 p[5] = {{r1 * c0, r1 * s0, 0}, {r2 * c1, r2 * s1, 0}, {r2 * c2, r2 * s2, 0},
                              {r1 * c3, r1 * s3, 0}, {r1 * c4, r1 * s4, 0}};
         for (int k = 0; k < 4; k++) {
@@ -227,7 +215,6 @@ Mesh gear_mesh(float inner, float outer, float width, uint32_t teeth, float toot
             quad({p[k].x, p[k].y, hw}, {p[k].x, p[k].y, -hw}, {p[k + 1].x, p[k + 1].y, -hw},
                  {p[k + 1].x, p[k + 1].y, hw}, n);
         }
-        // the hole
         quad({r0 * c4, r0 * s4, hw}, {r0 * c4, r0 * s4, -hw}, {r0 * c0, r0 * s0, -hw}, {r0 * c0, r0 * s0, hw},
              {-c0, -s0, 0});
     }
@@ -235,13 +222,11 @@ Mesh gear_mesh(float inner, float outer, float width, uint32_t teeth, float toot
 }
 
 
-// ---------------------------------------------------------------- GPU helpers
-
 namespace {
 
-constexpr uint32_t static_views = 32768;     // a sample's views, for its lifetime
-constexpr uint32_t views_per_slot = 8192;     // a frame's transient views
-constexpr uint64_t ring_bytes = 32ull << 20;  // a frame's upload memory
+constexpr uint32_t static_views = 32768;
+constexpr uint32_t views_per_slot = 8192;
+constexpr uint64_t ring_bytes = 32ull << 20;
 constexpr uint32_t shader_cache = 512;
 
 uint64_t align_up(uint64_t value, uint64_t alignment) { return (value + alignment - 1) & ~(alignment - 1); }
@@ -283,7 +268,6 @@ ID3D12Resource *upload_buffer(ID3D12Device *device, uint64_t bytes)
     return made;
 }
 
-// One mip level down, each texel the mean of the four (or two, or one) above it.
 void downsample(const uint32_t *from, uint32_t w, uint32_t h, uint32_t *to)
 {
     const uint32_t nw = w > 1 ? w / 2 : 1, nh = h > 1 ? h / 2 : 1;
@@ -303,7 +287,7 @@ void downsample(const uint32_t *from, uint32_t w, uint32_t h, uint32_t *to)
         }
 }
 
-}  // namespace
+}
 
 D3D12_CPU_DESCRIPTOR_HANDLE Descriptors::cpu_at(uint32_t index) const
 {
@@ -368,8 +352,6 @@ void DrawMesh::draw(ID3D12GraphicsCommandList *list, uint32_t instances) const
 
 void Texture::release() { safe_release(resource); }
 
-// ---- root signatures
-
 RootLayout &RootLayout::descriptor(D3D12_ROOT_PARAMETER_TYPE type, uint32_t reg, D3D12_SHADER_VISIBILITY visibility)
 {
     D3D12_ROOT_PARAMETER &p = params[param_count++];
@@ -406,8 +388,6 @@ RootLayout &RootLayout::constants(uint32_t reg, uint32_t values, D3D12_SHADER_VI
     return *this;
 }
 
-// The range's index rides in the pointer until root_signature() resolves it:
-// a layout may be copied, and a pointer into it would not follow.
 RootLayout &RootLayout::table(D3D12_DESCRIPTOR_RANGE_TYPE type, uint32_t reg, uint32_t count,
                               D3D12_SHADER_VISIBILITY visibility)
 {
@@ -465,8 +445,6 @@ RootLayout &RootLayout::no_input()
     return *this;
 }
 
-// ---- the device's lifetime
-
 const D3D12_INPUT_ELEMENT_DESC Gpu::mesh_layout[4] = {
     {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
     {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
@@ -475,9 +453,6 @@ const D3D12_INPUT_ELEMENT_DESC Gpu::mesh_layout[4] = {
 };
 
 namespace {
-
-/* A step of setting the device up that failed, named with its HRESULT: "no
- * Direct3D 12 device" alone does not say which of a dozen it was. */
 bool made(HRESULT result, const char *what)
 {
     if (SUCCEEDED(result)) return true;
@@ -494,7 +469,7 @@ bool made(HRESULT result, const char *what)
     return false;
 }
 
-}  // namespace
+}
 
 bool Gpu::initialize()
 {
@@ -670,7 +645,6 @@ void Gpu::wait(uint64_t value)
 {
     if (value == 0 || reached(value)) return;
     const double from = seconds();
-    // A null event: the call returns once the fence reaches the value.
     if (spin_waits || FAILED(fence_->SetEventOnCompletion(value, nullptr))) {
         while (!reached(value)) {
         }
@@ -691,7 +665,7 @@ void Gpu::reset_sample_state()
     views_.used = 0;
     samplers_.used = 0;
     cpu_views_.used = 0;
-    rtvs_.used = 1;   // the frame's target
+    rtvs_.used = 1;
     dsvs_.used = 1;
 }
 
@@ -699,8 +673,6 @@ void Gpu::queue_lists(ID3D12CommandList *const *lists, uint32_t count)
 {
     for (uint32_t i = 0; i < count && queued_count_ < 16; i++) queued_[queued_count_++] = lists[i];
 }
-
-// ---- shaders and pipelines
 
 D3D12_SHADER_BYTECODE Gpu::shader_code(const char *name, const char *source, const char *entry, const char *stage)
 {
@@ -820,8 +792,6 @@ ID3D12PipelineState *Gpu::compute(ID3D12RootSignature *root, D3D12_SHADER_BYTECO
     }
     return made;
 }
-
-// ---- resources
 
 ID3D12Resource *Gpu::resource(const D3D12_RESOURCE_DESC &desc, D3D12_RESOURCE_STATES state,
                               const D3D12_CLEAR_VALUE *clear)
@@ -1003,8 +973,6 @@ D3D12_GPU_VIRTUAL_ADDRESS Gpu::constants(const void *data, uint32_t bytes)
     return chunk.gpu;
 }
 
-// ---- descriptors
-
 Descriptors Gpu::views(uint32_t count)
 {
     const Descriptors run = views_.take(count);
@@ -1078,8 +1046,6 @@ void Gpu::make_sampler(D3D12_CPU_DESCRIPTOR_HANDLE at, D3D12_FILTER filter, D3D1
     device->CreateSampler(&desc, at);
 }
 
-// ---- recording
-
 void Gpu::barrier(ID3D12Resource *resource_, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after,
                   uint32_t subresource)
 {
@@ -1125,4 +1091,4 @@ void Gpu::viewport(float x, float y, float w, float h)
     list->RSSetScissorRects(1, &scissor);
 }
 
-}  // namespace samples
+}

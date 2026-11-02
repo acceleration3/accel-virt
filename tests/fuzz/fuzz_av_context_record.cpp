@@ -1,8 +1,3 @@
-/* The private data a process puts on D3DKMTCreateContextVirtual, fed
- * attacker-chosen bytes (features 043 and 050). What decodes must re-encode to
- * exactly the bytes read and carry only the options its sub-API may - every
- * one for OpenGL, the context it shares with for OpenCL, none otherwise - and
- * those must be ones the contract allows. */
 #include "core/support/status.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/escape/av_context_record.hpp"

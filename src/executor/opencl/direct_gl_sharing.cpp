@@ -19,10 +19,6 @@ void DirectGlSharing::configure(const GlDisplay &display)
     display_ = &display;
 }
 
-/* The decoder has already refused anything but a CL_CONTEXT_PLATFORM naming
- * the bound platform, so what is copied is short and known; whatever the host
- * answers is the guest's answer, since a host that got this far made such a
- * context when the backend bound. */
 cl_context DirectGlSharing::make_context(const cl_context_properties *properties, cl_uint num_devices,
                                          const cl_device_id *devices, cl_int *errcode_ret)
 {
@@ -72,9 +68,6 @@ cl_mem DirectGlSharing::from_renderbuffer(cl_context context, cl_mem_flags flags
     return over_texture(context, flags, renderbuffer, errcode_ret);
 }
 
-/* A renderbuffer with no image of it - none by that name, or one EGL will not
- * take - leaves the host's refusal standing; a texture the host took and this
- * could not hold is out of room. */
 cl_mem DirectGlSharing::over_texture(cl_context context, cl_mem_flags flags, cl_GLuint renderbuffer,
                                      cl_int *errcode_ret)
 {
@@ -151,4 +144,4 @@ uint32_t DirectGlSharing::renderbuffer_images() const
     return renderbuffers_.count();
 }
 
-}  // namespace av
+}

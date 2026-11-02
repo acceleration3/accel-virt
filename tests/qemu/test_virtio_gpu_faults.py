@@ -1,13 +1,3 @@
-"""Faults against the real device: a context whose ring or batch no valid guest
-could write, or whose commands cannot run, is faulted - the fence page reads
-faulted with the reason, the context's fence queue interrupts, and nothing more
-runs - while other contexts carry on, and a destroyed and recreated or reset
-context starts clean. Progress moves as commands run, so a busy context is
-visibly not hung.
-
-Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
-AV_QEMU_BUILD and AV_EXECUTOR.
-"""
 import os
 import struct
 import time
@@ -22,8 +12,6 @@ BUILD = os.environ.get("AV_QEMU_BUILD", "")
 WANTED = virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID | FEATURE_CONTEXT_INIT
 FENCE_QUEUE_FIRST = 2
 FAULTED = 1
-# Progress moves on the context's first command run and every this many after
-# (src/device/execution/batch_executor.cpp), as well as on every completion.
 COMMANDS_PER_HEARTBEAT = 256
 RING_HEADER, RING_TAIL, BATCH_HEADER, BATCH_ORDER, COMMAND_FRAMING, UNDECODABLE_CODE, DEVICE_LOST, NO_EXECUTOR = \
     range(1, 9)
@@ -39,9 +27,6 @@ def wait_for(condition, seconds=10.0):
 
 
 class Context:
-    """A context on guest-backed ring, fence page and reply slot, all in memory
-    allocated once so it can be set up again after it is destroyed."""
-
     def __init__(self, test, gpu, context, doorbell):
         self.test, self.gpu, self.context, self.doorbell = test, gpu, context, doorbell
         memory = gpu.device.memory
@@ -72,7 +57,6 @@ class Context:
         self.gpu.qtest.write(32, self.gpu.device.shared_memory[DOORBELL_SHM_ID][0] + self.doorbell * PAGE, 1)
 
     def send(self, *commands):
-        """A batch of these commands, published and rung: its fence."""
         self.fence += 1
         return self.send_raw(batch_header(len(b"".join(commands)), self.fence) + b"".join(commands)
                              + bytes(-(32 + len(b"".join(commands))) % 8))
@@ -133,8 +117,6 @@ class VirtioGpuFaults(unittest.TestCase):
                 msix.mask(3)
                 spoil(context)
                 self.assertTrue(context.faulted_with(code), context.fence_page())
-                # The last completion, and the progress so far: the echo ahead of the bad framing ran,
-                # and as the next heartbeat's command it moved progress.
                 self.assertEqual(context.fence_page()[2:4], (1, 3 if code == COMMAND_FRAMING else 2))
                 self.assertTrue(wait_for(lambda: msix.pending(3)))
                 self.assertIn(f"context faulted, code {code}", gpu.qtest.printed())
@@ -175,7 +157,7 @@ class VirtioGpuFaults(unittest.TestCase):
         context.set_up()
         self.assertEqual(context.fence_page()[1:5], (0, 0, 0, 0))
         self.assertTrue(context.completed(context.send(command(COUNT, b"", GENERATE_REPLY))))
-        self.assertEqual(struct.unpack("<QI", context.answer()), (0, 1))   # a new executor
+        self.assertEqual(struct.unpack("<QI", context.answer()), (0, 1))
 
     def test_a_reset_releases_faulted_and_healthy_contexts_alike(self):
         qtest = virtio_qtest.Qtest(BUILD, av_device(",vectors=4"))
@@ -191,11 +173,8 @@ class VirtioGpuFaults(unittest.TestCase):
     def test_progress_moves_for_every_command_run(self):
         gpu, _ = self.gpu()
         context = Context(self, gpu, 1, 9)
-        # A long batch is one heartbeat, at its first command, and its completion.
         self.assertTrue(context.completed(context.send(*(command(ECHO) for _ in range(COMMANDS_PER_HEARTBEAT)))))
         self.assertEqual(context.fence_page()[3], 2)
-        # The unknown command is skipped, not counted: the echo after it is the
-        # next heartbeat's command.
         self.assertTrue(context.completed(context.send(command(0x10099), command(ECHO))))
         self.assertEqual(context.fence_page()[3], 4)
         self.assertTrue(context.completed(context.send(command(ECHO))))

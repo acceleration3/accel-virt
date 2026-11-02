@@ -27,4 +27,4 @@ void WorkItem::complete_on(Host &host) const
     if (completion_ != nullptr) host.run_on_main_loop(completion_, context_);
 }
 
-}  // namespace av
+}

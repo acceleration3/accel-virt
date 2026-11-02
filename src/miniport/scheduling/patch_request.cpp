@@ -50,4 +50,4 @@ Status PatchRequest::patch()
     return Status::ok;
 }
 
-}  // namespace av
+}

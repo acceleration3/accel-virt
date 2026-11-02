@@ -1,8 +1,3 @@
-/* The present engine's two records over attacker-chosen bytes: a queued
- * present as a hostile guest writes it, and the page as a hostile device
- * does. Whatever either decoder accepts is what the bytes at the documented
- * offsets say, holds every rule the protocol states, and encodes back to the
- * same bytes; a refusal leaves the decoder as it was. */
 #include "core/support/status.hpp"
 #include "proto/dma/present_operation.hpp"
 #include "proto/pages/present_progress.hpp"
@@ -40,7 +35,6 @@ void check_request(const std::uint8_t *data, std::size_t size)
     av::WireWriter writer(again, sizeof again);
     request.write(writer);
     if (writer.status() != av::Status::ok) __builtin_trap();
-    /* The header is the dispatcher's, which chose this decoder by its type. */
     if (std::memcmp(again + header_size, data + header_size, sizeof again - header_size) != 0) __builtin_trap();
 }
 
@@ -57,7 +51,7 @@ void check_progress(const std::uint8_t *data, std::size_t size)
     if (std::memcmp(again, data, sizeof again) != 0) __builtin_trap();
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

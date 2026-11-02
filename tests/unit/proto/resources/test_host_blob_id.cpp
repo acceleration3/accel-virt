@@ -1,5 +1,3 @@
-/* The ids host blobs take: every id from `first` up, and no id below it, so
- * the device refuses a transport blob's, a scanout's or the cursor's. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/resources/host_blob_id.hpp"
 

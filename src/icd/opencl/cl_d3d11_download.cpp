@@ -19,9 +19,8 @@ cl_int ClD3d11Download::visit(uint8_t *data, size_t row_pitch, size_t slice_pitc
     const size_t origin[3] = {0u, 0u, 0u};
     size_t       region[3] = {};
     object_.region(region);
-    /* A 2D image's slice pitch must be 0; only a 3D one has slices. */
     return root_.enqueue_read_image(queue_, mem_, origin, region, row_pitch, region[2] > 1u ? slice_pitch : 0u,
                                     data, nullptr);
 }
 
-}  // namespace av::clicd
+}

@@ -5,8 +5,6 @@
 namespace av::d3d {
 
 namespace {
-
-/* d3d11TokenizedProgramFormat.hpp's numbers. */
 constexpr uint32_t geometry_shader_4_0 = (2u << 16u) | (4u << 4u);
 constexpr uint32_t op_mov = 0x36u;
 constexpr uint32_t op_ret = 0x3Eu;
@@ -18,7 +16,7 @@ constexpr uint32_t op_dcl_input_siv = 0x61u;
 constexpr uint32_t op_dcl_output = 0x65u;
 constexpr uint32_t op_dcl_output_siv = 0x67u;
 constexpr uint32_t op_emit = 0x13u;
-constexpr uint32_t point = 1u;   /* the input primitive and the output topology both */
+constexpr uint32_t point = 1u;
 constexpr uint32_t four_components = 2u;
 constexpr uint32_t swizzle_mode = 1u << 2u;
 constexpr uint32_t xyzw = 0xE4u;
@@ -29,7 +27,7 @@ constexpr uint32_t two_indices = 2u << 20u;
 
 constexpr uint32_t opcode(uint32_t code, uint32_t length) { return code | (length << 24u); }
 
-}  // namespace
+}
 
 PassthroughGeometryShader::PassthroughGeometryShader() : masks_{}, names_{}, tokens_{}, count_(0u)
 {
@@ -46,8 +44,6 @@ bool PassthroughGeometryShader::add(uint32_t index, uint32_t mask, uint32_t name
     return true;
 }
 
-/* One point in, the same point out: every register declared on both sides,
- * then copied, then the vertex emitted. */
 const uint32_t *PassthroughGeometryShader::tokens()
 {
     AV_SCOPE("PassthroughGeometryShader::tokens");
@@ -85,7 +81,6 @@ void PassthroughGeometryShader::put(uint32_t token)
     if (count_ < max_tokens) tokens_[count_++] = token;
 }
 
-/* v[1][index]: one vertex of a point. */
 void PassthroughGeometryShader::declare_input(uint32_t index)
 {
     AV_SCOPE("PassthroughGeometryShader::declare_input");
@@ -107,7 +102,6 @@ void PassthroughGeometryShader::declare_output(uint32_t index)
     if (named) put(names_[index]);
 }
 
-/* mov o[index].mask, v[0][index].xyzw */
 void PassthroughGeometryShader::copy(uint32_t index)
 {
     AV_SCOPE("PassthroughGeometryShader::copy");
@@ -119,4 +113,4 @@ void PassthroughGeometryShader::copy(uint32_t index)
     put(index);
 }
 
-}  // namespace av::d3d
+}

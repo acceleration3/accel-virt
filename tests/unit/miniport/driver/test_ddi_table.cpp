@@ -27,7 +27,7 @@ bool only_slot_set(const DdiTable &table, DdiSlot slot, DdiRoutine routine)
     return true;
 }
 
-}  // namespace
+}
 
 TEST(ddi_table, starts_at_wddm_3_2_with_no_routines)
 { const DdiTable table;

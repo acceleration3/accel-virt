@@ -26,4 +26,4 @@ uint32_t InspectSession::run(const wchar_t *line)
     return static_cast<uint32_t>(exit);
 }
 
-}  // namespace av
+}

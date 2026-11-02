@@ -11,13 +11,10 @@
 namespace av {
 
 namespace {
-
-/* The one rule the three creates share: an access flag, alone. */
 constexpr cl_mem_flags access_flags[] = {CL_MEM_READ_WRITE, CL_MEM_WRITE_ONLY, CL_MEM_READ_ONLY};
-/* A renderbuffer's texture is 2D, and its storage level 0. */
 constexpr uint32_t renderbuffer_dimensions = 2u;
 
-}  // namespace
+}
 
 CopiedGlSharing::CopiedGlSharing(BlockSource &blocks, GlObjectBytes &objects, GlRenderbufferTexture &textures)
     : objects_(objects), textures_(textures), mirrors_(blocks), staging_()
@@ -93,8 +90,6 @@ cl_mem CopiedGlSharing::image_of(cl_context context, cl_mem_flags flags, const G
             refused = objects_.level_shape(level, internal, width, height, depth) ? CL_SUCCESS : CL_INVALID_GL_OBJECT;
     const GlClFormat format(internal);
     if (refused == CL_SUCCESS && !format.known()) refused = CL_INVALID_IMAGE_FORMAT_DESCRIPTOR;
-    /* The host's GL measured the level, and a level it holds is memory it
-     * holds: no product of its extent and a texel's size nears 2^64. */
     const uint64_t bytes = uint64_t{width} * height * depth * format.texel_bytes();
     cl_mem         made = nullptr;
     if (refused == CL_SUCCESS) {
@@ -135,8 +130,6 @@ cl_int CopiedGlSharing::judged(cl_uint count, const cl_mem *objects)
         if (mirror == nullptr) return CL_INVALID_GL_OBJECT;
         if (mirror->bytes() > largest) largest = mirror->bytes();
     }
-    /* Private memory as large as the largest, which every copy passes
-     * through. */
     if (!staging_.reserve(static_cast<size_t>(largest))) { AV_UNTESTABLE("anonymous memory the size of a GL object the host's GPU holds"); return CL_OUT_OF_HOST_MEMORY; }
     return CL_SUCCESS;
 }
@@ -146,8 +139,6 @@ cl_int CopiedGlSharing::acquire(cl_command_queue queue, cl_uint count, const cl_
 {
     AV_SCOPE("CopiedGlSharing::acquire");
     cl_int answer = judged(count, objects);
-    /* The guest's wait list as a barrier, so the copies come after it on an
-     * out-of-order queue as well. */
     if (answer == CL_SUCCESS) answer = ::clEnqueueBarrierWithWaitList(queue, waits, wait_list, nullptr);
     for (cl_uint index = 0u; index < count && answer == CL_SUCCESS; index++)
         answer = copy_in(queue, *mirrors_.find(objects[index]));
@@ -170,15 +161,11 @@ cl_int CopiedGlSharing::release(cl_command_queue queue, cl_uint count, const cl_
         }
         mirror.release();
     }
-    /* Finished whatever happened after: a copy that failed part-way has
-     * still written what it wrote. */
     if (written) objects_.finish();
     if (answer != CL_SUCCESS || event == nullptr) return answer;
     return ::clEnqueueMarkerWithWaitList(queue, 0u, nullptr, event);
 }
 
-/* A GL object deleted since its cl_mem was made reads as nothing: the GL
- * object is what is refused, as the create would have been. */
 cl_int CopiedGlSharing::copy_in(cl_command_queue queue, GlMirror &mirror)
 {
     AV_SCOPE("CopiedGlSharing::copy_in");
@@ -275,4 +262,4 @@ uint32_t CopiedGlSharing::mirrors() const
     return mirrors_.count();
 }
 
-}  // namespace av
+}

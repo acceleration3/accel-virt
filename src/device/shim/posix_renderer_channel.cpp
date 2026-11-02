@@ -88,4 +88,4 @@ Status PosixRendererChannel::send(const uint8_t *bytes, size_t length, const int
     return sent == static_cast<ssize_t>(length) ? Status::ok : Status::not_found;
 }
 
-}  // namespace av
+}

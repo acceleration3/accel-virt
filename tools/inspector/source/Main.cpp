@@ -1,14 +1,3 @@
-// avinspector: a live view of an accel-virt stack on this host.
-//
-//   avinspector [--source DIR] [--shm DIR] [--interval MS] [--mcp-port PORT] [--seconds N]
-//   avinspector --mcp [--source DIR] [--shm DIR] [--interval MS]
-//
-// The window by default; --mcp-port also serves the MCP tools (data/McpTools.h) on 127.0.0.1:PORT,
-// one newline-delimited JSON-RPC session per connection. --mcp runs no window at all: the tools on
-// stdin/stdout, for an MCP client that launches the inspector itself (`claude mcp add`).
-// --source names the tree whose AV_SCOPE names the trace tables are read with (default: the tree
-// the inspector was built beside); --shm where the tables and state sockets are (/dev/shm).
-
 #include "application/App.h"
 #include "application/modules/RendererModule.h"
 #include "application/modules/UIModule.h"
@@ -34,7 +23,6 @@ int Usage() {
     return 2;
 }
 
-// No window: the model folds rounds in on a thread of its own while the tools serve stdio.
 int ServeStdio(inspector::Model& model) {
     model.Start();
     Atomic<bool> stop{false};
@@ -48,14 +36,14 @@ int ServeStdio(inspector::Model& model) {
     mcp::Server server(inspector::McpTools::Info());
     tools.Register(server);
     inspector::StdioTransport transport;
-    server.Serve(transport);   // until the client closes stdin
+    server.Serve(transport);
     stop.Store(true);
     pump.Join();
     model.Stop();
     return 0;
 }
 
-} // namespace
+}
 
 int main(int argc, char** argv) {
     inspector::ModelOptions options;
@@ -93,7 +81,6 @@ int main(int argc, char** argv) {
     AppConfig config;
     config.name = "avinspector";
     config.loop_mode = LoopMode::OnDemand;
-    // Wake often enough to take each round the sampler publishes, input or not.
     config.min_update_hz = 20.0;
     App app(config);
     WindowConfig window;

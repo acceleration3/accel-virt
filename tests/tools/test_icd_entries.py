@@ -1,10 +1,3 @@
-"""The generated Vulkan ICD wrappers and their table, from a registry small
-enough to read (tools/codegen/av_codegen/emit/icd_entries.py).
-
-What the loader relies on: every row says which object its command dispatches
-on, so vk_icdGetPhysicalDeviceProcAddr can answer only physical-device
-commands; and every physical device an enumeration answers is the ICD's
-wrapped handle, whether it came in an array or inside a device group."""
 import pathlib
 import re
 import shutil
@@ -133,7 +126,6 @@ class GeneratedIcdEntries(unittest.TestCase):
             self.assertIn("if (pPhysicalDeviceGroupProperties == nullptr) {", body)
             self.assertIn("::av::icd::wrap_server_handle<VkPhysicalDevice>(reinterpret_cast<uint64_t>(", body)
             self.assertIn("return VK_ERROR_OUT_OF_HOST_MEMORY;", body)
-            # The wrap follows the call: it reads the host's handles the call wrote.
             self.assertLess(body.index("av_" + name + "("), body.index("wrap_server_handle"))
 
     def test_each_groups_own_count_bounds_the_devices_wrapped(self):

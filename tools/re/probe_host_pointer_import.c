@@ -39,7 +39,6 @@ int main(void)
         PFN_vkGetMemoryHostPointerPropertiesEXT fn =
             (PFN_vkGetMemoryHostPointerPropertiesEXT)vkGetDeviceProcAddr(dev, "vkGetMemoryHostPointerPropertiesEXT");
         if (!fn) { puts("  no entry point"); vkDestroyDevice(dev, NULL); continue; }
-        /* The shape the rig and real QEMU both use: a memfd mapped shared. */
         {
             size_t sz = 1u<<20;
             int mfd = (int)syscall(SYS_memfd_create, "probe", 0u);

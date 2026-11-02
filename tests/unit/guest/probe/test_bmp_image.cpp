@@ -20,11 +20,9 @@ struct BmpImageProbe {
     static void break_rows(BmpImage &image) { image.rows_ = static_cast<BmpImage::Rows>(7); }
 };
 
-}  // namespace av
+}
 
 namespace {
-
-/* Two rows of two pixels, as a probe reads them: red, green over blue, white. */
 constexpr std::uint8_t two_by_two[16] = {
     255, 0, 0, 255,   0, 255, 0, 255,
     0, 0, 255, 255,   255, 255, 255, 128,
@@ -36,10 +34,8 @@ std::uint32_t u32_at(const std::uint8_t *bytes, std::size_t offset)
            static_cast<std::uint32_t>(bytes[offset + 2u]) << 16u | static_cast<std::uint32_t>(bytes[offset + 3u]) << 24u;
 }
 
-}  // namespace
+}
 
-/* The Windows BITMAPFILEHEADER and BITMAPINFOHEADER, byte by byte, and rows
- * stored bottom-up in BGR padded to four bytes. */
 TEST(bmp_image, encodes_a_top_first_image_as_a_bottom_up_24_bit_file)
 { const BmpImage image(two_by_two, 2u, 2u, Rows::top_first);
   CHECK(image.invariants_hold());
@@ -63,7 +59,6 @@ TEST(bmp_image, encodes_a_top_first_image_as_a_bottom_up_24_bit_file)
   CHECK_EQ(u32_at(file, 42u), 2835u);
   CHECK_EQ(u32_at(file, 46u), 0u);
   CHECK_EQ(u32_at(file, 50u), 0u);
-  /* The file's first row is the image's bottom one: blue, white. */
   const std::uint8_t rows[16] = {255, 0, 0,   255, 255, 255,   0, 0,
                                  0, 0, 255,   0, 255, 0,       0, 0};
   CHECK(std::memcmp(file + 54u, rows, sizeof rows) == 0);
@@ -78,7 +73,6 @@ TEST(bmp_image, a_bottom_first_image_keeps_its_row_order)
                                  255, 0, 0,   255, 255, 255,   0, 0};
   CHECK(std::memcmp(file + 54u, rows, sizeof rows) == 0); }
 
-/* A width whose BGR bytes are already a multiple of four needs no padding. */
 TEST(bmp_image, pads_each_row_only_to_the_next_multiple_of_four)
 { std::uint8_t one_row[16] = {};
   for (std::uint8_t at = 0u; at < 16u; at++) one_row[at] = at;

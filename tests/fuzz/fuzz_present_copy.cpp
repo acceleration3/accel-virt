@@ -1,8 +1,3 @@
-/* The device's present copy over attacker-chosen requests: the fixed part, the
- * page lists and the regions are all the guest's. Whatever it asks, the device
- * answers once, leaves nothing mapped, and changes no byte of guest RAM that
- * is not inside one of the destination's own entries - a request that does not
- * decode changes none at all. */
 #include "device/control/control_request.hpp"
 #include "device/control/present_commands.hpp"
 #include "harness/host/mock_host.hpp"
@@ -20,11 +15,8 @@ namespace {
 
 constexpr std::uint64_t ram = 0x100000u;
 constexpr std::size_t   ram_bytes = 0x10000u;
-/* A region boundary in the middle, as QEMU's RAM blocks split a mapping. */
 constexpr std::uint64_t split = ram + 0x7000u;
 
-/* Whether guest address `address` lies inside one of the destination's
- * entries, as the request names them. */
 bool in_destination(const std::uint8_t *data, std::size_t size, const av::PresentCopyRequest &request,
                     std::uint64_t address)
 {
@@ -40,7 +32,7 @@ bool in_destination(const std::uint8_t *data, std::size_t size, const av::Presen
     return false;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

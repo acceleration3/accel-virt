@@ -6,8 +6,6 @@
 
 namespace av {
 
-/* ------------------------------------------------------------ VirtualRange */
-
 VirtualRange::VirtualRange()
     : span_(), object_(0u), object_offset_(0u), mapped_(false)
     {
@@ -44,7 +42,6 @@ uint64_t    VirtualRange::object_offset() const
 Status VirtualRange::bind(uint32_t object, uint64_t object_offset)
 {
     AV_SCOPE("VirtualRange::bind");
-    /* Zero is how an unbound range is spelled, so it cannot name an object. */
     if (object == 0u) return Status::invalid_parameter;
     if (!ByteRange(object_offset, span_.size()).is_representable())
         return Status::invalid_parameter;
@@ -90,8 +87,6 @@ bool VirtualRange::invariants_hold(const ByteRange &bounds,
         return false;
     return true;
 }
-
-/* -------------------------------------------------- GpuVirtualAddressSpace */
 
 GpuVirtualAddressSpace::GpuVirtualAddressSpace(Platform &platform)
     : platform_(platform), ranges_(platform, Pool::non_paged), packed_(0u), bounds_(), page_(page_size)
@@ -163,7 +158,6 @@ Status GpuVirtualAddressSpace::reserve(uint64_t size,
     if (size == 0u || !page_.divides(size)) return Status::invalid_parameter;
     if (size > bounds_.size())            return Status::too_large;
 
-    /* No gap lies before packed_: the search starts at its end. */
     uint64_t cursor = 0u;
     if (!alignment.align_up(packed_end(), cursor)) return Status::no_space;
 
@@ -182,7 +176,6 @@ Status GpuVirtualAddressSpace::reserve(uint64_t size,
             uint64_t after = 0u;
             if (!alignment.align_up(ranges_.at(i).span().end(), after))
                 return Status::no_space;
-            /* An aligned cursor past the end of the space cannot host a hole. */
             if (after >= bounds_.end()) return Status::no_space;
             if (after > cursor) cursor = after;
         }
@@ -240,8 +233,6 @@ Status GpuVirtualAddressSpace::translate(uint64_t address,
                                    "GpuVirtualAddressSpace::translate");
 
     uint32_t index = lower_bound(address);
-    /* lower_bound lands on the range starting at `address`, or the one after
-     * it; in the latter case the only candidate is the range before. */
     if (index == ranges_.size() || ranges_.at(index).span().base() != address) {
         if (index == 0u) return Status::not_found;
         index--;
@@ -270,4 +261,4 @@ bool GpuVirtualAddressSpace::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

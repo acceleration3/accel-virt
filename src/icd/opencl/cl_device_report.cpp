@@ -8,34 +8,24 @@
 namespace av::clicd {
 
 namespace {
-
-/* The version this ICD implements. A host that answers more is capped to it,
- * because what is reported is what is tested (constitution VI). */
 constexpr uint32_t implemented_major = 3u;
 constexpr uint32_t implemented_minor = 0u;
 
-/* The one grain of SVM feature 052 mirrors. */
 constexpr cl_device_svm_capabilities carried_svm = CL_DEVICE_SVM_COARSE_GRAIN_BUFFER;
 
 constexpr const char *device_prefix = "OpenCL ";
 constexpr const char *language_prefix = "OpenCL C ";
-/* What follows the number, so a log of an application's device list says which
- * driver answered. */
 constexpr const char *reported_by = " avgpu";
 
-/* cl_nv_device_attribute_query's location queries, which the Khronos headers
- * do not carry (cl_nv_device_attribute_query.txt). */
 constexpr cl_device_info pci_bus_nv = 0x4008u;
 constexpr cl_device_info pci_slot_nv = 0x4009u;
 constexpr cl_device_info pci_domain_nv = 0x400Au;
 
-/* cl_device_topology_amd's PCIe arm: a type word, 17 unused bytes, then the
- * bus, device and function, one byte each - 24 bytes in all. */
 constexpr cl_uint topology_pcie_amd = 1u;
 constexpr size_t  topology_bytes = 24u;
 constexpr size_t  topology_bus_at = 21u;
 
-}  // namespace
+}
 
 ClDeviceReport::ClDeviceReport(uint64_t adapter_luid)
     : luid_(adapter_luid), adapter_(), version_(device_prefix, implemented_major, implemented_minor),
@@ -86,8 +76,6 @@ void ClDeviceReport::observe_svm(cl_device_svm_capabilities host)
 bool ClDeviceReport::decides(cl_device_info name_asked) const
 {
     AV_SCOPE("ClDeviceReport::decides");
-    /* One list, not two: what it decides is exactly what it can answer, and a
-     * size query with no buffer is that question asked of info(). */
     return info(name_asked, 0u, nullptr, nullptr) == CL_SUCCESS;
 }
 
@@ -96,9 +84,6 @@ cl_int ClDeviceReport::answer(const void *from, size_t bytes, size_t value_bytes
 {
     AV_SCOPE("ClDeviceReport::answer");
     if (value != nullptr) {
-        /* Too small is an error and writes nothing: a caller that asked for
-         * the size first and then shrank its buffer gets told, rather than a
-         * LUID cut where it happened to fit and matching another adapter. */
         if (value_bytes < bytes) return CL_INVALID_VALUE;
         const char *const source = static_cast<const char *>(from);
         char *const       out    = static_cast<char *>(value);
@@ -112,8 +97,6 @@ cl_int ClDeviceReport::answer_text(const char *text, size_t value_bytes, void *v
                                    size_t *size_ret) const
 {
     AV_SCOPE("ClDeviceReport::answer_text");
-    /* One byte short of the room, because the last of it is the terminator's:
-     * a string that somehow lost its is still answered from inside itself. */
     return answer(text, length_within(text, version_bytes - 1u) + 1u, value_bytes, value, size_ret);
 }
 
@@ -140,8 +123,6 @@ cl_int ClDeviceReport::info(cl_device_info name_asked, size_t value_bytes, void 
     case pci_slot_nv:
     case pci_domain_nv: return answer_vendor_location(name_asked, value_bytes, value, size_ret);
     case CL_DEVICE_LUID_KHR: {
-        /* LowPart then HighPart: the 64-bit value's bytes little-endian, which
-         * is what an application memcmps against a DXGI adapter's LUID. */
         cl_uchar reported[CL_LUID_SIZE_KHR];
         for (size_t index = 0u; index < sizeof reported; ++index) {
             reported[index] = static_cast<cl_uchar>((luid_ >> (index * 8u)) & 0xFFu);
@@ -149,8 +130,6 @@ cl_int ClDeviceReport::info(cl_device_info name_asked, size_t value_bytes, void 
         return answer(reported, sizeof reported, value_bytes, value, size_ret);
     }
     case CL_DEVICE_LUID_VALID_KHR: {
-        /* Zero is what Kmt::adapter_luid leaves when it found no adapter, and
-         * is no adapter's LUID. */
         const cl_bool reported = luid_ != 0u ? CL_TRUE : CL_FALSE;
         return answer(&reported, sizeof reported, value_bytes, value, size_ret);
     }
@@ -187,8 +166,6 @@ cl_int ClDeviceReport::answer_not_carried(cl_device_info name_asked, size_t valu
         const cl_uint none = 0u;
         return answer(&none, sizeof none, value_bytes, value, size_ret);
     }
-    /* A list of one terminator: the specification's "supports no partition
-     * type". */
     case CL_DEVICE_PARTITION_PROPERTIES: {
         const cl_device_partition_property none = 0;
         return answer(&none, sizeof none, value_bytes, value, size_ret);
@@ -197,8 +174,6 @@ cl_int ClDeviceReport::answer_not_carried(cl_device_info name_asked, size_t valu
         const cl_device_affinity_domain none = 0u;
         return answer(&none, sizeof none, value_bytes, value, size_ret);
     }
-    /* A root device was partitioned by nothing, which the specification lets
-     * it answer with no bytes at all. */
     case CL_DEVICE_PARTITION_TYPE: return answer(nullptr, 0u, value_bytes, value, size_ret);
     case CL_DEVICE_QUEUE_ON_DEVICE_PROPERTIES: {
         const cl_command_queue_properties none = 0u;
@@ -287,4 +262,4 @@ bool ClDeviceReport::invariants_hold() const
     return (svm_ & ~carried_svm) == 0u;
 }
 
-}  // namespace av::clicd
+}

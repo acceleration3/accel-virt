@@ -23,10 +23,6 @@ Status UmdConnection::acquire(uint64_t luid)
         opens_++;
         return Status::ok;
     }
-    /* Made here rather than at namespace scope: avumd.dll has no C runtime to
-     * run a static constructor, so a global one would stay zeroed in the guest
-     * and match no adapter - while every Linux test, whose runtime does run
-     * it, passed. */
     const Status found = search_.find_avgpu(luid);
     if (found != Status::ok) return found == Status::not_found ? Status::not_supported : found;
     luid_ = luid;
@@ -88,4 +84,4 @@ bool UmdConnection::invariants_hold() const
     return search_.found() == (opens_ != 0u);
 }
 
-}  // namespace av::d3d
+}

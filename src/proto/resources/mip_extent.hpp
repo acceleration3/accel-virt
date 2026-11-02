@@ -22,6 +22,6 @@ private:
     uint32_t level_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MIP_EXTENT_HPP
+#endif

@@ -27,8 +27,6 @@ constexpr uint32_t stage_vertex = 0u;
 constexpr uint32_t stage_pixel = 4u;
 constexpr uint32_t dxil_magic = 0x4c495844u;
 constexpr uint32_t dxil_magic_at = 8u;
-/* A container is the code plus its signatures: names of up to a dozen bytes
- * and 32-byte entries, well inside this much beside the code. */
 constexpr size_t   container_slack = 64u * 1024u;
 
 bool is_container(const uint8_t *code, uint64_t size)
@@ -46,8 +44,6 @@ bool is_dxil_program(const uint8_t *code, uint64_t size)
     return magic == dxil_magic;
 }
 
-/* A stage's signature of one role, as the Direct3D 11 wire's entries the
- * container writer takes. */
 uint32_t gather(const d3d12proto::SignatureEntry *signatures, uint32_t count, uint32_t set,
                 d3dproto::SignatureEntry *out)
 {
@@ -62,7 +58,7 @@ uint32_t gather(const d3d12proto::SignatureEntry *signatures, uint32_t count, ui
     return taken;
 }
 
-}  // namespace
+}
 
 D3d12PipelineBuilder::D3d12PipelineBuilder(const D3dObjectTable &objects) : objects_(objects), device_(nullptr)
 {
@@ -133,7 +129,6 @@ ID3D12RootSignature *D3d12PipelineBuilder::root_signature(uint32_t flags, const 
     desc.Desc_1_1 = {parameter_count, made_parameters, sampler_count, made_samplers,
                      static_cast<D3D12_ROOT_SIGNATURE_FLAGS>(flags)};
     ID3D12RootSignature *const made = device_->root_signature(&desc);
-    /* What a command signature's root arguments are judged against. */
     if (made == nullptr || D3d12RootLayout(parameters, parameter_count).attach(made)) return made;
     made->Release();
     return nullptr;
@@ -309,11 +304,10 @@ bool D3d12PipelineBuilder::compute(uint32_t id, uint32_t root, const uint8_t *co
     if (device_ == nullptr || signature == nullptr) return false;
     D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
     desc.pRootSignature = signature;
-    /* A compute shader has no signature to write: its inputs are system values. */
     if (!container(stage_count, code, code_size, nullptr, 0u, job, desc.CS) || desc.CS.BytecodeLength == 0u)
         return false;
     job.describe(id, signature, desc);
     return true;
 }
 
-}  // namespace av
+}

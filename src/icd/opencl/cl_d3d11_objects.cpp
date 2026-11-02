@@ -129,10 +129,8 @@ void ClD3d11Objects::report(StateWriter &writer) const
 bool ClD3d11Objects::invariants_hold() const
 {
     AV_SCOPE("ClD3d11Objects::invariants_hold");
-    /* An object over a resource is a context made from a device: without one
-     * there is nothing the resource could have been checked against. */
     if (device_ == nullptr && objects_.live() != 0u) return false;
     return objects_.all_of([](const D3d11Object &object) { return object.resource() != nullptr; });
 }
 
-}  // namespace av::clicd
+}

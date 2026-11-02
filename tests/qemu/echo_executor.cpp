@@ -1,71 +1,3 @@
-// An executor library for the qtest suites (src/device/abi/av_executor.h): it
-// offers the Vulkan sub-API and runs a handful of commands, so the device's
-// execution path can be driven on the real device without render-server.
-//
-//   0x10001 echo         the payload is the answer
-//   0x10002 undecodable  AV_UNDECODABLE
-//   0x10003 lose device  AV_DEVICE_LOST
-//   0x10004 count        the answer is u64 commands this executor ran before
-//                        it, then u32 1 when every call so far came from the
-//                        thread that created it
-//   0x10005 peek         payload u64 handle, u64 offset, u32 count: the answer
-//                        is the import's u32 memory type, u32 imports this
-//                        executor holds, u64 size, then `count` bytes read at
-//                        `offset` of the pointer it was handed - only the 16
-//                        bytes, zeroed, for a handle it does not hold or a range
-//                        past the import
-//   0x10006 poke         payload u64 handle, u64 offset, then bytes written at
-//                        `offset` of the import's pointer, as a host GPU would
-//                        write them: the answer is u32 1 when they were written
-//   0x10007 crash        with AV_ECHO_ALLOW_CRASH set, aborts the process the
-//                        executor runs in, as a driver crash would; otherwise
-//                        AV_UNKNOWN
-//
-//   0x30007 options      on an OpenGL context: the answer is the u8 major,
-//                        minor, profile and flags it was created with, then
-//                        the u64 ordinal of the executor it shares (0: none)
-//
-// Anything else is AV_UNKNOWN. With AV_ECHO_FAIL_CREATE set, create fails.
-//
-// Version 21: lose_device loses the executor's device, as the loss layer
-// loses a real one (tests/gpu_fault): poll answers AV_POLL_LOST and every
-// command AV_DEVICE_LOST from then on.
-//
-// Version 15 (docs/external-export.md): every surface the guest has not
-// released is shared, so the device's export socket can be judged without a
-// GPU. export_surface answers a memfd of 64x64 B8G8R8A8 pixels, linear, whose
-// first eight bytes are the surface's id; sync_surface answers twice the id as
-// the copies run, and an eventfd already readable - signalled - standing in
-// for a sync_file. release_shared remembers what the guest let go of (0
-// forgets it all: the ids start again), and a surface let go of exports
-// nothing.
-//
-// create records the options it was asked for (feature 050). With
-// AV_ECHO_OPENGL set the library offers OpenGL beside Vulkan.
-//
-// allocate_memory answers a memfd of the size asked, in a domain it opened,
-// cached, standing in for host GPU memory (docs/host-memory.md); import_blob
-// records the memory the key names, imported_handle answers
-// blob_id | 0x4000000000000000 for one it holds, and release_blob forgets
-// it - so qtest can judge the device's side
-// of host blobs and IMPORT_BLOB, reading and writing what the guest sees
-// through the window, without a GPU. peek's "memory type" is the request the
-// memory was allocated for.
-//
-// Domains are counted and nothing else: a device's domain is the one the last
-// open_domain answered.
-//
-// Two controls make a real timeout happen without rebuilding anything
-// (feature 040, FR-006), read from the environment at load:
-//
-//   AV_ECHO_STALL_MS      every command sleeps this long before answering
-//   AV_ECHO_FAULT_AFTER   the Nth command on each executor answers
-//                          AV_DEVICE_LOST, whatever it asked for
-//   AV_ECHO_ONLY_NTH      both apply only to the Nth executor created, so one
-//                          context can stall or fault while another completes
-//
-// A stall longer than TdrDelay is what dxgkrnl times out on; the guest suite's
-// tdr scenario sets them for the run that needs them.
 #include "av_executor.h"
 
 #include <cstdint>
@@ -92,8 +24,6 @@ constexpr std::uint64_t page = 4096u;
 constexpr std::size_t   max_imports = 16u;
 constexpr std::size_t   max_memories = 256u;
 
-/* Memory allocate_memory made: a memfd mapped here, kept under its domain
- * and key until free_memory. */
 struct Memory {
     std::uint32_t domain;
     std::uint64_t key;
@@ -118,16 +48,12 @@ struct Import {
 struct Executor {
     pthread_t     thread;
     std::uint64_t executed;
-    /* Which executor this is, counted from one in the order they were created:
-     * what AV_ECHO_ONLY_NTH names. */
     std::uint64_t ordinal;
     bool          one_thread;
     Import        imports[max_imports];
     AvContextOptions options;
-    /* The ordinal of the executor it shares objects with, or 0. */
     std::uint64_t     shares;
     bool              lost;
-    /* The last echo too long for its reply, kept for answer_part. */
     std::uint8_t     *kept;
     std::size_t       kept_length;
 };
@@ -148,8 +74,6 @@ std::uint32_t live_imports(const Executor *executor)
     return live;
 }
 
-/* The import `handle` names and the `length` bytes at `offset` of it, or null
- * for a range it does not hold. */
 std::uint8_t *range_of(Executor *executor, const std::uint8_t *payload, std::size_t size, std::size_t length,
                        Import *&import)
 {
@@ -194,10 +118,8 @@ void answer_poke(Executor *executor, const std::uint8_t *payload, std::size_t si
 }
 
 std::uint64_t created = 0u;
-/* Domains opened: the main loop opens them, any worker reads the count. */
 std::uint32_t domains = 0u;
 
-/* A number the environment names, or 0. */
 std::uint64_t from_environment(const char *name)
 {
     const char *const value = std::getenv(name);
@@ -224,10 +146,6 @@ std::uint32_t sub_apis(void *)
 
 AvExecutor *make(void *opaque, std::uint32_t sub_api)
 {
-    /* Only what sub_apis offers. Accepting anything looks harmless in a test
-     * library and is not: the device would hand that context commands of an
-     * API nothing here decodes, and the guest would wait for answers that
-     * never come. The conformance suite found this one (feature 042). */
     if ((sub_apis(opaque) & sub_api) == 0u || sub_api == 0u || (sub_api & (sub_api - 1u)) != 0u) return nullptr;
     if (std::getenv("AV_ECHO_FAIL_CREATE") != nullptr) return nullptr;
     auto *const executor = static_cast<Executor *>(std::calloc(1u, sizeof(Executor)));
@@ -244,8 +162,6 @@ bool defaults(const AvContextOptions *options)
                                   options->flags == 0u);
 }
 
-/* Options and a share only for OpenGL, and a share only of an OpenGL executor;
- * in a domain this library opened. */
 AvExecutor *create(void *opaque, std::uint32_t sub_api, const AvContextOptions *options, AvExecutor *share)
 {
     const bool opengl = sub_api == AV_EXECUTOR_SUB_API_OPENGL;
@@ -266,7 +182,6 @@ void destroy(void *, AvExecutor *handle)
     std::free(handle);
 }
 
-/* An echo longer than the reply, as a library keeps an answer (answer_part). */
 void keep(Executor *executor, const std::uint8_t *payload, std::size_t size)
 {
     executor->kept = static_cast<std::uint8_t *>(std::malloc(size));
@@ -296,10 +211,6 @@ std::uint32_t execute(void *, AvExecutor *handle, std::uint32_t id, const std::u
     std::free(executor->kept);
     executor->kept = nullptr;
     executor->kept_length = 0u;
-    /* The host taking too long, and the host losing the device: what a guest
-     * cannot ask for and a test has to be able to produce. Either is aimed at
-     * one executor where the run named one, so that what happens to a context
-     * can be told apart from what happens to the device. */
     const std::uint64_t only = from_environment("AV_ECHO_ONLY_NTH");
     const bool steered = only == 0u || only == executor->ordinal;
     if (steered) stall(from_environment("AV_ECHO_STALL_MS"));
@@ -343,7 +254,6 @@ std::uint32_t execute(void *, AvExecutor *handle, std::uint32_t id, const std::u
     return AV_EXECUTED;
 }
 
-/* In a domain this library opened, as create is (open_domain). */
 std::uint32_t allocate_memory(void *, std::uint32_t domain, std::uint64_t key, std::uint64_t size,
                               std::uint32_t request, AvHostMemory *memory)
 {
@@ -372,8 +282,6 @@ std::uint32_t allocate_memory(void *, std::uint32_t domain, std::uint64_t key, s
     return 0u;
 }
 
-/* The memory stays mapped for an import that may still read it; a test's
- * library lives as long as the process. */
 void free_memory(void *, std::uint32_t domain, std::uint64_t key)
 {
     pthread_mutex_lock(&memories_lock);
@@ -382,7 +290,6 @@ void free_memory(void *, std::uint32_t domain, std::uint64_t key)
     pthread_mutex_unlock(&memories_lock);
 }
 
-/* One domain's memory is not another's here: the echo library has one GPU. */
 std::uint32_t alias_memory(void *, std::uint32_t, std::uint64_t, std::uint32_t, std::uint64_t, AvHostMemory *)
 {
     return 1u;
@@ -417,9 +324,6 @@ std::uint64_t imported_handle(void *, AvExecutor *handle, std::uint64_t blob_id)
     return import_named(executor_of(handle), blob_id | handle_bit) != nullptr ? blob_id | handle_bit : 0u;
 }
 
-/* An echo executor completes everything on the thread that asked, so there is
- * nothing to signal about: it takes the callback and never calls it, which is
- * what the device must be able to cope with. */
 void set_signal(void *, AvExecutor *, void (*)(void *), void *) {}
 
 std::uint32_t open_domain(void *, const std::uint8_t *) { return __atomic_add_fetch(&domains, 1u, __ATOMIC_ACQ_REL); }
@@ -443,10 +347,6 @@ void          gpu_progress(void *, AvExecutor *, std::uint64_t *marked, std::uin
     *reached = 0u;
 }
 
-/* An echo library has no host API behind it, so it makes no host object and
- * shares none. The device answers every shared-object command with "the
- * executor refused", which is a status and not a fault, and that refusal is
- * what the qemu suites see. */
 std::uint32_t share_object(void *, AvExecutor *, std::uint64_t, std::uint32_t, std::uint64_t, std::uint64_t)
 {
     return AV_SHARED_REFUSED;
@@ -457,8 +357,6 @@ std::uint32_t open_object(void *, AvExecutor *, std::uint64_t, std::uint32_t, st
 }
 void close_object(void *, AvExecutor *, std::uint64_t) {}
 
-/* Nothing is drawn here, so there is no image to read or export and no frame
- * staged. */
 std::uint32_t read_image(void *, std::uint32_t, std::uint64_t, void *, std::uint32_t, std::uint32_t, std::uint32_t)
 {
     return AV_UNKNOWN;
@@ -474,9 +372,6 @@ std::uint32_t copy_frame(void *, std::uint32_t, std::uint64_t, std::uint32_t, st
     return AV_UNKNOWN;
 }
 
-/* Shared surfaces (docs/external-export.md): what the guest let go of, under a lock, since
- * the export socket asks from a thread of its own and the release comes on
- * the main loop. */
 constexpr std::uint32_t surface_edge = 64u;
 constexpr std::size_t   max_released = 64u;
 pthread_mutex_t         released_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -519,7 +414,7 @@ std::uint32_t export_surface(void *, std::uint32_t, std::uint64_t surface, std::
     }
     std::memcpy(mapped, &surface, sizeof surface);
     munmap(mapped, bytes);
-    *image = AvExportedImage{fd, 0u, surface_edge, surface_edge, stride, 0u, 0x34325241u /* AR24 */, 0u, 0u};
+    *image = AvExportedImage{fd, 0u, surface_edge, surface_edge, stride, 0u, 0x34325241u , 0u, 0u};
     return AV_EXECUTED;
 }
 
@@ -565,7 +460,7 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               lose_executor_device,
                               answer_part};
 
-}  // namespace
+}
 
 extern "C" {
 

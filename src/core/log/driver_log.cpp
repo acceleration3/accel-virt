@@ -58,4 +58,4 @@ void DriverLog::name(const char *what, const char *name)
     sink_.write(text.text());
 }
 
-}  // namespace av
+}

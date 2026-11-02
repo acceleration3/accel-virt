@@ -1,6 +1,3 @@
-/* One pixel format the ICD offers (research.md §7): RGBA8 with the depth and
- * stencil bits, buffering, sRGB and samples it names, and the PFD_ flags
- * opengl32 is shown for it. */
 #ifndef AV_GLICD_PIXEL_FORMAT_HPP
 #define AV_GLICD_PIXEL_FORMAT_HPP
 
@@ -32,6 +29,6 @@ private:
     uint8_t samples_;
 };
 
-}  // namespace av::glicd
+}
 
-#endif  // AV_GLICD_PIXEL_FORMAT_HPP
+#endif

@@ -43,8 +43,6 @@ TEST(renderer_extent, a_default_extent_is_empty_and_does_not_fit)
   CHECK(extent.length() == 0u);
   CHECK(!extent.fits()); }
 
-/* The address has 24 bits of region and 40 of offset; an extent that ends past
- * its region would reach whatever the renderer mapped next to it. */
 TEST(renderer_extent_fits, only_a_nameable_region_and_a_run_ending_inside_it)
 { const std::uint64_t span = RendererExtent::region_span;
   CHECK(RendererExtent(0u, 0u, span).fits());

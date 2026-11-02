@@ -1,5 +1,3 @@
-/* Reaches into a GuestMemoryTypes so invariant tests can corrupt it. Declared
- * a friend by GuestMemoryTypes; nothing outside the tests uses it. */
 #ifndef AV_GUEST_MEMORY_TYPES_PROBE_HPP
 #define AV_GUEST_MEMORY_TYPES_PROBE_HPP
 
@@ -22,6 +20,6 @@ struct GuestMemoryTypesProbe {
     GuestMemoryTypes &types;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_GUEST_MEMORY_TYPES_PROBE_HPP
+#endif

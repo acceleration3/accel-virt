@@ -61,4 +61,4 @@ bool GpuRect::decoded() const
     return decoded_;
 }
 
-}  // namespace av
+}

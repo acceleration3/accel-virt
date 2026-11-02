@@ -74,8 +74,6 @@ void RingConsumer::detach()
     executor_.stop();
 }
 
-/* The header's head field is the guest's to scribble on: only the device's own
- * head is judged and published. */
 void RingConsumer::service()
 {
     AV_SCOPE("RingConsumer::service");
@@ -136,7 +134,6 @@ Status RingConsumer::consume_next()
     __atomic_store_n(&head_, head_ + batch.span(), __ATOMIC_RELEASE);
     last_fence_ = batch.fence_id();
     batches_++;
-    /* The header was just read, so its head field is inside the blob. */
     static_cast<void>(ring_.publish_head(head_));
     complete_or_hold(last_fence_);
     return Status::ok;
@@ -152,8 +149,6 @@ void RingConsumer::complete_or_hold(uint64_t fence)
         fences_.complete(fence);
         return;
     }
-    /* Full only when the GPU is further behind than the guest may run ahead:
-     * the guest's own fence window stops it first. */
     while (!held_.hold(fence, marked)) {
         static_cast<void>(settle());
         __builtin_ia32_pause();
@@ -174,8 +169,6 @@ bool RingConsumer::settle()
     return true;
 }
 
-/* The executor goes at once: the host API's objects are the device's to free,
- * the context's binding the guest's. */
 bool RingConsumer::has_work() const
 {
     AV_SCOPE("RingConsumer::has_work");
@@ -190,9 +183,6 @@ bool RingConsumer::poll()
     AV_SCOPE("RingConsumer::poll");
     if (!attached_ || faulted_) return false;
     const HostPoll polled = executor_.poll();
-    /* Asked here and not only of a batch: a context with nothing to run is
-     * woken to hear its device was lost (AvExecutorOps::poll), and told so
-     * now rather than at a next batch an idle guest may never send. */
     if (polled == HostPoll::lost) {
         fault(FaultCode::device_lost, "the host device was lost; last fence", last_fence_);
         fences_.signal();
@@ -211,7 +201,6 @@ void RingConsumer::announce_awake(bool awake)
 {
     AV_SCOPE("RingConsumer::announce_awake");
     if (attached_) static_cast<void>(ring_.announce_awake(awake));
-    /* Asleep, it keeps watch on nothing. */
     if (!awake && publishing_) {
         publishing_ = false;
         note_work();
@@ -234,20 +223,13 @@ uint64_t RingConsumer::earliest_pending() const
     if (ring_.snapshot(header) == Status::ok && header.tail() - head >= BatchHeader::encoded_size) {
         uint8_t     bytes[BatchHeader::encoded_size] = {};
         BatchHeader batch;
-        /* A header torn by the owner moving on is read as due now. */
         if (ring_.copy(head, bytes, sizeof bytes) != Status::ok || batch.decode(bytes, sizeof bytes) != Status::ok)
             return 0u;
         return batch.published_at();
     }
-    /* Nothing past the head. A batch the process published without its kernel
-     * handing it over is past it, and waited for: D3dOrdering wakes this
-     * ring's worker to run it rather than wait for a doorbell. */
     return UINT64_MAX;
 }
 
-/* While Perfetto records, now and then the host's clock beside the guest's
- * stamp on a batch it is about to run: tools/perfetto_trace.py takes the
- * smallest difference as the offset between the guest's timeline and ours. */
 void RingConsumer::note_clock(uint64_t published_at)
 {
     AV_SCOPE("RingConsumer::note_clock");
@@ -309,8 +291,6 @@ uint64_t RingConsumer::batches() const
     return batches_;
 }
 
-/* Every batch spans at least a header and carries a larger fence than the one
- * before it, starting from 1; nothing is consumed that was not published. */
 bool RingConsumer::invariants_hold() const
 {
     AV_SCOPE("RingConsumer::invariants_hold");
@@ -319,4 +299,4 @@ bool RingConsumer::invariants_hold() const
            batches_ <= head_ / BatchHeader::encoded_size && batches_ <= last_fence_;
 }
 
-}  // namespace av
+}

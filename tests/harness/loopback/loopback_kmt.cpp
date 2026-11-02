@@ -20,8 +20,8 @@
 namespace av {
 
 namespace {
-constexpr std::uint32_t av_capset = 0x72u;   /* the init capset (docs/protocol.md) */
-}  // namespace
+constexpr std::uint32_t av_capset = 0x72u;
+}
 
 LoopbackKmt::LoopbackKmt(MockPlatform &platform, LoopbackDevice &device)
     : platform_(platform), device_(device), allocations_{}, contexts_{}, allocation_count_(0u), context_count_(0u),
@@ -78,8 +78,6 @@ Status LoopbackKmt::query_driver_version(std::uint32_t, std::uint32_t &version)
     return Status::ok;
 }
 
-/* The loopback has no PCI bus, no registry and no driver package: what a
- * vendor library would ask of it is not there to answer. */
 Status LoopbackKmt::query_adapter_location(std::uint32_t, PciLocation &location)
 {
     location = PciLocation();
@@ -107,8 +105,6 @@ Status LoopbackKmt::query_segment_sizes(std::uint32_t, std::uint64_t &dedicated_
 
 Status LoopbackKmt::close_adapter(std::uint32_t) { return Status::ok; }
 
-/* No miniport stands between the loopback's guest and its device: nothing
- * beyond the capset is offered. */
 Status LoopbackKmt::query_adapter_features(std::uint32_t, UmdAdapterInfo &info)
 {
     info = UmdAdapterInfo(luid, 0u);
@@ -295,7 +291,7 @@ Status LoopbackKmt::destroy_context(std::uint32_t context)
 Status LoopbackKmt::submit(std::uint32_t context, std::uint64_t, std::uint64_t, const std::uint8_t *private_data,
                            std::uint32_t private_size)
 {
-    constexpr std::size_t tail_offset = 8u;   /* the ring header's tail (docs/protocol.md) */
+    constexpr std::size_t tail_offset = 8u;
     Context *const found = find_context(context);
     SubmissionDescriptor submission;
     if (found == nullptr || private_data == nullptr || submission.decode(private_data, private_size) != Status::ok)
@@ -320,8 +316,6 @@ Status LoopbackKmt::scan_line(std::uint32_t, std::uint32_t, BeamPosition &) { re
 
 Status LoopbackKmt::refresh_millihz(std::uint32_t, std::uint32_t, std::uint32_t &) { return Status::not_supported; }
 
-/* The one escape the shim answers as the driver would: where a context's ring
- * and reply slot are. */
 Status LoopbackKmt::escape(std::uint32_t, std::uint32_t, std::uint32_t context, std::uint8_t *data,
                            std::uint32_t size)
 {
@@ -401,10 +395,6 @@ Status LoopbackKmt::notify_work_submission(std::uint32_t)
     return Status::not_supported;
 }
 
-/* Feature 053: an NT handle is a kernel object, and this rig has no kernel to
- * make one in - what it drives is the miniport, not dxgkrnl's handle table. A
- * guest asking for one is told so rather than handed a number that names
- * nothing. */
 Status LoopbackKmt::create_shared_allocation(std::uint32_t, std::uint8_t *, std::uint32_t,
                                              std::uint32_t &resource)
 {
@@ -444,11 +434,10 @@ Status LoopbackKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
 
 void LoopbackKmt::sleep_briefly() {}
 
-/* No display here: every search takes the first adapter it finds. */
 Status LoopbackKmt::primary_display_luid(std::uint64_t &answered)
 {
     answered = 0u;
     return Status::not_supported;
 }
 
-}  // namespace av
+}

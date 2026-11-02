@@ -49,8 +49,6 @@ Status BlobImportCommand::import(uint8_t *reply, size_t capacity, size_t &produc
     default: break;
     }
     produced = BlobImportAnswer::encoded_size;
-    /* A slot too small for the answer is written nothing, as the executor ABI
-     * leaves it, and the reply header says how much was needed. */
     static_cast<void>(BlobImportAnswer(answer, device_memory).encode(reply, capacity));
     return Status::ok;
 }
@@ -64,4 +62,4 @@ Status BlobImportCommand::release()
     return Status::ok;
 }
 
-}  // namespace av
+}

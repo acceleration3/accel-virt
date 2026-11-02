@@ -36,7 +36,6 @@ VkInstance InstanceSpan::at(uint32_t index) const
     return index < count_ ? instances_[index] : VK_NULL_HANDLE;
 }
 
-/* Every instance spanned is one, and none twice. */
 bool InstanceSpan::invariants_hold() const
 {
     AV_SCOPE("InstanceSpan::invariants_hold");
@@ -49,4 +48,4 @@ bool InstanceSpan::invariants_hold() const
     return true;
 }
 
-}  // namespace av::icd
+}

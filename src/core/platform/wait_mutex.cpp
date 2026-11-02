@@ -28,4 +28,4 @@ void WaitMutex::release()
     platform_.release_wait_mutex(storage_, rank_);
 }
 
-}  // namespace av
+}

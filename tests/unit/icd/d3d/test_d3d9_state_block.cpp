@@ -29,7 +29,7 @@ D3d9StateEntry constant(std::uint32_t stage, std::uint32_t reg, std::uint32_t fi
     return D3d9StateEntry(Kind::constant_f, stage, reg, words, 4u);
 }
 
-}  // namespace
+}
 
 TEST(d3d9_state_entry, names_the_same_state_whatever_its_value)
 {
@@ -45,7 +45,6 @@ TEST(d3d9_state_entry, names_the_same_state_whatever_its_value)
     CHECK(taken.kind() == Kind::render);
     CHECK_EQ(taken.a(), rs_cullmode);
     CHECK_EQ(taken.b(), 0u);
-    /* Words past four are not read, and words not given are zero. */
     const std::uint32_t six[6] = {1u, 2u, 3u, 4u, 5u, 6u};
     const D3d9StateEntry clipped(Kind::viewport, 0u, 0u, six, 6u);
     CHECK_EQ(clipped.value()[3], 4u);
@@ -56,7 +55,6 @@ TEST(d3d9_state_entry, names_the_same_state_whatever_its_value)
 
 TEST(d3d9_state_entry, keeps_a_handle_whole_beside_two_words)
 {
-    /* A handle with bits above 32: a 64-bit process's must come back whole. */
     const std::uintptr_t address = sizeof(void *) == 8u ? static_cast<std::uintptr_t>(0x123456789abcdef0ull)
                                                         : static_cast<std::uintptr_t>(0x9abcdef0u);
     void *const          handle = reinterpret_cast<void *>(address);
@@ -83,21 +81,18 @@ TEST(d3d9_state_shadow, keeps_the_last_value_of_each_state_and_nothing_else)
     CHECK(shadow.current(render(rs_cullmode, 0u), now));
     CHECK_EQ(now.value()[0], 2u);
     CHECK(!shadow.current(render(rs_zenable, 0u), now));
-    /* Vertex and pixel constants are apart, and each register apart. */
     CHECK(shadow.set(constant(0u, 10u, 100u)));
     CHECK(shadow.set(constant(1u, 10u, 200u)));
     CHECK(shadow.current(constant(0u, 10u, 0u), now));
     CHECK_EQ(now.value()[3], 103u);
     CHECK(shadow.current(constant(1u, 10u, 0u), now));
     CHECK_EQ(now.value()[0], 200u);
-    /* A vertex sampler's stage number is its own place. */
     const std::uint32_t point = 1u;
     CHECK(shadow.set(D3d9StateEntry(Kind::stage, 257u, 17u, &point, 1u)));
     CHECK(!shadow.current(D3d9StateEntry(Kind::stage, 1u, 17u, nullptr, 0u), now));
     CHECK(shadow.current(D3d9StateEntry(Kind::stage, 257u, 17u, nullptr, 0u), now));
 }
 
-/* What no device keeps is kept nowhere, and the answer says so. */
 TEST(d3d9_state_shadow, refuses_states_out_of_range)
 {
     D3d9StateShadow shadow;
@@ -117,8 +112,6 @@ TEST(d3d9_state_shadow, refuses_states_out_of_range)
     for (const Kind kind : singles) CHECK(shadow.set(D3d9StateEntry(kind, 0u, 0u, nullptr, 0u)));
 }
 
-/* A block holds each state once, with the last value recorded, and grows past
- * its first allocation without losing an entry. */
 TEST(d3d9_state_block, records_each_state_once_with_its_last_value)
 {
     MockPlatform   platform;
@@ -136,8 +129,6 @@ TEST(d3d9_state_block, records_each_state_once_with_its_last_value)
     CHECK(block.invariants_hold());
 }
 
-/* CAPTURE: each entry takes the device's value now; an entry the device never
- * set keeps what it was recorded with. */
 TEST(d3d9_state_block, capture_takes_the_devices_values_now)
 {
     MockPlatform    platform;
@@ -162,7 +153,6 @@ TEST(d3d9_state_block, a_block_with_no_room_is_left_as_it_was)
     CHECK(block.invariants_hold());
 }
 
-/* Past max_entries the block refuses rather than grows without bound. */
 TEST(d3d9_state_block, stops_at_its_limit)
 {
     MockPlatform   platform;

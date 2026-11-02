@@ -1,10 +1,3 @@
-"""CLI entry point for ``av-codegen``.
-
-Each emit backend is registered in ``emit.ALL_BACKENDS`` and run in
-order. ``--check`` re-emits to a temp directory and diffs against the
-committed copy; this is what CI runs.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -77,10 +70,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.verbose:
         print(f"  commands lowered: {len(reg.commands)}")
 
-    # Before anything is written: nothing may cross the wire at a width
-    # that depends on the machine. See emit/width_audit.py — this is the
-    # one protocol mistake this codebase has made three times, and it
-    # fails silently every time.
     width_audit.check(reg)
 
     if args.check:
@@ -88,8 +77,6 @@ def main(argv: list[str] | None = None) -> int:
 
     args.out.mkdir(parents=True, exist_ok=True)
 
-    # Persist any newly-assigned wire IDs back to protocol_ids.toml so
-    # the developer doesn't have to hand-edit it.
     profile.write_ids(prof)
 
     for backend in ALL_BACKENDS:

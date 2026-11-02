@@ -11,7 +11,7 @@ namespace {
 
 constexpr uint64_t page_bytes = 4096u;
 
-}  // namespace
+}
 
 KmtBlobArena::KmtBlobArena(GuestConnection &connection, KmtTransport &transport)
     : transport_(transport), memory_(connection, transport), bytes_(0u)
@@ -35,8 +35,6 @@ Status KmtBlobArena::open(uint64_t bytes)
     const Status opened = memory_.open(size, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u));
     if (opened != Status::ok) return opened;
     bytes_ = size;
-    /* The host writes the word only once it publishes one: zero is what an
-     * older host leaves, which the context reads as "ask instead". */
     const PublishedSlotLayout     tail(size);
     volatile unsigned char *const word = memory_.view() + tail.error_word();
     for (uint64_t at = 0u; at < PublishedSlotLayout::error_word_bytes; at++) word[at] = 0u;
@@ -97,4 +95,4 @@ bool KmtBlobArena::invariants_hold() const
            transport_.blobs().ready();
 }
 
-}  // namespace av
+}

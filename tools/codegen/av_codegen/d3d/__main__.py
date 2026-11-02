@@ -1,11 +1,3 @@
-"""av-codegen for Direct3D: this project's D3D registry in, the D3D half of the
-wire out.
-
-``--xml`` names the registry for symmetry with the other generators and with
-tools/check_generated.py, which passes every registry that way; it is TOML.
-``--check`` re-emits into a temporary directory and diffs against ``--out``.
-"""
-
 from __future__ import annotations
 
 import argparse

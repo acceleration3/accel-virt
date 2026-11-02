@@ -1,8 +1,3 @@
-/* The shares one session reaches: its GPU's HostShares, in the domain - the
- * guest device - its context belongs to, as that session. What a backend and
- * the Direct3D sessions inside it call, so none of them carries the three
- * apart. One per session slot, bound as a context opens there and ended as
- * it closes; unbound, it shares nothing and opens nothing. */
 #ifndef AV_SESSION_SHARES_HPP
 #define AV_SESSION_SHARES_HPP
 
@@ -26,7 +21,6 @@ public:
     SessionShares(const SessionShares &) = delete;
     SessionShares &operator=(const SessionShares &) = delete;
 
-    /* `shares` in `domain`, as `session`, from now on. */
     void        bind(HostShares &shares, uint32_t domain, SessionBackend &session);
     bool        bound() const;
     uint32_t    domain() const;
@@ -37,10 +31,7 @@ public:
     void                 close(uint64_t id, uint64_t handle);
     [[nodiscard]] Status publish_resource(uint64_t id, IUnknown *resource, ShareOrigin origin);
     void                 written(uint64_t id);
-    /* HostShares::describe_image in this session's domain. */
     bool                 describe_image(uint64_t id, const SharedImageShape &shape);
-    /* Every hold of this session let go of (HostShares::session_closed), and
-     * unbound. */
     void                 end();
 
 private:
@@ -49,6 +40,6 @@ private:
     uint32_t        domain_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SESSION_SHARES_HPP
+#endif

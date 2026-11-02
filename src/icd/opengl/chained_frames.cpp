@@ -15,8 +15,6 @@ ChainedFrames::ChainedFrames() : slots_(), textures_{}, opened_(false)
     AV_SCOPE("ChainedFrames::ChainedFrames");
 }
 
-/* A window's chain is made again at its new size by the chains; only a chain
- * of another window is closed (ChainSlots). */
 bool ChainedFrames::open(ClientTransport &wire, icd::WindowChains &chains, void *window, uint64_t luid,
                          uint32_t width, uint32_t height, bool srgb)
 {
@@ -36,10 +34,6 @@ bool ChainedFrames::open(ClientTransport &wire, icd::WindowChains &chains, void 
             close(&wire);
             return false;
         }
-        /* A slot is a linear image (the host's ExportableImages), and GL
-         * takes the tiling of memory it imports from the texture over it:
-         * left at its optimal default, it draws tiled into memory Direct3D
-         * reads row by row, and the window shows streaks. */
         glproto::av_glTextureParameteri(wire, textures_[slot], gl_texture_tiling, static_cast<GLint>(gl_linear_tiling));
         glproto::av_glTextureStorageMem2DEXT(wire, textures_[slot], 1, icd::SlotFormat(icd::SlotLayout::rgba_bottom_up).gl_storage(srgb),
                                               static_cast<GLsizei>(width), static_cast<GLsizei>(height),
@@ -61,8 +55,6 @@ bool ChainedFrames::fits(void *window, uint32_t width, uint32_t height) const
     return opened_ && slots_.fits(window, width, height);
 }
 
-/* glFinish is synchronous on the wire because the application waits for it;
- * here nothing waits but the batch, which the host ends only after running it. */
 void ChainedFrames::draw(ClientTransport &wire, uint32_t source, uint32_t slot)
 {
     AV_SCOPE("ChainedFrames::draw");
@@ -73,8 +65,6 @@ void ChainedFrames::draw(ClientTransport &wire, uint32_t source, uint32_t slot)
     static_cast<void>(wire.send_async(glproto::kCmd_glFinish, finish));
 }
 
-/* The textures go before the memory under them is released. Without a wire
- * both went with the host's context. */
 void ChainedFrames::close(ClientTransport *wire)
 {
     AV_SCOPE("ChainedFrames::close");
@@ -95,7 +85,6 @@ bool ChainedFrames::invariants_hold() const
     return (!opened_ || slots_.opened()) && slots_.invariants_hold();
 }
 
-/* OpenGL deletes nothing for a zero name, so a partly made set goes as it is. */
 void ChainedFrames::delete_textures(ClientTransport &wire)
 {
     AV_SCOPE("ChainedFrames::delete_textures");
@@ -106,4 +95,4 @@ void ChainedFrames::delete_textures(ClientTransport &wire)
     for (uint32_t &texture : textures_) texture = 0u;
 }
 
-}  // namespace av::glicd
+}

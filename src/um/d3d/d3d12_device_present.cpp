@@ -1,20 +1,3 @@
-/* What the kernel sees of a Direct3D 12 device's swap chain: each buffer's
- * kernel allocation, which DWM opens it by, and the presents.
- *
- * DXGI makes a swap chain buffer as a committed texture in a heap the display
- * may scan out, and hands dxgkrnl its allocation at every present; DWM opens
- * that allocation with Direct3D 11. The pixels never cross into guest memory:
- * the host shows its own texture to its Direct3D 11 device under the identity
- * the miniport minted over the allocation (ShareResource12), the same memory
- * on both of its devices, and a present orders that device's work after what
- * the presenting queue executed (PresentResource12).
- *
- * A present also names its point on the buffer - its nth present of it - in
- * the host command and in the private data dxgkrnl hands the miniport. A
- * flip-model present is composed from the host's texture and the point goes
- * unread; a blt-model one - Direct3D 9 on 12's redirected blt - is moved from
- * the frame the host staged at that point (docs/shared-surfaces.md). This
- * driver cannot tell the two apart: the runtime presents both alike. */
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
@@ -45,7 +28,6 @@ HRESULT D3d12Device::show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime
         refused_.failed("pfnAllocateCb for a swap chain buffer", made);
         return made;
     }
-    /* Made for the runtime's resource; given back with it (give_back). */
     resource.allocation = info.hAllocation;
     resource.runtime_resource = runtime.handle;
     const uint64_t key = surface.key();
@@ -53,14 +35,8 @@ HRESULT D3d12Device::show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime
         lines_.write("the miniport minted no identity for a swap chain buffer; DWM cannot open it");
         return S_OK;
     }
-    /* Every shown surface is shared, whatever its shape: the host marks it
-     * as the surface it is, which a blt of it is staged by, and makes the
-     * compositor's view of it only if something opens it - so D3D9On12, which
-     * shares every texture it makes, costs the host no more than that. */
     if (!sent(d3d12proto::av_d3d12_ShareResource12(wire(), resource.header.stamp.id(), key), "ShareResource12"))
         return E_OUTOFMEMORY;
-    /* DWM may open it as soon as the kernel hands it the handle, on a stream
-     * of its own: the host must have shown it by then. */
     if (wire().flush() != Status::ok) {
         lost("a swap chain buffer could not be shown");
         return E_OUTOFMEMORY;
@@ -68,9 +44,6 @@ HRESULT D3d12Device::show(ResourceRecord &resource, D3D12DDI_HRTRESOURCE runtime
     return S_OK;
 }
 
-/* The kernel's present of the buffer goes on the queue's context behind a
- * packet that follows the batch carrying PresentResource12: DWM is handed the
- * buffer only once the host has put its device's work behind the queue's. */
 void D3d12Device::present(D3D12DDI_HCOMMANDQUEUE queue_handle, const D3D12DDIARG_PRESENT_0001 *args,
                           D3D12DDI_PRESENT_0051 *out, D3D12DDI_PRESENT_CONTEXTS_0051 *contexts,
                           D3D12DDI_PRESENT_HWQUEUES_0051 *hardware_queues)
@@ -111,4 +84,4 @@ void D3d12Device::present(D3D12DDI_HCOMMANDQUEUE queue_handle, const D3D12DDIARG
     if (hardware_queues != nullptr) hardware_queues->BroadcastQueueCount = 0u;
 }
 
-}  // namespace av::d3d12
+}

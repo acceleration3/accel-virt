@@ -1,4 +1,3 @@
-"""tools/run_test_shard.py: shards cover a module exactly once between them."""
 import pathlib
 import subprocess
 import sys
@@ -47,7 +46,6 @@ class RunTestShard(unittest.TestCase):
 
     def test_a_failing_test_fails_only_its_shard(self):
         codes = [self.run_shard(index, 3, fail=True).returncode for index in range(3)]
-        # Sorted ids test_0..test_6: test_5 is position 5, shard 2.
         self.assertEqual(codes, [0, 0, 1])
 
     def test_a_shard_with_no_test_and_bad_arguments_are_refused(self):

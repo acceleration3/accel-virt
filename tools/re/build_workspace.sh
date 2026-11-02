@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# Rebuild the reverse-engineering workspace: fetch every binary pinned in
-# tools/re/binaries.txt with its public PDB into re/bin/, then import and
-# analyse each into the Ghidra project re/ghidra-proj/wddm. Microsoft binaries
-# are never committed; re/ is git-ignored.
-#
-# Needs GHIDRA_INSTALL_DIR, JAVA_HOME (JDK 21+) and a Python with pyghidra in
-# AV_PYGHIDRA. Re-running skips what is already present and correct.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 

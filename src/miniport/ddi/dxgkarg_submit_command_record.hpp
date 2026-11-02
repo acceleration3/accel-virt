@@ -1,6 +1,3 @@
-/* DXGKARG_SUBMITCOMMAND, as DxgkDdiSubmitCommand receives it. A DDI record:
- * hDevice is the union with hContext, Flags the DXGK_SUBMITCOMMANDFLAGS
- * Value. src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_SUBMIT_COMMAND_RECORD_HPP
 #define AV_DXGKARG_SUBMIT_COMMAND_RECORD_HPP
 
@@ -31,6 +28,6 @@ struct DxgkargSubmitCommandRecord {
     uint32_t Padding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_SUBMIT_COMMAND_RECORD_HPP
+#endif

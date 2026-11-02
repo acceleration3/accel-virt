@@ -1,7 +1,3 @@
-/* A shared object's release, told to the device over a real control queue: the
- * driver's own request type with the id where the device reads it, and the
- * device's answer - a refusal, bytes that are no answer, or none at all - is
- * what send reports. */
 #include "miniport/memory/shared_object_release.hpp"
 #include "core/support/status.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
@@ -83,7 +79,7 @@ private:
     std::optional<VirtioGpuDevice> device_;
 };
 
-}  // namespace
+}
 
 TEST(shared_object_release, sends_the_driver_s_request_naming_the_id_and_takes_the_device_s_ok)
 { Fixture fixture;
@@ -127,7 +123,5 @@ TEST(shared_object_release, is_passive_only)
   static_cast<void>(release.send(fixture.device(), 5u));
   fixture.mapped().platform().set_irql(Irql::passive);
   CHECK(fixture.mapped().platform().claim(Violation::irql_ceiling));
-  /* The device's own ceilings, reached under it, and the wait for its turn
-   * at the queue, which blocks. */
   while (fixture.mapped().platform().claim(Violation::irql_ceiling)) {}
   CHECK(fixture.mapped().platform().claim(Violation::blocking_at_dispatch)); }

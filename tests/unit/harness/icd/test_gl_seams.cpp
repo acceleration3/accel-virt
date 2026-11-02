@@ -1,8 +1,3 @@
-/* The OpenGL ICD's scripted windows and threads are the oracles its tests judge
- * presentation and current contexts by, so their own rules are tested: a DC
- * answers its window or none, sizes follow the test, a closed window has no
- * size, a blit is kept or refused, and each thread keeps its own slot and
- * error. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
@@ -23,7 +18,7 @@ int memory_dc = 0;
 int unknown_dc = 0;
 int window_a = 0;
 
-}  // namespace
+}
 
 TEST(scripted_window_surface, a_dc_answers_its_window_and_a_memory_or_unknown_dc_none)
 { ScriptedWindowSurface surface;
@@ -72,7 +67,6 @@ TEST(scripted_window_surface, keeps_each_blit_and_refuses_the_one_it_was_told_to
   CHECK_EQ(surface.blits(), 1u);
   CHECK(surface.blit(&dc_a, 2u, 1u, pixels));
   CHECK_EQ(surface.blits(), 2u);
-  /* A DC it does not know draws nowhere. */
   CHECK(!surface.blit(&unknown_dc, 2u, 1u, pixels));
   CHECK(!surface.blit(&memory_dc, 2u, 1u, pixels));
   CHECK_EQ(surface.blits(), 2u); }
@@ -85,8 +79,6 @@ TEST(scripted_window_surface, keeps_only_the_first_bytes_of_a_large_blit)
   CHECK(surface.blit(&dc_a, 512u, 512u, pixels));
   CHECK_EQ(surface.last_blit_bytes()[ScriptedWindowSurface::kept_bytes - 1u], 0x5au); }
 
-/* A Vulkan swapchain holds a window, not a DC: its frame is kept as a blit on
- * the window's first DC, and a closed or unknown window takes none. */
 TEST(scripted_window_surface, a_window_blit_draws_on_its_first_dc)
 { ScriptedWindowSurface scripted;
   av::icd::WindowSurface &surface = scripted;
@@ -105,8 +97,6 @@ TEST(scripted_window_surface, a_window_blit_draws_on_its_first_dc)
   CHECK(!surface.blit_window(&window, 8u, 4u, frame));
   CHECK_EQ(scripted.blits(), 1u); }
 
-/* A top-down window blit is kept as the same blit, marked top-down; a later
- * bottom-up one clears the mark, and a refused one leaves it as it was. */
 TEST(scripted_window_surface, a_top_down_window_blit_is_marked_so)
 { ScriptedWindowSurface scripted;
   av::icd::WindowSurface &surface = scripted;

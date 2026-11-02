@@ -47,10 +47,7 @@ bool QueueDoorbell::connected() const
 DoorbellStatus QueueDoorbell::status() const
 {
     AV_SCOPE("QueueDoorbell::status");
-    /* Never CONNECTED_NOTIFY_KMD: this device's doorbell is an ioeventfd, so
-     * the store is the notification and there is nothing for the driver to do
-     * after it (research.md §7). */
     return connected_ ? DoorbellStatus::connected : DoorbellStatus::disconnected_retry;
 }
 
-}  // namespace av
+}

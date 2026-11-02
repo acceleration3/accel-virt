@@ -35,4 +35,4 @@ void VirtualPresentAddresses::refer(uint8_t *command, uint32_t allocation_index,
     WireWriter(command + offset, address_bytes).write_u64(allocations[allocation_index].AllocationVirtualAddress);
 }
 
-}  // namespace av
+}

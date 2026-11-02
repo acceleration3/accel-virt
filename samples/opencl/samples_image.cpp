@@ -1,12 +1,8 @@
-// mandelbrot, gaussianblur, convolution, gameoflife, heat2d, imageresample: kernels
-// whose answer is a picture.
 #include "framework.h"
 
 namespace samples {
 
 namespace {
-
-// Reads back `rgba` (a buffer of packed R8G8B8A8) into the capture.
 void capture_rgba_buffer(Gpu &gpu, Capture &capture, cl_mem rgba, uint32_t width, uint32_t height)
 {
     const size_t bytes = static_cast<size_t>(width) * height * 4u;
@@ -24,7 +20,6 @@ void capture_image(Gpu &gpu, Capture &capture, cl_mem image, uint32_t width, uin
     release_memory(pixels);
 }
 
-// A test card: colour bars, a zone plate and a grid, sharp enough that a filter shows.
 uint32_t *test_card(uint32_t width, uint32_t height)
 {
     uint32_t *texels = static_cast<uint32_t *>(allocate(static_cast<size_t>(width) * height * 4u));
@@ -46,8 +41,6 @@ uint32_t *test_card(uint32_t width, uint32_t height)
         }
     return texels;
 }
-
-// ---------------------------------------------------------------- mandelbrot
 
 class Mandelbrot final : public Sample {
 public:
@@ -80,7 +73,6 @@ __kernel void mandelbrot(__global uchar4 *rgba, float cx, float cy, float scale,
         gpu.arg(kernel_, 4, 1024u);
         return !gpu.failed;
     }
-    // A zoom into the seahorse valley that starts over every four seconds.
     void step(Gpu &gpu) override { render(gpu, static_cast<float>(frame_++ % 240u) / 60.0f); }
     const char *capture(Gpu &gpu, Capture &capture) override
     {
@@ -111,10 +103,6 @@ private:
     uint32_t   frame_ = 0;
 };
 
-// ---------------------------------------------------------------- gaussianblur
-
-// A separable blur of radius 12 over a test card, horizontal then vertical,
-// image to image, the weights in constant memory.
 class GaussianBlur final : public Sample {
 public:
     const char *name() const override { return "gaussianblur"; }
@@ -189,10 +177,6 @@ private:
     cl_mem     source_ = nullptr, across_ = nullptr, blurred_ = nullptr, weights_ = nullptr;
 };
 
-// ---------------------------------------------------------------- convolution
-
-// A 5x5 convolution of a single-channel float field held in a buffer: each group
-// stages its tile and apron in local memory, the filter in constant memory.
 class Convolution final : public Sample {
 public:
     const char *name() const override { return "convolution"; }
@@ -238,7 +222,6 @@ __kernel void show(__global const float *field, __global uchar4 *rgba) {
             }
         in_ = gpu.buffer(size * size * 4u, field, CL_MEM_READ_ONLY);
         release_memory(field);
-        // A Laplacian of Gaussian: edges light up, flat regions go dark.
         const float filter[25] = {0, 0, -1, 0, 0, 0, -1, -2, -1, 0, -1, -2, 16, -2, -1,
                                   0, -1, -2, -1, 0, 0, 0, -1, 0, 0};
         filter_ = gpu.buffer(sizeof filter, filter, CL_MEM_READ_ONLY);
@@ -278,10 +261,6 @@ private:
     cl_mem                    in_ = nullptr, out_ = nullptr, filter_ = nullptr, rgba_ = nullptr;
 };
 
-// ---------------------------------------------------------------- gameoflife
-
-// Conway's Life on a 1024x1024 torus; a live cell's value is its age, which is
-// what the picture is coloured by.
 class GameOfLife final : public Sample {
 public:
     const char *name() const override { return "gameoflife"; }
@@ -368,10 +347,6 @@ private:
     uint32_t   current_ = 0;
 };
 
-// ---------------------------------------------------------------- heat2d
-
-// Heat spreading over a plate from four sources held at fixed temperatures, one
-// Jacobi relaxation per iteration.
 class Heat2d final : public Sample {
 public:
     const char *name() const override { return "heat2d"; }
@@ -468,11 +443,6 @@ private:
     uint32_t   current_ = 0;
 };
 
-// ---------------------------------------------------------------- imageresample
-
-// A test card rotated and scaled up through a sampler object the application
-// made - normalized coordinates, bilinear filtering, repeat addressing - rather
-// than one declared in the kernel.
 class ImageResample final : public Sample {
 public:
     const char *name() const override { return "imageresample"; }
@@ -531,7 +501,7 @@ private:
     uint32_t   frame_ = 0;
 };
 
-}  // namespace
+}
 
 void register_image(Sample **all, uint32_t &made)
 {
@@ -543,4 +513,4 @@ void register_image(Sample **all, uint32_t &made)
     all[made++] = new ImageResample();
 }
 
-}  // namespace samples
+}

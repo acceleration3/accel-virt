@@ -88,4 +88,4 @@ void SessionShares::end()
     domain_ = 0u;
 }
 
-}  // namespace av
+}

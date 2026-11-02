@@ -5,15 +5,12 @@
 namespace av {
 
 namespace {
-
-/* A dirty region of one rectangle, as RGNDATA lays it out: the header, then
- * the rectangles. */
 struct OneRectangleRegion {
     RGNDATAHEADER header;
     RECT          rectangle;
 };
 
-}  // namespace
+}
 
 WindowsD3d9ExEntry::WindowsD3d9ExEntry() : d3d9_(nullptr), device_(nullptr), chain_(nullptr)
 {
@@ -105,4 +102,4 @@ void WindowsD3d9ExEntry::release()
     d3d9_ = nullptr;
 }
 
-}  // namespace av
+}

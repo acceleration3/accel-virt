@@ -1,7 +1,3 @@
-/* The private data of a packet on an ordinary context, fed attacker-chosen
- * bytes: Adapter::submit_command_virtual decodes it for every such packet, and
- * a process writes it. What decodes must re-encode to exactly the bytes read
- * and name a ring and a fence. */
 #include "core/support/status.hpp"
 #include "proto/escape/follow_record.hpp"
 

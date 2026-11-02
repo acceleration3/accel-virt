@@ -1,5 +1,3 @@
-/* Reaches into an AdoptedBlobs so invariant tests can corrupt it. Declared a
- * friend by AdoptedBlobs; nothing outside the tests uses it. */
 #ifndef AV_ADOPTED_BLOBS_PROBE_HPP
 #define AV_ADOPTED_BLOBS_PROBE_HPP
 
@@ -20,6 +18,6 @@ struct AdoptedBlobsProbe {
     AdoptedBlobs &adopted;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_ADOPTED_BLOBS_PROBE_HPP
+#endif

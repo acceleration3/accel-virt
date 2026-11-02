@@ -154,9 +154,6 @@ void D3d9FramePool::Frame::drop()
 {
     AV_SCOPE("D3d9FramePool::Frame::drop");
     if (surface_ != nullptr && mapped_) surface_->UnlockRect();
-    /* A copy submitted for the lent pages may still be reading held_. Past a
-     * second it is not waited for any longer, and held_ and the device it
-     * belongs to are left alone - a leak, where a release is a use after free. */
     const bool pinned = copier_ != nullptr && copy_value_ != 0u && !copier_->wait(copy_value_, settle_ms);
     copy_value_ = 0u;
     if (copier_ != nullptr) pool_->return_copier(copier_);
@@ -177,8 +174,6 @@ void D3d9FramePool::Frame::drop()
     format_ = 0u;
 }
 
-/* The first read copies the frame into memory and flushes it to the GPU; a
- * later one finds it done. */
 StagedFrame::Reading D3d9FramePool::Frame::map_when_copied(const uint8_t *&pixels, uint32_t &row_pitch)
 {
     AV_SCOPE("D3d9FramePool::Frame::map_when_copied");
@@ -197,8 +192,6 @@ StagedFrame::Reading D3d9FramePool::Frame::map_when_copied(const uint8_t *&pixel
     return Reading::mapped;
 }
 
-/* The copier is asked for once per device: a device DXVK gives no interop
- * is read back as before. */
 StagedFrame::Copying D3d9FramePool::Frame::copy_into(const AvFrameCopy &target, uint32_t wait_ms)
 {
     AV_SCOPE("D3d9FramePool::Frame::copy_into");
@@ -222,4 +215,4 @@ void D3d9FramePool::Frame::unmap()
     mapped_ = false;
 }
 
-}  // namespace av
+}

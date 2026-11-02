@@ -1,8 +1,3 @@
-/* The host's answer to IMPORT_BLOB and RELEASE_BLOB as the guest reads it back
- * from its reply slot, attacker-chosen (feature 045): whatever the slot holds,
- * an import is either taken with memory and no refusal, refused with a status
- * and no memory, or held as nothing; and a release of what was taken names
- * exactly that memory and forgets it. */
 #include "core/support/status.hpp"
 #include "guest/transport/blob_import.hpp"
 #include "harness/transport/mock_transport.hpp"
@@ -23,7 +18,7 @@ void require(bool holds)
     if (!holds) __builtin_trap();
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {
@@ -37,7 +32,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     if (imported != av::Status::ok) return 0;
     require(size == av::BlobImportAnswer::encoded_size);
     const std::uint64_t memory = import.memory();
-    /* The same bytes answer the release, and a release is answered with none. */
     require(import.release() == av::Status::malformed);
     require(transport.last_command() == av::CommandHeader::release_blob_id);
     std::uint64_t named = 0u;

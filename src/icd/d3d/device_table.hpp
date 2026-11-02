@@ -1,11 +1,3 @@
-/* The devices of this process, and the only way back from the block the
- * runtime holds (contracts/umd_interface.md, "The device object model").
- *
- * `device_of` is the guard on every device entry point: it reads the magic of
- * a block this driver does not own, then asks the pool whether the address in
- * it is still a live device, and only then may a field be read. A block
- * another component scribbled on, a block of a destroyed device and a pointer
- * never handed out all answer null. */
 #ifndef AV_D3D_DEVICE_TABLE_HPP
 #define AV_D3D_DEVICE_TABLE_HPP
 
@@ -20,7 +12,7 @@
 namespace av {
 class BlockSource;
 class StateWriter;
-}  // namespace av
+}
 
 
 namespace av::d3d {
@@ -35,23 +27,11 @@ public:
     DeviceTable(const DeviceTable &) = delete;
     DeviceTable &operator=(const DeviceTable &) = delete;
 
-    /* What pfnCalcPrivateDeviceSize answers, whatever the runtime asked with. */
-    /* Where in the runtime's block the device's builder keeps the address of
-     * what it built, right after the cookie: the table thunks read it there
-     * on every call, without a search. */
     static constexpr size_t extension_offset = sizeof(DeviceCookie);
     static constexpr size_t private_bytes = extension_offset + sizeof(void *);
 
-    /* Makes a device on `adapter` and writes its cookie into `block`, the
-     * memory the runtime allocated. invalid_parameter for a null block;
-     * no_memory when the pool has none. The adapter's device count rises with
-     * the device. */
     [[nodiscard]] Status make(UmdDevice *&made, UmdAdapter &adapter, void *block);
-    /* The device `block` names, or null. */
     UmdDevice           *device_of(void *block) const;
-    /* Destroys the device `block` names and clears its cookie.
-     * invalid_parameter for a block naming none, which is what a double
-     * destroy and a forged handle both look like. */
     [[nodiscard]] Status destroy(void *block);
     uint32_t             live_devices() const;
 
@@ -65,6 +45,6 @@ private:
     friend struct DeviceTableProbe;
 };
 
-}  // namespace av::d3d
+}
 
-#endif  // AV_D3D_DEVICE_TABLE_HPP
+#endif

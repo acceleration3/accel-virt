@@ -1,9 +1,3 @@
-/* How far the host GPU has got with a Direct3D 11 session's batches: each
- * batch's end signals the session's fence with the next mark, reached() is
- * what the fence completed - never past the last mark - and a released fence
- * leaves every mark reached. Each mark is watched for by the session's wake,
- * and only a mark the runtime refused to watch is polled for. The fence is a
- * scripted stand-in for DXVK's, so the test says when the GPU got where. */
 #include "executor/d3d/d3d11_batch_progress.hpp"
 #include "executor/eventfd_wake.hpp"
 #include "executor/shim/d3d_headers.hpp"
@@ -48,7 +42,7 @@ public:
     ULONG  references = 1u;
 };
 
-}  // namespace
+}
 
 TEST(d3d11_batch_progress_new, has_marked_nothing_and_waits_for_nothing)
 { EventfdWake        wake;
@@ -90,7 +84,7 @@ TEST(d3d11_batch_progress_reached, follows_the_fence_and_is_pending_until_it_pas
     CHECK(progress.reached() == 2u);
     CHECK(!progress.pending());
     CHECK(progress.invariants_hold()); }
-  CHECK_EQ(fence.references, 0u); }   /* the session's fence goes with it */
+  CHECK_EQ(fence.references, 0u); }
 
 TEST(d3d11_batch_progress_reached, never_passes_the_last_mark_whatever_the_fence_answers)
 { ScriptedFence fence;
@@ -98,7 +92,7 @@ TEST(d3d11_batch_progress_reached, never_passes_the_last_mark_whatever_the_fence
   D3d11BatchProgress progress(wake);
   progress.adopt(&fence);
   progress.signalled();
-  fence.completed = UINT64_MAX;   /* a lost device's answer */
+  fence.completed = UINT64_MAX;
   CHECK(progress.reached() == 1u);
   CHECK(!progress.pending()); }
 
@@ -127,10 +121,10 @@ TEST(d3d11_batch_progress_release, leaves_every_mark_reached_and_marks_keep_risi
   CHECK(progress.reached() == 2u);
   CHECK(!progress.pending());
   CHECK(progress.invariants_hold());
-  progress.release();   /* nothing held: nothing let go twice */
+  progress.release();
   CHECK_EQ(first.references, 0u);
   progress.adopt(&second);
-  second.completed = 2u;   /* made at marked(), as the device makes it */
+  second.completed = 2u;
   CHECK(progress.next() == 3u);
   progress.signalled();
   CHECK(progress.marked() == 3u);
@@ -146,10 +140,8 @@ void count_wake(void *count)
     ++*static_cast<std::uint32_t *>(count);
 }
 
-}  // namespace
+}
 
-/* With a worker bound, each mark is handed to DXVK with the wake's eventfd:
- * the worker sleeps until the GPU reaches it and polls for nothing. */
 TEST(d3d11_batch_progress_signalled, a_watched_mark_is_not_polled_for)
 { std::uint32_t      woken = 0u;
   ScriptedFence      fence;
@@ -170,8 +162,6 @@ TEST(d3d11_batch_progress_signalled, a_watched_mark_is_not_polled_for)
   progress.release();
   wake.unbind(); }
 
-/* A mark DXVK will not watch is polled for until the GPU reaches it, and a
- * later one it does watch is not. */
 TEST(d3d11_batch_progress_signalled, a_mark_the_runtime_refuses_to_watch_is_polled_for_until_reached)
 { std::uint32_t      woken = 0u;
   ScriptedFence      fence;

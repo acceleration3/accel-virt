@@ -49,4 +49,4 @@ bool ContextPages::complete() const
            ring_view_ != nullptr && fence_view_ != nullptr;
 }
 
-}  // namespace av
+}

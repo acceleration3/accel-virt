@@ -54,4 +54,4 @@ bool BgraRows::invariants_hold() const
     return (source_ != nullptr || bytes_ == 0u) && (base_ == nullptr || base_ == source_);
 }
 
-}  // namespace av
+}

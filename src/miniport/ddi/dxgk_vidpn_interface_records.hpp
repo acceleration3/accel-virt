@@ -1,9 +1,3 @@
-/* The interface tables dxgkrnl hands a driver for a VidPn - DXGK_VIDPN_INTERFACE,
- * DXGK_VIDPNTOPOLOGY_INTERFACE, DXGK_VIDPNSOURCEMODESET_INTERFACE,
- * DXGK_VIDPNTARGETMODESET_INTERFACE - and for a monitor's source modes,
- * DXGK_MONITORSOURCEMODESET_INTERFACE. DDI records of typed function pointers,
- * kept together because each table names the others; src/km/ddi_record_layout.cpp
- * proves each offset. Handles are void *, SIZE_T uint64_t, NTSTATUS int32_t. */
 #ifndef AV_DXGK_VIDPN_INTERFACE_RECORDS_HPP
 #define AV_DXGK_VIDPN_INTERFACE_RECORDS_HPP
 
@@ -119,6 +113,6 @@ struct DxgkMonitorSourceModeSetInterfaceRecord {
     MonitorModeSetOperation pfnReleaseModeInfo;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGK_VIDPN_INTERFACE_RECORDS_HPP
+#endif

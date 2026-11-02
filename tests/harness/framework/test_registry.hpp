@@ -1,9 +1,3 @@
-/* Self-registering tests.
- *
- * The registry is the one place in this repo with process-lifetime state that
- * is not injected, because a test must register itself before main() runs.
- * It is a class with state, not a pile of file-scope variables, and nothing
- * outside the harness touches it. */
 #ifndef AV_TEST_REGISTRY_HPP
 #define AV_TEST_REGISTRY_HPP
 
@@ -13,9 +7,6 @@ class TestCase {
 public:
     using Body = void (*)();
 
-    /* Registers itself. Doing this from a separate __attribute__((constructor))
-     * is a bug: the two run in unspecified order, and the constructor then
-     * resets next_ and drops the rest of the list. */
     TestCase(const char *suite, const char *name, Body body);
 
     const char *suite() const;
@@ -40,8 +31,6 @@ public:
 
     void record_failure(const char *file, int line, const char *format, ...);
 
-    /* Whether the running test has failed so far; clears it. Lets a test prove
-     * that something fails a test without failing itself. */
     bool take_current_failure();
 
     static TestRegistry &instance();
@@ -52,7 +41,7 @@ private:
     bool      current_failed_;
 };
 
-}  // namespace av
+}
 
 #define TEST(suite_name, test_name)                                            \
     static void av_body_##suite_name##_##test_name();                          \
@@ -79,4 +68,4 @@ private:
              static_cast<unsigned>(s_),                                        \
              static_cast<unsigned>(expected)); } while (0)
 
-#endif  // AV_TEST_REGISTRY_HPP
+#endif

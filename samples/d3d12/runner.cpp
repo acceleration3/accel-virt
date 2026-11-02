@@ -1,7 +1,3 @@
-// Runs every sample off-screen: warm-up frames, timed frames, then one frame
-// at a fixed time read back as the picture both machines are compared by.
-// The same protocol as samples/d3d11/runner.cpp, where a D3D11 Flush is a
-// D3D12 submit of the frame's command list and a finish is a fence wait.
 #include "framework.h"
 
 namespace samples {
@@ -31,9 +27,6 @@ uint32_t parse_number(const char *text)
     return value;
 }
 
-// The frame as B8G8R8A8 rows: "BGRA", width, height, then the texels. The
-// capture frame is submitted first, with any lists the sample queued after
-// its own, and the copy follows in a list of its own.
 bool capture(Gpu &gpu, const char *path)
 {
     gpu.submit();
@@ -75,7 +68,7 @@ bool capture(Gpu &gpu, const char *path)
         const size_t row = static_cast<size_t>(gpu.width) * 4u;
         const size_t bytes = 12u + row * gpu.height;
         uint8_t *file = static_cast<uint8_t *>(allocate(bytes));
-        const uint32_t header[3] = {0x41524742u, gpu.width, gpu.height};   /* "BGRA" */
+        const uint32_t header[3] = {0x41524742u, gpu.width, gpu.height};
         copy_bytes(file, header, 12u);
         for (uint32_t y = 0; y < gpu.height; y++)
             copy_bytes(file + 12u + y * row, mapped + static_cast<size_t>(y) * pitch, row);
@@ -137,23 +130,13 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
         return;
     }
     const float step = 1.0f / 60.0f;
-    /* The GPU's clocks climb over the first few hundred milliseconds of load,
-     * so the warm-up runs for a time as well as a count: otherwise whichever
-     * run followed another on a warm GPU looks faster than the one that did
-     * not. */
     const double warm_from = seconds();
     for (uint32_t n = 0; n < options.warmup || seconds() - warm_from < options.warmup_seconds; n++)
         frame(sample, gpu, static_cast<float>(n % (options.warmup != 0 ? options.warmup : 1)) * step);
     gpu.finish();
-    /* Blocks of the frames asked for, each finished, until a second has gone:
-     * a run of a few milliseconds measures whatever else the machine did
-     * then. Within a block the CPU runs at most Gpu::slots frames ahead, as a
-     * D3D12 application with that many frames in flight does. */
     const double timed = seconds();
     uint32_t     frames = 0;
     double       looped = 0.0;
-    /* Each second's rate as well as the whole run's, so a long run shows
-     * whether the rate holds or sags while the same process renders. */
     double   second_from = timed;
     uint32_t second_frames = 0;
     double   waited_from = gpu.waited;
@@ -193,9 +176,6 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
     const double taken = seconds() - timed;
     log_number("loop ms", looped * 1000.0);
     log_number("finish ms", (taken - looped) * 1000.0);
-    /* Twice: a sample that shows what its previous frame measured - the
-     * occlusion counts - then shows the capture time's own, however many
-     * frames each machine managed before it. */
     frame(sample, gpu, options.capture_time);
     gpu.finish();
     gpu.open();
@@ -210,7 +190,7 @@ void run_sample(Sample &sample, Gpu &gpu, const Options &options, char *metrics,
     retire(sample, gpu);
 }
 
-}  // namespace
+}
 
 int run(int argc, const char *const *argv)
 {
@@ -244,9 +224,6 @@ int run(int argc, const char *const *argv)
         log("FAIL: the Direct3D 12 device could not be set up\n");
         return 2;
     }
-    /* An empty list, its signal and the wait for it, over and over: how long
-     * one submission takes to come back when there is no work in it, the
-     * floor under any frame that waits for the last one. */
     if (options.roundtrips != 0) {
         double shortest = 1e9;
         const double began = seconds();
@@ -282,4 +259,4 @@ int run(int argc, const char *const *argv)
     return 0;
 }
 
-}  // namespace samples
+}

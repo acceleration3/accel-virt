@@ -1,12 +1,3 @@
-"""A virtio-gpu driver that talks to a real QEMU over qtest, with no guest.
-
-qtest gives port I/O, MMIO and guest physical memory access on QEMU's stdin, so
-this module does what a guest's firmware and driver would: assign the PCI
-function's BARs, walk its virtio capabilities, negotiate features, lay split
-virtqueues out in guest RAM, and exchange virtio-gpu requests on them.
-Interrupts are not used: completion is polled from the used ring, which also
-lets QEMU's main loop run the device's bottom halves between commands.
-"""
 import os
 import struct
 import subprocess
@@ -49,12 +40,7 @@ FEATURE_EDID = 1 << 1
 
 
 class Qtest:
-    """One QEMU process driven over qtest; stopped when closed."""
-
     def __init__(self, build, device, shared_ram=False, extra=()):
-        """`shared_ram` backs guest RAM with a memfd, as the guest runner does, so
-        the device can map guest pages a second time (feature 045). `extra` is
-        appended to the command line - a seccomp sandbox, as libvirt starts QEMU."""
         self.environment = dict(os.environ, QEMU_MODULE_DIR=build)
         command = [os.path.join(build, "qemu-system-x86_64"), "-M", "pc", "-m", f"{RAM_MB}M",
                    "-display", "none", "-nodefaults", "-machine", "accel=qtest", "-qtest", "stdio",
@@ -63,13 +49,11 @@ class Qtest:
             command += ["-object", f"memory-backend-memfd,id=ram,size={RAM_MB}M,share=on",
                         "-machine", "memory-backend=ram"]
         command += list(extra)
-        # A file, not a pipe: nothing reads stderr while qtest runs, and a full pipe would stop QEMU.
         self.stderr = tempfile.TemporaryFile(mode="w+")
         self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=self.stderr, text=True, env=self.environment)
 
     def close(self):
-        """Stops QEMU and answers what it printed on stderr."""
         self.process.kill()
         self.process.wait(timeout=60)
         self.process.stdin.close()
@@ -80,8 +64,6 @@ class Qtest:
         return printed
 
     def printed(self):
-        """What QEMU has printed on stderr so far. pread, because QEMU writes
-        through the same file description and a seek would move its offset."""
         descriptor = self.stderr.fileno()
         return os.pread(descriptor, os.fstat(descriptor).st_size, 0).decode(errors="replace")
 
@@ -115,8 +97,6 @@ class Qtest:
 
 
 class GuestMemory:
-    """A bump allocator over guest RAM above the first 16 MiB."""
-
     def __init__(self, qtest):
         self.qtest = qtest
         self.next = FIRST_ALLOCATION
@@ -131,8 +111,6 @@ class GuestMemory:
 
 
 class PciFunction:
-    """Configuration space through 0xcf8/0xcfc, and BARs assigned as firmware would."""
-
     def __init__(self, qtest):
         self.qtest = qtest
         self.bars = {}
@@ -149,7 +127,6 @@ class PciFunction:
         self.qtest.command(f"out{'bwl'[(8, 16, 32).index(width)]} 0xcfc 0x{value:x}")
 
     def assign_bars(self):
-        """Sizes every memory BAR, places it above FIRST_BAR_ADDRESS, and enables decoding."""
         next_address = FIRST_BAR_ADDRESS
         index = 0
         while index < 6:
@@ -178,7 +155,6 @@ class PciFunction:
         self.write(16, PCI_COMMAND, self.read(16, PCI_COMMAND) | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER)
 
     def capabilities(self):
-        """(position, id) of each capability in the list."""
         if not self.read(16, PCI_STATUS) & PCI_STATUS_CAPABILITIES:
             return []
         found = []
@@ -190,9 +166,6 @@ class PciFunction:
 
 
 class Msix:
-    """A PCI function's MSI-X capability: its table and pending bits, reached
-    through the BARs the firmware assigned."""
-
     def __init__(self, qtest, pci):
         self.qtest = qtest
         self.pci = pci
@@ -206,7 +179,6 @@ class Msix:
         self.pending_bits = pci.bars[pending & 7] + (pending & ~7)
 
     def enable(self):
-        """Every vector programmed to the local APIC and masked, then MSI-X on."""
         for vector in range(self.vectors):
             entry = self.table + 16 * vector
             self.qtest.write(32, entry, 0xFEE00000)
@@ -231,8 +203,6 @@ class Msix:
 
 
 class SplitQueue:
-    """A split virtqueue in guest memory, one request/response chain at a time."""
-
     def __init__(self, qtest, memory, index, size):
         self.qtest = qtest
         self.index = index
@@ -246,7 +216,6 @@ class SplitQueue:
         self.last_used = 0
 
     def submit(self, notify_address, request, response_size):
-        """Places request (and a writable response buffer, if any) and notifies."""
         request_address = self.memory.allocate(len(request), 8)
         self.qtest.write_bytes(request_address, request)
         head = self.next_descriptor % self.size
@@ -269,7 +238,6 @@ class SplitQueue:
         return response_address
 
     def wait_used(self, seconds=10.0):
-        """The (descriptor id, written length) of the next used element."""
         deadline = time.monotonic() + seconds
         while self.qtest.read(16, self.used + 2) == self.last_used & 0xFFFF:
             if time.monotonic() > deadline:
@@ -280,9 +248,6 @@ class SplitQueue:
 
 
 class VirtioPciDevice:
-    """A modern virtio-pci function: capability walk, reset, negotiation, queues,
-    and shared memory regions by id as (guest address, length)."""
-
     def __init__(self, qtest):
         self.qtest = qtest
         self.memory = GuestMemory(qtest)
@@ -320,17 +285,14 @@ class VirtioPciDevice:
         return self.common(16, 0x12)
 
     def status(self, value=None):
-        """The device status register: read it, or write `value` and answer it."""
         return self.common(8, 0x14, value)
 
     def set_queue_vector(self, index, vector):
-        """The vector the device accepted: VIRTIO_MSI_NO_VECTOR when refused."""
         self.common(16, 0x16, index)
         self.common(16, 0x1A, vector)
         return self.common(16, 0x1A)
 
     def isr(self):
-        """The ISR status byte; reading it clears it."""
         return self.qtest.read(8, self.regions[VIRTIO_PCI_CAP_ISR])
 
     def device_config(self, width, offset):
@@ -344,7 +306,6 @@ class VirtioPciDevice:
         return features
 
     def initialize(self, wanted):
-        """Reset, acknowledge, negotiate `wanted` & offered, and answer what was accepted."""
         self.common(8, 0x14, 0)
         self.common(8, 0x14, STATUS_ACKNOWLEDGE)
         self.common(8, 0x14, STATUS_ACKNOWLEDGE | STATUS_DRIVER)
@@ -375,13 +336,10 @@ class VirtioPciDevice:
 
 
 class VirtioGpu:
-    """virtio-gpu's control and cursor queues over a started VirtioPciDevice."""
-
     CONTROL = 0
     CURSOR = 1
 
     def __init__(self, qtest, wanted=FEATURE_VERSION_1 | FEATURE_EDID, before_start=None):
-        """`before_start(device)` runs after the queues are set up and before DRIVER_OK."""
         self.device = VirtioPciDevice(qtest)
         self.features = self.device.initialize(wanted)
         self.control_queue = self.device.activate_queue(self.CONTROL)
@@ -392,14 +350,12 @@ class VirtioGpu:
         self.qtest = qtest
 
     def control(self, request, response_size=24):
-        """The response to one control request."""
         queue = self.control_queue
         response = queue.submit(queue.notify_address, request, response_size)
         _, length = queue.wait_used()
         return self.qtest.read_bytes(response, length)
 
     def cursor(self, request):
-        """The length the device reports for one cursor request."""
         queue = self.cursor_queue
         queue.submit(queue.notify_address, request, 0)
         return queue.wait_used()[1]

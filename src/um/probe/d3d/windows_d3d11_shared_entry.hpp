@@ -1,8 +1,3 @@
-/* D3d11SharedEntry over the system's d3d11.dll, which in the guest is
- * Microsoft's runtime on this driver: one device with no window, its shared
- * render targets and their views, and one staging texel to read them through.
- * Translation only - what the probe decides is in
- * src/guest/probe/shared_clear_work.cpp. */
 #ifndef AV_WINDOWS_D3D11_SHARED_ENTRY_HPP
 #define AV_WINDOWS_D3D11_SHARED_ENTRY_HPP
 
@@ -24,7 +19,6 @@ public:
     void    clear(uint32_t target, const uint8_t *colour) override;
     int32_t read_texel(uint32_t target, uint32_t x, uint32_t y, uint8_t *texel) override;
     int32_t removed_reason() override;
-    /* Answered by DXVK's IDXGIVkInteropDevice, which only a layer's device has. */
     bool    layered() override;
     void    release() override;
 
@@ -38,6 +32,6 @@ private:
     ID3D11Texture2D        *staging_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WINDOWS_D3D11_SHARED_ENTRY_HPP
+#endif

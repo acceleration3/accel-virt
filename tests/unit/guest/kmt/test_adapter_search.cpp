@@ -15,8 +15,6 @@ namespace {
 
 const PciIdentity stock(0x1AF4u, 0x1050u, 0x1AF4u, 0x1100u);
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
-/* virtio-gpu-av-pci presenting the host's GPUs, and a real card of the same
- * model passed through beside them. */
 const PciIdentity on_radeon(0x1002u, 0x7550u, 0x1AF4u, 0x5256u);
 const PciIdentity on_raphael(0x1002u, 0x13C0u, 0x1AF4u, 0x5256u);
 const PciIdentity real_radeon(0x1002u, 0x7550u, 0x1002u, 0x0E3Bu);
@@ -28,7 +26,7 @@ std::uint64_t luid_of(MockKmt &kmt, const AdapterSearch &search)
     return luid;
 }
 
-}  // namespace
+}
 
 TEST(adapter_search, keeps_one_avgpu_adapter_and_closes_every_other)
 { MockKmt kmt;
@@ -45,9 +43,9 @@ TEST(adapter_search, keeps_one_avgpu_adapter_and_closes_every_other)
     CHECK_STATUS(search.find_avgpu(0u), Status::invalid_state);
     CHECK_STATUS(search.close(), Status::ok);
     CHECK(!search.found());
-    CHECK_STATUS(search.close(), Status::ok);   /* nothing held */
+    CHECK_STATUS(search.close(), Status::ok);
     CHECK_STATUS(search.find_avgpu(0u), Status::ok); }
-  CHECK_EQ(kmt.open_objects(), 0u);   /* the destructor closed it */
+  CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
 TEST(adapter_search, reports_an_enumeration_failure_and_no_avgpu_adapter)
@@ -57,12 +55,10 @@ TEST(adapter_search, reports_an_enumeration_failure_and_no_avgpu_adapter)
   AdapterSearch search(kmt);
   kmt.fail_at(MockKmt::Call::enumerate_adapters, 1u, 0xC0000001u);
   CHECK_STATUS(search.find_avgpu(0u), Status::invalid_state);
-  CHECK_STATUS(search.find_avgpu(0u), Status::not_found);   /* a real card of the same model is not the device */
+  CHECK_STATUS(search.find_avgpu(0u), Status::not_found);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* The one a Direct3D runtime opened, by LUID, and none for a LUID no avgpu
- * adapter has. */
 TEST(adapter_search, finds_avgpu_by_luid)
 { MockKmt kmt;
   kmt.add_adapter(real_radeon, 3200u);
@@ -75,14 +71,12 @@ TEST(adapter_search, finds_avgpu_by_luid)
     CHECK_STATUS(search.find_avgpu(0x33u), Status::ok);
     CHECK_EQ(luid_of(kmt, search), 0x33u); }
   { AdapterSearch search(kmt);
-    CHECK_STATUS(search.find_avgpu(0x11u), Status::not_found); }   /* the real card's */
+    CHECK_STATUS(search.find_avgpu(0x11u), Status::not_found); }
   { AdapterSearch search(kmt);
     CHECK_STATUS(search.find_avgpu(0x99u), Status::not_found); }
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
-/* Asked for no adapter in particular, the search gives the one AvgpuAdapters
- * lists first: the primary display's, else the kernel's first. */
 TEST(adapter_search, avgpu_asked_for_no_luid_is_the_adapter_the_primary_display_is_on)
 { MockKmt kmt;
   kmt.add_adapter(on_raphael, 3200u);

@@ -48,4 +48,4 @@ Status RenderRequest::render()
     return Status::ok;
 }
 
-}  // namespace av
+}

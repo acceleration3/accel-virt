@@ -1,6 +1,3 @@
-/* A Direct3D 9 the probe's tests drive (feature 047, US1): every call
- * recorded, every call refusable, and a frame that comes back the colour it
- * was cleared to unless the test says otherwise. */
 #ifndef AV_SCRIPTED_D3D9_HPP
 #define AV_SCRIPTED_D3D9_HPP
 
@@ -12,8 +9,6 @@ namespace av {
 
 class ScriptedD3d9 final : public D3d9Entry {
 public:
-    /* What DXVK answers for a device on this driver: its own vendor and
-     * device ids, which are the host GPU's as the ICD reports them. */
     static constexpr std::uint32_t vendor = 0x10DEu;
     static constexpr std::uint32_t device = 0x2204u;
 
@@ -24,9 +19,6 @@ public:
     ScriptedD3d9 &operator=(const ScriptedD3d9 &) = delete;
 
     void          fail(Call call, std::uint32_t nth, std::int32_t result);
-    /* The frame comes back with one pixel's `channel` off by more than a
-     * driver's rounding: which channel matters, because each is compared on
-     * its own. */
     void          miscolour(unsigned channel);
     std::uint32_t calls(Call call) const;
     bool          live() const;
@@ -55,6 +47,6 @@ private:
     unsigned      miscoloured_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_D3D9_HPP
+#endif

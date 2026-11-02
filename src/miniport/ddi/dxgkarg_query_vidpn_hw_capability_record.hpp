@@ -1,6 +1,3 @@
-/* DXGKARG_QUERYVIDPNHWCAPABILITY, as DxgkDdiQueryVidPnHWCapability receives
- * and answers it. A DDI record: VidPnHWCaps is the D3DKMDT_VIDPN_HW_CAPABILITY
- * bitfield's UINT; src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_QUERY_VIDPN_HW_CAPABILITY_RECORD_HPP
 #define AV_DXGKARG_QUERY_VIDPN_HW_CAPABILITY_RECORD_HPP
 
@@ -16,6 +13,6 @@ struct DxgkargQueryVidPnHwCapabilityRecord {
     uint32_t VidPnHWCapsPadding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_QUERY_VIDPN_HW_CAPABILITY_RECORD_HPP
+#endif

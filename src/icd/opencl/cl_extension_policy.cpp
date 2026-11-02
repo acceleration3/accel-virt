@@ -5,83 +5,6 @@
 #include "proto/generated/opencl/cl_supported_extensions.h"
 
 namespace av::clicd {
-
-/* The extensions this ICD reports, each with the test that proves it through
- * the ICD (tools/check_extension_policy.py).
- *
- * Two names are deliberately absent.
- *
- * `cl_khr_external_memory` and `cl_khr_external_memory_win32` are how an
- * application names memory another API made: the Win32 handle travels in
- * `clCreateBufferWithProperties`' property list, `ClExternalMemory` turns it
- * into the object behind it and opens that on the device, and the extension's
- * acquire and release are answered by `ClIcdRoot::enqueue_external` - the
- * object was acquired on the host when the device opened it and stays
- * acquired for its life. Both are answered over the device's
- * `cl_khr_external_memory`, which is the executor's to say and not the host
- * OpenCL's: no OpenCL on a Linux host has a Win32 handle to take, and the
- * device reaches the descriptor through OpenGL instead (research.md §18 and
- * §21), which needs the host's OpenCL to share with the executor's GL. The
- * executor says the name exactly where that import is made
- * (OpenClBackend::on_clGetDeviceInfo) - not on NVIDIA's, which shares with no
- * EGL context - so neither row is reported where it would fail.
- *
- * `cl_khr_icd` is the loader's own contract rather than something an
- * application enables, and this ICD answers its two queries without claiming
- * the extension.
- *
- * `cl_khr_d3d10_sharing` is answered here alone, so it is reported whatever
- * the host offers: which device an application's DXGI adapter or Direct3D 10
- * device is on is a question about the guest's adapters, answered by the
- * adapter's LUID, and no context is ever made from a Direct3D 10 device - the
- * device's surfaces are not the host's to name - so the rest of the extension
- * is its refusals (ClIcdRoot). Affinity looks its OpenCL device up this way
- * and uses none that cannot be.
- *
- * `cl_khr_byte_addressable_store` is a compiler's promise - a kernel may
- * store a char without touching the bytes beside it - core since OpenCL 1.1
- * and listed by every driver still. Nothing crosses the wire for it but the
- * kernels, so it is reported where the host's device lists it; DaVinci Resolve
- * logs an error for a device that does not.
- *
- * `cl_khr_d3d11_sharing` is answered here alone too, so it is reported
- * whatever the host offers: a context made from an application's Direct3D 11
- * device keeps the device, each cl_mem over one of its resources is an
- * ordinary object of the host's, and acquire and release copy the resource's
- * bytes in and back through that device (docs/d3d11-sharing.md). DaVinci
- * Resolve makes its context this way and waits forever when it cannot.
- *
- * `cl_khr_gl_sharing` is reported where the host's device lists it - which
- * the executor leaves it in exactly where a GL context can be had on the GPU.
- * The context this ICD makes from a GL context is a context of the device's
- * made in that GL context's share group: the OpenGL ICD names the context by
- * its ring (avGetShareName), the miniport resolves the name for a context of
- * the same process, and the executor reaches the guest one's objects through a
- * GL context sharing them - the host's own OpenCL naming them where it shares
- * with that context, and copies at the acquire and the release where it does
- * not (CopiedGlSharing).
- *
- * `cl_khr_pci_bus_info`, `cl_amd_device_attribute_query` and
- * `cl_nv_device_attribute_query` say where the device sits on the PCI bus,
- * which is how an application pairs it with a DXGI adapter or a vendor
- * library's GPU (docs/vendor-libraries.md; DaVinci Resolve does). ClDeviceReport
- * answers them from what Windows says of the guest's adapter - the host's own
- * answers would name a bus the guest has no part of - and AMD's free memory
- * from Windows' own account of the adapter's (ClIcdRoot::free_memory), which
- * Resolve asks. The vendor rows are reported on that vendor's adapter alone;
- * an Intel adapter has none, and Resolve pairs it with its DXGI adapter by
- * `cl_khr_device_uuid`'s LUID instead - answered here from the guest's
- * adapter, its UUIDs by the host - and found no OpenCL GPU while the
- * extension went unreported.
- * their other queries go to the host, which answers them where its own driver
- * carries the extension and refuses them where it does not.
- *
- * The kernel-language and image extensions after them are the host
- * compiler's and the host image's: a program is compiled by the host, so what
- * its compiler accepts is what a kernel here may use, and the images are the
- * host's own objects. Each is reported where the host has it and proven by a
- * kernel run through this ICD.
- */
 const ClExtensionPolicy::Row reported_extensions[] = {
     {"cl_khr_external_memory", 1u,
      "cl_buffer_paths.the_acquire_and_release_of_an_external_object_are_answered_by_this_driver"},
@@ -150,17 +73,10 @@ bool ClExtensionPolicy::answered_by(const ExtensionWords &host, uint32_t index) 
 {
     AV_SCOPE("ClExtensionPolicy::answered_by");
     if (!rows_.reportable(index)) return false;
-    /* The host extension the row is answered over, when it is not the host's
-     * own spelling of it: cl_khr_external_memory_win32 is answered over the
-     * device's cl_khr_external_memory, since no Linux OpenCL has a Win32
-     * handle to take and the device opens the object through OpenGL instead
-     * (research.md §21). */
     const char *const over = rows_.row(index).host_;
     if (over != nullptr && over[0] == answered_here[0]) {
         if (over[1] == '\0') return true;
-        /* "-*": answered here once the adapter is described, whatever it is. */
         if (over[1] == '*' && over[2] == '\0') return vendor_ != 0u;
-        /* "-1002": answered here on an adapter of that PCI vendor. */
         return vendor_ != 0u && vendor_of(over) == vendor_;
     }
     return host.holds(rows_.host_name(index));
@@ -182,9 +98,6 @@ bool ClExtensionPolicy::reports(const ExtensionWords &host, const char *name) co
 size_t ClExtensionPolicy::report(const ExtensionWords &host, char *into, size_t into_bytes) const
 {
     AV_SCOPE("ClExtensionPolicy::report");
-    /* Measured first, then written: a caller asks the size and asks again
-     * with room, and an answer that does not fit writes nothing rather than
-     * as much as happened to fit. */
     size_t needed = 1u;
     for (uint32_t index = 0u; index < rows_.count(); ++index) {
         if (!answered_by(host, index)) continue;
@@ -243,4 +156,4 @@ bool ClExtensionPolicy::invariants_hold() const
     return rows_.count() <= max_rows && rows_.invariants_hold();
 }
 
-}  // namespace av::clicd
+}

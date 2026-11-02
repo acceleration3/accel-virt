@@ -1,28 +1,5 @@
 #!/usr/bin/env python3
-"""What a pinned translation layer says it requires (feature 047, FR-001).
-
-DXVK and vkd3d-proton each declare, in their own source, the Vulkan extensions
-they cannot start without and the ones they merely prefer. FR-001 forbids
-copying those lists into this repository by hand: they are read out of the
-pinned release at test time, so a layer that starts requiring one more cannot
-pass unnoticed.
-
-Both declare them the same way in the end - a `VK_*_EXTENSION_NAME` macro
-beside a word saying whether it is required - so one reader serves both:
-
-  * a `VK_*_EXTENSION_NAME` on a line that also holds the word `Required`
-    (DXVK's `DxvkExtMode::Required`) is required; `Optional` is optional;
-  * otherwise the name belongs to the table it is inside, and a table whose
-    own name holds `required` or `optional` says which (vkd3d-proton's
-    `required_device_extensions[]` and `optional_device_extensions[]`);
-  * a name in neither shape is **unclassified**, and reported as such rather
-    than dropped. A list that quietly shrank would be worse than no list.
-
-The macros themselves are resolved from the vendored Vulkan headers, which are
-pinned too, so a name is only ever a name the registry defines.
-
-  layer_requirements.py <layer directory> [--json]
-"""
+"""What a pinned translation layer says it requires (feature 047, FR-001)."""
 import argparse
 import json
 import os
@@ -41,9 +18,6 @@ OPTIONAL_WORD = re.compile(r"\bOptional\b")
 
 
 class ExtensionNames:
-    """The `VK_*_EXTENSION_NAME` macros the pinned registry headers define, and
-    the string each one stands for."""
-
     def __init__(self, header=DEFAULT_HEADER):
         self.header = header
         self.strings = {}
@@ -61,9 +35,6 @@ class ExtensionNames:
 
 
 class LayerRequirements:
-    """One layer's own answer: which extensions it requires, which it prefers,
-    and which its source names in a shape this cannot classify."""
-
     def __init__(self, directory, names):
         self.directory = directory
         self.names = names
@@ -72,7 +43,6 @@ class LayerRequirements:
         self.unclassified_ = set()
 
     def read(self):
-        """Every source file under the directory, in a stable order."""
         if not os.path.isdir(self.directory):
             raise FileNotFoundError(f"{self.directory} is not a directory")
         for base, _directories, files in sorted(os.walk(self.directory)):
@@ -101,8 +71,6 @@ class LayerRequirements:
     def classify(self, macro, line, table):
         name = self.names.string_of(macro)
         if name is None or not EXTENSION_NAME.match(name):
-            # A macro the pinned registry does not define is not a name this
-            # can vouch for, whatever the layer's source calls it.
             self.unclassified_.add(macro)
             return
         if REQUIRED_WORD.search(line):
@@ -117,8 +85,6 @@ class LayerRequirements:
             self.unclassified_.add(name)
 
     def required(self):
-        """Required wins over optional: a layer that names an extension in both
-        shapes cannot start without it."""
         return sorted(self.required_)
 
     def optional(self):
@@ -128,8 +94,6 @@ class LayerRequirements:
         return sorted(self.unclassified_)
 
     def invariants_hold(self):
-        """What it answers is disjoint, and every name it answers is one the
-        registry defines."""
         required = set(self.required())
         optional = set(self.optional())
         if required & optional:

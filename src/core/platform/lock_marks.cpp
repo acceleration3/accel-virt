@@ -35,4 +35,4 @@ void LockMarks::woken() const
     if (TraceTable *const table = scope_binding.table(); table != nullptr) table->waiting(0u);
 }
 
-}  // namespace av
+}

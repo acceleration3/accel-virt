@@ -1,8 +1,3 @@
-/* One guest context's OpenGL made the way the application asked, on every GPU
- * this host serves OpenGL on (feature 050): the version and profile it reports,
- * its debug and robustness state, a context sharing another's objects while
- * that one is current on another thread, and the imported region a pixel read
- * lands in. A host with no OpenGL returns without judging. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/exported_memory.hpp"
@@ -47,28 +42,22 @@ extern "C" const char *__lsan_default_suppressions(void)
 }
 
 namespace av {
-
-/* The host's own GL of a backend, called directly with its context current. */
 struct OpenGlBackendProbe {
     static const glproto::RealGl &gl(OpenGlBackend &backend)
     {
         CHECK(backend.context_.make_current());
         return backend.gl_;
     }
-    /* Whether a pixel read has had a pack buffer made over the region. */
     static bool packs(OpenGlBackend &backend) { return backend.pack_.packing(); }
-    /* The driver syncs the backend holds for live tokens. */
     static std::uint32_t live_syncs(OpenGlBackend &backend) { return backend.fences_.count(); }
 };
 
-}  // namespace av
+}
 
 using av::OpenGlBackend;
 using av::OpenGlBackendProbe;
 
 namespace {
-
-/* What the last import answered beside its handle, handed back to its release. */
 std::uint64_t detail = 0u;
 
 constexpr unsigned gl_major_version = 0x821B;
@@ -96,7 +85,6 @@ constexpr std::uint64_t page = 4096u;
 
 alignas(4096) std::uint8_t region[2u * 4096u];
 
-/* Every display this host keeps, in order; the count. */
 class Displays {
 public:
     Displays() : count_(0u)
@@ -104,7 +92,6 @@ public:
         host_.open();
         for (std::uint32_t i = 0u; i < host_.gpu_count(); i++) {
             const av::GlDisplay *const display = host_.gl_display(i);
-            /* The host keeps a display exactly where it says OpenGL runs. */
             CHECK_EQ(display != nullptr, (host_.sub_apis(i) & AV_EXECUTOR_SUB_API_OPENGL) != 0u);
             if (display == nullptr) continue;
             sources_[count_] = host_.memory_source(i);
@@ -114,7 +101,6 @@ public:
     ~Displays() { host_.close(); }
     std::uint32_t        count() const { return count_; }
     const av::GlDisplay *at(std::uint32_t index) const { return displays_[index]; }
-    /* The memory source of the GPU display `index` is on, or null. */
     av::HostMemorySource *source(std::uint32_t index) const { return sources_[index]; }
 
 private:
@@ -124,10 +110,6 @@ private:
     std::uint32_t        count_;
 };
 
-/* One allocation of a GPU's memory source, of `request`, as the device asks
- * for one: the descriptor it was answered with - what the device maps into
- * the window, and what a shared object's import names - and the memory a
- * context imports, held for as long as this is. */
 class SourceAllocation {
 public:
     static constexpr std::uint64_t key = 0x77u;
@@ -164,8 +146,6 @@ constexpr unsigned gl_condition_satisfied = 0x911C;
 constexpr unsigned gl_sync_flush_commands_bit = 0x1;
 constexpr std::uint64_t second_ns = 1000000000u;
 
-/* One command run as the guest sends it, `frame` its payload; the reply's
- * bytes land in `reply`, and how many in `replied`. */
 bool run_command(OpenGlBackend &backend, std::uint32_t id, const av::WireWriter &frame, const std::uint8_t *bytes,
                  std::uint8_t *reply, std::size_t reply_bytes, std::size_t &replied)
 {
@@ -178,7 +158,6 @@ bool run_command(OpenGlBackend &backend, std::uint32_t id, const av::WireWriter 
     return ran;
 }
 
-/* glFenceSync, its token minted by the guest. */
 bool fence_sync(OpenGlBackend &backend, std::uint64_t token)
 {
     std::uint8_t   frame[32];
@@ -191,9 +170,6 @@ bool fence_sync(OpenGlBackend &backend, std::uint64_t token)
     return run_command(backend, av::glproto::kCmd_glFenceSync, writer, frame, reply, sizeof reply, replied);
 }
 
-/* glGetSynciv(token, GL_SYNC_STATUS) as the guest reads it back: the value,
- * 0 where the host answered nothing - a sync the driver was never handed -
- * and -1 where the command did not run. */
 int sync_status(OpenGlBackend &backend, std::uint64_t token)
 {
     std::uint8_t   frame[32];
@@ -214,8 +190,6 @@ int sync_status(OpenGlBackend &backend, std::uint64_t token)
     return value;
 }
 
-/* glClientWaitSync(token, GL_SYNC_FLUSH_COMMANDS_BIT, a second): what it
- * answered, 0 where the command did not run. */
 unsigned client_wait(OpenGlBackend &backend, std::uint64_t token)
 {
     std::uint8_t   frame[32];
@@ -252,7 +226,7 @@ int integer(OpenGlBackend &backend, unsigned name)
     return value;
 }
 
-}  // namespace
+}
 
 TEST(opengl_backend_device, a_context_reports_the_version_and_profile_it_was_made_with)
 { Displays displays;
@@ -271,7 +245,6 @@ TEST(opengl_backend_device, a_context_reports_the_version_and_profile_it_was_mad
       CHECK(version >= 33);
       CHECK_EQ(integer(older, gl_context_profile_mask) & gl_core_profile_bit, gl_core_profile_bit);
       older.shut_down();
-      /* No OpenGL has these, and EGL is not asked for them. */
       const AvContextOptions refused[] = {{4u, 7u, AV_CONTEXT_PROFILE_CORE, 0u, 0u},
                                            {5u, 0u, AV_CONTEXT_PROFILE_CORE, 0u, 0u}};
       for (const AvContextOptions &options : refused) {
@@ -281,10 +254,6 @@ TEST(opengl_backend_device, a_context_reports_the_version_and_profile_it_was_mad
       }
   } }
 
-/* Feature 051: the compatibility profile a legacy application needs, asked for
- * on every host GPU this machine has. A driver that has none refuses the
- * create, which is the answer the guest ICD ladders down from - so it is
- * reported, not failed. */
 TEST(opengl_backend_device, a_compatibility_context_is_made_where_the_host_has_one)
 { Displays displays;
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
@@ -297,12 +266,9 @@ TEST(opengl_backend_device, a_compatibility_context_is_made_where_the_host_has_o
       }
       CHECK_EQ(integer(backend, gl_major_version), 4);
       CHECK_EQ(integer(backend, gl_minor_version), 6);
-      /* The mask is the only answer: one of this machine's two drivers names
-       * its compatibility context exactly as it names its core one. */
       CHECK_EQ(integer(backend, gl_context_profile_mask) & gl_compatibility_profile_bit,
                gl_compatibility_profile_bit);
       CHECK_EQ(integer(backend, gl_context_profile_mask) & gl_core_profile_bit, 0);
-      /* And the fixed-function entry points it exists for are there. */
       CHECK(av::OpenGlBackendProbe::gl(backend).glNewList != nullptr);
       CHECK(av::OpenGlBackendProbe::gl(backend).glCallLists != nullptr);
       CHECK(av::OpenGlBackendProbe::gl(backend).glBegin != nullptr);
@@ -323,7 +289,6 @@ TEST(opengl_backend_device, debug_and_robust_contexts_report_their_flags)
       CHECK(robustly.initialize(displays.at(index), &robust, nullptr));
       CHECK_EQ(integer(robustly, gl_reset_notification_strategy), static_cast<int>(gl_lose_context_on_reset));
       robustly.shut_down();
-      /* A plain one asked for neither. */
       OpenGlBackend plain;
       CHECK(plain.initialize(displays.at(index), nullptr, nullptr));
       CHECK_EQ(integer(plain, gl_context_flags) & gl_context_flag_debug, 0);
@@ -331,9 +296,6 @@ TEST(opengl_backend_device, debug_and_robust_contexts_report_their_flags)
   } }
 
 namespace {
-
-/* The context that made the texture, held current on a thread of its own
- * while the sharing one is made and asks about it. */
 struct Holder {
     OpenGlBackend  *backend;
     unsigned        texture;
@@ -363,9 +325,6 @@ void *hold_current(void *context)
     const av::glproto::RealGl &gl = OpenGlBackendProbe::gl(*holder.backend);
     gl.glGenTextures(1, &holder.texture);
     gl.glBindTexture(gl_texture_2d, holder.texture);
-    /* A shared object another context may name only after the context that
-     * made it has flushed - GL 4.6 section 5.3.2. Without this the texture is
-     * there on some drivers and not on others. */
     gl.glFlush();
     advance(holder, 1);
     await(holder, 2);
@@ -373,14 +332,13 @@ void *hold_current(void *context)
     return nullptr;
 }
 
-}  // namespace
+}
 
 TEST(opengl_backend_device, a_sharing_context_sees_a_texture_made_on_another_thread)
 { Displays displays;
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
       OpenGlBackend first;
       CHECK(first.initialize(displays.at(index), nullptr, nullptr));
-      /* Opening made it current here; a context is current on one thread. */
       CHECK(eglMakeCurrent(eglGetCurrentDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT) == EGL_TRUE);
       Holder holder = {&first, 0u, PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, 0};
       pthread_t thread;
@@ -392,7 +350,6 @@ TEST(opengl_backend_device, a_sharing_context_sees_a_texture_made_on_another_thr
       const av::glproto::RealGl &gl = OpenGlBackendProbe::gl(second);
       CHECK(holder.texture != 0u);
       CHECK_EQ(gl.glIsTexture(holder.texture), 1u);
-      /* One that shares nothing does not know it. */
       OpenGlBackend alone;
       CHECK(alone.initialize(displays.at(index), &core, nullptr));
       CHECK_EQ(OpenGlBackendProbe::gl(alone).glIsTexture(holder.texture), 0u);
@@ -400,12 +357,10 @@ TEST(opengl_backend_device, a_sharing_context_sees_a_texture_made_on_another_thr
       CHECK_EQ(pthread_join(thread, nullptr), 0);
       alone.shut_down();
       second.shut_down();
-      /* A share with no context is refused. */
       OpenGlBackend orphan;
       CHECK(!orphan.initialize(displays.at(index), &core, &second));
       first.shut_down();
   }
-  /* A share on another display is refused, where the host has two. */
   if (displays.count() < 2u) return;
   OpenGlBackend here;
   CHECK(here.initialize(displays.at(0u), nullptr, nullptr));
@@ -418,8 +373,6 @@ TEST(opengl_backend_device, a_pixel_read_lands_in_the_adopted_region)
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
       OpenGlBackend backend;
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
-      /* Memory with a mapping and no descriptor: what the backend reads
-       * into through the CPU. */
       av::SourceMemory memory(1u, 1u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(1u, -1, region, sizeof region));
       av::ImportedBlob blob;
       CHECK_STATUS(blob.take(1u, memory), av::Status::ok);
@@ -444,7 +397,6 @@ TEST(opengl_backend_device, a_pixel_read_lands_in_the_adopted_region)
           gl.glClear(gl_color_buffer_bit);
       }
       std::memset(region, 0, sizeof region);
-      /* glReadPixels(0, 0, 4, 4, RGBA, UNSIGNED_BYTE) into the region at one page in. */
       constexpr std::uint64_t pixels = 4u * 4u * 4u;
       std::uint8_t frame[64];
       av::WireWriter read(frame, sizeof frame);
@@ -469,11 +421,6 @@ TEST(opengl_backend_device, a_pixel_read_lands_in_the_adopted_region)
       backend.shut_down();
   } }
 
-/* A region of the GPU's own memory source - host GPU memory exported as a
- * dma-buf, as every region is - is what a pixel read packs into: the GPU
- * writes the memory itself (GlPackBuffer), and the bytes land where the
- * guest's window shows them, read here through the source's mapping. A GPU
- * whose compositing context would not open judges nothing. */
 TEST(opengl_backend_device, a_pixel_read_into_a_source_region_is_written_by_the_gpu)
 { Displays displays;
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
@@ -529,10 +476,6 @@ TEST(opengl_backend_device, a_pixel_read_into_a_source_region_is_written_by_the_
       static_cast<void>(blob.give_back());
   } }
 
-/* Feature 053: a descriptor of this process's own making imported as a memory
- * object of a real GL context, and as a semaphore, and deleted again. A host
- * whose GL has neither fd extension imports nothing and says so, which is the
- * answer the device turns into status 4. */
 TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaphore)
 { Displays          displays;
   for (std::uint32_t index = 0u; index < displays.count(); index++) {
@@ -549,32 +492,22 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
           continue;
       }
       CHECK(memory != 0u);
-      /* The descriptor stays the caller's: GL took a duplicate, so it can be
-       * imported again, which is what a second context opening one object
-       * does. */
       std::uint64_t again = 0u;
       CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.descriptor(),
                                   page, av::SharedImageShape(), again, detail));
       CHECK(again != 0u);
       CHECK(again != memory);
 
-      /* A name this context did not import, and one no GL name could be, are
-       * released by nobody. */
       backend.release_object(AV_SHARED_MEMORY, memory + again + 1u, detail);
       backend.release_object(AV_SHARED_MEMORY, 0x1'0000'0000ull | memory, detail);
       backend.release_object(AV_SHARED_MONITORED_FENCE, memory, detail);
       backend.release_object(AV_SHARED_MEMORY, memory, detail);
       backend.release_object(AV_SHARED_MEMORY, memory, detail);
 
-      /* A semaphore is the other name space, and one number can be both. Both
-       * guest fence kinds are that one host semaphore, so both are imported:
-       * a driver told the wrong one would make a second object nobody would
-       * ever release. */
       std::uint64_t fence = 0u;
       if (backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, descriptor.descriptor(),
                                 0u, av::SharedImageShape(), fence, detail)) {
           CHECK(fence != 0u);
-          /* Either guest fence kind is the one host semaphore. */
           backend.release_object(AV_SHARED_NATIVE_FENCE, fence, detail);
       }
       std::uint64_t native = 0u;
@@ -583,21 +516,13 @@ TEST(opengl_backend_device, imports_a_dma_buf_as_a_memory_object_and_as_a_semaph
           CHECK(native != 0u);
           backend.release_object(AV_SHARED_NATIVE_FENCE, native, detail);
       }
-      /* What HostShares never released goes with the context. */
       backend.shut_down();
-      /* And with the context gone the driver has nothing to make a semaphore
-       * on: the import is refused rather than answering a name that names
-       * nothing, which is the one refusal on this path the wire's answer
-       * depends on and no argument can force. */
       std::uint64_t after = 9u;
       CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF,
                                    descriptor.descriptor(), 0u, av::SharedImageShape(), after, detail));
       CHECK_EQ(after, 0u);
   } }
 
-/* A context imports as many shared objects as the guest opens: the table
- * this replaced stopped at 64, and the next import was refused. Each is
- * released by the name it was answered. */
 TEST(opengl_backend_device, a_context_imports_more_than_any_fixed_table_held)
 { Displays        displays;
   constexpr std::uint32_t many = 80u;
@@ -620,13 +545,6 @@ TEST(opengl_backend_device, a_context_imports_more_than_any_fixed_table_held)
       backend.shut_down();
   } }
 
-/* DaVinci Resolve fences every frame, deletes no sync, and polls each one's
- * status to learn when a texture is free again. Past the 256 syncs the table
- * once held, every later sync answered nothing - never signaled - and Resolve
- * made a new texture, and a new OpenCL image of it, every frame until the
- * host ran out of memory. Thousands of syncs, none deleted, each answered
- * signaled once the GPU passed it, with the driver syncs held bounded; a
- * token never minted, or deleted, still answers nothing. */
 TEST(opengl_backend_device, a_context_that_never_deletes_a_sync_has_every_one_answered)
 { Displays displays;
   constexpr std::uint64_t fences = 3000u;
@@ -638,7 +556,6 @@ TEST(opengl_backend_device, a_context_that_never_deletes_a_sync_has_every_one_an
           CHECK(OpenGlBackendProbe::live_syncs(backend) <= av::SyncTokens::max_live);
       }
       CHECK_EQ(OpenGlBackendProbe::live_syncs(backend), av::SyncTokens::max_live);
-      /* The newest passed, so has every one before it. */
       CHECK(passed(client_wait(backend, fences)));
       std::uint64_t signaled = 0u;
       for (std::uint64_t token = 1u; token <= fences; token++)
@@ -646,10 +563,7 @@ TEST(opengl_backend_device, a_context_that_never_deletes_a_sync_has_every_one_an
       CHECK_EQ(signaled, fences);
       CHECK_EQ(sync_status(backend, fences + 1u), 0);
       CHECK_EQ(sync_status(backend, 0u), 0);
-      /* A retired one is waited on like any signaled sync. */
       CHECK_EQ(client_wait(backend, 1u), gl_already_signaled);
-      /* Deleted, a retired token answers nothing and the rest still answer:
-       * what they answer through was not deleted with it. */
       CHECK(delete_sync(backend, 1u));
       CHECK_EQ(sync_status(backend, 1u), 0);
       CHECK_EQ(sync_status(backend, 2u), gl_signaled);
@@ -661,9 +575,6 @@ TEST(opengl_backend_device, a_context_that_never_deletes_a_sync_has_every_one_an
       backend.shut_down();
   } }
 
-/* Tokens are minted per process, so two contexts fencing in turn each see
- * every other one. Each answers its own, all of them, and not the other's
- * recent ones - the ones whose GPU work may still be running. */
 TEST(opengl_backend_device, contexts_fencing_in_turn_answer_only_their_own_recent_syncs)
 { Displays displays;
   constexpr std::uint64_t fences = 1000u;
@@ -683,8 +594,6 @@ TEST(opengl_backend_device, contexts_fencing_in_turn_answer_only_their_own_recen
           for (std::uint64_t token = 2u - which; token <= 2u * fences; token += 2u)
               signaled += sync_status(context, token) == gl_signaled ? 1u : 0u;
           CHECK_EQ(signaled, fences);
-          /* The other's newest, still live there, and the other's token
-           * between this one's two newest retired. */
           CHECK_EQ(sync_status(context, newest - 1u), 0);
           CHECK_EQ(sync_status(context, newest - 2u * av::SyncTokens::max_live - 1u), 0);
           CHECK_EQ(sync_status(context, newest - 2u * av::SyncTokens::max_live), gl_signaled);

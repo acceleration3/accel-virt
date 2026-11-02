@@ -1,7 +1,3 @@
-/* The table itself (feature 047): what it records, what it refuses, and what it
- * forgets. Driven directly rather than through an ICD, because the refusals a
- * whole ICD cannot reach - a table with every slot taken, a create with nothing
- * to record - are the ones a hostile or unlucky application does reach. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
@@ -39,8 +35,6 @@ VkDescriptorUpdateTemplateCreateInfo of(VkDescriptorUpdateTemplateEntry &entry, 
     return info;
 }
 
-/* The table and the lock it takes for every answer, so a test can see that it
- * released what it took. */
 class TableUnderLock {
 public:
     TableUnderLock() : lock_(trace_, 'T'), table_(lock_) {}
@@ -56,7 +50,7 @@ private:
     DescriptorTemplateTable table_;
 };
 
-}  // namespace
+}
 
 TEST(descriptor_template_table, what_it_records_is_what_an_update_carries)
 { TableUnderLock                  held;
@@ -66,15 +60,11 @@ TEST(descriptor_template_table, what_it_records_is_what_an_update_carries)
   CHECK(held.table().invariants_hold());
   CHECK_EQ(held.table().live(), 1u);
   CHECK_EQ(held.table().bytes_of(handle(0x11u)), 16u + 4u * image_bytes);
-  /* Every answer took the lock and gave it back. */
   CHECK(held.lock().held() == false);
   CHECK(held.lock().acquisitions() > 0u);
-  /* A handle it never recorded, and the null handle, carry nothing. */
   CHECK_EQ(held.table().bytes_of(handle(0x12u)), 0u);
   CHECK_EQ(held.table().bytes_of(VK_NULL_HANDLE), 0u); }
 
-/* A create with nothing to record it for or from is refused, and so are entries
- * that cannot be sized: the application's own fields reach here. */
 TEST(descriptor_template_table, a_create_it_cannot_record_is_refused)
 { TableUnderLock                  held;
   VkDescriptorUpdateTemplateEntry entry = {};
@@ -90,8 +80,6 @@ TEST(descriptor_template_table, a_create_it_cannot_record_is_refused)
   CHECK_EQ(held.table().live(), 0u);
   CHECK(held.table().invariants_hold()); }
 
-/* Every slot taken: the create is refused rather than one template forgotten to
- * make room for another. */
 TEST(descriptor_template_table, a_table_with_no_room_refuses)
 { TableUnderLock                  held;
   VkDescriptorUpdateTemplateEntry entry = {};
@@ -102,16 +90,12 @@ TEST(descriptor_template_table, a_table_with_no_room_refuses)
   CHECK_EQ(held.table().record(device, handle(0x9999u), &info), VK_ERROR_OUT_OF_HOST_MEMORY);
   CHECK_EQ(held.table().bytes_of(handle(0x9999u)), 0u);
   CHECK_EQ(held.table().bytes_of(handle(0x1000u)), image_bytes);
-  /* A handle it already holds is recorded again in its own slot, even with no
-   * room anywhere else. */
   const VkDescriptorUpdateTemplateCreateInfo wider = of(entry, 3u, 0u);
   CHECK_EQ(held.table().record(device, handle(0x1000u), &wider), VK_SUCCESS);
   CHECK_EQ(held.table().live(), DescriptorTemplateTable::max_templates);
   CHECK_EQ(held.table().bytes_of(handle(0x1000u)), 3u * image_bytes);
   CHECK(held.table().invariants_hold()); }
 
-/* What it forgets: one template, one device's, and nothing for a handle it
- * never had. */
 TEST(descriptor_template_table, it_forgets_a_template_and_a_device_s)
 { TableUnderLock                  held;
   VkDescriptorUpdateTemplateEntry entry = {};
@@ -123,14 +107,12 @@ TEST(descriptor_template_table, it_forgets_a_template_and_a_device_s)
   held.table().forget(handle(0x31u));
   CHECK_EQ(held.table().live(), 2u);
   CHECK_EQ(held.table().bytes_of(handle(0x31u)), 0u);
-  /* One it never had, and the null handle: neither takes a slot away. */
   held.table().forget(handle(0x31u));
   held.table().forget(VK_NULL_HANDLE);
   CHECK_EQ(held.table().live(), 2u);
   held.table().forget_device(device);
   CHECK_EQ(held.table().live(), 1u);
   CHECK_EQ(held.table().bytes_of(handle(0x33u)), 2u * image_bytes);
-  /* A device it never had takes nothing with it, and neither does none. */
   held.table().forget_device(reinterpret_cast<VkDevice>(0x8099u));
   held.table().forget_device(VK_NULL_HANDLE);
   CHECK_EQ(held.table().live(), 1u);

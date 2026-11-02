@@ -18,8 +18,6 @@ RequestRoom::~RequestRoom()
     if (spare_ != nullptr) platform_.release(spare_);
 }
 
-/* Only prepare() and take() touch the spare, and both belong to whoever sizes
- * the request; a writer reads the room in use and nothing else. */
 Status RequestRoom::prepare(uint32_t pages)
 {
     AV_SCOPE("RequestRoom::prepare");
@@ -34,8 +32,6 @@ Status RequestRoom::prepare(uint32_t pages)
     return Status::ok;
 }
 
-/* The smaller room becomes the spare rather than being released: releasing is
- * as much PASSIVE's as allocating is, and the next prepare() replaces it. */
 Status RequestRoom::take(uint32_t pages)
 {
     AV_SCOPE("RequestRoom::take");
@@ -70,11 +66,10 @@ size_t RequestRoom::size() const
     return room_bytes_;
 }
 
-/* A block is held exactly when its size says so. */
 bool RequestRoom::invariants_hold() const
 {
     AV_SCOPE("RequestRoom::invariants_hold");
     return (room_ == nullptr) == (room_bytes_ == 0u) && (spare_ == nullptr) == (spare_bytes_ == 0u);
 }
 
-}  // namespace av
+}

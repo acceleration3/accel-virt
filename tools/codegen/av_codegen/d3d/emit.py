@@ -1,19 +1,3 @@
-"""C++ for the Direct3D half of the wire.
-
-  d3d_protocol_ids.h     the id constants
-  d3d_wire_types.h       the registry's structs, each size pinned
-  d3d_command_names.*    an id to a name, for the log and avrecord
-  d3d_dispatch_client.*  one wrapper per command, encoding and sending
-  d3d_dispatch_server.*  the interface the executor implements, and the
-                         decode-and-call table
-
-The encoding is plain. Scalars and structs cross as their little-endian
-bytes; an array crosses as the elements its count parameter names, which is
-judged against the registry's maximum on both ends; bulk bytes cross as a
-size and a tag - inline, or an offset into the context's blob arena. A reply
-is written in the order the registry lists it.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,9 +5,6 @@ from pathlib import Path
 from ..emit.common import write
 from .model import SCALARS, Command, Param, Registry
 
-# The registry's prefix names everything it emits: "d3d" gives namespace
-# av::d3dproto, files d3d_*.h and wrappers av_d3d_*; "d3d12" the same with
-# d3d12. Set by emit_all before anything is emitted.
 PREFIX = "d3d"
 NS = "av::d3dproto"
 HEADER = ""
@@ -41,12 +22,7 @@ def _use(reg: Registry) -> None:
 def _inc(name: str) -> str:
     return f'"proto/generated/{PREFIX}/{PREFIX}_{name}"'
 
-# Bulk bytes smaller than this cross inline even when an arena is there: a
-# lease costs the host a bounds check and the guest a copy it would have made
-# into the ring anyway.
 INLINE_BYTES = 4096
-# What a reply may carry inline: half the reply slot, leaving the rest for
-# the scalars around it.
 INLINE_REPLY_BYTES = 32 * 1024
 
 
@@ -109,8 +85,6 @@ def _command_id(reg: Registry, cmd: Command) -> int:
     return (reg.api << 16) | cmd.id
 
 
-# ---------------------------------------------------------------------
-
 def emit_ids(reg: Registry) -> str:
     lines = [HEADER, "#pragma once", "", "#include <stdint.h>", "", f"namespace {NS} {{", "",
              f"inline constexpr uint16_t kApi = {reg.api};", ""]
@@ -150,8 +124,6 @@ def emit_names_cpp(reg: Registry) -> str:
     lines += ["        default: return nullptr;", "    }", "}", "", f"}}  // namespace {NS}", ""]
     return "\n".join(lines)
 
-
-# ---------------------------------------------------------------------
 
 def emit_client_h(reg: Registry) -> str:
     lines = [HEADER, "#pragma once", "", "#include <stdint.h>", "",
@@ -236,8 +208,6 @@ bool take_bytes(::av::WireReader& r, void* data, uint64_t capacity, const ::av::
 
 
 def _helpers(reg: Registry, text: str) -> str:
-    """The helper block, each helper a registry with no use for marked so: an
-    unused function in an anonymous namespace is an error under -Werror."""
     kinds = {p.type for c in reg.commands for p in c.params + c.reply}
     unused = []
     if "bytes" not in kinds:
@@ -298,8 +268,6 @@ def emit_client_cpp(reg: Registry) -> str:
     lines += [f"}}  // namespace {NS}", ""]
     return "\n".join(lines)
 
-
-# ---------------------------------------------------------------------
 
 def emit_server_h(reg: Registry) -> str:
     lines = [HEADER, "#pragma once", "", "#include <stddef.h>", "#include <stdint.h>", "",

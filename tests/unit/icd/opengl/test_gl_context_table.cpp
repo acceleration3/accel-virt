@@ -1,5 +1,3 @@
-/* DHGLRCs: a slot and a generation, so a stale or forged handle resolves to
- * nothing, and at most 256 live contexts. */
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_context_rig.hpp"
@@ -25,7 +23,6 @@ struct GlContextTableProbe {
     static void zero_next(GlContextTable &table) { table.next_ = 0u; }
     static void restore_next(GlContextTable &table) { table.next_ = 1u; }
     static GuestGlContext *at(GlContextTable &table, std::uint32_t slot) { return *table.contexts_.at(slot); }
-    /* `context` named under a second handle the pool knows nothing of. */
     static void plant(GlContextTable &table, std::uint64_t handle, GuestGlContext *context)
     {
         std::uint32_t slot = 0u;
@@ -34,7 +31,7 @@ struct GlContextTableProbe {
     static void pull(GlContextTable &table, std::uint64_t handle) { static_cast<void>(table.contexts_.erase(handle)); }
 };
 
-}  // namespace av::glicd
+}
 
 namespace {
 
@@ -43,7 +40,7 @@ struct Table {
     GlContextTable table{rig.platform(), rig.connection(), rig.send_lock(), rig.log(), rig.extensions(), rig.handles()};
 };
 
-}  // namespace
+}
 
 TEST(gl_context_table, a_handle_names_its_context_until_it_is_destroyed)
 { Table fixture;
@@ -64,7 +61,6 @@ TEST(gl_context_table, a_handle_names_its_context_until_it_is_destroyed)
   CHECK(table.invariants_hold());
   CHECK(table.resolve(first) == nullptr);
   CHECK_STATUS(table.destroy(first), Status::invalid_parameter);
-  /* A handle is not minted again: the old one stays dead. */
   std::uint64_t third = 0u;
   CHECK_STATUS(table.create(4, GlContextOptions(), third), Status::ok);
   CHECK_EQ(third, 3u);
@@ -85,8 +81,6 @@ TEST(gl_context_table, forged_handles_resolve_to_nothing)
   CHECK(fixture.table.resolve(handle) != nullptr);
   CHECK_EQ(fixture.table.live(), 1u); }
 
-/* Well past the 256 the table once held: every context its own handle, each
- * resolving to its own, and a pool that cannot grow refuses with no handle. */
 TEST(gl_context_table, holds_contexts_past_the_old_bound_and_refuses_one_with_no_memory)
 { Table fixture;
   constexpr std::uint32_t many = 600u;
@@ -118,8 +112,6 @@ TEST(gl_context_table, holds_contexts_past_the_old_bound_and_refuses_one_with_no
   CHECK_EQ(starved.table.live(), 0u);
   CHECK(starved.table.invariants_hold()); }
 
-/* The count wraps past the last 32-bit handle to 1, and steps over a handle a
- * live context still has. */
 TEST(gl_context_table, a_handle_wraps_past_the_last_and_skips_one_in_use)
 { Table fixture;
   std::uint64_t first = 0u, last = 0u, wrapped = 0u;

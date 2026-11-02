@@ -4,8 +4,6 @@ namespace samples {
 
 Cl cl;
 
-// ---------------------------------------------------------------- text
-
 void copy_text(char *to, size_t capacity, const char *from)
 {
     size_t i = 0;
@@ -62,8 +60,6 @@ void copy_bytes(void *to, const void *from, size_t bytes)
     for (size_t i = 0; i < bytes; i++) d[i] = s[i];
 }
 
-// ---------------------------------------------------------------- entry points
-
 bool Cl::load()
 {
     bool all = true;
@@ -78,14 +74,11 @@ bool Cl::load()
     return all;
 }
 
-// ---------------------------------------------------------------- the device
-
 bool Gpu::open(uint32_t index)
 {
     cl_platform_id platforms[8] = {};
     cl_uint        platform_count = 0;
     if (!check(cl.GetPlatformIDs(8, platforms, &platform_count), "clGetPlatformIDs")) return false;
-    // The index counts GPUs across every platform, in the order they are listed.
     uint32_t seen = 0;
     for (cl_uint p = 0; p < platform_count && device == nullptr; p++) {
         cl_device_id devices[16] = {};
@@ -269,8 +262,6 @@ void Gpu::finish()
     if (queue != nullptr) check(cl.Finish(queue), "clFinish");
 }
 
-// ---------------------------------------------------------------- capture
-
 void Capture::path(char *into, size_t capacity, const char *extension) const
 {
     copy_text(into, capacity, directory);
@@ -284,7 +275,7 @@ void Capture::image_rgba(const uint8_t *rgba, uint32_t width, uint32_t height)
     const size_t   texels = static_cast<size_t>(width) * height;
     const size_t   bytes = 12u + texels * 4u;
     uint8_t       *file = static_cast<uint8_t *>(allocate(bytes));
-    const uint32_t header[3] = {0x41524742u, width, height};   // "BGRA"
+    const uint32_t header[3] = {0x41524742u, width, height};
     copy_bytes(file, header, sizeof header);
     for (size_t i = 0; i < texels; i++) {
         file[12 + i * 4 + 0] = rgba[i * 4 + 2];
@@ -302,7 +293,7 @@ void Capture::buffer(Element type, const void *elements, uint32_t count)
 {
     const size_t   bytes = 12u + static_cast<size_t>(count) * 4u;
     uint8_t       *file = static_cast<uint8_t *>(allocate(bytes));
-    const uint32_t header[3] = {0x00425641u, type, count};   // "AVB"
+    const uint32_t header[3] = {0x00425641u, type, count};
     copy_bytes(file, header, sizeof header);
     copy_bytes(file + 12, elements, static_cast<size_t>(count) * 4u);
     char where[512] = {};
@@ -310,8 +301,6 @@ void Capture::buffer(Element type, const void *elements, uint32_t count)
     if (!write_file(where, file, bytes)) failed = true;
     release_memory(file);
 }
-
-// ---------------------------------------------------------------- content
 
 float smooth(float a, float b, float x)
 {
@@ -340,7 +329,7 @@ float value_noise(float x, float y, uint32_t seed)
     return mix(mix(a, b, sx), mix(c, d, sx), sy);
 }
 
-}  // namespace
+}
 
 float fbm(float x, float y, uint32_t seed, int octaves)
 {
@@ -426,4 +415,4 @@ double log_d(double x)
     return static_cast<double>(exponent) * ln2 + 2.0 * sum;
 }
 
-}  // namespace samples
+}

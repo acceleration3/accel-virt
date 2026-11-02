@@ -1,12 +1,3 @@
-"""One recorded trace, read once: the kernel's model of it and every event of
-the manifest providers the schema describes, decoded and in time order.
-
-    trace = Trace.read(etl_path, schema_path)
-    trace.kernel                      # tools/etw/kernel.Kernel
-    trace.events                      # [Event], by time
-    trace.named("Microsoft-Windows-Dwm-Core", "SCHEDULE_PROCESS_FRAME/Start")
-    trace.ms(ticks)                   # ticks of the trace's clock in milliseconds
-"""
 import bisect
 from dataclasses import dataclass, field
 
@@ -75,7 +66,6 @@ class Trace:
 
 
 def mapped(schema, record, fields):
-    """Fields with a value map carry the map's text beside the number."""
     event = schema.event(record)
     for index in range(event.get("top_level", len(event["fields"]))):
         spec = event["fields"][index]

@@ -25,11 +25,10 @@ bool CounterSpin::lasts()
     return now - started_ < budget_;
 }
 
-/* Nothing is measured before the first ask. */
 bool CounterSpin::invariants_hold() const
 {
     AV_SCOPE("CounterSpin::invariants_hold");
     return running_ || (budget_ == 0u && started_ == 0u);
 }
 
-}  // namespace av
+}

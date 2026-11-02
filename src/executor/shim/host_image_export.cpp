@@ -10,11 +10,9 @@
 namespace av {
 
 namespace {
-
-/* DRM_FORMAT_MOD_LINEAR, from drm_fourcc.h. */
 constexpr uint64_t drm_format_mod_linear = 0u;
 
-}  // namespace
+}
 
 HostImageExport::HostImageExport(DxvkVulkanDevice &vulkan)
     : vulkan_(vulkan), images_{}, width_(0u), height_(0u), format_(0u), next_(0u), unavailable_(false)
@@ -28,10 +26,6 @@ HostImageExport::~HostImageExport()
     release();
 }
 
-/* Linear, so the display imports it with the one modifier every driver reads
- * alike - and under that modifier rather than VK_IMAGE_TILING_LINEAR, which a
- * driver may refuse a dma-buf for (RADV from Mesa 26.2). Device local where
- * the GPU allows it, so the copy and the display stay in VRAM. */
 bool HostImageExport::make_image(ID3D11Device5 *device, Image &image)
 {
     AV_SCOPE("HostImageExport::make_image");
@@ -137,4 +131,4 @@ void HostImageExport::release()
     for (Image &image : images_) drop(image);
 }
 
-}  // namespace av
+}

@@ -58,8 +58,6 @@ Status OpenedObjects::open(ClientTransport &wire, uint32_t device, uint64_t hand
         lines_.write("a Win32 handle this process may not open");
         return Status::not_found;
     }
-    /* The row's room first: an object the device opened is one this context
-     * holds and must be able to give back. */
     KeyedSlots<uint64_t, OpenedObjectRow> &opens = *opens_of(kind);
     if (opens.reserve(opens.count() + 1u) != Status::ok) {
         lines_.write("no memory to keep an opened shared object");
@@ -67,9 +65,6 @@ Status OpenedObjects::open(ClientTransport &wire, uint32_t device, uint64_t hand
     }
     SharedObjectCall call(wire);
     uint64_t         opened = 0u;
-    /* An open that answered no handle is malformed to the call itself - an ok
-     * carrying nothing is an answer no guest could use - so there is nothing
-     * left here to check for. */
     if (call.open(object_id, kind, asked, into, opened) != Status::ok) {
         if (call.device_status() == SharedObjectAnswer::conflict) {
             lines_.write("an object this context already opened into the same object");
@@ -78,8 +73,6 @@ Status OpenedObjects::open(ClientTransport &wire, uint32_t device, uint64_t hand
         lines_.note("the device would not open a shared object for this context, status", call.device_status());
         return Status::invalid_state;
     }
-    /* Two opens answered one name would leave the second unreachable, and
-     * release the first twice. */
     const OpenedObjectRow row{object_id, into, asked};
     uint32_t              slot = 0u;
     if (opens.insert(opened, row, slot) != Status::ok) {
@@ -188,4 +181,4 @@ bool OpenedObjects::invariants_hold() const
     return holds;
 }
 
-}  // namespace av::icd
+}

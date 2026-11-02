@@ -1,6 +1,3 @@
-/* The header of a context's reply slot (docs/protocol.md): the answer of the
- * last reply-generating command of a batch follows it, or, when the answer is
- * larger than the slot, nothing does and the header says how much was needed. */
 #ifndef AV_REPLY_HEADER_HPP
 #define AV_REPLY_HEADER_HPP
 
@@ -18,11 +15,8 @@ public:
     static constexpr uint32_t status_too_large = 1u;
 
     ReplyHeader();
-    /* An answer of `size` bytes that follows. */
     ReplyHeader(uint64_t fence_id, uint32_t size);
 
-    /* This answer as a slot holding `capacity` bytes can carry it: unchanged,
-     * or too large with nothing following. */
     ReplyHeader within(uint32_t capacity) const;
 
     bool     too_large() const;
@@ -31,11 +25,10 @@ public:
     uint32_t required() const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
-    /* Unchanged unless ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic = 0x00595641u;  /* "AVY" */
+    static constexpr uint32_t magic = 0x00595641u;
 
     ReplyHeader(uint32_t status, uint64_t fence_id, uint32_t size, uint32_t required);
     bool fields_valid() const;
@@ -46,6 +39,6 @@ private:
     uint32_t required_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_REPLY_HEADER_HPP
+#endif

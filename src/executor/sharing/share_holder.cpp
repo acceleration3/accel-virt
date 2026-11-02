@@ -46,4 +46,4 @@ void ShareHolder::link(ShareHolder *next)
     next_ = next;
 }
 
-}  // namespace av
+}

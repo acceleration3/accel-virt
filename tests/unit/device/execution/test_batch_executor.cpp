@@ -1,8 +1,3 @@
-/* One context's batches run through its executor on its worker: in order,
- * unknown commands skipped, the transport's NOP and blob commands answered
- * without it, the last
- * answer asked for written to the reply slot, and every stream no producer
- * could frame refused. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/execution/batch_executor.hpp"
@@ -65,14 +60,13 @@ struct BatchExecutorProbe {
     static void break_reply(BatchExecutor &executor) { executor.reply_ = BlobWindow(nullptr, nullptr, 1u, 64u); }
 };
 
-}  // namespace av
+}
 
 namespace {
 
 constexpr std::uint8_t  uuid[16] = {3};
 constexpr std::uint32_t reply_bytes = 64u;
 
-/* Commands laid out as a producer frames them. */
 class Commands {
 public:
     Commands &add(std::uint32_t id, std::uint32_t payload_bytes, std::uint8_t flags = 0u, std::uint8_t fill = 0u)
@@ -139,7 +133,6 @@ public:
     MockExecutorOps &ops() { return ops_; }
     BatchExecutor   &batches() { return batches_; }
     av::WireRecorder &recorder() { return recorder_; }
-    /* Every record kind, so what this batch produced can be read in order. */
     void record_to(const char *path)
     {
         CHECK_STATUS(recorder_.open(path, 0u, "all", av::AtCeiling::stop, av::GpuIdentity(),
@@ -155,7 +148,6 @@ public:
         return header;
     }
 
-    /* The next batch at the guest's tail, run on a worker: the status run gave. */
     Status run(std::uint64_t fence, const Commands &commands)
     {
         const std::uint64_t head = guest_.tail();
@@ -184,8 +176,6 @@ public:
         host_.join_thread(thread);
     }
 
-    /* A batch left running on its worker, for a test that must look at the
-     * recording while a command is still inside the executor. */
     struct Running {
         Fixture      *fixture;
         std::uint64_t head;
@@ -239,9 +229,6 @@ private:
     BatchExecutor   batches_;
 };
 
-/* Guest-visible memory the scripted command below stores its payload into
- * write-combined, held in the host's buffers until a store fence: what a host
- * driver's copy into a context's arena is where the driver maps it so. */
 struct WriteCombined {
     MockHost     *host;
     std::uint8_t  arena[64];
@@ -257,8 +244,6 @@ std::uint32_t store_write_combined(void *, AvExecutor *, std::uint32_t, const st
     return AV_EXECUTED;
 }
 
-/* What a batch's end publishes, as OpenGL's error word: stored by end_batch,
- * after the answer, and read by a guest that has seen the batch's head. */
 constexpr std::uint8_t ended_word[8] = {1, 2, 3, 4, 5, 6, 7, 8};
 
 void store_at_end(void *, AvExecutor *)
@@ -266,10 +251,9 @@ void store_at_end(void *, AvExecutor *)
     write_combined->host->hold_store(write_combined->arena + 32u, ended_word, sizeof ended_word);
 }
 
-/* Where the reply slot carries its fence id, which the guest polls for. */
 constexpr std::size_t reply_fence_at = 8u;
 
-}  // namespace
+}
 
 TEST(batch_executor_run, runs_the_context_api_commands_in_order_and_skips_the_rest)
 { Fixture fixture;
@@ -286,11 +270,9 @@ TEST(batch_executor_run, runs_the_context_api_commands_in_order_and_skips_the_re
   CHECK_EQ(fixture.ops().size_at(2u), 40u);
   CHECK_EQ(fixture.batches().commands(), 2u);
   CHECK_EQ(fixture.batches().skipped(), 3u);
-  /* One heartbeat for the first command run, and none for those skipped: the
-   * next is 256 commands on. */
   CHECK_EQ(fixture.progress(), 1u);
   CHECK(fixture.batches().fault() == FaultCode::none);
-  CHECK_EQ(fixture.reply()[0], 0xEEu);   /* nothing asked for an answer */
+  CHECK_EQ(fixture.reply()[0], 0xEEu);
   CHECK_EQ(fixture.ops().misuses(), 0u); }
 
 TEST(batch_executor_run, the_last_answer_asked_for_lands_in_the_reply_slot)
@@ -316,7 +298,7 @@ TEST(batch_executor_run, a_nop_asking_for_an_answer_gets_an_empty_one_and_never_
   CHECK_EQ(fixture.ops().created(), 1u);
   CHECK_EQ(fixture.ops().executed(), 0u);
   const ReplyHeader header = fixture.reply_header();
-  CHECK_EQ(fixture.reply()[0], 0x41u);   /* "AVY" */
+  CHECK_EQ(fixture.reply()[0], 0x41u);
   CHECK(!header.too_large());
   CHECK_EQ(header.fence_id(), 5u);
   CHECK_EQ(header.size(), 0u);
@@ -356,8 +338,6 @@ TEST(batch_executor_run, a_nop_is_the_last_answer_only_when_it_comes_last)
   CHECK_EQ(fixture.reply()[32], 0x33u);
   CHECK_EQ(fixture.ops().executed(), 2u); }
 
-/* A body is framing the contract forbids, not a payload an executor failed to
- * decode, so the guest is told command_framing whichever flag it set. */
 TEST(batch_executor_run, a_nop_with_a_body_faults_the_context_as_misframed)
 { const std::uint32_t bodies[] = {1u, 7u, 8u, 4000u};
   const std::uint8_t  flags[] = {0u, CommandHeader::generate_reply};
@@ -427,9 +407,6 @@ TEST(batch_executor_run, an_answer_past_four_gigabytes_is_reported_as_the_larges
   CHECK(fixture.reply_header().too_large());
   CHECK_EQ(fixture.reply_header().required(), 0xFFFFFFFFu); }
 
-/* The Iris Xe's OpenCL rectangle reads (bufferrects): the host driver copied
- * the rows into the arena write-combined, and the guest, polling the reply
- * slot, saw the fence id before the rows and read what the arena held before. */
 TEST(batch_executor_run, what_a_command_stored_write_combined_is_in_memory_before_its_answer_is)
 { Fixture fixture;
   WriteCombined stored{&fixture.host(), {}};
@@ -443,12 +420,9 @@ TEST(batch_executor_run, what_a_command_stored_write_combined_is_in_memory_befor
   CHECK_EQ(fixture.reply_header().size(), 24u);
   for (std::uint32_t at = 0u; at < 24u; at++) CHECK_EQ(stored.arena[at], 0x5Au);
   CHECK_EQ(stored.arena[24], 0u);
-  /* They landed while the slot still held what it held before this batch. */
   CHECK_EQ(fixture.host().watched_when_landed(), 0xEEEEEEEEEEEEEEEEu);
   write_combined = nullptr; }
 
-/* With no answer, the batch's completion is what the guest waits on, and the
- * consumer publishes it as soon as run returns. */
 TEST(batch_executor_run, what_a_batch_stored_write_combined_is_in_memory_once_it_has_run)
 { Fixture fixture;
   WriteCombined stored{&fixture.host(), {}};
@@ -505,9 +479,6 @@ TEST(batch_executor_run, a_stream_no_producer_could_frame_or_an_executor_failure
       {"short tail", [](Commands &c) { c.tail(5u); }, Status::malformed},
       {"undecodable", [](Commands &c) { c.add(MockExecutorOps::undecodable_id, 0u); }, Status::malformed},
       {"device lost", [](Commands &c) { c.add(MockExecutorOps::lost_id, 0u); }, Status::invalid_state},
-      /* A library answering outside the ABI faults the context like a lost
-       * device does, but says something different, so an operator does not go
-       * looking for a GPU that never failed (feature 042). */
       {"an answer no library gives", [](Commands &c) { c.add(MockExecutorOps::garbage_id, 0u); },
        Status::not_supported},
   };
@@ -608,8 +579,6 @@ TEST(batch_executor_run, a_ring_the_blob_cannot_hold_is_refused_before_anything_
   CHECK(fixture.batches().fault() == FaultCode::command_framing);
   CHECK_EQ(fixture.ops().executed(), 0u); }
 
-/* An import the device refuses is an answer in the reply slot, not a fault: the
- * batch completes, the executor never sees it, and the context runs on. */
 TEST(batch_executor_run, a_refused_import_is_answered_in_the_slot_and_the_context_runs_on)
 { Fixture fixture;
   std::uint8_t body[av::BlobImportRequest::encoded_size] = {};
@@ -630,8 +599,6 @@ TEST(batch_executor_run, a_refused_import_is_answered_in_the_slot_and_the_contex
   CHECK_EQ(answer.status(), av::BlobImportAnswer::unknown_resource);
   CHECK_EQ(fixture.progress(), 1u); }
 
-/* A heartbeat is a store the guest's DPC pulls back across, so a long batch
- * gives one every 256 commands run rather than one per command. */
 TEST(batch_executor_run, a_heartbeat_goes_out_every_256_commands_run)
 { Fixture fixture;
   Commands commands;
@@ -694,9 +661,6 @@ TEST(batch_executor_run, records_the_fault_of_a_batch_that_did_not_complete)
   CHECK(payload != nullptr);
   CHECK(record.fence() == 3u);
   CHECK_EQ(record.context(), 1u);
-  /* A fault is a u32 code and a u32 the format reserves; a reader refuses a
-   * record whose reserved bytes are not zero, so a device that wrote anything
-   * there would make its own recordings unreadable. */
   CHECK_EQ(record.length(), 8u);
   if (payload != nullptr) {
       CHECK_EQ(payload[0], static_cast<std::uint8_t>(FaultCode::undecodable));
@@ -714,9 +678,6 @@ TEST(batch_executor_run, with_recording_off_it_asks_the_host_for_no_recording_at
   CHECK(fixture.recorder().records() == 0u);
   CHECK_EQ(fixture.host().recording_length("batches.av"), 0u); }
 
-/* US1 scenario 3: a host driver that takes the process down with it must leave
- * the batch it was given behind. Held inside the executor's first command, the
- * recording already holds the whole batch and nothing of its answer. */
 TEST(batch_executor_run, the_batch_is_on_the_recording_while_its_first_command_is_still_running)
 { Fixture fixture;
   fixture.record_to("crash.av");
@@ -742,8 +703,6 @@ TEST(batch_executor_run, the_batch_is_on_the_recording_while_its_first_command_i
   fixture.recorder().close(); }
 
 namespace {
-
-/* An ANSWER_PIECE from `offset`, asking for its answer. */
 Commands &ask_part(Commands &commands, std::uint64_t offset)
 {
     std::uint8_t body[8] = {};
@@ -751,12 +710,8 @@ Commands &ask_part(Commands &commands, std::uint64_t offset)
     return commands.add_body(CommandHeader::answer_piece_id, body, sizeof body, CommandHeader::generate_reply);
 }
 
-}  // namespace
+}
 
-/* Docs/protocol.md, "Long commands": pieces in one batch and the next are
- * gathered, and the command that closes them runs once with all of it; its
- * answer, too long for the slot, is kept, and ANSWER_PIECE hands it on a
- * slot at a time behind its length. */
 TEST(batch_executor_run, pieces_across_batches_run_as_one_command_and_its_answer_comes_in_parts)
 { Fixture fixture;
   Commands first;
@@ -794,17 +749,13 @@ TEST(batch_executor_run, pieces_across_batches_run_as_one_command_and_its_answer
       if (gathered[index] != expected) wrong++;
   }
   CHECK_EQ(wrong, 0u);
-  /* Past the end, and with nothing kept: the length alone. */
   Commands past;
   ask_part(past, 250u);
   CHECK_STATUS(fixture.run(20u, past), Status::ok);
   CHECK_EQ(fixture.reply_header().size(), 8u);
-  /* The parts never reached the executor as commands. */
   CHECK_EQ(fixture.ops().executed(), 1u);
   CHECK(fixture.batches().fault() == FaultCode::none); }
 
-/* A piece followed by anything but its own API's command, a piece asking for
- * an answer, and an ANSWER_PIECE framed wrong are framing no producer does. */
 TEST(batch_executor_run, pieces_not_closed_by_their_command_fault_the_context_as_misframed)
 { { Fixture fixture;
     Commands commands;
@@ -827,7 +778,6 @@ TEST(batch_executor_run, pieces_not_closed_by_their_command_fault_the_context_as
     CHECK_STATUS(fixture.run(1u, commands), Status::malformed);
     CHECK(fixture.batches().fault() == FaultCode::command_framing); } }
 
-/* No host memory to gather into faults the context: its command cannot run. */
 TEST(batch_executor_run, pieces_the_host_has_no_memory_for_fault_the_context)
 { Fixture fixture;
   fixture.host().fail_allocation_at(1u);

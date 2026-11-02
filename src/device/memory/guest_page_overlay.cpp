@@ -14,7 +14,7 @@ namespace {
 
 constexpr const char *unrestored = "virtio-gpu-av: a lent guest run could not be given its RAM back";
 
-}  // namespace
+}
 
 GuestPageOverlay::GuestPageOverlay(BlockSource &blocks, LentPages &lent, RunSwapGate &gate, GuestRamLending &owner)
     : lent_(lent), gate_(gate), owner_(owner), runs_(blocks, Pool::paged), extents_(blocks, Pool::paged), covered_(0u)
@@ -32,7 +32,6 @@ Status GuestPageOverlay::add(Host &host, ControlRequest &request, size_t offset,
 {
     AV_SCOPE("GuestPageOverlay::add");
     host.require_main_loop("GuestPageOverlay::add");
-    /* A list shorter than it says is refused before any of it is laid. */
     uint8_t entry[entry_size] = {};
     if (entries == 0u || request.read(offset + size_t{entries - 1u} * entry_size, entry, sizeof entry) != sizeof entry)
         return Status::invalid_parameter;
@@ -49,7 +48,6 @@ Status GuestPageOverlay::add(Host &host, ControlRequest &request, size_t offset,
     return Status::ok;
 }
 
-/* An entry may cross a region boundary, which QEMU maps as two runs. */
 Status GuestPageOverlay::lay_entry(Host &host, uint64_t address, uint64_t length, int fd, uint64_t size)
 {
     AV_SCOPE("GuestPageOverlay::lay_entry");
@@ -79,8 +77,6 @@ Status GuestPageOverlay::lay_entry(Host &host, uint64_t address, uint64_t length
     return Status::ok;
 }
 
-/* Room for the record is made first: a run laid and not recorded could never
- * be restored. */
 Status GuestPageOverlay::lay_run(Host &host, void *pointer, uint64_t length, uint64_t address, int fd)
 {
     AV_SCOPE("GuestPageOverlay::lay_run");
@@ -162,7 +158,6 @@ bool GuestPageOverlay::locate(uint64_t address, uint64_t length, uint32_t &hint,
     return false;
 }
 
-/* The bytes laid are the runs' sum, and every laid page is lent. */
 bool GuestPageOverlay::invariants_hold() const
 {
     AV_SCOPE("GuestPageOverlay::invariants_hold");
@@ -174,4 +169,4 @@ bool GuestPageOverlay::invariants_hold() const
     return runs_.invariants_hold() && extents_.invariants_hold() && sum == covered_;
 }
 
-}  // namespace av
+}

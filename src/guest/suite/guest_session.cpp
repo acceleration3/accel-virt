@@ -12,7 +12,6 @@ GuestSession::GuestSession(Kmt &kmt, uint32_t adapter)
           AV_SCOPE("GuestSession::GuestSession");
       }
 
-/* A scenario reports its own teardown; a destructor has no one to tell. */
 GuestSession::~GuestSession()
 {
     AV_SCOPE("GuestSession::~GuestSession");
@@ -54,8 +53,6 @@ Status GuestSession::lock(uint32_t index, void *&view)
     return Status::ok;
 }
 
-/* A view the driver would not take back is still held, so the teardown tries
- * again before the allocation under it is destroyed. */
 Status GuestSession::unlock(uint32_t index)
 {
     AV_SCOPE("GuestSession::unlock");
@@ -65,7 +62,6 @@ Status GuestSession::unlock(uint32_t index)
     return status;
 }
 
-/* A queue answered without its fence object is still destroyed at teardown. */
 Status GuestSession::open_paging_queue()
 {
     AV_SCOPE("GuestSession::open_paging_queue");
@@ -170,8 +166,6 @@ uint32_t GuestSession::teardown_code() const
     return teardown_code_;
 }
 
-/* Nothing outlives the device it was made on, a fence object its queue, or a
- * mapping or a view its allocation. */
 bool GuestSession::invariants_hold() const
 {
     AV_SCOPE("GuestSession::invariants_hold");
@@ -182,4 +176,4 @@ bool GuestSession::invariants_hold() const
     return (device_ != 0u || !children) && (queue_ != 0u || fence_object_ == 0u) && mappings_held;
 }
 
-}  // namespace av
+}

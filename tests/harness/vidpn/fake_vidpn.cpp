@@ -8,19 +8,17 @@ namespace {
 
 constexpr std::int32_t source_not_in_topology = static_cast<std::int32_t>(0xC01E0339u);
 constexpr std::int32_t invalid_parameter = static_cast<std::int32_t>(0xC000000Du);
-/* D3DKMDT_VPPS_UNPINNED / D3DKMDT_VPPR_UNPINNED, the value dxgkrnl's own
- * AcquirePathInfo writes into an unpinned path's transform fields. */
 constexpr std::int32_t unpinned_transformation = 254;
-constexpr std::uint32_t offset_zero = 0x10u;    /* D3DKMDT_VIDPN_PRESENT_PATH_ROTATION_SUPPORT.Offset0 */
-constexpr std::uint32_t other_offsets = 0xE0u;  /* Offset90, Offset180 and Offset270 */
+constexpr std::uint32_t offset_zero = 0x10u;
+constexpr std::uint32_t other_offsets = 0xE0u;
 constexpr std::int32_t empty_source_mode_set = static_cast<std::int32_t>(0xC01E0308u);
 constexpr std::int32_t empty_target_mode_set = static_cast<std::int32_t>(0xC01E0309u);
 constexpr std::int32_t no_more_elements = 0x401E034C;
-constexpr std::int32_t gamma_default = 1;   /* D3DDDI_GAMMARAMP_DEFAULT */
+constexpr std::int32_t gamma_default = 1;
 
 FakeVidPn *owner_of(void *topology) { return *static_cast<FakeVidPn **>(topology); }
 
-}  // namespace
+}
 
 FakeVidPn::FakeVidPn()
     : sources_{}, targets_{}, current_source_{}, current_target_{}, source_handles_{}, target_handles_{}, monitor_{},
@@ -176,7 +174,6 @@ void FakeVidPn::install_topology_interface()
         if (self->refusing(VidPnCall::update_path_support, status)) return status;
         return self->update_path(*path);
     };
-    /* A refused release still releases, so the refusal is not also a leak. */
     topology_interface_.pfnReleasePathInfo = +[](void *topology, const D3dkmdtVidPnPresentPathRecord *) {
         FakeVidPn *self = owner_of(topology);
         if (self->outstanding_paths_ == 0u) {
@@ -301,10 +298,6 @@ D3dkmdtVidPnPresentPathRecord &FakeVidPn::add_path(std::uint32_t source, std::ui
     path.VidPnTargetId = target;
     path.ImportanceOrdinal = 1;
     path.GammaRampType = gamma_default;
-    /* Unpinned is 254, not 0: DXGDMM AcquirePathInfo (dxgkrnl.sys @1403a6b10)
-     * builds the default path with 0xFE in both transform fields, and
-     * PinPathContentScaling (@1403052c0) treats 0xFE as "was unpinned" when it
-     * rolls back. A zeroed record is a value the real dxgkrnl never presents. */
     path.ContentTransformationScaling = unpinned_transformation;
     path.ContentTransformationRotation = unpinned_transformation;
     return path;
@@ -388,9 +381,6 @@ std::int32_t FakeVidPn::release_set(void *)
     return 0;
 }
 
-/* AssignSourceModeSet makes a new set current and releases it.
- * DMMVIDPNSOURCE::SetCofuncModeSet (dxgkrnl.sys @14002fffc) refuses an empty
- * cofunctional set with STATUS_GRAPHICS_EMPTY_MONITOR_MODE_SUPPORT_INTERSECTION. */
 std::int32_t FakeVidPn::assign_source(std::uint32_t source, void *mode_set)
 {
     if (source >= max_owners) return invalid_parameter;
@@ -402,8 +392,6 @@ std::int32_t FakeVidPn::assign_source(std::uint32_t source, void *mode_set)
     return release_set(mode_set);
 }
 
-/* DMMVIDPNTARGET::SetCofuncModeSet (dxgkrnl.sys @14005004c) refuses an empty one
- * with STATUS_GRAPHICS_EMPTY_ADAPTER_MONITOR_MODE_SUPPORT_INTERSECTION. */
 std::int32_t FakeVidPn::assign_target(std::uint32_t target, void *mode_set)
 {
     if (target >= max_owners) return invalid_parameter;
@@ -423,13 +411,6 @@ std::int32_t FakeVidPn::acquire_path(std::uint32_t index, const D3dkmdtVidPnPres
     return 0;
 }
 
-/* DMMVIDPNPRESENTPATH::SetRotationSupport (dxgkrnl.sys @14004b80c) bugchecks
- * 0x113 subcode 0x1C, rather than answering a status, when a driver that
- * declares an interface version above 0x4002 - every WDDM 2 driver - answers a
- * primary clone path with a rotation support mask that lacks Offset0 or carries
- * any of Offset90/180/270. Every path this fake has is the primary clone path
- * of its source, so a violation is a failed test here instead of a bugchecked
- * guest. */
 std::int32_t FakeVidPn::update_path(const D3dkmdtVidPnPresentPathRecord &path)
 {
     const std::uint32_t rotation = path.ContentTransformationRotationSupport;
@@ -454,7 +435,7 @@ std::uint32_t FakeVidPn::index_of(const D3dkmdtVidPnPresentPathRecord *path) con
     return max_paths;
 }
 
-}  // namespace av
+}
 
 extern "C" std::int32_t AvFakeQueryVidPnInterface(void *vidpn, std::int32_t version,
                                                   const av::DxgkVidPnInterfaceRecord **table)

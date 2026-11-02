@@ -1,11 +1,3 @@
-/* The probe's Vulkan through one loader entry point (feature 045, T037): the
- * vkGetInstanceProcAddr it is given - vulkan-1.dll's in the guest, the ICD's
- * own on the full-stack rig - answers vkCreateInstance, and each instance made
- * answers the rest, resolved once as the instance is made. The Vulkan
- * specification has vkGetInstanceProcAddr answer every core command, so those
- * are called as answered; only the ICD's own vkAvForceContextFault and
- * vkAvLastKernelStatus, which no loader has to know, are looked for, through
- * vkGetDeviceProcAddr. */
 #ifndef AV_LOADER_VULKAN_HPP
 #define AV_LOADER_VULKAN_HPP
 
@@ -125,7 +117,6 @@ public:
     VkResult queue_present(VkQueue queue, const VkPresentInfoKHR *info) override;
 
 private:
-    /* One per function resolved through an instance, in `names` order. */
     enum class Function : uint32_t {
         destroy_instance,
         device_proc_addr,
@@ -200,11 +191,8 @@ private:
     };
     static constexpr uint32_t function_count = static_cast<uint32_t>(Function::count);
 
-    /* `name` as the driver behind `device` answers it, through
-     * vkGetDeviceProcAddr; null when nothing answers. */
     PFN_vkVoidFunction device_entry(VkDevice device, const char *name);
 
-    /* The function resolved for `function`, as the C type the caller names. */
     template <typename Pointer>
     Pointer resolved(Function function) const;
 
@@ -219,6 +207,6 @@ Pointer LoaderVulkan::resolved(Function function) const
     return reinterpret_cast<Pointer>(functions_[static_cast<uint32_t>(function)]);
 }
 
-}  // namespace av
+}
 
-#endif  // AV_LOADER_VULKAN_HPP
+#endif

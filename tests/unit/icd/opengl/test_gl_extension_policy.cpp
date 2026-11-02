@@ -1,8 +1,3 @@
-/* The OpenGL ICD's extension policy (data-model.md, research.md §7): a GL name
- * is reported only when a row, the generator's carried list and the context's
- * host all have it, in the rows' order; the host's list is read once, capped,
- * and no further than a row is unfound; WGL names come from their rows alone,
- * and swap control never does. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_context_rig.hpp"
@@ -31,7 +26,7 @@ struct GlExtensionPolicyProbe {
     static void overcount_wgl(GlExtensionPolicy &policy) { policy.wgl_count_ = GlExtensionPolicy::max_rows + 1u; }
 };
 
-}  // namespace av::glicd
+}
 
 namespace {
 
@@ -52,7 +47,6 @@ constexpr Row wgl_rows[] = {
 
 constexpr const char *renderer = "host gpu";
 
-/* A context made over an empty policy, whose wire a test's policy then reads. */
 struct Made {
     GlContextRig      rig;
     GlExtensionPolicy empty{nullptr, 0u, nullptr, 0u};
@@ -68,7 +62,6 @@ struct Made {
     av::ClientTransport &wire() { return *context.wire(); }
 };
 
-/* A glGetStringi answer the host gives every wait nothing else answers. */
 void answer_every_name_with(GlContextRig &rig, const char *name)
 {
     std::uint8_t    bytes[av::MockKmt::max_answer];
@@ -80,7 +73,7 @@ void answer_every_name_with(GlContextRig &rig, const char *name)
     rig.kmt().answer_waits(bytes, static_cast<std::uint32_t>(writer.offset()));
 }
 
-}  // namespace
+}
 
 TEST(gl_extension_policy, reports_what_rows_the_tier_and_the_host_share)
 { Made made;
@@ -95,14 +88,11 @@ TEST(gl_extension_policy, reports_what_rows_the_tier_and_the_host_share)
   const std::uint32_t before = made.rig.kmt().commands();
   GlExtensionList list;
   policy.learn(made.wire(), list);
-  /* GL_KHR_debug is the host's and a row's, but not a carried extension. */
   CHECK_EQ(list.count(), 2u);
   CHECK(std::strcmp(list.name(0u), "GL_ARB_texture_float") == 0);
   CHECK(std::strcmp(list.name(1u), "GL_ARB_debug_output") == 0);
   CHECK(list.name(0u) == carried_rows[0].name_);
   CHECK(std::strcmp(list.joined(), "GL_ARB_texture_float GL_ARB_debug_output") == 0);
-  /* The count and all five names, one listed twice: a row is still unfound
-   * until the end. */
   CHECK_EQ(made.rig.kmt().commands() - before, 6u);
   CHECK_EQ(made.rig.kmt().queued_answers(), 0u);
   CHECK(list.invariants_hold()); }
@@ -123,7 +113,6 @@ TEST(gl_extension_policy, asks_no_more_than_1024_names)
   const GlExtensionPolicy policy(one_row, 1u, nullptr, 0u);
   made.rig.host().gl_integer(1025);
   answer_every_name_with(made.rig, "GL_EXT_not_it");
-  /* The mock's command journal holds fewer than this; its submissions count all. */
   const std::uint32_t before = made.rig.kmt().calls(av::MockKmt::Call::submit);
   GlExtensionList list;
   policy.learn(made.wire(), list);
@@ -135,7 +124,6 @@ TEST(gl_extension_policy, a_name_too_long_to_hold_is_no_row_s_name)
   const GlExtensionPolicy policy(one_row, 1u, nullptr, 0u);
   char long_name[GlExtensionPolicy::name_bytes + 1u];
   std::memset(long_name, 'x', sizeof long_name - 1u);
-  /* What the buffer keeps of it is a row's name; the whole is not. */
   std::memcpy(long_name, "GL_ARB_debug_output", 19u);
   long_name[GlExtensionPolicy::name_bytes] = '\0';
   made.rig.host().gl_integer(2);
@@ -144,7 +132,6 @@ TEST(gl_extension_policy, a_name_too_long_to_hold_is_no_row_s_name)
   GlExtensionList list;
   policy.learn(made.wire(), list);
   CHECK_EQ(list.count(), 0u);
-  /* One byte shorter is held whole, and is still not the row's name. */
   Made shorter;
   long_name[GlExtensionPolicy::name_bytes - 1u] = '\0';
   shorter.rig.host().gl_integer(1);
@@ -181,8 +168,6 @@ TEST(gl_extension_policy, no_rows_or_no_host_names_ask_nothing_more)
   }
   CHECK_EQ(list.count(), 0u); }
 
-/* Feature 051: swap control is reported now that an interval is honoured; tear
- * control, which is a negative interval, still is not. */
 TEST(gl_extension_policy, wgl_names_come_from_their_rows_without_tear_control)
 { const GlExtensionPolicy policy(nullptr, 0u, wgl_rows, 4u);
   CHECK(std::strcmp(policy.wgl_extensions(),
@@ -209,8 +194,6 @@ TEST(gl_extension_policy, reads_no_more_than_64_rows_of_either_table)
   CHECK(std::strstr(policy.wgl_extensions(), "WGL_ARB_row_63") != nullptr);
   CHECK(std::strstr(policy.wgl_extensions(), "WGL_ARB_row_64") == nullptr); }
 
-/* Rows longer together than the string are cut at its end, and the string
- * still judges whole. */
 TEST(gl_extension_policy, wgl_rows_longer_than_the_string_are_cut)
 { static Row rows[GlExtensionPolicy::max_rows];
   static char names[GlExtensionPolicy::max_rows][96];

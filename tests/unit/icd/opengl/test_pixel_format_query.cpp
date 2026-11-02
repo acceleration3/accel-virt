@@ -1,8 +1,3 @@
-/* WGL_ARB_pixel_format and its multisample and sRGB attributes, answered from
- * the ICD's 24 rows (research.md §7, data-model.md): every attribute for every
- * row, choosing by exact and minimum criteria in the ARB's order, and every
- * list, format and output the contract refuses. The constants are wgl.xml's,
- * written out so a wrong one in the implementation fails here. */
 #include "core/support/status.hpp"
 #include "harness/framework/hostile_sweep.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -24,7 +19,7 @@ struct PixelFormatTableProbe {
     static void repeat_row(PixelFormatTable &table) { table.rows_[5] = table.rows_[1]; }
 };
 
-}  // namespace av::glicd
+}
 
 namespace {
 
@@ -45,8 +40,6 @@ enum : std::int32_t {
 
 constexpr std::uint32_t rows = 24u;
 
-/* What wglGetPixelFormatAttribivARB answers for `row`, decided from the
- * contract rather than read off the implementation. */
 std::int32_t expected_value(const PixelFormat &row, std::int32_t name)
 {
     switch (name) {
@@ -114,7 +107,7 @@ bool reject_list(const std::uint8_t *bytes, std::size_t length)
     return false;
 }
 
-}  // namespace
+}
 
 TEST(pixel_format_query_attribs, every_attribute_of_every_row_is_the_contract_s)
 { const PixelFormatTable table;
@@ -155,8 +148,6 @@ TEST(pixel_format_query_attribs, the_rows_cover_srgb_samples_and_every_depth)
   CHECK_EQ(none, 8u);
   CHECK_EQ(doubled, 12u); }
 
-/* WGL_NUMBER_PIXEL_FORMATS_ARB is asked with format 0, which no other
- * attribute accepts. */
 TEST(pixel_format_query_attribs, the_format_count_answers_for_index_zero_only_alone)
 { const PixelFormatTable table;
   const PixelFormatQuery query(table);
@@ -218,8 +209,6 @@ TEST(pixel_format_query_choose, nothing_asked_is_every_format_in_table_order)
   CHECK_EQ(terminated.count, 24u);
   CHECK_EQ(terminated.formats[23], 24); }
 
-/* What a typical application asks: a window, OpenGL, double buffered, RGBA
- * with 24 depth bits - the exact D24S8 rows first, D32 after (more bits). */
 TEST(pixel_format_query_choose, exact_matches_come_before_ones_with_more_bits)
 { const PixelFormatTable table;
   const PixelFormatQuery query(table);
@@ -237,8 +226,6 @@ TEST(pixel_format_query_choose, exact_matches_come_before_ones_with_more_bits)
     depth[at] = row.depth_bits();
     sample[at] = row.samples();
   }
-  /* No D32 row has stencil, so the four are D24S8, equally close: they come
-   * in table order, which lists single-sampled rows first. */
   CHECK_EQ(depth[0], 24);
   CHECK_EQ(depth[3], 24);
   CHECK_EQ(sample[0], 0);
@@ -278,8 +265,6 @@ TEST(pixel_format_query_choose, srgb_and_multisample_criteria_select_their_rows)
   const std::int32_t ignored[] = {number_pixel_formats, 3, red_shift, 99, 0};
   CHECK_EQ(choose(query, ignored).count, 24u); }
 
-/* The float list carries the same names as floats; a name that is not a
- * whole number is no attribute. */
 TEST(pixel_format_query_choose, the_float_list_constrains_like_the_integer_list)
 { const PixelFormatTable table;
   const PixelFormatQuery query(table);
@@ -355,16 +340,6 @@ TEST(pixel_format_query_choose, hostile_lists_answer_only_formats_that_exist)
   av::HostileSweep sweep(&reject_list, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > sizeof bytes);
-  /* An attribute list is name-value pairs ended by a zero name, and only the
-   * names are judged: every value is a criterion the query can hold, so all 128
-   * value bits are acceptable. Of the four names, eleven flips land on another
-   * attribute WGL defines - seven of draw_to_window, three of depth_bits, one
-   * of samples and none of the sRGB name - and the terminator's flip to 0x2000
-   * is another name too, with a zero value behind it. A cut inside a name is
-   * only a partial name at its first byte, the other two bytes of each name
-   * being zero, so 32 of the 36 truncations end in a list that still reads. An
-   * empty list asks for nothing and matches every format, which is why all-zero
-   * is accepted; all-ones is a name nobody defined. */
   const std::uint32_t acceptable = 128u + 11u + 1u + 32u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 

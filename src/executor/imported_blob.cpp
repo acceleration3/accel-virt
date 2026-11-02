@@ -65,11 +65,10 @@ void ImportedBlob::record(uint64_t handle)
     handle_ = handle;
 }
 
-/* A free slot is all zeros: nothing of a previous import may look live. */
 bool ImportedBlob::invariants_hold() const
 {
     AV_SCOPE("ImportedBlob::invariants_hold");
     return memory_ != nullptr || (id_ == 0u && handle_ == 0u);
 }
 
-}  // namespace av
+}

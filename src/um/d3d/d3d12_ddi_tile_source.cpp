@@ -5,11 +5,9 @@
 namespace av::d3d12 {
 
 namespace {
-
-/* An absent count is a range of as many tiles as are left to map. */
 constexpr uint32_t every_tile_left = 0xFFFFFFFFu;
 
-}  // namespace
+}
 
 DdiTileSource::DdiTileSource(UINT region_count, const D3D12DDI_TILED_RESOURCE_COORDINATE *starts,
                              const D3D12DDI_TILE_REGION_SIZE *sizes, UINT range_count,
@@ -57,4 +55,4 @@ d3d12proto::TileRange DdiTileSource::range(uint32_t index) const
                                  counts_ != nullptr ? counts_[index] : every_tile_left};
 }
 
-}  // namespace av::d3d12
+}

@@ -8,8 +8,6 @@ TOOL = ROOT / "tools" / "host" / "list_gpus.py"
 sys.path.insert(0, str(ROOT / "tools" / "host"))
 import list_gpus  # noqa: E402
 
-# The shape of full `vulkaninfo` output, trimmed to what the tool reads: two GPUs,
-# the second with a device-local heap and a host heap, and llvmpipe.
 CAPTURE = """==========
 VULKANINFO
 ==========
@@ -134,9 +132,6 @@ class ListGpus(unittest.TestCase):
 
 
 class WhatTheGuestIsTold(unittest.TestCase):
-    """The name and PCI identity a guest sees for each GPU, which the device
-    decides in C++ and the guest runner checks Windows against."""
-
     def setUp(self):
         self.tree = SourceTree()
         self.addCleanup(self.tree.remove)
@@ -154,15 +149,14 @@ class WhatTheGuestIsTold(unittest.TestCase):
 
     def test_a_gpu_with_no_function_or_none_sysfs_describes_keeps_virtio_gpus(self):
         self.assertEqual(self.gpus[0].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))
-        self.assertEqual(self.gpus[1].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))  # no files
+        self.assertEqual(self.gpus[1].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))
         for name, text in (("vendor", "0x10de\n"), ("device", "0x24e0\n"), ("revision", "a1\n")):
             self.tree.write(f"0000:7b:00.0/{name}", text)
-        self.assertEqual(self.gpus[1].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))  # no 0x
+        self.assertEqual(self.gpus[1].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))
         self.tree.write("0000:7b:00.0/revision", "0x100\n")
-        self.assertEqual(self.gpus[1].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))  # past a byte
+        self.assertEqual(self.gpus[1].pci_identity(self.tree.root), (0x1AF4, 0x1050, 0x01))
 
     def test_the_adapter_names_list_each_gpu_by_the_ids_it_presents_and_leaves_the_cpu_out(self):
-        """What provision.ps1 reads from C:\\av\\adapters.txt: the ids the guest will see, tab-separated."""
         for name, text in (("vendor", "0x10de\n"), ("device", "0x24e0\n"), ("revision", "0xa1\n")):
             self.tree.write(f"0000:7b:00.0/{name}", text)
         self.assertEqual(list_gpus.adapter_names(self.gpus, self.tree.root).splitlines(), [
@@ -172,23 +166,18 @@ class WhatTheGuestIsTold(unittest.TestCase):
         self.assertEqual(list_gpus.adapter_names([self.gpus[2]], self.tree.root), "")
 
     def test_the_adapter_names_read_the_name_from_the_sysfs_they_read_the_ids_from(self):
-        """An integrated AMD GPU is named by its PCI identity, so the name has to
-        come from the same sysfs as the ids beside it - not the machine's own,
-        where the bus address is some other function or none."""
         integrated = CAPTURE.replace("\tvendorID          = 0x10de", "\tvendorID          = 0x1002") \
                             .replace("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU") \
                             .replace("NVIDIA GeForce RTX 3070 Ti Laptop GPU", "AMD Radeon Graphics (RADV RAPHAEL_MENDOCINO)") \
                             .replace("pciBus      = 123", "pciBus      = 255").replace("pciDevice   = 0", "pciDevice   = 31")
         gpu = list_gpus.parse(integrated)[1]
         self.assertEqual(gpu.pci_address, "0000:ff:1f.0")
-        # A revision no product table lists, so AMD's generic name is the answer.
         for name, text in (("vendor", "0x1002\n"), ("device", "0x13c0\n"), ("revision", "0xfe\n")):
             self.tree.write(f"0000:ff:1f.0/{name}", text)
         self.assertEqual(list_gpus.adapter_names([gpu], self.tree.root), "1002\t13c0\tAMD Radeon(TM) Graphics\n")
         self.assertEqual(list_gpus.adapter_names([gpu], self.tree.root / "missing"), "1af4\t1050\tAMD Radeon Graphics\n")
 
     def test_the_adapter_name_drops_the_driver_suffix_as_the_device_does(self):
-        """The cases tests/unit/device/gpu/test_adapter_name.cpp holds the C++ to."""
         cases = {"AMD Radeon RX 9070 XT (RADV GFX1201)": "AMD Radeon RX 9070 XT",
                  "llvmpipe (LLVM 19.1.7, 256 bits)": "llvmpipe",
                  "Intel(R) Arc(tm) A770 Graphics (DG2)": "Intel(R) Arc(tm) A770 Graphics",
@@ -209,8 +198,6 @@ class WhatTheGuestIsTold(unittest.TestCase):
         self.assertEqual(list_gpus.adapter_name("w" * 47 + " (RADV)"), "w" * 47)
 
     def test_an_integrated_gpu_amds_table_leaves_out_is_named_as_its_vendor_names_it(self):
-        """An AMD one by AMD's generic name, whatever the PCI ID database's bracket
-        says; another vendor's by the database's name after the vendor, once."""
         self.tree.write("pci.ids", "1002  Advanced Micro Devices, Inc. [AMD/ATI]\n"
                                    "\t13c0  Granite Ridge [Radeon 610M]\n"
                                    "8086  Intel Corporation\n"

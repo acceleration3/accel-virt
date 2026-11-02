@@ -1,8 +1,3 @@
-/* One of the process's AV_ environment variables, as a guest driver reads it:
- * copied once, when it is made, and judged by SettingText's rules - the ones
- * the host's EnvSetting judges by, so a switch set to "0" is off on both
- * sides of the guest boundary (docs/testing.md, "Knobs"). A value longer than
- * the copy holds is read as not set rather than cut. */
 #ifndef AV_UM_GUEST_SETTING_HPP
 #define AV_UM_GUEST_SETTING_HPP
 
@@ -16,7 +11,6 @@ public:
     GuestSetting(const GuestSetting &) = delete;
     GuestSetting &operator=(const GuestSetting &) = delete;
 
-    /* What it was set to, by SettingText's rules; not set when it was not. */
     SettingText value() const;
 
 private:
@@ -26,6 +20,6 @@ private:
     bool set_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_GUEST_SETTING_HPP
+#endif

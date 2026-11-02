@@ -9,12 +9,9 @@
 namespace av {
 
 namespace {
-
-/* The module the linker already bound this program to: the loader the runner
- * pushed beside the probe, never a second copy loaded by name. */
 constexpr const wchar_t *loader_module = L"OpenCL.dll";
 
-}  // namespace
+}
 
 WindowsClEntry::WindowsClEntry() : loader_(GetModuleHandleW(loader_module)), binary_(nullptr)
 {
@@ -67,9 +64,6 @@ int32_t WindowsClEntry::device_text(void *device, uint32_t name, char *into, siz
     return clGetDeviceInfo(static_cast<cl_device_id>(device), name, room, into, &bytes);
 }
 
-/* The two-call shape, because the names the probe asks for are four bytes
- * (CL_DEVICE_VENDOR_ID) or eight (the SVM capabilities, the LUID) and the
- * caller wants one number either way; anything wider is not a number. */
 int32_t WindowsClEntry::device_number(void *device, uint32_t name, uint64_t &value)
 {
     AV_SCOPE("WindowsClEntry::device_number");
@@ -116,8 +110,6 @@ void *WindowsClEntry::create_buffer_with_properties(void *context, const uint64_
 void *WindowsClEntry::create_program(void *context, const char *const *sources, uint32_t count, int32_t &error)
 {
     AV_SCOPE("WindowsClEntry::create_program");
-    /* cl.h's own signature predates const pointers to its strings; it reads
-     * them and nothing more. */
     return clCreateProgramWithSource(static_cast<cl_context>(context), count, const_cast<const char **>(sources),
                                      nullptr, &error);
 }
@@ -261,9 +253,6 @@ int32_t WindowsClEntry::set_kernel_svm(void *kernel, uint32_t index, void *point
     return clSetKernelArgSVMPointer(static_cast<cl_kernel>(kernel), index, pointer);
 }
 
-/* clCreateUserEvent and clSetUserEventStatus are not in the probe's import
- * library, so they come from the loaded loader by name; a loader without them
- * is one this step cannot run on rather than a crash. */
 void *WindowsClEntry::create_user_event(void *context, int32_t &error)
 {
     AV_SCOPE("WindowsClEntry::create_user_event");
@@ -290,9 +279,6 @@ int32_t WindowsClEntry::watch_event(void *event, int32_t status,
                                     void *user_data)
 {
     AV_SCOPE("WindowsClEntry::watch_event");
-    /* The probe's callback takes the event as a void pointer and is declared
-     * AV_RUNTIME_CALL, which is CL_CALLBACK's convention on either
-     * architecture, so only the handle's type differs and the cast is a rename. */
     using Notify = void(CL_CALLBACK *)(cl_event, cl_int, void *);
     return clSetEventCallback(static_cast<cl_event>(event), status,
                               reinterpret_cast<Notify>(notify), user_data);
@@ -341,4 +327,4 @@ void WindowsClEntry::release_context(void *context)
     static_cast<void>(clReleaseContext(static_cast<cl_context>(context)));
 }
 
-}  // namespace av
+}

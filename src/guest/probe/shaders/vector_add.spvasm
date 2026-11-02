@@ -1,9 +1,3 @@
-; The probe's vector add as an OpenCL kernel in SPIR-V, for clCreateProgramWithIL:
-; c[i] = a[i] + b[i] over three global float buffers, i the work-item's first
-; global id. offset_add adds a ulong argument too: eight private bytes, which a
-; host that keeps no type names for IL cannot tell from a sampler's handle. Written by hand: what a compiler writes carries linkage and
-; helper functions a driver need not take, and this is the least a device
-; that takes SPIR-V 1.0 must run.
                OpCapability Addresses
                OpCapability Kernel
                OpCapability Int64

@@ -1,7 +1,3 @@
-/* Descriptor heaps and the views written into them. A CPU descriptor handle is
- * the address of a slot in the heap's block that holds its own heap id and
- * index; a GPU one is the heap id over the index's byte offset. Either comes
- * back to (heap, index) without a search, which is how the wire names it. */
 #include "core/trace/function_scope.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
 #include "um/d3d/d3d12_device.hpp"
@@ -12,9 +8,7 @@ namespace {
 
 constexpr uint32_t gpu_heap_shift = 32u;
 constexpr uint64_t gpu_offset_mask = 0xffffffffu;
-/* D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE. */
 constexpr uint32_t api_shader_visible = 0x1u;
-/* The kinds' D3D12_*_DIMENSION values the translation below chooses from. */
 constexpr uint32_t view_buffer = 1u;
 constexpr uint32_t srv_1d = 2u, srv_1d_array = 3u, srv_2d = 4u, srv_2d_array = 5u, srv_2d_ms = 6u,
                    srv_2d_ms_array = 7u, srv_3d = 8u, srv_cube = 9u, srv_cube_array = 10u;
@@ -23,7 +17,7 @@ constexpr uint32_t dsv_1d = 1u, dsv_1d_array = 2u, dsv_2d = 3u, dsv_2d_array = 4
 
 enum class ViewKind : uint32_t { shader_resource, unordered_access, render_target };
 
-}  // namespace
+}
 
 SIZE_T D3d12Device::calc_private_descriptor_heap_size(const D3D12DDIARG_CREATE_DESCRIPTOR_HEAP_0001 *args)
 {
@@ -100,17 +94,12 @@ d3d12proto::DescriptorRef D3d12Device::descriptor(D3D12DDI_GPU_DESCRIPTOR_HANDLE
                                      static_cast<uint32_t>((handle.ptr & gpu_offset_mask) / descriptor_bytes)};
 }
 
-/* A view's resource, or for a null view - a descriptor that reads zeros - one
- * slice of one sample, which chooses the plain dimension. */
 const ResourceRecord &D3d12Device::viewed(D3D12DDI_HRESOURCE handle) const
 {
     AV_SCOPE("D3d12Device::viewed");
     return handle.pDrvPrivate != nullptr ? *static_cast<const ResourceRecord *>(handle.pDrvPrivate) : null_resource_;
 }
 
-/* The API union members of each texture dimension, from the DDI's, which
- * folds arrays and multisampling into the resource: a view of a resource with
- * several slices is an array view, of a multisampled one a multisample view. */
 bool D3d12Device::texture_view(uint32_t kind, const ResourceRecord &resource, D3D12DDI_RESOURCE_DIMENSION dimension,
                                const void *members, d3d12proto::ViewDesc &view) const
 {
@@ -122,7 +111,6 @@ bool D3d12Device::texture_view(uint32_t kind, const ResourceRecord &resource, D3
     float                 lod = 0.0f;
     switch (dimension) {
     case D3D12DDI_RD_TEXTURE1D:
-        /* DDI: MostDetailedMip|MipSlice, FirstArraySlice, [MipLevels, ArraySize, LOD]. */
         view.dimension = array ? srv_1d_array : srv_1d;
         if (srv) {
             __builtin_memcpy(&lod, in + 4, sizeof(lod));
@@ -137,8 +125,6 @@ bool D3d12Device::texture_view(uint32_t kind, const ResourceRecord &resource, D3
         return true;
     case D3D12DDI_RD_TEXTURE2D:
         if (multisampled) {
-            /* SRV: ..., FirstArraySlice, MipLevels, ArraySize; RTV: MipSlice,
-             * FirstArraySlice, ArraySize. */
             view.dimension = array ? srv_2d_ms_array : srv_2d_ms;
             view.args[0] = in[1];
             view.args[1] = srv ? in[3] : in[2];
@@ -146,7 +132,6 @@ bool D3d12Device::texture_view(uint32_t kind, const ResourceRecord &resource, D3
         }
         view.dimension = array ? srv_2d_array : srv_2d;
         if (srv) {
-            /* DDI: MostDetailedMip, FirstArraySlice, MipLevels, ArraySize, PlaneSlice, LOD. */
             __builtin_memcpy(&lod, in + 5, sizeof(lod));
             view.min_lod = lod;
             if (array) {
@@ -157,7 +142,6 @@ bool D3d12Device::texture_view(uint32_t kind, const ResourceRecord &resource, D3
                 for (uint32_t index = 0u; index < 3u; index++) view.args[index] = words[index];
             }
         } else if (array) {
-            /* DDI: MipSlice, FirstArraySlice, ArraySize, PlaneSlice. */
             for (uint32_t index = 0u; index < 4u; index++) view.args[index] = in[index];
         } else {
             view.args[0] = in[0];
@@ -167,7 +151,6 @@ bool D3d12Device::texture_view(uint32_t kind, const ResourceRecord &resource, D3
     case D3D12DDI_RD_TEXTURE3D:
         view.dimension = srv_3d;
         if (srv) {
-            /* DDI: MostDetailedMip, MipLevels, LOD. */
             view.args[0] = in[0];
             view.args[1] = in[1];
             __builtin_memcpy(&view.min_lod, in + 2, sizeof(float));
@@ -177,7 +160,6 @@ bool D3d12Device::texture_view(uint32_t kind, const ResourceRecord &resource, D3
         return true;
     case D3D12DDI_RD_TEXTURECUBE:
         if (srv) {
-            /* DDI: MostDetailedMip, MipLevels, First2DArrayFace, NumCubes, LOD. */
             const bool cubes = in[3] > 1u || in[2] != 0u;
             view.dimension = cubes ? srv_cube_array : srv_cube;
             view.args[0] = in[0];
@@ -189,7 +171,6 @@ bool D3d12Device::texture_view(uint32_t kind, const ResourceRecord &resource, D3
             __builtin_memcpy(&view.min_lod, in + 4, sizeof(float));
             return true;
         }
-        /* A render target of a cube is a 2D array view of its faces. */
         view.dimension = srv_2d_array;
         for (uint32_t index = 0u; index < 3u; index++) view.args[index] = in[index];
         return true;
@@ -278,7 +259,6 @@ VOID D3d12Device::create_depth_stencil_view(const D3D12DDIARG_CREATE_DEPTH_STENC
     view.format = static_cast<uint32_t>(args->Format);
     view.flags = static_cast<uint32_t>(args->Flags);
     const bool array = resource.depth_or_array > 1u || args->ResourceDimension == D3D12DDI_RD_TEXTURECUBE;
-    /* DDI: MipSlice, FirstArraySlice, ArraySize for every dimension. */
     const uint32_t *const in = &args->Tex2D.MipSlice;
     if (resource.sample_count > 1u) {
         view.dimension = array ? dsv_2d_ms_array : dsv_2d_ms;
@@ -335,9 +315,6 @@ VOID D3d12Device::copy_descriptors_simple(UINT count, D3D12DDI_CPU_DESCRIPTOR_HA
                            "CopyDescriptors12"));
 }
 
-/* The destination ranges and source ranges walked together, each run where
- * both stay inside one range copied at once - D3D12's CopyDescriptors. A
- * null size array is ranges of one. */
 VOID D3d12Device::copy_descriptors(UINT destination_ranges, const D3D12DDI_CPU_DESCRIPTOR_HANDLE *destinations,
                                    const UINT *destination_sizes, UINT source_ranges,
                                    const D3D12DDI_CPU_DESCRIPTOR_HANDLE *sources, const UINT *source_sizes,
@@ -364,4 +341,4 @@ VOID D3d12Device::copy_descriptors(UINT destination_ranges, const D3D12DDI_CPU_D
     }
 }
 
-}  // namespace av::d3d12
+}

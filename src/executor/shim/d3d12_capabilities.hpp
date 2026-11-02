@@ -1,8 +1,3 @@
-/* What one host GPU's Direct3D 12 device can do, asked once when it is made:
- * the answers the guest's user-mode driver reports through GetCaps, and every
- * DXGI format's support and quality levels, as vkd3d-proton's
- * CheckFeatureSupport gives them. The guest asks for all of it in one
- * QueryCaps12, so a device open costs it one round trip, not one a format. */
 #ifndef AV_D3D12_CAPABILITIES_HPP
 #define AV_D3D12_CAPABILITIES_HPP
 
@@ -32,6 +27,6 @@ private:
     FormatCapsRows     formats_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_D3D12_CAPABILITIES_HPP
+#endif

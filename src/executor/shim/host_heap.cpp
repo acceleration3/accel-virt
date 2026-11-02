@@ -38,4 +38,4 @@ uint64_t HostHeap::live() const
     return __atomic_load_n(&live_, __ATOMIC_RELAXED);
 }
 
-}  // namespace av
+}

@@ -1,9 +1,3 @@
-/* The tiled half of D3d12Session: what maps a reserved resource's tiles to a
- * heap's, on a queue, and what copies its tiles on a list. Every region is
- * held to the resource's tiles (D3d12TileSpace) and every heap range to the
- * heap (D3d12TileUpdate) before vkd3d-proton sees either, because
- * vkd3d-proton dereferences the heap of any range that maps and walks every
- * region it is given. */
 #include "executor/d3d/d3d12_session.hpp"
 
 #include "core/trace/function_scope.hpp"
@@ -18,15 +12,10 @@ namespace av {
 namespace {
 
 constexpr uint64_t tile_bytes = 64u * 1024u;
-/* D3D12_TILE_MAPPING_FLAG_NO_HAZARD, D3D12_TILE_COPY_FLAG_NO_HAZARD. */
 constexpr uint32_t no_hazard = 0x1u;
-/* D3D12_TILE_COPY_FLAGS' two directions, at most one of which is named. */
 constexpr uint32_t copy_into_tiles = 0x2u;
 constexpr uint32_t copy_out_of_tiles = 0x4u;
-/* A buffer offset a copy to or from a texture takes is whole texels, and a
- * whole number of 4-byte words (vkCmdCopyImageToBuffer). */
 constexpr uint64_t word_bytes = 4u;
-/* D3D12_TILE_REGION_SIZE's Height and Depth are 16-bit. */
 constexpr uint32_t most_box_side = 0xFFFFu;
 
 D3D12_TILED_RESOURCE_COORDINATE host_coordinate(const d3d12proto::TileCoordinate &coordinate)
@@ -35,7 +24,6 @@ D3D12_TILED_RESOURCE_COORDINATE host_coordinate(const d3d12proto::TileCoordinate
     return D3D12_TILED_RESOURCE_COORDINATE{coordinate.x, coordinate.y, coordinate.z, coordinate.subresource};
 }
 
-/* Held to most_box_side first (D3d12Session::tiles_hold). */
 D3D12_TILE_REGION_SIZE host_size(const d3d12proto::TileSize &size)
 {
     AV_SCOPE("host_size");
@@ -48,7 +36,7 @@ D3D12_TILE_REGION_SIZE host_size(const d3d12proto::TileSize &size)
     return made;
 }
 
-}  // namespace
+}
 
 bool D3d12Session::tiles_hold(ID3D12Resource *resource, const d3d12proto::TileCoordinate &start,
                               const d3d12proto::TileSize &size) const
@@ -136,8 +124,6 @@ bool D3d12Session::on_CopyTiles12(uint32_t id, uint32_t resource, const d3d12pro
     const D3D12_RESOURCE_DESC tiled_desc = tiled->GetDesc();
     const D3D12_RESOURCE_DESC linear_desc = linear->GetDesc();
     const uint64_t            texel = DxgiFormatLayout(static_cast<uint32_t>(tiled_desc.Format)).element_bytes();
-    /* Whole texels and whole words: every texel past a word is a whole
-     * number of words (8, 12 or 16 bytes). */
     const uint64_t            step = texel > word_bytes ? texel : word_bytes;
     const bool                texture = tiled_desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER;
     const uint64_t            bytes = uint64_t{size.tiles} * tile_bytes;
@@ -150,4 +136,4 @@ bool D3d12Session::on_CopyTiles12(uint32_t id, uint32_t resource, const d3d12pro
     return true;
 }
 
-}  // namespace av
+}

@@ -1,6 +1,3 @@
-/* The process's own heap as a block source, for what outlives any one device
- * (GuestRamLendings): blocks come zeroed, and what is given and not taken back
- * is counted. */
 #include "core/platform/block_source.hpp"
 #include "device/host/process_block_source.hpp"
 #include "harness/framework/test_registry.hpp"

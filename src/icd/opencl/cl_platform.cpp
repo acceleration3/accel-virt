@@ -8,13 +8,10 @@
 namespace av::clicd {
 
 namespace {
-
-/* The version this ICD implements. A host that answers more is capped to it,
- * because what is reported is what is tested (constitution VI). */
 constexpr uint32_t implemented_major = 3u;
 constexpr uint32_t implemented_minor = 0u;
 
-}  // namespace
+}
 
 ClPlatform::ClPlatform()
     : dispatch_(nullptr), version_{}, name_{}, version_number_("OpenCL ", implemented_major, implemented_minor)
@@ -64,8 +61,6 @@ cl_platform_id ClPlatform::as_handle()
 bool ClPlatform::names_this(cl_platform_id platform) const
 {
     AV_SCOPE("ClPlatform::names_this");
-    /* Null names this one: the API lets a caller leave the platform out where
-     * there is only one, and the guest is shown only this. */
     return platform == nullptr || platform == reinterpret_cast<const cl_platform_id>(
                                                   const_cast<ClPlatform *>(this));
 }
@@ -74,8 +69,6 @@ void ClPlatform::cap_version(uint32_t major, uint32_t minor)
 {
     AV_SCOPE("ClPlatform::cap_version");
     version_number_.cap(major, minor);
-    /* The word, a space, the version, a space, and whatever the vendor cares
-     * to say: the shape the specification fixes. */
     version_number_.write(version_, sizeof version_, " avgpu");
 }
 
@@ -92,9 +85,6 @@ cl_int ClPlatform::answer(const char *text, size_t value_bytes, void *value, siz
     AV_SCOPE("ClPlatform::answer");
     const size_t bytes = length_of(text) + 1u;
     if (value != nullptr) {
-        /* Too small is an error and writes nothing: a caller that asked for
-         * the size first and then shrank its buffer gets told, rather than a
-         * string cut where it happened to fit. */
         if (value_bytes < bytes) return CL_INVALID_VALUE;
         char *const out = static_cast<char *>(value);
         for (size_t index = 0u; index < bytes; ++index) out[index] = text[index];
@@ -113,8 +103,6 @@ cl_int ClPlatform::info(cl_platform_id platform, cl_platform_info name_asked, si
     case CL_PLATFORM_VERSION: return answer(version_, value_bytes, value, size_ret);
     case CL_PLATFORM_NAME: return answer(name_, value_bytes, value, size_ret);
     case CL_PLATFORM_VENDOR: return answer(vendor, value_bytes, value, size_ret);
-    /* The one query an ICD may not decline: a platform whose suffix cannot be
-     * read is dropped by the loader (research §1). */
     case CL_PLATFORM_ICD_SUFFIX_KHR: return answer(suffix, value_bytes, value, size_ret);
     case CL_PLATFORM_NUMERIC_VERSION: {
         if (value != nullptr) {
@@ -124,9 +112,6 @@ cl_int ClPlatform::info(cl_platform_id platform, cl_platform_info name_asked, si
         if (size_ret != nullptr) *size_ret = sizeof(cl_version);
         return CL_SUCCESS;
     }
-    /* No clock of the guest's is the host GPU's, so the platform keeps no
-     * timer the two could be read against together: the answer for a
-     * platform without one, whose timer calls are refused. */
     case CL_PLATFORM_HOST_TIMER_RESOLUTION: {
         if (value != nullptr) {
             if (value_bytes < sizeof(cl_ulong)) return CL_INVALID_VALUE;
@@ -144,10 +129,9 @@ bool ClPlatform::invariants_hold() const
     AV_SCOPE("ClPlatform::invariants_hold");
     if (!version_number_.invariants_hold()) return false;
     if (version_[0] == '\0') return false;
-    /* The version string is terminated inside its room. */
     size_t index = 0u;
     while (index < sizeof version_ && version_[index] != '\0') ++index;
     return index < sizeof version_;
 }
 
-}  // namespace av::clicd
+}

@@ -1,7 +1,3 @@
-/* Hostile wglChoosePixelFormatARB and wglGetPixelFormatAttribivARB input, as
- * an application hands it to avgl.dll: whatever the lists hold, a query
- * answers, reads no further than max_pairs pairs and a terminator, and every
- * format it chooses or describes exists. */
 #include "core/support/status.hpp"
 #include "icd/opengl/pixel_format_query.hpp"
 #include "icd/opengl/pixel_format_table.hpp"
@@ -13,12 +9,10 @@
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size);
 
 namespace {
-
-/* Two full lists and their terminators, with a guard pair past each. */
 constexpr std::size_t list_slots = 2u * av::glicd::PixelFormatQuery::max_pairs + 3u;
 constexpr std::size_t header_bytes = 12u;
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

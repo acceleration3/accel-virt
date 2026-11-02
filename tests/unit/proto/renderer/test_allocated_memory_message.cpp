@@ -1,7 +1,3 @@
-/* renderer -> QEMU: the answer to allocate_memory (docs/host-memory.md). QEMU
- * reads it from a socket, so it is judged as hostile: memory allocated is a
- * size and a caching QEMU can map and the guest can be told, with exactly one
- * descriptor beside it; nothing allocated is all zeros with none. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "harness/framework/byte_layout.hpp"
@@ -23,7 +19,6 @@ namespace {
 
 constexpr std::uint64_t size = 0x10000u;
 
-/* Fed with the one descriptor an allocation carries. */
 bool rejects(const std::uint8_t *bytes, std::size_t length)
 {
     AllocatedMemoryMessage message;
@@ -36,7 +31,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(allocated_memory_message_encode, is_the_caching_a_reserved_word_and_the_size)
 { GuardedBuffer bytes(AllocatedMemoryMessage::encoded_size);
@@ -49,7 +44,6 @@ TEST(allocated_memory_message_encode, is_the_caching_a_reserved_word_and_the_siz
   CHECK_EQ(AllocatedMemoryMessage::encoded_size, 16u);
   CHECK(bytes.guards_intact()); }
 
-/* The two cachings are the executor ABI's own values. */
 TEST(allocated_memory_message, its_cachings_are_the_executor_abis)
 { CHECK_EQ(AllocatedMemoryMessage::write_back, static_cast<std::uint32_t>(AV_MEMORY_WRITE_BACK));
   CHECK_EQ(AllocatedMemoryMessage::write_combined, static_cast<std::uint32_t>(AV_MEMORY_WRITE_COMBINED)); }
@@ -72,8 +66,6 @@ TEST(allocated_memory_message, an_allocation_round_trips_with_its_one_descriptor
       CHECK_STATUS(decoded.decode(bytes, sizeof bytes, 2u), Status::malformed);
   } }
 
-/* Nothing allocated is all zeros and no descriptor: one beside it would be a
- * file nobody owns. */
 TEST(allocated_memory_message, nothing_allocated_carries_nothing)
 { const AllocatedMemoryMessage none;
   CHECK(!none.allocated());
@@ -89,8 +81,6 @@ TEST(allocated_memory_message, nothing_allocated_carries_nothing)
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes, 0u), Status::ok);
   CHECK(!decoded.allocated()); }
 
-/* A caching that is neither, an allocation of nothing, and a size with no
- * allocation are refused on the way out as on the way in. */
 TEST(allocated_memory_message_encode, refuses_what_decode_would)
 { std::uint8_t bytes[AllocatedMemoryMessage::encoded_size] = {};
   CHECK_STATUS(AllocatedMemoryMessage(3u, size).encode(bytes, sizeof bytes), Status::invalid_parameter);
@@ -141,11 +131,5 @@ TEST(allocated_memory_message_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 128u);
-  /* Fed with one descriptor. Caching 1 flipped is 0 (nothing allocated, which
-   * a descriptor contradicts), 3, or a larger value - one flip, of bit 1, is
-   * 3, none is 2: every caching flip refuses. Any reserved bit refuses. The
-   * size's lone set bit flipped is no size; its other 63 flips are sizes.
-   * All zero carries no descriptor, all ones no caching: 63 + 1 for the
-   * untouched message. */
   const std::uint32_t acceptable = 63u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

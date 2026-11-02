@@ -85,4 +85,4 @@ bool D3d12AddressMap::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

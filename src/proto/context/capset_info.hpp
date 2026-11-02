@@ -1,5 +1,3 @@
-/* What one device instance - one host GPU - offers the guest: the av capset
- * (id 0x72, docs/protocol.md). */
 #ifndef AV_CAPSET_INFO_HPP
 #define AV_CAPSET_INFO_HPP
 
@@ -20,26 +18,10 @@ public:
     static constexpr uint32_t capset_id    = 0x72u;
     static constexpr size_t   encoded_size = 128u;
     static constexpr uint64_t feature_host_visible_memory = 1u;
-    /* Bits 2 and 4 were feature 039's probes of exporting host GPU memory
-     * and importing guest pages; every host-visible byte is host GPU memory
-     * now (docs/host-memory.md), so neither is a choice. */
-    /* The host's display can show a dma-buf, so the guest may scan a blob out
-     * instead of transferring it (feature 058). Decided when the guest first
-     * reads the capset, not at realize: QEMU registers its display backends
-     * after every device is realized. */
     static constexpr uint64_t feature_dmabuf_scanout = 8u;
-    /* The device moves queued presents on a thread of its own and says which
-     * it has moved through a page (docs/protocol.md, "Present engine"). */
     static constexpr uint64_t feature_present_engine = 16u;
-    /* A queued present's source may be a host image, read by its key. */
     static constexpr uint64_t feature_present_from_image = 32u;
-    /* The fence page counts out-of-band raises in `raised`, apart from
-     * progress (docs/protocol.md, "Fence page"), so the driver can wake a
-     * process waiting for one rather than have it ask. */
     static constexpr uint64_t feature_raises = 64u;
-    /* The device composes a head's overlay planes (SCANOUT_PLANE, docs/
-     * protocol.md "Scanout planes"), so the guest may offer Windows more than
-     * the one plane it shows. */
     static constexpr uint64_t feature_scanout_planes = 128u;
 
     CapsetInfo();
@@ -51,21 +33,16 @@ public:
     uint32_t               max_contexts() const;
     const GpuIdentity     &gpu() const;
     bool                   offers(SubApi api) const;
-    /* Adds a feature that could not be decided when the capset was described,
-     * which is what feature_dmabuf_scanout is. */
     void                   announce(uint64_t feature);
     bool                   accepts_ring_order(uint8_t order) const;
-    /* Unknown bits are kept, so a newer device's capabilities round-trip. */
     bool                   has_feature(uint64_t feature) const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
-    /* encoded_size bytes; a writer short of them latches its failure. */
     void                 encode(WireWriter &writer) const;
-    /* Leaves this capset unchanged unless it returns ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t magic           = 0x00315641u;  /* "AV1" */
+    static constexpr uint32_t magic           = 0x00315641u;
     static constexpr uint32_t known_sub_apis  = 0xFu;
     static constexpr uint8_t  lowest_order    = 12u;
     static constexpr uint8_t  highest_order   = 24u;
@@ -81,6 +58,6 @@ private:
     GpuIdentity     gpu_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_CAPSET_INFO_HPP
+#endif

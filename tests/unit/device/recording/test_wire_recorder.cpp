@@ -68,13 +68,11 @@ void *record_many(void *argument)
     return nullptr;
 }
 
-}  // namespace
+}
 
 namespace av {
 
 struct WireRecorderProbe {
-    /* A recorder holding a file with no lock, or a lock with no file: neither
-     * survives open() or close(). */
     static void lose_the_lock(WireRecorder &recorder) { recorder.lock_ = nullptr; }
     static void restore_the_lock(WireRecorder &recorder, void *lock) { recorder.lock_ = lock; }
     static void *lock_of(WireRecorder &recorder) { return recorder.lock_; }
@@ -86,7 +84,7 @@ struct WireRecorderProbe {
     static void break_the_limit(WireRecorder &recorder) { recorder.limit_.took(recorder.limit_.ceiling()); }
 };
 
-}  // namespace av
+}
 
 TEST(wire_recorder, without_a_path_it_records_nothing_and_asks_the_host_for_nothing)
 { MockHost host; WireRecorder recorder(host);
@@ -289,8 +287,6 @@ TEST(wire_recorder, a_write_the_host_refuses_stops_the_recording_and_logs_once)
   recorder.record_batch(1u, 2u, batch, sizeof batch);
   recorder.record_batch(1u, 3u, batch, sizeof batch);
   CHECK(recorder.records() == 1u);
-  /* A write the host refused is a record lost, not a record turned away: the
-   * count is what the ceiling and a record's own size raise. */
   CHECK_EQ(recorder.refused(), 0u);
   CHECK(!recorder.recording());
   CHECK_EQ(host.logged(), 1u);
@@ -303,7 +299,6 @@ TEST(wire_recorder, a_payload_that_carries_a_record_but_not_its_bulk_stops_the_r
   CHECK_STATUS(recorder.open(path, 0u, nullptr, AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)),
                Status::ok);
   const std::uint8_t batch[] = {1u, 2u, 3u, 4u};
-  /* The header lands, the bulk does not. */
   host.fail_recording_append_at(2u);
   recorder.record_batch(1u, 1u, batch, sizeof batch);
   CHECK(recorder.records() == 0u);
@@ -345,7 +340,6 @@ TEST(wire_recorder, a_wrapping_recording_starts_again_at_its_header_and_never_pa
   RecordHeader        record;
   const std::uint8_t *payload = nullptr;
   CHECK(file.next(record, payload));
-  /* The newest records are what survived. */
   CHECK(record.fence() == 5u);
   CHECK(!file.next(record, payload));
   recorder.close(); }
@@ -371,7 +365,6 @@ TEST(wire_recorder, a_wrap_whose_header_cannot_be_rewritten_stops_the_recording)
                Status::ok);
   const std::uint8_t batch[] = {1u, 2u, 3u, 4u};
   recorder.record_batch(1u, 1u, batch, sizeof batch);
-  /* The truncate lands; the header rewrite does not. */
   host.fail_recording_append_at(1u);
   recorder.record_batch(1u, 2u, batch, sizeof batch);
   CHECK(recorder.records() == 1u);
@@ -383,9 +376,6 @@ TEST(wire_recorder, a_record_larger_than_any_record_may_be_is_refused_and_the_re
 { MockHost host; WireRecorder recorder(host);
   CHECK_STATUS(recorder.open(path, 0u, "all", AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)), Status::ok);
   const std::uint8_t byte = 1u;
-  /* The first size a record may not hold: its prefix plus this is one byte
-   * past max_payload. The accepting side, a record of exactly max_payload,
-   * cannot be written here - MockHost's recording holds 4 MiB. */
   recorder.record_blob_bytes(1u, 9u, 0u, &byte, RecordHeader::max_payload - WireRecorder::blob_bytes_prefix + 1u);
   CHECK(recorder.records() == 0u);
   CHECK(recorder.refused() == 1u);
@@ -401,7 +391,6 @@ TEST(wire_recorder, a_record_larger_than_any_record_may_be_is_refused_and_the_re
 TEST(wire_recorder, a_setup_that_cannot_be_encoded_is_refused_and_the_recording_runs_on)
 { MockHost host; WireRecorder recorder(host);
   CHECK_STATUS(recorder.open(path, 0u, "all", AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)), Status::ok);
-  /* Minor 0 carries no OpenGL options, so this setup has no encoding. */
   const ContextSetup impossible(ProtocolVersion(1u, 0u), SubApi::opengl, 40u, 16u, 41u, 2u, 42u,
                                 GlContextOptions(4u, 6u, GlContextOptions::Profile::core, 0u, 0u));
   recorder.record_context_setup(3u, impossible);
@@ -430,7 +419,6 @@ TEST(wire_recorder, several_workers_recording_at_once_leave_whole_records_in_ord
   while (file.next(record, payload)) {
       seen++;
       CHECK_EQ(record.length(), 64u);
-      /* Every byte of a record belongs to the context that wrote it. */
       for (std::uint32_t index = 0u; index < record.length(); index++)
           CHECK_EQ(payload[index], static_cast<std::uint8_t>(record.context()));
       CHECK(record.timestamp() >= last);
@@ -439,29 +427,18 @@ TEST(wire_recorder, several_workers_recording_at_once_leave_whole_records_in_ord
   CHECK_EQ(seen, 4u * 64u);
   recorder.close(); }
 
-/* Constitution IV: with each recording call failed in turn, the device runs on,
- * the recorder stops cleanly, nothing leaks and no recording is left open -
- * and each refusal leaves a different, named state, decided from the contract
- * rather than counted. The ceiling holds the file header and one four-byte
- * record, so the second batch is the one that wraps. */
 TEST(wire_recorder, survives_every_recording_call_the_host_refuses_in_turn)
 { struct Refusal {
       std::uint32_t nth;
-      std::uint64_t records;   /* what reached the file before the refusal */
-      std::size_t   written;   /* what the file holds afterwards */
+      std::uint64_t records;
+      std::size_t   written;
       const char   *what;
   };
   const std::uint64_t one_record = RecordHeader::encoded_size + 4u;
   const Refusal       refusals[] = {
-      /* The file is never made: recording is off, nothing is written, and the
-       * run is not refused. */
       {1u, 0u, 0u, "create"},
-      /* The file header lands, the first batch's frame does not. */
       {2u, 0u, RecordingHeader::encoded_size, "the first record"},
-      /* The first batch lands; the wrap the second one needs cannot be made. */
       {3u, 1u, RecordingHeader::encoded_size + one_record, "the wrap"},
-      /* No mutex, so no record is ever taken, and the header was never written
-       * either: open gave up on its first write. */
       {4u, 0u, 0u, "the mutex"}};
   for (const Refusal &refusal : refusals) {
       MockHost host; WireRecorder recorder(host);
@@ -477,7 +454,6 @@ TEST(wire_recorder, survives_every_recording_call_the_host_refuses_in_turn)
           recorder.record_batch(7u, fence, batch, sizeof batch);
           CHECK(recorder.invariants_hold());
       }
-      /* One line about what was refused, and never a second one per record. */
       CHECK_EQ(host.logged(), 1u);
       CHECK(!recorder.recording());
       CHECK_EQ(recorder.records(), refusal.records);
@@ -508,11 +484,9 @@ TEST(wire_recorder, a_record_taken_after_the_recording_stopped_writes_nothing)
                Status::ok);
   const std::uint8_t batch[] = {1u, 2u, 3u, 4u};
   recorder.record_batch(1u, 1u, batch, sizeof batch);
-  recorder.record_batch(1u, 2u, batch, sizeof batch);   /* stops the recording */
+  recorder.record_batch(1u, 2u, batch, sizeof batch);
   CHECK(!recorder.recording());
   const std::uint64_t written = host.recording_length(path);
-  /* The kind is still kept, so the call reaches write, which sees the
-   * recording stopped under the lock and leaves the file alone. */
   recorder.record_batch(1u, 3u, batch, sizeof batch);
   CHECK(recorder.records() == 1u);
   CHECK_EQ(host.logged(), 1u);
@@ -547,8 +521,6 @@ TEST(wire_recorder_invariants, catch_a_closed_recorder_still_holding_a_lock)
   av::WireRecorderProbe::restore_the_lock(recorder, nullptr);
   CHECK(recorder.invariants_hold()); }
 
-/* The counts are what a run reads once the recording is closed, so closing a
- * recorder that recorded is the ordinary end of one, not a broken recorder. */
 TEST(wire_recorder, a_closed_recording_keeps_its_counts_and_holds_its_invariant)
 { MockHost host; WireRecorder recorder(host);
   CHECK_STATUS(recorder.open(path, 0u, "all", AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)), Status::ok);

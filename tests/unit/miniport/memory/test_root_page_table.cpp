@@ -20,7 +20,7 @@ struct RootPageTableProbe {
     static void overfill(RootPageTable &root) { root.entries_ = GpuMmuGeometry::entries_per_table + 1u; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -41,7 +41,7 @@ DxgkargSetRootPageTableRecord root_of(std::uint32_t entries)
     return {nullptr, 2u, 0u, 0x5000u, entries, 0u};
 }
 
-}  // namespace
+}
 
 TEST(root_page_table_admits, any_address_before_a_root_is_assigned)
 { Fixture fixture;

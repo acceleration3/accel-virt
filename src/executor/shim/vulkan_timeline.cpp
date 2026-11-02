@@ -54,7 +54,6 @@ bool VulkanTimeline::import_fd(const VulkanDeviceTable &table, OwnedFd &descript
         release();
         return false;
     }
-    /* A successful import owns the descriptor. */
     static_cast<void>(descriptor.take());
     return true;
 }
@@ -95,4 +94,4 @@ VkSemaphore VulkanTimeline::semaphore() const
     return semaphore_;
 }
 
-}  // namespace av
+}

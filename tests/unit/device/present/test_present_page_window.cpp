@@ -1,7 +1,3 @@
-/* The present engine's page as the device holds it: a page of guest RAM,
- * headed and counting nothing once mapped, then each progress written at the
- * documented offsets. Memory that is not a whole page of guest RAM is
- * refused, and nothing stays mapped after a refusal or a release. */
 #include "device/present/present_page_window.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
@@ -34,7 +30,7 @@ PresentProgress progress_of(MockHost &host)
     return progress;
 }
 
-}  // namespace
+}
 
 TEST(present_page_window, a_page_of_guest_ram_is_headed_and_counts_nothing)
 { MockHost host;
@@ -66,7 +62,7 @@ TEST(present_page_window, each_progress_is_written_at_its_offsets_and_nothing_el
   CHECK_EQ(progress.completed(), 0x100000007u);
   CHECK_EQ(progress.refused(), 2u);
   window.release();
-  window.publish(PresentProgress(9u, 0u));   /* unmapped: nothing */
+  window.publish(PresentProgress(9u, 0u));
   CHECK_EQ(u64_at(host, page + 8u), 0x100000007u); }
 
 TEST(present_page_window, memory_that_is_not_a_page_of_guest_ram_is_refused_and_nothing_held)
@@ -77,7 +73,7 @@ TEST(present_page_window, memory_that_is_not_a_page_of_guest_ram_is_refused_and_
   PresentPageWindow window(host);
   CHECK_STATUS(window.map(0x80000000u), Status::not_found);
   CHECK_STATUS(window.map(0x40000000u), Status::not_supported);
-  CHECK_STATUS(window.map(ram + 0x5000u), Status::not_supported);   /* split inside the page */
+  CHECK_STATUS(window.map(ram + 0x5000u), Status::not_supported);
   host.empty_mapping_at(1u);
   CHECK_STATUS(window.map(page), Status::not_found);
   CHECK(!window.mapped());
@@ -92,6 +88,6 @@ TEST(present_page_window, a_page_mapped_again_lets_the_first_go)
   CHECK_EQ(host.live_guest_mappings(), 1u);
   window.publish(PresentProgress(3u, 0u));
   CHECK_EQ(u64_at(host, page + 0x1000u + 8u), 3u);
-  CHECK_STATUS(window.map(0x80000000u), Status::not_found);   /* a refused one lets it go too */
+  CHECK_STATUS(window.map(0x80000000u), Status::not_found);
   CHECK_EQ(host.live_guest_mappings(), 0u);
   CHECK(!window.mapped()); }

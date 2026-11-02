@@ -57,4 +57,4 @@ std::uint32_t        ShippedBatch::commands() const { return count_; }
 const CommandHeader &ShippedBatch::header(std::uint32_t index) const { return headers_[index]; }
 const std::uint8_t  *ShippedBatch::body(std::uint32_t index) const { return bytes_ + offsets_[index]; }
 
-}  // namespace av
+}

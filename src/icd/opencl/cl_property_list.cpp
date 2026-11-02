@@ -3,8 +3,6 @@
 #include "core/trace/function_scope.hpp"
 
 namespace av::clicd {
-
-/* The two spellings read as uint64_t lists, on every target. */
 static_assert(sizeof(cl_queue_properties) == sizeof(uint64_t), "cl_queue_properties");
 static_assert(sizeof(cl_mem_properties) == sizeof(uint64_t), "cl_mem_properties");
 
@@ -53,10 +51,9 @@ bool ClPropertyList::invariants_hold() const
 {
     AV_SCOPE("ClPropertyList::invariants_hold");
     if (pairs_ > max_pairs) return false;
-    /* A zero name is the terminator, so no pair carries one. */
     for (uint32_t index = 0u; index < pairs_; ++index)
         if (names_[index] == 0u) return false;
     return true;
 }
 
-}  // namespace av::clicd
+}

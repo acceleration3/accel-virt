@@ -63,4 +63,4 @@ uint32_t ClRefusalLog::named() const
     return lines_.keys();
 }
 
-}  // namespace av::clicd
+}

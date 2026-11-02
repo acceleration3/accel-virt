@@ -12,7 +12,7 @@ constexpr wchar_t root[] = L"C:\\ProgramData\\av";
 static_assert(sizeof root / sizeof root[0] == DiagnosticsDirectory::prefix_chars,
               "the prefix is the directory and its separator");
 
-}  // namespace
+}
 
 DiagnosticsDirectory::DiagnosticsDirectory() : root_(root)
 {
@@ -50,4 +50,4 @@ size_t DiagnosticsDirectory::place(const wchar_t *name, wchar_t *path, size_t ca
     return length;
 }
 
-}  // namespace av
+}

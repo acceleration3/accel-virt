@@ -79,9 +79,6 @@ void BufferMapTransfer::send(ClientTransport &wire, const BufferMapping &mapping
     }
 }
 
-/* Runs are noted as the scan finds them and sent when WrittenRuns holds no
- * more: the scan only looks past the runs noted, so sending them later
- * changes neither what it finds nor what goes out. */
 void BufferMapTransfer::send_changes(ClientTransport &wire, const BufferMapping &mapping, uint8_t *known)
 {
     AV_SCOPE("BufferMapTransfer::send_changes");
@@ -109,9 +106,6 @@ void BufferMapTransfer::send_runs(ClientTransport &wire, const BufferMapping &ma
     runs_.clear();
 }
 
-/* Word by word, each compare a load apiece: a scan of a 256 KiB staging
- * range runs once per unmap, and calls per word would cost more than the
- * bytes it saves. */
 uint64_t BufferMapTransfer::next_change(const BufferMapping &mapping, const uint8_t *known, uint64_t at) const
 {
     AV_SCOPE("BufferMapTransfer::next_change");
@@ -137,4 +131,4 @@ uint64_t BufferMapTransfer::change_end(const BufferMapping &mapping, const uint8
     return end;
 }
 
-}  // namespace av::glicd
+}

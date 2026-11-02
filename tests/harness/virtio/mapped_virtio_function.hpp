@@ -1,5 +1,3 @@
-/* A fake virtio-gpu function with its BARs mapped the way a started adapter
- * maps them: what the transport and the device classes are built over. */
 #ifndef AV_MAPPED_VIRTIO_FUNCTION_HPP
 #define AV_MAPPED_VIRTIO_FUNCTION_HPP
 
@@ -29,10 +27,8 @@ public:
     FakeVirtioGpuFunction &function();
     FakeCommonConfig      &common();
     BarMappings           &mappings();
-    /* dxgkrnl's callbacks as the driver reaches them. */
     DxgkrnlInterface      &interface();
     const VirtioPciLayout &layout() const;
-    /* The device side of an activated queue. */
     FakeVirtqueueDevice    queue_device(std::uint16_t index);
 
 private:
@@ -44,6 +40,6 @@ private:
     VirtioPciLayout       layout_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MAPPED_VIRTIO_FUNCTION_HPP
+#endif

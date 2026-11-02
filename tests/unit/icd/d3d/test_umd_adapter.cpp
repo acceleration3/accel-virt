@@ -1,6 +1,3 @@
-/* The adapter and the connection under it (data-model.md): one open per
- * runtime, one kernel adapter for the process however many opens there are,
- * and a handle the table never gave answering nothing. */
 #include "core/trace/state_writer.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
@@ -40,11 +37,10 @@ const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_de
 
 D3dddiAdapterCallbacksRecord callbacks;
 int                          runtime_handle;
-/* What an adapter made outside a root is opened over: none of these judge it. */
 MockKmt                      no_kernel;
 UmdConnection                unopened(no_kernel);
 
-}  // namespace
+}
 
 TEST(umd_adapter, records_what_the_open_gave_and_counts_the_devices_made_on_it)
 { UmdAdapter adapter(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 26100u);
@@ -63,8 +59,6 @@ TEST(umd_adapter, records_what_the_open_gave_and_counts_the_devices_made_on_it)
   CHECK_EQ(adapter.devices(), 1u);
   adapter.device_gone();
   CHECK_EQ(adapter.devices(), 0u);
-  /* A destroy with nothing left is a caller's mistake, not an underflow that
-   * would let the adapter close with a device still on it. */
   adapter.device_gone();
   CHECK_EQ(adapter.devices(), 0u);
   CHECK(adapter.invariants_hold()); }
@@ -108,7 +102,6 @@ TEST(adapter_table, opens_adapters_and_answers_only_the_handles_it_gave)
 
   CHECK_STATUS(table.close(first), Status::ok);
   CHECK_EQ(table.open_adapters(), 1u);
-  /* Closed once is closed: the handle names nothing afterwards. */
   CHECK(table.adapter_of(first) == nullptr);
   CHECK_STATUS(table.close(first), Status::invalid_parameter);
   CHECK_STATUS(table.close(second), Status::ok);
@@ -153,8 +146,6 @@ TEST(adapter_table, reports_every_adapter_it_holds)
   CHECK(std::strstr(writer.dump(), "interface=0x00000000000B002D") != nullptr);
   CHECK_STATUS(table.close(adapter), Status::ok); }
 
-/* The kernel adapter is the process's, not the open's: two opens hold one, and
- * it goes with the last. */
 TEST(umd_connection, holds_one_kernel_adapter_for_every_open)
 { MockKmt kmt;
   kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
@@ -183,7 +174,6 @@ TEST(umd_connection, holds_one_kernel_adapter_for_every_open)
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK(connection.invariants_hold());
 
-  /* A release with nothing held would be a close without an open. */
   CHECK_STATUS(connection.release(), Status::invalid_state);
   CHECK(connection.invariants_hold()); }
 
@@ -196,9 +186,6 @@ TEST(umd_connection, no_avgpu_adapter_is_not_supported_and_holds_nothing)
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK(connection.invariants_hold()); }
 
-/* The runtime opens a UMD on one adapter: with two avgpu adapters the
- * connection holds the one whose LUID it was given, not the first enumerated,
- * and a LUID no adapter has finds nothing. */
 TEST(umd_connection, holds_the_adapter_with_the_luid_it_was_given)
 { MockKmt kmt;
   kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
@@ -229,8 +216,6 @@ TEST(umd_connection, reports_what_it_holds)
   CHECK(std::strstr(writer.dump(), "opens=1") != nullptr);
   CHECK_STATUS(connection.release(), Status::ok); }
 
-/* GetDeviceRemovedReason must name what happened, not what happened last: a
- * removal cascades, and every later cause is a consequence of the first. */
 TEST(device_removal, keeps_the_first_cause_and_counts_the_rest)
 { RecordingLog  log;
   DeviceRemoval removal;
@@ -240,7 +225,6 @@ TEST(device_removal, keeps_the_first_cause_and_counts_the_rest)
   CHECK_EQ(removal.check(log, "pfnPresent"), hr_ok);
   CHECK_EQ(log.lines(), 0u);
 
-  /* hr_ok is not a removal and is ignored. */
   removal.remove(hr_ok);
   CHECK(!removal.removed());
   CHECK(removal.invariants_hold());

@@ -15,8 +15,6 @@ VkPhysicalDevice PhysicalDeviceList::find(VkInstance instance, const HostGpu &gp
 {
     AV_SCOPE("PhysicalDeviceList::find");
     uint32_t found = max_devices;
-    /* VK_INCOMPLETE still lists the first sixteen, and a GPU past them is one
-     * this host does not have. */
     if (vkEnumeratePhysicalDevices(instance, &found, listed_) < 0) return VK_NULL_HANDLE;
     if (found > max_devices) found = max_devices;
     for (uint32_t i = 0u; i < found; i++)
@@ -24,4 +22,4 @@ VkPhysicalDevice PhysicalDeviceList::find(VkInstance instance, const HostGpu &gp
     return VK_NULL_HANDLE;
 }
 
-}  // namespace av
+}

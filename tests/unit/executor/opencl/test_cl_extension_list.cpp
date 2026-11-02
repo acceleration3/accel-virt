@@ -1,6 +1,3 @@
-/* The extension list a guest is shown (ClExtensionList): the host's words,
- * one space apart, with a word struck or added as a whole word and never as
- * part of another, and answered as clGetDeviceInfo answers. */
 #include "executor/opencl/cl_extension_list.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -18,14 +15,12 @@ struct ClExtensionListProbe {
     static void length(ClExtensionList &list, std::size_t length) { list.length_ = length; }
 };
 
-}  // namespace av
+}
 
 using av::ClExtensionList;
 using av::ClExtensionListProbe;
 
 namespace {
-
-/* The list as a guest reads it. */
 const char *shown(const ClExtensionList &list)
 {
     static char text[ClExtensionList::host_bytes + ClExtensionList::added_bytes];
@@ -33,7 +28,7 @@ const char *shown(const ClExtensionList &list)
     return list.answer(sizeof text, text, nullptr) == CL_SUCCESS ? text : "";
 }
 
-}  // namespace
+}
 
 TEST(cl_extension_list, the_host_s_words_are_kept_one_space_apart)
 { ClExtensionList list;
@@ -43,7 +38,6 @@ TEST(cl_extension_list, the_host_s_words_are_kept_one_space_apart)
   list.hold(host, sizeof host);
   CHECK(list.invariants_hold());
   CHECK(std::strcmp(shown(list), "cl_khr_fp64 cl_khr_gl_sharing cl_khr_icd") == 0);
-  /* No further than the bytes it is given, terminator or not. */
   list.hold(host, 13u);
   CHECK(std::strcmp(shown(list), "cl_khr_fp64") == 0);
   list.hold(host, 0u);
@@ -71,13 +65,11 @@ TEST(cl_extension_list, a_struck_word_goes_and_a_word_it_begins_or_ends_stays)
   CHECK(list.invariants_hold());
   CHECK(!list.names("cl_khr_gl_sharing"));
   CHECK(std::strcmp(shown(list), "cl_khr_gl_sharing_x x_cl_khr_gl_sharing") == 0);
-  /* The first and the last, and then everything. */
   list.strike("cl_khr_gl_sharing_x");
   CHECK(std::strcmp(shown(list), "x_cl_khr_gl_sharing") == 0);
   list.strike("x_cl_khr_gl_sharing");
   CHECK(std::strcmp(shown(list), "") == 0);
   CHECK(list.invariants_hold());
-  /* A word that is not there changes nothing. */
   list.hold(host, sizeof host);
   list.strike("cl_khr_fp64");
   CHECK(std::strcmp(shown(list), host) == 0); }
@@ -92,10 +84,8 @@ TEST(cl_extension_list, a_word_is_added_once_at_the_end_and_only_where_it_fits)
   list.add("cl_khr_external_memory");
   CHECK(list.invariants_hold());
   CHECK(std::strcmp(shown(list), "cl_khr_fp64 cl_khr_external_memory_opaque_fd cl_khr_external_memory") == 0);
-  /* Nothing to add. */
   list.add("");
   CHECK(std::strcmp(shown(list), "cl_khr_fp64 cl_khr_external_memory_opaque_fd cl_khr_external_memory") == 0);
-  /* A list at its room takes no more. */
   static char full[ClExtensionList::host_bytes];
   std::memset(full, 'a', sizeof full - 1u);
   full[sizeof full - 1u] = '\0';
@@ -120,7 +110,6 @@ TEST(cl_extension_list, the_answer_is_clGetDeviceInfo_s)
   char exact[sizeof host] = {};
   CHECK_EQ(list.answer(sizeof exact, exact, nullptr), CL_SUCCESS);
   CHECK(std::strcmp(exact, host) == 0);
-  /* Room it does not fit: refused, nothing written, the room it needs said. */
   char cramped[sizeof host - 1u];
   std::memset(cramped, 'x', sizeof cramped);
   needed = 0u;
@@ -133,8 +122,6 @@ TEST(cl_extension_list, the_invariant_fails_each_way_the_list_can_be_wrong)
       const char *text;
       std::size_t length;
   };
-  /* Unterminated at its length, a space first or last, a terminator inside,
-   * two spaces together. */
   const Case cases[] = {{"abcx", 3u}, {" ab\0", 3u}, {"ab \0", 3u}, {"a\0b\0", 3u}, {"a  b\0", 4u}};
   for (const Case &item : cases) {
       ClExtensionList list;

@@ -1,10 +1,3 @@
-/* wglCreateContextAttribsARB attribute lists into the OpenGL ICD (feature 050,
- * T025). Whatever the application wrote, decoding reads no further than 64
- * pairs and their terminator, and an accepted list gives options a host
- * context can be made with.
- *
- * An input is little-endian int32 values; the list the decoder is handed is
- * exactly 129 values, the input's first ones and zeros after them. */
 #include "icd/opengl/context_attributes.hpp"
 #include "proto/context/gl_context_options.hpp"
 
@@ -23,7 +16,7 @@ void require(bool holds)
     if (!holds) __builtin_trap();
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

@@ -44,9 +44,6 @@ Status BlobWindow::read(uint64_t offset, uint8_t *bytes, size_t count) const
 {
     AV_SCOPE("BlobWindow::read");
     if (!contains(offset, count)) return Status::invalid_parameter;
-    /* A builtin: -ffreestanding keeps the compiler from making a loop one,
-     * and a texture's bytes copied one at a time held a Direct3D 9 video at
-     * a few frames a second. */
     walk(offset, count, [bytes](const uint8_t *source, size_t done, size_t chunk) {
         __builtin_memcpy(bytes + done, source, chunk);
     });
@@ -93,7 +90,6 @@ Status BlobWindow::store_u64(uint64_t offset, uint64_t value) const
     return Status::ok;
 }
 
-/* The extents add up to the length, and there is memory behind any of them. */
 bool BlobWindow::invariants_hold() const
 {
     AV_SCOPE("BlobWindow::invariants_hold");
@@ -103,4 +99,4 @@ bool BlobWindow::invariants_hold() const
     return sum == length_;
 }
 
-}  // namespace av
+}

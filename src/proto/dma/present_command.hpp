@@ -1,7 +1,3 @@
-/* The header of one present in a DMA buffer (docs/protocol.md), written by
- * DxgkDdiPresent and executed by the device. Its sub-rectangles follow it; the
- * source and destination addresses are left zero, for DxgkDdiPatch to fill with
- * physical addresses or DxgkDdiPresent with GPU virtual ones. */
 #ifndef AV_PRESENT_COMMAND_HPP
 #define AV_PRESENT_COMMAND_HPP
 
@@ -26,11 +22,10 @@ public:
     PresentCommand(PresentOperation operation, uint32_t color, const Rectangle &source, const Rectangle &destination,
                    uint32_t flip_interval, uint32_t sub_rectangles, PresentAddressSpace addresses);
 
-    /* The header only; the writer latches a header that does not fit. */
     void write(WireWriter &writer) const;
 
 private:
-    static constexpr uint32_t magic = 0x00505641u;   /* "AVP" */
+    static constexpr uint32_t magic = 0x00505641u;
 
     PresentOperation operation_;
     uint32_t         color_;
@@ -41,6 +36,6 @@ private:
     PresentAddressSpace addresses_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_PRESENT_COMMAND_HPP
+#endif

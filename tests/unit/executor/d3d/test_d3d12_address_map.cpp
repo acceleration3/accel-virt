@@ -1,8 +1,3 @@
-/* Which host buffer a guest GPU virtual address falls in: every buffer
- * registered with the guest range it was given, a guest address translated to
- * the host buffer's address plus the same offset, and anything outside one
- * registered range translated to nothing. Guest addresses come off the wire,
- * so the ends of ranges and the top of the address space are the cases. */
 #include "executor/d3d/d3d12_address_map.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -19,11 +14,11 @@ TEST(d3d12_address_map_translate, an_address_inside_a_range_is_the_host_buffer_p
   CHECK_STATUS(map.insert(0x10000u, 0x1000u, 0xA0000000u, 3u), Status::ok);
   CHECK(map.translate(0x10000u, 0u) == 0xA0000000u);
   CHECK(map.translate(0x10100u, 0x100u) == 0xA0000100u);
-  CHECK(map.translate(0x10FFFu, 1u) == 0xA0000FFFu);   /* the last byte */
-  CHECK(map.translate(0x10000u, 0x1000u) == 0xA0000000u);   /* the whole range */
-  CHECK(map.translate(0x10001u, 0x1000u) == 0u);        /* one byte past its end */
-  CHECK(map.translate(0x11000u, 0u) == 0u);             /* just after */
-  CHECK(map.translate(0xFFFFu, 0u) == 0u);              /* just before */
+  CHECK(map.translate(0x10FFFu, 1u) == 0xA0000FFFu);
+  CHECK(map.translate(0x10000u, 0x1000u) == 0xA0000000u);
+  CHECK(map.translate(0x10001u, 0x1000u) == 0u);
+  CHECK(map.translate(0x11000u, 0u) == 0u);
+  CHECK(map.translate(0xFFFFu, 0u) == 0u);
   CHECK(map.invariants_hold()); }
 
 TEST(d3d12_address_map_owner, names_the_buffer_and_the_offset_or_none)
@@ -45,15 +40,15 @@ TEST(d3d12_address_map_insert, refuses_an_empty_wrapping_overlapping_or_nameless
   D3d12AddressMap map(platform);
   CHECK_STATUS(map.insert(0x4000u, 0x1000u, 0x1u, 1u), Status::ok);
   CHECK_STATUS(map.insert(0x8000u, 0u, 0x1u, 2u), Status::invalid_parameter);
-  CHECK_STATUS(map.insert(~std::uint64_t{0} - 0xFFu, 0x100u, 0x1u, 2u), Status::invalid_parameter);   /* ends at 2^64: wraps */
-  CHECK_STATUS(map.insert(0x4800u, 0x10u, 0x1u, 2u), Status::conflict);    /* inside */
-  CHECK_STATUS(map.insert(0x3000u, 0x1001u, 0x1u, 2u), Status::conflict);  /* runs into it */
-  CHECK_STATUS(map.insert(0x4FFFu, 0x10u, 0x1u, 2u), Status::conflict);    /* starts on its last byte */
-  CHECK_STATUS(map.insert(0x3000u, 0x3000u, 0x1u, 2u), Status::conflict);  /* covers it */
-  CHECK_STATUS(map.insert(0x9000u, 0x10u, 0x1u, 0u), Status::invalid_parameter);    /* id 0 names nothing */
-  CHECK_STATUS(map.insert(0x3000u, 0x1000u, 0x1u, 2u), Status::ok);   /* ends exactly where it starts */
-  CHECK_STATUS(map.insert(0x5000u, 0x1000u, 0x1u, 3u), Status::ok);   /* starts exactly where it ends */
-  CHECK_STATUS(map.insert(~std::uint64_t{0} - 0xFFu, 0xFFu, 0x1u, 4u), Status::ok);   /* the top, without wrapping */
+  CHECK_STATUS(map.insert(~std::uint64_t{0} - 0xFFu, 0x100u, 0x1u, 2u), Status::invalid_parameter);
+  CHECK_STATUS(map.insert(0x4800u, 0x10u, 0x1u, 2u), Status::conflict);
+  CHECK_STATUS(map.insert(0x3000u, 0x1001u, 0x1u, 2u), Status::conflict);
+  CHECK_STATUS(map.insert(0x4FFFu, 0x10u, 0x1u, 2u), Status::conflict);
+  CHECK_STATUS(map.insert(0x3000u, 0x3000u, 0x1u, 2u), Status::conflict);
+  CHECK_STATUS(map.insert(0x9000u, 0x10u, 0x1u, 0u), Status::invalid_parameter);
+  CHECK_STATUS(map.insert(0x3000u, 0x1000u, 0x1u, 2u), Status::ok);
+  CHECK_STATUS(map.insert(0x5000u, 0x1000u, 0x1u, 3u), Status::ok);
+  CHECK_STATUS(map.insert(~std::uint64_t{0} - 0xFFu, 0xFFu, 0x1u, 4u), Status::ok);
   CHECK_EQ(map.count(), 4u);
   CHECK(map.invariants_hold()); }
 
@@ -68,14 +63,12 @@ TEST(d3d12_address_map_remove, forgets_one_buffer_s_range_and_keeps_the_rest_in_
   CHECK(map.translate(0x4010u, 0u) == 0x400010u);
   CHECK(map.translate(0x1010u, 0u) == 0x100010u);
   CHECK(map.translate(0x5010u, 0u) == 0x500010u);
-  CHECK_STATUS(map.insert(0x3000u, 0x1000u, 0x7u, 3u), Status::ok);   /* its range is free again */
+  CHECK_STATUS(map.insert(0x3000u, 0x1000u, 0x7u, 3u), Status::ok);
   CHECK(map.invariants_hold());
   map.clear();
   CHECK_EQ(map.count(), 0u);
   CHECK(map.translate(0x1010u, 0u) == 0u); }
 
-/* The table once held 16384 ranges and refused the next buffer: a guest
- * makes as many buffers as it likes, and every one translates. */
 TEST(d3d12_address_map_insert, holds_well_more_ranges_than_the_old_table_did)
 { MockPlatform platform;
   D3d12AddressMap map(platform);

@@ -42,7 +42,6 @@ struct KeyedSlotsProbe {
         table.row(slot)->next_free_ = next;
     }
 
-    /* `key` indexed to `slot` with no entry put there, or (no_slot) unindexed. */
     template <typename Key, typename Entry>
     static void index_quietly(KeyedSlots<Key, Entry> &table, Key key, std::uint32_t slot)
     {
@@ -57,7 +56,7 @@ struct KeyedSlotsProbe {
     }
 };
 
-}  // namespace av
+}
 
 using av::Irql;
 using av::KeyedSlots;
@@ -88,8 +87,6 @@ std::uint32_t put(Objects &table, std::uint32_t key, std::uint64_t address)
     return table.insert(key, Object{address, 0u}, slot) == Status::ok ? slot : Objects::no_slot;
 }
 
-/* `count` keys after `after` whose probe starts where `key`'s does: ids a
- * hostile guest would pick to share one run. */
 void colliding(const Objects &table, std::uint32_t key, std::uint32_t after, std::uint32_t *keys, std::uint32_t count)
 {
     std::uint32_t found = 0u;
@@ -97,7 +94,7 @@ void colliding(const Objects &table, std::uint32_t key, std::uint32_t after, std
         if (KeyedSlotsProbe::home_of(table, candidate) == KeyedSlotsProbe::home_of(table, key)) keys[found++] = candidate;
 }
 
-}  // namespace
+}
 
 TEST(keyed_slots_insert, starts_with_nothing_and_hands_out_slot_zero_first)
 { MockPlatform platform;

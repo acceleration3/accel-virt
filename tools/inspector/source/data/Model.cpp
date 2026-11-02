@@ -8,8 +8,6 @@
 
 namespace inspector {
 namespace {
-
-// A frame's age against the table's clock: zero for a stamp the reader's clock is behind.
 f64 AgeOf(u64 entered, u64 now) {
     return now > entered ? TicksToSeconds(now - entered) : 0.0;
 }
@@ -18,7 +16,6 @@ String ProgressKey(StringView process, u32 thread) {
     return Format("{} {}", process, thread);
 }
 
-// SubApi (src/proto/context/sub_api.hpp).
 StringView SubApiName(StringView value) {
     if (value == "1") return "Vulkan";
     if (value == "2") return "OpenGL";
@@ -27,7 +24,7 @@ StringView SubApiName(StringView value) {
     return value;
 }
 
-} // namespace
+}
 
 StringView ThreadStateName(ThreadState state) {
     switch (state) {
@@ -93,7 +90,6 @@ bool Model::Update() {
             m_history.Record(Format("{} thread/{} entries", key, slot.thread), static_cast<f64>(slot.entries), time);
         }
     }
-    // The round being replaced is what "changed" is measured against.
     if (m_current) {
         for (ProcessSample& process : m_current->processes) {
             if (process.state) {
@@ -193,7 +189,6 @@ DynamicArray<ThreadView> Model::Threads(const ProcessSample& process, f64 stall_
         }
         views.PushBack(RValueCast(view));
     }
-    // Worst first, then by thread: a stall is what anyone looking at threads is looking for.
     for (usize i = 1; i < views.GetSize(); ++i) {
         for (usize j = i; j > 0; --j) {
             const ThreadView& a = views[j - 1];
@@ -246,4 +241,4 @@ DynamicArray<ContextView> Model::Contexts() const {
     return views;
 }
 
-} // namespace inspector
+}

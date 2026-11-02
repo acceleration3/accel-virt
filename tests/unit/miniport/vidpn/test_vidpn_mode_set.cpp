@@ -30,7 +30,6 @@ D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t heig
     return mode;
 }
 
-/* A fixture with its VidPn initialized. */
 class Session {
 public:
     Session() : fixture_(), vidpn_(fixture_.platform(), fixture_.dxgkrnl(), fixture_.handle())
@@ -47,7 +46,7 @@ private:
     VidPn        vidpn_;
 };
 
-}  // namespace
+}
 
 TEST(vidpn_mode_set_copy_pinned, copies_the_pinned_mode_and_releases_it)
 { Session session;
@@ -119,11 +118,6 @@ TEST(vidpn_mode_set, a_refused_acquire_create_or_assign_fails_without_a_leak)
   session.fake().refuse(VidPnCall::assign_target_mode_set, no_memory);
   CHECK_STATUS(assigned.assign(), Status::no_memory); }
 
-/* dxgkrnl writes the interface table before it decides the owner is one the
- * VidPn does not have, so a failed acquire can leave a table behind. Keeping it
- * makes the destructor release a mode set that was never acquired - a handle
- * dxgkrnl never gave us. The fuzz target found this with a source beyond the
- * ones the VidPn holds. */
 TEST(vidpn_mode_set_acquire, an_owner_the_vidpn_lacks_leaves_nothing_to_release)
 { Session session;
   { SourceModeSet source(session.platform(), session.vidpn(), 7u);
@@ -166,7 +160,6 @@ TEST(vidpn_mode_set, is_passive_only)
   static_cast<void>(set.copy_pinned(mode));
   static_cast<void>(set.add(mode));
   session.platform().set_irql(Irql::passive);
-  /* Each of the five checks its ceiling; those that reach the VidPn check again. */
   unsigned claimed = 0u;
   while (session.platform().claim(Violation::irql_ceiling)) claimed++;
   CHECK_EQ(claimed, 7u); }

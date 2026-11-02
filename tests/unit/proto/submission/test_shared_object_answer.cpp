@@ -1,8 +1,3 @@
-/* What a shared-object command answers, judged from the guest's side: the ICD
- * decodes what the device wrote, and a hostile or older device is exactly as
- * foreign to it as a guest is to the device. A refusal carrying a handle is
- * the case that matters - a guest that believed one would go on to name an
- * object nothing ever made. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -39,7 +34,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(shared_object_answer_encode, lays_out_the_status_and_handle_with_the_reserved_word_zero)
 { std::uint8_t bytes[SharedObjectAnswer::encoded_size];
@@ -127,16 +122,5 @@ TEST(shared_object_answer_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 128u);
-  /* `done` accepts any handle, so the 64 bits of wire_handle are all free;
-   * every flip of the status leaves a code that is not `done` and so demands a
-   * zero handle, which this input does not have, and every flip of the four
-   * reserved bytes makes them non-zero. All-zero is a `done` with no handle,
-   * which is exactly what a release answers, and the untouched input is the
-   * last acceptance. All-ones has reserved bytes nobody may set, and every
-   * truncation is short of sixteen.
-   *
-   * The count is exact, not a bound: it was checked as an equality before
-   * being written as a floor, so a decoder that starts refusing one of these
-   * has changed its format. */
   const std::uint32_t acceptable = 64u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

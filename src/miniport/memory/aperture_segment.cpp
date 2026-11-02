@@ -44,4 +44,4 @@ bool ApertureSegment::invariants_hold() const
     return (size_ & (page_bytes - 1u)) == 0u;
 }
 
-}  // namespace av
+}

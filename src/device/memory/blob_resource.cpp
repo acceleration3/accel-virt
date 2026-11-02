@@ -40,8 +40,6 @@ void BlobResource::pin()
     pins_++;
 }
 
-/* A pin let go that was never taken would wrap the count, and a blob that
- * reads as pinned forever is one RESOURCE_UNREF can never release. */
 void BlobResource::unpin()
 {
     AV_SCOPE("BlobResource::unpin");
@@ -70,4 +68,4 @@ Status BlobResource::view(const uint8_t *&base)
     return status;
 }
 
-}  // namespace av
+}

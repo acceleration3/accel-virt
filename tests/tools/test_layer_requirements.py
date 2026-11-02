@@ -1,11 +1,3 @@
-"""What a pinned layer says it requires, read out of its own source
-(tools/layer_requirements.py, feature 047 FR-001).
-
-Driven over trees this test writes, in the two shapes the two layers use: a
-name beside the word Required or Optional, and a name inside a table whose own
-name says which. What matters is that a name is never quietly dropped and never
-counted as both.
-"""
 import json
 import pathlib
 import tempfile
@@ -17,7 +9,6 @@ from tool_run import ROOT, run
 TOOL = ROOT / "tools" / "layer_requirements.py"
 HEADER = ROOT / "third_party" / "khronos" / "include" / "vulkan" / "vulkan_core.h"
 
-# DXVK's shape: one declaration per extension, the mode on the same line.
 BESIDE_THE_MODE = textwrap.dedent("""
     struct DxvkDeviceExtensions {
       DxvkExt extRobustness2 = { VK_EXT_ROBUSTNESS_2_EXTENSION_NAME, DxvkExtMode::Required };
@@ -26,7 +17,6 @@ BESIDE_THE_MODE = textwrap.dedent("""
     };
 """)
 
-# vkd3d-proton's shape: two tables, each saying what it holds.
 INSIDE_A_TABLE = textwrap.dedent("""
     static const char * const required_device_extensions[] = {
         VK_KHR_MAINTENANCE_1_EXTENSION_NAME,
@@ -66,8 +56,6 @@ class LayerRequirementsRead(unittest.TestCase):
     def test_both_layers_read_together_and_required_wins(self):
         (self.layer / "dxvk_extensions.h").write_text(BESIDE_THE_MODE)
         (self.layer / "device.c").write_text(INSIDE_A_TABLE)
-        # The same extension optional in one place and required in another:
-        # a layer that cannot start without it is what decides.
         (self.layer / "both.c").write_text(textwrap.dedent("""
             static const char * const required_device_extensions[] = {
                 VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME,

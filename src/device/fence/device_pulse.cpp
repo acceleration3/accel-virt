@@ -74,9 +74,6 @@ void DevicePulse::drop(FenceReporter &reporter)
     if (carried() == 0u) stop_thread();
 }
 
-/* Paired with rest: the worker's store that it works comes before this load,
- * and the pulse's store that it is dormant before its look at the workers,
- * both sequentially consistent, so one of the two always sees the other. */
 void DevicePulse::stir()
 {
     AV_SCOPE("DevicePulse::stir");
@@ -102,8 +99,6 @@ void DevicePulse::run()
     }
 }
 
-/* Under the lock a page cannot be dropped, and so cannot go, while it is
- * beaten. */
 bool DevicePulse::tick(bool &working)
 {
     AV_SCOPE("DevicePulse::tick");
@@ -148,8 +143,6 @@ void DevicePulse::stop_thread()
     thread_ = nullptr;
 }
 
-/* A page is carried once, and a thread runs only for a pulse that has a lock
- * and an event to run on. */
 bool DevicePulse::invariants_hold() const
 {
     AV_SCOPE("DevicePulse::invariants_hold");
@@ -160,4 +153,4 @@ bool DevicePulse::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

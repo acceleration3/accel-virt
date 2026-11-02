@@ -1,10 +1,3 @@
-"""The CTS build this repository runs, pinned by URL and hash (feature 048,
-FR-001).
-
-Driven over archives the test builds and serves through `file://`, because the
-real one has never been downloaded here - which is the point of the pins being
-empty, and the reason the tooling has to be provable without them.
-"""
 import hashlib
 import io
 import pathlib
@@ -75,9 +68,7 @@ class Fetching(unittest.TestCase):
         self.assertEqual((self.into / "deqp-vk").read_bytes(), DEQP)
         self.assertEqual((self.into / "main.txt").read_bytes(), DATA)
         self.assertIn("2 file(s)", result.stdout)
-        # The build is runnable, not just present.
         self.assertTrue((self.into / "deqp-vk").stat().st_mode & 0o111)
-        # And --check now says the set on disk is the pinned one.
         checked = run(FETCH, "--pins", self.pins(archive, members), "--into", self.into, "--cache", self.cache,
                       "--check")
         self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
@@ -105,9 +96,6 @@ class Fetching(unittest.TestCase):
         self.assertEqual(refused.returncode, 1)
         self.assertIn("sha256", refused.stderr)
         self.assertFalse(self.into.exists())
-        # The archive that disagreed is not left in the cache to be trusted
-        # next time; the one that verified stays, which is what a cache is
-        # for.
         self.assertEqual(list(self.cache.glob("*" + "1" * 64 + "*")), [])
         self.assertEqual(len(list(self.cache.glob("*.zip"))), 1)
 
@@ -160,8 +148,6 @@ class Fetching(unittest.TestCase):
         self.assertEqual(list(self.cache.glob("*")) if self.cache.exists() else [], [])
 
     def test_this_repositorys_own_pins_are_empty_and_say_so(self):
-        """The CTS has never been downloaded here, so --check refuses and names
-        the file rather than reporting a build nobody has."""
         result = run(FETCH, "--check")
         self.assertEqual(result.returncode, 1)
         self.assertIn("no archive pin", result.stderr)

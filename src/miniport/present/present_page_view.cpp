@@ -46,8 +46,6 @@ uint32_t *PresentPageView::word(uint64_t offset) const
     return reinterpret_cast<uint32_t *>(page_ + offset);
 }
 
-/* Refused before completed: the device stores them the other way round, so
- * the completed read after is never behind the refused read before. */
 Status PresentPageView::read(PresentProgress &progress) const
 {
     AV_SCOPE("PresentPageView::read");
@@ -67,4 +65,4 @@ Status PresentPageView::read(PresentProgress &progress) const
     return progress.decode(bytes, sizeof bytes);
 }
 
-}  // namespace av
+}

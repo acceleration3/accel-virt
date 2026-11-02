@@ -1,5 +1,3 @@
-/* The doorbell eventfds QEMU offered: one per page, never one descriptor at
- * two pages, each handed out once. */
 #include "core/support/status.hpp"
 #include "device/renderer/doorbell_offers.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -18,13 +16,13 @@ struct DoorbellOffersProbe {
     }
 };
 
-}  // namespace av
+}
 
 TEST(doorbell_offers_offer, a_page_holds_one_descriptor_until_it_is_taken)
 { DoorbellOffers offers;
   CHECK(offers.invariants_hold());
   CHECK_STATUS(offers.offer(0u, 10), Status::ok);
-  CHECK_STATUS(offers.offer(DoorbellOffers::pages - 1u, 0), Status::ok);   /* descriptor 0 is a descriptor */
+  CHECK_STATUS(offers.offer(DoorbellOffers::pages - 1u, 0), Status::ok);
   CHECK(offers.invariants_hold());
   CHECK_STATUS(offers.offer(0u, 11), Status::conflict);
   int descriptor = -1;

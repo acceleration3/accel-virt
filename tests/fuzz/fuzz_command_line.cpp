@@ -1,6 +1,3 @@
-/* Hostile command lines, as avinspect.exe gets them from whoever started it:
- * a line parses or is refused, and a parsed one's arguments are terminated
- * inside the parser and within its limits. */
 #include "guest/inspect/command_line.hpp"
 
 #include <cstddef>

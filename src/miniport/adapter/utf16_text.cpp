@@ -18,7 +18,7 @@ constexpr uint32_t low_surrogate     = 0xDC00u;
 constexpr uint32_t surrogate_bits    = 10u;
 constexpr uint32_t surrogate_mask    = 0x3FFu;
 
-}  // namespace
+}
 
 Utf16Text::Utf16Text(const char *utf8) : units_{}, length_(0u)
 {
@@ -50,7 +50,6 @@ bool Utf16Text::empty() const
     return length_ == 0u;
 }
 
-/* Overlong forms, surrogates and anything past U+10FFFF are not UTF-8. */
 uint32_t Utf16Text::decode(const unsigned char *utf8, size_t &taken) const
 {
     AV_SCOPE("Utf16Text::decode");
@@ -95,4 +94,4 @@ bool Utf16Text::append(uint32_t code_point)
     return true;
 }
 
-}  // namespace av
+}

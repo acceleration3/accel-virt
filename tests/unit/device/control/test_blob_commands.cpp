@@ -1,8 +1,3 @@
-/* The blob commands the core answers, request byte by request byte: every
- * answer, every refusal, and what the base class is left to answer. A GUEST
- * blob is guest pages; a HOST3D blob is host GPU memory the context plane
- * allocates for one live context, named by a host blob id and mapped into
- * the hostmem region with the host's caching (docs/host-memory.md). */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/control/blob_commands.hpp"
@@ -45,7 +40,6 @@ constexpr std::uint32_t ok_nodata = 0x1100u, ok_map_info = 0x1106u, err_unspec =
                         err_invalid_context_id = 0x1204u, err_invalid_parameter = 0x1205u;
 constexpr std::uint32_t guest = 1u, host3d = 2u, host3d_guest = 3u, mappable = 1u;
 constexpr std::uint32_t map_cache_cached = 1u, map_cache_wc = 3u;
-/* The context the plane holds, and a host blob id for it. */
 constexpr std::uint32_t context = 7u;
 constexpr std::uint32_t host_blob = HostBlobId::first;
 const std::uint64_t     upload = HostMemoryRequest(HostMemoryRequest::Kind::upload, 0u).encoded();
@@ -58,8 +52,6 @@ GpuRequestBuilder create_blob(std::uint32_t id, std::uint32_t memory, std::uint3
     return request;
 }
 
-/* A HOST3D blob for the context the plane holds, of upload memory unless a
- * test names other. */
 GpuRequestBuilder create_host(std::uint32_t id, std::uint64_t size, std::uint64_t memory = upload,
                               std::uint32_t for_context = context)
 {
@@ -68,14 +60,11 @@ GpuRequestBuilder create_host(std::uint32_t id, std::uint64_t size, std::uint64_
 
 const std::uint64_t readback = HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u).encoded();
 
-/* A HOST3D_GUEST blob over pages a process lent, for the context the plane
- * holds, of readback memory unless a test names other. */
 GpuRequestBuilder create_adopted(std::uint32_t id, std::uint64_t size, std::uint64_t memory = readback)
 {
     return create_blob(id, host3d_guest, 0u, 0u, memory, size).context(context);
 }
 
-/* RESOURCE_ATTACH_BACKING naming one run of guest pages. */
 GpuRequestBuilder attach(std::uint32_t id, std::uint64_t address, std::uint32_t length)
 {
     GpuRequestBuilder request(BlobCommands::resource_attach_backing);
@@ -109,10 +98,8 @@ public:
         host_.set_hostmem_size(0x10000u);
         host_.add_resource(50u);
     }
-    /* What a reset would do: every host blob let go, its placement with it. */
     ~Fixture() { host_blobs_.release_all(); }
 
-    /* The response type, or 0 when the core left the request to the base class. */
     std::uint32_t send(const GpuRequestBuilder &builder, std::uint32_t *map_info = nullptr)
     {
         MockRequest mock(builder.bytes(), builder.size());
@@ -144,7 +131,7 @@ private:
     BlobCommands              commands_;
 };
 
-}  // namespace
+}
 
 TEST(blob_commands_create, a_guest_blob_over_its_pages)
 { Fixture fixture;
@@ -168,36 +155,26 @@ TEST(blob_commands_create, a_host_blob_is_memory_the_plane_allocates_for_its_con
   CHECK_EQ(asked.key, std::uint64_t{host_blob});
   CHECK_EQ(asked.size, 0x2000u);
   CHECK_EQ(asked.request, static_cast<std::uint32_t>(upload));
-  /* Neither a guest blob nor something the contexts in another process copy. */
   CHECK_EQ(fixture.blobs().live(), 0u);
   CHECK_EQ(fixture.plane().created_count(), 0u); }
 
-/* Pages a process lent: the blob is made with none, each ATTACH_BACKING lays
- * the next of them over its memory in order, and released, the pages are the
- * guest's own again holding what the memory held (docs/host-memory.md,
- * "Application memory"). */
 TEST(blob_commands_create, an_adopted_blob_lies_over_the_pages_attached_to_it_until_released)
 { Fixture fixture;
   std::uint8_t *const first = fixture.host().guest_ram(ram + 0x3000u);
   first[5] = 0x5Au;
   CHECK_EQ(fixture.send(create_adopted(host_blob, 0x3000u)), ok_nodata);
   CHECK(fixture.host_blobs().owns(context, host_blob));
-  /* The memory is made as the first piece of pages is laid. */
   CHECK_EQ(fixture.send(attach(host_blob, ram + 0x3000u, 0x1000u)), ok_nodata);
   CHECK_EQ(fixture.plane().last_memory().request, static_cast<std::uint32_t>(readback));
   CHECK_EQ(fixture.send(attach(host_blob, ram + 0x8000u, 0x2000u)), ok_nodata);
   CHECK_EQ(fixture.host().overlaid_bytes(), 0x3000u);
-  /* What the guest held came along: the page reads the same through RAM. */
   CHECK_EQ(first[5], 0x5Au);
-  /* Full, a further page runs past the blob. */
   CHECK_EQ(fixture.send(attach(host_blob, ram + 0xC000u, 0x1000u)), err_invalid_parameter);
-  /* Never placed: the guest sees it through its own pages. */
   CHECK_EQ(fixture.send(map_blob(host_blob, 0u)), ok_map_info);
   CHECK_EQ(fixture.send(named(BlobCommands::resource_unmap_blob, host_blob)), ok_nodata);
   CHECK_EQ(fixture.send(named(BlobCommands::resource_unref, host_blob)), ok_nodata);
   CHECK_EQ(fixture.host().overlaid_bytes(), 0u);
   CHECK_EQ(first[5], 0x5Au);
-  /* Given back, the pages can be lent again. */
   CHECK_EQ(fixture.send(create_adopted(host_blob, 0x1000u)), ok_nodata);
   CHECK_EQ(fixture.send(attach(host_blob, ram + 0x3000u, 0x1000u)), ok_nodata); }
 
@@ -223,16 +200,12 @@ TEST(blob_commands_create, an_adoption_the_protocol_or_the_memory_does_not_allow
     refused.plane().refuse_memory_at(1u);
     CHECK_EQ(refused.send(create_adopted(host_blob, 0x1000u)), ok_nodata);
     CHECK_EQ(refused.send(attach(host_blob, ram + 0x3000u, 0x1000u)), err_out_of_memory); }
-  /* The guest maps its own pages write-back: memory the host maps
-   * write-combined cannot lie under them, and goes back. */
   Fixture combined;
   combined.plane().answer_caching(AV_MEMORY_WRITE_COMBINED);
   CHECK_EQ(combined.send(create_adopted(host_blob, 0x1000u)), ok_nodata);
   CHECK_EQ(combined.send(attach(host_blob, ram + 0x3000u, 0x1000u)), err_unspec);
   CHECK_EQ(combined.plane().freed_count(), 1u); }
 
-/* ATTACH_BACKING is the base class's but for a host blob; for one, a piece
- * that cannot be laid is refused with why. */
 TEST(blob_commands_attach, a_piece_is_laid_or_refused_and_anything_not_a_host_blob_is_the_base_class_s)
 { Fixture fixture;
   CHECK_EQ(fixture.send(attach(50u, ram, 0x1000u)), 0u);
@@ -241,9 +214,7 @@ TEST(blob_commands_attach, a_piece_is_laid_or_refused_and_anything_not_a_host_bl
   CHECK_EQ(fixture.send(create_adopted(host_blob, 0x4000u)), ok_nodata);
   CHECK_EQ(fixture.send(create_adopted(host_blob + 1u, 0x4000u)), ok_nodata);
   CHECK_EQ(fixture.send(attach(host_blob, ram, 0x1000u)), ok_nodata);
-  /* A page under one blob is refused another. */
   CHECK_EQ(fixture.send(attach(host_blob + 1u, ram, 0x1000u)), err_invalid_parameter);
-  /* Memory that is not guest RAM, and memory there is no room to record. */
   CHECK_EQ(fixture.send(attach(host_blob, 0x800000u, 0x1000u)), err_unspec);
   fixture.host().fail_allocation_at(1u);
   CHECK_EQ(fixture.send(attach(host_blob + 1u, ram + 0x1000u, 0x1000u)), err_out_of_memory);
@@ -257,14 +228,12 @@ TEST(blob_commands_map, a_host_blob_maps_where_the_guest_asks_with_the_host_s_ca
   CHECK_EQ(map_info, map_cache_cached);
   CHECK_EQ(fixture.host().last_placement().offset, 0x4000u);
   CHECK_EQ(fixture.host().last_placement().size, 0x2000u);
-  /* What the guest writes at the offset is the allocation's memory. */
   auto *const placed = static_cast<std::uint8_t *>(fixture.host().placed_at(0x4000u));
   CHECK(placed != nullptr);
   CHECK(fixture.host_blobs().invariants_hold());
   CHECK_EQ(fixture.send(named(BlobCommands::resource_unmap_blob, host_blob)), ok_nodata);
   CHECK_EQ(fixture.host().live_placements(), 0u);
   CHECK_EQ(fixture.send(named(BlobCommands::resource_unmap_blob, host_blob)), err_invalid_parameter);
-  /* Memory the host maps write-combined is mapped so by the guest too. */
   fixture.plane().answer_caching(AV_MEMORY_WRITE_COMBINED);
   CHECK_EQ(fixture.send(create_host(host_blob + 1u, 0x1000u)), ok_nodata);
   CHECK_EQ(fixture.send(map_blob(host_blob + 1u, 0x8000u), &map_info), ok_map_info);
@@ -278,30 +247,29 @@ TEST(blob_commands_create, refuses_what_the_protocol_does_not_allow)
   Case cases[] = {
       {create_blob(1u, guest, 0u, 1u, 0u, 0x1000u).truncate(55u), err_invalid_parameter},
       {create_host(0u, 0x1000u), err_invalid_resource_id},
-      {create_host(50u, 0x1000u), err_invalid_resource_id},                           /* a base-class 2D resource */
-      {create_host(5u, 0x1000u), err_invalid_resource_id},                            /* not a host blob id */
-      {create_host(HostBlobId::first - 1u, 0x1000u), err_invalid_resource_id},          /* just below the range */
-      {create_blob(1u, guest, 0u, 1u, 7u, 0x1000u), err_invalid_parameter},           /* names a context object */
+      {create_host(50u, 0x1000u), err_invalid_resource_id},
+      {create_host(5u, 0x1000u), err_invalid_resource_id},
+      {create_host(HostBlobId::first - 1u, 0x1000u), err_invalid_resource_id},
+      {create_blob(1u, guest, 0u, 1u, 7u, 0x1000u), err_invalid_parameter},
       {create_blob(host_blob, host3d_guest, mappable, 0u, 0u, 0x1000u).context(context), err_invalid_parameter},
       {create_blob(host_blob, host3d, 0u, 0u, upload, 0x1000u).context(context), err_invalid_parameter},
       {create_blob(host_blob, host3d, mappable, 1u, upload, 0x1000u).context(context), err_invalid_parameter},
       {create_host(host_blob, 0x1000u, upload | std::uint64_t{1} << 32u), err_invalid_parameter},
-      {create_host(host_blob, 0x1000u, upload, context + 1u), err_invalid_context_id},   /* no such context */
+      {create_host(host_blob, 0x1000u, upload, context + 1u), err_invalid_context_id},
       {create_host(host_blob, 0x1000u, upload, 0u), err_invalid_context_id},
-      {create_host(host_blob, 0x1800u), err_invalid_parameter},                       /* not a page multiple */
+      {create_host(host_blob, 0x1800u), err_invalid_parameter},
       {create_host(host_blob, 0u), err_invalid_parameter},
-      {create_host(host_blob, 0x1000u, 0u), err_invalid_parameter},                   /* no memory named */
-      {create_host(host_blob, 0x1000u, 9u), err_invalid_parameter},                   /* a kind nobody has */
-      {create_host(host_blob, 0x1000u, 2u | 1u << 8u), err_invalid_parameter},        /* readback with a type */
-      {create_blob(1u, guest, 0u, 0u, 0u, 0x1000u), err_invalid_parameter},           /* no entries */
-      {create_blob(1u, guest, 0u, 2u, 0u, 0x1000u), err_invalid_parameter},           /* entries missing */
+      {create_host(host_blob, 0x1000u, 0u), err_invalid_parameter},
+      {create_host(host_blob, 0x1000u, 9u), err_invalid_parameter},
+      {create_host(host_blob, 0x1000u, 2u | 1u << 8u), err_invalid_parameter},
+      {create_blob(1u, guest, 0u, 0u, 0u, 0x1000u), err_invalid_parameter},
+      {create_blob(1u, guest, 0u, 2u, 0u, 0x1000u), err_invalid_parameter},
   };
   for (Case &c : cases) {
       Fixture fixture;
       CHECK_EQ(fixture.send(c.request), c.answer);
       CHECK_EQ(fixture.blobs().live(), 0u);
       CHECK_EQ(fixture.host_blobs().live(), 0u);
-      /* Every refusal is decided before memory is asked for. */
       CHECK_EQ(fixture.plane().memory_allocations(), 0u);
   }
   Fixture short_backing;
@@ -317,7 +285,6 @@ TEST(blob_commands_create, refuses_what_the_protocol_does_not_allow)
   CHECK_EQ(duplicate.send(create_host(host_blob, 0x1000u)), ok_nodata);
   CHECK_EQ(duplicate.send(create_host(host_blob, 0x1000u)), err_invalid_resource_id);
   CHECK_EQ(duplicate.plane().memory_allocations(), 1u);
-  /* A guest blob under an id in the host blobs' range takes it from them. */
   Fixture taken;
   GpuRequestBuilder guest_there = create_blob(host_blob, guest, 0u, 1u, 0u, 0x1000u);
   guest_there.u64(ram).u32(0x1000u).u32(0u);
@@ -325,9 +292,6 @@ TEST(blob_commands_create, refuses_what_the_protocol_does_not_allow)
   CHECK_EQ(taken.send(create_host(host_blob, 0x1000u)), err_invalid_resource_id);
   CHECK_EQ(taken.host_blobs().live(), 0u); }
 
-/* What the plane answers is judged before a blob is made of it: none, too
- * little, no descriptor or a caching the guest cannot copy is no memory, and
- * the descriptor is not kept. */
 TEST(blob_commands_create, memory_the_plane_cannot_give_is_out_of_memory_and_holds_nothing)
 { { Fixture refused;
     refused.plane().refuse_memory_at(1u);
@@ -351,7 +315,6 @@ TEST(blob_commands_create, memory_the_plane_cannot_give_is_out_of_memory_and_hol
       CHECK_EQ(uncachable.host_blobs().live(), 0u);
   } }
 
-/* A device whose host blob table has no lock yet has no host blobs to give. */
 TEST(blob_commands_create, a_host_blob_table_never_initialized_refuses_every_host_blob)
 { MockHost                  host;
   BlobTable                 blobs(host);
@@ -367,8 +330,6 @@ TEST(blob_commands_create, a_host_blob_table_never_initialized_refuses_every_hos
   CHECK_EQ(mock.response_type(), err_invalid_parameter);
   CHECK_EQ(plane.memory_allocations(), 0u); }
 
-/* A host with no memory for a guest blob's page table is out of memory, not
- * the guest's mistake. */
 TEST(blob_commands_create, a_guest_blob_the_host_has_no_memory_to_track_is_out_of_memory)
 { Fixture fixture;
   fixture.host().fail_allocation_at(1u);
@@ -401,17 +362,16 @@ TEST(blob_commands_map, refuses_bad_offsets_second_maps_and_unmappable_blobs)
   CHECK_EQ(fixture.send(guest_blob), ok_nodata);
   const std::uint32_t second = host_blob + 1u;
   CHECK_EQ(fixture.send(map_blob(host_blob, 0x2000u)), ok_map_info);
-  CHECK_EQ(fixture.send(map_blob(host_blob, 0x8000u)), err_invalid_parameter);   /* already mapped */
-  CHECK_EQ(fixture.send(map_blob(second, 0x3000u)), err_invalid_parameter);      /* overlaps */
-  CHECK_EQ(fixture.send(map_blob(second, 0x1000u)), err_invalid_parameter);      /* overlaps from below */
-  CHECK_EQ(fixture.send(map_blob(second, 0x0800u)), err_invalid_parameter);      /* misaligned */
-  CHECK_EQ(fixture.send(map_blob(second, 0xF000u)), err_invalid_parameter);      /* past the region */
+  CHECK_EQ(fixture.send(map_blob(host_blob, 0x8000u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(map_blob(second, 0x3000u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(map_blob(second, 0x1000u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(map_blob(second, 0x0800u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(map_blob(second, 0xF000u)), err_invalid_parameter);
   CHECK_EQ(fixture.send(map_blob(second, ~std::uint64_t{0} - 0xFFFu)), err_invalid_parameter);
-  CHECK_EQ(fixture.send(map_blob(4u, 0x8000u)), err_invalid_resource_id);        /* a guest blob is never mapped */
+  CHECK_EQ(fixture.send(map_blob(4u, 0x8000u)), err_invalid_resource_id);
   CHECK_EQ(fixture.send(map_blob(9u, 0x8000u)), err_invalid_resource_id);
   CHECK_EQ(fixture.send(map_blob(second, 0x8000u).truncate(39u)), err_invalid_parameter);
   CHECK_EQ(fixture.host().live_placements(), 1u);
-  /* The host refusing the placement is the host's failure, not the guest's. */
   fixture.host().fail_placement_at(1u);
   CHECK_EQ(fixture.send(map_blob(second, 0x8000u)), err_unspec);
   CHECK(fixture.host_blobs().invariants_hold());
@@ -436,15 +396,12 @@ TEST(blob_commands_unref, releases_a_host_blob_mapped_or_not_and_leaves_other_re
   CHECK_EQ(fixture.send(named(BlobCommands::resource_unref, host_blob + 1u)), ok_nodata);
   CHECK_EQ(fixture.host_blobs().live(), 0u);
   CHECK_EQ(fixture.host().live_placements(), 0u);
-  /* Each let go of its memory under its own key, and the descriptors the
-   * plane handed over were closed with the blobs. */
   CHECK_EQ(fixture.plane().freed_count(), 2u);
   CHECK_EQ(fixture.plane().freed(0u), std::uint64_t{host_blob});
   CHECK_EQ(fixture.plane().freed(1u), std::uint64_t{host_blob + 1u});
-  CHECK_EQ(fixture.send(named(BlobCommands::resource_unref, host_blob)), 0u);   /* base class answers */
+  CHECK_EQ(fixture.send(named(BlobCommands::resource_unref, host_blob)), 0u);
   CHECK_EQ(fixture.send(GpuRequestBuilder(BlobCommands::resource_unref).u32(host_blob)), 0u); }
 
-/* A guest blob a context is bound to is pinned: refused, and kept. */
 TEST(blob_commands_unref, a_blob_a_context_is_bound_to_is_refused_and_kept)
 { Fixture fixture;
   GpuRequestBuilder request = create_blob(2u, guest, 0u, 1u, 0u, 0x1000u);
@@ -473,8 +430,6 @@ TEST(blob_commands, create_2d_on_a_blob_id_is_refused_and_everything_else_is_the
   GpuRequestBuilder other_2d(BlobCommands::resource_create_2d);
   other_2d.u32(3u).u32(1u).u32(64u).u32(64u);
   CHECK_EQ(fixture.send(other_2d), 0u);
-  /* SET_SCANOUT_BLOB moved to ScanoutCommands (feature 058); BlobCommands
-   * leaves it, and everything else it does not own, to the next answerer. */
   CHECK_EQ(fixture.send_type(0x010Du, GpuRequestBuilder(0x010Du)), 0u);
   CHECK_EQ(fixture.send_type(0x0100u, GpuRequestBuilder(0x0100u)), 0u); }
 
@@ -492,8 +447,6 @@ std::uint64_t u64_at(const std::uint8_t *bytes, std::size_t offset)
     return value;
 }
 
-/* A guest blob belongs to the device and its record names no context; a host
- * blob is made for one and its creation names it. */
 TEST(blob_commands_create, records_every_blob_created_and_released)
 { Fixture fixture;
   CHECK_STATUS(fixture.recorder().open("blobs.av", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
@@ -530,10 +483,6 @@ TEST(blob_commands_create, records_every_blob_created_and_released)
   CHECK_EQ(file.remaining(), 0u);
   fixture.recorder().close(); }
 
-/* Contexts in another process keep a copy of the guest blob table: every
- * guest blob made and let go is told to them, and one the device refused is
- * not. A host blob is not theirs to copy - its memory reaches them through
- * the plane's allocation. */
 TEST(blob_commands, tells_the_contexts_of_every_guest_blob_made_and_let_go)
 { Fixture fixture;
   GpuRequestBuilder request = create_blob(1u, guest, 0u, 1u, 0u, 0x1000u);
@@ -560,8 +509,6 @@ TEST(blob_commands_create, a_creation_the_device_refused_records_nothing)
   CHECK_STATUS(fixture.recorder().open("refused.av", 0u, "blob", av::AtCeiling::stop, av::GpuIdentity(),
                                        av::ProtocolVersion(1u, 1u)),
                Status::ok);
-  /* A host blob that is not mappable, one the plane has no memory for, and an
-   * unref of a resource nobody made. */
   CHECK_EQ(fixture.send(create_blob(host_blob, host3d, 0u, 0u, upload, 0x2000u).context(context)),
            err_invalid_parameter);
   fixture.plane().refuse_memory_at(1u);

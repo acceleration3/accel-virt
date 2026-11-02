@@ -10,13 +10,12 @@
 namespace inspector {
 namespace {
 
-constexpr u64 kMagic = 0x0045434152545641ull; // "AVTRACE\0" little-endian
+constexpr u64 kMagic = 0x0045434152545641ull;
 constexpr u32 kVersion = 1;
 constexpr usize kHeaderBytes = 96;
 constexpr usize kSlotHeaderBytes = 56;
 constexpr usize kFrameBytes = 24;
 constexpr u64 kActiveBit = 1ull << 63;
-// Beyond any table a binary lays out; a header claiming more is not trusted.
 constexpr u32 kMaxSlots = 4096;
 constexpr u32 kMaxFrames = 1024;
 
@@ -47,7 +46,6 @@ TraceSlot DecodeSlot(Span<const u8> slot, u32 frames_per_slot) {
     s.left_at = ReadAt<u64>(slot, 32);
     s.waiting_on = ReadAt<u64>(slot, 40);
     s.holding = ReadAt<u64>(slot, 48);
-    // Only an active slot's frames are its own; an idle one's are what it pushed last time.
     const u32 stored = s.depth < frames_per_slot ? s.depth : frames_per_slot;
     for (u32 f = 0; s.active && f < stored; ++f) {
         const usize at = kSlotHeaderBytes + static_cast<usize>(f) * kFrameBytes;
@@ -60,7 +58,7 @@ TraceSlot DecodeSlot(Span<const u8> slot, u32 frames_per_slot) {
     return s;
 }
 
-} // namespace
+}
 
 Optional<TraceTable> ParseTraceTable(Span<const u8> bytes, String& why) {
     if (bytes.GetSize() < kHeaderBytes) {
@@ -138,4 +136,4 @@ Optional<DynamicArray<u8>> ReadWholeFile(StringView path, String& why) {
     return bytes;
 }
 
-} // namespace inspector
+}

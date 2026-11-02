@@ -1,26 +1,8 @@
-# The Direct3D 9 commands the user-mode driver (avumd.dll) sends and the
-# executor runs on the host's Direct3D 9 - DXVK's native d3d9.
-#
-# The third registry on the Direct3D sub-API's wire, beside d3d.toml (11) and
-# d3d12.toml (12), and written the same way: values are the Direct3D 9 *API*'s
-# - D3DFORMAT, D3DRENDERSTATETYPE, D3DPOOL, D3DUSAGE - which the guest
-# translates from the DDI's once, and the host judges before DXVK sees them.
-#
-# Objects are named by a 32-bit id the guest chooses, unique within its
-# session and shared with the session's Direct3D 11 and 12 objects; 0 is
-# "none" wherever a binding may be empty. Every object belongs to the device
-# that made it, and a command naming one of another device's is refused.
-#
-# Ids are stable: a command keeps its id for as long as the wire does.
-# 0x2000-0x2fff are Direct3D 9's.
-
 [meta]
 api = 4
 prefix = "d3d9"
 first_id = 0x2000
 last_id = 0x2fff
-
-# ---------------------------------------------------------------- structs
 
 [structs.Rect]
 fields = ["i32 left", "i32 top", "i32 right", "i32 bottom"]
@@ -28,40 +10,21 @@ fields = ["i32 left", "i32 top", "i32 right", "i32 bottom"]
 [structs.Box]
 fields = ["u32 left", "u32 top", "u32 front", "u32 right", "u32 bottom", "u32 back"]
 
-# D3DVIEWPORT9.
 [structs.Viewport]
 fields = ["u32 x", "u32 y", "u32 width", "u32 height", "f32 min_z", "f32 max_z"]
 
-# D3DVERTEXELEMENT9, widened: type is a D3DDECLTYPE, method a D3DDECLMETHOD,
-# usage a D3DDECLUSAGE.
 [structs.VertexElement]
 fields = ["u32 stream", "u32 offset", "u32 type", "u32 method", "u32 usage", "u32 usage_index"]
 
-# D3DMATERIAL9.
 [structs.Material]
 fields = ["f32 diffuse[4]", "f32 ambient[4]", "f32 specular[4]", "f32 emissive[4]", "f32 power"]
 
-# D3DLIGHT9; type is a D3DLIGHTTYPE.
 [structs.Light]
 fields = ["u32 type", "f32 diffuse[4]", "f32 specular[4]", "f32 ambient[4]", "f32 position[3]",
           "f32 direction[3]", "f32 range", "f32 falloff", "f32 attenuation[3]", "f32 theta", "f32 phi"]
 
-# One D3DFORMAT as the host's Direct3D 9 answers it against an X8R8G8B8 display.
-# support is a bit each answered by IDirect3D9::CheckDeviceFormat (or CheckDeviceType
-# for bit 12): bit 0 a texture, 1 a cube texture, 2 a volume texture, 3 a
-# render-target texture, 4 a render-target surface, 5 a depth-stencil surface, 6 a
-# vertex texture, 7 read as sRGB, 8 written as sRGB, 9 filtered, 10 blended after the
-# pixel shader, 11 mipmaps it makes itself, 12 a windowed back buffer, 13 an
-# offscreen plain surface, 14 a legacy bump map, 15 a depth texture
-# (D3DUSAGE_DEPTHSTENCIL on a texture). multisample has bit n for each
-# D3DMULTISAMPLE_TYPE n from 2 to 16 it renders at windowed
-# (CheckDeviceMultiSampleType), and quality_levels[n - 1] is the quality level count
-# of type n: 0 where it does not render at it, and NONMASKABLE's (type 1) asked
-# only of a format that renders at some count.
 [structs.FormatCaps9]
 fields = ["u32 support", "u32 multisample", "u32 quality_levels[16]"]
-
-# ---------------------------------------------------------------- device
 
 [[command]]
 name = "CreateDevice9"
@@ -109,8 +72,6 @@ id = 0x2003
 doc = """Any object these commands made, a device included, by id. A destroyed device takes nothing else with it:
 its objects stay until each is destroyed, and are refused wherever they are named."""
 params = ["u32 object"]
-
-# ---------------------------------------------------------------- resources
 
 [[command]]
 name = "CreateSurface9"
@@ -174,8 +135,6 @@ nothing is written."""
 params = ["u32 surface", "u32 subresource"]
 reply = ["u32 hresult", "u32 width", "u32 height", "u32 format", "u32 pitch", "out_bytes pixels"]
 
-# ---------------------------------------------------------------- output
-
 [[command]]
 name = "StretchRect9"
 id = 0x2108
@@ -201,8 +160,6 @@ fullscreen primary's flip instead: the pixels are kept in a Direct3D 11 texture 
 scanout open by it. Nothing is answered; a key of 0, or a surface not of four-byte pixels, stages nothing, and the
 present that names the point is refused."""
 params = ["u32 surface", "u32 subresource", "u64 key", "u32 point"]
-
-# ---------------------------------------------------------------- shaders
 
 [[command]]
 name = "CreateVertexShader9"
@@ -260,8 +217,6 @@ name = "SetConstantsB9"
 id = 0x2309
 doc = """Boolean constants, one value a register."""
 params = ["u32 stage", "u32 start", "u32 value_count", "u32 values[value_count] max 16"]
-
-# ---------------------------------------------------------------- state
 
 [[command]]
 name = "SetRenderStates9"
@@ -347,8 +302,6 @@ name = "SetClipPlane9"
 id = 0x240e
 params = ["u32 index", "u32 value_count", "f32 plane[value_count] max 4"]
 
-# ---------------------------------------------------------------- draws
-
 [[command]]
 name = "DrawPrimitive9"
 id = 0x2500
@@ -360,8 +313,6 @@ name = "DrawIndexedPrimitive9"
 id = 0x2501
 params = ["u32 type", "i32 base_vertex", "u32 min_index", "u32 vertex_count", "u32 start_index",
           "u32 primitive_count"]
-
-# ---------------------------------------------------------------- queries
 
 [[command]]
 name = "CreateQuery9"
@@ -382,8 +333,6 @@ doc = """IDirect3DQuery9::GetData: hresult S_OK with the data, S_FALSE (1) while
 D3DGETDATA_FLUSH (1)."""
 params = ["u32 query", "u32 flags"]
 reply = ["u32 hresult", "out_bytes data"]
-
-# ---------------------------------------------------------------- output
 
 [[command]]
 name = "SetRenderTarget9"

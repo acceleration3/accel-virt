@@ -1,23 +1,3 @@
-/* The windows' DXGI flip chains (icd::WindowChains) over d3d11.dll and
- * dxgi.dll, loaded the first time a chain is asked for, so a process that
- * never presents through one never loads them.
- *
- * One Direct3D 11 device per adapter, on avumd as any application's is, and
- * per window a flip chain of two buffers and up to max_slots shared textures,
- * all of the slot layout's channel order - R8G8B8A8, or B8G8R8A8 for a
- * blue-first Vulkan image. A slot's object id is the key the miniport minted
- * into its allocation, read through D3DKMT from the NT handle the texture is
- * shared by - the AllocationDescriptor and SharedObjectRecord every kernel
- * surface carries - which is how OpenGL and Vulkan name any shared object.
- *
- * Presenting puts the slot in the chain's back buffer: a top-down slot is
- * copied, and a bottom-up one, as OpenGL stores a frame, is drawn upside down
- * with two shaders compiled at the device's making through d3dcompiler_47.dll.
- * The chain is then presented and the copy or draw waited for, so the slot may
- * be written again. There are as many chains as windows an application shows
- * this way, and a device per avgpu adapter. The chains and their devices are
- * used under `lock`: an application's thread opens a window's chain while the
- * present thread presents another's. */
 #ifndef AV_UM_DXGI_WINDOW_CHAINS_HPP
 #define AV_UM_DXGI_WINDOW_CHAINS_HPP
 
@@ -43,7 +23,7 @@ struct IDXGISwapChain1;
 namespace av {
 class BlockSource;
 class KeyedLog;
-}  // namespace av
+}
 
 namespace av {
 
@@ -53,8 +33,6 @@ class ThreadLock;
 class DxgiWindowChains final : public icd::WindowChains {
 public:
     static constexpr uint32_t max_devices = AvgpuAdapters::max_adapters;
-    /* Looks for a finished copy this often, this many times: what a GPU that
-     * finishes nothing in two seconds is given before the slot is let go. */
     static constexpr uint32_t copy_looks = 2000u;
 
     DxgiWindowChains(BlockSource &memory, Kmt &kmt, ThreadLock &lock, KeyedLog &log);
@@ -68,8 +46,6 @@ public:
     void close(void *window) override;
 
 private:
-    /* One adapter's device, and the kernel device a slot's handle is opened
-     * on to read its key. */
     struct Device {
         uint64_t                            luid;
         ComReference<ID3D11Device>          device;
@@ -81,7 +57,6 @@ private:
         uint32_t                            kmt_adapter;
         uint32_t                            kmt_device;
     };
-    /* One window's chain and slots. */
     struct Chain {
         void                                   *window;
         uint32_t                                device;
@@ -95,25 +70,17 @@ private:
         uint32_t                                height;
         uint32_t                                count;
         icd::SlotLayout                         layout;
-        /* The DXGI_FORMAT of the buffers and the slots, the layout's. */
         uint32_t                                format;
     };
 
     [[nodiscard]] bool loaded();
-    /* The device of the adapter `luid` names, made the first time; max_devices
-     * for none. */
     uint32_t           device_for(uint64_t luid);
     [[nodiscard]] bool make_device(uint64_t luid, Device &made);
     [[nodiscard]] bool kernel_device(uint64_t luid, Device &made);
-    /* The fullscreen triangle and the flipped read of a slot, compiled. */
     [[nodiscard]] bool make_shaders(Device &made);
-    /* Slot `slot` of a bottom-up `chain` drawn into `back` upside down. */
     void               draw_flipped(Chain &chain, Device &device, ID3D11Texture2D *back, uint32_t slot);
     Chain             *chain_of(void *window);
-    /* A new, empty chain for `window`; null, said once, when there is no
-     * memory for one. */
     Chain             *new_chain(void *window);
-    /* `window`'s chain dropped and given back. */
     void               forget_chain(void *window);
     [[nodiscard]] bool make_chain(Chain &chain, Device &device, uint32_t width, uint32_t height);
     [[nodiscard]] bool make_slots(Chain &chain, Device &device, uint32_t count);
@@ -121,8 +88,6 @@ private:
     void               drop_chain(Chain &chain);
     void               drop_device(Device &device);
     void               refuse(const char *why);
-    /* The first chain opened, and the first present's answer, said once each:
-     * whether a window is shown this way at all is otherwise invisible. */ 
 
     Kmt             &kmt_;
     ThreadLock      &lock_;
@@ -136,10 +101,9 @@ private:
     bool             load_refused_;
     Device           devices_[max_devices];
     ObjectPool<Chain> chains_;
-    /* Each chain by its window's address. */
     KeyedSlots<uint64_t, Chain *> windows_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_UM_DXGI_WINDOW_CHAINS_HPP
+#endif

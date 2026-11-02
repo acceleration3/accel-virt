@@ -17,13 +17,8 @@ Status ClObjectTable::make(ClObject::Kind kind, uint64_t wire, GuestClContext *c
 {
     AV_SCOPE("ClObjectTable::make");
     object = nullptr;
-    /* Zero is what the host answers when it made nothing, so it never names
-     * an object. */
     if (wire == 0u) return Status::invalid_parameter;
     const ThreadLockHold held(lock_);
-    /* A parent this table does not hold would leave a subtree that cannot be
-     * destroyed with it, and one of the same kind or higher makes the chain to
-     * a context unbounded. */
     if (parent != nullptr && !tree_.parent_fits(kind, parent)) return Status::invalid_parameter;
     ClObject    *made = nullptr;
     const Status created = tree_.make(made, table_, memory_, kind, wire, context, parent);
@@ -47,9 +42,6 @@ void ClObjectTable::destroy_held(ClObject &object)
     if (!tree_.holds(&object)) return;
     ClObject *const parent = object.parent();
     static_cast<void>(tree_.destroy(object));
-    /* What it was made on no longer holds it. A destroy takes only what lies
-     * below, and a held object's parent is held, so the parent is still
-     * here; the subtree's own parents went with it. */
     if (parent != nullptr) parent->orphan();
 }
 
@@ -76,8 +68,6 @@ bool ClObjectTable::release(ClObject &object, GuestClContext *&freed, const void
     const ThreadLockHold held(lock_);
     if (!tree_.holds(&object) || object.references() == 0u) return false;
     if (!object.release()) return true;
-    /* Up the chain while each is held by nothing: the kinds only rise towards
-     * the root, so this ends. */
     for (ClObject *at = &object; at != nullptr && at->unheld();) {
         ClObject *const parent = at->parent();
         if (at->kind() == ClObject::Kind::context) freed = at->context();
@@ -135,10 +125,8 @@ bool ClObjectTable::invariants_hold() const
 {
     AV_SCOPE("ClObjectTable::invariants_hold");
     const ThreadLockHold held(lock_);
-    /* Every parent is still held, so a live child of a dead parent cannot
-     * happen - and is proven before an object's own invariants read it. */
     if (!tree_.invariants_hold()) return false;
     return tree_.nodes().all_of([](const ClObject &object) { return object.invariants_hold(); });
 }
 
-}  // namespace av::clicd
+}

@@ -1,8 +1,3 @@
-"""The Vulkan runtime arrives pinned and verified, or nothing of it arrives.
-
-Driven against a local archive through `file://`: the tool takes its source as
-data, so no test touches the network.
-"""
 import hashlib
 import io
 import pathlib
@@ -24,7 +19,6 @@ def sha256(raw):
 
 
 def bundle(members):
-    """A zip laid out as LunarG's is: one top directory, x64 and x86 under it."""
     raw = io.BytesIO()
     with zipfile.ZipFile(raw, "w") as archive:
         archive.writestr(f"{TOP}/", b"")

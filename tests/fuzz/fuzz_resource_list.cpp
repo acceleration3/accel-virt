@@ -1,5 +1,3 @@
-/* A hostile translated resource list. The parser may refuse anything; it must
- * never read past the bytes, and what it accepts must satisfy its invariants. */
 #include "miniport/pci/resource_list.hpp"
 #include "core/support/status.hpp"
 #include "harness/platform/mock_platform.hpp"

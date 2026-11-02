@@ -8,7 +8,7 @@ namespace {
 
 constexpr uint64_t end = uint64_t{1} << D3d12AddressSpace::address_bits;
 
-}  // namespace
+}
 
 D3d12AddressSpace::D3d12AddressSpace() : next_(first)
 {
@@ -40,4 +40,4 @@ bool D3d12AddressSpace::invariants_hold() const
     return next >= first && next <= end && next % alignment == 0u;
 }
 
-}  // namespace av::d3d
+}

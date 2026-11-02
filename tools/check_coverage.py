@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Gate for constitution Principle IV.1: 100% branch coverage of src/core, src/miniport,
-src/device, src/proto, src/guest and src/icd - headers included - and an
-AV_UNTESTABLE mark count
-that only moves down.
-
-Run by the coverage_gate ctest after every unit test has written its profile.
-
-  check_coverage.py <build dir>
-"""
 import glob
 import json
 import os
@@ -16,23 +7,13 @@ import subprocess
 import sys
 
 SOURCE_DIRECTORIES = ("src/core/", "src/miniport/", "src/device/", "src/executor/", "src/proto/", "src/guest/", "src/icd/")
-# The same rule the design gate keeps, by the same name: what a generator wrote
-# is held to the compiler and to check_generated.py, not to a branch count no
-# test could reach across thousands of registry commands (feature 063).
 GENERATED_DIRECTORY = "generated"
-# Constitution II: the core is portable, the shim is not. A file here does
-# nothing but call the host's own loaders - dlopen, an instance, an enumeration
-# - and a unit test on a machine that may have no GPU at all cannot drive it. It
-# is proven at L3 and L5 instead. The directory is the rule, so moving a file
-# out of it puts the gate back (feature 042).
 SHIM_DIRECTORY = "shim"
 BASELINE = "tests/untestable_baseline.txt"
 MARK_RE = re.compile(r'AV_UNTESTABLE\(\s*"([^"]*)"')
 
 
 class CoverageVerdict:
-    """Judges one llvm-cov export against the source tree it was built from."""
-
     def __init__(self, root, export, binaries, profile_dir):
         self.root = os.path.realpath(str(root))
         self.export = export
@@ -62,15 +43,11 @@ class CoverageVerdict:
         return found
 
     def excluded(self, relative):
-        """Machine-written code and the shim are compiled and judged, but not by
-        a branch count: one named rule each (features 063 and 042)."""
         spelled = f"{os.sep}{relative}"
         return (f"{os.sep}{GENERATED_DIRECTORY}{os.sep}" in spelled
                 or f"{os.sep}{SHIM_DIRECTORY}{os.sep}" in spelled)
 
     def unlinked(self):
-        """A source no test references is dropped by the linker, so it never
-        reaches the coverage data and would otherwise pass unmeasured."""
         measured = {self.source_path(r["filename"]) for r in self.export["data"][0]["files"]}
         return [f"{os.path.relpath(path, self.root)}: not linked into any test binary"
                 for path in self.sources((".cpp",))
@@ -83,15 +60,6 @@ class CoverageVerdict:
         return relative if relative.startswith(SOURCE_DIRECTORIES) else None
 
     def uncovered(self):
-        """Branches are merged by source position: llvm-cov lists each template
-        instantiation separately, and a direction is covered when any
-        instantiation takes it.
-
-        A branch on a line carrying an AV_UNTESTABLE mark is left out of the
-        count entirely, which is what the mark is for: constitution IV.1 says a
-        branch no test can reach is marked at the site and the marks are
-        ratcheted, and a mark that still failed the percentage would be a mark
-        nobody could ever write. Every one of them is in the report."""
         marked = self.marked_lines()
         taken = {}
         for record in self.export["data"][0]["files"]:
@@ -135,7 +103,6 @@ class CoverageVerdict:
         return [f"AV_UNTESTABLE marks {len(marks)} > baseline {baseline}"] + marks
 
     def marked_lines(self):
-        """Every (file, line) carrying an AV_UNTESTABLE mark."""
         marked = set()
         for path in self.sources((".cpp", ".hpp")):
             relative = os.path.relpath(path, self.root)

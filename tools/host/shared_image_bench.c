@@ -1,30 +1,3 @@
-/* shared_image_bench: what the layout of a shared Direct3D 11 texture's image
- * costs the GPU. Each layout ExportableImages could make a 2560x1440 BGRA
- * texture in - over memory exported as a dma-buf, laid out by a DRM format
- * modifier - is drawn into, drawn from and copied into many times, timed on
- * the GPU with timestamps, beside an ordinary optimal image:
- *
- *   - rows: DRM_FORMAT_MOD_LINEAR with rows 256 bytes apart, the memory host
- *     visible (ExportableImages::make_rows);
- *   - tiled: whichever single-plane tiling the driver picks
- *     (ExportableImages::make_tiled).
- *
- * "Drawn" is a scaled, filtered blit, which Intel's and AMD's drivers run on
- * the 3D engine, sampling the source and writing the target as a draw does.
- * What it found (docs/external-export.md, docs/frame-pacing.md), 2026-10-15:
- *
- *   GPU, ms a pass        drawn into         drawn from         copied into
- *                       rows   tiled  opt  rows   tiled  opt  rows   tiled  opt
- *   Iris Xe (ADL GT2)   1.21   0.35  0.21  1.68   0.28  0.20  0.73   0.38  0.17
- *   RTX 3070 Ti (580)   0.11   0.05  0.05  0.07   0.05  0.05  0.07   0.05  0.05
- *   RX 9070 XT (RADV)   0.08   0.02  0.02  0.02   0.02  0.02  0.08   0.02  0.02
- *
- * DWM composing a captured monitor into shared rows and from them dropped one
- * frame in six on the Iris Xe.
- *
- *   cc -O2 -o shared_image_bench tools/host/shared_image_bench.c -lvulkan
- *   ./shared_image_bench [GPU name part] [width height passes]
- */
 #include <vulkan/vulkan.h>
 
 #include <stdint.h>
@@ -65,7 +38,6 @@ struct image {
 
 static uint32_t width = 2560u, height = 1440u, passes = 60u;
 
-/* As VulkanDeviceTable chooses: `wanted` first, then device local, then any. */
 static uint32_t memory_type(const struct gpu *gpu, uint32_t allowed, VkMemoryPropertyFlags wanted)
 {
     const VkMemoryPropertyFlags tries[] = {wanted, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0u};
@@ -77,8 +49,6 @@ static uint32_t memory_type(const struct gpu *gpu, uint32_t allowed, VkMemoryPro
     return UINT32_MAX;
 }
 
-/* The tilings make_tiled lists: one plane, not linear, and every drawing
- * feature the format's optimal tiling has. */
 static void list_tilings(struct gpu *gpu)
 {
     VkDrmFormatModifierPropertiesEXT     found[64];
@@ -165,8 +135,6 @@ static void transition(VkCommandBuffer commands, VkImage image, VkImageLayout fr
                          0u, NULL, 1u, &barrier);
 }
 
-/* Milliseconds a pass of `source` into `target` takes: a filtered blit from a
- * slightly smaller source (`drawn`), else a copy. */
 static double time_passes(struct gpu *gpu, const struct image *target, const struct image *source, int drawn)
 {
     VkCommandBuffer                   commands;
@@ -209,8 +177,6 @@ static double time_passes(struct gpu *gpu, const struct image *target, const str
     return (double)(stamps[1] - stamps[0]) * gpu->period / 1e6 / passes;
 }
 
-/* The fastest of three runs after a first that warms the caches: what the
- * layout costs, less the machine's noise. */
 static double best_of_three(struct gpu *gpu, const struct image *target, const struct image *source, int drawn)
 {
     double best = 1e30;

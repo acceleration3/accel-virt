@@ -1,5 +1,3 @@
-/* D3d9Device's lifetime, state, shaders, queries and state blocks
- * (d3d9_device.hpp). */
 #include "um/d3d/d3d9_device.hpp"
 
 #include "core/platform/block_source.hpp"
@@ -23,21 +21,16 @@ namespace {
 constexpr uint32_t stage_vertex = 0u;
 constexpr uint32_t stage_pixel = 1u;
 constexpr uint32_t components = 4u;
-/* D3DHAL_STATESET* (reverse-engineering.md §4.4). */
 constexpr UINT stateset_begin = 0u;
 constexpr UINT stateset_end = 1u;
 constexpr UINT stateset_delete = 2u;
 constexpr UINT stateset_execute = 3u;
 constexpr UINT stateset_capture = 4u;
-/* D3DDDIDEVINFOID_VCACHE's answer, as a driver that does no cache
- * optimisation of its own gives it. */
-constexpr DWORD vcache_pattern = 0x48434143u;   /* 'CACH' */
-/* d3d9.h's, which a driver does not include. */
-constexpr uint32_t issue_end = 0x1u;              /* D3DISSUE_END */
-constexpr uint32_t issue_begin = 0x2u;            /* D3DISSUE_BEGIN */
-constexpr uint32_t get_data_flush = 0x1u;         /* get_data_flush */
+constexpr DWORD vcache_pattern = 0x48434143u;
+constexpr uint32_t issue_end = 0x1u;
+constexpr uint32_t issue_begin = 0x2u;
+constexpr uint32_t get_data_flush = 0x1u;
 
-/* GetData's answer per query type (D3DQUERYTYPE's documented sizes). */
 uint32_t query_bytes(D3DDDIQUERYTYPE type)
 {
     AV_SCOPE("query_bytes");
@@ -49,7 +42,7 @@ uint32_t query_bytes(D3DDDIQUERYTYPE type)
     }
 }
 
-}  // namespace
+}
 
 D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog &log, const D3d9HostCaps &caps,
                        d3d::UmdAdapter &adapter, d3d::D3dCallTrace &trace)
@@ -64,9 +57,6 @@ D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog &
     AV_SCOPE("D3d9Device::D3d9Device");
 }
 
-/* The runtime destroys its resources before the device; whatever is left is
- * the device's to give back. The host lets go of a destroyed device's
- * objects with the session. */
 D3d9Device::~D3d9Device()
 {
     AV_SCOPE("D3d9Device::~D3d9Device");
@@ -165,9 +155,7 @@ void D3d9Device::trace(const char *call, uint32_t a, uint32_t b, uint32_t c, uin
 void D3d9Device::note_failure(const char *call, uint32_t hresult)
 {
     AV_SCOPE("D3d9Device::note_failure");
-    constexpr uint32_t still_drawing = 0x8876021Cu;   /* D3DERR_WASSTILLDRAWING */
-    /* Said whether or not the device traces, once for each call and answer:
-     * an application that retries one forever says it once. */
+    constexpr uint32_t still_drawing = 0x8876021Cu;
     if (hresult != still_drawing) refused_.failed(call, static_cast<int32_t>(hresult));
 }
 
@@ -193,8 +181,6 @@ HANDLE D3d9Device::handle_of(uint32_t id) const
     return reinterpret_cast<HANDLE>(static_cast<uintptr_t>(id));
 }
 
-/* The Direct3D 9 DDI has one spelling of a lost device, whatever the session's
- * fault code says. */
 HRESULT D3d9Device::lost(const char *call)
 {
     AV_SCOPE("D3d9Device::lost");
@@ -209,10 +195,6 @@ void D3d9Device::not_implemented(const char *call)
     refused_.unserved(call);
 }
 
-/* ---------------------------------------------------------------- state */
-
-/* A device's first states are every state there is, more than one command
- * carries (d3d9.toml's limits): they go in pieces of whole entries. */
 bool D3d9Device::send_states()
 {
     AV_SCOPE("D3d9Device::send_states");
@@ -298,8 +280,6 @@ HRESULT D3d9Device::set_vertex_shader_decl(HANDLE declaration)
     return d3d9proto::av_d3d9_SetVertexDeclaration9(wire(), id_of(declaration)) ? S_OK : lost(__func__);
 }
 
-/* Constants are the shadow's and a state block's register by register, and
- * cross in one command whatever their count. */
 HRESULT D3d9Device::set_pixel_shader_const(const D3DDDIARG_SETPIXELSHADERCONST *args, const FLOAT *values)
 {
     AV_SCOPE("D3d9Device::set_pixel_shader_const");
@@ -393,7 +373,6 @@ HRESULT D3d9Device::set_stream_source(const D3DDDIARG_SETSTREAMSOURCE *args)
     return S_OK;
 }
 
-/* A user pointer is read at the draw: the runtime keeps it valid until then. */
 HRESULT D3d9Device::set_stream_source_um(const D3DDDIARG_SETSTREAMSOURCEUM *args, const void *data)
 {
     AV_SCOPE("D3d9Device::set_stream_source_um");
@@ -426,8 +405,6 @@ HRESULT D3d9Device::set_stream_source_freq(const D3DDDIARG_SETSTREAMSOURCEFREQ *
     return d3d9proto::av_d3d9_SetStreamSourceFreq9(wire(), args->Stream, args->Divider) ? S_OK : lost(__func__);
 }
 
-/* The DDI sets the viewport's rectangle and its depth range apart; the API
- * sets them together. */
 HRESULT D3d9Device::set_viewport(const D3DDDIARG_VIEWPORTINFO *args)
 {
     AV_SCOPE("D3d9Device::set_viewport");
@@ -482,8 +459,6 @@ HRESULT D3d9Device::set_clip_plane(const D3DDDIARG_SETCLIPPLANE *args)
     return d3d9proto::av_d3d9_SetClipPlane9(wire(), args->Index, components, args->Plane) ? S_OK : lost(__func__);
 }
 
-/* The API's SetRenderTarget resets the viewport and scissor to the target;
- * the DDI's does not, so the device's own are put back after it. */
 HRESULT D3d9Device::set_render_target(const D3DDDIARG_SETRENDERTARGET *args)
 {
     AV_SCOPE("D3d9Device::set_render_target");
@@ -513,8 +488,6 @@ HRESULT D3d9Device::set_depth_stencil(const D3DDDIARG_SETDEPTHSTENCIL *args)
           target != nullptr ? target->subresources[0].height : 0u, 0u);
     return d3d9proto::av_d3d9_SetDepthStencil9(wire(), id, subresource) ? S_OK : lost(__func__);
 }
-
-/* ---------------------------------------------------------------- shaders */
 
 HRESULT D3d9Device::create_vertex_shader_func(D3DDDIARG_CREATEVERTEXSHADERFUNC *args, const UINT *code)
 {
@@ -548,7 +521,6 @@ HRESULT D3d9Device::delete_pixel_shader(HANDLE shader)
     return d3d9proto::av_d3d9_Destroy9(wire(), id_of(shader)) ? S_OK : lost(__func__);
 }
 
-/* The runtime may or may not end the list with D3DDECL_END (stream 0xff). */
 HRESULT D3d9Device::create_vertex_shader_decl(D3DDDIARG_CREATEVERTEXSHADERDECL *args,
                                               const D3DDDIVERTEXELEMENT *elements)
 {
@@ -574,8 +546,6 @@ HRESULT D3d9Device::delete_vertex_shader_decl(HANDLE declaration)
     AV_SCOPE("D3d9Device::delete_vertex_shader_decl");
     return d3d9proto::av_d3d9_Destroy9(wire(), id_of(declaration)) ? S_OK : lost(__func__);
 }
-
-/* ---------------------------------------------------------------- queries */
 
 HRESULT D3d9Device::create_query(D3DDDIARG_CREATEQUERY *args)
 {
@@ -611,7 +581,6 @@ HRESULT D3d9Device::issue_query(const D3DDDIARG_ISSUEQUERY *args)
     return S_OK;
 }
 
-/* S_FALSE until the host has the answer; never blocking. */
 HRESULT D3d9Device::get_query_data(const D3DDDIARG_GETQUERYDATA *args)
 {
     AV_SCOPE("D3d9Device::get_query_data");
@@ -629,8 +598,6 @@ HRESULT D3d9Device::get_query_data(const D3DDDIARG_GETQUERYDATA *args)
     if (args->pData != nullptr && answered >= query->data_bytes) memcpy(args->pData, answer, query->data_bytes);
     return S_OK;
 }
-
-/* ---------------------------------------------------------------- state blocks */
 
 HRESULT D3d9Device::apply(const D3d9StateEntry &entry)
 {
@@ -700,9 +667,6 @@ HRESULT D3d9Device::apply_constant(const D3d9StateEntry &entry)
                   : set_pixel_shader_const_b(&pixel_args, reinterpret_cast<const BOOL *>(value));
 }
 
-/* BEGIN starts a block the calls up to END record into, handed back at END;
- * EXECUTE applies a block, CAPTURE refreshes it from the device as it is now,
- * DELETE lets it go (reverse-engineering.md §4.4). */
 HRESULT D3d9Device::state_set(D3DDDIARG_STATESET *args)
 {
     AV_SCOPE("D3d9Device::state_set");
@@ -742,8 +706,6 @@ HRESULT D3d9Device::state_set(D3DDDIARG_STATESET *args)
     }
 }
 
-/* ---------------------------------------------------------------- the rest */
-
 HRESULT D3d9Device::update_w_info(const D3DDDIARG_WINFO *)
 {
     AV_SCOPE("D3d9Device::update_w_info");
@@ -767,9 +729,6 @@ HRESULT D3d9Device::get_info(UINT info, void *data, UINT bytes)
     return S_OK;
 }
 
-/* With hardware T&L and shaders at model 2 or later, the runtime turns fixed
- * function into shaders and consumes these itself (reverse-engineering.md
- * §4.5); one that still arrives changes nothing the shaders read. */
 HRESULT D3d9Device::multiply_transform(const D3DDDIARG_MULTIPLYTRANSFORM *)
 {
     AV_SCOPE("D3d9Device::multiply_transform");
@@ -843,7 +802,6 @@ HRESULT D3d9Device::query_resource_residency(const D3DDDIARG_QUERYRESOURCERESIDE
     return S_OK;
 }
 
-/* No patches are offered (D3DDEVCAPS_RTPATCHES, NPATCHES), so none is drawn. */
 HRESULT D3d9Device::draw_rect_patch(const D3DDDIARG_DRAWRECTPATCH *, const D3DDDIRECTPATCH_INFO *, const FLOAT *)
 {
     AV_SCOPE("D3d9Device::draw_rect_patch");
@@ -856,8 +814,6 @@ HRESULT D3d9Device::draw_tri_patch(const D3DDDIARG_DRAWTRIPATCH *, const D3DDDIT
     return S_OK;
 }
 
-/* The video, extension and overlay devices are asked for only where caps
- * offer them, and none are offered. */
 HRESULT D3d9Device::create_decode_device(D3DDDIARG_CREATEDECODEDEVICE *)
 {
     AV_SCOPE("D3d9Device::create_decode_device");
@@ -1037,10 +993,9 @@ HRESULT D3d9Device::present_multi_plane_overlay(const D3DDDIARG_PRESENTMULTIPLAN
 HRESULT D3d9Device::check_present_duration_support(D3DDDIARG_CHECKPRESENTDURATIONSUPPORT *args)
 {
     AV_SCOPE("D3d9Device::check_present_duration_support");
-    /* No duration but the refresh's own: none closer either side. */
     args->ClosestSmallerDuration = 0u;
     args->ClosestLargerDuration = 0u;
     return S_OK;
 }
 
-}  // namespace av::d3d9
+}

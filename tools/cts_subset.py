@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""Which CTS cases this repository runs, and which extension each group is
-there for (feature 048, US1 and FR-005).
-
-The file holds patterns rather than case names: one dEQP group is thousands of
-cases and the list changes with every release, so the runner asks the CTS for
-its own case list and keeps what these match. The `for:` tag on each line is
-what holds the subset to the ICD: every extension a policy row reports has to
-be exercised by a group here, and tools/check_cts_subset.py fails the build
-naming one that is not.
-"""
 import fnmatch
 import re
 
@@ -17,15 +7,12 @@ CORE = "core"
 
 
 class CtsSubset:
-    """One subset file: its patterns, and what each is for."""
-
     def __init__(self, path):
         self.path = path
         self.groups_ = None
 
     @property
     def groups(self):
-        """(pattern, [extension, ...]) in file order."""
         if self.groups_ is None:
             self.groups_ = self.read()
         return self.groups_
@@ -51,12 +38,9 @@ class CtsSubset:
         return found
 
     def extensions(self):
-        """Every extension some group is for."""
         return sorted({name for _pattern, names in self.groups for name in names if name != CORE})
 
     def matching(self, names):
-        """The cases of `names` some pattern keeps, in the order given and each
-        once: what one run of this subset is."""
         kept = []
         seen = set()
         for name in names:
@@ -68,6 +52,4 @@ class CtsSubset:
         return kept
 
     def unmatched(self):
-        """Patterns that kept nothing is a question only a fetched CTS can
-        answer; what this answers is which extensions have no group at all."""
         return [pattern for pattern, extensions in self.groups if not extensions]

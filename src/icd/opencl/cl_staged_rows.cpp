@@ -14,8 +14,6 @@ ClStagedRows::ClStagedRows(const ClImageRegion &layout, const icd::RowPieces &pi
     AV_SCOPE("ClStagedRows::ClStagedRows");
 }
 
-/* The application's rows of the piece, from its first: a row pitch apart,
- * the last only as long as the piece's row. */
 uint64_t ClStagedRows::spread() const
 {
     AV_SCOPE("ClStagedRows::spread");
@@ -44,4 +42,4 @@ size_t ClStagedRows::row(size_t index) const
     return layout_.row_offset(top_ + index, slice_) + column_ * layout_.element_bytes();
 }
 
-}  // namespace av::clicd
+}

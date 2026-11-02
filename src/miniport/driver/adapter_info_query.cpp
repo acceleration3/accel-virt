@@ -60,4 +60,4 @@ Status AdapterInfoQuery::write_output(const void *bytes, uint32_t count) const
     return Status::ok;
 }
 
-}  // namespace av
+}

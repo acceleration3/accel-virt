@@ -27,4 +27,4 @@ Status SharedObjectRelease::send(VirtioGpuDevice &device, uint64_t object_id)
     return reader.ok() ? Status::ok : Status::not_supported;
 }
 
-}  // namespace av
+}

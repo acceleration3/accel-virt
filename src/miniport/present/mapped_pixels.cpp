@@ -11,13 +11,10 @@
 namespace av {
 
 namespace {
-
-/* Each pixel's four bytes as they are, or with the first and third traded:
- * a shuffle mask over sixteen bytes, whose first four serve a lone pixel. */
 alignas(16) constexpr uint8_t same_order[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 alignas(16) constexpr uint8_t swapped_order[16] = {2, 1, 0, 3, 6, 5, 4, 7, 10, 9, 8, 11, 14, 13, 12, 15};
 
-}  // namespace
+}
 
 MappedPixels::MappedPixels(Platform &platform) : platform_(platform)
 {
@@ -66,11 +63,6 @@ MappedPixels::ByteOrder::ByteOrder(const PresentSurface &source, const PresentSu
     AV_SCOPE("MappedPixels::ByteOrder::ByteOrder");
 }
 
-/* An ordinary load from an uncached view is a trip to memory: a pixel read a
- * byte at a time was most of a second for a 1280x800 frame, and even memcpy's
- * sixteen-byte loads took fifty milliseconds. MOVNTDQA streams a whole line
- * from write-combined memory per four loads. Windows 11 requires SSE4.2, so
- * every processor it runs on has it. */
 __attribute__((target("sse4.1,ssse3"))) void MappedPixels::ByteOrder::copy_pixels(const uint8_t *from, uint8_t *to,
                                                                                   uint32_t count) const
 {
@@ -98,4 +90,4 @@ void MappedPixels::ByteOrder::copy_pixel(const uint8_t *from, uint8_t *to) const
     __builtin_memcpy(to, moved, sizeof moved);
 }
 
-}  // namespace av
+}

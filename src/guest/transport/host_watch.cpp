@@ -8,13 +8,12 @@
 namespace av {
 
 namespace {
-/* Where the device stores each word whole (docs/protocol.md, "Fence page"). */
 constexpr uint32_t flags_at = 4u;
 constexpr uint32_t completed_at = 8u;
 constexpr uint32_t progress_at = 16u;
 constexpr uint32_t fault_code_at = 24u;
 constexpr uint32_t faulted_flag = 1u;
-}  // namespace
+}
 
 HostWatch::HostWatch(Kmt &kmt, const TransportRing &ring)
     : kmt_(kmt), ring_(ring), page_(nullptr), head_(0u), completed_(0u), progress_(0u), beat_(0u), last_moved_(0u),
@@ -35,8 +34,6 @@ bool HostWatch::reads_page() const
     return page_ != nullptr;
 }
 
-/* One aligned word the device stores whole, so a load of it alone is never
- * torn, while a decode of the page could mix two of its writes. */
 uint64_t HostWatch::word(uint32_t offset) const
 {
     AV_SCOPE("HostWatch::word");
@@ -65,9 +62,6 @@ uint32_t HostWatch::fault_code() const
     return __atomic_load_n(reinterpret_cast<const uint32_t *>(page_ + fault_code_at), __ATOMIC_ACQUIRE);
 }
 
-/* No clock is read here: most waits end at their first look, and a reading
- * taken for nothing would be time a caller timing its own waits on the same
- * counter loses. The silence is counted from the first look instead. */
 void HostWatch::start()
 {
     AV_SCOPE("HostWatch::start");
@@ -104,11 +98,10 @@ bool HostWatch::keeps_waiting()
     return now_ - last_moved_ < frequency * silence_seconds;
 }
 
-/* Time read from one counter only goes forward. */
 bool HostWatch::invariants_hold() const
 {
     AV_SCOPE("HostWatch::invariants_hold");
     return last_moved_ <= now_;
 }
 
-}  // namespace av
+}

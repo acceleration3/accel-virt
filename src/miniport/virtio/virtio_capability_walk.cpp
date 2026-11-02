@@ -18,9 +18,8 @@ constexpr uint8_t base_cap_len          = 16u;
 constexpr uint8_t notify_cap_len        = 20u;
 constexpr uint8_t shared_memory_cap_len = 24u;
 
-}  // namespace
+}
 
-/* The structures found so far; the first instance of each wins (4.1.4.1). */
 class VirtioCapabilityWalk::Collector {
 public:
     Collector() : found_{}, multiplier_(0u), shared_{}, shared_ids_{}, shared_count_(0u)
@@ -47,7 +46,6 @@ public:
         AV_SCOPE("VirtioCapabilityWalk::Collector::build");
         for (uint8_t type = common_type; type <= device_type; type++)
             if (!found_[type].present()) return Status::not_supported;
-        /* 4.1.4.4: 0 or an even power of two. */
         const bool multiplier_ok =
             multiplier_ == 0u || (multiplier_ >= 2u && (multiplier_ & (multiplier_ - 1u)) == 0u);
         if (!multiplier_ok || found_[common_type].length() < common_bytes ||
@@ -100,7 +98,7 @@ Status VirtioCapabilityWalk::visit(size_t at, Collector &collector) const
                            (type == shared_memory_type && cap_len < shared_memory_cap_len);
     if (too_short || at + cap_len > config_space_bytes) return Status::malformed;
     const uint8_t bar = bytes_[at + 4u];
-    if (bar > highest_bar) return Status::ok;   /* reserved BAR: ignore (4.1.4.1) */
+    if (bar > highest_bar) return Status::ok;
 
     uint64_t offset = read_u32(at + 8u);
     uint64_t length = read_u32(at + 12u);
@@ -130,4 +128,4 @@ Status VirtioCapabilityWalk::walk(VirtioPciLayout &layout) const
     return collector.build(layout);
 }
 
-}  // namespace av
+}

@@ -47,4 +47,4 @@ bool ReplyReader::invariants_hold() const
     return slot_ != nullptr || capacity_ == 0u;
 }
 
-}  // namespace av
+}

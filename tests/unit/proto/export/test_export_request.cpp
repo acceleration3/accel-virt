@@ -1,8 +1,3 @@
-/* A consumer's request on the export socket, as the device reads it: 32 bytes
- * of magic, version, operation, a reserved word, the surface and the tag. What
- * a consumer could not have meant - a hello naming a surface, an export
- * naming none, an operation only the device sends - decodes to nothing, and
- * another major version is a refusal of its own, since its layout may be any. */
 #include "core/support/status.hpp"
 #include "harness/framework/hostile_sweep.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -25,7 +20,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
 
 void put_u32(std::uint8_t *bytes, std::size_t at, std::uint32_t value) { std::memcpy(bytes + at, &value, sizeof value); }
 
-}  // namespace
+}
 
 TEST(export_request, encodes_at_the_documented_offsets_and_decodes_back)
 { std::uint8_t bytes[ExportRequest::encoded_size] = {};
@@ -43,9 +38,6 @@ TEST(export_request, encodes_at_the_documented_offsets_and_decodes_back)
   std::uint8_t small[ExportRequest::encoded_size - 1u] = {};
   CHECK_STATUS(sent.encode(small, sizeof small), Status::too_large); }
 
-/* Hello and timing name no surface; export, sync and release name one, and
- * head names a head, 1 to 16 for heads 0 to 15. A timing built as a surface
- * request has no refresh and no moment, and is no timing. */
 TEST(export_request, each_operation_names_a_surface_or_none_as_it_must)
 { struct Case {
       ExportOperation operation;
@@ -71,13 +63,10 @@ TEST(export_request, each_operation_names_a_surface_or_none_as_it_must)
       CHECK_STATUS(ExportRequest(item.operation, item.surface, 7u).encode(bytes, sizeof bytes), Status::ok);
       ExportRequest read(ExportOperation::release, 3u, 4u);
       CHECK_STATUS(read.decode(bytes, sizeof bytes), item.expected);
-      /* A refusal leaves what was there. */
       CHECK_EQ(read.surface(), item.expected == Status::ok ? item.surface : 3u);
       CHECK_EQ(read.tag(), item.expected == Status::ok ? 7u : 4u);
   } }
 
-/* A timing's shift, as a two's complement, is where other requests name a
- * surface; the word beside it is reserved, the rate being the device's. */
 TEST(export_request, a_timing_carries_its_shift_at_the_documented_offset)
 { std::uint8_t bytes[ExportRequest::encoded_size] = {};
   const ExportRequest sent(-1500000, 9u);
@@ -94,13 +83,10 @@ TEST(export_request, a_timing_carries_its_shift_at_the_documented_offset)
   CHECK_EQ(read.shift_ns(), -1500000);
   CHECK_EQ(read.surface(), 0u);
   CHECK_EQ(read.tag(), 9u);
-  /* A word beside the shift is a rate a consumer once asked for: refused. */
   put_u32(bytes, 12u, 144000000u);
   CHECK_STATUS(read.decode(bytes, sizeof bytes), Status::malformed);
-  /* Other requests carry no shift. */
   CHECK_EQ(ExportRequest(ExportOperation::sync, 4u, 5u).shift_ns(), 0); }
 
-/* A shift may be 0 and is under a second either way. */
 TEST(export_request, a_timing_shifting_a_second_is_malformed)
 { struct Case {
       std::int64_t shift;
@@ -120,15 +106,12 @@ TEST(export_request, a_timing_shifting_a_second_is_malformed)
       CHECK_STATUS(read.decode(bytes, sizeof bytes), item.expected);
       CHECK_EQ(read.shift_ns(), item.expected == Status::ok ? item.shift : 0);
   }
-  /* A word in any other request is a reserved word that is not 0. */
   std::uint8_t bytes[ExportRequest::encoded_size] = {};
   CHECK_STATUS(ExportRequest(ExportOperation::hello, 0u, 7u).encode(bytes, sizeof bytes), Status::ok);
   put_u32(bytes, 12u, 60000u);
   ExportRequest read;
   CHECK_STATUS(read.decode(bytes, sizeof bytes), Status::malformed); }
 
-/* Only an export and a sync may say the consumer imports on another GPU; no
- * other flag exists. */
 TEST(export_request, the_other_gpu_flag_is_taken_by_an_export_and_a_sync_alone)
 { struct Case {
       ExportOperation operation;
@@ -150,20 +133,19 @@ TEST(export_request, the_other_gpu_flag_is_taken_by_an_export_and_a_sync_alone)
       CHECK_EQ(read.flags(), item.expected == Status::ok ? item.flags : 0u);
       CHECK(read.imports_on_other_gpu() == (item.expected == Status::ok)); } }
 
-/* Another major is not this layout, whatever its bytes; another minor is. */
 TEST(export_request, another_major_is_not_supported_and_another_minor_is_read)
 { std::uint8_t bytes[ExportRequest::encoded_size] = {};
   CHECK_STATUS(ExportRequest(ExportOperation::export_surface, 5u, 6u).encode(bytes, sizeof bytes), Status::ok);
-  bytes[6] = 0x07u;   /* minor 7 */
+  bytes[6] = 0x07u;
   ExportRequest read;
   CHECK_STATUS(read.decode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(read.surface(), 5u);
-  bytes[4] = 0x02u;   /* major 2 */
-  bytes[12] = 0xFFu;  /* and a reserved word no version 1 sends */
+  bytes[4] = 0x02u;
+  bytes[12] = 0xFFu;
   ExportRequest other;
   CHECK_STATUS(other.decode(bytes, sizeof bytes), Status::not_supported);
   CHECK_EQ(other.surface(), 0u);
-  bytes[4] = 0x00u;   /* major 0 */
+  bytes[4] = 0x00u;
   CHECK_STATUS(other.decode(bytes, sizeof bytes), Status::not_supported); }
 
 TEST(export_request, a_wrong_length_magic_or_reserved_word_is_malformed)
@@ -176,7 +158,7 @@ TEST(export_request, a_wrong_length_magic_or_reserved_word_is_malformed)
   put_u32(bytes, 12u, 1u);
   CHECK_STATUS(read.decode(bytes, ExportRequest::encoded_size), Status::malformed);
   put_u32(bytes, 12u, 0u);
-  put_u32(bytes, 0u, 0x41585641u);   /* an answer's magic */
+  put_u32(bytes, 0u, 0x41585641u);
   CHECK_STATUS(read.decode(bytes, ExportRequest::encoded_size), Status::malformed);
   CHECK_EQ(read.surface(), 0u); }
 
@@ -187,15 +169,9 @@ TEST(export_request_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK_EQ(sweep.cases_run(), 32u + 1u + 8u * 32u + 2u);
-  /* Free: the minor's 16 flips; the surface's 64, since 0x41 has two bits
-   * set and no single flip makes it 0; the tag's 64; and of the operation's,
-   * only bit 0, which makes export (2) sync (3) - another operation naming a
-   * surface; and the flags word's bit 0, the other-GPU flag an export may
-   * carry. With the untouched request, 147 acceptances. */
   const std::uint32_t acceptable = 16u + 64u + 64u + 1u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
-/* A head request names head N as N + 1, and only a head request has one. */
 TEST(export_request, a_head_request_names_its_head_less_one)
 { std::uint8_t bytes[ExportRequest::encoded_size] = {};
   CHECK_STATUS(ExportRequest(ExportOperation::head, 1u, 7u).encode(bytes, sizeof bytes), Status::ok);

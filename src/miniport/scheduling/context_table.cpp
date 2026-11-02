@@ -27,12 +27,7 @@ Status ContextTable::create(void *device, DxgkargCreateContextRecord &request)
     InvariantScope<ContextTable> guard(platform_, *this, "create");
     request.hContext = nullptr;
     Device *owner = devices_.find(device);
-    /* Private data is either absent, or exactly the av context record - any
-     * other size is data this driver does not define. */
     const bool av_context = request.PrivateDriverDataSize == AvContextRecord::encoded_size;
-    /* Node 1 is the hardware-scheduled one: dxgkrnl puts a context there only
-     * when the process asked for one a queue may run on, and a context that
-     * did not ask has no way to submit to it (feature 049, research.md §16). */
     if (owner == nullptr || request.NodeOrdinal >= node_count ||
         (request.NodeOrdinal == hardware_queue_node && (request.Flags & hw_queue_supported) == 0u) ||
         (request.EngineAffinity & ~known_engines) != 0u ||
@@ -117,4 +112,4 @@ bool ContextTable::invariants_hold() const
     return contexts_.invariants_hold();
 }
 
-}  // namespace av
+}

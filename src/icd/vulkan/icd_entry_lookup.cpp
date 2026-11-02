@@ -16,4 +16,4 @@ PFN_vkVoidFunction IcdEntryLookup::entry(const char *name)
     return root_.entry(name);
 }
 
-}  // namespace av::icd
+}

@@ -1,5 +1,3 @@
-/* A state source that writes its reporter's dump on the socket's own thread:
- * the executor library's root, which takes no lock to report. */
 #ifndef AV_REPORTER_STATE_SOURCE_HPP
 #define AV_REPORTER_STATE_SOURCE_HPP
 
@@ -21,6 +19,6 @@ private:
     StateReporter &reporter_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_REPORTER_STATE_SOURCE_HPP
+#endif

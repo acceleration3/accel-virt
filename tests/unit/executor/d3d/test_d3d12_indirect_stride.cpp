@@ -1,5 +1,3 @@
-/* The stride kept on a command signature and what it bounds: a whole number
- * of commands from a word-aligned offset, inside the buffer. */
 #include "executor/d3d/d3d12_indirect_stride.hpp"
 #include "harness/executor/private_data_object.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -20,10 +18,10 @@ TEST(d3d12_indirect_stride, stamped_on_a_signature_it_reads_back)
 TEST(d3d12_indirect_stride, reaches_only_whole_commands_inside_the_buffer)
 { const D3d12IndirectStride stride(16u);
   CHECK(stride.reaches(16u, 2u, 48u));
-  CHECK(!stride.reaches(20u, 2u, 48u));    /* the last command ends past the buffer */
-  CHECK(!stride.reaches(18u, 1u, 48u));    /* not a whole word */
-  CHECK(!stride.reaches(52u, 0u, 48u));    /* an offset past the buffer */
-  CHECK(stride.reaches(48u, 0u, 48u));     /* no command at the very end */
+  CHECK(!stride.reaches(20u, 2u, 48u));
+  CHECK(!stride.reaches(18u, 1u, 48u));
+  CHECK(!stride.reaches(52u, 0u, 48u));
+  CHECK(stride.reaches(48u, 0u, 48u));
   CHECK(!stride.reaches(0u, 0xFFFFFFFFu, 1u << 20u)); }
 
 TEST(d3d12_indirect_stride, a_signature_that_keeps_none_gives_none_back)

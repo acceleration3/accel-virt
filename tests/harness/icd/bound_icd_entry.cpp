@@ -11,4 +11,4 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL bound_icd_instance_proc_addr(VkInstance
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL bound_icd_device_proc_addr(VkDevice device, const char *name)
 { return icd::icd_binding.root().device_proc_addr(device, name); }
 
-}  // namespace av
+}

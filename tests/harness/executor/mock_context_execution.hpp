@@ -1,7 +1,3 @@
-/* What one context executes with, over a mock executor: the library, the
- * context's executor configured for Vulkan, staging for a ring of `order`, and
- * the batch executor reporting to `fences`, without a reply slot. For tests of
- * what sits above it. */
 #ifndef AV_MOCK_CONTEXT_EXECUTION_HPP
 #define AV_MOCK_CONTEXT_EXECUTION_HPP
 
@@ -44,6 +40,6 @@ private:
     BatchExecutor   batches_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_MOCK_CONTEXT_EXECUTION_HPP
+#endif

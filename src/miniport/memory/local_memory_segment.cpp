@@ -34,8 +34,6 @@ bool LocalMemorySegment::present() const
     return size_ != 0u;
 }
 
-/* No flag: not an aperture, not CPU-visible, and not preserved across standby,
- * since nothing in it would need preserving. */
 void LocalMemorySegment::describe(DxgkSegmentDescriptor4Record &descriptor, int64_t base_address) const
 {
     AV_SCOPE("LocalMemorySegment::describe");
@@ -58,4 +56,4 @@ bool LocalMemorySegment::invariants_hold() const
     return (size_ & (page_bytes - 1u)) == 0u;
 }
 
-}  // namespace av
+}

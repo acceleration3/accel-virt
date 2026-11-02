@@ -1,6 +1,3 @@
-/* The driver image, registered and driven through its DDI table the way
- * dxgkrnl drives it (docs/ddi-sequences.md), against fake virtio-gpu
- * functions. Nothing here calls a core class directly. */
 #include "miniport/ddi/d3dkmdt_shared_primary_surface_data_record.hpp"
 #include "miniport/ddi/dxgk_allocation_info_record.hpp"
 #include "miniport/ddi/dxgk_build_paging_buffer_flush_tlb_record.hpp"
@@ -90,8 +87,6 @@ namespace {
 constexpr std::uint32_t no_memory = 0xC0000017u;
 constexpr std::uint32_t not_supported = 0xC00000BBu;
 constexpr std::uint32_t invalid_device_state = 0xC0000184u;
-/* DXGK_CREATEALLOCATIONFLAGS::Resource and DXGK_DESTROYALLOCATIONFLAGS::
- * DestroyResource, which are each bit 0 of their own Value. */
 constexpr std::uint32_t resource_flag = 1u;
 constexpr std::int32_t  power_d0 = 1;
 constexpr std::int32_t  power_d3 = 4;
@@ -102,8 +97,6 @@ int registry_path = 0;
 
 std::uint32_t nt(std::int32_t status) { return static_cast<std::uint32_t>(status); }
 
-/* DriverEntry has run and dxgkrnl accepted the table; teardown unloads and
- * leaves the image the way the kernel does when the driver is unloaded. */
 class LoadedDriver {
 public:
     LoadedDriver()
@@ -116,7 +109,6 @@ public:
     }
 
     int32_t         entered() const { return entered_; }
-    /* What a loaded driver holds before any adapter: its trace table. */
     std::uint32_t   loaded_allocations() const { return loaded_allocations_; }
     MockPlatform   &platform() { return image_.platform(); }
     const DdiTable &table() { return *image_.platform().registered_table(); }
@@ -127,7 +119,6 @@ private:
     std::uint32_t                                loaded_allocations_;
 };
 
-/* The display info a host with one 1280x800 scanout answers. */
 class DisplayInfoAnswer {
 public:
     DisplayInfoAnswer() : bytes_{}
@@ -151,13 +142,12 @@ private:
     std::uint8_t bytes_[av::DisplayInfoResponse::encoded_size];
 };
 
-/* One PCI function dxgkrnl found, with its FDO. */
-constexpr std::uint32_t create_blob = 0x010Cu;       /* VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB */
-constexpr std::uint32_t map_blob = 0x0208u;          /* VIRTIO_GPU_CMD_RESOURCE_MAP_BLOB */
+constexpr std::uint32_t create_blob = 0x010Cu;
+constexpr std::uint32_t map_blob = 0x0208u;
 constexpr std::uint64_t host_region_address = 0x4000000000ull;
 constexpr std::uint64_t host_region_bytes = 16u << 20u;
-constexpr std::uint32_t get_capset_info = 0x0108u;   /* VIRTIO_GPU_CMD_GET_CAPSET_INFO */
-constexpr std::uint32_t get_capset = 0x0109u;        /* VIRTIO_GPU_CMD_GET_CAPSET */
+constexpr std::uint32_t get_capset_info = 0x0108u;
+constexpr std::uint32_t get_capset = 0x0109u;
 constexpr std::uint8_t  first_gpu[av::GpuIdentity::uuid_bytes] = {3};
 constexpr std::uint8_t  other_gpu[av::GpuIdentity::uuid_bytes] = {4};
 
@@ -179,8 +169,6 @@ public:
     FakeDxgkrnlAdapter    &dxgkrnl() { return dxgkrnl_; }
     FakeDxgkrnlFdo        &fdo() { return fdo_; }
 
-    /* StartDevice asks the device what its displays are and waits for it, so
-     * the host answers from the stall between the driver's polls. */
     std::int32_t start_device()
     {
         platform_.on_stall(&Device::answer_display_info, this);
@@ -189,12 +177,8 @@ public:
         return started;
     }
 
-    /* A power cycle programs the queue afresh, so a test that cycles power
-     * takes a new view of it. */
     void forget_control() { control_.reset(); }
 
-    /* A resume asks the device what it is, and waits for the answer, so the
-     * host answers from the stall as it does at StartDevice. */
     std::int32_t resume()
     {
         platform_.on_stall(&Device::answer_display_info, this);
@@ -203,13 +187,8 @@ public:
         return powered;
     }
 
-    /* What the device says it is from the next ask on: another host GPU behind
-     * the same function is another device (feature 040, FR-005). */
     void answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid, 0u); }
-    /* The host GPU's local memory, as the capset gives it from the next ask on. */
     void answer_local_memory(std::uint64_t bytes) { capset_ = host_capset(first_gpu, bytes); }
-    /* `step` with the device answering, as it does at StartDevice: what a DDI
-     * that waits on the control queue needs from the host. */
     template <typename Step>
     std::int32_t answering(Step step)
     {
@@ -218,17 +197,12 @@ public:
         platform_.on_stall(nullptr, nullptr);
         return status;
     }
-    /* The shared objects the driver said are gone, and the last one it named. */
     std::uint32_t released() const { return released_; }
-    /* Every release from now on is answered with the device's refusal. */
     void refuse_releases() { refusing_releases_ = true; }
     std::uint64_t last_released() const { return last_released_; }
-    /* Whether the driver made a blob and placed it in the region. */
     bool created_blob() const { return created_blob_; }
     bool mapped_region() const { return mapped_region_; }
 
-    /* The device's clock reaching head 0's next blank, latching `latched`,
-     * then the DPC the display line's interrupt queues. */
     void blank(std::uint32_t latched = 0u)
     {
         clock_.blank(latched);
@@ -236,7 +210,6 @@ public:
     }
     av::FakeDisplayClock &clock() { return clock_; }
 
-    /* The device side of the control queue, shared with that answer. */
     av::FakeVirtqueueDevice &control()
     {
         if (!control_.has_value()) {
@@ -247,7 +220,6 @@ public:
     }
 
 private:
-    /* The id a release names, counted; the device's ok. */
     static std::uint32_t answer_release(void *context, const std::uint8_t *request, std::uint32_t length,
                                         std::uint8_t *answer, std::uint32_t room)
     {
@@ -267,11 +239,7 @@ private:
     static void answer_display_info(void *context)
     {
         auto *const device = static_cast<Device *>(context);
-        /* The adapter asks what the device is as well as what it shows, and the
-         * answers are told apart by what was asked (feature 040, FR-005). */
         const std::uint32_t asked = device->control().pending_type();
-        /* A blob placed in the region, which only a process asking for a
-         * window chunk makes (docs/host-window.md). */
         if (asked == create_blob || asked == map_blob) {
             av::GpuResponse answer;
             if (asked == map_blob) {
@@ -323,7 +291,7 @@ private:
     std::optional<av::FakeVirtqueueDevice> control_;
 };
 
-}  // namespace
+}
 
 TEST(ddi_scenario, the_recorded_bring_up_and_teardown)
 { LoadedDriver driver;
@@ -363,10 +331,6 @@ TEST(ddi_scenario, stop_device_twice)
   CHECK_EQ(device.fdo().stop_device(), 0);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
-/* US2 of feature 040: pnputil disables and enables a display adapter as often
- * as an administrator likes, and each cycle is a StopDevice and a StartDevice
- * on the same adapter object. Nothing may grow across them - the driver holds
- * no state whose size depends on how many times it has been turned off. */
 TEST(ddi_scenario, fifty_stop_and_start_cycles_leave_nothing_behind)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -380,7 +344,6 @@ TEST(ddi_scenario, fifty_stop_and_start_cycles_leave_nothing_behind)
       CHECK_EQ(device.start_device(), 0);
       CHECK_EQ(device.function().common().status(), driver_ok_status);
   }
-  /* The same live allocations as after the first start, not fifty times as many. */
   CHECK_EQ(driver.platform().live_allocations(), after_first);
   CHECK_EQ(device.dxgkrnl().live_mappings(), 1u);
   CHECK_EQ(device.fdo().stop_device(), 0);
@@ -460,19 +423,13 @@ TEST(ddi_scenario, add_device_past_the_adapter_ceiling_is_no_memory)
   for (std::uint32_t i = 0u; i < 8u; i++) CHECK_EQ(fdos[i].add_device(), 0);
   CHECK_EQ(nt(fdos[8].add_device()), no_memory);
   CHECK(fdos[8].context() == nullptr);
-  /* DriverEntry, a line for each adapter added, and the refusal naming why.
-   * No trace table: the service here sets no TraceScopes. */
   CHECK_EQ(driver.platform().logged(), 10u);
   CHECK(std::strstr(driver.platform().last_log(), "no free adapter slot") != nullptr); }
-
-/* ---- Capability reporting (feature 007) ------------------------------------ */
 
 namespace {
 
 constexpr std::int32_t revision_mismatch = static_cast<std::int32_t>(0xC0000059u);
 
-/* The driver's own table with QueryAdapterInfo answering an unknown WDDM
- * version, as a later feature's mistake would. */
 std::int32_t answers_an_unknown_wddm_version(void *, const av::DxgkargQueryAdapterInfoRecord *query)
 {
     if (query->Type != 1) return static_cast<std::int32_t>(0xC0000002u);
@@ -482,7 +439,7 @@ std::int32_t answers_an_unknown_wddm_version(void *, const av::DxgkargQueryAdapt
     return 0;
 }
 
-}  // namespace
+}
 
 TEST(ddi_scenario, every_query_adapter_info_type_answers_a_status_dxgkrnl_accepts)
 { LoadedDriver driver;
@@ -538,10 +495,6 @@ TEST(ddi_scenario, escape_and_debug_collection_through_the_table)
   CHECK_EQ(report[6], 1u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
-/* ---- The desktop on the host (feature 038) ------------------------------------ */
-
-/* ---- Memory model (feature 008) ---------------------------------------------- */
-
 TEST(ddi_scenario, vidmm_accepts_the_aperture_segment_after_start)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -553,10 +506,6 @@ TEST(ddi_scenario, vidmm_accepts_the_aperture_segment_after_start)
   CHECK(vidmm.segment(0u).Size == std::uint64_t{8} << 30u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
-/* dxdiag's Dedicated Memory and DXGI's DedicatedVideoMemory are the host GPU's
- * own, as the capset reports it, and guest RAM stays the aperture it always
- * was. A restart reads the capset again: a host GPU that reports none leaves
- * the aperture alone. */
 TEST(ddi_scenario, vidmm_counts_the_host_gpu_s_memory_as_dedicated_video_memory)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -599,8 +548,6 @@ std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
            std::uint32_t{bytes[offset + 2u]} << 16u | std::uint32_t{bytes[offset + 3u]} << 24u;
 }
 
-/* The runtime side of dxgkrnl for one adapter: the calls it makes to create a
- * primary for DWM and open it on a device, through the registered table. */
 class Runtime {
 public:
     Runtime(const DdiTable &table, void *adapter, std::uint32_t width = 1024u, std::uint32_t height = 768u)
@@ -624,7 +571,7 @@ public:
         if (status < 0) return status;
         info_.pPrivateDriverData = descriptor_;
         info_.PrivateDriverDataSize = describe.AllocationPrivateDriverDataSize;
-        info_.Flags2 = 0xFFFFFFFFu;   /* the driver answers every flag */
+        info_.Flags2 = 0xFFFFFFFFu;
         av::DxgkargCreateAllocationRecord create = {};
         create.NumAllocations = 1u;
         create.pAllocationInfo = &info_;
@@ -637,8 +584,6 @@ public:
     std::uint32_t flags2() const { return info_.Flags2; }
     void         *primary() const { return info_.hAllocation; }
 
-    /* VidMm putting the primary in the aperture segment, which is where the
-     * driver learns the guest pages the host must read it from. */
     std::int32_t map_aperture(av::MockPlatform &platform, std::uint32_t pages)
     {
         for (std::uint32_t index = 0u; index < pages; index++) frames_[index] = first_frame + index * page_bytes;
@@ -651,7 +596,7 @@ public:
         av::DxgkargBuildPagingBufferRecord paging = {};
         paging.pDmaBuffer = dma;
         paging.DmaSize = sizeof dma;
-        paging.Operation = 5;   /* DXGK_OPERATION_MAP_APERTURE_SEGMENT */
+        paging.Operation = 5;
         std::memcpy(paging.Reserved, &mapping, sizeof mapping);
         return routine<std::int32_t (*)(void *, av::DxgkargBuildPagingBufferRecord *)>(
             DdiSlot::DxgkDdiBuildPagingBuffer)(adapter_, &paging);
@@ -730,14 +675,10 @@ private:
     std::uint64_t                              frames_[max_pages];
 };
 
-}  // namespace
+}
 
-/* How often the DPC refreshes a scanout, in 100 ns. */
 constexpr std::uint64_t display_period = 10000000u / 60u;
 
-/* The whole display path through the DDI table dxgkrnl calls: a committed mode
- * makes the host's resource, the primary dxgkrnl hands over at device IRQL is
- * attached and scanned out, and the frame is carried once. */
 TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -769,34 +710,23 @@ TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
   CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetVidPnSourceAddressRecord *)>(
                table.routine(DdiSlot::DxgkDdiSetVidPnSourceAddress))(adapter, &address),
            0);
-  /* The DPC refreshes the scanout once a display period at most, counted
-   * from boot. */
   driver.platform().advance_time(display_period);
   driver.platform().set_irql(av::Irql::dispatch);
   reinterpret_cast<void (*)(void *)>(table.routine(DdiSlot::DxgkDdiDpcRoutine))(adapter);
   driver.platform().set_irql(av::Irql::passive);
   av::FakeVirtqueueDevice &control = device.control();
   CHECK_EQ(control.respond_all(0x1100u), 5u);
-  /* Requests 0 to 4 were StartDevice's DISPLAY_CLOCK, GET_DISPLAY_INFO,
-   * GET_DISPLAY_MODES and its capset query. */
-  CHECK_EQ(control.request_type(0u), 0x02F4u);        /* DISPLAY_CLOCK */
-  CHECK_EQ(control.request_type(5u), 0x0101u);        /* RESOURCE_CREATE_2D */
-  CHECK_EQ(control.request_type(6u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
-  CHECK_EQ(control.request_type(7u), 0x0103u);        /* SET_SCANOUT */
-  CHECK_EQ(control.request_type(8u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
-  CHECK_EQ(control.request_type(9u), 0x0104u);        /* RESOURCE_FLUSH */
-  /* One memory entry, because the pages VidMm gave are adjacent, and it is the
-   * guest physical address of the first one - not the aperture address. */
+  CHECK_EQ(control.request_type(0u), 0x02F4u);
+  CHECK_EQ(control.request_type(5u), 0x0101u);
+  CHECK_EQ(control.request_type(6u), 0x0106u);
+  CHECK_EQ(control.request_type(7u), 0x0103u);
+  CHECK_EQ(control.request_type(8u), 0x0105u);
+  CHECK_EQ(control.request_type(9u), 0x0104u);
   CHECK_EQ(u32(control.request(6u), 28u), 1u);
   CHECK_EQ(u32(control.request(6u), 32u), 0x40000000u);
   CHECK_EQ(u32(control.request(6u), 40u), 1280u * 800u * 4u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
-/* Suspend and resume as dxgkrnl drives it (feature 040, US1): the whole table,
- * a source scanning out, D3, and D0 - after which the guest's own objects are
- * untouched and the host is asked for the scanout again. What dxgkrnl sends
- * after a resume is the address it already had, which is what re-attaches the
- * pages. */
 TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -837,21 +767,14 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
 
   CHECK_EQ(device.fdo().set_power_state(power_d3), 0);
   CHECK_EQ(device.function().common().status(), 0u);
-  /* Nothing of the guest's went away with the device. */
   CHECK_EQ(device.fdo().set_power_state(power_d0), 0);
   CHECK_EQ(device.function().common().status(), driver_ok_status);
   device.forget_control();
   av::FakeVirtqueueDevice &resumed = device.control();
-  /* The resume's own work: the clock's page registered again and the
-   * resource for the source that was scanning out. Nothing answers the asks
-   * here, and the device answers in order, so the question of what device
-   * this is waits behind the unanswered page and is never sent. */
   CHECK_EQ(resumed.respond_all(0x1100u), 2u);
-  CHECK_EQ(resumed.request_type(0u), 0x02F4u);        /* DISPLAY_CLOCK */
-  CHECK_EQ(resumed.request_type(1u), 0x0101u);        /* RESOURCE_CREATE_2D */
+  CHECK_EQ(resumed.request_type(0u), 0x02F4u);
+  CHECK_EQ(resumed.request_type(1u), 0x0101u);
 
-  /* What dxgkrnl sends after a resume is the address it already had, and that
-   * is what puts the pages and the scanout back. */
   driver.platform().set_irql(av::Irql::isr);
   CHECK_EQ(set_address(adapter, &address), 0);
   driver.platform().advance_time(display_period);
@@ -866,19 +789,12 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
       attached += type == 0x0106u ? 1u : 0u;
       scanned += type == 0x0103u ? 1u : 0u;
   }
-  CHECK_EQ(created, 1u);     /* the resource the resume created */
-  CHECK_EQ(attached, 1u);    /* the pages the guest's own address brought back */
-  CHECK_EQ(scanned, 1u);     /* and the source scanning out again */
+  CHECK_EQ(created, 1u);
+  CHECK_EQ(attached, 1u);
+  CHECK_EQ(scanned, 1u);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* The timeout sequence VidSch drives, through the real table (feature 040, US3).
- * VidSchiCheckNodeTimeout (dxgmms2.sys @1400c9b50) decides a node is late, asks
- * QueryEngineStatus, and takes a responsive answer as "no timeout this round";
- * when the answer stops being responsive it resets the engine. DdiResetEngine
- * (dxgkrnl.sys @14006e0a4) checks that the driver returns at the IRQL it was
- * called at, so the whole sequence runs at dispatch and the mock holds us to
- * it. */
 TEST(ddi_scenario, an_engine_that_stops_moving_is_reset_with_nothing_more_reported)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -891,8 +807,7 @@ TEST(ddi_scenario, an_engine_that_stops_moving_is_reset_with_nothing_more_report
                table.routine(DdiSlot::DxgkDdiCreateDevice))(adapter, &created),
            0);
   av::DxgkargCreateContextRecord context = {};
-  context.Flags = 0x4u;   /* virtual addressing */
-  /* CreateContext is called on the device handle, not the adapter. */
+  context.Flags = 0x4u;
   CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, av::DxgkargCreateContextRecord *)>(
                table.routine(DdiSlot::DxgkDdiCreateContext))(created.hDevice, &context),
            0);
@@ -909,11 +824,11 @@ TEST(ddi_scenario, an_engine_that_stops_moving_is_reset_with_nothing_more_report
   driver.platform().set_irql(av::Irql::dispatch);
   av::DxgkargQueryEngineStatusRecord status = {0u, 0u, 0u};
   CHECK_EQ(engine_status(adapter, &status), 0);
-  CHECK_EQ(status.EngineStatus, 1u);        /* the one deferral a late node gets */
-  driver.platform().advance_time(20000000u);   /* two seconds, and nothing moved */
+  CHECK_EQ(status.EngineStatus, 1u);
+  driver.platform().advance_time(20000000u);
   status.EngineStatus = 0u;
   CHECK_EQ(engine_status(adapter, &status), 0);
-  CHECK_EQ(status.EngineStatus, 0u);        /* VidSch may now reset it */
+  CHECK_EQ(status.EngineStatus, 0u);
 
   const std::uint32_t before = device.dxgkrnl().interrupts();
   av::DxgkargResetEngineRecord reset = {0u, 0u, 0u};
@@ -921,9 +836,7 @@ TEST(ddi_scenario, an_engine_that_stops_moving_is_reset_with_nothing_more_report
                table.routine(DdiSlot::DxgkDdiResetEngine))(adapter, &reset),
            0);
   CHECK_EQ(reset.LastAbortedFenceId, 1u);
-  /* VidSch knows what it reset; DMA_FAULTED here would bugcheck 0x119/0xD. */
   CHECK_EQ(device.dxgkrnl().interrupts(), before);
-  /* An engine with nothing queued is responsive again. */
   status.EngineStatus = 0u;
   CHECK_EQ(engine_status(adapter, &status), 0);
   CHECK_EQ(status.EngineStatus, 1u);
@@ -938,13 +851,6 @@ TEST(ddi_scenario, an_engine_that_stops_moving_is_reset_with_nothing_more_report
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* FR-005: a hibernated guest is restored onto whatever QEMU is running now, and
- * the device behind the same PCI function may be another one - another host
- * GPU, or an older protocol. What the guest still holds cannot be finished on
- * it: nothing is reported (DMA_FAULTED bugchecks 0x119/0xD), the work queued on
- * the device that is gone waits for dxgkrnl's timeout reset, a new context and
- * a new submission are refused, and the desktop - the scanout, which is none of
- * this - goes on working. */
 TEST(ddi_scenario, a_device_that_changed_across_hibernation_refuses_its_contexts)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -957,7 +863,7 @@ TEST(ddi_scenario, a_device_that_changed_across_hibernation_refuses_its_contexts
                table.routine(DdiSlot::DxgkDdiCreateDevice))(adapter, &created),
            0);
   av::DxgkargCreateContextRecord context = {};
-  context.Flags = 0x4u;   /* virtual addressing */
+  context.Flags = 0x4u;
   CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, av::DxgkargCreateContextRecord *)>(
                table.routine(DdiSlot::DxgkDdiCreateContext))(created.hDevice, &context),
            0);
@@ -974,23 +880,18 @@ TEST(ddi_scenario, a_device_that_changed_across_hibernation_refuses_its_contexts
   device.forget_control();
   device.answer_capset_of(other_gpu);
   const std::uint32_t before = device.dxgkrnl().interrupts();
-  /* The transition itself succeeds: not bugchecking is what FR-005 asks for. */
   CHECK_EQ(device.resume(), 0);
   CHECK_EQ(device.function().common().status(), driver_ok_status);
   CHECK_EQ(device.dxgkrnl().interrupts(), before);
 
-  /* Nothing new runs on it, and a submission on the context that is left is
-   * refused rather than taken for a completion nobody will send. */
   av::DxgkargCreateContextRecord refused = {};
   refused.Flags = 0x4u;
   CHECK(reinterpret_cast<std::int32_t (*)(void *, av::DxgkargCreateContextRecord *)>(
             table.routine(DdiSlot::DxgkDdiCreateContext))(created.hDevice, &refused) < 0);
   submit.SubmissionFenceId = 2u;
-  CHECK_EQ(static_cast<std::uint32_t>(submit_virtual(adapter, &submit)), 0xC000000Du);   /* STATUS_INVALID_PARAMETER */
+  CHECK_EQ(static_cast<std::uint32_t>(submit_virtual(adapter, &submit)), 0xC000000Du);
   CHECK_EQ(device.dxgkrnl().interrupts(), before);
 
-  /* The display is still the driver's to run: the guest commits a mode and the
-   * host is asked to scan it out. */
   av::FakeVidPn vidpn;
   vidpn.add_path(0u, 0u);
   av::D3dkmdtVidPnSourceModeRecord pinned = {};
@@ -1011,17 +912,8 @@ TEST(ddi_scenario, a_device_that_changed_across_hibernation_refuses_its_contexts
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 namespace {
-
-/* The runtime side of dxgkrnl for a *shared* allocation (feature 053): one
- * creating process's device and one opening process's, both on this adapter,
- * with the private driver data dxgkrnl carries from the first to the second
- * untouched. Separate from Runtime, which is the display path's primary and
- * has one device; what this exercises is two. */
 class SharedRuntime {
 public:
-    /* Four pages, which is what the record has to agree with: an allocation is
-     * rounded up to whole pages and a record that names any other size is not
-     * this allocation's. */
     static constexpr std::uint64_t bytes = 4u * 4096u;
 
     SharedRuntime(const DdiTable &table, void *adapter)
@@ -1030,9 +922,6 @@ public:
     template <typename Routine>
     Routine routine(DdiSlot slot) const { return reinterpret_cast<Routine>(table_.routine(slot)); }
 
-    /* A create that asks for an identity: 56 bytes of descriptor and 40 of an
-     * unassigned record. `size` other than the allocation's is what a creator
-     * lying about what it is sharing looks like. */
     std::int32_t create(std::uint64_t record_size, std::uint32_t kind = av::SharedObjectKind::memory)
     {
         const av::AllocationDescriptor descriptor(av::AllocationKind::shadow, true,
@@ -1049,11 +938,6 @@ public:
         av::DxgkargCreateAllocationRecord request = {};
         request.NumAllocations = 1u;
         request.pAllocationInfo = &info_;
-        /* Asked for as a resource, because that is the only thing
-         * D3DKMTShareObjects will mint an NT handle over: its type check
-         * refuses anything but a resource, and silently (research.md §16). The
-         * handle the driver answers here is what the runtime keeps and what a
-         * share names. */
         request.Flags = resource_flag;
         const std::int32_t status =
             routine<std::int32_t (*)(void *, av::DxgkargCreateAllocationRecord *)>(DdiSlot::DxgkDdiCreateAllocation)(
@@ -1065,16 +949,8 @@ public:
         return status;
     }
 
-    /* The resource the create answered, which is the object a share names.
-     * Null until a create asks for one. */
     void *resource() const { return resource_; }
 
-    /* The open dxgkrnl runs inside every create, which this rig did not model
-     * and which is why it never caught the carrier bug: the caller's own bytes
-     * are put back over whatever CreateAllocation wrote, and the creating
-     * device is opened on them. That open is where the miniport writes the
-     * minted record, and what it leaves is what dxgkrnl copies out to the
-     * caller and stores for another process (research.md §15). */
     std::int32_t creator_open(std::uint32_t which, std::uint64_t record_size,
                               std::uint32_t kind = av::SharedObjectKind::memory)
     {
@@ -1085,8 +961,6 @@ public:
         return open(which);
     }
 
-    /* The id the miniport minted into the creator's own bytes, which is the
-     * value the runtime keeps and hands the opening process. */
     av::SharedObjectRecord minted() const
     {
         av::SharedObjectRecord record;
@@ -1106,8 +980,6 @@ public:
         return status;
     }
 
-    /* An open with `carried` as the private data the opening process was
-     * handed - the creator's own bytes by default, which is what dxgkrnl does. */
     std::int32_t open(std::uint32_t which, const std::uint8_t *carried = nullptr,
                       std::uint32_t carried_size = 0u)
     {
@@ -1139,8 +1011,6 @@ public:
         av::DxgkargDestroyAllocationRecord request = {};
         request.NumAllocations = 1u;
         request.pAllocationList = &handle;
-        /* The resource goes with the allocations in it, which is how dxgkrnl
-         * destroys one it created here. */
         request.hResource = resource_;
         request.Flags = resource_ != nullptr ? resource_flag : 0u;
         const std::int32_t status =
@@ -1166,11 +1036,8 @@ private:
     std::uint32_t                    kernel_handle_;
 };
 
-}  // namespace
+}
 
-/* Feature 053, US1 at L2: an allocation created shareable is opened by a second
- * device with the creator's own private driver data, closed in either order and
- * destroyed - every call through the table dxgkrnl registered. */
 TEST(ddi_scenario, a_shared_allocation_is_opened_by_a_second_device_and_closed_in_either_order)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1180,18 +1047,14 @@ TEST(ddi_scenario, a_shared_allocation_is_opened_by_a_second_device_and_closed_i
     CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
     CHECK_EQ(runtime.create_device(0u), 0);
     CHECK_EQ(runtime.create_device(1u), 0);
-    /* The create writes nothing; the open dxgkrnl runs inside it does. */
     CHECK(!runtime.minted().assigned());
     CHECK_EQ(runtime.creator_open(0u, SharedRuntime::bytes), 0);
-    /* Now the id has reached the creator's bytes, which is the only channel
-     * that crosses a process boundary. */
     const av::SharedObjectRecord record = runtime.minted();
     CHECK(record.assigned());
     CHECK(record.object_id() != 0u);
     CHECK(record.adapter_id() != 0u);
     CHECK_EQ(record.size(), SharedRuntime::bytes);
     CHECK_EQ(runtime.open(1u), 0);
-    /* Neither open may destroy what the other still holds. */
     CHECK_EQ(nt(runtime.destroy()), invalid_device_state);
     CHECK_EQ(runtime.close(1u), 0);
     CHECK_EQ(nt(runtime.destroy()), invalid_device_state);
@@ -1203,10 +1066,6 @@ TEST(ddi_scenario, a_shared_allocation_is_opened_by_a_second_device_and_closed_i
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* The device holds what was shared under an id until the guest has let go of
- * it everywhere, which is the destroy dxgkrnl makes after the last close: that
- * one destroy - and not the refused ones before it - tells the device the id
- * is gone. */
 TEST(ddi_scenario, the_destroy_after_the_last_close_tells_the_device_the_shared_object_is_gone)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1219,7 +1078,7 @@ TEST(ddi_scenario, the_destroy_after_the_last_close_tells_the_device_the_shared_
     CHECK_EQ(runtime.creator_open(0u, SharedRuntime::bytes), 0);
     const std::uint64_t id = runtime.minted().object_id();
     CHECK_EQ(runtime.open(1u), 0);
-    CHECK_EQ(runtime.close(0u), 0);   /* the creator lets go first */
+    CHECK_EQ(runtime.close(0u), 0);
     CHECK_EQ(nt(device.answering([&] { return runtime.destroy(); })), invalid_device_state);
     CHECK_EQ(device.released(), 0u);
     CHECK_EQ(runtime.close(1u), 0);
@@ -1233,8 +1092,6 @@ TEST(ddi_scenario, the_destroy_after_the_last_close_tells_the_device_the_shared_
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* A release the device refuses is the device's to explain: the driver says so
- * while its log budget lasts and destroys the allocation all the same. */
 TEST(ddi_scenario, a_refused_release_is_logged_until_the_budget_is_spent)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1254,13 +1111,11 @@ TEST(ddi_scenario, a_refused_release_is_logged_until_the_budget_is_spent)
       CHECK_EQ(runtime.destroy_device(0u), 0);
   }
   CHECK(std::strstr(driver.platform().last_log(), "avgpu: a shared object's release") != nullptr);
-  CHECK_EQ(driver.platform().logged(), logged);   /* the last refusal, past the budget, said nothing */
+  CHECK_EQ(driver.platform().logged(), logged);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* A device that was pulled out holds nothing any more: the destroy after the
- * last close tells it nothing and does not wait on it. */
 TEST(ddi_scenario, a_shared_object_destroyed_after_surprise_removal_tells_nobody)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1281,8 +1136,6 @@ TEST(ddi_scenario, a_shared_object_destroyed_after_surprise_removal_tells_nobody
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* The other order, and the close of the creating device last: what a process
- * that exits holding a shared allocation leaves behind is nothing. */
 TEST(ddi_scenario, a_device_destroyed_holding_a_shared_allocation_lets_go_of_it)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1294,7 +1147,6 @@ TEST(ddi_scenario, a_device_destroyed_holding_a_shared_allocation_lets_go_of_it)
     CHECK_EQ(runtime.create_device(1u), 0);
     CHECK_EQ(runtime.creator_open(0u, SharedRuntime::bytes), 0);
     CHECK_EQ(runtime.open(1u), 0);
-    /* The opening process exits without closing. */
     CHECK_EQ(runtime.destroy_device(1u), 0);
     CHECK_EQ(nt(runtime.destroy()), invalid_device_state);
     CHECK_EQ(runtime.destroy_device(0u), 0);
@@ -1302,8 +1154,6 @@ TEST(ddi_scenario, a_device_destroyed_holding_a_shared_allocation_lets_go_of_it)
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations()); }
 
-/* A record no miniport of this adapter wrote opens nothing, and the allocation
- * it named is not opened either: a forger gets a refusal, not a handle. */
 TEST(ddi_scenario, an_open_carrying_a_forged_record_is_refused_and_opens_nothing)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1335,10 +1185,7 @@ TEST(ddi_scenario, an_open_carrying_a_forged_record_is_refused_and_opens_nothing
                      av::Status::ok);
         CHECK(runtime.open(0u, forged, sizeof forged) < 0);
     }
-    /* A length that is not the shared one at all, which is a record that is
-     * not there. */
     CHECK(runtime.open(0u, forged, av::AllocationDescriptor::encoded_size) < 0);
-    /* And the real one still opens: nothing above spent the allocation. */
     CHECK_EQ(runtime.open(0u), 0);
     CHECK_EQ(runtime.close(0u), 0);
     CHECK_EQ(runtime.destroy(), 0);
@@ -1394,8 +1241,6 @@ TEST(ddi_scenario, remove_device_with_devices_and_allocations_outstanding)
     CHECK_EQ(runtime.open(), 0);
     CHECK_EQ(device.fdo().remove_device(), 0); }
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations()); }
-
-/* ---- Submission (feature 009) ------------------------------------------------- */
 
 TEST(ddi_scenario, render_patch_submit_and_three_fences_complete_through_the_dpc)
 { LoadedDriver driver;
@@ -1455,8 +1300,6 @@ TEST(ddi_scenario, a_render_that_overruns_is_refused_and_nothing_is_submitted)
     CHECK_EQ(vidsch.completed(), 0u); }
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
-/* ---- TDR (feature 010) ---------------------------------------------------------- */
-
 TEST(ddi_scenario, a_timeout_is_recovered_from_twice)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1485,8 +1328,6 @@ TEST(ddi_scenario, a_timeout_is_recovered_from_twice)
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- Modes (feature 011) --------------------------------------------------- */
-
 TEST(ddi_scenario, a_mode_change_from_edid_to_commit)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1501,7 +1342,6 @@ TEST(ddi_scenario, a_mode_change_from_edid_to_commit)
     CHECK_EQ(edid[56] | (edid[58] >> 4u) << 8u, 1280u);
     av::FakeVidPn vidpn;
     CHECK_EQ(dmm.read_monitor_modes(vidpn), 0);
-    /* The five standard modes that fit the display the device reports. */
     CHECK_EQ(vidpn.monitor_modes().modes(), 5u);
     CHECK_EQ(nt(dmm.recommend_functional_vidpn()), 0xC01E0323u);
     CHECK_EQ(nt(dmm.recommend_vidpn_topology()), 0xC01E031Au);
@@ -1541,8 +1381,6 @@ TEST(ddi_scenario, a_second_path_is_refused_and_a_mode_off_the_list_is_never_off
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- Present and scanout (feature 012) --------------------------------------- */
-
 TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -1580,13 +1418,11 @@ TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
   CHECK_EQ(device.dxgkrnl().interrupts(), reported);
   CHECK_EQ(dmm.control_vsync(true), 0);
   CHECK_EQ(device.fdo().stop_device(), 0);
-  device.fdo().dpc();   /* a stopped device's page is gone, and nothing reads it */
+  device.fdo().dpc();
   CHECK_EQ(device.dxgkrnl().interrupts(), reported);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
-
-/* ---- Cursor and the legacy surface (feature 013) ------------------------------ */
 
 TEST(ddi_scenario, the_pointer_reaches_the_cursor_queue_and_the_legacy_surface_declines)
 { LoadedDriver driver;
@@ -1645,8 +1481,6 @@ TEST(ddi_scenario, the_pointer_reaches_the_cursor_queue_and_the_legacy_surface_d
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- WDDM 1.1 (feature 014) ---------------------------------------------------- */
-
 TEST(ddi_scenario, the_committed_path_reports_no_driver_transformation_and_the_placeholders_stay_empty)
 { LoadedDriver driver;
   FakeDxgkrnl dxgkrnl;
@@ -1670,8 +1504,6 @@ TEST(ddi_scenario, the_committed_path_reports_no_driver_transformation_and_the_p
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
-
-/* ---- WDDM 1.2 (feature 015) ---------------------------------------------------- */
 
 TEST(ddi_scenario, an_engine_reset_then_the_device_disappears)
 { LoadedDriver driver;
@@ -1703,8 +1535,6 @@ TEST(ddi_scenario, an_engine_reset_then_the_device_disappears)
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- WDDM 1.3 (feature 016) ---------------------------------------------------- */
-
 TEST(ddi_scenario, node_metadata_clock_calibration_and_vsync_state_through_the_table)
 { LoadedDriver driver;
   CHECK(driver.table().routine(DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport) == nullptr);
@@ -1735,8 +1565,6 @@ TEST(ddi_scenario, node_metadata_clock_calibration_and_vsync_state_through_the_t
   CHECK_EQ(device.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
-
-/* ---- WDDM 2.0 GPU virtual addressing (feature 017) ----------------------------- */
 
 TEST(ddi_scenario, a_gpu_mmu_adapter_pages_submits_by_virtual_address_and_flips_at_device_irql)
 { LoadedDriver driver;
@@ -1812,13 +1640,9 @@ TEST(ddi_scenario, a_gpu_mmu_adapter_pages_submits_by_virtual_address_and_flips_
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- WDDM 2.1 (feature 018) ----------------------------------------------------- */
-
 TEST(ddi_scenario, start_declines_hdr_priority_and_the_monitor_link_is_plain)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
-  /* The MPO3 generation is overlay planes' (OverlaySupport); its post-present
-   * DDI is one no build calls. */
   CHECK(table.routine(DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport3) != nullptr);
   CHECK(table.routine(DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3) != nullptr);
   CHECK(table.routine(DdiSlot::DxgkDdiPostMultiPlaneOverlayPresent) == nullptr);
@@ -1843,8 +1667,6 @@ TEST(ddi_scenario, start_declines_hdr_priority_and_the_monitor_link_is_plain)
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- WDDM 2.2 (feature 019) ----------------------------------------------------- */
-
 TEST(ddi_scenario, hardware_queues_submit_complete_through_progress_fences_and_reset)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
@@ -1863,7 +1685,7 @@ TEST(ddi_scenario, hardware_queues_submit_complete_through_progress_fences_and_r
   CHECK_EQ(device.fdo().dxgadapter().display_caps_extension(), 0u);
   void *const adapter = device.fdo().context();
   { av::FakeVidSch vidsch(driver.platform(), table, device.dxgkrnl(), adapter);
-    CHECK_EQ(vidsch.create_context(0x14u), 0);   /* VirtualAddressing | HwQueueSupported */
+    CHECK_EQ(vidsch.create_context(0x14u), 0);
     av::FakeHwQueue queue(driver.platform(), table, adapter, vidsch.context());
     CHECK_EQ(queue.create(0x1u), 0);
     for (int packet = 0; packet < 3; packet++) CHECK_EQ(queue.submit(0x10000u, 0u), 0);
@@ -1872,7 +1694,7 @@ TEST(ddi_scenario, hardware_queues_submit_complete_through_progress_fences_and_r
     CHECK_EQ(vidsch.fence_signals(), 1u);
     queue.observe_progress();
     CHECK_EQ(queue.completed(), 3u);
-    CHECK_EQ(queue.submit(0x20000u, 0x1u), 0);   /* a paging buffer */
+    CHECK_EQ(queue.submit(0x20000u, 0x1u), 0);
     const av::DxgkargResetHwEngineRecord reset = {0u, 0u};
     CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargResetHwEngineRecord *)>(
                  table.routine(DdiSlot::DxgkDdiResetHwEngine))(adapter, &reset), 0);
@@ -1882,8 +1704,6 @@ TEST(ddi_scenario, hardware_queues_submit_complete_through_progress_fences_and_r
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
-
-/* ---- WDDM 2.3 - 2.7 (feature 020) ----------------------------------------------- */
 
 TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_null)
 { LoadedDriver driver;
@@ -1919,8 +1739,6 @@ TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- WDDM 2.4 (feature 021) ----------------------------------------------------- */
-
 TEST(ddi_scenario, a_system_memory_primary_flips_immediately_and_gpu_va_presents_complete)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
@@ -1944,9 +1762,9 @@ TEST(ddi_scenario, a_system_memory_primary_flips_immediately_and_gpu_va_presents
   CHECK_EQ(dmm.set_visible(true), 0);
   CHECK_EQ(dmm.control_vsync(true), 0);
   int first = 0, second = 0;
-  CHECK_EQ(dmm.flip(&first, 0u, 0, 0x4u), 0);    /* FlipOnNextVSync, segment 0 address 0 */
+  CHECK_EQ(dmm.flip(&first, 0u, 0, 0x4u), 0);
   const std::uint32_t before = device.dxgkrnl().interrupts();
-  CHECK_EQ(dmm.flip(&second, 0u, 0, 0x2u), 0);   /* FlipImmediate: completed on return */
+  CHECK_EQ(dmm.flip(&second, 0u, 0, 0x2u), 0);
   CHECK_EQ(device.dxgkrnl().interrupts(), before);
   device.blank();
   CHECK_EQ(device.dxgkrnl().interrupt(before).InterruptType, 3);
@@ -1972,8 +1790,6 @@ TEST(ddi_scenario, a_system_memory_primary_flips_immediately_and_gpu_va_presents
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
-
-/* ---- WDDM 2.9 (feature 022) ----------------------------------------------------- */
 
 TEST(ddi_scenario, a_wddm_2_9_adapter_flips_without_a_hardware_flip_queue)
 { LoadedDriver driver;
@@ -2001,8 +1817,6 @@ TEST(ddi_scenario, a_wddm_2_9_adapter_flips_without_a_hardware_flip_queue)
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- WDDM 3.0 (feature 023) ----------------------------------------------------- */
-
 TEST(ddi_scenario, a_wddm_3_0_adapter_allocates_a_primary_with_the_later_slots_null)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
@@ -2016,19 +1830,12 @@ TEST(ddi_scenario, a_wddm_3_0_adapter_allocates_a_primary_with_the_later_slots_n
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   { Runtime runtime(table, device.fdo().context());
     CHECK_EQ(runtime.create_primary(), 0);
-    CHECK_EQ(runtime.flags2(), 0u);   /* CreateDriverAllocations refuses Flags2 above 0x3f from 3.0 */
+    CHECK_EQ(runtime.flags2(), 0u);
     CHECK_EQ(runtime.destroy_primary(), 0); }
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- WDDM 3.1 doorbells (feature 049) -------------------------------------------- */
-
-/* The five doorbell DDIs through the table dxgkrnl registered. A doorbell names
- * the device page its queue's *context* was bound to, so a context that is not
- * an av context - which every context in this scenario is, because binding one
- * needs the device and its allocations - has no page and is refused. What the
- * successful path does is test_doorbell_table's and the full-stack rig's. */
 TEST(ddi_scenario, the_doorbell_ddis_refuse_a_queue_whose_context_holds_no_page)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
@@ -2044,18 +1851,14 @@ TEST(ddi_scenario, the_doorbell_ddis_refuse_a_queue_whose_context_holds_no_page)
         table.routine(DdiSlot::DxgkDdiCreateDoorbell));
     av::DxgkargCreateDoorbellRecord made = {};
     made.hHwQueue = queue.handle();
-    /* No page: the context this queue runs on was never bound to one. */
     CHECK(create(&made) != 0);
     CHECK(made.hDoorbell == nullptr);
-    /* Private data is a thing this driver carries none of, and a flag it does
-     * not know is a request it does not answer. */
     made.PrivateDriverDataSize = 4u;
     CHECK(create(&made) != 0);
     made.PrivateDriverDataSize = 0u;
     made.Flags = 1u;
     CHECK(create(&made) != 0);
 
-    /* Every other doorbell DDI, given a handle nobody made. */
     std::uint64_t not_a_doorbell = 0u;
     av::DxgkargConnectDoorbellRecord connect = {};
     connect.hDoorbell = &not_a_doorbell;
@@ -2063,9 +1866,6 @@ TEST(ddi_scenario, the_doorbell_ddis_refuse_a_queue_whose_context_holds_no_page)
     disconnect.hDoorbell = &not_a_doorbell;
     av::DxgkargDestroyDoorbellRecord destroy = {};
     destroy.hDoorbell = &not_a_doorbell;
-    /* Reached through the adapter rather than the table: the table's entry
-     * points read the handle as a doorbell, which a handle nobody made is
-     * not. */
     av::Adapter &adapter = *static_cast<av::Adapter *>(device.fdo().context());
     CHECK(adapter.connect_doorbell(&connect) != 0);
     CHECK(adapter.disconnect_doorbell(&disconnect) != 0);
@@ -2076,9 +1876,6 @@ TEST(ddi_scenario, the_doorbell_ddis_refuse_a_queue_whose_context_holds_no_page)
     CHECK(adapter.destroy_doorbell(nullptr) != 0);
     CHECK(adapter.notify_work_submission(nullptr) != 0);
 
-    /* NotifyWorkSubmission on a queue that exists answers success and
-     * publishes nothing: the work is in the ring and the store already woke
-     * the worker. */
     const auto notify = reinterpret_cast<std::int32_t (*)(const av::DxgkargNotifyWorkSubmissionRecord *)>(
         table.routine(DdiSlot::DxgkDdiNotifyWorkSubmission));
     av::DxgkargNotifyWorkSubmissionRecord submitted = {};
@@ -2088,14 +1885,9 @@ TEST(ddi_scenario, the_doorbell_ddis_refuse_a_queue_whose_context_holds_no_page)
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- WDDM 3.1 (feature 024) ----------------------------------------------------- */
-
 TEST(ddi_scenario, a_wddm_3_1_adapter_starts_with_its_doorbells_and_its_native_fences)
 { LoadedDriver driver;
   const DdiTable &table = driver.table();
-  /* Feature 049 filled both halves of WDDM 3.1: the doorbells a process
-   * submits through, and the native fences the OS demands before it will hand
-   * one out (research.md §14). The sharing half is 025's (slots 186-189). */
   const DdiSlot fences[] = {
       DdiSlot::DxgkDdiCreateNativeFence, DdiSlot::DxgkDdiDestroyNativeFence, DdiSlot::DxgkDdiUpdateMonitoredValues,
       DdiSlot::DxgkDdiUpdateCurrentValuesFromCpu,
@@ -2112,14 +1904,11 @@ TEST(ddi_scenario, a_wddm_3_1_adapter_starts_with_its_doorbells_and_its_native_f
   };
   for (const DdiSlot slot : doorbells) CHECK(table.routine(slot) != nullptr);
   Device device(driver, 0u);
-  /* This OS allows native fences, so the driver may report the capability
-   * they are behind; one that does not is told nothing about them (§17). */
   device.dxgkrnl().allow_feature(av::feature_native_fence);
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
-  /* NativeGpuFence, which is what lets the OS allow user-mode submission. */
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().SchedulingCaps & 0x800u, 0x800u);
   { av::FakeVidSch vidsch(driver.platform(), table, device.dxgkrnl(), device.fdo().context());
     CHECK_EQ(vidsch.create_context(0x14u), 0);
@@ -2128,8 +1917,6 @@ TEST(ddi_scenario, a_wddm_3_1_adapter_starts_with_its_doorbells_and_its_native_f
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
-
-/* ---- WDDM 3.2 (feature 025) ----------------------------------------------------- */
 
 TEST(ddi_scenario, a_wddm_3_2_display_adapter_starts_with_the_3_2_slots_null)
 { LoadedDriver driver;
@@ -2155,15 +1942,10 @@ TEST(ddi_scenario, a_wddm_3_2_display_adapter_starts_with_the_3_2_slots_null)
   CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* ---- Several outputs (feature 038, US4) ------------------------------------- */
-
-/* A device with two displays: dxgkrnl is told two sources and two children,
- * each child answers, and each source scans out its own resource on its own
- * host scanout. */
 TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
 { LoadedDriver driver;
   Device device(driver, 0u);
-  device.function().device_config().set_u32(8u, 2u);   /* num_scanouts */
+  device.function().device_config().set_u32(8u, 2u);
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.start_device(), 0);
   CHECK_EQ(device.fdo().sources(), 2u);
@@ -2191,8 +1973,6 @@ TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
                    table.routine(DdiSlot::DxgkDdiSetVidPnSourceVisibility))(adapter, &visible),
                0);
   }
-  /* Two creates, one per source, each with its own resource id, after the five
-   * StartDevice made. */
   CHECK_EQ(control.respond_all(0x1100u), 2u);
   CHECK_EQ(control.request_type(5u), 0x0101u);
   CHECK_EQ(u32(control.request(5u), 24u), av::ScanoutResource::first_resource_id);
@@ -2200,11 +1980,6 @@ TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
   CHECK_EQ(u32(control.request(6u), 24u), av::ScanoutResource::first_resource_id + 1u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
-/* Through the real table: the device's host-visible region is the driver's
- * own window, never a segment. VidMm is told of the aperture alone - with the
- * region in a CPU-visible segment it hands a process the aperture's staging
- * pages at Lock instead (docs/host-window.md) - and nothing is placed in the
- * region until a process asks for a chunk of it. */
 TEST(ddi_scenario, a_device_with_host_memory_reports_the_aperture_alone)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -2219,7 +1994,7 @@ TEST(ddi_scenario, a_device_with_host_memory_reports_the_aperture_alone)
   std::uint32_t physical_adapter = 0u;
   av::DxgkQuerySegmentOut4Record out = {};
   av::DxgkargQueryAdapterInfoRecord query = {};
-  query.Type = 11;   /* DXGKQAITYPE_QUERYSEGMENT4 */
+  query.Type = 11;
   query.pInputData = &physical_adapter;
   query.InputDataSize = sizeof physical_adapter;
   query.pOutputData = &out;
@@ -2229,14 +2004,11 @@ TEST(ddi_scenario, a_device_with_host_memory_reports_the_aperture_alone)
   CHECK_EQ(ask(adapter, &query), 0);
   CHECK_EQ(out.NbSegment, 1u);
 
-  /* A primary lives in the aperture the display reads. */
   Runtime runtime(table, adapter);
   CHECK_EQ(runtime.create_primary(), 0);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
-/* The same driver on a device with no region: one segment, no blob asked for,
- * and every allocation where it was before (FR-007). */
 TEST(ddi_scenario, a_device_without_host_memory_is_the_adapter_as_it_was)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -2258,11 +2030,6 @@ TEST(ddi_scenario, a_device_without_host_memory_is_the_adapter_as_it_was)
   CHECK_EQ(out.NbSegment, 1u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
-/* Feature 053, research.md §16. D3DKMTShareObjects mints an NT handle over a
- * *resource* - its handle-table type check refuses anything else, and does it
- * with no message at all - so the carrier a shared object's identity is minted
- * into has to be one. A create that asks for a resource answers a handle of
- * the driver's own, and destroying the allocations destroys it with them. */
 TEST(ddi_scenario, a_create_that_asks_for_a_resource_is_answered_one_and_gives_it_back)
 { LoadedDriver driver;
   Device device(driver, 0u);
@@ -2270,7 +2037,6 @@ TEST(ddi_scenario, a_create_that_asks_for_a_resource_is_answered_one_and_gives_i
   CHECK_EQ(device.start_device(), 0);
   { SharedRuntime runtime(driver.table(), device.fdo().context());
     CHECK_EQ(runtime.create(SharedRuntime::bytes), 0);
-    /* The handle the runtime keeps, and the one a share would name. */
     CHECK(runtime.resource() != nullptr);
     CHECK_EQ(runtime.create_device(0u), 0);
     CHECK_EQ(runtime.creator_open(0u, SharedRuntime::bytes), 0);

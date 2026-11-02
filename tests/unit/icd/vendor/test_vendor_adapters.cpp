@@ -1,6 +1,3 @@
-/* The avgpu adapters as the vendor libraries learn them from Windows: only
- * avgpu's, whatever GPU each presents; each fact as Windows reports it; none
- * guessed; every adapter handle closed again. */
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/pci_location.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -21,16 +18,13 @@ using av::vendor::VendorAdapter;
 using av::vendor::VendorAdapters;
 
 namespace {
-
-/* virtio-gpu-av-pci on an AMD iGPU and on an NVIDIA card; the Basic Render
- * Driver; a real Radeon passed through, which is not ours to describe. */
 const PciIdentity on_raphael(0x1002u, 0x13C0u, 0x1AF4u, 0x5256u, 0xC9u);
 const PciIdentity on_geforce(0x10DEu, 0x2684u, 0x1AF4u, 0x5256u, 0xA1u);
 const PciIdentity basic_render(0x1414u, 0x008Cu, 0u, 0u);
 const PciIdentity real_radeon(0x1002u, 0x7550u, 0x1002u, 0x0E3Bu);
 constexpr std::uint64_t version = 0x0000002300050000ull;
 
-}  // namespace
+}
 
 TEST(vendor_adapters, learns_every_avgpu_adapter_and_only_those_with_each_fact_windows_reports)
 { MockKmt kmt;
@@ -71,8 +65,6 @@ TEST(vendor_adapters, learns_every_avgpu_adapter_and_only_those_with_each_fact_w
   CHECK(adapters.nth_of(0x1002u, 1u) == nullptr);
   CHECK(adapters.nth_of(0x8086u, 0u) == nullptr); }
 
-/* A fact Windows will not give is not guessed: that adapter is left out, and
- * the others are still described. */
 TEST(vendor_adapters, an_adapter_a_fact_of_which_windows_will_not_give_is_left_out)
 { for (const MockKmt::Call refused : {MockKmt::Call::adapter_luid, MockKmt::Call::query_adapter_location,
                                      MockKmt::Call::query_adapter_name, MockKmt::Call::query_umd_driver_version,
@@ -80,8 +72,6 @@ TEST(vendor_adapters, an_adapter_a_fact_of_which_windows_will_not_give_is_left_o
       MockKmt kmt;
       kmt.add_adapter(on_raphael, 3200u);
       kmt.add_adapter(on_raphael, 3200u);
-      /* Listing the adapters asks each one's LUID first: the refusal is of
-       * the first adapter's own ask. */
       kmt.fail_at(refused, refused == MockKmt::Call::adapter_luid ? 3u : 1u, MockKmt::invalid_parameter);
       VendorAdapters adapters(kmt);
       CHECK_STATUS(adapters.learn(), Status::ok);
@@ -89,8 +79,6 @@ TEST(vendor_adapters, an_adapter_a_fact_of_which_windows_will_not_give_is_left_o
       CHECK_EQ(kmt.open_objects(), 0u);
   } }
 
-/* The kernel's refusal to enumerate is the answer, and what was learnt before
- * is gone: a library must not describe adapters it can no longer see. */
 TEST(vendor_adapters, a_refused_enumeration_is_the_answer_and_leaves_nothing_learnt)
 { MockKmt kmt;
   kmt.add_adapter(on_raphael, 3200u);
@@ -102,8 +90,6 @@ TEST(vendor_adapters, a_refused_enumeration_is_the_answer_and_leaves_nothing_lea
   CHECK_EQ(adapters.count_of(0x1002u), 0u);
   CHECK(adapters.nth_of(0x1002u, 0u) == nullptr); }
 
-/* A miniport from before the bit says nothing of the GPU's kind; no primary
- * display is no adapter's. */
 TEST(vendor_adapters, no_integrated_bit_reads_discrete_and_no_primary_display_is_on_none)
 { MockKmt kmt;
   kmt.add_adapter(on_raphael, 3200u);
@@ -115,10 +101,6 @@ TEST(vendor_adapters, no_integrated_bit_reads_discrete_and_no_primary_display_is
   CHECK(!amd->facts().integrated());
   CHECK(!amd->primary()); }
 
-/* More adapters than it holds are read as far as it holds - the kernel
- * counts every adapter, and writes as many handles as there is room for; a
- * zero handle is no adapter; an adapter Windows will not identify is not
- * avgpu's to describe; and every handle opened is closed. */
 TEST(vendor_adapters, more_adapters_than_it_holds_a_zero_handle_and_no_identity_are_each_passed_over)
 { MockKmt kmt;
   kmt.add_adapter(on_raphael, 3200u);
@@ -140,8 +122,6 @@ TEST(vendor_adapters, more_adapters_than_it_holds_a_zero_handle_and_no_identity_
   CHECK_EQ(some.count_of(0x1002u), 1u);
   CHECK_EQ(few.open_objects(), 0u); }
 
-/* A features query the miniport refuses says nothing of the GPU's kind, which
- * reads as discrete, as a miniport from before the bit does. */
 TEST(vendor_adapters, a_refused_features_query_reads_discrete)
 { MockKmt kmt;
   kmt.add_adapter(on_raphael, 3200u);

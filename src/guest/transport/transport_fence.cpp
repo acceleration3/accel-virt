@@ -64,4 +64,4 @@ bool TransportFence::invariants_hold() const
     return next_ >= 1u && completed_ < next_ && outstanding() <= max_outstanding;
 }
 
-}  // namespace av
+}

@@ -37,7 +37,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(reply_message_encode, is_the_sequence_the_status_the_payload_length_then_the_payload)
 { GuardedBuffer bytes(reply_length);
@@ -95,8 +95,6 @@ TEST(reply_message_encode, a_short_or_missing_destination_is_too_large)
   CHECK(buffer.guards_intact());
   CHECK_STATUS(ReplyMessage(1u, Status::ok, payload, sizeof payload).encode(nullptr, reply_length), Status::too_large); }
 
-/* A status av::Status does not have would be cast into an enum no caller's
- * switch handles. */
 TEST(reply_message_decode, refuses_an_unknown_status_and_stays_unchanged)
 { std::uint8_t bytes[reply_length] = {};
   CHECK_STATUS(ReplyMessage(1u, Status::ok, payload, sizeof payload).encode(bytes, sizeof bytes), Status::ok);
@@ -106,8 +104,6 @@ TEST(reply_message_decode, refuses_an_unknown_status_and_stays_unchanged)
   CHECK(decoded.sequence() == 6u);
   CHECK_STATUS(decoded.status(), Status::conflict); }
 
-/* A payload length past the bound is refused before it is added to anything,
- * whatever arrived after it. */
 TEST(reply_message_decode, a_payload_past_the_bound_is_malformed_even_when_it_arrived)
 { static std::uint8_t bytes[ReplyMessage::fixed_size + ReplyMessage::max_payload_length + 1u];
   put(bytes, 12u, ReplyMessage::max_payload_length + 1u);
@@ -132,9 +128,5 @@ TEST(reply_message_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 128u);
-  /* The sequence is free: 64 flips. Status ok flipped at bit 0 to 3 is 1, 2, 4
-   * or 8, all statuses; bit 4 and up is past malformed. A payload length flip
-   * claims bytes that did not arrive; the payload is opaque: 32 flips. With
-   * the untouched message, 64 + 4 + 32 + 1. */
   const std::uint32_t acceptable = 64u + 4u + 32u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

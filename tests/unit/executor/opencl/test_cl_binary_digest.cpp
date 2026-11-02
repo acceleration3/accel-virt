@@ -1,6 +1,3 @@
-/* The digest a program binary's envelope is checked by: FNV-1a over 64 bits,
- * judged against the published vectors, and text digested with its end so two
- * strings run together are not one. */
 #include "executor/opencl/cl_binary_digest.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -17,7 +14,6 @@ TEST(cl_binary_digest, the_published_fnv1a_64_vectors)
   { ClBinaryDigest word;
     word.add("foobar", 6u);
     CHECK_EQ(word.value(), 0x85944171F73967E8ull); }
-  /* In pieces, the same as at once; null adds nothing. */
   { ClBinaryDigest pieces;
     pieces.add("foo", 3u);
     pieces.add(nullptr, 5u);
@@ -32,13 +28,11 @@ TEST(cl_binary_digest, text_is_digested_with_its_end)
   moved.add_text("a");
   moved.add_text("bc");
   CHECK(joined.value() != moved.value());
-  /* "a" and its terminator, as bytes. */
   ClBinaryDigest bytes;
   bytes.add("a", 2u);
   ClBinaryDigest text;
   text.add_text("a");
   CHECK_EQ(text.value(), bytes.value());
-  /* No text is the terminator alone. */
   ClBinaryDigest none;
   none.add_text(nullptr);
   ClBinaryDigest empty;

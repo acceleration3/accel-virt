@@ -1,15 +1,3 @@
-/* The generated OpenCL ICD table, compiled for the first time.
- *
- * `cl_icd_stubs.h` fills every dispatch slot the driver did not claim, because
- * the Khronos loader reads a slot and calls through it without checking - a
- * null slot is a jump into nothing with no diagnostic. What matters here: a
- * slot the driver claimed is left alone, every slot the codegen knows about is
- * filled, a refusal answers what the API means by failure through both a
- * return value and an errcode_ret, and each refusal names itself once.
- *
- * Nothing had ever included this header, so the `av::icd::stub_called` it calls
- * was declared nowhere (feature 052, research §3). The definition here is the
- * test's own; the ICD's is in src/icd/opencl/cl_hooks.cpp. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opencl/cl_icd_stubs.h"
 #include "proto/client/icd_stub_report.hpp"
@@ -17,10 +5,6 @@
 #include <cstring>
 
 namespace {
-
-/* What the refusals said, for the test to read back. A test binary may keep
- * this at file scope; src/ may not (constitution III), which is why the ICD
- * reaches its log through its binding instead. */
 struct Refusals {
     static constexpr unsigned capacity = 8u;
 
@@ -42,14 +26,12 @@ struct Refusals {
 
 Refusals refusals;
 
-/* The one slot this fake driver claims, so the fill has something to leave
- * alone. Its answer is one no refusal returns. */
 cl_int CL_API_CALL claimed_get_platform_ids(cl_uint, cl_platform_id *, cl_uint *)
 {
     return CL_PLATFORM_NOT_FOUND_KHR;
 }
 
-}  // namespace
+}
 
 namespace av::icd {
 
@@ -63,7 +45,7 @@ void stub_called(const char *api, const char *entry_point, const char *why) noex
     ++refusals.count;
 }
 
-}  // namespace av::icd
+}
 
 TEST(icd_stub_report, a_slot_the_driver_claimed_is_not_overwritten)
 { cl_icd_dispatch table{};
@@ -92,25 +74,21 @@ TEST(icd_stub_report, a_refusal_that_returns_an_object_answers_null_and_errcode_
   CHECK(table.clCreateContext(nullptr, 0u, nullptr, nullptr, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_OPERATION);
   CHECK(refusals.named("clCreateContext"));
-  /* A null errcode_ret is what most callers pass, and must not be written. */
   CHECK(table.clCreateContext(nullptr, 0u, nullptr, nullptr, nullptr, nullptr) == nullptr); }
 
 TEST(icd_stub_report, every_core_slot_the_loader_dispatches_through_is_filled)
 { cl_icd_dispatch table{};
   av::clproto::fill_unimplemented(table);
-  /* One from each version the header gates, so a gate that stopped filling
-   * shows. These are core entry points the loader exports and dispatches
-   * straight through, where a null slot is a crash rather than an error. */
   CHECK(table.clGetPlatformInfo != nullptr);
   CHECK(table.clGetDeviceIDs != nullptr);
   CHECK(table.clCreateCommandQueue != nullptr);
   CHECK(table.clEnqueueMapBuffer != nullptr);
-  CHECK(table.clCreateUserEvent != nullptr);      /* 1.1 */
-  CHECK(table.clCreateImage != nullptr);          /* 1.2 */
-  CHECK(table.clSVMAlloc != nullptr);             /* 2.0 */
-  CHECK(table.clCreateProgramWithIL != nullptr);  /* 2.1 */
-  CHECK(table.clSetProgramReleaseCallback != nullptr); /* 2.2 */
-  CHECK(table.clCreateBufferWithProperties != nullptr); /* 3.0 */ }
+  CHECK(table.clCreateUserEvent != nullptr);
+  CHECK(table.clCreateImage != nullptr);
+  CHECK(table.clSVMAlloc != nullptr);
+  CHECK(table.clCreateProgramWithIL != nullptr);
+  CHECK(table.clSetProgramReleaseCallback != nullptr);
+  CHECK(table.clCreateBufferWithProperties != nullptr); }
 
 TEST(icd_stub_report, filling_a_table_twice_changes_nothing)
 { cl_icd_dispatch first{};

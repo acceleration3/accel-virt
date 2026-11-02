@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-# Build qemu-system-x86_64 with the virtio-gpu-av modules linked against the
-# device core. The distro binary cannot load them: its compiled-in module table
-# has no entry for the new device types, so QEMU itself is rebuilt.
-#
-#   build_qemu.sh <build directory> <directory holding av_device.pc>
-#
-# The pinned source (tools/fetch_qemu.sh) is copied and patched once per patch
-# revision; the glue in src/device/qemu is re-synced on every run, so ninja
-# rebuilds only what changed. Run QEMU from <build directory>/qemu with
-# QEMU_MODULE_DIR set to that directory.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 [ $# -eq 2 ] || { echo "usage: build_qemu.sh <build directory> <av_device.pc directory>" >&2; exit 2; }

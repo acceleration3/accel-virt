@@ -1,4 +1,3 @@
-// triangle, pushconstants, gears, texture
 #include "framework.h"
 
 namespace samples {
@@ -94,9 +93,6 @@ private:
     D3D12_VERTEX_BUFFER_VIEW view_ = {};
 };
 
-// Vulkan's push constants are D3D12's root constants: each sphere's world
-// matrix and tint written straight into the root arguments, the frame's
-// camera in a constant buffer beside them.
 class PushConstants final : public Sample {
 public:
     const char *name() const override { return "pushconstants"; }
@@ -218,7 +214,6 @@ private:
     DrawMesh             gears_[3];
 };
 
-// A mipmapped, anisotropically filtered texture on a receding quad.
 class TextureSample final : public Sample {
 public:
     const char *name() const override { return "texture"; }
@@ -282,11 +277,11 @@ private:
     Texture              texture_;
 };
 
-}  // namespace
+}
 
 Sample *make_triangle() { return new Triangle(); }
 Sample *make_pushconstants() { return new PushConstants(); }
 Sample *make_gears() { return new Gears(); }
 Sample *make_texture() { return new TextureSample(); }
 
-}  // namespace samples
+}

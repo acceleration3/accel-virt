@@ -64,8 +64,6 @@ Status ReplyHeader::encode(uint8_t *bytes, size_t capacity) const
     return writer.status();
 }
 
-/* An answer that fits carries all of itself; one too large carries nothing
- * and says what it needed. */
 bool ReplyHeader::fields_valid() const
 {
     AV_SCOPE("ReplyHeader::fields_valid");
@@ -91,4 +89,4 @@ Status ReplyHeader::decode(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-}  // namespace av
+}

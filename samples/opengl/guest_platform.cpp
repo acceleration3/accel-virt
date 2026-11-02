@@ -1,6 +1,3 @@
-// The guest build's platform: Windows, no C runtime, WGL through the system
-// opengl32.dll - which loads whichever ICD the display driver names, avgl.dll
-// on the paravirtual adapter.
 #include "framework.h"
 
 #include <windows.h>
@@ -48,7 +45,6 @@ namespace samples {
 namespace {
 
 constexpr wchar_t window_class[] = L"avglsamples";
-// WGL_ARB_create_context and WGL_ARB_create_context_profile.
 constexpr int wgl_context_major_version = 0x2091, wgl_context_minor_version = 0x2092,
               wgl_context_profile_mask = 0x9126, wgl_context_core_profile_bit = 0x0001;
 
@@ -65,7 +61,7 @@ LRESULT CALLBACK window_procedure(HWND window, UINT message, WPARAM wide, LPARAM
     return DefWindowProcW(window, message, wide, lengthy);
 }
 
-}  // namespace
+}
 
 void log(const char *text)
 {
@@ -120,12 +116,6 @@ bool read_file(const char *path, Blob &blob)
     return ok;
 }
 
-// A hidden window's DC, a legacy context to reach wglCreateContextAttribsARB
-// through - opengl32 answers an extension's name only while one of the ICD's
-// contexts is current - then the core context the samples run in. The frames
-// are drawn off-screen, as the D3D11 suite draws them; the window is never
-// shown or presented to. The GPU is the one the adapter's device runs on,
-// whatever `gpu` says.
 bool create_context(const char *)
 {
     const HINSTANCE instance = GetModuleHandleW(nullptr);
@@ -167,8 +157,6 @@ bool create_context(const char *)
     return true;
 }
 
-// OpenGL 1.1 is opengl32's own export; wglGetProcAddress answers only what
-// came after it, and some drivers answer a small integer for a name they lack.
 void *gl_proc(const char *name)
 {
     PROC found = wglGetProcAddress(name);
@@ -178,12 +166,10 @@ void *gl_proc(const char *name)
     return reinterpret_cast<void *>(found);
 }
 
-}  // namespace samples
+}
 
 extern "C" void avglsamples_entry()
 {
-    // The command line split on spaces outside double quotes, as ASCII:
-    // shell32's CommandLineToArgvW would be one more import for this.
     const wchar_t *line = GetCommandLineW();
     char         **argv = static_cast<char **>(samples::allocate(sizeof(char *) * 64));
     int            argc = 0;

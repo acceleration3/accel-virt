@@ -18,7 +18,7 @@ constexpr uint32_t drm_xbgr8888 = FourCc('X', 'B', '2', '4').value();
 
 constexpr uint32_t pixel_width = 4u;
 
-}  // namespace
+}
 
 ScanoutFormat::ScanoutFormat(uint32_t format) : format_(format)
 {
@@ -59,4 +59,4 @@ uint32_t ScanoutFormat::format() const
     return format_;
 }
 
-}  // namespace av
+}

@@ -1,6 +1,3 @@
-/* One region of a present copy on the wire: six u32s in order, read back as
- * written, and a region with no width or no height - or too few bytes - is
- * malformed and leaves the region as it was. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/dma/present_region.hpp"
 #include "proto/wire/wire_reader.hpp"

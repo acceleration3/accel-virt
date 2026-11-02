@@ -19,7 +19,6 @@ AvRequestWriter::AvRequestWriter(uint8_t *bytes, size_t capacity)
         AV_SCOPE("AvRequestWriter::AvRequestWriter");
     }
 
-/* The header's context id sits at offset 16, after type, flags and fence. */
 bool AvRequestWriter::begin(WireWriter &writer, uint32_t type, uint32_t context_id, size_t size)
 {
     AV_SCOPE("AvRequestWriter::begin");
@@ -115,7 +114,7 @@ Status AvRequestWriter::host_blob(uint32_t context_id, uint32_t resource_id, Hos
     writer.write_u32(resource_id);
     writer.write_u32(blob_memory_host3d);
     writer.write_u32(blob_flag_mappable);
-    writer.write_u32(0u);   /* no memory entries: the memory is the host's */
+    writer.write_u32(0u);
     writer.write_u64(memory.encoded());
     writer.write_u64(size);
     return Status::ok;
@@ -243,4 +242,4 @@ size_t AvRequestWriter::length() const
     return length_;
 }
 
-}  // namespace av
+}

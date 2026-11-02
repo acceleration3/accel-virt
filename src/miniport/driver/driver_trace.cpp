@@ -30,8 +30,6 @@ void DriverTrace::start(BugcheckRoutine routine)
     }
     region_ = region;
     bytes_ = bytes;
-    /* Contiguous memory is page-aligned and this size holds every slot, so the
-     * table cannot refuse it. */
     static_cast<void>(table_.initialize(region_, bytes_, "avgpu", 0u));
     scope_binding.bind(table_);
     char       line[line_bytes];
@@ -52,8 +50,6 @@ void DriverTrace::stop()
     platform_.require_irql_at_most(Irql::passive, "DriverTrace::stop");
     if (region_ == nullptr) return;
     if (scope_binding.table() == &table_) scope_binding.unbind();
-    /* The scopes this call runs in - and its callers' - leave after the region
-     * is gone. */
     table_.withdraw();
     if (registered_) platform_.deregister_bugcheck();
     registered_ = false;
@@ -81,8 +77,6 @@ void DriverTrace::bugcheck()
     }
 }
 
-/* A region of the table's size is held exactly while tracing runs, and only a
- * started table can be registered. */
 bool DriverTrace::invariants_hold() const
 {
     AV_SCOPE("DriverTrace::invariants_hold");
@@ -90,4 +84,4 @@ bool DriverTrace::invariants_hold() const
     return bytes_ == TraceLayout(slots).bytes();
 }
 
-}  // namespace av
+}

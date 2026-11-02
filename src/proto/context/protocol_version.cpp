@@ -33,4 +33,4 @@ ProtocolVersion ProtocolVersion::negotiated_with(const ProtocolVersion &peer) co
     return ProtocolVersion(major_, minor_ < peer.minor_ ? minor_ : peer.minor_);
 }
 
-}  // namespace av
+}

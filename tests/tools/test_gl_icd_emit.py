@@ -1,12 +1,3 @@
-"""The generated OpenGL ICD entries and their proc table, from a registry small
-enough to read (tools/codegen/av_codegen/opengl/emit.py, feature 050).
-
-What opengl32.dll relies on: the table DrvSetContext answers is Microsoft's
-GLCLTPROCTABLE, in the order tools/codegen/profiles/opengl_proc_table.txt
-records, with no empty slot; every other name is answered by DrvGetProcAddress.
-An ICD exports no GL symbol, so nothing generated has a C name. And the client
-it calls ends every synchronous call on every path from its writer, and a
-one-way call whose payload it drops, so a locked transport is always let go."""
 import pathlib
 import re
 import shutil
@@ -144,14 +135,10 @@ class GeneratedGlIcd(unittest.TestCase):
         self.assertNotIn("legacy_entry", self.table)
 
     def test_a_compatibility_entry_asks_the_granted_profile_before_it_sends(self):
-        """Feature 051: a compat-tier command exists only where the host
-        granted a compatibility profile, so the forwarder judges it and records
-        what a core context would."""
         begin = body_of(self.source, "Wrap_glBegin")
         self.assertIn("if (!::av::glicd::legacy_calls_live()) {", begin)
         self.assertIn("::av::glicd::refuse_legacy();", begin)
         self.assertIn("::av::glproto::av_glBegin(*av_t, mode);", begin)
-        # A core-tier command asks nothing.
         self.assertNotIn("legacy_calls_live", body_of(self.source, "Wrap_glEnable"))
 
     def test_forwarding_entries_are_defined_and_handwritten_ones_are_left_to_the_icd(self):
@@ -162,10 +149,6 @@ class GeneratedGlIcd(unittest.TestCase):
         self.assertNotIn("Wrap_glDrawArrays(GLenum mode, GLint first, GLsizei count) {", self.source)
 
     def test_a_pixel_transfer_is_staged_when_it_cannot_cross_with_its_command(self):
-        """With no pixel buffer of the application's bound, a transfer the ICD
-        stages names offset 0 of its staging buffer instead of its pointer, and
-        is finished once the command is sent: an upload's binding put back, a
-        download's bytes brought back."""
         upload = body_of(self.source, "Wrap_glTexSubImage2D")
         self.assertIn("const bool av_pixels_staged = !av_pixels_offset && "
                       "::av::glicd::stage_upload(pixels, av_pixels_bytes);", upload)
@@ -177,7 +160,6 @@ class GeneratedGlIcd(unittest.TestCase):
         self.assertIn("const size_t av_data_bytes = av_data_offset ? 0 : static_cast<size_t>(bufSize);", download)
         self.assertIn("::av::glicd::stage_download(data, av_data_bytes);", download)
         self.assertIn("if (av_data_staged) ::av::glicd::finish_download(data, av_data_bytes);", download)
-        # A query result's buffer is another binding: never staged.
         self.assertNotIn("stage", body_of(self.source, "Wrap_glGetQueryObjectiv"))
 
     def test_a_staged_transfer_that_answers_a_value_is_refused(self):
@@ -247,11 +229,6 @@ class ProcTableOrder(unittest.TestCase):
 
 
 class ParameterTypes(unittest.TestCase):
-    """GL declares its lists of strings and of index pointers `const T *const *`:
-    an entry point written with one const fewer is a different function type,
-    which a caller holding the registry's type calls through a mismatched
-    pointer."""
-
     def rendered(self, text):
         return _ctype_from(ElementTree.fromstring(text)).cpp()
 

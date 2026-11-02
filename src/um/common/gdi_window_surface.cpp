@@ -34,8 +34,6 @@ bool GdiWindowSurface::blit_window(void *window, uint32_t width, uint32_t height
     return draw_on_window(window, width, static_cast<int32_t>(height), bgra_bottom_up);
 }
 
-/* Top-down, so a Vulkan image's rows are drawn as the host read them back
- * rather than turned over on the CPU first: 14 MB a frame at 2560x1369. */
 bool GdiWindowSurface::blit_window_top_down(void *window, uint32_t width, uint32_t height,
                                             const uint8_t *bgra_top_down)
 {
@@ -68,4 +66,4 @@ bool GdiWindowSurface::draw(void *dc, uint32_t width, int32_t dib_height, const 
                              DIB_RGB_COLORS) != 0;
 }
 
-}  // namespace av
+}

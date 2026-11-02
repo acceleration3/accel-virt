@@ -1,6 +1,3 @@
-/* OverlayEntry over Windows' own d3d11.dll and dxgi.dll - the runtime DWM
- * composes with, on avumd - with a window of its own for each swap chain.
- * Translation only: what the probe decides is in src/guest/probe/overlay_work.cpp. */
 #ifndef AV_WINDOWS_OVERLAY_ENTRY_HPP
 #define AV_WINDOWS_OVERLAY_ENTRY_HPP
 
@@ -27,9 +24,7 @@ public:
     void    release() override;
 
 private:
-    /* The window and swap chain, and what was made over them. */
     void    drop_swap_chain();
-    /* Messages the window was sent, so it keeps answering. */
     void    pump();
 
     void                   *instance_;
@@ -43,6 +38,6 @@ private:
     ID3D11RenderTargetView *target_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WINDOWS_OVERLAY_ENTRY_HPP
+#endif

@@ -15,7 +15,7 @@ constexpr uint32_t address_digits = 16u;
 constexpr uint32_t code_digits = 8u;
 constexpr uint32_t id_digits = 8u;
 
-}  // namespace
+}
 
 TraceText::TraceText(const TraceSnapshot &snapshot, const ImageRange &image, uint64_t now)
     : snapshot_(snapshot), image_(image), now_(now), part_(Part::header), slot_(0u), frame_(0u)
@@ -52,7 +52,6 @@ bool TraceText::next(TextBuffer &out)
         advance_slot();
         return true;
     default:
-        /* Part::done */
         return false;
     }
     const TraceSlotView view = snapshot_.slot(slot_);
@@ -130,8 +129,6 @@ void TraceText::frame(TextBuffer &out, const TraceSlotView &view) const
     age(out, " for_ms=", view.entered(frame_));
 }
 
-/* The name is trusted only if every byte read lies in the image, it ends
- * within max_name characters, and it hashes to the id the frame stored. */
 void TraceText::name(TextBuffer &out, uint32_t id, uint64_t text) const
 {
     char copy[max_name + 1u] = {};
@@ -162,4 +159,4 @@ void TraceText::advance_slot()
     if (slot_ >= snapshot_.slots()) part_ = Part::done;
 }
 
-}  // namespace av
+}

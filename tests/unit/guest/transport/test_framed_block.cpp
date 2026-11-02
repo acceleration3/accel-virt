@@ -1,8 +1,3 @@
-/* Commands framed into one block as the device reads a batch (FramedBlock):
- * each lent room after a header's worth, its header written in front of what
- * it wrote, and nothing framed that ran past the block. What OpenGL's and
- * OpenCL's batches, the Direct3D stream and a Vulkan command buffer all
- * record into. */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/framed_block_probe.hpp"
@@ -28,7 +23,6 @@ namespace {
 constexpr std::size_t   header = FramedBlock::header_bytes;
 constexpr std::uint32_t first_id = 0x10001u;
 
-/* The header framed at `at`, decoded. */
 CommandHeader header_at(const FramedBlock &framed, std::size_t at)
 {
     CommandHeader decoded;
@@ -36,7 +30,7 @@ CommandHeader header_at(const FramedBlock &framed, std::size_t at)
     return decoded;
 }
 
-}  // namespace
+}
 
 TEST(framed_block, a_null_block_holds_nothing_and_lends_nothing)
 { FramedBlock framed(nullptr, 4096u);
@@ -50,8 +44,6 @@ TEST(framed_block, a_null_block_holds_nothing_and_lends_nothing)
   CHECK_EQ(framed.used(), 0u);
   CHECK(framed.invariants_hold()); }
 
-/* Each command lands after the last, its header in front of its body, and
- * the size the header carries counts both. */
 TEST(framed_block, commands_are_framed_one_after_another)
 { std::uint8_t block[256] = {};
   FramedBlock  framed(block, sizeof block);
@@ -77,8 +69,6 @@ TEST(framed_block, commands_are_framed_one_after_another)
   CHECK(framed.bytes() == block);
   CHECK(framed.invariants_hold()); }
 
-/* A writer is lent the room asked for, or what is left past a header when
- * less is; a block without even a header's room lends nothing. */
 TEST(framed_block, a_writer_is_lent_no_more_than_is_left)
 { std::uint8_t block[64] = {};
   FramedBlock  framed(block, sizeof block);
@@ -97,8 +87,6 @@ TEST(framed_block, a_writer_is_lent_no_more_than_is_left)
   CHECK(none.status() != Status::ok);
   CHECK_EQ(framed.used(), sizeof block); }
 
-/* A writer that failed is not framed, and neither is one that wrote past
- * what is left: nothing of either is in the block. */
 TEST(framed_block, a_failed_writer_or_one_past_the_block_is_not_framed)
 { std::uint8_t block[64] = {};
   FramedBlock  framed(block, sizeof block);
@@ -106,8 +94,6 @@ TEST(framed_block, a_failed_writer_or_one_past_the_block_is_not_framed)
   failed.write_u64(1u);
   CHECK(!framed.frame(first_id, failed, 0u));
   CHECK_EQ(framed.used(), 0u);
-  /* A writer over room the block no longer has: another command was framed
-   * since it was lent. */
   WireWriter late = framed.lend(32u);
   late.write_u64(1u);
   late.write_u64(2u);
@@ -131,8 +117,6 @@ TEST(framed_block, commands_framed_elsewhere_are_appended_whole_or_not_at_all)
   CHECK(framed.append(nullptr, 0u));
   CHECK_EQ(framed.used(), sizeof commands); }
 
-/* A block that moves keeps what was framed in it; one that is emptied frames
- * from its start again. */
 TEST(framed_block, an_adopted_block_carries_on_and_a_cleared_one_starts_over)
 { std::uint8_t small[32] = {};
   std::uint8_t large[64] = {};
@@ -167,8 +151,6 @@ TEST(framed_block, the_invariant_catches_a_count_past_the_block_and_room_without
   probe.used() = 0u;
   CHECK(framed.invariants_hold()); }
 
-/* A writer lent with a spill goes on past the block; framed piece by piece,
- * the first piece fills what the block has free. */
 TEST(framed_block, a_writer_lent_with_a_spill_is_framed_in_pieces)
 { av::MockPlatform platform;
   av::SpillBlock   spill(platform);
@@ -182,20 +164,16 @@ TEST(framed_block, a_writer_lent_with_a_spill_is_framed_in_pieces)
   CHECK(framed.frame_piece(pieces));
   CHECK_EQ(framed.used(), sizeof block);
   CHECK(!pieces.done());
-  /* A full block frames nothing more until it is sent. */
   CHECK(!framed.frame_piece(pieces));
   framed.clear();
   CHECK(framed.frame_piece(pieces));
   CHECK(!framed.frame_piece(pieces) || pieces.done());
   CHECK(framed.invariants_hold());
-  /* No header's room lends nothing, spill or not. */
   FramedBlock tiny(block, CommandHeader::encoded_size - 1u);
   WireWriter  none = tiny.lend(8u, spill);
   none.write_u8(1u);
   CHECK(none.status() != Status::ok); }
 
-/* In a block that holds something, less than a least_piece of room is not
- * worth a piece - unless the rest fits whole. */
 TEST(framed_block, a_held_block_takes_a_small_piece_only_when_it_is_the_last)
 { std::uint8_t block[av::CommandPieces::least_piece] = {};
   FramedBlock  framed(block, sizeof block);

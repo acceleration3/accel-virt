@@ -17,7 +17,7 @@ namespace {
 void put32(std::uint8_t *bytes, std::size_t offset, std::uint32_t value) { std::memcpy(bytes + offset, &value, 4); }
 void put64(std::uint8_t *bytes, std::size_t offset, std::uint64_t value) { std::memcpy(bytes + offset, &value, 8); }
 
-}  // namespace
+}
 
 TEST(create_blob_request_decode, reads_the_fixed_part_after_the_header)
 { std::uint8_t bytes[CreateBlobRequest::fixed_size + CreateBlobRequest::entry_size] = {};
@@ -48,7 +48,7 @@ TEST(create_blob_request_decode, a_short_request_is_malformed)
 TEST(blob_request_decode_resource, reads_the_id_of_a_32_byte_request)
 { std::uint8_t bytes[32] = {};
   put32(bytes, 24u, 9u);
-  put32(bytes, 28u, 0xFFFFFFFFu);   /* padding, or RESOURCE_CREATE_2D's format: not read */
+  put32(bytes, 28u, 0xFFFFFFFFu);
   WireReader reader(bytes, sizeof bytes);
   BlobRequest request;
   CHECK_STATUS(request.decode_resource(reader), Status::ok);

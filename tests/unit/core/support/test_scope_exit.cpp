@@ -21,7 +21,7 @@ int leave_early(Counter &counter, bool early)
     return 2;
 }
 
-}  // namespace
+}
 
 TEST(scope_exit, runs_when_the_scope_ends)
 { Counter counter;

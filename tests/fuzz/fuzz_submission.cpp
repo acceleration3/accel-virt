@@ -1,7 +1,3 @@
-/* Render and Patch over attacker-chosen sizes, offsets and indices, with
- * buffers exactly as large as the sizes they claim (a larger claim is a
- * dxgkrnl contract breach nothing can detect). Whatever is refused, nothing
- * may be written outside the DMA buffer or the output patch list. */
 #include "miniport/ddi/d3dddi_patch_location_list_record.hpp"
 #include "miniport/ddi/dxgk_allocation_list_record.hpp"
 #include "miniport/ddi/dxgkarg_patch_record.hpp"
@@ -24,7 +20,7 @@ constexpr std::uint32_t max_entries = 8u;
 constexpr std::uint32_t guard = 32u;
 constexpr std::uint8_t  poison = 0x5Au;
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

@@ -1,7 +1,3 @@
-/* GET_DISPLAY_MODES answers as a hostile device writes them. Whatever is
- * accepted is what the bytes at the documented offsets say, with every mode a
- * display could have and the preferred one among them; a refused answer
- * leaves the last accepted set untouched. */
 #include "proto/virtio_gpu/display_mode_set.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -20,7 +16,7 @@ std::uint32_t field(const std::uint8_t *data, std::size_t offset)
     return value;
 }
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {
@@ -37,8 +33,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         if (set.width(index) != field(data, 32u + index * 8u)) __builtin_trap();
         if (set.height(index) != field(data, 36u + index * 8u)) __builtin_trap();
     }
-    /* What was accepted encodes back to the same bytes, the refresh apart: a
-     * zero or missing one is 60 Hz. */
     const std::size_t modes_end = av::DisplayModeSet::fixed_size + set.count() * av::DisplayModeSet::mode_size;
     if (size >= modes_end + av::DisplayModeSet::refresh_size && field(data, modes_end) != 0u &&
         set.refresh_millihz() != field(data, modes_end))

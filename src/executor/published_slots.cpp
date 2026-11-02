@@ -36,9 +36,6 @@ bool PublishedSlots::bound() const
     return count_ != 0u;
 }
 
-/* The sequence is cleared before the payload and set after it, each behind a
- * store fence: a guest that reads its sequence before and after its copy saw
- * no write of this in between. */
 bool PublishedSlots::write(uint32_t index, uint64_t sequence, const uint8_t *payload, uint32_t size)
 {
     AV_SCOPE("PublishedSlots::write");
@@ -76,4 +73,4 @@ bool PublishedSlots::invariants_hold() const
     return count_ != 0u || offset_ == 0u;
 }
 
-}  // namespace av
+}

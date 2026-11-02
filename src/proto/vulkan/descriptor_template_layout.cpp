@@ -9,7 +9,7 @@ namespace {
 
 constexpr uint64_t highest = ~static_cast<uint64_t>(0);
 
-}  // namespace
+}
 
 DescriptorTemplateLayout::DescriptorTemplateLayout() : bytes_(0u), entries_(0u)
 {
@@ -44,9 +44,6 @@ uint32_t DescriptorTemplateLayout::entries() const
     return entries_;
 }
 
-/* The sizes the specification gives a descriptor written through a template
- * (Vulkan 1.3, VkDescriptorUpdateTemplateEntry). A mutable descriptor is not
- * among them: a template may not write one. */
 uint64_t DescriptorTemplateLayout::descriptor_bytes(int32_t type) const
 {
     AV_SCOPE("DescriptorTemplateLayout::descriptor_bytes");
@@ -67,8 +64,6 @@ uint64_t DescriptorTemplateLayout::descriptor_bytes(int32_t type) const
         return sizeof(VkDescriptorBufferInfo);
     case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
         return sizeof(VkAccelerationStructureKHR);
-    /* An inline uniform block's descriptorCount is its byte count, so one
-     * "descriptor" of it is one byte and the stride is not read at all. */
     case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK:
         return 1u;
     default:
@@ -79,8 +74,6 @@ uint64_t DescriptorTemplateLayout::descriptor_bytes(int32_t type) const
 Status DescriptorTemplateLayout::end_of(const VkDescriptorUpdateTemplateEntry &entry, uint64_t &end) const
 {
     AV_SCOPE("DescriptorTemplateLayout::end_of");
-    /* The type is an application's field: read as the integer it is, never
-     * loaded as the enumeration (proto/wire/foreign_enum.hpp). */
     const int32_t  type = foreign_enum(entry.descriptorType);
     const uint64_t one = descriptor_bytes(type);
     if (one == 0u) return Status::not_supported;
@@ -88,9 +81,6 @@ Status DescriptorTemplateLayout::end_of(const VkDescriptorUpdateTemplateEntry &e
     if (entry.descriptorCount == 0u) return Status::ok;
     const uint64_t offset = static_cast<uint64_t>(entry.offset);
     const uint64_t count = entry.descriptorCount;
-    /* An inline uniform block is `descriptorCount` bytes from the offset; every
-     * other type is one descriptor every `stride` bytes, and the last one ends
-     * a descriptor past its own start. */
     const bool     inline_block = type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
     const uint64_t stride = inline_block ? 0u : static_cast<uint64_t>(entry.stride);
     const uint64_t steps = inline_block ? 0u : count - 1u;
@@ -110,4 +100,4 @@ bool DescriptorTemplateLayout::invariants_hold() const
     return entries_ != 0u || bytes_ == 0u;
 }
 
-}  // namespace av
+}

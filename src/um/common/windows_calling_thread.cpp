@@ -12,4 +12,4 @@ uint32_t WindowsCallingThread::thread_id()
     return GetCurrentThreadId();
 }
 
-}  // namespace av
+}

@@ -1,5 +1,3 @@
-/* Why FakeDxgkrnl refused a DDI table - one value per check dxgkrnl applies at
- * registration (docs/ddi-sequences.md, section 1). */
 #ifndef AV_REGISTRATION_RULE_HPP
 #define AV_REGISTRATION_RULE_HPP
 
@@ -13,6 +11,6 @@ enum class RegistrationRule : unsigned {
     already_registered,
 };
 
-}  // namespace av
+}
 
-#endif  // AV_REGISTRATION_RULE_HPP
+#endif

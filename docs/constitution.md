@@ -36,10 +36,10 @@ alignment. `ByteRange` owns a span. `GpuVirtualAddressSpace` owns a table and a
 
 Two kinds of class, and everything is one of them:
 
-- **Object classes** — one instance per real thing. `Adapter`, `Device`,
+- **Object classes**: one instance per real thing. `Adapter`, `Device`,
   `Context`, `Allocation`, `VirtualRange`, `MonitoredFence`, `VirtQueue`,
   `Doorbell`, `Edid`.
-- **System classes** — a long-lived service owning a collection, injected where
+- **System classes**: a long-lived service owning a collection, injected where
   it is needed. `GpuVirtualAddressSpace`, `Scheduler`, `PagingEngine`,
   `DisplayEngine`, `TimeoutDetector`.
 
@@ -81,8 +81,8 @@ feature 055) and the table's thunks reach it through the single pointer
 the ADL and NVAPI libraries' exports with no context but an ADL2 context
 that is the root itself, so each library's root lives in its exports'
 translation unit (`src/um/vendor/adl_exports.cpp`,
-`src/um/vendor/nvapi_exports.cpp`, docs/vendor-libraries.md);
-and every function opens a trace scope (`AV_SCOPE`, docs/trace.md) that no
+`src/um/vendor/nvapi_exports.cpp`);
+and every function opens a trace scope (`AV_SCOPE`) that no
 caller can hand the binary's trace table, so each binary's table - owned by
 that binary's root above - is reached through the single pointer
 `scope_binding` holds (`src/core/trace/scope_binding.cpp`), bound once the root
@@ -124,9 +124,8 @@ exercise every branch, assert the module's invariants, and feed it garbage.**
    function (`InvariantScope`). An invariant function that can never return false is
    not an invariant; delete it and write a real one.
 
-3. **Garbage data.** Every function that reads bytes it did not write —
-   guest memory, host memory, a ring, a virtqueue, a descriptor, a DDI struct,
-   a user-mode buffer — gets both:
+3. **Garbage data.** Every function that reads bytes it did not write (guest memory, host memory, a ring, a virtqueue, a
+   descriptor, a DDI struct, a user-mode buffer) gets both:
    - a table-driven hostile-input test covering, at minimum: zero length,
      truncated at every field boundary, length larger than the buffer,
      misaligned base, off-by-one indices, integer overflow in every computed
@@ -136,7 +135,7 @@ exercise every branch, assert the module's invariants, and feed it garbage.**
 
    The required outcome for hostile input is always the same: a returned error,
    no write outside the destination, no unbounded loop, no crash under ASan and
-   UBSan. Never an assert — a malformed frame is a reachable state, not a bug.
+   UBSan. Never an assert: a malformed frame is a reachable state, not a bug.
 
 4. **Tests name what they cover.** `TEST(gpuva_map, rejects_overlap_at_upper_bound)`,
    not `TEST(gpuva, test3)`. A reviewer must be able to map a test to a branch.
@@ -211,7 +210,7 @@ That is a testable property, and it is tested.
 
 No interface with one implementation, no abstraction for a second backend that
 does not exist, no configuration flag with one setting. Add it when the second
-case arrives. A feature level that the roadmap marks `stub` gets a stub that
+case arrives. A feature level marked `stub` gets a stub that
 returns the correct "not supported" status and a test that proves it, not a
 partial implementation.
 
@@ -224,7 +223,7 @@ device exists.
 
 ## Technology constraints
 
-- **Language: C++23**, freestanding subset — `-fno-exceptions -fno-rtti`, no
+- **Language: C++23**, freestanding subset: `-fno-exceptions -fno-rtti`, no
   C++ standard library, no heap `new`/`delete` (in-place construction only in
   `ObjectStorage` and `ObjectPool`). `basicrender.sys`, Microsoft's own
   WDDM miniport, is C++ classes with virtuals, so this is the supported way to

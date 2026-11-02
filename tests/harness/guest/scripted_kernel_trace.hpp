@@ -1,7 +1,3 @@
-/* The driver's side of avinspect.exe's trace escapes, as a test plays it: a
- * table and a state dump served a window at a time, with the misbehaviours a
- * reader must refuse - a window cut short, a total that changes, a refusal,
- * an answer to another request - at the Nth answer. */
 #ifndef AV_SCRIPTED_KERNEL_TRACE_HPP
 #define AV_SCRIPTED_KERNEL_TRACE_HPP
 
@@ -22,10 +18,8 @@ public:
     std::uint32_t answer(std::uint8_t *data, std::uint32_t size) override;
 
     void          serve(TraceEscapeRecord::Kind kind, const std::uint8_t *bytes, std::size_t length);
-    /* What every answer claims the total is, whatever is served. */
     void          claim_total(std::uint64_t total);
     void          set_clock(std::uint64_t now);
-    /* The `nth` answer from now (1-based) misbehaves as `fault` says. */
     void          fault_at(std::uint32_t nth, Fault fault);
     std::uint32_t answers() const;
 
@@ -42,6 +36,6 @@ private:
     Fault               fault_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_KERNEL_TRACE_HPP
+#endif

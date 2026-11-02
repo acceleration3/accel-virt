@@ -10,12 +10,9 @@
 namespace av::glicd {
 
 namespace {
-
-/* Tear control means a negative interval, which nothing here honours: the
- * pacing is a wait for whole blanks (feature 051, PresentPacing). */
 const char *const never_reported[] = {"WGL_EXT_swap_control_tear"};
 
-}  // namespace
+}
 
 GlExtensionPolicy::GlExtensionPolicy(const Row *gl_rows, uint32_t gl_count, const Row *wgl_rows, uint32_t wgl_count)
     : gl_rows_(gl_rows, gl_count < max_rows ? gl_count : max_rows, "GL_",
@@ -40,11 +37,6 @@ GlExtensionPolicy::GlExtensionPolicy(const Row *gl_rows, uint32_t gl_count, cons
 uint32_t GlExtensionPolicy::mark(const char *name, bool (&found)[max_rows]) const
 {
     AV_SCOPE("GlExtensionPolicy::mark");
-    /* A row that names the host extension it is answered over is found by
-     * that name and by no other: GL_EXT_memory_object_win32 is this driver's
-     * spelling of the host's GL_EXT_memory_object_fd, because a guest has no
-     * file descriptors - and a host that lists the Win32 name itself would be
-     * a host that is not this one (feature 053). */
     uint32_t marked = 0u;
     for (uint32_t row = gl_rows_.answering(name, 0u); row < gl_rows_.count();
          row = gl_rows_.answering(name, row + 1u)) {
@@ -70,7 +62,6 @@ void GlExtensionPolicy::learn(ClientTransport &wire, GlExtensionList &list) cons
         char   name[name_bytes];
         size_t length = 0u;
         if (!glproto::av_glGetStringi(wire, gl_extensions, index, name, sizeof name, &length)) break;
-        /* A name longer than the buffer was cut, and is no name a row has. */
         if (length >= sizeof name) continue;
         unfound -= mark(name, found);
     }
@@ -84,8 +75,6 @@ const char *GlExtensionPolicy::wgl_extensions() const
     return wgl_;
 }
 
-/* Both tables hold together, and the WGL string holds exactly the WGL rows
- * that are reportable. */
 bool GlExtensionPolicy::invariants_hold() const
 {
     AV_SCOPE("GlExtensionPolicy::invariants_hold");
@@ -99,4 +88,4 @@ bool GlExtensionPolicy::invariants_hold() const
     return __builtin_strlen(wgl_) == kept;
 }
 
-}  // namespace av::glicd
+}

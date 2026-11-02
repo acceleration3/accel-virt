@@ -11,7 +11,7 @@ constexpr uint32_t first_vertex_sampler = 256u;
 constexpr uint32_t last_vertex_sampler = 260u;
 constexpr uint32_t stage_pixel = 1u;
 
-}  // namespace
+}
 
 D3d9StateShadow::D3d9StateShadow()
     : render_{}, stage_{}, texture_{}, vertex_shader_{}, pixel_shader_{}, declaration_{}, constant_f_{},
@@ -84,4 +84,4 @@ bool D3d9StateShadow::current(const D3d9StateEntry &entry, D3d9StateEntry &value
     return true;
 }
 
-}  // namespace av::d3d
+}

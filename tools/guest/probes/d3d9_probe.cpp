@@ -1,15 +1,3 @@
-// d3d9_probe.exe: a Direct3D 9 device made the way a Source engine game makes
-// one, on whatever d3d9.dll routes the adapter to (D3D9On12, on an adapter
-// whose UserModeDriverName names no Direct3D 9 driver), then frames cleared
-// to a known colour and presented.
-//
-// D3D9On12 answers a failure inside device creation with the bare HRESULT: it
-// throws a _com_error at the call that failed and catches it at the DDI. A
-// vectored handler sees that throw first, and writes its HRESULT and the
-// return addresses under it as module+offset, which the module's public PDB
-// names.
-//
-//   d3d9_probe.exe [--fullscreen] [--frames N] [--width W --height H] [--samples N]
 #include <windows.h>
 #include <d3d9.h>
 #include <stdio.h>
@@ -44,8 +32,6 @@ LONG CALLBACK first_chance(EXCEPTION_POINTERS *pointers)
             wprintf(L"exception 0x%08lx at %p\n", record.ExceptionCode, record.ExceptionAddress);
         return EXCEPTION_CONTINUE_SEARCH;
     }
-    // _CxxThrowException's parameters: magic, the thrown object, its throw
-    // info. A _com_error is a vtable pointer and then the HRESULT.
     long hresult = 0;
     if (record.NumberParameters >= 2u && record.ExceptionInformation[1] != 0u)
         hresult = reinterpret_cast<const long *>(record.ExceptionInformation[1])[1];
@@ -75,7 +61,7 @@ void pump()
     }
 }
 
-}  // namespace
+}
 
 int wmain(int argc, wchar_t **argv)
 {
@@ -89,7 +75,6 @@ int wmain(int argc, wchar_t **argv)
         else if (wcscmp(argv[index], L"--samples") == 0 && index + 1 < argc) samples = wcstoul(argv[++index], nullptr, 10);
     }
     AddVectoredExceptionHandler(1, first_chance);
-    /* A probe that hangs is killed: what it printed so far must be in the file. */
     setvbuf(stdout, nullptr, _IONBF, 0);
 
     WNDCLASSW window_class = {};

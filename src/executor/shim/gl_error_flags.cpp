@@ -10,10 +10,9 @@ namespace av {
 namespace {
 
 constexpr GLenum no_error = 0u;
-/* One flag per kind GL defines, GL_CONTEXT_LOST among them. */
 constexpr uint32_t error_flags = 8u;
 
-}  // namespace
+}
 
 GlErrorFlags::GlErrorFlags() : get_error_(nullptr)
 {
@@ -40,4 +39,4 @@ bool GlErrorFlags::clear()
     return none;
 }
 
-}  // namespace av
+}

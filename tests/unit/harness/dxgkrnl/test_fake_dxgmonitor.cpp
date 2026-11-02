@@ -1,5 +1,3 @@
-/* The harness's monitor link information handling, proven against crafted
- * answers so a driver claiming more than dxgkrnl trusts is caught. */
 #include "miniport/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "miniport/driver/ddi_slot.hpp"
 #include "miniport/driver/ddi_table.hpp"
@@ -22,7 +20,6 @@ namespace {
 
 constexpr std::int32_t no_memory = static_cast<std::int32_t>(0xC0000017u);
 
-/* A miniport whose UpdateMonitorLinkInfo answers what the test set. */
 class LinkMiniport {
 public:
     LinkMiniport() : status_(0), capabilities_(0u), dithering_(0u), target_(0xFFu), hints_(0xFFu)
@@ -60,7 +57,7 @@ private:
     std::uint32_t hints_;
 };
 
-}  // namespace
+}
 
 TEST(fake_dxgmonitor_update_link_info, sends_the_usage_as_hints_and_keeps_trusted_capabilities)
 { MockPlatform platform; LinkMiniport miniport;
@@ -83,7 +80,7 @@ TEST(fake_dxgmonitor_update_link_info, below_2_4_untrusted_bits_are_masked_and_f
   miniport.answer_with(0, 0xFFFu, 0x5u);
   CHECK_EQ(monitor.update_link_info(0u, 0u), 0);
   CHECK_EQ(monitor.capabilities(), 0x7Fu);
-  CHECK_EQ(monitor.dithering_support(), 0u);   /* a preference is not the driver's to give */
+  CHECK_EQ(monitor.dithering_support(), 0u);
   miniport.answer_with(no_memory, 0x1u, 0u);
   CHECK_EQ(monitor.update_link_info(0u, 0u), 0);
   CHECK_EQ(monitor.capabilities(), 0u); }
@@ -93,7 +90,7 @@ TEST(fake_dxgmonitor_update_link_info, from_2_4_untrusted_bits_and_failures_reac
   FakeDxgmonitor monitor(platform, miniport.table(), &miniport, 2400u);
   miniport.answer_with(0, 0x80u | 0x1u, 0u);
   CHECK_EQ(monitor.update_link_info(0u, 0u), 0);
-  CHECK_EQ(monitor.capabilities(), 0x1u);      /* TargetIndependentPrimary is always cleared */
+  CHECK_EQ(monitor.capabilities(), 0x1u);
   miniport.answer_with(0, 0x800u, 0u);
   CHECK_EQ(monitor.update_link_info(0u, 0u), FakeDxgmonitor::status_unsuccessful);
   CHECK_EQ(monitor.capabilities(), 0u);

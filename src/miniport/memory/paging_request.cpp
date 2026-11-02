@@ -149,7 +149,6 @@ NtStatus PagingRequest::copy_entries(PagingCommandWriter &writer)
     uint32_t next = request_.MultipassOffset;
     const Status status = write_copy(writer, next);
     if (status == Status::invalid_parameter) return NtStatus(status);
-    /* A header with no range after it is not worth a buffer. */
     const bool progressed = next != request_.MultipassOffset;
     request_.MultipassOffset = next;
     return finish(status, progressed ? writer.length() : 0u);
@@ -188,4 +187,4 @@ NtStatus PagingRequest::finish(Status status, size_t length)
     return status == Status::ok ? NtStatus(Status::ok) : NtStatus(insufficient_dma_buffer);
 }
 
-}  // namespace av
+}

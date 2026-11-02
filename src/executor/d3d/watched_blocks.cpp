@@ -42,4 +42,4 @@ uint32_t WatchedBlocks::refusal(uint32_t otherwise) const
     return refused_ ? static_cast<uint32_t>(E_OUTOFMEMORY) : otherwise;
 }
 
-}  // namespace av
+}

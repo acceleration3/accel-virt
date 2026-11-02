@@ -18,7 +18,6 @@ uint64_t KernelTraceHost::clock() const { return KeQueryInterruptTime(); }
 
 uint16_t KernelTraceHost::level() const { return static_cast<uint16_t>(KeGetCurrentIrql()); }
 
-/* LONG64 and uint64_t differ only in signedness. */
 bool KernelTraceHost::exchange(uint64_t &word, uint64_t expected, uint64_t desired)
 {
     const auto target = reinterpret_cast<LONG64 *>(&word);
@@ -26,4 +25,4 @@ bool KernelTraceHost::exchange(uint64_t &word, uint64_t expected, uint64_t desir
                                                               static_cast<LONG64>(expected))) == expected;
 }
 
-}  // namespace av
+}

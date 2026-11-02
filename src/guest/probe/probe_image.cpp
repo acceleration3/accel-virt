@@ -13,7 +13,6 @@ ProbeImage::ProbeImage(ProbeDevice &device)
         AV_SCOPE("ProbeImage::ProbeImage");
     }
 
-/* Vulkan makes destroying and freeing VK_NULL_HANDLE a no-op. */
 ProbeImage::~ProbeImage()
 {
     AV_SCOPE("ProbeImage::~ProbeImage");
@@ -95,4 +94,4 @@ bool ProbeImage::invariants_hold() const
     return memory_ == VK_NULL_HANDLE || image_ != VK_NULL_HANDLE;
 }
 
-}  // namespace av
+}

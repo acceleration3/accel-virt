@@ -53,8 +53,6 @@ void BufferShadows::wrote(uint32_t buffer, uint64_t offset, uint64_t length, con
     unmark(buffer);
     const uint32_t slot = holding(buffer);
     if (slot == max_shadows) return;
-    /* No bytes named: what the host does with that is not the guest's to
-     * guess. */
     if (bytes == nullptr) {
         drop(slot);
         return;
@@ -167,9 +165,6 @@ void BufferShadows::report(StateWriter &writer) const
     writer.close();
 }
 
-/* Each copy is whole and of a buffer no other copy is, their bytes are counted
- * and within the budget, and no buffer has two sizes. A distrusted context can
- * still hold what it had until its own thread next asks. */
 bool BufferShadows::invariants_hold() const
 {
     AV_SCOPE("BufferShadows::invariants_hold");
@@ -215,8 +210,6 @@ uint32_t BufferShadows::least_recent() const
     return oldest;
 }
 
-/* Bytes over the budget mean a copy is held, and no free slot means every
- * slot is, so there is always one to drop. */
 uint32_t BufferShadows::make_room(uint64_t length)
 {
     AV_SCOPE("BufferShadows::make_room");
@@ -231,9 +224,6 @@ void BufferShadows::drop(uint32_t slot)
     shadows_[slot].destroy();
 }
 
-/* Another context's thread may distrust this one's copies while its own thread
- * uses them, so only the flag crosses; what is held goes here, on the thread
- * that holds it. */
 bool BufferShadows::let_go()
 {
     AV_SCOPE("BufferShadows::let_go");
@@ -257,4 +247,4 @@ void BufferShadows::unmark(uint32_t buffer)
         if (marked == buffer) marked = 0u;
 }
 
-}  // namespace av::glicd
+}

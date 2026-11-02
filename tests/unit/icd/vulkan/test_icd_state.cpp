@@ -1,6 +1,3 @@
-/* The Vulkan ICD's state dump (docs/trace.md): what avinspect.exe shows of a
- * process's connections and handles, read by the state service's thread
- * without waiting on the thread that may be hung. */
 #include "core/support/text_buffer.hpp"
 #include "core/trace/state_reporter.hpp"
 #include "core/trace/state_writer.hpp"
@@ -45,7 +42,7 @@ struct ConnectionProbe {
     static std::uint32_t context(const Connection &c) { return c.channel_.transport().context(); }
 };
 
-}  // namespace av::icd
+}
 
 namespace {
 
@@ -59,8 +56,6 @@ using FreeMemory = void (*)(VkDevice, VkDeviceMemory, const VkAllocationCallback
 constexpr std::uint64_t command_buffer_host = 0x7700u;
 constexpr std::uint32_t draw_bytes = 32u;
 
-/* The line `connection/N ...` the rig's connection writes, with the handles
- * MockKmt gave it. */
 void connection_line(TextBuffer &out, std::uint32_t number, const Connection &connection)
 {
     out.append("connection/");
@@ -73,7 +68,7 @@ void connection_line(TextBuffer &out, std::uint32_t number, const Connection &co
     out.append_decimal(av::icd::ConnectionProbe::context(connection));
 }
 
-}  // namespace
+}
 
 TEST(icd_state, dumps_each_connection_with_its_handles_memory_and_batches)
 { IcdRig rig;
@@ -99,7 +94,6 @@ TEST(icd_state, dumps_each_connection_with_its_handles_memory_and_batches)
   begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   CHECK_EQ(rig.entry<BeginCommandBuffer>(instance, "vkBeginCommandBuffer")(command_buffer, &begin), VK_SUCCESS);
   rig.entry<CmdDraw>(instance, "vkCmdDraw")(command_buffer, 3u, 1u, 0u, 0u);
-  /* The batch holds the Begin as its encoder framed it, then the 32-byte draw. */
   av::CommandHeader begun;
   CHECK_STATUS(begun.decode(av::icd::CommandBatchProbe::block(
                                 *static_cast<av::icd::LoaderHandle *>(static_cast<void *>(command_buffer))->batch()),
@@ -107,8 +101,6 @@ TEST(icd_state, dumps_each_connection_with_its_handles_memory_and_batches)
                av::Status::ok);
   const std::uint32_t recorded = begun.size() + draw_bytes;
   rig.entry<FreeMemory>(instance, "vkFreeMemory")(device, VK_NULL_HANDLE, nullptr);
-  /* A second instance, with nothing made through it: its connection comes
-   * second, and its instance is numbered after the first one's handles. */
   const VkInstance other = rig.create_instance();
   rig.trace().clear();
 

@@ -26,10 +26,6 @@ Status SharedObjectTable::initialize()
     if (adapter_ != 0u) return Status::invalid_state;
     uint64_t       frequency = 0u;
     const uint64_t counter = platform_.performance_counter(frequency);
-    /* Two adapters starting in one tick would share a number; the id itself is
-     * what an open is refused on, and this only has to keep a record of one
-     * adapter from being believed by the one beside it. The low bit is set so
-     * the number is never zero, which is what "not minted" means. */
     adapter_ = (counter ^ (frequency << 32u)) | 1u;
     return Status::ok;
 }
@@ -53,12 +49,6 @@ Status SharedObjectTable::mint(Allocation &allocation, SharedObjectRecord &recor
     MutexGuard lock(mutex_);
     InvariantScope<SharedObjectTable> guard(platform_, *this, "mint");
     if (adapter_ == 0u) return Status::invalid_state;
-    /* The size is the object's, not the allocation's. An ICD sharing host
-     * memory has no guest allocation of it at all and creates a one-page
-     * carrier for the identity alone (feature 053, T031), so tying the two
-     * would cost a guest allocation the size of every shared texture. Nothing
-     * is lost: the size a record declares is what an open is refused against,
-     * and a forger who changes it disagrees with the object this minted. */
     if (record.assigned()) return Status::invalid_parameter;
     SharedObject *object = nullptr;
     const Status  created =
@@ -160,9 +150,6 @@ void SharedObjectTable::report(StateWriter &writer)
     writer.open("shared_objects", 0u);
     writer.flag("busy", !guard.held());
     if (guard.held()) {
-        /* Not the adapter's own number: it is a value a dump is read across
-         * and an operator traces objects by their ids, which are what a record
-         * carries anyway. */
         writer.number("live", live());
         writer.number("released", objects_.live() - live());
         objects_.for_each([&](const SharedObject &object) {
@@ -190,4 +177,4 @@ bool SharedObjectTable::invariants_hold() const
     });
 }
 
-}  // namespace av
+}

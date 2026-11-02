@@ -49,7 +49,7 @@ struct DeviceTableProbe {
     { static_cast<void>(table.devices_.destroy(static_cast<Device *>(device))); }
 };
 
-}  // namespace av
+}
 
 using av::Adapter;
 using av::Allocation;
@@ -80,8 +80,6 @@ namespace {
 
 constexpr std::uint32_t allocation_count = 4u;
 
-/* An adapter's tables with dxgkrnl's handle table: allocations already created
- * and each given a D3DKMT handle, as dxgkrnl does before OpenAllocation. */
 class Fixture {
 public:
     Fixture()
@@ -141,9 +139,6 @@ public:
 
     Allocation *allocation(std::uint32_t i) { return allocations_.find(infos_[i].hAllocation); }
 
-    /* Allocation `i` created again, this time asking for an identity, so an
-     * open has a shared object to count. Answers the record the miniport
-     * wrote back, which is what the opening process is handed. */
     av::SharedObjectRecord share(std::uint32_t i)
     {
         av::DxgkargDestroyAllocationRecord destroy = {};
@@ -171,11 +166,6 @@ public:
         kernel_handles_.remove(handles_[i]);
         handles_[i] = kernel_handles_.insert(infos_[i].hAllocation);
 
-        /* The create writes nothing into the caller's bytes - dxgkrnl would
-         * discard it - so what a creator's private data carries afterwards is
-         * what the open dxgkrnl runs inside the create left there. The fixture
-         * does that here, because every test below opens against it
-         * (research.md §15). */
         const av::Allocation *const made = allocations_.find(infos_[i].hAllocation);
         CHECK(made != nullptr);
         if (made == nullptr) return av::SharedObjectRecord();
@@ -188,9 +178,6 @@ public:
         return minted;
     }
 
-    /* Allocation `i` created again as a context's ring, which is published to
-     * the host as a blob over the pages the aperture gives it - so it belongs
-     * to the one device that opened it and a second device may not have it. */
     void make_blob(std::uint32_t i)
     {
         av::DxgkargDestroyAllocationRecord destroy = {};
@@ -212,7 +199,6 @@ public:
         handles_[i] = kernel_handles_.insert(infos_[i].hAllocation);
     }
 
-    /* What dxgkrnl hands the opening process: the creator's own private data. */
     void hand_over_creator_data(std::uint32_t i)
     {
         opens_[i].pPrivateDriverData = descriptors_[i];
@@ -222,8 +208,6 @@ public:
 
     av::SharedObjectTable &shared() { return shared_; }
 
-    /* The creator's own record bytes, which a test may rewrite as a hostile
-     * process would. */
     std::uint8_t *creator_record(std::uint32_t i)
     { return descriptors_[i] + AllocationDescriptor::encoded_size; }
 
@@ -252,17 +236,13 @@ private:
     AllocationTable              allocations_;
     DeviceTable                  devices_;
     DxgkAllocationInfoRecord     infos_[allocation_count];
-    /* Room for the record a shareable allocation carries after its
-     * descriptor (feature 053). */
     std::uint8_t                 descriptors_[allocation_count][AllocationDescriptor::encoded_size +
                                                                 av::SharedObjectRecord::encoded_size];
     std::uint32_t                handles_[allocation_count];
     DxgkOpenAllocationInfoRecord opens_[allocation_count];
 };
 
-}  // namespace
-
-/* ---- create and destroy -------------------------------------------------------- */
+}
 
 TEST(device_table_create, answers_a_live_device_that_knows_its_adapter)
 { Fixture fixture;
@@ -300,8 +280,6 @@ TEST(device_table_destroy, releases_the_device_and_closes_what_it_had_open)
   CHECK_EQ(fixture.devices().opens(), 1u);
   CHECK_STATUS(fixture.devices().destroy(device), Status::invalid_parameter); }
 
-/* ---- open and close ------------------------------------------------------------ */
-
 TEST(device_table_open, resolves_each_kernel_handle_and_answers_a_per_device_handle)
 { Fixture fixture;
   void *device = fixture.create_device();
@@ -323,12 +301,12 @@ TEST(device_table_open, refuses_the_whole_list_and_undoes_what_it_opened)
       void *device = fixture.create_device();
       DxgkargOpenAllocationRecord request = fixture.open_request(allocation_count);
       void *target = device;
-      if (knob == 0) target = &fixture;                                    /* not a device */
+      if (knob == 0) target = &fixture;
       if (knob == 1) request.NumAllocations = 0u;
       if (knob == 2) request.NumAllocations = AllocationTable::max_per_call + 1u;
       if (knob == 3) request.pOpenAllocation = nullptr;
-      if (knob == 4) fixture.open_info(3u).hAllocation = 0x7FFFFFFFu;     /* dxgkrnl knows no such handle */
-      if (knob == 5) {                                                      /* not one of our allocations */
+      if (knob == 4) fixture.open_info(3u).hAllocation = 0x7FFFFFFFu;
+      if (knob == 5) {
           fixture.kernel_handles().remove(fixture.handle(3u));
           fixture.open_info(3u).hAllocation = fixture.kernel_handles().insert(&fixture);
       }
@@ -407,13 +385,11 @@ TEST(device_table_invariants, detect_broken_pools_orphaned_opens_and_uncounted_o
       CHECK(!fixture.devices().invariants_hold());
   } }
 
-/* ---- report -------------------------------------------------------------------- */
-
 namespace {
 
 unsigned long long hex_of(const void *object) { return static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(object)); }
 
-}  // namespace
+}
 
 TEST(device_table_report, writes_each_device_and_the_allocations_it_has_open)
 { Fixture fixture;
@@ -455,11 +431,6 @@ TEST(device_table_report, a_table_another_thread_holds_is_only_busy)
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   fixture.platform().set_irql(Irql::passive); }
 
-/* ---- shared allocations (feature 053) ------------------------------------------ */
-
-/* The second process's open is a second device's, with the creating process's
- * private data in front of it: the identity is what joins them, and the count
- * on the object is what keeps the host resource alive. */
 TEST(device_table_open, a_second_device_opening_a_shared_allocation_counts_the_object)
 { Fixture fixture;
   const av::SharedObjectRecord record = fixture.share(0u);
@@ -485,7 +456,6 @@ TEST(device_table_open, a_second_device_opening_a_shared_allocation_counts_the_o
   CHECK_EQ(fixture.allocation(0u)->opens(), 2u);
   CHECK_EQ(fixture.shared().live(), 1u);
 
-  /* The first process exits holding it; the second keeps what it has. */
   CHECK_STATUS(fixture.devices().destroy(first), Status::ok);
   CHECK(fixture.shared().invariants_hold());
   CHECK_EQ(fixture.allocation(0u)->opens(), 1u);
@@ -518,8 +488,6 @@ TEST(device_table_open, refuses_private_data_that_does_not_carry_the_creators_re
       CHECK(fixture.shared().invariants_hold());
   } }
 
-/* A process that writes its own record over the creator's names an object the
- * allocation is not: neither half alone is enough to open. */
 TEST(device_table_open, refuses_a_record_that_names_another_object_than_the_allocation)
 { Fixture fixture;
   const av::SharedObjectRecord record = fixture.share(0u);
@@ -532,8 +500,6 @@ TEST(device_table_open, refuses_a_record_that_names_another_object_than_the_allo
   CHECK_EQ(fixture.devices().opens(), 0u);
   CHECK(fixture.shared().invariants_hold()); }
 
-/* A record from another adapter, which is the multi-GPU edge case: the id may
- * even be one this adapter minted, and it is still refused. */
 TEST(device_table_open, refuses_a_record_whose_adapter_is_not_this_one)
 { Fixture fixture;
   const av::SharedObjectRecord record = fixture.share(0u);
@@ -552,15 +518,13 @@ TEST(device_table_open, refuses_a_record_that_does_not_decode_at_all)
 { Fixture fixture;
   static_cast<void>(fixture.share(0u));
   void *const device = fixture.create_device();
-  fixture.creator_record(0u)[0] ^= 0xFFu;   /* the magic */
+  fixture.creator_record(0u)[0] ^= 0xFFu;
   DxgkargOpenAllocationRecord open = fixture.open_request(1u);
   fixture.hand_over_creator_data(0u);
   CHECK_STATUS(fixture.devices().open(device, open), Status::invalid_parameter);
   CHECK_EQ(fixture.devices().opens(), 0u);
   CHECK(fixture.shared().invariants_hold()); }
 
-/* An allocation with no identity is opened as it always was, and its open
- * carries no object to uncount. */
 TEST(device_table_open, an_allocation_with_no_identity_needs_no_record_at_all)
 { Fixture fixture;
   void *const device = fixture.create_device();
@@ -571,9 +535,6 @@ TEST(device_table_open, an_allocation_with_no_identity_needs_no_record_at_all)
   CHECK_STATUS(fixture.close(device, 1u), Status::ok);
   CHECK(fixture.shared().invariants_hold()); }
 
-/* An open that claims the object and then cannot record it must give the
- * reference straight back: a count that only ever went up would make the
- * host descriptor immortal. */
 TEST(device_table_open, gives_the_shared_reference_back_when_the_open_itself_cannot_be_recorded)
 { Fixture fixture;
   static_cast<void>(fixture.share(0u));
@@ -585,39 +546,29 @@ TEST(device_table_open, gives_the_shared_reference_back_when_the_open_itself_can
   CHECK_EQ(fixture.devices().opens(), 0u);
   CHECK_EQ(fixture.allocation(0u)->opens(), 0u);
   CHECK(fixture.shared().invariants_hold());
-  /* Nothing is held, so the next open still works. */
   DxgkargOpenAllocationRecord again = fixture.open_request(1u);
   fixture.hand_over_creator_data(0u);
   CHECK_STATUS(fixture.devices().open(device, again), Status::ok);
   CHECK_STATUS(fixture.close(device, 1u), Status::ok);
   CHECK(fixture.shared().invariants_hold()); }
 
-/* A list is all-or-nothing, so an earlier shared open is unwound when a later
- * one in the same call fails. */
 TEST(device_table_open, unwinds_an_earlier_shared_open_when_a_later_one_fails)
 { Fixture fixture;
   static_cast<void>(fixture.share(0u));
   void *const device = fixture.create_device();
   DxgkargOpenAllocationRecord open = fixture.open_request(2u);
   fixture.hand_over_creator_data(0u);
-  /* The second names an allocation with no identity, and its private data is
-   * the one thing this open cannot resolve. */
   fixture.open_info(1u).hAllocation = 0u;
   CHECK_STATUS(fixture.devices().open(device, open), Status::invalid_parameter);
   CHECK_EQ(fixture.devices().opens(), 0u);
   CHECK_EQ(fixture.allocation(0u)->opens(), 0u);
   CHECK(fixture.devices().invariants_hold());
   CHECK(fixture.shared().invariants_hold());
-  /* And the object is still openable, which it would not be if the unwind had
-   * dropped a reference it never took. */
   DxgkargOpenAllocationRecord again = fixture.open_request(1u);
   fixture.hand_over_creator_data(0u);
   CHECK_STATUS(fixture.devices().open(device, again), Status::ok);
   CHECK_STATUS(fixture.close(device, 1u), Status::ok); }
 
-/* A shared allocation opened first and a later one in the same list refused:
- * the unwind has to give the *object* back too, not only the open, or the
- * identity is held by a device that opened nothing (feature 053). */
 TEST(device_table_open, unwinds_the_object_of_a_shared_open_when_a_later_open_cannot_be_recorded)
 { Fixture fixture;
   static_cast<void>(fixture.share(0u));
@@ -626,9 +577,6 @@ TEST(device_table_open, unwinds_the_object_of_a_shared_open_when_a_later_open_ca
   static_cast<void>(fixture.share(1u));
   fixture.hand_over_creator_data(0u);
   fixture.hand_over_creator_data(1u);
-  /* The second names an identity whose record does not decode, which is
-   * refused inside the loop rather than before it - so the first is already
-   * open, and shared, when the unwind runs. */
   for (std::uint32_t index = 0u; index < av::SharedObjectRecord::encoded_size; index++)
       fixture.creator_record(1u)[index] = 0xA5u;
   CHECK(fixture.devices().open(device, request) != Status::ok);
@@ -636,17 +584,11 @@ TEST(device_table_open, unwinds_the_object_of_a_shared_open_when_a_later_open_ca
   CHECK_EQ(fixture.allocation(0u)->opens(), 0u);
   CHECK(fixture.devices().invariants_hold());
   CHECK(fixture.shared().invariants_hold());
-  /* And the object is openable again, which it would not be had the unwind
-   * kept the reference the first open took. */
   DxgkargOpenAllocationRecord again = fixture.open_request(1u);
   fixture.hand_over_creator_data(0u);
   CHECK_STATUS(fixture.devices().open(device, again), Status::ok);
   CHECK_STATUS(fixture.close(device, 1u), Status::ok); }
 
-/* A context's ring belongs to the device that opened it: the host reads it over
- * the pages that device's aperture mapping gave, so a second device opening the
- * same blob would be reading another context's ring. The open is refused, and
- * the refusal has to unwind what it had already recorded. */
 TEST(device_table_open, a_blob_another_device_already_holds_is_refused_and_unwound)
 { Fixture fixture;
   fixture.make_blob(0u);
@@ -659,25 +601,16 @@ TEST(device_table_open, a_blob_another_device_already_holds_is_refused_and_unwou
   DxgkargOpenAllocationRecord theirs = fixture.open_request(1u);
   CHECK_STATUS(fixture.devices().open(other, theirs), Status::invalid_parameter);
   CHECK(theirs.pOpenAllocation[0].hDeviceSpecificAllocation == nullptr);
-  /* The first device still has it, and exactly once. */
   CHECK_EQ(fixture.allocation(0u)->opens(), 1u);
   CHECK_EQ(fixture.devices().opens(), 1u);
   CHECK(fixture.devices().invariants_hold());
   CHECK(fixture.shared().invariants_hold()); }
 
-/* The open dxgkrnl runs inside every create, which is where this feature was
- * failing. dxgkrnl copies the caller's own bytes back over the private data
- * before that open, so the creating device's open arrives carrying the
- * *unassigned* record the caller wrote - not the one CreateAllocation minted.
- * It must be taken, and it is where the minted record goes into the bytes
- * dxgkrnl then copies out to the caller (research.md §15). */
 TEST(device_table_open, the_creating_devices_own_open_carries_no_record_and_is_given_one)
 { Fixture fixture;
   static_cast<void>(fixture.share(0u));
   const auto *const made = fixture.allocation(0u);
   CHECK(made->shared_id() != 0u);
-  /* The caller's bytes, as dxgkrnl restores them: the record it asked with,
-   * naming no object at all. */
   const av::SharedObjectRecord asking(0u, av::SharedObjectKind(av::SharedObjectKind::memory), 0u, 0x1000u);
   CHECK_STATUS(asking.encode(fixture.creator_record(0u), av::SharedObjectRecord::encoded_size), Status::ok);
 
@@ -687,8 +620,6 @@ TEST(device_table_open, the_creating_devices_own_open_carries_no_record_and_is_g
   CHECK_STATUS(fixture.devices().open(device, open), Status::ok);
   CHECK_EQ(fixture.devices().opens(), 1u);
 
-  /* And the bytes now name the object, which is how the creating process gets
-   * an id it can share by - the only channel out of the kernel there is. */
   av::SharedObjectRecord given;
   CHECK_STATUS(given.decode(fixture.creator_record(0u), av::SharedObjectRecord::encoded_size), Status::ok);
   CHECK(given.assigned());
@@ -699,9 +630,6 @@ TEST(device_table_open, the_creating_devices_own_open_carries_no_record_and_is_g
   CHECK(fixture.shared().invariants_hold());
   CHECK_STATUS(fixture.close(device, 1u), Status::ok); }
 
-/* An unassigned record on an allocation with no identity is still nothing to
- * open: the creator's-open path is reached only where the allocation already
- * names an object. */
 TEST(device_table_open, an_unassigned_record_on_an_ordinary_allocation_opens_nothing_shared)
 { Fixture fixture;
   void *const device = fixture.create_device();
@@ -714,11 +642,6 @@ TEST(device_table_open, an_unassigned_record_on_an_ordinary_allocation_opens_not
   CHECK(fixture.devices().invariants_hold());
   CHECK_STATUS(fixture.close(device, 1u), Status::ok); }
 
-/* The creating device's open of an allocation naming an object the table does
- * not hold: refused, and the bytes are left as they came rather than given a
- * record for an open that did not happen. Only the kernel writes an id onto an
- * allocation, so this is a state no caller can reach - which is exactly why
- * the open must not assume it away. */
 TEST(device_table_open, the_creating_devices_open_of_an_identity_the_table_lost_is_refused)
 { Fixture fixture;
   static_cast<void>(fixture.share(0u));

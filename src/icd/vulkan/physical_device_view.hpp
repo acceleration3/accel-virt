@@ -1,19 +1,3 @@
-/* The physical device's properties as this guest's adapter presents them
- * (research.md §8): the host GPU's answers, with what the guest owns written
- * over them - an API version no newer than the ICD implements, the adapter's
- * LUID, which is how an application pairs the Vulkan device with the DXGI one,
- * and the adapter's name, which is what every other API calls the same GPU:
- * the host driver's own ("AMD Ryzen 9 9950X3D ... (RADV RAPHAEL_MENDOCINO)")
- * names a processor, and a GPU list with it in names a device the guest's
- * Device Manager, DXGI and OpenCL call by another name.
- *
- * The reply is the host's to write, and the generated decoder writes every
- * structure's sType from it, including the application's own nodes in the
- * pNext chain. A host that relabelled a node would have the LUID written into a
- * structure too small for it. So the chain is remembered before the call and
- * put back after it, and the LUID goes only into a node the application itself
- * labelled. A chain longer than can be remembered - or a cyclic one, which the
- * encoder would follow forever - is not sent. */
 #ifndef AV_ICD_PHYSICAL_DEVICE_VIEW_HPP
 #define AV_ICD_PHYSICAL_DEVICE_VIEW_HPP
 
@@ -23,7 +7,7 @@
 
 namespace av {
 class DriverLog;
-}  // namespace av
+}
 
 namespace av {
 class ClientTransport;
@@ -31,7 +15,7 @@ class ClientTransport;
 
 namespace av::vkproto {
 class HandleTranslation;
-}  // namespace av::vkproto
+}
 
 namespace av::icd {
 
@@ -39,19 +23,14 @@ struct PhysicalDeviceViewProbe;
 
 class PhysicalDeviceView {
 public:
-    /* The application's structure and the nodes after it. */
     static constexpr uint32_t max_chain = 32u;
-    /* An adapter is one node: the mask a valid LUID comes with. */
     static constexpr uint32_t only_node = 1u;
 
-    /* `latest_version` is the API version the ICD implements; `name` the
-     * adapter's (Connection::adapter_name), empty to keep the host's. */
     PhysicalDeviceView(ClientTransport &transport, vkproto::HandleTranslation &handles, uint64_t luid, const char *name, uint32_t latest_version,
                        DriverLog &log);
     PhysicalDeviceView(const PhysicalDeviceView &) = delete;
     PhysicalDeviceView &operator=(const PhysicalDeviceView &) = delete;
 
-    /* The host's answer, or all zero where its reply did not reach. */
     void properties(VkPhysicalDevice physical_device, VkPhysicalDeviceProperties *answer);
     void properties2(VkPhysicalDevice physical_device, VkPhysicalDeviceProperties2 *answer);
 
@@ -77,6 +56,6 @@ private:
     friend struct PhysicalDeviceViewProbe;
 };
 
-}  // namespace av::icd
+}
 
-#endif  // AV_ICD_PHYSICAL_DEVICE_VIEW_HPP
+#endif

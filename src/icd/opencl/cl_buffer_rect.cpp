@@ -5,12 +5,9 @@
 namespace av::clicd {
 
 namespace {
-
-/* Read in place of a null argument, so neither side reads what the
- * application did not give; check() refuses the rectangle all the same. */
 constexpr size_t nowhere[3] = {};
 
-}  // namespace
+}
 
 ClBufferRect::ClBufferRect(const size_t *buffer_origin, const size_t *host_origin, const size_t *region,
                            size_t buffer_row_pitch, size_t buffer_slice_pitch, size_t host_row_pitch,
@@ -53,4 +50,4 @@ size_t ClBufferRect::host_offset() const
     return host_offset_;
 }
 
-}  // namespace av::clicd
+}

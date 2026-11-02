@@ -84,4 +84,4 @@ bool ClPendingReads::invariants_hold() const
     return held == held_;
 }
 
-}  // namespace av::clicd
+}

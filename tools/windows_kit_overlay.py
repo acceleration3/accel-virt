@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""Write a clang VFS overlay that makes the Windows kit's headers resolvable on
-a case-sensitive filesystem.
-
-The kit was authored for NTFS: `kernelspecs.h` includes "DriverSpecs.h" and the
-file is `driverspecs.h`. Clang only matches case-insensitively against entries
-an overlay lists explicitly - a `directory-remap` falls through to the real
-filesystem - so every header is listed. `use-external-names` is off so a quoted
-include is searched beside the includer's virtual path, inside the overlay.
-
-  windows_kit_overlay.py third_party/windows-kit   ->  .../overlay.yaml
-"""
 import json
 import os
 import sys

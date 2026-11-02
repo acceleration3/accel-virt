@@ -10,14 +10,14 @@ using av::ScanoutFormat;
 TEST(scanout_format, each_virtio_format_is_its_own_bytes_read_the_other_way_round)
 { struct Row { std::uint32_t format; std::uint32_t fourcc; };
   const Row rows[] = {
-      {ScanoutFormat::b8g8r8a8, FourCc('A', 'R', '2', '4').value()},   /* bytes B G R A */
-      {ScanoutFormat::b8g8r8x8, FourCc('X', 'R', '2', '4').value()},   /* bytes B G R X */
-      {ScanoutFormat::a8r8g8b8, FourCc('B', 'A', '2', '4').value()},   /* bytes A R G B */
-      {ScanoutFormat::x8r8g8b8, FourCc('B', 'X', '2', '4').value()},   /* bytes X R G B */
-      {ScanoutFormat::r8g8b8a8, FourCc('A', 'B', '2', '4').value()},   /* bytes R G B A */
-      {ScanoutFormat::x8b8g8r8, FourCc('R', 'X', '2', '4').value()},   /* bytes X B G R */
-      {ScanoutFormat::a8b8g8r8, FourCc('R', 'A', '2', '4').value()},   /* bytes A B G R */
-      {ScanoutFormat::r8g8b8x8, FourCc('X', 'B', '2', '4').value()},   /* bytes R G B X */
+      {ScanoutFormat::b8g8r8a8, FourCc('A', 'R', '2', '4').value()},
+      {ScanoutFormat::b8g8r8x8, FourCc('X', 'R', '2', '4').value()},
+      {ScanoutFormat::a8r8g8b8, FourCc('B', 'A', '2', '4').value()},
+      {ScanoutFormat::x8r8g8b8, FourCc('B', 'X', '2', '4').value()},
+      {ScanoutFormat::r8g8b8a8, FourCc('A', 'B', '2', '4').value()},
+      {ScanoutFormat::x8b8g8r8, FourCc('R', 'X', '2', '4').value()},
+      {ScanoutFormat::a8b8g8r8, FourCc('R', 'A', '2', '4').value()},
+      {ScanoutFormat::r8g8b8x8, FourCc('X', 'B', '2', '4').value()},
   };
   for (const Row &row : rows) {
       const ScanoutFormat format(row.format);

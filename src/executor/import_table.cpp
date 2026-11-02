@@ -21,7 +21,6 @@ Status ImportTable::take(uint64_t blob_id, SourceMemory &memory, ImportedBlob *&
     ImportedBlob *made = nullptr;
     const Status  created = blobs_.create(made);
     if (created != Status::ok) return created;
-    /* A blob just made holds nothing, so it takes; the room was made above. */
     static_cast<void>(made->take(blob_id, memory));
     uint32_t slot = 0u;
     static_cast<void>(ids_.insert(blob_id, made, slot));
@@ -36,7 +35,6 @@ ImportedBlob *ImportTable::find(uint64_t blob_id)
     return found != nullptr ? *found : nullptr;
 }
 
-/* The room take made means the insert fails for a taken handle alone. */
 Status ImportTable::name(ImportedBlob &blob, uint64_t handle)
 {
     AV_SCOPE("ImportTable::name");
@@ -88,7 +86,6 @@ uint32_t ImportTable::count() const
     return ids_.count();
 }
 
-/* Every name is a live blob's own, and a named blob is under its name. */
 bool ImportTable::invariants_hold() const
 {
     AV_SCOPE("ImportTable::invariants_hold");
@@ -104,4 +101,4 @@ bool ImportTable::invariants_hold() const
     return holds && named == handles_.count();
 }
 
-}  // namespace av
+}

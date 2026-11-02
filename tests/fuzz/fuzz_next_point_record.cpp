@@ -1,6 +1,3 @@
-/* The escape naming a surface's next present point, fed attacker-chosen bytes:
- * Adapter::escape decodes it for any process. What decodes must re-encode to
- * exactly the bytes read and name a surface and a point. */
 #include "core/support/status.hpp"
 #include "proto/escape/next_point_record.hpp"
 

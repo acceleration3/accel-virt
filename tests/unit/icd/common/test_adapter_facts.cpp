@@ -1,6 +1,3 @@
-/* What Windows says of one avgpu adapter (AdapterFacts): every fact as the
- * kernel gave it, a fact refused unknown and read as nothing - never a guess,
- * never what an earlier learn left - and the others still known. */
 #include "core/support/text_buffer.hpp"
 #include "guest/kmt/avgpu_adapters.hpp"
 #include "guest/kmt/pci_identity.hpp"
@@ -32,7 +29,6 @@ constexpr std::uint32_t all_facts = AdapterFacts::luid_fact | AdapterFacts::iden
                                     AdapterFacts::driver_version_fact | AdapterFacts::segments_fact |
                                     AdapterFacts::features_fact;
 
-/* One adapter Windows describes in full. */
 void describe(MockKmt &kmt)
 {
     kmt.add_adapter(on_raphael, 3200u);
@@ -42,7 +38,6 @@ void describe(MockKmt &kmt)
     kmt.set_adapter_features(0u, UmdAdapterInfo::feature_integrated_gpu);
 }
 
-/* The adapter handle MockKmt hands out for its first adapter. */
 std::uint32_t first_adapter(MockKmt &kmt)
 {
     std::uint32_t handles[4] = {};
@@ -51,7 +46,7 @@ std::uint32_t first_adapter(MockKmt &kmt)
     return handles[0];
 }
 
-}  // namespace
+}
 
 TEST(adapter_facts, knows_nothing_before_a_learn)
 { const AdapterFacts facts;
@@ -83,8 +78,6 @@ TEST(adapter_facts, learns_every_fact_windows_gives)
   CHECK(facts.integrated());
   CHECK(facts.invariants_hold()); }
 
-/* Each refusal leaves that fact, and only that one, unknown and read as
- * nothing; what Windows did give is still there. */
 TEST(adapter_facts, a_refused_fact_is_unknown_and_reads_as_nothing_while_the_rest_are_known)
 { struct Refusal {
       MockKmt::Call call;
@@ -115,12 +108,10 @@ TEST(adapter_facts, a_refused_fact_is_unknown_and_reads_as_nothing_while_the_res
       CHECK_EQ(facts.name()[0] == '\0', refusal.fact == AdapterFacts::name_fact);
       CHECK_EQ(facts.driver_version(), refusal.fact == AdapterFacts::driver_version_fact ? 0u : version);
       CHECK_EQ(facts.shared_system_bytes(), refusal.fact == AdapterFacts::segments_fact ? 0u : 4ull << 30u);
-      /* A miniport from before the bit reads as discrete. */
       CHECK_EQ(facts.integrated(), refusal.fact != AdapterFacts::features_fact);
       CHECK(facts.invariants_hold());
   } }
 
-/* A LUID of zero names no adapter: it is not a fact. */
 TEST(adapter_facts, a_zero_luid_is_unknown)
 { MockKmt kmt;
   describe(kmt);
@@ -131,8 +122,6 @@ TEST(adapter_facts, a_zero_luid_is_unknown)
   CHECK(facts.knows(AdapterFacts::name_fact));
   CHECK(facts.invariants_hold()); }
 
-/* Learning again forgets: a fact the second learn is refused is not the
- * first one's answer. */
 TEST(adapter_facts, a_second_learn_forgets_what_the_first_was_told)
 { MockKmt kmt;
   describe(kmt);
@@ -153,8 +142,6 @@ TEST(adapter_facts, a_second_learn_forgets_what_the_first_was_told)
   CHECK_EQ(facts.luid(), 0u);
   CHECK(facts.invariants_hold()); }
 
-/* The driver package's version as Windows writes it: four 16-bit parts, the
- * most significant first, each in full. */
 TEST(adapter_facts, writes_the_driver_version_as_windows_does)
 { MockKmt kmt;
   describe(kmt);

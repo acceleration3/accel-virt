@@ -79,7 +79,7 @@ private:
     ContextBinding binding_;
 };
 
-}  // namespace
+}
 
 TEST(context_binding_bind, records_the_setup_at_the_negotiated_version_and_pins_both_blobs)
 { Fixture fixture;

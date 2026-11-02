@@ -1,5 +1,3 @@
-/* Reaches into a SyncTokens so invariant tests can corrupt it. Declared a
- * friend by SyncTokens; nothing outside the tests uses it. */
 #ifndef AV_SYNC_TOKENS_PROBE_HPP
 #define AV_SYNC_TOKENS_PROBE_HPP
 
@@ -16,12 +14,11 @@ struct SyncTokensProbe {
     void set_fence(uint32_t index, void *fence);
     void set_newest(uint64_t newest);
     void set_stand_in(void *fence);
-    /* The retired tokens, for a probe of their own. */
     RetiredSyncTokens &retired();
 
     SyncTokens &tokens;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SYNC_TOKENS_PROBE_HPP
+#endif

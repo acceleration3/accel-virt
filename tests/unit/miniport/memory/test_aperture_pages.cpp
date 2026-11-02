@@ -37,7 +37,7 @@ DxgkBuildPagingBufferUnmapApertureSegmentRecord unmapping(std::uint64_t offset, 
     return request;
 }
 
-}  // namespace
+}
 
 TEST(aperture_pages, has_no_pages_before_a_mapping)
 { MockPlatform platform;
@@ -183,14 +183,12 @@ TEST(aperture_pages, fills_a_second_window_of_the_same_mapping)
   CHECK_EQ(list.runs(), 2u); }
 
 namespace av {
-
-/* The states the invariant guards, which correct code never reaches. */
 struct AperturePagesProbe {
     static void forget_capacity(AperturePages &pages) { pages.capacity_ = 0u; }
     static void move_the_window(AperturePages &pages) { pages.base_page_ = 9u; }
 };
 
-}  // namespace av
+}
 
 TEST(aperture_pages_invariants, no_capacity_is_detected)
 { MockPlatform platform;
@@ -199,7 +197,6 @@ TEST(aperture_pages_invariants, no_capacity_is_detected)
   av::AperturePagesProbe::forget_capacity(pages);
   CHECK(!pages.invariants_hold()); }
 
-/* A window without frames describes pages that were never recorded. */
 TEST(aperture_pages_invariants, a_window_with_no_frames_is_detected)
 { MockPlatform platform;
   AperturePages pages(platform, 2u);

@@ -14,12 +14,9 @@
 namespace av {
 
 namespace {
-
-/* One resource per output the driver can offer, each with its own index: an
- * array member cannot be built in a loop, so the maximum is written out. */
 static_assert(DisplaySources::max_sources == 4u, "give each source its resource when there are more");
 
-}  // namespace
+}
 
 DisplayScanout::DisplayScanout(Platform &platform, LogBudget &budget, ObjectStorage<VirtioGpuDevice> &device)
     : platform_(platform), lock_(platform, LockRank::scanout), resources_{ScanoutResource(platform, budget, device, 0u),
@@ -35,9 +32,6 @@ DisplayScanout::DisplayScanout(Platform &platform, LogBudget &budget, ObjectStor
           AV_SCOPE("DisplayScanout::DisplayScanout");
       }
 
-/* Read once, at StartDevice, beside every other thing the capset settles. A
- * device that cannot show a dma-buf is every device until its display backend
- * gives a console a GL context, so the 2D path stays the default. */
 void DisplayScanout::offer(const CapsetInfo &capset)
 {
     AV_SCOPE("DisplayScanout::offer");
@@ -58,8 +52,6 @@ bool DisplayScanout::scans_out_blobs() const
     return blob_scanout_;
 }
 
-/* The room the mode needs is made before the lock, where memory can be had;
- * the source takes it under the lock. */
 Status DisplayScanout::configure(uint32_t source, const DisplayMode &mode)
 {
     AV_SCOPE("DisplayScanout::configure");
@@ -91,14 +83,6 @@ void DisplayScanout::wait_for_refresh()
     SpinLockGuard held(lock_);
 }
 
-/* A source that is not visible is not carried: dxgkrnl has told us nothing is
- * on it, and the host was already told to scan out nothing.
- *
- * The primary handle is the one this driver gave dxgkrnl for its own
- * allocation, so it is cast back rather than looked up: the allocation table
- * is reached under a mutex, which this path may not take. The destroy clears
- * the handle (DisplaySources::forget_primary) and then waits out any refresh
- * that read it before then (wait_for_refresh), under this lock. */
 Status DisplayScanout::refresh(DisplaySources &sources, bool presented, bool due)
 {
     AV_SCOPE("DisplayScanout::refresh");
@@ -108,9 +92,6 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented, bool due
     Status                         carried = Status::ok;
     for (uint32_t source = 0u; source < sources.count(); source++) {
         if (!sources.visible(source) || (!due && !numbered(source))) continue;
-        /* The number before the address: a flip in between then posts the new
-         * address under the older number, and the next DPC posts it again
-         * under its own, rather than the old address under the new one. */
         const uint32_t frame = sources.frame(source);
         const uint64_t address = sources.scanout_address(source);
         GuestPageList  pages;
@@ -139,12 +120,9 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented, bool due
                 line.append_decimal(static_cast<uint32_t>(sources.flip(source)));
                 platform_.log(line.text());
             }
-            /* A keyed image already shown never reads the pages (ScanoutResource::refresh). */
             if (primary != nullptr && (key == 0u || !resources_[source].scanning_out()))
                 pages = primary->pages_at(address, resources_[source].page_count());
         }
-        /* The planes first, so the frame that follows is composed with them. A
-         * source flipped some other way shows its base image alone. */
         if (planes_offered_ && resources_[source].width() != 0u) {
             OverlayPlane planes[OverlayPlane::max_planes];
             if (sources.flip(source) == DisplaySources::Flip::presented_plane) sources.planes(source, planes);
@@ -200,4 +178,4 @@ bool DisplayScanout::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

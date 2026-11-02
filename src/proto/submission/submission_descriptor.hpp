@@ -1,4 +1,3 @@
-/* One batch of ring bytes and the fence that completes it (docs/protocol.md). */
 #ifndef AV_SUBMISSION_DESCRIPTOR_HPP
 #define AV_SUBMISSION_DESCRIPTOR_HPP
 
@@ -24,19 +23,17 @@ public:
     uint64_t length() const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
-    /* Unchanged unless ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
-    /* A batch longer than the ring cannot have been written into it. */
     [[nodiscard]] Status validate_against(const RingHeader &ring) const;
 
 private:
-    static constexpr uint32_t magic = 0x00535641u;  /* "AVS" */
+    static constexpr uint32_t magic = 0x00535641u;
 
     uint64_t fence_id_;
     uint64_t begin_;
     uint64_t end_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SUBMISSION_DESCRIPTOR_HPP
+#endif

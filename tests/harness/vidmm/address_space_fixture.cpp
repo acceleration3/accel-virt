@@ -16,8 +16,6 @@ AddressSpaceFixture::AddressSpaceFixture() : platform_(), space_(platform_)
                                                 "fixture is born inconsistent");
 }
 
-/* Leaks are reported by ~MockPlatform, which runs after the space has released
- * its table. */
 AddressSpaceFixture::~AddressSpaceFixture() = default;
 
 MockPlatform           &AddressSpaceFixture::platform() { return platform_; }
@@ -65,4 +63,4 @@ void GpuVirtualAddressSpaceProbe::set_object_offset(std::uint32_t index,
 void GpuVirtualAddressSpaceProbe::set_mapped(std::uint32_t index, bool mapped)
 { space.ranges_.at(index).mapped_ = mapped; }
 
-}  // namespace av
+}

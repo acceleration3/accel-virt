@@ -68,4 +68,4 @@ const std::uint8_t *RecordedFile::expect(RecordKind kind, RecordHeader &record)
     return nullptr;
 }
 
-}  // namespace av
+}

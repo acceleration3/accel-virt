@@ -36,4 +36,4 @@ uint32_t KeyedLog::keys() const
     return keys_.claimed();
 }
 
-}  // namespace av
+}

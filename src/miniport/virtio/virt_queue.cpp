@@ -12,12 +12,11 @@ constexpr uint16_t flag_next  = 1u;
 constexpr uint16_t flag_write = 2u;
 constexpr size_t   descriptor_bytes = 16u;
 
-}  // namespace
+}
 
-/* The driver's own record of one descriptor, kept out of device-visible memory. */
 struct VirtQueue::Shadow {
     uint16_t next;
-    uint16_t chain_length;   /* non-zero only for the head of a chain in flight */
+    uint16_t chain_length;
     uint32_t writable;
 };
 
@@ -81,17 +80,12 @@ uint32_t VirtQueue::read_u32(size_t offset) const
     return uint32_t{read_u16(offset)} | uint32_t{read_u16(offset + 2u)} << 16u;
 }
 
-/* The index the device polls: one 16-bit store, after everything it
- * publishes. Two byte stores let the device read an index 256 off when it
- * crosses a byte boundary - hundreds of phantom chains, and QEMU's "virtqueue
- * size exceeded" breaks the device for good. */
 void VirtQueue::publish_u16(size_t offset, uint16_t value)
 {
     AV_SCOPE("VirtQueue::publish_u16");
     __atomic_store_n(reinterpret_cast<uint16_t *>(ring_.bytes() + offset), value, __ATOMIC_RELEASE);
 }
 
-/* The device's index: one 16-bit load, before anything it names is read. */
 uint16_t VirtQueue::observe_u16(size_t offset) const
 {
     AV_SCOPE("VirtQueue::observe_u16");
@@ -183,8 +177,6 @@ Status VirtQueue::take_used(uint16_t &head, uint32_t &written)
     const size_t element = device_offset_ + 4u + 8u * (last_used_index_ & (size_ - 1u));
     const uint32_t id = read_u32(element);
     const uint32_t length = read_u32(element + 4u);
-    /* A bad element is consumed so the queue moves on; its chain, if any, is
-     * lost rather than freed on the device's word. */
     last_used_index_++;
     if (id >= size_ || shadow_[id].chain_length == 0u || length > shadow_[id].writable)
         return Status::invalid_state;
@@ -237,4 +229,4 @@ bool VirtQueue::invariants_hold() const
     return free_count_ <= size_ && in_flight <= size_ && (size_ == 0u) == (shadow_ == nullptr);
 }
 
-}  // namespace av
+}

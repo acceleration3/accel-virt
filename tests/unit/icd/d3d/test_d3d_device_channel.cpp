@@ -1,11 +1,3 @@
-/* A process's devices on one command stream: each command is recorded under
- * the process's lock, a device that was not the last to speak is selected
- * before its command and one that was is not, and the lock is let go when an
- * asynchronous command is recorded, when a synchronous call ends, and when a
- * command is given up before it was sent - a lock kept there would hang the
- * process's next call on any device. Closing destroys the device on the host
- * and makes the stream select whoever speaks next. The batch is read back off
- * MockKmt's ring as the device reads it. */
 #include "core/support/status.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -54,14 +46,13 @@ struct KmtTransportProbe {
     static std::uint32_t ring(const KmtTransport &t) { return t.allocations_[0]; }
 };
 
-}  // namespace av
+}
 
 using av::KmtTransportProbe;
 
 namespace {
 
 const PciIdentity av(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
-/* A ring that takes a whole held block, as the session's does. */
 constexpr std::uint8_t  ring_order = 20u;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::size_t   staging_bytes = 1024u;
@@ -95,7 +86,6 @@ public:
     D3dDeviceChannel &b() { return b_; }
     D3dDeviceChannel &twelve() { return twelve_; }
 
-    /* The ids of what the last batch carried, and each SelectDevice11's device. */
     std::uint32_t shipped(std::uint32_t *ids, std::uint32_t *selected, std::uint32_t capacity)
     {
         ShippedBatch batch(kmt_, KmtTransportProbe::ring(transport_));
@@ -125,7 +115,7 @@ private:
     D3dDeviceChannel    twelve_;
 };
 
-}  // namespace
+}
 
 TEST(d3d_device_channel, a_device_is_selected_only_when_another_spoke_last)
 { Fixture fixture;
@@ -151,13 +141,10 @@ TEST(d3d_device_channel, the_lock_is_held_for_each_call_and_no_longer)
   CHECK(!fixture.lock().held());
   CHECK(av_d3d_Draw(fixture.b(), 3u, 0u));
   CHECK_STATUS(fixture.b().flush(), Status::ok);
-  /* Data that crosses inline needs no room, and takes no lock to say so. */
   CHECK(fixture.b().make_room_for(av::d3d::D3dCommandStream::inline_data));
   CHECK(!fixture.lock().held());
   CHECK(std::strcmp(fixture.trace().text(), "PpPpPp") == 0); }
 
-/* The device's answer is written before the call reads it: the first batch
- * that asks for one is fence 1. */
 TEST(d3d_device_channel, a_synchronous_call_keeps_the_lock_until_it_ends)
 { Fixture fixture;
   std::uint8_t *reply = fixture.kmt().reply_of(fixture.transport().context());
@@ -171,11 +158,6 @@ TEST(d3d_device_channel, a_synchronous_call_keeps_the_lock_until_it_ends)
   CHECK(!fixture.lock().held());
   CHECK(std::strcmp(fixture.trace().text(), "Pp") == 0); }
 
-/* A full arena whose leases the commands the stream holds name is emptied
- * by sending them and waiting for the host to run them - not by a Finish,
- * whose answer once retired leases the host had not been sent yet - and the
- * room is asked once they are back: asked before, a full arena refused every
- * first upload that needed it (DWM's "an upload larger than the arena"). */
 TEST(d3d_device_channel, room_held_commands_hold_comes_back_once_they_are_sent_and_run)
 { Fixture fixture;
   alignas(64) static std::uint8_t block[2u * av::d3d::D3dCommandStream::inline_data];
@@ -194,8 +176,6 @@ TEST(d3d_device_channel, room_held_commands_hold_comes_back_once_they_are_sent_a
   CHECK_EQ(ids[1], kCmd_UpdateSubresource);
   CHECK(!fixture.lock().held()); }
 
-/* Room a published batch holds comes back by waiting for the host to run
- * it - no Finish is sent, and the lock is not held for the wait. */
 TEST(d3d_device_channel, room_a_sent_batch_holds_comes_back_without_a_finish)
 { Fixture fixture;
   alignas(64) static std::uint8_t block[2u * av::d3d::D3dCommandStream::inline_data];
@@ -214,7 +194,6 @@ TEST(d3d_device_channel, room_a_sent_batch_holds_comes_back_without_a_finish)
 TEST(d3d_device_channel, a_command_given_up_before_it_was_sent_lets_the_lock_go)
 { Fixture fixture;
   const Box whole = {};
-  /* Four bytes named with no data behind them: refused while encoding. */
   CHECK(!av_d3d_UpdateSubresource(fixture.a(), 1u, 0u, 0u, whole, 0u, 0u, 0u, nullptr, 4u));
   CHECK(!fixture.lock().held());
   CHECK(av_d3d_Draw(fixture.b(), 3u, 0u));
@@ -233,8 +212,6 @@ TEST(d3d_device_channel, closing_destroys_the_device_and_the_next_speaker_is_sel
   CHECK_EQ(selected[3], device_a);
   CHECK(!fixture.lock().held()); }
 
-/* A stream that failed fails every later command, the selection included, and
- * the channel still lets the lock go. */
 TEST(d3d_device_channel, a_failed_stream_fails_the_command_and_keeps_no_lock)
 { Fixture fixture;
   fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
@@ -246,8 +223,6 @@ TEST(d3d_device_channel, a_failed_stream_fails_the_command_and_keeps_no_lock)
   CHECK(!fixture.lock().held()); }
 
 namespace {
-
-/* The host's answer to the first batch that asks for one: an hresult and a level. */
 void answer_create(Fixture &fixture, std::uint32_t hresult)
 {
     std::uint8_t *reply = fixture.kmt().reply_of(fixture.transport().context());
@@ -257,12 +232,8 @@ void answer_create(Fixture &fixture, std::uint32_t hresult)
     std::memcpy(reply + av::ReplyHeader::encoded_size, words, sizeof words);
 }
 
-}  // namespace
+}
 
-/* CreateDevice11 selects the device on the host: sent after a selection of an
- * id the host does not know yet, the selection would be refused and the
- * session lost. So opening sends no selection, and the device's next command
- * needs none. */
 TEST(d3d_device_channel, opening_selects_the_device_without_a_selection_sent_first)
 { Fixture fixture;
   answer_create(fixture, 0u);
@@ -279,7 +250,6 @@ TEST(d3d_device_channel, opening_selects_the_device_without_a_selection_sent_fir
   CHECK_EQ(ids[0], kCmd_Draw);
   CHECK(!fixture.lock().held()); }
 
-/* A device the host would not make is not the one it has selected. */
 TEST(d3d_device_channel, a_refused_open_leaves_the_next_command_to_select)
 { Fixture fixture;
   answer_create(fixture, 0x80004005u);
@@ -300,10 +270,6 @@ TEST(d3d_device_channel, an_open_that_cannot_be_sent_fails_and_keeps_no_lock)
   CHECK(!fixture.a().open(0xb100u, hresult, level));
   CHECK(!fixture.lock().held()); }
 
-/* A Direct3D 12 device speaks as device 0: its commands name their own
- * objects, so nothing is selected before them, and the device a Direct3D 11
- * command selected stays selected across them - the next command from it
- * needs no selection either. */
 TEST(d3d_device_channel, a_direct3d_12_speaker_selects_nothing_and_keeps_the_selection)
 { Fixture fixture;
   CHECK(av_d3d12_DrawInstanced12(fixture.twelve(), 1u, 3u, 1u, 0u, 0u));
@@ -321,9 +287,6 @@ TEST(d3d_device_channel, a_direct3d_12_speaker_selects_nothing_and_keeps_the_sel
   CHECK(fixture.twelve().invariants_hold());
   CHECK_EQ(fixture.twelve().device(), 0u); }
 
-/* A deferred context's channel: what it recorded is counted and taken out of
- * the stream under the process's lock, and an application's Flush is the
- * stream's, under the lock too. */
 TEST(d3d_device_channel, a_recording_is_counted_and_taken_under_the_lock)
 { Fixture fixture;
   av::MockPlatform platform;
@@ -333,7 +296,6 @@ TEST(d3d_device_channel, a_recording_is_counted_and_taken_under_the_lock)
   CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
   fixture.trace().clear();
   const std::size_t recorded = fixture.a().recorded_bytes();
-  /* The selection of a, then its draw. */
   CHECK(recorded > av::CommandHeader::encoded_size);
   std::uint8_t out[256] = {};
   std::size_t  length = 0u;
@@ -358,8 +320,6 @@ TEST(d3d_device_channel, an_application_flush_is_the_streams_under_the_lock)
   CHECK_EQ(fixture.stream().recorded_bytes(), 0u); }
 
 namespace {
-
-/* CreateDevice9's answer: an hresult alone. */
 void answer_create9(Fixture &fixture, std::uint32_t hresult)
 {
     std::uint8_t *reply = fixture.kmt().reply_of(fixture.transport().context());
@@ -368,11 +328,8 @@ void answer_create9(Fixture &fixture, std::uint32_t hresult)
     std::memcpy(reply + av::ReplyHeader::encoded_size, &hresult, sizeof hresult);
 }
 
-}  // namespace
+}
 
-/* A Direct3D 9 session's stream selects with SelectDevice9 and opens and
- * closes its devices with Direct3D 9's own commands: Direct3D 11's selection
- * would name a device the host keeps no Direct3D 11 state for. */
 TEST(d3d_device_channel, a_direct3d_9_stream_selects_opens_and_closes_in_direct3d_9)
 { Fixture fixture;
   fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Flush9);
@@ -383,7 +340,6 @@ TEST(d3d_device_channel, a_direct3d_9_stream_selects_opens_and_closes_in_direct3
   std::uint32_t ids[6] = {}, selected[6] = {};
   CHECK_EQ(fixture.shipped(ids, selected, 6u), 1u);
   CHECK_EQ(ids[0], av::d3d9proto::kCmd_CreateDevice9);
-  /* Opened means selected: a's next command goes alone, b's is preceded by its selection. */
   CHECK(av::d3d9proto::av_d3d9_Flush9(fixture.a()));
   CHECK(av::d3d9proto::av_d3d9_Flush9(fixture.b()));
   CHECK(fixture.b().close9());
@@ -393,16 +349,12 @@ TEST(d3d_device_channel, a_direct3d_9_stream_selects_opens_and_closes_in_direct3
   CHECK_EQ(ids[1], av::d3d9proto::kCmd_SelectDevice9);
   CHECK_EQ(ids[2], av::d3d9proto::kCmd_Flush9);
   CHECK_EQ(ids[3], av::d3d9proto::kCmd_Destroy9);
-  /* The closed device is forgotten: speaking for it again selects it again. */
   CHECK(av::d3d9proto::av_d3d9_Flush9(fixture.b()));
   CHECK_STATUS(fixture.b().flush(), Status::ok);
   CHECK_EQ(fixture.shipped(ids, selected, 6u), 2u);
   CHECK_EQ(ids[0], av::d3d9proto::kCmd_SelectDevice9);
   CHECK(!fixture.lock().held()); }
 
-/* An application's flush is the dialect's too: Flush11 from a Direct3D 9
- * session names no Direct3D 11 device to the host, which refuses it and
- * faults the whole session. */
 TEST(d3d_device_channel, a_direct3d_9_streams_application_flush_is_flush9)
 { Fixture fixture;
   fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Flush9);
@@ -416,8 +368,6 @@ TEST(d3d_device_channel, a_direct3d_9_streams_application_flush_is_flush9)
   CHECK_EQ(fixture.shipped(ids, selected, 4u), 2u);
   CHECK_EQ(ids[0], av::d3d9proto::kCmd_SetIndices9);
   CHECK_EQ(ids[1], av::d3d9proto::kCmd_Flush9);
-  /* Nothing recorded since: no second flush command, so the next batch is
-   * the next command alone. */
   CHECK_STATUS(fixture.a().application_flush(), Status::ok);
   CHECK(av::d3d9proto::av_d3d9_SetIndices9(fixture.a(), 8u));
   CHECK_STATUS(fixture.a().flush(), Status::ok);
@@ -425,8 +375,6 @@ TEST(d3d_device_channel, a_direct3d_9_streams_application_flush_is_flush9)
   CHECK_EQ(ids[0], av::d3d9proto::kCmd_SetIndices9);
   CHECK(!fixture.lock().held()); }
 
-/* What Portal did: one device destroyed while selected, then another's
- * flush. The flush names its device first, or the host has none selected. */
 TEST(d3d_device_channel, an_application_flush_after_the_selected_device_closed_selects_its_own)
 { Fixture fixture;
   fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Flush9);
@@ -449,8 +397,6 @@ TEST(d3d_device_channel, a_direct3d_9_open_that_cannot_be_sent_fails_and_keeps_n
   CHECK(!fixture.a().open9(hresult));
   CHECK(!fixture.lock().held()); }
 
-/* A Direct3D 9 device the host would not make is not the one it selected:
- * its next command selects it first. */
 TEST(d3d_device_channel, a_refused_direct3d_9_open_leaves_the_next_command_to_select)
 { Fixture fixture;
   fixture.stream().speak_with(av::d3d9proto::kCmd_SelectDevice9, av::d3d9proto::kCmd_Flush9);
@@ -465,8 +411,6 @@ TEST(d3d_device_channel, a_refused_direct3d_9_open_leaves_the_next_command_to_se
   CHECK_EQ(ids[0], av::d3d9proto::kCmd_SelectDevice9);
   CHECK(!fixture.lock().held()); }
 
-/* A stream the kernel failed sends nothing more, an application's flush
- * included; and a call that never began ends without a lock to let go. */
 TEST(d3d_device_channel, a_failed_streams_application_flush_fails_and_an_idle_call_ends_quietly)
 { Fixture fixture;
   fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
@@ -477,9 +421,6 @@ TEST(d3d_device_channel, a_failed_streams_application_flush_fails_and_an_idle_ca
   CHECK(!fixture.lock().held()); }
 
 namespace {
-
-/* A command list of `draws` draws, as a deferred context records it on its
- * own fixture's stream. */
 std::size_t recorded_draws(std::uint8_t *out, std::size_t capacity, std::uint32_t draws)
 {
     Fixture         recorder;
@@ -493,18 +434,13 @@ std::size_t recorded_draws(std::uint8_t *out, std::size_t capacity, std::uint32_
     return length;
 }
 
-}  // namespace
+}
 
-/* A command list runs from and back to the default state: the state cleared
- * before it only when something was recorded since the last clear, and after
- * it always. Bytes that are no commands are refused; a failed stream runs
- * nothing. */
 TEST(d3d_device_channel, a_command_list_runs_between_cleared_states)
 { std::uint8_t list[256] = {};
   const std::size_t length = recorded_draws(list, sizeof list, 1u);
   CHECK(length > 0u);
   Fixture fixture;
-  /* The selection is recorded too: the list starts from a cleared state. */
   CHECK_STATUS(fixture.a().execute(list, length), Status::ok);
   CHECK_STATUS(fixture.a().flush(), Status::ok);
   std::uint32_t ids[8] = {}, selected[8] = {};
@@ -512,14 +448,11 @@ TEST(d3d_device_channel, a_command_list_runs_between_cleared_states)
                                   kCmd_ClearState11};
   CHECK_EQ(fixture.shipped(ids, selected, 8u), 5u);
   for (std::uint32_t at = 0u; at < 5u; at++) CHECK_EQ(ids[at], first[at]);
-  /* Straight after a list nothing was recorded since its clear: none before
-   * the next. */
   CHECK_STATUS(fixture.a().execute(list, length), Status::ok);
   CHECK_STATUS(fixture.a().flush(), Status::ok);
   const std::uint32_t again[3] = {kCmd_SelectDevice11, kCmd_Draw, kCmd_ClearState11};
   CHECK_EQ(fixture.shipped(ids, selected, 8u), 3u);
   for (std::uint32_t at = 0u; at < 3u; at++) CHECK_EQ(ids[at], again[at]);
-  /* A draw since: cleared again first. */
   CHECK(av_d3d_Draw(fixture.a(), 6u, 0u));
   CHECK_STATUS(fixture.a().execute(list, length), Status::ok);
   CHECK_STATUS(fixture.a().flush(), Status::ok);
@@ -541,10 +474,6 @@ TEST(d3d_device_channel, a_failed_stream_runs_no_command_list)
   CHECK_STATUS(fixture.b().execute(list, length), Status::invalid_state);
   CHECK(!fixture.lock().held()); }
 
-/* The transport holds what the stream sends in one block, so a list that
- * does not fit behind a pile of draws sends them first, and a clear that does
- * not fit behind a list nearly the block's size sends the list first - and a
- * flush the kernel refuses fails the command list, with no lock kept. */
 TEST(d3d_device_channel, a_flush_the_kernel_refuses_fails_the_command_list)
 { static std::uint8_t list[block_bytes] = {};
   constexpr std::size_t draw = av::CommandHeader::encoded_size + 8u;
@@ -563,9 +492,6 @@ TEST(d3d_device_channel, a_flush_the_kernel_refuses_fails_the_command_list)
     CHECK(fixture.stream().failed());
     CHECK(!fixture.lock().held()); } }
 
-/* The clear before a list asks a command's room like any command: behind as
- * many draws as fit, it flushes them, and a flush the kernel refuses fails
- * the list before a byte of it is recorded. */
 TEST(d3d_device_channel, a_refused_flush_for_the_clear_before_a_list_fails_it)
 { std::uint8_t list[256] = {};
   const std::size_t length = recorded_draws(list, sizeof list, 1u);
@@ -584,11 +510,6 @@ TEST(d3d_device_channel, a_refused_flush_for_the_clear_before_a_list_fails_it)
   CHECK(fixture.stream().failed());
   CHECK(!fixture.lock().held()); }
 
-/* The publish barrier before another process opens what a device made - a
- * shared resource's key, which DWM opens on a context of its own: what the
- * stream holds goes with a no-op behind it, under the lock, and returns once
- * the host has answered. A recording sends nothing, and a stream whose
- * transport lost the context fails it. */
 TEST(d3d_device_channel, the_publish_barrier_runs_what_is_held_under_the_lock)
 { Fixture fixture;
   CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));

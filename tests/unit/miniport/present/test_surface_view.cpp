@@ -1,6 +1,3 @@
-/* A present surface mapped for one blit: a pixel is where the layout puts it,
- * across the pages it spans; a mapping the platform refuses is not_found; and
- * the view comes down with the object, writing through to the pages. */
 #include "miniport/present/present_surface.hpp"
 #include "miniport/present/surface_view.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -21,11 +18,11 @@ namespace {
 
 constexpr std::uint64_t page = GuestPageList::page_bytes;
 constexpr std::uint32_t width = 16u;
-constexpr std::uint32_t pitch = 1024u;   /* four rows a page */
-constexpr std::uint32_t height = 8u;     /* two pages */
-constexpr std::uint32_t format = 21u;    /* D3DDDIFMT_A8R8G8B8 */
+constexpr std::uint32_t pitch = 1024u;
+constexpr std::uint32_t height = 8u;
+constexpr std::uint32_t format = 21u;
 
-}  // namespace
+}
 
 TEST(surface_view, a_pixel_is_where_the_layout_puts_it_across_its_pages)
 { MockPlatform  platform;
@@ -33,7 +30,7 @@ TEST(surface_view, a_pixel_is_where_the_layout_puts_it_across_its_pages)
   CHECK(block != nullptr);
   const std::uint64_t  frames[2] = {platform.physical_address(block), platform.physical_address(block) + page};
   const PresentSurface surface(SurfaceLayout(width, height, format, pitch), GuestPageList(frames, 2u));
-  block[5u * pitch + 3u * PresentSurface::pixel_bytes] = 0x5Au;   /* row 5, in the second page */
+  block[5u * pitch + 3u * PresentSurface::pixel_bytes] = 0x5Au;
   { SurfaceView view(platform, surface);
     CHECK_STATUS(view.map(), Status::ok);
     CHECK_EQ(*view.pixel(3u, 5u), 0x5Au);

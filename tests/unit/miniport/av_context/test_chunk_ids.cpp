@@ -1,7 +1,3 @@
-/* The adapter's host blob ids: every chunk on the device takes one no other
- * resource and no other chunk has, the lowest free first, and gives it back
- * when the device let go of its blob (docs/host-memory.md). The bitmap grows
- * as ids are taken, so only the id range itself runs out. */
 #include "miniport/av_context/chunk_ids.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -18,7 +14,7 @@ struct ChunkIdsProbe {
     static void set_word(ChunkIds &ids, std::uint32_t word, std::uint64_t bits) { ids.words_.at(word) = bits; }
 };
 
-}  // namespace av
+}
 
 using av::ChunkIds;
 using av::ChunkIdsProbe;
@@ -49,8 +45,6 @@ TEST(chunk_ids_take, hands_out_the_lowest_free_id_first)
   CHECK_EQ(id, HostBlobId::first + 3u);
   CHECK(ids.invariants_hold()); }
 
-/* The bitmap is words of 64: the 65th id is the first of the second word,
- * and a free bit in a later word is found past a full one. */
 TEST(chunk_ids_take, crosses_from_a_full_word_to_the_next)
 { MockPlatform  platform;
   ChunkIds      ids(platform, HostBlobId::most);
@@ -60,14 +54,12 @@ TEST(chunk_ids_take, crosses_from_a_full_word_to_the_next)
   CHECK_STATUS(ids.take(id), Status::ok);
   CHECK_EQ(id, HostBlobId::first + 64u);
   ids.give_back(HostBlobId::first + 64u);
-  ids.give_back(HostBlobId::first + 70u);   /* never taken: nothing changes */
+  ids.give_back(HostBlobId::first + 70u);
   CHECK_EQ(ids.taken(), 64u);
   CHECK_STATUS(ids.take(id), Status::ok);
   CHECK_EQ(id, HostBlobId::first + 64u);
   CHECK(ids.invariants_hold()); }
 
-/* The 16384 ids the device once kept are no bound: ids are handed out well
- * past them, each once, and one given back low down is the next taken. */
 TEST(chunk_ids_take, hands_out_ids_well_past_the_old_range)
 { MockPlatform  platform;
   ChunkIds      ids(platform, HostBlobId::most);
@@ -85,8 +77,6 @@ TEST(chunk_ids_take, hands_out_ids_well_past_the_old_range)
   CHECK_EQ(id, HostBlobId::first + 100000u);
   CHECK(ids.invariants_hold()); }
 
-/* Every id of the range taken, and then none: the next open has nowhere to
- * go and nothing moved. The range here is short, as a test can take it. */
 TEST(chunk_ids_take, every_id_of_the_range_taken_is_no_space)
 { MockPlatform  platform;
   ChunkIds      ids(platform, 70u);
@@ -103,8 +93,6 @@ TEST(chunk_ids_take, every_id_of_the_range_taken_is_no_space)
   CHECK_STATUS(ids.take(id), Status::ok);
   CHECK_EQ(id, HostBlobId::first + 69u); }
 
-/* A bitmap that cannot grow to note the next id refuses it as out of memory,
- * hands out nothing and takes the next once memory is back. */
 TEST(chunk_ids_take, a_bitmap_that_cannot_grow_is_out_of_memory)
 { MockPlatform  platform;
   ChunkIds      ids(platform, HostBlobId::most);
@@ -127,8 +115,6 @@ TEST(chunk_ids_take, is_passive_only)
   CHECK(platform.claim(Violation::irql_ceiling));
   while (platform.claim(Violation::irql_ceiling)) {} }
 
-/* An id outside the range names no bit, and neither does one past the words
- * the bitmap has: given back, each frees nothing. */
 TEST(chunk_ids_give_back, an_id_outside_the_range_or_past_the_bitmap_frees_nothing)
 { MockPlatform  platform;
   ChunkIds      ids(platform, HostBlobId::most);

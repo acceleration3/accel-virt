@@ -19,7 +19,7 @@ struct DxgkrnlInterfaceProbe {
     DxgkrnlInterface &interface;
 };
 
-}  // namespace av
+}
 
 using av::DxgkDeviceInfoRecord;
 using av::DxgkrnlInterface;
@@ -36,8 +36,6 @@ int handle_data_marker = 0;
 int release_marker = 0;
 unsigned released = 0u;
 
-/* The dxgkrnl side of each callback: records its arguments, answers what the
- * test configured. */
 class Callbacks {
 public:
     Callbacks()
@@ -58,8 +56,6 @@ public:
         record_.DxgkCbQueueDpc = +[](void *handle) {
             return static_cast<Callbacks *>(handle)->queue_dpc();
         };
-        /* Feature 049: what this OS answers about a feature the driver
-         * implements. */
         record_.DxgkCbQueryFeatureSupport = +[](av::DxgkargcbQueryFeatureSupportRecord *request) {
             return static_cast<Callbacks *>(request->DeviceHandle)->query_feature_support(*request);
         };
@@ -182,7 +178,7 @@ private:
 
 constexpr std::int32_t no_memory = static_cast<std::int32_t>(0xC0000017u);
 
-}  // namespace
+}
 
 TEST(dxgkrnl_interface, starts_uninitialized)
 { MockPlatform platform; DxgkrnlInterface interface(platform);
@@ -202,7 +198,7 @@ TEST(dxgkrnl_interface_initialize, copies_the_table_dxgkrnl_passes)
   CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
   CHECK(interface.initialized());
   CHECK(interface.invariants_hold());
-  callbacks.record().DeviceHandle = nullptr;  /* dxgkrnl's copy may change; ours does not */
+  callbacks.record().DeviceHandle = nullptr;
   CHECK(interface.queue_dpc());
   CHECK_EQ(callbacks.dpcs, 1u); }
 
@@ -325,8 +321,6 @@ TEST(dxgkrnl_interface_invariants, an_initialized_table_missing_a_callback_is_de
   DxgkrnlInterfaceProbe(interface).clear_callback();
   CHECK(!interface.invariants_hold()); }
 
-/* An unknown handle answers invalid_parameter, never STATUS_NOT_FOUND, which
- * dxgkrnl logs as an invalid NTSTATUS and hands to the caller. */
 TEST(dxgkrnl_interface_acquire_handle_data, lends_the_driver_data_behind_an_allocation_handle)
 { MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
   void *data = &callbacks;
@@ -365,7 +359,7 @@ std::uint8_t mark_ran(void *context)
     return 1u;
 }
 
-}  // namespace
+}
 
 TEST(dxgkrnl_interface_synchronize_execution, runs_the_routine_through_dxgkrnl_on_message_zero)
 { MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks; int ran = 0;
@@ -404,10 +398,6 @@ TEST(dxgkrnl_interface_notify_dpc, is_dispatch_at_most_and_notify_interrupt_is_d
   CHECK(platform.claim(Violation::irql_ceiling));
   platform.set_irql(Irql::passive); }
 
-/* Windows reads a monitor's EDID and modes again only when it is told the
- * monitor went away and came back: one connection status of each, in that
- * order, for the child named. A table it was never handed, or one too old to
- * carry the callback, has no one to tell. */
 TEST(dxgkrnl_interface_replug, tells_dxgkrnl_the_child_unplugged_then_plugged_back)
 { MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
   interface.replug(1u);
@@ -426,7 +416,6 @@ TEST(dxgkrnl_interface_replug, tells_dxgkrnl_the_child_unplugged_then_plugged_ba
   CHECK_EQ(callbacks.statuses[0].HotPlugConnected, 0u);
   CHECK_EQ(callbacks.statuses[1].HotPlugConnected, 1u);
 
-  /* A refusal of either is not the driver's to act on: both are still sent. */
   callbacks.answer = no_memory;
   interface.replug(0u);
   CHECK_EQ(callbacks.child_statuses, 4u);
@@ -463,11 +452,6 @@ TEST(dxgkrnl_interface_query_vidpn_interface, answers_version_one_of_the_table)
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling)); }
 
-/* Feature 049: a driver must ask the OS before it reports a scheduling
- * capability, because reporting one the OS has not enabled fails the whole
- * adapter start (research.md §15). An answer this driver cannot get - no
- * callback, a refusal, or a table it never initialized - is "not allowed",
- * which is the answer that keeps the adapter alive. */
 TEST(dxgkrnl_interface_feature_enabled, answers_what_the_os_allows_and_no_for_anything_else)
 { MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
   CHECK(!interface.feature_enabled(av::feature_hwsch, av::feature_support_stable));
@@ -482,12 +466,10 @@ TEST(dxgkrnl_interface_feature_enabled, answers_what_the_os_allows_and_no_for_an
   CHECK(interface.feature_enabled(av::feature_hwsch, av::feature_support_stable));
   CHECK(!interface.feature_enabled(av::feature_user_mode_submission, av::feature_support_stable));
 
-  /* A refusal is not an answer of yes. */
   callbacks.answer = no_memory;
   CHECK(!interface.feature_enabled(av::feature_hwsch, av::feature_support_stable));
   callbacks.answer = 0;
 
-  /* A table without the callback at all is every table older than WDDM 2.9. */
   DxgkrnlInterface older(platform);
   Callbacks        without;
   without.record().DxgkCbQueryFeatureSupport = nullptr;

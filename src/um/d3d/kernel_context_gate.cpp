@@ -10,7 +10,7 @@ namespace {
 
 constexpr uint32_t stall_report_every = 100u;
 
-}  // namespace
+}
 
 KernelContextGate::KernelContextGate(const D3DDDI_DEVICECALLBACKS &kernel, HANDLE device, HANDLE context,
                                      KeyedLog &lines, DWORD bound_ms)
@@ -37,8 +37,6 @@ void KernelContextGate::pass()
     AV_SCOPE("KernelContextGate::pass");
     const HRESULT waited = signal_and_wait();
     if (waited == S_OK) return;
-    /* A wait that ran out is counted, and said at the first and every
-     * hundredth: the batch went on without the context's work done. */
     if (waited == S_FALSE) {
         stalled_++;
         if (stalled_ == 1u || stalled_ % stall_report_every == 0u)
@@ -101,9 +99,6 @@ HRESULT KernelContextGate::make_fence()
     return S_OK;
 }
 
-/* DWM has usually let the buffer go by the next present, before the signal is
- * even queued: the fence's CPU mapping answers that without a call into the
- * kernel. S_FALSE when the bound ran out first. */
 HRESULT KernelContextGate::await_signalled()
 {
     AV_SCOPE("KernelContextGate::await_signalled");
@@ -115,12 +110,10 @@ HRESULT KernelContextGate::await_signalled()
     wait.hAsyncEvent = event_;
     const HRESULT asked = kernel_.pfnWaitForSynchronizationObjectFromCpuCb(device_, &wait);
     if (FAILED(asked)) return asked;
-    /* A wait that ran out earlier still sets the event when its own fence
-     * arrives, so only the fence says this one's has. */
     for (;;) {
         if (WaitForSingleObject(event_, bound_ms_) != WAIT_OBJECT_0) return S_FALSE;
         if (reached_ == nullptr || *reached_ >= signalled_) return S_OK;
     }
 }
 
-}  // namespace av::d3d
+}

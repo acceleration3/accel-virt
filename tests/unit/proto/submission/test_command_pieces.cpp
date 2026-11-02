@@ -1,5 +1,3 @@
-/* One command framed as the pieces the device gathers back into it
- * (docs/protocol.md, "Long commands"). */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/submission/command_header.hpp"
@@ -16,9 +14,8 @@ namespace {
 
 constexpr std::uint32_t command = 0x00020021u;
 
-}  // namespace
+}
 
-/* A payload that fits the first room is the command alone, its flags kept. */
 TEST(command_pieces, a_payload_that_fits_is_the_command_itself)
 { const std::uint8_t body[3] = {9u, 8u, 7u};
   CommandPieces      pieces(command, CommandHeader::generate_reply, body, sizeof body);
@@ -33,12 +30,9 @@ TEST(command_pieces, a_payload_that_fits_is_the_command_itself)
   CHECK_EQ(header.id(), command);
   CHECK(header.generates_reply());
   CHECK_EQ(room[CommandHeader::encoded_size + 2u], 7u);
-  /* Done is done. */
   CHECK_EQ(pieces.frame_next(room, sizeof room), 0u);
   CHECK(pieces.invariants_hold()); }
 
-/* A longer payload: pieces as large as each room, in order, none asking
- * for an answer, and the command last with the rest and its own flags. */
 TEST(command_pieces, a_longer_payload_is_pieces_then_the_command_with_the_rest)
 { std::uint8_t body[100] = {};
   for (std::uint32_t index = 0u; index < sizeof body; ++index) body[index] = static_cast<std::uint8_t>(index);
@@ -72,7 +66,6 @@ TEST(command_pieces, a_longer_payload_is_pieces_then_the_command_with_the_rest)
   CHECK_EQ(wrong, 0u);
   CHECK(pieces.invariants_hold()); }
 
-/* A room with no byte past a header frames nothing, and no room at all. */
 TEST(command_pieces, a_room_with_no_byte_past_a_header_frames_nothing)
 { const std::uint8_t body[20] = {};
   CommandPieces      pieces(command, 0u, body, sizeof body);
@@ -82,7 +75,6 @@ TEST(command_pieces, a_room_with_no_byte_past_a_header_frames_nothing)
   CHECK_EQ(pieces.frame_next(room, 3u), 0u);
   CHECK(!pieces.done());
   CHECK_EQ(pieces.rest(), 20u);
-  /* An empty payload is a header alone, in a room of just a header. */
   CommandPieces empty(command, 0u, nullptr, 0u);
   CHECK_EQ(empty.frame_next(room, sizeof room), CommandHeader::encoded_size);
   CHECK(empty.done()); }

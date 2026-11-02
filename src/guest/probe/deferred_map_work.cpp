@@ -8,13 +8,10 @@
 namespace av {
 
 namespace {
-
-/* A prime below 256: a piece's value cycles through every nonzero byte
- * before it repeats. */
 constexpr uint32_t value_cycle = 251u;
 constexpr uint32_t kibibyte_shift = 10u;
 
-}  // namespace
+}
 
 DeferredMapWork::DeferredMapWork(D3d11DeferredEntry &d3d11)
     : d3d11_(d3d11), made_(false), drawn_(0u), growth_(0u), head_{}
@@ -45,9 +42,6 @@ void DeferredMapWork::run(ScenarioSteps &steps, void *window)
                          static_cast<uint32_t>(growth_ >> kibibyte_shift));
 }
 
-/* The memory is read once the warm frames are drawn and again after the
- * last: growth is what the measured frames kept. Memory given back between
- * the two is no growth. */
 int32_t DeferredMapWork::frames()
 {
     AV_SCOPE("DeferredMapWork::frames");
@@ -101,4 +95,4 @@ bool DeferredMapWork::invariants_hold() const
     return drawn_ <= warm_frames + measured_frames && matching() <= head_bytes;
 }
 
-}  // namespace av
+}

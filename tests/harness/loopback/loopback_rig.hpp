@@ -1,8 +1,3 @@
-/* One process holding both sides: a guest's MockPlatform, the device core over
- * it, the driver carrying requests between them, and two guest contexts, each
- * on memory of its own standing in for a process's allocations. The device is
- * reset before the contexts' memory is released, as a guest's memory outlives
- * the device's view of it. */
 #ifndef AV_LOOPBACK_RIG_HPP
 #define AV_LOOPBACK_RIG_HPP
 
@@ -24,8 +19,6 @@ public:
     static constexpr std::uint32_t reply_bytes = 4096u;
     static constexpr std::uint32_t contexts = 2u;
 
-    /* `gpu` names the host GPU the device is bound to; rigs share one unless a
-     * test asks for another (feature 040, FR-005). */
     explicit LoopbackRig(const std::uint8_t *gpu = LoopbackDevice::default_gpu,
                          const char *record = nullptr);
     ~LoopbackRig();
@@ -36,24 +29,14 @@ public:
     LoopbackDevice &device();
     LoopbackDriver &driver();
     GuestContext   &context(std::uint32_t index);
-    /* The memory context `index` runs on. */
     ContextMemory  &memory(std::uint32_t index);
-    /* Its reply slot, as the process the rig plays sees it: where its replies
-     * land. */
     std::uint8_t   *reply(std::uint32_t index);
-    /* The doorbell, and fence line, context `index` sets up on: index + 1. */
     std::uint32_t   line(std::uint32_t index) const;
 
-    /* Reads the capset: whether it completed. */
     bool   read_capset();
-    /* What the device offered, once read. */
     const CapsetInfo &capset() const;
-    /* Sets context `index` up with ids of its own, on fresh memory when it is
-     * idle: the set_up status, then whether every request was answered and it
-     * is established. */
     Status set_up(std::uint32_t index);
     bool   establish(std::uint32_t index);
-    /* Tears context `index` down and releases it: whether it went idle. */
     bool   retire(std::uint32_t index);
     Status submit(std::uint32_t index, std::uint64_t fence, std::uint64_t begin, std::uint64_t end);
     Status serve(std::uint32_t index);
@@ -69,6 +52,6 @@ private:
     GuestContext   second_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_LOOPBACK_RIG_HPP
+#endif

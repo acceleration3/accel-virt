@@ -1,15 +1,3 @@
-// vk_window.exe: a Vulkan window as an application makes one - a Win32
-// surface, a swapchain on it, an image acquired, filled and presented each
-// frame - for a few seconds. The top half is blue and the bottom half red, so a
-// screenshot shows whether the frame reached the screen the right way up and in
-// the right colours, and a white bar crosses it, so one shows whether frames
-// keep coming. With "resize", the window grows by a third two seconds in and
-// the swapchain is made again with the old one named, as a game's is. "rgba"
-// asks for R8G8B8A8 images rather than B8G8R8A8, "immediate" for IMMEDIATE
-// rather than FIFO. The loader is loaded at run time: vulkan-1.dll is the
-// system's. Prints the presents it made, the swapchains, and any failure.
-//
-//   vk_window.exe [seconds] [width] [height] [resize] [rgba] [immediate]
 #define VK_USE_PLATFORM_WIN32_KHR
 #define VK_NO_PROTOTYPES
 #include <cstdio>
@@ -83,8 +71,6 @@ LRESULT CALLBACK procedure(HWND window, UINT message, WPARAM w, LPARAM l)
     return DefWindowProcW(window, message, w, l);
 }
 
-// One frame in the swapchain's channel order: blue over red, and a white
-// column after it, which a present copies at a moving offset.
 bool fill_staging()
 {
     if (staging != VK_NULL_HANDLE) {
@@ -124,8 +110,6 @@ bool fill_staging()
     return true;
 }
 
-// The swapchain at the window's size, with the last one named and destroyed
-// once the new one is made.
 bool make_swapchain(int &made)
 {
     vkDeviceWaitIdle(device);
@@ -195,7 +179,7 @@ void record(VkCommandBuffer commands, VkImage image, int frame)
     vkEndCommandBuffer(commands);
 }
 
-}  // namespace
+}
 
 int wmain(int argc, wchar_t **argv)
 {

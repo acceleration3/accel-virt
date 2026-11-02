@@ -69,4 +69,4 @@ void UmdDrivers::tear_down(d3d::UmdDevice &device, void *block)
     d3d11_.tear_down(block);
 }
 
-}  // namespace av
+}

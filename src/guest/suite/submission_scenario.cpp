@@ -10,11 +10,9 @@ namespace av {
 namespace {
 
 constexpr uint64_t command_buffer_bytes = 4096u;
-/* The driver does not read the commands of a context with GPU virtual
- * addressing before M3, only where they are. */
 constexpr uint64_t command_bytes = 64u;
 
-}  // namespace
+}
 
 SubmissionScenario::SubmissionScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : kmt_(kmt), search_(search), steps_(kmt, report, "submission")
@@ -41,4 +39,4 @@ void SubmissionScenario::run()
     steps_.check_teardown(session);
 }
 
-}  // namespace av
+}

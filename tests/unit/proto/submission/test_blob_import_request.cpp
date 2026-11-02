@@ -1,7 +1,3 @@
-/* IMPORT_BLOB's body as a guest driver writes it and the device reads it: a
- * length other than 8 bytes is framing, and a resource of 0 or a reserved
- * word that is not zero is refused here, so the device only ever looks up a
- * resource a guest could have opened. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -37,7 +33,7 @@ void encode(const BlobImportRequest &request, std::uint8_t *bytes)
     CHECK_STATUS(request.encode(bytes, BlobImportRequest::encoded_size), Status::ok);
 }
 
-}  // namespace
+}
 
 TEST(blob_import_request_encode, lays_out_the_resource_and_a_zero_reserved_word)
 { std::uint8_t bytes[BlobImportRequest::encoded_size];
@@ -90,8 +86,5 @@ TEST(blob_import_request_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 64u);
-  /* Any resource but 0 is acceptable and the reserved word must be zero: of
-   * the resource's 32 bits every single flip leaves it non-zero, and the
-   * untouched input is the last acceptance. */
   const std::uint32_t acceptable = 32u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

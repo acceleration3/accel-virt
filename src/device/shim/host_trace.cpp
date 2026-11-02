@@ -21,8 +21,6 @@ struct Search {
     uint64_t high;
 };
 
-/* dl_iterate_phdr's callback: the loaded object whose segments hold the
- * address, as the span from its lowest to its highest loaded byte. */
 int find_object(dl_phdr_info *info, size_t, void *context)
 {
     AV_SCOPE("find_object");
@@ -45,7 +43,7 @@ int find_object(dl_phdr_info *info, size_t, void *context)
     return 1;
 }
 
-}  // namespace
+}
 
 HostTrace::HostTrace() : host_(), region_(), table_(host_), events_region_(), events_(), image_(0u, 0u)
 {
@@ -59,24 +57,13 @@ Status HostTrace::start(const char *module)
     const size_t bytes = TraceLayout(slots).bytes();
     const Status opened = region_.open(module, bytes);
     if (opened != Status::ok) return opened;
-    /* This function's own address names the object this copy of the code is
-     * linked into: QEMU's module, or the executor library. */
     Search search{static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&find_object)), 0u, 0u};
     if (dl_iterate_phdr(&find_object, &search) != 0) image_ = ImageRange(search.low, search.high - search.low);
     const Status laid = table_.initialize(region_.region(), region_.bytes(), module, region_.process());
     if (laid != Status::ok) return laid;
-    /* A profiler attaching to a QEMU this shell did not start is refused under
-     * Yama's ptrace_scope 1 unless the process names it allowed. */
     if (EnvSetting("AV_PTRACE").on()) prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
-    /* Every scope costs the call it opens - a batch runs a few hundred - so
-     * the table is bound only when a trace is asked for, as the kernel's is. */
     const bool perfetto = EnvSetting("AV_PERFETTO").on();
     if (perfetto || EnvSetting("AV_TRACE_SCOPES").on()) scope_binding.bind(table_);
-    /* A timeline for Perfetto keeps the outer calls only, unless told
-     * otherwise: every scope reads the clock twice, and the hottest leaves
-     * ran ten million a second. The device's batch loop is kept (its idle
-     * spin is below it); the executor down to each command's handler and
-     * what it calls. AV_TRACE_DEPTH sets both; 0 records everything. */
     constexpr uint32_t device_depth = 2u;
     constexpr uint32_t executor_depth = 6u;
     const bool         device = module[0] == 'd';
@@ -84,11 +71,7 @@ Status HostTrace::start(const char *module)
     uint64_t           limit = !perfetto ? 0u : device ? device_depth : executor_depth;
     if (depth.text() != nullptr && !depth.number(limit)) limit = 0u;
     table_.limit_depth(static_cast<uint32_t>(limit));
-    /* AV_TRACE_ONLY: a comma-separated list of scope names, the only ones
-     * recorded. */
     table_.only(EnvSetting("AV_TRACE_ONLY").text());
-    /* A ring per slot the size of a busy thread's second or so; the file is
-     * sparse, so only the slots threads use take memory. */
     constexpr uint32_t events_per_slot = 1u << 22u;
     if (perfetto &&
         events_region_.open("/av-events-", module, EventRingLayout(slots, events_per_slot).bytes()) == Status::ok &&
@@ -142,4 +125,4 @@ uint32_t HostTrace::process() const
     return region_.process();
 }
 
-}  // namespace av
+}

@@ -8,7 +8,7 @@ namespace {
 
 constexpr uint32_t word_bytes = 4u;
 
-}  // namespace
+}
 
 TexelLayout::TexelLayout() : bytes_(0u), width_(1u), height_(1u)
 {
@@ -77,4 +77,4 @@ bool TexelLayout::word_texels() const
     return bytes_ == word_bytes && width_ == 1u;
 }
 
-}  // namespace av
+}

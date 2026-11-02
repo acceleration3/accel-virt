@@ -37,8 +37,6 @@ uint32_t InterruptLinesMessage::descriptors() const
 bool InterruptLinesMessage::fields_valid() const
 {
     AV_SCOPE("InterruptLinesMessage::fields_valid");
-    /* A shift by the word's width is undefined: all 64 lines leave no bit
-     * past the last. */
     return lines_ != 0u && lines_ <= max_lines && (lines_ == max_lines || (present_ >> lines_) == 0u);
 }
 
@@ -69,4 +67,4 @@ Status InterruptLinesMessage::decode(const uint8_t *bytes, size_t length, uint32
     return Status::ok;
 }
 
-}  // namespace av
+}

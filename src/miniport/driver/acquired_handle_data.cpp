@@ -30,12 +30,10 @@ void *AcquiredHandleData::data() const
     return data_;
 }
 
-/* A release handle without data would be one nothing can read and the
- * destructor would still hand back. */
 bool AcquiredHandleData::invariants_hold() const
 {
     AV_SCOPE("AcquiredHandleData::invariants_hold");
     return data_ != nullptr || release_handle_ == nullptr;
 }
 
-}  // namespace av
+}

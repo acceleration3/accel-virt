@@ -1,11 +1,3 @@
-"""What the committed submission ratio keeps, and what it refuses to read
-(feature 049, US3).
-
-The record is one number, so what is worth testing is everything that is not
-one: two of them, none, a zero, a value no submission path could have, and a
-file that is not there at all. A record that quietly read as nothing would let
-a regression through on the day the file was mistyped.
-"""
 import pathlib
 import tempfile
 import unittest
@@ -61,8 +53,6 @@ class SubmitRatchetTests(unittest.TestCase):
                 record.recorded
 
     def test_the_record_this_repository_ships_is_empty_on_purpose(self):
-        """T017: no guest has measured the two paths yet, and a number here
-        would be a claim nobody made."""
         shipped = SubmitRatchet(ROOT / "tools" / "submit_ratchet.txt")
         self.assertEqual(shipped.recorded, 0)
         self.assertIn("EMPTY ON PURPOSE", (ROOT / "tools" / "submit_ratchet.txt").read_text())

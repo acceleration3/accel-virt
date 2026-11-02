@@ -22,11 +22,11 @@ Status GpuResponseReader::decode(const uint8_t *bytes, size_t length)
         candidate.capset_id_ = reader.read_u32();
         candidate.capset_max_version_ = reader.read_u32();
         candidate.capset_max_size_ = reader.read_u32();
-        static_cast<void>(reader.read_u32());   /* padding */
+        static_cast<void>(reader.read_u32());
     }
     if (candidate.type_ == ok_map_info) {
         candidate.map_info_ = reader.read_u32();
-        static_cast<void>(reader.read_u32());   /* padding */
+        static_cast<void>(reader.read_u32());
     }
     if (reader.status() != Status::ok) return reader.status();
     if (candidate.type_ == ok_capset &&
@@ -72,4 +72,4 @@ const CapsetInfo &GpuResponseReader::capset() const
     return capset_;
 }
 
-}  // namespace av
+}

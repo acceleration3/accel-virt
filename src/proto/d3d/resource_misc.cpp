@@ -27,4 +27,4 @@ bool ResourceMisc::presented() const
     return (flags_ & presented_bit) != 0u;
 }
 
-}  // namespace av
+}

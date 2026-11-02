@@ -25,16 +25,6 @@ void FramePacer::wait()
     if (failures_++ == 0u) log_.write("presents unpaced: the adapter's vertical blank wait failed");
 }
 
-/* A schedule of its own, a refresh apart from whenever the first frame came,
- * put Minecraft's shown frames 14 ms after the blank: a few milliseconds late
- * carried one past the next blank, and one refresh in nine showed no new frame
- * while the next showed two.
- *
- * A blank came between two presents when the scan-out is earlier in its
- * refresh at the second. A game presents far more often than the screen
- * refreshes, so that alone decides; presents all but a refresh apart may land
- * at the same place in theirs, and the device's refresh is not exactly the
- * nominal one, so those count as a blank apart. */
 bool FramePacer::admits()
 {
     AV_SCOPE("FramePacer::admits");
@@ -53,9 +43,6 @@ bool FramePacer::admits()
     return true;
 }
 
-/* The refresh is the host's to change while the VM runs, so it is read again
- * every second; a read that fails keeps the last one, and the first that
- * fails is 60 Hz, which is what a device that says nothing runs at. */
 uint64_t FramePacer::refresh_period(uint64_t now, uint64_t frequency)
 {
     AV_SCOPE("FramePacer::refresh_period");
@@ -90,11 +77,10 @@ uint64_t FramePacer::failures() const
     return failures_;
 }
 
-/* A blank is only ever counted on an adapter: with none, every wait fails. */
 bool FramePacer::invariants_hold() const
 {
     AV_SCOPE("FramePacer::invariants_hold");
     return adapter_ != 0u || blanks_ == 0u;
 }
 
-}  // namespace av::icd
+}

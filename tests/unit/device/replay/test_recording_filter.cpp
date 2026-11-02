@@ -23,7 +23,6 @@ RecordHeader a_batch(std::uint32_t context, std::uint64_t fence)
     return RecordHeader(RecordKind::batch, context, 0u, 0u, fence);
 }
 
-/* One framed command, for the filter to judge. */
 class OneCommand {
 public:
     explicit OneCommand(std::uint32_t id) : bytes_{}
@@ -40,12 +39,11 @@ private:
     RecordedCommand command_;
 };
 
-}  // namespace
+}
 
 namespace av {
 
 struct RecordingFilterProbe {
-    /* A range no keep_fences would take, for the invariant to catch. */
     static void invert(RecordingFilter &filter) { filter.first_fence_ = 9u; filter.last_fence_ = 8u; }
     static void unterminate(RecordingFilter &filter)
     {
@@ -53,7 +51,7 @@ struct RecordingFilterProbe {
     }
 };
 
-}  // namespace av
+}
 
 TEST(recording_filter, keeps_everything_until_it_is_told_otherwise)
 { const RecordingFilter filter;
@@ -72,7 +70,6 @@ TEST(recording_filter_keep_context, keeps_one_context_and_no_other)
   CHECK_EQ(filter.context(), 4u);
   CHECK(filter.keeps(a_batch(4u, 1u)));
   CHECK(!filter.keeps(a_batch(5u, 1u)));
-  /* Context 0 is the device's own, and a filter for it keeps only that. */
   filter.keep_context(0u);
   CHECK(filter.keeps(a_batch(0u, 0u)));
   CHECK(!filter.keeps(a_batch(4u, 1u)));
@@ -104,7 +101,6 @@ TEST(recording_filter_keep_fences, keeps_a_range_and_refuses_one_that_ends_befor
   CHECK(filter.keeps(a_batch(1u, 10u)));
   CHECK(filter.keeps(a_batch(1u, 20u)));
   CHECK(!filter.keeps(a_batch(1u, 21u)));
-  /* A record belonging to no batch is inside every range. */
   CHECK(filter.keeps(a_batch(1u, 0u)));
   CHECK_STATUS(filter.keep_fences(20u, 19u), Status::invalid_parameter);
   CHECK(filter.keeps(a_batch(1u, 15u)));
@@ -117,12 +113,11 @@ TEST(recording_filter_keep_command, keeps_a_command_whose_name_holds_the_fragmen
 { RecordingFilter filter;
   CHECK_STATUS(filter.keep_command("Create"), Status::ok);
   CHECK(filter.names_a_command());
-  CHECK(filter.keeps(OneCommand(0x00010006u).command()));    /* vkCreateInstance */
+  CHECK(filter.keeps(OneCommand(0x00010006u).command()));
   CHECK(!filter.keeps(OneCommand(CommandHeader::nop_id).command()));
   CHECK_STATUS(filter.keep_command("nop"), Status::ok);
   CHECK(filter.keeps(OneCommand(CommandHeader::nop_id).command()));
   CHECK(!filter.keeps(OneCommand(0x00010006u).command()));
-  /* The whole name, and a fragment at its very end. */
   CHECK_STATUS(filter.keep_command("vkCreateInstance"), Status::ok);
   CHECK(filter.keeps(OneCommand(0x00010006u).command()));
   CHECK_STATUS(filter.keep_command("Instance"), Status::ok);
@@ -143,9 +138,6 @@ TEST(recording_filter_keep_command, an_empty_fragment_keeps_everything_and_a_lon
   CHECK_STATUS(filter.keep_command(longest), Status::invalid_parameter);
   CHECK_STATUS(filter.keep_command(nullptr), Status::invalid_parameter);
   CHECK(!filter.names_a_command());
-  /* The boundary the fragment's own room decides: a fragment of exactly
-   * longest_fragment characters needs a terminator the filter has nowhere to
-   * put, so it is refused, and one character shorter is kept whole. */
   longest[RecordingFilter::longest_fragment] = '\0';
   CHECK_STATUS(filter.keep_command(longest), Status::invalid_parameter);
   CHECK(!filter.names_a_command());
@@ -154,9 +146,6 @@ TEST(recording_filter_keep_command, an_empty_fragment_keeps_everything_and_a_lon
   CHECK(filter.names_a_command());
   CHECK(filter.invariants_hold()); }
 
-/* A refused fragment leaves the one the filter was already keeping: a tool
- * that printed everything after a typo would be answering a question nobody
- * asked. */
 TEST(recording_filter_keep_command, a_refused_fragment_leaves_the_one_it_was_keeping)
 { RecordingFilter filter;
   CHECK_STATUS(filter.keep_command("Create"), Status::ok);
@@ -180,7 +169,7 @@ TEST(recording_filter, narrows_on_every_axis_at_once)
   CHECK(!filter.keeps(a_batch(3u, 4u)));
   CHECK(!filter.keeps(a_batch(2u, 7u)));
   CHECK(filter.keeps(OneCommand(0x00010006u).command()));
-  CHECK(!filter.keeps(OneCommand(0x00020001u).command()));   /* the right name, the wrong API */
+  CHECK(!filter.keeps(OneCommand(0x00020001u).command()));
   CHECK(filter.invariants_hold()); }
 
 TEST(recording_filter_invariants, catch_a_range_that_ends_before_it_starts_and_a_fragment_with_no_end)

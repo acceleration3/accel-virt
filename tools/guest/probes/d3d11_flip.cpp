@@ -1,14 +1,3 @@
-// d3d11_flip.exe: a window shown through a DXGI flip chain of R8G8B8A8 buffers,
-// as the OpenGL and Vulkan drivers' window chains are: "direct" clears the back
-// buffer blue; "shared" clears a texture shared by NT handle green and copies
-// it into the back buffer, as a chain's slot is; "pixelformat" is "direct" on a
-// window an OpenGL pixel format was set on first, as an OpenGL window is; "blt"
-// is "direct" through a blt-model chain (DXGI_SWAP_EFFECT_DISCARD), whose
-// presents go through the window's redirection surface; "bltout" is "blt" on
-// the adapter that has an output, where the present needs no cross-adapter copy.
-// Presents for a few seconds.
-//
-//   d3d11_flip.exe direct|shared|pixelformat|blt [seconds]
 #include <cstdio>
 #include <cwchar>
 #include <d3d11.h>

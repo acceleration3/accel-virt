@@ -1,5 +1,3 @@
-/* Where the scan-out is within its refresh: the blank begins it, so every
- * blank line comes before every visible one, and lines rise within each. */
 #include "harness/framework/test_registry.hpp"
 #include "guest/kmt/beam_position.hpp"
 

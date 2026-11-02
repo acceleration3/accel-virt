@@ -1,8 +1,3 @@
-/* What a CopyTextureRegion reads and where it lands: the box when given; else
- * a footprint's size, or a texture subresource's mip - never smaller than a
- * texel, a volume's depth halving with it; a subresource the texture does not
- * have is unknown; and a destination region that would pass 2^32 is none. The
- * resource is a scripted stand-in whose description the test sets. */
 #include "executor/d3d/d3d12_copy_extent.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -71,10 +66,8 @@ bool same(const Box &a, const Box &b)
            a.back == b.back;
 }
 
-}  // namespace
+}
 
-/* A 2D array texture of 100x60, three mips and four layers: mip 2 of any
- * layer is 25x15, and a mip past 1x1 stays a texel. */
 TEST(d3d12_copy_extent, a_texture_source_without_a_box_reads_its_subresource_s_mip)
 { ScriptedResource texture;
   texture.desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -90,8 +83,6 @@ TEST(d3d12_copy_extent, a_texture_source_without_a_box_reads_its_subresource_s_m
   const D3d12CopyExtent smallest(subresource_of(texture, 2u), nullptr);
   CHECK(same(smallest.read(), Box{0u, 0u, 0u, 1u, 1u, 1u})); }
 
-/* A volume's depth is its mip's; a subresource past mips x layers x two
- * planes is unknown. */
 TEST(d3d12_copy_extent, a_volume_s_depth_halves_and_an_absent_subresource_is_unknown)
 { ScriptedResource volume;
   volume.desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
@@ -101,13 +92,11 @@ TEST(d3d12_copy_extent, a_volume_s_depth_halves_and_an_absent_subresource_is_unk
   volume.desc.MipLevels = 2u;
   const D3d12CopyExtent mip1(subresource_of(volume, 1u), nullptr);
   CHECK(same(mip1.read(), Box{0u, 0u, 0u, 32u, 16u, 8u}));
-  CHECK(D3d12CopyExtent(subresource_of(volume, 3u), nullptr).known());    /* the second plane's last */
+  CHECK(D3d12CopyExtent(subresource_of(volume, 3u), nullptr).known());
   CHECK(!D3d12CopyExtent(subresource_of(volume, 4u), nullptr).known());
-  volume.desc.MipLevels = 0u;                                               /* as if one */
+  volume.desc.MipLevels = 0u;
   CHECK(!D3d12CopyExtent(subresource_of(volume, 2u), nullptr).known()); }
 
-/* A box is what is read, from a footprint or a texture; a footprint without
- * one is read whole. */
 TEST(d3d12_copy_extent, a_box_is_read_and_a_footprint_without_one_is_read_whole)
 { ScriptedResource texture;
   texture.desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -125,8 +114,6 @@ TEST(d3d12_copy_extent, a_box_is_read_and_a_footprint_without_one_is_read_whole)
   CHECK(same(D3d12CopyExtent(footprint, &box).read(), box));
   CHECK(D3d12CopyExtent(footprint, &box).known()); }
 
-/* What is read lands its own size at (x, y, z); a region past 2^32, or an
- * inverted box, lands nowhere. */
 TEST(d3d12_copy_extent, the_written_region_is_the_read_size_at_the_destination)
 { ScriptedResource texture;
   texture.desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -142,7 +129,7 @@ TEST(d3d12_copy_extent, the_written_region_is_the_read_size_at_the_destination)
   CHECK(!extent.written_at(0xFFFFFFF0u, 0u, 0u, written));
   CHECK(!extent.written_at(0u, 0xFFFFFFF0u, 0u, written));
   CHECK(!extent.written_at(0u, 0u, 0xFFFFFFFFu, written));
-  CHECK(same(written, Box{10u, 2u, 3u, 26u, 18u, 4u}));   /* untouched when refused */
+  CHECK(same(written, Box{10u, 2u, 3u, 26u, 18u, 4u}));
   const Box inverted = {20u, 8u, 0u, 4u, 24u, 1u};
   CHECK(!D3d12CopyExtent(subresource_of(texture, 0u), &inverted).written_at(0u, 0u, 0u, written));
   const Box upside = {4u, 24u, 0u, 20u, 8u, 1u};

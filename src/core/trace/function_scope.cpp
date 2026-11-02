@@ -15,4 +15,4 @@ void FunctionScope::leave()
     if (slot_ != TraceTable::no_slot) table_->leave(slot_);
 }
 
-}  // namespace av
+}

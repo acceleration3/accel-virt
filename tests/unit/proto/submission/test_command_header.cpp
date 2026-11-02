@@ -28,7 +28,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(command_header_encode, places_the_id_and_the_size_with_its_flags_in_the_top_byte)
 { std::uint8_t bytes[CommandHeader::encoded_size] = {};
@@ -77,12 +77,6 @@ TEST(command_header_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 64u);
-  /* Only the size word is constrained. The id is 32 free bits; the size's
-   * three low bytes are 24 more, because no single flip of 40 drops it under
-   * the 8-byte header; and clearing the reply flag leaves the one other flag
-   * byte a reader accepts. Every shorter input is short of 8 bytes, all-zero
-   * has a size below the header, all-ones has flags nobody defined, and the
-   * untouched input is the last acceptance. */
   const std::uint32_t acceptable = 32u + 24u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 

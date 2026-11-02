@@ -27,8 +27,6 @@ bool DisplayClockCommands::answer(ControlRequest &request, uint32_t type)
     return true;
 }
 
-/* A page the device cannot map leaves the guest's vsync without a clock, so
- * the refusal is said here as well as answered. */
 void DisplayClockCommands::register_page(ControlRequest &request)
 {
     AV_SCOPE("DisplayClockCommands::register_page");
@@ -62,4 +60,4 @@ void DisplayClockCommands::retime(ControlRequest &request)
     request.respond(response);
 }
 
-}  // namespace av
+}

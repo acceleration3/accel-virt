@@ -1,7 +1,3 @@
-/* The order several recording locks were taken and let go in, as one string: a
- * lock's letter when it is acquired, the same letter in lower case when it is
- * released. "SHhs" is H taken inside S; "hH" is a release of H before its
- * acquire. What a test asserts lock order with. */
 #ifndef AV_LOCK_TRACE_HPP
 #define AV_LOCK_TRACE_HPP
 
@@ -17,7 +13,6 @@ public:
     LockTrace(const LockTrace &) = delete;
     LockTrace &operator=(const LockTrace &) = delete;
 
-    /* Past the capacity the trace is cut, and says so with a final '~'. */
     void        append(char event);
     const char *text() const;
     void        clear();
@@ -27,6 +22,6 @@ private:
     std::uint32_t length_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_LOCK_TRACE_HPP
+#endif

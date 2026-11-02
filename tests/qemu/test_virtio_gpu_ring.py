@@ -1,12 +1,3 @@
-"""The submission ring and doorbells against the real device: a store to a
-bound context's doorbell page wakes its worker, which consumes every complete
-batch in the ring and publishes head; a ring no valid guest could write stops
-only its own context. The doorbell's ioeventfd is dispatched by QEMU itself
-under qtest, as KVM would dispatch it in the kernel.
-
-Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
-AV_QEMU_BUILD.
-"""
 import os
 import struct
 import time
@@ -22,7 +13,6 @@ BUILD = os.environ.get("AV_QEMU_BUILD", "")
 HOSTMEM = 64 << 20
 SHM_ID_HOST_VISIBLE = 1
 QUIET = 0.3
-# The worker clears its awake flag a moment before it waits for a store.
 SETTLE = 0.01
 
 
@@ -42,7 +32,6 @@ class VirtioGpuRing(unittest.TestCase):
         return address
 
     def bind(self, gpu, context, doorbell, order=12, resource=None):
-        """A context set up with a guest-backed ring and a fence blob: its ring."""
         ring_id = resource or 100 + 2 * context
         address = gpu.device.memory.allocate(((32 + (1 << order)) + PAGE - 1) & ~(PAGE - 1))
         ring = GuestRing(gpu.qtest, address, order)
@@ -56,9 +45,6 @@ class VirtioGpuRing(unittest.TestCase):
         gpu.qtest.write(width, self.doorbells(gpu) + doorbell * PAGE + offset, 0xD00D)
 
     def attached(self, gpu, ring, doorbell):
-        """One batch through the doorbell: after it, the worker has attached the
-        ring and gone back to sleep, so nothing written later is consumed
-        without a store. An awake worker watches the ring and needs none."""
         ring.write_batch(ring.tail // BATCH_HEADER + 1, 0)
         ring.publish()
         self.ring_doorbell(gpu, doorbell)
@@ -216,7 +202,7 @@ class VirtioGpuRing(unittest.TestCase):
         gpu = self.open()
         old = self.bind(gpu, 1, 9)
         self.attached(gpu, old, 9)
-        again = virtio_qtest.VirtioGpu(gpu.qtest, gpu.features)   # a new driver resets the device first
+        again = virtio_qtest.VirtioGpu(gpu.qtest, gpu.features)
         old.write_batch(9, 0)
         old.publish()
         self.ring_doorbell(again, 9)

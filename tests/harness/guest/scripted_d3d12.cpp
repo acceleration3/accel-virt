@@ -3,11 +3,9 @@
 #include "harness/framework/test_registry.hpp"
 
 namespace {
-
-/* No channel: what a frame that comes back whole is asked for. */
 constexpr unsigned no_channel = 4u;
 
-}  // namespace
+}
 
 namespace av {
 
@@ -74,7 +72,6 @@ std::int32_t ScriptedD3d12::pipeline_library(std::uint32_t &serialized)
     const std::int32_t refused = refusal(Call::pipeline_library);
     if (refused != 0) return refused;
     CHECK(live_);
-    /* Before the queue, as an engine asks. */
     CHECK(!queue_);
     serialized = library_bytes;
     return 0;
@@ -123,8 +120,6 @@ std::int32_t ScriptedD3d12::read_back(std::uint8_t *pixels, std::uint32_t bytes)
 {
     const std::int32_t refused = refusal(Call::read_back);
     if (refused != 0) return refused;
-    /* Read before the fence was reached would be a race a test must not
-     * pass. */
     CHECK(waited_);
     for (std::uint32_t pixel = 0u; pixel * 4u < bytes; pixel++)
         for (unsigned channel = 0u; channel < 4u; channel++)
@@ -180,4 +175,4 @@ void ScriptedD3d12::release()
     waited_ = false;
 }
 
-}  // namespace av
+}

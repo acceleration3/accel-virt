@@ -40,4 +40,4 @@ void SrwLock::release()
     ReleaseSRWLockExclusive(reinterpret_cast<PSRWLOCK>(&lock_));
 }
 
-}  // namespace av
+}

@@ -23,4 +23,4 @@ cl_int ClInfoRequest::give(const void *from, size_t bytes) const
     return CL_SUCCESS;
 }
 
-}  // namespace av::clicd
+}

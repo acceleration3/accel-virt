@@ -1,19 +1,3 @@
-/* Hostile batches into the OpenGL server dispatch.
- *
- * Decoded one command after another over RecordingGl, which answers a
- * representative of every kind of pointer the decoder hands a driver - reads,
- * uploads, count-sized outputs and inputs, text, list queries, offsets and the
- * arrays a draw reads - and the state each depends on, with no OpenGL behind
- * it, and leaves every other entry point null for the decoder to refuse after
- * decoding. A batch, because what a call may touch depends on the
- * glPixelStorei, glBindBuffer and array calls before it. What must hold after
- * every command, whatever the bytes: no call was handed a pointer GL would
- * read or write past, or a null it would follow (feature 044's glReadPixels
- * hole and T030's), no offset or client array was followed as an address with
- * no buffer bound, nothing was written past the reply.
- *
- * Each record is a two-byte command within OpenGL's range, a two-byte length
- * and that many payload bytes. */
 #include "harness/executor/recording_gl.hpp"
 #include "proto/generated/opengl/gl_dispatch_server.h"
 #include "proto/wire/wire_arena.hpp"
@@ -34,7 +18,6 @@ constexpr std::size_t   reply_bytes = 4096u;
 constexpr std::size_t   arena_bytes = 1u << 16;
 constexpr std::uint32_t opengl_api = 3u;
 constexpr std::uint8_t  guard = 0xABu;
-/* A small 3D level, so a texture read has an extent and skipped images count. */
 constexpr GLint level_width = 8;
 constexpr GLint level_height = 8;
 constexpr GLint level_depth = 2;
@@ -42,7 +25,7 @@ constexpr GLint level_depth = 2;
 alignas(16) std::uint8_t block[arena_bytes];
 std::uint8_t reply[reply_bytes + 1u];
 
-}  // namespace
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size)
 {

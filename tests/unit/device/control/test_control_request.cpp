@@ -52,5 +52,4 @@ TEST(control_request, is_main_loop_only)
                    &call, thread),
                av::Status::ok);
   host.join_thread(thread);
-  /* read and respond, and the mock's own read_request and respond */
   for (int violation = 0; violation < 4; violation++) CHECK(host.claim(HostViolation::main_loop_required)); }

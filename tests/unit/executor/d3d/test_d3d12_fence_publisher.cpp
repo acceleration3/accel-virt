@@ -1,8 +1,3 @@
-/* The Direct3D 12 fences whose completed values the guest reads from its own
- * memory: each published fence's value written, as one aligned u64, at the
- * offset the guest named, whenever it moves; a fence a queue will signal is
- * pending until it has. The fences are scripted, so the GPU moves when the
- * test says. */
 #include "executor/d3d/d3d12_fence_publisher.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/shim/d3d_headers.hpp"
@@ -46,8 +41,6 @@ public:
     UINT64 completed = 0u;
 };
 
-/* A session's region over memory of the test's own, and the word at `offset`
- * in it. */
 class Arena {
 public:
     Arena() : bytes_{}, import_(bytes_, sizeof bytes_) { CHECK(region_.adopt(import_.blob())); }
@@ -65,7 +58,7 @@ private:
     GuestRegion     region_;
 };
 
-}  // namespace
+}
 
 TEST(d3d12_fence_publisher_publish, writes_the_value_at_once_and_again_whenever_it_moves)
 { Arena arena;
@@ -76,7 +69,7 @@ TEST(d3d12_fence_publisher_publish, writes_the_value_at_once_and_again_whenever_
   CHECK(arena.word(64u) == 4u);
   CHECK(!publisher.update());
   fence.completed = 9u;
-  CHECK(arena.word(64u) == 4u);   /* between batches, not as it moves */
+  CHECK(arena.word(64u) == 4u);
   CHECK(!publisher.update());
   CHECK(arena.word(64u) == 9u);
   CHECK_EQ(publisher.count(), 1u);
@@ -86,14 +79,13 @@ TEST(d3d12_fence_publisher_publish, refuses_an_offset_outside_the_region_or_misa
 { Arena arena;
   D3d12FencePublisher publisher(arena.region());
   ScriptedFence fence;
-  CHECK(!publisher.publish(1u, &fence, 4092u));   /* its eight bytes past the end */
+  CHECK(!publisher.publish(1u, &fence, 4092u));
   CHECK(!publisher.publish(1u, &fence, 4096u));
   CHECK(!publisher.publish(1u, &fence, 12u));
   CHECK(!publisher.publish(1u, nullptr, 16u));
-  CHECK(publisher.publish(1u, &fence, 4088u));    /* the last word */
+  CHECK(publisher.publish(1u, &fence, 4088u));
   CHECK_EQ(publisher.count(), 1u); }
 
-/* Publishing a fence again moves it; offset `stop` ends it, as does forget. */
 TEST(d3d12_fence_publisher_publish, a_fence_published_again_moves_and_stop_ends_it)
 { Arena arena;
   D3d12FencePublisher publisher(arena.region());
@@ -111,7 +103,7 @@ TEST(d3d12_fence_publisher_publish, a_fence_published_again_moves_and_stop_ends_
   fence.completed = 6u;
   CHECK(!publisher.update());
   CHECK(arena.word(16u) == 5u);
-  CHECK(publisher.publish(9u, nullptr, D3d12FencePublisher::stop));   /* never published: nothing */ }
+  CHECK(publisher.publish(9u, nullptr, D3d12FencePublisher::stop));   }
 
 TEST(d3d12_fence_publisher_expect, a_fence_behind_what_a_queue_will_signal_is_pending)
 { Arena arena;
@@ -120,8 +112,8 @@ TEST(d3d12_fence_publisher_expect, a_fence_behind_what_a_queue_will_signal_is_pe
   CHECK(publisher.publish(1u, &first, 0u));
   CHECK(publisher.publish(2u, &second, 8u));
   publisher.expect(1u, 3u);
-  publisher.expect(1u, 2u);   /* an older expectation never lowers it */
-  publisher.expect(5u, 9u);   /* not published: nothing */
+  publisher.expect(1u, 2u);
+  publisher.expect(5u, 9u);
   CHECK(publisher.update());
   first.completed = 2u;
   CHECK(publisher.update());
@@ -139,12 +131,12 @@ TEST(d3d12_fence_publisher_forget, the_last_fence_takes_the_forgotten_one_s_plac
   publisher.forget(1u);
   publisher.forget(1u);
   CHECK_EQ(publisher.count(), 2u);
-  CHECK(publisher.update());   /* the moved fence kept its expectation */
+  CHECK(publisher.update());
   fences[2].completed = 1u;
   fences[0].completed = 7u;
   CHECK(!publisher.update());
   CHECK(arena.word(16u) == 1u);
-  CHECK(arena.word(0u) == 0u);   /* forgotten: no longer written */
+  CHECK(arena.word(0u) == 0u);
   publisher.clear();
   CHECK_EQ(publisher.count(), 0u);
   CHECK(publisher.invariants_hold()); }
@@ -159,5 +151,5 @@ TEST(d3d12_fence_publisher_publish, a_full_table_refuses_the_next_fence)
   for (std::uint32_t id = 1u; id <= D3d12FencePublisher::capacity; id++)
       CHECK(publisher.publish(id, &fence, (id - 1u) * 8u));
   CHECK(!publisher.publish(D3d12FencePublisher::capacity + 1u, &fence, D3d12FencePublisher::capacity * 8u));
-  CHECK(publisher.publish(1u, &fence, D3d12FencePublisher::capacity * 8u));   /* one already here moves */
+  CHECK(publisher.publish(1u, &fence, D3d12FencePublisher::capacity * 8u));
   CHECK_EQ(publisher.count(), D3d12FencePublisher::capacity); }

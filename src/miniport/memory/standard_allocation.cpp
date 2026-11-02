@@ -17,7 +17,7 @@ namespace {
 
 constexpr uint64_t max_u32 = 0xFFFFFFFFull;
 
-}  // namespace
+}
 
 StandardAllocation::StandardAllocation(Platform &platform, DxgkargGetStandardAllocationDriverDataRecord &request)
     : platform_(platform), request_(request)
@@ -25,7 +25,6 @@ StandardAllocation::StandardAllocation(Platform &platform, DxgkargGetStandardAll
         AV_SCOPE("StandardAllocation::StandardAllocation");
     }
 
-/* basicrender.sys refuses a surface whose pitch or size does not fit 32 bits. */
 Status StandardAllocation::layout_of(uint32_t width, uint32_t height, uint32_t format, SurfaceLayout &layout) const
 {
     AV_SCOPE("StandardAllocation::layout_of");
@@ -73,9 +72,6 @@ Status StandardAllocation::describe_staging(AllocationDescriptor &descriptor) co
     return Status::ok;
 }
 
-/* A cross-adapter texture, or a heap (no format, one row high): pitch and
- * rows as dxgkrnl checks them (CrossAdapterLayout). The row-major bytes are
- * the process's own pages, which the processor reads and writes. */
 Status StandardAllocation::describe_cross_adapter(AllocationDescriptor &descriptor) const
 {
     AV_SCOPE("StandardAllocation::describe_cross_adapter");
@@ -93,14 +89,8 @@ Status StandardAllocation::describe_gdi(AllocationDescriptor &descriptor) const
 {
     AV_SCOPE("StandardAllocation::describe_gdi");
     auto &surface = *static_cast<D3dkmdtGdiSurfaceDataRecord *>(request_.pCreateSurfaceData);
-    /* The cross-adapter texture is always the process's own pages, so the
-     * CPU-visible variant - the one CDD makes of a window's redirection
-     * surface under SupportSoftwareDeviceBitmaps - is the same allocation. */
     if (surface.Type == gdi_texture_cross_adapter || surface.Type == gdi_texture_cpu_visible_cross_adapter)
         return describe_cross_adapter(descriptor);
-    /* The surface DWM opens is lent to the host as rows (open_cross_adapter), so
-     * it takes the rows a texture over lent memory can be: its pages stay where
-     * the miniport can write them. */
     if (surface.Type == gdi_texture_cpu_visible) {
         const uint32_t format = static_cast<uint32_t>(surface.Format);
         const CrossAdapterLayout rows(surface.Width, surface.Height, format, CrossAdapterFormat(format).bytes_per_pixel());
@@ -140,4 +130,4 @@ Status StandardAllocation::describe()
                              AllocationDescriptor::encoded_size);
 }
 
-}  // namespace av
+}

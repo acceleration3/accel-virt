@@ -13,7 +13,7 @@ constexpr uint32_t bus_mask      = 0xFFu;
 constexpr uint32_t device_mask   = 0x1Fu;
 constexpr uint32_t function_mask = 0x7u;
 
-}  // namespace
+}
 
 PciAddress::PciAddress() : domain_(0u), bus_(0u), device_(0u), function_(0u)
 {
@@ -46,4 +46,4 @@ ExportGreeting PciAddress::greeting(const uint8_t *uuid) const
                           static_cast<uint8_t>(function_));
 }
 
-}  // namespace av
+}

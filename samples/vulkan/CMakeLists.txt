@@ -1,12 +1,3 @@
-# The Vulkan samples (tools/vulkan_report.py): Sascha Willems' examples as
-# forked at Voultapher/Vulkan-Samples, fetched and patched by
-# tools/fetch_vulkan_samples.sh, in one headless benchmark program with the
-# runner samples/d3d11 has. A project of its own, not the driver's: the guest
-# build is MinGW's - the examples need a C++ standard library and a C runtime,
-# which the driver's freestanding guest toolchain has neither of - and the
-# host build is the same sources against the host's Vulkan loader.
-#
-#   tools/build_vulkan_samples.sh host|guest
 cmake_minimum_required(VERSION 3.20)
 project(avvksamples CXX C)
 
@@ -22,8 +13,6 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# assimp with the three importers the examples' models need (.dae, .obj, .3ds)
-# and its own zlib, so the host and the guest parse every model the same way.
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
@@ -39,7 +28,6 @@ set(ASSIMP_BUILD_OBJ_IMPORTER ON CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_3DS_IMPORTER ON CACHE BOOL "" FORCE)
 add_subdirectory("${VKS_TREE}/assimp" assimp EXCLUDE_FROM_ALL)
 
-# The D3D11 samples' order (samples/d3d11/registry.cpp), so the two reports read alike.
 set(VKS_SAMPLES
   triangle pushconstants gears texture
   geometryshader tessellation displacement instancing mesh pipelines multisampling
@@ -70,9 +58,6 @@ add_executable(avvksamples
   "${VKS_UPSTREAM}/base/vulkanexamplebase.cpp"
   "${VKS_UPSTREAM}/base/vulkantools.cpp"
   "${VKS_UPSTREAM}/base/vulkandebug.cpp")
-# The upstream tree's root, then its base: a sample's own includes resolve as
-# they would in upstream's build; this directory first for the headless swap
-# chain the patched vulkanswapchain.hpp includes.
 target_include_directories(avvksamples PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"
   "${VKS_UPSTREAM}"
@@ -81,15 +66,12 @@ target_include_directories(avvksamples PRIVATE
   "${VKS_UPSTREAM}/external/glm"
   "${VKS_UPSTREAM}/external/gli")
 target_compile_definitions(avvksamples PRIVATE VK_EXAMPLE_HEADLESS NOMINMAX _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
-# Their code, their warnings: none of it is the driver's.
 target_compile_options(avvksamples PRIVATE -O2 -w -fpermissive)
 target_link_libraries(avvksamples PRIVATE assimp)
 
 if(WIN32)
-  # The loader the guest runs, the one the report pushes beside the program.
   set(VKS_VULKAN_DLL "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/vulkan-runtime/vulkan-1.dll" CACHE FILEPATH "")
   target_compile_definitions(avvksamples PRIVATE VK_USE_PLATFORM_WIN32_KHR)
-  # One file to push: the C and C++ runtimes and winpthreads linked in.
   target_link_options(avvksamples PRIVATE -static -static-libgcc -static-libstdc++ -mconsole -s)
   target_link_libraries(avvksamples PRIVATE "${VKS_VULKAN_DLL}")
   set_target_properties(avvksamples PROPERTIES SUFFIX ".exe")

@@ -45,4 +45,4 @@ uint64_t ExportedMemory::size() const
     return size_;
 }
 
-}  // namespace av
+}

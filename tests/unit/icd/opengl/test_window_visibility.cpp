@@ -1,6 +1,3 @@
-/* Whether a frame put on a window now would be seen (feature 051, US2.3): a
- * window that is gone, minimized or empty in either dimension is one a swap
- * reads nothing back for. */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/opengl/window_visibility.hpp"

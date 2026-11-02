@@ -1,7 +1,3 @@
-/* The ICD's test seams are the oracles every ICD test judges locking, logging
- by, so their own rules are tested: a recursive acquire
- * and a stray release are violations a test must claim, a lock left held fails
- * the test, the trace keeps the order, the log keeps and counts lines. */
 #include "core/platform/thread_lock.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"

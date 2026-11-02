@@ -14,11 +14,9 @@ namespace {
 
 constexpr size_t doublings = Connection::command_bytes / CommandBatch::first_block;
 
-/* Doubling from the first block lands on the command limit exactly, so a block
- * below the limit never grows past it. */
 static_assert(Connection::command_bytes % CommandBatch::first_block == 0u && (doublings & (doublings - 1u)) == 0u);
 
-}  // namespace
+}
 
 CommandBatch::CommandBatch(BlockSource &memory, Connection &connection)
     : memory_(memory), connection_(connection), framed_(nullptr, 0u), last_(0u), failure_(Status::ok),
@@ -50,8 +48,6 @@ Status CommandBatch::end()
                                                                                           : Status::invalid_state;
 }
 
-/* Room for the next command's header and its lent room: a bigger block below
- * the command limit, and at it, the block emptied into a batch of its own. */
 bool CommandBatch::make_room()
 {
     AV_SCOPE("CommandBatch::make_room");
@@ -75,8 +71,6 @@ bool CommandBatch::flush()
     return true;
 }
 
-/* One doubling is always enough: a block is at least twice the room a
- * command is lent, and what is recorded never exceeds the block. */
 bool CommandBatch::grow()
 {
     AV_SCOPE("CommandBatch::grow");
@@ -115,8 +109,6 @@ TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer
         refused_ = command_id;
         return TransportResult::failed;
     }
-    /* The writer was lent at most the block's room, so only one that failed
-     * is not framed. */
     if (!framed_.frame(command_id, writer, 0u)) {
         failure_ = Status::no_memory;
         refused_ = command_id;
@@ -126,11 +118,6 @@ TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer
     return TransportResult::ok;
 }
 
-/* Never in pieces of its own: pieces split over batches published one at a
- * time, the send lock let go between them, let another thread's command in
- * between them, and the device took that command for the one they belonged
- * to. A command no batch holds goes alone, as one run of the transport's
- * pieces under the lock. */
 bool CommandBatch::record_spilled(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("CommandBatch::record_spilled");
@@ -143,7 +130,7 @@ bool CommandBatch::record_spilled(uint32_t command_id, WireWriter &writer)
     if (!framed_.fits(whole)) return connection_.send_command(command_id, writer) == TransportResult::ok;
     const size_t  before = framed_.used();
     CommandPieces pieces(command_id, 0u, writer.bytes(), writer.offset());
-    static_cast<void>(framed_.frame_piece(pieces));   /* it fits whole: the command alone */
+    static_cast<void>(framed_.frame_piece(pieces));
     last_ = before;
     return true;
 }
@@ -202,4 +189,4 @@ bool CommandBatch::invariants_hold() const
     return last_ + last.size() == used;
 }
 
-}  // namespace av::icd
+}

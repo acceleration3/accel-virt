@@ -17,8 +17,6 @@ GuestProgram::GuestProgram(uint32_t stress_seconds, Run run, ObjectStorage<Proce
 uint32_t GuestProgram::run()
 {
     AV_SCOPE("GuestProgram::run");
-    /* Tracing is a diagnosis aid: the suite runs, and reports only what it
-     * tests, whether or not the section could be made. */
     if (trace_.construct() == Status::ok) static_cast<void>(trace_.object().start("avtest", *this, crashed_));
     const Status initialized = kmt_.initialize();
     if (initialized == Status::ok) {
@@ -45,7 +43,6 @@ void GuestProgram::report(StateWriter &writer)
     report_.report(writer);
 }
 
-/* A report the console does not take is still the exit code. */
 void GuestProgram::write_report() const
 {
     AV_SCOPE("GuestProgram::write_report");
@@ -54,4 +51,4 @@ void GuestProgram::write_report() const
                                 static_cast<DWORD>(report_.length()), &written, nullptr));
 }
 
-}  // namespace av
+}

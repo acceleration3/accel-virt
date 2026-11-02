@@ -9,15 +9,11 @@
 namespace av {
 
 namespace {
-
-/* How often a present waiting for its frame looks again. */
 constexpr uint64_t poll_nanoseconds = 100000u;
 constexpr uint64_t nanoseconds_per_ms = 1000000u;
 
-}  // namespace
+}
 
-/* The frames still kept belong to pools that live as long as this does, and
- * go with them: nothing is given back to a pool that is going too. */
 SharedSurfaces::SharedSurfaces(BlockSource &blocks) : lock_(), surfaces_(blocks, Pool::paged), slots_{}, clock_(0u), time_()
 {
     AV_SCOPE("SharedSurfaces::SharedSurfaces");
@@ -93,9 +89,6 @@ bool SharedSurfaces::map(const SurfacePoint &frame, uint32_t wait_ms, AvFrameVie
     return false;
 }
 
-/* A frame not kept is one of three things: its writer has not reached it,
- * is staging it now, or passed it without staging - the last is a blt asking
- * for a surface nobody knew one would, which it now is. */
 SharedSurfaces::Look SharedSurfaces::look(const SurfacePoint &frame, AvFrameView &view)
 {
     AV_SCOPE("SharedSurfaces::look");
@@ -107,7 +100,6 @@ SharedSurfaces::Look SharedSurfaces::look(const SurfacePoint &frame, AvFrameView
     if (reading == StagedFrame::Reading::mapped) return Look::mapped;
     StagedFrame *failed = nullptr;
     {
-        /* A slot being read is neither evicted nor released, so it is still this. */
         const ThreadLockHold locked(lock_);
         Slot *const          again = slot(frame);
         if (reading == StagedFrame::Reading::failed) {
@@ -146,14 +138,8 @@ void SharedSurfaces::settle(const SurfacePoint &frame, StagedFrame::Copying done
     if (done == StagedFrame::Copying::copied) return;
     StagedFrame *failed = nullptr;
     {
-        /* A slot being read is neither evicted nor released, so it is still this. */
         const ThreadLockHold locked(lock_);
         Slot *const          again = slot(frame);
-        /* The present is refused, but a copy the GPU has not finished still
-         * lands: it is held off from later GPU copies into the lending
-         * (FrameBufferCopy::submit) and the frame's image is kept until it
-         * is done, but not from GDI's writes or a later present the CPU
-         * moves, which a late frame may overwrite while the lending lives. */
         if (done == StagedFrame::Copying::timed_out) {
             failed = again->staged_;
             *again = Slot{};
@@ -280,4 +266,4 @@ bool SharedSurfaces::invariants_hold() const
     return holds && surfaces_.invariants_hold();
 }
 
-}  // namespace av
+}

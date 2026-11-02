@@ -1,9 +1,3 @@
-/* The CPU's way into a resource: a map hands the application the resource's
- * shadow in guest memory, filled from the host first when it is read, and an
- * unmap after a write carries the subresource back to the host. The host's
- * UpdateSubresource runs in command order, so a draw recorded before the
- * unmap still reads the old contents - which is what NO_OVERWRITE promises
- * and DISCARD allows. */
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
@@ -14,13 +8,10 @@
 namespace av::d3d11 {
 
 namespace {
-
-/* D3D11_COPY_FLAGS, which the host's UpdateSubresource1 takes as the hint a
- * map gave. */
 constexpr uint32_t copy_no_overwrite = 0x1u;
 constexpr uint32_t copy_discard = 0x2u;
 
-}  // namespace
+}
 
 void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP type, UINT,
                       D3D10DDI_MAPPED_SUBRESOURCE *mapped)
@@ -31,16 +22,10 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
         set_error(E_INVALIDARG);
         return;
     }
-    /* A deferred context records its writes as copies, into a shadow of its
-     * own. */
     if (parent_ != nullptr && resource.shadow_local == 0u && !own_shadow(resource)) {
         set_error(E_OUTOFMEMORY);
         return;
     }
-    /* A buffer on a slice is mapped in place: a discard renames it, anything
-     * else writes where the host already reads. A discard with no slice free
-     * to rename to is a copy: from then on the buffer is copied, so the
-     * host's buffer and the guest's never disagree about where it lives. */
     if (resource.on_slice != 0u && type == D3D10_DDI_MAP_WRITE_DISCARD && !rename_slice(resource)) {
         lines_.once("no slice free for a discarding map: the buffer is copied from then on");
         if (!leave_slice_for_copies(resource)) {
@@ -60,8 +45,6 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
     const size_t   offset = subresource_offset(resource, subresource);
     uint8_t *const at = resource.shadow + offset;
     const size_t   bytes = subresource_bytes(resource, subresource);
-    /* Refused before the application is handed memory: a write the unmap
-     * could not find would never reach the host. */
     if (type != D3D10_DDI_MAP_READ && !open_map(resource, subresource, offset, bytes, flags)) {
         lines_.once("a map the device had no memory to hold open for writing");
         set_error(E_OUTOFMEMORY);
@@ -77,7 +60,6 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
         lost(__func__);
         return;
     }
-    /* What the read-back wrote is the host's already. */
     if ((type == D3D10_DDI_MAP_READ || type == D3D10_DDI_MAP_READWRITE) && resource.shadow_watched != 0u)
         shadows_.forget_writes(at, bytes);
     uint32_t width = 0u, height = 0u, depth = 0u;
@@ -91,7 +73,6 @@ void D3d11Device::unmap(D3D10DDI_HRESOURCE handle, UINT subresource)
 {
     AV_SCOPE("D3d11Device::unmap");
     ResourceRecord &resource = record(handle);
-    /* What the application wrote is already where the host GPU reads it. */
     if (resource.on_slice != 0u || resource.shadow == nullptr) return;
     icd::StagedMapping *const open = maps_.find(resource.stamp.id(), subresource);
     if (open == nullptr) return;
@@ -105,8 +86,6 @@ void D3d11Device::unmap(D3D10DDI_HRESOURCE handle, UINT subresource)
            line * rows(resource, height), flags);
 }
 
-/* `subresource` mapped for writing with `flags`; a map of one already open
- * takes the newer flags. False when there is no memory to hold it open. */
 bool D3d11Device::open_map(const ResourceRecord &resource, uint32_t subresource, size_t offset, size_t bytes,
                            uint32_t flags)
 {
@@ -127,9 +106,6 @@ void D3d11Device::forget_maps(uint32_t id)
     static_cast<void>(maps_.close_if([id](const icd::StagedMapping &open) { return open.object() == id; }));
 }
 
-/* The pages of a watched buffer the application wrote, a box each run; the
- * first carries the map's DISCARD, as a whole upload's first piece does.
- * False when the watch cannot tell, and the buffer then goes whole. */
 bool D3d11Device::upload_written(const ResourceRecord &resource, uint32_t flags)
 {
     AV_SCOPE("D3d11Device::upload_written");
@@ -262,17 +238,6 @@ bool D3d11Device::rename_slice(ResourceRecord &resource)
     return bind_slice(resource);
 }
 
-/* A deferred context's copy of a record names the immediate context's shadow:
- * a slice the host draws in place, or memory the immediate context's own maps
- * write and watch. Neither is this context's to write - its writes reach the
- * host only when the command list runs - so its first map of the copy takes a
- * shadow of its own, and the slice is only forgotten (leave_slice). Nothing is
- * copied into it: a deferred context's first map of a resource in a list
- * discards it, and NO_OVERWRITE after that writes beside what this context
- * wrote. The runtime destroys every copy a list used once the list is made,
- * and the copy then gives the shadow back (forget_copy): kept, Dark Souls
- * Remastered's one-MiB vertex buffer leaked a shadow a frame, until the guest
- * ran out of memory. */
 bool D3d11Device::own_shadow(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::own_shadow");
@@ -288,9 +253,6 @@ bool D3d11Device::own_shadow(ResourceRecord &resource)
     return true;
 }
 
-/* What the runtime destroys on a deferred context is its copy of a record:
- * the object is the immediate context's, and only a shadow the copy took is
- * the copy's to give back. */
 void D3d11Device::forget_copy(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::forget_copy");
@@ -299,9 +261,6 @@ void D3d11Device::forget_copy(ResourceRecord &resource)
     resource = ResourceRecord{};
 }
 
-/* The slice is left behind what was recorded, for the GPU may still read
- * it; the buffer's bytes go on in a shadow of its own, which the copies send
- * from. The host's buffer leaves the slice at the first copy's discard. */
 bool D3d11Device::leave_slice_for_copies(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::leave_slice_for_copies");
@@ -323,15 +282,6 @@ bool D3d11Device::bind_slice(const ResourceRecord &resource)
                                             resource.slice.bytes_);
 }
 
-/* A deferred context's record is a copy of the immediate one's
- * (context_local), whose slice it names: the immediate record keeps it, and
- * retires it when it renames or destroys the buffer, while a deferred
- * context owns no slices (ContextSlices) and only forgets it (own_shadow).
- * Retired there too, it went back free twice - once while the immediate
- * buffer was still on it - and two buffers took the same slice: the
- * multithreading sample's per-thread constant buffers left duplicates that
- * computeparticles' constants, renamed a thousand times a batch, then shared,
- * one step reading another's. */
 void D3d11Device::leave_slice(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::leave_slice");
@@ -340,4 +290,4 @@ void D3d11Device::leave_slice(ResourceRecord &resource)
     resource.shadow = nullptr;
 }
 
-}  // namespace av::d3d11
+}

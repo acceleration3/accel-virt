@@ -27,8 +27,6 @@ namespace {
 constexpr std::uint32_t window = 64u;
 constexpr std::size_t   page_bytes = TraceEscapeRecord::encoded_size + window;
 
-/* A dump of "x/0" and `fields` fields of " ?=", counting how often it was
- * asked for. */
 class CountingReporter final : public av::StateReporter {
 public:
     explicit CountingReporter(std::uint32_t fields) : fields_(fields), reports_(0u) {}
@@ -45,7 +43,6 @@ private:
     std::uint32_t reports_;
 };
 
-/* A reporter whose dump is known byte for byte. */
 class FixedReporter final : public av::StateReporter {
 public:
     void report(av::StateWriter &writer) override
@@ -69,7 +66,6 @@ struct Bound {
     ~Bound() { av::scope_binding.unbind(); }
 };
 
-/* Every window of `kind` from offset 0, as avinspect.exe pages it, joined. */
 std::size_t read_all(TraceEscape &escape, Kind kind, std::uint8_t *out, std::size_t capacity, std::uint64_t &clock)
 {
     std::uint64_t offset = 0u;
@@ -90,7 +86,7 @@ std::size_t read_all(TraceEscape &escape, Kind kind, std::uint8_t *out, std::siz
     return 0u;
 }
 
-}  // namespace
+}
 
 TEST(trace_escape_answer, pages_the_bound_table_out_whole)
 { MockPlatform platform;
@@ -139,7 +135,6 @@ TEST(trace_escape_answer, a_dump_longer_than_a_window_is_reassembled_in_order)
   std::uint64_t clock = 0u;
   const std::size_t length = read_all(escape, Kind::state, static_cast<std::uint8_t *>(static_cast<void *>(dump)),
                                       sizeof dump - 1u, clock);
-  /* "x/0" and 297 fields of " ?=" */
   CHECK_EQ(length, 3u + 297u * 3u);
   CHECK(std::strncmp(dump, "x/0 ?= ?=", 9u) == 0);
   CHECK(std::strcmp(dump + length - 3u, " ?=") == 0);
@@ -181,7 +176,6 @@ TEST(trace_escape_answer, a_request_that_is_not_one_is_refused_and_nothing_writt
   CHECK_STATUS(escape.answer(buffer.data(), 39u), Status::malformed);
   CHECK_STATUS(escape.answer(nullptr, page_bytes), Status::malformed);
   CHECK(buffer.guards_intact());
-  /* A window that exactly fills the bytes is answered inside them. */
   CHECK_STATUS(TraceEscapeRecord(Kind::state, 0u, window).encode(buffer.data(), buffer.size()), Status::ok);
   CHECK_STATUS(escape.answer(buffer.data(), buffer.size()), Status::ok);
   CHECK(buffer.guards_intact()); }
@@ -196,7 +190,6 @@ TEST(trace_escape_answer, a_dump_with_nowhere_to_go_is_no_memory)
   CHECK_STATUS(escape.answer(page, sizeof page), Status::no_memory);
   TraceEscapeRecord unanswered;
   CHECK_STATUS(unanswered.decode(page, sizeof page), Status::ok);
-  /* The table needs no memory. */
   platform.fail_allocation_at(1u);
   CHECK_STATUS(TraceEscapeRecord(Kind::table, 0u, window).encode(page, sizeof page), Status::ok);
   CHECK_STATUS(escape.answer(page, sizeof page), Status::ok);

@@ -13,8 +13,6 @@ WireArena::~WireArena() { give_back_chunks(); }
 void *WireArena::claim(size_t count, size_t size, size_t alignment)
 {
     if (count == 0u) return refuse();
-    /* The count arrives from the wire: refuse what would wrap rather than
-     * hand back room for less than was asked for. */
     if (count > ~size_t{0} / size) return refuse();
     const size_t bytes = count * size;
     const size_t padding = (alignment - (used_ % alignment)) % alignment;
@@ -22,17 +20,10 @@ void *WireArena::claim(size_t count, size_t size, size_t alignment)
     if (!fits && !take_chunk(bytes, alignment)) return refuse();
     const size_t start = fits ? used_ + padding : 0u;
     used_ = start + bytes;
-    /* Zeroed, because a decoder reads some of what it is about to write: the
-     * generated pNext codec walks the destination's existing chain to decide
-     * whether to fill a node in place or adopt a new one, and a nested struct
-     * decoded into fresh arena memory would have walked whatever was there.
-     * Found by tests/fuzz/fuzz_generated_decode.cpp on its first run. */
     __builtin_memset(room_ + start, 0, bytes);
     return room_ + start;
 }
 
-/* A chunk's room starts past its header, which is a multiple of every
- * alignment a decoder asks for. */
 bool WireArena::take_chunk(size_t bytes, size_t alignment)
 {
     if (more_ == nullptr || alignment > chunk_header || bytes > ~size_t{0} - chunk_header) return false;
@@ -91,8 +82,6 @@ void *WireArena::refuse()
     return nullptr;
 }
 
-/* Refusals survive it: they count what this block was too small for, not what
- * one decode was. */
 void WireArena::reset()
 {
     give_back_chunks();
@@ -106,12 +95,8 @@ size_t WireArena::refusals() const { return refusals_; }
 
 bool WireArena::invariants_hold() const
 {
-    /* That a block-less arena has no capacity is the constructor's doing and
-     * cannot come apart afterwards - neither the block nor the capacity is ever
-     * assigned again - so what is left to hold is where the mark sits, and
-     * that room is taken past the block only while there are chunks. */
     return used_ <= room_capacity_ && (newest_chunk_ == nullptr) == (chunks_ == 0u) &&
            (chunks_ == 0u || more_ != nullptr) && (chunks_ != 0u || room_ == block_);
 }
 
-}  // namespace av
+}

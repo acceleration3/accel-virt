@@ -1,6 +1,3 @@
-/* A DXGI the overlay probe's tests drive: every call recorded and refusable,
- * an output that has overlays, and swap chains DWM shows in an overlay plane
- * unless the test says otherwise. Nothing of DXGI is here but its shape. */
 #ifndef AV_SCRIPTED_OVERLAY_HPP
 #define AV_SCRIPTED_OVERLAY_HPP
 
@@ -19,20 +16,16 @@ public:
     ScriptedOverlay(const ScriptedOverlay &) = delete;
     ScriptedOverlay &operator=(const ScriptedOverlay &) = delete;
 
-    /* `call` answers `result` from its `nth` use on. */
     void          fail(Call call, std::uint32_t nth, std::int32_t result);
-    /* What the output and the swap chains then say. */
     void          answer(bool overlays, std::uint32_t support, std::uint32_t mode);
     std::uint32_t calls(Call call) const;
     bool          live() const;
-    /* The rectangle the last swap chain was asked for. */
     std::int32_t  x() const;
     std::uint32_t width() const;
 
     std::int32_t create_device() override;
     std::int32_t supports_overlays(bool &supported) override;
     std::int32_t overlay_support(std::uint32_t format, std::uint32_t &flags) override;
-    /* The formats overlay support was asked of, in order. */
     std::uint32_t asked_format(std::uint32_t nth) const;
     std::int32_t create_swap_chain(std::int32_t x, std::int32_t y, std::uint32_t width, std::uint32_t height) override;
     std::int32_t present(const std::uint8_t *colour) override;
@@ -54,6 +47,6 @@ private:
     std::uint32_t formats_[4] = {};
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_OVERLAY_HPP
+#endif

@@ -1,5 +1,3 @@
-/* DXGKARG_CLOSEALLOCATION, as DxgkDdiCloseAllocation receives it. A DDI
- * record. src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_CLOSE_ALLOCATION_RECORD_HPP
 #define AV_DXGKARG_CLOSE_ALLOCATION_RECORD_HPP
 
@@ -13,6 +11,6 @@ struct DxgkargCloseAllocationRecord {
     void *const *pOpenHandleList;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_CLOSE_ALLOCATION_RECORD_HPP
+#endif

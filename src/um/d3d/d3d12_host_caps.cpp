@@ -13,32 +13,22 @@ namespace {
 constexpr uint32_t level_11_0 = 0xb000u;
 constexpr uint32_t level_11_1 = 0xb100u;
 constexpr uint32_t level_12_0 = 0xc000u;
-/* What 12_0 asks beyond 11_1 (D3D_FEATURE_LEVEL_12_0): resource binding tier
- * 2, tiled resources tier 2 and typed UAV loads of the additional formats. */
 constexpr uint32_t binding_tier_12_0 = 2u;
 constexpr uint32_t tiled_tier_12_0 = 2u;
-/* The tiers of tiled resources this driver carries: Texture2D tiles, with
- * unmapped tiles reading zero. A Texture3D's (tier 3) are not reported. */
 constexpr uint32_t most_tiled_tier = 2u;
-/* D3D_SHADER_MODEL 5.1 and 6.5, and the DDI's release values: 5.1, then each
- * 6.x as 0x60005 + 0x10 * x. */
 constexpr uint32_t api_model_6_0 = 0x60u;
 constexpr uint32_t api_model_6_5 = 0x65u;
 constexpr uint32_t ddi_model_5_1 = 0x50015u;
 constexpr uint32_t ddi_model_6_0 = 0x60005u;
 constexpr uint32_t ddi_model_step = 0x10u;
 constexpr uint32_t address_bits = 40u;
-/* Row-major layout alignments: what a texture copy footprint is aligned to. */
 constexpr UINT16   row_major_element = 16u;
 constexpr UINT16   row_major_alignment = 256u;
-/* OPTIONS_0102's ceilings: vkd3d-proton's own view heap floor, and the sampler
- * count the runtime takes as the least a driver may report. */
 constexpr UINT     view_heap_ceiling = 1000000u;
 constexpr UINT     sampler_heap_ceiling = 4000u;
-/* 1, 2, 4, 8 and 16 samples, a bit each. */
 constexpr UINT     no_output_sample_counts = 0x1fu;
 
-}  // namespace
+}
 
 D3d12HostCaps::D3d12HostCaps() : caps_{}, formats_(), learned_(false)
 {
@@ -127,8 +117,6 @@ HRESULT D3d12HostCaps::shader(void *data, UINT bytes) const
     return fill(data, bytes, &answer, sizeof(answer));
 }
 
-/* Asked twice: once for the count, then with room for the list. 5.1 is always
- * there and the 6.x releases follow without a gap, which D3D12Core demands. */
 HRESULT D3d12HostCaps::shader_models(void *data, UINT bytes) const
 {
     AV_SCOPE("D3d12HostCaps::shader_models");
@@ -175,8 +163,6 @@ HRESULT D3d12HostCaps::answer(const D3D12DDIARG_GETCAPS &args) const
         return fill(args.pData, bytes, &answer, sizeof(answer));
     }
     case D3D12DDICAPS_TYPE_MEMORY_ARCHITECTURE: {
-        /* A discrete GPU behind PCIe: IO coherent, not UMA (d3d12core refuses
-         * a driver that says otherwise on x64). */
         D3D12DDI_MEMORY_ARCHITECTURE_CAPS_0041 answer = {};
         answer.IOCoherent = TRUE;
         return fill(args.pData, bytes, &answer, sizeof(answer));
@@ -195,16 +181,8 @@ HRESULT D3d12HostCaps::answer(const D3D12DDIARG_GETCAPS &args) const
     case D3D12DDICAPS_TYPE_0033_ADAPTER_COMPUTE_ONLY:
     case D3D12DDICAPS_TYPE_0050_HARDWARE_SCHEDULING_CAPS:
     case D3D12DDICAPS_TYPE_EXECUTECOMMANDLISTS_PARALLELISM:
-        /* No device-dependent layouts or swizzles, no tile-based renderer,
-         * no false positives, no queue priorities, not compute-only, no
-         * hardware queues: every one of them zero. */
         return fill(args.pData, bytes, nullptr, 0u);
     case D3D12DDICAPS_TYPE_OPTIONS_0102: {
-        /* The DDI's ceilings, which the runtime clamps to the API's own: it
-         * refuses a device reporting the API's 2048 samplers or a view heap
-         * smaller than its 1000000 ("Driver's MaxViewDescriptorHeapSize is
-         * too small"). No-output rendering at 1 to 16 samples is required at
-         * 11_1. */
         D3D12DDI_OPTIONS_DATA_0102 answer = {};
         answer.SupportedSampleCountsWithNoOutputs = no_output_sample_counts;
         answer.MaxSamplerDescriptorHeapSize = sampler_heap_ceiling;
@@ -213,17 +191,13 @@ HRESULT D3d12HostCaps::answer(const D3D12DDIARG_GETCAPS &args) const
         return fill(args.pData, bytes, &answer, sizeof(answer));
     }
     case D3D12DDICAPS_TYPE_OPTIONS_0110: {
-        /* The tier has no zero: 1_0 is the floor, and all-zero is out of range. */
         D3D12DDI_OPTIONS_DATA_0110 answer = {};
         answer.ExecuteIndirectTier = D3D12DDI_EXECUTE_INDIRECT_TIER_1_0;
         return fill(args.pData, bytes, &answer, sizeof(answer));
     }
     default:
-        /* Every other question is about a feature this driver does not
-         * expose, and all zeroes is each one's "none": a refusal is what the
-         * runtime cannot take for some of them. */
         return fill(args.pData, bytes, nullptr, 0u);
     }
 }
 
-}  // namespace av::d3d12
+}

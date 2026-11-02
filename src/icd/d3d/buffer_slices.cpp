@@ -58,8 +58,6 @@ void BufferSlices::retire(const Slice &slice)
     const ThreadLockHold release(lock_);
     reclaim();
     if (outstanding_ != 0u) outstanding_--;
-    /* Room was made when the slice was handed out; one from before the store
-     * was taken again has none, and is never reused rather than reused early. */
     static_cast<void>(retired_.append(Retired{slice.offset_, slice.bytes_, timeline_.recording()}));
 }
 
@@ -139,14 +137,11 @@ Status BufferSlices::carve(uint32_t which)
     AV_SCOPE("BufferSlices::carve");
     const uint64_t each = class_bytes(which);
     const uint32_t count = static_cast<uint32_t>(block_bytes / each);
-    /* The stack holds every slice its class carved, so freeing one never
-     * needs memory. */
     const Status room = free_[which].reserve(carved_[which] + count);
     if (room != Status::ok) return room;
     uint64_t     block = 0u;
     const Status placed = ranges_.place(block_bytes, block);
     if (placed != Status::ok) return placed;
-    /* Pushed highest first, so the block is handed out from its start. */
     for (uint32_t index = count; index > 0u; index--)
         static_cast<void>(free_[which].append(block + (index - 1u) * each));
     carved_[which] += count;
@@ -189,9 +184,6 @@ void BufferSlices::free_slice(uint64_t offset, uint64_t bytes)
         static_cast<void>(ranges_.remove(offset));
         return;
     }
-    /* Room for every slice the class carved was made at the carve; a stack
-     * already holding them all is given a slice of a store taken since, which
-     * is dropped. */
     if (free_[which].size() < carved_[which]) static_cast<void>(free_[which].append(offset));
 }
 
@@ -221,4 +213,4 @@ bool BufferSlices::invariants_hold() const
     return true;
 }
 
-}  // namespace av::d3d
+}

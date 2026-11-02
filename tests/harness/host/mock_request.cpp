@@ -45,4 +45,4 @@ std::uint32_t MockRequest::response_u32(std::size_t offset) const
 std::size_t MockRequest::response_size() const { return response_size_; }
 const std::uint8_t *MockRequest::response_bytes() const { return response_; }
 
-}  // namespace av
+}

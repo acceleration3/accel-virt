@@ -54,9 +54,9 @@ bool     SurfaceLayout::is_surface() const
 bool SurfaceLayout::red_first() const
 {
     AV_SCOPE("SurfaceLayout::red_first");
-    constexpr uint32_t a8b8g8r8 = 32u;   /* D3DDDIFMT_A8B8G8R8 */
-    constexpr uint32_t x8b8g8r8 = 33u;   /* D3DDDIFMT_X8B8G8R8 */
+    constexpr uint32_t a8b8g8r8 = 32u;
+    constexpr uint32_t x8b8g8r8 = 33u;
     return format_ == a8b8g8r8 || format_ == x8b8g8r8;
 }
 
-}  // namespace av
+}

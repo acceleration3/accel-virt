@@ -1,5 +1,3 @@
-/* Reads a little-endian integer at an absolute offset, so layout tests state
- * each field's documented offset instead of re-decoding it. */
 #ifndef AV_BYTE_LAYOUT_HPP
 #define AV_BYTE_LAYOUT_HPP
 
@@ -19,6 +17,6 @@ private:
     std::size_t         length_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_BYTE_LAYOUT_HPP
+#endif

@@ -58,12 +58,8 @@ void StateWriter::flag(const char *name, bool value) { text(name, value ? "true"
 const char *StateWriter::dump() const { return out_.text(); }
 size_t      StateWriter::length() const { return out_.length(); }
 
-/* TextBuffer keeps one byte for the terminator and cuts silently, so a full
- * buffer is the only sign of a cut; a dump that exactly fills one counts. */
 bool StateWriter::truncated() const { return capacity_ != 0u && out_.length() + 1u >= capacity_; }
 
-/* Every line still open was opened, and nothing is written past the
- * terminator's byte. */
 bool StateWriter::invariants_hold() const
 {
     if (depth_ > opened_) return false;
@@ -77,4 +73,4 @@ void StateWriter::key(const char *name)
     out_.append("=");
 }
 
-}  // namespace av
+}

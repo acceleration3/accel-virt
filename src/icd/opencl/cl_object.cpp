@@ -108,9 +108,6 @@ ClObject *ClObject::nearest(Kind kind)
 void ClObject::retain()
 {
     AV_SCOPE("ClObject::retain");
-    /* A count that saturates no longer says how many, so it never drops to
-     * zero either: the object lives until its context does. An application
-     * that retains four billion times has other problems. */
     if (references_ != ~uint32_t{0}) ++references_;
 }
 
@@ -200,17 +197,12 @@ bool ClObject::invariants_hold() const
     AV_SCOPE("ClObject::invariants_hold");
     if (dispatch_ == nullptr) return false;
     if (wire_ == 0u) return false;
-    /* A parent is always of a lower kind, which is what makes the chain
-     * finite. */
     if (parent_ != nullptr && static_cast<uint8_t>(parent_->kind_) >= static_cast<uint8_t>(kind_)) {
         return false;
     }
-    /* A platform belongs to no context; everything else does once it is made
-     * on one. */
     if (kind_ == Kind::platform && context_ != nullptr) return false;
-    /* Only memory is a region of memory, and never of itself. */
     if (sliced_from_ != nullptr && (kind_ != Kind::mem || sliced_from_ == this)) return false;
     return true;
 }
 
-}  // namespace av::clicd
+}

@@ -1,21 +1,3 @@
-"""Blob scanout against the real device, in the configuration a qtest runs in:
-no display backend at all.
-
-That is not an accident of the harness, it is the case that must never regress.
-A console with no display backend has no GL context - it is the backend that
-calls qemu_console_set_display_gl_ctx, not the device - so this device offers no
-dma-buf scanout, says so in its capset, and refuses every SET_SCANOUT_BLOB with
-ERR_UNSPEC while answering every malformed one exactly as ScanoutFramebuffer
-says. Guest-authored 2D transfers still work, but accelerated desktop images
-are acknowledged without GPU export or CPU readback. WGC clients capture the
-desktop independently of QEMU's display backend.
-
-What a GL display does with the same commands needs one, and the guest suite is
-where it is proven (T029).
-
-Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
-AV_QEMU_BUILD.
-"""
 import os
 import struct
 import unittest
@@ -118,8 +100,6 @@ class VirtioGpuScanout(unittest.TestCase):
                     + struct.pack("<IIQI4x", 1, 1, address, FRAME), RESP_OK_NODATA)
         self.expect(gpu, header(CMD_SET_SCANOUT)
                     + struct.pack("<6I", 0, 0, WIDTH, HEIGHT, 0, 1), RESP_OK_NODATA)
-        # The echo executor cannot export or read this key. A CPU-readback
-        # fallback would fail here; headless presentation must still succeed.
         for frame in (0, 1, 2, 0xFFFFFFFF):
             self.expect(gpu, header(CMD_SCANOUT_IMAGE)
                         + struct.pack("<IIQ", 1, frame, 0xDEADBEEF), RESP_OK_NODATA)
@@ -139,7 +119,6 @@ class VirtioGpuScanout(unittest.TestCase):
         self.blob(gpu, 1)
         self.expect(gpu, scanout_blob(0, 1), RESP_ERR_UNSPEC)
         self.expect(gpu, scanout_blob(MAX_HEADS - 1, 1), RESP_ERR_UNSPEC)
-        # Refused means nothing was taken: the guest may still release the blob.
         self.expect(gpu, named(CMD_RESOURCE_UNREF, 1), RESP_OK_NODATA)
 
     def test_hiding_a_head_needs_no_display_and_is_never_an_error(self):
@@ -182,13 +161,8 @@ class VirtioGpuScanout(unittest.TestCase):
     def test_a_flush_and_a_set_scanout_the_core_does_not_own_reach_the_base_class(self):
         gpu = self.open()
         self.blob(gpu, 1)
-        # A blob no head shows: the core's, and refused.
         self.expect(gpu, flush(1), RESP_ERR_INVALID_PARAMETER)
         self.expect(gpu, flush(1, padding=1), RESP_ERR_INVALID_RESOURCE_ID)
-        # A resource neither the core nor the base class holds: the base
-        # class's answer, unchanged by this feature.
         self.expect(gpu, flush(9), RESP_ERR_INVALID_RESOURCE_ID)
-        # SET_SCANOUT naming a blob is deliberately not intercepted; the base
-        # class already answers for a resource it does not hold.
         self.expect(gpu, header(CMD_SET_SCANOUT) + struct.pack("<6I", 0, 0, WIDTH, HEIGHT, 0, 1),
                     RESP_ERR_INVALID_RESOURCE_ID)

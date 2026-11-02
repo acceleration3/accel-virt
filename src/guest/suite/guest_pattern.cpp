@@ -7,10 +7,9 @@ namespace av {
 namespace {
 
 constexpr uint32_t step = 7u;
-/* A prime, so the sequence runs 251 bytes before it repeats. */
 constexpr uint32_t period = 251u;
 
-}  // namespace
+}
 
 GuestPattern::GuestPattern(uint32_t bytes) : bytes_(bytes)
 {
@@ -59,4 +58,4 @@ uint32_t GuestPattern::filled(const volatile unsigned char *view) const
     return filled;
 }
 
-}  // namespace av
+}

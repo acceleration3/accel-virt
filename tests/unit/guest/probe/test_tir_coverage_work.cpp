@@ -1,9 +1,3 @@
-/* Direct2D's hairlines drawn with a forced sample count over a scripted
- * Direct3D 11: every step in order and every texel the mask D3D's rasterizer
- * gives - and the failure the host had, a stack rasterizing the draw at one
- * sample, caught with the texels it still got right; a layer's device noted
- * rather than judged; a refusal at each call kept as its HRESULT; and the
- * device released whatever happened. */
 #include "guest/probe/tir_coverage_work.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/scenario_steps.hpp"
@@ -20,8 +14,6 @@ namespace av {
 struct TirCoverageWorkProbe {
     static void read_without_a_device(TirCoverageWork &work) { work.read_ = true; }
     static void lose_a_vertex(TirCoverageWork &work) { work.added_--; }
-    /* Texels where D3D covers some samples of the pattern but not all: the
-     * ones a hairline crosses. */
     static std::uint32_t partial(const TirCoverageWork &work)
     {
         std::uint32_t count = 0u;
@@ -30,7 +22,7 @@ struct TirCoverageWorkProbe {
     }
 };
 
-}  // namespace av
+}
 
 using av::GuestReport;
 using av::MockKmt;
@@ -76,7 +68,7 @@ bool has(const char *report, const char *line)
     return std::strstr(report, line) != nullptr;
 }
 
-}  // namespace
+}
 
 TEST(tir_coverage_work, hairlines_at_a_forced_16_samples_come_back_as_d3d_covers_them)
 { TirRig rig;
@@ -94,16 +86,11 @@ TEST(tir_coverage_work, hairlines_at_a_forced_16_samples_come_back_as_d3d_covers
   CHECK_EQ(rig.d3d11().calls(Call::draw), 1u);
   CHECK_EQ(rig.d3d11().calls(Call::release), 1u); }
 
-/* The strokes are thinner than the pattern's rows: many texels have some of
- * the 16 samples covered and not all, which a single sample cannot say. */
 TEST(tir_coverage_work, the_strokes_cover_texels_partly)
 { ScriptedD3d11Tir d3d11;
   const TirCoverageWork work(d3d11);
   CHECK(TirCoverageWorkProbe::partial(work) > 400u); }
 
-/* What the host's DXVK did before it emulated the forced count: one bit
- * where the pattern has any. The step fails with the texels still right -
- * the empty ones. */
 TEST(tir_coverage_work, a_draw_rasterized_at_one_sample_fails_the_coverage_with_what_was_right)
 { TirRig rig;
   rig.d3d11().rasterize_at_one_sample();
@@ -113,8 +100,6 @@ TEST(tir_coverage_work, a_draw_rasterized_at_one_sample_fails_the_coverage_with_
   CHECK(has(report, "ok d3d11.tir_device_kept"));
   CHECK(has(report, "avd3d11probe: 5 passed, 1 failed")); }
 
-/* DXVK beside the probe, as released, ignores the forced count with a
- * render target bound: its coverage is noted, the rest still judged. */
 TEST(tir_coverage_work, a_layers_device_is_noted_not_judged)
 { TirRig rig;
   rig.d3d11().set_layered(true);

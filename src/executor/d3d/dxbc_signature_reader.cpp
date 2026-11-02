@@ -8,13 +8,12 @@ namespace {
 
 constexpr size_t   header_bytes = 32u;
 constexpr uint32_t most_chunks = 64u;
-/* ISG1 entries carry a stream and a minimum precision besides ISGN's six. */
 constexpr uint32_t isgn_entry_bytes = 24u;
 constexpr uint32_t isg1_entry_bytes = 32u;
 constexpr uint32_t isgn_register_word = 4u;
 constexpr uint32_t isg1_register_word = 5u;
 
-}  // namespace
+}
 
 DxbcSignatureReader::DxbcSignatureReader(const uint8_t *bytes, size_t size)
     : bytes_(bytes), size_(bytes == nullptr ? 0u : size), chunk_(0u), chunk_size_(0u), entry_bytes_(0u)
@@ -80,4 +79,4 @@ const char *DxbcSignatureReader::semantic_at(uint32_t register_index, uint32_t &
     return nullptr;
 }
 
-}  // namespace av
+}

@@ -40,9 +40,6 @@ Status VidPn::source_paths(uint32_t source, uint64_t &paths)
     return NtStatus(answer).status();
 }
 
-/* A path is released only after the next is acquired from it. Once anything
- * fails no further path is visited, but the one already acquired is still
- * released. */
 Status VidPn::for_each_path(PathVisitor &visitor)
 {
     AV_SCOPE("VidPn::for_each_path");
@@ -147,10 +144,6 @@ Status VidPn::obtain(int32_t (*call)(void *, uint32_t, void **, const ModeSetInt
     mode_set_interface = nullptr;
     const Status status = NtStatus(call(handle_, owner, &mode_set, &mode_set_interface)).status();
     if (status == Status::ok && mode_set_interface != nullptr) return Status::ok;
-    /* A call that failed holds nothing, whatever it left in the out parameters:
-     * dxgkrnl writes the interface table before it decides the owner is not one
-     * this VidPn has, and keeping that table makes the caller use and release a
-     * mode set it never acquired. */
     mode_set = nullptr;
     mode_set_interface = nullptr;
     return status == Status::ok ? Status::malformed : status;
@@ -162,4 +155,4 @@ Status VidPn::release_path(const D3dkmdtVidPnPresentPathRecord *path)
     return NtStatus(topology_interface_->pfnReleasePathInfo(topology_, path)).status();
 }
 
-}  // namespace av
+}

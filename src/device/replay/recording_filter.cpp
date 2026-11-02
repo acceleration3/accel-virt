@@ -8,9 +8,6 @@
 namespace av {
 
 namespace {
-
-/* Whether `text` holds `fragment`, both NUL-terminated; `fragment` is never
- * empty, because an empty one keeps everything without looking. */
 bool holds(const char *text, const char *fragment)
 {
     AV_SCOPE("holds");
@@ -22,7 +19,7 @@ bool holds(const char *text, const char *fragment)
     return false;
 }
 
-}  // namespace
+}
 
 RecordingFilter::RecordingFilter()
     : context_(any_context), api_(any_api), first_fence_(0u), last_fence_(~uint64_t{0}), fragment_{}
@@ -107,4 +104,4 @@ bool RecordingFilter::invariants_hold() const
     return fragment_[longest_fragment - 1u] == '\0';
 }
 
-}  // namespace av
+}

@@ -1,6 +1,3 @@
-/* DXGKARG_SETVIDPNSOURCEADDRESS, as DxgkDdiSetVidPnSourceAddress receives it.
- * A DDI record: Flags is the DXGK_SETVIDPNSOURCEADDRESS_FLAGS Value;
- * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_SET_VIDPN_SOURCE_ADDRESS_RECORD_HPP
 #define AV_DXGKARG_SET_VIDPN_SOURCE_ADDRESS_RECORD_HPP
 
@@ -17,7 +14,7 @@ struct DxgkargSetVidPnSourceAddressRecord {
     void                  *hAllocation;
     uint32_t              ContextCount;
     uint32_t              ContextCountPadding;
-    void                  *Context[65];   /* 1 + D3DDDI_MAX_BROADCAST_CONTEXT */
+    void                  *Context[65];
     uint32_t              Flags;
     uint32_t              Duration;
     DxgkPrimaryDataRecord PrimaryData[64];
@@ -26,6 +23,6 @@ struct DxgkargSetVidPnSourceAddressRecord {
     void                  *pDriverPrivateData;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_DXGKARG_SET_VIDPN_SOURCE_ADDRESS_RECORD_HPP
+#endif

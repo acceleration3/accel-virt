@@ -42,8 +42,6 @@ Status RendererContextPlane::configure(const char *renderer, const char *executo
 {
     AV_SCOPE("RendererContextPlane::configure");
     if (renderer == nullptr || executor == nullptr) return Status::invalid_parameter;
-    /* A byte past the longest path the hello carries: a path that fills it
-     * was cut short. */
     TextBuffer renderer_path(renderer_, sizeof renderer_);
     TextBuffer executor_path(executor_, sizeof executor_);
     renderer_path.append(renderer);
@@ -54,8 +52,6 @@ Status RendererContextPlane::configure(const char *renderer, const char *executo
     return configured_ ? Status::ok : Status::invalid_parameter;
 }
 
-/* The renderer loads the library, not QEMU: a table given here is a device
- * that asked for both, which is refused. */
 Status RendererContextPlane::accept(const AvExecutorOps *executor)
 {
     AV_SCOPE("RendererContextPlane::accept");
@@ -79,8 +75,6 @@ Status RendererContextPlane::start(const uint8_t *gpu_uuid, const CapsetInfo &ca
     return launch();
 }
 
-/* Started, greeted, and told everything the device already holds - its
- * memory, its blobs, its interrupts - before any context reaches it. */
 Status RendererContextPlane::launch()
 {
     AV_SCOPE("RendererContextPlane::launch");
@@ -107,8 +101,6 @@ Status RendererContextPlane::launch()
 Status RendererContextPlane::send_regions()
 {
     AV_SCOPE("RendererContextPlane::send_regions");
-    /* ROMs and device memory are regions too, and no memfd backs them: they
-     * are skipped, and a guest whose RAM is one of them has no renderer. */
     const uint32_t count = host_.guest_region_count();
     uint32_t       sent = 0u;
     for (uint32_t index = 0u; index < count; index++) {
@@ -135,9 +127,6 @@ uint32_t RendererContextPlane::sub_apis() const
     return ready_.sub_apis();
 }
 
-/* The memory is the renderer's library's, and its dma-buf comes back beside
- * the answer: QEMU maps it into the hostmem region, the renderer keeps the
- * allocation and who it was made for. */
 Status RendererContextPlane::allocate_memory(uint32_t context, uint64_t key, uint64_t size, uint32_t request,
                                              AvHostMemory &memory)
 {
@@ -182,8 +171,6 @@ void RendererContextPlane::free_memory(uint64_t key)
         give_up();
 }
 
-/* The renderer's library is in a process of its own, and so is each device's:
- * nothing there could be made the same memory as another's. */
 Status RendererContextPlane::alias_memory(uint64_t, const ContextPlane &, uint64_t, AvHostMemory &)
 {
     AV_SCOPE("RendererContextPlane::alias_memory");
@@ -212,8 +199,6 @@ const ObjectStorage<RemoteContext> *RendererContextPlane::slot_of(uint32_t id) c
     return nullptr;
 }
 
-/* A context made while no renderer runs has nowhere to run: the guest's
- * create fails, and its device-lost recovery tries again once one does. */
 Status RendererContextPlane::create(uint32_t id)
 {
     AV_SCOPE("RendererContextPlane::create");
@@ -239,7 +224,6 @@ Status RendererContextPlane::create(uint32_t id)
     return Status::no_space;
 }
 
-/* A lost context is only QEMU's now: the renderer that ran it is gone. */
 Status RendererContextPlane::destroy(uint32_t id)
 {
     AV_SCOPE("RendererContextPlane::destroy");
@@ -258,8 +242,6 @@ Status RendererContextPlane::destroy(uint32_t id)
     return Status::ok;
 }
 
-/* A reset takes every blob after the contexts: the renderer's copies go
- * first, so none outlives the table it copied. */
 void RendererContextPlane::destroy_all()
 {
     AV_SCOPE("RendererContextPlane::destroy_all");
@@ -274,10 +256,6 @@ bool RendererContextPlane::holds(uint32_t id)
     return slot_of(id) != nullptr;
 }
 
-/* The renderer's silence mid-bind is its death: the context is left unbound
- * and every other one is reported lost. A refusal - QEMU's own, of a setup
- * naming a blob that is not there or of a context already bound, or the
- * renderer's - is the guest's answer and ends nothing. */
 Status RendererContextPlane::bind(uint32_t id, const ContextSetup &setup, const CapsetInfo &capset)
 {
     AV_SCOPE("RendererContextPlane::bind");
@@ -321,8 +299,6 @@ uint32_t RendererContextPlane::live() const
 void RendererContextPlane::blob_created(uint32_t id)
 {
     AV_SCOPE("RendererContextPlane::blob_created");
-    /* A blob the renderer cannot be remembered to have is left out, as one
-     * outside its memory is: every context that names it is refused. */
     if (mirrored_.append(id) != Status::ok) {
         host_.log("virtio-gpu-av: no memory to give a blob to the renderer");
         return;
@@ -330,9 +306,6 @@ void RendererContextPlane::blob_created(uint32_t id)
     if (!alive_) return;
     const Status status = mirror(id);
     if (status == Status::ok) return;
-    /* A blob the renderer cannot be given - pages outside every region QEMU
-     * sent it - is left out: every context that names it is refused, and the
-     * renderer is not ended over it, which a relaunch would only repeat. */
     if (status == Status::invalid_parameter || status == Status::not_supported) {
         mirrored_.truncate(mirrored_.size() - 1u);
         host_.log("virtio-gpu-av: a blob outside the renderer's memory is not given to it");
@@ -356,8 +329,6 @@ void RendererContextPlane::blob_released(uint32_t id)
     }
 }
 
-/* What was shared lives in the renderer's contexts, so the release goes there;
- * a renderer that is gone took everything with it. */
 void RendererContextPlane::shared_released(const uint8_t *, uint64_t object_id)
 {
     AV_SCOPE("RendererContextPlane::shared_released");
@@ -377,8 +348,6 @@ Status RendererContextPlane::mirror(uint32_t id)
     return mirror_guest(id, pages);
 }
 
-/* Each of the blob's runs is a host pointer into guest RAM; the renderer
- * finds the same pages as the region QEMU mapped them from. */
 Status RendererContextPlane::mirror_guest(uint32_t id, const BlobWindow &pages)
 {
     AV_SCOPE("RendererContextPlane::mirror_guest");
@@ -410,7 +379,6 @@ void RendererContextPlane::interrupts_changed(bool connected)
     if (status != Status::ok) give_up();
 }
 
-/* One descriptor per line QEMU has a notifier for, in line order. */
 Status RendererContextPlane::send_interrupt_lines()
 {
     AV_SCOPE("RendererContextPlane::send_interrupt_lines");
@@ -470,8 +438,6 @@ void RendererContextPlane::renderer_lost()
     if (launch() != Status::ok) host_.log("virtio-gpu-av: the renderer could not be started again");
 }
 
-/* The display holds its own import of whatever was shown; a new renderer's
- * images are new descriptors. */
 void RendererContextPlane::drop_images()
 {
     AV_SCOPE("RendererContextPlane::drop_images");
@@ -543,8 +509,6 @@ bool RendererContextPlane::read_image(const uint8_t *, uint64_t, void *, uint32_
     return false;
 }
 
-/* The renderer's snapshots are in its own process's memory, which the
- * engine here cannot read: presents keep their read-back. */
 bool RendererContextPlane::reads_frames() const
 {
     AV_SCOPE("RendererContextPlane::reads_frames");
@@ -568,8 +532,6 @@ Status RendererContextPlane::copy_frame(const uint8_t *, const SurfacePoint &, u
     return Status::not_supported;
 }
 
-/* The surfaces live in the renderer's process, whose descriptors nothing here
- * asks for: a device with a renderer exports none (docs/external-export.md). */
 bool RendererContextPlane::exports_surfaces() const
 {
     AV_SCOPE("RendererContextPlane::exports_surfaces");
@@ -621,4 +583,4 @@ bool RendererContextPlane::invariants_hold() const
     return true;
 }
 
-}  // namespace av
+}

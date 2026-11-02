@@ -1,8 +1,3 @@
-/* One rectangle of pixels a present copy moves (docs/protocol.md, the present
- * copy): where it starts in the source and in the destination, and its size,
- * in four-byte pixels. The miniport clips it to both surfaces before it
- * travels; the device believes none of that, and reaches no byte outside the
- * pages it mapped (RegionMover). */
 #ifndef AV_PRESENT_REGION_HPP
 #define AV_PRESENT_REGION_HPP
 
@@ -26,8 +21,6 @@ public:
                   uint32_t height);
 
     void                 write(WireWriter &writer) const;
-    /* malformed for a region with no width or no height, which no clipped
-     * rectangle is: one that clips away is never sent. */
     [[nodiscard]] Status decode(WireReader &reader);
 
     uint32_t source_x() const;
@@ -46,6 +39,6 @@ private:
     uint32_t height_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_PRESENT_REGION_HPP
+#endif

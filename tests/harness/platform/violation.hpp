@@ -1,5 +1,3 @@
-/* The rules MockPlatform enforces. Each kind is recorded separately, so a test
- * claims exactly the rule it meant to break. */
 #ifndef AV_VIOLATION_HPP
 #define AV_VIOLATION_HPP
 
@@ -21,6 +19,6 @@ enum class Violation : unsigned {
     count
 };
 
-}  // namespace av
+}
 
-#endif  // AV_VIOLATION_HPP
+#endif

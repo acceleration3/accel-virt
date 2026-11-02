@@ -37,8 +37,6 @@ Status SharedObjectCommand::answer(uint32_t status, uint64_t wire_handle, uint8_
 {
     AV_SCOPE("SharedObjectCommand::answer");
     produced = SharedObjectAnswer::encoded_size;
-    /* A slot too small for the answer is written nothing, as the executor ABI
-     * leaves it, and the reply header says how much was needed. */
     static_cast<void>(SharedObjectAnswer(status, wire_handle).encode(reply, capacity));
     return Status::ok;
 }
@@ -74,4 +72,4 @@ Status SharedObjectCommand::run(uint8_t *reply, size_t capacity, size_t &produce
     return answer(refusal_of(opened), wire_handle, reply, capacity, produced);
 }
 
-}  // namespace av
+}

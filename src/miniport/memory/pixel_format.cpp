@@ -16,4 +16,4 @@ uint32_t PixelFormat::bytes_per_pixel() const
     return bgra_or_rgba ? 4u : 0u;
 }
 
-}  // namespace av
+}

@@ -11,7 +11,7 @@ namespace {
 constexpr uint32_t code_digits = 8u;
 constexpr uint32_t address_digits = 16u;
 
-}  // namespace
+}
 
 CrashReport::CrashReport(const CrashEvent &event, TraceText &trace, ModuleResolver &modules,
                          const uint64_t *returns, uint32_t count)
@@ -55,7 +55,6 @@ bool CrashReport::invariants_hold() const
     return count_ <= max_frames && frame_ <= count_ && (returns_ != nullptr || count_ == 0u);
 }
 
-/* `0x<address> (<module>+0x<offset>)`, or the address alone in no module. */
 void CrashReport::located(TextBuffer &out, uint64_t address) const
 {
     out.append("0x");
@@ -71,4 +70,4 @@ void CrashReport::located(TextBuffer &out, uint64_t address) const
     out.append(")");
 }
 
-}  // namespace av
+}

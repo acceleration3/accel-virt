@@ -62,7 +62,7 @@ private:
     DxgkargRenderRecord           record_;
 };
 
-}  // namespace
+}
 
 TEST(render_request_render, copies_the_command_and_its_patch_locations_then_advances)
 { MockPlatform platform; Render render;
@@ -87,15 +87,15 @@ TEST(render_request_render, an_empty_command_with_no_patches_is_fine)
 TEST(render_request_render, refuses_anything_that_would_read_or_write_outside_its_buffers)
 { for (int knob = 0; knob < 10; knob++) {
       MockPlatform platform; Render render;
-      if (knob == 0) render.record().CommandLength = dma_bytes + 1u;               /* longer than the DMA buffer */
+      if (knob == 0) render.record().CommandLength = dma_bytes + 1u;
       if (knob == 1) render.record().pCommand = nullptr;
       if (knob == 2) render.record().pDmaBuffer = nullptr;
-      if (knob == 3) render.record().PatchLocationListOutSize = 1u;                /* no room for the patches */
+      if (knob == 3) render.record().PatchLocationListOutSize = 1u;
       if (knob == 4) render.record().pPatchLocationListIn = nullptr;
       if (knob == 5) render.record().pPatchLocationListOut = nullptr;
-      if (knob == 6) render.in(1u).AllocationIndex = 2u;                           /* outside the allocation list */
-      if (knob == 7) render.in(1u).PatchOffset = command_bytes - 7u;               /* eight bytes do not fit */
-      if (knob == 8) render.in(1u).PatchOffset = 0xFFFFFFFCu;                      /* would wrap */
+      if (knob == 6) render.in(1u).AllocationIndex = 2u;
+      if (knob == 7) render.in(1u).PatchOffset = command_bytes - 7u;
+      if (knob == 8) render.in(1u).PatchOffset = 0xFFFFFFFCu;
       if (knob == 9) render.record().pAllocationList = nullptr;
       const std::uint8_t *before = static_cast<std::uint8_t *>(render.record().pDmaBuffer);
       CHECK_STATUS(render.run(platform), Status::invalid_parameter);

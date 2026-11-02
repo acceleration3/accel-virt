@@ -1,8 +1,3 @@
-"""tools/guest/run_guest_suite.py against a fake QEMU with a scripted guest:
-every step, reboot, timeout and misbehaving agent; bugchecks named, their dumps
-pulled after a reboot or from a rescue boot; image preparation; holding a guest
-for debugging; and the promise that the base image is never written and the
-overlay never outlives the run."""
 import hashlib
 import json
 import os
@@ -30,16 +25,12 @@ from fetch_opencl_loader import CMAKE_CONFIG, WANTED  # noqa: E402
 RUNNER = ROOT / "tools" / "guest" / "run_guest_suite.py"
 FAKES = ROOT / "tests" / "tools" / "fake_guest"
 ONE_MONITOR = "display: dwm=1 services=avgpu monitors=1\n"
-"""What the check stage says about a guest with one output."""
 PASSING_REPORT = "ok adapter.find\navtest: 23 passed, 0 failed\n"
 SLEEP_STATES = "sleep: standby=yes hibernate=yes\n"
-"""What a machine that offers both says (feature 040, US1)."""
 COLLECTED = "file C:\\av\\diag\\system.txt\r\ndump C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp\r\n"
 
 
 def live_dump(code):
-    """A kernel dump's first bytes as the fake guest serves them, one byte per
-    character: DUMP_HEADER64's signature and the bugcheck code it was taken for."""
     head = bytearray(0x40)
     head[:8] = b"PAGEDU64"
     struct.pack_into("<I", head, 0x38, code)
@@ -47,18 +38,13 @@ def live_dump(code):
 
 
 BLACK_SCREEN = live_dump(0x1A8)
-"""VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP: expected until something renders."""
 GUEST_FILES = {"C:\\av\\diag\\system.txt": "System events\n",
                "C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp": BLACK_SCREEN,
                "C:\\Windows\\MEMORY.DMP": live_dump(0xD1)}
-"""What a suite that wrote a pattern through a mapped view reports (feature 041)."""
 TIMEOUT_EVENTS = "timeout: 2026-09-13T10:00:00 Display driver avgpu stopped responding and has successfully "\
                  "recovered.\r\ntimeouts: 1\r\n"
-"""What the guest says event 4101 looks like (feature 040, US3)."""
 WITH_MEMORY_DUMP = COLLECTED + "dump C:\\Windows\\MEMORY.DMP\r\n"
 ADAPTER_LUID = 0xD3A1
-"""The avgpu adapter's LUID LowPart in these scripts; vulkaninfo prints the
-LUID structure's eight bytes, LowPart first and little-endian."""
 
 
 VULKAN_PICTURES = ("C:\\av\\vulkan-draw.bmp", "C:\\av\\vulkan-present.bmp", "C:\\av\\vulkan-resized.bmp")
@@ -66,9 +52,6 @@ GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated", "opengl-compat
 
 
 def vulkaninfo_gpu(index, luid_bytes="a1d30000-00000000", name="av (NVIDIA GeForce RTX 4090)"):
-    """One physical device as vulkaninfo's full text output prints it
-    (Vulkan-Tools DumpGpu and DumpVkPhysicalDeviceIDProperties): a GPUn header,
-    then its property structures, the LUID only while deviceLUIDValid."""
     luid = f"\tdeviceLUID      = {luid_bytes}\r\n" if luid_bytes is not None else ""
     return (f"GPU{index}:\r\nVkPhysicalDeviceProperties:\r\n---------------------------\r\n"
             f"\tapiVersion        = 1.3.290 (4206882)\r\n\tdeviceName        = {name}\r\n\r\n"
@@ -88,7 +71,6 @@ PROBE_REPORT = (f"ok vulkan.instance\r\nok vulkan.adapter_luid {ADAPTER_LUID}\r\
                 "ok vulkan.draw\r\nok vulkan.lost\r\nok vulkan.recreated\r\nok vulkan.surface 4096\r\n"
                 "ok vulkan.present 4096\r\nok vulkan.pacing 60\r\nok vulkan.resized 9216\r\n"
                 "avvkprobe: 12 passed, 0 failed\r\n")
-"""What avvkprobe.exe prints when every step of features 045 and 046 passed."""
 D3D_REPORTS = {
     "9": ("ok d3d9.device\r\nok d3d9.adapter_ids\r\nok d3d9.clear\r\nok d3d9.readback\r\n"
           "ok d3d9.pixels 4096\r\nok d3d9.present\r\nok d3d9.wpf_device\r\nok d3d9.wpf_swap_chain\r\n"
@@ -109,7 +91,6 @@ D3D_REPORTS = {
            "ok d3d12.target\r\nok d3d12.clear\r\nok d3d12.fence\r\nok d3d12.readback\r\n"
            "ok d3d12.pixels 4096\r\navd3d12probe: 10 passed, 0 failed\r\n"),
 }
-"""What each D3D probe prints when every step of feature 047's US1 and US2 passed."""
 D3D_PICTURES = ("C:\\av\\d3d9-clear.bmp", "C:\\av\\d3d9-wpf.bmp", "C:\\av\\d3d11-clear.bmp",
                 "C:\\av\\d3d12-clear.bmp")
 KEY_ABSENT = "ERROR: The system was unable to find the specified registry key or value.\r\n"
@@ -117,7 +98,6 @@ ICD_LOG = "C:\\ProgramData\\av\\avvk-4242.log"
 
 
 def host_gpu(index, uuid, vendor, device, kind, name, bus):
-    """One GPU of a host's full vulkaninfo output, with the PCI bus it is on."""
     return (f"GPU{index}:\nVkPhysicalDeviceProperties:\n\tvendorID = {vendor}\n\tdeviceID = {device}\n"
             f"\tdeviceType = PHYSICAL_DEVICE_TYPE_{kind}\n\tdeviceName = {name}\n"
             f"\tdeviceUUID = {uuid}\n"
@@ -125,8 +105,6 @@ def host_gpu(index, uuid, vendor, device, kind, name, bus):
                f"\tpciDevice = 0\n\tpciFunction = 0\n" if bus is not None else ""))
 
 
-# This project's host: the RX 9070 XT at 03:00.0 and the Raphael iGPU at
-# 7b:00.0, which sysfs is told nothing about here, and llvmpipe.
 RADEON_UUID = "00000000-0300-0000-0000-000000000000"
 RAPHAEL_UUID = "00000000-7b00-0000-0000-000000000000"
 HOST_GPUS = (host_gpu(0, RADEON_UUID, "0x1002", "0x7550", "DISCRETE_GPU", "AMD Radeon RX 9070 XT (RADV GFX1201)", 3)
@@ -136,7 +114,6 @@ HOST_GPUS = (host_gpu(0, RADEON_UUID, "0x1002", "0x7550", "DISCRETE_GPU", "AMD R
                         "llvmpipe (LLVM 21.1.0, 256 bits)", None))
 TWO_ADAPTERS = "display: dwm=1 services=avgpu,avgpu monitors=2 adapters=2\n" \
                "device: PCI\\VEN_1002 status=OK problem=0 service=avgpu\n"
-"""What the check stage says of two avgpu adapters with one output each."""
 WINDOWS_ADAPTERS = (
     "wmi|PCI\\VEN_1002&DEV_7550&SUBSYS_52561AF4&REV_C0\\3&11583659&0&10|4293918720|accel-virt|"
     "AMD Radeon RX 9070 XT|AMD Radeon RX 9070 XT\r\n"
@@ -145,8 +122,6 @@ WINDOWS_ADAPTERS = (
     "dxgi|1002|7550|52561af4|c0|268435456|8589934592|0|AMD Radeon RX 9070 XT\r\n"
     "dxgi|1af4|1050|52561af4|01|268435456|8589934592|0|AMD Radeon Graphics\r\n"
     "dxgi|1414|008c|00000000|00|0|8589934592|2|Microsoft Basic Render Driver\r\n")
-"""What the adapters stage says of those two, and the software rasterizer DXGI
-always lists."""
 
 
 class GuestSuiteRun(unittest.TestCase):
@@ -162,7 +137,6 @@ class GuestSuiteRun(unittest.TestCase):
                      "avd3d12probe.exe", "OVMF_VARS.fd", "OVMF_CODE.fd", "avvk32.json", "atiadlxx.dll",
                      "nvapi64.dll"):
             (self.scratch / name).write_bytes(name.encode() * 100)
-        # The 32-bit drivers, from a directory of their own as a build makes them.
         self.drivers32 = self.scratch / "guest32"
         self.drivers32.mkdir()
         for name in ("avvk32.dll", "avgl32.dll", "avcl32.dll", "avumd32.dll", "atiadlxy.dll", "nvapi.dll"):
@@ -235,30 +209,16 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\av\\package\\avgpu.sys 900", lines)
         self.assertIn("file C:\\av\\package\\avgpu.inf", "\n".join(lines))
-        # The INF names the ICD whatever the run is for, and pnputil refuses a
-        # package missing a file it names (feature 045).
         self.assertIn("file C:\\av\\package\\avvk.dll 800", lines)
         self.assertIn("file C:\\av\\package\\avvk.json 900", lines)
-        # The OpenGL ICD is in the package too, which names it (feature 050).
         self.assertIn("file C:\\av\\package\\avgl.dll 800", lines)
-        # And the vendor libraries, which the INF copies to System32 and
-        # SysWOW64 (docs/vendor-libraries.md).
         for name in ("atiadlxx.dll", "nvapi64.dll", "atiadlxy.dll", "nvapi.dll"):
             self.assertIn(f"file C:\\av\\package\\{name}", "\n".join(lines))
-        # And the Direct3D user-mode driver, which the software key names four
-        # times over (feature 055).
         self.assertIn("file C:\\av\\package\\avumd.dll 900", lines)
-        # And the 32-bit drivers the *Wow values name, with the 32-bit Vulkan
-        # manifest, for a WoW64 process.
         for name in ("avvk32.dll", "avgl32.dll", "avcl32.dll", "avumd32.dll"):
             self.assertIn(f"file C:\\av\\package\\{name} {len(name) * 100}", lines)
         self.assertIn("file C:\\av\\package\\avvk32.json 1100", lines)
-        # The inspector is in every run, so a hung or crashed program can be
-        # read from the host whatever the run is for (docs/trace.md).
         self.assertIn("file C:\\av\\avinspect.exe 1300", lines)
-        # And the package's hashes, which provision.ps1 checks before signing
-        # and after installing; with provision.ps1 itself and avtest.exe, that
-        # is every file the run pushes.
         self.assertIn("file C:\\av\\package\\package.sha256", "\n".join(lines))
         self.assertIn("file C:\\av\\provision.ps1", "\n".join(lines))
         self.assertNotIn("vulkaninfo", "\n".join(lines))
@@ -281,11 +241,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_the_cycle_scenario_disables_and_enables_the_adapter(self):
-        """Feature 040 US2: what pnputil does to an adapter, N times, and the
-        adapter back each time."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "cycle": [0]},
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
-                             # The guest ends its lines the Windows way.
                              "cycle": "cycle: 50 done\r\npool: Current Pool Allocations: 0\r\n",
                              "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--power-cycles", "50")
@@ -296,10 +253,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_no_verifier_installs_without_it_and_says_so(self):
-        """Feature 053: Driver Verifier interposes on every DDI call, so a run
-        trying to find out whether the verifier is what refused a call has to be
-        able to take it away. The install stage is where it goes on, so that is
-        where the switch is, and the run says which driver it is measuring."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0]},
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
                              "install": "verifier: skipped, avgpu.sys installed with no Driver Verifier "
@@ -312,7 +265,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_without_the_flag_the_install_stage_is_asked_for_the_verifier(self):
-        """The default is unchanged: nothing is passed, so the stage installs it."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0]},
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
                              "avtest": PASSING_REPORT, "collect": COLLECTED})
@@ -324,16 +276,11 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_no_verifier_is_refused_with_the_scenario_that_reads_it(self):
-        """The cycle scenario judges the pool allocations Driver Verifier
-        tracked. Without the verifier it would read none and pass, which is a
-        scenario that cannot fail - so the combination is refused rather than
-        quietly weakened."""
         result = self.run_suite("--no-verifier", "--power-cycles", "50")
         self.assertEqual(result.returncode, 2)
         self.assertIn("--no-verifier leaves nothing to read", result.stderr)
 
     def test_the_upgrade_scenario_installs_a_higher_version_without_a_reboot(self):
-        """Feature 040 US2: a package that arrives over the running one."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "upgrade": [0]},
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
                              "upgrade": "upgrade: installed 0.35.1.0 running 0.35.1.0 problem 0\r\n",
@@ -366,9 +313,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_the_executor_controls_reach_qemus_environment(self):
-        """Feature 040 US3: a real TDR needs the host to stall, and the test
-        executor is told to from outside - no rebuild, no test-only command in
-        the protocol (FR-006)."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
                     outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                              "avtest": PASSING_REPORT, "collect": COLLECTED, "timeouts": TIMEOUT_EVENTS})
@@ -381,7 +325,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_s3_suspends_through_the_agent_and_wakes_through_qmp(self):
-        """Feature 040 US1: the adapter is still there after the guest slept."""
         self.script()
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -403,8 +346,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_s4_leaves_the_machine_off_and_the_overlay_boots_again(self):
-        """The sleep states are asked again after the stage turns hibernation
-        on: what the guest said before it is no longer what it would say."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "hibernate": [0],
                             "sleepstates": [0]})
         result = self.run_suite("--hibernate")
@@ -417,8 +358,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_every_resume_runs_the_suite_again(self):
-        """SC-001 asks for five S4 resumes with a passing avtest, not five
-        machines that come back: the suite runs after each one."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "hibernate": [0],
                             "sleepstates": [0]})
         result = self.run_suite("--hibernate", "3")
@@ -426,13 +365,10 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(self.journal_lines().count("guest-suspend-disk"), 3)
         for cycle in (1, 2, 3):
             self.assertIn(f"guest: hibernate ok: the adapter came back from S4, {cycle} of 3", result.stdout)
-        # Once after each resume, and once for the run itself.
         self.assertEqual(result.stdout.count("guest: report ok: 23 passed"), 4)
         self.assert_clean()
 
     def test_an_av_run_asks_for_the_av_scenarios_and_records_its_executor_and_latency(self):
-        """Feature 044: the av scenarios run instead of the suite, and the verdict
-        says which executor did the work and what a no-op cost."""
         report = "ok transport.nop\nok transport.latency 812\nok vulkan.instance\navtest: 12 passed, 0 failed\n"
         self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                              "avtest": report, "collect": COLLECTED})
@@ -447,8 +383,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("av latency", (self.work / "verdict.txt").read_text())
 
     def test_an_av_run_on_a_named_host_gpu_binds_the_device_to_it_and_says_so(self):
-        """Feature 045, T020: the host-visible import is proven on each host GPU,
-        so a run can name the one the device binds to; auto stays the default."""
         report = "ok transport.nop\navtest: 2 passed, 0 failed\n"
         self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                              "avtest": report, "collect": COLLECTED})
@@ -459,8 +393,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn(f"guest: av: executor /nowhere/libav_echo_executor.so, host-gpu {uuid}", result.stdout)
 
     def all_gpus_run(self, adapters=WINDOWS_ADAPTERS, check=TWO_ADAPTERS):
-        """A quick --all-gpus run on HOST_GPUS, with sysfs describing only the
-        RX 9070 XT's function: the iGPU's device keeps virtio-gpu's IDs."""
         sysfs = self.scratch / "sysfs"
         for name, value in (("vendor", "0x1002"), ("device", "0x7550"), ("revision", "0xc0")):
             (sysfs / "0000:03:00.0").mkdir(parents=True, exist_ok=True)
@@ -477,12 +409,11 @@ class GuestSuiteRun(unittest.TestCase):
         argv = self.journal_lines()[0]
         self.assertIn(f"virtio-gpu-av-pci,id=gpu,host-gpu={RADEON_UUID},", argv)
         self.assertIn(f"virtio-gpu-av-pci,id=gpu1,host-gpu={RAPHAEL_UUID},", argv)
-        self.assertEqual(argv.count("virtio-gpu-av-pci"), 2)   # llvmpipe is not a GPU a guest is shown
+        self.assertEqual(argv.count("virtio-gpu-av-pci"), 2)
         self.assertIn("host gpu: 00000000-0300-0000-0000-000000000000 1002:7550 rev c0 'AMD Radeon RX 9070 XT'",
                       result.stdout)
         self.assertIn("host gpu: 00000000-7b00-0000-0000-000000000000 1af4:1050 rev 01 'AMD Radeon Graphics'",
                       result.stdout)
-        # provision.ps1 names each model in the INF from what the runner pushed.
         self.assertIn("file C:\\av\\adapters.txt", "\n".join(self.journal_lines()))
         self.assertEqual(self.stage_calls()[:4], ["sign", "install", "check", "adapters"])
         self.assertIn("guest: adapters: WMI 'AMD Radeon RX 9070 XT' "
@@ -544,8 +475,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertNotIn("adapters.txt", "\n".join(self.journal_lines()))
 
     def test_a_quick_run_installs_checks_and_runs_the_suite_without_the_slow_scenarios(self):
-        """Feature 044: an iteration run leaves the display, power and sleep
-        scenarios - minutes of waiting - to the gate."""
         self.script()
         result = self.run_suite("--quick")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -556,8 +485,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertNotIn("guest: sleepstates", result.stdout)
 
     def test_an_av_run_whose_no_op_is_past_the_threshold_fails(self):
-        """SC-002: a transport that has stopped being interrupt-driven passes every
-        step and is still a regression."""
         report = "ok transport.nop\nok transport.latency 60000\navtest: 2 passed, 0 failed\n"
         self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                              "avtest": report, "collect": COLLECTED})
@@ -566,15 +493,12 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: av failed: a no-op took 60000 us, past the 50000 us threshold", result.stdout)
 
     def av_run(self, *extra, median="ok transport.warm_median 640\n"):
-        """An av run whose transport scenario timed its warm rounds."""
         report = "ok transport.nop\nok transport.latency 812\n" + median + "avtest: 12 passed, 0 failed\n"
         self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                              "avtest": report, "collect": COLLECTED})
         return self.run_suite("--av", *extra)
 
     def test_two_av_runs_make_the_cost_of_a_recording_a_number(self):
-        """SC-002: the first boot can only keep its own round trip, and the one
-        that completes the pair is the one that says what a recording cost."""
         first = self.av_run()
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         self.assertIn("guest: recording cost: a no-op round trip took 640 us with recording off; the same run "
@@ -588,9 +512,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_a_recording_no_slower_than_no_recording_is_not_called_a_cost(self):
-        """The two boots are minutes apart on a machine doing other things, so
-        the run with the recording on comes out faster often enough that
-        printing a negative cost would be printing noise as a measurement."""
         self.assertEqual(self.av_run("--record", median="ok transport.warm_median 640\n").returncode, 0)
         result = self.av_run(median="ok transport.warm_median 700\n")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -598,16 +519,12 @@ class GuestSuiteRun(unittest.TestCase):
                       "with it on; a recording costs nothing this pair could measure", result.stdout)
 
     def test_an_av_run_that_timed_no_warm_round_trip_measures_no_cost(self):
-        """A run whose warm rounds failed reported a latency and nothing to
-        compare; it must not keep the cold round trip as if it were one."""
         result = self.av_run(median="")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("guest: recording cost skipped: the av run timed no warm round trip", result.stdout)
         self.assertFalse((self.work / "recording-cost.txt").exists())
 
     def test_a_cost_record_that_is_not_two_round_trips_fails_the_run(self):
-        """A hand-edited record is evidence of something; a run that silently
-        overwrote it would take the comparison with it."""
         self.work.mkdir(parents=True, exist_ok=True)
         (self.work / "recording-cost.txt").write_text("off 640\noff 700\n")
         result = self.av_run()
@@ -617,9 +534,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual((self.work / "recording-cost.txt").read_text(), "off 640\noff 700\n")
 
     def test_a_device_loss_run_loads_the_layer_loses_the_device_and_sees_the_desktop_again(self):
-        """A host device lost under the desktop: QEMU starts with the layer that
-        loses one, avtest's loss run is asked for and passes, and the desktop
-        is lit again afterwards."""
         report = ("ok host_loss.lose\nok host_loss.idle_code 7\nok host_loss.recreated\n"
                   "avtest: 14 passed, 0 failed\n")
         self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
@@ -670,9 +584,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: av failed: no summary line", result.stdout)
 
     def vulkan_runtime(self, **contents):
-        """A fetched runtime and the pins it was fetched by, as
-        tools/fetch_vulkan_runtime.py leaves them; `contents` replaces a file's
-        bytes after pinning, or with None leaves it out."""
         runtime = self.scratch / "vulkan-runtime"
         runtime.mkdir(exist_ok=True)
         pins = ["archive file:///nowhere/runtime.zip " + "0" * 64]
@@ -699,10 +610,6 @@ class GuestSuiteRun(unittest.TestCase):
                     **exits, **behaviour)
 
     def test_a_probe_needs_a_console_session_and_a_task_that_finishes(self):
-        """Feature 046: the probe's present steps make a window, which only the
-        session a person is logged into can show. A machine no one is logged
-        into has nowhere to run it, and a task that never finishes is a failure
-        naming itself rather than a run that hangs."""
         self.vulkan_script(console_user="")
         nobody = self.run_suite("--vulkan", "--executor", "/nowhere/libav_executor.so", *self.vulkan_runtime())
         self.assertEqual(nobody.returncode, 1)
@@ -714,14 +621,10 @@ class GuestSuiteRun(unittest.TestCase):
                                "--step-timeout", "1")
         self.assertEqual(stuck.returncode, 1)
         self.assertIn("guest: avvkprobe failed: avconsole was still running after 1.0 s", stuck.stdout)
-        # Whatever it answered, the task is not left behind on the machine.
         self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /delete /tn avconsole /f", self.journal_lines())
         self.assert_clean()
 
     def test_a_vulkan_run_finds_the_icd_through_the_adapter_alone_and_runs_the_probe(self):
-        """Feature 045, SC-001 to SC-003: no global Khronos key, vulkaninfo lists
-        exactly the one device whose LUID is the adapter's, the probe's steps
-        all pass, and the ICD's log is in diag/."""
         self.vulkan_script()
         result = self.run_suite("--vulkan", "--executor", "/nowhere/libav_executor.so", *self.vulkan_runtime())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -735,17 +638,12 @@ class GuestSuiteRun(unittest.TestCase):
                                     "C:\\Windows\\System32\\schtasks.exe", "C:\\Windows\\System32\\schtasks.exe",
                                     "C:\\av\\avvkprobe.exe", "C:\\Windows\\System32\\schtasks.exe",
                                     "C:\\Windows\\System32\\schtasks.exe"])
-        # The probe's window has to be made where a window can be seen: the
-        # agent's own session has no visible desktop, so the probe runs in the
-        # console session through a scheduled task with /it (feature 046).
         self.assertIn("file C:\\av\\console.cmd 56", lines)
         self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /create /tn avconsole /tr C:\\av\\console.cmd "
                       "/sc once /st 23:59 /ru guest\\tester /it /f", lines)
         self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /run /tn avconsole", lines)
         self.assertIn("exec C:\\Windows\\System32\\schtasks.exe /delete /tn avconsole /f", lines)
         self.assertIn("pull C:\\av\\vulkan.txt", lines)
-        # vulkaninfo's full listing is written to a guest file and pulled: the
-        # agent's captured output stalled the program on a live guest.
         self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\av\\vulkaninfo.exe "
                       "> C:\\av\\vulkaninfo.txt 2>&1", lines)
         self.assertIn("pull C:\\av\\vulkaninfo.txt", lines)
@@ -761,7 +659,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual((self.work / "vulkaninfo.txt").read_text(newline=""), VULKANINFO)
         self.assertEqual((self.work / "vulkan.txt").read_text(newline=""), PROBE_REPORT)
         self.assertEqual((self.work / "images" / "vulkan-draw.bmp").read_text(), "BM vulkan")
-        # The window-system steps' pictures come back too (feature 046).
         self.assertEqual((self.work / "images" / "vulkan-present.bmp").read_text(), "BM vulkan")
         self.assertEqual((self.work / "images" / "vulkan-resized.bmp").read_text(), "BM vulkan")
         self.assertIn(f"guest: vulkan.images ok: 3 in {self.work / 'images'}", result.stdout)
@@ -780,8 +677,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: khronos ok: the key lists no av driver", result.stdout)
 
     def test_an_av_driver_in_the_global_khronos_key_fails_before_vulkaninfo_runs(self):
-        """FR-001: a global value would make the loader list the device twice,
-        and would hide whether the adapter's own value works."""
         listed = ("\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Khronos\\Vulkan\\Drivers\r\n"
                   "    C:\\Windows\\System32\\DriverStore\\FileRepository\\avgpu.inf_amd64_1\\avvk.json"
                   "    REG_DWORD    0x0\r\n")
@@ -867,9 +762,6 @@ class GuestSuiteRun(unittest.TestCase):
                     **behaviour)
 
     def test_an_opengl_discovery_run_records_what_opengl32_did_and_the_icd_log(self):
-        """Feature 050, T008: the probe runs through the system opengl32.dll with
-        its report written to a guest file and pulled; the run records which ICD
-        loaded and the adapter the window's DC opened, and keeps avgl's log."""
         self.discovery_script()
         result = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "avglprobe.exe")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -982,14 +874,8 @@ class GuestSuiteRun(unittest.TestCase):
                  "ok opencl.il 4294967237\r\n"
                  "ok opencl.release\r\n"
                  "avclprobe: 39 passed, 0 failed\r\n")
-    """What avclprobe.exe prints when every step of feature 052 passed, in the
-    probe's own order (src/guest/probe/cl_probe.cpp)."""
 
     def opencl_loader(self, pinned=True, missing=()):
-        """A fetched OpenCL loader source tree and the pins it was fetched by, as
-        tools/fetch_opencl_loader.py leaves them: what a --opencl run's OpenCL.dll
-        was cross-built from, and what the run refuses to boot without.
-        `missing` names files the pins name and disk does not."""
         into = self.scratch / "opencl-loader"
         digest = "2" * 64
         for name in WANTED + (CMAKE_CONFIG,):
@@ -1017,10 +903,6 @@ class GuestSuiteRun(unittest.TestCase):
 
     def d3d_layers(self, files=("d3d9.dll", "d3d11.dll", "dxgi.dll"),
                    vkd3d=("d3d12.dll", "d3d12core.dll"), missing=(), empty_pins=False, no_files=False):
-        """A fetched DXVK and vkd3d-proton, pinned to what is on disk: what a
-        --d3d run needs before it boots anything. `missing` names files the
-        pins name and disk does not, and `empty_pins` leaves a pins file as it
-        is in the repository - named but naming nothing."""
         layers = self.scratch / "layers"
         tools = self.scratch / "tools"
         tools.mkdir(exist_ok=True)
@@ -1059,15 +941,11 @@ class GuestSuiteRun(unittest.TestCase):
         self.script(outputs=outputs, files=dict(GUEST_FILES, **pictures), **behaviour)
 
     def test_a_d3d_run_proves_every_step_of_all_three_layers(self):
-        """Feature 047, FR-005: the three probes run in the console session with
-        the layers' DLLs beside them, every step of each report passes, and the
-        frame each cleared is pulled back as a picture."""
         self.d3d_script()
         result = self.run_suite("--d3d", "--executor", "/nowhere/libav_executor.so",
                                 *self.vulkan_runtime(), *self.d3d_layers())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = self.journal_lines()
-        # The layers' DLLs and the loader they call, beside the probes.
         for name in ("d3d9.dll", "d3d11.dll", "dxgi.dll", "d3d12.dll", "d3d12core.dll"):
             self.assertTrue(any(line.startswith(f"file C:\\av\\{name} ") for line in lines),
                             f"{name} was not pushed: {lines}")
@@ -1079,7 +957,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: d3d9 ok: 11 passed through dxvk", result.stdout)
         self.assertIn("guest: d3d11 ok: 24 passed through dxvk", result.stdout)
         self.assertIn("guest: d3d12 ok: 10 passed through vkd3d-proton", result.stdout)
-        # It ran in the console session, as a window needs.
         self.assertTrue(any("schtasks.exe /create /tn avconsole" in line for line in lines))
         for picture in ("d3d9-clear", "d3d9-wpf", "d3d11-clear", "d3d12-clear"):
             self.assertEqual((self.work / "images" / f"{picture}.bmp").read_text(), "BM d3d")
@@ -1088,9 +965,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_a_d3d_run_under_page_heap_reports_what_windows_logged(self):
-        """Feature 047, FR-006: every probe runs with full page heap on it, the
-        Application log is read afterwards, and the flag is taken off the
-        machine again. A run that found a heap event names it and fails."""
         self.d3d_script(stages={"sign": [3010], "install": [3010], "check": [0], "pageheap": [0],
                                 "heapchecks": [0]},
                         outputs={"check": ONE_MONITOR +
@@ -1105,7 +979,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: pageheap on: 3 program(s)", result.stdout)
         self.assertIn("guest: heapchecks ok: no heap event under page heap", result.stdout)
         self.assertIn("guest: pageheap off: 3 program(s)", result.stdout)
-        # On, then off: the machine is left as it was found.
         programs = "avd3d9probe.exe,avd3d11probe.exe,avd3d12probe.exe"
         self.assertEqual(self.stage_calls(),
                          ["sign", "install", "check", f"pageheap -Programs {programs} -Enable",
@@ -1113,8 +986,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_a_heap_event_under_page_heap_fails_the_run_naming_it(self):
-        """What page heap catching a write past an allocation looks like: the
-        event is reported and the run fails, and the flag still comes off."""
         self.d3d_script(stages={"sign": [3010], "install": [3010], "check": [0], "pageheap": [0],
                                 "heapchecks": [0]},
                         outputs={"check": ONE_MONITOR +
@@ -1134,8 +1005,6 @@ class GuestSuiteRun(unittest.TestCase):
                         f"the flag was not taken off: {self.stage_calls()}")
 
     def test_page_heap_without_the_d3d_run_is_refused(self):
-        """It is what the D3D probes run under; on its own it would turn a flag
-        on and run nothing."""
         self.d3d_script()
         result = self.run_suite("--page-heap", "--executor", "/nowhere/libav_executor.so")
         self.assertEqual(result.returncode, 1)
@@ -1143,14 +1012,10 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(self.journal_lines(), [])
 
     def test_a_d3d_run_without_the_pinned_layers_is_refused_before_qemu(self):
-        """The layers are two archives and their hashes; a run that cannot have
-        them says which fetch to run and boots nothing."""
         self.d3d_script()
         empty = self.run_suite("--d3d", "--executor", "/nowhere/libav_executor.so",
                                *self.vulkan_runtime(), *self.d3d_layers(empty_pins=True))
         self.assertEqual(empty.returncode, 1)
-        # The pins file in the repository is comments alone, which is what this
-        # is: it names no archive, so there is nothing to check against.
         self.assertIn("no source pin: run tools/fetch_layers.py dxvk", empty.stdout)
         self.assertEqual(self.journal_lines(), [])
 
@@ -1169,7 +1034,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("d3d11.dll missing", gone.stdout)
         self.assertEqual(self.journal_lines(), [])
 
-        # A layer file that is not what it was pinned to is not the layer.
         self.d3d_script()
         layers = self.d3d_layers()
         (self.scratch / "layers" / "dxvk" / "d3d9.dll").write_bytes(b"something else")
@@ -1180,8 +1044,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(self.journal_lines(), [])
 
     def test_a_d3d_run_fails_a_failed_missing_or_unsummarised_step(self):
-        """What a layer that half works looks like: a failed step, a step the
-        probe never printed, and a report with no summary at all."""
         cases = {
             "failed step": ({"avd3d11probe": D3D_REPORTS["11"].replace(
                 "ok d3d11.pixels 4096", "FAIL d3d11.pixels status=6 0").replace(
@@ -1224,8 +1086,6 @@ class GuestSuiteRun(unittest.TestCase):
                 "--cts-subset", ROOT / "tools" / "cts_subset.txt")
 
     def cts_script(self, logs=None, **behaviour):
-        # What deqp-vk prints is what the caselist redirection captures: the
-        # runner asks the guest's own build what cases there are.
         outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                    "deqp-vk": CTS_CASELIST, "collect": COLLECTED}
         outputs.update(behaviour.pop("outputs", {}))
@@ -1244,13 +1104,10 @@ class GuestSuiteRun(unittest.TestCase):
         result = self.run_cts("--cts-shard", "8")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = self.journal_lines()
-        # The build and the loader beside it, in a directory of its own.
         self.assertTrue(any(line.startswith("file C:\\av\\cts\\deqp-vk.exe ") for line in lines))
         self.assertTrue(any(line.startswith("file C:\\av\\cts\\vulkan-1.dll ") for line in lines))
-        # The case list came from the guest's own build.
         self.assertTrue(any("--deqp-runmode=stdout-caselist" in line for line in lines))
         self.assertIn("pull C:\\av\\cts\\caselist.txt", lines)
-        # The three cases the subset names, and not the one it does not.
         cases = (self.work / "cts" / "cases.txt").read_text()
         self.assertIn("dEQP-VK.api.smoke.triangle", cases)
         self.assertIn("dEQP-VK.info.device_memory_budget", cases)
@@ -1262,9 +1119,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_a_shard_that_died_in_a_case_is_picked_up_after_it(self):
-        """A crash, a TDR or a bugcheck leaves the log open at the case that
-        caused it; the run continues from the next one, and the case that died
-        is recorded rather than dropped."""
         self.cts_script(logs={
             "C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"), ended=False) +
                                         "#beginTestCaseResult dEQP-VK.api.smoke.create_sampler\r\n",
@@ -1274,21 +1128,15 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("guest: cts: shard0 died in dEQP-VK.api.smoke.create_sampler", result.stdout)
         lines = self.journal_lines()
-        # The second run was given the case after the one that died, and never
-        # the one that died.
         self.assertTrue(any(line.startswith("file C:\\av\\cts\\shard0.r1.cases.txt ") for line in lines),
                         lines)
         resumed = (self.work / "cts" / "shard0.r1.qpa").read_text()
         self.assertIn("dEQP-VK.info.device_memory_budget", resumed)
         self.assertIn("guest: cts: 3 case(s) answered, 2 passed", result.stdout)
-        # And the case that killed it is in the merged log as a crash.
         whole = (self.work / "cts" / "guest.qpa").read_text()
         self.assertIn("dEQP-VK.api.smoke.create_sampler", whole)
 
     def test_a_shard_with_no_restarts_left_fails_naming_what_went_unrun(self):
-        """A resumed shard always shrinks, so the restart limit is reached only
-        by a guest that keeps dying - and then what it did not run is named
-        rather than counted as passed."""
         dying = qpa(ended=False) + "#beginTestCaseResult dEQP-VK.api.smoke.triangle\r\n"
         self.cts_script(logs={"C:\\av\\cts\\shard0.qpa": dying})
         result = self.run_cts("--cts-shard", "8", "--cts-restarts", "0")
@@ -1309,8 +1157,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("cts.ratchet failed: 1 case(s) lost of 1 recorded", result.stdout)
 
     def test_the_verdict_is_the_comparison_with_the_hosts_run(self):
-        """FR-002: a case that passes on the host and not in the guest fails the
-        run; one that fails on both does not."""
         self.cts_script(logs={"C:\\av\\cts\\shard0.qpa": qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                                                               ("dEQP-VK.api.smoke.create_sampler", "Fail"),
                                                               ("dEQP-VK.info.device_memory_budget", "Fail"))})
@@ -1324,8 +1170,6 @@ class GuestSuiteRun(unittest.TestCase):
                       "guest", failed.stdout)
         self.assertIn("cts.compare failed: 1 guest-only failure(s) of 3 compared", failed.stdout)
 
-        # The same run against a host that failed it too passes, and says how
-        # many failures matched.
         host.write_text(qpa(("dEQP-VK.api.smoke.triangle", "Pass"),
                             ("dEQP-VK.api.smoke.create_sampler", "Fail"),
                             ("dEQP-VK.info.device_memory_budget", "Fail")))
@@ -1352,17 +1196,12 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(self.journal_lines(), [])
 
     def test_a_subset_that_matches_nothing_the_cts_listed_is_a_failure(self):
-        """A subset and a build that disagree is not a run of anything, and a
-        pass here would be a conformance claim nobody measured."""
         self.cts_script(outputs={"deqp-vk": "TEST: dEQP-VK.nothing.this.names\r\n"})
         result = self.run_cts()
         self.assertEqual(result.returncode, 1)
         self.assertIn("the subset matched none of the", result.stdout)
 
     def test_a_frame_with_no_reference_is_kept_and_said_so(self):
-        """Feature 048, US2: the first run of an application is where a
-        reference comes from, and a run that claimed to match one nobody
-        committed would be a claim nobody made."""
         self.vulkan_script()
         references = self.scratch / "references"
         references.mkdir()
@@ -1375,13 +1214,9 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertTrue(captured.read_bytes().startswith(b"P6"))
 
     def test_a_frame_that_is_not_the_reference_fails_and_keeps_the_difference(self):
-        """FR-004: what is compared is the device's scanout, so a run that
-        composited something else is a failure with three files to look at."""
         self.vulkan_script()
         references = self.scratch / "references"
         references.mkdir()
-        # A reference of the size the fake scans out, and nothing like its
-        # pixels.
         (references / "vulkan.ppm").write_bytes(b"P6\n1280 800\n255\n" + bytes(1280 * 800 * 3))
         result = self.run_suite("--vulkan", "--frames", "--references", references,
                                 "--executor", "/nowhere/libav_executor.so", *self.vulkan_runtime())
@@ -1400,9 +1235,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("the capture is 1280x800 and the reference is 4x2", result.stdout)
 
     def test_an_opengl_run_proves_every_step_through_the_system_opengl32(self):
-        """Feature 050, T043: the probe runs with its report written to a guest
-        file and pulled; every one of the nine steps passes, the renderer is a
-        GPU's, and avgl's log is kept."""
         self.opengl_script()
         result = self.run_suite("--opengl", "--executor", "/nowhere/libav_executor.so",
                                 "--gl-probe", self.scratch / "avglprobe.exe")
@@ -1419,7 +1251,6 @@ class GuestSuiteRun(unittest.TestCase):
                       "version 4.6 (Compatibility Profile) Mesa 26.2.2", result.stdout)
         self.assertIn("opengl ok", (self.work / "verdict.txt").read_text())
         self.assertTrue((self.work / "diag" / "avgl-4242.log").exists())
-        # The renders the probe judged, as pictures a person can open.
         for name in GL_PICTURES:
             self.assertEqual((self.work / "images" / f"{name}.bmp").read_text(), f"BM {name}")
             self.assertIn(f"pull C:\\av\\{name}.bmp", lines)
@@ -1452,8 +1283,6 @@ class GuestSuiteRun(unittest.TestCase):
                 self.assertIn(f"guest: {reason}", result.stdout)
 
     def test_a_passing_probe_without_its_pictures_fails(self):
-        """A probe that judged a render wrote its picture; a missing one means
-        the pixels were judged from something no one can look at."""
         self.opengl_script(pictures={"C:\\av\\opengl-draw.bmp": "BM"})
         result = self.run_suite("--opengl", "--executor", "/nowhere/libav_executor.so",
                                 "--gl-probe", self.scratch / "avglprobe.exe")
@@ -1474,16 +1303,10 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: prepare failed: " + str(self.scratch / "noprobe.exe") + " does not exist", missing.stdout)
 
     def test_an_opencl_run_proves_every_step_through_the_khronos_loader(self):
-        """Feature 052, T057: the probe runs beside the cross-built loader with its
-        report written to a guest file and pulled; every one of the probe's steps
-        passes, and the device it named is a host GPU's rather than a CPU
-        runtime's."""
         self.opencl_script()
         result = self.run_suite("--opencl", "--executor", "/nowhere/libav_executor.so", *self.opencl_loader())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = self.journal_lines()
-        # The loader the guest loads is the cross-built one beside the probe,
-        # never the pinned source tree it was built from.
         self.assertIn("file C:\\av\\OpenCL.dll 1000", lines)
         self.assertIn("file C:\\av\\avclprobe.exe 1300", lines)
         self.assertIn("file C:\\av\\package\\avcl.dll 800", lines)
@@ -1495,7 +1318,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: opencl ok: 39 passed, device av (NVIDIA GeForce RTX 4090)", result.stdout)
         self.assertIn("opencl ok", (self.work / "verdict.txt").read_text())
         self.assertTrue((self.work / "diag" / "avcl-4242.log").exists())
-        # The probe renders nothing, so no picture is asked of it.
         self.assertFalse((self.work / "images").exists())
         self.assertNotIn("avglprobe", "\n".join(lines))
         self.assert_clean()
@@ -1508,15 +1330,12 @@ class GuestSuiteRun(unittest.TestCase):
                 "opencl failed: 1 step(s) failed, exit 1; see opencl.txt"),
             "missing step": (report.replace("ok opencl.unmap\r\n", "").replace("39 passed", "38 passed"), 0,
                              "opencl failed: the probe reported no unmap; see opencl.txt"),
-            # A probe from before long programs crossed: its run is not proof.
             "no long program": (report.replace("ok opencl.long_sum 0\r\n", "").replace("39 passed", "38 passed"),
                                 0, "opencl failed: the probe reported no long_sum; see opencl.txt"),
-            # A probe from before binaries, linking and IL crossed.
             "no binary": (report.replace("ok opencl.binary_refused 4294967254\r\n", "").replace(
                 "39 passed", "38 passed"), 0, "opencl failed: the probe reported no binary_refused; see opencl.txt"),
             "no link": (report.replace("ok opencl.link_sum 0\r\n", "").replace("39 passed", "38 passed"), 0,
                         "opencl failed: the probe reported no link_sum; see opencl.txt"),
-            # A device that takes SPIR-V has to run it, not only say so.
             "il not run": (report.replace("not offered", "SPIR-V_1.0 SPIR-V_1.2").replace(
                 "ok opencl.il 4294967237", "ok opencl.il"), 0,
                 "opencl failed: the probe reported no il_sum; see opencl.txt"),
@@ -1537,8 +1356,6 @@ class GuestSuiteRun(unittest.TestCase):
                 self.assertEqual((self.work / "opencl.txt").read_text(newline=""), text)
 
     def test_an_opencl_run_without_the_pinned_loader_the_dll_or_the_probe_is_refused_before_qemu(self):
-        """The loader is cross-built from a pinned tree, so a run whose tree
-        nobody fetched would be reporting a loader nobody pinned."""
         self.opencl_script()
         unfetched = self.run_suite("--opencl", *self.opencl_loader(pinned=False))
         self.assertEqual(unfetched.returncode, 1)
@@ -1589,7 +1406,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def real_executor_script(self, av_report=None, gl_report=None):
-        """One boot's answers for --av --vulkan --opengl together."""
         av = av_report or "ok transport.nop\nok transport.latency 812\navtest: 12 passed, 0 failed\n"
         outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                    "reg": KEY_ABSENT, "vulkaninfo": VULKANINFO, "avvkprobe": PROBE_REPORT, "avtest": av,
@@ -1603,9 +1419,6 @@ class GuestSuiteRun(unittest.TestCase):
                               *self.vulkan_runtime(), "--gl-probe", self.scratch / "avglprobe.exe")
 
     def test_the_real_executor_scenarios_share_one_boot(self):
-        """The av scenarios, the Vulkan ICD and the OpenGL ICD all need the real
-        executor and none needs a fresh machine, so the gate runs them in one
-        boot: one install, each scenario in turn."""
         self.real_executor_script()
         result = self.real_executor_run()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -1637,9 +1450,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("--opengl-discovery is its own boot", result.stderr)
 
     def test_a_run_that_injects_a_stall_runs_the_timeout_scenario_alone(self):
-        """US3: with the host holding one context, every other scenario would be
-        measuring the stall, so the run asks the guest for the timeout scenario
-        and wants dxgkrnl's own 4101 beside the guest's verdict."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
                     outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                              "avtest": PASSING_REPORT, "collect": COLLECTED,
@@ -1648,15 +1458,12 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("guest: tdr ok: 23 passed, the held context lost", result.stdout)
         self.assertIn("guest: tdr ok: 1 recovery event(s) 4101 in the System log", result.stdout)
-        # The suite and the rate it measures belong to a run with no injection.
         self.assertNotIn("guest: report ok", result.stdout)
         self.assertNotIn("guest: vsync ok", result.stdout)
         environment = json.loads((self.work / "environment.json").read_text())
         self.assertEqual(environment.get("AV_ECHO_ONLY_NTH"), "1")
 
     def test_a_stall_that_dxgkrnl_never_timed_out_fails_the_run(self):
-        """Without event 4101 nothing was reset, and whatever the guest saw was
-        about something else."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
                     outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=avgpu\n",
                              "avtest": PASSING_REPORT, "collect": COLLECTED, "timeouts": "timeouts: 0\r\n"})
@@ -1665,8 +1472,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("the System log holds no event 4101", (self.work / "verdict.txt").read_text())
 
     def test_the_timeouts_live_dump_is_expected_only_where_one_was_injected(self):
-        """A TDR live dump is this driver's failure (SC-005) unless the run is
-        the one that told the host to stop answering."""
         dumps = dict(GUEST_FILES)
         dumps["C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp"] = live_dump(0x141)
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
@@ -1687,8 +1492,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: dumps failed: WD-1.dmp 0x141 VIDEO_ENGINE_TIMEOUT_DETECTED", result.stdout)
 
     def test_the_stress_window_is_passed_to_the_guest_and_its_numbers_read_back(self):
-        """Feature 039 US3: a long run is asked for in minutes, spent in the
-        guest, and what it saw comes back on the report's own lines."""
         stressed = ("ok adapter.find\nok stress.fences 74210\nok stress.worst_wait_us 812\n"
                     "avtest: 30 passed, 0 failed\n")
         self.script(outputs={"check": ONE_MONITOR, "avtest": stressed, "collect": COLLECTED})
@@ -1699,13 +1502,10 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_the_submission_costs_are_read_back_and_judged_against_the_record(self):
-        """Feature 049 US3: both per-submission costs come back on the report's
-        own lines, and what the record holds is their ratio."""
         measured = ("ok adapter.find\nnote submit.doorbell connected\r\nok submit.doorbell_ns 400\r\n"
                     "ok submit.kernel_ns 1800\r\nok submit.ratio 450\r\n"
                     "avtest: 30 passed, 0 failed\n")
         self.script(outputs={"check": ONE_MONITOR, "avtest": measured, "collect": COLLECTED})
-        # Nothing recorded: the run passes and says the line that would record it.
         empty = self.scratch / "submit_ratchet.txt"
         empty.write_text("# nothing yet\n")
         result = self.run_suite("--submit-ratchet", str(empty))
@@ -1714,7 +1514,6 @@ class GuestSuiteRun(unittest.TestCase):
                       result.stdout)
         self.assertIn("submit.ratchet: nothing recorded yet; commit `ratio 450`", result.stdout)
 
-        # A record this run keeps, and one it falls below.
         kept = self.scratch / "kept.txt"
         kept.write_text("ratio 400\n")
         self.script(outputs={"check": ONE_MONITOR, "avtest": measured, "collect": COLLECTED})
@@ -1730,7 +1529,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("submit.ratchet failed: the doorbell path is worth 4.50x the kernel one here and "
                       "6.00x was recorded", result.stdout)
 
-        # A record that is not a ratio stops the run rather than being ignored.
         broken = self.scratch / "broken.txt"
         broken.write_text("four hundred\n")
         self.script(outputs={"check": ONE_MONITOR, "avtest": measured, "collect": COLLECTED})
@@ -1739,9 +1537,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("is not a `ratio <hundredths>` line", result.stdout)
 
     def test_a_machine_without_hardware_queues_measures_no_gain_and_says_so(self):
-        """Hardware scheduling is the OS's decision (049 research.md §11): a
-        guest that gives out no hardware queue measures the kernel path alone,
-        and nothing is judged against the record."""
         only_kernel = ("ok adapter.find\nnote submit.doorbell none\r\nok submit.doorbell_ns 0\r\n"
                        "ok submit.kernel_ns 1800\r\nok submit.ratio 0\r\n"
                        "avtest: 30 passed, 0 failed\n")
@@ -1812,10 +1607,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_a_live_dump_that_is_not_the_expected_black_screen_fails_the_run(self):
-        """SC-005: a display TDR leaves a live kernel dump and recovers, so every
-        step can still pass while the driver has just been reset. Only
-        VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP is expected - nothing renders into
-        the primary until features 042-044 - and anything else fails the run."""
         dumps = dict(GUEST_FILES)
         dumps["C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp"] = live_dump(0x117)
         self.script(files=dumps)
@@ -1871,10 +1662,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_the_kernel_dump_is_left_alone_unless_it_is_asked_for(self):
-        """MEMORY.DMP is copied through the agent in base64 chunks, so on a real
-        guest it outlasts the step timeout and the failing pull takes the rest of
-        the manifest with it. Four bring-up runs of feature 037 lost their
-        minidumps that way; the kernel dump is now opt-in."""
         self.script(panic={"during": "avtest", "code": 0xD1},
                     outputs={"check": ONE_MONITOR, "avtest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite()
@@ -1980,7 +1767,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def start_suite(self, *extra, stdin=subprocess.DEVNULL):
-        """run_suite's command, left running for a test to act on the guest meanwhile."""
         arguments = ["--image", self.image, "--work", self.work, "--power-poll", "0.1",
                      "--qemu", FAKES / "fake_qemu.py",
                      "--qemu-img", FAKES / "fake_qemu_img.py", "--executor", "/nowhere/libav_echo_executor.so",
@@ -2007,9 +1793,6 @@ class GuestSuiteRun(unittest.TestCase):
             time.sleep(0.05)
 
     def test_the_agent_relay_serves_the_guest_while_the_run_holds_its_agent(self):
-        """docs/trace.md: tools/mcp/av_inspect.py reaches a guest a run holds
-        through <work>/agent-relay.sock, one answer per request line, without
-        disturbing the run's own exchanges."""
         self.script(hang="check", reg=7, answer_delay=0.02)
         runner = self.start_suite("--step-timeout", "8")
         self.wait_for_stage("check", runner)
@@ -2028,7 +1811,6 @@ class GuestSuiteRun(unittest.TestCase):
         started = ask({"execute": "guest-exec", "arguments": {"path": "C:\\Windows\\System32\\reg.exe",
                                                               "arg": ["query", "HKLM"], "capture-output": True}})
         pid = started["return"]["pid"]
-        # The run polls its hung stage all along; every relayed answer is still this request's.
         for _ in range(40):
             status = ask({"execute": "guest-exec-status", "arguments": {"pid": pid}})
             self.assertEqual((status["return"]["exited"], status["return"]["exitcode"]), (True, 7))
@@ -2040,7 +1822,6 @@ class GuestSuiteRun(unittest.TestCase):
                              "Refused")
         self.assertEqual(ask({"execute": "guest-no-such"})["error"]["class"], "CommandNotFound")
         self.assertEqual(ask({"execute": "guest-ping"}), {"return": {}})
-        # A client gone mid-request leaves the relay serving the next one.
         dropped = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         dropped.connect(str(relay))
         dropped.sendall(json.dumps({"execute": "guest-ping"}).encode() + b"\n")
@@ -2095,8 +1876,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_a_kept_guest_is_held_after_a_passing_run(self):
-        """--keep holds whatever the verdict, so a passing guest can be inspected
-        (docs/trace.md); the run still answers its verdict."""
         self.script()
         runner = self.start_suite("--keep", stdin=subprocess.PIPE)
         self.addCleanup(lambda: runner.poll() is None and runner.kill())
@@ -2136,13 +1915,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_the_display_step_asserts_the_host_scans_out_the_guest_s_primary(self):
-        """What a screendump can prove is that the host reads our resource.
-
-        The picture itself is not a desktop yet - nothing executes GPU work
-        until features 042-044 - so the step asserts the committed size, that
-        the dump is not QEMU's placeholder, and that the driver recorded the
-        primary's aperture pages and refused no frame.
-        """
         self.script(screendump=[1280, 800])
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -2151,17 +1923,12 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("screendump 1280x800", self.journal_lines())
 
     def test_a_mode_the_driver_offers_must_reach_the_guest(self):
-        """US2: the modes the run works with are ones the guest can choose.
-        What Windows adds of its own is not the driver's, so only the absence
-        of one of ours fails the run."""
         self.script(screendump=[1280, 800], modes=["1280x800", "1920x1080"])
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("the guest is not offered ['1024x768']", (self.work / "verdict.txt").read_text())
 
     def test_the_drivers_own_vertical_blank_rate_is_checked(self):
-        """US3: a waiter in the guest cannot see the driver's rate - the blank
-        is a pulse it can miss - so the line the driver logs is read here."""
         self.script(screendump=[1280, 800],
                     driver_log=["avgpu: aperture map segment 1 offset 0 pages 1000 status 0",
                                 "avgpu: vsync 600 periods in 200000000 ticks, 600 reported, enabled 0 times"])
@@ -2178,8 +1945,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("the driver logged no vertical blank window", (self.work / "verdict.txt").read_text())
 
     def test_the_fastest_window_is_the_drivers_rate(self):
-        """A window dxgkrnl turned the blanks off in is slower than the driver's
-        period; the fastest window says what the period is."""
         self.script(screendump=[1280, 800],
                     driver_log=["avgpu: aperture map segment 1 offset 0 pages 1000 status 0",
                                 "avgpu: vsync 120 periods in 700000000 ticks, 120 reported, enabled 120 times",
@@ -2189,10 +1954,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: vsync ok: 60.00 blanks a second", result.stdout)
 
     def test_a_window_at_the_drivers_period_is_waited_for(self):
-        """The driver says its rate once every 120 blanks, and after a resume
-        the windows already in the log are the ones dxgkrnl kept the blanks off
-        through. The run waits for one at the period rather than judging the
-        log the instant the suite ends (feature 040, US1)."""
         self.script(screendump=[1280, 800],
                     driver_log=["avgpu: aperture map segment 1 offset 0 pages 1000 status 0",
                                 "avgpu: vsync 120 periods in 700000000 ticks, 120 reported, enabled 120 times"],
@@ -2203,16 +1964,12 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: vsync ok: 60.00 blanks a second", result.stdout)
 
     def test_a_switch_the_guest_refuses_must_leave_the_scanout_alone(self):
-        """The console session's display is not the session 0 service's to
-        change; a refusal must not disturb what the host scans out."""
         self.script(screendump=[1280, 800], setmode_refused=True)
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("setmode ok: 1024x768 refused, and the console session kept", result.stdout)
 
     def test_a_switch_the_host_does_not_follow_fails_the_run(self):
-        """The guest took the mode; if the host still scans out the old size,
-        the driver never told it."""
         self.script(screendump=[1280, 800], screendump_fixed=True)
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
@@ -2220,8 +1977,6 @@ class GuestSuiteRun(unittest.TestCase):
                       (self.work / "verdict.txt").read_text())
 
     def test_a_mode_the_driver_never_offered_must_be_refused(self):
-        """A guest that takes 2560x1600 committed a mode the driver does not
-        have, and the host would scan out a rectangle it does not have."""
         self.script(screendump=[1280, 800],
                     modes=["640x480", "800x600", "1024x768", "1280x720", "1280x800", "2560x1600"])
         result = self.run_suite()
@@ -2230,7 +1985,6 @@ class GuestSuiteRun(unittest.TestCase):
                       (self.work / "verdict.txt").read_text())
 
     def test_a_guest_with_the_wrong_monitor_count_fails_the_run(self):
-        """US4: Windows attaches a monitor to every output the device reports."""
         self.script(screendump=[1280, 800],
                     outputs={"check": "display: dwm=1 services=avgpu monitors=2\n",
                              "avtest": PASSING_REPORT, "collect": COLLECTED})
@@ -2247,8 +2001,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("did not count the guest's monitors", (self.work / "verdict.txt").read_text())
 
     def test_two_outputs_are_each_scanned_out(self):
-        """US4: with max_outputs=2 the desktop is extended and each head shows
-        the committed size."""
         self.script(screendump=[1280, 800],
                     outputs={"check": "display: dwm=1 services=avgpu monitors=2\n",
                              "avtest": PASSING_REPORT, "collect": COLLECTED})
@@ -2261,8 +2013,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("screendump 1280x800 head 1", self.journal_lines())
 
     def test_a_desktop_that_will_not_extend_fails_the_run(self):
-        """A guest that refuses the topology for a reason of its own is a
-        failure; only the console session's access is not."""
         self.script(screendump=[1280, 800],
                     outputs={"check": "display: dwm=1 services=avgpu monitors=2\n", "extend": "extend: -1\n",
                              "avtest": PASSING_REPORT, "collect": COLLECTED})
@@ -2271,8 +2021,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("the guest answered '-1' extending the desktop", (self.work / "verdict.txt").read_text())
 
     def test_a_topology_the_session_0_service_may_not_change_asserts_the_first_head(self):
-        """No user is logged in, so SetDisplayConfig answers ERROR_ACCESS_DENIED
-        and the displays past the first stay dark - the run says so."""
         self.script(screendump=[1280, 800],
                     outputs={"check": "display: dwm=1 services=avgpu monitors=2\n", "extend": "extend: 5\n",
                              "avtest": PASSING_REPORT, "collect": COLLECTED})
@@ -2282,8 +2030,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("display ok: 1 head(s) of 1280x800", result.stdout)
 
     def test_the_display_goes_dark_by_policy_and_comes_back_with_a_key(self):
-        """US4: the power policy turns the display off without a session, and the
-        host scans out the same mode again once the guest sees input."""
         self.script(screendump=[1280, 800])
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -2306,16 +2052,12 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("the host scans out 640x480 on head 0, not 1280x800", (self.work / "verdict.txt").read_text())
 
     def test_qemus_placeholder_is_not_a_scanout(self):
-        """QEMU draws "display output is not active" in grey on black when no
-        scanout is programmed; that is the absence of a frame, not a frame."""
         self.script(screendump=[1280, 800], screendump_placeholder=True)
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("head 0 scans out QEMU's placeholder", (self.work / "verdict.txt").read_text())
 
     def test_a_primary_with_no_recorded_pages_fails_the_run(self):
-        """Without DXGK_OPERATION_MAP_APERTURE_SEGMENT the driver has no pages
-        to attach, and the host reads whatever sits at the aperture address."""
         self.script(screendump=[1280, 800], driver_log=["avgpu: DriverEntry"])
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
@@ -2330,8 +2072,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("a frame was not carried: avgpu: scanout 0", (self.work / "verdict.txt").read_text())
 
     def test_the_device_is_given_a_host_window_and_the_driver_sets_it_up(self):
-        """docs/host-window.md: the device has a window by default, and the
-        driver's own log is where a run sees it was set up."""
         self.script()
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -2370,7 +2110,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("-display sdl,gl=on ", self.journal_lines()[0])
         self.assertNotIn("usb-tablet", self.journal_lines()[0])
-        # The controller stays: a disk is hot-plugged onto it.
         self.assertIn("-device qemu-xhci", self.journal_lines()[0])
         self.assert_clean()
 
@@ -2401,8 +2140,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_record_writes_a_wire_recording_beside_the_qemu_log(self):
-        """Feature 065, FR-001: the device is told where to write down what
-        crosses the wire, and the run says where it went."""
         self.script()
         result = self.run_suite("--record", "--record-limit", "1048576")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -2422,9 +2159,6 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_a_driver_that_set_up_no_window_fails_the_window_step(self):
-        """The device has a window and the driver logged none, or logged a
-        failure: every chunk would silently be guest memory, so the run says
-        which."""
         self.script(window_status=None)
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
@@ -2445,9 +2179,6 @@ class GuestSuiteRun(unittest.TestCase):
 
 
 class VulkaninfoListing(unittest.TestCase):
-    """What the runner reads out of vulkaninfo: tolerant of how the text is
-    laid out, never of how many devices it names."""
-
     def test_each_physical_device_section_carries_its_own_luid(self):
         listing = VULKANINFO + vulkaninfo_gpu(1, "0b5e0100-00000000", "llvmpipe")
         self.assertEqual(vulkaninfo_devices(listing), {0: ["a1d30000-00000000"], 1: ["0b5e0100-00000000"]})
@@ -2460,8 +2191,6 @@ class VulkaninfoListing(unittest.TestCase):
         self.assertEqual(luid_low_part(devices[0][0]), ADAPTER_LUID)
 
     def test_lines_that_only_mention_a_gpu_are_not_devices(self):
-        """Device groups and presentable surfaces name devices by id; a device
-        section header is the name alone on its line."""
         listing = ("Presentable Surfaces:\r\n\tGPU id : 0 (av) :\r\n\tGPU0 (av) (ID: 0)\r\n"
                    "\tdeviceLUIDValid = true\r\n" + vulkaninfo_gpu(0))
         self.assertEqual(vulkaninfo_devices(listing), {0: ["a1d30000-00000000"]})
@@ -2483,8 +2212,6 @@ if __name__ == "__main__":
 
 
 class ScreendumpTest(unittest.TestCase):
-    """The PPM QEMU writes, read back: its size, and whether two differ."""
-
     def setUp(self):
         self.scratch = pathlib.Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.scratch, ignore_errors=True)
@@ -2542,8 +2269,6 @@ CTS_CASELIST = ("DEQP-VK\r\nTopLevel\r\n"
                 "TEST: dEQP-VK.api.smoke.create_sampler\r\n"
                 "TEST: dEQP-VK.pipeline.enormous.case\r\n"
                 "TEST: dEQP-VK.info.device_memory_budget\r\n")
-"""What deqp-vk --deqp-runmode=stdout-caselist prints: groups, cases, and a case
-this repository's subset does not name."""
 
 
 def qpa_case(name, status):

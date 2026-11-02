@@ -53,4 +53,4 @@ bool MockTraceHost::exchange(std::uint64_t &word, std::uint64_t expected, std::u
     return true;
 }
 
-}  // namespace av
+}

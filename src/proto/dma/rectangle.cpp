@@ -50,4 +50,4 @@ int32_t Rectangle::bottom() const
     return bottom_;
 }
 
-}  // namespace av
+}

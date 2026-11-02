@@ -71,4 +71,4 @@ bool PresentPacing::invariants_hold() const
     return !pacer_.constructed() || pacer_.object().invariants_hold();
 }
 
-}  // namespace av::icd
+}

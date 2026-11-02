@@ -1,16 +1,4 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/*
- * The AvHostOps table: the device core's Host contract, implemented with
- * QEMU's threads (qemu_thread_create blocks the signals a worker must not take),
- * events, mutexes and bottom halves, guest memory through the device's DMA
- * address space, the executor's dma-bufs placed over the hostmem reservation
- * (docs/host-memory.md), the control
- * queue, doorbell pages as ioeventfds on the worker's eventfd, and the host GPU
- * catalog read from the Vulkan loader, and the export socket's listener and
- * connections (docs/external-export.md). Translation only.
- *
- * Installed by accel-virt's tools/build_qemu.sh as hw/display/virtio-gpu-av-host.c.
- */
 #include "qemu/osdep.h"
 #include "qemu/error-report.h"
 #include "qemu/main-loop.h"
@@ -56,8 +44,6 @@ static int av_main_loop_held(void *opaque)
     return bql_locked();
 }
 
-/* A worker aliases guest RAM, and finding a pointer's RAM block is an RCU read
- * that only a registered thread may take. */
 static void *av_thread_main(void *opaque)
 {
     VirtIOGPUAvThread *t = opaque;
@@ -86,8 +72,6 @@ static void av_join_thread(void *opaque, void *thread)
     g_free(t);
 }
 
-/* An eventfd, so a doorbell's ioeventfd can signal the same event the worker
- * waits on. */
 static void *av_create_event(void *opaque)
 {
     EventNotifier *event = g_new0(EventNotifier, 1);
@@ -110,8 +94,6 @@ static void av_signal_event(void *opaque, void *event)
     event_notifier_set(event);
 }
 
-/* Auto-reset: clearing reads the whole counter, and a signal after the clear
- * is not lost, because the core drains its work and ring after this returns. */
 static void av_wait_event(void *opaque, void *event)
 {
     GPollFD wake = { .fd = event_notifier_get_fd(event), .events = G_IO_IN };
@@ -123,8 +105,6 @@ static void av_wait_event(void *opaque, void *event)
 
 static uint64_t av_monotonic_nanoseconds(void *opaque);
 
-/* The display clock's sleep toward its next blank: CLOCK_MONOTONIC, the clock
- * av_monotonic_nanoseconds reads, so the deadline and the wake agree. */
 static int av_wait_event_until(void *opaque, void *event, uint64_t deadline)
 {
     struct pollfd wake = { .fd = event_notifier_get_fd(event), .events = POLLIN };
@@ -210,10 +190,6 @@ static void av_release(void *opaque, void *block)
     g_free(block);
 }
 
-/* The device has no DMA address space of its own until the bus plugs it in,
- * which is after realize - and the feasibility probes run inside realize. The
- * machine's memory is the same RAM the guest will see, so it answers the
- * question they ask. */
 static AddressSpace *av_address_space(VirtIOGPUAv *r)
 {
     AddressSpace *device = VIRTIO_DEVICE(r)->dma_as;
@@ -221,8 +197,6 @@ static AddressSpace *av_address_space(VirtIOGPUAv *r)
     return device ? device : &address_space_memory;
 }
 
-/* A bounce buffer is not guest RAM, and a copy the guest cannot see is no
- * blob; the core refuses one it is told about. */
 static void *av_map_guest(void *opaque, uint64_t address, uint64_t *length, int *direct)
 {
     VirtIOGPUAv *r = opaque;
@@ -250,7 +224,6 @@ static void *av_reserve_range(void *opaque, uint64_t size)
     return base == MAP_FAILED ? NULL : base;
 }
 
-/* What the RAM block behind `run` maps from: its file and the offset in it. */
 static int av_ram_file(void *run, uint64_t size, int *fd, off_t *offset)
 {
     ram_addr_t in_block;
@@ -265,9 +238,6 @@ static int av_ram_file(void *run, uint64_t size, int *fd, off_t *offset)
     return 0;
 }
 
-/* The same pages again, from the file behind the guest's RAM backend (feature
- * 045, research.md section 7): anonymous RAM has no file to map twice, and a run
- * leaving its block would need a second file. */
 static int av_alias_guest_run(void *opaque, void *run, uint64_t size, void *at)
 {
     int fd;
@@ -279,11 +249,6 @@ static int av_alias_guest_run(void *opaque, void *run, uint64_t size, void *at)
     return mmap(at, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, offset) == MAP_FAILED;
 }
 
-/* `size` bytes of the dma-buf `fd` from `offset`, mapped where the kernel
- * chooses. nvidia-drm maps a dma-buf only from its first page - it finds the
- * object by the mapping's exact start (drm_vma_offset_exact_lookup_locked), so
- * any other offset is EINVAL - so the dma-buf is mapped from its start and the
- * head before `offset` dropped, which every exporter takes. */
 static void *av_map_dmabuf_part(int fd, uint64_t size, uint64_t offset)
 {
     char *whole = mmap(NULL, offset + size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
@@ -297,9 +262,6 @@ static void *av_map_dmabuf_part(int fd, uint64_t size, uint64_t offset)
     return whole + offset;
 }
 
-/* What `run` holds copied into `staging`, whose mapping then replaces the one
- * at `run` (MREMAP_FIXED): KVM follows through its MMU notifiers, as it does
- * for av_place_in_hostmem. The staging mapping is gone either way. */
 static int av_move_run(void *run, uint64_t size, void *staging)
 {
     memcpy(staging, run, size);
@@ -310,8 +272,6 @@ static int av_move_run(void *run, uint64_t size, void *staging)
     return 0;
 }
 
-/* RAM with no file behind it could never be given back, so it is refused
- * before anything moves. */
 static int av_overlay_guest_run(void *opaque, void *run, uint64_t size, int fd, uint64_t offset)
 {
     int ram_fd;
@@ -340,16 +300,6 @@ static int av_restore_guest_run(void *opaque, void *run, uint64_t size)
     return av_move_run(run, size, staging);
 }
 
-/* A run is swapped by copy-then-remap, so a write between the two is lost
- * (docs/host-memory.md). The guest's processors are the writers that cannot be
- * told when to stop, so they are held out of KVM_RUN for the whole of a lend
- * or a restore (accel_ioctl_inhibit_begin: it waits for the vCPUs to leave
- * KVM_RUN, keeps new entries out, and - unlike pause_all_vcpus - does not drop
- * the main loop's lock, so no other handler of this device runs in the
- * middle). It asserts the lock is held, which the device checks first; a vCPU
- * thread that took the lock for an MMIO write is a vCPU outside KVM_RUN, which
- * is fine. Under TCG vCPUs do no ioctls and are not held (not supported: the
- * swap goes on as before); a stopped guest has no writers. */
 static int av_pause_guest(void *opaque)
 {
     if (!bql_locked() || !kvm_enabled() || !runstate_is_running()) {
@@ -376,9 +326,6 @@ static uint64_t av_hostmem_size(void *opaque)
     return r->hostmem_mmap ? VIRTIO_GPU_BASE(r)->conf.hostmem : 0;
 }
 
-/* Replacing the pages under a mapped RAM region is how virtio-gpu-gl places
- * virgl's blobs; KVM follows through its MMU notifiers. The mapping holds the
- * dma-buf for as long as it is there, so the caller may close its descriptor. */
 static int av_place_in_hostmem(void *opaque, int fd, uint64_t size, uint64_t offset)
 {
     VirtIOGPUAv *r = opaque;
@@ -400,8 +347,6 @@ static void av_remove_from_hostmem(void *opaque, uint64_t offset, uint64_t size)
     }
 }
 
-/* QEMU makes nothing on the GPU itself: every allocation is the executor's
- * (docs/host-memory.md). The binding only says which GPU the catalog names. */
 static int av_bind_gpu(void *opaque, uint32_t index)
 {
     VirtIOGPUAv *r = opaque;
@@ -446,8 +391,6 @@ static void av_disconnect_fence_interrupts(void *opaque)
     k->set_guest_notifiers(bus->parent, AV_DEVICE_FENCE_QUEUE_FIRST + AV_DEVICE_INTERRUPT_LINES, false);
 }
 
-/* virtio-pci stops assigning notifiers at the first queue without a size, so
- * one it never initialized is left alone. */
 static void av_raise_fence_interrupt(void *opaque, uint32_t line)
 {
     VirtIOGPUAv *r = opaque;
@@ -458,8 +401,6 @@ static void av_raise_fence_interrupt(void *opaque, uint32_t line)
     }
 }
 
-/* What a renderer is handed of QEMU's own objects (docs/renderer.md). The
- * event's eventfd is its own; everything else is a duplicate the core closes. */
 static int av_event_descriptor(void *opaque, void *event)
 {
     return event_notifier_get_fd(event);
@@ -499,8 +440,6 @@ static size_t av_read_request(void *opaque, void *request, size_t offset, uint8_
     return iov_to_buf(cmd->elem.out_sg, cmd->elem.out_num, offset, buffer, size);
 }
 
-/* The core writes little-endian wire bytes; virtio_gpu_ctrl_response expects
- * the header in host order and swaps it back. */
 static void av_respond(void *opaque, void *request, const uint8_t *bytes, size_t size)
 {
     VirtIOGPUAv *r = opaque;
@@ -522,10 +461,6 @@ static int av_resource_exists(void *opaque, uint32_t id)
     return virtio_gpu_find_resource(VIRTIO_GPU(r), id) != NULL;
 }
 
-/* A wire recording (docs/protocol.md): an ordinary file, written and flushed
- * from whichever thread took the record, so a QEMU that dies next leaves
- * behind what led to it. The handle is the descriptor, biased so NULL is never
- * a valid one. */
 static void *av_create_recording(void *opaque, const char *path)
 {
     int fd;
@@ -569,7 +504,6 @@ static void av_close_recording(void *opaque, void *file)
     qemu_close((int)(intptr_t)file - 1);
 }
 
-/* The console of head `head`, or NULL past the heads this device has. */
 static QemuConsole *av_head_console(VirtIOGPUAv *r, uint32_t head)
 {
     VirtIOGPUBase *b = VIRTIO_GPU_BASE(r);
@@ -580,10 +514,6 @@ static QemuConsole *av_head_console(VirtIOGPUAv *r, uint32_t head)
     return b->scanout[head].con;
 }
 
-/* Whether a display backend gave this head's console a GL context. It is the
- * backend that does so (ui/egl-headless.c, ui/gtk.c, ui/sdl2.c, ui/dbus.c,
- * ui/spice-display.c), and it does so after every device has realized, which
- * is why the core asks this when the guest reads the capset and not before. */
 static int av_display_takes_dmabuf(void *opaque, uint32_t head)
 {
     QemuConsole *con = av_head_console(opaque, head);
@@ -591,9 +521,6 @@ static int av_display_takes_dmabuf(void *opaque, uint32_t head)
     return con != NULL && qemu_console_has_gl(con);
 }
 
-/* A display surface straight over the device's mapping of the blob, which
- * the core keeps mapped while the head shows it: every display backend reads
- * one, GL or not, and no frame is copied on the way. */
 static int av_show_scanout(void *opaque, uint32_t head, const void *blob, const AvScanoutFrame *frame)
 {
     VirtIOGPUAv *r = opaque;
@@ -639,9 +566,6 @@ bool virtio_gpu_av_show_image(VirtIOGPUAv *r, uint32_t head, const AvExportedIma
         return false;
     }
     buffer = r->exported[head][image->slot];
-    /* The listener imports a buffer once and keeps the import: an image made
-     * again in another format or layout on the same descriptor has to be a
-     * new buffer, or it is sampled with the old one's. */
     if (buffer && (r->exported_fd[head][image->slot] != image->fd ||
                    qemu_dmabuf_get_width(buffer) != image->width || qemu_dmabuf_get_height(buffer) != image->height ||
                    qemu_dmabuf_get_fourcc(buffer) != image->fourcc ||
@@ -667,9 +591,6 @@ bool virtio_gpu_av_show_image(VirtIOGPUAv *r, uint32_t head, const AvExportedIma
         r->exported_fd[head][image->slot] = image->fd;
     }
     if (r->showing[head] != (int32_t)image->slot) {
-        /* The dma-buf carries its own size, as virtio-gpu's blob scanouts do:
-         * the console's 2D surface is left alone, because virtio-gpu still
-         * holds it for the head and a resize would free it underneath. */
         VIRTIO_GPU_BASE(r)->enable = 1;
         if (r->showing[head] < 0) {
             fprintf(stderr, "virtio-gpu-av: head %u shows exported images\n", head);
@@ -715,7 +636,6 @@ static void av_hide_scanout(void *opaque, uint32_t head)
     }
 }
 
-/* The PCI revision the host's kernel reports, or -1. */
 static int av_pci_revision(const AvGpuProperties *gpu)
 {
     g_autofree char *path = g_strdup_printf("/sys/bus/pci/devices/%04x:%02x:%02x.%x/revision", gpu->pci_domain,
@@ -728,8 +648,6 @@ static int av_pci_revision(const AvGpuProperties *gpu)
     return (int)g_ascii_strtoll(text, NULL, 16);
 }
 
-/* libdrm's table of AMD product names by device and revision - what AMD's
- * own driver names the adapter - or false where it has no entry. */
 static bool av_amdgpu_name(const AvGpuProperties *gpu, int revision, char *name, size_t size)
 {
     g_autofree char *table = NULL;
@@ -751,11 +669,6 @@ static bool av_amdgpu_name(const AvGpuProperties *gpu, int revision, char *name,
     return false;
 }
 
-/* The PCI ID database's name for the device, its bracketed product name when
- * it has one ("Alder Lake-P GT2 [Iris Xe Graphics]"), after the prefix the
- * vendor's Windows driver gives a product. A product that already starts
- * with the vendor's word has it replaced, not repeated: "Intel Arc Graphics"
- * is "Intel(R) Arc Graphics". */
 static bool av_pci_ids_name(const AvGpuProperties *gpu, char *name, size_t size)
 {
     static const char *const databases[] = {"/usr/share/hwdata/pci.ids", "/usr/share/misc/pci.ids"};
@@ -796,11 +709,6 @@ static bool av_pci_ids_name(const AvGpuProperties *gpu, char *name, size_t size)
     return false;
 }
 
-/* An integrated GPU AMD's table does not name. An AMD one is "AMD
- * Radeon(TM) Graphics", what AMD's own Windows driver calls these: the PCI ID
- * database's bracket lists whatever the device ID was sold as ("Granite Ridge
- * [Radeon 610M]" for a desktop Ryzen 9000's GPU, never called that). Another
- * vendor's is the database's name. */
 static bool av_integrated_name(const AvGpuProperties *gpu, char *name, size_t size)
 {
     if (gpu->vendor_id == 0x1002) {
@@ -810,12 +718,6 @@ static bool av_integrated_name(const AvGpuProperties *gpu, char *name, size_t si
     return av_pci_ids_name(gpu, name, size);
 }
 
-/* The name Windows would give the adapter. Vulkan's deviceName is the
- * driver's: RADV names an integrated GPU after its processor, "AMD Ryzen 9
- * 9950X3D 16-Core Processor (RADV RAPHAEL_MENDOCINO)", which is no GPU's name
- * and runs past what the capset carries. AMD's own table comes first, then,
- * for an integrated GPU, av_integrated_name; otherwise Vulkan's stands.
- * tools/host/list_gpus.py makes the same choice. */
 static void av_marketing_name(AvGpuProperties *gpu)
 {
     char name[sizeof(gpu->name)] = {0};
@@ -847,7 +749,6 @@ static bool av_has_device_extension(VkPhysicalDevice device, const char *name)
     return false;
 }
 
-/* The file at `path`, whole or cut at `size`; the core reads sysfs through it. */
 static int av_read_file(void *opaque, const char *path, char *buffer, size_t size, size_t *length)
 {
     g_autofree char *contents = NULL;
@@ -861,8 +762,6 @@ static int av_read_file(void *opaque, const char *path, char *buffer, size_t siz
     return 0;
 }
 
-/* The names in the directory at `path`, each ended by a newline; the core
- * lists /sys/class/drm through it to find the host's monitors. */
 static int av_list_directory(void *opaque, const char *path, char *buffer, size_t size, size_t *length)
 {
     GDir *directory = g_dir_open(path, 0, NULL);
@@ -885,7 +784,6 @@ static int av_list_directory(void *opaque, const char *path, char *buffer, size_
     return 0;
 }
 
-/* No loader or no device leaves the catalog empty; the core names the failure. */
 static void av_read_gpus(VirtIOGPUAv *r)
 {
     const VkApplicationInfo application = {
@@ -962,15 +860,11 @@ void virtio_gpu_av_host_finish(VirtIOGPUAv *r)
     }
 }
 
-/* The export socket (docs/external-export.md). Its connections are blocking
- * descriptors a core thread reads; nothing here decides what a request is. */
 void virtio_gpu_av_export_init(VirtIOGPUAv *r)
 {
     r->export_listener = -1;
 }
 
-/* Every connection waiting is handed over, refused ones closed: the core
- * decides, from whose process each came. */
 static void av_export_accept(void *opaque)
 {
     VirtIOGPUAv *r = opaque;
@@ -991,9 +885,6 @@ static void av_export_accept(void *opaque)
     }
 }
 
-/* A socket file left by a QEMU that is gone answers a connect with
- * ECONNREFUSED and is replaced; one a live process listens on, or a path that
- * is no socket, is not touched. */
 static bool av_export_path_free(const char *path, Error **errp)
 {
     struct sockaddr_un address = { .sun_family = AF_UNIX };
@@ -1047,8 +938,6 @@ bool virtio_gpu_av_export_listen(VirtIOGPUAv *r, Error **errp)
         error_setg_errno(errp, errno, "virtio-gpu-av: no socket for export-socket '%s'", path);
         return false;
     }
-    /* Mode 0600 once bound; a process of another user that connects in the
-     * moment before is refused by its credentials all the same. */
     if (bind(listener, (struct sockaddr *)&address, sizeof(address)) != 0 || chmod(path, 0600) != 0 ||
         listen(listener, 8) != 0) {
         error_setg_errno(errp, errno, "virtio-gpu-av: export-socket '%s' cannot be listened on", path);
@@ -1071,9 +960,6 @@ void virtio_gpu_av_export_finish(VirtIOGPUAv *r)
     unlink(r->export_socket);
 }
 
-/* SOCK_SEQPACKET keeps a datagram whole: MSG_TRUNC answers its real length,
- * which the core reads as one too long. A consumer sends no descriptors, so
- * any that came are closed. */
 static int av_receive_export(void *opaque, int connection, uint8_t *buffer, size_t capacity, size_t *length)
 {
     char control[CMSG_SPACE(sizeof(int) * 4)] = { 0 };

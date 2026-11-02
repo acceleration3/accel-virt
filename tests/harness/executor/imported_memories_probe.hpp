@@ -1,6 +1,3 @@
-/* Reaches into an ImportedMemories so invariant tests can corrupt it: a count
- * that disagrees with the slots it counts. Declared a friend by
- * ImportedMemories; nothing outside the tests uses it. */
 #ifndef AV_IMPORTED_MEMORIES_PROBE_HPP
 #define AV_IMPORTED_MEMORIES_PROBE_HPP
 
@@ -18,6 +15,6 @@ struct ImportedMemoriesProbe {
     ImportedMemories &memories;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_IMPORTED_MEMORIES_PROBE_HPP
+#endif

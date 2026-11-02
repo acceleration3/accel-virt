@@ -1,7 +1,3 @@
-/* The EGL attribute list an OpenGL context is made with, from the options the
- * guest asked for (feature 050): each option as the EGL 1.5 attribute that
- * means it, nothing for what was not asked, and options no OpenGL has refused
- * before EGL is asked. Judged without a GPU. */
 #include "device/abi/av_executor.h"
 #include "executor/opengl/gl_context_attributes.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -22,7 +18,6 @@ constexpr std::int32_t reset_strategy = 0x31BD;
 constexpr std::int32_t lose_context_on_reset = 0x31BF;
 constexpr std::int32_t none = 0x3038;
 
-/* The value `name` has in the list, or -1 when it is not there. */
 std::int32_t value_of(const GlContextAttributes &attributes, std::int32_t name)
 {
     const std::int32_t *const list = attributes.list();
@@ -38,7 +33,7 @@ std::uint32_t pairs_in(const GlContextAttributes &attributes)
     return count;
 }
 
-}  // namespace
+}
 
 TEST(gl_context_attributes, no_options_are_an_empty_list)
 { const GlContextAttributes defaults(nullptr);
@@ -92,6 +87,5 @@ TEST(gl_context_attributes, options_no_opengl_has_are_invalid_and_list_nothing)
   const AvContextOptions highest[] = {{1u, 5u, 0u, 0u, 0u}, {2u, 1u, 0u, 0u, 0u}, {3u, 3u, 2u, 15u, 0u},
                                        {4u, 0u, 1u, 0u, 0u}};
   for (const AvContextOptions &options : highest) CHECK(GlContextAttributes(&options).valid());
-  /* The domain is the device's, not OpenGL's: any one is a valid context. */
   const AvContextOptions in_domain = {4u, 6u, 1u, 0u, 7u};
   CHECK(GlContextAttributes(&in_domain).valid()); }

@@ -93,4 +93,4 @@ void DeviceUuid::append_hex(TextBuffer &text) const
     for (const uint8_t byte : bytes_) text.append_hex(byte, 2u);
 }
 
-}  // namespace av
+}

@@ -60,4 +60,4 @@ bool ContextChunk::invariants_hold() const
     return locked_ != nullptr || (pages_ != 0u && mapping_ != nullptr);
 }
 
-}  // namespace av
+}

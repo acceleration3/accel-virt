@@ -18,4 +18,4 @@ void RingBlobWriter::write_header(std::uint32_t id, std::uint8_t order)
     blobs_.unpin(id);
 }
 
-}  // namespace av
+}

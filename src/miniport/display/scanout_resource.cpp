@@ -66,9 +66,6 @@ uint32_t ScanoutResource::page_count() const
     return DisplayMode(width_, height_).frame_pages();
 }
 
-/* Every request below fits a max_request_size buffer, so the writer cannot
- * refuse one and its answer is voided as the cursor's is; only the queue can
- * refuse, and that answer is returned. */
 Status ScanoutResource::create(VirtioGpuDevice &device)
 {
     AV_SCOPE("ScanoutResource::create");
@@ -79,8 +76,6 @@ Status ScanoutResource::create(VirtioGpuDevice &device)
     return device.send_control(bytes, writer.length());
 }
 
-/* The one request whose writer answer is not voided: a page list the driver
- * could not complete is a refusal, not a buffer that was too small. */
 Status ScanoutResource::attach(VirtioGpuDevice &device, const GuestPageList &pages)
 {
     AV_SCOPE("ScanoutResource::attach");
@@ -115,8 +110,6 @@ Status ScanoutResource::show(VirtioGpuDevice &device, uint32_t resource)
     return device.send_control(bytes, writer.length());
 }
 
-/* TRANSFER_TO_HOST_2D carries the guest's pixels to the host's copy of the
- * resource; RESOURCE_FLUSH is what puts them on the screen. */
 Status ScanoutResource::flush(VirtioGpuDevice &device, uint32_t frame)
 {
     AV_SCOPE("ScanoutResource::flush");
@@ -184,7 +177,6 @@ Status ScanoutResource::configure(const DisplayMode &mode)
     const Status made = create(device_.object());
     created_ = made == Status::ok;
     if (!created_) {
-        /* No resource, so no size: a refused create leaves nothing behind. */
         width_ = 0u;
         height_ = 0u;
     }
@@ -255,16 +247,12 @@ Status ScanoutResource::refresh(uint64_t address, const GuestPageList &pages, bo
     platform_.require_irql_at_most(Irql::dispatch, "ScanoutResource::refresh");
     InvariantScope<ScanoutResource> guard(platform_, *this, "refresh");
     if (!created_ || !device_.constructed()) return Status::ok;
-    /* dxgkrnl has given the source no primary to show yet. */
     if (address == 0u) {
         report(address, pages, Status::invalid_state);
         return Status::ok;
     }
     VirtioGpuDevice &device = device_.object();
     key_ = key;
-    /* A keyed image is read from the host's own copy, never the pages: once
-     * shown, a flip between keyed images is a new key and a flush, not a
-     * detach and attach of a thousand pages on QEMU's main loop. */
     if (key != 0u && scanning_out_) {
         attached_address_ = address;
         if (frame != posted_frame_) {
@@ -292,4 +280,4 @@ Status ScanoutResource::refresh(uint64_t address, const GuestPageList &pages, bo
     return presented ? flush(device, 0u) : Status::ok;
 }
 
-}  // namespace av
+}

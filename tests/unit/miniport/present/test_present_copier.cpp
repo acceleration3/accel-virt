@@ -1,9 +1,3 @@
-/* A present's pixels handed to the host: the request the copier sends is
- * answered by the device's own PresentCommands over the guest's memory, so a
- * pixel that arrives proves the whole path - the fixed part, both page lists
- * and the regions in the payload, and the answer. Whatever the host cannot
- * take moves through the fallback instead, and the first time says so in the
- * log. */
 #include "miniport/present/mapped_pixels.hpp"
 #include "miniport/present/present_copier.hpp"
 #include "miniport/present/present_surface.hpp"
@@ -48,12 +42,9 @@ namespace {
 
 constexpr std::uint32_t side = 16u;
 constexpr std::uint32_t pitch = side * PresentSurface::pixel_bytes;
-constexpr std::uint32_t blue_first = 21u;   /* D3DDDIFMT_A8R8G8B8 */
-constexpr std::uint32_t red_first = 32u;    /* D3DDDIFMT_A8B8G8R8 */
+constexpr std::uint32_t blue_first = 21u;
+constexpr std::uint32_t red_first = 32u;
 
-/* The device's side of the control queue, answering in the driver's stalls:
- * the device core's PresentCommands over the guest's own memory, or a
- * refusal, or bytes that are no answer, or nothing. */
 class HostSide {
 public:
     enum class Answer { commands, refusal, garbage, nothing };
@@ -113,7 +104,6 @@ private:
     std::uint8_t        request_[0x9000] = {};
 };
 
-/* One 16x16 surface in a page of the guest's. */
 class Surface {
 public:
     explicit Surface(MockPlatform &platform) : platform_(platform)
@@ -175,10 +165,8 @@ std::uint32_t swapped(std::uint32_t pixel)
     return (pixel & 0xFF00FF00u) | ((pixel >> 16u) & 0xFFu) | ((pixel & 0xFFu) << 16u);
 }
 
-}  // namespace
+}
 
-/* The host moved them: the guest never mapped a page, and the device was
- * asked once. */
 TEST(present_copier, a_blt_is_moved_by_the_host)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -200,7 +188,6 @@ TEST(present_copier, a_blt_is_moved_by_the_host)
   CHECK_EQ(destination.at(0u, 0u), swapped(source.at(0u, 15u)));
   CHECK_EQ(fixture.platform().mapped_frames(), 0u);
   CHECK_EQ(fixture.platform().logged_line("would not move"), false);
-  /* Surfaces of one order move byte for byte. */
   const PresentSurface same = destination.present(red_first);
   CHECK_STATUS(copier.copy(from, same, regions, 1u), Status::ok);
   CHECK_EQ(destination.at(3u, 4u), source.at(1u, 2u)); }
@@ -221,8 +208,6 @@ TEST(present_copier, a_fill_is_moved_by_the_host)
   CHECK_EQ(destination.at(4u, 2u), 0xFF00FF00u);
   CHECK_EQ(destination.at(5u, 2u), 0u); }
 
-/* A device that refuses, answers what is no answer, or answers nothing: the
- * pixels still move, through the miniport, and the log says so once. */
 TEST(present_copier, what_the_host_will_not_move_the_fallback_does)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
@@ -252,8 +237,6 @@ TEST(present_copier, what_the_host_will_not_move_the_fallback_does)
   CHECK_EQ(fixture.platform().logged(), logged);
   CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
 
-/* No payload, no running device, or more pages than the payload holds: the
- * host is not asked, and the fallback answers. */
 TEST(present_copier, a_present_the_host_cannot_be_handed_goes_to_the_fallback)
 { Fixture       fixture;
   MappedPixels  fallback(fixture.platform());
@@ -264,15 +247,12 @@ TEST(present_copier, a_present_the_host_cannot_be_handed_goes_to_the_fallback)
   const PresentSurface from = source.present(blue_first);
   const PresentSurface into = destination.present(blue_first);
   const PresentRegion  region(0u, 0u, 0u, 0u, side, side);
-  /* Not initialized: no payload. */
   CHECK_STATUS(copier.copy(from, into, &region, 1u), Status::ok);
   CHECK_EQ(destination.at(5u, 5u), source.at(5u, 5u));
   CHECK_STATUS(copier.initialize(), Status::ok);
   CHECK_STATUS(copier.initialize(), Status::invalid_state);
-  /* A device that is not running. */
   CHECK_STATUS(copier.fill(into, 0x7u, &region, 1u), Status::ok);
   CHECK_EQ(destination.at(5u, 5u), 0x7u);
-  /* A page list past the payload: every page a run of its own. */
   CHECK_STATUS(fixture.start(), Status::ok);
   HostSide host(fixture.mapped());
   constexpr std::uint32_t scattered = PresentCopier::payload_bytes / PresentCopyRequest::entry_size + 1u;

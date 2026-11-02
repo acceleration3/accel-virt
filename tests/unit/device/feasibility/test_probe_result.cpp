@@ -11,8 +11,6 @@ using av::Status;
 using av::TextBuffer;
 
 namespace {
-
-/* What describe() wrote, for a result in whatever state the caller left it. */
 const char *described(const ProbeResult &result, char *bytes, std::size_t capacity)
 {
     TextBuffer line(bytes, capacity);
@@ -20,7 +18,7 @@ const char *described(const ProbeResult &result, char *bytes, std::size_t capaci
     return line.text();
 }
 
-}  // namespace
+}
 
 TEST(probe_result, answers_nothing_until_it_is_given_an_answer)
 { ProbeResult result;
@@ -47,8 +45,6 @@ TEST(probe_result_record_failure, carries_the_reason_and_the_host_error)
   CHECK_EQ(result.errno_value(), -2);
   CHECK_EQ(result.measured(), 0u); }
 
-/* A capability bit whose evidence changed underneath it is worse than no bit,
- * so a result answers once. */
 TEST(probe_result_record_pass, a_second_answer_is_refused_and_the_first_stands)
 { ProbeResult passed;
   CHECK_STATUS(passed.record_pass(64u), Status::ok);
@@ -65,9 +61,6 @@ TEST(probe_result_record_pass, a_second_answer_is_refused_and_the_first_stands)
   CHECK_STATUS(failed.reason(), Status::no_memory);
   CHECK_EQ(failed.errno_value(), 12); }
 
-/* A failed probe still has something to say about the path taken instead - the
- * rate of the copy a fallback would do - but a passed one's measurement is its
- * own and nothing overwrites it. */
 TEST(probe_result_measure, gives_a_failed_result_a_number_and_leaves_a_passed_one_alone)
 { ProbeResult failed;
   CHECK_STATUS(failed.record_failure(Status::not_supported, 0), Status::ok);
@@ -96,8 +89,6 @@ TEST(probe_result_describe, names_the_outcome_and_what_it_was_for)
   ProbeResult refused;
   CHECK_STATUS(refused.record_failure(Status::malformed, 0), Status::ok);
   CHECK(std::strcmp(described(refused, bytes, sizeof bytes), "failed, status 9") == 0);
-  /* Not every host number is negative: VK_NOT_READY and its neighbours are
-   * positive, and a driver that answers one has still refused. */
   ProbeResult positive;
   CHECK_STATUS(positive.record_failure(Status::not_supported, 3), Status::ok);
   CHECK(std::strcmp(described(positive, bytes, sizeof bytes), "failed, status 6, host 3") == 0); }

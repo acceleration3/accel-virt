@@ -9,19 +9,8 @@
 namespace av {
 
 namespace {
-
-/* gettid() is a system call every time, and every scope asks: the id is read
- * once per thread. QEMU does not fork once devices exist, so no child keeps a
- * parent's id. Initial-exec: the general-dynamic model a shared object gets by
- * default calls __tls_get_addr on every scope, and one int fits the static TLS
- * surplus glibc keeps for dlopened modules. */
 [[gnu::tls_model("initial-exec")]] thread_local pid_t thread_id = 0;
 
-/* Every thread that enters traced code gets an alternate signal stack, so a
- * stack overflow on it - a device worker, a vCPU thread - still runs the crash
- * handler. A thread that has one keeps it; QEMU's own are never replaced. The
- * stack is released when the thread ends. This file and what it calls carry no
- * scope: every scope calls it. */
 constexpr size_t least_signal_stack = 64u * 1024u;
 constexpr size_t signal_stack_multiple = 4u;
 
@@ -59,8 +48,6 @@ void give_thread_a_signal_stack()
     size_t     usable = minimum > 0 ? static_cast<size_t>(minimum) * signal_stack_multiple : 0u;
     if (usable < least_signal_stack) usable = least_signal_stack;
     usable = (usable + page - 1u) / page * page;
-    /* The mapping holds the record the destructor reads, a guard page below
-     * the stack, and the stack. */
     const size_t bytes = page + page + usable;
     void *const  mapping = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mapping == MAP_FAILED) return;
@@ -91,7 +78,7 @@ pid_t cached_thread_id()
     return thread_id;
 }
 
-}  // namespace
+}
 
 uint64_t PosixTraceHost::thread_key() const { return static_cast<uint64_t>(cached_thread_id()); }
 uint32_t PosixTraceHost::thread_number() const { return static_cast<uint32_t>(cached_thread_id()); }
@@ -116,4 +103,4 @@ void PosixTraceHost::precise()
     clock_ = monotonic;
 }
 
-}  // namespace av
+}

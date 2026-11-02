@@ -28,11 +28,8 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
-/* The magic, the ring and 24 zero bytes: dxgkrnl hands an 8-byte private
- * escape to no driver, so the record is padded to the host-visible bind
- * record's size. */
 TEST(tail_publish_record_encode, is_the_magic_the_ring_and_zeros)
 { GuardedBuffer bytes(TailPublishRecord::encoded_size);
   CHECK_STATUS(TailPublishRecord(0x12345678u).encode(bytes.data(), bytes.size()), Status::ok);
@@ -52,7 +49,6 @@ TEST(tail_publish_record, round_trips_through_its_encoding)
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::ok);
   CHECK_EQ(decoded.ring(), 0xFFFFFFFFu); }
 
-/* A refused record leaves what was decoded before. */
 TEST(tail_publish_record_decode, a_refused_record_keeps_the_ring_it_had)
 { std::uint8_t bytes[TailPublishRecord::encoded_size] = {};
   CHECK_STATUS(TailPublishRecord(7u).encode(bytes, sizeof bytes), Status::ok);
@@ -69,8 +65,6 @@ TEST(tail_publish_record_encode, a_short_or_missing_destination_is_too_large)
   CHECK(buffer.guards_intact());
   CHECK_STATUS(TailPublishRecord().encode(nullptr, TailPublishRecord::encoded_size), Status::too_large); }
 
-/* Every escape a process sends arrives here first; only exactly this record
- * is one, so the other escapes keep their own meaning. */
 TEST(tail_publish_record_decode, refuses_another_magic_a_reserved_byte_and_any_other_length)
 { std::uint8_t bytes[TailPublishRecord::encoded_size + 1u] = {};
   CHECK_STATUS(TailPublishRecord().encode(bytes, sizeof bytes), Status::ok);
@@ -93,7 +87,5 @@ TEST(tail_publish_record_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, bytes, sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 256u);
-  /* Only the ring is free: the magic is fixed and every other bit must be
-   * zero. Its 32 single-bit flips and the untouched record are acceptances. */
   const std::uint32_t acceptable = 32u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }

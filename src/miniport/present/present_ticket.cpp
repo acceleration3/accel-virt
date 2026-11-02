@@ -33,9 +33,6 @@ Status PresentTicket::fill(const PresentSurface &destination, uint32_t colour, c
     return fallback_.fill(destination, colour, regions, count);
 }
 
-/* A present the queue refuses is moved at once and its packet waits for
- * nothing: the tickets before it are the device's to finish, and what it
- * would have followed is already queued. */
 bool PresentTicket::queued(const PresentCopyRequest &request, const PresentSurface *source,
                            const PresentSurface &destination, const PresentRegion *regions)
 {
@@ -71,4 +68,4 @@ uint64_t PresentTicket::ticket() const
     return ticket_;
 }
 
-}  // namespace av
+}

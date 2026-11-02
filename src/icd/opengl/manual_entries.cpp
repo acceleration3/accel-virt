@@ -1,6 +1,3 @@
-/* The OpenGL entries the generator declares and leaves to the ICD
- * (research.md §2): each one line into ManualCalls on the bound root, or - a
- * client-side array of the compatibility profile - into the legacy recorder. */
 #include "core/trace/function_scope.hpp"
 #include "icd/opengl/gl_icd_binding.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
@@ -477,11 +474,6 @@ void APIENTRY Wrap_glVertexPointer(GLint, GLenum, GLsizei, const void*)
 }
 
 
-/* GL_EXT_memory_object and GL_EXT_semaphore's twelve, which never cross: the
- * device makes the object inside OPEN_SHARED_OBJECT, so a create, an import, a
- * query and a parameter are all about a name only this ICD holds (feature 053,
- * T037). Declared driver_implemented in the profile, which is what lets the
- * extensions be reported at all. */
 void APIENTRY Wrap_glCreateMemoryObjectsEXT(GLsizei n, GLuint *memoryObjects)
 {
     AV_SCOPE("Wrap_glCreateMemoryObjectsEXT");
@@ -523,16 +515,12 @@ void APIENTRY Wrap_glImportSemaphoreWin32NameEXT(GLuint semaphore, GLenum handle
 GLboolean APIENTRY Wrap_glIsMemoryObjectEXT(GLuint memoryObject)
 {
     AV_SCOPE("Wrap_glIsMemoryObjectEXT");
-    /* GL_TRUE and GL_FALSE are 1 and 0, so the answer converts rather than
-     * branching. */
     return static_cast<GLboolean>(::av::glicd::gl_icd_binding.root().manual().is_memory_object(memoryObject));
 }
 
 GLboolean APIENTRY Wrap_glIsSemaphoreEXT(GLuint semaphore)
 {
     AV_SCOPE("Wrap_glIsSemaphoreEXT");
-    /* GL_TRUE and GL_FALSE are 1 and 0, so the answer converts rather than
-     * branching. */
     return static_cast<GLboolean>(::av::glicd::gl_icd_binding.root().manual().is_semaphore(semaphore));
 }
 
@@ -560,4 +548,4 @@ void APIENTRY Wrap_glGetSemaphoreParameterui64vEXT(GLuint semaphore, GLenum pnam
     ::av::glicd::gl_icd_binding.root().manual().get_semaphore_parameter(semaphore, pname, params);
 }
 
-}  // namespace av::glicd::generated
+}

@@ -1,8 +1,3 @@
-/* What the export socket answers of the GPU, decided before a byte is sent:
- * nothing is exported until realize attached the contexts, or where they
- * export nothing; what the executor exports is passed on with its descriptor
- * only when it describes a picture and came with one, and a descriptor with
- * no picture is closed rather than handed to a process outside QEMU. */
 #include "device/display/head_planes.hpp"
 #include "device/export/exported_gpu.hpp"
 #include "harness/context/recording_context_plane.hpp"
@@ -33,7 +28,7 @@ ExportRequest asked(ExportOperation operation)
     return ExportRequest(operation, operation == ExportOperation::hello ? 0u : surface, 5u);
 }
 
-}  // namespace
+}
 
 TEST(exported_gpu, exports_nothing_before_realize_or_where_the_contexts_export_nothing)
 { av::MockHost host; av::HeadPlanes heads(host);
@@ -66,7 +61,6 @@ TEST(exported_gpu, hello_names_the_gpu_it_was_attached_with)
   CHECK_EQ(answer.greeting().bus(), 3u);
   CHECK(answer.greeting().valid()); }
 
-/* The executor's own answer, asked by the GPU's UUID, with its descriptor. */
 TEST(exported_gpu, an_exported_surface_is_answered_with_its_layout_and_its_dma_buf)
 { av::MockHost host; av::HeadPlanes heads(host);
   av::RecordingContextPlane plane;
@@ -90,9 +84,6 @@ TEST(exported_gpu, an_exported_surface_is_answered_with_its_layout_and_its_dma_b
   CHECK_EQ(descriptor, -1);
   CHECK_EQ(host.exports_closed(), 0u); }
 
-/* An executor that answers a picture with no size, or a stride narrower than
- * it, is not believed: its descriptor is closed here. One that answers no
- * descriptor at all has nothing to close. */
 TEST(exported_gpu, an_export_with_no_picture_or_no_dma_buf_is_refused_and_its_descriptor_closed)
 { av::MockHost host; av::HeadPlanes heads(host);
   av::RecordingContextPlane plane;
@@ -139,10 +130,6 @@ TEST(exported_gpu, a_sync_is_answered_with_the_writes_and_a_sync_file_or_refused
   CHECK_EQ(descriptor, -1);
   CHECK_EQ(plane.syncs_asked(), 3u); }
 
-/* A head is composed now from the planes the device keeps for it, and goes out
- * as a descriptor of the export path's own - the executor keeps the image it
- * composed into - beside the layout; a head with no plane, or contexts that
- * compose none, is answered without one. */
 TEST(exported_gpu, a_head_goes_out_composed_beside_a_descriptor_of_its_own)
 { av::MockHost host; av::HeadPlanes heads(host);
   CHECK_STATUS(heads.initialize(), Status::ok);
@@ -150,11 +137,11 @@ TEST(exported_gpu, a_head_goes_out_composed_beside_a_descriptor_of_its_own)
   ExportedGpu exported(host);
   exported.attach(plane, gpu, ExportGreeting(gpu), heads);
   int descriptor = 7;
-  const ExportRequest head(ExportOperation::head, 3u, 5u);   /* head 2 */
+  const ExportRequest head(ExportOperation::head, 3u, 5u);
   CHECK_STATUS(exported.export_head(head, descriptor).status(), Status::invalid_state);
   CHECK_EQ(descriptor, -1);
   plane.compose_as(picture);
-  CHECK_STATUS(exported.export_head(head, descriptor).status(), Status::not_found);   /* no plane yet */
+  CHECK_STATUS(exported.export_head(head, descriptor).status(), Status::not_found);
   const std::int32_t whole[4] = {0, 0, 640, 480};
   CHECK_STATUS(heads.set(av::ScanoutPlaneRequest(2u, 1u, av::ScanoutPlaneRequest::flag_shown, 0x77u, whole, whole,
                                                  640u, 480u)),
@@ -165,5 +152,5 @@ TEST(exported_gpu, a_head_goes_out_composed_beside_a_descriptor_of_its_own)
   CHECK_EQ(plane.composed_count(), 1u);
   CHECK_EQ(plane.composed_width(), 640u);
   CHECK(descriptor >= 0);
-  CHECK(descriptor != plane.composed_fd());   /* Host::duplicate_export's, not the executor's */
+  CHECK(descriptor != plane.composed_fd());
   host.close_export(descriptor); }

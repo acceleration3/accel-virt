@@ -1,6 +1,3 @@
-/* The probe's render target over a scripted Vulkan: device-local memory when
- * the image may use it, else the lowest type it may; a view of it; a refusal
- * at each call stops there; and everything made is destroyed. */
 #include "guest/probe/probe_device.hpp"
 #include "guest/probe/probe_image.hpp"
 #include "guest/probe/probe_outcome.hpp"
@@ -16,7 +13,7 @@ struct ProbeImageProbe {
     static void memory_without_image(ProbeImage &image) { image.image_ = VK_NULL_HANDLE; image.view_ = VK_NULL_HANDLE; }
 };
 
-}  // namespace av
+}
 
 using av::ProbeDevice;
 using av::ProbeImage;
@@ -36,7 +33,7 @@ void make(ProbeDevice &device)
     CHECK_EQ(device.make_device(), VK_SUCCESS);
 }
 
-}  // namespace
+}
 
 TEST(probe_image, an_image_prefers_device_local_memory)
 { ScriptedVulkan vulkan;

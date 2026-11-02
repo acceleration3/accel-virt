@@ -16,7 +16,6 @@ VkResult SurfaceTable::create(VkInstance instance, void *window, VkSurfaceKHR &s
     surface = VK_NULL_HANDLE;
     if (window == nullptr) return VK_ERROR_INITIALIZATION_FAILED;
     uint32_t slot = 0u;
-    /* 64 bits are not run through by a process. */
     if (slots_.insert(next_, SurfaceSlot{instance, window}, slot) != Status::ok) return VK_ERROR_OUT_OF_HOST_MEMORY;
     surface = HandleBits(next_++).as<VkSurfaceKHR>();
     return VK_SUCCESS;
@@ -49,7 +48,6 @@ uint32_t SurfaceTable::live() const
     return slots_.count();
 }
 
-/* Every surface has a window and an instance, under a handle minted already. */
 bool SurfaceTable::invariants_hold() const
 {
     AV_SCOPE("SurfaceTable::invariants_hold");
@@ -60,4 +58,4 @@ bool SurfaceTable::invariants_hold() const
     return whole && slots_.invariants_hold();
 }
 
-}  // namespace av::icd
+}

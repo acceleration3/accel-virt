@@ -6,8 +6,6 @@
 namespace av {
 
 namespace {
-
-/* D3D_NAME, as a container's signature writes it. */
 constexpr uint32_t name_none = 0u;
 constexpr uint32_t name_clip_distance = 2u;
 constexpr uint32_t name_cull_distance = 3u;
@@ -20,8 +18,6 @@ constexpr uint32_t name_line_density = 16u;
 constexpr uint32_t name_target = 64u;
 constexpr uint32_t name_depth = 65u;
 
-/* D3D10_SB_NAME, as the DDI hands it, where it differs from D3D_NAME: the
- * token format names each tessellation factor separately. */
 constexpr uint32_t sb_quad_edge_first = 11u;
 constexpr uint32_t sb_quad_inside_first = 15u;
 constexpr uint32_t sb_tri_edge_first = 17u;
@@ -47,7 +43,7 @@ const char *const system_names[] = {"AV",
                                     "SV_IsFrontFace",
                                     "SV_SampleIndex"};
 
-}  // namespace
+}
 
 DxbcContainer::DxbcContainer(uint8_t *buffer, size_t capacity)
     : buffer_(buffer), capacity_(buffer == nullptr ? 0u : capacity), used_(0u), chunks_(0u), chunk_offsets_{},
@@ -107,7 +103,6 @@ bool DxbcContainer::begin_chunk(const char *fourcc)
 void DxbcContainer::end_chunk()
 {
     AV_SCOPE("DxbcContainer::end_chunk");
-    /* Chunks are four-byte aligned, and a string table rarely ends on one. */
     while (!overflowed_ && used_ % 4u != 0u) {
         if (!reserve(1u)) return;
         buffer_[used_++] = 0u;
@@ -175,10 +170,6 @@ bool DxbcContainer::add_signature(Role role, const d3dproto::SignatureEntry *ent
         if (overflowed_) return false;
         const size_t at = table + static_cast<size_t>(element) * entry_bytes;
         const uint32_t mask = entry.mask & full_mask;
-        /* An input's second mask byte is the components the shader reads,
-         * which DXVK trims a declaration to; the DDI says only which exist. An
-         * output's is the components it never writes: none, as far as this
-         * side knows. */
         const uint32_t masks = role == Role::input ? (mask | mask << 8u) : mask;
         const uint32_t fields[8] = {entry.stream,           name_offset, index, sv, entry.component_type,
                                     entry.register_index, masks,       entry.min_precision};
@@ -196,9 +187,6 @@ bool DxbcContainer::add_layout_signature(const uint32_t *registers, uint32_t cou
     for (uint32_t element = 0u; element < count; element++) {
         entries[element].register_index = registers[element];
         entries[element].mask = full_mask;
-        /* D3D_REGISTER_COMPONENT_FLOAT32: the layout's format says what the
-         * fetch converts to, and a signature is only consulted for the
-         * register here. */
         entries[element].component_type = 3u;
     }
     return add_signature(Role::input, entries, count, false);
@@ -220,8 +208,6 @@ bool DxbcContainer::add_code(const uint8_t *tokens, size_t size)
 bool DxbcContainer::add_dxil(const uint8_t *program, size_t size)
 {
     AV_SCOPE("DxbcContainer::add_dxil");
-    /* DxilProgramHeader: version, size in dwords, then DxilBitcodeHeader,
-     * whose first word is 'DXIL'. */
     constexpr size_t   magic_at = 8u;
     constexpr uint32_t dxil_magic = 0x4c495844u;
     if (program == nullptr || size < magic_at + 4u || size % 4u != 0u) return false;
@@ -256,4 +242,4 @@ size_t DxbcContainer::finish()
     return used_;
 }
 
-}  // namespace av
+}

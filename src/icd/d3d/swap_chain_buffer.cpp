@@ -16,4 +16,4 @@ SwapChainBuffer::Model SwapChainBuffer::model() const
     return (misc_ & misc_shared) != 0u ? Model::flip : Model::blt;
 }
 
-}  // namespace av::d3d
+}

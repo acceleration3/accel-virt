@@ -1,17 +1,3 @@
-/* The OpenGL server dispatch's table with no OpenGL behind it.
- *
- * Fills a representative of every kind of pointer the decoder hands a driver -
- * reads and uploads sized by the pixel store, count-sized outputs and inputs,
- * text, state queries whose answer is a list, offsets into bound buffers, and
- * the vertex arrays a draw reads - along with the state each depends on, so a
- * test or a fuzz target can drive the generated decoder over them with no GPU.
- * Every other entry stays null, which the decoder refuses after decoding.
- *
- * What it records is what the decoder must never let through: a pointer the
- * driver would read or write past what the decode arena gave out, a null one
- * the driver would follow, or an offset followed as an address because no
- * buffer was bound to make it one - a stray, every one. The state queries the
- * decoder itself asks go to its own locals and are answered unchecked. */
 #ifndef AV_RECORDING_GL_HPP
 #define AV_RECORDING_GL_HPP
 
@@ -26,41 +12,26 @@ class WireArena;
 
 class RecordingGl {
 public:
-    /* How many of each this fake's driver has. */
     static constexpr GLint vertex_attributes = 16;
     static constexpr GLint texture_units = 2;
-    /* GL_NUM_COMPRESSED_TEXTURE_FORMATS: more than any slack a query gets. */
     static constexpr GLint compressed_formats = 48;
-    /* GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS of every block. */
     static constexpr GLint block_uniforms = 40;
 
-    /* `block` is the start of the memory `arena` hands out from. The table's
-     * entry points are GL's own signatures and carry no user pointer, so they
-     * reach the one live RecordingGl through the harness's static storage: a
-     * second one made while another is alive takes the table over. */
     RecordingGl(const std::uint8_t *block, const WireArena &arena);
     ~RecordingGl();
     RecordingGl(const RecordingGl &) = delete;
     RecordingGl &operator=(const RecordingGl &) = delete;
 
     const glproto::RealGl &table() const;
-    /* What glGetTexLevelParameteriv answers for any level. */
     void set_level_extent(GLint width, GLint height, GLint depth);
-    /* Removes glGetIntegerv, which no pixel store or binding can be asked
-     * without. */
     void forget_state_queries();
-    /* A core context's table: it has no fixed-function arrays to ask of. */
     void be_core();
-    /* How many times glIsEnabled was asked. */
     std::uint32_t capability_queries() const;
 
-    /* Pixel reads that reached the driver. */
     std::uint32_t reads() const;
-    /* Every other call that reached the driver, state aside. */
     std::uint32_t calls() const;
     std::uint32_t strays() const;
 
-    /* The entry points, as the table calls them. */
     void pixel_store(GLenum pname, GLint value);
     void bind_buffer(GLenum target, GLuint name);
     void delete_buffers(GLsizei n, const GLuint *names);
@@ -97,22 +68,16 @@ public:
     void map_order(GLenum target, GLenum query, GLint *values) const;
     void stipple(GLubyte *mask);
     void bitmap(GLsizei width, GLsizei height, const GLubyte *bits);
-    /* A call whose driver keeps the pointer: never one the decoder makes. */
     void kept_pointer();
 
 private:
-    /* Alignment, skip pixels, skip rows, skip images, row length, image height. */
     using Store = GLint[6];
 
-    /* Where GL touches the byte after the last pixel of this transfer, from
-     * `store`; false for a format and type this fake does not size. */
     bool reach(const Store &store, GLsizei width, GLsizei height, GLsizei depth, GLenum format,
                GLenum type, std::uint64_t &bytes) const;
     bool bitmap_reach(const Store &store, GLsizei width, GLsizei height, std::uint64_t &bytes) const;
     void check_span(const void *bytes, std::uint64_t length);
-    /* A string GL reads to its terminator. */
     void check_terminated(const GLchar *text);
-    /* Whether any enabled array has no buffer behind it. */
     bool client_array_enabled() const;
     GLuint *binding(GLenum target);
 
@@ -144,6 +109,6 @@ private:
     std::uint32_t       capability_queries_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_RECORDING_GL_HPP
+#endif

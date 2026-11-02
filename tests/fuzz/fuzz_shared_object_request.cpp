@@ -1,10 +1,3 @@
-/* The body of the three shared-object transport commands, and the answer the
- * device writes back, fed attacker-chosen bytes (feature 053).
- *
- * The body is guest-authored and decoded inside QEMU; the answer is
- * device-authored and decoded inside the guest's ICD, and a hostile or older
- * device is as foreign to the ICD as a guest is to the device. Both directions
- * are fuzzed here because both are readers of bytes they did not write. */
 #include "core/support/status.hpp"
 #include "proto/submission/shared_object_answer.hpp"
 #include "proto/submission/shared_object_request.hpp"

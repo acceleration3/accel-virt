@@ -38,7 +38,7 @@ private:
     pthread_mutex_t &mutex_;
 };
 
-}  // namespace
+}
 
 MockHost::MockHost()
     : main_loop_(pthread_self()), violations_{}, logged_(0u), last_log_{}, threads_{}, events_{}, mutexes_{}, gpus_{},
@@ -298,9 +298,6 @@ bool MockHost::wait_event_until(void *event, std::uint64_t deadline)
     return signalled;
 }
 
-/* Under the state lock and then each event's, the order wait_for_sleepers
- * takes them in: a waiter reads the clock under its event's lock alone, so
- * none can look between the store and the broadcast and sleep through it. */
 void MockHost::set_clock(std::uint64_t now)
 {
     StateLock lock(state_);
@@ -667,7 +664,6 @@ Status MockHost::list_directory(const char *path, char *buffer, std::size_t capa
         const char *const name = file + prefix + 1u;
         std::size_t       name_length = 0u;
         while (name[name_length] != '\0' && name[name_length] != '/') name_length++;
-        /* Once each, however many of its files there are. */
         bool listed = false;
         for (std::size_t at = 0u; at < length && !listed;) {
             std::size_t end = at;
@@ -905,8 +901,6 @@ MockHost::Range *MockHost::range_holding(void *at, std::uint64_t bytes)
     return nullptr;
 }
 
-/* Memory the loopback suite translates is the guest harness's own, with no file
- * behind it: refused, as QEMU refuses RAM with no fd. */
 Status MockHost::alias_guest_run(void *run, std::uint64_t bytes, void *at)
 {
     if (!holds_range(at, bytes)) {
@@ -958,8 +952,6 @@ std::uint64_t MockHost::overlaid_bytes()
     return overlaid_;
 }
 
-/* What av_move_run does in QEMU: the bytes into a fresh mapping of the file,
- * which then takes the run's place. */
 namespace {
 
 bool move_run(void *run, std::uint64_t bytes, int fd, std::uint64_t offset)
@@ -972,7 +964,7 @@ bool move_run(void *run, std::uint64_t bytes, int fd, std::uint64_t offset)
            MAP_FAILED;
 }
 
-}  // namespace
+}
 
 Status MockHost::overlay_guest_run(void *run, std::uint64_t bytes, int fd, std::uint64_t offset)
 {
@@ -1013,9 +1005,6 @@ Status MockHost::restore_guest_run(void *run, std::uint64_t bytes)
     return Status::ok;
 }
 
-/* A descriptor the test's subject may own and close. A pipe's read end costs
- * nothing and is a real file descriptor, which is what makes "closed exactly
- * once" a thing the kernel answers rather than a counter. */
 int MockHost::open_descriptor()
 {
     const int descriptor = fresh_descriptor();
@@ -1054,8 +1043,6 @@ bool MockHost::descriptor_open(int fd) const
     return fd >= 0 && ::fcntl(fd, F_GETFD) != -1;
 }
 
-/* A host with no GL-capable display - which is what `-display none` gives, and
- * the default here - has no head that can show a dma-buf at all. */
 bool MockHost::display_takes_dmabuf(std::uint32_t head)
 {
     StateLock lock(state_);
@@ -1073,10 +1060,7 @@ Status MockHost::show_scanout(std::uint32_t head, const std::uint8_t *blob, cons
 Status MockHost::show_scanout_plane(std::uint32_t head, const std::uint8_t *blob, const Plane &plane)
 {
     StateLock lock(state_);
-    /* A head the display lacks is refused, as QEMU's glue refuses it. */
     if (head >= display_heads_ || head >= max_scanout_heads) return Status::not_supported;
-    /* A head reads the frame out of the mapping until it shows something
-     * else; there is no frame without one. */
     if (blob == nullptr) {
         violations_[static_cast<std::uint32_t>(HostViolation::scanout_misuse)]++;
         return Status::not_supported;
@@ -1178,9 +1162,6 @@ std::uint64_t MockHost::hostmem_size()
     return hostmem_size_;
 }
 
-/* What QEMU does with the descriptor: its pages mapped where the guest
- * reaches them. A descriptor that is not open is the caller's bug; one that
- * cannot be mapped for the whole size is refused, as QEMU refuses it. */
 Status MockHost::place_in_hostmem(int fd, std::uint64_t size, std::uint64_t offset)
 {
     require_main_loop("MockHost::place_in_hostmem");
@@ -1266,13 +1247,10 @@ void MockHost::empty_mapping_at(std::uint32_t nth) { StateLock lock(state_); emp
 void MockHost::fail_bind_gpu_at(std::uint32_t nth) { StateLock lock(state_); fail_bind_gpu_ = nth; }
 void MockHost::advance_clock_per_read(std::uint64_t nanoseconds) { StateLock lock(state_); clock_step_ = nanoseconds; }
 
-/* A test that cannot get a file or an address to put guest RAM at has no guest
- * to test, so it fails here rather than in whatever it was about to prove. */
 void MockHost::add_guest_ram(std::uint64_t base, std::size_t size)
 {
     StateLock lock(state_);
     const std::uint64_t mapped = (size + page - 1u) / page * page;
-    /* Sealed against shrinking, as QEMU's guest RAM memfd is. */
     const int           fd = memfd_create("mock guest ram", MFD_CLOEXEC | MFD_ALLOW_SEALING);
     void *const reserved = mmap(nullptr, mapped + page, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (fd < 0 || ftruncate(fd, static_cast<off_t>(mapped)) != 0 ||
@@ -1514,9 +1492,6 @@ std::uint32_t MockHost::live_recordings()
     return live;
 }
 
-/* The descriptor stands for the eventfd a QEMU event is; the mock's events
- * are condition variables, so it only has to be a real file the renderer can
- * be handed and close. */
 int MockHost::event_descriptor(void *event)
 {
     require_main_loop("MockHost::event_descriptor");
@@ -1588,9 +1563,6 @@ Status MockHost::locate_guest(const void *pointer, std::uint64_t length, std::ui
     return Status::not_found;
 }
 
-/* A descriptor the mock counted comes off the count, so a test says no
- * descriptor the device was handed outlived it; one that is not open is a
- * double close. */
 void MockHost::close_descriptor(int descriptor)
 {
     if (!descriptor_open(descriptor)) {
@@ -1619,8 +1591,6 @@ Status MockHost::start_renderer(const char *path)
     return Status::ok;
 }
 
-/* The peer gets duplicates, as a socket gives the far process its own: the
- * caller's stay the caller's. */
 Status MockHost::send_renderer(const std::uint8_t *bytes, std::size_t length, const int *descriptors,
                                std::uint32_t count)
 {
@@ -1741,8 +1711,6 @@ void MockHost::close_export(int descriptor)
     {
         StateLock lock(state_);
         exports_closed_++;
-        /* A counted descriptor the device handed on and closed this way is
-         * closed all the same. */
         for (int &slot : counted_)
             if (slot == descriptor) slot = -1;
     }
@@ -1810,4 +1778,4 @@ const char *MockHost::started_renderer() { StateLock lock(state_); return starte
 std::uint32_t MockHost::renderer_datagrams() { StateLock lock(state_); return renderer_datagrams_; }
 std::uint32_t MockHost::last_receive_timeout() { StateLock lock(state_); return receive_timeout_; }
 
-}  // namespace av
+}

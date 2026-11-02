@@ -1,4 +1,3 @@
-// The examples in the program, in the order the runner takes them.
 #pragma once
 
 #include <stdint.h>
@@ -9,7 +8,6 @@ struct SampleEntry
 {
 	const char *name;
 	VulkanExampleBase *(*make)();
-	// Through the example's own type: VulkanExampleBase's destructor is not virtual.
 	void (*destroy)(VulkanExampleBase *);
 };
 

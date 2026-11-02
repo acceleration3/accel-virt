@@ -1,5 +1,3 @@
-/* One context's host executor: made and released on the context's worker,
- * running commands there, and every answer a library gives read as a status. */
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/execution/context_executor.hpp"
@@ -32,7 +30,7 @@ struct ContextExecutorProbe {
     static void create_unconfigured(ContextExecutor &executor) { executor.configured_ = false; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
@@ -53,15 +51,12 @@ public:
     MockExecutorOps &ops() { return ops_; }
     ExecutorShares  &shares() { return shares_; }
     ContextExecutor &executor() { return executor_; }
-    /* Library memory under `key` in the device's domain, as a host blob's is;
-     * the device's descriptor of it closed, since nothing here maps it. */
     void allocate(std::uint64_t key)
     {
         AvHostMemory memory = {-1, 0u, 0u};
         CHECK_STATUS(library_.allocate_memory(key, 4096u, 1u, memory), Status::ok);
         close(memory.fd);
     }
-    /* A second context of the same device, context 6. */
     ContextExecutor &sharing() { return sharing_; }
 
     template <typename Body>
@@ -91,7 +86,7 @@ private:
     ContextExecutor sharing_;
 };
 
-}  // namespace
+}
 
 TEST(context_executor_create, makes_the_configured_executor_on_the_worker_and_releases_it_there)
 { Fixture fixture;
@@ -114,7 +109,7 @@ TEST(context_executor_create, makes_the_configured_executor_on_the_worker_and_re
   CHECK_EQ(fixture.ops().created(), 1u);
   CHECK_EQ(fixture.ops().destroyed(), 1u);
   CHECK_EQ(fixture.ops().last_sub_api(), AV_EXECUTOR_SUB_API_VULKAN);
-  CHECK(fixture.ops().last_options().domain != 0u);   /* the device's domain */
+  CHECK(fixture.ops().last_options().domain != 0u);
   CHECK_EQ(fixture.ops().misuses(), 0u); }
 
 TEST(context_executor_create, an_unconfigured_context_or_a_library_that_makes_nothing_has_no_executor)
@@ -140,9 +135,6 @@ TEST(context_executor_execute, reads_every_answer_a_library_gives)
           {MockExecutorOps::unknown_id, Status::not_found},
           {MockExecutorOps::undecodable_id, Status::malformed},
           {MockExecutorOps::lost_id, Status::invalid_state},
-          /* A value the ABI does not define is a broken library, not a lost
-           * device: folding the two together would have an operator chasing a
-           * GPU fault that never happened (feature 042). */
           {MockExecutorOps::garbage_id, Status::not_supported},
       };
       for (const Case &c : cases)
@@ -177,7 +169,7 @@ TEST(context_executor, an_executor_left_behind_is_released_with_the_context)
       CHECK(executor.created());
   }
   CHECK_EQ(ops.destroyed(), 1u);
-  CHECK_EQ(ops.misuses(), 1u);   /* released off the thread it was made on: the last resort */ }
+  CHECK_EQ(ops.misuses(), 1u);   }
 
 TEST(context_executor, configures_on_the_main_loop_and_runs_on_a_worker)
 { Fixture fixture;
@@ -198,8 +190,6 @@ TEST(context_executor_invariants, an_executor_without_a_configuration_is_detecte
   CHECK(!fixture.executor().invariants_hold());
   fixture.on_worker([](ContextExecutor &executor) { executor.destroy(); }); }
 
-/* The round trip: the import is made of the memory under the key, then asked
- * what it became, and the answer is what the guest will name the memory by. */
 TEST(context_executor_import, imports_under_the_devices_id_and_answers_the_handle_the_library_named)
 { Fixture fixture;
   fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
@@ -239,9 +229,9 @@ TEST(context_executor_import, a_refusal_or_an_import_named_nothing_leaves_nothin
       CHECK_STATUS(executor.import(2u, 40u, device_memory), Status::not_supported);
       CHECK_EQ(device_memory, 0u);
       CHECK_EQ(fixture.ops().imported(), 1u);
-      CHECK_EQ(fixture.ops().released(), 1u);   /* made, named nothing, and given back */
+      CHECK_EQ(fixture.ops().released(), 1u);
       CHECK_EQ(fixture.ops().live_imports(), 0u);
-      CHECK_STATUS(executor.import(3u, 41u, device_memory), Status::not_supported);   /* no memory under it */
+      CHECK_STATUS(executor.import(3u, 41u, device_memory), Status::not_supported);
       CHECK_EQ(fixture.ops().imported(), 1u);
       executor.destroy();
   }); }
@@ -254,17 +244,13 @@ TEST(context_executor_import, runs_on_a_worker)
   CHECK(fixture.host().claim(HostViolation::worker_required));
   CHECK(fixture.host().claim(HostViolation::worker_required)); }
 
-/* ---- OpenGL options and sharing (feature 050) ---- */
-
 namespace {
 
 const GlContextOptions core_46(4u, 6u, GlContextOptions::Profile::core,
                                GlContextOptions::debug | GlContextOptions::lose_context_on_reset, 0u);
 
-}  // namespace
+}
 
-/* An OpenGL executor is made with the context's options and published for
- * others to share while it lives; a Vulkan one is never published. */
 TEST(context_executor_create, an_opengl_executor_is_made_with_its_options_and_published_while_it_lives)
 { Fixture fixture;
   fixture.executor().configure(SubApi::opengl, uuid, core_46);
@@ -287,7 +273,6 @@ TEST(context_executor_create, an_opengl_executor_is_made_with_its_options_and_pu
       CHECK_EQ(fixture.shares().published(), 0u);
       executor.destroy();
   });
-  /* The defaults ask for nothing. */
   CHECK_EQ(fixture.ops().last_options().major, 0u);
   CHECK_EQ(fixture.ops().misuses(), 0u); }
 
@@ -319,7 +304,6 @@ TEST(context_executor_create, a_share_context_is_the_published_executor_of_that_
   CHECK_EQ(fixture.shares().published(), 0u);
   CHECK_EQ(fixture.ops().misuses(), 0u); }
 
-/* Nothing published under the share id is no executor, and nothing is asked. */
 TEST(context_executor_create, a_share_context_with_no_executor_makes_none)
 { Fixture fixture;
   fixture.sharing().configure(SubApi::opengl, uuid, core_46.sharing(5u));
@@ -330,8 +314,6 @@ TEST(context_executor_create, a_share_context_with_no_executor_makes_none)
   CHECK_EQ(fixture.ops().option_creates(), 0u);
   CHECK_EQ(fixture.shares().published(), 0u); }
 
-/* An OpenGL executor that cannot be published is given back: a context
- * another cannot share with has no way to say so later. */
 TEST(context_executor_create, an_opengl_executor_that_cannot_be_published_is_given_back)
 { MockHost host;
   MockExecutorOps ops(AV_EXECUTOR_SUB_API_OPENGL);
@@ -352,8 +334,6 @@ TEST(context_executor_create, an_opengl_executor_that_cannot_be_published_is_giv
   CHECK_EQ(ops.live(), 0u);
   CHECK_EQ(ops.misuses(), 0u); }
 
-/* Feature 053: a context with no executor shares, opens and closes nothing,
- * and never calls into the library. */
 TEST(context_executor_shared, refuses_without_an_executor)
 { Fixture fixture;
   fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
@@ -367,8 +347,6 @@ TEST(context_executor_shared, refuses_without_an_executor)
   CHECK_EQ(fixture.ops().shared_objects(), 0u);
   CHECK_EQ(fixture.ops().closed_objects(), 0u); }
 
-/* What the library answers is what the device tells the guest: done, an id
- * it does not share, one that disagrees, one already held, and a refusal. */
 TEST(context_executor_shared, shares_opens_and_closes_through_the_library)
 { Fixture fixture;
   fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
@@ -396,9 +374,6 @@ TEST(context_executor_shared, shares_opens_and_closes_through_the_library)
   CHECK_EQ(fixture.ops().opened_objects(), 1u);
   CHECK_EQ(fixture.ops().misuses(), 0u); }
 
-/* An answer too long for the reply the library keeps (ABI 22), and
- * answer_part hands it on from any offset; with no executor, or nothing
- * kept, the length is 0 and nothing is copied. */
 TEST(context_executor_answer_part, hands_on_what_the_library_kept_of_a_long_answer)
 { Fixture fixture;
   fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
@@ -420,7 +395,6 @@ TEST(context_executor_answer_part, hands_on_what_the_library_kept_of_a_long_answ
       CHECK_EQ(executor.answer_part(8u, out, sizeof out, length), 2u);
       CHECK_EQ(out[1], 9u);
       CHECK_EQ(executor.answer_part(10u, out, sizeof out, length), 0u);
-      /* The next command drops what was kept. */
       CHECK_STATUS(executor.execute(0x10001u, payload, 2u, reply, sizeof reply, reply_size), Status::ok);
       CHECK_EQ(executor.answer_part(0u, out, sizeof out, length), 0u);
       CHECK_EQ(length, 0u);

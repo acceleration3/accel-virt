@@ -1,40 +1,3 @@
-# Runs inside the Windows guest, one stage per call, driven over the QEMU guest
-# agent by tools/guest/run_guest_suite.py. Exit 3010 asks for a reboot before
-# the next stage; any other non-zero exit fails the run.
-#
-#   prepare  once per image (run_guest_suite.py --prepare-image): the test
-#            signing certificate and test signing, kernel crash dumps, verbose
-#            device-install logging, and nothing that interrupts a run - fast
-#            startup, sleep, automatic updates, maintenance, boot repair
-#   sign     name every present virtio-gpu-av-pci in the INF (below), trust a
-#            self-signed test certificate, catalog and sign the package, turn
-#            test signing on
-#   install  install the package on virtio-gpu-av-pci, Driver Verifier's
-#            standard checks on avgpu.sys - or, with -NoVerifier, without
-#            them, for a run measuring what the verifier itself changes
-#   check    every avgpu adapter started on avgpu with no problem code; the
-#            verifier's settings
-#   adapters what Windows says each display adapter is, one line per adapter
-#            and source, '|'-separated: "wmi|<PNPDeviceID>|<AdapterRAM>|
-#            <AdapterCompatibility>|<VideoProcessor>|<Name>" from
-#            Win32_VideoController, and "dxgi|<VendorId>|<DeviceId>|<SubSysId>|
-#            <Revision>|<DedicatedVideoMemory>|<SharedSystemMemory>|<Flags>|
-#            <Description>" from IDXGIFactory1::EnumAdapters1, IDs in hex
-#   modes    every display mode the driver offers, one "mode: WxH" line each,
-#            and the one in force as "current: WxH"
-#   setmode  switch the display to -Width by -Height; "set: <result>", where 0
-#            is DISP_CHANGE_SUCCESSFUL and anything else is a refusal
-#   extend   the desktop across every attached display; "extend: <result>",
-#            where 0 is success
-#   monitortimeout  the power policy's display timeout, in -Minutes; 0 never
-#            turns it off. Needs no session: the system's idle timer is what
-#            turns the display off, and that is the path a display driver must
-#            survive
-#   timeouts  the event 4101s in the System log, which is dxgkrnl saying it
-#            reset a display driver that stopped responding, one "timeout:"
-#            line each and a count
-#   collect  diagnostics into C:\av\diag, then one "file <path>" or
-#            "dump <path>" line per file for the runner to pull
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('prepare', 'sign', 'install', 'check', 'adapters', 'modes', 'setmode', 'extend', 'monitortimeout',
@@ -52,31 +15,16 @@ param(
 $ErrorActionPreference = 'Stop'
 $RebootRequired = 3010
 $Subject = 'CN=accel-virt test signing'
-# virtio-gpu-av-pci presents its host GPU's vendor, device and revision
-# (docs/protocol.md), which differ from host to host; its subsystem, 1af4:5256,
-# is always this device's. virtio-gpu's own 1af4:1050 is what it keeps when its
-# GPU has no PCI function, and the one ID the INF names statically.
 $AvHardwareId = '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})&SUBSYS_52561AF4$'
 $StockHardwareId = 'PCI\VEN_1AF4&DEV_1050&SUBSYS_52561AF4'
-# What the runner knows each host GPU is called: "<vendor>`t<device>`t<name>"
-# a line, with a fourth field, "`t<version>", where it looked up the vendor's
-# current Windows driver version; hex in lowercase. Absent, a generated model
-# is named as the static one.
 $AdapterNames = 'C:\av\adapters.txt'
-# What a vendor's user-mode driver is stamped with when adapters.txt gives no
-# version for it: an offline install, and a runner with no lookup
-# (run_guest_suite.py, gpu_matrix.py). Refreshed at release from the Microsoft
-# Update Catalog. A vendor in neither is stamped with the INF's DriverVer.
 $FallbackDriverVersions = @{
     '1002' = '32.0.31044.16'
     '10DE' = '32.0.16.1088'
     '8086' = '32.0.101.8509'
 }
-# The end of every INF line WriteModels wrote, so signing again replaces them.
 $GeneratedMark = '; provision.ps1: a host GPU'
 $Diagnostics = 'C:\av\diag'
-# The package's files and their SHA-256, as the runner built and pushed them
-# (run_guest_suite.py's PACKAGE_MANIFEST), in sha256sum's form.
 $Manifest = 'package.sha256'
 $KernelMemoryDump = 2
 $VerboseDeviceInstallLog = 0x2000FFFF
@@ -93,10 +41,6 @@ function Sign($Path, $Certificate) {
     if ($signature.Status -ne 'Valid') { throw "signing $Path left it $($signature.Status)" }
 }
 
-# One valid now: a certificate made while the clock ran ahead - a guest that
-# read its RTC in another time zone than the host's - starts hours from now,
-# and until then no chain is built to it and nothing is signed. A new one
-# starts days back, so a clock that is ahead when it is made does not do that.
 function SigningCertificate {
     $now = Get-Date
     $certificate = Get-ChildItem Cert:\LocalMachine\My |
@@ -111,7 +55,6 @@ function SigningCertificate {
     $certificate
 }
 
-# Whether test signing had to be turned on, which takes a reboot.
 function EnableTestSigning {
     if ((bcdedit /enum '{current}') -match 'testsigning\s+Yes') { return $false }
     bcdedit /set testsigning on | Out-Null
@@ -124,15 +67,6 @@ function SetDword($Path, $Name, $Value) {
     Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type DWord
 }
 
-# The device presents its host GPU's vendor and device (docs/protocol.md), so
-# with a network Windows' device setup finds the vendor's own WHQL driver on
-# Windows Update, ranks it above this test-signed one and installs it over
-# the device - which then bugchecks at the next boot (2026-09-28: AMD's
-# u0420529.inf on 1002:7550). NoAutoUpdate does not stop device setup, so it
-# is told not to search Windows Update for drivers at all - and the policies
-# do not stop an update already downloaded, which Windows Update installed
-# after the next boot all the same, so its services and tasks are turned off
-# and what it downloaded is dropped.
 function NoDriverUpdates {
     SetDword 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate' ExcludeWUDriversInQualityUpdate 1
     SetDword 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching' DontSearchWindowsUpdate 1
@@ -155,7 +89,6 @@ function AvDevice {
     AvDevices | Select-Object -First 1
 }
 
-# The four-part hardware ID of every present virtio-gpu-av-pci, once each.
 function AvHardwareIds {
     @(AvDevices | ForEach-Object { $_.HardwareID } | Where-Object { $_ -match $AvHardwareId } |
         ForEach-Object { $_.ToUpperInvariant() } | Sort-Object -Unique)
@@ -170,15 +103,12 @@ function AdapterName($Vendor, $Device) {
     return $null
 }
 
-# The version the runner found for one host GPU, or $null.
 function AdapterVersion($Vendor, $Device) {
     if (-not (Test-Path $AdapterNames)) { return $null }
     foreach ($line in Get-Content $AdapterNames -Encoding UTF8) {
         $fields = $line -split "`t", 4
         if ($fields.Count -eq 4 -and $fields[0] -eq $Vendor -and $fields[1] -eq $Device) {
             $version = $null
-            # A file version holds four parts of sixteen bits, and a value past
-            # them would wrap into another version without complaint.
             if ([version]::TryParse($fields[3].Trim(), [ref]$version) -and $version.Revision -ge 0 -and
                 @($version.Major, $version.Minor, $version.Build, $version.Revision | Where-Object { $_ -gt 65535 }).Count -eq 0) {
                 return $version
@@ -196,12 +126,6 @@ function InfDriverVer($Inf) {
     throw "$Inf has no DriverVer"
 }
 
-# The version each present vendor's user-mode driver is stamped with, by
-# vendor in sorted order: the highest adapters.txt gives for its present
-# devices, else the table's, else the INF's as built, so no file is left at
-# 0.0.0.0. DXGI's CheckInterfaceSupport reports this file version, and
-# applications refuse a driver that reads too old. A package with no host GPU
-# among its adapters (llvmpipe) is stamped as virtio-gpu's own vendor.
 function DriverVersions($Inf) {
     $asBuilt = InfDriverVer $Inf
     $given = @{}
@@ -236,8 +160,6 @@ public static class VersionResource {
 }
 '@
 
-# One VS_VERSIONINFO node: header, key, then the value and the children, each
-# padded to four bytes. A child's length is its own.
 function VersionNode([string]$Key, [byte[]]$Value, [uint16]$ValueLength, [uint16]$Type, [byte[][]]$Children) {
     $bytes = New-Object 'System.Collections.Generic.List[byte]'
     $bytes.AddRange([byte[]](0, 0))
@@ -263,16 +185,12 @@ function VersionString([string]$Key, [string]$Value) {
     VersionNode $Key ([Text.Encoding]::Unicode.GetBytes($Value + [char]0)) ([uint16]($Value.Length + 1)) 1 @()
 }
 
-# The file version of a DLL with no version resource, which is what DXGI and
-# Explorer read. Written in place with BeginUpdateResource: the package is not
-# signed yet, and the catalog covers whatever it holds once it is.
 function StampVersion($Path, [version]$Version) {
     if (-not ('VersionResource' -as [type])) { Add-Type -TypeDefinition $VersionResourceApi -ErrorAction Stop }
     $text = $Version.ToString(4)
     $ms = ([uint32]$Version.Major -shl 16) -bor [uint32]$Version.Minor
     $ls = ([uint32]$Version.Build -shl 16) -bor [uint32]$Version.Revision
     $fixed = New-Object 'System.Collections.Generic.List[byte]'
-    # A bare 0xFEEF04BD literal parses negative.
     foreach ($field in [Convert]::ToUInt32('FEEF04BD', 16), [uint32]0x00010000, $ms, $ls, $ms, $ls, [uint32]0x3F,
                        [uint32]0, [uint32]0x00040004, [uint32]3, [uint32]4, [uint32]0, [uint32]0) {
         $fixed.AddRange([BitConverter]::GetBytes([uint32]$field))
@@ -296,10 +214,6 @@ function StampVersion($Path, [version]$Version) {
     }
 }
 
-# Stamp the user-mode drivers in the package with their vendors' versions. The
-# first vendor's are the package's own avumd.dll and avumd32.dll; each further
-# vendor gets copies named for it, which WriteModels points its models at.
-# Copies from an earlier signing are dropped first.
 function StampUserModeDrivers($Versions) {
     Get-ChildItem $Package -Filter 'avumd*_*.dll' | Remove-Item -Force
     $targets = @()
@@ -313,10 +227,6 @@ function StampUserModeDrivers($Versions) {
             $targets += , @($target, $Versions[$vendor])
         }
     }
-    # A version is worth less than a display: a file that cannot be stamped
-    # stays as built, which an application reads as 0.0.0.0, and the install
-    # goes on. Failing here would also fail every later try, as the signing's
-    # manifest check then finds the files stamped before this one changed.
     foreach ($target in $targets) {
         try {
             StampVersion "$Package\$($target[0])" $target[1]
@@ -327,10 +237,6 @@ function StampUserModeDrivers($Versions) {
     }
 }
 
-# What [Avgpu_Install] does, for a vendor whose user-mode drivers are its own
-# copies: the same files and settings, and UserModeDriverName and its Wow
-# arm naming the copies. The AddReg that overrides them comes after the shared
-# one, so its values are the ones left.
 function VendorInstallSection($Vendor) {
     $mark = $GeneratedMark
     $names = (1..4 | ForEach-Object { '"%13%\avumd_' + $Vendor + '.dll"' }) -join ', '
@@ -351,15 +257,6 @@ function VendorInstallSection($Vendor) {
       "HKR,, UserModeDriverNameWow, 0x00010000, $namesWow $mark")
 }
 
-# One model line in the INF for each present virtio-gpu-av-pci whose IDs are
-# its host GPU's: no static INF can list them, and PnP matches no ID made of a
-# subsystem alone. Written before the catalog, which is what signs the INF.
-# A host GPU the runner named gets its own DeviceDesc, which is what Device
-# Manager, WMI and DXGI show until avgpu.sys writes the same name at
-# StartDevice; the rest are named as the static model is.
-# Every vendor but the first among $Versions installs through its own section,
-# Avgpu_Install_<vendor>, which is Avgpu_Install with that vendor's stamped
-# user-mode drivers (StampUserModeDrivers) in place of the package's.
 function WriteModels($Inf, $Versions) {
     $lines = [System.Collections.Generic.List[string]]@(Get-Content $Inf | Where-Object { -not $_.EndsWith($GeneratedMark) })
     $models = @()
@@ -398,21 +295,9 @@ function WriteModels($Inf, $Versions) {
     $disksAt = $lines.FindIndex([Predicate[string]]{ param($line) $line -match '^\[SourceDisksFiles\]' })
     if ($disksAt -lt 0) { throw "$Inf has no [SourceDisksFiles] section" }
     $lines.InsertRange($disksAt + 1, [string[]]$disks)
-    # UTF-16 with a byte order mark: an INF may be ANSI or Unicode, and a
-    # host GPU's name need not be ANSI.
     Set-Content -Path $Inf -Value $lines -Encoding Unicode
 }
 
-# Each file the manifest names, as the host built it. A guest that bugchecked
-# mid-push kept avumd.dll's size and lost its bytes, and three upgrades
-# installed it: every Direct3D 11 device failed and DWM restarted in a loop.
-# Before sign changes avgpu.sys and the INF, every byte is still the host's.
-# Both checks write with Write-Host: what a function outputs is what it returns.
-# Windows keeps the driver an adapter runs over a package of the same
-# DriverVer, and pnputil then installs the package on nothing (exit 259, no
-# more items). A package that is no newer than the accel-virt driver running
-# is given a build past the running one's, as the upgrade stage does; a first
-# install, over Windows' own driver, is left as built.
 function RaiseDriverVer($Inf) {
     $device = AvDevice
     if (-not $device) { return }
@@ -451,10 +336,6 @@ function PackageMatchesManifest {
     return $bad -eq 0
 }
 
-# The driver store's copy of each file the manifest names, against the
-# package's as signing left it: the store's is what Windows loads, and pnputil
-# copies without comparing. The store is the one the adapter's own driver key
-# names its user-mode drivers from.
 function StoreMatchesPackage {
     $path = Join-Path $Package $Manifest
     if (-not (Test-Path $path)) { return $true }
@@ -466,7 +347,6 @@ function StoreMatchesPackage {
     if ($names.Count -eq 0) { Write-Host "installed: $key names no user-mode driver"; return $false }
     $store = Split-Path $names[0]
     $bad = 0
-    # The manifest's files, and the per-vendor user-mode drivers signing made.
     $files = @(foreach ($line in Get-Content $path) {
             if ($line -match '^[0-9a-fA-F]{64}\s+\*?(\S.*)$') { $Matches[1] }
         }) + @(Get-ChildItem $Package -Filter 'avumd*_*.dll' | ForEach-Object { $_.Name })
@@ -491,8 +371,6 @@ function SaveEvents($Log, $Count, $Name) {
     }
 }
 
-# EnumDisplaySettings and ChangeDisplaySettings: what the control panel uses,
-# without a desktop session to open one in.
 $DisplayApi = @'
 using System;
 using System.Runtime.InteropServices;
@@ -561,9 +439,6 @@ public class Display {
 }
 '@
 
-# IDXGIFactory1::EnumAdapters1 and IDXGIAdapter1::GetDesc1, what an
-# application listing adapters calls. Only the vtable slots before the two
-# methods called matter; the placeholders are never called.
 $DxgiApi = @'
 using System;
 using System.Collections.Generic;
@@ -630,8 +505,6 @@ public static class Dxgi {
 switch ($Stage) {
     'prepare' {
         SigningCertificate | Out-Null
-        # Fast startup resumes a hibernated kernel, which a copy-on-write
-        # overlay booted on other hardware must not do.
         SetDword 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' HiberbootEnabled 0
         powercfg /hibernate off
         powercfg /change standby-timeout-ac 0
@@ -645,9 +518,6 @@ switch ($Stage) {
         SetDword 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' NoAutoUpdate 1
         NoDriverUpdates
         SetDword 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\Maintenance' MaintenanceDisabled 1
-        # A driver that bugchecks on every boot must keep rebooting into
-        # Windows, where the runner notices, not stop in the recovery
-        # environment, where nothing answers.
         bcdedit /set '{current}' recoveryenabled No | Out-Null
         bcdedit /set '{current}' bootstatuspolicy IgnoreAllFailures | Out-Null
         try {
@@ -664,9 +534,6 @@ switch ($Stage) {
         $versions = DriverVersions "$Package\avgpu.inf"
         StampUserModeDrivers $versions
         WriteModels "$Package\avgpu.inf" $versions
-        # Only the files are stamped: the INF keeps accel-virt's own DriverVer.
-        # With a vendor's there (32.0.31044.16), dxgkrnl refused every adapter
-        # with STATUS_DEVICE_CONFIGURATION_ERROR before the driver's first query.
         RaiseDriverVer "$Package\avgpu.inf"
         $certificate = SigningCertificate
         Sign "$Package\avgpu.sys" $certificate
@@ -677,32 +544,17 @@ switch ($Stage) {
         exit 0
     }
     'install' {
-        # Also here, for an image prepared before the prepare stage set it.
         NoDriverUpdates
-        # The WDDM features this driver implements, staged off by this build of
-        # Windows (feature 049, research.md §19). dxgkrnl's ConfigureFeature
-        # reads Features\<DXGK_FEATURE_ID>\Enabled, and the driver's own INF
-        # reaches only the adapter's database; the global one is here.
-        #   4  DXGK_FEATURE_USER_MODE_SUBMISSION
-        #   37 DXGK_FEATURE_NATIVE_FENCE
         foreach ($feature in 4, 37) {
             $key = "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Features\$feature"
             SetDword $key Enabled 1
             SetDword $key AllowExperimental 1
         }
-        # DWM drives a display through DisplayCore rather than a DXGI swap
-        # chain for every WDDM 3.2 driver not AMD's (udwm.dll,
-        # CDWMDisplay::IsDDisplayCompatible). The driver now makes the MPO3
-        # flips DisplayCore presents with, so the switch earlier packages set
-        # to keep DWM off it (DisableDDisplay) is taken away again.
         Remove-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\Dwm' -Name DisableDDisplay -ErrorAction SilentlyContinue
         pnputil /add-driver "$Package\avgpu.inf" /install
         if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $RebootRequired) { exit $LASTEXITCODE }
         if (-not (StoreMatchesPackage)) { exit 1 }
         if ($NoVerifier) {
-            # Driver Verifier interposes on every DDI call, so a run that is
-            # trying to find out whether the verifier is the thing refusing a
-            # call has to be able to take it away (feature 053).
             Write-Output 'verifier: skipped, avgpu.sys installed with no Driver Verifier checks'
         } else {
             verifier /standard /driver avgpu.sys | Out-Null
@@ -714,20 +566,14 @@ switch ($Stage) {
         verifier /querysettings
         $devices = @(AvDevices)
         if ($devices.Count -eq 0) { Write-Output 'device: absent'; exit 1 }
-        # The desktop's compositor, and every driver bound to a display: feature
-        # 038 asks for avgpu alone with dwm.exe composited on it.
         $dwm = @(Get-Process -Name dwm -ErrorAction SilentlyContinue).Count
         $displays = (Get-PnpDevice -Class Display -Status OK -ErrorAction SilentlyContinue |
             ForEach-Object { (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_Service).Data }) -join ','
-        # One monitor per output each adapter reports, which is what US4 asks.
-        # Only the ones an avgpu adapter is the parent of: an image that has
-        # run another display driver keeps its monitors.
         $instances = @($devices | ForEach-Object { $_.InstanceId })
         $monitors = @(Get-PnpDevice -Class Monitor -Status OK -ErrorAction SilentlyContinue | Where-Object {
             $instances -contains (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_Parent).Data
         }).Count
         Write-Output "display: dwm=$dwm services=$displays monitors=$monitors adapters=$($devices.Count)"
-        # Last, so a failure's tail - all the runner reports - names the problem.
         $failed = $false
         foreach ($device in $devices) {
             $property = { param($Key) (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName $Key).Data }
@@ -773,10 +619,6 @@ switch ($Stage) {
         exit 0
     }
     'upgrade' {
-        # A package with a higher DriverVer installed over the running one, as
-        # an update would arrive: no reboot, and the adapter running on the new
-        # version afterwards (feature 040, US2). The catalog is signed again
-        # because the INF it covers changed.
         $inf = "$Package\avgpu.inf"
         $text = Get-Content $inf -Raw
         $match = [regex]::Match($text, 'DriverVer\s*=\s*([0-9/]+),([0-9.]+)')
@@ -802,10 +644,6 @@ switch ($Stage) {
     }
 
     'cycle' {
-        # What an administrator does with pnputil, $Minutes times over: disable
-        # the adapter and enable it again, checking it came back each time
-        # (feature 040, US2). A cycle that leaves the device with a problem code
-        # stops the loop where it happened.
         $device = AvDevice
         if (-not $device) { Write-Output 'cycle: the adapter is absent'; exit 1 }
         for ($cycle = 1; $cycle -le $Minutes; $cycle++) {
@@ -818,8 +656,6 @@ switch ($Stage) {
                 exit 1
             }
         }
-        # What Driver Verifier tracked for this driver after the last cycle: a
-        # pool allocation that outlives every disable is a leak.
         $pool = (verifier /query | Select-String -Pattern 'Current Pool Allocations|Pool Allocations') -join '; '
         Write-Output "cycle: $Minutes done"
         Write-Output "pool: $pool"
@@ -827,10 +663,6 @@ switch ($Stage) {
     }
 
     'sleepstates' {
-        # What this machine actually offers. powercfg prints what is available
-        # and then what is not, and the second list names the same states: only
-        # the text before "not available" counts, or every state reads as
-        # offered (feature 040, US1).
         $all = (powercfg /availablesleepstates | Out-String)
         $split = $all -split 'not available'
         $available = $split[0]
@@ -841,8 +673,6 @@ switch ($Stage) {
     }
 
     'hibernate' {
-        # The prepared image keeps hibernation off so nothing interrupts a run;
-        # the S4 scenario turns it on inside the overlay, which is thrown away.
         powercfg /hibernate on
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         Write-Output 'hibernate: on'
@@ -857,9 +687,6 @@ switch ($Stage) {
         exit $LASTEXITCODE
     }
     'timeouts' {
-        # 4101: "Display driver avgpu stopped responding and has successfully
-        # recovered" - what dxgkrnl logs once it has reset the engine
-        # (feature 040, US3).
         $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Id = 4101 } -ErrorAction SilentlyContinue)
         foreach ($event in $events) {
             $message = ($event.Message -replace '\s+', ' ')
@@ -869,12 +696,6 @@ switch ($Stage) {
         exit 0
     }
     'pageheap' {
-        # What gflags /p /enable writes, written directly: the debugging tools
-        # are not in this image, and the flag is a registry value under Image
-        # File Execution Options either way (feature 047, FR-006). 0x02000000
-        # is FLG_HEAP_PAGE_ALLOCS; PageHeapFlags 3 is full page heap with
-        # backwards-compatible padding, which is what catches a write past an
-        # allocation at the moment it happens.
         foreach ($program in $Programs) {
             $key = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\$program"
             if ($Enable) {
@@ -892,10 +713,6 @@ switch ($Stage) {
         exit 0
     }
     'heapchecks' {
-        # What page heap raises when it catches a write past an allocation: the
-        # process is terminated and Windows Error Reporting records it, and a
-        # verifier stop is logged under Application. Every event of either, so
-        # a run reports what it found rather than only that it found nothing.
         $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application' } -MaxEvents 200 `
                         -ErrorAction SilentlyContinue |
                 Where-Object { $_.Message -match 'heap|verifier|0xc0000374|STATUS_HEAP_CORRUPTION' })
@@ -915,12 +732,7 @@ switch ($Stage) {
         SaveEvents 'Microsoft-Windows-Kernel-PnP/Configuration' 200 'kernel-pnp.txt'
         SaveEvents 'Microsoft-Windows-CodeIntegrity/Operational' 200 'code-integrity.txt'
         Copy-Item 'C:\Windows\INF\setupapi.dev.log' "$Diagnostics\setupapi.dev.log" -ErrorAction SilentlyContinue
-        # The Vulkan ICD's log, one file per process that loaded it (feature
-        # 045, FR-007); none when nothing did.
         Copy-Item 'C:\ProgramData\av\*.log' $Diagnostics -ErrorAction SilentlyContinue
-        # What a traced program left when it crashed (docs/trace.md), and what
-        # Windows Error Reporting recorded for any av program, traced or not:
-        # a probe that faulted before its table existed shows only there.
         Copy-Item 'C:\ProgramData\av\crash-*.txt' $Diagnostics -ErrorAction SilentlyContinue
         Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = 'Windows Error Reporting' } `
                 -MaxEvents 50 -ErrorAction SilentlyContinue |

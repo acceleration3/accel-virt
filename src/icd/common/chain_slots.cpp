@@ -86,7 +86,6 @@ bool ChainSlots::present(uint32_t slot)
     return opened_ && slot < count_ && chains_->present(window_, slot);
 }
 
-/* The memory is the device's to free: releasing the object does. */
 void ChainSlots::release(ClientTransport &wire)
 {
     AV_SCOPE("ChainSlots::release");
@@ -121,8 +120,6 @@ void ChainSlots::forget_slots()
     opened_ = false;
 }
 
-/* Opened is every slot of the count held, for a window of some area; a slot
- * held is one with the identity it was opened by. */
 bool ChainSlots::invariants_hold() const
 {
     AV_SCOPE("ChainSlots::invariants_hold");
@@ -135,4 +132,4 @@ bool ChainSlots::invariants_hold() const
     return !opened_ || (window_ != nullptr && width_ != 0u && height_ != 0u && count_ != 0u);
 }
 
-}  // namespace av::icd
+}

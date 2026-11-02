@@ -24,9 +24,6 @@
 namespace av::glicd {
 
 namespace {
-
-/* GL_EXT_memory_object_win32 and GL_EXT_semaphore_win32, answered here rather
- * than by the generated table (feature 053). */
 struct SharedObjectEntry {
     const char *name;
     void       *address;
@@ -39,12 +36,6 @@ const SharedObjectEntry shared_object_entries[] = {
     {"glTextureStorageMem2DEXT", reinterpret_cast<void *>(&entry::glTextureStorageMem2DEXT)},
     {"glSignalSemaphoreEXT", reinterpret_cast<void *>(&entry::glSignalSemaphoreEXT)},
     {"glWaitSemaphoreEXT", reinterpret_cast<void *>(&entry::glWaitSemaphoreEXT)},
-    /* The rest of what the four rows promise (feature 053, T037). The queries
-     * and parameters are answered here because they are about an object the
-     * host has not been told of; the ten storage commands are generated and
-     * are here to substitute the host's name before they go out; the two name
-     * imports are answered to refuse them, which is a driver saying no rather
-     * than an entry point that is not there. */
     {"glNamedBufferStorageMemEXT", reinterpret_cast<void *>(&entry::glNamedBufferStorageMemEXT)},
     {"glTexStorageMem1DEXT", reinterpret_cast<void *>(&entry::glTexStorageMem1DEXT)},
     {"glTexStorageMem2DEXT", reinterpret_cast<void *>(&entry::glTexStorageMem2DEXT)},
@@ -59,23 +50,13 @@ const SharedObjectEntry shared_object_entries[] = {
      reinterpret_cast<void *>(&entry::glTextureStorageMem3DMultisampleEXT)},
 };
 
-/* glGetError's slot in opengl32's table (tools/codegen/profiles/opengl_proc_table.txt). */
 constexpr uint32_t get_error_slot = 261u;
 constexpr uint32_t get_integerv_slot = 263u;
-/* ARB_robustness, KHR_robustness, EXT_robustness and GL 4.5 all name one query. */
 constexpr const char *const reset_status_names[] = {"glGetGraphicsResetStatus", "glGetGraphicsResetStatusARB",
                                                     "glGetGraphicsResetStatusEXT", "glGetGraphicsResetStatusKHR"};
-/* The GL extensions reported: a row arrives with the test that proves its
- * extension through this ICD (tools/check_extension_policy.py), and is still
- * only reported where the host's own list has it. */
 constexpr GlExtensionPolicy::Row reported_extensions[] = {
     {"GL_ARB_compatibility", 1u,
      "fullstack_opengl_icd.a_legacy_context_draws_the_fixed_function_pipeline_through_a_display_list"},
-    /* The external objects (feature 053, T037), each answered over the host's
-     * own fd spelling: a guest has no file descriptors, which is the whole
-     * reason the Win32 names exist. All four are reported together or not at
-     * all - the registry has each _win32 row require its base extension, and
-     * the base extensions are what the host's fd ones make possible. */
     {"GL_EXT_memory_object", 1u,
      "manual_calls.every_storage_command_names_the_hosts_memory_object", "GL_EXT_memory_object_fd"},
     {"GL_EXT_memory_object_win32", 1u,
@@ -86,11 +67,6 @@ constexpr GlExtensionPolicy::Row reported_extensions[] = {
     {"GL_EXT_semaphore_win32", 1u,
      "manual_calls.an_imported_name_crosses_as_the_hosts_own_on_every_command_that_takes_one",
      "GL_EXT_semaphore_fd"},
-    /* What OpenGL 2.x and 3.0 promoted to core, which a 4.6 context does
-     * through the same commands. An application of that era asks the
-     * extension string for them instead of the version: Photoshop CS6's GPU
-     * check turns its canvas acceleration off without NPOT, framebuffer
-     * objects and the shading language named there. */
     {"GL_ARB_texture_non_power_of_two", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_ARB_framebuffer_object", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
     {"GL_EXT_framebuffer_object", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
@@ -106,8 +82,6 @@ constexpr GlExtensionPolicy::Row reported_extensions[] = {
     {"GL_ARB_multitexture", 1u, "gl_extension_policy.reports_what_rows_the_tier_and_the_host_share"},
 };
 constexpr uint32_t reported_count = sizeof reported_extensions / sizeof reported_extensions[0];
-/* The WGL extensions the functions DrvGetProcAddress answers make whole, each
- * with the test that proves it. */
 constexpr GlExtensionPolicy::Row reported_wgl_extensions[] = {
     {"WGL_ARB_extensions_string", 1u, "gl_icd_root.answers_gl_and_wgl_names_it_implements"},
     {"WGL_ARB_pixel_format", 1u, "gl_icd_root.answers_pixel_format_attributes_and_choices_through_wgl"},
@@ -120,7 +94,7 @@ constexpr GlExtensionPolicy::Row reported_wgl_extensions[] = {
 };
 constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof reported_wgl_extensions[0];
 
-}  // namespace
+}
 
 GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock,
                      KeyedLog &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
@@ -177,7 +151,6 @@ bool GlIcdRoot::set_pixel_format(void *dc, int32_t index)
         return false;
     }
     const ThreadLockHold release(lock_);
-    /* Rows of windows gone first: a handle Windows reuses starts with no format. */
     windows_.drop_gone(surface_);
     const Status set = windows_.set_format(window, index);
     if (set == Status::ok) return true;
@@ -225,7 +198,6 @@ bool GlIcdRoot::delete_context(uint64_t handle)
         return false;
     }
     if (currents_.current() == context) currents_.release();
-    /* The handle resolved above, so the table holds its context and gives it back. */
     static_cast<void>(contexts_.destroy(handle));
     return true;
 }
@@ -247,9 +219,6 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
         fail(error_busy);
         return nullptr;
     }
-    /* A context the thread leaves may be read from another next (a shared
-     * object, a context the application makes current elsewhere): what it
-     * holds goes first. */
     GuestGlContext *const previous = currents_.current();
     if (previous != nullptr && previous != context) previous->flush();
     if (context->state() == GuestGlContext::State::created) {
@@ -264,8 +233,6 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
     if (transport != nullptr) {
         const Status on_window = context->framebuffers().make_current_on(
             *transport, surface_.window_of(dc), formats_.format(context->pixel_format()), surface_);
-        /* A context the host lost meanwhile is made current all the same, as
-         * a lost context is: every call on it then does nothing. */
         if (on_window != Status::ok && context->wire() != nullptr) {
             fail(on_window == Status::invalid_parameter ? error_invalid_pixel_format : error_not_enough_memory);
             return nullptr;
@@ -295,8 +262,6 @@ bool GlIcdRoot::copy_context(uint64_t, uint64_t, uint32_t)
     return false;
 }
 
-/* `second` is to share `first`'s objects. The host shares at creation, so
- * both must still be unmade; `second` is made after `first` (make_chain). */
 bool GlIcdRoot::share_lists(uint64_t first, uint64_t second)
 {
     AV_SCOPE("GlIcdRoot::share_lists");
@@ -307,9 +272,6 @@ bool GlIcdRoot::share_lists(uint64_t first, uint64_t second)
         fail(error_invalid_handle);
         return false;
     }
-    /* Only the context taking the share must hold no object yet. The one it
-     * shares may be in use: a made one is named by its ring, and an unmade
-     * one is made first (make_chain). */
     if (target->state() == GuestGlContext::State::lost || shares_into(first, second) ||
         sharer->share_after(first) != Status::ok) {
         fail(error_invalid_operation);
@@ -336,17 +298,12 @@ void *GlIcdRoot::get_proc_address(const char *name)
         return reinterpret_cast<void *>(&entry::wglSwapIntervalEXT);
     if (__builtin_strcmp(name, "wglGetSwapIntervalEXT") == 0)
         return reinterpret_cast<void *>(&entry::wglGetSwapIntervalEXT);
-    /* A lost context answers its reset status without the host. */
     for (const char *const spelling : reset_status_names)
         if (__builtin_strcmp(name, spelling) == 0) return reinterpret_cast<void *>(&entry::get_graphics_reset_status);
     if (__builtin_strcmp(name, "avForceContextFault") == 0)
         return reinterpret_cast<void *>(&entry::avForceContextFault);
     if (__builtin_strcmp(name, "avGetShareName") == 0) return reinterpret_cast<void *>(&entry::avGetShareName);
     if (__builtin_strcmp(name, "avRunHeldCalls") == 0) return reinterpret_cast<void *>(&entry::avRunHeldCalls);
-    /* Before the generated table on purpose: four of these the generator never
-     * emitted, and the other four it did - and those must substitute the
-     * host's name for the one the application holds, so this ICD's answer has
-     * to win (feature 053, T036). */
     for (const SharedObjectEntry &row : shared_object_entries)
         if (__builtin_strcmp(name, row.name) == 0) return row.address;
     for (uint32_t row = 0u; row < generated::kNamedEntryCount; row++)
@@ -367,9 +324,6 @@ bool GlIcdRoot::swap_layer_buffers(void *dc, uint32_t planes)
     return (planes & swap_main_plane) != 0u && swap_buffers(dc);
 }
 
-/* The calling thread's context puts its frame for the DC's window there, ends
- * the frame - shown or not, it is the application's - and waits out the
- * interval after it (feature 051, US2.2). */
 bool GlIcdRoot::swap_buffers(void *dc)
 {
     AV_SCOPE("GlIcdRoot::swap_buffers");
@@ -391,24 +345,15 @@ GlIcdRoot::Shown GlIcdRoot::show_frame(void *dc)
     void *const           window = surface_.window_of(dc);
     if (context == nullptr || windows_.format_of(window) != context->pixel_format()) return Shown::refused;
     ClientTransport *const transport = context->wire();
-    /* A lost context has nothing to show and fails nothing by swapping. */
     if (transport == nullptr) return Shown::nothing;
-    /* Nor does a window nobody can see: the frame is read back through the
-     * host GPU and blitted for a client area that is not there (feature 051,
-     * US2.3). */
     const icd::WindowExtent::Look seen = icd::WindowExtent(surface_, window).look();
     if (seen == icd::WindowExtent::Look::gone || seen == icd::WindowExtent::Look::empty) return Shown::nothing;
-    /* Minecraft swapped 175 times a second and every frame was read back and
-     * blitted onto its window for DWM to show 60 of. */
     if (!context->pacing().admits()) return Shown::nothing;
     WindowFramebuffers &framebuffers = context->framebuffers();
     framebuffers.drop_gone(*transport, surface_);
     if (!framebuffers.present(*transport, context->arrays(), dc, window, surface_, &presents_,
                               context->adapter_luid()))
         return Shown::refused;
-    /* The frame's read-back goes out with the calls before it, and the present
-     * thread is handed the frame with the batch it went in. Only then may the
-     * window's new size replace the room the frame is being read into. */
     context->flush();
     framebuffers.hand_over(context->mark());
     framebuffers.follow(*transport, window, formats_.format(context->pixel_format()), surface_);
@@ -483,7 +428,6 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
         return nullptr;
     }
     GuestGlContext *const context = contexts_.resolve(handle);
-    /* A context just created takes a share. */
     if (share_name != 0u) static_cast<void>(context->share(share_name));
     const Status made = context->make();
     Status       pended = made;
@@ -567,15 +511,9 @@ uint32_t GlIcdRoot::get_error()
     AV_SCOPE("GlIcdRoot::get_error");
     GuestGlContext *const context = currents_.current();
     if (context == nullptr) return 0u;
-    /* The wire first: that is where a context finds out it was lost, which
-     * is the error it reports next. */
     ClientTransport *const transport = context->wire();
     const uint32_t         local = context->take_error();
     if (local != 0u) return local;
-    /* From the word the host publishes, without a round trip: an error shows
-     * once the host has run the command that raised it, which for a command
-     * still queued is a later call - where OpenGL would have answered it
-     * already, having run it. */
     uint32_t published = 0u;
     if (context->take_host_error(published)) return published;
     return transport != nullptr ? glproto::av_glGetError(*transport) : 0u;
@@ -614,25 +552,18 @@ int32_t GlIcdRoot::force_context_fault()
     }
     ClientTransport *const transport = context->wire();
     if (transport == nullptr) return 1;
-    /* A glGetString with no name: the OpenGL decoder cannot take it, and an
-     * OpenGL context only skips the Vulkan command 045's fault sends. */
     static_cast<void>(ContextFault(*transport, glproto::kCmd_glGetString).send());
     if (context->wire() == nullptr) return 1;
     lines_.write("the host answered the forced fault; the context goes on");
     return 0;
 }
 
-/* Threads with contexts of their own mint at once and take no lock. */
 uint64_t GlIcdRoot::mint_sync_token()
 {
     AV_SCOPE("GlIcdRoot::mint_sync_token");
     return sync_tokens_.next();
 }
 
-/* What the host granted the first context this process made, named once: a
- * driver whose compatibility profile is missing is the difference between an
- * application running and every legacy call refusing, and the host's own
- * version string says which driver answered (feature 051, US1.4). */
 void GlIcdRoot::note_profile(const GuestGlContext &context)
 {
     AV_SCOPE("GlIcdRoot::note_profile");
@@ -682,7 +613,6 @@ bool GlIcdRoot::invariants_hold() const
         pending_named = pending_named && thread != 0u && handle != 0u;
     });
     if (!pending_named || !pending_.invariants_hold()) return false;
-    /* The query's own invariants are the format table's. */
     return extensions_.invariants_hold() && query_.invariants_hold() && windows_.invariants_hold() &&
            currents_.invariants_hold() &&
            connection_.invariants_hold() && contexts_.invariants_hold();
@@ -716,9 +646,6 @@ uint32_t GlIcdRoot::made_error(Status status) const
     return status == Status::no_memory ? error_not_enough_memory : error_invalid_operation;
 }
 
-/* WGL_ARB_create_context: a refused version is ERROR_INVALID_VERSION_ARB. The
- * host does not say which option it refused, so a context that asked for the
- * compatibility profile is taken to have been refused that. */
 uint32_t GlIcdRoot::make_error(Status status, const GlContextOptions &options) const
 {
     AV_SCOPE("GlIcdRoot::make_error");
@@ -727,8 +654,6 @@ uint32_t GlIcdRoot::make_error(Status status, const GlContextOptions &options) c
                                                                           : error_invalid_version_arb;
 }
 
-/* Whether `first` already shares, through its recorded targets, into `second`
- * - a share that would close a loop. */
 bool GlIcdRoot::shares_into(uint64_t first, uint64_t second) const
 {
     AV_SCOPE("GlIcdRoot::shares_into");
@@ -741,9 +666,6 @@ bool GlIcdRoot::shares_into(uint64_t first, uint64_t second) const
     return false;
 }
 
-/* The unmade contexts `context` shares through, made from the far end so each
- * names a made context to share: each round makes the farthest unmade one. A
- * target deleted meanwhile shares nothing, and a lost one fails the make. */
 Status GlIcdRoot::make_chain(GuestGlContext &context)
 {
     AV_SCOPE("GlIcdRoot::make_chain");
@@ -762,8 +684,6 @@ Status GlIcdRoot::make_chain(GuestGlContext &context)
     return Status::ok;
 }
 
-/* Share targets never loop (shares_into refuses one that would), so the walk
- * ends within the contexts there are. */
 GuestGlContext &GlIcdRoot::farthest_unmade(GuestGlContext &context) const
 {
     AV_SCOPE("GlIcdRoot::farthest_unmade");
@@ -786,8 +706,7 @@ GuestGlContext *GlIcdRoot::shared_context(void *share)
     GuestGlContext *const target = contexts_.resolve(handle);
     if (target == nullptr) return nullptr;
     if (target->state() == GuestGlContext::State::created && make_chain(*target) != Status::ok) return nullptr;
-    /* wire() is what notices a transport that faulted since. */
     return target->wire() != nullptr ? target : nullptr;
 }
 
-}  // namespace av::glicd
+}

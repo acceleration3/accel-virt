@@ -45,8 +45,6 @@ def main():
     subsystem = re.search(r"^\s*Subsystem: (\w+)", dump.stdout, re.M)
     if not subsystem or subsystem.group(1) != SUBSYSTEM:
         violations.append(f"subsystem {subsystem.group(1) if subsystem else 'unknown'}, want {SUBSYSTEM}")
-    # ntoskrnl's MiObtainSectionForDriver refuses such a native image with
-    # STATUS_CONFLICTING_ADDRESSES before DriverEntry runs.
     if TERMINAL_SERVER_AWARE in dump.stdout:
         violations.append(f"{TERMINAL_SERVER_AWARE} set, which the kernel will not load")
     for module in re.findall(r"^\s*Name: (\S+)", dump.stdout, re.M):

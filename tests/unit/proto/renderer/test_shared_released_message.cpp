@@ -1,6 +1,3 @@
-/* QEMU tells the renderer the guest let go of a shared object: the object id,
- * eight bytes and nothing beside it - 0 for every object, which a reset sends
- * because the guest's ids start again. */
 #include "core/support/status.hpp"
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/guarded_buffer.hpp"
@@ -31,7 +28,7 @@ bool rejects(const std::uint8_t *bytes, std::size_t length)
     return status != Status::ok;
 }
 
-}  // namespace
+}
 
 TEST(shared_released_message_encode, is_the_object_id)
 { GuardedBuffer bytes(SharedReleasedMessage::encoded_size);
@@ -42,7 +39,6 @@ TEST(shared_released_message_encode, is_the_object_id)
   CHECK_EQ(SharedReleasedMessage::descriptors, 0u);
   CHECK(bytes.guards_intact()); }
 
-/* Object 0 is every object - a reset - so it travels like any other. */
 TEST(shared_released_message, round_trips_any_id_zero_included)
 { const std::uint64_t ids[] = {0u, 1u, 0xFFFFFFFFFFFFFFFFu};
   for (std::uint64_t id : ids) {
@@ -59,8 +55,6 @@ TEST(shared_released_message_encode, a_short_or_missing_destination_is_too_large
   CHECK(buffer.guards_intact());
   CHECK_STATUS(SharedReleasedMessage(1u).encode(nullptr, SharedReleasedMessage::encoded_size), Status::too_large); }
 
-/* A descriptor on a message that takes none would be leaked by a receiver
- * that trusted the kind. */
 TEST(shared_released_message_decode, any_descriptor_other_length_or_no_bytes_is_malformed_and_changes_nothing)
 { std::uint8_t bytes[SharedReleasedMessage::encoded_size + 1u] = {};
   CHECK_STATUS(SharedReleasedMessage(9u).encode(bytes, sizeof bytes), Status::ok);

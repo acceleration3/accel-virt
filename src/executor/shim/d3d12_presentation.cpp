@@ -37,13 +37,6 @@ void D3d12Presentation::bind(D3d12HostDevice *device12, D3d11HostDevice *device1
     shares_ = shares;
 }
 
-/* Any committed texture made shared is marked as the surface it is: a blt
- * of it is staged by that (SharedSurfaces), whatever its shape. Only one the
- * compositor can open - one 2D image of one mip and one sample, a swap chain
- * buffer - is published for it, and its view is made the first time it is
- * opened (D3d11HostDevice::open_shared): Direct3D 9 on 12 shares every
- * texture it makes, and only its presents are ever read. One that cannot be
- * published costs that one the compositor, not the session its device. */
 bool D3d12Presentation::share(ID3D12Resource *resource, uint64_t key)
 {
     AV_SCOPE("D3d12Presentation::share");
@@ -55,8 +48,6 @@ bool D3d12Presentation::share(ID3D12Resource *resource, uint64_t key)
     if (desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D || FAILED(resource->GetHeapProperties(&heap, &heap_flags)) ||
         (heap_flags & D3D12_HEAP_FLAG_SHARED) == 0)
         return false;
-    /* A key already shared is another surface's: taking it is refused, and
-     * the resource is marked only once it is published. */
     const bool composable = desc.MipLevels == 1u && desc.DepthOrArraySize == 1u && desc.SampleDesc.Count == 1u;
     if (composable && shares_->publish_resource(key, resource, ShareOrigin::d3d12) != Status::ok) return false;
     return SurfaceIdentity(key).mark(resource);
@@ -99,4 +90,4 @@ bool D3d12Presentation::connect()
     return true;
 }
 
-}  // namespace av
+}

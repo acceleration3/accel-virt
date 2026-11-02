@@ -1,8 +1,3 @@
-/* The kernel allocations a Direct3D 9 or 11 device presents from, and the
- * context it presents on: each allocation made over a KernelSurface's private
- * data and asked to be resident (PagingQueue), since a blt-model present names
- * it in a DMA buffer dxgkrnl refuses otherwise. What the kernel refuses is
- * said once per answer, at the point of decision, with the answer. */
 #ifndef AV_UM_PRESENTED_ALLOCATIONS_HPP
 #define AV_UM_PRESENTED_ALLOCATIONS_HPP
 
@@ -13,7 +8,7 @@
 namespace av {
 class KeyedLog;
 class PollClock;
-}  // namespace av
+}
 
 namespace av::d3d {
 
@@ -29,38 +24,20 @@ public:
     PresentedAllocations(PresentedAllocations &&) = delete;
     PresentedAllocations &operator=(PresentedAllocations &&) = delete;
 
-    /* The allocation of `surface`, made (KernelSurface::make) beforehand,
-     * belonging to the runtime's `resource` or, made long after it, to none.
-     * A refusal to keep it resident is said and the allocation still made: a
-     * flip never names it. */
     [[nodiscard]] HRESULT make(KernelSurface &surface, HANDLE resource, D3DKMT_HANDLE &allocation);
-    /* What `make` made, given back; the kernel's refusal is said once. */
     void give_back(D3DKMT_HANDLE allocation, HANDLE resource);
-    /* An allocation another device made and this one opened - a window's
-     * redirection surface, which a present names as its destination - asked
-     * to be resident for this device; the kernel's refusal is said once. */
     [[nodiscard]] HRESULT keep_resident(D3DKMT_HANDLE allocation);
-    /* The same, and addressable: `pages` 4 KiB pages of the opened surface
-     * mapped at a GPU virtual address of this process, `address`. dxgkrnl
-     * looks up the destination's address in the presenting process before it
-     * calls the miniport, and rejects a present of a GPU virtual addressing
-     * context whose destination has none, with nothing said (DXGCONTEXT::
-     * SubmitPresentWithDmaBuffer). Each refusal is said once, with the answer. */
     [[nodiscard]] HRESULT keep_addressable(D3DKMT_HANDLE allocation, uint64_t pages, uint64_t &address);
-    /* The address `keep_addressable` gave, given back once the surface is
-     * closed; nothing for 0. */
     void release_address(uint64_t address, uint64_t pages);
-    /* The device's own context, on the one engine the miniport runs. */
     [[nodiscard]] HRESULT make_context(HANDLE &context);
 
 private:
     KernelDevice                      &kernel_;
     KeyedLog                          &lines_;
     PollClock                         &clock_;
-    /* Opened at the first allocation, once the kernel device is bound. */
     ObjectStorage<d3d11::PagingQueue> paging_;
 };
 
-}  // namespace av::d3d
+}
 
-#endif  // AV_UM_PRESENTED_ALLOCATIONS_HPP
+#endif

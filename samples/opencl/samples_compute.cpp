@@ -1,13 +1,8 @@
-// computeparticles, computeshader, raytracing (the D3D11 suite's compute samples,
-// ported from Sascha Willems' Vulkan samples) and nbody.
 #include "framework.h"
 
 namespace samples {
 
 namespace {
-
-// Additive splats land in fixed point, one integer per channel, so the sum is
-// the same whatever order the device adds them in; this is one.
 const char *const splat_source = R"(
 #define ONE 1024.0f
 void splat(__global uint *accum, int width, int height, int x, int y, float3 c) {
@@ -25,7 +20,6 @@ __kernel void resolve(__global const uint *accum, __global uchar4 *rgba) {
 }
 )";
 
-// An accumulation target and the picture resolved from it.
 struct Splats {
     cl_program program = nullptr;
     cl_kernel  resolve = nullptr;
@@ -66,10 +60,6 @@ struct Splats {
     }
 };
 
-// ---------------------------------------------------------------- computeparticles
-
-// A quarter of a million particles pulled by an attractor that swings across
-// the screen, each drawn as a glowing sprite coloured by its own gradient.
 class ComputeParticles final : public Sample {
 public:
     const char *name() const override { return "computeparticles"; }
@@ -185,7 +175,6 @@ private:
     static constexpr float    preroll = 8.0f;
     static constexpr float    capture_time = 1.5f;
 
-    // Time zero shows the swarm already settled into its streams.
     void reset(Gpu &gpu)
     {
         gpu.check(cl.EnqueueCopyBuffer(gpu.queue, initial_, particles_, 0, 0, count * 32u, 0, nullptr, nullptr),
@@ -217,10 +206,6 @@ private:
     uint32_t   steps_ = 0;
 };
 
-// ---------------------------------------------------------------- computeshader
-
-// A painting generated on the CPU, filtered three ways by kernels reading it as
-// an image: sharpen, edge detect and emboss.
 class ComputeShader final : public Sample {
 public:
     const char *name() const override { return "computeshader"; }
@@ -274,7 +259,6 @@ __kernel void emboss(read_only image2d_t source, write_only image2d_t filtered) 
     const char *capture(Gpu &gpu, Capture &capture) override
     {
         step(gpu);
-        // The original and its three filtered copies side by side.
         const uint32_t strip = size * 4;
         uint8_t       *pixels = static_cast<uint8_t *>(allocate(static_cast<size_t>(strip) * size * 4u));
         uint8_t       *one = static_cast<uint8_t *>(allocate(size * size * 4u));
@@ -302,7 +286,6 @@ __kernel void emboss(read_only image2d_t source, write_only image2d_t filtered) 
 private:
     static constexpr uint32_t size = 512;
 
-    // Sky, clouds and smoke over a brown sea, and a tall ship.
     static void paint(uint32_t *texels)
     {
         for (uint32_t y = 0; y < size; y++)
@@ -360,10 +343,6 @@ private:
     cl_mem     filtered_[3] = {};
 };
 
-// ---------------------------------------------------------------- raytracing
-
-// Three spheres over a plane, one bounce of reflection and hard shadows, the
-// light circling once every eight seconds.
 class Raytracing final : public Sample {
 public:
     const char *name() const override { return "raytracing"; }
@@ -472,10 +451,6 @@ private:
     uint32_t   frame_ = 0;
 };
 
-// ---------------------------------------------------------------- nbody
-
-// Two discs of 8192 bodies each falling into one another, every body pulled by
-// every other through tiles of local memory; drawn as a density map.
 class NBody final : public Sample {
 public:
     const char *name() const override { return "nbody"; }
@@ -627,7 +602,7 @@ private:
     uint32_t   current_ = 0;
 };
 
-}  // namespace
+}
 
 void register_compute(Sample **all, uint32_t &made)
 {
@@ -637,4 +612,4 @@ void register_compute(Sample **all, uint32_t &made)
     all[made++] = new NBody();
 }
 
-}  // namespace samples
+}

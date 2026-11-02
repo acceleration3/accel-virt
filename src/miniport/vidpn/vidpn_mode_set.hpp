@@ -1,7 +1,3 @@
-/* One source or target mode set of a VidPn, held from acquire() or create()
- * until assign() hands it to the VidPn or the destructor releases it. Every
- * mode info it acquires is released before the call that acquired it returns.
- * All of it is PASSIVE. */
 #ifndef AV_VIDPN_MODE_SET_HPP
 #define AV_VIDPN_MODE_SET_HPP
 
@@ -15,14 +11,6 @@
 #include <stdint.h>
 
 namespace av {
-
-/* A mode info from pfnCreateNewModeInfo is not a blank record to overwrite:
- * dxgkrnl stamps fields it owns and checks them on the way back in. Its V1
- * target mode set bugchecks - VIDEO_DXGKRNL_FATAL_ERROR 0x113 subcode 7, from
- * DXGK_VIDPNTARGETMODESET_INTERFACE_V1_IMPL::AddModeImpl - when a target mode
- * returns with MinimumVSyncFreq other than the all-ones it wrote, rather than
- * answering a status. So a description is copied over the record and what
- * dxgkrnl owns is put back, per record type. */
 inline void restore_created(D3dkmdtVidPnSourceModeRecord &info, const D3dkmdtVidPnSourceModeRecord &created)
 {
     AV_SCOPE("restore_created");
@@ -45,15 +33,10 @@ public:
     VidPnModeSet(const VidPnModeSet &) = delete;
     VidPnModeSet &operator=(const VidPnModeSet &) = delete;
 
-    /* The owner's current set. */
     [[nodiscard]] Status acquire();
-    /* An empty set that replaces the current one once assigned. */
     [[nodiscard]] Status create();
     [[nodiscard]] Status assign();
-    /* not_found when no mode is pinned. */
     [[nodiscard]] Status copy_pinned(Mode &mode);
-    /* A new mode info described by `description`, keeping every field dxgkrnl
-     * stamped into it; a mode the set already has is not a failure. */
     [[nodiscard]] Status add(const Mode &description);
 
 private:
@@ -74,8 +57,6 @@ VidPnModeSet<Mode, ModeSetInterface>::VidPnModeSet(Platform &platform, VidPn &vi
         AV_SCOPE("VidPnModeSet::VidPnModeSet");
     }
 
-/* A destructor has nowhere to report a failed release; the set is dxgkrnl's
- * to reclaim with the VidPn either way. */
 template <typename Mode, typename ModeSetInterface>
 VidPnModeSet<Mode, ModeSetInterface>::~VidPnModeSet()
 {
@@ -126,7 +107,6 @@ Status VidPnModeSet<Mode, ModeSetInterface>::copy_pinned(Mode &mode)
     return NtStatus(interface_->pfnReleaseModeInfo(mode_set_, pinned)).status();
 }
 
-/* dxgkrnl releases a mode info it adds; one it refuses is still the driver's. */
 template <typename Mode, typename ModeSetInterface>
 Status VidPnModeSet<Mode, ModeSetInterface>::add(const Mode &description)
 {
@@ -147,6 +127,6 @@ Status VidPnModeSet<Mode, ModeSetInterface>::add(const Mode &description)
     return added.status();
 }
 
-}  // namespace av
+}
 
-#endif  // AV_VIDPN_MODE_SET_HPP
+#endif

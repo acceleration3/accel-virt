@@ -1,10 +1,3 @@
-/* The OpenGL the GL probe's unit tests play (feature 050, T038), behind
- * GlEntry: contexts that share textures once wglShareLists joined them,
- * shaders that compile and programs that link unless told not to, a draw
- * that fills the back buffer with solid.frag's colour when a linked program
- * and a vertex array are bound, and a swap that keeps it for the read. Any
- * call in Call can be made to fail on its Nth use, and every object made is
- * counted, so a test asserts nothing is left. */
 #ifndef AV_SCRIPTED_GL_HPP
 #define AV_SCRIPTED_GL_HPP
 
@@ -43,41 +36,22 @@ public:
     ScriptedGl &operator=(const ScriptedGl &) = delete;
 
     void fail_at(Call call, std::uint32_t nth);
-    /* What GL_CONTEXT_PROFILE_MASK answers: compatibility (2) until a test
-     * says otherwise (feature 051). */
     void set_profile_mask(std::int32_t mask);
-    /* No wglSwapIntervalEXT at all, as an ICD without the extension. */
     void hide_swap_control();
-    /* The adapter a paced swap waits on, as the ICD's does: without one a
-     * swap waits for nothing (feature 051). */
     void          pace_with(Kmt &kmt, std::uint32_t adapter, std::uint32_t device);
-    /* Blanks the swaps waited for, as the interval asked. */
     std::uint32_t paced_blanks() const;
-    /* Windows this cannot resize, and one whose size never changes however the
-     * resize went. */
     void refuse_resizes();
     void keep_its_size();
-    /* No display lists: a compatibility context whose list will not compile. */
     void refuse_lists();
-    /* An interval this takes and then does not report. */
     void forget_intervals();
-    /* A swap that waits for no blank, whatever the interval says. */
     void stop_pacing();
     void set_strings(const char *version, const char *renderer);
-    /* What glGetError answers after the draw. */
     void set_error(std::uint32_t error);
-    /* Added to every channel the draw writes. */
     void shift_colour(std::int32_t shift);
-    /* The ARB errors wglCreateContextAttribsARB then does not give: it makes the context. */
     void accept_versions();
     void accept_profiles();
-    /* Textures read in another context come back empty although shared. */
     void isolate_textures();
-    /* A context current here may be made current on another thread too. */
     void let_other_threads_take_contexts();
-    /* No avForceContextFault; the fault leaves the context working; a lost
-     * robust context reports no reset; a loss is never reported by
-     * glGetError, or reported by every call. */
     void hide_fault_hook();
     void survive_faults();
     void forget_resets();
@@ -85,7 +59,6 @@ public:
     void report_losses_forever();
 
     std::uint32_t live_contexts() const;
-    /* Shaders, programs, vertex arrays and textures not deleted. */
     std::uint32_t live_objects() const;
     std::uint32_t misuses() const;
     std::uint32_t calls(Call call) const;
@@ -158,7 +131,6 @@ private:
 
     bool          fails(Call call);
     std::uint32_t row_of(void *context) const;
-    /* A GL call with nothing current is a misuse. */
     bool          current_or_misuse();
 
     std::uint32_t width_;
@@ -179,9 +151,6 @@ private:
     bool          unreported_;
     bool          reported_forever_;
     std::int32_t  format_;
-    /* Feature 051: what the profile mask answers, whether the swap-control
-     * entries exist, what the interval is, the blanks the swaps waited for,
-     * whether a resize is allowed, and the lists this made. */
     std::int32_t  profile_mask_;
     bool          hidden_swap_control_;
     bool          refuses_resizes_;
@@ -210,6 +179,6 @@ private:
     std::uint32_t misuses_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCRIPTED_GL_HPP
+#endif

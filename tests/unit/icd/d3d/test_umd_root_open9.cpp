@@ -1,9 +1,3 @@
-/* OpenAdapter, driven as d3d9.dll drives it (docs/research/d3d9/
- * reverse-engineering.md §1.3-1.5): Interface 9, the newest Version the
- * runtime knows first, walking down; and a device made and destroyed through
- * the host driver, with no block the runtime sized. d3d9.dll falls back to
- * nothing once a Direct3D 9 driver is named, so every refusal here is one a
- * game would meet as "no hardware device". */
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/fake_d3d_runtime.hpp"
 #include "harness/icd/recording_host_driver.hpp"
@@ -28,11 +22,8 @@ constexpr std::uint32_t win7_interface = 0x2003u;
 constexpr std::uint32_t vista_interface = 0x000cu;
 constexpr std::uint32_t caps_d3d9 = 13u;
 
-}  // namespace
+}
 
-/* The driver answers Windows 7's interface whatever newer one the runtime
- * offers: the entry points it fills are Windows 7's, and a newer answer would
- * have the runtime require the 1-suffixed ones in their place. */
 TEST(umd_root_open_adapter9, opens_at_the_newest_version_and_answers_windows_7s)
 {
     UmdRig         rig;
@@ -66,9 +57,6 @@ TEST(umd_root_open_adapter9, refuses_what_is_not_interface_9_at_windows_7_or_lat
     CHECK(rig.root().invariants_hold());
 }
 
-/* A refused open fills nothing of the runtime's records - not the adapter
- * table, not the handle, not DriverVersion - so d3d9.dll is never left
- * holding half an adapter. */
 TEST(umd_root_open_adapter9, a_refused_open_fills_none_of_the_records)
 {
     constexpr std::uint32_t untouched = 0x1234u;
@@ -88,8 +76,6 @@ TEST(umd_root_open_adapter9, a_refused_open_fills_none_of_the_records)
     CHECK_EQ(rig.kmt().open_objects(), 0u);
 }
 
-/* d3d9.dll makes a device inside Direct3DCreate9, before it asks a single cap;
- * the device holds its adapter open until destroyed. */
 TEST(umd_root_create_device9, a_device_is_the_host_drivers_and_holds_its_adapter)
 {
     RecordingHostDriver driver;
@@ -105,14 +91,11 @@ TEST(umd_root_create_device9, a_device_is_the_host_drivers_and_holds_its_adapter
     CHECK_EQ(runtime.destroy_device9(), hr_ok);
     CHECK_EQ(driver.tear_downs(), 1u);
     CHECK(driver.torn_runtime() == RuntimeKind::d3d9);
-    /* Destroyed once: a second destroy names nothing. */
     CHECK_EQ(rig.root().destroy_device9(driver.device9()), hr_invalid_arg);
     CHECK_EQ(runtime.close_adapter(), hr_ok);
     CHECK(rig.root().invariants_hold());
 }
 
-/* The host driver's build9 is asked on the kernel handle of the adapter the
- * runtime opened, and its tear_down9 answers only for a device it built. */
 TEST(umd_root_create_device9, build9_is_asked_on_the_opened_adapter_and_tear_down9_knows_its_own)
 {
     RecordingHostDriver driver;
@@ -140,7 +123,6 @@ TEST(umd_root_create_device9, a_refused_create_leaves_nothing_made)
     driver.answer(hr_out_of_memory, hr_ok, hr_ok);
     CHECK_EQ(runtime.create_device(), hr_out_of_memory);
     CHECK(runtime.device9() == nullptr);
-    /* Nothing holds the adapter. */
     CHECK_EQ(runtime.close_adapter(), hr_ok);
     CHECK_EQ(rig.root().create_device9(nullptr, nullptr), hr_invalid_arg);
     CHECK(rig.root().invariants_hold());
@@ -156,7 +138,6 @@ TEST(umd_root_create_device9, with_no_host_driver_nothing_is_made)
     CHECK_EQ(runtime.close_adapter(), hr_ok);
 }
 
-/* A Direct3D 11 adapter is not one a Direct3D 9 device is made on. */
 TEST(umd_root_create_device9, refuses_an_adapter_another_runtime_opened)
 {
     RecordingHostDriver driver;
@@ -169,7 +150,6 @@ TEST(umd_root_create_device9, refuses_an_adapter_another_runtime_opened)
     CHECK_EQ(eleven.close_adapter(), hr_ok);
 }
 
-/* Caps go to the host driver with the adapter's runtime, as 10's and 12's do. */
 TEST(umd_root_open_adapter9, caps_reach_the_host_driver_as_direct3d_9s)
 {
     RecordingHostDriver driver;

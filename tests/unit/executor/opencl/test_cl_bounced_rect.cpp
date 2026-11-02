@@ -1,10 +1,3 @@
-/* A rectangle read into private memory and copied into the arena a row at a
- * time, on the host's own OpenCL. Any host judges what counts as a refusal and
- * every region the read itself refuses; a host with an OpenCL GPU also shows
- * the rows landing where the host would have put them, the gaps between them
- * left as they were, the private memory growing for a larger read, and the
- * host's own error passed back. A host without one returns after the
- * refusals, as the other device tests do. */
 #include "executor/opencl/cl_bounced_rect.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -20,8 +13,6 @@ namespace {
 
 constexpr std::size_t buffer_bytes = 256u * 1024u;
 
-/* A context, a queue and a buffer filled with each byte's index modulo 251 on
- * the first OpenCL GPU, or nothing. */
 class HostBuffer {
 public:
     HostBuffer() : context_(nullptr), queue_(nullptr), buffer_(nullptr)
@@ -60,11 +51,6 @@ private:
     cl_mem           buffer_;
 };
 
-/* Whether `into`, read at host origin `host` and the given pitches from the
- * buffer at origin `from` and its pitches, holds the pattern in every row of
- * `region` and 0xEE everywhere else among its first `bytes`. The rows are
- * judged, then struck out of a copy, which must then be 0xEE throughout: the
- * pattern holds 0xEE too. */
 bool rows_landed(const std::uint8_t *into, std::size_t bytes, const std::size_t *from, std::size_t buffer_row,
                  std::size_t buffer_slice, const std::size_t *host, const std::size_t *region, std::size_t row,
                  std::size_t slice)
@@ -85,7 +71,7 @@ bool rows_landed(const std::uint8_t *into, std::size_t bytes, const std::size_t 
     return true;
 }
 
-}  // namespace
+}
 
 TEST(cl_bounced_rect_refusal, only_a_destination_the_host_will_not_take_is_one_and_it_is_kept)
 { ClBouncedRect bounced;
@@ -119,12 +105,10 @@ TEST(cl_bounced_rect_read, refuses_a_region_that_names_no_rows_or_reaches_past_m
   for (const auto &empty : flat)
       CHECK_EQ(bounced.read(nullptr, nullptr, origin, origin, empty, 0u, 0u, 0u, 0u, into, 0u, nullptr, nullptr),
                CL_INVALID_VALUE);
-  /* A row shorter than the region's width, and a slice shorter than its rows. */
   CHECK_EQ(bounced.read(nullptr, nullptr, origin, origin, region, 0u, 0u, 3u, 0u, into, 0u, nullptr, nullptr),
            CL_INVALID_VALUE);
   CHECK_EQ(bounced.read(nullptr, nullptr, origin, origin, region, 0u, 0u, 4u, 7u, into, 0u, nullptr, nullptr),
            CL_INVALID_VALUE);
-  /* Pitches and origins whose reach wraps, at each step of it. */
   const std::size_t most = SIZE_MAX;
   const std::size_t wide[3] = {most, 2u, 1u};
   CHECK_EQ(bounced.read(nullptr, nullptr, origin, origin, wide, 0u, 0u, 0u, 0u, into, 0u, nullptr, nullptr),
@@ -142,7 +126,6 @@ TEST(cl_bounced_rect_read, refuses_a_region_that_names_no_rows_or_reaches_past_m
   const std::size_t deep[3] = {4u, 2u, most};
   CHECK_EQ(bounced.read(nullptr, nullptr, origin, origin, deep, 0u, 0u, 0u, 0u, into, 0u, nullptr, nullptr),
            CL_INVALID_VALUE);
-  /* The last slice, the last row and the last row's width each past the end. */
   const std::size_t two_slices[3] = {4u, 1u, 2u}, near_slice[3] = {most - 10u, 0u, 0u};
   CHECK_EQ(bounced.read(nullptr, nullptr, origin, near_slice, two_slices, 0u, 0u, 4u, 16u, into, 0u, nullptr,
                         nullptr),
@@ -153,14 +136,12 @@ TEST(cl_bounced_rect_read, refuses_a_region_that_names_no_rows_or_reaches_past_m
   const std::size_t edge[3] = {most - 7u, 0u, 0u};
   CHECK_EQ(bounced.read(nullptr, nullptr, origin, edge, region, 0u, 0u, 0u, 0u, into, 0u, nullptr, nullptr),
            CL_INVALID_VALUE);
-  /* A reach that does not wrap, but that no private memory can hold. */
   const std::size_t near_end[3] = {most - 20u, 0u, 0u}, one[3] = {4u, 1u, 1u};
   CHECK_EQ(bounced.read(nullptr, nullptr, origin, near_end, one, 0u, 0u, 0u, 0u, into, 0u, nullptr, nullptr),
            CL_OUT_OF_HOST_MEMORY);
   const std::size_t exabyte[3] = {std::size_t{1} << 60u, 0u, 0u};
   CHECK_EQ(bounced.read(nullptr, nullptr, origin, exabyte, one, 0u, 0u, 0u, 0u, into, 0u, nullptr, nullptr),
            CL_OUT_OF_HOST_MEMORY);
-  /* Nothing was written. */
   std::uint8_t zero[64] = {};
   CHECK(std::memcmp(into, zero, sizeof into) == 0); }
 
@@ -175,15 +156,12 @@ TEST(cl_bounced_rect_read, lands_every_row_where_the_host_would_and_leaves_the_g
                         0u, nullptr, nullptr),
            CL_SUCCESS);
   CHECK(rows_landed(into, sizeof into, from, 256u, 256u * 40u, at, region, 300u, 300u * 45u));
-  /* Pitches left to the host: rows packed, slices of packed rows. */
   std::memset(into, 0xEE, sizeof into);
   const std::size_t corner[3] = {0u, 0u, 0u}, packed[3] = {64u, 4u, 3u};
   CHECK_EQ(bounced.read(host.queue(), host.buffer(), from, corner, packed, 512u, 512u * 8u, 0u, 0u, into, 0u,
                         nullptr, nullptr),
            CL_SUCCESS);
   CHECK(rows_landed(into, sizeof into, from, 512u, 512u * 8u, corner, packed, 64u, 64u * 4u));
-  /* A read larger than the private memory held so far grows it, and an event
-   * asked for is the host's. */
   static std::uint8_t large[buffer_bytes];
   std::memset(large, 0xEE, sizeof large);
   const std::size_t whole[3] = {1024u, 200u, 1u};
@@ -201,7 +179,6 @@ TEST(cl_bounced_rect_read, the_host_s_own_refusal_is_answered_and_nothing_is_cop
   ClBouncedRect bounced;
   std::uint8_t into[256];
   std::memset(into, 0xEE, sizeof into);
-  /* A rectangle past the buffer's end is the host's to refuse. */
   const std::size_t beyond[3] = {0u, buffer_bytes / 64u, 0u}, corner[3] = {0u, 0u, 0u}, region[3] = {64u, 2u, 1u};
   CHECK_EQ(bounced.read(host.queue(), host.buffer(), beyond, corner, region, 64u, 0u, 0u, 0u, into, 0u, nullptr,
                         nullptr),

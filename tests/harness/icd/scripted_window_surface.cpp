@@ -107,4 +107,4 @@ bool ScriptedWindowSurface::blit_window_top_down(void *window, std::uint32_t wid
     return drawn;
 }
 
-}  // namespace av
+}

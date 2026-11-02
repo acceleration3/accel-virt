@@ -45,7 +45,6 @@ AvContextTable::AvContextTable(Platform &platform, DxgkrnlInterface &dxgkrnl, Al
 AvContextTable::~AvContextTable()
 {
     AV_SCOPE("AvContextTable::~AvContextTable");
-    /* The device stopped before the adapter goes, and holds nothing. */
     for (uint32_t slot = 0u; slot < max_contexts; slot++) {
         if (contexts_[slot] == nullptr) continue;
         release_chunks(slot, nullptr, true);
@@ -75,9 +74,6 @@ uint32_t AvContextTable::claim(void *context, bool &duplicate)
     return no_slot;
 }
 
-/* The handle is the process's, so it is resolved through dxgkrnl and borrowed
- * only for the lookup; what outlives it is the driver's own Allocation, whose
- * freeing the adapter asks this table about first. */
 Status AvContextTable::resolve(uint32_t handle, AllocationKind kind, Allocation *&allocation)
 {
     AV_SCOPE("AvContextTable::resolve");
@@ -101,11 +97,8 @@ Status AvContextTable::resolve_share(uint32_t slot, SubApi asking, uint32_t hand
     const Allocation *const ring = allocations_.find(acquired.data());
     SpinLockGuard           locked(lock_);
     for (uint32_t other = 0u; other < max_contexts; other++) {
-        /* A slot with no context names no ring, so a handle that is no allocation matches nothing. */
         if (other == slot || names_[other] != ring || !live_[other]) continue;
         const AvContextBinding &binding = bindings_[other].object();
-        /* An OpenGL context shares within its own device; an OpenCL one comes
-         * from another ICD, on another device of the same process. */
         const Allocation &own = *names_[slot];
         const bool same_owner = asking == SubApi::opengl ? ring->held_with(own) : ring->held_in_process_of(own);
         if (binding.sub_api() != SubApi::opengl || !same_owner) return Status::invalid_parameter;
@@ -156,9 +149,6 @@ Status AvContextTable::bind(void *context, const AvContextRecord &record, Virtio
     return Status::ok;
 }
 
-/* A setup the device was asked for and would not undo may leave it holding
- * pages, which are then never handed out again; one refused before anything
- * was sent leaves the device holding nothing. */
 Status AvContextTable::set_up(uint32_t slot, const AvContextRecord &record, VirtioGpuDevice &device,
                                RegisterWindow &doorbells, const CapsetInfo &capset)
 {
@@ -197,14 +187,7 @@ Status AvContextTable::unbind(void *context, VirtioGpuDevice *device)
     AvContextBinding &binding = bindings_[slot].object();
     const bool held = binding.state() == GuestContext::State::established ||
                       binding.state() == GuestContext::State::failed;
-    /* The context before its chunks: the device keeps a chunk it holds imported
-     * and refuses to release it, and destroying the context is what ends every
-     * import it made. */
     const bool torn_down = held && device != nullptr && binding.tear_down(*device) == Status::ok;
-    /* A device reset or gone holds nothing of the context, window chunks
-     * included; one that stopped answering mid-teardown may still hold them
-     * placed, and the context's own pages, and all of them are kept out of use
-     * for good. */
     const bool let_go = torn_down || !held || device == nullptr;
     release_chunks(slot, torn_down ? device : nullptr, let_go);
     if (!torn_down) binding.abandon();
@@ -213,8 +196,6 @@ Status AvContextTable::unbind(void *context, VirtioGpuDevice *device)
     return Status::ok;
 }
 
-/* Everything a slot holds, in the reverse of how bind took it; the slot is
- * given back last, so nobody claims it while its pages are still mapped. */
 void AvContextTable::release(uint32_t slot)
 {
     AV_SCOPE("AvContextTable::release");
@@ -232,7 +213,6 @@ void AvContextTable::release(uint32_t slot)
         told_lost_[slot] = false;
         contexts_[slot] = nullptr;
     }
-    /* Whoever still waits on the context wakes to find it gone. */
     if (wake != nullptr) {
         platform_.signal_event(wake);
         platform_.release_event(wake);
@@ -293,9 +273,6 @@ Status AvContextTable::views(void *context, ContextViewsRecord &record)
     return Status::ok;
 }
 
-/* The reference is taken before the slot is looked at, because taking it may
- * not happen under the spin lock; one the slot turns out not to want is let
- * go of again. */
 Status AvContextTable::wake_on_raise(void *context, uint64_t handle)
 {
     AV_SCOPE("AvContextTable::wake_on_raise");
@@ -317,14 +294,10 @@ Status AvContextTable::wake_on_raise(void *context, uint64_t handle)
         platform_.release_event(event);
         return Status::invalid_parameter;
     }
-    /* The same event named again holds two references, and this lets go of one. */
     if (previous != nullptr) platform_.release_event(previous);
     return Status::ok;
 }
 
-/* The id first, then the pages: a chunk takes both, and gives both back if
- * anything after fails - unless the device kept a blob under them. Nothing here falls back to guest RAM - every byte a
- * process maps is host GPU memory (docs/host-memory.md). */
 Status AvContextTable::open_window(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device)
 {
     AV_SCOPE("AvContextTable::open_window");
@@ -334,16 +307,10 @@ Status AvContextTable::open_window(uint32_t slot, HostWindowRecord &record, Virt
     return place_in_window(slot, resource, record, device);
 }
 
-/* Each step is undone in reverse if a later one fails. The pages go back only
- * once the device holds no blob over them: a blob it would not release may
- * still be placed there, and the next chunk must not land on it - the pages
- * and the id then stay taken for good. */
 Status AvContextTable::place_in_window(uint32_t slot, uint32_t resource, HostWindowRecord &record,
                                         VirtioGpuDevice &device)
 {
     AV_SCOPE("AvContextTable::place_in_window");
-    /* The id goes back with everything else, unless a blob the device kept
-     * still answers to it. */
     bool      keep_id = false;
     ScopeExit id_back([this, resource, &keep_id] {
         if (!keep_id) ids_.give_back(resource);
@@ -357,8 +324,6 @@ Status AvContextTable::place_in_window(uint32_t slot, uint32_t resource, HostWin
     const Status   taken = window_.take(pages, first);
     if (taken != Status::ok) return taken;
     HostVisibleBlob blob(platform_);
-    /* What destroy answers is read back from the blob: still created is a
-     * device that did not let go of it. */
     ScopeExit       unwind([this, &blob, &device, &keep_id, first, pages] {
         if (blob.created()) static_cast<void>(blob.destroy(device));
         keep_id = blob.created();
@@ -387,9 +352,6 @@ Status AvContextTable::place_in_window(uint32_t slot, uint32_t resource, HostWin
     return Status::ok;
 }
 
-/* The pages are locked before anything else and let go of last: a blob the
- * device made over them is released first, which gives the guest's own pages
- * back their contents (docs/host-memory.md, "Application memory"). */
 Status AvContextTable::adopt_pages(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device)
 {
     AV_SCOPE("AvContextTable::adopt_pages");
@@ -438,11 +400,6 @@ Status AvContextTable::close_window(uint32_t slot, uint32_t resource_id, VirtioG
     return Status::ok;
 }
 
-/* The process's view first, so it never reads a page the host no longer
- * backs; the pages last, once the device answered both the unmap and the
- * release - handed out before that, they could be placed over a mapping QEMU
- * still holds. Without a device to ask, `host_let_go` alone says whether one
- * could still be holding them. */
 void AvContextTable::take_down(ContextChunk &chunk, VirtioGpuDevice *device, bool host_let_go)
 {
     AV_SCOPE("AvContextTable::take_down");
@@ -455,8 +412,6 @@ void AvContextTable::take_down(ContextChunk &chunk, VirtioGpuDevice *device, boo
         if (chunk.locked() == nullptr) window_.give_back(chunk.first_page(), chunk.pages());
         ids_.give_back(chunk.resource_id());
     }
-    /* Whatever the device answered: a process may not end holding locked
-     * pages, and one the device kept is still memory to the guest. */
     if (chunk.locked() != nullptr) platform_.unlock_process_pages(chunk.locked());
     const uint32_t slot = chunk.slot();
     static_cast<void>(chunks_.destroy(&chunk));
@@ -494,12 +449,6 @@ Status AvContextTable::release_batch(void *context, const SubmissionDescriptor &
     return status;
 }
 
-/* What is wrong with an order - a batch that overlaps one released, more held
- * than a process could have in flight, a ring that refuses what it is handed -
- * is a ring that will never be whole: the context is failed, which finishes
- * everything queued on it and wakes its process, rather than leaving its
- * packets to wait for a batch that cannot come. The packet that brought it
- * here is an asynchronous one and is not refused. */
 Status AvContextTable::in_turn(uint32_t slot, const SubmissionDescriptor &batch)
 {
     AV_SCOPE("AvContextTable::in_turn");
@@ -559,10 +508,6 @@ bool AvContextTable::completed_already(void *context, uint64_t fence)
     return binding.completed() >= fence;
 }
 
-/* What a lost context submitted is finished rather than dropped: a packet
- * left on the node would hold every context's work queued behind it until a
- * timeout reset. Serving it on every DPC also finishes a packet whose batch
- * was published before the fault was seen and which reached the node after. */
 void AvContextTable::serve(ExecutionNode &node, HwQueueSubmissions &queues)
 {
     AV_SCOPE("AvContextTable::serve");
@@ -576,15 +521,10 @@ void AvContextTable::serve(ExecutionNode &node, HwQueueSubmissions &queues)
         const uint64_t completed = lost_now ? UINT64_MAX : binding.completed();
         wake(slot, binding.raised(), lost_now);
         node.finish(contexts_[slot], completed);
-        /* What a hardware queue of this context submitted waits on the same
-         * fence, and its progress is where the process reads it (feature 049). */
         queues.completed_through(contexts_[slot], completed);
     }
 }
 
-/* Under the lock. A raise the process has not been woken for, or the context
- * just lost - after which no raise ever comes, and a thread asleep on the
- * event would sleep for good. */
 void AvContextTable::wake(uint32_t slot, uint64_t raised, bool lost_now)
 {
     AV_SCOPE("AvContextTable::wake");
@@ -612,11 +552,7 @@ void AvContextTable::abandon_all()
             SpinLockGuard locked(lock_);
             if (!live_[slot]) continue;
             live_[slot] = false;
-            /* A reset leaves nothing held to be released: the contexts are
-             * gone with the device, and a process that makes another starts
-             * its order again. */
             releases_[slot].clear();
-            /* Nothing more is ever served on it. */
             if (wakes_[slot] != nullptr) platform_.signal_event(wakes_[slot]);
         }
         bindings_[slot].object().abandon();
@@ -637,8 +573,6 @@ void *AvContextTable::user_of(const Allocation *allocation)
 uint32_t AvContextTable::doorbell_of(const void *context) const
 {
     AV_SCOPE("AvContextTable::doorbell_of");
-    /* The slot is the doorbell page: a context takes one of each together
-     * (AvContextTable::set_up). */
     return slot_of(context);
 }
 
@@ -681,8 +615,6 @@ uint32_t AvContextTable::bound() const
     return count;
 }
 
-/* Unlocked, as doorbell_of is: a caller asking whether the table holds its own
- * context is the only thing that could be unbinding it. */
 bool AvContextTable::holds(const void *context) const
 {
     AV_SCOPE("AvContextTable::holds");
@@ -690,8 +622,6 @@ bool AvContextTable::holds(const void *context) const
     return slot_of(context) != no_slot;
 }
 
-/* One line per context set up or refused: which doorbell, and which message
- * its fence interrupts arrive on, is what a guest that never wakes needs. */
 void AvContextTable::log_binding(uint32_t slot, uint32_t message, Status status)
 {
     AV_SCOPE("AvContextTable::log_binding");
@@ -706,9 +636,6 @@ void AvContextTable::log_binding(uint32_t slot, uint32_t message, Status status)
     platform_.log(line.text());
 }
 
-/* A live slot is bound and set up on the memory it holds, mapped into its
- * process; a bound slot is named by an allocation; a free slot holds
- * nothing. */
 void AvContextTable::report(StateWriter &writer)
 {
     AV_SCOPE("AvContextTable::report");
@@ -765,4 +692,4 @@ bool AvContextTable::invariants_hold() const
            chunks_.live() <= ids_.taken();
 }
 
-}  // namespace av
+}

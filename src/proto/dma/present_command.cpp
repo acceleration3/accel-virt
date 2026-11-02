@@ -29,4 +29,4 @@ void PresentCommand::write(WireWriter &writer) const
     writer.write_u32(static_cast<uint32_t>(addresses_));
 }
 
-}  // namespace av
+}

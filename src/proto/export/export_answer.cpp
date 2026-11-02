@@ -11,11 +11,10 @@ namespace {
 
 constexpr size_t body_size = 32u;
 
-/* The statuses an answer carries, by their number on the wire. */
 constexpr Status wire_statuses[] = {Status::ok,        Status::malformed, Status::not_supported,
                                     Status::not_found, Status::no_space,  Status::invalid_state};
 
-}  // namespace
+}
 
 ExportAnswer::ExportAnswer() : ExportAnswer(Status::malformed)
 {
@@ -151,8 +150,6 @@ bool ExportAnswer::body_empty() const
     return greeting_.empty() && layout_.empty() && writes_ == 0u && refresh_microhz_ == 0u;
 }
 
-/* A reason is only ever a revocation's: no constructor gives another answer
- * one, and decode reads that word as reserved in every other. */
 bool ExportAnswer::fields_valid() const
 {
     AV_SCOPE("ExportAnswer::fields_valid");
@@ -257,8 +254,6 @@ Status ExportAnswer::decode(const uint8_t *bytes, size_t length, uint32_t descri
         reserved = reader.read_u32() | reader.read_u32() | (flags & ~on_pci_flag);
         candidate.greeting_ = (flags & on_pci_flag) != 0u ? ExportGreeting(uuid, domain, bus, device, function)
                                                           : ExportGreeting(uuid);
-        /* Without the flag the address fields must be 0; the greeting built
-         * without them cannot say otherwise, so they are kept as reserved. */
         if ((flags & on_pci_flag) == 0u) reserved |= domain | bus | device | function;
     } else if (candidate.operation_ == ExportOperation::export_surface ||
                candidate.operation_ == ExportOperation::head) {
@@ -278,7 +273,6 @@ Status ExportAnswer::decode(const uint8_t *bytes, size_t length, uint32_t descri
         candidate.reason_ = reader.read_u32();
         for (size_t word = 0u; word < (body_size - sizeof(uint32_t)) / sizeof(uint32_t); word++)
             reserved |= reader.read_u32();
-        /* Only a revocation carries a reason in its first word. */
         if (candidate.operation_ != ExportOperation::revoked) reserved |= candidate.reason_;
         if (candidate.operation_ != ExportOperation::revoked) candidate.reason_ = 0u;
     }
@@ -288,4 +282,4 @@ Status ExportAnswer::decode(const uint8_t *bytes, size_t length, uint32_t descri
     return Status::ok;
 }
 
-}  // namespace av
+}

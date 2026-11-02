@@ -7,8 +7,6 @@
 namespace av {
 
 namespace {
-
-/* opengl32's callbacks are handed no context: the one fake alive answers. */
 FakeOpengl32 *alive = nullptr;
 
 std::uintptr_t APIENTRY get_dhglrc(void *context)
@@ -31,10 +29,9 @@ using Swap = std::int32_t (APIENTRY *)(void *);
 using Share = std::int32_t (APIENTRY *)(std::uintptr_t, std::uintptr_t);
 using GetProc = void *(APIENTRY *)(const char *);
 
-/* The HGLRC for context row n: a value no pointer the test holds is. */
 constexpr std::uintptr_t hglrc_base = 0x10000u;
 
-}  // namespace
+}
 
 FakeOpengl32::FakeOpengl32(ScriptedThreadSlot &threads)
     : threads_(threads), exports_(), hidden_{}, hidden_count_(0u), contexts_{}, tables_{}, current_{}, lookups_(0u),
@@ -140,9 +137,6 @@ bool FakeOpengl32::share_lists(void *first, void *second)
 
 bool FakeOpengl32::swap_buffers(void *dc) { return reinterpret_cast<Swap>(resolve("DrvSwapBuffers"))(dc) != 0; }
 
-/* opengl32's wglGetProcAddress asks the ICD only for a thread with a context
- * of it current, and answers null otherwise - the live guest's attribs step
- * failed with ERROR_PROC_NOT_FOUND for exactly that. */
 void *FakeOpengl32::get_proc_address(const char *name)
 {
     if (current_[threads_.thread_id() - 1u] == 0u) return nullptr;
@@ -182,4 +176,4 @@ void *FakeOpengl32::resolve(const char *name) const
     return exports_.address(name);
 }
 
-}  // namespace av
+}

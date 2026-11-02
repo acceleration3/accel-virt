@@ -1,7 +1,3 @@
-"""tools/mcp/av_inspect.py and tools/mcp/trace_format.py: tables and dumps
-built byte by byte from docs/trace.md, every refusal of a malformed table, what
-a reader makes of stalls and locks, the JSON-RPC loop over pipes, host tables
-and state in a stand-in /dev/shm, and every guest tool against the fake guest."""
 import base64
 import json
 import os
@@ -29,7 +25,6 @@ MS = 10_000
 
 
 def header(slots, module=b"avvk", process=4242, crash=None, **overrides):
-    """docs/trace.md's 96-byte header, field by field."""
     fields = {"magic": b"AVTRACE\0", "version": 1, "header": 96, "slots": slots, "slot_bytes": 824, "frames": 32,
               "frame_bytes": 24, "module": module.ljust(16, b"\0")}
     fields.update(overrides)
@@ -43,7 +38,6 @@ def header(slots, module=b"avvk", process=4242, crash=None, **overrides):
 
 
 def slot(owner=0, depth=0, thread=0, entries=0, last_left=0, left_at=0, waiting=0, holding=0, frames=()):
-    """One 824-byte slot: its 56-byte header, then 24-byte frames."""
     data = struct.pack("<QIIQIIQQQ", owner, depth, thread, entries, last_left, 0, left_at, waiting, holding)
     for name, level, entered in frames:
         data += struct.pack("<IHHQQ", name, level, 0, entered, 0x7FF600000000 + name)
@@ -61,9 +55,6 @@ NAMES = {RUN: "IcdRoot::destroy_instance", SEND: "KmtTransport::send_sync", WAIT
 
 
 def busy_table():
-    """Thread 11 waits on lock 0x5000 inside a send, for 7 s; thread 12 holds
-    that lock and has been in its wait 1 s; thread 13 left the root 2 s ago;
-    one slot was never used."""
     return (header(4)
             + slot(owner=0x11 | ACTIVE, depth=2, thread=11, entries=40, waiting=0x5000,
                    frames=[(RUN, 0, 100 * MS), (SEND, 0, 3_000 * MS)])
@@ -149,9 +140,6 @@ class TraceFormat(unittest.TestCase):
         self.assertEqual(described["module"], "avvk")
 
     def test_a_thread_parked_on_something_no_thread_holds_is_waiting_not_stalled(self):
-        """A service thread waits on its own event for as long as nobody asks:
-        old frames with a wait nobody in the table holds are a wait, while the
-        same frames with no wait are a stall."""
         parked = trace_format.parse_table(header(2)
                                           + slot(owner=0x5 | ACTIVE, depth=1, thread=5, waiting=0x7000,
                                                  frames=[(RUN, 0, 1_000 * MS)])
@@ -169,17 +157,14 @@ class TraceFormat(unittest.TestCase):
         thread = described["threads"][0]
         self.assertEqual(thread["frames"][0]["name"], "#abcdef01")
         self.assertEqual(thread["frames"][0]["level"], 15)
-        # A frame never stamped has no age, and so cannot be judged stalled.
         self.assertIsNone(thread["frames"][1]["age_ms"])
         self.assertFalse(thread["stalled"])
-        # 40 pushed, 32 stored: the stored frames past the two written are zeros.
         self.assertEqual((len(thread["frames"]), thread["unstored_frames"]), (32, 8))
         self.assertEqual(described["crash"], {"code": "0xb", "address": "0x10", "thread": 5, "ms_ago": 9_000})
         exactly = trace_format.parse_table(header(1) + slot(owner=0x5 | ACTIVE, depth=1, thread=5,
                                                             frames=[(RUN, 0, 5_000 * MS)]))
         self.assertTrue(trace_format.describe_threads(exactly, NAMES, 10_000 * MS, 5)["threads"][0]["stalled"])
         self.assertFalse(trace_format.describe_threads(exactly, NAMES, 10_000 * MS - 1, 5)["threads"][0]["stalled"])
-        # A frame stamped after the copy was taken has no age either.
         self.assertIsNone(trace_format.describe_threads(exactly, NAMES, 1, 5)["threads"][0]["frames"][0]["age_ms"])
 
     def test_without_a_clock_ages_run_from_the_newest_stamp(self):
@@ -189,8 +174,6 @@ class TraceFormat(unittest.TestCase):
 
 
 class ServerLoop(unittest.TestCase):
-    """The server as Claude Code runs it: a child process on pipes."""
-
     def setUp(self):
         self.scratch = pathlib.Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.scratch)
@@ -280,7 +263,6 @@ class ServerLoop(unittest.TestCase):
         failed, text = self.call("verdict", work="no-such-run")
         self.assertTrue(failed)
         self.assertIn("no work directory", text)
-        # A tool that raises something unforeseen is still an answer.
         failed, text = self.call("driver_log", work="build-guest-x", grep="(")
         self.assertTrue(failed)
         self.assertIn("driver_log failed: ", text)
@@ -410,8 +392,6 @@ TABLE_ADDRESS = 0x1F000000
 
 
 class GuestTools(unittest.TestCase):
-    """The guest tools against the fake QEMU's agent, with no run holding it."""
-
     def setUp(self):
         self.scratch = pathlib.Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.scratch)
@@ -477,7 +457,6 @@ class GuestTools(unittest.TestCase):
              "name": "vulkaninfo", "threads": 3, "started": "2026-09-16T20:00:00"},
             {"pid": 5000, "module": "avgl", "scope": "local", "exe": "C:\\x.exe", "exited": True}])
         self.assertIn("exec C:\\av\\avinspect.exe list --out C:\\av\\inspect-list.bin", self.executed())
-        # The listing is a file written by PowerShell's redirect, never captured output.
         self.assertTrue(any(line.startswith("exec C:\\Windows\\System32\\cmd.exe /c C:\\Windows\\System32\\"
                                             "WindowsPowerShell\\v1.0\\powershell.exe -NoProfile") and "> C:\\av\\"
                             in line for line in self.executed()))
@@ -560,7 +539,6 @@ class GuestTools(unittest.TestCase):
         self.assertIn(f"pmemsave {TABLE_ADDRESS:#x} {len(self.kernel)}", self.journal.read_text())
         self.assertEqual(sorted(path.name for path in self.work.iterdir()),
                          ["agent.sock", "avgpu.log", "environment.json", "qmp.sock"])
-        # QEMU serves one QMP client: the second finds it taken.
         with self.assertRaisesRegex(av_inspect.ToolError, "run holds it"):
             self.inspector.kernel_trace_from_memory(str(self.work))
 

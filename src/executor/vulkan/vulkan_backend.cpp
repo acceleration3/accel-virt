@@ -18,15 +18,8 @@
 namespace av {
 
 namespace {
-
-/* Devices before instances, the order the API requires and the order a guest
- * would have used had it bothered. What a device made goes with it: the
- * driver frees it. */
 constexpr VulkanObjectKind release_order[] = {VulkanObjectKind::device, VulkanObjectKind::instance};
 
-/* The kind this host tells a handle of `kind` apart as: the five the loader
- * dispatches on are judged by kind, everything else only by whether this
- * context made it. */
 constexpr VulkanObjectKind object_kind(vkproto::HandleKind kind)
 {
     switch (kind) {
@@ -39,15 +32,13 @@ constexpr VulkanObjectKind object_kind(vkproto::HandleKind kind)
     }
 }
 
-}  // namespace
+}
 
 VulkanBackend::VulkanBackend(DriverLog &lines) : VulkanBackend(heap_, lines)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }
 
-/* heap_ is constructed before blocks_ is bound to it, whichever constructor
- * runs: it is declared first. */
 VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
     : heap_(), blocks_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks, Pool::paged),
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
@@ -71,9 +62,6 @@ VkPhysicalDevice VulkanBackend::bound_device(VkInstance instance)
     return gpu_ != nullptr ? listed_.find(instance, *gpu_) : VK_NULL_HANDLE;
 }
 
-/* Both lists answer the same way: the count alone when there is no array, and
- * otherwise as much of the one device as the room holds, VK_INCOMPLETE when
- * that was none of it. */
 VkResult VulkanBackend::on_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysicalDeviceCount,
                                                       VkPhysicalDevice *pPhysicalDevices)
 {
@@ -103,8 +91,6 @@ VkResult VulkanBackend::on_vkEnumeratePhysicalDeviceGroups(VkInstance instance, 
     if (*pPhysicalDeviceGroupCount < available) return VK_INCOMPLETE;
     *pPhysicalDeviceGroupCount = available;
     if (available == 0u) return VK_SUCCESS;
-    /* A group of one is a group every physical device is. The caller's sType
-     * and pNext stay as it set them. */
     pPhysicalDeviceGroupProperties[0].physicalDeviceCount = 1u;
     pPhysicalDeviceGroupProperties[0].physicalDevices[0] = bound;
     pPhysicalDeviceGroupProperties[0].subsetAllocation = VK_FALSE;
@@ -124,24 +110,12 @@ bool VulkanBackend::room_for(uint64_t handles)
     return handles_.make_room(handles) == Status::ok;
 }
 
-/* The decoder asked room_for every handle a reply carries before the driver
- * made any, so remembering one cannot fail from the wire. Were it to, the
- * handle is one this host refuses when the guest names it - a refused
- * command, never a pointer the guest chose. */
 void VulkanBackend::made(vkproto::HandleKind kind, uint64_t handle)
 {
     AV_SCOPE("VulkanBackend::made");
     keep(handle, object_kind(kind), 0u);
 }
 
-/* A dispatchable handle must be one this context made as that kind: the loader
- * dereferences it to find the table to call through, so null, a number never
- * made or a queue where a device belongs aborts the host process rather than
- * getting an error back (feature 042, T064). Every other handle the driver
- * dereferences too - a VkBuffer this executor never made is the same hole one
- * layer down - but null is a value the API defines for most of them, and
- * refusing it would refuse every optional parameter: null passes, anything
- * else must be this context's. */
 bool VulkanBackend::handle_for(vkproto::HandleKind kind, uint64_t wire, uint64_t &handle) const
 {
     AV_SCOPE("VulkanBackend::handle_for");
@@ -152,7 +126,6 @@ bool VulkanBackend::handle_for(vkproto::HandleKind kind, uint64_t wire, uint64_t
     return true;
 }
 
-/* The null handle is the API's own and is never anybody's to own. */
 void VulkanBackend::keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes)
 {
     AV_SCOPE("VulkanBackend::keep");
@@ -196,10 +169,8 @@ Status VulkanBackend::enable_identity(VkInstanceCreateInfo &create)
 {
     AV_SCOPE("VulkanBackend::enable_identity");
     const Status taken = extensions_.take(create.ppEnabledExtensionNames, create.enabledExtensionCount, 1u);
-    /* A list the loader will refuse anyway is left for it to refuse. */
     if (taken == Status::invalid_parameter) return Status::ok;
     if (taken != Status::ok) return taken;
-    /* Into the room take made, so it cannot be refused. */
     static_cast<void>(extensions_.add(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME));
     create.ppEnabledExtensionNames = extensions_.names();
     create.enabledExtensionCount = extensions_.count();
@@ -218,11 +189,6 @@ void VulkanBackend::adopt_host_version(VkInstanceCreateInfo &create)
     create.pApplicationInfo = &application_;
 }
 
-/* The guest's host-visible memory is the memory source's, which reaches the
- * guest's device as a dma-buf (docs/host-memory.md). VK_KHR_external_memory
- * is core from 1.1 and still valid to enable there. The modifier extension is
- * what the ICD's swapchain images are laid out by over a window chain's
- * memory (ChainedImage, ExportableImageInfo). */
 Status VulkanBackend::enable_memory_import(VkDeviceCreateInfo &create, uint32_t &importing)
 {
     AV_SCOPE("VulkanBackend::enable_memory_import");
@@ -231,7 +197,6 @@ Status VulkanBackend::enable_memory_import(VkDeviceCreateInfo &create, uint32_t 
     const Status taken = extensions_.take(create.ppEnabledExtensionNames, create.enabledExtensionCount, added);
     if (taken == Status::invalid_parameter) return Status::ok;
     if (taken != Status::ok) return taken;
-    /* Into the room take made, so none can be refused. */
     static_cast<void>(extensions_.add(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME));
     static_cast<void>(extensions_.add(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME));
     static_cast<void>(extensions_.add(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME));
@@ -246,11 +211,6 @@ VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
                                             const VkAllocationCallbacks *, VkInstance *pInstance)
 {
     AV_SCOPE("VulkanBackend::on_vkCreateInstance");
-    /* A version below 1.0 - major zero - is refused here rather than passed
-     * on. The loader only warns about it (VUID-VkApplicationInfo-apiVersion)
-     * and then builds a chain the layers behind it read as one that was never
-     * made: Mesa's device-select layer dereferences a table it never
-     * allocated and the host process dies, which no guest may be able to do. */
     if (pCreateInfo->pApplicationInfo != nullptr && pCreateInfo->pApplicationInfo->apiVersion != 0u &&
         pCreateInfo->pApplicationInfo->apiVersion < lowest_api_version)
         return VK_ERROR_INCOMPATIBLE_DRIVER;
@@ -260,29 +220,17 @@ VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
     return RealVulkanDispatch::on_vkCreateInstance(&create, nullptr, pInstance);
 }
 
-/* A template the guest made: what it reads is remembered, because the length of
- * every blob an update through it carries is this template's and the guest's
- * claim about that length is not trusted (feature 047). The decoder made room
- * for its handle before this was called, so no update can arrive for one this
- * context cannot size. */
 VkResult VulkanBackend::on_vkCreateDescriptorUpdateTemplate(VkDevice device,
                                                             const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
                                                             const VkAllocationCallbacks *pAllocator,
                                                             VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate)
 {
     AV_SCOPE("VulkanBackend::on_vkCreateDescriptorUpdateTemplate");
-    /* Sized before the driver is asked: entries that cannot be sized - the
-     * guest sent them, so they are checked here rather than trusted - are
-     * refused rather than handed a template no update through it could be
-     * checked against (constitution V). */
     DescriptorTemplateLayout layout;
     if (layout.take(pCreateInfo->pDescriptorUpdateEntries, pCreateInfo->descriptorUpdateEntryCount) != Status::ok)
         return VK_ERROR_INITIALIZATION_FAILED;
     const VkResult result = RealVulkanDispatch::on_vkCreateDescriptorUpdateTemplate(device, pCreateInfo, pAllocator,
                                                                                     pDescriptorUpdateTemplate);
-    /* Vulkan sets the handle to VK_NULL_HANDLE when a create fails, and the
-     * null handle is never kept, so the driver's answer needs no branch of its
-     * own. A handle the driver hands out again is this template now. */
     const uint64_t made = reinterpret_cast<uint64_t>(*pDescriptorUpdateTemplate);
     handles_.forget(made);
     made_through(reinterpret_cast<uint64_t>(device));
@@ -301,8 +249,6 @@ uint64_t VulkanBackend::template_bytes(VkDescriptorUpdateTemplate made) const
 bool VulkanBackend::knows(uint32_t command_id) const
 {
     AV_SCOPE("VulkanBackend::knows");
-    /* Asked before the dispatch, so an id the profile does not carry is a
-     * skip instead of a fault. */
     return vkproto::knows_command(command_id);
 }
 
@@ -326,13 +272,6 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
     uint32_t           importing = 0u;
     if (enable_memory_import(create, importing) != Status::ok) return VK_ERROR_OUT_OF_HOST_MEMORY;
     VkResult result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, &create, nullptr, pDevice);
-    /* Made without what the driver lacks: listing the physical device's
-     * extensions first would take a table of hundreds of names, and a refusal
-     * costs one more create. A driver without the modifier extension still
-     * imports guest memory, and only a swapchain over a window chain needs
-     * it; one without the import extensions is made as the guest asked. A
-     * guest naming one that does not exist is refused each time, the same
-     * way. */
     if (result == VK_ERROR_EXTENSION_NOT_PRESENT && importing != create.enabledExtensionCount) {
         create.enabledExtensionCount = importing;
         result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, &create, nullptr, pDevice);
@@ -341,9 +280,6 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
         create.enabledExtensionCount != pCreateInfo->enabledExtensionCount)
         result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, pCreateInfo, nullptr, pDevice);
     if (result != VK_SUCCESS) return result;
-    /* Every device's entry points, for what is shared through it; the last
-     * made is the one blobs are imported onto, since a blob arrives with no
-     * command to name one. */
     GuestDevice *made = nullptr;
     if (devices_.create(made) != Status::ok) {
         RealVulkanDispatch::on_vkDestroyDevice(*pDevice, nullptr);
@@ -351,8 +287,6 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     physical_ = physicalDevice;
-    /* Asked of the device rather than of the list: whichever create made it,
-     * the loader answers the entry point only when it was enabled. */
     const auto instance = reinterpret_cast<VkInstance>(handles_.parent_of(reinterpret_cast<uint64_t>(physicalDevice)));
     if (made->load(instance, physicalDevice, *pDevice)) {
         adopting_ = made;
@@ -364,9 +298,6 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
     return result;
 }
 
-/* The guest is shown one physical device, the bound GPU's, whose source this
- * is. The source's view is the one its requests are translated by, so it is
- * the guest's whenever there is one; without it the guest maps nothing. */
 void VulkanBackend::learn_types(VkPhysicalDevice physical)
 {
     AV_SCOPE("VulkanBackend::learn_types");
@@ -426,10 +357,6 @@ void VulkanBackend::for_source(VkDevice device, VkBufferCreateInfo &create, VkEx
     if (backs_with_source(device, create.pNext, external.sType, external.handleTypes)) create.pNext = &external;
 }
 
-/* An image whose chain names the source's handle type - the one added here,
- * or the guest's own - may be bound to the source's memory. An image laid out
- * by a DRM format modifier is not asked about: the driver's query needs the
- * modifier, and RADV dereferences the structure that would name it. */
 bool VulkanBackend::for_source(VkDevice device, VkImageCreateInfo &create, VkExternalMemoryImageCreateInfo &external)
 {
     AV_SCOPE("VulkanBackend::for_source");
@@ -458,10 +385,6 @@ VkResult VulkanBackend::on_vkCreateBuffer(VkDevice device, const VkBufferCreateI
     return RealVulkanDispatch::on_vkCreateBuffer(device, &create, nullptr, pBuffer);
 }
 
-/* What the image was made as is remembered with its handle, which is what its
- * memory requirements are answered by, and goes when the handle does. Vulkan
- * sets the handle to VK_NULL_HANDLE when a create fails, and the null handle
- * is never remembered, so the driver's answer needs no branch of its own. */
 VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                                          const VkAllocationCallbacks *, VkImage *pImage)
 {
@@ -575,7 +498,6 @@ void VulkanBackend::on_vkGetDeviceImageMemoryRequirements(VkDevice device,
     needs.memoryTypeBits = image_bits(needs.memoryTypeBits, bindable);
 }
 
-/* The create info answers what on_vkCreateImage would make of it. */
 void VulkanBackend::on_vkGetDeviceImageSparseMemoryRequirements(
     VkDevice device, const VkDeviceImageMemoryRequirements *pInfo, uint32_t *pSparseMemoryRequirementCount,
     VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements)
@@ -599,9 +521,6 @@ void VulkanBackend::on_vkGetDeviceImageSparseMemoryRequirementsKHR(
                                                 pSparseMemoryRequirements);
 }
 
-/* A linear image made for a dma-buf may be laid out for it - a driver may
- * pitch its rows as the import needs - so the layout asked of a create info
- * is the made image's. */
 void VulkanBackend::on_vkGetDeviceImageSubresourceLayoutKHR(VkDevice device, const VkDeviceImageSubresourceInfo *pInfo,
                                                             VkSubresourceLayout2 *pLayout)
 {
@@ -660,8 +579,6 @@ void VulkanBackend::on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, cons
         RealVulkanDispatch::on_vkFreeMemory(device, memory, nullptr);
         return;
     }
-    /* The blob stays the device's until it releases it; only what this
-     * library made of it goes, so that the release finds nothing to free. */
     abandon(*imported, handle);
     imports_->unname(handle);
 }
@@ -727,26 +644,16 @@ bool VulkanBackend::imports_nothing(const void *next) const
     return true;
 }
 
-/* The type the source's memory is imported as: the type it was allocated as
- * when this device's driver would import its dma-buf as that (the guest asked
- * for that type - HostMemoryRequest), and else the first that driver reports
- * for the dma-buf: memory another adapter's device lent, allocated on another
- * GPU, has a type index that is that GPU's. */
 uint32_t VulkanBackend::import_type(const SourceMemory &memory, int fd) const
 {
     AV_SCOPE("VulkanBackend::import_type");
     const uint32_t reported = adopting_->memory().dmabuf_types(fd);
-    /* A driver that cannot say reports none: the type it was allocated as. */
     if (reported == 0u) return memory.memory_type();
     if (memory.memory_type() < max_memory_types && (reported & (1u << memory.memory_type())) != 0u)
         return memory.memory_type();
     return first_memory_type(reported);
 }
 
-/* The source's memory, by its dma-buf, as memory of the type it was
- * allocated as where that is the type this device would import it as, and
- * only onto a device the guest has made, because device memory belongs to
- * one. Vulkan owns the descriptor once the import is made. */
 bool VulkanBackend::adopt(const SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("VulkanBackend::adopt");
@@ -763,8 +670,6 @@ bool VulkanBackend::adopt(const SourceMemory &memory, uint64_t &handle)
         adopting_->memory().release(made);
         return false;
     }
-    /* A non-dispatchable handle on the wire is the driver's own number, so the
-     * memory is what the guest names it by. */
     handle = made;
     return true;
 }
@@ -790,12 +695,6 @@ bool VulkanBackend::export_object(uint32_t kind, uint64_t wire_handle, uint32_t 
         return true;
     }
     if (kind != AV_SHARED_MEMORY) return false;
-    /* Memory is shared as a dma-buf and nothing else. An opaque fd carries no
-     * memory type with it, and Vulkan requires an import to name the type the
-     * allocation was made with - which is the exporting guest's number, on the
-     * exporting guest's device, and nothing on this side of the wire has it.
-     * A GPU that imports the host pointer therefore shares no memory at all,
-     * and the guest is refused rather than handed something it cannot bind. */
     if (!owner->memory().export_memory(wire_handle, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, descriptor))
         return false;
     handle_kind = AV_SHARED_HANDLE_DMA_BUF;
@@ -807,7 +706,7 @@ bool VulkanBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
                                   uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("VulkanBackend::import_object");
-    static_cast<void>(shape);   /* memory alone: no image of this API is made over it */
+    static_cast<void>(shape);
     wire_handle = 0u;
     detail = 0u;
     if (fd < 0 || into == 0u) return false;
@@ -825,11 +724,6 @@ bool VulkanBackend::import_memory(GuestDevice &device, int fd, uint64_t size, ui
     if (memory_type == max_memory_types) return false;
     const bool imported = device.memory().import_shared_memory(fd, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
                                                                size, memory_type, wire_handle);
-    /* The host driver declining an import the backend asked for correctly.
-     * No driver reachable from a test on this machine ever does: radv is the
-     * only one here that takes a dma-buf at all, and it takes one of the wrong
-     * size, one whose device never enabled the extension, and a descriptor
-     * number that names nothing (research.md §19). */
     if (!imported) { AV_UNTESTABLE("no host driver here refuses an import"); return false; }
     if (kept_on(device, wire_handle)) return true;
     device.memory().release(wire_handle);
@@ -837,9 +731,6 @@ bool VulkanBackend::import_memory(GuestDevice &device, int fd, uint64_t size, ui
     return false;
 }
 
-/* Into a semaphore this context made, on the device that made it: the
- * semaphore stays the guest's, so the hold answers it and its release
- * destroys nothing. */
 bool VulkanBackend::import_payload(int fd, uint64_t into, uint64_t &wire_handle, uint64_t &detail)
 {
     AV_SCOPE("VulkanBackend::import_payload");
@@ -865,10 +756,6 @@ GuestDevice *VulkanBackend::owner_of(uint64_t made)
     return handles_.holds(made) ? device_of(handles_.parent_of(made)) : nullptr;
 }
 
-/* Made through the device, so destroying the device ends it as the driver
- * does. A registry with no room refuses the import rather than losing the
- * device, as a command's handle would: the guest is copied through instead,
- * and nothing it already has breaks. */
 bool VulkanBackend::kept_on(const GuestDevice &device, uint64_t made)
 {
     AV_SCOPE("VulkanBackend::kept_on");
@@ -876,8 +763,6 @@ bool VulkanBackend::kept_on(const GuestDevice &device, uint64_t made)
            Status::ok;
 }
 
-/* What an import made is the device's it was made on: one already gone with
- * its device is not freed twice. */
 GuestDevice *VulkanBackend::forgot(uint64_t made)
 {
     AV_SCOPE("VulkanBackend::forgot");
@@ -886,9 +771,6 @@ GuestDevice *VulkanBackend::forgot(uint64_t made)
     return owner;
 }
 
-/* The guest may have freed the memory itself, with the commands it frees any
- * by: then the registry no longer knows it and there is nothing to do. A
- * payload imported into the guest's own semaphore goes with the semaphore. */
 void VulkanBackend::release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail)
 {
     AV_SCOPE("VulkanBackend::release_object");
@@ -902,8 +784,6 @@ void VulkanBackend::release_object(uint32_t kind, uint64_t wire_handle, uint64_t
     owner->memory().destroy_semaphore(wire_handle);
 }
 
-/* The memory itself is the source's and stays mapped; what this made of it
- * is this library's to free, and no longer a handle the guest names. */
 void VulkanBackend::abandon(const SourceMemory &, uint64_t handle)
 {
     AV_SCOPE("VulkanBackend::abandon");
@@ -940,17 +820,12 @@ bool VulkanBackend::lose_device()
     return adopting_ != nullptr && adopting_->table().lose();
 }
 
-/* A Vulkan device's loss reaches the guest from the driver itself, as
- * VK_ERROR_DEVICE_LOST answering its next command. */
 bool VulkanBackend::lost() const
 {
     AV_SCOPE("VulkanBackend::lost");
     return false;
 }
 
-/* A device through the guest's own destroy, which forgets what it exported:
- * the backend outlives the context in its slot, and an fd left listed here is
- * one the next context could import, another context's memory. */
 void VulkanBackend::let_go(uint64_t raw, VulkanObjectKind kind)
 {
     AV_SCOPE("VulkanBackend::let_go");
@@ -967,8 +842,6 @@ void VulkanBackend::shut_down()
     handles_.release_all(release_order, sizeof release_order / sizeof release_order[0],
                          [this](uint64_t raw, VulkanObjectKind kind, uint64_t &, uint32_t) { let_go(raw, kind); });
     imports_ = nullptr;
-    /* The types were learnt of a physical device of the instance that just
-     * died. */
     types_learnt_ = false;
     gpu_ = nullptr;
     ran_ = 0u;
@@ -980,4 +853,4 @@ uint64_t VulkanBackend::ran() const
     return ran_;
 }
 
-}  // namespace av
+}

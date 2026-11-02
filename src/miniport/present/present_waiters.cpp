@@ -19,10 +19,6 @@ PresentWaiters::PresentWaiters(Platform &platform)
     AV_SCOPE("PresentWaiters::PresentWaiters");
 }
 
-/* The slot is taken before the look that decides to sleep, and kept until the
- * wait is over: a wake that lands between that look and the sleep finds the
- * event and is not lost, and a sleeper that was woken is never refused a slot
- * to sleep in again. */
 template <typename Done>
 Status PresentWaiters::sleep_until(uint64_t ticks, uint64_t &waits, uint64_t &timeouts, Done done)
 {
@@ -60,10 +56,6 @@ Status PresentWaiters::admit_write(PresentReads &reads, PresentWrites &writes, u
     return sleep_until(ticks, holds_, hold_timeouts_, [&] { return reads.admit(writes); });
 }
 
-/* The sequence is read on both sides of the ticket: a present that opened in
- * between is one the ticket may not name, and the next look sees it. A ticket
- * of another epoch than the engine's is of an engine that went with a power
- * cycle, and the present it names with it: it counts for nothing. */
 bool PresentWaiters::settled(PresentWrites &writes, const PresentPageView *progress, uint32_t epoch,
                              uint64_t &sequence)
 {
@@ -144,7 +136,6 @@ uint64_t PresentWaiters::hold_timeouts()
     return hold_timeouts_;
 }
 
-/* Never waits on the lock: the dump is read from a bugcheck callback too. */
 void PresentWaiters::report(StateWriter &writer)
 {
     AV_SCOPE("PresentWaiters::report");
@@ -170,4 +161,4 @@ bool PresentWaiters::invariants_hold()
     return timeouts_ <= waits_ && hold_timeouts_ <= holds_;
 }
 
-}  // namespace av
+}

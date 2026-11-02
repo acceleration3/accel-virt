@@ -1,7 +1,3 @@
-/* Reaches into a ScanoutBinding so invariant tests can corrupt it: each of the
- * two things a head keeps in step with showing - a framebuffer, and the blob
- * it names - can be broken on its own here, and on its own it fails. Declared
- * a friend by ScanoutBinding; nothing outside the tests uses it. */
 #ifndef AV_SCANOUT_BINDING_PROBE_HPP
 #define AV_SCANOUT_BINDING_PROBE_HPP
 
@@ -21,6 +17,6 @@ struct ScanoutBindingProbe {
     ScanoutBinding &binding;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_SCANOUT_BINDING_PROBE_HPP
+#endif

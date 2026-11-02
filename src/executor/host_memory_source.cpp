@@ -22,15 +22,10 @@ HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks
 HostMemorySource::~HostMemorySource()
 {
     AV_SCOPE("HostMemorySource::~HostMemorySource");
-    /* Aliases were let go of when the library closed (release_aliases): the
-     * memory they held may be gone with the source that allocated it. */
     memories_.for_each([this](const SourceMemory &memory) { exporter_.free(memory.exported()); });
     memories_.destroy_all();
 }
 
-/* A type is asked of the exporter once, the first time anything wants to
- * know: the probe allocates on the GPU, and nothing allocates before a guest
- * asks. */
 void HostMemorySource::learn()
 {
     AV_SCOPE("HostMemorySource::learn");
@@ -79,14 +74,6 @@ uint32_t HostMemorySource::first_type(uint32_t among, VkMemoryPropertyFlags want
     return HostMemoryRequest::memory_types;
 }
 
-/* Upload memory is what the CPU writes and the GPU reads: the GPU's own,
- * through a resizable BAR, where there is one, else uncached system memory.
- * Readback memory is what a CPU reads, the guest's or the host's, which only
- * cached memory serves at speed. Either is first sought among the types an
- * importer may map, since vkd3d-proton imports a heap only as a type the
- * driver reports for its dma-buf: NVIDIA's BAR memory would leave every upload
- * heap refused. A Vulkan request names the guest's type, and has no other:
- * the backend imports it as exactly the host type behind it. */
 uint32_t HostMemorySource::choices(HostMemoryRequest request, uint32_t (&types)[most_choices]) const
 {
     AV_SCOPE("HostMemorySource::choices");
@@ -94,8 +81,6 @@ uint32_t HostMemorySource::choices(HostMemoryRequest request, uint32_t (&types)[
     for (uint32_t &type : found) type = HostMemoryRequest::memory_types;
     constexpr uint32_t per_group = most_choices / 2u;
     const uint32_t     groups[2] = {visible_, mappable_ & ~visible_};
-    /* The request was judged valid, so a kind that is neither of the first
-     * two is readback. */
     constexpr VkMemoryPropertyFlags local = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     constexpr VkMemoryPropertyFlags cached = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
     if (request.kind() == HostMemoryRequest::Kind::vulkan) {
@@ -158,7 +143,6 @@ Status HostMemorySource::alias(uint32_t domain, uint64_t key, HostMemorySource &
                                uint64_t from_key, AvHostMemory &memory)
 {
     AV_SCOPE("HostMemorySource::alias");
-    /* From's reference first, outside this lock: it may be this source. */
     SourceMemory *const lent = from.acquire(from_domain, from_key);
     if (lent == nullptr) return Status::not_found;
     Status status = Status::ok;
@@ -271,9 +255,6 @@ SourceMemory *HostMemorySource::acquire(uint32_t domain, uint64_t key)
         memory->acquire();
         return memory;
     }
-    /* The alias is still there under this lock, and holds a reference, so the
-     * memory lasts while another is taken: the count is atomic, and no lock of
-     * the allocating source's is wanted. */
     memory = aliased(domain, key);
     if (memory != nullptr) memory->acquire();
     return memory;
@@ -300,9 +281,6 @@ uint32_t HostMemorySource::live() const
 void HostMemorySource::report(StateWriter &writer) const
 {
     AV_SCOPE("HostMemorySource::report");
-    /* allocate and release change the pool under the lock, from any
-     * session's worker, and learn the types; a dump must not wait on one
-     * holding it. */
     const ReportGate gate(lock_, writer, "memory_source");
     if (!gate.held()) return;
     writer.hex("mappable_types", mappable_);
@@ -315,8 +293,6 @@ void HostMemorySource::report(StateWriter &writer) const
     writer.close();
 }
 
-/* Every allocation is still referenced by someone, and no two live ones
- * answer to one key. */
 bool HostMemorySource::invariants_hold() const
 {
     AV_SCOPE("HostMemorySource::invariants_hold");
@@ -332,4 +308,4 @@ bool HostMemorySource::invariants_hold() const
     return held && (visible_ & ~mappable_) == 0u && memories_.invariants_hold();
 }
 
-}  // namespace av
+}

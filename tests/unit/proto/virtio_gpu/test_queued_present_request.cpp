@@ -1,7 +1,3 @@
-/* The queued present's fixed part, byte by byte: the driver's own type, the
- * ticket and the source, then the present copy's fields in the copy's order,
- * and every rule the device holds a request to - each broken alone - refused
- * as malformed, leaving what was decoded before as it was. */
 #include "harness/framework/test_registry.hpp"
 #include "proto/dma/present_operation.hpp"
 #include "proto/dma/present_region.hpp"
@@ -77,7 +73,7 @@ T field_at(const std::uint8_t *bytes, std::size_t offset)
     return value;
 }
 
-}  // namespace
+}
 
 TEST(queued_present_request, writes_the_ticket_the_source_then_the_copy_s_fields_in_order)
 { const Encoded encoded = encode(QueuedPresentRequest(9u, blt(swap, 0u, 3u, 5u, 5120u, 7u, 8192u)));
@@ -134,34 +130,33 @@ TEST(queued_present_request, a_page_fill_has_a_colour_and_no_source)
   CHECK_EQ(read.copy().colour(), 0xFF00FF00u);
   CHECK_EQ(read.destination_entries_offset(), 80u); }
 
-/* Each rule broken alone, after a request that held: the refusal leaves it. */
 TEST(queued_present_request, every_rule_broken_is_malformed_and_changes_nothing)
 { QueuedPresentRequest read;
   CHECK_STATUS(decode(QueuedPresentRequest(7u, blt(0u, 0u, 1u, 1u, 64u, 1u, 64u)), read), Status::ok);
   const QueuedPresentRequest broken[] = {
-      QueuedPresentRequest(0u, blt(0u, 0u, 1u, 1u, 64u, 1u, 64u)),                /* no ticket */
+      QueuedPresentRequest(0u, blt(0u, 0u, 1u, 1u, 64u, 1u, 64u)),
       QueuedPresentRequest(8u, PresentCopyRequest(PresentOperation::flip, 0u, 0u, 1u, 1u, 64u, 1u, 64u)),
       QueuedPresentRequest(8u, PresentCopyRequest(static_cast<PresentOperation>(0u), 0u, 0u, 1u, 1u, 64u, 1u, 64u)),
-      QueuedPresentRequest(8u, blt(0u, 5u, 1u, 1u, 64u, 1u, 64u)),                /* a colour on a blt */
-      QueuedPresentRequest(8u, blt(0u, 0u, 0u, 1u, 64u, 1u, 64u)),                /* no regions */
-      QueuedPresentRequest(8u, blt(0u, 0u, max_regions + 1u, 1u, 64u, 1u, 64u)),  /* too many */
-      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 0u, 64u, 1u, 64u)),                /* a page blt with no pages */
-      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 0u, 0u, 1u, 64u)),                 /* ... nor pitch */
+      QueuedPresentRequest(8u, blt(0u, 5u, 1u, 1u, 64u, 1u, 64u)),
+      QueuedPresentRequest(8u, blt(0u, 0u, 0u, 1u, 64u, 1u, 64u)),
+      QueuedPresentRequest(8u, blt(0u, 0u, max_regions + 1u, 1u, 64u, 1u, 64u)),
+      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 0u, 64u, 1u, 64u)),
+      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 0u, 0u, 1u, 64u)),
       QueuedPresentRequest(8u, blt(0u, 0u, 1u, max_entries + 1u, 64u, 1u, 64u)),
-      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 1u, 0u, 1u, 64u)),                 /* no source pitch */
-      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 1u, 66u, 1u, 64u)),                /* part of a pixel */
-      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 1u, 64u, 0u, 64u)),                /* no destination */
+      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 1u, 0u, 1u, 64u)),
+      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 1u, 66u, 1u, 64u)),
+      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 1u, 64u, 0u, 64u)),
       QueuedPresentRequest(8u, blt(0u, 0u, 1u, 1u, 64u, max_entries + 1u, 64u)),
-      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 1u, 64u, 1u, 0u)),                 /* no destination pitch */
+      QueuedPresentRequest(8u, blt(0u, 0u, 1u, 1u, 64u, 1u, 0u)),
       QueuedPresentRequest(8u, blt(0u, 0u, 1u, 1u, 64u, 1u, 62u)),
-      QueuedPresentRequest(8u, fill(swap, 0u, 0u)),                               /* nothing to swap in a fill */
-      QueuedPresentRequest(8u, fill(0u, 1u, 0u)),                                 /* a fill with a source */
+      QueuedPresentRequest(8u, fill(swap, 0u, 0u)),
+      QueuedPresentRequest(8u, fill(0u, 1u, 0u)),
       QueuedPresentRequest(8u, fill(0u, 0u, 64u)),
-      QueuedPresentRequest(8u, SurfacePoint(0u, point), blt(0u, 0u, 1u, 0u, 0u, 1u, 64u)),      /* an image of no surface */
-      QueuedPresentRequest(8u, SurfacePoint(surface, 0u), blt(0u, 0u, 1u, 0u, 0u, 1u, 64u)),    /* ... at no point */
-      QueuedPresentRequest(8u, SurfacePoint(surface, point), blt(0u, 0u, 1u, 1u, 0u, 1u, 64u)), /* an image with pages */
-      QueuedPresentRequest(8u, SurfacePoint(surface, point), blt(0u, 0u, 1u, 0u, 64u, 1u, 64u)),/* ... or a pitch */
-      QueuedPresentRequest(8u, SurfacePoint(surface, point), fill(0u, 0u, 0u)),                 /* an image fills nothing */
+      QueuedPresentRequest(8u, SurfacePoint(0u, point), blt(0u, 0u, 1u, 0u, 0u, 1u, 64u)),
+      QueuedPresentRequest(8u, SurfacePoint(surface, 0u), blt(0u, 0u, 1u, 0u, 0u, 1u, 64u)),
+      QueuedPresentRequest(8u, SurfacePoint(surface, point), blt(0u, 0u, 1u, 1u, 0u, 1u, 64u)),
+      QueuedPresentRequest(8u, SurfacePoint(surface, point), blt(0u, 0u, 1u, 0u, 64u, 1u, 64u)),
+      QueuedPresentRequest(8u, SurfacePoint(surface, point), fill(0u, 0u, 0u)),
   };
   for (const QueuedPresentRequest &request : broken) {
       CHECK_STATUS(decode(request, read), Status::malformed);
@@ -174,11 +169,11 @@ TEST(queued_present_request, every_rule_broken_is_malformed_and_changes_nothing)
       std::size_t  offset;
       std::uint8_t value;
   };
-  const Damage damages[] = {{32u, 2u},    /* a source kind nothing names */
-                            {36u, 1u},    /* a point on a page source */
-                            {39u, 1u},    /* ... in its last byte */
-                            {40u, 1u},    /* a surface on a page source */
-                            {52u, 2u},    /* a flag nothing names */
+  const Damage damages[] = {{32u, 2u},
+                            {36u, 1u},
+                            {39u, 1u},
+                            {40u, 1u},
+                            {52u, 2u},
                             {55u, 0x80u}};
   for (const Damage &damage : damages) {
       Encoded bytes = good;

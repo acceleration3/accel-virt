@@ -17,7 +17,6 @@ std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
            std::uint32_t{bytes[offset + 2u]} << 16u | std::uint32_t{bytes[offset + 3u]} << 24u;
 }
 
-/* A header with no flags, fence, context or ring. */
 bool plain_header(const std::uint8_t *bytes, std::uint32_t type)
 {
     for (std::size_t byte = 4u; byte < GpuRequestWriter::header_size; byte++)
@@ -30,13 +29,12 @@ struct Buffer {
     std::uint8_t bytes[GpuRequestWriter::max_request_size + 8u];
 };
 
-/* Room for a backing request with several memory entries. */
 struct BigBuffer {
     BigBuffer() { std::memset(bytes, 0xEE, sizeof bytes); }
     std::uint8_t bytes[256u];
 };
 
-}  // namespace
+}
 
 TEST(gpu_request_writer_create_2d, is_virtio_gpu_resource_create_2d)
 { Buffer buffer;
@@ -63,7 +61,6 @@ TEST(gpu_request_writer_attach_backing, is_one_memory_entry)
   CHECK_EQ(u32(buffer.bytes, 40u), 16384u);
   CHECK_EQ(u32(buffer.bytes, 44u), 0u); }
 
-/* One memory entry per run of adjacent pages, each covering the whole run. */
 TEST(gpu_request_writer_attach_backing_pages, joins_adjacent_pages_into_one_entry)
 { BigBuffer buffer;
   GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -117,8 +114,6 @@ TEST(gpu_request_writer_transfer_to_host_2d, covers_the_whole_resource)
   CHECK_EQ(u32(buffer.bytes, 48u), 1u);
   CHECK_EQ(u32(buffer.bytes, 52u), 0u); }
 
-/* struct virtio_gpu_set_scanout: the rectangle the host shows, then which
- * scanout shows it and from which resource. */
 TEST(gpu_request_writer_resource_unref, names_the_resource_the_host_may_forget)
 { Buffer buffer;
   GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -129,7 +124,6 @@ TEST(gpu_request_writer_resource_unref, names_the_resource_the_host_may_forget)
   CHECK_EQ(u32(buffer.bytes, 28u), 0u);
   CHECK_EQ(buffer.bytes[32], 0xEEu); }
 
-/* struct virtio_gpu_resource_detach_backing: the resource, then padding. */
 TEST(gpu_request_writer_detach_backing, names_the_resource_that_lets_go_of_its_pages)
 { Buffer buffer;
   GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -142,9 +136,6 @@ TEST(gpu_request_writer_detach_backing, names_the_resource_that_lets_go_of_its_p
   GpuRequestWriter header_only(buffer.bytes, GpuRequestWriter::header_size - 1u);
   CHECK_STATUS(header_only.detach_backing(9u), Status::too_large); }
 
-/* av's own request: the resource, the frame the display clock shows it as
- * (0: at once), and the key the host image was published under, which the
- * host shows in place of a transfer from the guest's pages. */
 TEST(gpu_request_writer_scanout_image, names_the_resource_the_frame_and_the_host_image_key)
 { Buffer buffer;
   GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -175,7 +166,6 @@ TEST(gpu_request_writer_set_scanout, names_the_scanout_the_resource_and_the_rect
   CHECK_EQ(u32(buffer.bytes, 44u), 7u);
   CHECK_EQ(buffer.bytes[48], 0xEEu); }
 
-/* A scanout of resource 0 is how virtio-gpu is told to show nothing. */
 TEST(gpu_request_writer_set_scanout, disables_a_scanout_with_resource_zero)
 { Buffer buffer;
   GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -245,12 +235,9 @@ TEST(gpu_request_writer, a_request_that_does_not_fit_writes_nothing)
   CHECK_STATUS(tiny.update_cursor(0u, 0, 0, 1u, 0u, 0u), Status::too_large);
   CHECK_STATUS(tiny.set_scanout(0u, 1u, 1u, 1u), Status::too_large);
   CHECK_STATUS(tiny.resource_flush(1u, 1u, 1u), Status::too_large);
-  /* The scanout blob is the longest of them, so the buffer every other
-   * request fits is still too small for it. */
   CHECK_STATUS(writer.set_scanout_blob(0u, 1u, 64u, 64u, 256u), Status::too_large);
   CHECK_STATUS(tiny.set_scanout_blob(0u, 1u, 64u, 64u, 256u), Status::too_large);
   CHECK_EQ(tiny.length(), 0u);
-  /* An unref is 32 bytes, so it fits where the bigger requests do not. */
   CHECK_STATUS(tiny.resource_unref(1u), Status::ok);
   CHECK_EQ(tiny.length(), 32u);
   GpuRequestWriter header_only(buffer.bytes, GpuRequestWriter::header_size - 1u);

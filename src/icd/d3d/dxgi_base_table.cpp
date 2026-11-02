@@ -13,11 +13,9 @@
 namespace av::d3d {
 
 namespace {
-
-/* D3DDDI_RECLAIM_RESULT_OK: reclaimed with its contents. */
 constexpr uint32_t reclaim_ok = 0u;
 
-}  // namespace
+}
 
 DxgiBaseTable::DxgiBaseTable(UmdDevice &device) : device_(device), revision_(Revision::none), callbacks_(nullptr)
 {
@@ -71,8 +69,6 @@ Hresult DxgiBaseTable::gamma_caps(DxgiDdiArgGetGammaControlCapsRecord *args)
     caps->ScaleAndOffsetSupported = 0;
     caps->MaxConvertedValue = 0.0f;
     caps->MinConvertedValue = 0.0f;
-    /* Zero control points, so the 1025-entry array behind these four fields is
-     * the runtime's and is not touched. */
     caps->NumGammaControlPoints = 0u;
     return hr_ok;
 }
@@ -80,8 +76,6 @@ Hresult DxgiBaseTable::gamma_caps(DxgiDdiArgGetGammaControlCapsRecord *args)
 Hresult DxgiBaseTable::resource_priority(DxgiDdiArgRecord *args)
 {
     AV_SCOPE("DxgiBaseTable::resource_priority");
-    /* Advisory, and this driver has no eviction order of its own to apply it
-     * to: accepted and dropped, which is what a driver without one does. */
     return usable(args);
 }
 
@@ -127,9 +121,6 @@ Hresult DxgiBaseTable::overlay_color_space(DxgiDdiArgCheckMultiplaneOverlayColor
     const Hresult refused =
         usable(reinterpret_cast<const DxgiDdiArgRecord *>(args));
     if (refused != hr_ok) return refused;
-    /* What avgpu's planes show (OverlaySupport): the scanout's RGB formats in
-     * the desktop's colour space, and NV12 and YUY2 video in a BT.601 or
-     * BT.709 YCbCr space, which the host converts. */
     constexpr uint32_t srgb = 0u, first_ycbcr = 5u, last_ycbcr = 9u;
     const bool video = args->Format == 103u || args->Format == 107u;
     const bool rgb = args->Format == 87u || args->Format == 88u || args->Format == 28u;
@@ -141,8 +132,6 @@ Hresult DxgiBaseTable::overlay_color_space(DxgiDdiArgCheckMultiplaneOverlayColor
 Hresult DxgiBaseTable::trim_residency(DxgiDdiArgRecord *args)
 {
     AV_SCOPE("DxgiBaseTable::trim_residency");
-    /* Residency is the KMD's here, so there is nothing of the driver's to
-     * trim; the runtime asks and is told it happened. */
     return usable(args);
 }
 
@@ -194,4 +183,4 @@ bool DxgiBaseTable::invariants_hold() const
     return (revision_ == Revision::none) == (callbacks_ == nullptr);
 }
 
-}  // namespace av::d3d
+}

@@ -1,10 +1,3 @@
-/* Contexts that run in a renderer process (docs/renderer.md): QEMU keeps the
- * control plane - which contexts exist, what they pin, their doorbells - and
- * the renderer runs their workers over the same guest memory. The renderer is
- * told of every blob and of the fence interrupts, and a new one is told all of
- * it again. One that dies takes its contexts with it: each is reported lost to
- * the guest, and a new renderer is started unless they keep dying. Main loop
- * only. */
 #ifndef AV_RENDERER_CONTEXT_PLANE_HPP
 #define AV_RENDERER_CONTEXT_PLANE_HPP
 
@@ -35,17 +28,12 @@ class RendererContextPlane final : public ContextPlane {
 public:
     static constexpr uint32_t max_contexts = 64u;
     static constexpr uint32_t max_path = HelloMessage::max_path_length;
-    /* More deaths than this inside the window and no renderer is started
-     * again: a driver that crashes on start would otherwise be restarted for
-     * ever, each start holding the main loop for its greeting. */
     static constexpr uint32_t max_losses = 3u;
     static constexpr uint64_t loss_window_ns = 60000000000u;
 
     RendererContextPlane(Host &host, BlobTable &blobs, FenceInterrupts &interrupts);
     ~RendererContextPlane();
 
-    /* Before start: the renderer to run and the executor library it loads.
-     * invalid_parameter for a path that is missing or too long. */
     [[nodiscard]] Status configure(const char *renderer, const char *executor);
 
     [[nodiscard]] Status accept(const AvExecutorOps *executor) override;
@@ -75,8 +63,6 @@ public:
     void renderer_lost() override;
 
     bool export_image(const uint8_t *gpu_uuid, uint64_t key, AvExportedImage &image) override;
-    /* The renderer composes no planes: its link carries no plane set, so a
-     * device in it never offers them. */
     bool composes() const override;
     bool compose_planes(const uint8_t *gpu_uuid, const AvScanoutPlane *planes, uint32_t count, uint32_t width,
                         uint32_t height, AvExportedImage &image) override;
@@ -103,8 +89,6 @@ private:
     [[nodiscard]] Status mirror(uint32_t id);
     [[nodiscard]] Status mirror_guest(uint32_t id, const BlobWindow &pages);
     [[nodiscard]] Status send_interrupt_lines();
-    /* The renderer answered nothing, or nothing a renderer sends: it is let
-     * go as though it had died. */
     void                 give_up();
     bool                 may_restart();
     void                 drop_images();
@@ -128,11 +112,7 @@ private:
     uint32_t         epoch_;
     uint64_t         losses_[max_losses];
     uint32_t         loss_count_;
-    /* The dma-buf last sent for each exported image slot: the display
-     * imports an image once per descriptor, so the same one is handed back
-     * until the renderer sends another. */
     int              images_[ExportedImageMessage::slots];
-    /* Every guest blob the renderer is given, sent again at each launch. */
     GrowableArray<uint32_t> mirrored_;
     ObjectStorage<RemoteContext> slots_[max_contexts];
     RendererExtent   extents_[GuestBlobMessage::max_extents];
@@ -141,6 +121,6 @@ private:
     friend struct RendererContextPlaneProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_RENDERER_CONTEXT_PLANE_HPP
+#endif

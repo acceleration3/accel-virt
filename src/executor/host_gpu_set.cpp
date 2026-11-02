@@ -72,4 +72,4 @@ void HostGpuSet::report(StateWriter &writer) const
     for (uint32_t index = 0u; index < count_; index++) gpus_[index].report(writer);
 }
 
-}  // namespace av
+}

@@ -47,14 +47,12 @@ struct WorkerProbe {
     static void     *lock(Worker &worker) { return worker.lock_; }
 };
 
-}  // namespace av
+}
 
 namespace {
 
 constexpr std::uint32_t patience_ms = 5000u;
 
-/* A journal both sides write: which items ran, in what order, and which
- * completions reached the main loop. */
 struct Journal {
     Host                      *host = nullptr;
     std::atomic<std::uint32_t> ran{0u};
@@ -66,7 +64,7 @@ struct Journal {
 struct Entry {
     Journal      *journal;
     std::uint32_t number;
-    void         *gate;   /* an event the item waits on, or null */
+    void         *gate;
 };
 
 void work(void *context)
@@ -85,7 +83,6 @@ void completion(void *context)
     entry->journal->completion_order[entry->journal->completed++] = entry->number;
 }
 
-/* A ring of order 12 the worker's consumer serves once prepared and attached. */
 class RingMemory {
 public:
     RingMemory() : bytes_{}, pointer_(bytes_), length_(sizeof bytes_), guest_(bytes_, 12u) {}
@@ -120,7 +117,6 @@ public:
     RingWindow    window() const { return memory_.window(); }
     Entry         entry(std::uint32_t number, void *gate = nullptr) { return Entry{&journal_, number, gate}; }
 
-    /* Whether the worker published `head` before patience ran out. */
     bool published(std::uint64_t head)
     {
         for (std::uint32_t spins = 0u; spins < 50000000u && memory_.guest().head() != head; spins++) sched_yield();
@@ -139,7 +135,7 @@ private:
     RingMemory   memory_;
 };
 
-}  // namespace
+}
 
 TEST(worker_post, runs_work_off_the_main_loop_and_completes_on_it_in_order)
 { Fixture fixture;
@@ -162,8 +158,6 @@ TEST(worker_post, runs_work_off_the_main_loop_and_completes_on_it_in_order)
   CHECK(!fixture.worker().running());
   CHECK(fixture.worker().invariants_hold()); }
 
-/* A worker's line: whether it runs, what waits and whether it is stopping;
- * a lock another thread holds is written as busy rather than waited on. */
 TEST(worker_report, writes_its_queue_or_busy_without_waiting)
 { Fixture fixture;
   char bytes[256];
@@ -178,7 +172,7 @@ TEST(worker_report, writes_its_queue_or_busy_without_waiting)
   CHECK_STATUS(fixture.host().create_event(gate), Status::ok);
   Entry blocker = fixture.entry(0u, gate);
   CHECK_STATUS(fixture.worker().post(WorkItem(&work, nullptr, &blocker)), Status::ok);
-  while (fixture.worker().pending() != 0u) sched_yield();   /* the blocker is running */
+  while (fixture.worker().pending() != 0u) sched_yield();
   Entry entries[Worker::queue_capacity] = {};
   for (std::uint32_t index = 0u; index < Worker::queue_capacity; index++) {
       entries[index] = fixture.entry(index + 1u);
@@ -205,7 +199,7 @@ TEST(worker_post, a_full_queue_refuses_the_next_item)
   CHECK_STATUS(fixture.worker().start(), Status::ok);
   Entry blocker = fixture.entry(0u, gate);
   CHECK_STATUS(fixture.worker().post(WorkItem(&work, &completion, &blocker)), Status::ok);
-  while (fixture.worker().pending() != 0u) sched_yield();   /* the blocker is running */
+  while (fixture.worker().pending() != 0u) sched_yield();
   Entry entries[Worker::queue_capacity + 1u] = {};
   for (std::uint32_t index = 0u; index < Worker::queue_capacity; index++) {
       entries[index] = fixture.entry(index + 1u);
@@ -230,7 +224,6 @@ struct Releaser {
     void   *gate;
 };
 
-/* Waits until stop has been requested, then lets the running item finish. */
 void release_once_stopping(void *context)
 {
     auto *const releaser = static_cast<Releaser *>(context);
@@ -238,7 +231,7 @@ void release_once_stopping(void *context)
     releaser->host->signal_event(releaser->gate);
 }
 
-}  // namespace
+}
 
 TEST(worker_stop, finishes_the_running_item_and_drops_the_rest)
 { Fixture fixture;
@@ -260,7 +253,7 @@ TEST(worker_stop, finishes_the_running_item_and_drops_the_rest)
   CHECK(!fixture.worker().stopping());
   CHECK_EQ(fixture.worker().pending(), 0u);
   CHECK_STATUS(fixture.worker().post(WorkItem(&work, &completion, &dropped[0])), Status::invalid_state);
-  CHECK_STATUS(fixture.worker().start(), Status::ok);   /* restartable */
+  CHECK_STATUS(fixture.worker().start(), Status::ok);
   fixture.host().destroy_event(gate); }
 
 TEST(worker_start, a_second_start_is_refused_and_each_host_failure_releases_everything)
@@ -268,7 +261,7 @@ TEST(worker_start, a_second_start_is_refused_and_each_host_failure_releases_ever
   CHECK_STATUS(fixture.worker().start(), Status::ok);
   CHECK_STATUS(fixture.worker().start(), Status::invalid_state);
   fixture.worker().stop();
-  fixture.worker().stop();   /* stopping a stopped worker does nothing */
+  fixture.worker().stop();
   for (int failure = 0; failure < 3; failure++) {
       if (failure == 0) fixture.host().fail_event_at(1u);
       if (failure == 1) fixture.host().fail_mutex_at(1u);
@@ -301,7 +294,7 @@ TEST(worker, lifecycle_is_main_loop_only_and_work_is_worker_only)
   CHECK_STATUS(fixture.worker().start(), Status::ok);
   fixture.worker().stop();
   Entry entry = fixture.entry(1u);
-  work(&entry);   /* worker work run on the main loop */
+  work(&entry);
   CHECK(fixture.host().claim(HostViolation::worker_required)); }
 
 TEST(worker_connect_doorbell, a_store_wakes_the_worker_to_serve_its_ring)
@@ -331,9 +324,9 @@ TEST(worker_run, a_doorbell_that_raced_the_attachment_is_not_lost)
   CHECK_STATUS(fixture.worker().connect_doorbell(0u), Status::ok);
   fixture.guest().write_batch(1u, 0u);
   fixture.guest().publish();
-  CHECK(fixture.host().ring_doorbell(0u));   /* served before the ring is attached: nothing */
+  CHECK(fixture.host().ring_doorbell(0u));
   CHECK_STATUS(fixture.worker().post(WorkItem(&attach, nullptr, &fixture.ring())), Status::ok);
-  CHECK(fixture.published(fixture.guest().tail()));   /* the whole empty batch, its header alone */
+  CHECK(fixture.published(fixture.guest().tail()));
   CHECK_EQ(fixture.guest().tail(), 32u);
   CHECK_EQ(fixture.host().run_main_loop(), 0u); }
 
@@ -355,7 +348,7 @@ TEST(worker_connect_doorbell, a_page_past_the_region_is_refused)
   CHECK_EQ(fixture.host().live_doorbells(), 0u);
   fixture.worker().stop();
   CHECK_STATUS(fixture.worker().start(), Status::ok);
-  CHECK_STATUS(fixture.worker().connect_doorbell(1u), Status::ok);   /* restarted: connectable again */
+  CHECK_STATUS(fixture.worker().connect_doorbell(1u), Status::ok);
   fixture.worker().stop(); }
 
 TEST(worker_invariants, a_queue_past_capacity_or_a_head_outside_it_is_detected)
@@ -373,8 +366,8 @@ TEST(worker_invariants, a_queue_past_capacity_or_a_head_outside_it_is_detected)
   CHECK(!misplaced.invariants_hold());
   int event = 0;
   Worker stopped(host, ring);
-  av::DoorbellProbe::forge(av::WorkerProbe::doorbell(stopped), &event);   /* connected, never started */
+  av::DoorbellProbe::forge(av::WorkerProbe::doorbell(stopped), &event);
   CHECK(!stopped.invariants_hold());
-  av::DoorbellProbe::forget_event(av::WorkerProbe::doorbell(stopped));   /* and inconsistent */
+  av::DoorbellProbe::forget_event(av::WorkerProbe::doorbell(stopped));
   CHECK(!stopped.invariants_hold());
   av::DoorbellProbe::repair(av::WorkerProbe::doorbell(stopped)); }

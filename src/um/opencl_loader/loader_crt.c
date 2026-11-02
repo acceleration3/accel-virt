@@ -1,22 +1,9 @@
-/* The twelve C library functions the pinned Khronos OpenCL loader calls,
- * answered over the process heap so the guest's OpenCL.dll needs no C runtime.
- *
- * This is the loader's build, not this driver's: it exists so the guest proof
- * runs against the real Khronos loader rather than a stand-in (feature 052,
- * research §2). Nothing in src/ links it, and the ICD it goes on to find is
- * avcl.dll, built the same way and against none of this.
- *
- * Allocation goes through the process heap, not a pool, because this is user
- * mode and the loader frees what it allocates on the same thread it allocated
- * it. The sizes are small and few: a vendor list and the strings in it. */
 #include <windows.h>
 
 typedef __SIZE_TYPE__ av_size_t;
 
 void *malloc(av_size_t bytes)
 {
-    /* HeapAlloc of zero bytes answers a pointer that may be freed, which is
-     * what malloc(0) is allowed to do; the loader never dereferences one. */
     return HeapAlloc(GetProcessHeap(), 0u, (SIZE_T)bytes);
 }
 
@@ -92,15 +79,12 @@ av_size_t wcslen(const unsigned short *text)
     return length;
 }
 
-/* Microsoft's bounded wide-string pair, as much of it as the loader uses: the
- * destination is left empty and a non-zero answer returned when what is being
- * copied does not fit, which is what its callers check. */
 int wcscpy_s(unsigned short *to, av_size_t elements, const unsigned short *from)
 {
     av_size_t index;
-    if (to == 0 || elements == 0u) return 22; /* EINVAL */
+    if (to == 0 || elements == 0u) return 22;
     for (index = 0u; from[index] != 0; ++index) {
-        if (index + 1u >= elements) { to[0] = 0; return 34; } /* ERANGE */
+        if (index + 1u >= elements) { to[0] = 0; return 34; }
         to[index] = from[index];
     }
     to[index] = 0;
@@ -116,8 +100,6 @@ int wcscat_s(unsigned short *to, av_size_t elements, const unsigned short *from)
     return wcscpy_s(to + used, elements - used, from);
 }
 
-/* Insertion sort: the loader sorts its vendor list, which is a handful of
- * entries, and a quadratic sort of a handful is not worth a better one. */
 void qsort(void *base, av_size_t count, av_size_t size,
            int (*compare)(const void *, const void *))
 {
@@ -139,14 +121,10 @@ void qsort(void *base, av_size_t count, av_size_t size,
 
 char *getenv(const char *name)
 {
-    /* The loader reads OCL_ICD_* to be told where to look and what to trace.
-     * A guest test artifact is told nothing: the adapter's registration is the
-     * only way in, which is what the proof is about. */
     (void)name;
     return 0;
 }
 
-/* Tracing, which is off. The names exist so the macros link. */
 struct av_loader_file { int unused; };
 static struct av_loader_file av_loader_stderr_storage = {0};
 struct av_loader_file *const av_loader_stderr = &av_loader_stderr_storage;
@@ -165,9 +143,6 @@ int fwprintf(struct av_loader_file *stream, const unsigned short *format, ...)
     return 0;
 }
 
-/* The DLL's entry point. There is no C runtime to run one, and the loader
- * needs nothing done at attach: its own state is built behind an
- * InitOnceExecuteOnce at the first call. */
 int __stdcall av_opencl_loader_entry(void *module, unsigned long reason, void *reserved)
 {
     (void)module;

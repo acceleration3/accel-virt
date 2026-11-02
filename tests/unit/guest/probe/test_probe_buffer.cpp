@@ -1,7 +1,3 @@
-/* A buffer the probe maps, over a scripted Vulkan: made, bound and mapped in
- * the lowest host-visible type it may use; a failure at each call stops there
- * and is the one the outcome keeps; no usable type is a missing one; and
- * whatever was made is destroyed with its memory. */
 #include "guest/probe/probe_buffer.hpp"
 #include "guest/probe/probe_device.hpp"
 #include "guest/probe/probe_outcome.hpp"
@@ -17,7 +13,7 @@ struct ProbeBufferProbe {
     static void memory_without_buffer(ProbeBuffer &buffer) { buffer.buffer_ = VK_NULL_HANDLE; buffer.bytes_ = nullptr; }
 };
 
-}  // namespace av
+}
 
 using av::ProbeBuffer;
 using av::ProbeBufferProbe;
@@ -37,7 +33,7 @@ void make(ProbeDevice &device)
     CHECK_EQ(device.make_device(), VK_SUCCESS);
 }
 
-}  // namespace
+}
 
 TEST(probe_buffer, a_buffer_is_mapped_in_a_host_visible_type)
 { ScriptedVulkan vulkan;
@@ -71,7 +67,6 @@ TEST(probe_buffer, no_host_visible_type_is_missing)
   CHECK_EQ(vulkan.live(), 0u);
   CHECK_EQ(vulkan.misuses(), 0u); }
 
-/* Each call refused in turn: nothing after it is made, and nothing is left. */
 TEST(probe_buffer, a_refusal_at_each_call_stops_there)
 { const Call calls[] = {Call::create_buffer, Call::allocate_memory, Call::bind_buffer_memory, Call::map_memory};
   for (const Call call : calls) {

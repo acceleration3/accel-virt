@@ -1,9 +1,3 @@
-"""Every generator's --check (GeneratedTree): a committed tree that matches
-what the generator writes passes; one that lost a file, gained one, or drifted
-by a byte fails and says which; and a missing --out is refused rather than
-made. The Vulkan generator's own copy crashed on a missing file rather than
-reporting it.
-"""
 import contextlib
 import io
 import pathlib

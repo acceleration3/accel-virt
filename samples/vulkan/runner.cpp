@@ -1,10 +1,3 @@
-// Runs the examples off-screen with samples/d3d11/runner.cpp's semantics:
-// warm-up frames for a count and a second, then blocks of timed frames, each
-// block finished, until a second has passed; then one moment rendered twice
-// and read back as the picture both machines are compared by. The examples'
-// own render() draws each frame, and this drives the bookkeeping upstream's
-// renderLoop() does around it (frame time, the animation timer, the overlay's
-// once-a-second refresh), on a fixed 1/60 s step.
 #include "prelude.hpp"
 #include "registry.hpp"
 
@@ -29,7 +22,6 @@ struct Options
 	double timedSeconds = 1.0;
 	uint32_t frames = 600;
 	float captureTime = 1.5f;
-	// A sample that has not reported by then is stuck: its line says so and the program ends.
 	uint32_t watchdogSeconds = 300;
 	bool compile = false;
 	bool list = false;
@@ -52,15 +44,13 @@ double seconds()
 	return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-}  // namespace
+}
 
 class HeadlessRunner
 {
 public:
 	explicit HeadlessRunner(const Options &options);
 	int run();
-	// The line of whichever sample was running when the process ended early: a
-	// failed VK_CHECK_RESULT exits, and the report must still see the sample.
 	void reportUnfinished(const char *how);
 	void watch();
 
@@ -68,7 +58,6 @@ private:
 	const Options &options;
 	std::string metrics = "sample\tstatus\tinit_ms\tframes\tms\tfps\n";
 	std::atomic<const char *> current{nullptr};
-	// "init", "render" or "capture": where a sample that never reported stopped.
 	std::atomic<const char *> phase{"init"};
 	std::atomic<double> deadline{0.0};
 	double fpsFrom = 0.0;
@@ -94,7 +83,6 @@ VulkanExampleBase *HeadlessRunner::start(const SampleEntry &entry)
 	example->initSwapchain();
 	example->prepare();
 	vkQueueWaitIdle(example->queue);
-	// renderLoop() leaves the first frame 1 s of frame time; a fixed step instead.
 	example->frameTimer = frameStep;
 	return example;
 }
@@ -114,8 +102,6 @@ void HeadlessRunner::frame(VulkanExampleBase *example, float step)
 	}
 }
 
-// renderLoop()'s once-a-second fps count and overlay refresh, which the
-// samples showing text pay for every second.
 void HeadlessRunner::tick(VulkanExampleBase *example)
 {
 	const double now = seconds();
@@ -129,7 +115,6 @@ void HeadlessRunner::tick(VulkanExampleBase *example)
 	fpsFrom = now;
 }
 
-// The presented image as B8G8R8A8 rows: "BGRA", width, height, then the texels.
 bool HeadlessRunner::capture(VulkanExampleBase *example, const std::string &path)
 {
 	VkDevice device = example->device;
@@ -233,8 +218,6 @@ void HeadlessRunner::runSample(const SampleEntry &entry)
 	}
 	phase = "render";
 	fpsFrom = seconds();
-	/* The GPU's clocks climb over the first few hundred milliseconds of load,
-	 * so the warm-up runs for a time as well as a count. */
 	const double warmFrom = seconds();
 	for (uint32_t count = 0; count < options.warmup || seconds() - warmFrom < options.warmupSeconds; count++)
 	{
@@ -242,7 +225,6 @@ void HeadlessRunner::runSample(const SampleEntry &entry)
 		tick(example);
 	}
 	vkQueueWaitIdle(example->queue);
-	/* Blocks of the frames asked for, each finished, until a second has gone. */
 	const double timed = seconds();
 	uint32_t frames = 0;
 	double looped = 0.0;
@@ -261,11 +243,6 @@ void HeadlessRunner::runSample(const SampleEntry &entry)
 	printf("loop ms%.3f\nfinish ms%.3f\n", looped * 1000.0, (taken - looped) * 1000.0);
 	entry.destroy(example);
 
-	/* The picture: a fresh example stepped to the capture time, so a sample
-	 * that accumulates its own state - particles, a skeleton's clock - shows
-	 * the same moment however many frames each machine managed above. Then
-	 * that moment twice, so one showing what its previous frame measured -
-	 * the occlusion counts - shows the capture time's own. */
 	phase = "capture";
 	example = start(entry);
 	const uint32_t steps = uint32_t(options.captureTime / frameStep + 0.5f);
@@ -296,7 +273,6 @@ void HeadlessRunner::writeMetrics()
 	fclose(file);
 }
 
-// how is "failed" for a process ending early, "hung" for the watchdog.
 void HeadlessRunner::reportUnfinished(const char *how)
 {
 	const char *name = current.exchange(nullptr);
@@ -366,12 +342,11 @@ void reportAtExit()
 	}
 }
 
-}  // namespace
+}
 
 int main(int argc, char **argv)
 {
 #if defined(_WIN32)
-	// A crash ends the process instead of waiting on a dialog nobody sees.
 	SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
 #endif
 	Options options;

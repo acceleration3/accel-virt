@@ -1,13 +1,3 @@
-"""The display clock against the real device (docs/protocol.md, "Display
-clock"): a registered page is headed and each head's blanks advance on the
-host's clock at the head's rate, whatever the guest does; a new rate takes over
-from the last blank; requests the protocol does not allow are refused; and the
-display line - queue 66, after the fence queues - pends its vector on the
-blanks the guest asked for and on no others.
-
-Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
-AV_QEMU_BUILD.
-"""
 import os
 import struct
 import time
@@ -40,9 +30,6 @@ def request(kind, body):
 
 
 class Blank:
-    """One head's record, read until its generation was the same even number
-    on both sides of the copy."""
-
     def __init__(self, qtest, page, head):
         at = page + 32 + 64 * head
         for _ in range(1000):
@@ -80,8 +67,6 @@ class VirtioGpuDisplayClock(unittest.TestCase):
         blanks = second.sequence - first.sequence
         self.assertGreaterEqual(blanks, 20)
         self.assertLessEqual(blanks, 40)
-        # The device's own timestamps: n blanks are n periods apart, to the
-        # nanosecond the rate's fraction allows.
         self.assertAlmostEqual((second.vblank - first.vblank) / blanks, 1e9 / 60, delta=1.0)
         self.assertEqual(second.latched, 0)
         last = Blank(gpu.qtest, page, 15)
@@ -99,7 +84,7 @@ class VirtioGpuDisplayClock(unittest.TestCase):
         self.assertEqual(faster.period, 1000000)
         time.sleep(0.2)
         self.assertGreaterEqual(Blank(gpu.qtest, page, 2).sequence - faster.sequence, 100)
-        self.assertEqual(Blank(gpu.qtest, page, 0).refresh, 60000)   # the other heads keep theirs
+        self.assertEqual(Blank(gpu.qtest, page, 0).refresh, 60000)
 
     def test_what_the_protocol_does_not_allow_is_refused(self):
         gpu = virtio_qtest.VirtioGpu(self.qtest(), WANTED)
@@ -124,7 +109,7 @@ class VirtioGpuDisplayClock(unittest.TestCase):
         table = msix["table"]
         page = self.registered(gpu)
         time.sleep(QUIET)
-        self.assertFalse(table.pending(3))   # nobody asked
+        self.assertFalse(table.pending(3))
         gpu.qtest.write_bytes(page + 32 + 32, struct.pack("<I", 1))
         self.assertTrue(wait_for(lambda: table.pending(3)))
         self.assertFalse(any(table.pending(vector) for vector in range(3)))
@@ -133,7 +118,7 @@ class VirtioGpuDisplayClock(unittest.TestCase):
         self.assertTrue(wait_for(lambda: not table.pending(3)))
         table.mask(3, True)
         time.sleep(QUIET)
-        self.assertFalse(table.pending(3))   # asked for nothing again
+        self.assertFalse(table.pending(3))
 
 
 if __name__ == "__main__":

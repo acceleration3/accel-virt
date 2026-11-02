@@ -1,8 +1,3 @@
-/* Reads the device's av capset (docs/protocol.md): GET_CAPSET_INFO for index
- * 0, then GET_CAPSET for what it names, and judges what comes back against
- * this driver's protocol. One request and one answer at a time: the caller
- * sends each request however it reaches the device and hands back its answer.
- * The first failure ends the query. At most DISPATCH (the DPC's harvest). */
 #ifndef AV_CAPSET_QUERY_HPP
 #define AV_CAPSET_QUERY_HPP
 
@@ -21,18 +16,10 @@ class CapsetQuery {
 public:
     explicit CapsetQuery(Platform &platform);
 
-    /* The next request into `bytes`, its size in `length`. invalid_state while
-     * an answer is awaited or once the query ended; too_large, writing
-     * nothing, when it does not fit. */
     [[nodiscard]] Status next_request(uint8_t *bytes, size_t capacity, size_t &length);
-    /* The answer to the request sent. ok moves on. not_supported for a device
-     * that refuses, offers another capset or version, or a capset of another
-     * major; malformed for an answer no device gives. invalid_state when no
-     * answer is awaited. */
     [[nodiscard]] Status accept(const uint8_t *bytes, size_t length);
     bool                 complete() const;
     bool                 failed() const;
-    /* Only once complete. */
     const CapsetInfo    &capset() const;
 
     bool invariants_hold() const;
@@ -53,6 +40,6 @@ private:
     friend struct CapsetQueryProbe;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_CAPSET_QUERY_HPP
+#endif

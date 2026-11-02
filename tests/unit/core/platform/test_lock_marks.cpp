@@ -33,8 +33,6 @@ namespace {
 
 constexpr std::size_t one_slot = 96u + 824u;
 
-/* A bound table and one open scope, so the calling thread has a slot the
- * marks land in. */
 struct Marked {
     av::MockTraceHost host;
     alignas(8) std::uint8_t bytes[one_slot] = {};
@@ -71,7 +69,7 @@ void look(void *context)
     seen->holding = seen->marked->holding();
 }
 
-}  // namespace
+}
 
 TEST(lock_marks, name_the_lock_while_waiting_then_while_held_then_nothing)
 { MockPlatform platform;
@@ -100,8 +98,6 @@ TEST(lock_marks, name_the_lock_while_waiting_then_while_held_then_nothing)
   CHECK_EQ(seen.waiting, address_of(&wait));
   CHECK_EQ(seen.holding, 0u);
   CHECK_EQ(marked.holding(), address_of(&wait));
-  /* A nested lock is the one named as held; releasing it clears the name
-   * rather than restoring the outer one. */
   Mutex inner(platform, LockRank{40});
   inner.acquire();
   CHECK_EQ(marked.holding(), address_of(&inner));
@@ -113,8 +109,6 @@ TEST(lock_marks, name_the_lock_while_waiting_then_while_held_then_nothing)
   CHECK(marked.table.invariants_hold());
   CHECK_EQ(platform.locks_held(), 0u); }
 
-/* A thread parked on an event it does not take - a service waiting to be
- * asked - names the event while it waits and holds nothing after. */
 TEST(lock_marks, a_wait_that_takes_nothing_clears_the_wait_and_keeps_the_hold)
 { Marked marked;
   const av::FunctionScope scope(av::scope_binding, ScopeName("test::park"));
@@ -168,7 +162,6 @@ TEST(spin_lock_try_acquire, a_lock_held_elsewhere_is_refused_and_nothing_changes
   CHECK(platform.current_irql() == Irql::passive);
   CHECK_EQ(platform.locks_held(), 0u);
   CHECK_EQ(marked.holding(), 0u);
-  /* Another rank is not the one held elsewhere. */
   SpinLock other(platform, LockRank{11});
   CHECK(other.try_acquire(previous));
   other.release(previous);

@@ -65,8 +65,6 @@ void IcdConnection::report(StateWriter &writer) const
     writer.close();
 }
 
-/* Every link is held by a context and its device open; the adapter is kept
- * exactly while some link is. */
 bool IcdConnection::invariants_hold() const
 {
     AV_SCOPE("IcdConnection::invariants_hold");
@@ -81,8 +79,7 @@ void IcdConnection::close_adapter_if_idle()
 {
     AV_SCOPE("IcdConnection::close_adapter_if_idle");
     if (links_.count() != 0u) return;
-    /* The adapter handle is ours alone; a failed close leaves nothing to redo. */
     static_cast<void>(search_.close());
 }
 
-}  // namespace av::icd
+}

@@ -1,6 +1,3 @@
-/* Where the device's lines go: a stdio stream - QEMU's stderr, which its log
- * collects - one line at a time, each whole. Every session backend writes its
- * refusals through a DriverLog over one. */
 #ifndef AV_STDIO_LOG_HPP
 #define AV_STDIO_LOG_HPP
 
@@ -20,6 +17,6 @@ private:
     FILE *stream_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_STDIO_LOG_HPP
+#endif

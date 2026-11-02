@@ -85,4 +85,4 @@ bool WindowCursor::contains(uint64_t offset, size_t count) const
     return offset <= window_.length() && count <= window_.length() - offset;
 }
 
-}  // namespace av
+}

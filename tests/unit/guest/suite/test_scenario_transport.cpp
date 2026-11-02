@@ -1,7 +1,3 @@
-/* The context a scenario runs over, over MockKmt: opening reports each step up
- * to the first that fails and attempts nothing after it; close gives back
- * everything open whatever failed, twice being harmless; and a second context
- * opened on its connection shares the device. */
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
@@ -32,15 +28,13 @@ using av::Status;
 using av::SubApi;
 
 namespace {
-
-/* The av suite's transport: 1 KiB commands and a page of reply (feature 044). */
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
 const PciIdentity av_gpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
                       PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem);
 
-}  // namespace
+}
 
 TEST(scenario_transport, opens_a_context_of_its_sub_api_on_the_adapter_found)
 { MockKmt kmt;
@@ -59,7 +53,6 @@ TEST(scenario_transport, opens_a_context_of_its_sub_api_on_the_adapter_found)
   CHECK_STATUS(record.decode(kmt.last_private(), kmt.last_private_size()), Status::ok);
   CHECK(record.sub_api() == SubApi::opencl);
   CHECK_EQ(record.ring_order(), ScenarioTransport::ring_order);
-  /* A second context on the same connection is on the same device. */
   std::uint8_t second_staging[staging_bytes] = {};
   KmtTransport second(link.connection(), SubApi::vulkan, ScenarioTransport::ring_order,
                       reply_bytes, second_staging, sizeof second_staging);
@@ -75,7 +68,7 @@ TEST(scenario_transport, opens_a_context_of_its_sub_api_on_the_adapter_found)
   CHECK_STATUS(search.close(), Status::ok); }
 
 TEST(scenario_transport, stops_at_the_first_step_that_fails_and_leaves_nothing_open)
-{ { MockKmt kmt;   /* no adapter: nothing asked of D3DKMT */
+{ { MockKmt kmt;
     AdapterSearch search(kmt);
     av::MockPlatform report_memory;
     GuestReport   report(report_memory);
@@ -106,7 +99,7 @@ TEST(scenario_transport, stops_at_the_first_step_that_fails_and_leaves_nothing_o
     GuestReport   report(report_memory);
     ScenarioSteps steps(kmt, report, "probe");
     { ScenarioTransport link(kmt, search, steps, SubApi::vulkan);
-      CHECK(link.open() != Status::ok); }   /* the destructor closes what opened */
+      CHECK(link.open() != Status::ok); }
     CHECK(std::strstr(report.text(), "ok probe.connection\nFAIL probe.initialize") != nullptr);
     CHECK_EQ(kmt.open_objects(), 1u);
     CHECK_EQ(kmt.misuses(), 0u);

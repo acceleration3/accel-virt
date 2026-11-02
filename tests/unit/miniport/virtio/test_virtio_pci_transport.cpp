@@ -18,7 +18,7 @@ struct VirtioPciTransportProbe {
     VirtioPciTransport &transport;
 };
 
-}  // namespace av
+}
 
 using av::FakeCommonConfig;
 using av::VirtioPciTransportProbe;
@@ -44,8 +44,8 @@ public:
     {
         common_.offer_features(version_1 | edid | blob | context_init);
         common_.set_queues(2u, 256u);
-        device_.set_u32(8u, 1u);    /* num_scanouts */
-        device_.set_u32(12u, 2u);   /* num_capsets */
+        device_.set_u32(8u, 1u);
+        device_.set_u32(12u, 2u);
     }
 
     MockPlatform       &platform() { return platform_; }
@@ -64,7 +64,7 @@ private:
     VirtioPciTransport transport_;
 };
 
-}  // namespace
+}
 
 TEST(virtio_pci_transport_negotiate, follows_the_initialization_sequence)
 { Device device;
@@ -72,10 +72,10 @@ TEST(virtio_pci_transport_negotiate, follows_the_initialization_sequence)
   CHECK(device.transport().invariants_hold());
   const FakeCommonConfig &common = device.common();
   CHECK_EQ(common.status_writes(), 4u);
-  CHECK_EQ(common.status_written(0u), 0u);      /* reset */
-  CHECK_EQ(common.status_written(1u), 1u);      /* ACKNOWLEDGE */
-  CHECK_EQ(common.status_written(2u), 3u);      /* | DRIVER */
-  CHECK_EQ(common.status_written(3u), 0xBu);    /* | FEATURES_OK */
+  CHECK_EQ(common.status_written(0u), 0u);
+  CHECK_EQ(common.status_written(1u), 1u);
+  CHECK_EQ(common.status_written(2u), 3u);
+  CHECK_EQ(common.status_written(3u), 0xBu);
   CHECK(device.transport().features() == (version_1 | edid | blob));
   CHECK(common.driver_features() == (version_1 | edid | blob)); }
 
@@ -115,7 +115,7 @@ TEST(virtio_pci_transport_negotiate, is_passive_only)
   device.platform().set_irql(Irql::dispatch);
   CHECK_STATUS(device.transport().negotiate(version_1, version_1), Status::ok);
   CHECK(device.platform().claim(Violation::irql_ceiling));
-  CHECK(device.platform().claim(Violation::irql_ceiling));   /* and its reset */
+  CHECK(device.platform().claim(Violation::irql_ceiling));
   device.platform().set_irql(Irql::passive); }
 
 TEST(virtio_pci_transport_start, sets_driver_ok_after_negotiation)
@@ -209,9 +209,6 @@ TEST(virtio_pci_transport_device_config, refuses_reads_past_the_region)
   CHECK_STATUS(device.transport().read_device_u32(~std::uint64_t{0} - 1u, value), Status::invalid_parameter);
   CHECK_EQ(value, 7u); }
 
-/* The device configuration's one writable field is events_clear: a write
- * lands where it was asked, and one that would reach past the region - or
- * wrap round it - touches nothing. */
 TEST(virtio_pci_transport_device_config, writes_within_the_region_and_refuses_past_it)
 { Device device;
   device.platform().set_irql(Irql::dispatch);
@@ -261,8 +258,6 @@ TEST(virtio_pci_transport_device_config, a_region_shorter_than_a_field_refuses_e
   CHECK_STATUS(transport.write_device_u32(0u, value), Status::invalid_parameter);
   CHECK_EQ(tiny.writes(), 0u); }
 
-/* Feature 043: a context's fence queue gets its vector when the context is set
- * up, long after DRIVER_OK, and is never enabled. */
 TEST(virtio_pci_transport_queue_vector, is_assigned_to_a_queue_the_device_has_after_driver_ok)
 { Device device;
   device.common().set_queues(66u, 256u);

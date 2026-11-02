@@ -1,7 +1,3 @@
-/* Which API a command belongs to (CommandApi): the SubApi bit a context is
- * set up for and the API half of the ids it sends, the name a person types
- * for each, and each API's registry for its commands' names - Direct3D's
- * three registries one API on the wire, each id found in whichever has it. */
 #include "device/execution/command_api.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
@@ -21,10 +17,8 @@ namespace {
 
 bool named(const char *text, const char *expected) { return std::strcmp(text, expected) == 0; }
 
-}  // namespace
+}
 
-/* Each sub-API sends the API half its ids carry; the bits are not the
- * halves - OpenGL is bit 2 and API 3, OpenCL bit 4 and API 2. */
 TEST(command_api, each_sub_api_sends_its_own_api)
 { CHECK_EQ(CommandApi(SubApi::vulkan).api(), 1u);
   CHECK_EQ(CommandApi(SubApi::opencl).api(), 2u);
@@ -43,8 +37,6 @@ TEST(command_api, every_api_has_its_name)
   CHECK(named(CommandApi(std::uint16_t{9u}).name(), "api"));
   CHECK(CommandApi(std::uint16_t{0u}).known()); }
 
-/* A name is taken whole: a prefix, a longer word or nothing is no API, and
- * leaves what was there. */
 TEST(command_api, a_name_names_its_api_and_nothing_else_does)
 { CommandApi api(CommandApi::none);
   CHECK(api.take_name("d3d"));
@@ -60,8 +52,6 @@ TEST(command_api, a_name_names_its_api_and_nothing_else_does)
   CHECK(!api.take_name(nullptr));
   CHECK_EQ(api.api(), 3u); }
 
-/* Direct3D 11's, 12's and 9's commands each name themselves from their own
- * registry under the one API; an id none has is unknown. */
 TEST(command_api, a_direct3d_command_is_named_by_whichever_registry_has_it)
 { const CommandApi d3d(SubApi::d3d);
   CHECK(named(d3d.command_name(av::d3dproto::kCmd_ClearState11), "ClearState11"));

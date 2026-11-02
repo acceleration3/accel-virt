@@ -1,8 +1,3 @@
-/* D3d11Entry over the d3d11.dll beside the probe (feature 047, T028), which in
- * the guest is DXVK's: one device, one swap chain on the probe's window, one
- * render target view of its back buffer and one staging texture to read it
- * back through. Translation only - what the probe decides is in
- * src/guest/probe/d3d11_work.cpp. */
 #ifndef AV_WINDOWS_D3D11_ENTRY_HPP
 #define AV_WINDOWS_D3D11_ENTRY_HPP
 
@@ -38,6 +33,6 @@ private:
     uint32_t                height_;
 };
 
-}  // namespace av
+}
 
-#endif  // AV_WINDOWS_D3D11_ENTRY_HPP
+#endif

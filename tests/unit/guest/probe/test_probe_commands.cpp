@@ -1,7 +1,3 @@
-/* One command buffer of the probe's over a scripted Vulkan: its pool on the
- * device's family, recording begun, and ended, submitted with its fence and
- * waited for; a refusal at each call stops there and is kept; a fence that
- * never signals is VK_TIMEOUT; the pool and fence go with this. */
 #include "guest/suite/guest_report.hpp"
 #include "guest/probe/probe_commands.hpp"
 #include "guest/probe/probe_device.hpp"
@@ -22,7 +18,7 @@ struct ProbeCommandsProbe {
     static void fence_only(ProbeCommands &commands) { commands.pool_ = VK_NULL_HANDLE; commands.buffer_ = VK_NULL_HANDLE; }
 };
 
-}  // namespace av
+}
 
 using av::GuestReport;
 using av::MockKmt;
@@ -45,7 +41,7 @@ void make(ProbeDevice &device)
     CHECK_EQ(device.make_device(), VK_SUCCESS);
 }
 
-}  // namespace
+}
 
 TEST(probe_commands, a_buffer_is_recorded_submitted_and_waited_for)
 { ScriptedVulkan vulkan;
@@ -99,8 +95,6 @@ TEST(probe_commands, a_refusal_while_running_stops_there)
       CHECK_EQ(vulkan.live(), 0u);
   } }
 
-/* A submission the host never completed: the fence is never signalled, and
- * the wait's VK_TIMEOUT is what the outcome reports. */
 TEST(probe_commands, an_unsignalled_fence_times_out)
 { ScriptedVulkan vulkan;
   vulkan.hold_fences();

@@ -14,7 +14,7 @@ constexpr std::size_t partial_bytes = 20u;
 enum : std::uint8_t { type_port = 1u, type_interrupt = 2u, type_memory = 3u, type_memory_large = 7u };
 constexpr std::uint16_t interrupt_message = 0x02u;
 
-}  // namespace
+}
 
 FakeResourceList::FakeResourceList()
     : bytes_(), size_(list_header), full_count_(0u), current_full_(0u), partial_count_(0u)
@@ -35,8 +35,8 @@ void FakeResourceList::begin_full_descriptor()
 {
     current_full_ = size_;
     partial_count_ = 0u;
-    put(current_full_ + 8u, 1u, 2u);  /* PartialResourceList.Version */
-    put(current_full_ + 10u, 1u, 2u); /* Revision */
+    put(current_full_ + 8u, 1u, 2u);
+    put(current_full_ + 10u, 1u, 2u);
     put(current_full_ + partial_count_at, 0u, 4u);
     size_ += full_header;
     put(0u, ++full_count_, 4u);
@@ -63,7 +63,6 @@ void FakeResourceList::add_large_memory(std::uint64_t start, std::uint16_t flags
     add_partial(type_memory_large, flags, start, stored);
 }
 
-/* Translated message interrupt: Level, Vector, Affinity - opaque to the driver. */
 void FakeResourceList::add_message_interrupt() { add_partial(type_interrupt, interrupt_message, 0x60u, 0u); }
 
 void FakeResourceList::add_line_interrupt() { add_partial(type_interrupt, 0u, 0x0Bu, 0u); }
@@ -83,4 +82,4 @@ std::uint8_t *FakeResourceList::mutable_bytes() { return bytes_; }
 
 std::size_t FakeResourceList::size() const { return size_; }
 
-}  // namespace av
+}

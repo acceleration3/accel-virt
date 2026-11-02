@@ -25,7 +25,7 @@ TEST(nt_status, maps_every_core_status_to_its_ntstatus)
       CHECK_EQ(static_cast<std::uint32_t>(NtStatus(c.status).value()), c.value); }
 
 TEST(nt_status, carries_a_graphics_status_core_has_no_name_for)
-{ const NtStatus status(0xC01D0008u);   /* STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA */
+{ const NtStatus status(0xC01D0008u);
   CHECK_EQ(static_cast<std::uint32_t>(status.value()), 0xC01D0008u);
   CHECK(!status.succeeded());
   CHECK(NtStatus(Status::ok).succeeded()); }
@@ -43,7 +43,6 @@ TEST(nt_status, names_the_graphics_statuses_of_a_vidpn)
   CHECK_EQ(NtStatus::no_recommended_functional_vidpn, 0xC01E0323u);
   CHECK_EQ(NtStatus::no_recommended_vidpn_topology, 0xC01E031Au); }
 
-/* One of the four statuses DXGADAPTER::DdiQueryAdapterInfo accepts. */
 TEST(nt_status, not_implemented_is_status_not_implemented)
 { CHECK_EQ(NtStatus::not_implemented, 0xC0000002u);
   CHECK(!NtStatus(NtStatus::not_implemented).succeeded()); }
@@ -52,7 +51,7 @@ TEST(nt_status_status, maps_a_callback_answer_back_to_the_core_status)
 { struct Case { std::uint32_t value; Status status; };
   const Case cases[] = {
       {0x00000000u, Status::ok},
-      {0x00000103u, Status::ok},  /* STATUS_PENDING is a success */
+      {0x00000103u, Status::ok},
       {0xC000000Du, Status::invalid_parameter},
       {0xC0000017u, Status::no_memory},
       {0xC0000225u, Status::not_found},
@@ -61,7 +60,7 @@ TEST(nt_status_status, maps_a_callback_answer_back_to_the_core_status)
       {0xC00000BBu, Status::not_supported},
       {0xC0000184u, Status::invalid_state},
       {0xC0000023u, Status::too_large},
-      {0xC0000001u, Status::invalid_state},  /* STATUS_UNSUCCESSFUL: no closer name */
+      {0xC0000001u, Status::invalid_state},
   };
   for (const Case &c : cases)
       CHECK_STATUS(NtStatus(c.value).status(), c.status); }

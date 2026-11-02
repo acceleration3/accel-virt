@@ -1,12 +1,3 @@
-/* The adapter's shared objects: where an identity is minted, and where every
- * claim to one is judged.
- *
- * The table believes nothing it did not write. Everything a second process can
- * put in front of it - an id nobody minted, an id from another adapter, a kind
- * or a size that disagrees with the object, a record with no id at all - is
- * refused here, with nothing held and nothing on the host touched. That is
- * US1's fourth scenario, and it is the only defence the kernel has: dxgkrnl
- * copies private data without reading it. */
 #include "miniport/memory/allocation.hpp"
 #include "miniport/memory/aperture_segment.hpp"
 #include "miniport/memory/memory_segments.hpp"
@@ -24,9 +15,6 @@
 #include <cstring>
 
 namespace av {
-
-/* The same probe the object's own test defines, so a table test can put an
- * object into a state no table ever leaves one in. */
 struct SharedObjectProbe {
     static void set_opens(SharedObject &object, std::uint32_t opens) { object.opens_ = opens; }
     static void forget_allocation(SharedObject &object) { object.allocation_ = nullptr; }
@@ -42,7 +30,7 @@ struct SharedObjectTableProbe {
     static std::uint64_t next_id(const SharedObjectTable &table) { return table.next_id_; }
 };
 
-}  // namespace av
+}
 
 using av::Allocation;
 using av::AllocationDescriptor;
@@ -63,7 +51,6 @@ namespace {
 
 constexpr std::uint64_t page = Allocation::page_bytes;
 
-/* An adapter's table and the allocations it names. */
 class Fixture {
 public:
     Fixture()
@@ -76,12 +63,8 @@ public:
 
     MockPlatform      &platform() { return platform_; }
     SharedObjectTable &table() { return table_; }
-    /* A non-null value a refusal has to clear, so "answered nothing" is
-     * something a test can tell from "was never written". */
     SharedObject      *sentinel() { return reinterpret_cast<SharedObject *>(&storage_[max_allocations - 1u]); }
 
-    /* An allocation of `bytes`, which the caller keeps for as long as it names
-     * anything: a table forgets an object only when told to. */
     Allocation *allocate(std::uint64_t bytes)
     {
         if (count_ == max_allocations) return nullptr;
@@ -91,7 +74,6 @@ public:
         return made;
     }
 
-    /* What a creator hands the miniport: a kind, a size, and no identity. */
     SharedObjectRecord asking(std::uint64_t bytes,
                               std::uint32_t kind = SharedObjectKind::memory) const
     { return SharedObjectRecord(0u, SharedObjectKind(kind), 0u, bytes); }
@@ -105,8 +87,6 @@ private:
 
     Allocation *new_allocation(std::uint64_t bytes)
     {
-        /* Storage the fixture owns, so an allocation outlives whatever names
-         * it without a pool of its own. */
         Allocation *const made = reinterpret_cast<Allocation *>(&storage_[count_]);
         ::new (static_cast<void *>(made)) Allocation(platform_, segments_, descriptors_[count_], bytes);
         count_++;
@@ -122,7 +102,7 @@ private:
     std::uint32_t           count_ = 0u;
 };
 
-}  // namespace
+}
 
 TEST(shared_object_table_initialize, mints_an_adapter_number_once_and_never_zero)
 { MockPlatform      platform;
@@ -172,8 +152,6 @@ TEST(shared_object_table_mint, gives_a_fresh_id_to_every_allocation_and_never_re
       if (index > 0u) CHECK(ids[index] != ids[index - 1u]);
   }
   CHECK_EQ(rig.table().live(), 3u);
-  /* The middle one goes; its id is never handed out again, so a process that
-   * kept the old record finds nothing rather than someone else's object. */
   Allocation *const second = rig.allocate(page);
   SharedObjectRecord record = rig.asking(page);
   CHECK_STATUS(rig.table().mint(*second, record), Status::ok);
@@ -189,12 +167,6 @@ TEST(shared_object_table_mint, refuses_a_record_that_already_names_one)
   CHECK_EQ(already.object_id(), 4u);
   CHECK_EQ(rig.table().live(), 0u); }
 
-/* The size a record declares is the object's and need not be the allocation's:
- * an ICD sharing host memory has no guest allocation of it and creates a
- * one-page carrier for the identity alone (feature 053, T031). What the size
- * still binds is the open - a record whose size was changed afterwards
- * disagrees with the object this minted, which is the only thing the check
- * ever protected. */
 TEST(shared_object_table_mint, a_one_page_carrier_may_name_an_object_of_any_size)
 { Fixture rig;
   Allocation *const carrier = rig.allocate(page);
@@ -203,8 +175,6 @@ TEST(shared_object_table_mint, a_one_page_carrier_may_name_an_object_of_any_size
   rig.check();
   CHECK(bigger.assigned());
   CHECK_EQ(rig.table().live(), 1u);
-  /* The object is the size the record declared, so an open naming any other
-   * size is refused however big the carrier was. */
   SharedObject *found = nullptr;
   CHECK_STATUS(rig.table().open(bigger, found), Status::ok);
   CHECK(found != nullptr);
@@ -224,8 +194,6 @@ TEST(shared_object_table_mint, propagates_a_pool_that_cannot_grow)
   rig.check();
   CHECK(!record.assigned());
   CHECK_EQ(rig.table().live(), 0u);
-  /* The id the refused mint would have taken is still the next one: a failed
-   * mint must not burn one, or a table would run out under a hostile guest. */
   CHECK_STATUS(rig.table().mint(*allocation, record), Status::ok);
   rig.check();
   CHECK_EQ(record.object_id(), 1u); }
@@ -241,7 +209,6 @@ TEST(shared_object_table_open, finds_what_a_creator_minted_and_counts_the_device
   rig.check();
   CHECK(first != nullptr);
   CHECK_EQ(first->opens(), 1u);
-  /* A second process opening the same record reaches the same object. */
   SharedObject *second = nullptr;
   CHECK_STATUS(rig.table().open(record, second), Status::ok);
   rig.check();
@@ -284,7 +251,6 @@ TEST(shared_object_table_open, refuses_a_record_from_another_adapter)
   CHECK_STATUS(rig.table().open(elsewhere, found), Status::not_found);
   rig.check();
   CHECK(found == nullptr);
-  /* The object itself is untouched and still opens from its own adapter. */
   SharedObject *ours = nullptr;
   CHECK_STATUS(rig.table().open(minted, ours), Status::ok);
   CHECK_EQ(ours->opens(), 1u);
@@ -323,7 +289,6 @@ TEST(shared_object_table_open, refuses_a_kind_or_a_size_that_disagrees_with_the_
       rig.check();
       CHECK(found == nullptr);
   }
-  /* Nothing was counted by any of them. */
   SharedObject *ours = nullptr;
   CHECK_STATUS(rig.table().open(minted, ours), Status::ok);
   CHECK_EQ(ours->opens(), 1u);
@@ -363,13 +328,10 @@ TEST(shared_object_table_forget, takes_the_identity_with_the_allocation_and_leav
   CHECK_STATUS(rig.table().close(*found), Status::ok);
   rig.check();
 
-  /* Forgetting an allocation that never named one changes nothing. */
   rig.table().forget(*first);
   rig.check();
   CHECK_EQ(rig.table().live(), 1u); }
 
-/* What a destroy forgot waits for the adapter to tell the device: as many as
- * asked for, and each id once. A forgotten object no longer opens. */
 TEST(shared_object_table_take_released, hands_over_each_forgotten_id_once)
 { Fixture rig;
   Allocation *allocations[3] = {};
@@ -383,7 +345,7 @@ TEST(shared_object_table_take_released, hands_over_each_forgotten_id_once)
   CHECK_EQ(rig.table().take_released(ids, 4u), 0u);
   rig.table().forget(*allocations[2]);
   rig.table().forget(*allocations[0]);
-  rig.table().forget(*allocations[0]);   /* already forgotten: nothing more */
+  rig.table().forget(*allocations[0]);
   rig.check();
   CHECK_EQ(rig.table().live(), 1u);
   av::SharedObject *found = nullptr;
@@ -401,14 +363,9 @@ TEST(shared_object_table_take_released, hands_over_each_forgotten_id_once)
   CHECK_EQ(rig.table().live(), 0u);
   rig.check(); }
 
-/* An adapter that does not drain for a while drops nothing: the queue this
- * replaced held 256, and what it could not hold the device kept until the
- * adapter restarted. */
 TEST(shared_object_table_take_released, more_forgotten_than_any_fixed_queue_held_are_all_handed_over)
 { Fixture rig;
   constexpr std::uint32_t many = 300u;
-  /* One allocation made again and again, as a window remakes its surfaces:
-   * a forgotten object no longer names it. */
   Allocation *const allocation = rig.allocate(page);
   for (std::uint32_t index = 0u; index < many; index++) {
       SharedObjectRecord record = rig.asking(page);
@@ -425,11 +382,9 @@ TEST(shared_object_table_take_released, more_forgotten_than_any_fixed_queue_held
        taken = rig.table().take_released(ids, 64u))
       for (std::uint32_t index = 0u; index < taken; index++, handed++) sum += ids[index];
   CHECK_EQ(handed, many);
-  CHECK_EQ(sum, std::uint64_t{many} * (many + 1u) / 2u);   /* ids 1 to 300, each once */
+  CHECK_EQ(sum, std::uint64_t{many} * (many + 1u) / 2u);
   rig.check(); }
 
-/* dxgkrnl destroys a shared allocation only once nobody holds it, so a
- * forgotten object still open is a table that lost count. */
 TEST(shared_object_table_invariants, refuse_a_forgotten_object_still_held)
 { Fixture rig;
   Allocation *const allocation = rig.allocate(page);
@@ -465,15 +420,12 @@ TEST(shared_object_table, is_apc_at_most_and_the_mock_says_so)
   SharedObject *found = nullptr;
   static_cast<void>(rig.table().open(record, found));
   rig.platform().set_irql(av::Irql::passive);
-  /* The ceiling the table declares, the mutex it takes and releases above
-   * that ceiling, and the object's own, which is reached under it. */
   for (int refusal = 0; refusal < 4; refusal++) CHECK(rig.platform().claim(Violation::irql_ceiling));
   CHECK(rig.platform().claim(Violation::blocking_at_dispatch)); }
 
 TEST(shared_object_table_report, names_the_adapter_and_every_object_it_holds)
 { Fixture rig;
   Allocation *const allocation = rig.allocate(3u * page);
-  /* A fence carries no size, which is the record's rule (feature 053). */
   SharedObjectRecord record = rig.asking(0u, SharedObjectKind::native_fence);
   CHECK_STATUS(rig.table().mint(*allocation, record), Status::ok);
   SharedObject *found = nullptr;
@@ -507,8 +459,6 @@ TEST(shared_object_table_invariants, refuse_an_object_whose_id_was_never_minted)
   SharedObjectRecord record = rig.asking(page);
   CHECK_STATUS(rig.table().mint(*allocation, record), Status::ok);
   CHECK(rig.table().invariants_hold());
-  /* An id at or above the next one to be minted is one the table cannot have
-   * handed out. */
   SharedObjectTableProbe::set_next_id(rig.table(), record.object_id());
   CHECK(!rig.table().invariants_hold());
   SharedObjectTableProbe::set_next_id(rig.table(), record.object_id() + 1u);
@@ -539,11 +489,6 @@ TEST(shared_object_table_invariants, refuse_two_objects_that_name_one_id)
   CHECK_STATUS(rig.table().close(*found), Status::ok);
   CHECK(rig.table().invariants_hold()); }
 
-/* The creating device's open, which arrives with no record to present because
- * dxgkrnl copied the caller's own bytes back over the ones CreateAllocation
- * wrote. The table opens by the id the allocation carries and answers the
- * record that names the object, which is what the caller is finally given
- * (research.md §15). */
 TEST(shared_object_table_open_minted, opens_by_the_allocations_own_id_and_answers_the_record)
 { Fixture fixture;
   Allocation *const carrier = fixture.allocate(4096u);
@@ -561,18 +506,14 @@ TEST(shared_object_table_open_minted, opens_by_the_allocations_own_id_and_answer
   CHECK_EQ(minted.adapter_id(), fixture.table().adapter());
   CHECK_EQ(minted.size(), 8192u);
   CHECK(minted.kind().same_as(asking.kind()));
-  /* It is a real open: the object is held until it is closed. */
   CHECK_STATUS(fixture.table().close(*object), Status::ok);
   CHECK(fixture.table().invariants_hold());
 
-  /* An id this table never minted, and no id at all. */
   SharedObject *nothing = nullptr;
   CHECK_STATUS(fixture.table().open_minted(asking.object_id() + 0x1000u, nothing, minted), Status::not_found);
   CHECK(nothing == nullptr);
   CHECK_STATUS(fixture.table().open_minted(0u, nothing, minted), Status::invalid_parameter);
   CHECK(nothing == nullptr);
-  /* And an object already held by as many devices as it can be: the creator's
-   * open is refused like any other rather than counted past the ceiling. */
   SharedObject *held = nullptr;
   CHECK_STATUS(fixture.table().open_minted(asking.object_id(), held, minted), Status::ok);
   av::SharedObjectProbe::set_opens(*held, 0xFFFFFFFFu);
