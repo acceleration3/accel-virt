@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: host libraries, Windows drivers, checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Install the build dependencies
+        run: >
+          pacman -Syu --noconfirm --needed base-devel git cmake ninja python clang lld llvm
+          curl unzip xz vulkan-headers vulkan-icd-loader ocl-icd libglvnd
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Mark the workspace safe for git
+        run: git config --global --add safe.directory '*'
+
+      - uses: actions/cache@v4
+        with:
+          path: third_party/.cache
+          key: downloads-${{ hashFiles('tools/*pins.txt', 'tools/fetch_*.sh') }}
+          restore-keys: downloads-
+
+      - name: Fetch the Windows kit and the Khronos registries
+        run: |
+          tools/fetch_windows_kit.sh
+          tools/fetch_khronos_registries.py
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++
+
+      - name: Build the host libraries and the Windows drivers
+        run: cmake --build build --target av_core drivers
+
+      - name: Checks
+        run: >
+          ctest --test-dir build --output-on-failure -j4
+          -R "^(tools_test_|generated_|extension_policy|layer_requirements|cts_subset|check_spirv)"
+          -E "^(tools_test_check_design|tools_test_check_symbol_tests|tools_test_cl_lent_bytes|tools_test_kernel_build|tools_test_run_guest_suite_2|tools_test_run_guest_suite_4|tools_test_run_guest_suite_14|tools_test_scope_marks)$"
