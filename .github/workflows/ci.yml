@@ -23,7 +23,7 @@ jobs:
       - name: Install the build dependencies
         run: >
           pacman -Syu --noconfirm --needed base-devel git cmake ninja python clang lld llvm
-          curl unzip xz vulkan-headers vulkan-icd-loader ocl-icd libglvnd
+          curl unzip xz vulkan-headers vulkan-icd-loader ocl-icd libglvnd glslang
 
       - uses: actions/checkout@v4
         with:
