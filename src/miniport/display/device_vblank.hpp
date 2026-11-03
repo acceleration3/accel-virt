@@ -24,7 +24,6 @@ class VirtioGpuDevice;
 class DeviceVblank {
 public:
     static constexpr uint32_t sweep_every = 24u;
-    static constexpr uint32_t blanks_per_report = 120u;
 
     DeviceVblank(Platform &platform, DxgkrnlInterface &dxgkrnl, DisplaySources &sources);
     DeviceVblank(const DeviceVblank &) = delete;
@@ -50,7 +49,6 @@ private:
 
     void                 ask();
     [[nodiscard]] Status report(const FlipView &shown);
-    void                 report_rate(uint64_t now);
 
     Platform             &platform_;
     DisplaySources       &sources_;
@@ -63,11 +61,8 @@ private:
     bool                  suspended_;
     bool                  suspended_reporting_;
     uint64_t              sequence_;
-    uint32_t              blanks_;
-    uint32_t              missed_;
     uint32_t              reported_;
     uint32_t              enables_;
-    uint64_t              window_start_;
 };
 
 }

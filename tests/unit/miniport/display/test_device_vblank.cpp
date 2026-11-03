@@ -227,21 +227,3 @@ TEST(device_vblank_power, nothing_is_reported_across_a_suspend_and_the_asking_co
   fixture.vsync().destroy();
   CHECK_STATUS(fixture.vsync().resume(), Status::invalid_state);
   CHECK_EQ(fixture.platform().live_allocations(), 0u); }
-
-TEST(device_vblank_report_rate, every_hundred_and_twenty_blanks_a_line_says_how_the_clock_kept)
-{ Fixture fixture;
-  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
-  fixture.take_page();
-  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
-  fixture.blank(1u);
-  fixture.tick(1000u);
-  fixture.blank(4u);
-  fixture.tick(51000u);
-  for (std::uint64_t blank = 5u; blank <= DeviceVblank::blanks_per_report; blank++) {
-      fixture.blank(blank);
-      fixture.tick(1000u + blank * 166667u);
-  }
-  CHECK(fixture.platform().logged_line(
-      "avgpu: vsync 120 blanks in 20000040 ticks, 2 folded, 118 reported, enabled 1 times"));
-  CHECK_EQ(fixture.vsync().reported(), 0u);
-  CHECK(fixture.vsync().invariants_hold()); }

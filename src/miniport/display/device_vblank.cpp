@@ -3,7 +3,6 @@
 #include "miniport/display/display_mode.hpp"
 #include "miniport/display/display_sources.hpp"
 #include "miniport/display/flip_view.hpp"
-#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
 #include "proto/pages/vblank_record.hpp"
@@ -15,7 +14,7 @@ namespace av {
 DeviceVblank::DeviceVblank(Platform &platform, DxgkrnlInterface &dxgkrnl, DisplaySources &sources)
     : platform_(platform), sources_(sources), notification_(platform, dxgkrnl), page_(platform),
       phase_(), layer_(), presented_layers_(), reporting_(false), suspended_(false), suspended_reporting_(false), sequence_(0u),
-      blanks_(0u), missed_(0u), reported_(0u), enables_(0u), window_start_(0u)
+      reported_(0u), enables_(0u)
       {
           AV_SCOPE("DeviceVblank::DeviceVblank");
       }
@@ -87,8 +86,6 @@ void DeviceVblank::suspend()
     suspended_reporting_ = reporting_;
     reporting_ = false;
     suspended_ = true;
-    blanks_ = 0u;
-    missed_ = 0u;
     reported_ = 0u;
     enables_ = 0u;
 }
@@ -118,16 +115,12 @@ void DeviceVblank::tick(uint64_t now, bool latching)
     VblankRecord   blank;
     const uint64_t seen = platform_.load_atomic(sequence_);
     if (page_.read(target, blank) != Status::ok || blank.sequence() <= seen) return;
-    if (blanks_ == 0u) window_start_ = now;
-    missed_ += seen != 0u ? static_cast<uint32_t>(blank.sequence() - seen - 1u) : 0u;
-    blanks_ += seen != 0u ? static_cast<uint32_t>(blank.sequence() - seen) : 1u;
     platform_.store_atomic(sequence_, blank.sequence());
     phase_.observe(blank.sequence(), now, blank.period_ns());
     if (reporting_) {
         if (report(sources_.shown(target, latching ? blank.latched() : 0u)) == Status::ok) reported_++;
         else platform_.log("avgpu: a vsync was refused");
     }
-    if (blanks_ >= blanks_per_report) report_rate(now);
 }
 
 Status DeviceVblank::report(const FlipView &shown)
@@ -143,29 +136,6 @@ Status DeviceVblank::report(const FlipView &shown)
     case FlipView::Kind::address: break;
     }
     return notification_.report_vsync(target, shown.address());
-}
-
-void DeviceVblank::report_rate(uint64_t now)
-{
-    AV_SCOPE("DeviceVblank::report_rate");
-    char       bytes[128];
-    TextBuffer line(bytes, sizeof bytes);
-    line.append("avgpu: vsync ");
-    line.append_decimal(blanks_);
-    line.append(" blanks in ");
-    line.append_decimal(static_cast<uint32_t>(now - window_start_));
-    line.append(" ticks, ");
-    line.append_decimal(missed_);
-    line.append(" folded, ");
-    line.append_decimal(reported_);
-    line.append(" reported, enabled ");
-    line.append_decimal(enables_);
-    line.append(" times");
-    platform_.log(line.text());
-    blanks_ = 0u;
-    missed_ = 0u;
-    reported_ = 0u;
-    enables_ = 0u;
 }
 
 uint32_t DeviceVblank::scan_line(const DisplayMode &mode, uint64_t now) const
@@ -190,7 +160,7 @@ uint32_t DeviceVblank::enabled_count() const
 bool DeviceVblank::invariants_hold() const
 {
     AV_SCOPE("DeviceVblank::invariants_hold");
-    return page_.invariants_hold() && phase_.invariants_hold() && (!suspended_ || !reporting_) && missed_ <= blanks_;
+    return page_.invariants_hold() && phase_.invariants_hold() && (!suspended_ || !reporting_);
 }
 
 }
