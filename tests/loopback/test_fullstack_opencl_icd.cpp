@@ -3,6 +3,7 @@
 #include "harness/executor/widest_host_gpu.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/fullstack/full_stack_rig.hpp"
+#include "core/log/keyed_log.hpp"
 #include "harness/icd/fake_cl_loader.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
@@ -110,8 +111,8 @@ public:
 class ClProcess {
 public:
     explicit ClProcess(DdiKmt &kmt)
-        : lock_(trace_, 'H'), send_lock_(trace_, 'S'), objects_lock_(trace_, 'O'), blocks_lock_(trace_, 'B'),
-          root_(memory_, kmt, lock_, send_lock_, objects_lock_, blocks_lock_, log_, watcher_, gl_share_, d3d_adapters_,
+        : lock_(trace_, 'H'), send_lock_(trace_, 'S'), objects_lock_(trace_, 'O'), blocks_lock_(trace_, 'B'), lines_(memory_, log_, "avcl: "),
+          root_(memory_, kmt, lock_, send_lock_, objects_lock_, blocks_lock_, lines_, watcher_, gl_share_, d3d_adapters_,
                 d3d11_, av::clicd::cl_icd_binding),
           loader_(root_)
     {
@@ -134,6 +135,7 @@ private:
     RecordingThreadLock objects_lock_;
     RecordingThreadLock blocks_lock_;
     RecordingLog        log_;
+    av::KeyedLog        lines_;
     ScriptedThread      watcher_;
     av::ScriptedGlShareSource gl_share_;
     av::ScriptedD3dAdapterSource d3d_adapters_;

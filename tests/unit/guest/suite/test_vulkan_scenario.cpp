@@ -147,18 +147,19 @@ TEST(vulkan_scenario, allocates_the_lowest_memory_type_for_the_size_the_buffer_n
   CHECK_EQ(rig.kmt().command_id(6u), static_cast<std::uint32_t>(kCmd_vkAllocateMemory));
   std::uint8_t   block[256] = {};
   av::WireArena arena(block, sizeof block);
+  av::vkproto::HandleIdentity handles;
   { const std::uint8_t *bytes = rig.kmt().command_bytes(4u);
     av::WireReader body(bytes + CommandHeader::encoded_size, MockKmt::journal_bytes - CommandHeader::encoded_size);
     CHECK_EQ(body.read_u64(), ScriptedHost::vk_device);
     VkBufferCreateInfo buffer = {};
-    CHECK(deserialize_VkBufferCreateInfo(body, &buffer, arena));
+    CHECK(deserialize_VkBufferCreateInfo(body, handles, &buffer, arena));
     CHECK_EQ(buffer.size, VulkanScenario::buffer_bytes);
     CHECK_EQ(buffer.usage, static_cast<VkBufferUsageFlags>(VK_BUFFER_USAGE_TRANSFER_DST_BIT)); }
   { const std::uint8_t *bytes = rig.kmt().command_bytes(6u);
     av::WireReader body(bytes + CommandHeader::encoded_size, MockKmt::journal_bytes - CommandHeader::encoded_size);
     CHECK_EQ(body.read_u64(), ScriptedHost::vk_device);
     VkMemoryAllocateInfo allocate = {};
-    CHECK(deserialize_VkMemoryAllocateInfo(body, &allocate, arena));
+    CHECK(deserialize_VkMemoryAllocateInfo(body, handles, &allocate, arena));
     CHECK_EQ(allocate.memoryTypeIndex, 3u);
     CHECK_EQ(allocate.allocationSize, 8192u); }
   rig.check_nothing_left_but_the_adapter(); }

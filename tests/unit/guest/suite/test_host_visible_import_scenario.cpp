@@ -239,6 +239,7 @@ TEST(host_visible_import_scenario, what_crosses_names_the_chunk_the_range_and_th
   CHECK_EQ(report.failed(), 0u);
   std::uint8_t  block[512] = {};
   av::WireArena arena(block, sizeof block);
+  av::vkproto::HandleIdentity handles;
   std::uint32_t imports = 0u;
   std::uint32_t buffers = 0u;
   for (std::uint32_t index = 0u; index < rig.kmt().commands(); index++) {
@@ -255,7 +256,7 @@ TEST(host_visible_import_scenario, what_crosses_names_the_chunk_the_range_and_th
       if (id == kCmd_vkCreateBuffer) {
           CHECK_EQ(reader.read_u64(), ScriptedHost::vk_device);
           VkBufferCreateInfo buffer = {};
-          CHECK(deserialize_VkBufferCreateInfo(reader, &buffer, arena));
+          CHECK(deserialize_VkBufferCreateInfo(reader, handles, &buffer, arena));
           CHECK_EQ(buffer.size, HostVisibleImportScenario::copy_bytes);
           CHECK_EQ(buffer.usage, static_cast<VkBufferUsageFlags>(buffers == 0u ? VK_BUFFER_USAGE_TRANSFER_SRC_BIT
                                                                                : VK_BUFFER_USAGE_TRANSFER_DST_BIT));

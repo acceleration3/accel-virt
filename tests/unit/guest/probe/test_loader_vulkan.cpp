@@ -192,7 +192,7 @@ TEST(loader_vulkan, the_forced_fault_is_found_through_the_device_or_refused)
   const VkDevice device = loader_device(rig.host(), icd, instance);
   rig.kmt().withhold_answer_at(1u);
   CHECK_EQ(icd.force_context_fault(device), VK_ERROR_DEVICE_LOST);
-  CHECK(rig.root().connection_of(instance, Kind::instance)->faulted());
+  CHECK(rig.root().connection_of(instance, Kind::instance)->lost());
   icd.destroy_device(device);
   icd.destroy_instance(instance);
   CHECK(rig.root().invariants_hold()); }

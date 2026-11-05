@@ -161,7 +161,7 @@ TEST(loopback_recording, a_recorded_run_replays_into_a_library_with_the_same_rep
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   av::RecordingReader  reader(rig.device().host().recording_bytes(path),
                               rig.device().host().recording_length(path));
-  av::RecordingReplay  replay(library);
+  av::RecordingReplay  replay(library, rig.platform());
   const av::RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.contexts(), 1u);

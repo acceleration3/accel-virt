@@ -3,6 +3,7 @@
 #include "guest/suite/scenario_steps.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -20,6 +21,7 @@ using av::AppPointerCheck;
 using av::AppPointerCheckProbe;
 using av::GuestReport;
 using av::MockKmt;
+using av::MockPlatform;
 using av::ScenarioSteps;
 
 namespace {
@@ -28,7 +30,7 @@ const char *const names[3] = {"heap", "alias", "copy"};
 
 class CheckRig {
 public:
-    CheckRig() : report_("avprobe"), steps_(kmt_, report_, "api") {}
+    CheckRig() : report_(memory_, "avprobe"), steps_(kmt_, report_, "api") {}
     CheckRig(const CheckRig &) = delete;
     CheckRig &operator=(const CheckRig &) = delete;
 
@@ -43,6 +45,7 @@ public:
     { std::memcpy(check_.copied(), check_.pattern(), AppPointerCheck::bytes); }
 
 private:
+    MockPlatform    memory_;
     MockKmt         kmt_;
     GuestReport     report_;
     ScenarioSteps   steps_;

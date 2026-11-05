@@ -6,6 +6,7 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/context/sub_api.hpp"
 #include "vk_dispatch_client.h"
+#include "vk_handle_translation.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -36,10 +37,11 @@ TEST(loopback_transport, a_vulkan_command_crosses_the_transport_and_comes_back)
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK(transport.established());
 
+  av::vkproto::HandleIdentity handles;
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;
-  const VkResult result = av::vkproto::av_vkCreateInstance(transport, &info, nullptr, &instance);
+  const VkResult result = av::vkproto::av_vkCreateInstance(transport, handles, &info, nullptr, &instance);
 
   CHECK(result != VK_ERROR_DEVICE_LOST);
   CHECK(rig.device().executor().executed() >= 1u);

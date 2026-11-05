@@ -85,7 +85,7 @@ TEST(loopback_capset, the_device_refuses_a_setup_of_another_major)
   CHECK_STATUS(memory.allocate(LoopbackRig::ring_order, LoopbackRig::reply_bytes), Status::ok);
   std::uint8_t     request[AvRequestWriter::max_request_size] = {};
   AvRequestWriter writer(request, sizeof request);
-  CHECK_STATUS(writer.create_context(5u, CapsetInfo::capset_id), Status::ok);
+  CHECK_STATUS(writer.create_context(5u, CapsetInfo::capset_id, "test", 4u), Status::ok);
   CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
   const av::ContextPages   pages = memory.pages();
   const av::GuestPageList  lists[3] = {pages.ring(), pages.fence(), pages.reply()};

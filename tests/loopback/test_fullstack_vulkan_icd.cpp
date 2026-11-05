@@ -8,9 +8,12 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/fullstack/full_stack_rig.hpp"
 #include "harness/icd/bound_icd_entry.hpp"
+#include "core/log/keyed_log.hpp"
+#include "harness/icd/counted_wake_signal.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "harness/icd/surface_window_frame.hpp"
@@ -61,8 +64,9 @@ constexpr std::uint32_t window_side = av::VulkanProbe::extent;
 class IcdProcess {
 public:
     explicit IcdProcess(DdiKmt &kmt)
-        : lock_(trace_, 'H'), send_lock_(trace_, 'S'), memory_lock_(trace_, 'M'),
-          root_(memory_, kmt, lock_, send_lock_, memory_lock_, log_, av::icd::icd_binding, windows_, chains_)
+        : lock_(trace_, 'H'), send_lock_(trace_, 'S'), memory_lock_(trace_, 'M'), present_lock_(trace_, 'P'), lines_(memory_, log_, "avvk: "),
+          root_(memory_, kmt, lock_, send_lock_, memory_lock_, lines_, av::icd::icd_binding, windows_, chains_,
+                present_thread_, handed_, shown_, present_lock_)
     {
     }
 
@@ -76,9 +80,14 @@ private:
     RecordingThreadLock lock_;
     RecordingThreadLock send_lock_;
     RecordingThreadLock memory_lock_;
+    RecordingThreadLock       present_lock_;
     RecordingLog        log_;
+    av::KeyedLog              lines_;
     av::ScriptedWindowSurface windows_;
     av::ScriptedWindowChains  chains_;
+    av::ScriptedThread        present_thread_;
+    av::CountedWakeSignal     handed_;
+    av::CountedWakeSignal     shown_;
     av::icd::IcdRoot    root_;
 };
 
