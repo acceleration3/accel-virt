@@ -8,7 +8,7 @@ namespace av {
 
 ScriptedD3d11Bridge::ScriptedD3d11Bridge()
     : device_(nullptr), resources_{}, count_(0u), held_{}, references_{}, staging_{}, reads_(0u), writes_(0u),
-      subresource_(0u), refuse_(false), twin_(nullptr), twin_handle_(0u), closed_(0u), to_twins_(0u),
+      subresource_(0u), refuse_(false), twin_(nullptr), twin_handle_(0u), twin_bytes_(0u), twin_device_(0u), closed_(0u), to_twins_(0u),
       from_twins_(0u)
 {
 }
@@ -94,18 +94,25 @@ std::uint32_t ScriptedD3d11Bridge::writes() const { return writes_; }
 
 std::uint32_t ScriptedD3d11Bridge::subresource() const { return subresource_; }
 
-void ScriptedD3d11Bridge::offer_twin(void *twin, std::uint64_t handle)
+void ScriptedD3d11Bridge::offer_twin(void *twin, std::uint64_t handle, std::uint64_t bytes)
 {
     twin_ = twin;
     twin_handle_ = handle;
+    twin_bytes_ = bytes;
 }
 
-void *ScriptedD3d11Bridge::twin(void *, void *, std::uint32_t, std::uint64_t &handle)
+std::uint32_t ScriptedD3d11Bridge::twin_device() const { return twin_device_; }
+
+void *ScriptedD3d11Bridge::twin(void *, void *, std::uint32_t, std::uint32_t kmt_device, std::uint64_t &handle,
+                                std::uint64_t &bytes)
 {
     void *const made = twin_;
+    twin_device_ = kmt_device;
     handle = twin_handle_;
+    bytes = twin_bytes_;
     twin_ = nullptr;
     twin_handle_ = 0u;
+    twin_bytes_ = 0u;
     if (made != nullptr) hold(made);
     return made;
 }

@@ -53,12 +53,12 @@ private:
     Gpu             gpus_[max_gpus];
     uint32_t        count_;
     uint32_t        questions_;
+    RecordingLog    log_;
+    DriverLog       lines_;
     D3d11HostDevice d3d11_;
     uint32_t        d3d11_index_;
     HostHeap        heap_;
     SharedSurfaces  surfaces_;
-    RecordingLog    log_;
-    DriverLog       lines_;
     HostShares      shares_;
     MockMemoryExporter exporter_;
     HostMemorySource   source_;

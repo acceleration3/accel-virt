@@ -1,12 +1,14 @@
 #ifndef AV_OPEN_CONNECTION_HPP
 #define AV_OPEN_CONNECTION_HPP
 
+#include "core/log/keyed_log.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "icd/common/shared_handles.hpp"
 #include "icd/vulkan/connection.hpp"
 
 #include <cstdint>
@@ -36,6 +38,9 @@ private:
     LockTrace           trace_;
     RecordingThreadLock lock_;
     RecordingLog        log_;
+    KeyedLog            lines_;
+    RecordingThreadLock handles_lock_;
+    icd::SharedHandles  handles_;
     icd::Connection     connection_;
 };
 

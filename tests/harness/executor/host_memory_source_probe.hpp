@@ -3,11 +3,10 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
+#include "device/shim/posix_lock.hpp"
 #include "executor/host_memory_source.hpp"
 
 #include <stdint.h>
-
-#include <pthread.h>
 
 namespace av {
 
@@ -21,7 +20,7 @@ struct HostMemorySourceProbe {
     void                 drain(SourceMemory &memory);
     void                 mark_visible(uint32_t types);
     ObjectPool<SourceMemory> &pool();
-    pthread_mutex_t          &mutex();
+    PosixLock                &lock();
 
     HostMemorySource &source;
 };

@@ -1,13 +1,13 @@
 #ifndef AV_COUNTED_WAKE_SIGNAL_HPP
 #define AV_COUNTED_WAKE_SIGNAL_HPP
 
-#include "icd/opengl/wake_signal.hpp"
+#include "icd/common/thread_wake.hpp"
 
 #include <cstdint>
 
 namespace av {
 
-class CountedWakeSignal final : public icd::WakeSignal {
+class CountedWakeSignal final : public icd::ThreadWake {
 public:
     CountedWakeSignal();
 

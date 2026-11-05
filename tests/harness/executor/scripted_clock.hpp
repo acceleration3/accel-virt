@@ -1,13 +1,13 @@
 #ifndef AV_SCRIPTED_CLOCK_HPP
 #define AV_SCRIPTED_CLOCK_HPP
 
-#include "executor/host_clock.hpp"
+#include "core/platform/poll_clock.hpp"
 
 #include <stdint.h>
 
 namespace av {
 
-class ScriptedClock final : public HostClock {
+class ScriptedClock final : public PollClock {
 public:
     ScriptedClock(uint64_t start, uint64_t step);
 

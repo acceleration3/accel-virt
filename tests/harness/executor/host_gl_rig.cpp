@@ -33,7 +33,7 @@ constexpr GLenum unpack_alignment = 0x0CF5u;
 }
 
 HostGlRig::HostGlRig()
-    : host_(), device_(nullptr), display_(nullptr), gl_(), context_(nullptr), queue_(nullptr)
+    : sink_(), log_(sink_), host_(log_), device_(nullptr), display_(nullptr), gl_(), context_(nullptr), queue_(nullptr)
 {
     host_.open();
     for (std::uint32_t index = 0u; index < host_.gpu_count() && device_ == nullptr; index++) {

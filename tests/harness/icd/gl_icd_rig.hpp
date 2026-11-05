@@ -1,6 +1,7 @@
 #ifndef AV_GL_ICD_RIG_HPP
 #define AV_GL_ICD_RIG_HPP
 
+#include "core/log/keyed_log.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/counted_wake_signal.hpp"
@@ -14,7 +15,9 @@
 #include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
-#include "icd/opengl/gl_present_loop.hpp"
+#include "icd/common/window_present_queue.hpp"
+#include "icd/opengl/back_buffer_presenter.hpp"
+#include "icd/opengl/batch_ready.hpp"
 
 #include <cstdint>
 
@@ -39,7 +42,7 @@ public:
     ScriptedThreadSlot    &threads();
     FakeOpengl32          &opengl32();
     glicd::GlIcdRoot      &root();
-    glicd::GlPresentLoop  &presents();
+    glicd::GlPresentQueue &presents();
     ScriptedThread        &present_thread();
     CountedWakeSignal     &handed();
     CountedWakeSignal     &shown();
@@ -61,6 +64,8 @@ private:
     RecordingThreadLock   lock_;
     RecordingThreadLock   send_lock_;
     RecordingLog          log_;
+    KeyedLog              lines_;
+    RecordingThreadLock   slice_lock_;
     ScriptedWindowSurface surface_;
     ScriptedWindowChains  chains_;
     ScriptedThreadSlot    threads_;
@@ -69,7 +74,8 @@ private:
     ScriptedThread        present_thread_;
     CountedWakeSignal     handed_;
     CountedWakeSignal     shown_;
-    glicd::GlPresentLoop  presents_;
+    glicd::BatchReady     ready_;
+    glicd::GlPresentQueue presents_;
     glicd::GlIcdRoot      root_;
     int                   dc_;
     int                   other_dc_;

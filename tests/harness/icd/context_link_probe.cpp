@@ -4,6 +4,6 @@ namespace av::icd {
 
 ContextLinkProbe::ContextLinkProbe(ContextLink &target) : held(target) {}
 
-uint32_t &ContextLinkProbe::link() { return held.link_; }
+DeviceLink *&ContextLinkProbe::link() { return held.link_; }
 
 }

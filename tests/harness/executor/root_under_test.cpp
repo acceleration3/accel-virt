@@ -14,12 +14,12 @@ ObjectStorage<ExecutorRoot> storage;
 
 }
 
-RootUnderTest::RootUnderTest() : held_(false), gpus_{}, domains_{}
+RootUnderTest::RootUnderTest() : sink_(), log_(sink_), held_(false), gpus_{}, domains_{}
 {
     AV_SCOPE("RootUnderTest::RootUnderTest");
     CHECK(!storage.constructed());
     if (storage.constructed()) return;
-    CHECK_STATUS(storage.construct(), Status::ok);
+    CHECK_STATUS(storage.construct(log_), Status::ok);
     held_ = true;
 }
 

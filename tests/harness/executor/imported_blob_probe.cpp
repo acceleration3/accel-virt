@@ -6,8 +6,8 @@ ImportedBlobProbe::ImportedBlobProbe(ImportedBlob &target) : blob(target) {}
 
 void ImportedBlobProbe::set_id(uint64_t id) { blob.id_ = id; }
 
-void ImportedBlobProbe::set_object(uint64_t object) { blob.object_ = object; }
+void ImportedBlobProbe::forget_memory() { blob.memory_ = nullptr; }
 
-void ImportedBlobProbe::set_wire_handle(uint64_t handle) { blob.wire_handle_ = handle; }
+void ImportedBlobProbe::set_handle(uint64_t handle) { blob.handle_ = handle; }
 
 }

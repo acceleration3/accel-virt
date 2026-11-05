@@ -1,10 +1,11 @@
 #ifndef AV_RECORDING_CL_DISPATCH_HPP
 #define AV_RECORDING_CL_DISPATCH_HPP
 
-#include "executor/opencl/cl_handle_registry.hpp"
+#include "executor/host_object_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "proto/generated/opencl/cl_default_dispatch.h"
+#include "proto/wire/guest_bytes.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -34,7 +35,6 @@ public:
     void *handle_for(clproto::HandleKind kind, std::uint64_t wire) const override;
     bool  declared_argument(cl_kernel kernel, cl_uint index, clproto::KernelArgument &argument) override;
     void *svm_for(std::uint64_t address, std::uint64_t bytes) const override;
-    void *lent_for(std::uint64_t offset, std::uint64_t bytes) const override;
     void  lend(std::uint8_t *block, std::size_t bytes);
 
     std::uint64_t make_svm(std::size_t bytes);
@@ -92,7 +92,7 @@ public:
     std::uint32_t refused() const;
     std::uint32_t builds_without_argument_info() const;
     Declared      argument_declared(cl_uint index) const;
-    const ClHandleRegistry &handles() const;
+    const HostObjectRegistry<std::uint64_t, clproto::HandleKind, void *> &handles() const;
     MockPlatform           &platform();
     std::uint32_t called_at(std::size_t index) const;
 
@@ -113,9 +113,10 @@ private:
     MockPlatform        platform_;
     const std::uint8_t *block_;
     const WireArena    &arena_;
+    GuestBytes          guest_;
     std::uint8_t       *lent_;
     std::size_t         lent_bytes_;
-    ClHandleRegistry    handles_;
+    HostObjectRegistry<std::uint64_t, clproto::HandleKind, void *> handles_;
     HostSvmRanges       svm_;
     unsigned char       shared_[max_shared];
     std::size_t         shared_used_;

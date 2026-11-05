@@ -136,7 +136,7 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         return AV_SHARED_REFUSED;
     };
     table_.open_object = [](void *opaque, AvExecutor *handle, std::uint64_t object_id, std::uint32_t kind,
-                            std::uint64_t size, std::uint64_t *wire_handle) -> std::uint32_t {
+                            std::uint64_t size, std::uint64_t into, std::uint64_t *wire_handle) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
         if (mock.executor_of(handle) == nullptr || wire_handle == nullptr) return AV_SHARED_REFUSED;
         *wire_handle = 0u;
@@ -154,13 +154,13 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         if (mock.withhold_open_handle_ != 0u && --mock.withhold_open_handle_ == 0u) return AV_SHARED_DONE;
         for (Open &open : mock.opens_) {
             if (open.live) continue;
-            open = Open{object_id, handle, object_bit | ++mock.next_object_, true};
+            open = Open{object_id, handle, into != 0u ? into : (object_bit | ++mock.next_object_), true};
             *wire_handle = open.wire_handle;
             return AV_SHARED_DONE;
         }
         return AV_SHARED_REFUSED;
     };
-    table_.close_object = [](void *opaque, AvExecutor *handle, std::uint64_t object_id) {
+    table_.close_object = [](void *opaque, AvExecutor *handle, std::uint64_t object_id, std::uint64_t) {
         MockExecutorOps &mock = mock_of(opaque);
         if (mock.executor_of(handle) == nullptr) return;
         Lock lock(mock.lock_);

@@ -39,7 +39,7 @@ public:
     };
     const AliasAsked &last_alias() const { return last_alias_; }
     std::uint32_t     aliases() const { return aliases_; }
-    Status        create(std::uint32_t) override { return Status::not_supported; }
+    Status        create(std::uint32_t, const char *) override { return Status::not_supported; }
     Status        destroy(std::uint32_t) override { return Status::not_found; }
     void          destroy_all() override {}
     bool          holds(std::uint32_t id) override { return id != 0u && id == held_context_; }

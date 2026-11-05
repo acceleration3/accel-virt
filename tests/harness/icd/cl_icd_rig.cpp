@@ -9,8 +9,8 @@ namespace av {
 
 ClIcdRig::ClIcdRig()
     : platform_(), kmt_(), host_(kmt_), trace_(), lock_(trace_, 'H'), send_lock_(trace_, 'S'),
-      objects_lock_(trace_, 'O'), blocks_lock_(trace_, 'B'), log_(), watcher_(), gl_share_(), d3d_adapters_(), d3d11_(),
-      root_(platform_, kmt_, lock_, send_lock_, objects_lock_, blocks_lock_, log_, watcher_, gl_share_, d3d_adapters_, d3d11_,
+      objects_lock_(trace_, 'O'), blocks_lock_(trace_, 'B'), log_(), lines_(platform_, log_, "avcl: "), watcher_(), gl_share_(), d3d_adapters_(), d3d11_(),
+      root_(platform_, kmt_, lock_, send_lock_, objects_lock_, blocks_lock_, lines_, watcher_, gl_share_, d3d_adapters_, d3d11_,
             clicd::cl_icd_binding),
       loader_(root_)
 {

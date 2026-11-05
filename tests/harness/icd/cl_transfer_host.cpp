@@ -32,7 +32,7 @@ bool read_triple(WireReader &payload, std::uint64_t *into)
 }
 
 ClTransferHost::ClTransferHost()
-    : request_(static_cast<std::uint8_t *>(std::calloc(1u, request_bytes))),
+    : RoomedTransport(request_bytes, reply_bytes), request_(static_cast<std::uint8_t *>(std::calloc(1u, request_bytes))),
       reply_(static_cast<std::uint8_t *>(std::calloc(1u, reply_bytes))),
       buffer_(static_cast<std::uint8_t *>(std::calloc(1u, buffer_bytes))),
       image_(static_cast<std::uint8_t *>(std::calloc(1u, image_bytes))),

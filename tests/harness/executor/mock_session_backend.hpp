@@ -1,7 +1,9 @@
 #ifndef AV_MOCK_SESSION_BACKEND_HPP
 #define AV_MOCK_SESSION_BACKEND_HPP
 
+#include "executor/owned_fd.hpp"
 #include "executor/session_backend.hpp"
+#include "executor/source_memory.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 
 #include <cstddef>
@@ -41,13 +43,13 @@ public:
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
     void bind_signal(void (*signal)(void *context), void *context) override;
     bool signal();
-    [[nodiscard]] bool adopt(ImportedBlob &blob) override;
-    void abandon(ImportedBlob &blob) override;
+    [[nodiscard]] bool adopt(SourceMemory &memory, std::uint64_t &handle) override;
+    void abandon(const SourceMemory &memory, std::uint64_t handle) override;
     [[nodiscard]] bool export_object(std::uint32_t kind, std::uint64_t wire_handle,
-                                     std::uint32_t &handle_kind, int &fd) override;
+                                     std::uint32_t &handle_kind, OwnedFd &descriptor) override;
     [[nodiscard]] bool import_object(std::uint32_t kind, std::uint32_t handle_kind, int fd,
                                      std::uint64_t size, const av::SharedImageShape &shape,
-                                     std::uint64_t &wire_handle, std::uint64_t &detail) override;
+                                     std::uint64_t into, std::uint64_t &wire_handle, std::uint64_t &detail) override;
     const av::SharedImageShape &imported_shape() const { return imported_shape_; }
     void               release_object(std::uint32_t kind, std::uint64_t wire_handle, std::uint64_t detail) override;
 

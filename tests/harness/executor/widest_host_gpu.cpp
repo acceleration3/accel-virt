@@ -1,12 +1,16 @@
 #include "harness/executor/widest_host_gpu.hpp"
 
+#include "executor/executor_log.hpp"
 #include "executor/shim/loader_host_apis.hpp"
+#include "harness/icd/recording_log.hpp"
 
 namespace av {
 
 WidestHostGpu::WidestHostGpu() : uuid_{}, sub_apis_(0u)
 {
-    LoaderHostApis host;
+    RecordingLog   sink;
+    ExecutorLog    log(sink);
+    LoaderHostApis host(log);
     host.open();
     for (std::uint32_t index = 0u; index < host.gpu_count(); index++) {
         const std::uint32_t runs = host.sub_apis(index);

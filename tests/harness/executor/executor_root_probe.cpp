@@ -8,7 +8,7 @@ HostGpuSet &ExecutorRootProbe::gpus() { return root.gpus_; }
 
 void ExecutorRootProbe::forget_host() { root.apis_ = nullptr; }
 
-ContextSession &ExecutorRootProbe::session_at(uint32_t slot) { return root.sessions_[slot]; }
+ContextSession &ExecutorRootProbe::session_at(uint32_t slot) { return root.sessions_[slot].object(); }
 
 SessionShares &ExecutorRootProbe::shares_at(uint32_t slot) { return root.shares_[slot]; }
 

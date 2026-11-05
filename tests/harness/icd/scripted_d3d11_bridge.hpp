@@ -20,7 +20,8 @@ public:
     void name_resource(void *resource, void *device, const clicd::D3d11Resource &described, std::uint8_t *bytes,
                        std::size_t size, std::size_t row_pitch, std::size_t slice_pitch);
     void refuse_next();
-    void offer_twin(void *twin, std::uint64_t handle);
+    void offer_twin(void *twin, std::uint64_t handle, std::uint64_t bytes = 0u);
+    std::uint32_t twin_device() const;
 
     bool   device(void *object) override;
     bool   describe(void *object, void *device, clicd::D3d11Resource &described) override;
@@ -28,7 +29,8 @@ public:
     void   let_go(void *object) override;
     cl_int read(void *device, void *resource, std::uint32_t subresource, clicd::D3d11Rows &rows) override;
     cl_int write(void *device, void *resource, std::uint32_t subresource, clicd::D3d11Rows &rows) override;
-    void  *twin(void *device, void *resource, std::uint32_t subresource, std::uint64_t &handle) override;
+    void  *twin(void *device, void *resource, std::uint32_t subresource, std::uint32_t kmt_device,
+               std::uint64_t &handle, std::uint64_t &bytes) override;
     void   close_handle(std::uint64_t handle) override;
     cl_int to_twin(void *device, void *resource, std::uint32_t subresource, void *twin) override;
     cl_int from_twin(void *device, void *twin, void *resource, std::uint32_t subresource) override;
@@ -67,6 +69,8 @@ private:
     bool          refuse_;
     void         *twin_;
     std::uint64_t twin_handle_;
+    std::uint64_t twin_bytes_;
+    std::uint32_t twin_device_;
     std::uint32_t closed_;
     std::uint32_t to_twins_;
     std::uint32_t from_twins_;

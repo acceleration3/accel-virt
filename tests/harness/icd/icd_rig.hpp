@@ -1,11 +1,14 @@
 #ifndef AV_ICD_RIG_HPP
 #define AV_ICD_RIG_HPP
 
+#include "core/log/keyed_log.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "harness/icd/counted_wake_signal.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -33,6 +36,9 @@ public:
     RecordingThreadLock  &send_lock();
     RecordingThreadLock  &memory_lock();
     RecordingLog         &log();
+    ScriptedThread       &present_thread();
+    CountedWakeSignal    &handed();
+    CountedWakeSignal    &shown();
     ScriptedWindowSurface &windows();
     ScriptedWindowChains &chains();
     icd::IcdRoot         &root();
@@ -57,8 +63,13 @@ private:
     RecordingThreadLock  send_lock_;
     RecordingThreadLock  memory_lock_;
     RecordingLog         log_;
+    KeyedLog             lines_;
     ScriptedWindowSurface windows_;
     ScriptedWindowChains  chains_;
+    RecordingThreadLock  present_lock_;
+    ScriptedThread       present_thread_;
+    CountedWakeSignal    handed_;
+    CountedWakeSignal    shown_;
     icd::IcdRoot         root_;
 };
 

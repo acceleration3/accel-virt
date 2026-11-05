@@ -1,6 +1,7 @@
 #ifndef AV_CL_ICD_RIG_HPP
 #define AV_CL_ICD_RIG_HPP
 
+#include "core/log/keyed_log.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/fake_cl_loader.hpp"
@@ -50,6 +51,7 @@ private:
     RecordingThreadLock  objects_lock_;
     RecordingThreadLock  blocks_lock_;
     RecordingLog         log_;
+    KeyedLog             lines_;
     ScriptedThread       watcher_;
     ScriptedGlShareSource gl_share_;
     ScriptedD3dAdapterSource d3d_adapters_;

@@ -3,7 +3,7 @@
 
 #include "executor/imported_blob.hpp"
 #include "proto/client/client_blob_arena.hpp"
-#include "proto/client/client_transport.hpp"
+#include "harness/transport/roomed_transport.hpp"
 #include "proto/resources/host_memory_request.hpp"
 #include "proto/wire/wire_arena.hpp"
 
@@ -16,7 +16,7 @@ class D3dBackend;
 class HostMemorySource;
 class SourceMemory;
 
-class D3dLoopback final : public ClientTransport {
+class D3dLoopback final : public RoomedTransport {
 public:
     static constexpr std::size_t   command_bytes = 1u << 20u;
     static constexpr std::size_t   reply_bytes = 64u * 1024u;
@@ -47,8 +47,13 @@ public:
 
 private:
     bool run(uint32_t command_id, WireWriter &writer, bool awaited, std::size_t &answered);
-    bool open(HostMemoryRequest request, std::uint64_t bytes, ImportedBlob &blob);
-    void close(ImportedBlob &blob);
+    struct Held {
+        ImportedBlob  blob;
+        std::uint64_t handle = 0u;
+    };
+
+    bool open(HostMemoryRequest request, std::uint64_t bytes, Held &held);
+    void close(Held &held);
 
     D3dBackend       &backend_;
     HostMemorySource *source_;
@@ -61,8 +66,8 @@ private:
     uint32_t          refused_;
     uint64_t          answers_;
     std::uint64_t     next_key_;
-    ImportedBlob      region_;
-    ImportedBlob      memories_[max_memories];
+    Held              region_;
+    Held              memories_[max_memories];
 };
 
 }

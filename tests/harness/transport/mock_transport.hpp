@@ -2,14 +2,14 @@
 #define AV_MOCK_TRANSPORT_HPP
 
 #include "proto/client/client_blob_arena.hpp"
-#include "proto/client/client_transport.hpp"
+#include "harness/transport/roomed_transport.hpp"
 
 #include <cstddef>
 #include <cstdint>
 
 namespace av {
 
-class MockTransport final : public ClientTransport {
+class MockTransport final : public RoomedTransport {
 public:
     static constexpr std::size_t slot_bytes = 65536u;
 

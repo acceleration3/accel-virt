@@ -41,7 +41,7 @@ cl_int answer_info(const void *answer, std::size_t bytes, std::size_t room, void
 }
 
 RecordingClDispatch::RecordingClDispatch(const std::uint8_t *block, const WireArena &arena)
-    : platform_(), block_(block), arena_(arena), lent_(nullptr), lent_bytes_(0u), handles_(platform_), svm_(platform_), shared_(), shared_used_(0u), objects_{}, produced_(0u), calls_(0u),
+    : clproto::DefaultDispatch(guest_), platform_(), block_(block), arena_(arena), guest_(), lent_(nullptr), lent_bytes_(0u), handles_(platform_), svm_(platform_), shared_(), shared_used_(0u), objects_{}, produced_(0u), calls_(0u),
       last_called_(0u), strangers_(0u), strays_(0u), refused_(0u), builds_without_argument_info_(0u),
       answer_pending_(false), answer_result_(CL_SUCCESS), answer_reported_(0u), logged_{}
 {}
@@ -116,7 +116,8 @@ cl_int RecordingClDispatch::on_clEnqueueReadBuffer(cl_command_queue command_queu
 
 void *RecordingClDispatch::handle_for(clproto::HandleKind kind, std::uint64_t wire) const
 {
-    return handles_.resolve(kind, wire);
+    void *const *const held = handles_.find(wire, kind);
+    return held != nullptr ? *held : nullptr;
 }
 
 void *RecordingClDispatch::svm_for(std::uint64_t address, std::uint64_t bytes) const
@@ -124,16 +125,12 @@ void *RecordingClDispatch::svm_for(std::uint64_t address, std::uint64_t bytes) c
     return svm_.resolve(address, bytes);
 }
 
-void *RecordingClDispatch::lent_for(std::uint64_t offset, std::uint64_t bytes) const
-{
-    if (lent_ == nullptr || offset > lent_bytes_ || bytes > lent_bytes_ - offset) return nullptr;
-    return lent_ + offset;
-}
-
 void RecordingClDispatch::lend(std::uint8_t *block, std::size_t bytes)
 {
     lent_ = block;
     lent_bytes_ = block == nullptr ? 0u : bytes;
+    guest_.unbind();
+    static_cast<void>(guest_.bind(block, bytes));
 }
 
 bool RecordingClDispatch::inside_lent(const void *bytes, std::size_t length) const
@@ -276,7 +273,7 @@ cl_int RecordingClDispatch::on_clSetKernelArg(cl_kernel kernel, cl_uint arg_inde
     const clproto::HandleKind kind = declared == Declared::sampler || declared == Declared::untyped_private
                                          ? clproto::HandleKind::sampler
                                          : clproto::HandleKind::mem;
-    if (handles_.resolve(kind, object) == nullptr) strangers_++;
+    if (handles_.find(object, kind) == nullptr) strangers_++;
     return CL_SUCCESS;
 }
 
@@ -319,7 +316,7 @@ RecordingClDispatch::Declared RecordingClDispatch::argument_declared(cl_uint ind
 
 void RecordingClDispatch::made(clproto::HandleKind kind, void *object)
 {
-    if (handles_.remember(kind, object) != Status::ok) refused_++;
+    if (handles_.remember(wire_of(object), kind, 0u, object) != Status::ok) refused_++;
 }
 
 bool RecordingClDispatch::room_for(std::uint64_t objects) { return handles_.make_room(objects) == Status::ok; }
@@ -328,12 +325,12 @@ MockPlatform &RecordingClDispatch::platform() { return platform_; }
 
 void RecordingClDispatch::retained(clproto::HandleKind kind, void *object)
 {
-    handles_.retain(kind, object);
+    handles_.retain(wire_of(object), kind);
 }
 
 void RecordingClDispatch::released(clproto::HandleKind kind, void *object)
 {
-    handles_.release(kind, object);
+    static_cast<void>(handles_.release(wire_of(object), kind));
 }
 
 std::uint64_t RecordingClDispatch::wire_of(const void *object) const
@@ -355,7 +352,7 @@ std::uint32_t RecordingClDispatch::builds_without_argument_info() const
 {
     return builds_without_argument_info_;
 }
-const ClHandleRegistry &RecordingClDispatch::handles() const { return handles_; }
+const HostObjectRegistry<std::uint64_t, clproto::HandleKind, void *> &RecordingClDispatch::handles() const { return handles_; }
 
 void RecordingClDispatch::called(std::uint32_t command_id)
 {
@@ -367,7 +364,8 @@ void RecordingClDispatch::called(std::uint32_t command_id)
 void RecordingClDispatch::handed(clproto::HandleKind kind, void *object)
 {
     if (object == nullptr) return;
-    if (handles_.resolve(kind, wire_of(object)) != object) strangers_++;
+    void *const *const held = handles_.find(wire_of(object), kind);
+    if (held == nullptr || *held != object) strangers_++;
 }
 
 void RecordingClDispatch::touched(const void *bytes, std::size_t length)

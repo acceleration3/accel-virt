@@ -2,8 +2,9 @@
 #define AV_GL_TRANSFER_HOST_HPP
 
 #include "proto/client/client_blob_arena.hpp"
-#include "proto/client/client_transport.hpp"
+#include "harness/transport/roomed_transport.hpp"
 #include "proto/generated/opengl/gl_real_dispatch.h"
+#include "proto/wire/guest_bytes.hpp"
 #include "proto/wire/wire_arena.hpp"
 
 #include <cstddef>
@@ -11,7 +12,7 @@
 
 namespace av {
 
-class GlTransferHost final : public ClientTransport {
+class GlTransferHost final : public RoomedTransport {
 public:
     static constexpr std::uint32_t max_buffers = 8u;
     static constexpr GLsizei       width = 1024;
@@ -109,6 +110,7 @@ private:
     WireArena       host_arena_;
     WireArena       guest_arena_;
     ClientBlobArena blobs_;
+    GuestBytes      guest_;
     glproto::RealGl table_;
 };
 

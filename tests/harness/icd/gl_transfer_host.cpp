@@ -67,7 +67,6 @@ void entry_tex_sub_image(GLenum, GLint, GLint x, GLint y, GLsizei w, GLsizei h, 
 {
     live->tex_sub_image(x, y, w, h, format, type, pixels);
 }
-std::uint8_t *entry_lent(void *, std::uint64_t at, std::uint64_t bytes) { return live->lent(at, bytes); }
 
 std::uint32_t pattern(GLsizei x, GLsizei y)
 {
@@ -77,7 +76,7 @@ std::uint32_t pattern(GLsizei x, GLsizei y)
 }
 
 GlTransferHost::GlTransferHost()
-    : request_(static_cast<std::uint8_t *>(std::calloc(1u, request_bytes))),
+    : RoomedTransport(request_bytes, reply_bytes), request_(static_cast<std::uint8_t *>(std::calloc(1u, request_bytes))),
       reply_(static_cast<std::uint8_t *>(std::calloc(1u, reply_bytes))),
       block_(static_cast<std::uint8_t *>(std::calloc(1u, arena_bytes))),
       framebuffer_(static_cast<std::uint8_t *>(std::calloc(1u, image_bytes))),
@@ -85,7 +84,7 @@ GlTransferHost::GlTransferHost()
       unpack_binding_(0u), other_binding_(0u), pack_{{4, 0, 0, 0, 0, 0}}, unpack_{{4, 0, 0, 0, 0, 0}},
       name_nothing_(false), generated_(0u), commands_(0u), ids_{}, id_counts_{}, id_kinds_(0u), refusals_(0u),
       largest_(0u), answered_(0u), lent_(nullptr), lent_bytes_(0u), host_arena_(block_, arena_bytes),
-      guest_arena_(nullptr, 0u), blobs_(), table_()
+      guest_arena_(nullptr, 0u), blobs_(), guest_(), table_()
 {
     live = this;
     for (GLsizei y = 0; y < height; y++)
@@ -131,7 +130,9 @@ void GlTransferHost::lend(std::uint8_t *block, std::size_t bytes)
     lent_ = block;
     lent_bytes_ = bytes;
     blobs_.lend(block, bytes);
-    table_.av_blob = entry_lent;
+    guest_.unbind();
+    static_cast<void>(guest_.bind(block, bytes));
+    table_.av_guest = &guest_;
 }
 
 void GlTransferHost::name_nothing() { name_nothing_ = true; }

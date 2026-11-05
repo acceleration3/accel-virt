@@ -7,10 +7,12 @@
 
 namespace av::icd {
 
+class DeviceLink;
+
 struct ContextLinkProbe {
     explicit ContextLinkProbe(ContextLink &target);
 
-    uint32_t &link();
+    DeviceLink *&link();
 
     ContextLink &held;
 };

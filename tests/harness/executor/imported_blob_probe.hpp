@@ -11,8 +11,8 @@ struct ImportedBlobProbe {
     explicit ImportedBlobProbe(ImportedBlob &target);
 
     void set_id(uint64_t id);
-    void set_object(uint64_t object);
-    void set_wire_handle(uint64_t handle);
+    void forget_memory();
+    void set_handle(uint64_t handle);
 
     ImportedBlob &blob;
 };

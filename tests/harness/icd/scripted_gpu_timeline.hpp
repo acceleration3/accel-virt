@@ -12,9 +12,11 @@ public:
     ScriptedGpuTimeline();
 
     std::uint64_t recording() const override;
+    std::uint64_t covering() const override;
     std::uint64_t completed() const override;
     bool          wait(std::uint64_t fence) override;
 
+    void          hold();
     void          send();
     void          finish(std::uint64_t fence);
     void          lose();
@@ -24,6 +26,7 @@ private:
     std::uint64_t recording_;
     std::uint64_t completed_;
     std::uint32_t waits_;
+    bool          held_;
     bool          lost_;
 };
 

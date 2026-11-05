@@ -16,8 +16,8 @@ const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_de
 }
 
 UmdRig::UmdRig(d3d::UmdHostDriver *builder)
-    : platform_(), kmt_(), trace_(), lock_(trace_, 'U'), log_(),
-      root_(platform_, kmt_, lock_, log_, d3d::umd_binding, builder)
+    : platform_(), kmt_(), trace_(), lock_(trace_, 'U'), log_(), lines_(log_, "avumd: "),
+      root_(platform_, kmt_, lock_, lines_, d3d::umd_binding, builder)
 {
     kmt_.add_adapter(avgpu, AdapterScenario::wddm_3_2);
     kmt_.open_host_window(MockKmt::rig_window_bytes);

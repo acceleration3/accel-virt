@@ -2,14 +2,14 @@
 #define AV_CL_TRANSFER_HOST_HPP
 
 #include "proto/client/client_blob_arena.hpp"
-#include "proto/client/client_transport.hpp"
+#include "harness/transport/roomed_transport.hpp"
 
 #include <cstddef>
 #include <cstdint>
 
 namespace av {
 
-class ClTransferHost final : public ClientTransport {
+class ClTransferHost final : public RoomedTransport {
 public:
     static constexpr std::uint64_t buffer_handle = 0x6600u;
     static constexpr std::uint64_t image_handle = 0x6601u;

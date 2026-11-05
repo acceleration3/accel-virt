@@ -2,6 +2,8 @@
 #define AV_ROOT_UNDER_TEST_HPP
 
 #include "device/abi/av_executor.h"
+#include "executor/executor_log.hpp"
+#include "harness/icd/recording_log.hpp"
 
 #include <cstdint>
 
@@ -30,6 +32,8 @@ public:
 private:
     static constexpr std::uint32_t max_domains = 8u;
 
+    RecordingLog  sink_;
+    ExecutorLog   log_;
     bool          held_;
     std::uint8_t  gpus_[max_domains][16];
     std::uint32_t domains_[max_domains];

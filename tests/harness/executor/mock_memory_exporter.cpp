@@ -10,7 +10,7 @@
 namespace av {
 
 MockMemoryExporter::MockMemoryExporter()
-    : types_{}, type_count_(0u), heaps_{}, heap_count_(0u), allocations_{}, fail_allocation_(0u), failing_(0u), fail_share_(0u), rounding_(0u), claimed_(0u), attempts_(0u),
+    : types_{}, type_count_(0u), heaps_{}, heap_count_(0u), allocations_{}, fail_allocation_(0u), failing_(0u), rounding_(0u), claimed_(0u), attempts_(0u),
       next_handle_(0x1000u), made_(0u), freed_(0u), last_type_(max_types), last_size_(0u), misuses_(0u)
 {
 }
@@ -42,7 +42,6 @@ std::uint32_t MockMemoryExporter::add_heap(VkMemoryHeapFlags flags, VkDeviceSize
 
 void MockMemoryExporter::fail_allocation_at(std::uint32_t nth) { fail_allocation_ = nth; }
 void MockMemoryExporter::fail_allocations(std::uint32_t count) { failing_ = count; }
-void MockMemoryExporter::fail_share_at(std::uint32_t nth) { fail_share_ = nth; }
 void MockMemoryExporter::round_to(std::uint64_t bytes) { rounding_ = bytes; }
 void MockMemoryExporter::claim_types(std::uint32_t count) { claimed_ = count; }
 
@@ -136,16 +135,6 @@ void MockMemoryExporter::free(const ExportedMemory &memory)
     ::close(allocation->fd);
     *allocation = Allocation{};
     freed_++;
-}
-
-int MockMemoryExporter::share(const ExportedMemory &memory)
-{
-    if (allocation_of(memory) == nullptr) {
-        misuses_++;
-        return -1;
-    }
-    if (fires(fail_share_)) return -1;
-    return ::fcntl(memory.fd(), F_DUPFD_CLOEXEC, 0);
 }
 
 std::uint32_t MockMemoryExporter::export_questions(std::uint32_t type) const

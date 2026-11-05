@@ -539,12 +539,12 @@ TEST(host_memory_source, a_report_while_a_worker_holds_the_pool_says_busy_and_wa
   rig.discrete();
   AvHostMemory memory = {};
   CHECK_STATUS(rig.allocate(1u, readback, memory), Status::ok);
-  pthread_mutex_t &held = HostMemorySourceProbe(rig.source).mutex();
-  pthread_mutex_lock(&held);
+  av::PosixLock &held = HostMemorySourceProbe(rig.source).lock();
+  held.acquire();
   char            bytes[512] = {};
   av::StateWriter writer(bytes, sizeof bytes);
   rig.source.report(writer);
-  pthread_mutex_unlock(&held);
+  held.release();
   CHECK(std::strstr(writer.dump(), "busy=true") != nullptr);
   CHECK(std::strstr(writer.dump(), "live=") == nullptr);
   CHECK(std::strstr(writer.dump(), "bytes=") == nullptr);

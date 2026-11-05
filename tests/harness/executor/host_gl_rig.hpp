@@ -1,8 +1,10 @@
 #ifndef AV_HOST_GL_RIG_HPP
 #define AV_HOST_GL_RIG_HPP
 
+#include "executor/executor_log.hpp"
 #include "executor/shim/gl_context.hpp"
 #include "executor/shim/loader_host_apis.hpp"
+#include "harness/icd/recording_log.hpp"
 
 #include <CL/cl.h>
 #include <cstdint>
@@ -43,6 +45,8 @@ public:
 private:
     void *entry(const char *name);
 
+    RecordingLog        sink_;
+    ExecutorLog         log_;
     LoaderHostApis      host_;
     const OpenClDevice *device_;
     const GlDisplay    *display_;

@@ -18,7 +18,7 @@ constexpr std::uint64_t memory_heap_bytes = std::uint64_t{1} << 30u;
 
 }
 
-ScriptedHost::ScriptedHost(MockKmt &kmt) : kmt_(kmt), cut_(uncut), answer_{} {}
+ScriptedHost::ScriptedHost(MockKmt &kmt) : kmt_(kmt), cut_(uncut), answer_{}, handles_() {}
 
 void ScriptedHost::queue(const WireWriter &writer)
 {
@@ -82,7 +82,7 @@ void ScriptedHost::vk_external_buffer_properties(std::uint32_t features, std::ui
     properties.externalMemoryProperties.exportFromImportedHandleTypes = export_from;
     properties.externalMemoryProperties.compatibleHandleTypes = compatible;
     writer.write_pod<std::int32_t>(0);
-    vkproto::serialize_VkExternalBufferProperties(writer, properties);
+    vkproto::serialize_VkExternalBufferProperties(writer, handles_, properties);
     queue(writer);
 }
 
@@ -96,7 +96,7 @@ void ScriptedHost::vk_external_semaphore_properties(std::uint32_t features, std:
     properties.exportFromImportedHandleTypes = export_from;
     properties.compatibleHandleTypes = compatible;
     writer.write_pod<std::int32_t>(0);
-    vkproto::serialize_VkExternalSemaphoreProperties(writer, properties);
+    vkproto::serialize_VkExternalSemaphoreProperties(writer, handles_, properties);
     queue(writer);
 }
 

@@ -26,7 +26,7 @@ void HostSharesProbe::forget_nothing(uint32_t domain, uint64_t id) { shares.inde
 ShareHolder *HostSharesProbe::stray_holder(SessionBackend &session)
 {
     ShareHolder *holder = nullptr;
-    static_cast<void>(shares.holders_.create(holder, session, 0u, 0u));
+    static_cast<void>(shares.holders_.create(holder, session, 0u, 0u, 0u));
     return holder;
 }
 

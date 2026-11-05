@@ -2,6 +2,7 @@
 #define AV_SCRIPTED_HOST_HPP
 
 #include "guest/suite/submit_benchmark.hpp"
+#include "proto/generated/vulkan/vk_handle_translation.h"
 
 #include <cstdint>
 
@@ -112,6 +113,7 @@ private:
     MockKmt      &kmt_;
     std::uint32_t cut_;
     std::uint8_t  answer_[answer_bytes];
+    vkproto::HandleIdentity handles_;
 };
 
 }

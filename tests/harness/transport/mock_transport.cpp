@@ -5,7 +5,7 @@
 namespace av {
 
 MockTransport::MockTransport()
-    : request_{}, sent_{}, reply_{}, reply_length_(0u), sends_(0u), end_calls_(0u), last_command_(0u),
+    : RoomedTransport(slot_bytes, slot_bytes), request_{}, sent_{}, reply_{}, reply_length_(0u), sends_(0u), end_calls_(0u), last_command_(0u),
       last_length_(0u), fail_next_(false), arena_(nullptr, 0u), blobs_() {}
 
 void MockTransport::set_reply(const std::uint8_t *reply, std::size_t length)

@@ -235,7 +235,7 @@ Status LoopbackKmt::create_context_virtual(std::uint32_t, const std::uint8_t *pr
     const ContextSetup setup(ProtocolVersion(1u, 0u), record.sub_api(), ring_id, record.ring_order(), fence_id,
                              doorbell, reply_id);
     AvRequestWriter set(request, sizeof request);
-    if (created.create_context(handle, av_capset) != Status::ok || !control(request, created.length()) ||
+    if (created.create_context(handle, av_capset, "loopback", 8u) != Status::ok || !control(request, created.length()) ||
         set.setup(handle, setup) != Status::ok || !control(request, set.length())) {
         free_context_memory(made);
         return Status::not_supported;

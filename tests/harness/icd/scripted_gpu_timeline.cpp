@@ -2,11 +2,16 @@
 
 namespace av {
 
-ScriptedGpuTimeline::ScriptedGpuTimeline() : recording_(1u), completed_(0u), waits_(0u), lost_(false) {}
+ScriptedGpuTimeline::ScriptedGpuTimeline() : recording_(1u), completed_(0u), waits_(0u), held_(false), lost_(false) {}
 
 std::uint64_t ScriptedGpuTimeline::recording() const
 {
     return recording_;
+}
+
+std::uint64_t ScriptedGpuTimeline::covering() const
+{
+    return recording_ - 1u + (held_ ? 1u : 0u);
 }
 
 std::uint64_t ScriptedGpuTimeline::completed() const
@@ -18,13 +23,22 @@ bool ScriptedGpuTimeline::wait(std::uint64_t fence)
 {
     waits_++;
     if (lost_) return false;
-    if (fence >= recording_) recording_ = fence + 1u;
+    if (fence >= recording_) {
+        recording_ = fence + 1u;
+        held_ = false;
+    }
     if (fence > completed_) completed_ = fence;
     return true;
 }
 
+void ScriptedGpuTimeline::hold()
+{
+    held_ = true;
+}
+
 void ScriptedGpuTimeline::send()
 {
+    held_ = false;
     recording_++;
 }
 

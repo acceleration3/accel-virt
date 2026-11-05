@@ -25,7 +25,6 @@ public:
     std::uint32_t add_heap(VkMemoryHeapFlags flags, VkDeviceSize size);
     void          fail_allocation_at(std::uint32_t nth);
     void          fail_allocations(std::uint32_t count);
-    void          fail_share_at(std::uint32_t nth);
     void          round_to(std::uint64_t bytes);
     void          claim_types(std::uint32_t count);
     void          hide_on_import(std::uint32_t type);
@@ -35,7 +34,6 @@ public:
     bool          imports_host_visible(std::uint32_t type) override;
     Status        allocate(std::uint32_t type, std::uint64_t size, ExportedMemory &memory) override;
     void          free(const ExportedMemory &memory) override;
-    int           share(const ExportedMemory &memory) override;
 
     std::uint32_t export_questions(std::uint32_t type) const;
     std::uint32_t import_questions(std::uint32_t type) const;
@@ -76,7 +74,6 @@ private:
     Allocation    allocations_[max_allocations];
     std::uint32_t fail_allocation_;
     std::uint32_t failing_;
-    std::uint32_t fail_share_;
     std::uint64_t rounding_;
     std::uint32_t claimed_;
     std::uint32_t attempts_;

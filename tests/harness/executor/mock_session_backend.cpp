@@ -4,7 +4,6 @@
 
 #include <unistd.h>
 
-#include "executor/imported_blob.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -98,19 +97,16 @@ void          MockSessionBackend::set_adopts(bool adopts) { adopts_ = adopts; }
 std::uint32_t MockSessionBackend::adopted() const { return adopted_; }
 std::uint32_t MockSessionBackend::abandoned() const { return abandoned_; }
 
-bool MockSessionBackend::adopt(ImportedBlob &blob)
+bool MockSessionBackend::adopt(SourceMemory &memory, std::uint64_t &handle)
 {
+    handle = 0u;
     if (!adopts_) return false;
     adopted_++;
-    blob.record(blob.id() + 0x1000u, blob.id() + wire_offset);
+    handle = memory.key() + wire_offset;
     return true;
 }
 
-void MockSessionBackend::abandon(ImportedBlob &blob)
-{
-    abandoned_++;
-    blob.record(0u, 0u);
-}
+void MockSessionBackend::abandon(const SourceMemory &, std::uint64_t) { abandoned_++; }
 
 void MockSessionBackend::shut_down()
 {
@@ -137,15 +133,15 @@ void MockSessionBackend::before_next_export(void (*during)(void *context), void 
 }
 
 bool MockSessionBackend::export_object(std::uint32_t kind, std::uint64_t wire_handle,
-                                       std::uint32_t &handle_kind, int &fd)
+                                       std::uint32_t &handle_kind, OwnedFd &descriptor)
 {
     handle_kind = 0u;
-    fd = -1;
+    descriptor.close();
     if (!shares_ || wire_handle == 0u || kind == 0u) return false;
     int ends[2] = {-1, -1};
     if (::pipe(ends) != 0) return false;
     ::close(ends[1]);
-    fd = ends[0];
+    descriptor.hold(ends[0]);
     handle_kind = AV_SHARED_HANDLE_DMA_BUF;
     exported_objects_++;
     void (*const during)(void *) = during_export_;
@@ -156,7 +152,7 @@ bool MockSessionBackend::export_object(std::uint32_t kind, std::uint64_t wire_ha
 
 bool MockSessionBackend::import_object(std::uint32_t kind, std::uint32_t handle_kind, int fd,
                                        std::uint64_t size, const av::SharedImageShape &shape,
-                                       std::uint64_t &wire_handle, std::uint64_t &detail)
+                                       std::uint64_t into, std::uint64_t &wire_handle, std::uint64_t &detail)
 {
     imported_shape_ = shape;
     wire_handle = 0u;
@@ -164,7 +160,7 @@ bool MockSessionBackend::import_object(std::uint32_t kind, std::uint32_t handle_
     if (!shares_ || fd < 0 || kind == 0u || handle_kind == 0u || size == 0u) return false;
     descriptor_ = fd;
     imported_objects_++;
-    wire_handle = object_handle + imported_objects_;
+    wire_handle = into != 0u ? into : object_handle + imported_objects_;
     detail = wire_handle ^ detail_mask;
     return true;
 }

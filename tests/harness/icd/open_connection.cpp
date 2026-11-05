@@ -10,7 +10,9 @@
 namespace av {
 
 OpenConnection::OpenConnection()
-    : kmt_(), platform_(), host_(kmt_), trace_(), lock_(trace_, 'S'), log_(), connection_(kmt_, platform_, lock_, log_)
+    : kmt_(), platform_(), host_(kmt_), trace_(), lock_(trace_, 'S'), log_(), lines_(platform_, log_, "avvk: "),
+      handles_lock_(trace_, 'H'), handles_(kmt_, handles_lock_, platform_),
+      connection_(kmt_, platform_, lock_, lines_, handles_)
 {
     kmt_.add_adapter(PciIdentity(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
                                  PciIdentity::virtio_vendor, AvgpuAdapters::av_subsystem),

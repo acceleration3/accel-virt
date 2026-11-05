@@ -1,6 +1,7 @@
 #ifndef AV_UMD_RIG_HPP
 #define AV_UMD_RIG_HPP
 
+#include "core/log/driver_log.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
@@ -35,6 +36,7 @@ private:
     LockTrace           trace_;
     RecordingThreadLock lock_;
     RecordingLog        log_;
+    DriverLog           lines_;
     d3d::UmdRoot        root_;
 };
 
