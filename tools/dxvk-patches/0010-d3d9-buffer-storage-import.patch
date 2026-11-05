@@ -9,8 +9,13 @@ ID3D11VkExtContext2::BindBufferStorage and takes the same
 DxvkBuffer::importStorage: accel-virt points a guest buffer the CPU writes
 at the guest memory the guest writes it in. Buffers that are not directly
 mapped keep a separate staging buffer and are refused. FlushCommands submits
-what was recorded without waiting for the CS thread, so a batch an embedder
-marked with an event query reaches the GPU as a D3D11 fence flush does.
+what was recorded without waiting for the CS thread. MarkSubmission calls the
+embedder back from a DXVK thread once the submission holding that point has
+completed, which is how it follows a batch without polling an event query.
+UnbindBufferStorage gives a buffer storage of its own again whatever the lock
+flags and discard settings, BufferStorageBindable tells whether a buffer can
+take imported storage, and WaitForIdle drains the CS thread, the submission
+and finish threads and the device.
 ---
 diff --git a/src/d3d9/d3d9_common_buffer.h b/src/d3d9/d3d9_common_buffer.h
 index aab28cb6..906b73c2 100644
@@ -43,10 +48,10 @@ index 8213e308..c8824ada 100644
        return S_OK;
      }
 diff --git a/src/d3d9/d3d9_interfaces.h b/src/d3d9/d3d9_interfaces.h
-index 3664b6c6..3ede23c3 100644
+index 3664b6c6..2a8d0c8a 100644
 --- a/src/d3d9/d3d9_interfaces.h
 +++ b/src/d3d9/d3d9_interfaces.h
-@@ -253,6 +253,44 @@ ID3D9VkInteropDevice : public IUnknown {
+@@ -253,6 +253,82 @@ ID3D9VkInteropDevice : public IUnknown {
            IDirect3DResource9**      ppResult) = 0;
  };
  
@@ -86,12 +91,50 @@ index 3664b6c6..3ede23c3 100644
 +   * reach the GPU, as ID3D11DeviceContext::Flush does for a D3D11 fence.
 +   */
 +  virtual void STDMETHODCALLTYPE FlushCommands() = 0;
++
++  /**
++   * \brief Whether a buffer can be pointed at imported storage
++   *
++   * \returns D3D_OK if the vertex or index buffer is directly mapped
++   */
++  virtual HRESULT STDMETHODCALLTYPE BufferStorageBindable(
++          IDirect3DResource9*  pResource) = 0;
++
++  /**
++   * \brief Gives a buffer storage of its own again
++   *
++   * Recorded in order like BindBufferStorage, whatever the lock flags and
++   * the device's discard settings: the buffer takes a fresh allocation and
++   * its contents are undefined until the embedder writes them.
++   */
++  virtual HRESULT STDMETHODCALLTYPE UnbindBufferStorage(
++          IDirect3DResource9*  pResource) = 0;
++
++  /**
++   * \brief Calls back once the commands recorded so far have completed
++   *
++   * Submits what was recorded, as FlushCommands does, and calls
++   * pCallback(pContext, Value) from a DXVK thread when the GPU has finished
++   * the submission that holds this point.
++   */
++  virtual HRESULT STDMETHODCALLTYPE MarkSubmission(
++          void (*pCallback)(void*, uint64_t),
++          void*                pContext,
++          uint64_t             Value) = 0;
++
++  /**
++   * \brief Waits until every command of the device has run
++   *
++   * Drains the CS thread and DXVK's submission and finish threads, and then
++   * the device.
++   */
++  virtual void STDMETHODCALLTYPE WaitForIdle() = 0;
 +};
 +
  /**
   * \brief D3D9 current output metadata
   */
-@@ -299,6 +337,7 @@ __CRT_UUID_DECL(ID3D9VkInteropInterface,   0x3461a81b,0xce41,0x485b,0xb6,0xb5,0x
+@@ -299,6 +375,7 @@ __CRT_UUID_DECL(ID3D9VkInteropInterface,   0x3461a81b,0xce41,0x485b,0xb6,0xb5,0x
  __CRT_UUID_DECL(ID3D9VkInteropInterface1,  0xd6589ed4,0x7a37,0x4096,0xba,0xc2,0x22,0x3b,0x25,0xae,0x31,0xd2);
  __CRT_UUID_DECL(ID3D9VkInteropTexture,     0xd56344f5,0x8d35,0x46fd,0x80,0x6d,0x94,0xc3,0x51,0xb4,0x72,0xc1);
  __CRT_UUID_DECL(ID3D9VkInteropDevice,      0x2eaa4b89,0x0107,0x4bdb,0x87,0xf7,0x0f,0x54,0x1c,0x49,0x3c,0xe0);
@@ -100,13 +143,114 @@ index 3664b6c6..3ede23c3 100644
  __CRT_UUID_DECL(ID3D9VkExtInterface,       0x65b55086,0xe3e3,0x4c3e,0xb3,0xa0,0x86,0x81,0x5c,0xce,0x2c,0x4c);
  #endif
 diff --git a/src/d3d9/d3d9_interop.cpp b/src/d3d9/d3d9_interop.cpp
-index 7594eb15..7bd019b9 100644
+index 7594eb15..2d27724c 100644
 --- a/src/d3d9/d3d9_interop.cpp
 +++ b/src/d3d9/d3d9_interop.cpp
-@@ -253,6 +253,51 @@ namespace dxvk {
+@@ -1,3 +1,6 @@
++#include <atomic>
++#include <thread>
++
+ #include "d3d9_interop.h"
+ #include "d3d9_interface.h"
+ #include "d3d9_common_texture.h"
+@@ -253,6 +256,148 @@ namespace dxvk {
      m_lock = D3D9DeviceLock();
    }
  
++  static D3D9CommonBuffer* GetCommonBuffer(IDirect3DResource9* pResource) {
++    if (unlikely(!pResource))
++      return nullptr;
++
++    switch (pResource->GetType()) {
++      case D3DRTYPE_VERTEXBUFFER: return static_cast<D3D9VertexBuffer*>(pResource)->GetCommonBuffer();
++      case D3DRTYPE_INDEXBUFFER:  return static_cast<D3D9IndexBuffer*> (pResource)->GetCommonBuffer();
++      default:                    return nullptr;
++    }
++  }
++
++  class D3D9SubmissionSignal final : public sync::Signal {
++
++  public:
++
++    D3D9SubmissionSignal(void (*pCallback)(void*, uint64_t), void* pContext)
++    : m_callback(pCallback), m_context(pContext) { }
++
++    uint64_t value() const {
++      return m_value.load();
++    }
++
++    void signal(uint64_t value) {
++      m_value.store(value);
++      m_callback(m_context, value);
++    }
++
++    void wait(uint64_t value) {
++      while (m_value.load() < value)
++        std::this_thread::yield();
++    }
++
++  private:
++
++    void (*m_callback)(void*, uint64_t);
++    void*                 m_context;
++    std::atomic<uint64_t> m_value = { 0u };
++
++  };
++
++  HRESULT STDMETHODCALLTYPE D3D9VkInteropDevice::BufferStorageBindable(
++          IDirect3DResource9*  pResource) {
++    D3D9DeviceLock lock = m_device->LockDevice();
++
++    D3D9CommonBuffer* buffer = GetCommonBuffer(pResource);
++
++    if (unlikely(!buffer || buffer->GetMapMode() != D3D9_COMMON_BUFFER_MAP_MODE_DIRECT))
++      return D3DERR_INVALIDCALL;
++
++    return D3D_OK;
++  }
++
++  HRESULT STDMETHODCALLTYPE D3D9VkInteropDevice::UnbindBufferStorage(
++          IDirect3DResource9*  pResource) {
++    D3D9DeviceLock lock = m_device->LockDevice();
++
++    D3D9CommonBuffer* buffer = GetCommonBuffer(pResource);
++
++    if (unlikely(!buffer || buffer->GetMapMode() != D3D9_COMMON_BUFFER_MAP_MODE_DIRECT))
++      return D3DERR_INVALIDCALL;
++
++    m_device->EmitCs([
++      cBuffer     = buffer->GetBuffer<D3D9_COMMON_BUFFER_TYPE_MAPPING>(),
++      cAllocation = buffer->DiscardMapSlice()
++    ] (DxvkContext* ctx) mutable {
++      ctx->invalidateBuffer(cBuffer, std::move(cAllocation));
++    });
++
++    buffer->SetNeedsReadback(false);
++    return D3D_OK;
++  }
++
++  HRESULT STDMETHODCALLTYPE D3D9VkInteropDevice::MarkSubmission(
++          void (*pCallback)(void*, uint64_t),
++          void*                pContext,
++          uint64_t             Value) {
++    if (unlikely(!pCallback))
++      return D3DERR_INVALIDCALL;
++
++    {
++      D3D9DeviceLock lock = m_device->LockDevice();
++
++      m_device->EmitCs([
++        cSignal = Rc<sync::Signal>(new D3D9SubmissionSignal(pCallback, pContext)),
++        cValue  = Value
++      ] (DxvkContext* ctx) {
++        ctx->signal(cSignal, cValue);
++      });
++    }
++
++    m_device->Flush();
++    return D3D_OK;
++  }
++
 +  HRESULT STDMETHODCALLTYPE D3D9VkInteropDevice::BindBufferStorage(
 +          IDirect3DResource9*  pResource,
 +          VkBuffer             Storage,
@@ -118,13 +262,10 @@ index 7594eb15..7bd019b9 100644
 +    if (unlikely(!pResource || !Storage || !pMapPtr))
 +      return D3DERR_INVALIDCALL;
 +
-+    D3D9CommonBuffer* buffer = nullptr;
++    D3D9CommonBuffer* buffer = GetCommonBuffer(pResource);
 +
-+    switch (pResource->GetType()) {
-+      case D3DRTYPE_VERTEXBUFFER: buffer = static_cast<D3D9VertexBuffer*>(pResource)->GetCommonBuffer(); break;
-+      case D3DRTYPE_INDEXBUFFER:  buffer = static_cast<D3D9IndexBuffer*> (pResource)->GetCommonBuffer(); break;
-+      default:                    return D3DERR_INVALIDCALL;
-+    }
++    if (unlikely(!buffer))
++      return D3DERR_INVALIDCALL;
 +
 +    if (unlikely(buffer->GetMapMode() != D3D9_COMMON_BUFFER_MAP_MODE_DIRECT))
 +      return D3DERR_INVALIDCALL;
@@ -152,11 +293,17 @@ index 7594eb15..7bd019b9 100644
 +    m_device->Flush();
 +  }
 +
++  void STDMETHODCALLTYPE D3D9VkInteropDevice::WaitForIdle() {
++    m_device->Flush();
++    m_device->SynchronizeCsThread(DxvkCsThread::SynchronizeAll);
++    m_device->GetDXVKDevice()->waitForIdle();
++  }
++
    static Rc<DxvkPagedResource> GetDxvkResource(IDirect3DResource9 *pResource) {
      switch (pResource->GetType()) {
        case D3DRTYPE_SURFACE:       return static_cast<D3D9Surface*>     (pResource)->GetCommonTexture()->GetImage();
 diff --git a/src/d3d9/d3d9_interop.h b/src/d3d9/d3d9_interop.h
-index 9909893f..5a2c5c30 100644
+index 9909893f..8837306d 100644
 --- a/src/d3d9/d3d9_interop.h
 +++ b/src/d3d9/d3d9_interop.h
 @@ -83,7 +83,7 @@ namespace dxvk {
@@ -168,7 +315,7 @@ index 9909893f..5a2c5c30 100644
  
    public:
  
-@@ -134,6 +134,15 @@ namespace dxvk {
+@@ -134,6 +134,28 @@ namespace dxvk {
              const D3D9VkExtImageDesc* desc,
              IDirect3DResource9**      ppResult);
  
@@ -180,6 +327,19 @@ index 9909893f..5a2c5c30 100644
 +            void*                pMapPtr);
 +
 +    void STDMETHODCALLTYPE FlushCommands();
++
++    HRESULT STDMETHODCALLTYPE BufferStorageBindable(
++            IDirect3DResource9*  pResource);
++
++    HRESULT STDMETHODCALLTYPE UnbindBufferStorage(
++            IDirect3DResource9*  pResource);
++
++    HRESULT STDMETHODCALLTYPE MarkSubmission(
++            void (*pCallback)(void*, uint64_t),
++            void*                pContext,
++            uint64_t             Value);
++
++    void STDMETHODCALLTYPE WaitForIdle();
 +
    private:
  
