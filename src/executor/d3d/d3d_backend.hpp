@@ -68,6 +68,8 @@ public:
     void bind_signal(void (*signal)(void *context), void *context) override;
     [[nodiscard]] bool adopt(SourceMemory &memory, const BlobRole &role, uint64_t &handle) override;
     void abandon(const SourceMemory &memory, uint64_t handle) override;
+    void unbind_arena(const SourceMemory &memory) override;
+    void retire_arena(const SourceMemory &memory) override;
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      OwnedFd &descriptor) override;
     [[nodiscard]] bool import_object(uint32_t kind, uint32_t handle_kind, int fd, uint64_t size,

@@ -30,6 +30,8 @@ public:
 
     [[nodiscard]] virtual bool adopt(SourceMemory &memory, const BlobRole &role, uint64_t &handle) = 0;
     virtual void abandon(const SourceMemory &memory, uint64_t handle) = 0;
+    virtual void unbind_arena(const SourceMemory &memory) = 0;
+    virtual void retire_arena(const SourceMemory &memory) = 0;
 
     [[nodiscard]] virtual bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                              OwnedFd &descriptor) = 0;

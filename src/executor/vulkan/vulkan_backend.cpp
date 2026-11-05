@@ -792,6 +792,16 @@ void VulkanBackend::abandon(const SourceMemory &, uint64_t handle)
     if (owner != nullptr) owner->memory().release(handle);
 }
 
+void VulkanBackend::unbind_arena(const SourceMemory &)
+{
+    AV_SCOPE("VulkanBackend::unbind_arena");
+}
+
+void VulkanBackend::retire_arena(const SourceMemory &)
+{
+    AV_SCOPE("VulkanBackend::retire_arena");
+}
+
 bool VulkanBackend::poll()
 {
     AV_SCOPE("VulkanBackend::poll");

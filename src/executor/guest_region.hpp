@@ -8,11 +8,12 @@
 namespace av {
 
 class BlobRole;
+class DriverLog;
 class SourceMemory;
 
 class GuestRegion {
 public:
-    explicit GuestRegion(GuestBytes &bytes);
+    GuestRegion(GuestBytes &bytes, DriverLog &lines);
     GuestRegion(const GuestRegion &) = delete;
     GuestRegion &operator=(const GuestRegion &) = delete;
 
@@ -29,6 +30,7 @@ private:
     friend struct GuestRegionProbe;
 
     GuestBytes   &bytes_;
+    DriverLog    &lines_;
     SourceMemory *memories_[GuestBytes::slot_count];
 };
 

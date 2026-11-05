@@ -1,7 +1,9 @@
+#include "core/log/driver_log.hpp"
 #include "executor/exported_memory.hpp"
 #include "executor/guest_region.hpp"
 #include "executor/source_memory.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
 #include "proto/submission/blob_role.hpp"
 #include "proto/wire/guest_bytes.hpp"
 
@@ -14,6 +16,14 @@ using av::GuestRegion;
 using av::SourceMemory;
 
 namespace {
+
+class Quiet {
+public:
+    Quiet() : sink(), lines(sink, "t: ") {}
+
+    av::RecordingLog sink;
+    av::DriverLog    lines;
+};
 
 alignas(4096) std::uint8_t mapping[16384];
 
@@ -38,7 +48,8 @@ std::uint64_t address_of(const void *pointer)
 
 TEST(guest_region_adopt, an_arena_import_becomes_a_segment_named_by_its_address)
 { GuestBytes bytes;
-  GuestRegion region(bytes);
+  Quiet       quiet;
+  GuestRegion region(bytes, quiet.lines);
   Memory      import(mapping, sizeof mapping);
   std::uint64_t handle = 1u;
   CHECK(!region.held());
@@ -53,7 +64,8 @@ TEST(guest_region_adopt, an_arena_import_becomes_a_segment_named_by_its_address)
 
 TEST(guest_region_adopt, a_plain_role_is_not_a_segment)
 { GuestBytes bytes;
-  GuestRegion region(bytes);
+  Quiet       quiet;
+  GuestRegion region(bytes, quiet.lines);
   Memory      import(mapping, sizeof mapping);
   std::uint64_t handle = 1u;
   CHECK(!region.adopt(import.memory, BlobRole(), handle));
@@ -63,7 +75,8 @@ TEST(guest_region_adopt, a_plain_role_is_not_a_segment)
 
 TEST(guest_region_adopt, segments_adopted_in_any_order_land_at_their_roles_bases)
 { GuestBytes bytes;
-  GuestRegion region(bytes);
+  Quiet       quiet;
+  GuestRegion region(bytes, quiet.lines);
   Memory      later(mapping + 8192, 4096u);
   Memory      earlier(mapping, 4096u);
   std::uint64_t handle = 0u;
@@ -77,7 +90,8 @@ TEST(guest_region_adopt, segments_adopted_in_any_order_land_at_their_roles_bases
 
 TEST(guest_region_adopt, a_taken_slot_a_repeated_memory_or_a_bad_base_is_refused_untouched)
 { GuestBytes bytes;
-  GuestRegion region(bytes);
+  Quiet       quiet;
+  GuestRegion region(bytes, quiet.lines);
   Memory      first(mapping, 4096u);
   Memory      second(mapping + 4096, 4096u);
   std::uint64_t handle = 0u;
@@ -88,11 +102,29 @@ TEST(guest_region_adopt, a_taken_slot_a_repeated_memory_or_a_bad_base_is_refused
   CHECK(!region.adopt(second.memory, BlobRole(BlobRole::Kind::arena_segment, 4096u), handle));
   CHECK(!region.is(second.memory));
   CHECK_EQ(bytes.segments(), 1u);
+  CHECK_EQ(quiet.sink.lines(), 3u);
+  CHECK_EQ(quiet.sink.holding("would not bind"), 3u);
+  CHECK(region.invariants_hold()); }
+
+TEST(guest_region_adopt, a_slot_freed_by_an_abandon_binds_the_next_segment_at_once)
+{ Quiet       quiet;
+  GuestBytes  bytes;
+  GuestRegion region(bytes, quiet.lines);
+  Memory      first(mapping, 4096u);
+  Memory      second(mapping + 4096, 4096u);
+  std::uint64_t handle = 0u;
+  CHECK(region.adopt(first.memory, arena_at(1u), handle));
+  CHECK(!region.adopt(second.memory, arena_at(1u), handle));
+  region.abandon(first.memory);
+  CHECK(bytes.at(GuestBytes::slot_bytes, 16u) == nullptr);
+  CHECK(region.adopt(second.memory, arena_at(1u), handle));
+  CHECK(region.memory_at(GuestBytes::slot_bytes) == &second.memory);
   CHECK(region.invariants_hold()); }
 
 TEST(guest_region_adopt, memory_with_no_mapping_or_no_bytes_is_refused)
 { GuestBytes bytes;
-  GuestRegion region(bytes);
+  Quiet       quiet;
+  GuestRegion region(bytes, quiet.lines);
   Memory      unmapped(nullptr, 4096u);
   Memory      empty(mapping, 0u);
   std::uint64_t handle = 0u;
@@ -103,7 +135,8 @@ TEST(guest_region_adopt, memory_with_no_mapping_or_no_bytes_is_refused)
 
 TEST(guest_region_abandon, only_the_adopted_memory_gives_its_segment_back)
 { GuestBytes bytes;
-  GuestRegion region(bytes);
+  Quiet       quiet;
+  GuestRegion region(bytes, quiet.lines);
   Memory      held(mapping, 4096u);
   Memory      stranger(mapping + 4096, 4096u);
   std::uint64_t handle = 0u;
@@ -123,7 +156,8 @@ TEST(guest_region_abandon, only_the_adopted_memory_gives_its_segment_back)
 
 TEST(guest_region_memory_at, a_long_segment_answers_with_its_memory_in_every_slot_it_covers)
 { GuestBytes bytes;
-  GuestRegion region(bytes);
+  Quiet       quiet;
+  GuestRegion region(bytes, quiet.lines);
   Memory      long_memory(mapping, GuestBytes::slot_bytes + 4096u);
   std::uint64_t handle = 0u;
   CHECK(region.adopt(long_memory.memory, arena_at(1u), handle));

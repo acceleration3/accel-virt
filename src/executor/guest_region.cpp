@@ -1,12 +1,14 @@
 #include "executor/guest_region.hpp"
 
+#include "core/log/driver_log.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/source_memory.hpp"
 #include "proto/submission/blob_role.hpp"
 
 namespace av {
 
-GuestRegion::GuestRegion(GuestBytes &bytes) : bytes_(bytes), memories_{}
+GuestRegion::GuestRegion(GuestBytes &bytes, DriverLog &lines) : bytes_(bytes), lines_(lines), memories_{}
 {
     AV_SCOPE("GuestRegion::GuestRegion");
 }
@@ -15,7 +17,19 @@ bool GuestRegion::adopt(SourceMemory &memory, const BlobRole &role, uint64_t &ha
 {
     AV_SCOPE("GuestRegion::adopt");
     handle = 0u;
-    if (!role.is_arena() || bytes_.bind(role.base(), memory.pointer(), memory.size()) != Status::ok) return false;
+    if (!role.is_arena()) return false;
+    const Status bound = bytes_.bind(role.base(), memory.pointer(), memory.size());
+    if (bound != Status::ok) {
+        LogLine(lines_)
+            .text("an arena segment of ")
+            .number(memory.size())
+            .text(" bytes would not bind at ")
+            .number(role.base())
+            .text(", status ")
+            .number(static_cast<uint32_t>(bound))
+            .write();
+        return false;
+    }
     memories_[role.base() >> GuestBytes::slot_shift] = &memory;
     handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(memory.pointer()));
     return true;

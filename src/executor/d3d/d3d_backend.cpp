@@ -113,7 +113,7 @@ D3dBackend::D3dBackend(ExecutorLog &log)
     : d3dproto::ServerDispatch(guest_), device11_(nullptr), surfaces_(nullptr), shares_(nullptr), wake_(), fence_wake_(), clock_(), admitted_(false), held_(false), heap_(),
       blocks_(heap_), remade_(blocks_, Pool::paged), states_(blocks_),
       lines_(log.d3d11()), refusal_(lines_), arena_(nullptr), objects_(blocks_), guest_(),
-      region_(guest_), imports_(nullptr), slices_(blocks_, lines_), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_, log.d3d12()),
+      region_(guest_, lines_), imports_(nullptr), slices_(blocks_, lines_), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_, log.d3d12()),
       d3d9_(guest_, objects_, blocks_, slices_, fence_wake_, log.d3d9()),
       published_(blocks_, guest_), progress11_(fence_wake_), constants_(blocks_),
       missed_key_(0u), batches_(), mark_refused_(false), show_refused_(false), lost_(false)
@@ -300,9 +300,20 @@ void D3dBackend::abandon(const SourceMemory &memory, uint64_t)
     AV_SCOPE("D3dBackend::abandon");
     d3d12_.abandon(memory);
     if (device11_ != nullptr && slices_.holds(memory)) retire_slices(memory);
+}
+
+void D3dBackend::unbind_arena(const SourceMemory &memory)
+{
+    AV_SCOPE("D3dBackend::unbind_arena");
     if (!region_.is(memory)) return;
     if (region_.base_of(memory) == 0u) published_.unbind();
     region_.abandon(memory);
+}
+
+void D3dBackend::retire_arena(const SourceMemory &memory)
+{
+    AV_SCOPE("D3dBackend::retire_arena");
+    abandon(memory, 0u);
 }
 
 void D3dBackend::retire_slices(const SourceMemory &memory)

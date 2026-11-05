@@ -20,6 +20,7 @@ public:
 
     [[nodiscard]] Status take(uint64_t blob_id, SourceMemory &memory, ImportedBlob *&taken);
     ImportedBlob        *find(uint64_t blob_id);
+    const ImportedBlob  *find(uint64_t blob_id) const;
     [[nodiscard]] Status name(ImportedBlob &blob, uint64_t handle);
     SourceMemory        *named(uint64_t handle) const;
     void                 unname(uint64_t handle);

@@ -46,6 +46,10 @@ public:
     bool signal();
     [[nodiscard]] bool adopt(SourceMemory &memory, const BlobRole &role, std::uint64_t &handle) override;
     void abandon(const SourceMemory &memory, std::uint64_t handle) override;
+    void unbind_arena(const SourceMemory &memory) override;
+    void retire_arena(const SourceMemory &memory) override;
+    std::uint32_t unbound() const;
+    std::uint32_t unbound_when_retired() const;
     [[nodiscard]] bool export_object(std::uint32_t kind, std::uint64_t wire_handle,
                                      std::uint32_t &handle_kind, OwnedFd &descriptor) override;
     [[nodiscard]] bool import_object(std::uint32_t kind, std::uint32_t handle_kind, int fd,
@@ -72,6 +76,8 @@ private:
     std::uint32_t ran_;
     std::uint32_t adopted_;
     std::uint32_t abandoned_;
+    std::uint32_t unbound_;
+    std::uint32_t unbound_when_retired_;
     bool          lost_;
     bool          losable_;
     bool          adopts_;

@@ -11,7 +11,7 @@
 namespace av {
 
 MockSessionBackend::MockSessionBackend()
-    : answer_bytes_(0u), ran_(0u), adopted_(0u), abandoned_(0u), lost_(false), losable_(true), adopts_(true), marked_(0u), reached_(0u),
+    : answer_bytes_(0u), ran_(0u), adopted_(0u), abandoned_(0u), unbound_(0u), unbound_when_retired_(0u), lost_(false), losable_(true), adopts_(true), marked_(0u), reached_(0u),
       shares_(true), exported_objects_(0u), imported_objects_(0u), released_objects_(0u),
       descriptor_(-1), signal_(nullptr), signal_context_(nullptr), during_export_(nullptr),
       during_export_context_(nullptr)
@@ -113,6 +113,17 @@ bool MockSessionBackend::adopt(SourceMemory &memory, const BlobRole &, std::uint
 }
 
 void MockSessionBackend::abandon(const SourceMemory &, std::uint64_t) { abandoned_++; }
+
+void MockSessionBackend::unbind_arena(const SourceMemory &) { unbound_++; }
+
+void MockSessionBackend::retire_arena(const SourceMemory &)
+{
+    unbound_when_retired_ = unbound_;
+    abandoned_++;
+}
+
+std::uint32_t MockSessionBackend::unbound() const { return unbound_; }
+std::uint32_t MockSessionBackend::unbound_when_retired() const { return unbound_when_retired_; }
 
 void MockSessionBackend::shut_down()
 {

@@ -129,6 +129,8 @@ public:
 
     [[nodiscard]] bool adopt(SourceMemory &memory, const BlobRole &role, uint64_t &handle) override;
     void abandon(const SourceMemory &memory, uint64_t handle) override;
+    void unbind_arena(const SourceMemory &memory) override;
+    void retire_arena(const SourceMemory &memory) override;
 
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
                                      OwnedFd &descriptor) override;

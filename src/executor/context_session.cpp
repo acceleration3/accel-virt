@@ -1,6 +1,7 @@
 #include "executor/context_session.hpp"
 
 #include "core/log/driver_log.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/gpu_clock_hold.hpp"
@@ -183,6 +184,14 @@ uint32_t ContextSession::import_blob(uint64_t blob_id, uint64_t memory_key, cons
     }
     uint64_t handle = 0u;
     if (!backend_->adopt(*memory, role, handle)) {
+        LogLine(lines_)
+            .text("a backend that would not adopt blob ")
+            .number(blob_id)
+            .text(role.is_arena() ? " as the arena segment at " : " as plain memory at ")
+            .number(role.base())
+            .text(", status ")
+            .number(static_cast<uint64_t>(AV_UNDECODABLE))
+            .write();
         source_->release(*imports_.forget(blob_id));
         return AV_UNDECODABLE;
     }
@@ -211,7 +220,10 @@ void ContextSession::release_blob(uint64_t blob_id)
         if (parked_[index].blob_id_ == blob_id) return;
     uint64_t marked = 0u;
     uint64_t reached = 0u;
-    if (blob->arena() && backend_ != nullptr) backend_->gpu_progress(marked, reached);
+    if (blob->arena() && backend_ != nullptr) {
+        backend_->unbind_arena(blob->memory());
+        backend_->gpu_progress(marked, reached);
+    }
     if (reached < marked && parked_count_ < parked_most) {
         parked_[parked_count_++] = Parked{blob_id, marked};
         return;
@@ -224,7 +236,12 @@ void ContextSession::retire_blob(uint64_t blob_id)
     AV_SCOPE("ContextSession::retire_blob");
     ImportedBlob *const blob = imports_.find(blob_id);
     if (blob == nullptr) return;
-    if (blob->handle() != 0u) backend_->abandon(blob->memory(), blob->handle());
+    if (blob->arena()) {
+        backend_->unbind_arena(blob->memory());
+        backend_->retire_arena(blob->memory());
+    } else if (blob->handle() != 0u) {
+        backend_->abandon(blob->memory(), blob->handle());
+    }
     source_->release(*imports_.forget(blob_id));
 }
 
@@ -275,8 +292,10 @@ bool ContextSession::invariants_hold() const
 {
     AV_SCOPE("ContextSession::invariants_hold");
     if (parked_count_ > parked_most || parked_count_ > imports_.count()) return false;
-    for (uint32_t index = 0u; index < parked_count_; index++)
-        if (parked_[index].blob_id_ == 0u) return false;
+    for (uint32_t index = 0u; index < parked_count_; index++) {
+        const ImportedBlob *const blob = imports_.find(parked_[index].blob_id_);
+        if (blob == nullptr || !blob->arena()) return false;
+    }
     return arena_.invariants_hold() && imports_.invariants_hold() && (backend_ != nullptr || !faulted_) &&
            (backend_ != nullptr || imports_.count() == 0u) && (source_ != nullptr || imports_.count() == 0u);
 }

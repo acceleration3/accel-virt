@@ -35,6 +35,13 @@ ImportedBlob *ImportTable::find(uint64_t blob_id)
     return found != nullptr ? *found : nullptr;
 }
 
+const ImportedBlob *ImportTable::find(uint64_t blob_id) const
+{
+    AV_SCOPE("ImportTable::find");
+    const ImportedBlob *const *const found = ids_.find(blob_id);
+    return found != nullptr ? *found : nullptr;
+}
+
 Status ImportTable::name(ImportedBlob &blob, uint64_t handle)
 {
     AV_SCOPE("ImportTable::name");

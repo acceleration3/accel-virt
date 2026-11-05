@@ -79,7 +79,7 @@ OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
-       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_), imported_(nullptr), events_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_, lines), imported_(nullptr), events_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false), lines_(lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
@@ -389,10 +389,20 @@ bool OpenClBackend::adopt(SourceMemory &memory, const BlobRole &role, uint64_t &
     return memory.pointer() != nullptr;
 }
 
-void OpenClBackend::abandon(const SourceMemory &memory, uint64_t)
+void OpenClBackend::abandon(const SourceMemory &, uint64_t)
 {
     AV_SCOPE("OpenClBackend::abandon");
+}
+
+void OpenClBackend::unbind_arena(const SourceMemory &memory)
+{
+    AV_SCOPE("OpenClBackend::unbind_arena");
     arena_.abandon(memory);
+}
+
+void OpenClBackend::retire_arena(const SourceMemory &)
+{
+    AV_SCOPE("OpenClBackend::retire_arena");
 }
 
 cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,

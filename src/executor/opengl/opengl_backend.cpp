@@ -110,7 +110,7 @@ OpenGlBackend::OpenGlBackend(DriverLog &lines) : OpenGlBackend(heap_, lines)
 }
 
 OpenGlBackend::OpenGlBackend(BlockSource &blocks, DriverLog &lines)
-    : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), pending_(gl_, errors_), slices_(blocks, gl_, import_, progress_, pending_, guest_, lines), guest_(), region_(guest_), published_(guest_), errors_(),
+    : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), pending_(gl_, errors_), slices_(blocks, gl_, import_, progress_, pending_, guest_, lines), guest_(), region_(guest_, lines), published_(guest_), errors_(),
       resolved_(0u), ran_(0u),
       current_(false), poll_failure_logged_(false), lines_(lines)
 {
@@ -327,16 +327,24 @@ void OpenGlBackend::unpack()
     pack_.unbind();
 }
 
-void OpenGlBackend::abandon(const SourceMemory &memory, uint64_t handle)
+void OpenGlBackend::abandon(const SourceMemory &, uint64_t handle)
 {
     AV_SCOPE("OpenGlBackend::abandon");
-    if (!region_.is(memory)) {
-        slices_.retire_memory(static_cast<uint32_t>(handle));
-        slices_.reclaim();
-        return;
-    }
+    slices_.retire_memory(static_cast<uint32_t>(handle));
+    slices_.reclaim();
+}
+
+void OpenGlBackend::unbind_arena(const SourceMemory &memory)
+{
+    AV_SCOPE("OpenGlBackend::unbind_arena");
+    if (!region_.is(memory)) return;
     pack_.abandon(region_.base_of(memory));
     region_.abandon(memory);
+}
+
+void OpenGlBackend::retire_arena(const SourceMemory &)
+{
+    AV_SCOPE("OpenGlBackend::retire_arena");
 }
 
 bool OpenGlBackend::bind_fence(uint64_t token, void *fence)

@@ -19,6 +19,19 @@ using av::ContextSession;
 using av::MockSessionBackend;
 using av::Status;
 
+namespace av {
+
+struct ContextSessionProbe {
+    static void park(ContextSession &session, std::uint64_t blob_id)
+    {
+        session.parked_[session.parked_count_++] = ContextSession::Parked{blob_id, 1u};
+    }
+};
+
+}
+
+using av::ContextSessionProbe;
+
 namespace {
 
 constexpr std::uint32_t domain = 3u;
@@ -50,6 +63,7 @@ public:
             if (made.fd >= 0) close(made.fd);
     }
 
+    av::RecordingLog   &log() { return sink_; }
     ContextSession     &session() { return session_; }
     MockSessionBackend &backend() { return backend_; }
 
@@ -149,3 +163,53 @@ TEST(context_session_parking, releasing_the_session_retires_what_still_waits)
   CHECK_EQ(parking.session().parked(), 0u);
   CHECK_EQ(parking.backend().abandoned(), 1u);
   CHECK(parking.session().invariants_hold()); }
+
+TEST(context_session_parking, a_released_segment_stops_resolving_at_once_while_its_memory_waits_for_the_gpu)
+{ Parking parking;
+  CHECK_EQ(parking.session().import_blob(5u, first_key, arena_at(1u)), std::uint32_t{AV_EXECUTED});
+  parking.backend().set_progress(7u, 3u);
+  CHECK_EQ(parking.backend().unbound(), 0u);
+  parking.session().release_blob(5u);
+  CHECK_EQ(parking.backend().unbound(), 1u);
+  CHECK_EQ(parking.backend().abandoned(), 0u);
+  CHECK_EQ(parking.session().parked(), 1u);
+  parking.backend().set_progress(7u, 7u);
+  parking.session().end_batch();
+  CHECK_EQ(parking.backend().abandoned(), 1u);
+  CHECK(parking.backend().unbound_when_retired() >= 1u);
+  CHECK(parking.session().invariants_hold()); }
+
+TEST(context_session_parking, a_segment_released_over_idle_gpu_work_is_unbound_before_it_is_retired)
+{ Parking parking;
+  CHECK_EQ(parking.session().import_blob(5u, first_key, arena_at(1u)), std::uint32_t{AV_EXECUTED});
+  parking.backend().set_progress(4u, 4u);
+  parking.session().release_blob(5u);
+  CHECK(parking.backend().unbound_when_retired() >= 1u);
+  CHECK_EQ(parking.backend().abandoned(), 1u); }
+
+TEST(context_session_parking, a_plain_import_is_never_unbound_as_an_arena_segment)
+{ Parking parking;
+  CHECK_EQ(parking.session().import_blob(5u, first_key), std::uint32_t{AV_EXECUTED});
+  parking.session().release_blob(5u);
+  CHECK_EQ(parking.backend().unbound(), 0u); }
+
+TEST(context_session_parking, a_backend_that_will_not_adopt_a_blob_is_logged_once_with_the_blob_and_its_status)
+{ Parking parking;
+  parking.backend().set_adopts(false);
+  CHECK_EQ(parking.session().import_blob(5u, first_key, arena_at(1u)), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(parking.log().lines(), 1u);
+  CHECK_EQ(parking.log().holding("would not adopt blob 5 as the arena segment at 67108864"), 1u);
+  CHECK(parking.session().invariants_hold()); }
+
+TEST(context_session_parking, the_invariant_fails_for_a_parked_id_that_is_no_import)
+{ Parking parking;
+  CHECK_EQ(parking.session().import_blob(5u, first_key, arena_at(1u)), std::uint32_t{AV_EXECUTED});
+  CHECK(parking.session().invariants_hold());
+  ContextSessionProbe::park(parking.session(), 99u);
+  CHECK(!parking.session().invariants_hold()); }
+
+TEST(context_session_parking, the_invariant_fails_for_a_parked_import_that_is_not_an_arena_segment)
+{ Parking parking;
+  CHECK_EQ(parking.session().import_blob(5u, first_key), std::uint32_t{AV_EXECUTED});
+  ContextSessionProbe::park(parking.session(), 5u);
+  CHECK(!parking.session().invariants_hold()); }
