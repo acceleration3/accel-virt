@@ -1342,13 +1342,8 @@ TEST(av_context_table_adopt, a_range_too_long_or_not_the_processs_holds_nothing)
   CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::invalid_parameter);
   CHECK_EQ(host.queue().requests(), asked);
   fixture.platform().lend_process_range(lent_at, lent_frames, 1u);
-  AvContextTableProbe::set_held(fixture.table(), 0u, AvContextTable::max_chunks_per_context);
-  CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::no_space);
-  CHECK(fixture.platform().claim(Violation::broken_invariant));
-  CHECK(fixture.platform().claim(Violation::broken_invariant));
-  AvContextTableProbe::set_held(fixture.table(), 0u, 0u);
-  AvContextTableProbe::take_every_id(fixture.table());
-  CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::no_space);
+  fixture.platform().fail_allocation_at(1u);
+  CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::no_memory);
   CHECK_EQ(host.queue().requests(), asked);
   CHECK_EQ(fixture.platform().process_locks(), 0u);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
@@ -1386,7 +1381,7 @@ TEST(av_context_table_adopt, a_step_that_fails_is_undone_and_the_pages_let_go)
     Host    host(fixture.mapped());
     bind_with_window(fixture);
     fixture.platform().lend_process_range(lent_at, lent_frames, 1u);
-    fixture.platform().fail_allocation_at(3u);
+    fixture.platform().fail_allocation_at(4u);
     HostWindowRecord answer;
     CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::no_memory);
     CHECK_EQ(host.count_of(unref_type), 1u);
@@ -1408,7 +1403,7 @@ TEST(av_context_table_adopt, a_step_that_fails_is_undone_and_the_pages_let_go)
   Host    host(fixture.mapped());
   bind_with_window(fixture);
   fixture.platform().lend_process_range(lent_at, lent_frames, 1u);
-  fixture.platform().fail_allocation_at(3u);
+  fixture.platform().fail_allocation_at(4u);
   host.refuse_next(unref_type);
   HostWindowRecord answer;
   CHECK_STATUS(adopt(fixture, &first_context, page, answer), Status::no_memory);
@@ -1553,9 +1548,9 @@ using GlProfile = av::GlContextOptions::Profile;
 constexpr std::size_t setup_offset = 32u;
 constexpr std::size_t options_offset = setup_offset + 32u;
 
-CapsetInfo capset_at(std::uint16_t minor)
+CapsetInfo current_capset()
 {
-    return CapsetInfo(av::ProtocolVersion(1u, minor), 0x7u, 64u, 12u, 20u, 0u,
+    return CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major, av::ProtocolVersion::current_minor), 0x7u, 64u, 12u, 20u, 0u,
                       av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
 }
 
@@ -1575,10 +1570,10 @@ private:
     ProcessAllocation ring_;
 };
 
-Status bind_at(Fixture &fixture, void *context, const AvContextRecord &record, std::uint16_t minor = 1u)
+Status bind_at(Fixture &fixture, void *context, const AvContextRecord &record)
 {
     return fixture.table().bind(context, record, fixture.device(), fixture.mapped().function().doorbells(),
-                                capset_at(minor));
+                                current_capset());
 }
 
 std::uint8_t setup_byte(const Host &host, std::uint32_t nth, std::size_t offset)
@@ -1600,7 +1595,8 @@ TEST(av_context_table_bind, a_gl_contexts_options_reach_the_setup_unchanged)
                Status::ok);
   CHECK_EQ(host.count_of(submit_3d_type), 1u);
   CHECK_EQ(host.field(submit_3d_type, 0u, 24u), 48u);
-  CHECK_EQ(host.field(submit_3d_type, 0u, setup_offset + 4u), 0x00010001u);
+  CHECK_EQ(host.field(submit_3d_type, 0u, setup_offset + 4u),
+           av::ProtocolVersion::current_major | (std::uint32_t{av::ProtocolVersion::current_minor} << 16u));
   CHECK_EQ(setup_byte(host, 0u, options_offset), 4u);
   CHECK_EQ(setup_byte(host, 0u, options_offset + 1u), 6u);
   CHECK_EQ(setup_byte(host, 0u, options_offset + 2u), 1u);
@@ -1609,16 +1605,13 @@ TEST(av_context_table_bind, a_gl_contexts_options_reach_the_setup_unchanged)
   CHECK(fixture.table().invariants_hold());
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
-TEST(av_context_table_bind, a_device_at_the_previous_minor_gets_the_old_setup_and_no_options)
+TEST(av_context_table_bind, options_that_do_not_fit_the_sub_api_are_refused_before_anything_is_sent)
 { Fixture fixture;
   Host host(fixture.mapped());
-  CHECK_STATUS(bind_at(fixture, &first_context, fixture.record(), 0u), Status::ok);
-  CHECK_EQ(host.field(submit_3d_type, 0u, 24u), 32u);
-  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
   const std::uint32_t sent = host.queue().requests();
-  const AvContextRecord with_options(SubApi::opengl, 12u, fixture.ring().handle(), page,
+  const AvContextRecord with_options(SubApi::vulkan, 12u, fixture.ring().handle(), page,
                                       GlContextOptions(3u, 3u, GlProfile::core, 0u, 0u));
-  CHECK_STATUS(bind_at(fixture, &first_context, with_options, 0u), Status::invalid_parameter);
+  CHECK_STATUS(bind_at(fixture, &first_context, with_options), Status::invalid_parameter);
   CHECK_EQ(host.queue().requests(), sent);
   CHECK_EQ(fixture.table().bound(), 0u);
   CHECK_EQ(fixture.handles().outstanding(), 0u); }

@@ -19,7 +19,7 @@ WindowStatsView::~WindowStatsView()
 Status WindowStatsView::initialize()
 {
     AV_SCOPE("WindowStatsView::initialize");
-    platform_.require_irql_at_most(Irql::passive, "WindowStatsView::initialize");
+    platform_.require_irql_at_most(Irql::apc, "WindowStatsView::initialize");
     if (page_ != nullptr) return Status::ok;
     page_ = static_cast<uint8_t *>(platform_.allocate_contiguous(WindowStats::page_size));
     if (page_ == nullptr) return Status::no_memory;
@@ -64,7 +64,7 @@ bool WindowStatsView::invariants_hold() const
 void WindowStatsView::publish(const WindowStats &stats)
 {
     AV_SCOPE("WindowStatsView::publish");
-    platform_.require_irql_at_most(Irql::passive, "WindowStatsView::publish");
+    platform_.require_irql_at_most(Irql::apc, "WindowStatsView::publish");
     if (page_ == nullptr) return;
     const uint32_t before = __atomic_load_n(sequence(), __ATOMIC_RELAXED);
     __atomic_store_n(sequence(), before + 1u, __ATOMIC_RELAXED);
