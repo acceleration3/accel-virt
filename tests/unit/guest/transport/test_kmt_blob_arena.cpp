@@ -534,3 +534,59 @@ TEST(kmt_blob_arena_shrink, a_segment_with_data_in_it_restarts_its_idle_clock)
   CHECK_EQ(blobs.segments(), 1u);
   rig.host_takes_the_releases(2u);
   CHECK_STATUS(rig.arena().close(), Status::ok); }
+
+TEST(kmt_transport_shrink, the_transport_releases_an_idle_segment_once_its_own_clock_says_ten_seconds_passed)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  rig.host().blob_import(0u, imported_memory + 2u);
+  const std::uint64_t wanted[1] = {18u * mib};
+  CHECK(rig.transport().make_room_for_blobs(wanted, 1u));
+  CHECK_EQ(rig.transport().blobs().segments(), 2u);
+  rig.kmt().reads_clock(nullptr, 4u * MockKmt::ticks_per_second);
+  rig.transport().release_idle_segments();
+  rig.transport().release_idle_segments();
+  CHECK_EQ(rig.transport().blobs().segments(), 2u);
+  rig.host().nop();
+  rig.transport().release_idle_segments();
+  rig.transport().release_idle_segments();
+  CHECK_EQ(rig.transport().blobs().segments(), 1u);
+  CHECK(rig.arena().invariants_hold());
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok); }
+
+TEST(kmt_transport_shrink, a_transport_with_no_arena_attached_has_nothing_to_release_or_open)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  rig.transport().attach_arena(nullptr);
+  rig.kmt().reads_clock(nullptr, 100u * MockKmt::ticks_per_second);
+  const std::uint32_t before = rig.kmt().commands();
+  rig.transport().release_idle_segments();
+  CHECK_EQ(rig.kmt().commands(), before);
+  CHECK(!rig.transport().open_region(4096u).taken());
+  const std::uint64_t wanted[1] = {18u * mib};
+  CHECK(!rig.transport().make_room_for_blobs(wanted, 1u));
+  rig.transport().attach_arena(&rig.arena());
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok); }
+
+TEST(kmt_transport_region, a_region_opened_through_the_transport_is_the_arena_s_and_closes_back_into_it)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  rig.host().blob_import(0u, imported_memory + 2u);
+  const ClientBlobLease region = rig.transport().open_region(3u * mib + 5u);
+  CHECK(region.taken());
+  CHECK_EQ(region.offset(), 2u * slot);
+  CHECK_EQ(region.bytes(), 3u * mib + 5u);
+  std::uint64_t offset = 0u;
+  CHECK(rig.transport().blobs().holds(region.data(), 16u, offset));
+  CHECK_EQ(offset, 2u * slot);
+  rig.host().nop();
+  rig.transport().close_region(region);
+  CHECK(!rig.transport().blobs().holds(region.data(), 16u, offset));
+  rig.transport().close_region(ClientBlobLease());
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok);
+  rig.check_nothing_is_held(); }
