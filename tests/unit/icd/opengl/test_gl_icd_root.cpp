@@ -328,7 +328,7 @@ TEST(gl_icd_root, a_make_that_fails_answers_why_and_leaves_the_context_to_retry)
   CHECK(rig.root().set_context(rig.dc(), handle, nullptr) == nullptr);
   check_error(rig, Root::error_not_enough_memory);
   av::glicd::GlIcdRootProbe::connection(rig.root()).release(*held);
-  rig.host().arena_import(0x77u, 2u);
+  rig.host().arena_import(0x77u, 1u);
   rig.kmt().withhold_answer_at(2u);
   CHECK(rig.root().set_context(rig.dc(), handle, nullptr) == nullptr);
   check_error(rig, Root::error_invalid_operation);
@@ -701,9 +701,10 @@ TEST(gl_icd_root, with_a_present_thread_a_swap_hands_its_frame_over_and_returns)
 { GlIcdRig rig(true);
   rig.load_with_format();
   CHECK(rig.current_context() != nullptr);
+  rig.host().blob_import(0u, 0x0000600000000090ull);
   const std::uint32_t queued = rig.kmt().queued_answers();
   CHECK(rig.opengl32().swap_buffers(rig.dc()));
-  CHECK_EQ(rig.kmt().queued_answers(), queued);
+  CHECK_EQ(rig.kmt().queued_answers(), queued - 1u);
   CHECK_EQ(sent(rig, av::glproto::kCmd_glGetTextureSubImage), 1u);
   CHECK_EQ(rig.surface().blits(), 0u);
   CHECK_EQ(rig.presents().queued(), 1u);

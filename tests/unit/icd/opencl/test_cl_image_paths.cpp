@@ -724,7 +724,7 @@ TEST(cl_image_paths, transfers_are_staged_while_buffers_fill_their_part_of_the_a
   av::clicd::GuestClContext *const on = static_cast<av::clicd::ClObject *>(static_cast<void *>(run.context()))->context();
   constexpr std::uint64_t page = av::clicd::ClArenaBlocks::alignment;
   std::uint64_t           low = 0u;
-  std::uint64_t           high = av::clicd::GuestClContext::arena_bytes / page + 1u;
+  std::uint64_t           high = av::clicd::GuestClContext::blocks_reserve / page + 1u;
   std::uint64_t           full = 0u;
   while (high - low > 1u) {
       const std::uint64_t middle = (low + high) / 2u;
@@ -735,7 +735,7 @@ TEST(cl_image_paths, transfers_are_staged_while_buffers_fill_their_part_of_the_a
           high = middle;
       }
   }
-  CHECK(low * page > av::clicd::GuestClContext::arena_bytes / 2u);
+  CHECK(low * page > av::clicd::GuestClContext::blocks_reserve / 2u);
   CHECK(on->blocks().take(low * page, full));
   std::uint64_t more = 0u;
   CHECK(!on->blocks().take(page, more));

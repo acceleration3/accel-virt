@@ -62,8 +62,8 @@ constexpr std::size_t buffer_bytes = 256u;
 
 void arena_answers(ClIcdRig &rig, bool arena, std::uint64_t handle)
 {
-    rig.host().blob_import(arena ? 0u : 1u, arena ? handle : 0u);
-    if (!arena) rig.host().blob_import(1u, 0u);
+    if (arena) rig.host().arena_import(handle, 3u);
+    else rig.host().blob_import(1u, 0u);
 }
 
 void device_opens(ClIcdRig &rig, bool arena)

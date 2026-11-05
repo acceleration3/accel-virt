@@ -1,3 +1,4 @@
+#include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/pci_location.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -41,6 +42,7 @@ public:
         kmt_.describe_adapter(2u, PciLocation(0u, 18u, 0u), "NVIDIA GeForce RTX 4060 Laptop GPU", version);
         kmt_.set_adapter_features(2u, UmdAdapterInfo::feature_integrated_gpu);
         kmt_.set_segment_sizes(24ull << 30u, 0u, 16ull << 30u);
+        kmt_.set_video_memory(av::MemorySegmentGroup::local, 20ull << 30u, 4ull << 30u);
         kmt_.set_adapter_luid(0u, 0x0000000500001234ull);
         kmt_.set_primary_display_luid(0x0000000500001234ull);
     }
@@ -110,7 +112,7 @@ TEST(nvapi_root, memory_info_answers_each_version_and_refuses_another)
   CHECK_EQ(memory.availableDedicatedVideoMemory, 24u << 20u);
   CHECK_EQ(memory.systemVideoMemory, 0u);
   CHECK_EQ(memory.sharedSystemMemory, 16u << 20u);
-  CHECK_EQ(memory.curAvailableDedicatedVideoMemory, 24u << 20u);
+  CHECK_EQ(memory.curAvailableDedicatedVideoMemory, 16u << 20u);
   CHECK_EQ(memory.dedicatedVideoMemoryEvictionCount, 0u);
   NvDisplayDriverMemoryInfoRecord small;
   std::memset(&small, 0xEE, sizeof small);
@@ -120,7 +122,7 @@ TEST(nvapi_root, memory_info_answers_each_version_and_refuses_another)
   CHECK_EQ(small.curAvailableDedicatedVideoMemory, 0xEEEEEEEEu);
   small.version = memory_v2;
   CHECK_EQ(machine.root().memory_info(gpu, &small), NvapiRoot::ok);
-  CHECK_EQ(small.curAvailableDedicatedVideoMemory, 24u << 20u);
+  CHECK_EQ(small.curAvailableDedicatedVideoMemory, 16u << 20u);
   CHECK_EQ(small.dedicatedVideoMemoryEvictionsSize, 0xEEEEEEEEu);
   NvDisplayDriverMemoryInfoRecord future = {};
   future.version = 36u | (4u << 16u);
@@ -134,7 +136,7 @@ TEST(nvapi_root, the_driver_version_and_the_primary_display_with_its_gpu)
   std::uint32_t driver = 0u;
   char          branch[NvapiRoot::short_string] = {};
   CHECK_EQ(machine.root().driver_and_branch_version(&driver, branch), NvapiRoot::ok);
-  CHECK_EQ(driver, 3505u);
+  CHECK_EQ(driver, 50000u);
   CHECK(std::strcmp(branch, "avgpu 0.35.5.0") == 0);
   void *display = nullptr;
   CHECK_EQ(machine.root().enum_display(0u, &display), NvapiRoot::ok);

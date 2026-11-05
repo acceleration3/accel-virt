@@ -156,7 +156,7 @@ TEST(kernel_surface, an_open_of_anything_but_this_driver_s_shared_surface_finds_
   CHECK_EQ(opened.key(), 0u);
   std::uint8_t garbage[KernelSurface::allocation_bytes];
   std::memset(garbage, 0xff, sizeof garbage);
-  CHECK_STATUS(opened.open(resource, KernelSurface::resource_bytes, garbage, sizeof garbage), Status::ok);
+  CHECK_STATUS(opened.open(resource, KernelSurface::resource_bytes, garbage, sizeof garbage), Status::malformed);
   CHECK_EQ(opened.key(), 0u); }
 
 TEST(kernel_surface, a_primary_says_where_it_is_scanned_out_and_any_other_is_none)

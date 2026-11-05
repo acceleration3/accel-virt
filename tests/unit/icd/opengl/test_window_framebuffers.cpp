@@ -437,6 +437,7 @@ TEST(window_framebuffers, a_frame_read_for_the_thread_is_handed_over_once)
   av::glicd::GlPresentQueue loop{rig.context_rig.platform(), thread, handed, shown, lock, ready, rig.surface,
                                  chains, rig.context_rig.lines()};
   CHECK_STATUS(rig.current_on(0, 100u), Status::ok);
+  rig.context_rig.host().blob_import(0u, 0x0000600000000090ull);
   CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], rig.surface, &loop, 0u));
   rig.context.flush();
   rig.framebuffers.hand_over(rig.context.mark());

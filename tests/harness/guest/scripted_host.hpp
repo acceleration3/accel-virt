@@ -89,7 +89,7 @@ public:
     void gl_slices(std::uint32_t supported = 0u);
     void gl_made(const char *renderer, const char *version);
     void gl_window(std::uint32_t framebuffers, std::uint32_t renderbuffers, std::uint32_t first = 100u);
-    static constexpr std::uint32_t gl_make_waits = 12u;
+    static constexpr std::uint32_t gl_make_waits = 13u;
     static constexpr std::uint32_t gl_policy_waits = 2u;
     static constexpr std::uint32_t gl_slices_waits = 1u;
 

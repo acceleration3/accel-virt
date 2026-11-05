@@ -61,12 +61,12 @@ TEST(cl_blob_backing, a_list_that_names_nothing_this_knows_is_not_a_backing)
 
 TEST(cl_blob_backing, a_list_with_no_terminator_ends_the_walk_rather_than_running_off)
 { ClBlobBacking read;
-  const std::uint64_t unterminated[4] = {1u, 2u, 3u, 4u};
+  const std::uint64_t unterminated[6] = {1u, 2u, 3u, 4u, 5u, 6u};
   CHECK(!read.read(unterminated));
   CHECK(!read.held());
   CHECK(read.invariants_hold());
 
-  const std::uint64_t named[4] = {ClBlobBacking::property, 0x2000u, 3u, 4u};
+  const std::uint64_t named[6] = {ClBlobBacking::property, 0x2000u, 3u, 4u, 5u, 6u};
   CHECK(read.read(named));
   CHECK_EQ(read.offset(), 0x2000u);
   CHECK(read.invariants_hold()); }

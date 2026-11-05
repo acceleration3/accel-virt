@@ -5,6 +5,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_location.hpp"
 #include "guest/kmt/pci_identity.hpp"
+#include "proto/context/av_device_count.hpp"
 #include "proto/escape/context_views_record.hpp"
 #include "proto/resources/host_blob_id.hpp"
 #include "proto/resources/host_memory_request.hpp"
@@ -313,7 +314,7 @@ private:
         std::uint8_t  carried[max_allocation_private];
         std::uint32_t carried_size;
     };
-    static constexpr std::uint32_t max_adapters = 8u;
+    static constexpr std::uint32_t max_adapters = most_av_devices;
     static constexpr std::uint32_t max_doorbells = 8u;
     static constexpr std::uint32_t segment_groups = 2u;
     static constexpr std::uint64_t first_address = 0x100000000ull;
