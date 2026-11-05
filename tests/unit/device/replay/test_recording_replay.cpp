@@ -45,7 +45,7 @@ using av::WireRecorder;
 namespace {
 
 constexpr const char  *path = "replay.av";
-constexpr std::size_t  widest = 8192u;
+constexpr std::size_t  widest = 65536u;
 constexpr std::uint8_t uuid[GpuIdentity::uuid_bytes] = {0x41u, 0x42u};
 
 class Batch {
@@ -152,7 +152,7 @@ public:
 
     Handmade &setup(std::uint32_t context, SubApi api)
     {
-        std::uint8_t bytes[ContextSetup::base_size] = {};
+        std::uint8_t bytes[ContextSetup::encoded_size] = {};
         CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), api, 40u, 16u, 41u, 1u, 42u)
                          .encode(bytes, sizeof bytes),
                      Status::ok);
@@ -190,11 +190,13 @@ struct ReplayContextProbe {
 struct RecordingReplayProbe {
     static void break_a_context(RecordingReplay &replay)
     {
-        ReplayContextProbe::forget_the_context(replay.slots_[0]);
+        ReplayContext *const *const found = replay.by_context_.at(replay.by_context_.next_live(0u));
+        ReplayContextProbe::forget_the_context(**found);
     }
     static void unterminate_a_finding(RecordingReplay &replay)
     {
-        replay.findings_text_[0][RecordingReplay::finding_bytes - 1u] = 'x';
+        if (replay.findings_text_.size() != 0u)
+            replay.findings_text_.at(0u).text_[RecordingReplay::finding_bytes - 1u] = 'x';
     }
     static void forget_a_context(RecordingReplay &replay) { replay.contexts_ = 0u; }
 };
@@ -208,7 +210,8 @@ TEST(recording_replay_run, replays_a_recording_into_a_library_with_no_finding)
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.contexts(), 1u);
@@ -238,7 +241,8 @@ TEST(recording_replay_run, an_answer_is_never_carried_from_one_batch_into_the_ne
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(ops.executed(), 2u);
@@ -257,7 +261,8 @@ TEST(recording_replay_run, destroys_every_executor_it_made)
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   { RecordingReader reader(written.bytes(), written.length());
-    RecordingReplay replay(library);
+    MockHost memory;
+    RecordingReplay replay(library, memory);
     const RecordingFilter filter;
     CHECK_STATUS(replay.run(reader, filter), Status::ok);
     CHECK_EQ(replay.contexts(), 2u);
@@ -283,7 +288,8 @@ TEST(recording_replay_run, names_the_fence_and_the_command_of_an_answer_that_dif
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
@@ -299,7 +305,8 @@ TEST(recording_replay_run, a_library_that_makes_no_executor_is_a_finding_and_not
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.contexts(), 0u);
@@ -324,7 +331,8 @@ TEST(recording_replay_run, a_command_the_library_cannot_decode_stops_that_contex
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
@@ -345,7 +353,8 @@ TEST(recording_replay_run, a_library_that_loses_its_device_stops_that_context)
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
@@ -363,7 +372,8 @@ TEST(recording_replay_run, a_command_the_library_does_not_know_is_skipped_as_the
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 0u);
@@ -381,7 +391,8 @@ TEST(recording_replay_run, a_batch_that_imports_guest_memory_is_reported_unrepla
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
@@ -401,7 +412,8 @@ TEST(recording_replay_run, a_blob_imported_into_a_context_leaves_it_unreplayable
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
@@ -409,22 +421,25 @@ TEST(recording_replay_run, a_blob_imported_into_a_context_leaves_it_unreplayable
   CHECK_EQ(ops.executed(), 0u);
   CHECK(replay.invariants_hold()); }
 
-TEST(recording_replay_run, more_contexts_than_it_holds_is_a_finding_and_the_rest_still_replay)
+TEST(recording_replay_run, a_context_the_library_cannot_make_an_executor_for_is_a_finding_and_the_rest_still_replay)
 { Written written;
-  for (std::uint32_t context = 1u; context <= RecordingReplay::max_contexts + 2u; context++)
+  constexpr std::uint32_t count = MockExecutorOps::max_executors + 2u;
+  for (std::uint32_t context = 1u; context <= count; context++)
       written.set_up(context, SubApi::vulkan);
   written.close();
   MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
-  CHECK_EQ(replay.contexts(), RecordingReplay::max_contexts);
+  CHECK_EQ(replay.contexts(), MockExecutorOps::max_executors);
   CHECK_EQ(replay.findings(), 2u);
-  CHECK(std::strstr(replay.finding(0u), "more contexts than this replay holds") != nullptr);
-  CHECK(std::strstr(replay.finding(1u), "more contexts than this replay holds") != nullptr);
+  CHECK(std::strstr(replay.finding(0u), "the library made no executor for it") != nullptr);
+  CHECK(std::strstr(replay.finding(1u), "the library made no executor for it") != nullptr);
+  CHECK_EQ(ops.live(), MockExecutorOps::max_executors);
   CHECK(replay.invariants_hold()); }
 
 TEST(recording_replay_run, a_damaged_recording_is_malformed_and_replays_what_it_read)
@@ -434,7 +449,8 @@ TEST(recording_replay_run, a_damaged_recording_is_malformed_and_replays_what_it_
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length() - 3u);
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::malformed);
   CHECK_EQ(replay.contexts(), 1u);
@@ -446,7 +462,8 @@ TEST(recording_replay_run, a_damaged_recording_is_malformed_and_replays_what_it_
   CHECK(replay.invariants_hold());
   const std::uint8_t nothing[8] = {};
   RecordingReader    empty(nothing, sizeof nothing);
-  RecordingReplay    none(library);
+  MockHost none_memory;
+  RecordingReplay none(library, none_memory);
   CHECK_STATUS(none.run(empty, filter), Status::malformed);
   CHECK_EQ(none.contexts(), 0u);
   CHECK_EQ(none.commands(), 0u);
@@ -465,7 +482,8 @@ TEST(recording_replay_run, a_filter_narrows_what_is_replayed)
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   RecordingFilter filter;
   filter.keep_context(4u);
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
@@ -588,7 +606,8 @@ TEST(recording_replay_run, a_gpu_of_its_own_is_the_one_it_asks_the_library_for)
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const std::uint8_t other[GpuIdentity::uuid_bytes] = {0x99u};
   replay.use_gpu(other);
   const RecordingFilter filter;
@@ -604,7 +623,8 @@ TEST(recording_replay_run, with_no_gpu_named_it_asks_the_library_for_the_recordi
       ExecutorLibrary library;
       CHECK_STATUS(library.accept(&ops.table()), Status::ok);
       RecordingReader reader(written.bytes(), written.length());
-      RecordingReplay replay(library);
+      MockHost memory;
+      RecordingReplay replay(library, memory);
       if (named != 0u) replay.use_gpu(nullptr);
       const RecordingFilter filter;
       CHECK_STATUS(replay.run(reader, filter), Status::ok);
@@ -622,7 +642,8 @@ TEST(recording_replay_run, a_setup_that_does_not_decode_and_a_context_set_up_twi
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
@@ -645,7 +666,8 @@ TEST(recording_replay_run, a_batch_framed_wrong_and_a_transport_command_that_is_
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
@@ -662,7 +684,8 @@ TEST(recording_replay_run, another_apis_commands_and_a_filter_leave_the_library_
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   RecordingFilter filter;
   CHECK_STATUS(filter.keep_command("vkCreateInstance"), Status::ok);
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
@@ -686,7 +709,8 @@ TEST(recording_replay_run, a_blob_created_or_released_is_not_an_import_and_repla
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 0u);
@@ -701,7 +725,8 @@ TEST(recording_replay_run, a_blob_imported_into_a_context_it_never_set_up_is_no_
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 0u);
@@ -723,7 +748,8 @@ TEST(recording_replay_run, nothing_of_a_context_that_gave_up_is_replayed_or_comp
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
@@ -742,29 +768,32 @@ TEST(recording_replay_run, a_reply_with_no_answer_behind_it_says_what_it_replied
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
   CHECK(std::strstr(replay.finding(0u), "replied 0 bytes, recorded 4") != nullptr);
   CHECK(replay.invariants_hold()); }
 
-TEST(recording_replay_run, counts_more_findings_than_it_can_keep_and_answers_nothing_past_them)
+TEST(recording_replay_run, keeps_every_finding_it_makes)
 { Handmade           made;
   const std::uint8_t nothing[1] = {};
-  for (std::uint32_t index = 0u; index < RecordingReplay::max_findings + 4u; index++)
+  constexpr std::uint32_t count = 200u;
+  for (std::uint32_t index = 0u; index < count; index++)
       made.add(av::RecordKind::context_setup, index + 1u, 0u, nothing, 0u);
   MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
-  CHECK_EQ(replay.findings(), RecordingReplay::max_findings + 4u);
-  CHECK(replay.finding(RecordingReplay::max_findings - 1u)[0] != '\0');
-  CHECK_EQ(std::strcmp(replay.finding(RecordingReplay::max_findings), ""), 0);
-  CHECK_EQ(std::strcmp(replay.finding(RecordingReplay::max_findings + 3u), ""), 0);
+  CHECK_EQ(replay.findings(), count);
+  CHECK(std::strstr(replay.finding(0u), "setup does not decode") != nullptr);
+  CHECK(std::strstr(replay.finding(count - 1u), "setup does not decode") != nullptr);
+  CHECK_EQ(std::strcmp(replay.finding(count), ""), 0);
   CHECK(replay.invariants_hold()); }
 
 TEST(recording_replay_invariants, catch_a_replay_whose_contexts_or_findings_do_not_agree)
@@ -774,20 +803,23 @@ TEST(recording_replay_invariants, catch_a_replay_whose_contexts_or_findings_do_n
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   { RecordingReader reader(written.bytes(), written.length());
-    RecordingReplay replay(library);
+    MockHost memory;
+    RecordingReplay replay(library, memory);
     const RecordingFilter filter;
     CHECK_STATUS(replay.run(reader, filter), Status::ok);
     CHECK(replay.invariants_hold());
     av::RecordingReplayProbe::break_a_context(replay);
     CHECK(!replay.invariants_hold()); }
   { RecordingReader reader(written.bytes(), written.length());
-    RecordingReplay replay(library);
+    MockHost memory;
+    RecordingReplay replay(library, memory);
     const RecordingFilter filter;
     CHECK_STATUS(replay.run(reader, filter), Status::ok);
     av::RecordingReplayProbe::forget_a_context(replay);
     CHECK(!replay.invariants_hold()); }
   { RecordingReader reader(written.bytes(), written.length());
-    RecordingReplay replay(library);
+    MockHost memory;
+    RecordingReplay replay(library, memory);
     RecordingFilter filter;
     filter.keep_context(99u);
     CHECK_STATUS(replay.run(reader, filter), Status::ok);
@@ -803,7 +835,8 @@ TEST(recording_replay_invariants, catch_a_finding_with_no_end)
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(made.bytes(), made.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
@@ -868,7 +901,8 @@ TEST(recording_replay_run, a_command_in_pieces_is_unreplayable_and_an_answer_par
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   RecordingReader reader(written.bytes(), written.length());
-  RecordingReplay replay(library);
+  MockHost memory;
+  RecordingReplay replay(library, memory);
   const RecordingFilter filter;
   CHECK_STATUS(replay.run(reader, filter), Status::ok);
   CHECK_EQ(replay.findings(), 1u);
