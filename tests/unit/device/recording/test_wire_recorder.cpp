@@ -152,7 +152,7 @@ TEST(wire_recorder, writes_one_record_of_each_kind_with_its_payload)
   CHECK(record.kind() == RecordKind::context_setup);
   CHECK_EQ(record.context(), 3u);
   CHECK(record.fence() == 0u);
-  CHECK_EQ(record.length(), ContextSetup::base_size);
+  CHECK_EQ(record.length(), ContextSetup::encoded_size);
   { ContextSetup decoded;
     CHECK_STATUS(decoded.decode(payload, record.length()), Status::ok);
     CHECK_EQ(decoded.ring_resource(), 40u);
@@ -391,7 +391,7 @@ TEST(wire_recorder, a_record_larger_than_any_record_may_be_is_refused_and_the_re
 TEST(wire_recorder, a_setup_that_cannot_be_encoded_is_refused_and_the_recording_runs_on)
 { MockHost host; WireRecorder recorder(host);
   CHECK_STATUS(recorder.open(path, 0u, "all", AtCeiling::stop, a_gpu(), ProtocolVersion(1u, 1u)), Status::ok);
-  const ContextSetup impossible(ProtocolVersion(1u, 0u), SubApi::opengl, 40u, 16u, 41u, 2u, 42u,
+  const ContextSetup impossible(ProtocolVersion(1u, 0u), SubApi::vulkan, 40u, 16u, 41u, 2u, 42u,
                                 GlContextOptions(4u, 6u, GlContextOptions::Profile::core, 0u, 0u));
   recorder.record_context_setup(3u, impossible);
   CHECK(recorder.records() == 0u);
