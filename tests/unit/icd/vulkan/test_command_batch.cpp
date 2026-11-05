@@ -6,6 +6,7 @@
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
 #include "harness/icd/shipped_batch.hpp"
+#include "icd/common/shared_handles.hpp"
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "proto/client/client_blob_arena.hpp"
@@ -73,9 +74,19 @@ constexpr std::uint32_t draws_per_batch = static_cast<std::uint32_t>(
     1u);
 const VkCommandBuffer command_buffer = VK_NULL_HANDLE;
 
+std::uint32_t last_command_id(MockKmt &kmt)
+{
+    for (std::uint32_t index = kmt.commands(); index-- > 0u;)
+        if (kmt.command_id(index) != CommandHeader::channel_stats_id) return kmt.command_id(index);
+    return 0u;
+}
+
 class BatchRig {
 public:
-    BatchRig() : connection_(rig_.kmt(), rig_.platform(), rig_.send_lock(), rig_.log()), batch_(rig_.platform(), connection_)
+    BatchRig()
+        : handles_(rig_.kmt(), rig_.lock(), rig_.platform()),
+          connection_(rig_.kmt(), rig_.platform(), rig_.send_lock(), rig_.lines(), handles_),
+          batch_(rig_.platform(), connection_)
     {
         CHECK_STATUS(connection_.open(0u), Status::ok);
         baseline_ = rig_.platform().live_allocations();
@@ -87,10 +98,11 @@ public:
     Connection   &connection() { return connection_; }
     CommandBatch &batch() { return batch_; }
     std::uint32_t baseline() const { return baseline_; }
+    HandleIdentity &identity() { return identity_; }
 
     void draw(std::uint32_t vertices)
     {
-        av_vkCmdDraw(batch_, command_buffer, vertices, 1u, 0u, 0u);
+        av_vkCmdDraw(batch_, identity_, command_buffer, vertices, 1u, 0u, 0u);
         CHECK(batch_.invariants_hold());
     }
 
@@ -112,6 +124,8 @@ public:
 
 private:
     IcdRig        rig_;
+    HandleIdentity identity_;
+    av::icd::SharedHandles handles_;
     Connection    connection_;
     CommandBatch  batch_;
     std::uint32_t baseline_ = 0u;
@@ -154,7 +168,7 @@ TEST(command_batch, a_command_that_asks_for_an_answer_is_refused_and_not_recorde
   CHECK(rig.batch().send_sync(kCmd_vkGetFenceStatus, writer, reply) == TransportResult::failed);
   CHECK_EQ(reply.remaining(), 0u);
   CHECK(rig.batch().invariants_hold());
-  CHECK_EQ(av_vkGetFenceStatus(rig.batch(), VK_NULL_HANDLE, VK_NULL_HANDLE), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(av_vkGetFenceStatus(rig.batch(), rig.identity(), VK_NULL_HANDLE, VK_NULL_HANDLE), VK_ERROR_DEVICE_LOST);
   rig.batch().end_call();
   CHECK(rig.batch().invariants_hold());
   rig.draw(2u);
@@ -193,7 +207,7 @@ TEST(command_batch, a_full_block_the_connection_refuses_answers_no_memory_at_end
   std::uint64_t instance = 0u;
   VkInstanceCreateInfo create = {};
   create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  CHECK_EQ(av_vkCreateInstance(rig.connection().transport(), &create, nullptr, &instance), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(av_vkCreateInstance(rig.connection().transport(), rig.identity(), &create, nullptr, &instance), VK_ERROR_DEVICE_LOST);
   const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
   rig.draw(draws_per_batch);
   rig.draw(0xFFFFu);
@@ -218,12 +232,14 @@ TEST(command_batch, memory_refused_while_recording_answers_no_memory_at_end_and_
 
 TEST(command_batch, the_block_goes_with_the_batch)
 { IcdRig rig;
-  Connection connection(rig.kmt(), rig.platform(), rig.send_lock(), rig.log());
+  av::icd::SharedHandles handles(rig.kmt(), rig.lock(), rig.platform());
+  Connection connection(rig.kmt(), rig.platform(), rig.send_lock(), rig.lines(), handles);
+  HandleIdentity identity;
   CHECK_STATUS(connection.open(0u), Status::ok);
   const std::uint32_t baseline = rig.platform().live_allocations();
   {
       CommandBatch batch(rig.platform(), connection);
-      av_vkCmdDraw(batch, command_buffer, 3u, 1u, 0u, 0u);
+      av_vkCmdDraw(batch, identity, command_buffer, 3u, 1u, 0u, 0u);
       CHECK(batch.invariants_hold());
       CHECK_EQ(rig.platform().live_allocations(), baseline + 1u);
   }
@@ -286,7 +302,7 @@ TEST(command_batch, a_command_longer_than_any_batch_goes_alone_as_one_run_under_
   CHECK_EQ(rig.kmt().command_id(last), static_cast<std::uint32_t>(kCmd_vkCmdUpdateBuffer));
   rig.draw(2u);
   CHECK_STATUS(rig.batch().end(), Status::ok);
-  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
+  CHECK_EQ(last_command_id(rig.kmt()), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
   CHECK_EQ(rig.rig().platform().live_allocations(), rig.baseline() + 1u);
   rig.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
   writer = rig.batch().request_writer();
@@ -300,8 +316,8 @@ TEST(command_batch, a_connection_refusing_the_batch_answers_invalid_state_and_dr
   std::uint64_t instance = 0u;
   VkInstanceCreateInfo create = {};
   create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  CHECK_EQ(av_vkCreateInstance(rig.connection().transport(), &create, nullptr, &instance), VK_ERROR_DEVICE_LOST);
-  CHECK(rig.connection().faulted());
+  CHECK_EQ(av_vkCreateInstance(rig.connection().transport(), rig.identity(), &create, nullptr, &instance), VK_ERROR_DEVICE_LOST);
+  CHECK(rig.connection().lost());
   rig.draw(1u);
   const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
   CHECK_STATUS(rig.batch().end(), Status::invalid_state);

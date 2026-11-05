@@ -36,6 +36,7 @@ public:
     RecordingThreadLock  &send_lock();
     RecordingThreadLock  &memory_lock();
     RecordingLog         &log();
+    KeyedLog             &lines();
     ScriptedThread       &present_thread();
     CountedWakeSignal    &handed();
     CountedWakeSignal    &shown();
