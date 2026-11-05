@@ -1,7 +1,6 @@
 #ifndef AV_D3D_LOOPBACK_HPP
 #define AV_D3D_LOOPBACK_HPP
 
-#include "executor/imported_blob.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "harness/transport/roomed_transport.hpp"
 #include "proto/resources/host_memory_request.hpp"
@@ -15,6 +14,8 @@ namespace av {
 
 class D3dBackend;
 class HostMemorySource;
+class ImportedBlob;
+class ImportTable;
 class SourceMemory;
 
 class D3dLoopback final : public RoomedTransport {
@@ -25,8 +26,8 @@ public:
     static constexpr std::uint32_t max_memories = 8u;
     static constexpr std::uint32_t domain = 1u;
 
-    explicit D3dLoopback(D3dBackend &backend, HostMemorySource *source = nullptr, std::size_t region_bytes = 0u,
-                         std::size_t lent_bytes = 0u);
+    D3dLoopback(D3dBackend &backend, ImportTable &imports, HostMemorySource *source = nullptr,
+                std::size_t region_bytes = 0u, std::size_t lent_bytes = 0u);
     ~D3dLoopback();
     D3dLoopback(const D3dLoopback &) = delete;
     D3dLoopback &operator=(const D3dLoopback &) = delete;
@@ -49,7 +50,7 @@ public:
 private:
     bool run(uint32_t command_id, WireWriter &writer, bool awaited, std::size_t &answered);
     struct Held {
-        ImportedBlob  blob;
+        ImportedBlob *blob = nullptr;
         std::uint64_t handle = 0u;
     };
 
@@ -57,6 +58,7 @@ private:
     void close(Held &held);
 
     D3dBackend       &backend_;
+    ImportTable      &imports_;
     HostMemorySource *source_;
     uint8_t          *command_;
     uint8_t          *reply_;

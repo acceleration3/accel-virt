@@ -189,7 +189,7 @@ TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_w
     av::D3dBackend &backend = held.backend();
     av::SessionShares unshared;
     CHECK(backend.initialize(unshared, rig.imports, device));
-    av::D3dLoopback wire(backend);
+    av::D3dLoopback wire(backend, rig.imports);
 
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
@@ -249,7 +249,7 @@ TEST(d3d_backend_device, a_batch_the_gpu_finishes_wakes_the_worker_instead_of_be
     CHECK(backend.initialize(unshared, rig.imports, device));
     batch_wakes = 0u;
     backend.bind_signal(&count_batch_wake, &batch_wakes);
-    av::D3dLoopback wire(backend);
+    av::D3dLoopback wire(backend, rig.imports);
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     make_triangle(wire);
@@ -280,7 +280,7 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_is_a_pass_through_geomet
     av::D3dBackend &backend = held.backend();
     av::SessionShares unshared;
     CHECK(backend.initialize(unshared, rig.imports, device));
-    av::D3dLoopback wire(backend);
+    av::D3dLoopback wire(backend, rig.imports);
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     constexpr std::uint32_t position = 1u;
@@ -311,7 +311,7 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_
     av::D3dBackend &backend = held.backend();
     av::SessionShares unshared;
     CHECK(backend.initialize(unshared, rig.imports, device));
-    av::D3dLoopback wire(backend);
+    av::D3dLoopback wire(backend, rig.imports);
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     make_triangle(wire);
@@ -372,7 +372,7 @@ TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_r
     opener_shares.bind(shares, 1u, opener);
     CHECK(creator.initialize(creator_shares, rig.imports, device));
     CHECK(opener.initialize(opener_shares, rig.imports, device));
-    av::D3dLoopback made(creator), opening(opener);
+    av::D3dLoopback made(creator, rig.imports), opening(opener, rig.imports);
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(made, 1u, 0u, 0u, &hresult, &level));
     CHECK(av_d3d_CreateDevice11(opening, 1u, 0u, 0u, &hresult, &level));
@@ -426,7 +426,7 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
     av::D3dBackend &backend = held.backend();
     av::SessionShares unshared;
     CHECK(backend.initialize(unshared, rig.imports, device));
-    av::D3dLoopback wire(backend);
+    av::D3dLoopback wire(backend, rig.imports);
 
     std::uint32_t hresult = 1u, level = 0u, removed = 1u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
@@ -500,7 +500,7 @@ TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it
     av::D3dBackend         &backend = held.backend();
     av::SessionShares unshared;
     CHECK(backend.initialize(unshared, rig.imports, device, nullptr, &surfaces));
-    av::D3dLoopback wire(backend);
+    av::D3dLoopback wire(backend, rig.imports);
     std::uint32_t hresult = 1u, level = 0u, removed = 1u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     make_triangle(wire, shown);
@@ -557,7 +557,7 @@ TEST(d3d_backend_device, a_flip_of_a_shared_target_is_shown_through_its_copy)
     av::SessionShares session;
     session.bind(shares, 1u, backend);
     CHECK(backend.initialize(session, rig.imports, device));
-    av::D3dLoopback wire(backend);
+    av::D3dLoopback wire(backend, rig.imports);
     std::uint32_t hresult = 1u, level = 0u, removed = 1u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     ResourceDesc target = {};
@@ -608,7 +608,7 @@ TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the
         av::SessionShares unshared;
         CHECK(backend.initialize(unshared, rig.imports, device));
         constexpr std::size_t region_bytes = 16u * 4096u;
-        av::D3dLoopback wire(backend, source, source != nullptr ? region_bytes : 0u);
+        av::D3dLoopback wire(backend, rig.imports, source, source != nullptr ? region_bytes : 0u);
 
         std::uint32_t hresult = 0u, level = 0u, removed = 0u;
         platform.fail_allocation_at(1u);
