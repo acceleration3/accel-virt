@@ -904,6 +904,10 @@ Status MockKmt::scan_line(std::uint32_t adapter, std::uint32_t source, BeamPosit
 Status MockKmt::refresh_millihz(std::uint32_t adapter, std::uint32_t source, std::uint32_t &millihz)
 {
     if (find(Kind::adapter, adapter) == nullptr || source != 0u) return misuse();
+    if (refresh_millihz_ != 0u) {
+        millihz = refresh_millihz_;
+        return Status::ok;
+    }
     if (blank_period_ == 0u) return Status::not_found;
     millihz = static_cast<std::uint32_t>(ticks_per_second * 1000u / blank_period_);
     return Status::ok;
@@ -1220,6 +1224,8 @@ void MockKmt::reads_clock(ClockReader *reader, std::uint64_t step)
 }
 
 void MockKmt::set_blank_period(std::uint64_t ticks) { blank_period_ = ticks; }
+
+void MockKmt::set_refresh_millihz(std::uint32_t millihz) { refresh_millihz_ = millihz; }
 
 void MockKmt::answer_waits(const std::uint8_t *answer, std::uint32_t size)
 {

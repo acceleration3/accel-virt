@@ -240,6 +240,7 @@ TEST(vsync_scenario, an_interval_outside_one_frame_to_two_fails_the_step)
       MockKmt kmt;
       kmt.add_adapter(av_gpu, AdapterScenario::wddm_3_2);
       kmt.set_blank_period(MockKmt::ticks_per_second / hertz);
+      kmt.set_refresh_millihz(VsyncScenario::expected_hz * 1000u);
       AdapterSearch search(kmt);
       CHECK_STATUS(search.find_avgpu(0u), Status::ok);
       av::MockPlatform report_memory;

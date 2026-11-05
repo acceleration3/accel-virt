@@ -217,6 +217,7 @@ public:
     void          hand_back_a_short_record();
     void          carry_at_the_next_share(const std::uint8_t *bytes, std::uint32_t size);
     void          set_blank_period(std::uint64_t ticks);
+    void          set_refresh_millihz(std::uint32_t millihz);
     void          spend_on_wait(std::uint64_t ticks);
     void          time_out_while_consuming(std::uint32_t count);
     void          time_out_while_beating(std::uint32_t count);
@@ -436,6 +437,7 @@ private:
     std::uint64_t clock_step_;
     ClockReader  *clock_reader_;
     std::uint64_t blank_period_;
+    std::uint32_t refresh_millihz_ = 0u;
     std::uint32_t slip_nth_;
     std::uint64_t slip_ticks_;
     std::uint64_t wait_cost_;
