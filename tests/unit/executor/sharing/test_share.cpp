@@ -1,14 +1,20 @@
+#include "executor/owned_fd.hpp"
 #include "executor/sharing/share.hpp"
 #include "executor/sharing/share_holder.hpp"
-#include "harness/executor/counted_object.hpp"
+#include "executor/sharing/shared_image_shape.hpp"
 #include "harness/executor/mock_session_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 
-using av::CountedObject;
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
 using av::MockSessionBackend;
+using av::OwnedFd;
 using av::Share;
 using av::ShareHolder;
 using av::ShareOrigin;
+using av::SharedImageShape;
 
 TEST(share, names_its_object)
 { const Share share(3u, 0x2Au, 7u, 4096u, ShareOrigin::d3d12);
@@ -18,10 +24,11 @@ TEST(share, names_its_object)
   CHECK_EQ(share.size(), 4096u);
   CHECK(share.origin() == ShareOrigin::d3d12);
   CHECK_EQ(share.descriptor(), -1);
-  CHECK(share.resource() == nullptr);
-  CHECK(share.view() == nullptr);
-  CHECK(share.shown() == nullptr);
-  CHECK_EQ(share.writes(), 0u); }
+  CHECK_EQ(share.handle_kind(), 0u);
+  CHECK(share.holders() == nullptr);
+  CHECK(share.publisher() == nullptr);
+  CHECK(!share.shape().described());
+  CHECK(share.direct3d().resource() == nullptr); }
 
 TEST(share, accepts_only_its_own_kind_and_size)
 { const Share share(1u, 1u, 7u, 4096u, ShareOrigin::object);
@@ -59,9 +66,9 @@ TEST(share, a_pinned_share_is_held)
 
 TEST(share, holders_come_and_go_in_any_order)
 { MockSessionBackend a, b, c, stranger;
-  ShareHolder first(a, 1u, 0u);
-  ShareHolder second(b, 2u, 0u);
-  ShareHolder third(c, 3u, 0u);
+  ShareHolder first(a, 0u, 1u, 0u);
+  ShareHolder second(b, 0u, 2u, 0u);
+  ShareHolder third(c, 0u, 3u, 0u);
   Share share(1u, 1u, 7u, 4096u, ShareOrigin::object);
   share.let_go_by_guest();
   share.hold(first);
@@ -84,91 +91,68 @@ TEST(share, holders_come_and_go_in_any_order)
   CHECK(share.holders() == nullptr);
   CHECK(share.unheld()); }
 
-TEST(share, keeps_one_descriptor_and_hands_it_over)
+TEST(share, one_session_holds_it_once_for_each_thing_it_is_made_into)
+{ MockSessionBackend session, other;
+  ShareHolder       plain(session, 0u, 0x9001u, 0xD1u);
+  ShareHolder       device(session, 0x7001u, 0x7001u, 0xD2u);
+  ShareHolder       semaphore(session, 0x7002u, 0x7002u, 0xD3u);
+  Share             share(1u, 1u, 7u, 4096u, ShareOrigin::object);
+  share.hold(plain);
+  share.hold(device);
+  share.hold(semaphore);
+  CHECK(share.holder_into(session, 0u) == &plain);
+  CHECK(share.holder_into(session, 0x7001u) == &device);
+  CHECK(share.holder_into(session, 0x7002u) == &semaphore);
+  CHECK(share.holder_into(session, 0x7003u) == nullptr);
+  CHECK(share.holder_into(other, 0u) == nullptr);
+  CHECK(share.holder_answered(session, 0x9001u) == &plain);
+  CHECK(share.holder_answered(session, 0x7002u) == &semaphore);
+  CHECK(share.holder_answered(session, 0x9002u) == nullptr);
+  CHECK(share.holder_answered(other, 0x9001u) == nullptr);
+  share.unhold(device);
+  CHECK(share.holder_into(session, 0x7001u) == nullptr);
+  CHECK(share.holder_answered(session, 0x7001u) == nullptr);
+  CHECK(share.holder_into(session, 0x7002u) == &semaphore);
+  share.unhold(plain);
+  share.unhold(semaphore);
+  CHECK(share.holders() == nullptr); }
+
+TEST(share, keeps_one_descriptor_it_owns_until_it_is_dropped)
 { Share share(1u, 1u, 7u, 4096u, ShareOrigin::object);
-  share.keep_descriptor(2u, 41);
-  CHECK_EQ(share.descriptor(), 41);
+  const int made = ::memfd_create("share", MFD_CLOEXEC);
+  CHECK(made >= 0);
+  OwnedFd descriptor(made);
+  share.keep_descriptor(2u, descriptor);
+  CHECK(!descriptor.held());
+  CHECK_EQ(share.descriptor(), made);
   CHECK_EQ(share.handle_kind(), 2u);
-  CHECK_EQ(share.take_descriptor(), 41);
+  CHECK(::fcntl(made, F_GETFD) != -1);
+  share.drop_descriptor();
   CHECK_EQ(share.descriptor(), -1);
-  CHECK_EQ(share.take_descriptor(), -1); }
+  CHECK_EQ(::fcntl(made, F_GETFD), -1);
+  share.drop_descriptor();
+  CHECK_EQ(share.descriptor(), -1); }
 
-TEST(share, opens_as_its_view_or_its_resource)
-{ CountedObject resource, view;
-  Share share(1u, 1u, 0u, 0u, ShareOrigin::d3d12);
-  share.keep_resource(&resource);
-  CHECK(share.view() == &resource);
-  share.keep_view(&view);
-  CHECK(share.view() == &view);
-  CHECK(share.resource() == &resource); }
+TEST(share, a_descriptor_kept_again_closes_the_one_before)
+{ Share share(1u, 1u, 7u, 4096u, ShareOrigin::object);
+  const int first = ::memfd_create("share", MFD_CLOEXEC);
+  const int second = ::memfd_create("share", MFD_CLOEXEC);
+  OwnedFd   one(first);
+  OwnedFd   two(second);
+  share.keep_descriptor(1u, one);
+  share.keep_descriptor(3u, two);
+  CHECK_EQ(share.descriptor(), second);
+  CHECK_EQ(share.handle_kind(), 3u);
+  CHECK_EQ(::fcntl(first, F_GETFD), -1); }
 
-TEST(share, gives_up_every_object_it_holds)
-{ CountedObject resource, view, shown;
-  Share share(1u, 1u, 0u, 0u, ShareOrigin::d3d12);
-  IUnknown *objects[3] = {};
-  CHECK_EQ(share.give_up_objects(objects), 0u);
-  share.keep_resource(&resource);
-  share.keep_shown(&shown);
-  CHECK_EQ(share.give_up_objects(objects), 2u);
-  CHECK(objects[0] == &resource);
-  CHECK(objects[1] == &shown);
-  CHECK(share.resource() == nullptr);
-  CHECK(share.shown() == nullptr);
-  share.keep_resource(&resource);
-  share.keep_view(&view);
-  share.keep_shown(&shown);
-  CHECK_EQ(share.give_up_objects(objects), 3u);
-  CHECK(objects[1] == &view);
-  CHECK_EQ(share.give_up_objects(objects), 0u); }
-
-TEST(share, gives_up_only_what_a_lost_direct3d11_device_made)
-{ CountedObject resource, view, shown;
-  IUnknown     *objects[3] = {};
-  Share         published11(1u, 1u, 0u, 0u, ShareOrigin::d3d11);
-  CHECK_EQ(published11.give_up_direct3d11(objects), 0u);
-  published11.keep_resource(&resource);
-  published11.keep_shown(&shown);
-  CHECK_EQ(published11.give_up_direct3d11(objects), 2u);
-  CHECK(objects[0] == &resource);
-  CHECK(objects[1] == &shown);
-  CHECK(published11.resource() == nullptr);
-  CHECK(published11.shown() == nullptr);
-  Share published12(1u, 2u, 0u, 0u, ShareOrigin::d3d12);
-  published12.keep_resource(&resource);
-  published12.keep_view(&view);
-  published12.keep_shown(&shown);
-  CHECK_EQ(published12.give_up_direct3d11(objects), 2u);
-  CHECK(objects[0] == &view);
-  CHECK(objects[1] == &shown);
-  CHECK(published12.resource() == &resource);
-  Share object(1u, 3u, 1u, 4096u, ShareOrigin::object);
-  object.keep_resource(&resource);
-  CHECK_EQ(object.give_up_direct3d11(objects), 0u);
-  CHECK(object.resource() == &resource); }
-
-TEST(share, gives_up_only_what_a_lost_direct3d12_device_made)
-{ CountedObject resource, view, shown;
-  IUnknown     *objects[3] = {};
-  Share         published12(1u, 1u, 0u, 0u, ShareOrigin::d3d12);
-  published12.keep_resource(&resource);
-  published12.keep_view(&view);
-  published12.keep_shown(&shown);
-  CHECK_EQ(published12.give_up_direct3d12(objects), 1u);
-  CHECK(objects[0] == &resource);
-  CHECK(published12.resource() == nullptr);
-  CHECK(published12.view() == &view);
-  CHECK(published12.shown() == &shown);
-  CHECK_EQ(published12.give_up_direct3d12(objects), 0u);
-  Share published11(1u, 2u, 0u, 0u, ShareOrigin::d3d11);
-  published11.keep_resource(&resource);
-  CHECK_EQ(published11.give_up_direct3d12(objects), 0u);
-  CHECK(published11.resource() == &resource); }
-
-TEST(share, counts_the_copies_written_into_it)
-{ Share share(1u, 1u, 0u, 0u, ShareOrigin::d3d11);
-  share.written();
-  share.written();
-  CHECK_EQ(share.writes(), 2u); }
+TEST(share, remembers_the_image_the_publisher_described)
+{ Share share(1u, 1u, 7u, 4096u, ShareOrigin::object);
+  CHECK(!share.shape().described());
+  share.describe_image(SharedImageShape(64u, 32u, 87u, 256u));
+  CHECK(share.shape().described());
+  CHECK_EQ(share.shape().width(), 64u);
+  CHECK_EQ(share.shape().height(), 32u);
+  CHECK_EQ(share.shape().pitch(), 256u); }
 
 TEST(share, remembers_its_publisher_without_being_held_by_it)
 { MockSessionBackend session;
@@ -186,10 +170,3 @@ TEST(share, is_indexed_until_a_reset_unindexes_it)
   CHECK(share.indexed());
   share.unindex();
   CHECK(!share.indexed()); }
-
-TEST(share, counts_the_direct3d_opens_of_it)
-{ Share share(1u, 1u, 0u, 0u, ShareOrigin::d3d11);
-  CHECK_EQ(share.opens(), 0u);
-  share.opened();
-  share.opened();
-  CHECK_EQ(share.opens(), 2u); }
