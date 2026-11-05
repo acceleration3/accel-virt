@@ -352,11 +352,12 @@ std::uint32_t share_object(void *, AvExecutor *, std::uint64_t, std::uint32_t, s
 {
     return AV_SHARED_REFUSED;
 }
-std::uint32_t open_object(void *, AvExecutor *, std::uint64_t, std::uint32_t, std::uint64_t, std::uint64_t *)
+std::uint32_t open_object(void *, AvExecutor *, std::uint64_t, std::uint32_t, std::uint64_t, std::uint64_t,
+                          std::uint64_t *)
 {
     return AV_SHARED_REFUSED;
 }
-void close_object(void *, AvExecutor *, std::uint64_t) {}
+void close_object(void *, AvExecutor *, std::uint64_t, std::uint64_t) {}
 
 std::uint32_t read_image(void *, std::uint32_t, std::uint64_t, void *, std::uint32_t, std::uint32_t, std::uint32_t)
 {
@@ -424,6 +425,8 @@ std::uint32_t sync_surface(void *, std::uint32_t, std::uint64_t surface, std::ui
     return AV_EXECUTED;
 }
 
+void channel_stats(void *, AvExecutor *, std::uint32_t, const std::uint8_t *, std::size_t) {}
+
 const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -454,7 +457,8 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               sync_surface,
                               nullptr,
                               lose_executor_device,
-                              answer_part};
+                              answer_part,
+                              channel_stats};
 
 }
 

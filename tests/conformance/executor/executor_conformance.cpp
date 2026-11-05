@@ -16,6 +16,8 @@
 namespace av {
 
 namespace {
+vkproto::HandleIdentity identity;
+
 struct ApiBit {
     std::uint32_t sub_api;
     std::uint32_t commands;
@@ -281,7 +283,7 @@ void ExecutorConformance::check_workload(AvExecutor *executor, uint32_t sub_api)
         VkInstanceCreateInfo create = {};
         create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         create.pApplicationInfo = &application;
-        av::vkproto::serialize_VkInstanceCreateInfo(writer, create);
+        av::vkproto::serialize_VkInstanceCreateInfo(writer, identity, create);
         command = av::vkproto::kCmd_vkCreateInstance;
         length = writer.offset();
     } else if (sub_api == AV_EXECUTOR_SUB_API_OPENCL) {
@@ -565,11 +567,11 @@ bool ExecutorConformance::make_device(ExecutorTransport &wire, std::uint64_t &in
     VkInstanceCreateInfo create = {};
     create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     create.pApplicationInfo = &application;
-    if (vkproto::av_vkCreateInstance(wire, &create, nullptr, &instance) != VK_SUCCESS) instance = 0u;
+    if (vkproto::av_vkCreateInstance(wire, identity, &create, nullptr, &instance) != VK_SUCCESS) instance = 0u;
     if (instance == 0u) return false;
 
     std::uint32_t count = 1u;
-    if (vkproto::av_vkEnumeratePhysicalDevices(wire, as<VkInstance>(instance), &count, &physical) != VK_SUCCESS ||
+    if (vkproto::av_vkEnumeratePhysicalDevices(wire, identity, as<VkInstance>(instance), &count, &physical) != VK_SUCCESS ||
         count == 0u)
         physical = 0u;
     if (physical == 0u) return false;
@@ -583,7 +585,7 @@ bool ExecutorConformance::make_device(ExecutorTransport &wire, std::uint64_t &in
     device_create.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_create.queueCreateInfoCount = 1u;
     device_create.pQueueCreateInfos = &queue;
-    if (vkproto::av_vkCreateDevice(wire, as<VkPhysicalDevice>(physical), &device_create, nullptr, &device) !=
+    if (vkproto::av_vkCreateDevice(wire, identity, as<VkPhysicalDevice>(physical), &device_create, nullptr, &device) !=
         VK_SUCCESS)
         device = 0u;
     return device != 0u;
@@ -596,7 +598,7 @@ std::uint64_t ExecutorConformance::make_buffer(ExecutorTransport &wire, std::uin
     create.size = page_bytes;
     create.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     VkBuffer buffer = VK_NULL_HANDLE;
-    if (vkproto::av_vkCreateBuffer(wire, as<VkDevice>(device), &create, nullptr, &buffer) != VK_SUCCESS)
+    if (vkproto::av_vkCreateBuffer(wire, identity, as<VkDevice>(device), &create, nullptr, &buffer) != VK_SUCCESS)
         return 0u;
     return reinterpret_cast<std::uint64_t>(buffer);
 }
@@ -649,11 +651,11 @@ void ExecutorConformance::check_imported_handle(AvExecutor *executor)
     std::uint64_t     device = 0u;
     if (!make_device(wire, instance, physical, device)) {
         skipped_because("a Vulkan executor made no device; an imported handle went unchecked");
-        if (instance != 0u) vkproto::av_vkDestroyInstance(wire, as<VkInstance>(instance), nullptr);
+        if (instance != 0u) vkproto::av_vkDestroyInstance(wire, identity, as<VkInstance>(instance), nullptr);
         return;
     }
     VkPhysicalDeviceMemoryProperties properties = {};
-    vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, as<VkPhysicalDevice>(physical), &properties);
+    vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, identity, as<VkPhysicalDevice>(physical), &properties);
     require(wire.ran(), "a Vulkan executor with a device did not answer its memory properties");
     if (wire.ran()) check_vulkan_types(properties);
 
@@ -661,7 +663,7 @@ void ExecutorConformance::check_imported_handle(AvExecutor *executor)
     require(buffer != 0u, "a Vulkan executor with a device made no buffer");
     VkMemoryRequirements requirements = {};
     if (buffer != 0u)
-        vkproto::av_vkGetBufferMemoryRequirements(wire, as<VkDevice>(device), as<VkBuffer>(buffer), &requirements);
+        vkproto::av_vkGetBufferMemoryRequirements(wire, identity, as<VkDevice>(device), as<VkBuffer>(buffer), &requirements);
     std::uint32_t mappable = 0u;
     for (std::uint32_t type = 0u; type < properties.memoryTypeCount && type < VK_MAX_MEMORY_TYPES; type++)
         if ((properties.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0u)
@@ -671,9 +673,9 @@ void ExecutorConformance::check_imported_handle(AvExecutor *executor)
     if (types != 0u)
         check_gpu_round_trip(executor, wire, device, buffer, static_cast<std::uint32_t>(__builtin_ctz(types)));
 
-    if (buffer != 0u) vkproto::av_vkDestroyBuffer(wire, as<VkDevice>(device), as<VkBuffer>(buffer), nullptr);
-    vkproto::av_vkDestroyDevice(wire, as<VkDevice>(device), nullptr);
-    vkproto::av_vkDestroyInstance(wire, as<VkInstance>(instance), nullptr);
+    if (buffer != 0u) vkproto::av_vkDestroyBuffer(wire, identity, as<VkDevice>(device), as<VkBuffer>(buffer), nullptr);
+    vkproto::av_vkDestroyDevice(wire, identity, as<VkDevice>(device), nullptr);
+    vkproto::av_vkDestroyInstance(wire, identity, as<VkInstance>(instance), nullptr);
 }
 
 void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTransport &wire, std::uint64_t device,
@@ -701,16 +703,16 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
 
     const VkDevice vk_device = as<VkDevice>(device);
     const VkBuffer vk_buffer = as<VkBuffer>(buffer);
-    const bool     bound = handle != 0u && vkproto::av_vkBindBufferMemory(wire, vk_device, vk_buffer,
+    const bool     bound = handle != 0u && vkproto::av_vkBindBufferMemory(wire, identity, vk_device, vk_buffer,
                                                                        as<VkDeviceMemory>(handle), 0u) == VK_SUCCESS;
     require(handle == 0u || bound, "execute did not accept an imported handle back in vkBindBufferMemory");
 
     std::uint64_t queue = 0u;
     VkCommandPool pool = VK_NULL_HANDLE;
-    if (bound) vkproto::av_vkGetDeviceQueue(wire, vk_device, 0u, 0u, &queue);
+    if (bound) vkproto::av_vkGetDeviceQueue(wire, identity, vk_device, 0u, 0u, &queue);
     VkCommandPoolCreateInfo pool_create = {};
     pool_create.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    if (queue != 0u && vkproto::av_vkCreateCommandPool(wire, vk_device, &pool_create, nullptr, &pool) != VK_SUCCESS)
+    if (queue != 0u && vkproto::av_vkCreateCommandPool(wire, identity, vk_device, &pool_create, nullptr, &pool) != VK_SUCCESS)
         pool = VK_NULL_HANDLE;
     VkCommandBufferAllocateInfo allocate_info = {};
     allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -719,7 +721,7 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
     allocate_info.commandBufferCount = 2u;
     std::uint64_t commands[2] = {};
     const bool    recordable = pool != VK_NULL_HANDLE &&
-                            vkproto::av_vkAllocateCommandBuffers(wire, vk_device, &allocate_info, commands) ==
+                            vkproto::av_vkAllocateCommandBuffers(wire, identity, vk_device, &allocate_info, commands) ==
                                 VK_SUCCESS &&
                             commands[0] != 0u && commands[1] != 0u;
     require(!bound || recordable, "a Vulkan executor with a device made no command buffers");
@@ -737,18 +739,18 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
         info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         info.commandBufferCount = 1u;
         info.pCommandBuffers = &recorded;
-        return vkproto::av_vkEndCommandBuffer(wire, recorded) == VK_SUCCESS &&
-               vkproto::av_vkQueueSubmit(wire, vk_queue, 1u, &info, VK_NULL_HANDLE) == VK_SUCCESS &&
-               vkproto::av_vkQueueWaitIdle(wire, vk_queue) == VK_SUCCESS;
+        return vkproto::av_vkEndCommandBuffer(wire, identity, recorded) == VK_SUCCESS &&
+               vkproto::av_vkQueueSubmit(wire, identity, vk_queue, 1u, &info, VK_NULL_HANDLE) == VK_SUCCESS &&
+               vkproto::av_vkQueueWaitIdle(wire, identity, vk_queue) == VK_SUCCESS;
     };
 
     if (recordable && window != nullptr) {
         const VkCommandBuffer copying = as<VkCommandBuffer>(commands[0]);
         const VkBufferCopy    region = {0u, half, half};
-        bool                  ran = vkproto::av_vkBeginCommandBuffer(wire, copying, &begin) == VK_SUCCESS;
-        vkproto::av_vkCmdCopyBuffer(wire, copying, vk_buffer, vk_buffer, 1u, &region);
+        bool                  ran = vkproto::av_vkBeginCommandBuffer(wire, identity, copying, &begin) == VK_SUCCESS;
+        vkproto::av_vkCmdCopyBuffer(wire, identity, copying, vk_buffer, vk_buffer, 1u, &region);
         ran = ran && wire.ran();
-        vkproto::av_vkCmdPipelineBarrier(wire, copying, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+        vkproto::av_vkCmdPipelineBarrier(wire, identity, copying, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
                                          0u, 1u, &to_host, 0u, nullptr, 0u, nullptr);
         ran = ran && wire.ran() && submit(0u);
         require(ran, "a copy within a buffer bound to imported memory did not run");
@@ -762,10 +764,10 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
         require(ops_->imported_handle(ops_->opaque, executor, imported_blob) == handle,
                 "free_memory took an import's memory from under it");
         const VkCommandBuffer filling = as<VkCommandBuffer>(commands[1]);
-        ran = vkproto::av_vkBeginCommandBuffer(wire, filling, &begin) == VK_SUCCESS;
-        vkproto::av_vkCmdFillBuffer(wire, filling, vk_buffer, half, half, 0x5A5A5A5Au);
+        ran = vkproto::av_vkBeginCommandBuffer(wire, identity, filling, &begin) == VK_SUCCESS;
+        vkproto::av_vkCmdFillBuffer(wire, identity, filling, vk_buffer, half, half, 0x5A5A5A5Au);
         ran = ran && wire.ran();
-        vkproto::av_vkCmdPipelineBarrier(wire, filling, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+        vkproto::av_vkCmdPipelineBarrier(wire, identity, filling, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
                                          0u, 1u, &to_host, 0u, nullptr, 0u, nullptr);
         ran = ran && wire.ran() && submit(1u);
         require(ran, "a fill of imported memory did not run once the device had let go of its key");
@@ -774,7 +776,7 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
         require(!ran || filled, "once the device let go of the key, the import was no longer the memory its "
                                 "descriptor maps");
     }
-    if (pool != VK_NULL_HANDLE) vkproto::av_vkDestroyCommandPool(wire, vk_device, pool, nullptr);
+    if (pool != VK_NULL_HANDLE) vkproto::av_vkDestroyCommandPool(wire, identity, vk_device, pool, nullptr);
 
     if (imported == AV_EXECUTED) {
         check_other_executor(executor, AV_EXECUTOR_SUB_API_VULKAN, imported_blob, handle);

@@ -4,7 +4,7 @@ namespace av {
 
 ExecutorTransport::ExecutorTransport(const AvExecutorOps &ops, AvExecutor *executor)
     : ops_(ops), executor_(executor), request_{}, reply_{}, block_{}, arena_(block_, sizeof block_), blobs_(),
-      ran_(false)
+      room_(sizeof request_, sizeof reply_), ran_(false)
 {}
 
 WireWriter ExecutorTransport::request_writer() { return WireWriter(request_, sizeof request_); }
@@ -32,6 +32,19 @@ WireArena &ExecutorTransport::decode_arena()
 }
 
 ClientBlobArena &ExecutorTransport::blobs() { return blobs_; }
+
+bool ExecutorTransport::make_room_for_blobs(const std::uint64_t *sizes, std::uint32_t count)
+{
+    return blobs_.ready() && blobs_.fits(sizes, count);
+}
+
+ClientBlobLease ExecutorTransport::open_region(std::uint64_t) { return ClientBlobLease(); }
+
+void ExecutorTransport::close_region(const ClientBlobLease &) {}
+
+const TransferRoom &ExecutorTransport::room() const { return room_; }
+
+void ExecutorTransport::note(ChannelCounter, std::uint64_t) {}
 
 bool ExecutorTransport::ran() const { return ran_; }
 

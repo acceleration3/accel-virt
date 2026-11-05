@@ -4,6 +4,7 @@
 #include "device/abi/av_executor.h"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
+#include "proto/client/transfer_room.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +25,11 @@ public:
     void                          end_call() override;
     WireArena                    &decode_arena() override;
     ClientBlobArena              &blobs() override;
+    [[nodiscard]] bool            make_room_for_blobs(const std::uint64_t *sizes, std::uint32_t count) override;
+    ClientBlobLease               open_region(std::uint64_t bytes) override;
+    void                          close_region(const ClientBlobLease &region) override;
+    const TransferRoom           &room() const override;
+    void                          note(ChannelCounter counter, std::uint64_t amount) override;
 
     bool ran() const;
 
@@ -37,6 +43,7 @@ private:
     std::uint8_t         block_[4096];
     WireArena            arena_;
     ClientBlobArena      blobs_;
+    TransferRoom         room_;
     bool                 ran_;
 };
 
