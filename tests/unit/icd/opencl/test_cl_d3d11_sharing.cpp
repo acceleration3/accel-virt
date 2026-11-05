@@ -664,7 +664,7 @@ TEST(cl_d3d11_sharing, a_texture_the_device_shares_a_twin_of_is_an_image_over_th
   CHECK(shared.made());
   if (!shared.made()) return;
   int twin = 0;
-  rig.d3d11().offer_twin(&twin, shared_handle(rig));
+  rig.d3d11().offer_twin(&twin, shared_handle(rig), 4096u);
   rig.host().shared_object(0u, host_image);
   const std::uint32_t sent = rig.kmt().commands();
   cl_int              error = CL_INVALID_VALUE;
@@ -701,7 +701,7 @@ TEST(cl_d3d11_sharing, a_twin_that_cannot_be_opened_leaves_the_object_to_cross_t
   CHECK(shared.made());
   if (!shared.made()) return;
   int twin = 0;
-  rig.d3d11().offer_twin(&twin, 0x7777u);
+  rig.d3d11().offer_twin(&twin, 0x7777u, 4096u);
   rig.host().cl_handle(host_image, CL_SUCCESS);
   cl_int       error = CL_INVALID_VALUE;
   const cl_mem image = shared.from_texture2d(CL_MEM_READ_WRITE, shared.texture(), 0u, error);
@@ -729,7 +729,7 @@ TEST(cl_d3d11_sharing, an_srgb_texture_is_never_twinned_and_crosses_through_memo
   std::uint8_t            texels[32] = {};
   rig.d3d11().name_resource(&srgb, shared.d3d_device(), srgb_texture, texels, sizeof texels, 16u, 32u);
   int twin = 0;
-  rig.d3d11().offer_twin(&twin, shared_handle(rig));
+  rig.d3d11().offer_twin(&twin, shared_handle(rig), 4096u);
   rig.host().cl_handle(host_image, CL_SUCCESS);
   const std::uint32_t sent = rig.kmt().commands();
   cl_int              error = CL_INVALID_VALUE;
@@ -754,7 +754,7 @@ TEST(cl_d3d11_sharing, a_twin_copy_direct3d_refuses_is_the_call_s_error)
   CHECK(shared.made());
   if (!shared.made()) return;
   int twin = 0;
-  rig.d3d11().offer_twin(&twin, shared_handle(rig));
+  rig.d3d11().offer_twin(&twin, shared_handle(rig), 4096u);
   rig.host().shared_object(0u, host_image);
   cl_int       error = CL_INVALID_VALUE;
   const cl_mem image = shared.from_texture2d(CL_MEM_READ_WRITE, shared.texture(), 0u, error);
