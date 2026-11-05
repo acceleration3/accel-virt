@@ -11,7 +11,7 @@
 namespace av::d3d12 {
 
 namespace {
-constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
+constexpr uint64_t session_arena_bytes = uint64_t{16} << 20u;
 
 }
 
