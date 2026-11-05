@@ -11,7 +11,7 @@
 namespace av {
 
 KmtBlobArena::KmtBlobArena(GuestConnection &connection, KmtTransport &transport, DriverLog &lines)
-    : connection_(connection), transport_(transport), lines_(lines), slots_(), control_(), rings_(), regions_(), slots_taken_(false), idle_since_{}, refusals_logged_(0u)
+    : connection_(connection), transport_(transport), lines_(lines), slots_(), control_(), rings_(), regions_(), slots_taken_(false), idle_since_{}, refusals_logged_(0u), failed_step_(nullptr), failed_status_(Status::ok)
 {
     AV_SCOPE("KmtBlobArena::KmtBlobArena");
 }
@@ -30,7 +30,7 @@ Status KmtBlobArena::open_control()
     const Status opened = control_.object().open_at(0u, PublishedSlotLayout::control_bytes);
     if (opened != Status::ok) {
         control_.destroy();
-        return opened;
+        return failed_at("control segment open", opened);
     }
     ArenaSegment &control = control_.object();
     volatile unsigned char *const word = control.view() + PublishedSlotLayout(control.bytes()).error_word();
@@ -38,7 +38,7 @@ Status KmtBlobArena::open_control()
     if (!transport_.blobs().add_region(control.base(), control.view(), static_cast<size_t>(control.bytes()))) {
         static_cast<void>(control.close());
         control_.destroy();
-        return Status::invalid_state;
+        return failed_at("control region add", Status::invalid_state);
     }
     slots_taken_ = false;
     return Status::ok;
@@ -49,6 +49,8 @@ Status KmtBlobArena::open(uint64_t bytes)
     AV_SCOPE("KmtBlobArena::open");
     if (lending()) return Status::invalid_state;
     if (bytes > max_bytes) return Status::invalid_parameter;
+    failed_step_ = nullptr;
+    failed_status_ = Status::ok;
     const Status controlled = open_control();
     if (controlled != Status::ok) return controlled;
     uint64_t size = bytes < default_bytes ? default_bytes : bytes;
@@ -57,13 +59,13 @@ Status KmtBlobArena::open(uint64_t bytes)
     const Status opened = rings_[0].object().open(size);
     if (opened != Status::ok) {
         rings_[0].destroy();
-        return opened;
+        return failed_at("ring segment open", opened);
     }
     ArenaSegment &ring = rings_[0].object();
     if (!transport_.blobs().add_segment(ring.base(), ring.view(), static_cast<size_t>(ring.bytes()))) {
         static_cast<void>(ring.close());
         rings_[0].destroy();
-        return Status::invalid_state;
+        return failed_at("ring region add", Status::invalid_state);
     }
     transport_.attach_arena(this);
     return Status::ok;
@@ -133,6 +135,26 @@ Status KmtBlobArena::grow(uint64_t need)
             .number(static_cast<uint32_t>(grown))
             .write();
     return grown;
+}
+
+const char *KmtBlobArena::failed_step() const
+{
+    AV_SCOPE("KmtBlobArena::failed_step");
+    return failed_step_;
+}
+
+Status KmtBlobArena::failed_status() const
+{
+    AV_SCOPE("KmtBlobArena::failed_status");
+    return failed_status_;
+}
+
+Status KmtBlobArena::failed_at(const char *step, Status status)
+{
+    AV_SCOPE("KmtBlobArena::failed_at");
+    failed_step_ = step;
+    failed_status_ = status;
+    return status;
 }
 
 bool KmtBlobArena::first_refusal(Status refused)

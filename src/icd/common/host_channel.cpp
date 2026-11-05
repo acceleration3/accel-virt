@@ -25,6 +25,7 @@ HostChannel::HostChannel(BlockSource &memory, DriverLog &log, const ChannelShape
     : memory_(memory), lines_(log), lock_(lock), sub_api_(shape.sub_api_), ring_order_(shape.ring_order_),
       reply_bytes_(shape.reply_bytes_), staging_bytes_(shape.staging_bytes_), batch_bytes_(shape.batch_bytes_),
       arena_bytes_(shape.arena_bytes_), staging_(nullptr), batch_block_(nullptr), transport_(), locked_(), arena_(),
+      arena_failed_step_(nullptr), arena_failed_status_(Status::ok),
       device_(nullptr), memories_(memory), handles_(memory, Pool::paged), retired_(memory, Pool::paged), fenced_(memory, Pool::paged)
 {
     AV_SCOPE("HostChannel::HostChannel");
@@ -59,11 +60,20 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
     const Status arena = arena_bytes_ != 0u ? open_arena(device) : Status::ok;
     if (arena != Status::ok) {
         const bool faulted = transport_.object().faulted();
-        LogLine(lines_)
-            .text(faulted ? "the context faulted opening its blob arena, status "
+        LogLine line(lines_);
+        line.text(faulted ? "the context faulted opening its blob arena, status "
                           : "no blob arena for the context; bulk data crosses inline, status ")
-            .number(static_cast<uint32_t>(arena))
-            .write();
+            .number(static_cast<uint32_t>(arena));
+        if (faulted)
+            line.text(", failed step ")
+                .text(arena_failed_step_ != nullptr ? arena_failed_step_ : "none")
+                .text(" returned ")
+                .number(static_cast<uint32_t>(arena_failed_status_))
+                .text(", host faulted ")
+                .number(transport_.object().host_faulted() ? 1u : 0u)
+                .text(" with code ")
+                .number(transport_.object().host_fault_code());
+        line.write();
         if (faulted) return Status::invalid_state;
     }
     undo.dismiss();
@@ -80,7 +90,11 @@ Status HostChannel::open_arena(GuestConnection &device)
         bytes /= 2u;
         opened = arena_.object().open(bytes);
     }
-    if (opened != Status::ok) arena_.destroy();
+    if (opened != Status::ok) {
+        arena_failed_step_ = arena_.object().failed_step();
+        arena_failed_status_ = arena_.object().failed_status();
+        arena_.destroy();
+    }
     return opened;
 }
 

@@ -121,6 +121,8 @@ private:
     ObjectStorage<KmtTransport>     transport_;
     ObjectStorage<LockedTransport>  locked_;
     ObjectStorage<KmtBlobArena>     arena_;
+    const char                     *arena_failed_step_;
+    Status                          arena_failed_status_;
     GuestConnection                *device_;
     ObjectPool<Kept>                          memories_;
     KeyedSlots<uint64_t, Kept *>              handles_;

@@ -39,6 +39,8 @@ public:
     bool                 lending() const;
     uint64_t             bytes() const;
     uint64_t             host_errors() const;
+    const char          *failed_step() const;
+    Status               failed_status() const;
 
     bool invariants_hold() const;
 
@@ -47,6 +49,7 @@ private:
     [[nodiscard]] Status settle(bool abandoning);
     [[nodiscard]] Status add_ring(uint64_t want);
     bool                 first_refusal(Status refused);
+    Status               failed_at(const char *step, Status status);
 
     GuestConnection               &connection_;
     KmtTransport                  &transport_;
@@ -58,6 +61,8 @@ private:
     bool                           slots_taken_;
     uint64_t                       idle_since_[ClientBlobArena::max_segments];
     uint32_t                       refusals_logged_;
+    const char                    *failed_step_;
+    Status                         failed_status_;
 
     friend struct KmtBlobArenaProbe;
 };
