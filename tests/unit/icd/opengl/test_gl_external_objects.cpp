@@ -1,4 +1,5 @@
 #include "core/support/status.hpp"
+#include "core/log/keyed_log.hpp"
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -26,13 +27,13 @@
 namespace av::icd {
 
 struct OpenedObjectsProbe {
+    static constexpr std::uint64_t stray = 999u;
     static void add_empty(OpenedObjects &opened)
     {
-        OpenedObjectRow *made = nullptr;
-        CHECK_STATUS(opened.rows_.create(made, OpenedObjectRow{}), Status::ok);
+        std::uint32_t slot = 0u;
+        CHECK_STATUS(opened.opens_[0].insert(stray, OpenedObjectRow{}, slot), Status::ok);
     }
-    static void drop_empty(OpenedObjects &opened)
-    { opened.rows_.destroy_if([](const OpenedObjectRow &row) { return row.made_ == 0u; }); }
+    static void drop_empty(OpenedObjects &opened) { static_cast<void>(opened.opens_[0].erase(stray)); }
 };
 
 }
@@ -41,7 +42,13 @@ namespace av::glicd {
 
 struct GlExternalObjectsProbe {
     static GlSharedObjectRow &row(GlExternalObjects &objects, std::uint32_t name)
-    { return *objects.rows_.find_if([name](const GlSharedObjectRow &row) { return row.name_ == name; }); }
+    { return *objects.rows_.find(name); }
+    static void plant(GlExternalObjects &objects, std::uint32_t name)
+    {
+        std::uint32_t slot = 0u;
+        CHECK_STATUS(objects.rows_.insert(name, GlSharedObjectRow{}, slot), Status::ok);
+    }
+    static void pull(GlExternalObjects &objects, std::uint32_t name) { static_cast<void>(objects.rows_.erase(name)); }
     static icd::OpenedObjects &opened(GlExternalObjects &objects) { return objects.opened_; }
 };
 
@@ -76,8 +83,8 @@ private:
 
 class Process {
 public:
-    Process() : memory_(), trace_(), lock_(trace_, 'S'), kmt_(), log_(), device_(0u),
-                handles_(kmt_, lock_, memory_), objects_(handles_, memory_, log_)
+    Process() : memory_(), trace_(), lock_(trace_, 'S'), kmt_(), log_(), lines_(memory_, log_, "avgl: "), device_(0u),
+                handles_(kmt_, lock_, memory_), objects_(handles_, memory_, lines_)
     {
         kmt_.add_adapter(av::PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u), 3200u);
         std::uint32_t adapter = 0u;
@@ -116,6 +123,7 @@ private:
     av::RecordingThreadLock  lock_;
     MockKmt                  kmt_;
     av::RecordingLog         log_;
+    av::KeyedLog             lines_;
     MockTransport            wire_;
     std::uint32_t            device_;
     av::icd::SharedHandles   handles_;
@@ -359,15 +367,10 @@ TEST(gl_external_objects_invariants, refuse_each_state_a_create_or_an_import_nev
   GlSharedObjectRow &second = GlExternalObjectsProbe::row(one.objects(), names[1]);
   const GlSharedObjectRow whole = second;
 
-  second.name_ = 0u;
+  GlExternalObjectsProbe::plant(one.objects(), 0u);
   CHECK(!one.objects().invariants_hold());
-  second.name_ = names[0];
-  CHECK(!one.objects().invariants_hold());
-  second = whole;
+  GlExternalObjectsProbe::pull(one.objects(), 0u);
   CHECK(one.objects().invariants_hold());
-  second.name_ = 0xFFFFu;
-  CHECK(!one.objects().invariants_hold());
-  second = whole;
   second.made_ = host_name;
   CHECK(!one.objects().invariants_hold());
   second = whole;
@@ -579,7 +582,7 @@ TEST(gl_external_objects_import, a_memory_object_of_no_bytes_is_an_invalid_value
   CHECK_EQ(one.wire().sends(), 0u);
   CHECK_EQ(one.objects().made(SharedObjectKind::memory, name), 0u); }
 
-TEST(gl_external_objects_import, one_object_under_a_second_name_is_an_invalid_operation)
+TEST(gl_external_objects_import, one_object_the_device_already_opened_for_the_context_is_an_invalid_operation)
 { Process       one;
   std::uint32_t names[2] = {};
   CHECK_EQ(one.objects().create(SharedObjectKind::memory, 2, names), GlExternalObjects::gl_no_error);
@@ -590,10 +593,31 @@ TEST(gl_external_objects_import, one_object_under_a_second_name_is_an_invalid_op
                                 GlExternalObjects::opaque_win32, handle),
            GlExternalObjects::gl_no_error);
   const std::uint32_t sends = one.wire().sends();
+  const Answer        conflict(SharedObjectAnswer::conflict, 0u);
+  one.wire().set_reply(conflict.bytes(), SharedObjectAnswer::encoded_size);
   CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, names[1], object_bytes,
                                 GlExternalObjects::opaque_win32, handle),
            GlExternalObjects::gl_invalid_operation);
-  CHECK_EQ(one.wire().sends(), sends);
+  CHECK_EQ(one.wire().sends(), sends + 1u);
   CHECK_EQ(one.objects().made(SharedObjectKind::memory, names[1]), 0u);
-  CHECK_EQ(one.log().holding("avgl: an object this context already imported"), 1u);
+  CHECK_EQ(one.log().holding("avgl: an object this context already opened into the same object"), 1u);
   CHECK(one.objects().invariants_hold()); }
+
+TEST(gl_external_objects_import, a_device_that_answers_a_name_the_context_already_holds_is_refused_and_given_back)
+{ Process       one;
+  std::uint32_t names[2] = {};
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 2, names), GlExternalObjects::gl_no_error);
+  const Answer opened(SharedObjectAnswer::done, host_name);
+  one.wire().set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, names[0], object_bytes,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_no_error);
+  const std::uint32_t sends = one.wire().sends();
+  CHECK_EQ(one.objects().import(one.wire(), one.device(), SharedObjectKind::memory, names[1], object_bytes,
+                                GlExternalObjects::opaque_win32, one.handle()),
+           GlExternalObjects::gl_out_of_memory);
+  CHECK_EQ(one.wire().sends(), sends + 2u);
+  CHECK_EQ(one.objects().made(SharedObjectKind::memory, names[1]), 0u);
+  CHECK_EQ(one.objects().made(SharedObjectKind::memory, names[0]), host_name);
+  CHECK(one.objects().invariants_hold()); }
+

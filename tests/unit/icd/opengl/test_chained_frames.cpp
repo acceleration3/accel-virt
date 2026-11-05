@@ -1,6 +1,7 @@
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
+#include "harness/transport/roomed_transport.hpp"
 #include "icd/opengl/chained_frames.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
@@ -27,18 +28,19 @@ using av::WireReader;
 using av::WireWriter;
 using av::glicd::ChainedFrames;
 
+constexpr std::uint32_t gl_srgb8_alpha8 = 0x8C43u;
 constexpr std::uint32_t first_memory = 0x700u;
 constexpr std::uint32_t first_name = 40u;
 constexpr std::uint64_t luid = 0x1234u;
 constexpr std::uint32_t width = 64u;
 constexpr std::uint32_t height = 32u;
 
-class ScriptedGlHost final : public ClientTransport {
+class ScriptedGlHost final : public av::RoomedTransport {
 public:
     static constexpr std::uint32_t max_sends = 64u;
     static constexpr std::size_t   slot_bytes = 4096u;
 
-    ScriptedGlHost() : request_{}, reply_{}, commands_{}, async_{}, payloads_{}, sends_(0u), opens_(0u),
+    ScriptedGlHost() : RoomedTransport(256u * 1024u, 64u * 1024u), request_{}, reply_{}, commands_{}, async_{}, payloads_{}, sends_(0u), opens_(0u),
                        names_(first_name), refuse_open_at_(0u), arena_(nullptr, 0u), blobs_() {}
 
     void refuse_open_at(std::uint32_t nth) { refuse_open_at_ = nth; }
@@ -167,7 +169,7 @@ TEST(chained_frames, a_chain_opens_every_slot_over_the_memory_the_device_names)
   WireReader storage(host.payload(host.last(av::glproto::kCmd_glTextureStorageMem2DEXT)), ScriptedGlHost::slot_bytes);
   CHECK_EQ(varint(storage), first_name + 1u);
   CHECK_EQ(varint(storage), 1u);
-  CHECK_EQ(varint(storage), std::uint64_t{ChainedFrames::gl_srgb8_alpha8});
+  CHECK_EQ(varint(storage), std::uint64_t{gl_srgb8_alpha8});
   CHECK_EQ(varint(storage), width);
   CHECK_EQ(varint(storage), height);
   CHECK_EQ(varint(storage), first_memory + 1u);
@@ -236,7 +238,7 @@ TEST(chained_frames, close_gives_everything_back_and_a_new_window_closes_the_old
   CHECK(frames.open(host, chains, &second, luid, width, height, false));
   CHECK_EQ(chains.closes(), 1u);
   CHECK(chains.last_closed() == &first);
-  frames.close(&host, chains);
+  frames.close(&host);
   CHECK(!frames.opened());
   CHECK_EQ(chains.closes(), 2u);
   CHECK(chains.last_closed() == &second);
@@ -244,6 +246,6 @@ TEST(chained_frames, close_gives_everything_back_and_a_new_window_closes_the_old
   CHECK_EQ(host.count(CommandHeader::release_shared_object_id), 3u * ChainedFrames::slot_count);
   CHECK(frames.open(host, chains, &first, luid, width, height, false));
   const std::uint32_t sent = host.sends();
-  frames.close(nullptr, chains);
+  frames.close(nullptr);
   CHECK_EQ(host.sends(), sent);
   CHECK_EQ(chains.closes(), 3u); }

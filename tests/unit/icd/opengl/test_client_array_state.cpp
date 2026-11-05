@@ -104,19 +104,23 @@ TEST(client_array_state, every_buffer_target_is_kept)
   for (const std::uint32_t target : targets) CHECK_EQ(state.bound_buffer(target), buffer++);
   CHECK(state.invariants_hold()); }
 
-TEST(client_array_state, an_indexed_target_bound_several_at_once_is_no_longer_known)
+TEST(client_array_state, a_buffer_binding_the_host_may_have_moved_is_forgotten_and_a_later_bind_is_known_again)
 { av::MockPlatform platform;
   ClientArrayState state(platform);
   constexpr std::uint32_t indexed[] = {0x8A11u, 0x8C8Eu, 0x90D2u, 0x92C0u};
   for (const std::uint32_t target : indexed) {
     state.bind_buffer(target, 5u);
-    state.lose_buffer(target);
+    state.forget_buffer(target);
     CHECK_EQ(state.bound_buffer(target), ClientArrayState::unknown);
   }
   state.bind_buffer(ClientArrayState::pixel_pack_buffer, 6u);
-  state.lose_buffer(ClientArrayState::pixel_pack_buffer);
-  state.lose_buffer(0x0DE1u);
-  CHECK_EQ(state.bound_buffer(ClientArrayState::pixel_pack_buffer), 6u);
+  state.bind_buffer(ClientArrayState::array_buffer, 7u);
+  state.forget_buffer(ClientArrayState::pixel_pack_buffer);
+  state.forget_buffer(0x0DE1u);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::pixel_pack_buffer), ClientArrayState::unknown);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::array_buffer), 7u);
+  CHECK(!state.tracks(0x0DE1u));
+  CHECK_EQ(state.bound_buffer(0x0DE1u), 0u);
   const std::uint32_t deleted[] = {5u};
   state.delete_buffers(1, deleted);
   CHECK_EQ(state.bound_buffer(0x8A11u), ClientArrayState::unknown);
@@ -124,25 +128,27 @@ TEST(client_array_state, an_indexed_target_bound_several_at_once_is_no_longer_kn
   CHECK_EQ(state.bound_buffer(0x8A11u), 7u);
   CHECK(state.invariants_hold()); }
 
-TEST(client_array_state, a_binding_is_known_only_where_nothing_can_move_it_out_of_sight)
+TEST(client_array_state, every_target_with_a_row_is_tracked_and_the_element_buffer_follows_its_vertex_array)
 { av::MockPlatform platform;
   ClientArrayState state(platform);
-  std::uint32_t    buffer = 99u;
-  CHECK(state.known_buffer(ClientArrayState::array_buffer, buffer));
-  CHECK_EQ(buffer, 0u);
-  state.bind_buffer(0x8F37u , 4u);
-  CHECK(state.known_buffer(0x8F37u, buffer));
-  CHECK_EQ(buffer, 4u);
-  CHECK(!state.known_buffer(0x0DE1u, buffer));
+  CHECK_EQ(state.bound_buffer(ClientArrayState::array_buffer), 0u);
+  state.bind_buffer(0x8F37u, 4u);
+  CHECK(state.tracks(0x8F37u));
+  CHECK_EQ(state.bound_buffer(0x8F37u), 4u);
+  CHECK(!state.tracks(0x0DE1u));
+  state.bind_buffer(0x0DE1u, 9u);
+  CHECK_EQ(state.bound_buffer(0x0DE1u), 0u);
+  CHECK(state.tracks(ClientArrayState::element_array_buffer));
   state.bind_buffer(ClientArrayState::element_array_buffer, 5u);
-  CHECK(!state.known_buffer(ClientArrayState::element_array_buffer, buffer));
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 5u);
+  CHECK_STATUS(state.bind_vertex_array(2u), av::Status::ok);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
+  CHECK_STATUS(state.bind_vertex_array(0u), av::Status::ok);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 5u);
   state.bind_buffer(0x8A11u, 6u);
-  state.lose_buffer(0x8A11u);
-  CHECK(!state.known_buffer(0x8A11u, buffer));
-  state.restore_buffers();
-  CHECK(!state.known_buffer(ClientArrayState::array_buffer, buffer));
-  CHECK(!state.known_buffer(0x8F37u, buffer));
-  CHECK_EQ(buffer, 4u);
+  state.forget_buffer(0x8A11u);
+  CHECK_EQ(state.bound_buffer(0x8A11u), ClientArrayState::unknown);
+  CHECK_EQ(state.bound_buffer(0x8F37u), 4u);
   CHECK(state.invariants_hold()); }
 
 TEST(client_array_state, each_vertex_array_keeps_its_element_buffer)
