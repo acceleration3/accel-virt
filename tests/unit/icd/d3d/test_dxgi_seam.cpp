@@ -158,19 +158,16 @@ TEST(dxgi_seam, an_interface_this_driver_does_not_serve_publishes_nothing)
   for (std::uint32_t slot = 0u; slot < DxgiBaseTable::wddm_3_2_slots; slot++) CHECK(slots[slot] == nullptr);
   CHECK(device.rig().root().invariants_hold()); }
 
-TEST(dxgi_seam, until_later_refuses_with_the_entry_it_was_asked_for)
+TEST(dxgi_seam, until_later_refuses_a_null_argument_and_otherwise_is_not_implemented)
 { Device device;
   CHECK_EQ(device.adopt(), hr_ok);
   if (device.device() == nullptr) return;
   DxgiDdiArgRecord args = {};
   args.hDevice = device.block();
-  CHECK_EQ(device.device()->dxgi().until_later(&args, "pfnBlt"), hr_not_impl);
-  CHECK_EQ(device.device()->dxgi().until_later(nullptr, "pfnBlt"), hr_invalid_arg);
-  device.device()->removal().remove(hr_dxgi_device_removed);
-  CHECK_EQ(device.device()->dxgi().until_later(&args, "pfnBlt"), hr_dxgi_device_removed);
-  CHECK_EQ(device.rig().log().holding("device removed, pfnBlt answers 0x887A0005"), 1u); }
+  CHECK_EQ(device.device()->dxgi().until_later(&args), hr_not_impl);
+  CHECK_EQ(device.device()->dxgi().until_later(nullptr), hr_invalid_arg); }
 
-TEST(dxgi_seam, offer_resources_accepts_and_a_removed_device_answers_its_removal)
+TEST(dxgi_seam, offer_and_reclaim_accept_a_device_and_refuse_a_null_argument)
 { Device device;
   CHECK_EQ(device.adopt(), hr_ok);
   if (device.device() == nullptr) return;
@@ -178,14 +175,12 @@ TEST(dxgi_seam, offer_resources_accepts_and_a_removed_device_answers_its_removal
   args.hDevice = device.block();
   CHECK_EQ(device.device()->dxgi().offer_resources(&args), hr_ok);
   CHECK_EQ(device.device()->dxgi().offer_resources(nullptr), hr_invalid_arg);
-  device.device()->removal().remove(hr_dxgi_device_removed);
-  CHECK_EQ(device.device()->dxgi().offer_resources(&args), hr_dxgi_device_removed);
   DxgiDdiArgReclaimResourcesRecord reclaim = {};
   reclaim.hDevice = device.block();
-  CHECK_EQ(device.device()->dxgi().reclaim_resources(&reclaim), hr_dxgi_device_removed);
+  CHECK_EQ(device.device()->dxgi().reclaim_resources(&reclaim), hr_ok);
   DxgiDdiArgReclaimResources1Record reclaim1 = {};
   reclaim1.hDevice = device.block();
-  CHECK_EQ(device.device()->dxgi().reclaim_resources1(&reclaim1), hr_dxgi_device_removed); }
+  CHECK_EQ(device.device()->dxgi().reclaim_resources1(&reclaim1), hr_ok); }
 
 TEST(dxgi_seam, every_slot_a_later_feature_fills_answers_not_implemented)
 { Device device;
@@ -195,7 +190,6 @@ TEST(dxgi_seam, every_slot_a_later_feature_fills_answers_not_implemented)
   args.hDevice = device.block();
   for (const std::uint32_t slot : later_slots) {
       CHECK_EQ(device.call(slot, &args), hr_not_impl);
-      CHECK(!device.device()->removal().removed());
   }
   CHECK(device.rig().root().invariants_hold()); }
 
@@ -338,26 +332,3 @@ TEST(dxgi_seam, a_slot_called_with_a_foreign_device_is_refused)
   args.hDevice = nullptr;
   CHECK_EQ(device.call(Slot::present, &args), hr_invalid_arg);
   CHECK_EQ(device.call(Slot::present, static_cast<DxgiDdiArgRecord *>(nullptr)), hr_invalid_arg); }
-
-TEST(dxgi_seam, a_removed_device_answers_its_removal_code_from_every_slot)
-{ Device device;
-  CHECK_EQ(device.adopt(), hr_ok);
-  if (device.device() == nullptr) return;
-  device.device()->removal().remove(hr_dxgi_device_reset);
-  device.device()->removal().remove(hr_dxgi_device_removed);
-  CHECK_EQ(device.device()->removal().later_causes(), 1u);
-
-  DxgiDdiArgRecord args = {};
-  args.hDevice = device.block();
-  CHECK_EQ(device.call(Slot::present, &args), hr_dxgi_device_reset);
-  CHECK_EQ(device.call(Slot::resource_priority, &args), hr_dxgi_device_reset);
-  CHECK_EQ(device.call(Slot::trim_residency, &args), hr_dxgi_device_reset);
-
-  DxgiDdiArgGetGammaControlCapsRecord gamma = {};
-  gamma.hDevice = device.block();
-  gamma.pGammaCapabilities = nullptr;
-  CHECK_EQ(device.call(Slot::gamma_caps, &gamma), hr_dxgi_device_reset);
-
-  CHECK_EQ(device.rig().log().holding("device removed, pfnPresent answers 0x887A0007"), 1u);
-  CHECK_EQ(device.rig().log().holding("device removed"), 1u);
-  CHECK(device.device()->removal().invariants_hold()); }

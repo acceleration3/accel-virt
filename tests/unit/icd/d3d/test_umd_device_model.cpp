@@ -100,7 +100,7 @@ TEST(umd_device_model, a_created_device_records_the_runtimes_handles_and_both_ca
 
 TEST(umd_device_model, the_tables_count_follows_every_device_made_and_destroyed)
 { Fixture fixture;
-  DeviceTable table(fixture.rig().platform(), fixture.rig().log());
+  DeviceTable table(fixture.rig().platform());
   CHECK_EQ(table.live_devices(), 0u);
   CHECK(table.invariants_hold());
 
@@ -229,5 +229,6 @@ TEST(umd_device_model, a_state_dump_names_the_device)
   av::StateWriter writer(bytes, sizeof bytes);
   fixture.rig().root().report(writer);
   CHECK(std::strstr(writer.dump(), "umd/0 busy=false adapters=1 devices=1") != nullptr);
-  CHECK(std::strstr(writer.dump(), "removed=0x0000000000000000") != nullptr);
+  CHECK(std::strstr(writer.dump(), "avumd/0/device/0 interface=0x00000000000B002D runtime_version=") != nullptr);
+  CHECK(std::strstr(writer.dump(), "dxgi_revision=1") != nullptr);
   UmdRootProbe::release(fixture.rig().root(), fixture.block()); }
