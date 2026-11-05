@@ -1,6 +1,8 @@
+#include "core/log/driver_log.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "harness/executor/vulkan_backend_probe.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
 #include "proto/generated/vulkan/vk_default_dispatch.h"
 #include "proto/generated/vulkan/vk_dispatch_server.h"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
@@ -35,6 +37,18 @@ H as_handle(std::uint64_t raw)
 
 class CarelessDriver final : public vkproto::DefaultServerDispatch {
 public:
+    explicit CarelessDriver(VulkanBackend &backend) : backend_(backend) {}
+
+    bool handle_for(vkproto::HandleKind kind, std::uint64_t wire, std::uint64_t &handle) const override
+    { return backend_.handle_for(kind, wire, handle); }
+    std::uint64_t template_bytes(VkDescriptorUpdateTemplate made) const override
+    { return backend_.template_bytes(made); }
+    void made(vkproto::HandleKind kind, std::uint64_t handle) override { backend_.made(kind, handle); }
+    bool room_for(std::uint64_t handles) override { return backend_.room_for(handles); }
+    void made_through(std::uint64_t parent) override { backend_.made_through(parent); }
+    void ended(std::uint64_t handle) override { backend_.ended(handle); }
+    void children_ended(std::uint64_t handle) override { backend_.children_ended(handle); }
+
     VkResult on_vkCreateInstance(const VkInstanceCreateInfo *, const VkAllocationCallbacks *,
                                  VkInstance *out) override
     { *out = as_handle<VkInstance>(first_invented); return VK_SUCCESS; }
@@ -59,6 +73,7 @@ public:
       claimed_ = claimed; }
 
 private:
+    VulkanBackend &backend_;
     VkResult      result_ = VK_SUCCESS;
     std::uint32_t listed_ = 1u;
     std::uint32_t claimed_ = 1u;
@@ -66,9 +81,10 @@ private:
 
 class GuestContext {
 public:
-    GuestContext() : backend_(), probe_(backend_), driver_(), block_{}, frame_{}, reply_{}, answered_(0u) {}
+    GuestContext() : sink_(), lines_(sink_, "vulkan: "), backend_(lines_), probe_(backend_), driver_(backend_), block_{}, frame_{}, reply_{}, answered_(0u) {}
 
     CarelessDriver &driver() { return driver_; }
+    vkproto::HandleTranslation &identity() { return identity_; }
     bool            knows(std::uint64_t handle) const { return backend_.knows_handle(handle); }
     WireWriter      frame() { return WireWriter(frame_, sizeof frame_); }
     WireReader      answer() const { return WireReader(reply_, answered_); }
@@ -94,7 +110,7 @@ public:
     { WireWriter writer = frame();
       VkInstanceCreateInfo create = {};
       create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-      vkproto::serialize_VkInstanceCreateInfo(writer, create);
+      vkproto::serialize_VkInstanceCreateInfo(writer, identity_, create);
       CHECK(send(vkproto::kCmd_vkCreateInstance, writer));
       return created(); }
 
@@ -110,14 +126,17 @@ public:
       writer.write_pod(physical);
       VkDeviceCreateInfo create = {};
       create.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-      vkproto::serialize_VkDeviceCreateInfo(writer, create);
+      vkproto::serialize_VkDeviceCreateInfo(writer, identity_, create);
       CHECK(send(vkproto::kCmd_vkCreateDevice, writer));
       return created(); }
 
 private:
+    av::RecordingLog   sink_;
+    av::DriverLog      lines_;
     VulkanBackend      backend_;
     VulkanBackendProbe probe_;
     CarelessDriver     driver_;
+    vkproto::HandleIdentity identity_;
     std::uint8_t       block_[block_bytes];
     std::uint8_t       frame_[frame_bytes];
     std::uint8_t       reply_[frame_bytes];
@@ -155,7 +174,7 @@ TEST(vulkan_dispatch, a_failed_create_answers_a_null_handle_the_host_never_learn
   VkBufferCreateInfo create = {};
   create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   create.size = 4096u;
-  vkproto::serialize_VkBufferCreateInfo(writer, create);
+  vkproto::serialize_VkBufferCreateInfo(writer, guest.identity(), create);
   CHECK(guest.send(vkproto::kCmd_vkCreateBuffer, writer));
   WireReader reply = guest.answer();
   std::int32_t  failed = 0;
