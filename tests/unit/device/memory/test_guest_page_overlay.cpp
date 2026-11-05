@@ -1,7 +1,9 @@
 #include "core/support/status.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/guest_page_overlay.hpp"
+#include "device/memory/guest_ram_lending.hpp"
 #include "device/memory/lent_pages.hpp"
+#include "harness/context/recording_context_plane.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
@@ -14,21 +16,18 @@
 
 using av::ControlRequest;
 using av::GuestPageOverlay;
+using av::GuestRamLending;
 using av::LentPages;
 using av::MockHost;
 using av::MockRequest;
+using av::RecordingContextPlane;
 using av::Status;
 
 namespace av {
 
 struct GuestPageOverlayProbe {
-    static void miscount(GuestPageOverlay &overlay) { overlay.record_->covered_ += 1u; }
-    static void overcount(GuestPageOverlay &overlay) { overlay.record_->count_ = overlay.record_->capacity_ + 1u; }
-    static void repair(GuestPageOverlay &overlay, std::uint32_t count, std::uint64_t covered)
-    {
-        overlay.record_->count_ = count;
-        overlay.record_->covered_ = covered;
-    }
+    static void miscount(GuestPageOverlay &overlay) { overlay.covered_ += 1u; }
+    static void repair(GuestPageOverlay &overlay, std::uint64_t covered) { overlay.covered_ = covered; }
 };
 
 }
@@ -88,24 +87,29 @@ private:
 class Fixture {
 public:
     explicit Fixture(std::uint64_t blob_bytes = 4u * page)
-        : lent_(host_), memory_(blob_bytes), overlay_()
+        : lent_(host_), memory_(blob_bytes), owner_(host_, lent_, blob_bytes, -1, plane_, 1u),
+          overlay_(host_, lent_, owner_)
     { host_.add_guest_ram(ram, 0x10000u); }
+    ~Fixture() { overlay_.restore(host_); }
     MockHost         &host() { return host_; }
     LentPages        &lent() { return lent_; }
     BlobMemory       &memory() { return memory_; }
+    GuestRamLending  &owner() { return owner_; }
     GuestPageOverlay &overlay() { return overlay_; }
     Status add(const EntryList &list, std::uint32_t entries)
     {
         MockRequest    mock(list.bytes(), list.size());
         ControlRequest request(host_, &mock);
-        return overlay_.add(host_, lent_, request, header, entries, memory_.fd(), memory_.size());
+        return overlay_.add(host_, request, header, entries, memory_.fd(), memory_.size());
     }
 
 private:
     MockHost         host_;
-    LentPages        lent_;
-    BlobMemory       memory_;
-    GuestPageOverlay overlay_;
+    LentPages             lent_;
+    BlobMemory            memory_;
+    RecordingContextPlane plane_;
+    GuestRamLending       owner_;
+    GuestPageOverlay      overlay_;
 };
 
 }
@@ -134,7 +138,7 @@ TEST(guest_page_overlay_add, the_guests_pages_and_the_blobs_memory_are_one_until
   CHECK_EQ(second[7], 0x33u);
   first[40] = 0x44u;
   CHECK_EQ(fixture.memory().bytes()[40], 0x44u);
-  fixture.overlay().restore();
+  fixture.overlay().restore(fixture.host());
   CHECK_EQ(fixture.host().overlaid_bytes(), 0u);
   CHECK_EQ(fixture.lent().count(), 0u);
   CHECK_EQ(fixture.overlay().covered(), 0u);
@@ -199,14 +203,16 @@ TEST(guest_page_overlay_add, a_page_already_lent_is_refused_and_earlier_runs_sta
   CHECK_STATUS(fixture.add(again, 2u), Status::conflict);
   CHECK_EQ(fixture.overlay().covered(), 2u * page);
   CHECK_EQ(fixture.lent().count(), 2u);
-  GuestPageOverlay other;
+  GuestPageOverlay other(fixture.host(), fixture.lent(), fixture.owner());
   MockRequest      mock(first.bytes(), first.size());
   ControlRequest   request(fixture.host(), &mock);
-  CHECK_STATUS(other.add(fixture.host(), fixture.lent(), request, header, 1u, fixture.memory().fd(), fixture.memory().size()), Status::conflict);
+  CHECK_STATUS(other.add(fixture.host(), request, header, 1u, fixture.memory().fd(), fixture.memory().size()), Status::conflict);
   CHECK_EQ(other.covered(), 0u);
-  fixture.overlay().restore();
+  fixture.overlay().restore(fixture.host());
   CHECK_EQ(fixture.host().overlaid_bytes(), 0u);
-  CHECK_STATUS(other.add(fixture.host(), fixture.lent(), request, header, 1u, fixture.memory().fd(), fixture.memory().size()), Status::ok); }
+  CHECK_STATUS(other.add(fixture.host(), request, header, 1u, fixture.memory().fd(), fixture.memory().size()), Status::ok);
+  CHECK(other.invariants_hold());
+  other.restore(fixture.host()); }
 
 TEST(guest_page_overlay_add, a_run_the_host_refuses_or_cannot_record_is_left_as_it_was)
 { { Fixture fixture;
@@ -216,31 +222,29 @@ TEST(guest_page_overlay_add, a_run_the_host_refuses_or_cannot_record_is_left_as_
     CHECK_STATUS(fixture.add(single, 1u), Status::not_supported);
     CHECK_EQ(fixture.lent().count(), 0u);
     CHECK_EQ(fixture.host().live_guest_mappings(), 0u); }
+  for (std::uint32_t nth = 1u; nth <= 3u; nth++) {
+    Fixture fixture;
+    fixture.host().fail_allocation_at(nth);
+    EntryList single(1u);
+    single.add(ram, static_cast<std::uint32_t>(page));
+    CHECK_STATUS(fixture.add(single, 1u), Status::no_memory);
+    CHECK_EQ(fixture.lent().count(), 0u);
+    CHECK_EQ(fixture.overlay().covered(), 0u);
+    CHECK_EQ(fixture.host().live_guest_mappings(), 0u); }
   { Fixture fixture;
-    fixture.host().fail_allocation_at(2u);
+    fixture.host().fail_allocation_at(4u);
     EntryList single(1u);
     single.add(ram, static_cast<std::uint32_t>(page));
     CHECK_STATUS(fixture.add(single, 1u), Status::no_memory);
     CHECK_EQ(fixture.host().overlaid_bytes(), 0u);
     CHECK_EQ(fixture.lent().count(), 0u); }
-  { Fixture fixture;
-    fixture.host().fail_allocation_at(2u);
-    fixture.host().fail_restore_at(1u);
-    EntryList single(1u);
-    single.add(ram, static_cast<std::uint32_t>(page));
-    const std::uint32_t logged = fixture.host().logged();
-    CHECK_STATUS(fixture.add(single, 1u), Status::no_memory);
-    CHECK_EQ(fixture.host().logged(), logged + 1u);
-    CHECK(std::strstr(fixture.host().last_log(), "could not be given its RAM back") != nullptr);
-    CHECK_EQ(fixture.host().overlaid_bytes(), page);
-    CHECK_STATUS(fixture.host().restore_guest_run(fixture.host().guest_ram(ram), page), Status::ok); }
   Fixture fixture;
   EntryList single(1u);
   single.add(ram, static_cast<std::uint32_t>(page));
   CHECK_STATUS(fixture.add(single, 1u), Status::ok);
   fixture.host().fail_restore_at(1u);
   const std::uint32_t logged = fixture.host().logged();
-  fixture.overlay().restore();
+  fixture.overlay().restore(fixture.host());
   CHECK_EQ(fixture.host().logged(), logged + 1u);
   CHECK_EQ(fixture.lent().count(), 0u);
   CHECK_STATUS(fixture.host().restore_guest_run(fixture.host().guest_ram(ram), page), Status::ok); }
@@ -253,11 +257,8 @@ TEST(guest_page_overlay_invariants, a_record_that_is_not_its_runs_breaks_them)
   CHECK(fixture.overlay().invariants_hold());
   av::GuestPageOverlayProbe::miscount(fixture.overlay());
   CHECK(!fixture.overlay().invariants_hold());
-  av::GuestPageOverlayProbe::repair(fixture.overlay(), 1u, page);
-  av::GuestPageOverlayProbe::overcount(fixture.overlay());
-  CHECK(!fixture.overlay().invariants_hold());
-  av::GuestPageOverlayProbe::repair(fixture.overlay(), 1u, page);
+  av::GuestPageOverlayProbe::repair(fixture.overlay(), page);
   fixture.lent().release(ram, page);
   CHECK(!fixture.overlay().invariants_hold());
-  CHECK_STATUS(fixture.lent().claim(ram, page), Status::ok);
+  CHECK_STATUS(fixture.lent().claim(ram, page, fixture.owner()), Status::ok);
   CHECK(fixture.overlay().invariants_hold()); }

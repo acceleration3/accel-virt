@@ -23,22 +23,25 @@ using av::Status;
 namespace av {
 
 struct BlobTableProbe {
+    static BlobResource *make(BlobTable &table, std::uint32_t id)
+    {
+        BlobResource *blob = nullptr;
+        static_cast<void>(table.blobs_.create(blob, table.host_, id));
+        return blob;
+    }
+    static void orphan(BlobTable &table, std::uint32_t id) { static_cast<void>(make(table, id)); }
     static void place(BlobTable &table, std::uint32_t id)
     {
-        for (ObjectStorage<BlobResource> &slot : table.slots_)
-            if (slot.construct(table.host_, id) == Status::ok) return;
+        std::uint32_t slot = 0u;
+        static_cast<void>(table.ids_.insert(id, BlobTable::Entry{make(table, id), false}, slot));
     }
-    static void mark_empty_slot_retiring(BlobTable &table)
+    static void rename(BlobTable &table, std::uint32_t id, std::uint32_t named)
     {
-        for (std::uint32_t index = 0u; index < BlobTable::max_blobs; index++) {
-            if (table.slots_[index].constructed()) continue;
-            table.retiring_[index] = true;
-            return;
-        }
-    }
-    static void clear_marks(BlobTable &table)
-    {
-        for (bool &retiring : table.retiring_) retiring = false;
+        BlobTable::Entry *const entry = table.ids_.find(id);
+        std::uint32_t           slot = 0u;
+        BlobTable::Entry        moved = *entry;
+        table.ids_.erase(id);
+        static_cast<void>(table.ids_.insert(named, moved, slot));
     }
 };
 
@@ -95,16 +98,20 @@ TEST(blob_table_create_guest, keeps_ids_unique_and_leaves_nothing_behind_a_refus
   CHECK_EQ(fixture.host().live_guest_mappings(), 1u);
   CHECK(fixture.table().invariants_hold()); }
 
-TEST(blob_table_create_guest, a_full_table_is_out_of_space)
+TEST(blob_table_create_guest, grows_past_any_fixed_count_and_gives_every_mapping_back)
 { Fixture fixture;
-  for (std::uint32_t id = 1u; id <= BlobTable::max_blobs; id++)
-      if (fixture.create(id) != Status::ok) break;
-  CHECK_EQ(fixture.table().live(), BlobTable::max_blobs);
-  CHECK_STATUS(fixture.create(9999u), Status::no_space);
+  constexpr std::uint32_t count = 300u;
+  for (std::uint32_t id = 1u; id <= count; id++)
+      CHECK_STATUS(fixture.create(id), Status::ok);
+  CHECK_EQ(fixture.table().live(), count);
+  CHECK(fixture.table().contains(count));
+  CHECK_EQ(fixture.host().live_guest_mappings(), count);
+  CHECK_STATUS(fixture.create(count), Status::conflict);
   CHECK(fixture.table().invariants_hold());
   fixture.table().release_all();
   CHECK_EQ(fixture.table().live(), 0u);
-  CHECK_EQ(fixture.host().live_guest_mappings(), 0u); }
+  CHECK_EQ(fixture.host().live_guest_mappings(), 0u);
+  CHECK(fixture.table().invariants_hold()); }
 
 TEST(blob_table_size, answers_what_the_pages_hold)
 { Fixture fixture(2u);
@@ -250,12 +257,19 @@ TEST(blob_table, is_main_loop_only)
       CHECK(fixture.host().claim(HostViolation::main_loop_required));
   CHECK_STATUS(call.status, Status::not_found); }
 
-TEST(blob_table_invariants, a_duplicate_id_is_detected)
+TEST(blob_table_invariants, a_blob_no_id_names_is_detected)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.create(1u), Status::ok);
+  CHECK(fixture.table().invariants_hold());
+  av::BlobTableProbe::orphan(fixture.table(), 2u);
+  CHECK(!fixture.table().invariants_hold()); }
+
+TEST(blob_table_invariants, an_id_naming_a_blob_of_another_id_is_detected)
 { Fixture fixture;
   CHECK_STATUS(fixture.create(1u), Status::ok);
   CHECK_STATUS(fixture.create(2u), Status::ok);
   CHECK(fixture.table().invariants_hold());
-  av::BlobTableProbe::place(fixture.table(), 1u);
+  av::BlobTableProbe::rename(fixture.table(), 2u, 3u);
   CHECK(!fixture.table().invariants_hold()); }
 
 TEST(blob_table_invariants, a_blob_without_the_lock_is_detected)
@@ -267,14 +281,6 @@ TEST(blob_table_invariants, a_blob_without_the_lock_is_detected)
   CHECK_STATUS(table.initialize(), Status::ok);
   CHECK(table.invariants_hold());
   table.release_all(); }
-
-TEST(blob_table_invariants, a_retiring_mark_on_an_empty_slot_is_detected)
-{ Fixture fixture;
-  CHECK_STATUS(fixture.create(1u), Status::ok);
-  av::BlobTableProbe::mark_empty_slot_retiring(fixture.table());
-  CHECK(!fixture.table().invariants_hold());
-  av::BlobTableProbe::clear_marks(fixture.table());
-  CHECK(fixture.table().invariants_hold()); }
 
 TEST(blob_table_initialize, nothing_is_created_before_the_lock_exists_and_it_is_made_once)
 { MockHost host;
