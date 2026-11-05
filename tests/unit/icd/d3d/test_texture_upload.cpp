@@ -1,7 +1,9 @@
 #include "harness/framework/test_registry.hpp"
+#include "harness/transport/mock_transport.hpp"
 #include "icd/d3d/texture_upload.hpp"
 #include "icd/d3d/upload_sink.hpp"
 #include "proto/resources/texel_layout.hpp"
+#include "proto/submission/channel_counter.hpp"
 
 #include <cstdint>
 
@@ -63,8 +65,9 @@ bool same(const Box &a, const Box &b)
 }
 
 TEST(texture_upload, a_box_that_fits_goes_as_one_piece)
-{ const Box     box = {2u, 3u, 1u, 10u, 7u, 3u};
-  TextureUpload upload(words, box, 64u, 512u, 4096u);
+{ av::MockTransport wire;
+  const Box     box = {2u, 3u, 1u, 10u, 7u, 3u};
+  TextureUpload upload(words, box, 64u, 512u, 4096u, wire);
   CHECK(upload.readable());
   CHECK_EQ(upload.bytes(), 512u + 3u * 64u + 32u);
   Recorded sink;
@@ -75,14 +78,19 @@ TEST(texture_upload, a_box_that_fits_goes_as_one_piece)
   CHECK_EQ(sink.bytes(0u), upload.bytes());
   CHECK_EQ(sink.row_pitch(0u), 64u);
   CHECK_EQ(sink.slice_pitch(0u), 512u);
-  CHECK(sink.first(0u)); }
+  CHECK(sink.first(0u));
+  CHECK_EQ(wire.noted(av::ChannelCounter::split_transfers), 0u);
+  CHECK_EQ(wire.noted(av::ChannelCounter::split_pieces), 0u); }
 
 TEST(texture_upload, a_box_too_large_goes_a_slice_and_some_rows_at_a_time)
-{ const Box     box = {0u, 0u, 4u, 16u, 4u, 6u};
-  TextureUpload upload(words, box, 64u, 256u, 160u);
+{ av::MockTransport wire;
+  const Box     box = {0u, 0u, 4u, 16u, 4u, 6u};
+  TextureUpload upload(words, box, 64u, 256u, 160u, wire);
   Recorded      sink;
   CHECK(upload.send(sink, memory));
   CHECK_EQ(sink.count(), 4u);
+  CHECK_EQ(wire.noted(av::ChannelCounter::split_transfers), 1u);
+  CHECK_EQ(wire.noted(av::ChannelCounter::split_pieces), 3u);
   const Box expected[4] = {{0u, 0u, 4u, 16u, 2u, 5u}, {0u, 2u, 4u, 16u, 4u, 5u},
                            {0u, 0u, 5u, 16u, 2u, 6u}, {0u, 2u, 5u, 16u, 4u, 6u}};
   const std::uint64_t offsets[4] = {0u, 128u, 256u, 384u};
@@ -94,8 +102,9 @@ TEST(texture_upload, a_box_too_large_goes_a_slice_and_some_rows_at_a_time)
   } }
 
 TEST(texture_upload, block_rows_and_runs_land_on_whole_blocks)
-{ const Box     box = {8u, 4u, 0u, 20u, 10u, 1u};
-  TextureUpload upload(blocks, box, 64u, 0u, 16u);
+{ av::MockTransport wire;
+  const Box     box = {8u, 4u, 0u, 20u, 10u, 1u};
+  TextureUpload upload(blocks, box, 64u, 0u, 16u, wire);
   Recorded      sink;
   CHECK(upload.send(sink, memory));
   CHECK_EQ(sink.count(), 4u);
@@ -107,8 +116,9 @@ TEST(texture_upload, block_rows_and_runs_land_on_whole_blocks)
   CHECK_EQ(sink.bytes(3u), 8u); }
 
 TEST(texture_upload, a_buffer_goes_in_runs_of_bytes)
-{ const Box     box = {100u, 0u, 0u, 350u, 1u, 1u};
-  TextureUpload upload(TexelLayout(1u, 1u, 1u), box, 0u, 0u, 100u);
+{ av::MockTransport wire;
+  const Box     box = {100u, 0u, 0u, 350u, 1u, 1u};
+  TextureUpload upload(TexelLayout(1u, 1u, 1u), box, 0u, 0u, 100u, wire);
   CHECK(upload.readable());
   Recorded sink;
   CHECK(upload.send(sink, memory));
@@ -118,33 +128,35 @@ TEST(texture_upload, a_buffer_goes_in_runs_of_bytes)
   CHECK_EQ(sink.bytes(2u), 50u); }
 
 TEST(texture_upload, a_box_its_memory_cannot_hold_is_refused_before_anything_is_sent)
-{ Recorded sink;
-  const TextureUpload empty(words, Box{4u, 0u, 0u, 4u, 4u, 1u}, 64u, 0u, 4096u);
+{ av::MockTransport wire;
+  Recorded sink;
+  const TextureUpload empty(words, Box{4u, 0u, 0u, 4u, 4u, 1u}, 64u, 0u, 4096u, wire);
   CHECK_EQ(empty.bytes(), 0u);
   CHECK(!empty.readable());
   CHECK(!empty.send(sink, memory));
-  const TextureUpload flat(words, Box{0u, 4u, 0u, 4u, 4u, 1u}, 64u, 0u, 4096u);
+  const TextureUpload flat(words, Box{0u, 4u, 0u, 4u, 4u, 1u}, 64u, 0u, 4096u, wire);
   CHECK(!flat.readable());
-  const TextureUpload shallow(words, Box{0u, 0u, 2u, 4u, 4u, 2u}, 64u, 0u, 4096u);
+  const TextureUpload shallow(words, Box{0u, 0u, 2u, 4u, 4u, 2u}, 64u, 0u, 4096u, wire);
   CHECK(!shallow.readable());
-  const TextureUpload unknown(TexelLayout(0u, 1u, 1u), Box{0u, 0u, 0u, 4u, 4u, 1u}, 64u, 0u, 4096u);
+  const TextureUpload unknown(TexelLayout(0u, 1u, 1u), Box{0u, 0u, 0u, 4u, 4u, 1u}, 64u, 0u, 4096u, wire);
   CHECK(!unknown.readable());
-  const TextureUpload crowded(words, Box{0u, 0u, 0u, 16u, 2u, 1u}, 32u, 0u, 4096u);
+  const TextureUpload crowded(words, Box{0u, 0u, 0u, 16u, 2u, 1u}, 32u, 0u, 4096u, wire);
   CHECK(!crowded.readable());
-  const TextureUpload stacked(words, Box{0u, 0u, 0u, 16u, 2u, 2u}, 64u, 100u, 4096u);
+  const TextureUpload stacked(words, Box{0u, 0u, 0u, 16u, 2u, 2u}, 64u, 100u, 4096u, wire);
   CHECK(!stacked.readable());
   CHECK(!stacked.send(sink, memory));
   CHECK_EQ(sink.count(), 0u);
-  const TextureUpload row(words, Box{0u, 0u, 0u, 16u, 1u, 1u}, 0u, 0u, 4096u);
+  const TextureUpload row(words, Box{0u, 0u, 0u, 16u, 1u, 1u}, 0u, 0u, 4096u, wire);
   CHECK(row.readable());
-  const TextureUpload slices(words, Box{0u, 0u, 0u, 16u, 2u, 2u}, 64u, 128u, 4096u);
+  const TextureUpload slices(words, Box{0u, 0u, 0u, 16u, 2u, 2u}, 64u, 128u, 4096u, wire);
   CHECK(slices.readable()); }
 
 TEST(texture_upload, a_refused_piece_ends_the_upload)
-{ Recorded whole;
+{ av::MockTransport wire;
+  Recorded whole;
   whole.refuse_at(1u);
-  CHECK(!TextureUpload(words, Box{0u, 0u, 0u, 4u, 4u, 1u}, 16u, 0u, 4096u).send(whole, memory));
+  CHECK(!TextureUpload(words, Box{0u, 0u, 0u, 4u, 4u, 1u}, 16u, 0u, 4096u, wire).send(whole, memory));
   Recorded split;
   split.refuse_at(2u);
-  CHECK(!TextureUpload(words, Box{0u, 0u, 0u, 16u, 4u, 2u}, 64u, 256u, 160u).send(split, memory));
+  CHECK(!TextureUpload(words, Box{0u, 0u, 0u, 16u, 4u, 2u}, 64u, 256u, 160u, wire).send(split, memory));
   CHECK_EQ(split.count(), 2u); }

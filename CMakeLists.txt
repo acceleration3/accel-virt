@@ -330,6 +330,7 @@ add_library(av_d3d_umd STATIC ${AV_D3D_UMD_SOURCES}
   ${CMAKE_SOURCE_DIR}/src/icd/common/shared_bytes.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/slice_block.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/slice_blocks.cpp
+  ${CMAKE_SOURCE_DIR}/src/icd/common/split_report.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/stream_memory.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/transport_timeline.cpp)
 target_link_libraries(av_d3d_umd PUBLIC av_core)
