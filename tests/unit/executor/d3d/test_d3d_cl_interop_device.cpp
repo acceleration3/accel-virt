@@ -1,7 +1,9 @@
 #include "proto/d3d/dxgi_format.hpp"
 #include "proto/d3d/resource_misc.hpp"
 #include "executor/d3d/d3d_backend.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/opencl/opencl_backend.hpp"
+#include "executor/sharing/d3d_shares.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
@@ -9,6 +11,7 @@
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/shim/opencl_device.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "harness/executor/executor_log_rig.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 
@@ -58,7 +61,7 @@ bool images_over_buffers(cl_device_id device)
 
 std::uint32_t texture_pitch(av::HostShares &shares, av::D3d11HostDevice &device)
 {
-    IUnknown *const held = shares.resource(domain, key);
+    IUnknown *const held = av::D3dShares(shares).resource(domain, key);
     ID3D11Texture2D *texture = nullptr;
     if (held == nullptr || FAILED(held->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&texture)))) {
         if (held != nullptr) held->Release();
@@ -76,7 +79,8 @@ std::uint32_t texture_pitch(av::HostShares &shares, av::D3d11HostDevice &device)
 void opened_by_opencl(std::uint32_t dxgi)
 {
     if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     apis.open();
     std::uint32_t gpu = apis.gpu_count();
     for (std::uint32_t index = 0u; index < apis.gpu_count() && gpu == apis.gpu_count(); index++)
@@ -88,11 +92,11 @@ void opened_by_opencl(std::uint32_t dxgi)
         return;
     }
     av::HostShares *const shares = apis.shares(gpu);
-    av::D3dBackend        direct3d;
+    av::D3dBackend        direct3d(rig.log);
     av::SessionShares     d3d_session;
     d3d_session.bind(*shares, domain, direct3d);
-    CHECK(direct3d.initialize(d3d_session, apis.d3d11_device(gpu)));
-    av::D3dLoopback wire(direct3d);
+    CHECK(direct3d.initialize(d3d_session, rig.imports, apis.d3d11_device(gpu)));
+    av::D3dLoopback wire(direct3d, rig.imports);
     std::uint32_t   hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     ResourceDesc shared = {};
@@ -117,21 +121,22 @@ void opened_by_opencl(std::uint32_t dxgi)
     CHECK(av_d3d_UpdateSubresource(wire, 1u, 0u, 1u, whole, size * 4u, 0u, 0u, pattern, sizeof pattern));
     CHECK(av_d3d_Finish11(wire, &hresult));
     std::uint32_t handle_kind = 0u;
-    int           fd = -1;
-    CHECK(direct3d.export_object(AV_SHARED_MEMORY, 1u, handle_kind, fd));
-    const off_t bytes = fd >= 0 ? lseek(fd, 0, SEEK_END) : 0;
-    if (fd >= 0) close(fd);
+    av::OwnedFd   descriptor;
+    CHECK(direct3d.export_object(AV_SHARED_MEMORY, 1u, handle_kind, descriptor));
+    const off_t bytes = descriptor.held() ? lseek(descriptor.fd(), 0, SEEK_END) : 0;
+    descriptor.close();
     CHECK(bytes > 0);
     CHECK(d3d_session.publish(key, AV_SHARED_MEMORY, static_cast<std::uint64_t>(bytes), 1u) == av::Status::ok);
 
-    av::OpenClBackend opencl;
-    CHECK(opencl.initialize(apis.opencl_device(gpu), apis.gl_display(gpu), nullptr));
+    av::OpenClBackend opencl(rig.log.opencl());
+    av::ImportTable cl_imports(rig.heap);
+    CHECK(opencl.initialize(apis.opencl_device(gpu), apis.gl_display(gpu), nullptr, cl_imports));
     cl_context const context = guest_context(opencl, *apis.opencl_device(gpu));
     CHECK(context != nullptr);
     av::SessionShares cl_session;
     cl_session.bind(*shares, domain, opencl);
     std::uint64_t handle = 0u;
-    CHECK(cl_session.open(key, AV_SHARED_MEMORY, static_cast<std::uint64_t>(bytes), handle) == av::Status::ok);
+    CHECK(cl_session.open(key, AV_SHARED_MEMORY, static_cast<std::uint64_t>(bytes), 0u, handle) == av::Status::ok);
     cl_mem const image = reinterpret_cast<cl_mem>(handle);
     cl_device_id const device = static_cast<cl_device_id>(apis.opencl_device(gpu)->device());
     const bool         as_image = images_over_buffers(device) && av::DxgiFormat(dxgi).cl_image_on_host();
@@ -162,7 +167,7 @@ void opened_by_opencl(std::uint32_t dxgi)
     }
     CHECK(std::memcmp(read, pattern, sizeof read) == 0);
     ::clReleaseCommandQueue(queue);
-    cl_session.close(key);
+    cl_session.close(key, handle);
     cl_session.end();
     opencl.shut_down();
     d3d_session.end();
