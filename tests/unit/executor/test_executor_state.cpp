@@ -51,9 +51,9 @@ TEST(executor_root_report, names_each_gpu_and_each_live_session)
       "executor/0/domain/2 gpu=1\n"
       "executor/0/session/1 api=vulkan gpu=1 domain=2\n"
       "executor/0/gpu_shares/0\n"
-      "executor/0/gpu_shares/0/shares/0 live=0";
+      "executor/0/gpu_shares/0/shares/0 busy=false live=0";
   CHECK(std::strncmp(writer.dump(), expected, std::strlen(expected)) == 0);
-  CHECK(std::strstr(writer.dump(), "executor/0/gpu_shares/1/shares/0 live=0") != nullptr);
+  CHECK(std::strstr(writer.dump(), "executor/0/gpu_shares/1/shares/0 busy=false live=0") != nullptr);
   CHECK(root.invariants_hold());
   root.close(on_nvidia);
   StateWriter after(bytes, sizeof bytes);
@@ -93,7 +93,7 @@ TEST(executor_root_report, a_gpu_s_device_reports_its_exportable_images)
   char bytes[1024];
   StateWriter writer(bytes, sizeof bytes);
   root.report(writer);
-  CHECK(std::strstr(writer.dump(), "executor/0/gpu_shares/0/shares/0 live=0") != nullptr);
+  CHECK(std::strstr(writer.dump(), "executor/0/gpu_shares/0/shares/0 busy=false live=0") != nullptr);
   CHECK(std::strstr(writer.dump(), "executor/0/gpu_shares/0/exportable_images/0 live=0 retired=0") != nullptr); }
 
 TEST(executor_root_report, a_root_that_never_asked_has_nothing_but_its_line)
