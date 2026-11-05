@@ -14,18 +14,22 @@
 
 namespace av::icd {
 struct SurfaceTableProbe {
-    static void strip_the_instance(SurfaceTable &table) { table.slots_[0].instance_ = VK_NULL_HANDLE; }
+    static void strip_the_instance(SurfaceTable &table)
+    {
+        table.slots_.at(table.slots_.next_live(0u))->instance_ = VK_NULL_HANDLE;
+    }
 };
 
 struct SwapchainProbe {
-    static void hold_past_the_count(Swapchain &chain) { chain.held_[chain.count_] = true; }
+    static void hold_past_the_count(Swapchain &chain) { chain.holders_[chain.count_] = Swapchain::Holder::application; }
 };
 
 struct PresentationProbe {
     static void orphan_a_surface(Presentation &wsi) { SurfaceTableProbe::strip_the_instance(wsi.surfaces_); }
     static void break_a_swapchain(Presentation &wsi)
-    { for (SwapchainSlot &slot : wsi.slots_)
-          if (slot.chain_.constructed()) SwapchainProbe::hold_past_the_count(slot.chain_.object()); }
+    {
+        wsi.swapchains_.for_each([](uint64_t, Swapchain *const &chain) { SwapchainProbe::hold_past_the_count(*chain); });
+    }
 };
 
 }
@@ -36,7 +40,6 @@ using av::ScriptedVulkanDevice;
 using av::icd::Presentation;
 using av::icd::SurfaceProperties;
 using av::icd::PresentationProbe;
-using av::icd::SwapchainSlot;
 using av::icd::Win32SurfaceCreateRecord;
 using av::icd::win32_surface_create_info;
 
@@ -69,7 +72,9 @@ VkSwapchainCreateInfoKHR create_info(VkSurfaceKHR surface)
 
 class PresentationRig {
 public:
-    PresentationRig() : wsi_(rig_.platform(), rig_.kmt(), rig_.windows(), rig_.chains(), rig_.log(), rig_.root(), host_)
+    PresentationRig()
+        : wsi_(rig_.platform(), rig_.kmt(), rig_.windows(), rig_.chains(), rig_.lines(), rig_.root(), host_,
+               rig_.present_thread(), rig_.handed(), rig_.shown(), rig_.present_lock())
     { instance_ = rig_.create_instance();
       physical_ = rig_.physical_device(instance_);
       VkDeviceCreateInfo info = {};
@@ -90,6 +95,8 @@ public:
     VkDevice              device() const { return device_; }
     VkSurfaceKHR          surface() const { return surface_; }
     void                 *window() { return as_window(0x10u); }
+
+    void pump() { rig_.present_thread().run_until_done(); }
 
     VkSwapchainKHR create(const VkSwapchainCreateInfoKHR &info)
     { VkSwapchainKHR swapchain = VK_NULL_HANDLE;
@@ -112,7 +119,7 @@ TEST(icd_presentation, a_swapchain_presents_its_frame_on_the_window)
 { PresentationRig rig;
   const VkSwapchainKHR swapchain = rig.create(create_info(rig.surface()));
   CHECK(swapchain != VK_NULL_HANDLE);
-  CHECK(reinterpret_cast<const SwapchainSlot *>(swapchain)->chain_.constructed());
+  CHECK(reinterpret_cast<const av::icd::Swapchain *>(swapchain)->invariants_hold());
   CHECK_EQ(rig.wsi().swapchains(), 1u);
   CHECK(rig.wsi().invariants_hold());
   std::uint32_t count = 0u;
@@ -130,6 +137,7 @@ TEST(icd_presentation, a_swapchain_presents_its_frame_on_the_window)
   present.pSwapchains = &swapchain;
   present.pImageIndices = &index;
   CHECK_EQ(rig.wsi().present(rig.host().queue(), &present), VK_SUCCESS);
+  rig.pump();
   CHECK_EQ(rig.rig().windows().blits(), 1u);
   CHECK_EQ(rig.rig().windows().last_blit_bytes()[0], 0x81u);
   CHECK_EQ(rig.rig().windows().last_blit_bytes()[3], 0xFFu);
@@ -163,18 +171,37 @@ TEST(icd_presentation, a_swapchain_needs_this_driver_s_own_device_and_surface)
   CHECK_EQ(rig.wsi().swapchains(), 0u);
   CHECK(rig.wsi().invariants_hold()); }
 
-TEST(icd_presentation, more_swapchains_than_the_process_holds_are_out_of_memory)
-{ PresentationRig rig;
-  const VkSwapchainCreateInfoKHR info = create_info(rig.surface());
-  VkSwapchainKHR made[Presentation::max_swapchains] = {};
-  for (std::uint32_t index = 0u; index < Presentation::max_swapchains; index++) made[index] = rig.create(info);
-  CHECK_EQ(rig.wsi().swapchains(), Presentation::max_swapchains);
-  VkSwapchainKHR past = reinterpret_cast<VkSwapchainKHR>(0x1u);
-  CHECK_EQ(rig.wsi().create_swapchain(rig.device(), &info, &past), VK_ERROR_OUT_OF_HOST_MEMORY);
-  CHECK(past == VK_NULL_HANDLE);
-  rig.wsi().destroy_swapchain(rig.device(), made[0]);
-  CHECK_EQ(rig.wsi().swapchains(), Presentation::max_swapchains - 1u);
-  CHECK(rig.wsi().invariants_hold()); }
+TEST(icd_presentation, swapchains_are_kept_as_far_as_the_host_has_images_and_one_that_needs_memory_leaves_nothing)
+{ { PresentationRig rig;
+    const VkSwapchainCreateInfoKHR info = create_info(rig.surface());
+    constexpr std::uint32_t        many = ScriptedVulkanDevice::max_images / images;
+    VkSwapchainKHR                 made[many] = {};
+    for (std::uint32_t index = 0u; index < many; index++) made[index] = rig.create(info);
+    CHECK_EQ(rig.wsi().swapchains(), many);
+    CHECK(rig.wsi().invariants_hold());
+    rig.wsi().destroy_swapchain(rig.device(), made[0]);
+    CHECK_EQ(rig.wsi().swapchains(), many - 1u);
+    CHECK(rig.wsi().invariants_hold()); }
+
+  bool refused_somewhere = false;
+  for (std::uint32_t failing = 1u; failing <= 10u; failing++) {
+      PresentationRig                rig;
+      const VkSwapchainCreateInfoKHR info = create_info(rig.surface());
+      VkSwapchainKHR                 made = reinterpret_cast<VkSwapchainKHR>(0x1u);
+      rig.rig().platform().fail_allocation_at(failing);
+      const VkResult result = rig.wsi().create_swapchain(rig.device(), &info, &made);
+      rig.rig().platform().fail_allocation_at(0u);
+      CHECK(rig.wsi().invariants_hold());
+      if (result == VK_SUCCESS) {
+          CHECK_EQ(rig.wsi().swapchains(), 1u);
+          continue;
+      }
+      refused_somewhere = true;
+      CHECK(made == VK_NULL_HANDLE);
+      CHECK_EQ(rig.wsi().swapchains(), 0u);
+      CHECK_EQ(rig.host().images(), 0u);
+  }
+  CHECK(refused_somewhere); }
 
 TEST(icd_presentation, the_old_swapchain_a_recreation_names_is_retired)
 { PresentationRig rig;
@@ -237,6 +264,7 @@ TEST(icd_presentation, a_present_of_several_swapchains_answers_the_worst_result)
   present.pImageIndices = indices;
   present.pResults = results;
   CHECK_EQ(rig.wsi().present(rig.host().queue(), &present), VK_ERROR_OUT_OF_DATE_KHR);
+  rig.pump();
   CHECK_EQ(results[0], VK_SUCCESS);
   CHECK_EQ(results[1], VK_SUCCESS);
   CHECK_EQ(results[2], VK_ERROR_OUT_OF_DATE_KHR);
@@ -327,4 +355,5 @@ TEST(icd_presentation, a_destroyed_swapchain_s_handle_answers_nothing)
   present.pSwapchains = chains;
   present.pImageIndices = indices;
   CHECK_EQ(rig.wsi().present(rig.host().queue(), &present), VK_ERROR_OUT_OF_DATE_KHR);
+  rig.pump();
   CHECK_EQ(rig.rig().windows().blits(), 1u); }
