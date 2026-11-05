@@ -1,11 +1,13 @@
 #include "device/abi/av_executor.h"
 #include "executor/d3d/d3d_backend.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/executor_root.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/gl_display.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "harness/executor/executor_log_rig.hpp"
 #include "harness/executor/root_under_test.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/d3d/resource_misc.hpp"
@@ -226,7 +228,9 @@ bool find_gpu(av::LoaderHostApis &apis, std::uint32_t &gpu)
 
 class ExportRig {
 public:
-    ExportRig() : apis_(), gpu_(0u), uuid_{}, domain_(0u), held_(), direct3d_(), session_(), wire_(direct3d_), usable_(false)
+    ExportRig()
+        : rig_(), apis_(rig_.log), gpu_(0u), uuid_{}, domain_(0u), held_(), direct3d_(rig_.log), session_(),
+          wire_(direct3d_, rig_.imports), usable_(false)
     {
         if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
         apis_.open();
@@ -236,7 +240,7 @@ public:
         domain_ = held_->open_domain(uuid_);
         CHECK(domain_ != 0u);
         session_.bind(*apis_.shares(gpu_), domain_, direct3d_);
-        CHECK(direct3d_.initialize(session_, apis_.d3d11_device(gpu_)));
+        CHECK(direct3d_.initialize(session_, rig_.imports, apis_.d3d11_device(gpu_)));
         std::uint32_t hresult = 1u, level = 0u;
         CHECK(av_d3d_CreateDevice11(wire_, 1u, 0u, 0u, &hresult, &level));
         usable_ = true;
@@ -274,6 +278,7 @@ public:
     }
 
 private:
+    av::ExecutorLogRig rig_;
     av::LoaderHostApis apis_;
     std::uint32_t      gpu_;
     std::uint8_t       uuid_[uuid_bytes];
@@ -419,19 +424,17 @@ TEST(d3d_external_export_device, only_a_texture_asked_for_as_rows_is_opened_by_a
     CHECK(av_d3d_CreateResource(rig.wire(), 1u, texture(across, down, misc_shared_rows), surface, 0u, 0u));
     CHECK(av_d3d_CreateResource(rig.wire(), 2u, texture(across, down, misc_shared), surface + 1u, 0u, 0u));
     std::uint32_t handle_kind = 0u;
-    int           fd = -1;
-    CHECK(rig.backend().export_object(AV_SHARED_MEMORY, 1u, handle_kind, fd));
+    av::OwnedFd   rows;
+    CHECK(rig.backend().export_object(AV_SHARED_MEMORY, 1u, handle_kind, rows));
     CHECK_EQ(handle_kind, std::uint32_t{AV_SHARED_HANDLE_DMA_BUF});
-    CHECK(fd >= 0);
-    close(fd);
+    CHECK(rows.held());
     AvExportedImage image = {};
     CHECK(rig.root().export_surface(rig.domain(), surface + 1u, 0u, image));
     close(image.fd);
-    fd = -1;
-    const bool handed = rig.backend().export_object(AV_SHARED_MEMORY, 2u, handle_kind, fd);
+    av::OwnedFd tiled;
+    const bool  handed = rig.backend().export_object(AV_SHARED_MEMORY, 2u, handle_kind, tiled);
     CHECK_EQ(handed, image.modifier == drm_format_mod_linear);
-    if (handed) close(fd);
-    CHECK_EQ(fd >= 0, handed);
+    CHECK_EQ(tiled.held(), handed);
     std::fprintf(stderr, "a shared %ux%u texture not asked for as rows: modifier %016llx\n", across, down,
                  static_cast<unsigned long long>(image.modifier));
 }
