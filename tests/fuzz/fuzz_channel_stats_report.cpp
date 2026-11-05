@@ -27,7 +27,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     if (!latest.invariants_hold() || !latest.received()) __builtin_trap();
     char            text[2048] = {};
     av::StateWriter writer(text, sizeof text);
-    latest.report(writer);
+    latest.report(writer, 0u);
     if (!writer.invariants_hold()) __builtin_trap();
     return 0;
 }
