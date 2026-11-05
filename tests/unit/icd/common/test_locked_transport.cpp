@@ -2,9 +2,11 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/transport/mock_transport.hpp"
+#include "harness/transport/roomed_transport.hpp"
 #include "icd/common/locked_transport.hpp"
 #include "proto/client/client_transport.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
+#include "proto/generated/vulkan/vk_handle_translation.h"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -168,9 +170,9 @@ private:
     pthread_mutex_t mutex_;
 };
 
-class SharedSlotTransport final : public ClientTransport {
+class SharedSlotTransport final : public av::RoomedTransport {
 public:
-    SharedSlotTransport()
+    SharedSlotTransport() : av::RoomedTransport(64u, 64u)
     { pthread_mutex_init(&mutex_, nullptr);
       pthread_cond_init(&changed_, nullptr); }
     ~SharedSlotTransport()
@@ -182,14 +184,14 @@ public:
     TransportResult send_sync(std::uint32_t command_id, WireWriter &, WireReader &reply) override
     { pthread_mutex_lock(&mutex_);
       std::memcpy(slot_, &command_id, sizeof command_id);
-      note(static_cast<char>('0' + command_id));
+      record(static_cast<char>('0' + command_id));
       pthread_cond_broadcast(&changed_);
       pthread_mutex_unlock(&mutex_);
       reply = WireReader(slot_, sizeof slot_);
       return TransportResult::ok; }
     void end_call() override
     { pthread_mutex_lock(&mutex_);
-      note('e');
+      record('e');
       pthread_mutex_unlock(&mutex_); }
     av::WireArena   &decode_arena() override { return arena_; }
     av::ClientBlobArena &blobs() override { return blobs_; }
@@ -210,7 +212,7 @@ public:
     const char *log() const { return log_; }
 
 private:
-    void note(char event)
+    void record(char event)
     { if (length_ + 1u < sizeof log_) log_[length_++] = event; }
 
     pthread_mutex_t     mutex_;
@@ -268,10 +270,11 @@ TEST(locked_transport, a_generated_command_takes_the_lock_once)
   RecordingThreadLock lock(trace, 'S');
   LockedTransport transport(inner, lock);
   ClientTransport &seam = transport;
+  av::vkproto::HandleIdentity identity;
   VkInstanceCreateInfo create = {};
   create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;
-  const VkResult result = av::vkproto::av_vkCreateInstance(seam, &create, nullptr, &instance);
+  const VkResult result = av::vkproto::av_vkCreateInstance(seam, identity, &create, nullptr, &instance);
   CHECK_EQ(result, VK_SUCCESS);
   CHECK_EQ(instance, host_instance);
   CHECK_EQ(inner.last_command(), static_cast<std::uint32_t>(av::vkproto::kCmd_vkCreateInstance));
@@ -285,3 +288,17 @@ TEST(locked_transport, lends_the_inner_transports_arena_and_blobs)
   CHECK(&transport.decode_arena() == &inner.decode_arena());
   CHECK(&transport.blobs() == &inner.blobs());
   CHECK(!lock.held()); }
+
+TEST(locked_transport, makes_blob_room_under_the_lock_and_lends_the_inner_room_and_counters)
+{ MockTransport inner;
+  LockTrace trace;
+  RecordingThreadLock lock(trace, 'S');
+  LockedTransport transport(inner, lock);
+  CHECK(&transport.room() == &inner.room());
+  CHECK(!lock.held());
+  CHECK(!transport.make_room_for_blobs(1u << 30u));
+  CHECK(std::strcmp(trace.text(), "Ss") == 0);
+  transport.note(av::ChannelCounter::split_pieces, 3u);
+  CHECK_EQ(inner.noted(av::ChannelCounter::split_pieces), 3u);
+  CHECK(!lock.held());
+  CHECK(transport.invariants_hold()); }

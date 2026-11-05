@@ -17,7 +17,7 @@
 namespace av::icd {
 struct SharedHandlesProbe {
     static SharedHandleSlot &slot_for(SharedHandles &handles, std::uint64_t object_id)
-    { return *handles.row_for(object_id); }
+    { return *handles.slots_.find(*handles.handles_of_.find(object_id)); }
 };
 
 }
