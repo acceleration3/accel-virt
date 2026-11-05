@@ -78,34 +78,48 @@ TEST(shared_object_call_open, answers_the_handle_the_device_made_and_carries_no_
   const Answer     opened(SharedObjectAnswer::done, 0u, wire_handle);
   transport.set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
   std::uint64_t    made = 0u;
-  CHECK_STATUS(call.open(object_id, SharedObjectKind::memory, memory_bytes, made), Status::ok);
+  CHECK_STATUS(call.open(object_id, SharedObjectKind::memory, memory_bytes, 0u, made), Status::ok);
   CHECK_EQ(made, wire_handle);
   CHECK_EQ(transport.last_command(), CommandHeader::open_shared_object_id);
   CHECK_EQ(u64_at(transport.last_payload(), 16u), 0u);
   CHECK_EQ(u64_at(transport.last_payload(), 24u), memory_bytes); }
 
-TEST(shared_object_call_release, names_the_object_and_never_a_handle)
+TEST(shared_object_call_release, names_the_object_and_the_open_it_lets_go_of)
 { MockTransport    transport;
   SharedObjectCall call(transport);
   const Answer     done(SharedObjectAnswer::done, 0u, 0u);
   transport.set_reply(done.bytes(), SharedObjectAnswer::encoded_size);
-  CHECK_STATUS(call.release(object_id, SharedObjectKind::monitored_fence, 0u), Status::ok);
+  CHECK_STATUS(call.release(object_id, SharedObjectKind::monitored_fence, 0u, 0u), Status::ok);
   CHECK_EQ(transport.last_command(), CommandHeader::release_shared_object_id);
   CHECK_EQ(u32_at(transport.last_payload(), 8u), std::uint32_t{SharedObjectKind::monitored_fence});
   CHECK_EQ(u64_at(transport.last_payload(), 16u), 0u);
   CHECK_EQ(u64_at(transport.last_payload(), 24u), 0u); }
+
+TEST(shared_object_call, an_open_and_a_release_name_what_they_are_made_into)
+{ MockTransport    transport;
+  SharedObjectCall call(transport);
+  const Answer     opened(SharedObjectAnswer::done, 0u, wire_handle);
+  transport.set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
+  std::uint64_t    made = 0u;
+  CHECK_STATUS(call.open(object_id, SharedObjectKind::memory, memory_bytes, 0x55u, made), Status::ok);
+  CHECK_EQ(u64_at(transport.last_payload(), 16u), 0x55u);
+  const Answer done(SharedObjectAnswer::done, 0u, 0u);
+  transport.set_reply(done.bytes(), SharedObjectAnswer::encoded_size);
+  CHECK_STATUS(call.release(object_id, SharedObjectKind::memory, memory_bytes, wire_handle), Status::ok);
+  CHECK_EQ(transport.last_command(), CommandHeader::release_shared_object_id);
+  CHECK_EQ(u64_at(transport.last_payload(), 16u), wire_handle); }
 
 TEST(shared_object_call, a_body_the_wire_refuses_is_not_sent)
 { MockTransport    transport;
   SharedObjectCall call(transport);
   std::uint64_t    made = 9u;
   CHECK_STATUS(call.share(0u, SharedObjectKind::memory, memory_bytes, wire_handle), Status::invalid_parameter);
-  CHECK_STATUS(call.open(object_id, 0u, memory_bytes, made), Status::invalid_parameter);
-  CHECK_STATUS(call.open(object_id, SharedObjectKind::native_fence + 1u, 0u, made), Status::invalid_parameter);
+  CHECK_STATUS(call.open(object_id, 0u, memory_bytes, 0u, made), Status::invalid_parameter);
+  CHECK_STATUS(call.open(object_id, SharedObjectKind::native_fence + 1u, 0u, 0u, made), Status::invalid_parameter);
   CHECK_STATUS(call.share(object_id, SharedObjectKind::memory, 0u, wire_handle), Status::invalid_parameter);
-  CHECK_STATUS(call.open(object_id, SharedObjectKind::native_fence, memory_bytes, made),
+  CHECK_STATUS(call.open(object_id, SharedObjectKind::native_fence, memory_bytes, 0u, made),
                Status::invalid_parameter);
-  CHECK_STATUS(call.open(object_id, SharedObjectKind::memory, 4097u, made), Status::invalid_parameter);
+  CHECK_STATUS(call.open(object_id, SharedObjectKind::memory, 4097u, 0u, made), Status::invalid_parameter);
   CHECK_EQ(made, 0u);
   CHECK_EQ(transport.sends(), 0u); }
 
@@ -120,14 +134,14 @@ TEST(shared_object_call, a_refusal_is_the_devices_status_and_no_handle)
       const Answer     refused(refusal, 0u, 0u);
       transport.set_reply(refused.bytes(), SharedObjectAnswer::encoded_size);
       std::uint64_t made = 9u;
-      CHECK_STATUS(call.open(object_id, SharedObjectKind::memory, memory_bytes, made),
+      CHECK_STATUS(call.open(object_id, SharedObjectKind::memory, memory_bytes, 0u, made),
                    Status::invalid_parameter);
       CHECK_EQ(made, 0u);
       CHECK_EQ(call.device_status(), refusal);
       CHECK_STATUS(call.share(object_id, SharedObjectKind::memory, memory_bytes, wire_handle),
                    Status::invalid_parameter);
       CHECK_EQ(call.device_status(), refusal);
-      CHECK_STATUS(call.release(object_id, SharedObjectKind::memory, memory_bytes), Status::ok); } }
+      CHECK_STATUS(call.release(object_id, SharedObjectKind::memory, memory_bytes, 0u), Status::ok); } }
 
 TEST(shared_object_call, hostile_answers_make_nothing)
 { struct Case { const char *what; std::uint32_t status; std::uint32_t reserved; std::uint64_t handle;
@@ -153,7 +167,7 @@ TEST(shared_object_call, hostile_answers_make_nothing)
       const Answer     answer(one.status, one.reserved, one.handle);
       transport.set_reply(answer.bytes(), one.length);
       std::uint64_t made = 9u;
-      if (call.open(object_id, SharedObjectKind::memory, memory_bytes, made) != one.expected)
+      if (call.open(object_id, SharedObjectKind::memory, memory_bytes, 0u, made) != one.expected)
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, one.what);
       CHECK_EQ(made, 0u); } }
 
@@ -163,7 +177,7 @@ TEST(shared_object_call, a_share_or_a_release_answered_with_a_handle_is_malforme
   const Answer     handed(SharedObjectAnswer::done, 0u, wire_handle);
   transport.set_reply(handed.bytes(), SharedObjectAnswer::encoded_size);
   CHECK_STATUS(call.share(object_id, SharedObjectKind::memory, memory_bytes, wire_handle), Status::malformed);
-  CHECK_STATUS(call.release(object_id, SharedObjectKind::memory, memory_bytes), Status::malformed); }
+  CHECK_STATUS(call.release(object_id, SharedObjectKind::memory, memory_bytes, 0u), Status::malformed); }
 
 TEST(shared_object_call, a_call_that_fails_makes_nothing)
 { MockTransport    transport;
@@ -172,10 +186,10 @@ TEST(shared_object_call, a_call_that_fails_makes_nothing)
   transport.set_reply(opened.bytes(), SharedObjectAnswer::encoded_size);
   transport.fail_next();
   std::uint64_t made = 9u;
-  CHECK_STATUS(call.open(object_id, SharedObjectKind::memory, memory_bytes, made), Status::invalid_state);
+  CHECK_STATUS(call.open(object_id, SharedObjectKind::memory, memory_bytes, 0u, made), Status::invalid_state);
   CHECK_EQ(made, 0u);
   transport.fail_next();
   CHECK_STATUS(call.share(object_id, SharedObjectKind::memory, memory_bytes, wire_handle),
                Status::invalid_state);
   transport.fail_next();
-  CHECK_STATUS(call.release(object_id, SharedObjectKind::memory, memory_bytes), Status::invalid_state); }
+  CHECK_STATUS(call.release(object_id, SharedObjectKind::memory, memory_bytes, 0u), Status::invalid_state); }

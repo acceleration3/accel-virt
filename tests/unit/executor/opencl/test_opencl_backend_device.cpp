@@ -14,6 +14,8 @@
 #include "executor/shim/opencl_device.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/submission/blob_role.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/platform/mock_platform.hpp"
 
@@ -56,6 +58,11 @@ extern "C" const char *__asan_default_options(void)
 using av::OpenClBackend;
 
 namespace {
+av::BlobRole arena_at(std::uint32_t slot)
+{
+    return av::BlobRole(av::BlobRole::Kind::arena_segment, std::uint64_t{slot} << av::GuestBytes::slot_shift);
+}
+
 std::uint64_t detail = 0u;
 
 constexpr std::uint64_t page = 4096u;
@@ -500,7 +507,7 @@ TEST(opencl_backend_device, a_read_has_written_its_bytes_by_the_time_it_returns_
   alignas(4096) static std::uint8_t lent[bytes];
   av::SourceMemory memory(1u, 1u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(1u, -1, lent, sizeof lent));
   std::uint64_t arena = 0u;
-  CHECK(backend.adopt(memory, arena));
+  CHECK(backend.adopt(memory, arena_at(0u), arena));
   CHECK_EQ(arena, reinterpret_cast<std::uintptr_t>(lent));
   cl_int                 error = CL_SUCCESS;
   const cl_command_queue queue = ::clCreateCommandQueueWithProperties(
@@ -579,7 +586,7 @@ TEST(opencl_backend_device, a_rectangle_the_host_refused_into_the_arena_is_bounc
   alignas(4096) static std::uint8_t lent[64u * 1024u];
   av::SourceMemory memory(1u, 1u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(1u, -1, lent, sizeof lent));
   std::uint64_t arena = 0u;
-  CHECK(backend.adopt(memory, arena));
+  CHECK(backend.adopt(memory, arena_at(0u), arena));
   CHECK_EQ(arena, reinterpret_cast<std::uintptr_t>(lent));
   cl_int                 error = CL_SUCCESS;
   const cl_command_queue queue = ::clCreateCommandQueueWithProperties(

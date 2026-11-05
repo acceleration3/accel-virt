@@ -13,6 +13,8 @@
 #include "executor/shim/opencl_device.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/submission/blob_role.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/resources/cl_blob_backing.hpp"
@@ -78,6 +80,11 @@ av::SourceMemory &memory_over(std::uint8_t *base, std::uint64_t bytes)
     static av::SourceMemory other(1u, 2u, 0u, AV_MEMORY_WRITE_BACK,
                                   av::ExportedMemory(2u, -1, second_arena_region, sizeof second_arena_region));
     return base == arena_region && bytes == sizeof arena_region ? whole : other;
+}
+
+av::BlobRole arena_at(std::uint32_t slot)
+{
+    return av::BlobRole(av::BlobRole::Kind::arena_segment, std::uint64_t{slot} << av::GuestBytes::slot_shift);
 }
 
 std::uint64_t wire_of(const void *object)
@@ -147,40 +154,53 @@ TEST(opencl_backend, a_truncated_command_is_refused_at_every_length)
   CHECK_EQ(backend.ran(), 1u);
   backend.shut_down(); }
 
-TEST(opencl_backend, adopts_one_host_pointer_as_the_memory_a_buffer_can_be_made_over)
+TEST(opencl_backend, adopts_arena_segments_at_their_slots_and_unbinds_them_one_by_one)
 { Lines lines;
   OpenClBackend backend(lines.log);
   av::SourceMemory &whole = memory_over(arena_region, sizeof arena_region);
   av::SourceMemory &other = memory_over(second_arena_region, sizeof second_arena_region);
   std::uint64_t handle = 7u;
-  CHECK(backend.adopt(whole, handle));
+  CHECK(backend.adopt(whole, arena_at(0u), handle));
   CHECK_EQ(handle, wire_of(arena_region));
 
   std::uint64_t second = 0u;
-  CHECK(backend.adopt(other, second));
-  CHECK_EQ(second, wire_of(&other));
-  backend.abandon(other, second);
+  CHECK(!backend.adopt(other, arena_at(0u), second));
+  CHECK_EQ(second, 0u);
+  CHECK(backend.adopt(other, arena_at(1u), second));
+  CHECK_EQ(second, wire_of(second_arena_region));
+  backend.unbind_arena(other);
 
-  backend.abandon(whole, handle);
+  backend.unbind_arena(whole);
   handle = 0u;
-  CHECK(backend.adopt(other, handle));
+  CHECK(backend.adopt(other, arena_at(0u), handle));
   CHECK_EQ(handle, wire_of(second_arena_region));
-  backend.abandon(other, handle);
+  backend.unbind_arena(other);
   backend.shut_down(); }
 
-TEST(opencl_backend, memory_with_no_mapping_is_not_memory_a_buffer_can_be_made_over)
+TEST(opencl_backend, a_plain_blob_is_named_by_its_memory_and_needs_a_mapping)
+{ Lines lines;
+  OpenClBackend backend(lines.log);
+  av::SourceMemory &whole = memory_over(arena_region, sizeof arena_region);
+  std::uint64_t handle = 0u;
+  CHECK(backend.adopt(whole, av::BlobRole(), handle));
+  CHECK_EQ(handle, wire_of(&whole));
+  av::SourceMemory unmapped(1u, 3u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(3u, -1, nullptr, 4096u));
+  CHECK(!backend.adopt(unmapped, av::BlobRole(), handle));
+  backend.shut_down(); }
+
+TEST(opencl_backend, memory_with_no_mapping_is_not_an_arena_segment)
 { Lines lines;
   OpenClBackend backend(lines.log);
   av::SourceMemory unmapped(1u, 3u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(3u, -1, nullptr, 4096u));
   std::uint64_t handle = 5u;
-  CHECK(!backend.adopt(unmapped, handle));
+  CHECK(!backend.adopt(unmapped, arena_at(0u), handle));
   CHECK_EQ(handle, 0u);
   av::SourceMemory &whole = memory_over(arena_region, sizeof arena_region);
-  CHECK(backend.adopt(whole, handle));
+  CHECK(backend.adopt(whole, arena_at(0u), handle));
   std::uint64_t second = 5u;
-  CHECK(!backend.adopt(unmapped, second));
-  backend.abandon(unmapped, second);
-  backend.abandon(whole, handle);
+  CHECK(!backend.adopt(unmapped, arena_at(1u), second));
+  CHECK_EQ(second, 0u);
+  backend.unbind_arena(whole);
   backend.shut_down(); }
 
 namespace {
@@ -762,7 +782,7 @@ TEST(opencl_backend, a_buffer_over_an_offset_outside_the_arena_is_refused)
   OpenClBackend backend(lines.log);
   std::uint64_t arena = 0u;
   av::SourceMemory &blob = memory_over(arena_region, sizeof arena_region);
-  CHECK(backend.adopt(blob, arena));
+  CHECK(backend.adopt(blob, arena_at(0u), arena));
 
   ClCommand beyond(av::clproto::kCmd_clCreateBufferWithProperties);
   buffer_with_properties_frame(beyond, true, sizeof arena_region, 16u);
@@ -1042,7 +1062,7 @@ TEST(opencl_backend, a_buffer_over_a_bad_offset_with_nowhere_to_report_it_is_sti
   OpenClBackend backend(lines.log);
   std::uint64_t arena = 0u;
   av::SourceMemory &blob = memory_over(arena_region, sizeof arena_region);
-  CHECK(backend.adopt(blob, arena));
+  CHECK(backend.adopt(blob, arena_at(0u), arena));
   ClCommand beyond(av::clproto::kCmd_clCreateBufferWithProperties);
   buffer_with_properties_frame(beyond, true, sizeof arena_region, 16u, false);
   CHECK(beyond.decodes(backend));

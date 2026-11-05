@@ -77,7 +77,7 @@ public:
         std::uint8_t  payload[64] = {};
         std::uint64_t begin = 0u;
         std::uint64_t end = 0u;
-        return ring_.write_batch(payload, sizeof payload, fence, 0u, begin, end);
+        return ring_.write_batch(payload, sizeof payload, nullptr, 0u, fence, 0u, begin, end);
     }
 
     void consumer_awake(bool awake) { ring_memory_[awake_byte] = awake ? 1u : 0u; }

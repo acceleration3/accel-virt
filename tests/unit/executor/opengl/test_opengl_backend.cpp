@@ -12,6 +12,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "proto/submission/blob_role.hpp"
 #include "proto/wire/guest_bytes.hpp"
 #include "proto/generated/opengl/gl_dispatch_server.h"
 #include "proto/generated/opengl/gl_protocol_ids.h"
@@ -72,6 +73,11 @@ struct Lines {
     av::ExecutorLog  executor;
     av::DriverLog   &log;
 };
+
+av::BlobRole arena_at(std::uint32_t slot)
+{
+    return av::BlobRole(av::BlobRole::Kind::arena_segment, std::uint64_t{slot} << av::GuestBytes::slot_shift);
+}
 
 std::uint64_t wire_of(const void *object)
 {
@@ -151,14 +157,16 @@ TEST(opengl_backend, guest_bytes_answers_inside_the_region_and_nowhere_else)
   const av::GuestBytes &guest = OpenGlBackendProbe::guest(backend);
   CHECK(guest.at(0u, 1u) == nullptr);
   std::uint64_t handle = 7u;
-  CHECK(backend.adopt(memory_over(region, sizeof region), handle));
+  av::SourceMemory &memory = memory_over(region, sizeof region);
+  CHECK(backend.adopt(memory, arena_at(0u), handle));
   CHECK_EQ(handle, wire_of(region));
   CHECK(guest.at(0u, sizeof region) == region);
   CHECK(guest.at(16u, 32u) == region + 16u);
   CHECK(guest.at(0u, sizeof region + 1u) == nullptr);
   CHECK(guest.at(~std::uint64_t{0}, 1u) == nullptr);
-  backend.abandon(memory_over(region, sizeof region), handle);
-  CHECK(guest.at(0u, 1u) == nullptr); }
+  backend.unbind_arena(memory);
+  CHECK(guest.at(0u, 1u) == nullptr);
+  CHECK(guest.invariants_hold()); }
 
 TEST(opengl_backend, a_gpu_with_no_display_opens_no_context)
 { Lines backend_lines;
@@ -201,33 +209,37 @@ TEST(opengl_backend, without_a_context_nothing_runs)
   backend.shut_down();
   CHECK_EQ(backend.resolved(), 0u); }
 
-TEST(opengl_backend, adopts_one_host_pointer_as_its_region_and_lends_no_second_without_a_context)
+TEST(opengl_backend, adopts_arena_segments_at_their_slots_and_lends_a_plain_blob_only_with_a_context)
 { Lines backend_lines;
   OpenGlBackend backend(backend_lines.log);
   const av::GuestBytes &guest = OpenGlBackendProbe::guest(backend);
   av::SourceMemory &whole = memory_over(region, sizeof region);
   av::SourceMemory &other = memory_over(second_region, sizeof second_region);
   std::uint64_t handle = 7u;
-  CHECK(backend.adopt(whole, handle));
+  CHECK(backend.adopt(whole, arena_at(0u), handle));
   CHECK_EQ(handle, wire_of(region));
   CHECK(guest.at(4096u, 4096u) == region + 4096u);
   CHECK(guest.at(4096u, 4097u) == nullptr);
   std::uint64_t second = 7u;
-  CHECK(!backend.adopt(other, second));
+  CHECK(!backend.adopt(other, arena_at(0u), second));
   CHECK_EQ(second, 0u);
-  backend.abandon(other, second);
+  CHECK(!backend.adopt(other, av::BlobRole(), second));
+  CHECK_EQ(second, 0u);
   CHECK(guest.at(0u, 1u) == region);
-  backend.abandon(whole, handle);
+  CHECK(backend.adopt(other, arena_at(1u), second));
+  CHECK_EQ(second, wire_of(second_region));
+  CHECK(guest.at(av::GuestBytes::slot_bytes, 4096u) == second_region);
+  CHECK(guest.at(0u, 1u) == region);
+  backend.unbind_arena(whole);
   CHECK(guest.at(0u, 1u) == nullptr);
-  CHECK(backend.adopt(other, handle));
-  CHECK_EQ(handle, wire_of(second_region));
-  CHECK(guest.at(0u, 4096u) == second_region);
-  backend.abandon(other, handle);
-  CHECK(guest.at(0u, 1u) == nullptr);
+  CHECK(guest.at(av::GuestBytes::slot_bytes, 1u) == second_region);
+  backend.unbind_arena(other);
+  CHECK(guest.at(av::GuestBytes::slot_bytes, 1u) == nullptr);
+  CHECK(guest.invariants_hold());
   backend.shut_down();
   av::SourceMemory unmapped(1u, 3u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(3u, -1, nullptr, 4096u));
   handle = 7u;
-  CHECK(!backend.adopt(unmapped, handle));
+  CHECK(!backend.adopt(unmapped, arena_at(0u), handle));
   CHECK_EQ(handle, 0u);
   CHECK(guest.at(0u, 1u) == nullptr); }
 

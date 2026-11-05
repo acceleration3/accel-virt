@@ -5,6 +5,8 @@
 #include "executor/host_memory_source.hpp"
 #include "executor/executor_log.hpp"
 #include "executor/source_memory.hpp"
+#include "proto/submission/blob_role.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "proto/resources/host_memory_request.hpp"
 #include "executor/opengl/opengl_backend.hpp"
 #include "executor/shim/gl_display.hpp"
@@ -75,6 +77,11 @@ using av::OpenGlBackend;
 using av::OpenGlBackendProbe;
 
 namespace {
+av::BlobRole arena_at(std::uint32_t slot)
+{
+    return av::BlobRole(av::BlobRole::Kind::arena_segment, std::uint64_t{slot} << av::GuestBytes::slot_shift);
+}
+
 std::uint64_t detail = 0u;
 
 constexpr unsigned gl_major_version = 0x821B;
@@ -395,11 +402,11 @@ TEST(opengl_backend_device, a_pixel_read_lands_in_the_adopted_region)
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
       av::SourceMemory memory(1u, 1u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(1u, -1, region, sizeof region));
       std::uint64_t handle = 0u;
-      CHECK(backend.adopt(memory, handle));
+      CHECK(backend.adopt(memory, arena_at(0u), handle));
       CHECK_EQ(handle, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(region)));
       CHECK(!OpenGlBackendProbe::packs(backend));
       std::uint64_t second = 7u;
-      CHECK(!backend.adopt(memory, second));
+      CHECK(!backend.adopt(memory, arena_at(0u), second));
       CHECK_EQ(second, 0u);
       {
           const av::glproto::RealGl &gl = OpenGlBackendProbe::gl(backend);
@@ -437,7 +444,7 @@ TEST(opengl_backend_device, a_pixel_read_lands_in_the_adopted_region)
       CHECK_EQ(region[page + pixels - 1u], 255u);
       CHECK_EQ(region[0], 0u);
       CHECK_EQ(region[page + pixels], 0u);
-      backend.abandon(memory, handle);
+      backend.unbind_arena(memory);
       backend.shut_down();
   } }
 
@@ -454,7 +461,7 @@ TEST(opengl_backend_device, a_pixel_read_into_a_source_region_is_written_by_the_
       OpenGlBackend backend(displays.log());
       CHECK(backend.initialize(displays.at(index), nullptr, nullptr));
       std::uint64_t handle = 0u;
-      CHECK(backend.adopt(allocation.memory(), handle));
+      CHECK(backend.adopt(allocation.memory(), arena_at(0u), handle));
       {
           const av::glproto::RealGl &gl = OpenGlBackendProbe::gl(backend);
           unsigned texture = 0u;
@@ -490,7 +497,7 @@ TEST(opengl_backend_device, a_pixel_read_into_a_source_region_is_written_by_the_
       CHECK_EQ(guest[page + pixels - 1u], 255u);
       CHECK_EQ(guest[0], 0u);
       CHECK_EQ(guest[page + pixels], 0u);
-      backend.abandon(allocation.memory(), handle);
+      backend.unbind_arena(allocation.memory());
       backend.shut_down();
   } }
 

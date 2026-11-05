@@ -144,7 +144,7 @@ TEST(fullstack_shared_objects, a_second_context_opens_what_the_first_published_a
 
   SharedObjectCall open(opener.transport());
   std::uint64_t    opened_handle = 0u;
-  CHECK_STATUS(open.open(object_id, memory_kind, object_bytes, opened_handle), Status::ok);
+  CHECK_STATUS(open.open(object_id, memory_kind, object_bytes, 0u, opened_handle), Status::ok);
   CHECK(opened_handle != 0u);
   CHECK(opened_handle != published_handle);
   CHECK_EQ(rig.device().executor().shared_objects(), 1u);
@@ -155,7 +155,7 @@ TEST(fullstack_shared_objects, a_second_context_opens_what_the_first_published_a
   CHECK_EQ(rig.device().device().contexts(), 1u);
   CHECK_EQ(rig.device().executor().live_opens(), 1u);
 
-  CHECK_STATUS(open.release(object_id, memory_kind, object_bytes), Status::ok);
+  CHECK_STATUS(open.release(object_id, memory_kind, object_bytes, 0u), Status::ok);
   CHECK_EQ(rig.device().executor().live_opens(), 0u);
   CHECK_EQ(rig.device().executor().closed_objects(), 1u);
 
@@ -187,16 +187,16 @@ TEST(fullstack_shared_objects, ids_a_context_never_published_are_refused_and_not
 
   SharedObjectCall attack(hostile.transport());
   std::uint64_t    got = 9u;
-  CHECK_STATUS(attack.open(object_id + 0x1000u, memory_kind, object_bytes, got),
+  CHECK_STATUS(attack.open(object_id + 0x1000u, memory_kind, object_bytes, 0u, got),
                Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 2u);
   CHECK_EQ(got, 0u);
-  CHECK_STATUS(attack.open(object_id, SharedObjectKind::monitored_fence, 0u, got),
+  CHECK_STATUS(attack.open(object_id, SharedObjectKind::monitored_fence, 0u, 0u, got),
                Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 3u);
-  CHECK_STATUS(attack.open(object_id, memory_kind, object_bytes * 2u, got), Status::invalid_parameter);
+  CHECK_STATUS(attack.open(object_id, memory_kind, object_bytes * 2u, 0u, got), Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 3u);
-  CHECK_STATUS(attack.open(object_id, 4u, object_bytes, got), Status::invalid_parameter);
+  CHECK_STATUS(attack.open(object_id, 4u, object_bytes, 0u, got), Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 0u);
   CHECK_EQ(got, 0u);
   CHECK_STATUS(attack.share(object_id, memory_kind, object_bytes * 2u, published_handle),
@@ -208,17 +208,17 @@ TEST(fullstack_shared_objects, ids_a_context_never_published_are_refused_and_not
   CHECK_EQ(rig.device().device().contexts(), 2u);
   CHECK_EQ(rig.device().executor().opened_objects(), 0u);
 
-  CHECK_STATUS(attack.open(object_id, memory_kind, object_bytes, got), Status::ok);
+  CHECK_STATUS(attack.open(object_id, memory_kind, object_bytes, 0u, got), Status::ok);
   CHECK(got != 0u);
   CHECK_EQ(rig.device().executor().live_opens(), 1u);
   std::uint64_t again = 9u;
-  CHECK_STATUS(attack.open(object_id, memory_kind, object_bytes, again), Status::invalid_parameter);
+  CHECK_STATUS(attack.open(object_id, memory_kind, object_bytes, 0u, again), Status::invalid_parameter);
   CHECK_EQ(attack.device_status(), 6u);
   CHECK_EQ(again, 0u);
   CHECK_EQ(rig.device().executor().live_opens(), 1u);
   CHECK_EQ(rig.device().executor().opened_objects(), 1u);
 
-  CHECK_STATUS(attack.release(object_id, memory_kind, object_bytes), Status::ok);
+  CHECK_STATUS(attack.release(object_id, memory_kind, object_bytes, 0u), Status::ok);
   CHECK_EQ(rig.device().executor().live_opens(), 0u);
   publisher.close_context();
   CHECK_STATUS(kmt.destroy_shared_allocation(publisher.device(), carrier), Status::ok);

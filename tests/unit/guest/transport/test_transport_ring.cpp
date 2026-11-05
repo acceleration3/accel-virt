@@ -56,7 +56,7 @@ TEST(transport_ring, publish_tail_is_what_a_process_that_rings_its_own_doorbell_
   std::uint8_t payload[64] = {};
   std::uint64_t begin = 0u;
   std::uint64_t end = 0u;
-  CHECK_STATUS(ring.write_batch(payload, sizeof payload, 1u, 0u, begin, end), Status::ok);
+  CHECK_STATUS(ring.write_batch(payload, sizeof payload, nullptr, 0u, 1u, 0u, begin, end), Status::ok);
   RingHeader header;
   CHECK_STATUS(header.decode(memory.bytes, ring_bytes), Status::ok);
   CHECK_EQ(header.tail(), 0u);
@@ -75,7 +75,7 @@ TEST(transport_ring, is_unbound_until_initialized)
   CHECK(ring.invariants_hold());
   std::uint64_t begin = 0u, end = 0u;
   const std::uint8_t payload[8] = {};
-  CHECK_STATUS(ring.write_batch(payload, sizeof payload, 1u, 0u, begin, end), Status::invalid_state); }
+  CHECK_STATUS(ring.write_batch(payload, sizeof payload, nullptr, 0u, 1u, 0u, begin, end), Status::invalid_state); }
 
 TEST(transport_ring, initialize_writes_a_fresh_header)
 { Ring memory;
@@ -96,7 +96,7 @@ TEST(transport_ring, writes_a_batch_and_leaves_publishing_the_tail_to_the_minipo
   CHECK_STATUS(ring.initialize(memory.bytes, order), Status::ok);
   const std::uint8_t payload[] = {0xDEu, 0xADu, 0xBEu, 0xEFu, 0x01u, 0x02u, 0x03u, 0x04u};
   std::uint64_t begin = 9u, end = 9u;
-  CHECK_STATUS(ring.write_batch(payload, sizeof payload, 7u, 0x123456789ull, begin, end), Status::ok);
+  CHECK_STATUS(ring.write_batch(payload, sizeof payload, nullptr, 0u, 7u, 0x123456789ull, begin, end), Status::ok);
   CHECK_EQ(begin, 0u);
   CHECK_EQ(end, 40u);
   CHECK_EQ(ring.tail(), 40u);
@@ -111,16 +111,34 @@ TEST(transport_ring, writes_a_batch_and_leaves_publishing_the_tail_to_the_minipo
   memory.read_wrapped(BatchHeader::encoded_size, seen, sizeof seen);
   for (std::size_t i = 0u; i < sizeof seen; i++) CHECK_EQ(seen[i], payload[i]); }
 
+TEST(transport_ring, a_trailer_follows_the_payload_inside_one_batch)
+{ Ring memory;
+  TransportRing ring;
+  CHECK_STATUS(ring.initialize(memory.bytes, order), Status::ok);
+  const std::uint8_t payload[] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
+  const std::uint8_t trailer[] = {0xA1u, 0xA2u, 0xA3u, 0xA4u};
+  std::uint64_t begin = 0u, end = 0u;
+  CHECK_STATUS(ring.write_batch(payload, sizeof payload, trailer, sizeof trailer, 3u, 0u, begin, end), Status::ok);
+  const BatchHeader batch = memory.batch_at(0u);
+  CHECK_EQ(batch.length(), sizeof payload + sizeof trailer);
+  CHECK_EQ(batch.fence_id(), 3u);
+  std::uint8_t seen[12] = {};
+  memory.read_wrapped(BatchHeader::encoded_size, seen, sizeof seen);
+  for (std::size_t i = 0u; i < sizeof payload; i++) CHECK_EQ(seen[i], payload[i]);
+  for (std::size_t i = 0u; i < sizeof trailer; i++) CHECK_EQ(seen[sizeof payload + i], trailer[i]);
+  CHECK_STATUS(ring.write_batch(payload, sizeof payload, nullptr, 4u, 4u, 0u, begin, end), Status::invalid_parameter);
+  CHECK(ring.invariants_hold()); }
+
 TEST(transport_ring, batches_follow_one_another)
 { Ring memory;
   TransportRing ring;
   CHECK_STATUS(ring.initialize(memory.bytes, order), Status::ok);
   const std::uint8_t payload[16] = {};
   std::uint64_t begin = 0u, end = 0u;
-  CHECK_STATUS(ring.write_batch(payload, sizeof payload, 1u, 0u, begin, end), Status::ok);
+  CHECK_STATUS(ring.write_batch(payload, sizeof payload, nullptr, 0u, 1u, 0u, begin, end), Status::ok);
   CHECK_EQ(begin, 0u);
   CHECK_EQ(end, 48u);
-  CHECK_STATUS(ring.write_batch(payload, sizeof payload, 2u, 0u, begin, end), Status::ok);
+  CHECK_STATUS(ring.write_batch(payload, sizeof payload, nullptr, 0u, 2u, 0u, begin, end), Status::ok);
   CHECK_EQ(begin, 48u);
   CHECK_EQ(end, 96u);
   CHECK_EQ(memory.batch_at(48u).fence_id(), 2u); }
@@ -131,11 +149,11 @@ TEST(transport_ring, a_batch_wraps_the_data_area)
   CHECK_STATUS(ring.initialize(memory.bytes, order), Status::ok);
   std::uint8_t big[4056] = {};
   std::uint64_t begin = 0u, end = 0u;
-  CHECK_STATUS(ring.write_batch(big, sizeof big, 1u, 0u, begin, end), Status::ok);
+  CHECK_STATUS(ring.write_batch(big, sizeof big, nullptr, 0u, 1u, 0u, begin, end), Status::ok);
   CHECK_EQ(end, 4088u);
   memory.consume_to(4088u);
   const std::uint8_t payload[] = {0xAAu, 0xBBu, 0xCCu, 0xDDu, 0xEEu, 0xFFu, 0x11u, 0x22u};
-  CHECK_STATUS(ring.write_batch(payload, sizeof payload, 2u, 0u, begin, end), Status::ok);
+  CHECK_STATUS(ring.write_batch(payload, sizeof payload, nullptr, 0u, 2u, 0u, begin, end), Status::ok);
   CHECK_EQ(begin, 4088u);
   CHECK_EQ(end, 4088u + 40u);
   const BatchHeader wrapped = memory.batch_at(4088u);
@@ -151,11 +169,11 @@ TEST(transport_ring, refuses_a_batch_with_no_room_until_the_device_consumes)
   CHECK_STATUS(ring.initialize(memory.bytes, order), Status::ok);
   std::uint8_t big[4056] = {};
   std::uint64_t begin = 0u, end = 0u;
-  CHECK_STATUS(ring.write_batch(big, sizeof big, 1u, 0u, begin, end), Status::ok);
+  CHECK_STATUS(ring.write_batch(big, sizeof big, nullptr, 0u, 1u, 0u, begin, end), Status::ok);
   const std::uint8_t small[8] = {};
-  CHECK_STATUS(ring.write_batch(small, sizeof small, 2u, 0u, begin, end), Status::no_space);
+  CHECK_STATUS(ring.write_batch(small, sizeof small, nullptr, 0u, 2u, 0u, begin, end), Status::no_space);
   memory.consume_to(4000u);
-  CHECK_STATUS(ring.write_batch(small, sizeof small, 2u, 0u, begin, end), Status::ok); }
+  CHECK_STATUS(ring.write_batch(small, sizeof small, nullptr, 0u, 2u, 0u, begin, end), Status::ok); }
 
 TEST(transport_ring, refuses_fence_zero_a_null_payload_and_a_batch_too_large)
 { Ring memory;
@@ -163,10 +181,10 @@ TEST(transport_ring, refuses_fence_zero_a_null_payload_and_a_batch_too_large)
   CHECK_STATUS(ring.initialize(memory.bytes, order), Status::ok);
   std::uint64_t begin = 0u, end = 0u;
   const std::uint8_t payload[8] = {};
-  CHECK_STATUS(ring.write_batch(payload, sizeof payload, 0u, 0u, begin, end), Status::invalid_parameter);
-  CHECK_STATUS(ring.write_batch(nullptr, 8u, 1u, 0u, begin, end), Status::invalid_parameter);
+  CHECK_STATUS(ring.write_batch(payload, sizeof payload, nullptr, 0u, 0u, 0u, begin, end), Status::invalid_parameter);
+  CHECK_STATUS(ring.write_batch(nullptr, 8u, nullptr, 0u, 1u, 0u, begin, end), Status::invalid_parameter);
   std::uint8_t huge[data_bytes] = {};
-  CHECK_STATUS(ring.write_batch(huge, sizeof huge, 1u, 0u, begin, end), Status::invalid_parameter);
+  CHECK_STATUS(ring.write_batch(huge, sizeof huge, nullptr, 0u, 1u, 0u, begin, end), Status::invalid_parameter);
   CHECK(ring.invariants_hold()); }
 
 TEST(transport_ring, refuses_to_initialize_bad_arguments)
