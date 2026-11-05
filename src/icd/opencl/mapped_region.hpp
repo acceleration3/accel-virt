@@ -11,6 +11,8 @@
 
 namespace av::clicd {
 
+struct MappedRegionProbe;
+
 class MappedRegion : public icd::StagedMapping {
 public:
     enum class Memory : uint8_t { shared, staged, application };
@@ -28,6 +30,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct MappedRegionProbe;
+
     uint64_t host_;
     size_t   origin_[3];
     size_t   region_[3];

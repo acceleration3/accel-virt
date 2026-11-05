@@ -26,17 +26,18 @@ struct SvmAllocationProbe {
 };
 
 struct SvmTableProbe {
-    static void miscount(SvmTable &table) { table.live_ += 1u; }
-    static void count_past_the_table(SvmTable &table)
-    { table.live_ = SvmTable::max_allocations + 1u; }
-    static std::uint8_t *point_at_the_first_mirror(SvmTable &table)
-    { std::uint8_t *const own = table.allocations_[1].mirror();
-      table.allocations_[1].take(0x0000'7F55'0000'2000ull, table.allocations_[0].mirror(), 64u);
-      return own; }
-    static void restore_second_mirror(SvmTable &table, std::uint8_t *own)
-    { table.allocations_[1].take(0x0000'7F55'0000'2000ull, own, 64u); }
+    static void miscount(SvmTable &table) { static_cast<void>(table.bases_.append(1u)); }
+    static void shift_base(SvmTable &table, std::uint64_t by) { table.bases_.at(0u) += by; }
+    static void overlap_the_next(SvmTable &table)
+    { SvmAllocation &first = *table.allocations_.find(table.bases_.at(0u));
+      first.take(first.host_base(), first.mirror(), std::size_t{1} << 30u); }
+    static void restore_length(SvmTable &table, std::size_t bytes)
+    { SvmAllocation &first = *table.allocations_.find(table.bases_.at(0u));
+      first.take(first.host_base(), first.mirror(), bytes); }
     static void a_row_that_stands_for_nothing(SvmTable &table)
-    { table.allocations_[0].take(0u, table.allocations_[0].mirror(), 64u); }
+    { table.allocations_.find(table.bases_.at(0u))->give_up(); }
+    static void hold_again(SvmTable &table, std::uint64_t host, std::uint8_t *mirror, std::size_t bytes)
+    { table.allocations_.find(table.bases_.at(0u))->take(host, mirror, bytes); }
 };
 
 }
@@ -138,19 +139,24 @@ TEST(svm_table, a_table_with_no_memory_for_a_mirror_allocates_nothing)
   CHECK_EQ(table.live(), 0u);
   CHECK(table.invariants_hold()); }
 
-TEST(svm_table, a_full_table_refuses_and_stays_usable)
+TEST(svm_table, a_table_grows_past_any_fixed_bound_and_stays_usable_when_memory_runs_out)
 { MockPlatform platform;
   SvmTable table(platform);
+  constexpr std::uint32_t many = 1000u;
   void *first = nullptr;
-  for (std::uint32_t index = 0u; index < SvmTable::max_allocations; ++index) {
+  for (std::uint32_t index = 0u; index < many; ++index) {
       void *const mirror = table.take(host_base + index * 0x1000u, 16u);
       CHECK(mirror != nullptr);
       if (index == 0u) first = mirror;
   }
-  CHECK_EQ(table.live(), SvmTable::max_allocations);
-  CHECK(table.take(host_base + 0x1000000u, 16u) == nullptr);
+  CHECK_EQ(table.live(), many);
   CHECK(table.invariants_hold());
-  table.give_back(first);
+  CHECK_EQ(table.host_address_of(static_cast<std::uint8_t *>(first) + 3u), host_base + 3u);
+  platform.fail_allocation_at(1u);
+  CHECK(table.take(host_base + 0x1000000u, 16u) == nullptr);
+  CHECK_EQ(table.live(), many);
+  CHECK(table.invariants_hold());
+  CHECK_EQ(table.give_back(first), host_base);
   CHECK(table.take(host_base + 0x1000000u, 16u) != nullptr);
   CHECK(table.invariants_hold()); }
 
@@ -228,22 +234,18 @@ TEST(svm_table, the_dump_counts_what_is_live_and_what_is_mapped)
   CHECK(std::strstr(written.dump(), "mapped=1") != nullptr);
   CHECK(table.invariants_hold()); }
 
-TEST(svm_table, a_table_with_no_room_and_a_platform_with_no_memory_both_answer_nothing)
-{ MockPlatform platform;
-  SvmTable table(platform);
-  for (std::uint32_t index = 0u; index < SvmTable::max_allocations; ++index)
-      CHECK(table.take(host_base + (std::uint64_t{index} << 20u), 64u) != nullptr);
-  CHECK_EQ(table.live(), SvmTable::max_allocations);
-  CHECK(table.take(host_base + 0x8000'0000ull, 64u) == nullptr);
-  CHECK_EQ(table.live(), SvmTable::max_allocations);
-  CHECK(table.invariants_hold());
-
-  MockPlatform starved;
-  SvmTable     hungry(starved);
-  starved.fail_allocation_at(1u);
-  CHECK(hungry.take(host_base, 64u) == nullptr);
-  CHECK_EQ(hungry.live(), 0u);
-  CHECK(hungry.invariants_hold()); }
+TEST(svm_table, a_platform_with_no_memory_answers_nothing_for_each_allocation_it_would_need)
+{ for (std::uint32_t refused = 1u; refused <= 3u; ++refused) {
+      MockPlatform starved;
+      SvmTable     hungry(starved);
+      starved.fail_allocation_at(refused);
+      CHECK(hungry.take(host_base, 64u) == nullptr);
+      CHECK_EQ(hungry.live(), 0u);
+      CHECK(hungry.invariants_hold());
+      CHECK(hungry.take(host_base, 64u) != nullptr);
+      CHECK_EQ(hungry.live(), 1u);
+      CHECK(hungry.invariants_hold());
+  } }
 
 TEST(svm_table, the_invariant_catches_the_states_it_is_there_to_catch)
 { MockPlatform platform;
@@ -256,23 +258,29 @@ TEST(svm_table, the_invariant_catches_the_states_it_is_there_to_catch)
 
   MockPlatform beyond_platform;
   SvmTable     beyond(beyond_platform);
-  SvmTableProbe::count_past_the_table(beyond);
+  CHECK(beyond.take(host_base, 64u) != nullptr);
+  SvmTableProbe::shift_base(beyond, 1u);
   CHECK(!beyond.invariants_hold());
+  SvmTableProbe::shift_base(beyond, ~std::uint64_t{0});
+  CHECK(beyond.invariants_hold());
 
   MockPlatform overlap_platform;
   SvmTable     overlapping(overlap_platform);
   CHECK(overlapping.take(host_base, 64u) != nullptr);
   CHECK(overlapping.take(host_base + 0x10000u, 64u) != nullptr);
-  std::uint8_t *const own = SvmTableProbe::point_at_the_first_mirror(overlapping);
+  SvmTableProbe::overlap_the_next(overlapping);
   CHECK(!overlapping.invariants_hold());
-  SvmTableProbe::restore_second_mirror(overlapping, own);
+  SvmTableProbe::restore_length(overlapping, 64u);
   CHECK(overlapping.invariants_hold());
 
   MockPlatform rowless_platform;
   SvmTable     rowless(rowless_platform);
-  CHECK(rowless.take(host_base, 64u) != nullptr);
+  std::uint8_t *const mirror = static_cast<std::uint8_t *>(rowless.take(host_base, 64u));
+  CHECK(mirror != nullptr);
   SvmTableProbe::a_row_that_stands_for_nothing(rowless);
-  CHECK(!rowless.invariants_hold()); }
+  CHECK(!rowless.invariants_hold());
+  SvmTableProbe::hold_again(rowless, host_base, mirror, 64u);
+  CHECK(rowless.invariants_hold()); }
 
 TEST(svm_table, an_allocations_invariant_catches_a_pair_that_is_only_half_there)
 { const auto held_but_broken = [](void (*corrupt)(SvmAllocation &)) {

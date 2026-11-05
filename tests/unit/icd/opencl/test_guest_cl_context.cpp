@@ -4,10 +4,12 @@
 #include "icd/common/opened_objects.hpp"
 #include "harness/icd/context_link_probe.hpp"
 #include "harness/icd/host_channel_probe.hpp"
+#include "core/log/keyed_log.hpp"
 #include "harness/icd/cl_context_rig.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/client_transport.hpp"
 #include "guest/transport/guest_connection.hpp"
+#include "icd/common/device_link.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opencl/cl_property_list.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
@@ -33,10 +35,10 @@ namespace av::icd {
 struct OpenedObjectsProbe {
     static void add_empty(OpenedObjects &opened)
     {
-        OpenedObjectRow *made = nullptr;
-        CHECK_STATUS(opened.rows_.create(made, OpenedObjectRow{}), Status::ok);
+        std::uint32_t slot = 0u;
+        CHECK_STATUS(opened.opens_[0].insert(0x5151u, OpenedObjectRow{}, slot), Status::ok);
     }
-    static void clear(OpenedObjects &opened) { opened.rows_.destroy_all(); }
+    static void clear(OpenedObjects &opened) { opened.opens_[0].clear(); }
 };
 
 }
@@ -54,7 +56,7 @@ namespace {
 
 GuestClContext made_context(ClContextRig &rig)
 {
-    return GuestClContext(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(),
+    return GuestClContext(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.lines(),
                           rig.handles());
 }
 
@@ -181,7 +183,10 @@ TEST(guest_cl_context, it_names_the_device_its_transport_runs_on_once_it_has_one
   CHECK_STATUS(context.make(), Status::ok);
   const std::uint32_t device = context.guest_device();
   CHECK(device != 0u);
-  CHECK_EQ(device, rig.connection().device(0u).device());
+  av::icd::DeviceLink *link = nullptr;
+  CHECK_STATUS(rig.connection().acquire(link), Status::ok);
+  CHECK_EQ(device, link->device().device());
+  rig.connection().release(*link);
   CHECK(context.invariants_hold()); }
 
 TEST(guest_cl_context, it_shares_gl_only_once_made_from_a_gl_context)
@@ -234,26 +239,42 @@ TEST(guest_cl_context, with_no_avgpu_adapter_it_is_not_supported_and_holds_nothi
   av::LockTrace trace;
   av::RecordingThreadLock send_lock(trace, 'S');
   av::RecordingLog log;
-  av::icd::IcdConnection connection(kmt, 0u);
+  av::KeyedLog lines(platform, log, "avcl: ");
+  av::icd::IcdConnection connection(platform, kmt, 0u);
   av::RecordingThreadLock handles_lock(trace, 'H');
   av::icd::SharedHandles  handles(kmt, handles_lock, platform);
   av::RecordingThreadLock blocks_lock(trace, 'B');
-  GuestClContext context(connection, platform, send_lock, blocks_lock, log, handles);
+  GuestClContext context(connection, platform, send_lock, blocks_lock, lines, handles);
   CHECK_STATUS(context.make(), Status::not_supported);
   CHECK(context.state() == GuestClContext::State::created);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(platform.live_allocations(), 0u);
   CHECK(context.invariants_hold()); }
 
-TEST(guest_cl_context, a_context_with_no_memory_for_its_staging_holds_nothing)
-{ ClContextRig rig;
-  GuestClContext context = made_context(rig);
-  rig.platform().fail_allocation_at(1u);
-  CHECK_STATUS(context.make(), Status::no_memory);
-  CHECK(context.state() == GuestClContext::State::created);
-  CHECK_EQ(rig.kmt().open_objects(), 0u);
-  CHECK_EQ(rig.platform().live_allocations(), 0u);
-  CHECK(context.invariants_hold()); }
+TEST(guest_cl_context, a_context_that_is_refused_memory_at_any_step_of_making_holds_nothing)
+{ bool ran_out = false;
+  bool made = false;
+  for (std::uint32_t nth = 1u; nth <= 64u && !made; ++nth) {
+      ClContextRig rig;
+      arena_answers(rig);
+      GuestClContext context = made_context(rig);
+      rig.platform().fail_allocation_at(nth);
+      const Status status = context.make();
+      if (status == Status::ok) {
+          made = true;
+          CHECK(context.state() == GuestClContext::State::made);
+          CHECK(context.invariants_hold());
+          continue;
+      }
+      ran_out = ran_out || status == Status::no_memory;
+      CHECK(context.state() == GuestClContext::State::created);
+      CHECK(context.wire() == nullptr);
+      CHECK_EQ(rig.kmt().open_objects(), 0u);
+      CHECK_EQ(rig.platform().live_allocations(), 0u);
+      CHECK(context.invariants_hold());
+  }
+  CHECK(ran_out);
+  CHECK(made); }
 
 TEST(guest_cl_context, a_context_whose_transport_faulted_opening_its_arena_is_not_made)
 { ClContextRig rig;
@@ -341,11 +362,13 @@ TEST(guest_cl_context, tearing_down_gives_back_every_object_it_opened)
 
 namespace av::clicd {
 struct GuestClContextProbe {
-    static MappedRegion &mapping(GuestClContext &context, uint32_t slot)
-    { return context.mappings_[slot]; }
+    static void retarget(GuestClContext &context, uint64_t object, uint8_t *to)
+    { context.mappings_.for_each([object, to](MappedRegion &mapping) {
+          if (mapping.object() == object) mapping.hand(to, icd::StagedMapping::Memory::named);
+      }); }
     static icd::HostChannel &channel(GuestClContext &context) { return context.channel_; }
     static void          forget_link(GuestClContext &context)
-    { icd::ContextLinkProbe(context.link_).link() = icd::IcdConnection::no_link; }
+    { icd::ContextLinkProbe(context.link_).link() = nullptr; }
     static void          say_it_was_made(GuestClContext &context)
     { context.state_ = GuestClContext::State::made; }
     static void          say_it_was_never_made(GuestClContext &context)
@@ -353,7 +376,8 @@ struct GuestClContextProbe {
     static void          drop_the_lock(GuestClContext &context) { icd::HostChannelProbe(context.channel_).drop_locked(); }
     static void          restore_the_lock(GuestClContext &context)
     { icd::HostChannelProbe(context.channel_).restore_locked(); }
-    static void          stray_link(GuestClContext &context) { icd::ContextLinkProbe(context.link_).link() = 0u; }
+    static void          stray_link(GuestClContext &context) { static icd::DeviceLink *const nowhere = reinterpret_cast<icd::DeviceLink *>(std::uintptr_t{8u});
+      icd::ContextLinkProbe(context.link_).link() = nowhere; }
     static SvmTable     &svm_of(GuestClContext &context) { return context.svm_; }
 };
 
@@ -361,7 +385,7 @@ struct GuestClContextProbe {
 
 namespace av::clicd {
 struct SvmTableProbe {
-    static void miscount(SvmTable &table) { table.live_ += 1u; }
+    static void miscount(SvmTable &table) { static_cast<void>(table.bases_.append(1u)); }
 };
 
 }
@@ -385,21 +409,29 @@ TEST(guest_cl_context, a_mapping_of_nothing_is_not_taken_by_either_kind)
   CHECK_EQ(context.mappings(), 0u);
   CHECK(context.invariants_hold()); }
 
-TEST(guest_cl_context, the_mapping_table_fills_and_then_refuses_both_kinds)
+TEST(guest_cl_context, the_mapping_table_grows_past_any_fixed_bound_and_refuses_both_kinds_out_of_memory)
 { ClContextRig   rig;
   arena_answers(rig);
   GuestClContext context = made_context(rig);
   CHECK_STATUS(context.make(), Status::ok);
-  std::uint8_t at[GuestClContext::max_mappings][16] = {};
-  for (std::uint32_t index = 0u; index < GuestClContext::max_mappings; ++index) {
-      CHECK(context.take_shared_mapping(0x6600u + index, 0x7000u + index, 0u, 16u, at[index]) !=
-            nullptr);
-  }
-  CHECK_EQ(context.mappings(), GuestClContext::max_mappings);
-  std::uint8_t one_more[16] = {};
-  CHECK(context.take_shared_mapping(0x7700u, 0x8800u, 0u, 16u, one_more) == nullptr);
+  constexpr std::uint32_t most = 4096u;
+  constexpr std::uint32_t grown = 600u;
+  static std::uint8_t at[most][16];
+  std::uint32_t taken = 0u;
+  while (taken < grown && context.take_shared_mapping(0x6600u + taken, 0x7000u + taken, 0u, 16u, at[taken]) != nullptr)
+      ++taken;
+  CHECK_EQ(taken, grown);
+  rig.platform().fail_allocation_at(1u);
+  while (taken < most && context.take_shared_mapping(0x6600u + taken, 0x7000u + taken, 0u, 16u, at[taken]) != nullptr)
+      ++taken;
+  CHECK(taken < most);
+  CHECK_EQ(context.mappings(), taken);
+  CHECK(context.invariants_hold());
+  CHECK(context.take_shared_mapping(0x6600u + taken, 0x7000u + taken, 0u, 16u, at[taken]) != nullptr);
+  CHECK_EQ(context.mappings(), taken + 1u);
+  rig.platform().fail_allocation_at(1u);
   CHECK(context.take_mapping(0x7700u, 0x8800u, 0u, 16u, CL_MAP_READ) == nullptr);
-  CHECK_EQ(context.mappings(), GuestClContext::max_mappings);
+  CHECK_EQ(context.mappings(), taken + 1u);
   CHECK(context.invariants_hold()); }
 
 TEST(guest_cl_context, a_staged_mapping_with_no_memory_for_its_block_is_not_taken)
@@ -422,9 +454,9 @@ TEST(guest_cl_context, the_invariant_catches_two_mappings_answering_one_pointer)
   CHECK(context.take_shared_mapping(0x6600u, 0x7000u, 0u, sizeof at, at) != nullptr);
   CHECK(context.take_shared_mapping(0x6601u, 0x7001u, 0u, sizeof other, other) != nullptr);
   CHECK(context.invariants_hold());
-  GuestClContextProbe::mapping(context, 1u).take(0x6601u, 0x7001u, 0u, sizeof at, 0u, at, av::clicd::MappedRegion::Memory::shared);
+  GuestClContextProbe::retarget(context, 0x6601u, at);
   CHECK(!context.invariants_hold());
-  GuestClContextProbe::mapping(context, 1u).take(0x6601u, 0x7001u, 0u, sizeof other, 0u, other, av::clicd::MappedRegion::Memory::shared);
+  GuestClContextProbe::retarget(context, 0x6601u, other);
   CHECK(context.invariants_hold()); }
 
 TEST(guest_cl_context, the_invariant_catches_a_made_context_that_is_missing_what_a_make_holds)
@@ -471,22 +503,27 @@ TEST(guest_cl_context, the_arena_lends_its_bottom_to_buffers_and_its_top_to_tran
   GuestClContext context = made_context(rig);
   CHECK_STATUS(context.make(), Status::ok);
   const std::uint64_t page = av::clicd::ClArenaBlocks::alignment;
-  const std::uint64_t buffers = GuestClContext::arena_bytes - GuestClContext::staging_reserve;
-  std::uint64_t       offset = 0u;
-  CHECK(!context.blocks().take(buffers + 1u, offset));
+  const std::uint64_t reserve = GuestClContext::staging_reserve;
+  std::uint64_t       staged = ~std::uint64_t{0};
+  CHECK(!context.staging().take(reserve + page, staged));
+  CHECK(context.staging().take(reserve, staged));
+  CHECK_EQ(staged, 0u);
+  std::uint64_t named = ~std::uint64_t{0};
+  CHECK(context.wire()->blobs().holds(context.staging().at(staged, reserve), reserve, named));
+  const std::uint64_t buffers = named;
+  CHECK(buffers > 0u);
+  CHECK(buffers % page == 0u);
+  CHECK(buffers + reserve <= GuestClContext::arena_bytes);
+  std::uint64_t more = 0u;
+  CHECK(!context.staging().take(page, more));
+
+  std::uint64_t offset = 0u;
+  CHECK(!context.blocks().take(buffers + page, offset));
   CHECK(context.blocks().take(buffers, offset));
   CHECK_EQ(offset, 0u);
-  std::uint64_t named = ~std::uint64_t{0};
+  named = ~std::uint64_t{0};
   CHECK(context.wire()->blobs().holds(context.blocks().at(0u, buffers), buffers, named));
   CHECK_EQ(named, 0u);
-  std::uint64_t staged = 0u;
-  CHECK(!context.staging().take(GuestClContext::staging_reserve, staged));
-  CHECK(!context.staging().take(GuestClContext::staging_reserve - page + 1u, staged));
-  CHECK(context.staging().take(GuestClContext::staging_reserve - page, staged));
-  CHECK_EQ(staged, 0u);
-  CHECK(context.wire()->blobs().holds(context.staging().at(staged, GuestClContext::staging_reserve - page),
-                                      GuestClContext::staging_reserve - page, named));
-  CHECK_EQ(named, buffers);
   CHECK(context.invariants_hold()); }
 
 TEST(guest_cl_context, the_invariant_reaches_the_allocations_and_the_mappings_it_holds)
@@ -497,9 +534,9 @@ TEST(guest_cl_context, the_invariant_reaches_the_allocations_and_the_mappings_it
   std::uint8_t at[16] = {};
   CHECK(context.take_shared_mapping(0x6600u, 0x7000u, 0u, sizeof at, at) != nullptr);
   CHECK(context.invariants_hold());
-  GuestClContextProbe::mapping(context, 0u).take(0u, 0x7000u, 0u, sizeof at, 0u, at, av::clicd::MappedRegion::Memory::shared);
+  GuestClContextProbe::retarget(context, 0x6600u, nullptr);
   CHECK(!context.invariants_hold());
-  GuestClContextProbe::mapping(context, 0u).take(0x6600u, 0x7000u, 0u, sizeof at, 0u, at, av::clicd::MappedRegion::Memory::shared);
+  GuestClContextProbe::retarget(context, 0x6600u, at);
   CHECK(context.invariants_hold()); }
 
 TEST(guest_cl_context, the_invariant_catches_an_unmade_context_still_holding_something)
@@ -536,7 +573,9 @@ TEST(guest_cl_context, the_invariant_catches_each_thing_an_unmade_context_should
   { ClContextRig rig;
     GuestClContext context = made_context(rig);
     GuestClContextProbe::stray_link(context);
-    CHECK(!context.invariants_hold()); } }
+    CHECK(!context.invariants_hold());
+    GuestClContextProbe::forget_link(context);
+    CHECK(context.invariants_hold()); } }
 
 TEST(guest_cl_context, the_invariant_reaches_the_shared_allocations_it_holds)
 { ClContextRig rig;
@@ -563,13 +602,15 @@ TEST(guest_cl_context, a_staged_mapping_starts_as_zeros)
   arena_answers(rig);
   GuestClContext context = made_context(rig);
   CHECK_STATUS(context.make(), Status::ok);
-  std::uint8_t *const block = context.take_mapping(0x6600u, 0x7000u, 0u, 64u, CL_MAP_WRITE_INVALIDATE_REGION);
+  av::clicd::MappedRegion *const region = context.take_mapping(0x6600u, 0x7000u, 0u, 64u, CL_MAP_WRITE_INVALIDATE_REGION);
+  CHECK(region != nullptr);
+  if (region == nullptr) return;
+  const std::uint8_t *const block = region->at();
   CHECK(block != nullptr);
   bool zeros = true;
   for (std::uint32_t at = 0u; at < 64u; at++) zeros = zeros && block[at] == 0u;
   CHECK(zeros);
-  av::clicd::MappedRegion *const region = context.mapping_at(block);
-  CHECK(region != nullptr);
+  CHECK(context.mapping_at(0x6600u, block) == region);
   context.give_back_mapping(*region);
   CHECK_EQ(context.mappings(), 0u); }
 
