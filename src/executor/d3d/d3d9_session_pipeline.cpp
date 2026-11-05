@@ -236,7 +236,8 @@ bool D3d9Session::on_SetStreamSource9(uint32_t stream, uint32_t buffer, uint32_t
     AV_SCOPE("D3d9Session::on_SetStreamSource9");
     auto *const bound = mine<IDirect3DVertexBuffer9>(buffer, D3dObjectKind::vertex_buffer9);
     if (device() == nullptr || stream >= streams || (buffer != 0u && bound == nullptr)) return false;
-    return SUCCEEDED(device()->SetStreamSource(stream, bound, offset, stride));
+    return SUCCEEDED(device()->SetStreamSource(stream, bound, offset, stride)) &&
+           slices_.stream_bound(device(), stream, buffer);
 }
 
 bool D3d9Session::on_SetStreamSourceFreq9(uint32_t stream, uint32_t setting)
@@ -251,7 +252,7 @@ bool D3d9Session::on_SetIndices9(uint32_t buffer)
     AV_SCOPE("D3d9Session::on_SetIndices9");
     auto *const bound = mine<IDirect3DIndexBuffer9>(buffer, D3dObjectKind::index_buffer9);
     if (device() == nullptr || (buffer != 0u && bound == nullptr)) return false;
-    return SUCCEEDED(device()->SetIndices(bound));
+    return SUCCEEDED(device()->SetIndices(bound)) && slices_.indices_bound(device(), buffer);
 }
 
 bool D3d9Session::on_SetViewport9(const d3d9proto::Viewport &viewport)

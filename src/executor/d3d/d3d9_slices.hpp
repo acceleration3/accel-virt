@@ -1,7 +1,7 @@
 #ifndef AV_D3D9_SLICES_HPP
 #define AV_D3D9_SLICES_HPP
 
-#include "core/support/keyed_slots.hpp"
+#include "executor/d3d/d3d9_copy_bindings.hpp"
 #include "executor/d3d/slice_bindings.hpp"
 
 #include <stdint.h>
@@ -35,6 +35,8 @@ public:
                             uint64_t offset, uint64_t bytes);
     [[nodiscard]] bool detach(uint32_t resource, IDirect3DResource9 *buffer);
     void               copy_in_use(IDirect3DDevice9 *device);
+    [[nodiscard]] bool stream_bound(IDirect3DDevice9 *device, uint32_t stream, uint32_t resource);
+    [[nodiscard]] bool indices_bound(IDirect3DDevice9 *device, uint32_t resource);
     void               discard(const SliceBindings::Binding &bound, IDirect3DResource9 *buffer);
     void               forget(uint32_t resource);
     void               forget_device(IDirect3DDevice9 *device);
@@ -43,19 +45,13 @@ public:
     bool invariants_hold() const;
 
 private:
-    static constexpr uint32_t most_streams = 16u;
     static constexpr uint64_t offset_alignment = 4u;
-
-    struct Copied {
-        IDirect3DResource9 *buffer_;
-        IDirect3DDevice9   *device_;
-    };
 
     [[nodiscard]] bool bound_to_storage(D3d9Lane &lane, IDirect3DResource9 *buffer, uint32_t resource,
                                         SourceMemory &store, uint8_t *slice, uint64_t offset, uint64_t bytes);
     [[nodiscard]] bool copy_at_draw(IDirect3DDevice9 *device, uint32_t resource, IDirect3DResource9 *buffer,
                                     SourceMemory &store, uint8_t *slice, uint64_t bytes);
-    void               copy_one(IDirect3DResource9 *buffer);
+    void               copy_one(uint32_t resource, IDirect3DResource9 *buffer);
     bool               fits(IDirect3DResource9 *buffer, uint64_t bytes) const;
     [[nodiscard]] bool leave(IDirect3DResource9 *buffer, const SliceBindings::Binding &was);
     [[nodiscard]] bool lock_for(IDirect3DResource9 *buffer, uint32_t flags, void *&mapped, uint32_t &size) const;
@@ -66,7 +62,7 @@ private:
     DriverLog                     &lines_;
     D3d9HostDevice                *host_;
     ImportTable                   *imports_;
-    KeyedSlots<uint32_t, Copied>   copied_;
+    D3d9CopyBindings               copies_;
     bool                           reported_;
 };
 
