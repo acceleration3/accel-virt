@@ -115,7 +115,7 @@ D3dBackend::D3dBackend(ExecutorLog &log)
       region_(guest_), imports_(nullptr), slices_(blocks_, lines_), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_, log.d3d12()),
       d3d9_(guest_, objects_, blocks_, slices_, fence_wake_, log.d3d9()),
       published_(blocks_, guest_), progress11_(fence_wake_), constants_(blocks_),
-      missed_key_(0u), api_(GuestApi::d3d11), mark_refused_(false), show_refused_(false), lost_(false)
+      missed_key_(0u), batches_(), mark_refused_(false), show_refused_(false), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
@@ -179,12 +179,10 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
     if (device11_ == nullptr) return false;
     blocks_.forget();
     if (d3d12_.knows(command_id)) {
-        api_ = GuestApi::d3d12;
         finish_d3d11();
         return d3d12_.run(command_id, payload, reply, arena);
     }
     if (d3d9_.knows(command_id)) {
-        api_ = GuestApi::d3d9;
         finish_d3d11();
         return d3d9_.run(command_id, payload, reply, arena);
     }
@@ -204,6 +202,25 @@ void D3dBackend::end_batch()
     AV_SCOPE("D3dBackend::end_batch");
     d3d9_.end_batch();
     finish_d3d11();
+    batches_.end(issued(), completed());
+}
+
+D3dBatchCounter::Marks D3dBackend::issued() const
+{
+    AV_SCOPE("D3dBackend::issued");
+    uint64_t marked12 = 0u;
+    uint64_t reached12 = 0u;
+    d3d12_.gpu_progress(marked12, reached12);
+    return D3dBatchCounter::Marks{progress11_.marked(), marked12, d3d9_.marked()};
+}
+
+D3dBatchCounter::Marks D3dBackend::completed() const
+{
+    AV_SCOPE("D3dBackend::completed");
+    uint64_t marked12 = 0u;
+    uint64_t reached12 = 0u;
+    d3d12_.gpu_progress(marked12, reached12);
+    return D3dBatchCounter::Marks{progress11_.reached(), reached12, d3d9_.reached()};
 }
 
 void D3dBackend::finish_d3d11()
@@ -233,6 +250,7 @@ bool D3dBackend::poll()
 {
     AV_SCOPE("D3dBackend::poll");
     const bool unwatched = progress11_.polled();
+    batches_.retire(completed());
     if (device11_ == nullptr || held_ || !published_.pending()) return unwatched;
     device11_->lock(nullptr);
     const bool pending = published_.publish(device11_->context());
@@ -250,18 +268,8 @@ void D3dBackend::bind_signal(void (*signal)(void *context), void *context)
 void D3dBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 {
     AV_SCOPE("D3dBackend::gpu_progress");
-    switch (api_) {
-    case GuestApi::d3d12: d3d12_.gpu_progress(marked, reached); break;
-    case GuestApi::d3d9:
-        marked = d3d9_.marked();
-        reached = d3d9_.reached();
-        break;
-    case GuestApi::d3d11:
-        marked = progress11_.marked();
-        reached = progress11_.reached();
-        break;
-    }
-    if (lost()) reached = marked;
+    marked = batches_.marked();
+    reached = lost() ? marked : batches_.reached(completed());
 }
 
 bool D3dBackend::lost() const
@@ -1956,7 +1964,7 @@ bool D3dBackend::invariants_hold() const
 {
     AV_SCOPE("D3dBackend::invariants_hold");
     if (!objects_.invariants_hold()) return false;
-    if (!states_.invariants_hold()) return false;
+    if (!states_.invariants_hold() || !batches_.invariants_hold()) return false;
     if (device11_ == nullptr) return states_.count() == 0u && objects_.count() == 0u;
     return true;
 }

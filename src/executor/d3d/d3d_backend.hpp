@@ -2,6 +2,7 @@
 #define AV_D3D_BACKEND_HPP
 
 #include "executor/d3d/command_refusal.hpp"
+#include "executor/d3d/d3d_batch_counter.hpp"
 #include "executor/d3d/d3d11_batch_progress.hpp"
 #include "executor/d3d/d3d12_session.hpp"
 #include "executor/d3d/d3d9_session.hpp"
@@ -44,12 +45,6 @@ class ImportTable;
 class SourceMemory;
 class SessionShares;
 class SharedSurfaces;
-
-enum class GuestApi : uint32_t {
-    d3d11,
-    d3d12,
-    d3d9,
-};
 
 class D3dBackend final : public SessionBackend, public d3dproto::ServerDispatch {
 public:
@@ -184,6 +179,8 @@ private:
     bool marks_batches();
     void retire_slices(const SourceMemory &memory);
     void finish_d3d11();
+    D3dBatchCounter::Marks issued() const;
+    D3dBatchCounter::Marks completed() const;
     bool leave_slice(ID3D11Buffer *buffer, const SliceBindings::Binding &was);
     void drop_slice(uint32_t id);
     friend struct D3dBackendProbe;
@@ -239,7 +236,7 @@ private:
     D3d11BatchProgress      progress11_;
     ConstantRing            constants_;
     uint64_t                missed_key_;
-    GuestApi                api_;
+    D3dBatchCounter         batches_;
     bool                    mark_refused_;
     bool                    show_refused_;
     bool                    lost_;
