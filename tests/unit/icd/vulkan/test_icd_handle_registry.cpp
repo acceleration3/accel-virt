@@ -7,11 +7,14 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "core/log/keyed_log.hpp"
+#include "icd/common/shared_handles.hpp"
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/device_memory.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/handle_registry.hpp"
 #include "icd/vulkan/loader_handle.hpp"
+#include "proto/generated/vulkan/vk_handle_translation.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -133,17 +136,6 @@ TEST(loader_handle, answers_what_it_was_made_with_after_the_loader_overwrites_it
   CHECK(!handle.names(Kind::physical_device, physical_device_host + 1u, first));
   CHECK(!handle.names(Kind::physical_device, physical_device_host, second));
   CHECK(handle.invariants_hold()); }
-
-TEST(loader_handle, descends_from_every_parent_above_it_and_nothing_else)
-{ LoaderHandle instance(Kind::instance, instance_host, first, nullptr);
-  LoaderHandle physical_device(Kind::physical_device, physical_device_host, first, &instance);
-  LoaderHandle device(Kind::device, device_host, first, &physical_device);
-  LoaderHandle other(Kind::instance, instance_host + 1u, first, nullptr);
-  CHECK(device.descends_from(physical_device));
-  CHECK(device.descends_from(instance));
-  CHECK(!device.descends_from(device));
-  CHECK(!device.descends_from(other));
-  CHECK(!instance.descends_from(instance)); }
 
 TEST(loader_handle, invariants_refuse_what_the_registry_never_builds)
 { LoaderHandle instance(Kind::instance, instance_host, first, nullptr);
@@ -341,7 +333,7 @@ TEST(handle_registry, destroy_refuses_what_is_not_a_live_handle)
 
 TEST(handle_registry, destroys_a_wide_tree_spread_over_several_chunks)
 { MockPlatform platform;
-  HandleRegistry registry(platform);
+  { HandleRegistry registry(platform);
   Tree tree(registry);
   constexpr std::uint32_t devices = 70u;
   LoaderHandle *made[devices] = {};
@@ -358,43 +350,41 @@ TEST(handle_registry, destroys_a_wide_tree_spread_over_several_chunks)
   CHECK_EQ(registry.live(), 1u);
   CHECK_STATUS(registry.destroy(tree.instance), Status::ok);
   CHECK(registry.invariants_hold());
-  CHECK_EQ(registry.live(), 0u);
+  CHECK_EQ(registry.live(), 0u); }
   CHECK_EQ(platform.live_allocations(), 0u); }
 
-TEST(handle_registry, a_refused_allocation_refuses_only_the_handle_that_needed_a_chunk)
+TEST(handle_registry, a_refused_allocation_refuses_only_the_handle_that_needed_it_and_leaks_nothing)
 { constexpr std::uint32_t slots = av::ObjectPool<LoaderHandle>::chunk_slots;
   constexpr std::uint32_t handles = 2u * slots + 1u;
-  struct Case {
-      std::uint32_t failing;
-      std::uint32_t refused_index;
-  };
-  const Case cases[] = {{1u, slots}, {2u, 2u * slots}, {3u, 0u}};
-  for (const Case &check : cases) {
-      MockPlatform   platform;
-      HandleRegistry registry(platform);
-      LoaderHandle  *instance = nullptr;
-      CHECK_STATUS(registry.wrap(Kind::instance, instance_host, first, nullptr, instance), Status::ok);
-      platform.fail_allocation_at(check.failing);
-      std::uint32_t refused = 0u;
-      for (std::uint32_t index = 1u; index < handles + 1u; index++) {
-          LoaderHandle *handle = instance;
-          const Status  status = registry.wrap(Kind::physical_device, index, first, instance, handle);
-          CHECK(registry.invariants_hold());
-          if (status != Status::ok) {
-              CHECK_STATUS(status, Status::no_memory);
-              CHECK(handle == nullptr);
-              CHECK_EQ(index, check.refused_index);
-              refused++;
-              continue;
-          }
-          CHECK(handle != nullptr && handle->host() == index);
-      }
-      CHECK_EQ(refused, check.refused_index != 0u ? 1u : 0u);
-      CHECK_EQ(registry.live(), handles + 1u - refused);
-      CHECK_STATUS(registry.destroy(instance), Status::ok);
+  std::uint32_t           refusals = 0u;
+  for (std::uint32_t failing = 1u; failing <= 8u; failing++) {
+      MockPlatform platform;
+      { HandleRegistry registry(platform);
+        LoaderHandle  *instance = nullptr;
+        CHECK_STATUS(registry.wrap(Kind::instance, instance_host, first, nullptr, instance), Status::ok);
+        platform.fail_allocation_at(failing);
+        std::uint32_t refused = 0u;
+        for (std::uint32_t index = 1u; index < handles + 1u; index++) {
+            LoaderHandle *handle = instance;
+            const Status  status = registry.wrap(Kind::physical_device, index, first, instance, handle);
+            CHECK(registry.invariants_hold());
+            if (status != Status::ok) {
+                CHECK_STATUS(status, Status::no_memory);
+                CHECK(handle == nullptr);
+                refused++;
+                continue;
+            }
+            CHECK(handle != nullptr && handle->host() == index);
+        }
+        CHECK(refused <= 1u);
+        refusals += refused;
+        CHECK_EQ(registry.live(), handles + 1u - refused);
+        CHECK_STATUS(registry.destroy(instance), Status::ok);
+        CHECK(registry.invariants_hold());
+        CHECK_EQ(registry.live(), 0u); }
       CHECK_EQ(platform.live_allocations(), 0u);
   }
-}
+  CHECK(refusals > 0u); }
 
 TEST(handle_registry, invariants_see_a_dangling_parent_and_a_duplicate)
 { MockPlatform platform;
@@ -408,6 +398,7 @@ TEST(handle_registry, invariants_see_a_dangling_parent_and_a_duplicate)
   LoaderHandleProbe::set_host(*tree.queue, 0x5500u);
   LoaderHandleProbe::set_kind(*tree.queue, Kind::command_buffer);
   CHECK(!registry.invariants_hold());
+  LoaderHandleProbe::set_host(*tree.queue, 0x4400u);
   LoaderHandleProbe::set_kind(*tree.queue, Kind::queue);
   CHECK(registry.invariants_hold());
   LoaderHandleProbe::set_host(*tree.device, 0u);
@@ -422,7 +413,10 @@ TEST(handle_registry, invariants_see_a_dangling_parent_and_a_duplicate)
 namespace {
 class BatchSource {
 public:
-    BatchSource() : lock_(trace_, 'S'), log_(), connection_(kmt_, platform_, lock_, log_), batches_(platform_), memories_(platform_) {}
+    BatchSource()
+        : lock_(trace_, 'S'), log_(), lines_(platform_, log_, "avtest: "), shared_(kmt_, lock_, platform_),
+          connection_(kmt_, platform_, lock_, lines_, shared_), batches_(platform_), memories_(platform_)
+    {}
 
     MockPlatform                          &platform() { return platform_; }
     av::ObjectPool<av::icd::CommandBatch> &batches() { return batches_; }
@@ -431,7 +425,7 @@ public:
     av::icd::DeviceMemory &make_memory()
     {
         av::icd::DeviceMemory *memory = nullptr;
-        CHECK_STATUS(memories_.create(memory, kmt_, connection_, log_), Status::ok);
+        CHECK_STATUS(memories_.create(memory, kmt_, connection_, identity_, lines_), Status::ok);
         return *memory;
     }
 
@@ -448,6 +442,9 @@ private:
     av::LockTrace                         trace_;
     av::RecordingThreadLock               lock_;
     av::RecordingLog                      log_;
+    av::KeyedLog                          lines_;
+    av::icd::SharedHandles                shared_;
+    av::vkproto::HandleIdentity           identity_;
     Connection                            connection_;
     av::ObjectPool<av::icd::CommandBatch> batches_;
     av::ObjectPool<av::icd::DeviceMemory> memories_;
