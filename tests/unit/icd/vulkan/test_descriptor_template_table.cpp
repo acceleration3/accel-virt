@@ -1,6 +1,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/descriptor_template_table.hpp"
 
 #include <cstdint>
@@ -37,14 +38,16 @@ VkDescriptorUpdateTemplateCreateInfo of(VkDescriptorUpdateTemplateEntry &entry, 
 
 class TableUnderLock {
 public:
-    TableUnderLock() : lock_(trace_, 'T'), table_(lock_) {}
+    TableUnderLock() : lock_(trace_, 'T'), table_(memory_, lock_) {}
     TableUnderLock(const TableUnderLock &) = delete;
     TableUnderLock &operator=(const TableUnderLock &) = delete;
 
     DescriptorTemplateTable &table() { return table_; }
     RecordingThreadLock     &lock() { return lock_; }
+    av::MockPlatform        &memory() { return memory_; }
 
 private:
+    av::MockPlatform    memory_;
     LockTrace           trace_;
     RecordingThreadLock lock_;
     DescriptorTemplateTable table_;
@@ -80,20 +83,34 @@ TEST(descriptor_template_table, a_create_it_cannot_record_is_refused)
   CHECK_EQ(held.table().live(), 0u);
   CHECK(held.table().invariants_hold()); }
 
-TEST(descriptor_template_table, a_table_with_no_room_refuses)
+TEST(descriptor_template_table, a_table_grows_and_refuses_only_when_no_memory_is_left_to_grow_into)
 { TableUnderLock                  held;
   VkDescriptorUpdateTemplateEntry entry = {};
   const VkDescriptorUpdateTemplateCreateInfo info = of(entry, 1u, 0u);
-  for (std::uint32_t index = 0u; index < DescriptorTemplateTable::max_templates; index++)
+  constexpr std::uint32_t many = 2000u;
+  for (std::uint32_t index = 0u; index < many; index++)
       CHECK_EQ(held.table().record(device, handle(0x1000u + index), &info), VK_SUCCESS);
-  CHECK_EQ(held.table().live(), DescriptorTemplateTable::max_templates);
-  CHECK_EQ(held.table().record(device, handle(0x9999u), &info), VK_ERROR_OUT_OF_HOST_MEMORY);
-  CHECK_EQ(held.table().bytes_of(handle(0x9999u)), 0u);
+  CHECK_EQ(held.table().live(), many);
+  CHECK(held.table().invariants_hold());
+  held.memory().fail_allocation_at(1u);
+  std::uint32_t added = 0u;
+  VkResult      result = VK_SUCCESS;
+  while (result == VK_SUCCESS && added < 8u * many) {
+      result = held.table().record(device, handle(0x100000u + added), &info);
+      if (result == VK_SUCCESS) added++;
+  }
+  CHECK_EQ(result, VK_ERROR_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(held.table().live(), many + added);
+  CHECK_EQ(held.table().bytes_of(handle(0x100000u + added)), 0u);
   CHECK_EQ(held.table().bytes_of(handle(0x1000u)), image_bytes);
   const VkDescriptorUpdateTemplateCreateInfo wider = of(entry, 3u, 0u);
   CHECK_EQ(held.table().record(device, handle(0x1000u), &wider), VK_SUCCESS);
-  CHECK_EQ(held.table().live(), DescriptorTemplateTable::max_templates);
+  CHECK_EQ(held.table().live(), many + added);
   CHECK_EQ(held.table().bytes_of(handle(0x1000u)), 3u * image_bytes);
+  CHECK(held.table().invariants_hold());
+  held.memory().fail_allocation_at(0u);
+  CHECK_EQ(held.table().record(device, handle(0x100000u + added), &info), VK_SUCCESS);
+  CHECK_EQ(held.table().live(), many + added + 1u);
   CHECK(held.table().invariants_hold()); }
 
 TEST(descriptor_template_table, it_forgets_a_template_and_a_device_s)

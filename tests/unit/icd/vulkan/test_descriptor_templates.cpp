@@ -15,27 +15,19 @@
 #include <cstring>
 
 namespace av::icd {
+struct IcdRootProbe {
+    static DescriptorTemplateTable &templates(IcdRoot &root) { return root.templates_; }
+};
+
 struct DescriptorTemplateTableProbe {
-    static void a_slot_of_no_device(DescriptorTemplateTable &table) { table.slots_[0].device_ = VK_NULL_HANDLE; }
-    static void the_same_template_twice(DescriptorTemplateTable &table)
+    static void a_slot_of_no_device(DescriptorTemplateTable &table)
     {
-        table.slots_[1] = table.slots_[0];
+        table.slots_.at(table.slots_.next_live(0u))->device_ = VK_NULL_HANDLE;
     }
-    static void a_device_in_an_empty_slot(DescriptorTemplateTable &table)
+    static void a_slot_under_another_templates_key(DescriptorTemplateTable &table)
     {
-        for (DescriptorTemplateSlot &slot : table.slots_)
-            if (slot.template_ == VK_NULL_HANDLE) {
-                slot.device_ = reinterpret_cast<VkDevice>(0x7010u);
-                return;
-            }
-    }
-    static void bytes_in_an_empty_slot(DescriptorTemplateTable &table)
-    {
-        for (DescriptorTemplateSlot &slot : table.slots_)
-            if (slot.template_ == VK_NULL_HANDLE) {
-                slot.bytes_ = 8u;
-                return;
-            }
+        const uint32_t first = table.slots_.next_live(0u);
+        table.slots_.at(table.slots_.next_live(first + 1u))->template_ = table.slots_.at(first)->template_;
     }
 };
 
@@ -48,6 +40,7 @@ using av::ScriptedHost;
 using av::WireReader;
 using av::icd::DescriptorTemplateTable;
 using av::icd::DescriptorTemplateTableProbe;
+using av::icd::IcdRootProbe;
 using namespace av::vkproto;
 
 namespace {
@@ -83,6 +76,7 @@ public:
     TemplateRig &operator=(const TemplateRig &) = delete;
 
     IcdRig  &rig() { return rig_; }
+    DescriptorTemplateTable &templates() { return IcdRootProbe::templates(rig_.root()); }
     VkDevice device() const { return device_; }
     void     destroy_device()
     {
@@ -139,13 +133,13 @@ private:
 
 TEST(icd_descriptor_templates, a_template_is_remembered_and_sizes_the_blob_it_carries)
 { TemplateRig rig;
-  CHECK(rig.rig().root().templates().invariants_hold());
-  CHECK_EQ(rig.rig().root().templates().live(), 0u);
+  CHECK(rig.templates().invariants_hold());
+  CHECK_EQ(rig.templates().live(), 0u);
   const VkDescriptorUpdateTemplate made = rig.make(4u, 16u, 0x9100u);
   CHECK(made != VK_NULL_HANDLE);
-  CHECK_EQ(rig.rig().root().templates().live(), 1u);
-  CHECK_EQ(rig.rig().root().templates().bytes_of(made), 16u + 4u * image_bytes);
-  CHECK(rig.rig().root().templates().invariants_hold());
+  CHECK_EQ(rig.templates().live(), 1u);
+  CHECK_EQ(rig.templates().bytes_of(made), 16u + 4u * image_bytes);
+  CHECK(rig.templates().invariants_hold());
 
   std::uint8_t blob[16u + 4u * image_bytes] = {};
   for (std::uint32_t at = 0u; at < sizeof blob; at++) blob[at] = static_cast<std::uint8_t>(at + 1u);
@@ -153,11 +147,11 @@ TEST(icd_descriptor_templates, a_template_is_remembered_and_sizes_the_blob_it_ca
   CHECK_EQ(rig.blob_on_the_wire(), 16u + 4u * image_bytes);
 
   rig.destroy_entry()(rig.device(), made, nullptr);
-  CHECK_EQ(rig.rig().root().templates().live(), 0u);
-  CHECK_EQ(rig.rig().root().templates().bytes_of(made), 0u);
+  CHECK_EQ(rig.templates().live(), 0u);
+  CHECK_EQ(rig.templates().bytes_of(made), 0u);
   rig.update_entry()(rig.device(), reinterpret_cast<VkDescriptorSet>(0x42u), made, blob);
   CHECK_EQ(rig.blob_on_the_wire(), 0u);
-  CHECK(rig.rig().root().templates().invariants_hold()); }
+  CHECK(rig.templates().invariants_hold()); }
 
 TEST(icd_descriptor_templates, a_maintenance6_template_push_carries_the_template_s_blob)
 { TemplateRig rig;
@@ -175,22 +169,25 @@ TEST(icd_descriptor_templates, a_maintenance6_template_push_carries_the_template
       push.pData = carried ? blob : nullptr;
       std::uint8_t   wire[1024] = {};
       av::WireWriter writer(wire, sizeof wire);
-      serialize_VkPushDescriptorSetWithTemplateInfo(writer, push);
+      serialize_VkPushDescriptorSetWithTemplateInfo(writer, rig.rig().root().wire_handles(), push);
       CHECK_STATUS(writer.status(), av::Status::ok);
       WireReader    reader(wire, writer.offset());
       std::uint8_t  block[1024] = {};
       av::WireArena arena(block, sizeof block);
       VkPushDescriptorSetWithTemplateInfo decoded = {};
-      CHECK(deserialize_VkPushDescriptorSetWithTemplateInfo(reader, &decoded, arena));
+      if (!carried) {
+          CHECK(!deserialize_VkPushDescriptorSetWithTemplateInfo(reader, rig.rig().root().wire_handles(), &decoded,
+                                                                 arena));
+          continue;
+      }
+      CHECK(deserialize_VkPushDescriptorSetWithTemplateInfo(reader, rig.rig().root().wire_handles(), &decoded,
+                                                            arena));
       CHECK_EQ(reader.remaining(), 0u);
       CHECK_EQ(decoded.set, 3u);
       CHECK(decoded.layout == push.layout);
-      if (carried) {
-          CHECK(decoded.pData != nullptr);
-          CHECK_EQ(std::memcmp(decoded.pData, blob, sizeof blob), 0);
-      } else {
-          CHECK(decoded.pData == nullptr);
-      }
+      CHECK(decoded.descriptorUpdateTemplate == made);
+      CHECK(decoded.pData != nullptr);
+      CHECK_EQ(std::memcmp(decoded.pData, blob, sizeof blob), 0);
   } }
 
 TEST(icd_descriptor_templates, nothing_to_carry_carries_nothing)
@@ -201,7 +198,7 @@ TEST(icd_descriptor_templates, nothing_to_carry_carries_nothing)
   CHECK_EQ(rig.blob_on_the_wire(), 0u);
   const VkDescriptorUpdateTemplate empty = rig.make(0u, 0u, 0x9201u);
   CHECK(empty != VK_NULL_HANDLE);
-  CHECK_EQ(rig.rig().root().templates().bytes_of(empty), 0u);
+  CHECK_EQ(rig.templates().bytes_of(empty), 0u);
   std::uint8_t blob[8] = {};
   rig.update_entry()(rig.device(), reinterpret_cast<VkDescriptorSet>(0x42u), empty, blob);
   CHECK_EQ(rig.blob_on_the_wire(), 0u); }
@@ -222,7 +219,7 @@ TEST(icd_descriptor_templates, a_template_the_icd_cannot_size_is_refused)
   CHECK_EQ(rig.create_entry()(rig.device(), &info, nullptr, &made), VK_ERROR_INITIALIZATION_FAILED);
   CHECK(made == VK_NULL_HANDLE);
   CHECK_EQ(rig.rig().kmt().commands(), quiet);
-  CHECK_EQ(rig.rig().root().templates().live(), 0u);
+  CHECK_EQ(rig.templates().live(), 0u);
   CHECK_EQ(rig.rig().log().holding("cannot size"), 1u);
 
   overflowing.offset = 0u;
@@ -232,29 +229,29 @@ TEST(icd_descriptor_templates, a_template_the_icd_cannot_size_is_refused)
   overflowing.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
   rig.rig().host().vk_handle(VK_ERROR_OUT_OF_DEVICE_MEMORY, 0u);
   CHECK(rig.create_entry()(rig.device(), &info, nullptr, &made) != VK_SUCCESS);
-  CHECK_EQ(rig.rig().root().templates().live(), 0u);
+  CHECK_EQ(rig.templates().live(), 0u);
   CHECK_EQ(rig.create_entry()(rig.device(), nullptr, nullptr, &made), VK_ERROR_INITIALIZATION_FAILED);
   CHECK_EQ(rig.create_entry()(rig.device(), &info, nullptr, nullptr), VK_ERROR_INITIALIZATION_FAILED);
-  CHECK(rig.rig().root().templates().invariants_hold()); }
+  CHECK(rig.templates().invariants_hold()); }
 
 TEST(icd_descriptor_templates, a_device_takes_its_templates_with_it)
 { TemplateRig rig;
   CHECK(rig.make(2u, 0u, 0x9300u) != VK_NULL_HANDLE);
   CHECK(rig.make(1u, 64u, 0x9301u) != VK_NULL_HANDLE);
-  CHECK_EQ(rig.rig().root().templates().live(), 2u);
+  CHECK_EQ(rig.templates().live(), 2u);
   const VkDescriptorUpdateTemplate again = rig.make(8u, 0u, 0x9300u);
   CHECK(again != VK_NULL_HANDLE);
-  CHECK_EQ(rig.rig().root().templates().live(), 2u);
-  CHECK_EQ(rig.rig().root().templates().bytes_of(again), 8u * image_bytes);
-  CHECK_EQ(rig.rig().root().templates().bytes_of(reinterpret_cast<VkDescriptorUpdateTemplate>(0x1234u)), 0u);
-  rig.rig().root().templates().forget(reinterpret_cast<VkDescriptorUpdateTemplate>(0x1234u));
-  rig.rig().root().templates().forget(VK_NULL_HANDLE);
-  CHECK_EQ(rig.rig().root().templates().live(), 2u);
+  CHECK_EQ(rig.templates().live(), 2u);
+  CHECK_EQ(rig.templates().bytes_of(again), 8u * image_bytes);
+  CHECK_EQ(rig.templates().bytes_of(reinterpret_cast<VkDescriptorUpdateTemplate>(0x1234u)), 0u);
+  rig.templates().forget(reinterpret_cast<VkDescriptorUpdateTemplate>(0x1234u));
+  rig.templates().forget(VK_NULL_HANDLE);
+  CHECK_EQ(rig.templates().live(), 2u);
   rig.destroy_device();
-  CHECK_EQ(rig.rig().root().templates().live(), 0u);
-  CHECK(rig.rig().root().templates().invariants_hold()); }
+  CHECK_EQ(rig.templates().live(), 0u);
+  CHECK(rig.templates().invariants_hold()); }
 
-TEST(icd_descriptor_templates, a_template_the_table_has_no_room_for_is_given_back)
+TEST(icd_descriptor_templates, a_template_the_table_cannot_grow_for_is_given_back)
 { TemplateRig rig;
   VkDescriptorUpdateTemplateEntry            entry = {};
   entry.descriptorCount = 1u;
@@ -264,33 +261,43 @@ TEST(icd_descriptor_templates, a_template_the_table_has_no_room_for_is_given_bac
   filling.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO;
   filling.descriptorUpdateEntryCount = 1u;
   filling.pDescriptorUpdateEntries = &entry;
-  for (std::uint32_t index = 0u; index < av::icd::DescriptorTemplateTable::max_templates; index++)
-      CHECK_EQ(rig.rig().root().templates().record(
-                   rig.device(), reinterpret_cast<VkDescriptorUpdateTemplate>(0xA000u + index), &filling),
-               VK_SUCCESS);
-  CHECK_EQ(rig.rig().root().templates().live(), av::icd::DescriptorTemplateTable::max_templates);
+  std::uint32_t held = 0u;
+  VkResult      result = rig.templates().record(rig.device(), reinterpret_cast<VkDescriptorUpdateTemplate>(0xA000u),
+                                                &filling);
+  CHECK_EQ(result, VK_SUCCESS);
+  held++;
+  while (result == VK_SUCCESS && held < 4096u) {
+      rig.rig().platform().fail_allocation_at(1u);
+      result = rig.templates().record(rig.device(), reinterpret_cast<VkDescriptorUpdateTemplate>(0xA000u + held),
+                                      &filling);
+      if (result == VK_SUCCESS) held++;
+  }
+  CHECK_EQ(result, VK_ERROR_OUT_OF_HOST_MEMORY);
+  CHECK(held > 0u);
+  CHECK_EQ(rig.templates().live(), held);
   const std::uint32_t before = rig.rig().kmt().commands();
+  rig.rig().platform().fail_allocation_at(0u);
+  rig.rig().platform().fail_allocation_at(1u);
   CHECK(rig.make(1u, 0u, 0xB000u) == VK_NULL_HANDLE);
+  rig.rig().platform().fail_allocation_at(0u);
   CHECK_EQ(rig.rig().kmt().commands(), before + 2u);
   CHECK_EQ(rig.rig().kmt().command_id(rig.rig().kmt().commands() - 1u),
            static_cast<std::uint32_t>(kCmd_vkDestroyDescriptorUpdateTemplate));
-  CHECK_EQ(rig.rig().root().templates().live(), av::icd::DescriptorTemplateTable::max_templates);
-  CHECK(rig.rig().root().templates().invariants_hold()); }
+  CHECK_EQ(rig.templates().live(), held);
+  CHECK(rig.templates().invariants_hold());
+  CHECK(rig.make(1u, 0u, 0xB001u) != VK_NULL_HANDLE);
+  CHECK_EQ(rig.templates().live(), held + 1u);
+  CHECK(rig.templates().invariants_hold()); }
 
 TEST(icd_descriptor_templates, an_invariant_refuses_each_state_it_names)
 { { TemplateRig rig;
     CHECK(rig.make(2u, 0u, 0x9400u) != VK_NULL_HANDLE);
-    DescriptorTemplateTable &table = rig.rig().root().templates();
+    CHECK(rig.make(2u, 0u, 0x9401u) != VK_NULL_HANDLE);
+    DescriptorTemplateTable &table = rig.templates();
     CHECK(table.invariants_hold());
-    DescriptorTemplateTableProbe::the_same_template_twice(table);
+    DescriptorTemplateTableProbe::a_slot_under_another_templates_key(table);
     CHECK(!table.invariants_hold()); }
   { TemplateRig rig;
-    CHECK(rig.make(1u, 0u, 0x9401u) != VK_NULL_HANDLE);
-    DescriptorTemplateTableProbe::a_slot_of_no_device(rig.rig().root().templates());
-    CHECK(!rig.rig().root().templates().invariants_hold()); }
-  { TemplateRig rig;
-    DescriptorTemplateTableProbe::bytes_in_an_empty_slot(rig.rig().root().templates());
-    CHECK(!rig.rig().root().templates().invariants_hold()); }
-  { TemplateRig rig;
-    DescriptorTemplateTableProbe::a_device_in_an_empty_slot(rig.rig().root().templates());
-    CHECK(!rig.rig().root().templates().invariants_hold()); } }
+    CHECK(rig.make(1u, 0u, 0x9402u) != VK_NULL_HANDLE);
+    DescriptorTemplateTableProbe::a_slot_of_no_device(rig.templates());
+    CHECK(!rig.templates().invariants_hold()); } }
