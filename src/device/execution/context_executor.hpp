@@ -40,6 +40,7 @@ public:
                                  size_t reply_capacity, size_t &reply_size);
     [[nodiscard]] Status import(uint64_t blob_id, uint64_t memory_key, uint64_t &device_memory);
     void                 release(uint64_t blob_id);
+    void                 channel_stats(const uint8_t *body, size_t size);
     size_t               answer_part(uint64_t offset, uint8_t *out, size_t capacity, uint64_t &length);
 
     [[nodiscard]] Status share_object(uint64_t object_id, uint32_t kind, uint64_t size, uint64_t wire_handle);

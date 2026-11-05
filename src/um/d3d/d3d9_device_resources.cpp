@@ -404,7 +404,7 @@ HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data,
     AV_SCOPE("D3d9Device::write_buffer");
     const auto *const from = static_cast<const uint8_t *>(data);
     written_ += bytes;
-    icd::Pieces pieces(bytes, TransferRoom::lent_bytes);
+    icd::Pieces pieces(bytes, TransferRoom::lent_bytes, wire());
     while (pieces.next()) {
         const uint32_t done = static_cast<uint32_t>(pieces.offset());
         const uint32_t piece = static_cast<uint32_t>(pieces.count());
@@ -442,7 +442,7 @@ HRESULT D3d9Device::write_texture(const D3d9Resource &resource, uint32_t index, 
     const uint32_t           back = box.Back > box.Front ? box.Back : box.Front + 1u;
     const d3dproto::Box      region = {box.Left, box.Top, box.Front, box.Right, box.Bottom, back};
     const d3d::TextureUpload upload(D3d9FormatLayout(static_cast<uint32_t>(resource.format)), region, row_pitch,
-                                    slice_pitch, TransferRoom::lent_bytes);
+                                    slice_pitch, TransferRoom::lent_bytes, wire());
     if (!upload.readable()) return E_INVALIDARG;
     TextureWriter writer(*this, id, subresource, flags);
     return upload.send(writer, data) ? S_OK : lost(__func__);

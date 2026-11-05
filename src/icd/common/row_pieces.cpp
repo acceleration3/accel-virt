@@ -5,8 +5,22 @@
 namespace av::icd {
 
 RowPieces::RowPieces(const TexelLayout &layout, uint32_t width, uint32_t height, uint32_t pitch, uint64_t most)
+    : RowPieces(layout, width, height, pitch, most, SplitReport())
+{
+    AV_SCOPE("RowPieces::RowPieces");
+}
+
+RowPieces::RowPieces(const TexelLayout &layout, uint32_t width, uint32_t height, uint32_t pitch, uint64_t most,
+                     ClientTransport &wire)
+    : RowPieces(layout, width, height, pitch, most, SplitReport(wire))
+{
+    AV_SCOPE("RowPieces::RowPieces");
+}
+
+RowPieces::RowPieces(const TexelLayout &layout, uint32_t width, uint32_t height, uint32_t pitch, uint64_t most,
+                     const SplitReport &report)
     : layout_(layout), width_(width), height_(height), pitch_(pitch), rows_(0u), columns_(0u), rows_per_piece_(0u),
-      columns_per_piece_(0u), row_(0u), column_(0u), row_count_(0u), column_count_(0u)
+      columns_per_piece_(0u), row_(0u), column_(0u), row_count_(0u), column_count_(0u), report_(report)
 {
     AV_SCOPE("RowPieces::RowPieces");
     const uint64_t element = layout.element_bytes();
@@ -36,6 +50,7 @@ bool RowPieces::next()
     if (row_ >= rows_) return false;
     row_count_ = rows_ - row_ < rows_per_piece_ ? rows_ - row_ : rows_per_piece_;
     column_count_ = columns_ - column_ < columns_per_piece_ ? columns_ - column_ : columns_per_piece_;
+    report_.piece();
     return true;
 }
 

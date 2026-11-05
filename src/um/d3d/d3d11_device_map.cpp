@@ -39,6 +39,9 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
         mapped->DepthPitch = static_cast<UINT>(resource.shadow_bytes);
         return;
     }
+    if (resource.dimension == D3D10DDIRESOURCE_BUFFER && (resource.cpu_access & D3D10_DDI_CPU_ACCESS_WRITE) != 0u &&
+        type != D3D10_DDI_MAP_READ && session_.slices() == nullptr)
+        wire().note(ChannelCounter::copied_mappings, 1u);
     const uint32_t flags = type == D3D10_DDI_MAP_WRITE_DISCARD      ? copy_discard
                            : type == D3D10_DDI_MAP_WRITE_NOOVERWRITE ? copy_no_overwrite
                                                                      : 0u;

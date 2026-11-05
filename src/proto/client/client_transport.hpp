@@ -1,6 +1,7 @@
 #ifndef AV_CLIENT_TRANSPORT_HPP
 #define AV_CLIENT_TRANSPORT_HPP
 
+#include "proto/submission/channel_counter.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -32,6 +33,7 @@ public:
     virtual ClientBlobArena &blobs() = 0;
     [[nodiscard]] virtual bool make_room_for_blobs(size_t bytes) = 0;
     virtual const TransferRoom &room() const = 0;
+    virtual void note(ChannelCounter counter, uint64_t amount) = 0;
 
 protected:
     ClientTransport() = default;

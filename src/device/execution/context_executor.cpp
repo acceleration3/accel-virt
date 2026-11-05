@@ -139,6 +139,13 @@ Status ContextExecutor::import(uint64_t blob_id, uint64_t memory_key, uint64_t &
     return Status::not_supported;
 }
 
+void ContextExecutor::channel_stats(const uint8_t *body, size_t size)
+{
+    AV_SCOPE("ContextExecutor::channel_stats");
+    host_.require_worker("ContextExecutor::channel_stats");
+    if (executor_ != nullptr) library_.channel_stats(executor_, id_, body, size);
+}
+
 size_t ContextExecutor::answer_part(uint64_t offset, uint8_t *out, size_t capacity, uint64_t &length)
 {
     AV_SCOPE("ContextExecutor::answer_part");

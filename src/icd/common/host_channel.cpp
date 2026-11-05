@@ -107,8 +107,8 @@ Status HostChannel::open_memory(uint64_t bytes, HostMemoryRequest memory, const 
     const ThreadLockHold release(lock_);
     Kept                *kept = nullptr;
     const Status         room = keep(owner, kept);
-    if (room != Status::ok) return room;
-    return settle(kept, kept->allocation_.object().open(bytes, memory), made);
+    if (room != Status::ok) return counted(room);
+    return counted(settle(kept, kept->allocation_.object().open(bytes, memory), made));
 }
 
 Status HostChannel::adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory, const void *owner,
@@ -119,8 +119,19 @@ Status HostChannel::adopt_memory(void *address, uint64_t bytes, HostMemoryReques
     const ThreadLockHold release(lock_);
     Kept                *kept = nullptr;
     const Status         room = keep(owner, kept);
-    if (room != Status::ok) return room;
-    return settle(kept, kept->allocation_.object().adopt(address, bytes, memory), made);
+    if (room != Status::ok) return counted(room);
+    return counted(settle(kept, kept->allocation_.object().adopt(address, bytes, memory), made));
+}
+
+Status HostChannel::counted(Status status)
+{
+    AV_SCOPE("HostChannel::counted");
+    if (status == Status::ok || !transport_.constructed()) return status;
+    ChannelCounter counter = ChannelCounter::refused_other;
+    if (status == Status::no_space) counter = ChannelCounter::refused_no_space;
+    else if (status == Status::no_memory) counter = ChannelCounter::refused_no_memory;
+    transport_.object().note(counter, 1u);
+    return status;
 }
 
 Status HostChannel::keep(const void *owner, Kept *&kept)

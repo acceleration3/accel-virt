@@ -15,6 +15,7 @@
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/scanout_target.hpp"
 #include "proto/resources/surface_layout.hpp"
+#include "proto/submission/channel_stats_report.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/command_pieces.hpp"
 #include "proto/submission/command_stream.hpp"
@@ -381,8 +382,12 @@ TransportResult KmtTransport::hold_pieces(uint32_t command_id, const WireWriter 
     ScopeExit given_back([this] { spill_.release(); });
     if (writer.status() != Status::ok) return TransportResult::failed;
     CommandPieces pieces(command_id, flags, writer.bytes(), writer.offset());
+    uint64_t      cut = 0u;
     while (!pieces.done()) {
-        if (pending_.frame_piece(pieces)) continue;
+        if (pending_.frame_piece(pieces)) {
+            stats_.piece(++cut);
+            continue;
+        }
         if (pending_.used() == 0u || flush() != TransportResult::ok) return TransportResult::failed;
     }
     blobs_.seal();
@@ -522,12 +527,14 @@ TransportResult KmtTransport::publish_pieces(uint32_t command_id, const WireWrit
     AV_SCOPE("KmtTransport::publish_pieces");
     ScopeExit     given_back([this] { spill_.release(); });
     CommandPieces pieces(command_id, flags, writer.bytes(), writer.offset());
+    uint64_t      cut = 0u;
     while (!pieces.done()) {
         const size_t framed = pieces.frame_next(staging_, staging_bytes_);
         if (framed == 0u) return TransportResult::failed;
         if (pieces.done()) blobs_.seal();
         const TransportResult sent = publish_batch(staging_, static_cast<uint32_t>(framed), fence);
         if (sent != TransportResult::ok) return sent;
+        stats_.piece(++cut);
     }
     return TransportResult::ok;
 }
@@ -578,10 +585,15 @@ bool KmtTransport::make_room_for_blobs(size_t bytes)
     while (blobs_.room() < bytes && fences_.outstanding() != 0u && !faulted_) {
         const uint64_t oldest = fences_.oldest();
         const uint64_t end = fence_ends_[oldest % TransportFence::max_outstanding];
-        if (ring_.head() < end && (wait_for_host(oldest) != Status::ok ||
-                                   !arrives_eventually([this, end] { return ring_.head() >= end; }))) {
-            faulted_ = true;
-            return false;
+        if (ring_.head() < end) {
+            const uint64_t began = published_now();
+            const bool     arrived = wait_for_host(oldest) == Status::ok &&
+                                 arrives_eventually([this, end] { return ring_.head() >= end; });
+            note_wait(began);
+            if (!arrived) {
+                faulted_ = true;
+                return false;
+            }
         }
         retire_consumed();
     }
@@ -643,13 +655,17 @@ bool KmtTransport::room_for_fence()
     AV_SCOPE("KmtTransport::room_for_fence");
     retire_consumed();
     if (!fences_.full()) return true;
-    CounterSpin spin(connection_.kmt(), fence_spin_us);
-    while (spin.lasts()) {
+    const uint64_t began = published_now();
+    CounterSpin    spin(connection_.kmt(), fence_spin_us);
+    bool           roomy = false;
+    while (!roomy && spin.lasts()) {
         spin_once();
         retire_consumed();
-        if (!fences_.full()) return true;
+        roomy = !fences_.full();
     }
-    return drain();
+    if (!roomy) roomy = drain();
+    note_wait(began);
+    return roomy;
 }
 
 TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence)
@@ -671,14 +687,36 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
     uint64_t begin = 0u;
     uint64_t end = 0u;
     Status   written = ring_.write_batch(batch, length, next, published_now(), begin, end);
-    if (written == Status::no_space && room_within_spin(BatchHeader(length, next, 0u).span()))
+    if (written == Status::no_space) written = write_when_room(batch, length, next, begin, end);
+    if (written != Status::ok) return TransportResult::failed;
+    const TransportResult submitted = submit_written(begin, end, fence);
+    if (submitted == TransportResult::ok) report_stats();
+    return submitted;
+}
+
+Status KmtTransport::write_when_room(const uint8_t *batch, uint32_t length, uint64_t &next, uint64_t &begin,
+                                     uint64_t &end)
+{
+    AV_SCOPE("KmtTransport::write_when_room");
+    const uint64_t began = published_now();
+    Status         written = Status::no_space;
+    if (room_within_spin(BatchHeader(length, next, 0u).span()))
         written = ring_.write_batch(batch, length, next, published_now(), begin, end);
     if (written == Status::no_space) {
-        if (!drain()) return TransportResult::failed;
+        if (!drain()) {
+            note_wait(began);
+            return Status::invalid_state;
+        }
         next = fences_.peek();
         written = ring_.write_batch(batch, length, next, published_now(), begin, end);
     }
-    if (written != Status::ok) return TransportResult::failed;
+    note_wait(began);
+    return written;
+}
+
+TransportResult KmtTransport::submit_written(uint64_t begin, uint64_t end, uint64_t &fence)
+{
+    AV_SCOPE("KmtTransport::submit_written");
     previous_end_ = newest_end_;
     newest_end_ = end;
     fence = fences_.open();
@@ -694,6 +732,41 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
         return TransportResult::failed;
     }
     return TransportResult::ok;
+}
+
+void KmtTransport::report_stats()
+{
+    AV_SCOPE("KmtTransport::report_stats");
+    stats_.observe(ChannelCounter::inline_bulk, blobs_.declined());
+    const uint64_t now = published_now();
+    if (!stats_.due(now) || fences_.full()) return;
+    constexpr uint32_t size = static_cast<uint32_t>(CommandHeader::encoded_size + ChannelStatsReport::encoded_size);
+    uint8_t            command[size] = {};
+    if (CommandHeader(CommandHeader::channel_stats_id, size, 0u).encode(command, size) != Status::ok ||
+        stats_.snapshot().encode(command + CommandHeader::encoded_size, sizeof command - CommandHeader::encoded_size) !=
+            Status::ok)
+        return;
+    const uint64_t next = fences_.peek();
+    uint64_t       begin = 0u;
+    uint64_t       end = 0u;
+    if (next == 0u || ring_.write_batch(command, size, next, now, begin, end) != Status::ok) return;
+    stats_.sent(now);
+    uint64_t fence = 0u;
+    static_cast<void>(submit_written(begin, end, fence));
+}
+
+void KmtTransport::note_wait(uint64_t began)
+{
+    AV_SCOPE("KmtTransport::note_wait");
+    constexpr uint64_t ticks_per_microsecond = 10u;
+    stats_.note(ChannelCounter::room_waits, 1u);
+    stats_.note(ChannelCounter::room_wait_us, (published_now() - began) / ticks_per_microsecond);
+}
+
+void KmtTransport::note(ChannelCounter counter, uint64_t amount)
+{
+    AV_SCOPE("KmtTransport::note");
+    stats_.note(counter, amount);
 }
 
 TransportResult KmtTransport::send_async(uint32_t command_id, WireWriter &writer)

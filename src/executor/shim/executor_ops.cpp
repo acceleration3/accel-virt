@@ -296,6 +296,13 @@ void gpu_progress(void *, AvExecutor *executor, uint64_t *marked, uint64_t *reac
     if (reached != nullptr) *reached = done;
 }
 
+void channel_stats(void *, AvExecutor *executor, uint32_t context_id, const uint8_t *body, size_t size)
+{
+    AV_SCOPE("channel_stats");
+    av::ContextSession *const session = session_of(executor);
+    if (session != nullptr && body != nullptr) session->channel_stats(context_id, body, size);
+}
+
 const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -326,7 +333,8 @@ const AvExecutorOps table = {AV_EXECUTOR_ABI_VERSION,
                               sync_surface,
                               compose_planes,
                               lose_device,
-                              answer_part};
+                              answer_part,
+                              channel_stats};
 
 }
 

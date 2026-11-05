@@ -1,15 +1,22 @@
 #ifndef AV_ICD_ROW_PIECES_HPP
 #define AV_ICD_ROW_PIECES_HPP
 
+#include "icd/common/split_report.hpp"
 #include "proto/resources/texel_layout.hpp"
 
 #include <stdint.h>
+
+namespace av {
+class ClientTransport;
+}
 
 namespace av::icd {
 
 class RowPieces {
 public:
     RowPieces(const TexelLayout &layout, uint32_t width, uint32_t height, uint32_t pitch, uint64_t most);
+    RowPieces(const TexelLayout &layout, uint32_t width, uint32_t height, uint32_t pitch, uint64_t most,
+              ClientTransport &wire);
 
     [[nodiscard]] bool next();
     uint32_t top() const;
@@ -21,6 +28,9 @@ public:
     bool     first() const;
 
 private:
+    RowPieces(const TexelLayout &layout, uint32_t width, uint32_t height, uint32_t pitch, uint64_t most,
+              const SplitReport &report);
+
     TexelLayout layout_;
     uint32_t    width_;
     uint32_t    height_;
@@ -33,6 +43,7 @@ private:
     uint32_t    column_;
     uint32_t    row_count_;
     uint32_t    column_count_;
+    SplitReport report_;
 };
 
 }

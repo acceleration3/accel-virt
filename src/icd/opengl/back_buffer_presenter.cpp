@@ -306,7 +306,7 @@ void BackBufferPresenter::read_back(ClientTransport &wire)
     AV_SCOPE("BackBufferPresenter::read_back");
     const TexelLayout pixels(bytes_per_pixel, 1u, 1u);
     const size_t      chunk = wire.room().read_piece(wire);
-    icd::RowPieces    pieces(pixels, width_, height_, width_ * bytes_per_pixel, chunk);
+    icd::RowPieces    pieces(pixels, width_, height_, width_ * bytes_per_pixel, chunk, wire);
     while (pieces.next())
         glproto::av_glGetTextureSubImage(wire, texture_, 0, static_cast<GLint>(pieces.left()),
                                           static_cast<GLint>(pieces.top()), 0,

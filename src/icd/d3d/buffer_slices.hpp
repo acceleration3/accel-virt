@@ -9,6 +9,7 @@
 
 namespace av {
 class BlockSource;
+class ClientTransport;
 class ThreadLock;
 }
 
@@ -28,7 +29,7 @@ public:
     static constexpr uint32_t small_classes = 9u;
     static constexpr uint64_t block_bytes = uint64_t{256} * 1024u;
     static constexpr uint64_t large_alignment = uint64_t{64} * 1024u;
-    BufferSlices(BlockSource &memory, GpuTimeline &timeline, ThreadLock &lock);
+    BufferSlices(BlockSource &memory, GpuTimeline &timeline, ThreadLock &lock, ClientTransport &wire);
     BufferSlices(const BufferSlices &) = delete;
     BufferSlices &operator=(const BufferSlices &) = delete;
 
@@ -65,6 +66,7 @@ private:
 
     GpuTimeline             &timeline_;
     ThreadLock              &lock_;
+    ClientTransport         &wire_;
     icd::RangeTable          ranges_;
     GrowableArray<uint64_t>  free_[small_classes];
     uint32_t                 carved_[small_classes];

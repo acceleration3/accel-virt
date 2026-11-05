@@ -21,6 +21,7 @@ public:
     ClientBlobArena &blobs() override;
     [[nodiscard]] bool make_room_for_blobs(size_t bytes) override;
     const TransferRoom &room() const override;
+    void note(ChannelCounter counter, uint64_t amount) override;
 
 private:
     ClientTransport &inner_;

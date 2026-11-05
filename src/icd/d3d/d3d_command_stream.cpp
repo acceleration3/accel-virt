@@ -170,6 +170,12 @@ const TransferRoom &D3dCommandStream::room() const
     return transport_.room();
 }
 
+void D3dCommandStream::note(ChannelCounter counter, uint64_t amount)
+{
+    AV_SCOPE("D3dCommandStream::note");
+    transport_.note(counter, amount);
+}
+
 void D3dCommandStream::speak_with(uint32_t select_command, uint32_t flush_command)
 {
     AV_SCOPE("D3dCommandStream::speak_with");

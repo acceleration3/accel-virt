@@ -2,14 +2,15 @@
 
 #include "core/trace/function_scope.hpp"
 #include "icd/common/row_pieces.hpp"
+#include "icd/common/split_report.hpp"
 #include "icd/d3d/upload_sink.hpp"
 #include "proto/resources/pitched_extent.hpp"
 
 namespace av::d3d {
 
 TextureUpload::TextureUpload(const TexelLayout &layout, const d3dproto::Box &box, uint32_t row_pitch,
-                             uint32_t slice_pitch, uint64_t most)
-    : layout_(layout), box_(box), row_pitch_(row_pitch), slice_pitch_(slice_pitch), most_(most)
+                             uint32_t slice_pitch, uint64_t most, ClientTransport &wire)
+    : layout_(layout), box_(box), row_pitch_(row_pitch), slice_pitch_(slice_pitch), most_(most), wire_(wire)
 {
     AV_SCOPE("TextureUpload::TextureUpload");
 }
@@ -51,7 +52,7 @@ bool TextureUpload::readable() const
     return extent().pitches_hold();
 }
 
-bool TextureUpload::send_slice(UploadSink &sink, const uint8_t *data, uint32_t slice) const
+bool TextureUpload::send_slice(UploadSink &sink, const uint8_t *data, uint32_t slice, icd::SplitReport &split) const
 {
     AV_SCOPE("TextureUpload::send_slice");
     const uint8_t *const plane = data + uint64_t{slice} * slice_pitch_;
@@ -59,6 +60,7 @@ bool TextureUpload::send_slice(UploadSink &sink, const uint8_t *data, uint32_t s
     while (pieces.next()) {
         const d3dproto::Box part = {box_.left + pieces.left(),  box_.top + pieces.top(),       box_.front + slice,
                                     box_.left + pieces.right(), box_.top + pieces.bottom(), box_.front + slice + 1u};
+        split.piece();
         if (!sink.piece(part, plane + pieces.offset(), pieces.bytes(), row_pitch_, slice_pitch_,
                         slice == 0u && pieces.first()))
             return false;
@@ -71,8 +73,9 @@ bool TextureUpload::send(UploadSink &sink, const uint8_t *data) const
     AV_SCOPE("TextureUpload::send");
     if (!readable()) return false;
     if (bytes() <= most_) return sink.piece(box_, data, bytes(), row_pitch_, slice_pitch_, true);
+    icd::SplitReport split(wire_);
     for (uint32_t slice = 0u; slice < slices(); slice++)
-        if (!send_slice(sink, data, slice)) return false;
+        if (!send_slice(sink, data, slice, split)) return false;
     return true;
 }
 

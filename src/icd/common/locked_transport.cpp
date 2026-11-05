@@ -75,6 +75,12 @@ const TransferRoom &LockedTransport::room() const
     return inner_.room();
 }
 
+void LockedTransport::note(ChannelCounter counter, uint64_t amount)
+{
+    AV_SCOPE("LockedTransport::note");
+    inner_.note(counter, amount);
+}
+
 bool LockedTransport::invariants_hold() const
 {
     AV_SCOPE("LockedTransport::invariants_hold");

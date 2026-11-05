@@ -162,6 +162,12 @@ void ExecutorLibrary::release_blob(AvExecutor *executor, uint64_t blob_id) const
     ops_->release_blob(ops_->opaque, executor, blob_id);
 }
 
+void ExecutorLibrary::channel_stats(AvExecutor *executor, uint32_t context, const uint8_t *body, size_t size) const
+{
+    AV_SCOPE("ExecutorLibrary::channel_stats");
+    if (ops_->channel_stats != nullptr) ops_->channel_stats(ops_->opaque, executor, context, body, size);
+}
+
 size_t ExecutorLibrary::answer_part(AvExecutor *executor, uint64_t offset, uint8_t *out, size_t capacity,
                                     uint64_t &length) const
 {

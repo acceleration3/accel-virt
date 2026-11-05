@@ -4,11 +4,12 @@
 #include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/gpu_timeline.hpp"
+#include "proto/client/client_transport.hpp"
 
 namespace av::d3d {
 
-BufferSlices::BufferSlices(BlockSource &memory, GpuTimeline &timeline, ThreadLock &lock)
-    : timeline_(timeline), lock_(lock), ranges_(memory, large_alignment),
+BufferSlices::BufferSlices(BlockSource &memory, GpuTimeline &timeline, ThreadLock &lock, ClientTransport &wire)
+    : timeline_(timeline), lock_(lock), wire_(wire), ranges_(memory, large_alignment),
       free_{{memory, Pool::paged}, {memory, Pool::paged}, {memory, Pool::paged},
             {memory, Pool::paged}, {memory, Pool::paged}, {memory, Pool::paged},
             {memory, Pool::paged}, {memory, Pool::paged}, {memory, Pool::paged}},
@@ -190,6 +191,7 @@ void BufferSlices::free_slice(uint64_t offset, uint64_t bytes)
 bool BufferSlices::wait_oldest()
 {
     AV_SCOPE("BufferSlices::wait_oldest");
+    wire_.note(ChannelCounter::slice_waits, 1u);
     if (!timeline_.wait(retired_.at(retired_first_).tag_)) {
         lost_ = true;
         return false;

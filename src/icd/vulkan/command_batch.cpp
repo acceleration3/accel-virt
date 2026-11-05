@@ -169,6 +169,12 @@ const TransferRoom &CommandBatch::room() const
     return room_;
 }
 
+void CommandBatch::note(ChannelCounter counter, uint64_t amount)
+{
+    AV_SCOPE("CommandBatch::note");
+    connection_.transport().note(counter, amount);
+}
+
 void CommandBatch::report(StateWriter &writer) const
 {
     AV_SCOPE("CommandBatch::report");

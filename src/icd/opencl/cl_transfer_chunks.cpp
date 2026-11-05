@@ -4,6 +4,7 @@
 #include "icd/common/pieces.hpp"
 #include "icd/common/row_pieces.hpp"
 #include "icd/opencl/unanswered_transport.hpp"
+#include "icd/opencl/cl_arena_blocks.hpp"
 #include "icd/opencl/cl_buffer_rect.hpp"
 #include "icd/opencl/cl_image_region.hpp"
 #include "icd/opencl/cl_staged_rows.hpp"
@@ -26,6 +27,7 @@ cl_int ClTransferChunks::read(uint64_t buffer, size_t offset, size_t bytes, void
     uint8_t *const to = static_cast<uint8_t *>(into);
     ClStagingBlock staging(blocks_);
     if (staging.take(bytes, ClStagingBlock::least)) return read_staged(staging, buffer, offset, bytes, to);
+    note_inline();
     return read_inline(buffer, offset, bytes, to);
 }
 
@@ -35,6 +37,7 @@ cl_int ClTransferChunks::write(uint64_t buffer, size_t offset, size_t bytes, con
     const uint8_t *const source = static_cast<const uint8_t *>(from);
     ClStagingBlock       staging(blocks_);
     if (staging.take(bytes, ClStagingBlock::least)) return write_staged(staging, buffer, offset, bytes, source);
+    note_inline();
     return write_inline(buffer, offset, bytes, source);
 }
 
@@ -46,6 +49,7 @@ cl_int ClTransferChunks::read_image(uint64_t image, const ClImageRegion &region,
     if (staging.take(region.row_bytes() * region.rows() * region.slices(),
                      region.rows_packed() ? ClStagingBlock::least : 1u))
         return read_image_staged(staging, image, region, to);
+    note_inline();
     return read_image_inline(image, region, to);
 }
 
@@ -56,6 +60,7 @@ cl_int ClTransferChunks::write_image(uint64_t image, const ClImageRegion &region
     ClStagingBlock       staging(blocks_);
     if (staging.take(region.row_bytes() * region.rows() * region.slices(), ClStagingBlock::least))
         return write_image_staged(staging, image, region, source);
+    note_inline();
     return write_image_inline(image, region, source);
 }
 
@@ -68,6 +73,7 @@ cl_int ClTransferChunks::read_buffer_rect(uint64_t buffer, const ClBufferRect &r
     if (staging.take(application.row_bytes() * application.rows() * application.slices(),
                      application.rows_packed() ? ClStagingBlock::least : 1u))
         return read_rect_staged(staging, buffer, rect, to);
+    note_inline();
     return read_rect_inline(buffer, rect, to);
 }
 
@@ -79,13 +85,20 @@ cl_int ClTransferChunks::write_buffer_rect(uint64_t buffer, const ClBufferRect &
     ClStagingBlock       staging(blocks_);
     if (staging.take(application.row_bytes() * application.rows() * application.slices(), ClStagingBlock::least))
         return write_rect_staged(staging, buffer, rect, source);
+    note_inline();
     return write_rect_inline(buffer, rect, source);
+}
+
+void ClTransferChunks::note_inline()
+{
+    AV_SCOPE("ClTransferChunks::note_inline");
+    if (!blocks_.ready()) wire_.note(ChannelCounter::inline_bulk, 1u);
 }
 
 cl_int ClTransferChunks::read_inline(uint64_t buffer, size_t offset, size_t bytes, uint8_t *to)
 {
     AV_SCOPE("ClTransferChunks::read_inline");
-    icd::Pieces pieces(bytes, wire_.room().inline_read());
+    icd::Pieces pieces(bytes, wire_.room().inline_read(), wire_);
     while (pieces.next()) {
         ++commands_;
         const cl_int read = av::clproto::av_clEnqueueReadBuffer(wire_, queue_, buffer, CL_TRUE,
@@ -101,7 +114,7 @@ cl_int ClTransferChunks::write_inline(uint64_t buffer, size_t offset, size_t byt
 {
     AV_SCOPE("ClTransferChunks::write_inline");
     icd::UnansweredTransport unanswered(wire_);
-    icd::Pieces              pieces(bytes, wire_.room().inline_write());
+    icd::Pieces              pieces(bytes, wire_.room().inline_write(), wire_);
     while (pieces.next()) {
         ++commands_;
         const cl_int written = av::clproto::av_clEnqueueWriteBuffer(
@@ -121,7 +134,7 @@ cl_int ClTransferChunks::read_image_inline(uint64_t image, const ClImageRegion &
     for (size_t slice = 0u; slice < region.slices(); ++slice) {
         uint8_t *const plane = to + region.row_offset(0u, slice);
         icd::RowPieces pieces(texels, static_cast<uint32_t>(region.width()), static_cast<uint32_t>(region.rows()),
-                              static_cast<uint32_t>(region.row_pitch()), most);
+                              static_cast<uint32_t>(region.row_pitch()), most, wire_);
         while (pieces.next()) {
             size_t origin[3] = {};
             region.origin_of(pieces.left(), pieces.top(), slice, origin);
@@ -145,7 +158,7 @@ cl_int ClTransferChunks::write_image_inline(uint64_t image, const ClImageRegion 
         const uint8_t *const plane = source + region.row_offset(0u, slice);
         icd::RowPieces       pieces(texels, static_cast<uint32_t>(region.width()),
                                     static_cast<uint32_t>(region.rows()), static_cast<uint32_t>(region.row_pitch()),
-                                    wire_.room().inline_write());
+                                    wire_.room().inline_write(), wire_);
         while (pieces.next()) {
             size_t origin[3] = {};
             region.origin_of(pieces.left(), pieces.top(), slice, origin);
@@ -174,7 +187,7 @@ cl_int ClTransferChunks::read_rect_inline(uint64_t buffer, const ClBufferRect &r
         uint8_t *const plane = to + application.row_offset(0u, slice);
         icd::RowPieces pieces(bytes, static_cast<uint32_t>(application.width()),
                               static_cast<uint32_t>(application.rows()),
-                              static_cast<uint32_t>(application.row_pitch()), most);
+                              static_cast<uint32_t>(application.row_pitch()), most, wire_);
         while (pieces.next()) {
             size_t origin[3] = {};
             buffer_side.origin_of(pieces.left(), pieces.top(), slice, origin);
@@ -201,7 +214,7 @@ cl_int ClTransferChunks::write_rect_inline(uint64_t buffer, const ClBufferRect &
         const uint8_t *const plane = source + application.row_offset(0u, slice);
         icd::RowPieces       pieces(bytes, static_cast<uint32_t>(application.width()),
                                     static_cast<uint32_t>(application.rows()),
-                                    static_cast<uint32_t>(application.row_pitch()), wire_.room().inline_write());
+                                    static_cast<uint32_t>(application.row_pitch()), wire_.room().inline_write(), wire_);
         while (pieces.next()) {
             size_t origin[3] = {};
             buffer_side.origin_of(pieces.left(), pieces.top(), slice, origin);
@@ -222,7 +235,7 @@ cl_int ClTransferChunks::read_staged(const ClStagingBlock &staging, uint64_t buf
                                      uint8_t *to)
 {
     AV_SCOPE("ClTransferChunks::read_staged");
-    icd::Pieces pieces(bytes, staging.bytes());
+    icd::Pieces pieces(bytes, staging.bytes(), wire_);
     while (pieces.next()) {
         const size_t count = static_cast<size_t>(pieces.count());
         ++commands_;
@@ -239,7 +252,7 @@ cl_int ClTransferChunks::write_staged(const ClStagingBlock &staging, uint64_t bu
                                       const uint8_t *source)
 {
     AV_SCOPE("ClTransferChunks::write_staged");
-    icd::Pieces pieces(bytes, staging.bytes());
+    icd::Pieces pieces(bytes, staging.bytes(), wire_);
     while (pieces.next()) {
         const size_t count = static_cast<size_t>(pieces.count());
         __builtin_memcpy(staging.at(), source + pieces.offset(), count);
@@ -259,7 +272,7 @@ cl_int ClTransferChunks::read_image_staged(const ClStagingBlock &staging, uint64
     const TexelLayout texels(static_cast<uint32_t>(region.element_bytes()), 1u, 1u);
     for (size_t slice = 0u; slice < region.slices(); ++slice) {
         icd::RowPieces pieces(texels, static_cast<uint32_t>(region.width()), static_cast<uint32_t>(region.rows()),
-                              static_cast<uint32_t>(region.row_bytes()), staging.bytes());
+                              static_cast<uint32_t>(region.row_bytes()), staging.bytes(), wire_);
         while (pieces.next()) {
             size_t origin[3] = {};
             region.origin_of(pieces.left(), pieces.top(), slice, origin);
@@ -283,7 +296,7 @@ cl_int ClTransferChunks::write_image_staged(const ClStagingBlock &staging, uint6
     const TexelLayout texels(static_cast<uint32_t>(region.element_bytes()), 1u, 1u);
     for (size_t slice = 0u; slice < region.slices(); ++slice) {
         icd::RowPieces pieces(texels, static_cast<uint32_t>(region.width()), static_cast<uint32_t>(region.rows()),
-                              static_cast<uint32_t>(region.row_bytes()), staging.bytes());
+                              static_cast<uint32_t>(region.row_bytes()), staging.bytes(), wire_);
         while (pieces.next()) {
             size_t origin[3] = {};
             region.origin_of(pieces.left(), pieces.top(), slice, origin);
@@ -310,7 +323,7 @@ cl_int ClTransferChunks::read_rect_staged(const ClStagingBlock &staging, uint64_
     for (size_t slice = 0u; slice < application.slices(); ++slice) {
         icd::RowPieces pieces(bytes, static_cast<uint32_t>(application.width()),
                               static_cast<uint32_t>(application.rows()),
-                              static_cast<uint32_t>(application.row_bytes()), staging.bytes());
+                              static_cast<uint32_t>(application.row_bytes()), staging.bytes(), wire_);
         while (pieces.next()) {
             size_t origin[3] = {};
             buffer_side.origin_of(pieces.left(), pieces.top(), slice, origin);
@@ -338,7 +351,7 @@ cl_int ClTransferChunks::write_rect_staged(const ClStagingBlock &staging, uint64
     for (size_t slice = 0u; slice < application.slices(); ++slice) {
         icd::RowPieces pieces(bytes, static_cast<uint32_t>(application.width()),
                               static_cast<uint32_t>(application.rows()),
-                              static_cast<uint32_t>(application.row_bytes()), staging.bytes());
+                              static_cast<uint32_t>(application.row_bytes()), staging.bytes(), wire_);
         while (pieces.next()) {
             size_t origin[3] = {};
             buffer_side.origin_of(pieces.left(), pieces.top(), slice, origin);

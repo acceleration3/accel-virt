@@ -2,6 +2,7 @@
 #define AV_CONTEXT_SESSION_HPP
 
 #include "core/support/status.hpp"
+#include "executor/channel_stats_latest.hpp"
 #include "executor/import_table.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "proto/wire/spill_block.hpp"
@@ -16,6 +17,7 @@ class DriverLog;
 class GpuClockHold;
 class HostMemorySource;
 class SessionBackend;
+class StateWriter;
 
 class ContextSession {
 public:
@@ -45,6 +47,8 @@ public:
     uint64_t imported_handle(uint64_t blob_id);
     ImportTable &imports();
     uint32_t lose_device();
+    void     channel_stats(uint32_t context_id, const uint8_t *body, size_t size);
+    void     report_channel(StateWriter &writer) const;
 
 
     size_t   starved() const;
@@ -64,6 +68,7 @@ private:
     size_t          answer_length_;
     ImportTable     imports_;
     size_t          starved_;
+    ChannelStatsLatest channel_;
     bool            faulted_;
     DriverLog      &lines_;
 };

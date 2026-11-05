@@ -15,7 +15,7 @@ namespace av {
 
 ContextSession::ContextSession(DriverLog &lines)
     : backend_(nullptr), clocks_(nullptr), source_(nullptr), domain_(0u), heap_(), arena_(nullptr, 0u), answer_(heap_),
-      answer_length_(0u), imports_(heap_), starved_(0u), faulted_(false),
+      answer_length_(0u), imports_(heap_), starved_(0u), channel_(), faulted_(false),
       lines_(lines)
 {
     AV_SCOPE("ContextSession::ContextSession");
@@ -29,6 +29,7 @@ Status ContextSession::initialize(SessionBackend &backend, uint8_t *block, size_
     backend_ = &backend;
     arena_.attach(block, block_bytes);
     starved_ = 0u;
+    channel_.reset();
     faulted_ = false;
     return Status::ok;
 }
@@ -70,6 +71,18 @@ uint32_t ContextSession::poll()
         return AV_POLL_LOST;
     }
     return backend_->poll() ? AV_POLL_PENDING : AV_POLL_IDLE;
+}
+
+void ContextSession::channel_stats(uint32_t context_id, const uint8_t *body, size_t size)
+{
+    AV_SCOPE("ContextSession::channel_stats");
+    if (backend_ != nullptr) channel_.accept(context_id, body, size);
+}
+
+void ContextSession::report_channel(StateWriter &writer) const
+{
+    AV_SCOPE("ContextSession::report_channel");
+    if (channel_.received()) channel_.report(writer);
 }
 
 uint32_t ContextSession::lose_device()

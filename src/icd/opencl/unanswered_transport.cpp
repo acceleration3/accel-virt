@@ -60,4 +60,10 @@ const TransferRoom &UnansweredTransport::room() const
     return inner_.room();
 }
 
+void UnansweredTransport::note(ChannelCounter counter, uint64_t amount)
+{
+    AV_SCOPE("UnansweredTransport::note");
+    inner_.note(counter, amount);
+}
+
 }

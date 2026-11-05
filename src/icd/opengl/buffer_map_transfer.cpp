@@ -61,7 +61,7 @@ void BufferMapTransfer::write_back(ClientTransport &wire, BufferMapping &mapping
 void BufferMapTransfer::read(ClientTransport &wire, const BufferMapping &mapping)
 {
     AV_SCOPE("BufferMapTransfer::read");
-    icd::Pieces pieces(mapping.bytes(), wire.room().inline_read());
+    icd::Pieces pieces(mapping.bytes(), wire.room().inline_read(), wire);
     while (pieces.next())
         glproto::av_glGetNamedBufferSubData(wire, mapping.buffer(),
                                              static_cast<GLintptr>(mapping.offset() + pieces.offset()),
@@ -71,7 +71,9 @@ void BufferMapTransfer::read(ClientTransport &wire, const BufferMapping &mapping
 void BufferMapTransfer::send(ClientTransport &wire, const BufferMapping &mapping, uint64_t at, uint64_t end)
 {
     AV_SCOPE("BufferMapTransfer::send");
+    icd::SplitReport split(wire);
     while (at < end) {
+        split.piece();
         const size_t chunk = wire.room().write_piece(wire, end - at);
         glproto::av_glNamedBufferSubData(wire, mapping.buffer(), static_cast<GLintptr>(mapping.offset() + at),
                                           static_cast<GLsizeiptr>(chunk), mapping.at() + at);

@@ -352,6 +352,7 @@ void ExecutorRoot::report(StateWriter &writer)
         writer.text("api", api_name(apis_of_[slot]));
         writer.number("gpu", gpus_of_[slot]);
         writer.number("domain", shares_[slot].domain());
+        sessions_[slot].object().report_channel(writer);
         writer.close();
     }
     for (uint32_t index = 0u; index < gpus_.count(); index++) {

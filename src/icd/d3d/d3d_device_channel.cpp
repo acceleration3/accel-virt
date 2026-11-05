@@ -106,6 +106,12 @@ const TransferRoom &D3dDeviceChannel::room() const
     return stream_.room();
 }
 
+void D3dDeviceChannel::note(ChannelCounter counter, uint64_t amount)
+{
+    AV_SCOPE("D3dDeviceChannel::note");
+    stream_.note(counter, amount);
+}
+
 bool D3dDeviceChannel::close()
 {
     AV_SCOPE("D3dDeviceChannel::close");

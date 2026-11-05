@@ -3,6 +3,7 @@
 
 #include "core/support/status.hpp"
 #include "guest/transport/batch_mark.hpp"
+#include "guest/transport/channel_stats.hpp"
 #include "guest/transport/framed_block.hpp"
 #include "guest/transport/guest_doorbell.hpp"
 #include "guest/transport/host_watch.hpp"
@@ -82,6 +83,7 @@ public:
     void            end_call() override;
     [[nodiscard]] bool make_room_for_blobs(size_t bytes) override;
     const TransferRoom &room() const override;
+    void                note(ChannelCounter counter, uint64_t amount) override;
     TransportResult send_batch(const uint8_t *framed, size_t length, WireReader &reply);
     uint64_t marker_address() const;
     FollowRecord follow() const;
@@ -119,6 +121,11 @@ private:
     [[nodiscard]] bool room_for_fence();
     uint64_t           published_now() const;
     [[nodiscard]] TransportResult publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence);
+    [[nodiscard]] Status          write_when_room(const uint8_t *batch, uint32_t length, uint64_t &next, uint64_t &begin,
+                                                  uint64_t &end);
+    [[nodiscard]] TransportResult submit_written(uint64_t begin, uint64_t end, uint64_t &fence);
+    void                          report_stats();
+    void                          note_wait(uint64_t began);
     [[nodiscard]] TransportResult hold(uint32_t command_id, const WireWriter &writer, uint8_t flags);
     [[nodiscard]] TransportResult hold_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags);
     [[nodiscard]] TransportResult publish_held_answered(WireReader &reply);
@@ -170,6 +177,7 @@ private:
     ClientBlobArena  blobs_;
     SpillBlock       spill_;
     SpillBlock       answer_;
+    ChannelStats     stats_;
 
     friend struct KmtTransportProbe;
 };

@@ -121,7 +121,7 @@ void D3dSession::open_slices()
     }
     slice_store_ = store;
     static_cast<void>(timeline_.construct(channel_, lock_));
-    static_cast<void>(slices_.construct(memory_, timeline_.object(), slices_lock_));
+    static_cast<void>(slices_.construct(memory_, timeline_.object(), slices_lock_, channel_.transport()));
     slices_.object().take(store->bytes());
     LogLine(lines_).text("dynamic buffers are drawn in place from ").number(store->bytes() >> 20u).text(" MiB").write();
 }

@@ -4,7 +4,13 @@
 
 namespace av::icd {
 
-Pieces::Pieces(uint64_t total, uint64_t most) : total_(total), most_(most), offset_(0u), count_(0u)
+Pieces::Pieces(uint64_t total, uint64_t most) : total_(total), most_(most), offset_(0u), count_(0u), report_()
+{
+    AV_SCOPE("Pieces::Pieces");
+}
+
+Pieces::Pieces(uint64_t total, uint64_t most, ClientTransport &wire)
+    : total_(total), most_(most), offset_(0u), count_(0u), report_(wire)
 {
     AV_SCOPE("Pieces::Pieces");
 }
@@ -15,6 +21,7 @@ bool Pieces::next()
     offset_ += count_;
     if (offset_ >= total_ || most_ == 0u) return false;
     count_ = total_ - offset_ < most_ ? total_ - offset_ : most_;
+    report_.piece();
     return true;
 }
 

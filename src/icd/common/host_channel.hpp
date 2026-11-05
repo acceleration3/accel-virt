@@ -101,6 +101,7 @@ private:
     };
 
     [[nodiscard]] Status keep(const void *owner, Kept *&kept);
+    [[nodiscard]] Status counted(Status status);
     [[nodiscard]] Status settle(Kept *kept, Status taken, HostAllocation *&made);
     [[nodiscard]] Status close_kept(Kept *kept, bool lost);
     void                 close_memories(bool lost);

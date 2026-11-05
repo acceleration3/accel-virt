@@ -298,7 +298,7 @@ void D3d11Device::upload(const ResourceRecord &resource, uint32_t subresource, c
     const DxgiFormatLayout format(resource.format);
     const bool             bytes = resource.dimension == D3D10DDIRESOURCE_BUFFER || format.element_bytes() == 0u;
     const TexelLayout      layout = bytes ? TexelLayout(1u, 1u, 1u) : TexelLayout(format);
-    const d3d::TextureUpload upload(layout, region, row_pitch, depth_pitch, piece_bytes());
+    const d3d::TextureUpload upload(layout, region, row_pitch, depth_pitch, piece_bytes(), wire());
     if (upload.bytes() == 0u) return;
     UpdateWriter writer(*this, resource.stamp.id(), subresource, copy_flags);
     if (!upload.send(writer, static_cast<const uint8_t *>(data)))

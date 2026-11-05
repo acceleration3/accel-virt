@@ -39,7 +39,7 @@ bool BufferPieces::lends_whole(size_t bytes)
 void BufferPieces::write(uint32_t target, intptr_t offset, size_t bytes, const uint8_t *from)
 {
     AV_SCOPE("BufferPieces::write");
-    icd::Pieces pieces(bytes, wire_.room().inline_write());
+    icd::Pieces pieces(bytes, wire_.room().inline_write(), wire_);
     while (pieces.next()) {
         glproto::av_glBufferSubData(wire_, target, offset + static_cast<intptr_t>(pieces.offset()),
                                     static_cast<intptr_t>(pieces.count()), from + pieces.offset());
@@ -50,7 +50,7 @@ void BufferPieces::write(uint32_t target, intptr_t offset, size_t bytes, const u
 void BufferPieces::write_named(uint32_t buffer, intptr_t offset, size_t bytes, const uint8_t *from)
 {
     AV_SCOPE("BufferPieces::write_named");
-    icd::Pieces pieces(bytes, wire_.room().inline_write());
+    icd::Pieces pieces(bytes, wire_.room().inline_write(), wire_);
     while (pieces.next()) {
         glproto::av_glNamedBufferSubData(wire_, buffer, offset + static_cast<intptr_t>(pieces.offset()),
                                          static_cast<intptr_t>(pieces.count()), from + pieces.offset());
@@ -61,7 +61,7 @@ void BufferPieces::write_named(uint32_t buffer, intptr_t offset, size_t bytes, c
 void BufferPieces::write_named_ext(uint32_t buffer, intptr_t offset, size_t bytes, const uint8_t *from)
 {
     AV_SCOPE("BufferPieces::write_named_ext");
-    icd::Pieces pieces(bytes, wire_.room().inline_write());
+    icd::Pieces pieces(bytes, wire_.room().inline_write(), wire_);
     while (pieces.next()) {
         glproto::av_glNamedBufferSubDataEXT(wire_, buffer, offset + static_cast<intptr_t>(pieces.offset()),
                                             static_cast<intptr_t>(pieces.count()), from + pieces.offset());
@@ -72,7 +72,7 @@ void BufferPieces::write_named_ext(uint32_t buffer, intptr_t offset, size_t byte
 void BufferPieces::read(uint32_t target, intptr_t offset, size_t bytes, uint8_t *into)
 {
     AV_SCOPE("BufferPieces::read");
-    icd::Pieces pieces(bytes, wire_.room().inline_read());
+    icd::Pieces pieces(bytes, wire_.room().inline_read(), wire_);
     while (pieces.next()) {
         glproto::av_glGetBufferSubData(wire_, target, offset + static_cast<intptr_t>(pieces.offset()),
                                        static_cast<intptr_t>(pieces.count()), into + pieces.offset());
@@ -83,7 +83,7 @@ void BufferPieces::read(uint32_t target, intptr_t offset, size_t bytes, uint8_t 
 void BufferPieces::read_named(uint32_t buffer, intptr_t offset, size_t bytes, uint8_t *into)
 {
     AV_SCOPE("BufferPieces::read_named");
-    icd::Pieces pieces(bytes, wire_.room().inline_read());
+    icd::Pieces pieces(bytes, wire_.room().inline_read(), wire_);
     while (pieces.next()) {
         glproto::av_glGetNamedBufferSubData(wire_, buffer, offset + static_cast<intptr_t>(pieces.offset()),
                                             static_cast<intptr_t>(pieces.count()), into + pieces.offset());
@@ -94,7 +94,7 @@ void BufferPieces::read_named(uint32_t buffer, intptr_t offset, size_t bytes, ui
 void BufferPieces::read_named_ext(uint32_t buffer, intptr_t offset, size_t bytes, uint8_t *into)
 {
     AV_SCOPE("BufferPieces::read_named_ext");
-    icd::Pieces pieces(bytes, wire_.room().inline_read());
+    icd::Pieces pieces(bytes, wire_.room().inline_read(), wire_);
     while (pieces.next()) {
         glproto::av_glGetNamedBufferSubDataEXT(wire_, buffer, offset + static_cast<intptr_t>(pieces.offset()),
                                                static_cast<intptr_t>(pieces.count()), into + pieces.offset());
