@@ -5,6 +5,7 @@
 #include "executor/channel_stats_latest.hpp"
 #include "executor/import_table.hpp"
 #include "executor/shim/host_heap.hpp"
+#include "proto/client/client_blob_arena.hpp"
 #include "proto/submission/blob_role.hpp"
 #include "proto/wire/spill_block.hpp"
 #include "proto/wire/wire_arena.hpp"
@@ -23,7 +24,7 @@ class StateWriter;
 class ContextSession {
 public:
     static constexpr size_t arena_bytes = 1u << 20;
-    static constexpr uint32_t parked_most = 8u;
+    static constexpr uint32_t parked_most = ClientBlobArena::max_segments + ClientBlobArena::max_regions + 1u;
 
     explicit ContextSession(DriverLog &lines);
     ContextSession(const ContextSession &) = delete;

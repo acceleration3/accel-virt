@@ -197,7 +197,12 @@ uint32_t ContextSession::import_blob(uint64_t blob_id, uint64_t memory_key, cons
     }
     if (imports_.name(*taken, handle) != Status::ok) {
         lines_.note("an import answered a handle another import is named by, handle", handle);
-        backend_->abandon(*memory, handle);
+        if (role.is_arena()) {
+            backend_->unbind_arena(*memory);
+            backend_->retire_arena(*memory);
+        } else {
+            backend_->abandon(*memory, handle);
+        }
         source_->release(*imports_.forget(blob_id));
         return AV_UNDECODABLE;
     }

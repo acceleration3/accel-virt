@@ -36,7 +36,7 @@ namespace {
 
 constexpr std::uint32_t domain = 3u;
 constexpr std::uint64_t first_key = 0x10u;
-constexpr std::uint32_t keys = 12u;
+constexpr std::uint32_t keys = ContextSession::parked_most + 2u;
 
 BlobRole arena_at(std::uint32_t slot)
 {
@@ -151,6 +151,27 @@ TEST(context_session_parking, only_so_many_segments_wait_and_the_rest_retire)
   }
   CHECK_EQ(parking.session().parked(), ContextSession::parked_most);
   CHECK_EQ(parking.backend().abandoned(), 1u);
+  CHECK(parking.session().invariants_hold()); }
+
+TEST(context_session_parking, a_teardown_wide_enough_for_every_segment_a_channel_holds_parks_all_of_them)
+{ Parking parking;
+  parking.backend().set_progress(100u, 1u);
+  for (std::uint32_t at = 0u; at < av::ClientBlobArena::max_segments + av::ClientBlobArena::max_regions + 1u; at++) {
+      CHECK_EQ(parking.session().import_blob(at + 1u, first_key + at, arena_at(at + 1u)), std::uint32_t{AV_EXECUTED});
+      parking.session().release_blob(at + 1u);
+  }
+  CHECK_EQ(parking.session().parked(), ContextSession::parked_most);
+  CHECK_EQ(parking.backend().abandoned(), 0u);
+  CHECK(parking.session().invariants_hold()); }
+
+TEST(context_session_parking, an_arena_segment_whose_handle_is_taken_is_unbound_and_retired_not_abandoned_plain)
+{ Parking parking;
+  CHECK_EQ(parking.session().import_blob(1u, first_key), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(parking.session().import_blob(2u, first_key, arena_at(1u)), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(parking.backend().unbound(), 1u);
+  CHECK_EQ(parking.backend().unbound_when_retired(), 1u);
+  CHECK_EQ(parking.backend().abandoned(), 1u);
+  CHECK_EQ(parking.session().imported_handle(2u), 0u);
   CHECK(parking.session().invariants_hold()); }
 
 TEST(context_session_parking, releasing_the_session_retires_what_still_waits)
