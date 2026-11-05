@@ -177,7 +177,8 @@ private:
     bool detach_buffer_slice(uint32_t resource, uint64_t offset, uint64_t bytes);
     bool marks_batches();
     void retire_slices(const SourceMemory &memory);
-    void leave_slice(ID3D11Buffer *buffer, const SliceBindings::Binding &was);
+    bool leave_slice(ID3D11Buffer *buffer, const SliceBindings::Binding &was);
+    void drop_slice(uint32_t id);
     friend struct D3dBackendProbe;
 
     static constexpr uint32_t stage_count = 6u;

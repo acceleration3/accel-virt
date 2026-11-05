@@ -284,25 +284,31 @@ void D3dBackend::retire_slices(const SourceMemory &memory)
     const bool locked = !held_;
     if (locked) device11_->lock(nullptr);
     slices_.retire(memory, progress11_);
-    SliceBindings::Binding bound = {};
-    while (slices_.next_bound_to(memory, bound)) {
+    slices_.take_all_bound_to(memory, [this](const SliceBindings::Binding &bound) {
         ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(bound.resource_, D3dObjectKind::resource);
-        if (found == nullptr) continue;
-        device11_->context()->DiscardResource(found);
-    }
+        if (found != nullptr) device11_->context()->DiscardResource(found);
+    });
     if (locked) device11_->unlock();
 }
 
-void D3dBackend::leave_slice(ID3D11Buffer *buffer, const SliceBindings::Binding &was)
+bool D3dBackend::leave_slice(ID3D11Buffer *buffer, const SliceBindings::Binding &was)
 {
     AV_SCOPE("D3dBackend::leave_slice");
     D3D11_BUFFER_DESC desc = {};
     buffer->GetDesc(&desc);
     D3D11_MAPPED_SUBRESOURCE mapped = {};
-    if (FAILED(device11_->context()->Map(buffer, 0u, D3D11_MAP_WRITE_DISCARD, 0u, &mapped))) return;
+    if (FAILED(device11_->context()->Map(buffer, 0u, D3D11_MAP_WRITE_DISCARD, 0u, &mapped))) return false;
     const uint64_t kept = desc.ByteWidth < was.bytes_ ? desc.ByteWidth : was.bytes_;
     __builtin_memcpy(mapped.pData, was.slice_, static_cast<size_t>(kept));
     device11_->context()->Unmap(buffer, 0u);
+    return true;
+}
+
+void D3dBackend::drop_slice(uint32_t id)
+{
+    AV_SCOPE("D3dBackend::drop_slice");
+    SliceBindings::Binding was = {};
+    static_cast<void>(slices_.leave(id, was));
 }
 
 ID3D11Texture2D *D3dBackend::shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc)
@@ -720,8 +726,7 @@ bool D3dBackend::on_DestroyObject(uint32_t id)
     if (found == nullptr || kind >= D3dObjectKind::heap12) return false;
     published_.forget(id);
     constants_.forget(id);
-    SliceBindings::Binding was = {};
-    static_cast<void>(slices_.leave(id, was));
+    drop_slice(id);
     objects_.remove(id);
     return true;
 }
@@ -1572,6 +1577,7 @@ bool D3dBackend::on_Discard(uint32_t id, uint32_t rect_count, const d3dproto::Re
     IUnknown *const found = objects_.find_any(id, kind);
     if (!ready() || found == nullptr) return false;
     if (kind == D3dObjectKind::resource) {
+        drop_slice(id);
         device11_->context()->DiscardResource(static_cast<ID3D11Resource *>(static_cast<void *>(found)));
         return true;
     }
@@ -1607,6 +1613,7 @@ bool D3dBackend::on_CopySubresourceRegion(uint32_t destination, uint32_t destina
     if (!ready() || to == nullptr || from == nullptr) return false;
     constants_.release(device11_->context(), states_.selected_id(), destination, static_cast<ID3D11Buffer *>(to));
     constants_.release(device11_->context(), states_.selected_id(), source, static_cast<ID3D11Buffer *>(from));
+    if ((copy_flags & D3D11_COPY_DISCARD) != 0u) drop_slice(destination);
     const D3D11_BOX region = {box.left, box.top, box.front, box.right, box.bottom, box.back};
     device11_->context()->CopySubresourceRegion1(to, destination_subresource, x, y, z, from, source_subresource,
                                                  has_box != 0u ? &region : nullptr,
@@ -1675,6 +1682,7 @@ bool D3dBackend::on_UpdateSubresource(uint32_t resource, uint32_t subresource, u
     if (!PitchedExtent(row, layout.rows(height), depth, row_pitch, depth_pitch).within(data_size)) return false;
     if (update_dynamic_buffer(resource, found, has_box != 0u ? box.left : 0u, data, row, copy_flags)) return true;
     constants_.release(device11_->context(), states_.selected_id(), resource, static_cast<ID3D11Buffer *>(found));
+    if ((copy_flags & D3D11_COPY_DISCARD) != 0u) drop_slice(resource);
     const D3D11_BOX region = {box.left, box.top, box.front, box.right, box.bottom, box.back};
     device11_->context()->UpdateSubresource1(found, subresource, has_box != 0u ? &region : nullptr, data, row_pitch,
                                              depth_pitch, copy_flags & (D3D11_COPY_NO_OVERWRITE | D3D11_COPY_DISCARD));
@@ -1692,6 +1700,7 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
     static_cast<ID3D11Buffer *>(resource)->GetDesc(&desc);
     if (desc.Usage != D3D11_USAGE_DYNAMIC || offset + bytes > desc.ByteWidth) return false;
     ID3D11Buffer *const buffer = static_cast<ID3D11Buffer *>(resource);
+    if ((copy_flags & D3D11_COPY_DISCARD) != 0u) drop_slice(id);
     if ((copy_flags & D3D11_COPY_DISCARD) != 0u && offset == 0u &&
         constants_.update(device11_->device(), device11_->context(), states_.selected_id(), id, buffer, data,
                           static_cast<uint32_t>(bytes)))
@@ -1728,8 +1737,19 @@ bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t
     if (storage == nullptr) return false;
     auto *const buffer = static_cast<ID3D11Buffer *>(found);
     constants_.release(device11_->context(), states_.selected_id(), resource, buffer);
-    if (!device11_->bind_storage(buffer, *storage, offset, bytes, slice)) return false;
-    return slices_.attach({resource, store, slice, bytes});
+    SliceBindings::Binding previous = {};
+    const bool             had_previous = slices_.leave(resource, previous);
+    const auto             restore = [this, had_previous, &previous]() {
+        if (had_previous) static_cast<void>(slices_.attach(previous));
+    };
+    if (!slices_.attach({resource, store, slice, bytes})) {
+        restore();
+        return false;
+    }
+    if (device11_->bind_storage(buffer, *storage, offset, bytes, slice)) return true;
+    drop_slice(resource);
+    restore();
+    return false;
 }
 
 bool D3dBackend::detach_buffer_slice(uint32_t resource, uint64_t offset, uint64_t bytes)
@@ -1738,7 +1758,9 @@ bool D3dBackend::detach_buffer_slice(uint32_t resource, uint64_t offset, uint64_
     ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
     if (!ready() || found == nullptr || offset != 0u || bytes != 0u || !dynamic_buffer(found)) return false;
     SliceBindings::Binding was = {};
-    if (slices_.leave(resource, was)) leave_slice(static_cast<ID3D11Buffer *>(found), was);
+    if (!slices_.bound(resource, was)) return true;
+    if (!leave_slice(static_cast<ID3D11Buffer *>(found), was)) return false;
+    drop_slice(resource);
     return true;
 }
 

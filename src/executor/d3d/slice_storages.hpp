@@ -2,6 +2,7 @@
 #define AV_SLICE_STORAGES_HPP
 
 #include "core/support/object_pool.hpp"
+#include "core/trace/function_scope.hpp"
 #include "executor/d3d/slice_bindings.hpp"
 #include "executor/d3d/slice_storage.hpp"
 
@@ -24,7 +25,9 @@ public:
     const VulkanBuffer *bind(D3d11HostDevice &device, SourceMemory &store, const D3d11BatchProgress &progress);
     [[nodiscard]] bool  attach(const SliceBindings::Binding &binding);
     bool                leave(uint32_t resource, SliceBindings::Binding &was);
-    bool                next_bound_to(const SourceMemory &store, SliceBindings::Binding &was);
+    bool                bound(uint32_t resource, SliceBindings::Binding &was) const;
+    template <typename Visitor>
+    void                take_all_bound_to(const SourceMemory &store, Visitor visit);
     void                retire(const SourceMemory &store, const D3d11BatchProgress &progress);
     bool                holds(const SourceMemory &store);
     void                reclaim(const D3d11BatchProgress &progress);
@@ -43,6 +46,13 @@ private:
     uint32_t                 retiring_;
     bool                     reported_;
 };
+
+template <typename Visitor>
+void SliceStorages::take_all_bound_to(const SourceMemory &store, Visitor visit)
+{
+    AV_SCOPE("SliceStorages::take_all_bound_to");
+    bindings_.take_all_bound_to(store, visit);
+}
 
 }
 

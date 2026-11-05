@@ -40,10 +40,10 @@ bool SliceStorages::leave(uint32_t resource, SliceBindings::Binding &was)
     return bindings_.take(resource, was);
 }
 
-bool SliceStorages::next_bound_to(const SourceMemory &store, SliceBindings::Binding &was)
+bool SliceStorages::bound(uint32_t resource, SliceBindings::Binding &was) const
 {
-    AV_SCOPE("SliceStorages::next_bound_to");
-    return bindings_.take_bound_to(store, was);
+    AV_SCOPE("SliceStorages::bound");
+    return bindings_.find(resource, was);
 }
 
 void SliceStorages::retire(const SourceMemory &store, const D3d11BatchProgress &progress)
