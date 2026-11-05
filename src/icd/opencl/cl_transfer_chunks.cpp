@@ -21,13 +21,20 @@ ClTransferChunks::ClTransferChunks(ClientTransport &wire, uint64_t queue, ClAren
     AV_SCOPE("ClTransferChunks::ClTransferChunks");
 }
 
+bool ClTransferChunks::take_staging(ClStagingBlock &staging, uint64_t wanted, uint64_t smallest)
+{
+    AV_SCOPE("ClTransferChunks::take_staging");
+    if (staging.take(wanted, smallest)) return true;
+    if (wanted >= ClStagingBlock::least) wire_.note(ChannelCounter::inline_bulk, 1u);
+    return false;
+}
+
 cl_int ClTransferChunks::read(uint64_t buffer, size_t offset, size_t bytes, void *into)
 {
     AV_SCOPE("ClTransferChunks::read");
     uint8_t *const to = static_cast<uint8_t *>(into);
     ClStagingBlock staging(blocks_);
-    if (staging.take(bytes, ClStagingBlock::least)) return read_staged(staging, buffer, offset, bytes, to);
-    wire_.note(ChannelCounter::inline_bulk, 1u);
+    if (take_staging(staging, bytes, ClStagingBlock::least)) return read_staged(staging, buffer, offset, bytes, to);
     return read_inline(buffer, offset, bytes, to);
 }
 
@@ -36,8 +43,7 @@ cl_int ClTransferChunks::write(uint64_t buffer, size_t offset, size_t bytes, con
     AV_SCOPE("ClTransferChunks::write");
     const uint8_t *const source = static_cast<const uint8_t *>(from);
     ClStagingBlock       staging(blocks_);
-    if (staging.take(bytes, ClStagingBlock::least)) return write_staged(staging, buffer, offset, bytes, source);
-    wire_.note(ChannelCounter::inline_bulk, 1u);
+    if (take_staging(staging, bytes, ClStagingBlock::least)) return write_staged(staging, buffer, offset, bytes, source);
     return write_inline(buffer, offset, bytes, source);
 }
 
@@ -46,10 +52,9 @@ cl_int ClTransferChunks::read_image(uint64_t image, const ClImageRegion &region,
     AV_SCOPE("ClTransferChunks::read_image");
     uint8_t *const to = static_cast<uint8_t *>(into);
     ClStagingBlock staging(blocks_);
-    if (staging.take(region.row_bytes() * region.rows() * region.slices(),
+    if (take_staging(staging, region.row_bytes() * region.rows() * region.slices(),
                      region.rows_packed() ? ClStagingBlock::least : 1u))
         return read_image_staged(staging, image, region, to);
-    wire_.note(ChannelCounter::inline_bulk, 1u);
     return read_image_inline(image, region, to);
 }
 
@@ -58,9 +63,8 @@ cl_int ClTransferChunks::write_image(uint64_t image, const ClImageRegion &region
     AV_SCOPE("ClTransferChunks::write_image");
     const uint8_t *const source = static_cast<const uint8_t *>(from);
     ClStagingBlock       staging(blocks_);
-    if (staging.take(region.row_bytes() * region.rows() * region.slices(), ClStagingBlock::least))
+    if (take_staging(staging, region.row_bytes() * region.rows() * region.slices(), ClStagingBlock::least))
         return write_image_staged(staging, image, region, source);
-    wire_.note(ChannelCounter::inline_bulk, 1u);
     return write_image_inline(image, region, source);
 }
 
@@ -70,10 +74,9 @@ cl_int ClTransferChunks::read_buffer_rect(uint64_t buffer, const ClBufferRect &r
     const ClImageRegion &application = rect.application();
     uint8_t *const       to = static_cast<uint8_t *>(into) + rect.host_offset();
     ClStagingBlock       staging(blocks_);
-    if (staging.take(application.row_bytes() * application.rows() * application.slices(),
+    if (take_staging(staging, application.row_bytes() * application.rows() * application.slices(),
                      application.rows_packed() ? ClStagingBlock::least : 1u))
         return read_rect_staged(staging, buffer, rect, to);
-    wire_.note(ChannelCounter::inline_bulk, 1u);
     return read_rect_inline(buffer, rect, to);
 }
 
@@ -83,9 +86,9 @@ cl_int ClTransferChunks::write_buffer_rect(uint64_t buffer, const ClBufferRect &
     const ClImageRegion &application = rect.application();
     const uint8_t *const source = static_cast<const uint8_t *>(from) + rect.host_offset();
     ClStagingBlock       staging(blocks_);
-    if (staging.take(application.row_bytes() * application.rows() * application.slices(), ClStagingBlock::least))
+    if (take_staging(staging, application.row_bytes() * application.rows() * application.slices(),
+                     ClStagingBlock::least))
         return write_rect_staged(staging, buffer, rect, source);
-    wire_.note(ChannelCounter::inline_bulk, 1u);
     return write_rect_inline(buffer, rect, source);
 }
 
