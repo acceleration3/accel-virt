@@ -150,7 +150,8 @@ TEST(surface_properties, the_present_modes_are_fifo_and_immediate)
 TEST(icd_presentation, the_surface_queries_answer_from_the_named_surface_s_window)
 { IcdRig rig;
   ScriptedVulkanDevice host;
-  Presentation wsi(rig.platform(), rig.kmt(), rig.windows(), rig.chains(), rig.log(), rig.root(), host);
+  Presentation wsi(rig.platform(), rig.kmt(), rig.windows(), rig.chains(), rig.lines(), rig.root(), host,
+                   rig.present_thread(), rig.handed(), rig.shown(), rig.present_lock());
   rig.windows().add_dc(as_window(0x20u), as_window(0x10u), width, height);
   Win32SurfaceCreateRecord info = {};
   info.type_ = win32_surface_create_info;
