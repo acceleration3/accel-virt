@@ -35,7 +35,7 @@ public:
     static constexpr int64_t  whole_buffer = -1;
     enum : uint32_t {
         gl_no_error = 0u, gl_invalid_value = 0x0501u, gl_invalid_operation = 0x0502u,
-        gl_map_coherent_bit = 0x0080u, gl_dynamic_storage_bit = 0x0100u,
+        gl_map_coherent_bit = 0x0080u, gl_dynamic_storage_bit = 0x0100u, gl_client_storage_bit = 0x0200u,
         gl_read_only = 0x88B8u, gl_write_only = 0x88B9u, gl_read_write = 0x88BAu,
         gl_buffer_access = 0x88BBu, gl_buffer_mapped = 0x88BCu, gl_buffer_access_flags = 0x911Fu,
         gl_buffer_map_length = 0x9120u, gl_buffer_map_offset = 0x9121u, gl_buffer_storage_flags = 0x8220u,

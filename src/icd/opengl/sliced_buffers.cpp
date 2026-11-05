@@ -75,6 +75,10 @@ bool SlicedBuffers::offers(uint64_t size, uint32_t flags) const
 {
     AV_SCOPE("SlicedBuffers::offers");
     if (!granted_ || stopped_ || size == 0u || size > most_bytes) return false;
+    constexpr uint32_t known_storage = both | BufferMapping::map_persistent | gl_map_coherent_bit |
+                                       gl_dynamic_storage_bit | gl_client_storage_bit;
+    if ((flags & ~known_storage) != 0u || (flags & both) == 0u) return false;
+    if ((flags & gl_map_coherent_bit) != 0u && (flags & BufferMapping::map_persistent) == 0u) return false;
     return (flags & BufferMapping::map_persistent) != 0u && (flags & gl_dynamic_storage_bit) == 0u;
 }
 
@@ -155,6 +159,8 @@ uint32_t SlicedBuffers::map(uint32_t buffer, int64_t offset, int64_t length, uin
     if (row == nullptr || stream == nullptr || row->access_ != 0u) return gl_invalid_operation;
     const uint32_t refused = access_error(*row, offset, length, access);
     if (refused != gl_no_error) return refused;
+    constexpr uint32_t unsynchronized = BufferMapping::map_persistent | BufferMapping::map_unsynchronized;
+    if ((access & unsynchronized) == 0u && !timeline_.wait(timeline_.recording())) return gl_invalid_operation;
     const uint64_t at = static_cast<uint64_t>(offset);
     row->access_ = access;
     row->map_offset_ = at;
@@ -192,6 +198,7 @@ uint32_t SlicedBuffers::read(uint32_t buffer, int64_t offset, int64_t size, void
     Row *const row = rows_.find(buffer);
     icd::StreamMemory *const stream = row != nullptr ? made_stream(row->kind_) : nullptr;
     if (row == nullptr || stream == nullptr) return gl_invalid_operation;
+    if (row->access_ != 0u && (row->access_ & BufferMapping::map_persistent) == 0u) return gl_invalid_operation;
     if (offset < 0 || size < 0) return gl_invalid_value;
     const uint64_t at = static_cast<uint64_t>(offset);
     const uint64_t bytes = static_cast<uint64_t>(size);
