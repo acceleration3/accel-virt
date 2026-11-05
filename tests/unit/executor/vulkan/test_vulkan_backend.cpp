@@ -1,8 +1,10 @@
+#include "core/log/driver_log.hpp"
 #include "device/abi/av_executor.h"
-#include "executor/imported_blob.hpp"
+#include "executor/executor_log.hpp"
+#include "executor/import_table.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/exported_memory.hpp"
 #include "executor/source_memory.hpp"
-#include "executor/vulkan/handle_registry.hpp"
 #include "executor/host_gpu.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
@@ -14,7 +16,9 @@
 #include "harness/executor/vulkan_backend_probe.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
+#include "proto/submission/blob_role.hpp"
 #include "proto/generated/vulkan/vk_serialize.h"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -48,7 +52,18 @@ extern "C" const char *__lsan_default_suppressions(void)
 namespace {
 std::uint64_t detail = 0u;
 
+struct Rig {
+    Rig() : memory(), imports(memory), sink(), lines(sink, "vulkan: ") {}
+
+    av::MockPlatform memory;
+    av::ImportTable  imports;
+    av::RecordingLog sink;
+    av::DriverLog    lines;
+};
+
 constexpr std::size_t block_bytes = 65536u;
+
+av::vkproto::HandleIdentity identity_translation;
 
 constexpr std::uint32_t api_1_0 = 1u << 22;
 constexpr std::uint32_t api_1_1 = (1u << 22) | (1u << 12);
@@ -63,13 +78,14 @@ std::size_t create_instance_frame(std::uint8_t *frame, std::size_t capacity,
   VkInstanceCreateInfo create = {};
   create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   create.pApplicationInfo = &application;
-  av::vkproto::serialize_VkInstanceCreateInfo(writer, create);
+  av::vkproto::serialize_VkInstanceCreateInfo(writer, identity_translation, create);
   return writer.offset(); }
 
 }
 
 TEST(vulkan_backend, knows_the_ids_the_profile_carries_and_no_others)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   CHECK(backend.knows(av::vkproto::kCmd_vkCreateInstance));
   CHECK(backend.knows(av::vkproto::kCmd_vkDestroyInstance));
   CHECK(!backend.knows(0x1FFFFu));
@@ -77,7 +93,8 @@ TEST(vulkan_backend, knows_the_ids_the_profile_carries_and_no_others)
   CHECK(!backend.knows(0u)); }
 
 TEST(vulkan_backend, a_well_formed_command_decodes_and_answers)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   std::uint8_t frame[1024];
   const std::size_t length = create_instance_frame(frame, sizeof frame);
   CHECK(length > 0u);
@@ -96,7 +113,8 @@ TEST(vulkan_backend, a_well_formed_command_decodes_and_answers)
 TEST(vulkan_backend, an_instance_asking_for_a_version_below_one_zero_is_refused)
 { constexpr std::uint32_t refused[] = {1u, api_1_0 - 1u, 65664u};
   for (const std::uint32_t version : refused) {
-      VulkanBackend backend;
+      Rig rig;
+      VulkanBackend backend(rig.lines);
       std::uint8_t  frame[1024];
       const std::size_t length = create_instance_frame(frame, sizeof frame, version);
       std::uint8_t  block[block_bytes];
@@ -116,7 +134,8 @@ TEST(vulkan_backend, an_instance_asking_for_a_version_below_one_zero_is_refused)
   }
   constexpr std::uint32_t allowed[] = {0u, api_1_0};
   for (const std::uint32_t version : allowed) {
-      VulkanBackend backend;
+      Rig rig;
+      VulkanBackend backend(rig.lines);
       std::uint8_t  frame[1024];
       const std::size_t length = create_instance_frame(frame, sizeof frame, version);
       std::uint8_t  block[block_bytes];
@@ -132,7 +151,8 @@ TEST(vulkan_backend, an_instance_asking_for_a_version_below_one_zero_is_refused)
   } }
 
 TEST(vulkan_backend, a_truncated_command_is_refused_at_every_length)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   std::uint8_t frame[1024];
   const std::size_t whole = create_instance_frame(frame, sizeof frame);
   for (std::size_t length = 0u; length < whole; length++) {
@@ -146,7 +166,8 @@ TEST(vulkan_backend, a_truncated_command_is_refused_at_every_length)
   CHECK_EQ(backend.ran(), 0u); }
 
 TEST(vulkan_backend, an_id_it_does_not_know_does_not_decode)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   std::uint8_t block[block_bytes];
   WireArena arena(block, sizeof block);
   std::uint8_t frame[8] = {};
@@ -157,7 +178,8 @@ TEST(vulkan_backend, an_id_it_does_not_know_does_not_decode)
   CHECK_EQ(backend.ran(), 0u); }
 
 TEST(vulkan_backend, a_command_the_arena_will_not_hold_is_refused_and_counted)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   std::uint8_t frame[1024];
   const std::size_t length = create_instance_frame(frame, sizeof frame);
 
@@ -170,21 +192,22 @@ TEST(vulkan_backend, a_command_the_arena_will_not_hold_is_refused_and_counted)
   CHECK(arena.refusals() > 0u); }
 
 TEST(vulkan_backend, without_a_device_nothing_is_adopted)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
+  av::HostGpu gpu;
+  backend.initialize(gpu, nullptr, rig.imports);
   alignas(4096) static std::uint8_t page[4096];
   av::SourceMemory memory(1u, 1u, 0u, 1u, av::ExportedMemory(0x10u, -1, page, sizeof page));
-  av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, memory), av::Status::ok);
-  CHECK(!backend.adopt(blob));
-  CHECK_EQ(blob.object(), 0u);
-  CHECK_EQ(blob.wire_handle(), 0u);
-  backend.abandon(blob);
-  CHECK_EQ(blob.object(), 0u);
+  std::uint64_t handle = 9u;
+  CHECK(!backend.adopt(memory, av::BlobRole(), handle));
+  CHECK_EQ(handle, 0u);
+  backend.abandon(memory, 0x10u);
   CHECK(av::VulkanBackendProbe(backend).imports_held() == 0u);
-  static_cast<void>(blob.give_back()); }
+  backend.shut_down(); }
 
 TEST(vulkan_backend, the_device_the_guest_makes_is_the_one_imports_belong_to)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   std::uint8_t block[block_bytes];
   WireArena arena(block, sizeof block);
   std::uint8_t reply[256] = {};
@@ -214,7 +237,8 @@ TEST(vulkan_backend, the_device_the_guest_makes_is_the_one_imports_belong_to)
   backend.shut_down(); }
 
 TEST(vulkan_backend, knows_only_the_handles_it_made)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   CHECK(!backend.knows_handle(0x1234u));
   CHECK(backend.knows_handle(0u));
 
@@ -239,7 +263,8 @@ TEST(vulkan_backend, knows_only_the_handles_it_made)
   backend.shut_down(); }
 
 TEST(vulkan_backend, shutting_down_gives_back_what_the_guest_never_destroyed)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   std::uint8_t block[block_bytes];
   WireArena arena(block, sizeof block);
   std::uint8_t frame[1024];
@@ -262,22 +287,20 @@ TEST(vulkan_backend, shutting_down_gives_back_what_the_guest_never_destroyed)
   backend.shut_down();
   CHECK(!backend.knows_handle(raw)); }
 
-TEST(vulkan_backend, outside_a_dispatch_a_handle_is_this_process_s_own)
-{ CHECK(av::VulkanBackend::deciding() == nullptr);
-  av::WireWriter writer(nullptr, 0u);
-  std::uint8_t frame[16];
+TEST(vulkan_backend, an_identity_translation_reads_a_handle_as_the_number_it_is)
+{ std::uint8_t frame[16];
   av::WireWriter handle_writer(frame, sizeof frame);
   handle_writer.write_pod<std::uint64_t>(0xDEADBEEFu);
   av::WireReader reader(frame, handle_writer.offset());
   VkDevice device = VK_NULL_HANDLE;
-  CHECK(av::vkproto::deserialize_VkDevice(reader, device));
+  CHECK(av::vkproto::deserialize_VkDevice(reader, identity_translation, device));
   std::uint64_t raw = 0u;
   std::memcpy(&raw, &device, sizeof device);
-  CHECK_EQ(raw, 0xDEADBEEFu);
-  (void)writer; }
+  CHECK_EQ(raw, 0xDEADBEEFu); }
 
 TEST(vulkan_backend, inside_a_dispatch_a_handle_it_never_made_is_refused)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   std::uint8_t block[block_bytes];
   WireArena arena(block, sizeof block);
   std::uint8_t frame[16];
@@ -287,35 +310,72 @@ TEST(vulkan_backend, inside_a_dispatch_a_handle_it_never_made_is_refused)
   WireReader payload(frame, handle_writer.offset());
   WireWriter answer(reply, sizeof reply);
   CHECK(!backend.run(av::vkproto::kCmd_vkDestroyDevice, payload, answer, arena));
-  CHECK(av::VulkanBackend::deciding() == nullptr); }
-
-TEST(vulkan_backend, a_handle_it_cannot_remember_loses_the_device)
-{ VulkanBackend backend;
-  for (std::uint64_t raw = 1u; raw <= av::HandleRegistry::max_handles; raw++) backend.made(raw);
-  CHECK(!backend.lost());
-  backend.made(av::HandleRegistry::max_handles + 1u);
-  CHECK(backend.lost());
-  backend.shut_down();
   CHECK(!backend.lost()); }
 
-TEST(vulkan_backend, outside_a_dispatch_handles_cross_as_numbers)
+TEST(vulkan_backend, a_handle_it_made_is_known_by_its_kind_until_it_ends)
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
+  CHECK(backend.room_for(4u));
+  backend.made(av::vkproto::HandleKind::physical_device, 0x100u);
+  backend.made(av::vkproto::HandleKind::queue, 0x200u);
+  std::uint64_t handle = 0u;
+  CHECK(backend.knows_handle(0x100u));
+  CHECK(backend.knows_handle(0x100u, av::VulkanObjectKind::physical_device));
+  CHECK(!backend.knows_handle(0x100u, av::VulkanObjectKind::queue));
+  CHECK(backend.handle_for(av::vkproto::HandleKind::queue, 0x200u, handle));
+  CHECK_EQ(handle, 0x200u);
+  CHECK(!backend.handle_for(av::vkproto::HandleKind::physical_device, 0x200u, handle));
+  CHECK(!backend.handle_for(av::vkproto::HandleKind::queue, 0x300u, handle));
+  backend.ended(0x200u);
+  CHECK(!backend.knows_handle(0x200u));
+  CHECK(backend.knows_handle(0x100u));
+  backend.shut_down();
+  CHECK(!backend.knows_handle(0x100u)); }
+
+TEST(vulkan_backend, a_handle_made_through_a_parent_ends_with_the_parent_s_children)
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
+  backend.made(av::vkproto::HandleKind::physical_device, 0x200u);
+  backend.made_through(0x200u);
+  backend.made(av::vkproto::HandleKind::queue, 0x201u);
+  backend.made(av::vkproto::HandleKind::command_buffer, 0x202u);
+  backend.made_through(0u);
+  CHECK(backend.knows_handle(0x201u, av::VulkanObjectKind::queue));
+  CHECK(backend.knows_handle(0x202u, av::VulkanObjectKind::command_buffer));
+  backend.children_ended(0x200u);
+  CHECK(backend.knows_handle(0x200u));
+  CHECK(!backend.knows_handle(0x201u));
+  CHECK(!backend.knows_handle(0x202u));
+  backend.shut_down(); }
+
+TEST(vulkan_backend, it_makes_room_for_a_reply_s_handles_or_says_it_cannot)
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
+  CHECK(backend.room_for(0u));
+  CHECK(backend.room_for(1000u));
+  CHECK(!backend.room_for(~std::uint64_t{0}));
+  CHECK(!backend.lost());
+  CHECK(av::VulkanBackendProbe(backend).handles().invariants_hold()); }
+
+TEST(vulkan_backend, an_identity_translation_writes_handles_as_numbers)
 { std::uint8_t frame[16];
   WireWriter writer(frame, sizeof frame);
   VkBuffer buffer = VK_NULL_HANDLE;
   std::uint64_t raw = 0xABCDu;
   std::memcpy(&buffer, &raw, sizeof buffer);
-  av::vkproto::serialize_VkBuffer(writer, buffer);
+  av::vkproto::serialize_VkBuffer(writer, identity_translation, buffer);
   CHECK_EQ(writer.offset(), 8u);
 
   WireReader reader(frame, writer.offset());
   VkBuffer back = VK_NULL_HANDLE;
-  CHECK(av::vkproto::deserialize_VkBuffer(reader, back));
+  CHECK(av::vkproto::deserialize_VkBuffer(reader, identity_translation, back));
   std::uint64_t returned = 0u;
   std::memcpy(&returned, &back, sizeof back);
   CHECK_EQ(returned, 0xABCDu); }
 
 TEST(vulkan_backend, an_instance_the_driver_refuses_is_not_kept)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   std::uint8_t frame[1024];
   WireWriter writer(frame, sizeof frame);
   VkInstanceCreateInfo create = {};
@@ -323,7 +383,7 @@ TEST(vulkan_backend, an_instance_the_driver_refuses_is_not_kept)
   const char *layers[] = {"VK_LAYER_accel_virt_no_such_layer"};
   create.enabledLayerCount = 1u;
   create.ppEnabledLayerNames = layers;
-  av::vkproto::serialize_VkInstanceCreateInfo(writer, create);
+  av::vkproto::serialize_VkInstanceCreateInfo(writer, identity_translation, create);
 
   std::uint8_t block[block_bytes];
   WireArena arena(block, sizeof block);
@@ -350,7 +410,7 @@ VkInstance instance_through(VulkanBackend &backend, bool vulkan_1_1, std::uint32
   create.pApplicationInfo = &application;
   create.enabledExtensionCount = extension_count;
   create.ppEnabledExtensionNames = extensions;
-  av::vkproto::serialize_VkInstanceCreateInfo(writer, create);
+  av::vkproto::serialize_VkInstanceCreateInfo(writer, identity_translation, create);
   std::uint8_t block[block_bytes];
   WireArena arena(block, sizeof block);
   std::uint8_t reply[64] = {};
@@ -379,15 +439,18 @@ const VkPhysicalDevice sentinel = reinterpret_cast<VkPhysicalDevice>(static_cast
 }
 
 TEST(vulkan_backend, a_bound_context_lists_its_gpu_alone)
-{ av::LoaderHostApis host;
+{ av::RecordingLog   host_sink;
+  av::ExecutorLog    host_log(host_sink);
+  av::LoaderHostApis host(host_log);
   host.open();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
       av::HostGpu gpu;
       gpu.describe(host, i);
       constexpr bool versions[] = {true, false};
       for (const bool vulkan_1_1 : versions) {
-          VulkanBackend backend;
-          backend.initialize(gpu, nullptr);
+          Rig rig;
+          VulkanBackend backend(rig.lines);
+          backend.initialize(gpu, nullptr, rig.imports);
           const VkInstance instance = instance_through(backend, vulkan_1_1);
           CHECK(instance != VK_NULL_HANDLE);
           if (instance == VK_NULL_HANDLE) continue;
@@ -465,9 +528,11 @@ TEST(vulkan_backend, a_context_whose_gpu_is_not_listed_lists_nothing)
   apis.add_gpu(nobody_s_gpu, AV_EXECUTOR_SUB_API_VULKAN);
   av::HostGpu gpu;
   gpu.describe(apis, 0u);
-  VulkanBackend bound;
-  bound.initialize(gpu, nullptr);
-  VulkanBackend unbound;
+  Rig rig;
+  VulkanBackend bound(rig.lines);
+  bound.initialize(gpu, nullptr, rig.imports);
+  Rig bare;
+  VulkanBackend unbound(bare.lines);
   VulkanBackend *const backends[] = {&bound, &unbound};
   for (VulkanBackend *const backend : backends) {
       const VkInstance instance = instance_through(*backend, true);
@@ -493,7 +558,9 @@ TEST(vulkan_backend, a_context_whose_gpu_is_not_listed_lists_nothing)
   } }
 
 TEST(vulkan_backend, a_vulkan_1_0_instance_is_made_able_to_name_its_gpu)
-{ av::LoaderHostApis host;
+{ av::RecordingLog   host_sink;
+  av::ExecutorLog    host_log(host_sink);
+  av::LoaderHostApis host(host_log);
   host.open();
   if (host.gpu_count() == 0u) { host.close(); return; }
   av::HostGpu gpu;
@@ -508,8 +575,9 @@ TEST(vulkan_backend, a_vulkan_1_0_instance_is_made_able_to_name_its_gpu)
                         {2u, identity, true, 1u},
                         {3u, nullptr, false, 0u}};
   for (const Case &c : cases) {
-      VulkanBackend backend;
-      backend.initialize(gpu, nullptr);
+      Rig rig;
+      VulkanBackend backend(rig.lines);
+      backend.initialize(gpu, nullptr, rig.imports);
       const VkInstance instance = instance_through(backend, false, c.count, c.names);
       CHECK_EQ(instance != VK_NULL_HANDLE, c.made);
       if (instance != VK_NULL_HANDLE) {
@@ -521,12 +589,13 @@ TEST(vulkan_backend, a_vulkan_1_0_instance_is_made_able_to_name_its_gpu)
   }
   host.close(); }
 
-TEST(vulkan_backend, with_no_context_deciding_nothing_is_sized)
-{ CHECK_EQ(av::vkproto::descriptor_template_bytes(reinterpret_cast<VkDescriptorUpdateTemplate>(0x4242u)), 0u);
-  CHECK_EQ(av::vkproto::descriptor_template_bytes(VK_NULL_HANDLE), 0u); }
+TEST(vulkan_backend, an_identity_translation_sizes_no_template)
+{ CHECK_EQ(identity_translation.template_bytes(reinterpret_cast<VkDescriptorUpdateTemplate>(0x4242u)), 0u);
+  CHECK_EQ(identity_translation.template_bytes(VK_NULL_HANDLE), 0u); }
 
 TEST(vulkan_backend, a_template_it_never_made_sizes_no_blob)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   CHECK_EQ(backend.template_bytes(VK_NULL_HANDLE), 0u);
   CHECK_EQ(backend.template_bytes(reinterpret_cast<VkDescriptorUpdateTemplate>(0x4242u)), 0u);
   std::uint8_t frame[256] = {};
@@ -545,18 +614,22 @@ TEST(vulkan_backend, a_template_it_never_made_sizes_no_blob)
                      arena)); }
 
 TEST(vulkan_backend, a_backend_with_no_device_exports_imports_and_releases_nothing)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   std::uint32_t handle_kind = 9u;
-  int           fd = 9;
-  CHECK(!backend.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, fd));
+  av::OwnedFd   descriptor;
+  CHECK(!backend.export_object(AV_SHARED_MEMORY, 0x40u, handle_kind, descriptor));
   CHECK_EQ(handle_kind, 0u);
-  CHECK_EQ(fd, -1);
-  CHECK(!backend.export_object(AV_SHARED_MONITORED_FENCE, 0x40u, handle_kind, fd));
+  CHECK(!descriptor.held());
+  CHECK(!backend.export_object(AV_SHARED_MONITORED_FENCE, 0x40u, handle_kind, descriptor));
+  CHECK(!backend.export_object(AV_SHARED_MEMORY, 0u, handle_kind, descriptor));
 
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, av::SharedImageShape(), made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 3, 4096u, av::SharedImageShape(), 0x7001u,
+                               made, detail));
   CHECK_EQ(made, 0u);
-  CHECK(!backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, 3, 0u, av::SharedImageShape(), made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, 3, 0u, av::SharedImageShape(),
+                               0x7002u, made, detail));
   backend.release_object(AV_SHARED_MEMORY, 0x40u, detail);
   backend.release_object(AV_SHARED_MONITORED_FENCE, 0u, detail); }
 
@@ -567,7 +640,8 @@ void never_called(void *) {}
 }
 
 TEST(vulkan_backend, a_signal_changes_nothing_it_waits_on)
-{ VulkanBackend backend;
+{ Rig rig;
+  VulkanBackend backend(rig.lines);
   backend.bind_signal(&never_called, nullptr);
   CHECK(!backend.poll());
   std::uint64_t marked = 7u, reached = 7u;
@@ -583,8 +657,9 @@ TEST(vulkan_backend, the_guest_s_types_are_the_source_s_learnt_once_per_context)
                                        av::MockMemoryExporter::host_coherent;
   exporter.add_type(integrated, true);
   av::HostGpu   gpu;
-  VulkanBackend backend;
-  backend.initialize(gpu, &source);
+  Rig rig;
+  VulkanBackend backend(rig.lines);
+  backend.initialize(gpu, &source, rig.imports);
   av::VulkanBackendProbe probe(backend);
   probe.learn_types(VK_NULL_HANDLE);
   VkPhysicalDeviceMemoryProperties guest = {};
@@ -600,7 +675,7 @@ TEST(vulkan_backend, the_guest_s_types_are_the_source_s_learnt_once_per_context)
   CHECK_EQ(guest.memoryTypeCount, 2u);
 
   backend.shut_down();
-  backend.initialize(gpu, &source);
+  backend.initialize(gpu, &source, rig.imports);
   probe.learn_types(VK_NULL_HANDLE);
   probe.types().properties(guest);
   CHECK_EQ(guest.memoryTypeCount, 3u);
