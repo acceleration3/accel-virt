@@ -9,6 +9,7 @@
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/client/transfer_room.hpp"
+#include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -16,6 +17,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 using av::GlContextOptions;
 using av::GlContextRig;
@@ -367,7 +369,9 @@ TEST(buffer_mapping, a_range_larger_than_the_arena_crosses_in_leases_and_waits_f
 { Rig rig;
   const std::uint64_t mib = std::uint64_t{1} << 20u;
   const std::uint64_t length = 17u * mib;
-  CHECK(rig.wire().blobs().set_aside(rig.wire().blobs().room() - 16u * mib).taken());
+  std::vector<std::uint8_t> block(static_cast<std::size_t>(16u * mib));
+  rig.wire().blobs().lend(block.data(), block.size());
+  for (std::uint32_t refusals = 0u; refusals < 8u; refusals++) rig.host().blob_import(av::BlobImportAnswer::no_room, 0u);
   CHECK_EQ(rig.wire().blobs().room(), 16u * mib);
   CHECK_STATUS(rig.map(buffer, 0u, length, invalidating), Status::ok);
   pattern(rig.bytes(), static_cast<std::size_t>(length), 5u);
@@ -400,14 +404,23 @@ TEST(buffer_mapping, without_room_in_the_arena_or_without_an_arena_the_bytes_go_
   pattern(rig.bytes(), length, 9u);
   std::uint8_t small[64];
   rig.wire().blobs().lend(small, sizeof small);
+  rig.host().blob_import(av::BlobImportAnswer::no_room, 0u);
+  rig.host().blob_import(av::BlobImportAnswer::no_room, 0u);
   std::uint32_t before = rig.commands();
   rig.write_back();
-  CHECK_EQ(rig.commands() - before, 2u);
-  Write sent = rig.write_at(before);
+  std::uint32_t after = rig.commands();
+  std::uint32_t writes[2] = {};
+  std::uint32_t found = 0u;
+  for (std::uint32_t index = before; index < after; index++) {
+      if (rig.kmt().command_id(index) == ids::kCmd_glNamedBufferSubData && found < 2u) writes[found++] = index;
+      else CHECK_EQ(rig.kmt().command_id(index), av::CommandHeader::import_blob_id);
+  }
+  CHECK_EQ(found, 2u);
+  Write sent = rig.write_at(writes[0]);
   CHECK_EQ(sent.mode, inline_mode);
   CHECK_EQ(sent.size, rig.inline_write_bytes());
   CHECK_EQ(sent.first, 9u);
-  sent = rig.write_at(before + 1u);
+  sent = rig.write_at(writes[1]);
   CHECK_EQ(sent.mode, inline_mode);
   CHECK_EQ(sent.offset, rig.inline_write_bytes());
   CHECK_EQ(sent.size, 8u);
