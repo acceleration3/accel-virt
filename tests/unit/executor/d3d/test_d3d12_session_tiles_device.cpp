@@ -4,15 +4,19 @@
 #include "executor/d3d/d3d12_tile_update.hpp"
 #include "executor/d3d/d3d_backend.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
-#include "executor/guest_region.hpp"
+#include "executor/eventfd_wake.hpp"
+#include "executor/import_table.hpp"
+#include "executor/owned_fd.hpp"
+#include "core/log/driver_log.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "executor/host_memory_source.hpp"
-#include "executor/imported_memories.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "harness/executor/executor_log_rig.hpp"
 #include "harness/executor/local_import.hpp"
 #include "executor/wake_signal.hpp"
 #include "executor/d3d/watched_blocks.hpp"
@@ -64,7 +68,7 @@ constexpr std::uint64_t readback_address = 0x200000000ull;
 constexpr std::uint64_t sparse_address = 0x300000000ull;
 
 enum Id : std::uint32_t {
-    queue = 1, allocator, list, fence, tile_heap, tiled, mirror, wide, sparse, upload_heap, upload, readback_heap,
+    queue = 1, allocator, list, tile_heap, tiled, mirror, wide, sparse, upload_heap, upload, readback_heap,
     readback
 };
 
@@ -94,15 +98,16 @@ bool host_devices(av::LoaderHostApis &apis, av::D3d11HostDevice *&device11, av::
 
 bool tiled_here(av::D3d12HostDevice &device, av::D3dLoopback &wire)
 {
-    if (device.caps().tiled_resources_tier == 0u) {
+    if (device.capabilities().caps().tiled_resources_tier == 0u) {
         std::fprintf(stderr, "this GPU has no tiled resources: nothing judged\n");
         return false;
     }
     const std::uint64_t           memory = wire.open_memory(upload_memory, tiles_bytes);
     const av::SourceMemory *const held = wire.source_memory(memory);
-    const int                     fd = held != nullptr ? held->share() : -1;
-    ID3D12Heap *const imported = fd >= 0 ? device.import_dmabuf_heap(held->pointer(), fd, held->size()) : nullptr;
-    if (fd >= 0) close(fd);
+    av::OwnedFd                   shared;
+    const bool                    exported = held != nullptr && held->share(shared);
+    ID3D12Heap *const imported =
+        exported ? device.import_dmabuf_heap(held->pointer(), shared.fd(), held->size()) : nullptr;
     wire.close_memory(memory);
     if (imported == nullptr) {
         std::fprintf(stderr, "this vkd3d-proton opens no heap over a dma-buf (tools/vkd3d-proton-patches): nothing judged\n");
@@ -152,14 +157,12 @@ TileRegion run_of(std::uint32_t x, std::uint32_t count)
 void make_tiles(av::D3dLoopback &wire)
 {
     std::uint32_t hresult = 1u;
-    Caps12        caps = {};
-    CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult, &caps));
+    CHECK(av_d3d12_OpenDevice12(wire, 0u, &hresult));
     CHECK(av_d3d12_CreateCommandQueue12(wire, queue, 0u, 0u, 0u));
     CHECK(av_d3d12_CreateCommandAllocator12(wire, allocator, 0u));
     CHECK(av_d3d12_CreateCommandList12(wire, list, allocator, 0u, 0u));
-    CHECK(av_d3d12_CreateFence12(wire, fence, 0u, 0u));
     CHECK(av_d3d12_CreateHeap12(wire, tile_heap, heap_of(heap_default), texture_tile_pool, tiles_bytes, tile_bytes,
-                                0u));
+                                0u, 0u));
     CHECK(av_d3d12_CreateReservedResource12(wire, tiled, reserved_texture(), state_copy_dest, ClearValue{}, 0u));
     CHECK(av_d3d12_CreateReservedResource12(wire, mirror, reserved_texture(), state_copy_dest, ClearValue{}, 0u));
     CHECK(av_d3d12_CreateReservedResource12(wire, wide, reserved_texture(format_r32g32b32a32), state_copy_source,
@@ -169,11 +172,11 @@ void make_tiles(av::D3dLoopback &wire)
     heap_memory.readback = wire.open_memory(readback_memory, 2u * tiles_bytes);
     CHECK(heap_memory.upload != 0u);
     CHECK(heap_memory.readback != 0u);
-    CHECK(av_d3d12_CreateHeap12(wire, upload_heap, heap_of(heap_upload), 0u, tiles_bytes, 0u, heap_memory.upload));
+    CHECK(av_d3d12_CreateHeap12(wire, upload_heap, heap_of(heap_upload), 0u, tiles_bytes, 0u, heap_memory.upload, 0u));
     CHECK(av_d3d12_CreatePlacedResource12(wire, upload, upload_heap, 0u, buffer_of(tiles_bytes), state_generic_read,
                                            ClearValue{}, upload_address));
     CHECK(av_d3d12_CreateHeap12(wire, readback_heap, heap_of(heap_readback), 0u, 2u * tiles_bytes, 0u,
-                                heap_memory.readback));
+                                heap_memory.readback, 0u));
     CHECK(av_d3d12_CreatePlacedResource12(wire, readback, readback_heap, 0u, buffer_of(2u * tiles_bytes),
                                            state_copy_dest, ClearValue{}, readback_address));
     const TileRegion whole = run_of(0u, tiles);
@@ -181,15 +184,14 @@ void make_tiles(av::D3dLoopback &wire)
     CHECK(av_d3d12_UpdateTileMappings12(wire, queue, tiled, 1u, &whole, tile_heap, 1u, &in_order, 0u));
 }
 
-void run_list(av::D3dLoopback &wire, std::uint64_t value)
+void run_list(av::D3dLoopback &wire)
 {
     CHECK(av_d3d12_CloseCommandList12(wire, list));
     const std::uint32_t lists[1] = {list};
     CHECK(av_d3d12_ExecuteCommandLists12(wire, queue, 1u, lists));
-    CHECK(av_d3d12_SignalFence12(wire, queue, fence, value));
-    std::uint64_t completed = 0u;
-    CHECK(av_d3d12_FenceValue12(wire, fence, 1u, value, &completed));
-    CHECK(completed >= value);
+    std::uint32_t drained = 1u;
+    CHECK(av_d3d12_Finish12(wire, &drained));
+    CHECK_EQ(drained, 0u);
     CHECK(av_d3d12_ResetCommandAllocator12(wire, allocator));
     CHECK(av_d3d12_ResetCommandList12(wire, list, allocator, 0u));
 }
@@ -221,15 +223,16 @@ void copy_tiles(av::D3dLoopback &wire, std::uint32_t resource, std::uint32_t x, 
 
 TEST(d3d12_session_tiles_device, a_reserved_texture_keeps_what_its_mapped_tiles_were_given)
 {
-    av::LoaderHostApis   apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostMemorySource *source = nullptr;
     if (!host_devices(apis, device11, device12, source)) return;
-    av::D3dBackend backend;
+    av::D3dBackend backend(rig.log);
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device11, device12));
-    av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
+    CHECK(backend.initialize(unshared, rig.imports, device11, device12));
+    av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
     if (!tiled_here(*device12, wire)) {
         backend.shut_down();
         return;
@@ -252,25 +255,25 @@ TEST(d3d12_session_tiles_device, a_reserved_texture_keeps_what_its_mapped_tiles_
     CHECK(av_d3d12_CopyTiles12(wire, list, tiled, whole.start, whole.size, upload, 0u, copy_into_tiles));
     barrier(wire, tiled, state_copy_dest, state_copy_source);
     CHECK(av_d3d12_CopyTiles12(wire, list, tiled, whole.start, whole.size, readback, 0u, copy_out_of_tiles | no_hazard));
-    run_list(wire, 1u);
+    run_list(wire);
     for (std::uint32_t tile = 0u; tile < tiles; tile++) CHECK(tile_is(wire, 0u, tile, mark_of(tile)));
     std::memset(wire.memory(heap_memory.readback), 0, tiles_bytes);
     const TileSize box = {tiles, 1u, 2u, 2u, 1u};
     CHECK(av_d3d12_CopyTiles12(wire, list, tiled, TileCoordinate{}, box, readback, 0u, 0u));
-    run_list(wire, 5u);
+    run_list(wire);
     for (std::uint32_t tile = 0u; tile < tiles; tile++) CHECK(tile_is(wire, 0u, tile, mark_of(tile)));
 
     CHECK(av_d3d12_CopyTileMappings12(wire, queue, mirror, whole.start, tiled, whole.start, whole.size, 0u));
     barrier(wire, mirror, state_copy_dest, state_copy_source);
     CHECK(av_d3d12_CopyTiles12(wire, list, mirror, whole.start, whole.size, readback, tiles_bytes, 0u));
-    run_list(wire, 6u);
+    run_list(wire);
     for (std::uint32_t tile = 0u; tile < tiles; tile++) CHECK(tile_is(wire, tiles_bytes, tile, mark_of(tile)));
 
     const TileRange remap[3] = {{range_null, 0u, 1u}, {range_skip, 0u, 1u}, {range_reuse, 0u, 2u}};
     CHECK(av_d3d12_UpdateTileMappings12(wire, queue, mirror, 1u, &whole, tile_heap, 3u, remap, no_hazard));
     const TileRegion last_three = run_of(1u, 3u);
     CHECK(av_d3d12_CopyTiles12(wire, list, mirror, last_three.start, last_three.size, readback, tiles_bytes, 0u));
-    run_list(wire, 7u);
+    run_list(wire);
     CHECK(tile_is(wire, tiles_bytes, 0u, mark_of(1u)));
     CHECK(tile_is(wire, tiles_bytes, 1u, mark_of(0u)));
     CHECK(tile_is(wire, tiles_bytes, 2u, mark_of(0u)));
@@ -279,14 +282,14 @@ TEST(d3d12_session_tiles_device, a_reserved_texture_keeps_what_its_mapped_tiles_
     const TileRange  last_two = {0u, 2u, 2u};
     CHECK(av_d3d12_UpdateTileMappings12(wire, queue, mirror, 1u, &column, tile_heap, 1u, &last_two, 0u));
     CHECK(av_d3d12_CopyTiles12(wire, list, mirror, last_three.start, last_three.size, readback, tiles_bytes, 0u));
-    run_list(wire, 9u);
+    run_list(wire);
     CHECK(tile_is(wire, tiles_bytes, 0u, mark_of(2u)));
     CHECK(tile_is(wire, tiles_bytes, 1u, mark_of(0u)));
     CHECK(tile_is(wire, tiles_bytes, 2u, mark_of(3u)));
 
     copy_tiles(wire, wide, 0u, tiles_bytes - 16u);
     copy_tiles(wire, sparse, 0u, 2u);
-    run_list(wire, 10u);
+    run_list(wire);
 
     std::uint32_t removed = 1u;
     CHECK(av_d3d12_Finish12(wire, &removed));
@@ -409,16 +412,17 @@ constexpr Misuse misuses[] = {
 
 TEST(d3d12_session_tiles_device, each_region_or_range_past_its_resource_or_heap_removes_a_healthy_device)
 {
-    av::LoaderHostApis   apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostMemorySource *source = nullptr;
     if (!host_devices(apis, device11, device12, source)) return;
     for (const Misuse misuse : misuses) {
-        av::D3dBackend backend;
+        av::D3dBackend backend(rig.log);
         av::SessionShares unshared;
-        CHECK(backend.initialize(unshared, device11, device12));
-        av::D3dLoopback wire(backend, source, region_bytes, lent_bytes);
+        CHECK(backend.initialize(unshared, rig.imports, device11, device12));
+        av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
         if (!tiled_here(*device12, wire)) {
             backend.shut_down();
             return;
@@ -440,6 +444,7 @@ av::HostHeap                        session_heap;
 av::WatchedBlocks                   session_blocks(session_heap);
 av::D3dObjectTable                  objects(session_blocks);
 av::WakeSignal tenant;
+av::EventfdWake fence_wake;
 alignas(64) std::uint8_t guest[4096];
 TileRegion one_tile_regions[av::D3d12TileUpdate::most + 1u];
 
@@ -447,20 +452,21 @@ TileRegion one_tile_regions[av::D3d12TileUpdate::most + 1u];
 
 TEST(d3d12_session_tiles_device, more_regions_than_one_command_carries_map_none)
 {
-    av::LoaderHostApis   apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d12HostDevice *device12 = nullptr;
     av::HostMemorySource *source = nullptr;
     if (!host_devices(apis, device11, device12, source)) return;
-    if (device12->caps().tiled_resources_tier == 0u) return;
-    av::LocalImport      import(guest, sizeof guest);
-    av::GuestRegion      region;
-    av::ImportedMemories imported;
-    CHECK(region.adopt(import.blob()));
-    objects.clear();
-    CHECK_STATUS(session_storage.construct(region, imported, objects, tenant, session_blocks), av::Status::ok);
+    if (device12->capabilities().caps().tiled_resources_tier == 0u) return;
+    av::GuestBytes       bytes;
+    av::ImportTable      imports(session_heap);
+    av::DriverLog        lines(rig.sink, "d3d12: ");
+    CHECK_STATUS(bytes.bind(0u, guest, sizeof guest), av::Status::ok);
+    objects.release_all();
+    CHECK_STATUS(session_storage.construct(bytes, objects, tenant, fence_wake, session_blocks, lines), av::Status::ok);
     av::D3d12Session &session = session_storage.object();
-    session.initialize(device12);
+    session.initialize(imports, device12);
     CHECK(session.on_CreateCommandQueue12(queue, 0u, 0u, 0u));
     CHECK(session.on_CreateReservedResource12(tiled, reserved_texture(), state_copy_dest, ClearValue{}, 0u));
     for (TileRegion &each : one_tile_regions) each = run_of(0u, 1u);
