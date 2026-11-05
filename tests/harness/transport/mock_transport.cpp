@@ -6,7 +6,7 @@ namespace av {
 
 MockTransport::MockTransport()
     : RoomedTransport(slot_bytes, slot_bytes), request_{}, sent_{}, reply_{}, reply_length_(0u), sends_(0u), end_calls_(0u), last_command_(0u),
-      last_length_(0u), fail_next_(false), arena_(nullptr, 0u), blobs_() {}
+      last_length_(0u), fail_next_(false), writer_lent_at_(0u), arena_(nullptr, 0u), blobs_() {}
 
 void MockTransport::set_reply(const std::uint8_t *reply, std::size_t length)
 {
@@ -22,7 +22,13 @@ std::uint32_t MockTransport::last_command() const { return last_command_; }
 std::size_t   MockTransport::last_length() const { return last_length_; }
 const std::uint8_t *MockTransport::last_payload() const { return sent_; }
 
-WireWriter MockTransport::request_writer() { return WireWriter(request_, slot_bytes); }
+std::uint32_t MockTransport::writer_lent_at() const { return writer_lent_at_; }
+
+WireWriter MockTransport::request_writer()
+{
+    writer_lent_at_ = tick();
+    return WireWriter(request_, slot_bytes);
+}
 
 TransportResult MockTransport::deliver(std::uint32_t command_id, WireWriter &writer)
 {

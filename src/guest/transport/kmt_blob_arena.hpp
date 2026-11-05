@@ -29,6 +29,7 @@ public:
     [[nodiscard]] Status open(uint64_t bytes);
     [[nodiscard]] Status close();
     [[nodiscard]] Status abandon();
+    [[nodiscard]] Status grow(uint64_t need);
     [[nodiscard]] Status open_region(uint64_t bytes, ArenaSegment *&region);
     [[nodiscard]] Status close_region(uint64_t base);
     [[nodiscard]] bool   take_query_slots(uint32_t count, uint8_t *&view, uint64_t &offset);

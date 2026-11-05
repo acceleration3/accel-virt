@@ -106,6 +106,35 @@ Status KmtBlobArena::abandon()
     return settle(true);
 }
 
+Status KmtBlobArena::grow(uint64_t need)
+{
+    AV_SCOPE("KmtBlobArena::grow");
+    if (!lending()) return Status::invalid_state;
+    const uint64_t total = transport_.blobs().ring_bytes();
+    const uint64_t doubled = total < GuestBytes::slot_bytes ? total : GuestBytes::slot_bytes;
+    const uint64_t page = ArenaSegment::page_bytes;
+    uint64_t       want = doubled > need ? doubled : need;
+    want = (want + page - 1u) / page * page;
+    if (want == 0u || want < need || want > max_bytes || total + want > max_bytes) return Status::no_space;
+    for (ObjectStorage<ArenaSegment> &storage : rings_) {
+        if (storage.constructed()) continue;
+        static_cast<void>(storage.construct(connection_, transport_, slots_));
+        ArenaSegment &made = storage.object();
+        const Status  opened = made.open(want);
+        if (opened != Status::ok) {
+            storage.destroy();
+            return opened;
+        }
+        if (!transport_.blobs().add_segment(made.base(), made.view(), static_cast<size_t>(made.bytes()))) {
+            static_cast<void>(made.close());
+            storage.destroy();
+            return Status::no_space;
+        }
+        return Status::ok;
+    }
+    return Status::no_space;
+}
+
 Status KmtBlobArena::open_region(uint64_t bytes, ArenaSegment *&region)
 {
     AV_SCOPE("KmtBlobArena::open_region");

@@ -513,6 +513,26 @@ def _into_blob_variant(cmd: Command, h: list[str], c: list[str]) -> None:
     c.append("")
 
 
+def _blob_room(cmd: Command) -> list[str]:
+    sizes = []
+    for p in cmd.params:
+        floor = "::av::glproto::kPixelBlobFloor"
+        if p.role is Role.PIXELS_IN or (p.role is Role.PIXELS_OUT and not cmd.is_async):
+            want = f"static_cast<size_t>({_pixel_bytes_expr(cmd, p)})"
+            sizes.append(f"!{p.name}_is_offset && {p.name} != nullptr && {want} >= {floor} ? "
+                         f"static_cast<uint64_t>({want}) : 0u")
+        elif p.role is Role.ARRAY_IN:
+            want = f"static_cast<size_t>({_bytes_expr(p)})"
+            sizes.append(f"{p.name} != nullptr && {want} >= {floor} ? static_cast<uint64_t>({want}) : 0u")
+    if not sizes:
+        return []
+    return ["    {",
+            f"        const uint64_t av_blob_sizes[] = {{{', '.join(sizes)}}};",
+            f"        if (({' | '.join(f'av_blob_sizes[{i}]' for i in range(len(sizes)))}) != 0u)",
+            f"            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, {len(sizes)}u));",
+            "    }"]
+
+
 def emit_client(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
          "#include <stddef.h>", "#include <stdint.h>\n",
@@ -541,6 +561,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             continue
         c.append(f"{_client_signature(cmd)} {{")
         c.append(f'    AV_SCOPE("av_{cmd.name}");')
+        c += _blob_room(cmd)
         c.append("    ::av::WireWriter av_b = av_t.request_writer();")
         if not cmd.is_async:
             c.append("    const ::av::SyncCallScope av_call{av_t};")

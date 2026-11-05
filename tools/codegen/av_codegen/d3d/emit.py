@@ -234,6 +234,19 @@ def _encode(reg: Registry, p: Param, lines: list[str]) -> None:
         lines.append(f"    b.write_pod({p.name});")
 
 
+def _blob_room(cmd) -> list[str]:
+    sizes = [f"{p.name}_size > inline_bytes ? {p.name}_size : 0u" for p in cmd.params if p.type == "bytes"]
+    sizes += [f"{p.name}_capacity > inline_reply_bytes ? {p.name}_capacity : 0u"
+              for p in cmd.reply if p.type == "out_bytes"]
+    if not sizes:
+        return []
+    return ["    {",
+            f"        const uint64_t blob_sizes[] = {{{', '.join(sizes)}}};",
+            f"        if (({' | '.join(f'blob_sizes[{i}]' for i in range(len(sizes)))}) != 0u)",
+            f"            static_cast<void>(t.make_room_for_blobs(blob_sizes, {len(sizes)}u));",
+            "    }"]
+
+
 def emit_client_cpp(reg: Registry) -> str:
     lines = [HEADER, f'#include {_inc("dispatch_client.h")}', "",
              '#include "core/trace/function_scope.hpp"', '#include "proto/client/client_blob_arena.hpp"',
@@ -243,6 +256,7 @@ def emit_client_cpp(reg: Registry) -> str:
         params = ", ".join(["::av::ClientTransport& t"] + _client_params(reg, cmd))
         lines.append(f"bool av_{PREFIX}_{cmd.name}({params}) {{")
         lines.append(f'    AV_SCOPE("av_{PREFIX}_{cmd.name}");')
+        lines += _blob_room(cmd)
         lines.append("    ::av::WireWriter b = t.request_writer();")
         for p in cmd.params:
             _encode(reg, p, lines)

@@ -596,6 +596,8 @@ bool KmtTransport::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
     if (blobs_.fits(sizes, count)) return true;
     if (flush() != TransportResult::ok) return false;
     retire_consumed();
+    if (blobs_.fits(sizes, count) || consumed_for_blobs(sizes, count)) return true;
+    if (grow_for_blobs(sizes, count)) return true;
     while (!blobs_.fits(sizes, count) && fences_.outstanding() != 0u && !faulted_) {
         const uint64_t oldest = fences_.oldest();
         const uint64_t end = fence_ends_[oldest % TransportFence::max_outstanding];
@@ -612,6 +614,28 @@ bool KmtTransport::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
         retire_consumed();
     }
     return blobs_.fits(sizes, count);
+}
+
+bool KmtTransport::consumed_for_blobs(const uint64_t *sizes, uint32_t count)
+{
+    AV_SCOPE("KmtTransport::consumed_for_blobs");
+    if (arena_ == nullptr || fences_.outstanding() == 0u) return false;
+    CounterSpin spin(connection_.kmt(), grow_spin_us);
+    while (spin.lasts()) {
+        spin_once();
+        retire_consumed();
+        if (blobs_.fits(sizes, count)) return true;
+    }
+    return false;
+}
+
+bool KmtTransport::grow_for_blobs(const uint64_t *sizes, uint32_t count)
+{
+    AV_SCOPE("KmtTransport::grow_for_blobs");
+    if (arena_ == nullptr || faulted_) return false;
+    uint64_t need = 0u;
+    for (uint32_t index = 0u; index < count; index++) need += sizes[index];
+    return arena_->grow(need) == Status::ok && blobs_.fits(sizes, count);
 }
 
 ClientBlobLease KmtTransport::open_region(uint64_t bytes)

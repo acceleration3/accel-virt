@@ -22,6 +22,7 @@ public:
     std::uint32_t last_command() const;
     std::size_t   last_length() const;
     const std::uint8_t *last_payload() const;
+    std::uint32_t writer_lent_at() const;
 
     WireWriter request_writer() override;
     [[nodiscard]] TransportResult send_async(std::uint32_t command_id, WireWriter &writer) override;
@@ -43,6 +44,7 @@ private:
     std::uint32_t   last_command_;
     std::size_t     last_length_;
     bool            fail_next_;
+    std::uint32_t   writer_lent_at_;
     WireArena       arena_;
     ClientBlobArena blobs_;
 };

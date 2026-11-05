@@ -107,6 +107,7 @@ private:
     static constexpr uint64_t reply_spin_us = 1000u;
     static constexpr uint64_t fence_spin_us = 1000u;
     static constexpr uint64_t drain_spin_us = 2000u;
+    static constexpr uint64_t grow_spin_us = 1000u;
     static constexpr uint64_t ring_spin_us = 50000u;
     static constexpr uint64_t gpu_spin_us = 20000u;
 
@@ -139,6 +140,8 @@ private:
     [[nodiscard]] TransportResult await(uint64_t fence, WireReader &reply);
     bool                          replied_within_spin(uint64_t fence);
     bool                          consumed_within_spin();
+    bool                          consumed_for_blobs(const uint64_t *sizes, uint32_t count);
+    bool                          grow_for_blobs(const uint64_t *sizes, uint32_t count);
     void                          spin_once() const;
     template <typename Arrived> bool arrives_eventually(Arrived arrived);
     [[nodiscard]] Status          wait_for_host(uint64_t fence);

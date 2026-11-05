@@ -93,6 +93,11 @@ bool av_d3d9_CreateDevice9(::av::ClientTransport& t, uint32_t device, uint32_t f
 
 bool av_d3d9_QueryCaps9(::av::ClientTransport& t, uint32_t count, const uint32_t* formats, uint32_t* hresult, void* caps, uint64_t caps_capacity, uint64_t* caps_size, void* rows, uint64_t rows_capacity, uint64_t* rows_size) {
     AV_SCOPE("av_d3d9_QueryCaps9");
+    {
+        const uint64_t blob_sizes[] = {caps_capacity > inline_reply_bytes ? caps_capacity : 0u, rows_capacity > inline_reply_bytes ? rows_capacity : 0u};
+        if ((blob_sizes[0] | blob_sizes[1]) != 0u)
+            static_cast<void>(t.make_room_for_blobs(blob_sizes, 2u));
+    }
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(count);
     if (count > 256u || (count != 0u && formats == nullptr)) return abandon(t);
@@ -197,6 +202,11 @@ bool av_d3d9_CreateIndexBuffer9(::av::ClientTransport& t, uint32_t buffer, uint3
 
 bool av_d3d9_WriteTexture9(::av::ClientTransport& t, uint32_t texture, uint32_t subresource, const Box& box, uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags, const void* data, uint64_t data_size) {
     AV_SCOPE("av_d3d9_WriteTexture9");
+    {
+        const uint64_t blob_sizes[] = {data_size > inline_bytes ? data_size : 0u};
+        if ((blob_sizes[0]) != 0u)
+            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
+    }
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(texture);
     b.write_pod<uint32_t>(subresource);
@@ -210,6 +220,11 @@ bool av_d3d9_WriteTexture9(::av::ClientTransport& t, uint32_t texture, uint32_t 
 
 bool av_d3d9_WriteBuffer9(::av::ClientTransport& t, uint32_t buffer, uint32_t offset, uint32_t flags, const void* data, uint64_t data_size) {
     AV_SCOPE("av_d3d9_WriteBuffer9");
+    {
+        const uint64_t blob_sizes[] = {data_size > inline_bytes ? data_size : 0u};
+        if ((blob_sizes[0]) != 0u)
+            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
+    }
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(buffer);
     b.write_pod<uint32_t>(offset);
@@ -262,6 +277,11 @@ bool av_d3d9_GenerateMips9(::av::ClientTransport& t, uint32_t texture, uint32_t 
 
 bool av_d3d9_ReadSurface9(::av::ClientTransport& t, uint32_t surface, uint32_t subresource, uint32_t* hresult, uint32_t* width, uint32_t* height, uint32_t* format, uint32_t* pitch, void* pixels, uint64_t pixels_capacity, uint64_t* pixels_size) {
     AV_SCOPE("av_d3d9_ReadSurface9");
+    {
+        const uint64_t blob_sizes[] = {pixels_capacity > inline_reply_bytes ? pixels_capacity : 0u};
+        if ((blob_sizes[0]) != 0u)
+            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
+    }
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(surface);
     b.write_pod<uint32_t>(subresource);
@@ -324,6 +344,11 @@ bool av_d3d9_PresentPoint9(::av::ClientTransport& t, uint32_t surface, uint32_t 
 
 bool av_d3d9_CreateVertexShader9(::av::ClientTransport& t, uint32_t shader, const void* code, uint64_t code_size) {
     AV_SCOPE("av_d3d9_CreateVertexShader9");
+    {
+        const uint64_t blob_sizes[] = {code_size > inline_bytes ? code_size : 0u};
+        if ((blob_sizes[0]) != 0u)
+            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
+    }
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(shader);
     if (!put_bytes(t, b, code, code_size)) return abandon(t);
@@ -332,6 +357,11 @@ bool av_d3d9_CreateVertexShader9(::av::ClientTransport& t, uint32_t shader, cons
 
 bool av_d3d9_CreatePixelShader9(::av::ClientTransport& t, uint32_t shader, const void* code, uint64_t code_size) {
     AV_SCOPE("av_d3d9_CreatePixelShader9");
+    {
+        const uint64_t blob_sizes[] = {code_size > inline_bytes ? code_size : 0u};
+        if ((blob_sizes[0]) != 0u)
+            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
+    }
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(shader);
     if (!put_bytes(t, b, code, code_size)) return abandon(t);
@@ -573,6 +603,11 @@ bool av_d3d9_IssueQuery9(::av::ClientTransport& t, uint32_t query, uint32_t flag
 
 bool av_d3d9_GetQueryData9(::av::ClientTransport& t, uint32_t query, uint32_t flags, uint32_t* hresult, void* data, uint64_t data_capacity, uint64_t* data_size) {
     AV_SCOPE("av_d3d9_GetQueryData9");
+    {
+        const uint64_t blob_sizes[] = {data_capacity > inline_reply_bytes ? data_capacity : 0u};
+        if ((blob_sizes[0]) != 0u)
+            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
+    }
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(query);
     b.write_pod<uint32_t>(flags);
