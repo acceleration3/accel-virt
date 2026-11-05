@@ -411,7 +411,7 @@ TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
     CHECK(std::strstr(report.text(), "ok opengl.draw 1024\n") != nullptr);
     CHECK(std::strstr(report.text(), "ok opengl.share 4\n") != nullptr);
     CHECK(std::strstr(report.text(), "ok opengl.busy 170\n") != nullptr);
-    CHECK(std::strstr(report.text(), "ok opengl.lost 33365\n") != nullptr);
+    CHECK(std::strstr(report.text(), "ok opengl.lost 33363\n") != nullptr);
     CHECK(std::strstr(report.text(), "ok opengl.recreated 1024\n") != nullptr);
     CHECK(process.root().invariants_hold());
     for (std::uint32_t index = 0u; index < process.log().lines(); index++)

@@ -68,6 +68,7 @@ public:
           root_(memory_, kmt, lock_, send_lock_, memory_lock_, lines_, av::icd::icd_binding, windows_, chains_,
                 present_thread_, handed_, shown_, present_lock_)
     {
+        root_.presentation().refuse_presents();
     }
 
     av::icd::IcdRoot &root() { return root_; }
