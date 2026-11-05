@@ -9,10 +9,12 @@
 #include "proto/wire/wire_reader.hpp"
 #include "harness/icd/gl_context_rig.hpp"
 #include "harness/icd/gl_icd_rig.hpp"
+#include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/scripted_thread_slot.hpp"
 #include "icd/opengl/buffer_pieces.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
 #include "icd/opengl/current_contexts.hpp"
+#include "icd/opengl/gl_context_table.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
 #include "icd/opengl/gl_entry_points.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
@@ -45,13 +47,39 @@ void answer_size(av::ScriptedHost &host, std::int64_t size)
     host.gl_bytes(reinterpret_cast<const std::uint8_t *>(&size), sizeof size);
 }
 
+struct Bare {
+    av::GlContextRig               rig;
+    av::ScriptedThreadSlot         slot;
+    av::glicd::CurrentContexts     currents{slot};
+    av::RecordingThreadLock        lock{rig.trace(), 'T'};
+    av::RecordingThreadLock        slice_lock{rig.trace(), 'M'};
+    av::glicd::GlContextTable      contexts;
+    ManualCalls                    calls;
+
+    explicit Bare(const av::glicd::GlExtensionPolicy &policy)
+        : contexts(rig.platform(), rig.connection(), lock, rig.send_lock(), slice_lock, rig.lines(), policy,
+                   rig.handles()),
+          calls(currents, contexts, rig.kmt())
+    {}
+    Bare() : Bare(default_policy()) {}
+
+private:
+    static const av::glicd::GlExtensionPolicy &default_policy()
+    {
+        static const av::glicd::GlExtensionPolicy none(nullptr, 0u, nullptr, 0u);
+        return none;
+    }
+};
+
+constexpr std::uint64_t no_arena = 4096u;
+
 class Current {
 public:
     explicit Current(std::uint64_t window = av::MockKmt::rig_window_bytes)
     {
-        rig_.kmt().open_host_window(window);
+        if (window != no_arena) rig_.kmt().open_host_window(window);
         rig_.load_with_format();
-        handle_ = rig_.current_context();
+        handle_ = window == no_arena ? current_without_arena() : rig_.current_context();
         CHECK(handle_ != nullptr);
         if (handle_ != nullptr) context().flush();
         commands_ = rig_.kmt().commands();
@@ -62,12 +90,12 @@ public:
     std::uint32_t sent_since(std::uint32_t index)
     {
         context().flush();
-        return rig_.kmt().command_id(commands_ + index);
+        return rig_.kmt().command_id(absolute(index));
     }
     std::uint64_t argument_since(std::uint32_t index, std::uint32_t nth)
     {
         context().flush();
-        av::WireReader reader(rig_.kmt().command_bytes(commands_ + index) + av::CommandHeader::encoded_size,
+        av::WireReader reader(rig_.kmt().command_bytes(absolute(index)) + av::CommandHeader::encoded_size,
                               av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
         std::uint64_t  value = 0u;
         for (std::uint32_t at = 0u; at <= nth; at++) CHECK(reader.read_varint(value));
@@ -76,16 +104,49 @@ public:
     std::uint32_t sent()
     {
         context().flush();
-        return rig_.kmt().commands() - commands_;
+        std::uint32_t count = 0u;
+        for (std::uint32_t at = commands_; at < rig_.kmt().commands(); at++)
+            count += rig_.kmt().command_id(at) == av::CommandHeader::channel_stats_id ? 0u : 1u;
+        return count;
     }
     const std::uint8_t *command_since(std::uint32_t index)
     {
         context().flush();
-        return rig_.kmt().command_bytes(commands_ + index);
+        return rig_.kmt().command_bytes(absolute(index));
     }
     std::uint32_t error() { return av::glicd::entry::get_error(); }
 
 private:
+    std::uint32_t absolute(std::uint32_t index)
+    {
+        std::uint32_t seen = 0u;
+        for (std::uint32_t at = commands_; at < rig_.kmt().commands(); at++) {
+            if (rig_.kmt().command_id(at) == av::CommandHeader::channel_stats_id) continue;
+            if (seen++ == index) return at;
+        }
+        return rig_.kmt().commands();
+    }
+    void *current_without_arena()
+    {
+        void *const context = rig_.opengl32().create_context(rig_.dc());
+        if (context == nullptr) return nullptr;
+        av::ScriptedHost &host = rig_.host();
+        host.blob_import(1u, 0u);
+        host.blob_import(1u, 0u);
+        host.gl_string("av host vendor");
+        host.gl_string("host gpu");
+        host.gl_string("4.6.0 host");
+        host.gl_string("4.60");
+        for (int list = 0; list < 3; list++) host.gl_integer(0);
+        host.gl_integer(4);
+        host.gl_integer(6);
+        host.gl_integer(2);
+        host.gl_integer(0);
+        host.gl_integer(0);
+        host.gl_window(1u, 1u);
+        return rig_.opengl32().make_current(rig_.dc(), context) ? context : nullptr;
+    }
+
     GlIcdRig      rig_;
     void         *handle_ = nullptr;
     std::uint32_t commands_ = 0u;
@@ -473,7 +534,6 @@ TEST(manual_calls, a_maps_state_is_answered_by_the_guest)
 
 TEST(manual_calls, map_refusals_are_recorded)
 { Current current;
-  av::ScriptedHost &host = current.rig().host();
   CHECK(gen::Wrap_glMapBuffer(0x1234u, gl_read_write) == nullptr);
   CHECK_EQ(current.error(), gl_invalid_enum);
   CHECK(!gen::Wrap_glUnmapBuffer(0x1234u));
@@ -512,12 +572,10 @@ TEST(manual_calls, map_refusals_are_recorded)
   CHECK_EQ(current.sent(), 2u);
   const GLuint several[] = {7u};
   gen::Wrap_glBindBuffersBase(0x8A11u, 0u, 1, several);
-  host.gl_integer(7);
   CHECK(!gen::Wrap_glUnmapBuffer(0x8A11u));
   CHECK_EQ(current.error(), gl_invalid_operation);
-  CHECK_EQ(current.sent(), 4u);
-  CHECK_EQ(current.sent_since(3u), ids::kCmd_glGetIntegerv);
-  CHECK_EQ(current.argument_since(3u, 0u), 0x8A28u); }
+  CHECK_EQ(current.sent(), 3u);
+  CHECK_EQ(current.sent_since(2u), ids::kCmd_glBindBuffersBase); }
 
 TEST(manual_calls, the_ext_direct_state_calls_are_refused_without_a_host_call)
 { Current current;
@@ -644,7 +702,7 @@ TEST(manual_calls, with_nothing_current_nothing_is_sent_or_answered)
   calls.bind_buffer_indexed(0x90D2u, 1u);
   calls.bind_buffers_indexed(0x90D2u);
   calls.shaders_write_buffers();
-  calls.bindings_restored();
+  calls.client_attributes_popped();
   CHECK_EQ(rig.kmt().commands(), 0u); }
 
 TEST(manual_calls, a_lost_context_sends_nothing_but_still_answers_what_it_kept)
@@ -686,18 +744,19 @@ TEST(manual_calls, the_extension_count_is_answered_without_the_host)
 TEST(manual_calls, the_extensions_answered_are_the_context_s_list)
 { static constexpr av::glicd::GlExtensionPolicy::Row rows[] = {
       {"GL_ARB_debug_output", 1u, "manual_calls.the_extensions_answered_are_the_context_s_list"}};
-  av::GlContextRig rig;
   const av::glicd::GlExtensionPolicy policy(rows, 1u, nullptr, 0u);
-  av::ScriptedThreadSlot slot;
-  av::glicd::CurrentContexts currents(slot);
-  ManualCalls calls(currents);
-  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy, rig.handles(), 1,
-                                    av::GlContextOptions());
+  Bare bare(policy);
+  av::GlContextRig &rig = bare.rig;
+  av::glicd::CurrentContexts &currents = bare.currents;
+  ManualCalls &calls = bare.calls;
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.groups(), rig.lines(),
+                                    policy, rig.handles(), 1, av::GlContextOptions());
   CHECK(calls.string_i(0x1F03u, 0u) == nullptr);
   rig.host().gl_make("host gpu", "4.6");
-  rig.host().gl_policy(2);
+  rig.host().gl_integer(2);
   rig.host().gl_string("GL_EXT_host_only");
   rig.host().gl_string("GL_ARB_debug_output");
+  rig.host().gl_slices();
   CHECK_STATUS(context.make(), av::Status::ok);
   CHECK(currents.make_current(context));
   const std::uint32_t commands = rig.kmt().commands();
@@ -853,14 +912,14 @@ TEST(manual_calls, the_generated_entries_hooks_follow_the_current_context)
   CHECK_EQ(current.sent(), lost); }
 
 TEST(manual_calls, an_imported_objects_name_is_the_hosts_by_the_time_it_crosses)
-{ av::GlContextRig rig;
-  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
-  av::ScriptedThreadSlot slot;
-  av::glicd::CurrentContexts currents(slot);
-  ManualCalls calls(currents);
-  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
-                                    rig.handles(), 1, av::GlContextOptions());
-  rig.host().gl_make("host gpu", "4.6");
+{ const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  Bare bare(policy);
+  av::GlContextRig &rig = bare.rig;
+  av::glicd::CurrentContexts &currents = bare.currents;
+  ManualCalls &calls = bare.calls;
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.groups(), rig.lines(),
+                                    policy, rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_made("host gpu", "4.6");
   CHECK_STATUS(context.make(), av::Status::ok);
   CHECK(currents.make_current(context));
 
@@ -894,9 +953,8 @@ TEST(manual_calls, an_imported_objects_name_is_the_hosts_by_the_time_it_crosses)
   CHECK_EQ(context.take_error(), 0u); }
 
 TEST(manual_calls, the_external_object_entries_do_nothing_with_no_context)
-{ av::ScriptedThreadSlot slot;
-  av::glicd::CurrentContexts currents(slot);
-  ManualCalls calls(currents);
+{ Bare bare;
+  ManualCalls &calls = bare.calls;
   GLuint names[1] = {9u};
   calls.create_memory_objects(1, names);
   CHECK_EQ(names[0], 9u);
@@ -936,14 +994,14 @@ TEST(manual_calls, the_external_object_entries_do_nothing_with_no_context)
   calls.texture_storage_mem_3d_multisample(1u, 4, 0x8058u, 4, 4, 2, false, 1u, 0u); }
 
 TEST(manual_calls, an_import_puts_the_hosts_name_on_the_wire_and_a_delete_releases_the_object)
-{ av::GlContextRig rig;
-  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
-  av::ScriptedThreadSlot slot;
-  av::glicd::CurrentContexts currents(slot);
-  ManualCalls calls(currents);
-  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
-                                    rig.handles(), 1, av::GlContextOptions());
-  rig.host().gl_make("host gpu", "4.6");
+{ const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  Bare bare(policy);
+  av::GlContextRig &rig = bare.rig;
+  av::glicd::CurrentContexts &currents = bare.currents;
+  ManualCalls &calls = bare.calls;
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.groups(), rig.lines(),
+                                    policy, rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_made("host gpu", "4.6");
   CHECK_STATUS(context.make(), av::Status::ok);
   CHECK(currents.make_current(context));
 
@@ -1021,14 +1079,14 @@ void *openable_handle(av::GlContextRig &rig)
 }
 
 TEST(manual_calls, an_imported_name_crosses_as_the_hosts_own_on_every_command_that_takes_one)
-{ av::GlContextRig rig;
-  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
-  av::ScriptedThreadSlot slot;
-  av::glicd::CurrentContexts currents(slot);
-  ManualCalls calls(currents);
-  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
-                                    rig.handles(), 1, av::GlContextOptions());
-  rig.host().gl_make("host gpu", "4.6");
+{ const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  Bare bare(policy);
+  av::GlContextRig &rig = bare.rig;
+  av::glicd::CurrentContexts &currents = bare.currents;
+  ManualCalls &calls = bare.calls;
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.groups(), rig.lines(),
+                                    policy, rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_made("host gpu", "4.6");
   CHECK_STATUS(context.make(), av::Status::ok);
   CHECK(currents.make_current(context));
 
@@ -1081,14 +1139,14 @@ TEST(manual_calls, an_imported_name_crosses_as_the_hosts_own_on_every_command_th
   CHECK(rig.kmt().commands() > before); }
 
 TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
-{ av::GlContextRig rig;
-  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
-  av::ScriptedThreadSlot slot;
-  av::glicd::CurrentContexts currents(slot);
-  ManualCalls calls(currents);
-  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
-                                    rig.handles(), 1, av::GlContextOptions());
-  rig.host().gl_make("host gpu", "4.6");
+{ const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  Bare bare(policy);
+  av::GlContextRig &rig = bare.rig;
+  av::glicd::CurrentContexts &currents = bare.currents;
+  ManualCalls &calls = bare.calls;
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.groups(), rig.lines(),
+                                    policy, rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_made("host gpu", "4.6");
   CHECK_STATUS(context.make(), av::Status::ok);
   CHECK(currents.make_current(context));
   const auto sent_id = [&](std::uint32_t at) {
@@ -1186,14 +1244,14 @@ TEST(manual_calls, every_storage_command_names_the_hosts_memory_object)
   CHECK_EQ(rig.kmt().commands(), quiet); }
 
 TEST(manual_calls, the_queries_and_parameters_are_answered_without_the_host)
-{ av::GlContextRig rig;
-  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
-  av::ScriptedThreadSlot slot;
-  av::glicd::CurrentContexts currents(slot);
-  ManualCalls calls(currents);
-  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
-                                    rig.handles(), 1, av::GlContextOptions());
-  rig.host().gl_make("host gpu", "4.6");
+{ const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  Bare bare(policy);
+  av::GlContextRig &rig = bare.rig;
+  av::glicd::CurrentContexts &currents = bare.currents;
+  ManualCalls &calls = bare.calls;
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.groups(), rig.lines(),
+                                    policy, rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_made("host gpu", "4.6");
   CHECK_STATUS(context.make(), av::Status::ok);
   CHECK(currents.make_current(context));
 
@@ -1243,14 +1301,14 @@ TEST(manual_calls, the_queries_and_parameters_are_answered_without_the_host)
   CHECK_EQ(rig.kmt().commands(), quiet); }
 
 TEST(manual_calls, a_count_no_call_can_have_is_kept_as_an_error_on_each_entry)
-{ av::GlContextRig rig;
-  const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
-  av::ScriptedThreadSlot slot;
-  av::glicd::CurrentContexts currents(slot);
-  ManualCalls calls(currents);
-  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), policy,
-                                    rig.handles(), 1, av::GlContextOptions());
-  rig.host().gl_make("host gpu", "4.6");
+{ const av::glicd::GlExtensionPolicy policy(nullptr, 0u, nullptr, 0u);
+  Bare bare(policy);
+  av::GlContextRig &rig = bare.rig;
+  av::glicd::CurrentContexts &currents = bare.currents;
+  ManualCalls &calls = bare.calls;
+  av::glicd::GuestGlContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.groups(), rig.lines(),
+                                    policy, rig.handles(), 1, av::GlContextOptions());
+  rig.host().gl_made("host gpu", "4.6");
   CHECK_STATUS(context.make(), av::Status::ok);
   CHECK(currents.make_current(context));
 
@@ -1408,15 +1466,13 @@ TEST(manual_calls, new_storage_is_fresh_and_a_deleted_buffer_has_no_copy)
   calls.delete_buffers(1, deleted);
   CHECK(shadows.covering(7u, 0u, 1u) == nullptr);
   shadows.keep(8u, 0u, sizeof data, data);
-  calls.bindings_restored();
+  calls.client_attributes_popped();
   CHECK_EQ(shadows.held(), 0u);
   CHECK(shadows.trusted()); }
 
 namespace {
 
 using av::glicd::BufferPieces;
-
-constexpr std::uint64_t no_arena = 4096u;
 
 std::uint8_t bulk[std::size_t{1} << 20u];
 
@@ -1434,7 +1490,9 @@ TEST(manual_calls, without_an_arena_a_buffers_bytes_cross_in_pieces_each_way)
 { Current current(no_arena);
   CHECK(!current.context().wire()->blobs().ready());
   ManualCalls        &calls = current.rig().root().manual();
-  constexpr intptr_t  over = static_cast<intptr_t>(BufferPieces::write_room) + 1;
+  const std::size_t   write_room = current.context().wire()->room().inline_write();
+  const std::size_t   read_room = current.context().wire()->room().inline_read();
+  const intptr_t      over = static_cast<intptr_t>(write_room) + 1;
   calls.buffer_sub_data(array_buffer, 0, over, bulk);
   calls.named_buffer_sub_data(4u, 0, over, bulk);
   calls.named_buffer_sub_data_ext(4u, 0, over, bulk);
@@ -1442,7 +1500,7 @@ TEST(manual_calls, without_an_arena_a_buffers_bytes_cross_in_pieces_each_way)
                                   ids::kCmd_glNamedBufferSubData,      ids::kCmd_glNamedBufferSubData,
                                   ids::kCmd_glNamedBufferSubDataEXT,   ids::kCmd_glNamedBufferSubDataEXT};
   CHECK(sent_as(current, 0u, writes, 6u));
-  CHECK_EQ(current.argument_since(1u, 1u), BufferPieces::write_room);
+  CHECK_EQ(current.argument_since(1u, 1u), write_room);
   CHECK_EQ(current.argument_since(1u, 2u), 1u);
   calls.buffer_data(array_buffer, over, bulk, 0x88E4u);
   calls.buffer_storage(array_buffer, over, bulk, 0u);
@@ -1458,7 +1516,7 @@ TEST(manual_calls, without_an_arena_a_buffers_bytes_cross_in_pieces_each_way)
       ids::kCmd_glNamedBufferDataEXT,    ids::kCmd_glNamedBufferSubDataEXT, ids::kCmd_glNamedBufferSubDataEXT,
       ids::kCmd_glNamedBufferStorageEXT, ids::kCmd_glNamedBufferSubDataEXT, ids::kCmd_glNamedBufferSubDataEXT};
   CHECK(sent_as(current, 6u, storage, 18u));
-  constexpr intptr_t read = 2 * static_cast<intptr_t>(BufferPieces::read_room) + 1;
+  const intptr_t read = 2 * static_cast<intptr_t>(read_room) + 1;
   for (std::uint32_t answer = 0u; answer < 9u; answer++) current.rig().host().gl_bytes(nullptr, 0u);
   calls.get_buffer_sub_data(array_buffer, 8, read, bulk);
   calls.get_named_buffer_sub_data(4u, 0, read, bulk);
@@ -1466,19 +1524,19 @@ TEST(manual_calls, without_an_arena_a_buffers_bytes_cross_in_pieces_each_way)
   CHECK_EQ(current.sent(), 33u);
   CHECK_EQ(current.sent_since(24u), ids::kCmd_glGetBufferSubData);
   CHECK_EQ(current.sent_since(26u), ids::kCmd_glGetBufferSubData);
-  CHECK_EQ(current.argument_since(26u, 1u), 8u + 2u * BufferPieces::read_room);
+  CHECK_EQ(current.argument_since(26u, 1u), 8u + 2u * read_room);
   CHECK_EQ(current.sent_since(27u), ids::kCmd_glGetNamedBufferSubData);
   CHECK_EQ(current.sent_since(32u), ids::kCmd_glGetNamedBufferSubDataEXT);
   current.rig().host().gl_bytes(nullptr, 0u);
-  calls.get_buffer_sub_data(array_buffer, 0, static_cast<intptr_t>(BufferPieces::read_room), bulk);
+  calls.get_buffer_sub_data(array_buffer, 0, static_cast<intptr_t>(read_room), bulk);
   calls.buffer_sub_data(array_buffer, 0, -1, bulk);
   CHECK_EQ(current.sent(), 34u); }
 
 TEST(manual_calls, with_an_arena_a_large_write_is_lent_whole)
 { Current current;
   CHECK(current.context().wire()->blobs().ready());
-  current.rig().root().manual().buffer_sub_data(array_buffer, 0, static_cast<intptr_t>(BufferPieces::write_room) + 1,
-                                               bulk);
+  const std::size_t write_room = current.context().wire()->room().inline_write();
+  current.rig().root().manual().buffer_sub_data(array_buffer, 0, static_cast<intptr_t>(write_room) + 1, bulk);
   CHECK_EQ(current.sent(), 1u); }
 
 TEST(manual_calls, without_an_arena_a_large_read_pixels_goes_through_the_staging_buffer)
