@@ -47,7 +47,6 @@ struct RendererServiceProbe {
 
 struct RendererContextPlaneProbe {
     static void count_losses(RendererContextPlane &plane, std::uint32_t count) { plane.loss_count_ = count; }
-    static void count_blobs(RendererContextPlane &plane, std::uint32_t count) { plane.mirrored_count_ = count; }
     static void unconfigure(RendererContextPlane &plane) { plane.configured_ = false; }
 };
 
@@ -99,7 +98,7 @@ av::CapsetInfo capset()
 av::ContextSetup setup(std::uint32_t doorbell, av::SubApi api = av::SubApi::vulkan, std::uint32_t ring_id = ring,
                        std::uint32_t fence_id = fence)
 {
-    return av::ContextSetup(av::ProtocolVersion(1u, 0u), api, ring_id, 12u, fence_id, doorbell, 0u);
+    return av::ContextSetup(av::ProtocolVersion(av::ProtocolVersion::current_major, 0u), api, ring_id, 12u, fence_id, doorbell, 0u);
 }
 
 class Fixture {
@@ -271,9 +270,9 @@ TEST(renderer_context_plane, a_context_is_created_bound_and_run_in_the_renderer)
   CHECK_STATUS(fixture.start(), Status::ok);
   fixture.connect_interrupts();
   fixture.rings();
-  CHECK_STATUS(fixture.plane().create(0u), Status::invalid_parameter);
-  CHECK_STATUS(fixture.plane().create(3u), Status::ok);
-  CHECK_STATUS(fixture.plane().create(3u), Status::conflict);
+  CHECK_STATUS(fixture.plane().create(0u, "test"), Status::invalid_parameter);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::conflict);
   CHECK(fixture.plane().holds(3u));
   CHECK(!fixture.plane().holds(4u));
   CHECK_EQ(fixture.plane().live(), 1u);
@@ -299,9 +298,9 @@ TEST(renderer_context_plane_bind, a_guests_refused_bind_ends_nothing)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   fixture.rings();
-  CHECK_STATUS(fixture.plane().create(3u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u, av::SubApi::vulkan, 77u), capset()), Status::not_found);
-  const av::ContextSetup too_many(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, ring, 12u, fence, 64u, 0u);
+  const av::ContextSetup too_many(av::ProtocolVersion(av::ProtocolVersion::current_major, 0u), av::SubApi::vulkan, ring, 12u, fence, 64u, 0u);
   CHECK_STATUS(fixture.plane().bind(3u, too_many, capset()), Status::not_supported);
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::ok);
   CHECK_STATUS(fixture.plane().bind(3u, setup(6u), capset()), Status::invalid_state);
@@ -316,7 +315,7 @@ TEST(renderer_context_plane_bind, the_renderers_refusal_is_the_answer_and_unbind
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   fixture.rings();
-  CHECK_STATUS(fixture.plane().create(3u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
   fixture.peer().host().fail_allocation_at(1u);
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::no_memory);
   CHECK(!fixture.plane().holds_doorbell(5u));
@@ -328,7 +327,7 @@ TEST(renderer_context_plane_bind, a_silent_renderer_at_bind_is_given_up_on)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   fixture.rings();
-  CHECK_STATUS(fixture.plane().create(3u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
   fixture.peer().fall_silent();
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::invalid_state);
   CHECK_EQ(fixture.qemu().renderer_kills(), 1u);
@@ -342,21 +341,21 @@ TEST(renderer_context_plane_bind, a_silent_renderer_at_bind_is_given_up_on)
 
 TEST(renderer_context_plane_create, a_silent_renderer_or_none_makes_no_context)
 { Fixture fixture;
-  CHECK_STATUS(fixture.plane().create(3u), Status::invalid_state);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::invalid_state);
   CHECK_STATUS(fixture.start(), Status::ok);
   fixture.peer().fall_silent();
-  CHECK_STATUS(fixture.plane().create(3u), Status::invalid_state);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::invalid_state);
   CHECK(!fixture.plane().holds(3u));
   CHECK_EQ(fixture.qemu().renderer_kills(), 1u);
   CHECK_EQ(fixture.plane().epoch(), 2u);
-  CHECK_STATUS(fixture.plane().create(3u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
   CHECK(fixture.renderer_plane().holds(3u)); }
 
 TEST(renderer_context_plane_create, the_renderers_refusal_leaves_no_slot)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   fixture.peer().host().fail_thread_start_at(1u);
-  CHECK_STATUS(fixture.plane().create(3u), Status::no_memory);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::no_memory);
   CHECK(!fixture.plane().holds(3u));
   CHECK_EQ(fixture.plane().live(), 0u);
   CHECK_EQ(fixture.qemu().renderer_kills(), 0u); }
@@ -365,9 +364,9 @@ TEST(renderer_context_plane_create, a_full_plane_has_no_space)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   for (std::uint32_t id = 1u; id <= RendererContextPlane::max_contexts; id++)
-      CHECK_STATUS(fixture.plane().create(id), Status::ok);
+      CHECK_STATUS(fixture.plane().create(id, "test"), Status::ok);
   const std::uint32_t sent = fixture.peer().delivered();
-  CHECK_STATUS(fixture.plane().create(RendererContextPlane::max_contexts + 1u), Status::no_space);
+  CHECK_STATUS(fixture.plane().create(RendererContextPlane::max_contexts + 1u, "test"), Status::no_space);
   CHECK_EQ(fixture.peer().delivered(), sent);
   CHECK_EQ(fixture.plane().live(), RendererContextPlane::max_contexts); }
 
@@ -376,8 +375,8 @@ TEST(renderer_context_plane_destroy, tells_the_renderer_unless_the_context_was_l
   CHECK_STATUS(fixture.start(), Status::ok);
   fixture.rings();
   CHECK_STATUS(fixture.plane().destroy(3u), Status::not_found);
-  CHECK_STATUS(fixture.plane().create(3u), Status::ok);
-  CHECK_STATUS(fixture.plane().create(4u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
+  CHECK_STATUS(fixture.plane().create(4u, "test"), Status::ok);
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::ok);
   CHECK_STATUS(fixture.plane().destroy(3u), Status::ok);
   CHECK(!fixture.plane().holds(3u));
@@ -388,7 +387,7 @@ TEST(renderer_context_plane_destroy, tells_the_renderer_unless_the_context_was_l
   CHECK(!fixture.plane().holds(4u));
   CHECK_EQ(fixture.qemu().renderer_kills(), 1u);
   CHECK_EQ(fixture.plane().epoch(), 2u);
-  CHECK_STATUS(fixture.plane().create(6u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(6u, "test"), Status::ok);
   CHECK_STATUS(fixture.plane().bind(6u, setup(7u), capset()), Status::ok);
   fixture.qemu().renderer_gone();
   fixture.plane().renderer_lost();
@@ -401,9 +400,9 @@ TEST(renderer_context_plane_can_share, only_a_bound_living_opengl_context)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   fixture.rings();
-  CHECK_STATUS(fixture.plane().create(3u), Status::ok);
-  CHECK_STATUS(fixture.plane().create(4u), Status::ok);
-  CHECK_STATUS(fixture.plane().create(8u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
+  CHECK_STATUS(fixture.plane().create(4u, "test"), Status::ok);
+  CHECK_STATUS(fixture.plane().create(8u, "test"), Status::ok);
   CHECK(!fixture.plane().can_share(8u, 3u));
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u, av::SubApi::opengl), capset()), Status::ok);
   CHECK_STATUS(fixture.plane().bind(4u, setup(6u, av::SubApi::vulkan, other_ring, other_fence), capset()), Status::ok);
@@ -421,9 +420,9 @@ TEST(renderer_context_plane_renderer_lost, reports_every_bound_context_lost_and_
   fixture.connect_interrupts();
   fixture.rings();
   CHECK_STATUS(fixture.guest_blob(9u, 0x8000u, 0x1000u), Status::ok);
-  CHECK_STATUS(fixture.plane().create(3u), Status::ok);
-  CHECK_STATUS(fixture.plane().create(4u), Status::ok);
-  CHECK_STATUS(fixture.plane().create(8u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
+  CHECK_STATUS(fixture.plane().create(4u, "test"), Status::ok);
+  CHECK_STATUS(fixture.plane().create(8u, "test"), Status::ok);
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::ok);
   CHECK_STATUS(fixture.plane().bind(4u, setup(6u, av::SubApi::vulkan, other_ring, other_fence), capset()), Status::ok);
   av::GuestRing guest(fixture.qemu().guest_ram(ram), 12u);
@@ -472,7 +471,7 @@ TEST(renderer_context_plane_renderer_lost, reports_every_bound_context_lost_and_
   CHECK_STATUS(fixture.plane().destroy(3u), Status::ok);
   CHECK(!fixture.plane().holds_doorbell(5u));
   av::GuestRing(fixture.qemu().guest_ram(ram), 12u);
-  CHECK_STATUS(fixture.plane().create(10u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(10u, "test"), Status::ok);
   CHECK_STATUS(fixture.plane().bind(10u, setup(5u), capset()), Status::ok);
   CHECK_EQ(fixture.qemu().renderer_kills(), 0u);
   fixture.qemu().fail_renderer_start_at(1u);
@@ -483,7 +482,7 @@ TEST(renderer_context_plane_renderer_lost, reports_every_bound_context_lost_and_
   CHECK_EQ(fixture.qemu().raised(5u), 2u);
   fixture.plane().renderer_lost();
   CHECK_EQ(fixture.qemu().raised(5u), 2u);
-  CHECK_STATUS(fixture.plane().create(11u), Status::invalid_state);
+  CHECK_STATUS(fixture.plane().create(11u, "test"), Status::invalid_state);
   CHECK_STATUS(fixture.plane().bind(10u, setup(5u), capset()), Status::invalid_state); }
 
 TEST(renderer_context_plane_renderer_lost, stops_restarting_a_renderer_that_keeps_dying)
@@ -504,7 +503,7 @@ TEST(renderer_context_plane_renderer_lost, stops_restarting_a_renderer_that_keep
   fixture.wait(RendererContextPlane::loss_window_ns);
   fixture.plane().renderer_lost();
   CHECK(!fixture.plane().alive());
-  CHECK_STATUS(fixture.plane().create(3u), Status::invalid_state); }
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::invalid_state); }
 
 TEST(renderer_context_plane_renderer_lost, a_death_a_whole_window_after_the_others_is_restarted)
 { Fixture fixture;
@@ -768,14 +767,20 @@ TEST(renderer_context_plane_blobs, a_release_that_cannot_be_sent_ends_the_render
   CHECK(!fixture.renderer_blobs().contains(20u));
   CHECK(fixture.renderer_blobs().contains(21u)); }
 
-TEST(renderer_context_plane_blobs, remembers_no_more_blobs_than_the_table_holds)
+TEST(renderer_context_plane_blobs, remembers_every_blob_it_is_told_of_and_forgets_each_on_release)
 { Fixture fixture;
-  for (std::uint32_t id = 1u; id <= av::BlobTable::max_blobs + 1u; id++) fixture.plane().blob_created(id);
+  constexpr std::uint32_t count = 1100u;
+  for (std::uint32_t id = 1u; id <= count; id++) fixture.plane().blob_created(id);
   char            bytes[256];
   av::StateWriter writer(bytes, sizeof bytes);
   fixture.plane().report(writer);
-  CHECK(std::strstr(writer.dump(), "blobs=1024") != nullptr);
-  for (std::uint32_t id = 1u; id <= av::BlobTable::max_blobs + 1u; id++) fixture.plane().blob_released(id);
+  CHECK(std::strstr(writer.dump(), "blobs=1100") != nullptr);
+  CHECK(fixture.plane().invariants_hold());
+  for (std::uint32_t id = 1u; id <= count; id++) fixture.plane().blob_released(id);
+  char            after[256];
+  av::StateWriter reported(after, sizeof after);
+  fixture.plane().report(reported);
+  CHECK(std::strstr(reported.dump(), "blobs=0") != nullptr);
   CHECK(fixture.plane().invariants_hold()); }
 
 TEST(renderer_context_plane_interrupts, follows_the_guests_interrupts_on_and_off)
@@ -920,13 +925,15 @@ TEST(renderer_context_plane, reports_its_renderer_and_what_it_holds)
 { Fixture fixture;
   CHECK_STATUS(fixture.start(), Status::ok);
   CHECK_STATUS(fixture.guest_blob(20u, 0x8000u, 0x1000u), Status::ok);
-  CHECK_STATUS(fixture.plane().create(3u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
   fixture.qemu().renderer_gone();
   fixture.plane().renderer_lost();
   char            bytes[256];
   av::StateWriter writer(bytes, sizeof bytes);
   fixture.plane().report(writer);
-  CHECK(std::strcmp(writer.dump(), "renderer/0 alive=true epoch=2 losses=1 blobs=1 contexts=1") == 0); }
+  CHECK(std::strcmp(writer.dump(), "renderer/0 alive=true epoch=2 losses=1 blobs=1 contexts=1\n"
+                                  "contexts/0 live=1\n"
+                                  "contexts/0/context/3 name=test") == 0); }
 
 TEST(renderer_context_plane_invariants, each_broken_promise_is_seen)
 { Fixture fixture;
@@ -936,9 +943,6 @@ TEST(renderer_context_plane_invariants, each_broken_promise_is_seen)
   CHECK(!fixture.plane().invariants_hold());
   RendererContextPlaneProbe::count_losses(fixture.plane(), RendererContextPlane::max_losses);
   CHECK(fixture.plane().invariants_hold());
-  RendererContextPlaneProbe::count_blobs(fixture.plane(), av::BlobTable::max_blobs + 1u);
-  CHECK(!fixture.plane().invariants_hold());
-  RendererContextPlaneProbe::count_blobs(fixture.plane(), 0u);
   RendererContextPlaneProbe::unconfigure(fixture.plane());
   CHECK(!fixture.plane().invariants_hold()); }
 
