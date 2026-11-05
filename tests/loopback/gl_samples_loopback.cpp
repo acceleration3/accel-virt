@@ -1,4 +1,5 @@
 #include "device/abi/av_executor.h"
+#include "core/log/keyed_log.hpp"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
 #include "harness/fullstack/full_stack_rig.hpp"
@@ -14,7 +15,9 @@
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opengl/gl_icd_binding.hpp"
 #include "icd/opengl/gl_icd_root.hpp"
-#include "icd/opengl/gl_present_loop.hpp"
+#include "icd/common/window_present_queue.hpp"
+#include "icd/opengl/back_buffer_presenter.hpp"
+#include "icd/opengl/batch_ready.hpp"
 
 #include "samples/opengl/framework.h"
 
@@ -40,9 +43,10 @@ constexpr std::int32_t wgl_context_major_version = 0x2091, wgl_context_minor_ver
 class GlProcess {
 public:
     explicit GlProcess(av::DdiKmt &kmt)
-        : lock_(trace_, 'H'), send_lock_(trace_, 'S'), present_lock_(trace_, 'P'), opengl32_(threads_),
-          presents_(present_thread_, handed_, shown_, present_lock_, kmt, surface_, chains_, log_),
-          root_(memory_, kmt, lock_, send_lock_, log_, surface_, threads_, opengl32_, presents_,
+        : lock_(trace_, 'H'), send_lock_(trace_, 'S'), slice_lock_(trace_, 'L'), present_lock_(trace_, 'P'),
+          lines_(memory_, log_, "avgl: "), opengl32_(threads_), ready_(kmt),
+          presents_(memory_, present_thread_, handed_, shown_, present_lock_, ready_, surface_, chains_, lines_),
+          root_(memory_, kmt, lock_, send_lock_, slice_lock_, lines_, surface_, threads_, opengl32_, presents_,
                 av::glicd::gl_icd_binding)
     {
         presents_.refuse();
@@ -58,8 +62,10 @@ private:
     av::LockTrace             trace_;
     av::RecordingThreadLock   lock_;
     av::RecordingThreadLock   send_lock_;
+    av::RecordingThreadLock   slice_lock_;
     av::RecordingThreadLock   present_lock_;
     av::RecordingLog          log_;
+    av::KeyedLog              lines_;
     av::ScriptedWindowSurface surface_;
     av::ScriptedWindowChains chains_;
     av::ScriptedThreadSlot    threads_;
@@ -67,7 +73,8 @@ private:
     av::ScriptedThread       present_thread_;
     av::CountedWakeSignal    handed_;
     av::CountedWakeSignal    shown_;
-    av::glicd::GlPresentLoop presents_;
+    av::glicd::BatchReady     ready_;
+    av::glicd::GlPresentQueue presents_;
     av::glicd::GlIcdRoot      root_;
     int                       dc_ = 0;
     int                       window_ = 0;
