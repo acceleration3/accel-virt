@@ -28,11 +28,24 @@ uint64_t TransportTimeline::completed() const
 bool TransportTimeline::wait(uint64_t fence)
 {
     AV_SCOPE("TransportTimeline::wait");
+    uint64_t target = 0u;
+    return publish(fence, target) && await(target);
+}
+
+bool TransportTimeline::publish(uint64_t fence, uint64_t &target)
+{
+    AV_SCOPE("TransportTimeline::publish");
     KmtTransport &transport = channel_.transport();
     if (fence > transport.published_fence() && transport.flush() != TransportResult::ok) return false;
     const uint64_t published = transport.published_fence();
-    const uint64_t target = fence < published ? fence : published;
-    if (transport.await_gpu(target) != Status::ok) return false;
+    target = fence < published ? fence : published;
+    return true;
+}
+
+bool TransportTimeline::await(uint64_t target)
+{
+    AV_SCOPE("TransportTimeline::await");
+    if (channel_.transport().await_gpu(target) != Status::ok) return false;
     if (target > __atomic_load_n(&waited_, __ATOMIC_ACQUIRE)) __atomic_store_n(&waited_, target, __ATOMIC_RELEASE);
     return true;
 }

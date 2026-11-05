@@ -16,6 +16,8 @@ public:
     uint64_t           recording() const;
     uint64_t           completed() const;
     [[nodiscard]] bool wait(uint64_t fence);
+    [[nodiscard]] bool publish(uint64_t fence, uint64_t &target);
+    [[nodiscard]] bool await(uint64_t target);
     void               forget();
 
 private:

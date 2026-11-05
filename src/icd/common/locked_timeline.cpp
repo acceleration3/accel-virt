@@ -26,8 +26,12 @@ uint64_t LockedTimeline::completed() const
 bool LockedTimeline::wait(uint64_t fence)
 {
     AV_SCOPE("LockedTimeline::wait");
-    const ThreadLockHold hold(lock_);
-    return timeline_.wait(fence);
+    uint64_t target = 0u;
+    {
+        const ThreadLockHold hold(lock_);
+        if (!timeline_.publish(fence, target)) return false;
+    }
+    return timeline_.await(target);
 }
 
 void LockedTimeline::forget()
