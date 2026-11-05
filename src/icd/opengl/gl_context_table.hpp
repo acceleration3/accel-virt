@@ -25,7 +25,7 @@ struct GlContextTableProbe;
 class GlContextTable {
 public:
     GlContextTable(BlockSource &memory, icd::IcdConnection &connection, ThreadLock &send_lock,
-                   KeyedLog &lines, const GlExtensionPolicy &extensions, icd::SharedHandles &handles);
+                   ThreadLock &slice_lock, KeyedLog &lines, const GlExtensionPolicy &extensions, icd::SharedHandles &handles);
     GlContextTable(const GlContextTable &) = delete;
     GlContextTable &operator=(const GlContextTable &) = delete;
 
@@ -45,6 +45,7 @@ private:
     BlockSource                &memory_;
     icd::IcdConnection               &connection_;
     ThreadLock                 &send_lock_;
+    ThreadLock                 &slice_lock_;
     KeyedLog              &lines_;
     const GlExtensionPolicy    &extensions_;
     icd::SharedHandles         &handles_;

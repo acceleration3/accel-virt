@@ -157,6 +157,11 @@ private:
                              uint32_t access);
     bool            unmap_name(GuestGlContext &context, uint32_t buffer);
     void            mark_name(GuestGlContext &context, uint32_t buffer, intptr_t offset, intptr_t length);
+    uint32_t        sliced_buffer(GuestGlContext &context, uint32_t target);
+    void            read_sliced(GuestGlContext &context, uint32_t buffer, intptr_t offset, intptr_t size, void *data);
+    bool            offers_slice(GuestGlContext &context, intptr_t size, uint32_t flags);
+    bool            placed_in_slice(GuestGlContext &context, uint32_t buffer, intptr_t size, const void *data,
+                                    uint32_t flags);
     void            forget_bound(GuestGlContext &context, uint32_t target);
     void            respecify_bound(GuestGlContext &context, uint32_t target, intptr_t size, bool with_data);
     void            pin_storage(GuestGlContext &context, intptr_t size, const void *data);

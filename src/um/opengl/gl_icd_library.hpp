@@ -51,6 +51,7 @@ private:
         DriverSeams       process;
         SrwLock           lock;
         SrwLock           send_lock;
+        SrwLock           slice_lock;
         GdiWindowSurface  surface;
         TlsThreadSlot     slot;
         LoadedOpengl32    opengl32;

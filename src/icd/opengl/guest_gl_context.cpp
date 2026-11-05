@@ -18,6 +18,8 @@
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/command_header.hpp"
 
+#include "proto/generated/glmem/glmem_dispatch_client.h"
+
 #include "gl_dispatch_client.h"
 
 namespace av::glicd {
@@ -32,13 +34,13 @@ constexpr uint32_t no_error = 0u;
 }
 
 GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
-                               KeyedLog &lines, const GlExtensionPolicy &extensions,
+                               ThreadLock &slice_lock, KeyedLog &lines, const GlExtensionPolicy &extensions,
                                icd::SharedHandles &handles, int32_t pixel_format,
                                const GlContextOptions &options)
     : memory_(memory), lines_(lines), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_(lines), loss_reported_(false),
-      channel_(memory, lines, icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_, send_lock), extensions_(memory), framebuffers_(memory, lines), shadows_(memory), staging_(), mappings_(memory, shadows_, lines), externals_(handles, memory, lines), pinned_(memory, channel_),
+      channel_(memory, lines, icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_, send_lock), extensions_(memory), framebuffers_(memory, lines), shadows_(memory), staging_(), slices_(memory, channel_, timeline_, slice_lock, lines, this), mappings_(memory, shadows_, slices_, lines), externals_(handles, memory, lines), pinned_(memory, channel_),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
@@ -150,6 +152,7 @@ Status GuestGlContext::share_after(uint64_t target)
     if (share_target_ != 0u || been_current_ || state_ == State::lost) return Status::invalid_state;
     if (state_ == State::made) teardown();
     share_target_ = target;
+    slices_.stop_placing();
     return Status::ok;
 }
 
@@ -166,6 +169,7 @@ Status GuestGlContext::share(uint32_t share_name)
     if (options_.major() == 0u) options_ = GlContextOptions(1u, 0u, GlContextOptions::Profile::none, 0u, 0u);
     options_ = options_.sharing(share_name);
     shadows_.distrust();
+    slices_.stop_placing();
     return Status::ok;
 }
 
@@ -204,6 +208,7 @@ void GuestGlContext::end_frame()
     AV_SCOPE("GuestGlContext::end_frame");
     if (state_ != State::made) return;
     flush();
+    slices_.trim();
     uint64_t       frequency = 0u;
     const uint64_t now = link_.device().kmt().performance_counter(frequency);
     const uint64_t behind = frames_.end(timeline_.recording() - 1u, now, frequency, timeline_.completed());
@@ -263,6 +268,12 @@ BufferShadows &GuestGlContext::shadows()
     return shadows_;
 }
 
+SlicedBuffers &GuestGlContext::slices()
+{
+    AV_SCOPE("GuestGlContext::slices");
+    return slices_;
+}
+
 PixelStagingBuffer &GuestGlContext::staging()
 {
     AV_SCOPE("GuestGlContext::staging");
@@ -273,6 +284,7 @@ void GuestGlContext::lend()
 {
     AV_SCOPE("GuestGlContext::lend");
     shadows_.distrust();
+    slices_.stop_placing();
 }
 
 GlExternalObjects &GuestGlContext::externals()
@@ -395,6 +407,7 @@ void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
     writer.number("extensions", extensions_.count());
     framebuffers_.report(writer);
     mappings_.report(writer);
+    slices_.report(writer);
     shadows_.report(writer);
     writer.close();
 }
@@ -410,7 +423,7 @@ bool GuestGlContext::invariants_hold() const
     for (uint32_t row = 0u; row < strings; row++)
         if (strings_[row][string_bytes - 1u] != '\0') return false;
     return arrays_.invariants_hold() && uniforms_.invariants_hold() && queries_.invariants_hold() &&
-           framebuffers_.invariants_hold() && mappings_.invariants_hold() && shadows_.invariants_hold() &&
+           framebuffers_.invariants_hold() && mappings_.invariants_hold() && slices_.invariants_hold() && shadows_.invariants_hold() &&
            staging_.invariants_hold() && channel_.invariants_hold() && pacing_.invariants_hold();
 }
 
@@ -456,6 +469,9 @@ bool GuestGlContext::learn()
     cap_version(version_row, latest_minor);
     cap_version(shading_row, latest_language_minor);
     policy_.learn(wire, extensions_);
+    uint32_t sliced = 0u;
+    if (channel_.arena_view() != nullptr && glmemproto::av_glmem_QueryBufferSlicesGL(wire, &sliced) && sliced == 1u)
+        slices_.grant(link_.device().kmt());
     return !channel_.lost();
 }
 
@@ -479,6 +495,7 @@ void GuestGlContext::teardown()
     AV_SCOPE("GuestGlContext::teardown");
     framebuffers_.release(nullptr);
     mappings_.release();
+    slices_.release();
     shadows_.forget_all();
     if (state_ == State::made)
         staging_.release(channel_.transport());

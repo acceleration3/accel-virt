@@ -99,14 +99,14 @@ constexpr uint32_t reported_wgl_count = sizeof reported_wgl_extensions / sizeof 
 }
 
 GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock,
-                     KeyedLog &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
+                     ThreadLock &slice_lock, KeyedLog &log, icd::WindowSurface &surface, ThreadSlot &slot, SystemOpengl &system,
                      GlPresentQueue &presents, GlIcdBinding &binding)
     : lock_(lock), lines_(log), refused_(lines_), surface_(surface), slot_(slot), system_(system), presents_(presents),
       binding_(binding), formats_(),
       query_(formats_), windows_(memory), currents_(slot), connection_(memory, kmt, 0u),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       shared_handles_(kmt, lock, memory),
-      contexts_(memory, connection_, send_lock, lines_, extensions_, shared_handles_),
+      contexts_(memory, connection_, send_lock, slice_lock, lines_, extensions_, shared_handles_),
       manual_(currents_, kmt), callbacks_{}, callback_count_(0u), proc_table_(), pending_(memory, Pool::paged), sync_tokens_()
 {
     AV_SCOPE("GlIcdRoot::GlIcdRoot");
@@ -279,6 +279,7 @@ bool GlIcdRoot::share_lists(uint64_t first, uint64_t second)
         fail(error_invalid_operation);
         return false;
     }
+    target->lend();
     return true;
 }
 

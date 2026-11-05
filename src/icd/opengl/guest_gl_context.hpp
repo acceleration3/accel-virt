@@ -21,6 +21,7 @@
 #include "icd/opengl/pinned_buffers.hpp"
 #include "icd/opengl/pixel_staging_buffer.hpp"
 #include "icd/opengl/query_shapes.hpp"
+#include "icd/opengl/sliced_buffers.hpp"
 #include "icd/opengl/uniform_shapes.hpp"
 #include "icd/opengl/window_framebuffers.hpp"
 #include "proto/context/gl_context_options.hpp"
@@ -59,7 +60,7 @@ public:
     };
 
     GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
-                   KeyedLog &lines, const GlExtensionPolicy &extensions, icd::SharedHandles &handles, int32_t pixel_format,
+                   ThreadLock &slice_lock, KeyedLog &lines, const GlExtensionPolicy &extensions, icd::SharedHandles &handles, int32_t pixel_format,
                    const GlContextOptions &options);
     ~GuestGlContext();
     GuestGlContext(const GuestGlContext &) = delete;
@@ -93,6 +94,7 @@ public:
     WindowFramebuffers    &framebuffers();
     MappedBuffers         &mappings();
     BufferShadows         &shadows();
+    SlicedBuffers         &slices();
     GlExternalObjects     &externals();
     PixelStagingBuffer    &staging();
 
@@ -154,6 +156,7 @@ private:
     WindowFramebuffers             framebuffers_;
     BufferShadows                  shadows_;
     PixelStagingBuffer             staging_;
+    SlicedBuffers                  slices_;
     MappedBuffers                  mappings_;
     GlExternalObjects              externals_;
     PinnedBuffers                  pinned_;

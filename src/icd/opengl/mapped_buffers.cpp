@@ -4,6 +4,9 @@
 #include "core/trace/state_writer.hpp"
 #include "core/log/driver_log.hpp"
 #include "icd/opengl/buffer_shadows.hpp"
+#include "icd/opengl/sliced_buffers.hpp"
+#include "proto/client/client_transport.hpp"
+#include "proto/submission/channel_counter.hpp"
 
 #include "gl_dispatch_client.h"
 
@@ -30,8 +33,8 @@ uint32_t access_error(uint32_t access)
 
 }
 
-MappedBuffers::MappedBuffers(BlockSource &memory, BufferShadows &shadows, DriverLog &log)
-    : shadows_(shadows), log_(log), transfer_(shadows), mappings_(memory), persistent_writers_(0u), logged_()
+MappedBuffers::MappedBuffers(BlockSource &memory, BufferShadows &shadows, SlicedBuffers &slices, DriverLog &log)
+    : shadows_(shadows), slices_(slices), log_(log), transfer_(shadows), mappings_(memory), persistent_writers_(0u), logged_()
 {
     AV_SCOPE("MappedBuffers::MappedBuffers");
 }
@@ -47,6 +50,7 @@ uint32_t MappedBuffers::map(ClientTransport &wire, uint32_t buffer, int64_t offs
 {
     AV_SCOPE("MappedBuffers::map");
     pointer = nullptr;
+    if (slices_.holds(buffer)) return slices_.map(buffer, offset, length, access, pointer);
     const uint32_t refused = access_error(access);
     if (refused != gl_no_error) return refused;
     if (offset < 0 || length == 0 || length < whole_buffer) return gl_invalid_value;
@@ -71,6 +75,7 @@ uint32_t MappedBuffers::map(ClientTransport &wire, uint32_t buffer, int64_t offs
     transfer_.start(wire, *mapping);
     log_once();
     if (mapping->persistent_writes()) persistent_writers_++;
+    if ((access & BufferMapping::map_persistent) != 0u) wire.note(ChannelCounter::copied_mappings, 1u);
     pointer = mapping->at();
     return gl_no_error;
 }
@@ -78,6 +83,7 @@ uint32_t MappedBuffers::map(ClientTransport &wire, uint32_t buffer, int64_t offs
 uint32_t MappedBuffers::unmap(ClientTransport &wire, uint32_t buffer)
 {
     AV_SCOPE("MappedBuffers::unmap");
+    if (slices_.holds(buffer)) return slices_.unmap(buffer);
     BufferMapping *const mapping = find(buffer);
     if (mapping == nullptr) return gl_invalid_operation;
     transfer_.write_back(wire, *mapping);
@@ -88,6 +94,7 @@ uint32_t MappedBuffers::unmap(ClientTransport &wire, uint32_t buffer)
 uint32_t MappedBuffers::mark(uint32_t buffer, int64_t offset, int64_t length)
 {
     AV_SCOPE("MappedBuffers::mark");
+    if (slices_.holds(buffer)) return slices_.mark(buffer, offset, length);
     BufferMapping *const mapping = find(buffer);
     if (offset < 0 || length < 0) return gl_invalid_value;
     if (mapping == nullptr) return gl_invalid_operation;
@@ -99,6 +106,7 @@ uint32_t MappedBuffers::mark(uint32_t buffer, int64_t offset, int64_t length)
 void *MappedBuffers::pointer_of(uint32_t buffer) const
 {
     AV_SCOPE("MappedBuffers::pointer_of");
+    if (slices_.holds(buffer)) return slices_.pointer_of(buffer);
     const BufferMapping *const mapping = find(buffer);
     return mapping != nullptr ? mapping->at() : nullptr;
 }
@@ -107,20 +115,25 @@ bool MappedBuffers::map_state(uint32_t buffer, uint32_t pname, int64_t &value) c
 {
     AV_SCOPE("MappedBuffers::map_state");
     const BufferMapping *mapping = find(buffer);
-    const uint32_t       access = mapping != nullptr ? mapping->access() : 0u;
+    uint32_t             access = mapping != nullptr ? mapping->access() : 0u;
+    uint64_t             offset = mapping != nullptr ? mapping->offset() : 0u;
+    uint64_t             bytes = mapping != nullptr ? mapping->bytes() : 0u;
+    static_cast<void>(slices_.mapping(buffer, access, offset, bytes));
     const uint32_t       both = BufferMapping::map_read | BufferMapping::map_write;
     switch (pname) {
+    case gl_buffer_storage_flags:
+        return buffer == 0u || slices_.storage_flags(buffer, value);
     case gl_buffer_mapped:
-        value = mapping != nullptr ? 1 : 0;
+        value = mapping != nullptr || access != 0u ? 1 : 0;
         return true;
     case gl_buffer_access_flags:
         value = access;
         return true;
     case gl_buffer_map_offset:
-        value = mapping != nullptr ? static_cast<int64_t>(mapping->offset()) : 0;
+        value = static_cast<int64_t>(offset);
         return true;
     case gl_buffer_map_length:
-        value = mapping != nullptr ? static_cast<int64_t>(mapping->bytes()) : 0;
+        value = static_cast<int64_t>(bytes);
         return true;
     case gl_buffer_access:
         value = (access & both) == BufferMapping::map_read    ? gl_read_only

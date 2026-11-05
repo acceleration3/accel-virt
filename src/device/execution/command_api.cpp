@@ -4,6 +4,7 @@
 #include "proto/generated/d3d/d3d_command_names.h"
 #include "proto/generated/d3d12/d3d12_command_names.h"
 #include "proto/generated/d3d9/d3d9_command_names.h"
+#include "proto/generated/glmem/glmem_command_names.h"
 #include "proto/generated/opencl/cl_command_names.h"
 #include "proto/generated/opengl/gl_command_names.h"
 #include "proto/generated/vulkan/vk_command_names.h"
@@ -95,7 +96,10 @@ const char *CommandApi::command_name(uint32_t id) const
         return unknown;
     case vulkan_commands: return vkproto::cmd_id_to_string(id);
     case opencl_commands: return clproto::cmd_id_to_string(id);
-    case opengl_commands: return glproto::cmd_id_to_string(id);
+    case opengl_commands: {
+        const char *named = glmemproto::command_name(id);
+        return named != nullptr ? named : glproto::cmd_id_to_string(id);
+    }
     case d3d_commands: {
         const char *named = d3dproto::command_name(id);
         if (named == nullptr) named = d3d12proto::command_name(id);
