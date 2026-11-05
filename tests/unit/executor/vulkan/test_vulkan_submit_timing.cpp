@@ -1,5 +1,7 @@
+#include "core/log/driver_log.hpp"
 #include "executor/vulkan/vulkan_submit_timing.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -7,9 +9,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <sys/mman.h>
-#include <unistd.h>
 
+using av::DriverLog;
+using av::RecordingLog;
 using av::VulkanSubmitTiming;
 
 namespace {
@@ -84,30 +86,16 @@ private:
     std::uint32_t    family_;
 };
 
-template <typename Body>
-void capture_stderr(char *text, std::size_t capacity, Body body)
-{
-    std::fflush(stderr);
-    const int saved = dup(2);
-    const int file = memfd_create("stderr", 0);
-    dup2(file, 2);
-    body();
-    std::fflush(stderr);
-    dup2(saved, 2);
-    close(saved);
-    const ssize_t got = pread(file, text, capacity - 1u, 0);
-    text[got > 0 ? got : 0] = '\0';
-    close(file);
-}
-
 }
 
 TEST(vulkan_submit_timing, is_enabled_only_where_the_environment_asks)
 { unsetenv("AV_VK_SUBMIT_TIMING");
-  VulkanSubmitTiming off;
+  RecordingLog sink;
+  DriverLog    lines(sink, "av-vk-timing: ");
+  VulkanSubmitTiming off(lines);
   CHECK(!off.enabled());
   setenv("AV_VK_SUBMIT_TIMING", "1", 1);
-  VulkanSubmitTiming on;
+  VulkanSubmitTiming on(lines);
   CHECK(on.enabled());
   unsetenv("AV_VK_SUBMIT_TIMING");
   on.forget(VK_NULL_HANDLE); }
@@ -116,10 +104,11 @@ TEST(vulkan_submit_timing_queue_made, a_disabled_timing_takes_no_queue_and_passe
 { HostQueue host;
   if (!host.made()) return;
   unsetenv("AV_VK_SUBMIT_TIMING");
-  VulkanSubmitTiming timing;
-  char said[512] = {};
-  capture_stderr(said, sizeof said, [&] { timing.queue_made(host.physical(), host.device(), host.family(), host.queue()); });
-  CHECK(std::strstr(said, "av-vk-timing") == nullptr);
+  RecordingLog sink;
+  DriverLog    lines(sink, "av-vk-timing: ");
+  VulkanSubmitTiming timing(lines);
+  timing.queue_made(host.physical(), host.device(), host.family(), host.queue());
+  CHECK_EQ(sink.lines(), 0u);
   CHECK(host.submit_and_wait(timing, 1u));
   timing.forget(host.device()); }
 
@@ -127,17 +116,17 @@ TEST(vulkan_submit_timing_queue_made, an_enabled_timing_takes_the_first_queue_it
 { HostQueue host;
   if (!host.made()) return;
   setenv("AV_VK_SUBMIT_TIMING", "1", 1);
-  VulkanSubmitTiming timing;
+  RecordingLog sink;
+  DriverLog    lines(sink, "av-vk-timing: ");
+  VulkanSubmitTiming timing(lines);
   unsetenv("AV_VK_SUBMIT_TIMING");
-  char said[512] = {};
-  capture_stderr(said, sizeof said, [&] {
-      timing.queue_made(host.physical(), host.device(), host.family(), VK_NULL_HANDLE);
-      timing.queue_made(host.physical(), host.device(), host.family(), host.queue());
-      timing.queue_made(host.physical(), host.device(), host.family(), host.queue());
-  });
+  timing.queue_made(host.physical(), host.device(), host.family(), VK_NULL_HANDLE);
+  timing.queue_made(host.physical(), host.device(), host.family(), host.queue());
+  timing.queue_made(host.physical(), host.device(), host.family(), host.queue());
   char expected[64];
-  std::snprintf(expected, sizeof expected, "av-vk-timing: timing queue family %u\n", host.family());
-  CHECK(std::strcmp(said, expected) == 0);
+  std::snprintf(expected, sizeof expected, "av-vk-timing: timing queue family %u", host.family());
+  CHECK_EQ(sink.lines(), 1u);
+  CHECK(std::strcmp(sink.line(0u), expected) == 0);
   for (std::uint32_t round = 0u; round < 70u; round++) CHECK(host.submit_and_wait(timing, round % 3u));
   timing.forget(VK_NULL_HANDLE);
   CHECK(host.submit_and_wait(timing, 1u));

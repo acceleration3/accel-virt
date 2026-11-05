@@ -1,8 +1,10 @@
 #include "device/abi/av_executor.h"
+#include "executor/executor_log.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/source_memory.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
 #include "proto/resources/host_memory_request.hpp"
 
 #include <cstdint>
@@ -40,7 +42,9 @@ constexpr std::uint32_t domain = 1u;
 constexpr std::uint64_t bytes = 64u * 4096u;
 
 av::LoaderHostApis &opened_host()
-{ static av::LoaderHostApis host;
+{ static av::RecordingLog sink;
+  static av::ExecutorLog  log(sink);
+  static av::LoaderHostApis host(log);
   host.open();
   return host; }
 
