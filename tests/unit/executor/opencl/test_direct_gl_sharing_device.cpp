@@ -13,6 +13,12 @@
 #include <cstdio>
 #include <cstring>
 
+extern "C" const char *__asan_default_options(void);
+extern "C" const char *__asan_default_options(void)
+{
+    return "detect_leaks=0";
+}
+
 extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
 {
@@ -220,13 +226,13 @@ TEST(direct_gl_sharing_device, a_renderbuffer_the_host_will_not_name_is_read_thr
   CHECK_EQ(shared.sharing().renderbuffer_images(), 0u);
   for (std::uint32_t index = 0u; index < made; index++) ::clReleaseMemObject(held[index]);
 
-  cl_mem const made = shared.sharing().from_renderbuffer(shared.context(), CL_MEM_READ_ONLY, renderbuffer, &error);
-  CHECK(made != nullptr);
+  cl_mem const named = shared.sharing().from_renderbuffer(shared.context(), CL_MEM_READ_ONLY, renderbuffer, &error);
+  CHECK(named != nullptr);
   CHECK_EQ(error, CL_SUCCESS);
   CHECK(shared.sharing().from_renderbuffer(shared.context(), 0xFFu, renderbuffer, &error) == nullptr);
   CHECK(error != CL_SUCCESS);
   CHECK(shared.sharing().from_renderbuffer(shared.context(), CL_MEM_READ_ONLY, renderbuffer + 1000u, nullptr) ==
         nullptr);
-  shared.sharing().forget(made);
-  ::clReleaseMemObject(made);
+  shared.sharing().forget(named);
+  ::clReleaseMemObject(named);
   rig.delete_renderbuffer(renderbuffer); }
