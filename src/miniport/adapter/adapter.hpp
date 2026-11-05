@@ -60,7 +60,7 @@ namespace av {
 class AdapterInfoQuery;
 class DeviceAllocation;
 class ReleaseRecord;
-struct PointView;
+class PointView;
 
 class PresentSurface;
 class SurfacePoint;

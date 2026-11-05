@@ -5,11 +5,21 @@
 
 namespace av {
 
-struct PointView {
-    bool     pointed = false;
-    bool     queued = false;
-    uint32_t point = 0u;
-    bool     first_starvation = false;
+class PointView {
+public:
+    PointView();
+    PointView(bool pointed, bool queued, uint32_t point, bool first_starvation);
+
+    bool     pointed() const;
+    bool     queued() const;
+    uint32_t point() const;
+    bool     first_starvation() const;
+
+private:
+    bool     pointed_;
+    bool     queued_;
+    uint32_t point_;
+    bool     first_starvation_;
 };
 
 }

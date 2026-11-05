@@ -77,11 +77,9 @@ bool DeviceAllocation::pointed() const
 void DeviceAllocation::view(PointView &view)
 {
     AV_SCOPE("DeviceAllocation::view");
-    view.pointed = pointed_;
-    view.queued = queued_ != 0u;
-    view.point = point();
-    view.first_starvation = pointed_ && queued_ == 0u && !starved_told_;
-    if (view.first_starvation) starved_told_ = true;
+    const bool first_starvation = pointed_ && queued_ == 0u && !starved_told_;
+    view = PointView(pointed_, queued_ != 0u, point(), first_starvation);
+    if (first_starvation) starved_told_ = true;
 }
 
 }

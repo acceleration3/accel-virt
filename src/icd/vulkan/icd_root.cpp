@@ -168,7 +168,7 @@ constexpr ExtensionPolicy::Row reported_extensions[] = {
             "icd_external_handles.a_handle_exported_is_opened_by_the_device_on_import",
             "VK_KHR_external_memory_fd"},
     {"VK_KHR_external_semaphore_win32", 1u,
-            "icd_external_handles.a_semaphore_handle_becomes_the_host_s_own_fd_import",
+            "icd_external_handles.a_semaphore_handle_is_opened_by_the_device_into_the_semaphore_it_names",
             "VK_KHR_external_semaphore_fd"},
     {"VK_KHR_dynamic_rendering", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},
     {"VK_KHR_synchronization2", 1u, "reported_extensions.every_feature_structure_an_application_chains_reaches_the_host"},

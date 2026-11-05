@@ -1522,7 +1522,7 @@ uint64_t Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Pre
     if (source != nullptr) static_cast<void>(devices_.peek_point(source_handle, points));
     if (point_missing(request, source, points)) {
         presents_unpointed_++;
-        if (points.first_starvation)
+        if (points.first_starvation())
             platform_.log("avgpu: a present of a pointed surface has no point named: the window keeps its last frame");
         return 0u;
     }
@@ -1560,21 +1560,21 @@ SurfacePoint Adapter::image_of(const DxgkargPresentRecord &request, const Device
     if (record.decode(static_cast<const uint8_t *>(request.pPrivateDriverData), request.PrivateDriverDataSize) ==
         Status::ok)
         return SurfacePoint(source->allocation().shared_id(), record.point());
-    if (!points.queued || points.point == 0u) return SurfacePoint();
-    return SurfacePoint(source->allocation().shared_id(), points.point);
+    if (!points.queued() || points.point() == 0u) return SurfacePoint();
+    return SurfacePoint(source->allocation().shared_id(), points.point());
 }
 
 bool Adapter::point_missing(const DxgkargPresentRecord &request, const DeviceAllocation *source,
                             const PointView &points)
 {
     AV_SCOPE("Adapter::point_missing");
-    if (source == nullptr || !points.pointed || !identity_.offers(CapsetInfo::feature_present_from_image))
+    if (source == nullptr || !points.pointed() || !identity_.offers(CapsetInfo::feature_present_from_image))
         return false;
     PresentPointRecord record;
     if (record.decode(static_cast<const uint8_t *>(request.pPrivateDriverData), request.PrivateDriverDataSize) ==
         Status::ok)
         return false;
-    return !points.queued;
+    return !points.queued();
 }
 
 PixelMover &Adapter::immediate_mover()

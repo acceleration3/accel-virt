@@ -11,6 +11,7 @@
 #include "miniport/memory/memory_segments.hpp"
 #include "miniport/memory/aperture_segment.hpp"
 #include "miniport/memory/device_allocation.hpp"
+#include "miniport/memory/point_view.hpp"
 #include "miniport/driver/dxgkrnl_interface.hpp"
 #include "miniport/scheduling/device.hpp"
 #include "miniport/scheduling/device_table.hpp"
@@ -659,3 +660,29 @@ TEST(device_table_open, the_creating_devices_open_of_an_identity_the_table_lost_
   CHECK_STATUS(left.decode(fixture.creator_record(0u), av::SharedObjectRecord::encoded_size), Status::ok);
   CHECK(!left.assigned());
   CHECK(fixture.devices().invariants_hold()); }
+
+TEST(device_table_point, peeks_the_point_an_open_holds_and_consumes_it_once_presented)
+{ Fixture fixture;
+  void *const device = fixture.create_device();
+  DxgkargOpenAllocationRecord open = fixture.open_request(1u);
+  CHECK_STATUS(fixture.devices().open(device, open), Status::ok);
+  void *const handle = fixture.open_info(0u).hDeviceSpecificAllocation;
+  av::DeviceAllocation *const held = fixture.devices().opened(handle);
+  CHECK(held != nullptr);
+  if (held == nullptr) return;
+  av::PointView view;
+  CHECK_STATUS(fixture.devices().peek_point(handle, view), Status::ok);
+  CHECK(!view.pointed());
+  held->name_point(5u);
+  CHECK_STATUS(fixture.devices().peek_point(handle, view), Status::ok);
+  CHECK(view.pointed());
+  CHECK(view.queued());
+  CHECK_EQ(view.point(), 5u);
+  fixture.devices().consume_point(handle);
+  CHECK_STATUS(fixture.devices().peek_point(handle, view), Status::ok);
+  CHECK(view.pointed());
+  CHECK(!view.queued());
+  CHECK_STATUS(fixture.devices().peek_point(nullptr, view), Status::not_found);
+  fixture.devices().consume_point(nullptr);
+  CHECK(fixture.devices().invariants_hold());
+  CHECK_STATUS(fixture.close(device, 1u), Status::ok); }
