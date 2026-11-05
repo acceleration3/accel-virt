@@ -46,6 +46,7 @@ public:
     void                 drop_owner(const SlicedBuffers *owner);
     [[nodiscard]] Status enroll(SlicedBuffers *member, uint32_t group);
     void                 withdraw(const SlicedBuffers *member);
+    bool                 enrolled(const SlicedBuffers *member) const;
     SlicedBuffers       *next_member(uint32_t group, uint32_t &cursor) const;
     uint32_t             owned_by(const SlicedBuffers *owner) const;
     uint32_t             count() const;

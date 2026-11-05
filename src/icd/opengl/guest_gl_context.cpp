@@ -225,7 +225,9 @@ ClientTransport *GuestGlContext::wire()
         loss_.lose(channel_.fault_code());
         static_cast<void>(loss_.refuses("an OpenGL call"));
     }
-    return state_ == State::made ? &channel_.transport() : nullptr;
+    if (state_ != State::made) return nullptr;
+    slices_.send_forgets();
+    return &channel_.transport();
 }
 
 ClientArrayState &GuestGlContext::arrays()
@@ -315,6 +317,18 @@ uint32_t GuestGlContext::slices_busy() const
 {
     AV_SCOPE("GuestGlContext::slices_busy");
     return slices_.busy();
+}
+
+uint32_t GuestGlContext::slices_deferred() const
+{
+    AV_SCOPE("GuestGlContext::slices_deferred");
+    return slices_.deferred();
+}
+
+void GuestGlContext::slices_reclaim()
+{
+    AV_SCOPE("GuestGlContext::slices_reclaim");
+    slices_.reclaim_deferred();
 }
 
 GlExternalObjects &GuestGlContext::externals()

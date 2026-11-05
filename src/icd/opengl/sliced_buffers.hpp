@@ -4,7 +4,9 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "icd/common/stream_memory.hpp"
+#include "icd/opengl/deferred_slices.hpp"
 #include "icd/opengl/gl_poll_clock.hpp"
+#include "icd/opengl/queued_forgets.hpp"
 #include "icd/opengl/slice_groups.hpp"
 #include "proto/resources/host_memory_request.hpp"
 
@@ -25,6 +27,7 @@ class HostChannel;
 
 namespace av::glicd {
 
+class SlicePin;
 struct SlicedBuffersProbe;
 
 class SlicedBuffers {
@@ -55,7 +58,8 @@ public:
     [[nodiscard]] Status place(ClientTransport &wire, uint32_t buffer, uint64_t size, uint32_t flags,
                                const void *data);
     void                 forget(int32_t count, const uint32_t *buffers);
-    void                 release_row(uint32_t buffer, const Row &row);
+    void                 send_forgets();
+    void                 reclaim_deferred();
     void                 trim();
 
     uint8_t *view_of(const Row &row) const;
@@ -75,11 +79,14 @@ public:
     bool     storage_flags(uint32_t buffer, int64_t &value) const;
     uint32_t held() const;
     uint32_t owned() const;
+    uint32_t deferred() const;
     uint32_t busy() const;
     uint32_t pinned() const;
     void     pin();
     void     unpin();
     bool     wait_recorded();
+    uint64_t recording() const;
+    uint64_t completed() const;
     [[nodiscard]] Status enroll();
     uint32_t group() const;
 
@@ -97,9 +104,12 @@ private:
     icd::StreamMemory *stream_of(uint32_t stream);
     icd::StreamMemory *made_stream(uint32_t stream);
     bool               snapshot(uint32_t buffer, Row &copy) const;
+    bool               snapshot_pinned(uint32_t buffer, Row &copy, SlicePin &pin) const;
+    [[nodiscard]] Status shelve_locked(const Row &row);
+    [[nodiscard]] Status queue_forget_locked(uint32_t buffer);
+    void                 forget_on_host(uint32_t buffer);
     uint32_t           access_error(const Row &row, int64_t offset, int64_t length, uint32_t access) const;
     uint32_t           window_error(const Row &row, uint64_t offset, uint64_t bytes) const;
-    bool               settle_group(const SlicedBuffers *except);
 
     BlockSource                     &memory_;
     icd::HostChannel                &channel_;
@@ -109,6 +119,8 @@ private:
     DriverLog                       &lines_;
     const void                      *owner_;
     uint32_t                         pins_;
+    DeferredSlices                   deferred_;
+    QueuedForgets                    forgets_;
     GlPollClock                      clock_;
     ObjectStorage<icd::StreamMemory> streams_[stream_kinds];
     bool                             granted_;

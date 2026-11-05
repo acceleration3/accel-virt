@@ -123,6 +123,12 @@ void SliceGroups::withdraw(const SlicedBuffers *member)
     static_cast<void>(members_.erase(reinterpret_cast<uintptr_t>(member)));
 }
 
+bool SliceGroups::enrolled(const SlicedBuffers *member) const
+{
+    AV_SCOPE("SliceGroups::enrolled");
+    return members_.find(reinterpret_cast<uintptr_t>(member)) != nullptr;
+}
+
 SlicedBuffers *SliceGroups::next_member(uint32_t group, uint32_t &cursor) const
 {
     AV_SCOPE("SliceGroups::next_member");

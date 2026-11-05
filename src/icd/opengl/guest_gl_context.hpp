@@ -83,6 +83,8 @@ public:
     uint32_t             slices_owned() const;
     uint32_t             slices_pinned() const;
     uint32_t             slices_busy() const;
+    uint32_t             slices_deferred() const;
+    void                 slices_reclaim();
     ClientTransport     *wire();
     uint32_t             guest_device() const;
     void                 flush();

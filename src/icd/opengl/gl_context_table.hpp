@@ -47,7 +47,7 @@ private:
     uint64_t mint();
     bool     shares_live(const GuestGlContext &context) const;
     bool     retires(const GuestGlContext &context) const;
-    bool     reapable(const GuestGlContext &context) const;
+    bool     reapable(GuestGlContext &context) const;
     void     reap_locked();
 
     BlockSource                &memory_;
