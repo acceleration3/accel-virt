@@ -32,8 +32,7 @@ public:
     ClientBlobArena &operator=(const ClientBlobArena &) = delete;
 
     void            lend(uint8_t *block, size_t capacity);
-    bool            ready();
-    uint64_t        declined() const;
+    bool            ready() const;
     ClientBlobLease take(size_t count);
     void            give_back(const ClientBlobLease &lease);
     void            seal();
@@ -72,7 +71,6 @@ private:
     Mark     marks_[max_marks];
     uint32_t first_mark_;
     uint32_t mark_count_;
-    uint64_t declined_;
 
     friend struct ClientBlobArenaProbe;
 };

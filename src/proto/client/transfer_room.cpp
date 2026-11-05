@@ -34,15 +34,23 @@ size_t TransferRoom::write_piece(ClientTransport &wire, uint64_t left) const
 {
     AV_SCOPE("TransferRoom::write_piece");
     const size_t inline_piece = left < inline_write() ? static_cast<size_t>(left) : inline_write();
-    if (!wire.blobs().ready()) return inline_piece;
+    const bool   bulk = left > inline_write();
+    if (!wire.blobs().ready()) {
+        if (bulk) wire.note(ChannelCounter::inline_bulk, 1u);
+        return inline_piece;
+    }
     const size_t lent = left < lent_bytes ? static_cast<size_t>(left) : lent_bytes;
-    return wire.make_room_for_blobs(lent) ? lent : inline_piece;
+    if (wire.make_room_for_blobs(lent)) return lent;
+    if (bulk) wire.note(ChannelCounter::inline_bulk, 1u);
+    return inline_piece;
 }
 
 size_t TransferRoom::read_piece(ClientTransport &wire) const
 {
     AV_SCOPE("TransferRoom::read_piece");
-    return wire.blobs().ready() ? lent_bytes : inline_read();
+    if (wire.blobs().ready()) return lent_bytes;
+    wire.note(ChannelCounter::inline_bulk, 1u);
+    return inline_read();
 }
 
 }

@@ -152,14 +152,17 @@ bool put_bytes(::av::ClientTransport& t, ::av::WireWriter& b, const void* data, 
     if (size != 0u && data == nullptr) return false;
     b.write_pod<uint64_t>(size);
     ::av::ClientBlobArena& arena = t.blobs();
-    if (size > inline_bytes && arena.ready()) {{
-        const ::av::ClientBlobLease lease = arena.take(static_cast<size_t>(size));
-        if (lease.taken()) {{
-            __builtin_memcpy(lease.data(), data, static_cast<size_t>(size));
-            b.write_pod<uint8_t>(tag_blob);
-            b.write_pod<uint64_t>(lease.offset());
-            return true;
+    if (size > inline_bytes) {{
+        if (arena.ready()) {{
+            const ::av::ClientBlobLease lease = arena.take(static_cast<size_t>(size));
+            if (lease.taken()) {{
+                __builtin_memcpy(lease.data(), data, static_cast<size_t>(size));
+                b.write_pod<uint8_t>(tag_blob);
+                b.write_pod<uint64_t>(lease.offset());
+                return true;
+            }}
         }}
+        t.note(::av::ChannelCounter::inline_bulk, 1u);
     }}
     b.write_pod<uint8_t>(tag_inline);
     if (size != 0u) b.write(data, static_cast<size_t>(size));

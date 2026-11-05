@@ -204,6 +204,7 @@ void av_glBindBuffersBase(::av::ClientTransport& av_t, GLenum target, GLuint fir
                 buffers_via_blob = true;
             }
         }
+        if (!buffers_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(buffers == nullptr ? 0 : (buffers_via_blob ? 3 : 1));
     if (buffers_via_blob) {
@@ -246,6 +247,7 @@ void av_glBindBuffersRange(::av::ClientTransport& av_t, GLenum target, GLuint fi
                 buffers_via_blob = true;
             }
         }
+        if (!buffers_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(buffers == nullptr ? 0 : (buffers_via_blob ? 3 : 1));
     if (buffers_via_blob) {
@@ -269,6 +271,7 @@ void av_glBindBuffersRange(::av::ClientTransport& av_t, GLenum target, GLuint fi
                 offsets_via_blob = true;
             }
         }
+        if (!offsets_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(offsets == nullptr ? 0 : (offsets_via_blob ? 3 : 1));
     if (offsets_via_blob) {
@@ -292,6 +295,7 @@ void av_glBindBuffersRange(::av::ClientTransport& av_t, GLenum target, GLuint fi
                 sizes_via_blob = true;
             }
         }
+        if (!sizes_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(sizes == nullptr ? 0 : (sizes_via_blob ? 3 : 1));
     if (sizes_via_blob) {
@@ -415,6 +419,7 @@ void av_glBindImageTextures(::av::ClientTransport& av_t, GLuint first, GLsizei c
                 textures_via_blob = true;
             }
         }
+        if (!textures_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(textures == nullptr ? 0 : (textures_via_blob ? 3 : 1));
     if (textures_via_blob) {
@@ -497,6 +502,7 @@ void av_glBindSamplers(::av::ClientTransport& av_t, GLuint first, GLsizei count,
                 samplers_via_blob = true;
             }
         }
+        if (!samplers_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(samplers == nullptr ? 0 : (samplers_via_blob ? 3 : 1));
     if (samplers_via_blob) {
@@ -566,6 +572,7 @@ void av_glBindTextures(::av::ClientTransport& av_t, GLuint first, GLsizei count,
                 textures_via_blob = true;
             }
         }
+        if (!textures_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(textures == nullptr ? 0 : (textures_via_blob ? 3 : 1));
     if (textures_via_blob) {
@@ -650,6 +657,7 @@ void av_glBindVertexBuffers(::av::ClientTransport& av_t, GLuint first, GLsizei c
                 buffers_via_blob = true;
             }
         }
+        if (!buffers_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(buffers == nullptr ? 0 : (buffers_via_blob ? 3 : 1));
     if (buffers_via_blob) {
@@ -673,6 +681,7 @@ void av_glBindVertexBuffers(::av::ClientTransport& av_t, GLuint first, GLsizei c
                 offsets_via_blob = true;
             }
         }
+        if (!offsets_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(offsets == nullptr ? 0 : (offsets_via_blob ? 3 : 1));
     if (offsets_via_blob) {
@@ -696,6 +705,7 @@ void av_glBindVertexBuffers(::av::ClientTransport& av_t, GLuint first, GLsizei c
                 strides_via_blob = true;
             }
         }
+        if (!strides_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(strides == nullptr ? 0 : (strides_via_blob ? 3 : 1));
     if (strides_via_blob) {
@@ -925,6 +935,7 @@ void av_glBufferData(::av::ClientTransport& av_t, GLenum target, GLsizeiptr size
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data == nullptr ? 0 : (data_via_blob ? 3 : 1));
     if (data_via_blob) {
@@ -967,6 +978,7 @@ void av_glBufferStorage(::av::ClientTransport& av_t, GLenum target, GLsizeiptr s
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data == nullptr ? 0 : (data_via_blob ? 3 : 1));
     if (data_via_blob) {
@@ -1010,6 +1022,7 @@ void av_glBufferSubData(::av::ClientTransport& av_t, GLenum target, GLintptr off
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data == nullptr ? 0 : (data_via_blob ? 3 : 1));
     if (data_via_blob) {
@@ -1122,6 +1135,7 @@ void av_glClearBufferData(::av::ClientTransport& av_t, GLenum target, GLenum int
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -1168,6 +1182,7 @@ void av_glClearBufferSubData(::av::ClientTransport& av_t, GLenum target, GLenum 
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -1227,6 +1242,7 @@ void av_glClearBufferfv(::av::ClientTransport& av_t, GLenum buffer, GLint drawbu
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -1268,6 +1284,7 @@ void av_glClearBufferiv(::av::ClientTransport& av_t, GLenum buffer, GLint drawbu
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -1309,6 +1326,7 @@ void av_glClearBufferuiv(::av::ClientTransport& av_t, GLenum buffer, GLint drawb
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -1393,6 +1411,7 @@ void av_glClearNamedBufferData(::av::ClientTransport& av_t, GLuint buffer, GLenu
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -1439,6 +1458,7 @@ void av_glClearNamedBufferSubData(::av::ClientTransport& av_t, GLuint buffer, GL
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -1500,6 +1520,7 @@ void av_glClearNamedFramebufferfv(::av::ClientTransport& av_t, GLuint framebuffe
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -1542,6 +1563,7 @@ void av_glClearNamedFramebufferiv(::av::ClientTransport& av_t, GLuint framebuffe
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -1584,6 +1606,7 @@ void av_glClearNamedFramebufferuiv(::av::ClientTransport& av_t, GLuint framebuff
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -1639,6 +1662,7 @@ void av_glClearTexImage(::av::ClientTransport& av_t, GLuint texture, GLint level
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -1689,6 +1713,7 @@ void av_glClearTexSubImage(::av::ClientTransport& av_t, GLuint texture, GLint le
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -1815,6 +1840,7 @@ void av_glColorP3uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* col
                 color_via_blob = true;
             }
         }
+        if (!color_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(color == nullptr ? 0 : (color_via_blob ? 3 : 1));
     if (color_via_blob) {
@@ -1869,6 +1895,7 @@ void av_glColorP4uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* col
                 color_via_blob = true;
             }
         }
+        if (!color_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(color == nullptr ? 0 : (color_via_blob ? 3 : 1));
     if (color_via_blob) {
@@ -1926,6 +1953,7 @@ void av_glCompressedTexImage1D(::av::ClientTransport& av_t, GLenum target, GLint
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -1973,6 +2001,7 @@ void av_glCompressedTexImage2D(::av::ClientTransport& av_t, GLenum target, GLint
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -2021,6 +2050,7 @@ void av_glCompressedTexImage3D(::av::ClientTransport& av_t, GLenum target, GLint
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -2067,6 +2097,7 @@ void av_glCompressedTexSubImage1D(::av::ClientTransport& av_t, GLenum target, GL
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -2115,6 +2146,7 @@ void av_glCompressedTexSubImage2D(::av::ClientTransport& av_t, GLenum target, GL
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -2165,6 +2197,7 @@ void av_glCompressedTexSubImage3D(::av::ClientTransport& av_t, GLenum target, GL
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -2211,6 +2244,7 @@ void av_glCompressedTextureSubImage1D(::av::ClientTransport& av_t, GLuint textur
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -2259,6 +2293,7 @@ void av_glCompressedTextureSubImage2D(::av::ClientTransport& av_t, GLuint textur
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -2309,6 +2344,7 @@ void av_glCompressedTextureSubImage3D(::av::ClientTransport& av_t, GLuint textur
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -2944,6 +2980,7 @@ void av_glDebugMessageControl(::av::ClientTransport& av_t, GLenum source, GLenum
                 ids_via_blob = true;
             }
         }
+        if (!ids_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(ids == nullptr ? 0 : (ids_via_blob ? 3 : 1));
     if (ids_via_blob) {
@@ -3008,6 +3045,7 @@ void av_glDeleteBuffers(::av::ClientTransport& av_t, GLsizei n, const GLuint* bu
                 buffers_via_blob = true;
             }
         }
+        if (!buffers_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(buffers == nullptr ? 0 : (buffers_via_blob ? 3 : 1));
     if (buffers_via_blob) {
@@ -3048,6 +3086,7 @@ void av_glDeleteFramebuffers(::av::ClientTransport& av_t, GLsizei n, const GLuin
                 framebuffers_via_blob = true;
             }
         }
+        if (!framebuffers_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(framebuffers == nullptr ? 0 : (framebuffers_via_blob ? 3 : 1));
     if (framebuffers_via_blob) {
@@ -3101,6 +3140,7 @@ void av_glDeleteProgramPipelines(::av::ClientTransport& av_t, GLsizei n, const G
                 pipelines_via_blob = true;
             }
         }
+        if (!pipelines_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pipelines == nullptr ? 0 : (pipelines_via_blob ? 3 : 1));
     if (pipelines_via_blob) {
@@ -3141,6 +3181,7 @@ void av_glDeleteQueries(::av::ClientTransport& av_t, GLsizei n, const GLuint* id
                 ids_via_blob = true;
             }
         }
+        if (!ids_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(ids == nullptr ? 0 : (ids_via_blob ? 3 : 1));
     if (ids_via_blob) {
@@ -3181,6 +3222,7 @@ void av_glDeleteRenderbuffers(::av::ClientTransport& av_t, GLsizei n, const GLui
                 renderbuffers_via_blob = true;
             }
         }
+        if (!renderbuffers_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(renderbuffers == nullptr ? 0 : (renderbuffers_via_blob ? 3 : 1));
     if (renderbuffers_via_blob) {
@@ -3221,6 +3263,7 @@ void av_glDeleteSamplers(::av::ClientTransport& av_t, GLsizei count, const GLuin
                 samplers_via_blob = true;
             }
         }
+        if (!samplers_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(samplers == nullptr ? 0 : (samplers_via_blob ? 3 : 1));
     if (samplers_via_blob) {
@@ -3287,6 +3330,7 @@ void av_glDeleteTextures(::av::ClientTransport& av_t, GLsizei n, const GLuint* t
                 textures_via_blob = true;
             }
         }
+        if (!textures_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(textures == nullptr ? 0 : (textures_via_blob ? 3 : 1));
     if (textures_via_blob) {
@@ -3327,6 +3371,7 @@ void av_glDeleteTransformFeedbacks(::av::ClientTransport& av_t, GLsizei n, const
                 ids_via_blob = true;
             }
         }
+        if (!ids_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(ids == nullptr ? 0 : (ids_via_blob ? 3 : 1));
     if (ids_via_blob) {
@@ -3367,6 +3412,7 @@ void av_glDeleteVertexArrays(::av::ClientTransport& av_t, GLsizei n, const GLuin
                 arrays_via_blob = true;
             }
         }
+        if (!arrays_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(arrays == nullptr ? 0 : (arrays_via_blob ? 3 : 1));
     if (arrays_via_blob) {
@@ -3448,6 +3494,7 @@ void av_glDepthRangeArrayv(::av::ClientTransport& av_t, GLuint first, GLsizei co
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -3688,6 +3735,7 @@ void av_glDrawBuffers(::av::ClientTransport& av_t, GLsizei n, const GLenum* bufs
                 bufs_via_blob = true;
             }
         }
+        if (!bufs_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bufs == nullptr ? 0 : (bufs_via_blob ? 3 : 1));
     if (bufs_via_blob) {
@@ -4934,6 +4982,7 @@ void av_glGetActiveUniformsiv(::av::ClientTransport& av_t, GLuint program, GLsiz
                 uniformIndices_via_blob = true;
             }
         }
+        if (!uniformIndices_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(uniformIndices == nullptr ? 0 : (uniformIndices_via_blob ? 3 : 1));
     if (uniformIndices_via_blob) {
@@ -5219,6 +5268,7 @@ void av_glGetCompressedTexImage(::av::ClientTransport& av_t, GLenum target, GLin
             img_via_blob = img_lease.taken();
             if (img_via_blob) __builtin_memset(img_lease.data(), 0, img_want);
         }
+        if (!img_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         img_is_offset ? 2 : (img_via_blob ? 3 : (img != nullptr ? 1 : 0)));
@@ -5274,6 +5324,7 @@ void av_glGetCompressedTextureImage(::av::ClientTransport& av_t, GLuint texture,
             pixels_via_blob = pixels_lease.taken();
             if (pixels_via_blob) __builtin_memset(pixels_lease.data(), 0, pixels_want);
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
@@ -5335,6 +5386,7 @@ void av_glGetCompressedTextureSubImage(::av::ClientTransport& av_t, GLuint textu
             pixels_via_blob = pixels_lease.taken();
             if (pixels_via_blob) __builtin_memset(pixels_lease.data(), 0, pixels_want);
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
@@ -6574,6 +6626,7 @@ void av_glGetProgramResourceiv(::av::ClientTransport& av_t, GLuint program, GLen
                 props_via_blob = true;
             }
         }
+        if (!props_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(props == nullptr ? 0 : (props_via_blob ? 3 : 1));
     if (props_via_blob) {
@@ -6805,6 +6858,7 @@ void av_glGetQueryObjecti64v(::av::ClientTransport& av_t, GLuint id, GLenum pnam
             params_via_blob = params_lease.taken();
             if (params_via_blob) __builtin_memset(params_lease.data(), 0, params_want);
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         params_is_offset ? 2 : (params_via_blob ? 3 : (params != nullptr ? 1 : 0)));
@@ -6859,6 +6913,7 @@ void av_glGetQueryObjectiv(::av::ClientTransport& av_t, GLuint id, GLenum pname,
             params_via_blob = params_lease.taken();
             if (params_via_blob) __builtin_memset(params_lease.data(), 0, params_want);
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         params_is_offset ? 2 : (params_via_blob ? 3 : (params != nullptr ? 1 : 0)));
@@ -6913,6 +6968,7 @@ void av_glGetQueryObjectui64v(::av::ClientTransport& av_t, GLuint id, GLenum pna
             params_via_blob = params_lease.taken();
             if (params_via_blob) __builtin_memset(params_lease.data(), 0, params_want);
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         params_is_offset ? 2 : (params_via_blob ? 3 : (params != nullptr ? 1 : 0)));
@@ -6967,6 +7023,7 @@ void av_glGetQueryObjectuiv(::av::ClientTransport& av_t, GLuint id, GLenum pname
             params_via_blob = params_lease.taken();
             if (params_via_blob) __builtin_memset(params_lease.data(), 0, params_want);
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         params_is_offset ? 2 : (params_via_blob ? 3 : (params != nullptr ? 1 : 0)));
@@ -7542,6 +7599,7 @@ void av_glGetTexImage(::av::ClientTransport& av_t, GLenum target, GLint level, G
             pixels_via_blob = pixels_lease.taken();
             if (pixels_via_blob) __builtin_memset(pixels_lease.data(), 0, pixels_want);
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
@@ -7787,6 +7845,7 @@ void av_glGetTextureImage(::av::ClientTransport& av_t, GLuint texture, GLint lev
             pixels_via_blob = pixels_lease.taken();
             if (pixels_via_blob) __builtin_memset(pixels_lease.data(), 0, pixels_want);
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
@@ -8038,6 +8097,7 @@ void av_glGetTextureSubImage(::av::ClientTransport& av_t, GLuint texture, GLint 
             pixels_via_blob = pixels_lease.taken();
             if (pixels_via_blob) __builtin_memset(pixels_lease.data(), 0, pixels_want);
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
@@ -8815,6 +8875,7 @@ void av_glGetnCompressedTexImage(::av::ClientTransport& av_t, GLenum target, GLi
             pixels_via_blob = pixels_lease.taken();
             if (pixels_via_blob) __builtin_memset(pixels_lease.data(), 0, pixels_want);
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
@@ -8872,6 +8933,7 @@ void av_glGetnTexImage(::av::ClientTransport& av_t, GLenum target, GLint level, 
             pixels_via_blob = pixels_lease.taken();
             if (pixels_via_blob) __builtin_memset(pixels_lease.data(), 0, pixels_want);
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
@@ -9098,6 +9160,7 @@ void av_glInvalidateFramebuffer(::av::ClientTransport& av_t, GLenum target, GLsi
                 attachments_via_blob = true;
             }
         }
+        if (!attachments_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(attachments == nullptr ? 0 : (attachments_via_blob ? 3 : 1));
     if (attachments_via_blob) {
@@ -9139,6 +9202,7 @@ void av_glInvalidateNamedFramebufferData(::av::ClientTransport& av_t, GLuint fra
                 attachments_via_blob = true;
             }
         }
+        if (!attachments_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(attachments == nullptr ? 0 : (attachments_via_blob ? 3 : 1));
     if (attachments_via_blob) {
@@ -9180,6 +9244,7 @@ void av_glInvalidateNamedFramebufferSubData(::av::ClientTransport& av_t, GLuint 
                 attachments_via_blob = true;
             }
         }
+        if (!attachments_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(attachments == nullptr ? 0 : (attachments_via_blob ? 3 : 1));
     if (attachments_via_blob) {
@@ -9225,6 +9290,7 @@ void av_glInvalidateSubFramebuffer(::av::ClientTransport& av_t, GLenum target, G
                 attachments_via_blob = true;
             }
         }
+        if (!attachments_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(attachments == nullptr ? 0 : (attachments_via_blob ? 3 : 1));
     if (attachments_via_blob) {
@@ -9676,6 +9742,7 @@ void av_glMultiDrawArrays(::av::ClientTransport& av_t, GLenum mode, const GLint*
                 first_via_blob = true;
             }
         }
+        if (!first_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(first == nullptr ? 0 : (first_via_blob ? 3 : 1));
     if (first_via_blob) {
@@ -9699,6 +9766,7 @@ void av_glMultiDrawArrays(::av::ClientTransport& av_t, GLenum mode, const GLint*
                 count_via_blob = true;
             }
         }
+        if (!count_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(count == nullptr ? 0 : (count_via_blob ? 3 : 1));
     if (count_via_blob) {
@@ -9777,6 +9845,7 @@ void av_glMultiDrawElements(::av::ClientTransport& av_t, GLenum mode, const GLsi
                 count_via_blob = true;
             }
         }
+        if (!count_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(count == nullptr ? 0 : (count_via_blob ? 3 : 1));
     if (count_via_blob) {
@@ -9827,6 +9896,7 @@ void av_glMultiDrawElementsBaseVertex(::av::ClientTransport& av_t, GLenum mode, 
                 count_via_blob = true;
             }
         }
+        if (!count_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(count == nullptr ? 0 : (count_via_blob ? 3 : 1));
     if (count_via_blob) {
@@ -9860,6 +9930,7 @@ void av_glMultiDrawElementsBaseVertex(::av::ClientTransport& av_t, GLenum mode, 
                 basevertex_via_blob = true;
             }
         }
+        if (!basevertex_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(basevertex == nullptr ? 0 : (basevertex_via_blob ? 3 : 1));
     if (basevertex_via_blob) {
@@ -9955,6 +10026,7 @@ void av_glMultiTexCoordP1uiv(::av::ClientTransport& av_t, GLenum texture, GLenum
                 coords_via_blob = true;
             }
         }
+        if (!coords_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(coords == nullptr ? 0 : (coords_via_blob ? 3 : 1));
     if (coords_via_blob) {
@@ -10011,6 +10083,7 @@ void av_glMultiTexCoordP2uiv(::av::ClientTransport& av_t, GLenum texture, GLenum
                 coords_via_blob = true;
             }
         }
+        if (!coords_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(coords == nullptr ? 0 : (coords_via_blob ? 3 : 1));
     if (coords_via_blob) {
@@ -10067,6 +10140,7 @@ void av_glMultiTexCoordP3uiv(::av::ClientTransport& av_t, GLenum texture, GLenum
                 coords_via_blob = true;
             }
         }
+        if (!coords_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(coords == nullptr ? 0 : (coords_via_blob ? 3 : 1));
     if (coords_via_blob) {
@@ -10123,6 +10197,7 @@ void av_glMultiTexCoordP4uiv(::av::ClientTransport& av_t, GLenum texture, GLenum
                 coords_via_blob = true;
             }
         }
+        if (!coords_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(coords == nullptr ? 0 : (coords_via_blob ? 3 : 1));
     if (coords_via_blob) {
@@ -10164,6 +10239,7 @@ void av_glNamedBufferData(::av::ClientTransport& av_t, GLuint buffer, GLsizeiptr
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data == nullptr ? 0 : (data_via_blob ? 3 : 1));
     if (data_via_blob) {
@@ -10206,6 +10282,7 @@ void av_glNamedBufferStorage(::av::ClientTransport& av_t, GLuint buffer, GLsizei
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data == nullptr ? 0 : (data_via_blob ? 3 : 1));
     if (data_via_blob) {
@@ -10249,6 +10326,7 @@ void av_glNamedBufferSubData(::av::ClientTransport& av_t, GLuint buffer, GLintpt
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data == nullptr ? 0 : (data_via_blob ? 3 : 1));
     if (data_via_blob) {
@@ -10304,6 +10382,7 @@ void av_glNamedFramebufferDrawBuffers(::av::ClientTransport& av_t, GLuint frameb
                 bufs_via_blob = true;
             }
         }
+        if (!bufs_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bufs == nullptr ? 0 : (bufs_via_blob ? 3 : 1));
     if (bufs_via_blob) {
@@ -10469,6 +10548,7 @@ void av_glNormalP3uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* co
                 coords_via_blob = true;
             }
         }
+        if (!coords_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(coords == nullptr ? 0 : (coords_via_blob ? 3 : 1));
     if (coords_via_blob) {
@@ -10550,6 +10630,7 @@ void av_glPatchParameterfv(::av::ClientTransport& av_t, GLenum pname, const GLfl
                 values_via_blob = true;
             }
         }
+        if (!values_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(values == nullptr ? 0 : (values_via_blob ? 3 : 1));
     if (values_via_blob) {
@@ -10658,6 +10739,7 @@ void av_glPointParameterfv(::av::ClientTransport& av_t, GLenum pname, const GLfl
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -10712,6 +10794,7 @@ void av_glPointParameteriv(::av::ClientTransport& av_t, GLenum pname, const GLin
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -10834,6 +10917,7 @@ void av_glProgramBinary(::av::ClientTransport& av_t, GLuint program, GLenum bina
                 binary_via_blob = true;
             }
         }
+        if (!binary_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(binary == nullptr ? 0 : (binary_via_blob ? 3 : 1));
     if (binary_via_blob) {
@@ -10907,6 +10991,7 @@ void av_glProgramUniform1dv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -10964,6 +11049,7 @@ void av_glProgramUniform1fv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11021,6 +11107,7 @@ void av_glProgramUniform1iv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11078,6 +11165,7 @@ void av_glProgramUniform1uiv(::av::ClientTransport& av_t, GLuint program, GLint 
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11136,6 +11224,7 @@ void av_glProgramUniform2dv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11194,6 +11283,7 @@ void av_glProgramUniform2fv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11252,6 +11342,7 @@ void av_glProgramUniform2iv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11310,6 +11401,7 @@ void av_glProgramUniform2uiv(::av::ClientTransport& av_t, GLuint program, GLint 
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11369,6 +11461,7 @@ void av_glProgramUniform3dv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11428,6 +11521,7 @@ void av_glProgramUniform3fv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11487,6 +11581,7 @@ void av_glProgramUniform3iv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11546,6 +11641,7 @@ void av_glProgramUniform3uiv(::av::ClientTransport& av_t, GLuint program, GLint 
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11606,6 +11702,7 @@ void av_glProgramUniform4dv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11666,6 +11763,7 @@ void av_glProgramUniform4fv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11726,6 +11824,7 @@ void av_glProgramUniform4iv(::av::ClientTransport& av_t, GLuint program, GLint l
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11786,6 +11885,7 @@ void av_glProgramUniform4uiv(::av::ClientTransport& av_t, GLuint program, GLint 
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11829,6 +11929,7 @@ void av_glProgramUniformMatrix2dv(::av::ClientTransport& av_t, GLuint program, G
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11872,6 +11973,7 @@ void av_glProgramUniformMatrix2fv(::av::ClientTransport& av_t, GLuint program, G
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11915,6 +12017,7 @@ void av_glProgramUniformMatrix2x3dv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -11958,6 +12061,7 @@ void av_glProgramUniformMatrix2x3fv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12001,6 +12105,7 @@ void av_glProgramUniformMatrix2x4dv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12044,6 +12149,7 @@ void av_glProgramUniformMatrix2x4fv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12087,6 +12193,7 @@ void av_glProgramUniformMatrix3dv(::av::ClientTransport& av_t, GLuint program, G
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12130,6 +12237,7 @@ void av_glProgramUniformMatrix3fv(::av::ClientTransport& av_t, GLuint program, G
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12173,6 +12281,7 @@ void av_glProgramUniformMatrix3x2dv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12216,6 +12325,7 @@ void av_glProgramUniformMatrix3x2fv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12259,6 +12369,7 @@ void av_glProgramUniformMatrix3x4dv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12302,6 +12413,7 @@ void av_glProgramUniformMatrix3x4fv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12345,6 +12457,7 @@ void av_glProgramUniformMatrix4dv(::av::ClientTransport& av_t, GLuint program, G
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12388,6 +12501,7 @@ void av_glProgramUniformMatrix4fv(::av::ClientTransport& av_t, GLuint program, G
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12431,6 +12545,7 @@ void av_glProgramUniformMatrix4x2dv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12474,6 +12589,7 @@ void av_glProgramUniformMatrix4x2fv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12517,6 +12633,7 @@ void av_glProgramUniformMatrix4x3dv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12560,6 +12677,7 @@ void av_glProgramUniformMatrix4x3fv(::av::ClientTransport& av_t, GLuint program,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -12664,6 +12782,7 @@ void av_glReadPixels(::av::ClientTransport& av_t, GLint x, GLint y, GLsizei widt
             pixels_via_blob = pixels_lease.taken();
             if (pixels_via_blob) __builtin_memset(pixels_lease.data(), 0, pixels_want);
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
@@ -12723,6 +12842,7 @@ void av_glReadnPixels(::av::ClientTransport& av_t, GLint x, GLint y, GLsizei wid
             data_via_blob = data_lease.taken();
             if (data_via_blob) __builtin_memset(data_lease.data(), 0, data_want);
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
@@ -12864,6 +12984,7 @@ void av_glSamplerParameterIiv(::av::ClientTransport& av_t, GLuint sampler, GLenu
                 param_via_blob = true;
             }
         }
+        if (!param_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(param == nullptr ? 0 : (param_via_blob ? 3 : 1));
     if (param_via_blob) {
@@ -12905,6 +13026,7 @@ void av_glSamplerParameterIuiv(::av::ClientTransport& av_t, GLuint sampler, GLen
                 param_via_blob = true;
             }
         }
+        if (!param_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(param == nullptr ? 0 : (param_via_blob ? 3 : 1));
     if (param_via_blob) {
@@ -12961,6 +13083,7 @@ void av_glSamplerParameterfv(::av::ClientTransport& av_t, GLuint sampler, GLenum
                 param_via_blob = true;
             }
         }
+        if (!param_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(param == nullptr ? 0 : (param_via_blob ? 3 : 1));
     if (param_via_blob) {
@@ -13017,6 +13140,7 @@ void av_glSamplerParameteriv(::av::ClientTransport& av_t, GLuint sampler, GLenum
                 param_via_blob = true;
             }
         }
+        if (!param_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(param == nullptr ? 0 : (param_via_blob ? 3 : 1));
     if (param_via_blob) {
@@ -13074,6 +13198,7 @@ void av_glScissorArrayv(::av::ClientTransport& av_t, GLuint first, GLsizei count
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -13131,6 +13256,7 @@ void av_glScissorIndexedv(::av::ClientTransport& av_t, GLuint index, const GLint
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -13185,6 +13311,7 @@ void av_glSecondaryColorP3uiv(::av::ClientTransport& av_t, GLenum type, const GL
                 color_via_blob = true;
             }
         }
+        if (!color_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(color == nullptr ? 0 : (color_via_blob ? 3 : 1));
     if (color_via_blob) {
@@ -13225,6 +13352,7 @@ void av_glShaderBinary(::av::ClientTransport& av_t, GLsizei count, const GLuint*
                 shaders_via_blob = true;
             }
         }
+        if (!shaders_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(shaders == nullptr ? 0 : (shaders_via_blob ? 3 : 1));
     if (shaders_via_blob) {
@@ -13249,6 +13377,7 @@ void av_glShaderBinary(::av::ClientTransport& av_t, GLsizei count, const GLuint*
                 binary_via_blob = true;
             }
         }
+        if (!binary_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(binary == nullptr ? 0 : (binary_via_blob ? 3 : 1));
     if (binary_via_blob) {
@@ -13309,6 +13438,7 @@ void av_glShaderSource(::av::ClientTransport& av_t, GLuint shader, GLsizei count
                 length_via_blob = true;
             }
         }
+        if (!length_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(length == nullptr ? 0 : (length_via_blob ? 3 : 1));
     if (length_via_blob) {
@@ -13371,6 +13501,7 @@ void av_glSpecializeShader(::av::ClientTransport& av_t, GLuint shader, const GLc
                 pConstantIndex_via_blob = true;
             }
         }
+        if (!pConstantIndex_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pConstantIndex == nullptr ? 0 : (pConstantIndex_via_blob ? 3 : 1));
     if (pConstantIndex_via_blob) {
@@ -13394,6 +13525,7 @@ void av_glSpecializeShader(::av::ClientTransport& av_t, GLuint shader, const GLc
                 pConstantValue_via_blob = true;
             }
         }
+        if (!pConstantValue_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pConstantValue == nullptr ? 0 : (pConstantValue_via_blob ? 3 : 1));
     if (pConstantValue_via_blob) {
@@ -13573,6 +13705,7 @@ void av_glTexCoordP1uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* 
                 coords_via_blob = true;
             }
         }
+        if (!coords_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(coords == nullptr ? 0 : (coords_via_blob ? 3 : 1));
     if (coords_via_blob) {
@@ -13627,6 +13760,7 @@ void av_glTexCoordP2uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* 
                 coords_via_blob = true;
             }
         }
+        if (!coords_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(coords == nullptr ? 0 : (coords_via_blob ? 3 : 1));
     if (coords_via_blob) {
@@ -13681,6 +13815,7 @@ void av_glTexCoordP3uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* 
                 coords_via_blob = true;
             }
         }
+        if (!coords_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(coords == nullptr ? 0 : (coords_via_blob ? 3 : 1));
     if (coords_via_blob) {
@@ -13735,6 +13870,7 @@ void av_glTexCoordP4uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* 
                 coords_via_blob = true;
             }
         }
+        if (!coords_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(coords == nullptr ? 0 : (coords_via_blob ? 3 : 1));
     if (coords_via_blob) {
@@ -13780,6 +13916,7 @@ void av_glTexImage1D(::av::ClientTransport& av_t, GLenum target, GLint level, GL
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -13828,6 +13965,7 @@ void av_glTexImage2D(::av::ClientTransport& av_t, GLenum target, GLint level, GL
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -13895,6 +14033,7 @@ void av_glTexImage3D(::av::ClientTransport& av_t, GLenum target, GLint level, GL
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -13957,6 +14096,7 @@ void av_glTexParameterIiv(::av::ClientTransport& av_t, GLenum target, GLenum pna
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -13998,6 +14138,7 @@ void av_glTexParameterIuiv(::av::ClientTransport& av_t, GLenum target, GLenum pn
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -14054,6 +14195,7 @@ void av_glTexParameterfv(::av::ClientTransport& av_t, GLenum target, GLenum pnam
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -14110,6 +14252,7 @@ void av_glTexParameteriv(::av::ClientTransport& av_t, GLenum target, GLenum pnam
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -14242,6 +14385,7 @@ void av_glTexSubImage1D(::av::ClientTransport& av_t, GLenum target, GLint level,
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -14290,6 +14434,7 @@ void av_glTexSubImage2D(::av::ClientTransport& av_t, GLenum target, GLint level,
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -14340,6 +14485,7 @@ void av_glTexSubImage3D(::av::ClientTransport& av_t, GLenum target, GLint level,
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -14427,6 +14573,7 @@ void av_glTextureParameterIiv(::av::ClientTransport& av_t, GLuint texture, GLenu
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -14468,6 +14615,7 @@ void av_glTextureParameterIuiv(::av::ClientTransport& av_t, GLuint texture, GLen
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -14524,6 +14672,7 @@ void av_glTextureParameterfv(::av::ClientTransport& av_t, GLuint texture, GLenum
                 param_via_blob = true;
             }
         }
+        if (!param_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(param == nullptr ? 0 : (param_via_blob ? 3 : 1));
     if (param_via_blob) {
@@ -14580,6 +14729,7 @@ void av_glTextureParameteriv(::av::ClientTransport& av_t, GLuint texture, GLenum
                 param_via_blob = true;
             }
         }
+        if (!param_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(param == nullptr ? 0 : (param_via_blob ? 3 : 1));
     if (param_via_blob) {
@@ -14712,6 +14862,7 @@ void av_glTextureSubImage1D(::av::ClientTransport& av_t, GLuint texture, GLint l
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -14760,6 +14911,7 @@ void av_glTextureSubImage2D(::av::ClientTransport& av_t, GLuint texture, GLint l
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -14810,6 +14962,7 @@ void av_glTextureSubImage3D(::av::ClientTransport& av_t, GLuint texture, GLint l
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -14946,6 +15099,7 @@ void av_glUniform1dv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15001,6 +15155,7 @@ void av_glUniform1fv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15056,6 +15211,7 @@ void av_glUniform1iv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15111,6 +15267,7 @@ void av_glUniform1uiv(::av::ClientTransport& av_t, GLint location, GLsizei count
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15167,6 +15324,7 @@ void av_glUniform2dv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15223,6 +15381,7 @@ void av_glUniform2fv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15279,6 +15438,7 @@ void av_glUniform2iv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15335,6 +15495,7 @@ void av_glUniform2uiv(::av::ClientTransport& av_t, GLint location, GLsizei count
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15392,6 +15553,7 @@ void av_glUniform3dv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15449,6 +15611,7 @@ void av_glUniform3fv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15506,6 +15669,7 @@ void av_glUniform3iv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15563,6 +15727,7 @@ void av_glUniform3uiv(::av::ClientTransport& av_t, GLint location, GLsizei count
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15621,6 +15786,7 @@ void av_glUniform4dv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15679,6 +15845,7 @@ void av_glUniform4fv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15737,6 +15904,7 @@ void av_glUniform4iv(::av::ClientTransport& av_t, GLint location, GLsizei count,
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15795,6 +15963,7 @@ void av_glUniform4uiv(::av::ClientTransport& av_t, GLint location, GLsizei count
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15852,6 +16021,7 @@ void av_glUniformMatrix2dv(::av::ClientTransport& av_t, GLint location, GLsizei 
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15894,6 +16064,7 @@ void av_glUniformMatrix2fv(::av::ClientTransport& av_t, GLint location, GLsizei 
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15936,6 +16107,7 @@ void av_glUniformMatrix2x3dv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -15978,6 +16150,7 @@ void av_glUniformMatrix2x3fv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16020,6 +16193,7 @@ void av_glUniformMatrix2x4dv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16062,6 +16236,7 @@ void av_glUniformMatrix2x4fv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16104,6 +16279,7 @@ void av_glUniformMatrix3dv(::av::ClientTransport& av_t, GLint location, GLsizei 
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16146,6 +16322,7 @@ void av_glUniformMatrix3fv(::av::ClientTransport& av_t, GLint location, GLsizei 
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16188,6 +16365,7 @@ void av_glUniformMatrix3x2dv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16230,6 +16408,7 @@ void av_glUniformMatrix3x2fv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16272,6 +16451,7 @@ void av_glUniformMatrix3x4dv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16314,6 +16494,7 @@ void av_glUniformMatrix3x4fv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16356,6 +16537,7 @@ void av_glUniformMatrix4dv(::av::ClientTransport& av_t, GLint location, GLsizei 
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16398,6 +16580,7 @@ void av_glUniformMatrix4fv(::av::ClientTransport& av_t, GLint location, GLsizei 
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16440,6 +16623,7 @@ void av_glUniformMatrix4x2dv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16482,6 +16666,7 @@ void av_glUniformMatrix4x2fv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16524,6 +16709,7 @@ void av_glUniformMatrix4x3dv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16566,6 +16752,7 @@ void av_glUniformMatrix4x3fv(::av::ClientTransport& av_t, GLint location, GLsize
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -16607,6 +16794,7 @@ void av_glUniformSubroutinesuiv(::av::ClientTransport& av_t, GLenum shadertype, 
                 indices_via_blob = true;
             }
         }
+        if (!indices_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(indices == nullptr ? 0 : (indices_via_blob ? 3 : 1));
     if (indices_via_blob) {
@@ -16816,6 +17004,7 @@ void av_glVertexArrayVertexBuffers(::av::ClientTransport& av_t, GLuint vaobj, GL
                 buffers_via_blob = true;
             }
         }
+        if (!buffers_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(buffers == nullptr ? 0 : (buffers_via_blob ? 3 : 1));
     if (buffers_via_blob) {
@@ -16839,6 +17028,7 @@ void av_glVertexArrayVertexBuffers(::av::ClientTransport& av_t, GLuint vaobj, GL
                 offsets_via_blob = true;
             }
         }
+        if (!offsets_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(offsets == nullptr ? 0 : (offsets_via_blob ? 3 : 1));
     if (offsets_via_blob) {
@@ -16862,6 +17052,7 @@ void av_glVertexArrayVertexBuffers(::av::ClientTransport& av_t, GLuint vaobj, GL
                 strides_via_blob = true;
             }
         }
+        if (!strides_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(strides == nullptr ? 0 : (strides_via_blob ? 3 : 1));
     if (strides_via_blob) {
@@ -16924,6 +17115,7 @@ void av_glVertexAttrib1dv(::av::ClientTransport& av_t, GLuint index, const GLdou
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -16978,6 +17170,7 @@ void av_glVertexAttrib1fv(::av::ClientTransport& av_t, GLuint index, const GLflo
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17032,6 +17225,7 @@ void av_glVertexAttrib1sv(::av::ClientTransport& av_t, GLuint index, const GLsho
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17087,6 +17281,7 @@ void av_glVertexAttrib2dv(::av::ClientTransport& av_t, GLuint index, const GLdou
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17142,6 +17337,7 @@ void av_glVertexAttrib2fv(::av::ClientTransport& av_t, GLuint index, const GLflo
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17197,6 +17393,7 @@ void av_glVertexAttrib2sv(::av::ClientTransport& av_t, GLuint index, const GLsho
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17253,6 +17450,7 @@ void av_glVertexAttrib3dv(::av::ClientTransport& av_t, GLuint index, const GLdou
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17309,6 +17507,7 @@ void av_glVertexAttrib3fv(::av::ClientTransport& av_t, GLuint index, const GLflo
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17365,6 +17564,7 @@ void av_glVertexAttrib3sv(::av::ClientTransport& av_t, GLuint index, const GLsho
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17405,6 +17605,7 @@ void av_glVertexAttrib4Nbv(::av::ClientTransport& av_t, GLuint index, const GLby
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17445,6 +17646,7 @@ void av_glVertexAttrib4Niv(::av::ClientTransport& av_t, GLuint index, const GLin
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17485,6 +17687,7 @@ void av_glVertexAttrib4Nsv(::av::ClientTransport& av_t, GLuint index, const GLsh
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17542,6 +17745,7 @@ void av_glVertexAttrib4Nubv(::av::ClientTransport& av_t, GLuint index, const GLu
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17582,6 +17786,7 @@ void av_glVertexAttrib4Nuiv(::av::ClientTransport& av_t, GLuint index, const GLu
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17622,6 +17827,7 @@ void av_glVertexAttrib4Nusv(::av::ClientTransport& av_t, GLuint index, const GLu
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17662,6 +17868,7 @@ void av_glVertexAttrib4bv(::av::ClientTransport& av_t, GLuint index, const GLbyt
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17719,6 +17926,7 @@ void av_glVertexAttrib4dv(::av::ClientTransport& av_t, GLuint index, const GLdou
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17776,6 +17984,7 @@ void av_glVertexAttrib4fv(::av::ClientTransport& av_t, GLuint index, const GLflo
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17816,6 +18025,7 @@ void av_glVertexAttrib4iv(::av::ClientTransport& av_t, GLuint index, const GLint
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17873,6 +18083,7 @@ void av_glVertexAttrib4sv(::av::ClientTransport& av_t, GLuint index, const GLsho
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17913,6 +18124,7 @@ void av_glVertexAttrib4ubv(::av::ClientTransport& av_t, GLuint index, const GLub
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17953,6 +18165,7 @@ void av_glVertexAttrib4uiv(::av::ClientTransport& av_t, GLuint index, const GLui
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -17993,6 +18206,7 @@ void av_glVertexAttrib4usv(::av::ClientTransport& av_t, GLuint index, const GLus
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18092,6 +18306,7 @@ void av_glVertexAttribI1iv(::av::ClientTransport& av_t, GLuint index, const GLin
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18146,6 +18361,7 @@ void av_glVertexAttribI1uiv(::av::ClientTransport& av_t, GLuint index, const GLu
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18201,6 +18417,7 @@ void av_glVertexAttribI2iv(::av::ClientTransport& av_t, GLuint index, const GLin
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18256,6 +18473,7 @@ void av_glVertexAttribI2uiv(::av::ClientTransport& av_t, GLuint index, const GLu
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18312,6 +18530,7 @@ void av_glVertexAttribI3iv(::av::ClientTransport& av_t, GLuint index, const GLin
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18368,6 +18587,7 @@ void av_glVertexAttribI3uiv(::av::ClientTransport& av_t, GLuint index, const GLu
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18408,6 +18628,7 @@ void av_glVertexAttribI4bv(::av::ClientTransport& av_t, GLuint index, const GLby
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18465,6 +18686,7 @@ void av_glVertexAttribI4iv(::av::ClientTransport& av_t, GLuint index, const GLin
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18505,6 +18727,7 @@ void av_glVertexAttribI4sv(::av::ClientTransport& av_t, GLuint index, const GLsh
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18545,6 +18768,7 @@ void av_glVertexAttribI4ubv(::av::ClientTransport& av_t, GLuint index, const GLu
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18602,6 +18826,7 @@ void av_glVertexAttribI4uiv(::av::ClientTransport& av_t, GLuint index, const GLu
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18642,6 +18867,7 @@ void av_glVertexAttribI4usv(::av::ClientTransport& av_t, GLuint index, const GLu
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18729,6 +18955,7 @@ void av_glVertexAttribL1dv(::av::ClientTransport& av_t, GLuint index, const GLdo
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18784,6 +19011,7 @@ void av_glVertexAttribL2dv(::av::ClientTransport& av_t, GLuint index, const GLdo
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18840,6 +19068,7 @@ void av_glVertexAttribL3dv(::av::ClientTransport& av_t, GLuint index, const GLdo
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18897,6 +19126,7 @@ void av_glVertexAttribL4dv(::av::ClientTransport& av_t, GLuint index, const GLdo
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -18988,6 +19218,7 @@ void av_glVertexAttribP1uiv(::av::ClientTransport& av_t, GLuint index, GLenum ty
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -19046,6 +19277,7 @@ void av_glVertexAttribP2uiv(::av::ClientTransport& av_t, GLuint index, GLenum ty
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -19104,6 +19336,7 @@ void av_glVertexAttribP3uiv(::av::ClientTransport& av_t, GLuint index, GLenum ty
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -19162,6 +19395,7 @@ void av_glVertexAttribP4uiv(::av::ClientTransport& av_t, GLuint index, GLenum ty
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -19248,6 +19482,7 @@ void av_glVertexP2uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* va
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -19302,6 +19537,7 @@ void av_glVertexP3uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* va
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -19356,6 +19592,7 @@ void av_glVertexP4uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* va
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -19413,6 +19650,7 @@ void av_glViewportArrayv(::av::ClientTransport& av_t, GLuint first, GLsizei coun
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -19470,6 +19708,7 @@ void av_glViewportIndexedfv(::av::ClientTransport& av_t, GLuint index, const GLf
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -19554,6 +19793,7 @@ GLboolean av_glAreTexturesResident(::av::ClientTransport& av_t, GLsizei n, const
                 textures_via_blob = true;
             }
         }
+        if (!textures_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(textures == nullptr ? 0 : (textures_via_blob ? 3 : 1));
     if (textures_via_blob) {
@@ -19648,6 +19888,7 @@ void av_glBitmap(::av::ClientTransport& av_t, GLsizei width, GLsizei height, GLf
                 bitmap_via_blob = true;
             }
         }
+        if (!bitmap_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bitmap == nullptr ? 0 : (bitmap_via_blob ? 3 : 1));
     if (bitmap_via_blob) {
@@ -19702,6 +19943,7 @@ void av_glCallLists(::av::ClientTransport& av_t, GLsizei n, GLenum type, const v
                 lists_via_blob = true;
             }
         }
+        if (!lists_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(lists == nullptr ? 0 : (lists_via_blob ? 3 : 1));
     if (lists_via_blob) {
@@ -19784,6 +20026,7 @@ void av_glClipPlane(::av::ClientTransport& av_t, GLenum plane, const GLdouble* e
                 equation_via_blob = true;
             }
         }
+        if (!equation_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(equation == nullptr ? 0 : (equation_via_blob ? 3 : 1));
     if (equation_via_blob) {
@@ -19838,6 +20081,7 @@ void av_glColor3bv(::av::ClientTransport& av_t, const GLbyte* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -19892,6 +20136,7 @@ void av_glColor3dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -19946,6 +20191,7 @@ void av_glColor3fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20000,6 +20246,7 @@ void av_glColor3iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20054,6 +20301,7 @@ void av_glColor3sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20108,6 +20356,7 @@ void av_glColor3ubv(::av::ClientTransport& av_t, const GLubyte* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20162,6 +20411,7 @@ void av_glColor3uiv(::av::ClientTransport& av_t, const GLuint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20216,6 +20466,7 @@ void av_glColor3usv(::av::ClientTransport& av_t, const GLushort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20271,6 +20522,7 @@ void av_glColor4bv(::av::ClientTransport& av_t, const GLbyte* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20326,6 +20578,7 @@ void av_glColor4dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20381,6 +20634,7 @@ void av_glColor4fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20436,6 +20690,7 @@ void av_glColor4iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20491,6 +20746,7 @@ void av_glColor4sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20546,6 +20802,7 @@ void av_glColor4ubv(::av::ClientTransport& av_t, const GLubyte* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20601,6 +20858,7 @@ void av_glColor4uiv(::av::ClientTransport& av_t, const GLuint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20656,6 +20914,7 @@ void av_glColor4usv(::av::ClientTransport& av_t, const GLushort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -20772,6 +21031,7 @@ void av_glDrawPixels(::av::ClientTransport& av_t, GLsizei width, GLsizei height,
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -20840,6 +21100,7 @@ void av_glEdgeFlagv(::av::ClientTransport& av_t, const GLboolean* flag) {
                 flag_via_blob = true;
             }
         }
+        if (!flag_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(flag == nullptr ? 0 : (flag_via_blob ? 3 : 1));
     if (flag_via_blob) {
@@ -20929,6 +21190,7 @@ void av_glEvalCoord1dv(::av::ClientTransport& av_t, const GLdouble* u) {
                 u_via_blob = true;
             }
         }
+        if (!u_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(u == nullptr ? 0 : (u_via_blob ? 3 : 1));
     if (u_via_blob) {
@@ -20981,6 +21243,7 @@ void av_glEvalCoord1fv(::av::ClientTransport& av_t, const GLfloat* u) {
                 u_via_blob = true;
             }
         }
+        if (!u_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(u == nullptr ? 0 : (u_via_blob ? 3 : 1));
     if (u_via_blob) {
@@ -21034,6 +21297,7 @@ void av_glEvalCoord2dv(::av::ClientTransport& av_t, const GLdouble* u) {
                 u_via_blob = true;
             }
         }
+        if (!u_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(u == nullptr ? 0 : (u_via_blob ? 3 : 1));
     if (u_via_blob) {
@@ -21087,6 +21351,7 @@ void av_glEvalCoord2fv(::av::ClientTransport& av_t, const GLfloat* u) {
                 u_via_blob = true;
             }
         }
+        if (!u_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(u == nullptr ? 0 : (u_via_blob ? 3 : 1));
     if (u_via_blob) {
@@ -21244,6 +21509,7 @@ void av_glFogCoorddv(::av::ClientTransport& av_t, const GLdouble* coord) {
                 coord_via_blob = true;
             }
         }
+        if (!coord_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(coord == nullptr ? 0 : (coord_via_blob ? 3 : 1));
     if (coord_via_blob) {
@@ -21296,6 +21562,7 @@ void av_glFogCoordfv(::av::ClientTransport& av_t, const GLfloat* coord) {
                 coord_via_blob = true;
             }
         }
+        if (!coord_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(coord == nullptr ? 0 : (coord_via_blob ? 3 : 1));
     if (coord_via_blob) {
@@ -21350,6 +21617,7 @@ void av_glFogfv(::av::ClientTransport& av_t, GLenum pname, const GLfloat* params
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -21404,6 +21672,7 @@ void av_glFogiv(::av::ClientTransport& av_t, GLenum pname, const GLint* params) 
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -22304,6 +22573,7 @@ void av_glLightModelfv(::av::ClientTransport& av_t, GLenum pname, const GLfloat*
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -22358,6 +22628,7 @@ void av_glLightModeliv(::av::ClientTransport& av_t, GLenum pname, const GLint* p
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -22414,6 +22685,7 @@ void av_glLightfv(::av::ClientTransport& av_t, GLenum light, GLenum pname, const
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -22470,6 +22742,7 @@ void av_glLightiv(::av::ClientTransport& av_t, GLenum light, GLenum pname, const
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -22548,6 +22821,7 @@ void av_glLoadMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -22587,6 +22861,7 @@ void av_glLoadMatrixf(::av::ClientTransport& av_t, const GLfloat* m) {
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -22639,6 +22914,7 @@ void av_glLoadTransposeMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -22678,6 +22954,7 @@ void av_glLoadTransposeMatrixf(::av::ClientTransport& av_t, const GLfloat* m) {
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -22722,6 +22999,7 @@ void av_glMap1d(::av::ClientTransport& av_t, GLenum target, GLdouble u1, GLdoubl
                 points_via_blob = true;
             }
         }
+        if (!points_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(points == nullptr ? 0 : (points_via_blob ? 3 : 1));
     if (points_via_blob) {
@@ -22766,6 +23044,7 @@ void av_glMap1f(::av::ClientTransport& av_t, GLenum target, GLfloat u1, GLfloat 
                 points_via_blob = true;
             }
         }
+        if (!points_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(points == nullptr ? 0 : (points_via_blob ? 3 : 1));
     if (points_via_blob) {
@@ -22814,6 +23093,7 @@ void av_glMap2d(::av::ClientTransport& av_t, GLenum target, GLdouble u1, GLdoubl
                 points_via_blob = true;
             }
         }
+        if (!points_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(points == nullptr ? 0 : (points_via_blob ? 3 : 1));
     if (points_via_blob) {
@@ -22862,6 +23142,7 @@ void av_glMap2f(::av::ClientTransport& av_t, GLenum target, GLfloat u1, GLfloat 
                 points_via_blob = true;
             }
         }
+        if (!points_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(points == nullptr ? 0 : (points_via_blob ? 3 : 1));
     if (points_via_blob) {
@@ -22984,6 +23265,7 @@ void av_glMaterialfv(::av::ClientTransport& av_t, GLenum face, GLenum pname, con
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -23040,6 +23322,7 @@ void av_glMaterialiv(::av::ClientTransport& av_t, GLenum face, GLenum pname, con
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -23092,6 +23375,7 @@ void av_glMultMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -23131,6 +23415,7 @@ void av_glMultMatrixf(::av::ClientTransport& av_t, const GLfloat* m) {
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -23170,6 +23455,7 @@ void av_glMultTransposeMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -23209,6 +23495,7 @@ void av_glMultTransposeMatrixf(::av::ClientTransport& av_t, const GLfloat* m) {
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -23263,6 +23550,7 @@ void av_glMultiTexCoord1dv(::av::ClientTransport& av_t, GLenum target, const GLd
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23317,6 +23605,7 @@ void av_glMultiTexCoord1fv(::av::ClientTransport& av_t, GLenum target, const GLf
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23371,6 +23660,7 @@ void av_glMultiTexCoord1iv(::av::ClientTransport& av_t, GLenum target, const GLi
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23425,6 +23715,7 @@ void av_glMultiTexCoord1sv(::av::ClientTransport& av_t, GLenum target, const GLs
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23480,6 +23771,7 @@ void av_glMultiTexCoord2dv(::av::ClientTransport& av_t, GLenum target, const GLd
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23535,6 +23827,7 @@ void av_glMultiTexCoord2fv(::av::ClientTransport& av_t, GLenum target, const GLf
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23590,6 +23883,7 @@ void av_glMultiTexCoord2iv(::av::ClientTransport& av_t, GLenum target, const GLi
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23645,6 +23939,7 @@ void av_glMultiTexCoord2sv(::av::ClientTransport& av_t, GLenum target, const GLs
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23701,6 +23996,7 @@ void av_glMultiTexCoord3dv(::av::ClientTransport& av_t, GLenum target, const GLd
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23757,6 +24053,7 @@ void av_glMultiTexCoord3fv(::av::ClientTransport& av_t, GLenum target, const GLf
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23813,6 +24110,7 @@ void av_glMultiTexCoord3iv(::av::ClientTransport& av_t, GLenum target, const GLi
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23869,6 +24167,7 @@ void av_glMultiTexCoord3sv(::av::ClientTransport& av_t, GLenum target, const GLs
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23926,6 +24225,7 @@ void av_glMultiTexCoord4dv(::av::ClientTransport& av_t, GLenum target, const GLd
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -23983,6 +24283,7 @@ void av_glMultiTexCoord4fv(::av::ClientTransport& av_t, GLenum target, const GLf
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -24040,6 +24341,7 @@ void av_glMultiTexCoord4iv(::av::ClientTransport& av_t, GLenum target, const GLi
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -24097,6 +24399,7 @@ void av_glMultiTexCoord4sv(::av::ClientTransport& av_t, GLenum target, const GLs
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -24165,6 +24468,7 @@ void av_glNormal3bv(::av::ClientTransport& av_t, const GLbyte* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -24219,6 +24523,7 @@ void av_glNormal3dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -24273,6 +24578,7 @@ void av_glNormal3fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -24327,6 +24633,7 @@ void av_glNormal3iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -24381,6 +24688,7 @@ void av_glNormal3sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -24468,6 +24776,7 @@ void av_glPixelMapfv(::av::ClientTransport& av_t, GLenum map, GLsizei mapsize, c
                 values_via_blob = true;
             }
         }
+        if (!values_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(values == nullptr ? 0 : (values_via_blob ? 3 : 1));
     if (values_via_blob) {
@@ -24509,6 +24818,7 @@ void av_glPixelMapuiv(::av::ClientTransport& av_t, GLenum map, GLsizei mapsize, 
                 values_via_blob = true;
             }
         }
+        if (!values_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(values == nullptr ? 0 : (values_via_blob ? 3 : 1));
     if (values_via_blob) {
@@ -24550,6 +24860,7 @@ void av_glPixelMapusv(::av::ClientTransport& av_t, GLenum map, GLsizei mapsize, 
                 values_via_blob = true;
             }
         }
+        if (!values_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(values == nullptr ? 0 : (values_via_blob ? 3 : 1));
     if (values_via_blob) {
@@ -24631,6 +24942,7 @@ void av_glPolygonStipple(::av::ClientTransport& av_t, const GLubyte* mask) {
                 mask_via_blob = true;
             }
         }
+        if (!mask_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(mask == nullptr ? 0 : (mask_via_blob ? 3 : 1));
     if (mask_via_blob) {
@@ -24719,6 +25031,7 @@ void av_glPrioritizeTextures(::av::ClientTransport& av_t, GLsizei n, const GLuin
                 textures_via_blob = true;
             }
         }
+        if (!textures_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(textures == nullptr ? 0 : (textures_via_blob ? 3 : 1));
     if (textures_via_blob) {
@@ -24742,6 +25055,7 @@ void av_glPrioritizeTextures(::av::ClientTransport& av_t, GLsizei n, const GLuin
                 priorities_via_blob = true;
             }
         }
+        if (!priorities_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(priorities == nullptr ? 0 : (priorities_via_blob ? 3 : 1));
     if (priorities_via_blob) {
@@ -24850,6 +25164,7 @@ void av_glRasterPos2dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -24903,6 +25218,7 @@ void av_glRasterPos2fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -24956,6 +25272,7 @@ void av_glRasterPos2iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -25009,6 +25326,7 @@ void av_glRasterPos2sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -25063,6 +25381,7 @@ void av_glRasterPos3dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -25117,6 +25436,7 @@ void av_glRasterPos3fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -25171,6 +25491,7 @@ void av_glRasterPos3iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -25225,6 +25546,7 @@ void av_glRasterPos3sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -25280,6 +25602,7 @@ void av_glRasterPos4dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -25335,6 +25658,7 @@ void av_glRasterPos4fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -25390,6 +25714,7 @@ void av_glRasterPos4iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -25445,6 +25770,7 @@ void av_glRasterPos4sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -25500,6 +25826,7 @@ void av_glRectdv(::av::ClientTransport& av_t, const GLdouble* v1, const GLdouble
                 v1_via_blob = true;
             }
         }
+        if (!v1_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v1 == nullptr ? 0 : (v1_via_blob ? 3 : 1));
     if (v1_via_blob) {
@@ -25523,6 +25850,7 @@ void av_glRectdv(::av::ClientTransport& av_t, const GLdouble* v1, const GLdouble
                 v2_via_blob = true;
             }
         }
+        if (!v2_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v2 == nullptr ? 0 : (v2_via_blob ? 3 : 1));
     if (v2_via_blob) {
@@ -25582,6 +25910,7 @@ void av_glRectfv(::av::ClientTransport& av_t, const GLfloat* v1, const GLfloat* 
                 v1_via_blob = true;
             }
         }
+        if (!v1_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v1 == nullptr ? 0 : (v1_via_blob ? 3 : 1));
     if (v1_via_blob) {
@@ -25605,6 +25934,7 @@ void av_glRectfv(::av::ClientTransport& av_t, const GLfloat* v1, const GLfloat* 
                 v2_via_blob = true;
             }
         }
+        if (!v2_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v2 == nullptr ? 0 : (v2_via_blob ? 3 : 1));
     if (v2_via_blob) {
@@ -25664,6 +25994,7 @@ void av_glRectiv(::av::ClientTransport& av_t, const GLint* v1, const GLint* v2) 
                 v1_via_blob = true;
             }
         }
+        if (!v1_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v1 == nullptr ? 0 : (v1_via_blob ? 3 : 1));
     if (v1_via_blob) {
@@ -25687,6 +26018,7 @@ void av_glRectiv(::av::ClientTransport& av_t, const GLint* v1, const GLint* v2) 
                 v2_via_blob = true;
             }
         }
+        if (!v2_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v2 == nullptr ? 0 : (v2_via_blob ? 3 : 1));
     if (v2_via_blob) {
@@ -25746,6 +26078,7 @@ void av_glRectsv(::av::ClientTransport& av_t, const GLshort* v1, const GLshort* 
                 v1_via_blob = true;
             }
         }
+        if (!v1_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v1 == nullptr ? 0 : (v1_via_blob ? 3 : 1));
     if (v1_via_blob) {
@@ -25769,6 +26102,7 @@ void av_glRectsv(::av::ClientTransport& av_t, const GLshort* v1, const GLshort* 
                 v2_via_blob = true;
             }
         }
+        if (!v2_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v2 == nullptr ? 0 : (v2_via_blob ? 3 : 1));
     if (v2_via_blob) {
@@ -25910,6 +26244,7 @@ void av_glSecondaryColor3bv(::av::ClientTransport& av_t, const GLbyte* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -25964,6 +26299,7 @@ void av_glSecondaryColor3dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26018,6 +26354,7 @@ void av_glSecondaryColor3fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26072,6 +26409,7 @@ void av_glSecondaryColor3iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26126,6 +26464,7 @@ void av_glSecondaryColor3sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26180,6 +26519,7 @@ void av_glSecondaryColor3ubv(::av::ClientTransport& av_t, const GLubyte* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26234,6 +26574,7 @@ void av_glSecondaryColor3uiv(::av::ClientTransport& av_t, const GLuint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26288,6 +26629,7 @@ void av_glSecondaryColor3usv(::av::ClientTransport& av_t, const GLushort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26399,6 +26741,7 @@ void av_glTexCoord1dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26451,6 +26794,7 @@ void av_glTexCoord1fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26503,6 +26847,7 @@ void av_glTexCoord1iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26555,6 +26900,7 @@ void av_glTexCoord1sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26608,6 +26954,7 @@ void av_glTexCoord2dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26661,6 +27008,7 @@ void av_glTexCoord2fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26714,6 +27062,7 @@ void av_glTexCoord2iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26767,6 +27116,7 @@ void av_glTexCoord2sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26821,6 +27171,7 @@ void av_glTexCoord3dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26875,6 +27226,7 @@ void av_glTexCoord3fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26929,6 +27281,7 @@ void av_glTexCoord3iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -26983,6 +27336,7 @@ void av_glTexCoord3sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27038,6 +27392,7 @@ void av_glTexCoord4dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27093,6 +27448,7 @@ void av_glTexCoord4fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27148,6 +27504,7 @@ void av_glTexCoord4iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27203,6 +27560,7 @@ void av_glTexCoord4sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27275,6 +27633,7 @@ void av_glTexEnvfv(::av::ClientTransport& av_t, GLenum target, GLenum pname, con
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -27331,6 +27690,7 @@ void av_glTexEnviv(::av::ClientTransport& av_t, GLenum target, GLenum pname, con
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -27387,6 +27747,7 @@ void av_glTexGendv(::av::ClientTransport& av_t, GLenum coord, GLenum pname, cons
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -27443,6 +27804,7 @@ void av_glTexGenfv(::av::ClientTransport& av_t, GLenum coord, GLenum pname, cons
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -27499,6 +27861,7 @@ void av_glTexGeniv(::av::ClientTransport& av_t, GLenum coord, GLenum pname, cons
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -27582,6 +27945,7 @@ void av_glVertex2dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27635,6 +27999,7 @@ void av_glVertex2fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27688,6 +28053,7 @@ void av_glVertex2iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27741,6 +28107,7 @@ void av_glVertex2sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27795,6 +28162,7 @@ void av_glVertex3dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27849,6 +28217,7 @@ void av_glVertex3fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27903,6 +28272,7 @@ void av_glVertex3iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -27957,6 +28327,7 @@ void av_glVertex3sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28012,6 +28383,7 @@ void av_glVertex4dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28067,6 +28439,7 @@ void av_glVertex4fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28122,6 +28495,7 @@ void av_glVertex4iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28177,6 +28551,7 @@ void av_glVertex4sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28246,6 +28621,7 @@ void av_glWindowPos2dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28299,6 +28675,7 @@ void av_glWindowPos2fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28352,6 +28729,7 @@ void av_glWindowPos2iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28405,6 +28783,7 @@ void av_glWindowPos2sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28459,6 +28838,7 @@ void av_glWindowPos3dv(::av::ClientTransport& av_t, const GLdouble* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28513,6 +28893,7 @@ void av_glWindowPos3fv(::av::ClientTransport& av_t, const GLfloat* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28567,6 +28948,7 @@ void av_glWindowPos3iv(::av::ClientTransport& av_t, const GLint* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28621,6 +29003,7 @@ void av_glWindowPos3sv(::av::ClientTransport& av_t, const GLshort* v) {
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -28976,6 +29359,7 @@ void av_glScissorExclusiveArrayvNV(::av::ClientTransport& av_t, GLuint first, GL
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -29018,6 +29402,7 @@ void av_glFramebufferSampleLocationsfvNV(::av::ClientTransport& av_t, GLenum tar
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -29060,6 +29445,7 @@ void av_glNamedFramebufferSampleLocationsfvNV(::av::ClientTransport& av_t, GLuin
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -29248,6 +29634,7 @@ void av_glUniformHandleui64vARB(::av::ClientTransport& av_t, GLint location, GLs
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -29305,6 +29692,7 @@ void av_glProgramUniformHandleui64vARB(::av::ClientTransport& av_t, GLuint progr
                 values_via_blob = true;
             }
         }
+        if (!values_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(values == nullptr ? 0 : (values_via_blob ? 3 : 1));
     if (values_via_blob) {
@@ -29401,6 +29789,7 @@ void av_glVertexAttribL1ui64vARB(::av::ClientTransport& av_t, GLuint index, cons
                 v_via_blob = true;
             }
         }
+        if (!v_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(v == nullptr ? 0 : (v_via_blob ? 3 : 1));
     if (v_via_blob) {
@@ -29608,6 +29997,7 @@ void av_glUniformHandleui64vNV(::av::ClientTransport& av_t, GLint location, GLsi
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -29665,6 +30055,7 @@ void av_glProgramUniformHandleui64vNV(::av::ClientTransport& av_t, GLuint progra
                 values_via_blob = true;
             }
         }
+        if (!values_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(values == nullptr ? 0 : (values_via_blob ? 3 : 1));
     if (values_via_blob) {
@@ -29782,6 +30173,7 @@ void av_glDeleteMemoryObjectsEXT(::av::ClientTransport& av_t, GLsizei n, const G
                 memoryObjects_via_blob = true;
             }
         }
+        if (!memoryObjects_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(memoryObjects == nullptr ? 0 : (memoryObjects_via_blob ? 3 : 1));
     if (memoryObjects_via_blob) {
@@ -29822,6 +30214,7 @@ void av_glDeleteSemaphoresEXT(::av::ClientTransport& av_t, GLsizei n, const GLui
                 semaphores_via_blob = true;
             }
         }
+        if (!semaphores_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(semaphores == nullptr ? 0 : (semaphores_via_blob ? 3 : 1));
     if (semaphores_via_blob) {
@@ -29863,6 +30256,7 @@ void av_glSignalSemaphoreEXT(::av::ClientTransport& av_t, GLuint semaphore, GLui
                 buffers_via_blob = true;
             }
         }
+        if (!buffers_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(buffers == nullptr ? 0 : (buffers_via_blob ? 3 : 1));
     if (buffers_via_blob) {
@@ -29887,6 +30281,7 @@ void av_glSignalSemaphoreEXT(::av::ClientTransport& av_t, GLuint semaphore, GLui
                 textures_via_blob = true;
             }
         }
+        if (!textures_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(textures == nullptr ? 0 : (textures_via_blob ? 3 : 1));
     if (textures_via_blob) {
@@ -29910,6 +30305,7 @@ void av_glSignalSemaphoreEXT(::av::ClientTransport& av_t, GLuint semaphore, GLui
                 dstLayouts_via_blob = true;
             }
         }
+        if (!dstLayouts_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(dstLayouts == nullptr ? 0 : (dstLayouts_via_blob ? 3 : 1));
     if (dstLayouts_via_blob) {
@@ -29959,6 +30355,7 @@ void av_glWaitSemaphoreEXT(::av::ClientTransport& av_t, GLuint semaphore, GLuint
                 buffers_via_blob = true;
             }
         }
+        if (!buffers_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(buffers == nullptr ? 0 : (buffers_via_blob ? 3 : 1));
     if (buffers_via_blob) {
@@ -29983,6 +30380,7 @@ void av_glWaitSemaphoreEXT(::av::ClientTransport& av_t, GLuint semaphore, GLuint
                 textures_via_blob = true;
             }
         }
+        if (!textures_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(textures == nullptr ? 0 : (textures_via_blob ? 3 : 1));
     if (textures_via_blob) {
@@ -30006,6 +30404,7 @@ void av_glWaitSemaphoreEXT(::av::ClientTransport& av_t, GLuint semaphore, GLuint
                 srcLayouts_via_blob = true;
             }
         }
+        if (!srcLayouts_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(srcLayouts == nullptr ? 0 : (srcLayouts_via_blob ? 3 : 1));
     if (srcLayouts_via_blob) {
@@ -30511,6 +30910,7 @@ void av_glUniformui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei co
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -30599,6 +30999,7 @@ void av_glProgramUniformui64vNV(::av::ClientTransport& av_t, GLuint program, GLi
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -30897,6 +31298,7 @@ void av_glUniform1i64vNV(::av::ClientTransport& av_t, GLint location, GLsizei co
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -30938,6 +31340,7 @@ void av_glUniform2i64vNV(::av::ClientTransport& av_t, GLint location, GLsizei co
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -30979,6 +31382,7 @@ void av_glUniform3i64vNV(::av::ClientTransport& av_t, GLint location, GLsizei co
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31020,6 +31424,7 @@ void av_glUniform4i64vNV(::av::ClientTransport& av_t, GLint location, GLsizei co
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31123,6 +31528,7 @@ void av_glUniform1ui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei c
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31164,6 +31570,7 @@ void av_glUniform2ui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei c
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31205,6 +31612,7 @@ void av_glUniform3ui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei c
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31246,6 +31654,7 @@ void av_glUniform4ui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei c
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31385,6 +31794,7 @@ void av_glProgramUniform1i64vNV(::av::ClientTransport& av_t, GLuint program, GLi
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31427,6 +31837,7 @@ void av_glProgramUniform2i64vNV(::av::ClientTransport& av_t, GLuint program, GLi
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31469,6 +31880,7 @@ void av_glProgramUniform3i64vNV(::av::ClientTransport& av_t, GLuint program, GLi
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31511,6 +31923,7 @@ void av_glProgramUniform4i64vNV(::av::ClientTransport& av_t, GLuint program, GLi
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31619,6 +32032,7 @@ void av_glProgramUniform1ui64vNV(::av::ClientTransport& av_t, GLuint program, GL
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31661,6 +32075,7 @@ void av_glProgramUniform2ui64vNV(::av::ClientTransport& av_t, GLuint program, GL
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31703,6 +32118,7 @@ void av_glProgramUniform3ui64vNV(::av::ClientTransport& av_t, GLuint program, GL
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31745,6 +32161,7 @@ void av_glProgramUniform4ui64vNV(::av::ClientTransport& av_t, GLuint program, GL
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -31785,6 +32202,7 @@ void av_glMatrixLoadfEXT(::av::ClientTransport& av_t, GLenum mode, const GLfloat
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -31825,6 +32243,7 @@ void av_glMatrixLoaddEXT(::av::ClientTransport& av_t, GLenum mode, const GLdoubl
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -31865,6 +32284,7 @@ void av_glMatrixMultfEXT(::av::ClientTransport& av_t, GLenum mode, const GLfloat
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -31905,6 +32325,7 @@ void av_glMatrixMultdEXT(::av::ClientTransport& av_t, GLenum mode, const GLdoubl
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -32164,6 +32585,7 @@ void av_glTextureParameterfvEXT(::av::ClientTransport& av_t, GLuint texture, GLe
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -32222,6 +32644,7 @@ void av_glTextureParameterivEXT(::av::ClientTransport& av_t, GLuint texture, GLe
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -32268,6 +32691,7 @@ void av_glTextureImage1DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum 
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -32317,6 +32741,7 @@ void av_glTextureImage2DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum 
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -32364,6 +32789,7 @@ void av_glTextureSubImage1DEXT(::av::ClientTransport& av_t, GLuint texture, GLen
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -32413,6 +32839,7 @@ void av_glTextureSubImage2DEXT(::av::ClientTransport& av_t, GLuint texture, GLen
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -32538,6 +32965,7 @@ void av_glGetTextureImageEXT(::av::ClientTransport& av_t, GLuint texture, GLenum
             pixels_via_blob = pixels_lease.taken();
             if (pixels_via_blob) __builtin_memset(pixels_lease.data(), 0, pixels_want);
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
@@ -32731,6 +33159,7 @@ void av_glTextureImage3DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum 
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -32782,6 +33211,7 @@ void av_glTextureSubImage3DEXT(::av::ClientTransport& av_t, GLuint texture, GLen
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -32896,6 +33326,7 @@ void av_glMultiTexEnvfvEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum t
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -32954,6 +33385,7 @@ void av_glMultiTexEnvivEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum t
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -33012,6 +33444,7 @@ void av_glMultiTexGendvEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum c
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -33070,6 +33503,7 @@ void av_glMultiTexGenfvEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum c
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -33128,6 +33562,7 @@ void av_glMultiTexGenivEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum c
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -33346,6 +33781,7 @@ void av_glMultiTexParameterivEXT(::av::ClientTransport& av_t, GLenum texunit, GL
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -33404,6 +33840,7 @@ void av_glMultiTexParameterfvEXT(::av::ClientTransport& av_t, GLenum texunit, GL
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -33450,6 +33887,7 @@ void av_glMultiTexImage1DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -33499,6 +33937,7 @@ void av_glMultiTexImage2DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -33546,6 +33985,7 @@ void av_glMultiTexSubImage1DEXT(::av::ClientTransport& av_t, GLenum texunit, GLe
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -33595,6 +34035,7 @@ void av_glMultiTexSubImage2DEXT(::av::ClientTransport& av_t, GLenum texunit, GLe
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -33720,6 +34161,7 @@ void av_glGetMultiTexImageEXT(::av::ClientTransport& av_t, GLenum texunit, GLenu
             pixels_via_blob = pixels_lease.taken();
             if (pixels_via_blob) __builtin_memset(pixels_lease.data(), 0, pixels_want);
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
@@ -33913,6 +34355,7 @@ void av_glMultiTexImage3DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -33964,6 +34407,7 @@ void av_glMultiTexSubImage3DEXT(::av::ClientTransport& av_t, GLenum texunit, GLe
                 pixels_via_blob = true;
             }
         }
+        if (!pixels_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(pixels_is_offset ? 2 : (pixels_via_blob ? 3 : (pixels != nullptr ? 1 : 0)));
     if (pixels_is_offset) {
@@ -34238,6 +34682,7 @@ void av_glCompressedTextureImage3DEXT(::av::ClientTransport& av_t, GLuint textur
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34285,6 +34730,7 @@ void av_glCompressedTextureImage2DEXT(::av::ClientTransport& av_t, GLuint textur
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34331,6 +34777,7 @@ void av_glCompressedTextureImage1DEXT(::av::ClientTransport& av_t, GLuint textur
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34381,6 +34828,7 @@ void av_glCompressedTextureSubImage3DEXT(::av::ClientTransport& av_t, GLuint tex
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34429,6 +34877,7 @@ void av_glCompressedTextureSubImage2DEXT(::av::ClientTransport& av_t, GLuint tex
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34475,6 +34924,7 @@ void av_glCompressedTextureSubImage1DEXT(::av::ClientTransport& av_t, GLuint tex
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34515,6 +34965,7 @@ void av_glGetCompressedTextureImageEXT(::av::ClientTransport& av_t, GLuint textu
             img_via_blob = img_lease.taken();
             if (img_via_blob) __builtin_memset(img_lease.data(), 0, img_want);
         }
+        if (!img_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         img_is_offset ? 2 : (img_via_blob ? 3 : (img != nullptr ? 1 : 0)));
@@ -34578,6 +35029,7 @@ void av_glCompressedMultiTexImage3DEXT(::av::ClientTransport& av_t, GLenum texun
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34625,6 +35077,7 @@ void av_glCompressedMultiTexImage2DEXT(::av::ClientTransport& av_t, GLenum texun
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34671,6 +35124,7 @@ void av_glCompressedMultiTexImage1DEXT(::av::ClientTransport& av_t, GLenum texun
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34721,6 +35175,7 @@ void av_glCompressedMultiTexSubImage3DEXT(::av::ClientTransport& av_t, GLenum te
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34769,6 +35224,7 @@ void av_glCompressedMultiTexSubImage2DEXT(::av::ClientTransport& av_t, GLenum te
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34815,6 +35271,7 @@ void av_glCompressedMultiTexSubImage1DEXT(::av::ClientTransport& av_t, GLenum te
                 bits_via_blob = true;
             }
         }
+        if (!bits_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bits == nullptr ? 0 : (bits_via_blob ? 3 : 1));
     if (bits_via_blob) {
@@ -34855,6 +35312,7 @@ void av_glGetCompressedMultiTexImageEXT(::av::ClientTransport& av_t, GLenum texu
             img_via_blob = img_lease.taken();
             if (img_via_blob) __builtin_memset(img_lease.data(), 0, img_want);
         }
+        if (!img_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(
         img_is_offset ? 2 : (img_via_blob ? 3 : (img != nullptr ? 1 : 0)));
@@ -34910,6 +35368,7 @@ void av_glMatrixLoadTransposefEXT(::av::ClientTransport& av_t, GLenum mode, cons
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -34950,6 +35409,7 @@ void av_glMatrixLoadTransposedEXT(::av::ClientTransport& av_t, GLenum mode, cons
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -34990,6 +35450,7 @@ void av_glMatrixMultTransposefEXT(::av::ClientTransport& av_t, GLenum mode, cons
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -35030,6 +35491,7 @@ void av_glMatrixMultTransposedEXT(::av::ClientTransport& av_t, GLenum mode, cons
                 m_via_blob = true;
             }
         }
+        if (!m_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(m == nullptr ? 0 : (m_via_blob ? 3 : 1));
     if (m_via_blob) {
@@ -35071,6 +35533,7 @@ void av_glNamedBufferDataEXT(::av::ClientTransport& av_t, GLuint buffer, GLsizei
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data == nullptr ? 0 : (data_via_blob ? 3 : 1));
     if (data_via_blob) {
@@ -35114,6 +35577,7 @@ void av_glNamedBufferSubDataEXT(::av::ClientTransport& av_t, GLuint buffer, GLin
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data == nullptr ? 0 : (data_via_blob ? 3 : 1));
     if (data_via_blob) {
@@ -35351,6 +35815,7 @@ void av_glProgramUniform1fvEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35393,6 +35858,7 @@ void av_glProgramUniform2fvEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35435,6 +35901,7 @@ void av_glProgramUniform3fvEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35477,6 +35944,7 @@ void av_glProgramUniform4fvEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35519,6 +35987,7 @@ void av_glProgramUniform1ivEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35561,6 +36030,7 @@ void av_glProgramUniform2ivEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35603,6 +36073,7 @@ void av_glProgramUniform3ivEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35645,6 +36116,7 @@ void av_glProgramUniform4ivEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35688,6 +36160,7 @@ void av_glProgramUniformMatrix2fvEXT(::av::ClientTransport& av_t, GLuint program
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35731,6 +36204,7 @@ void av_glProgramUniformMatrix3fvEXT(::av::ClientTransport& av_t, GLuint program
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35774,6 +36248,7 @@ void av_glProgramUniformMatrix4fvEXT(::av::ClientTransport& av_t, GLuint program
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35817,6 +36292,7 @@ void av_glProgramUniformMatrix2x3fvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35860,6 +36336,7 @@ void av_glProgramUniformMatrix3x2fvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35903,6 +36380,7 @@ void av_glProgramUniformMatrix2x4fvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35946,6 +36424,7 @@ void av_glProgramUniformMatrix4x2fvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -35989,6 +36468,7 @@ void av_glProgramUniformMatrix3x4fvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -36032,6 +36512,7 @@ void av_glProgramUniformMatrix4x3fvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -36106,6 +36587,7 @@ void av_glTextureParameterIivEXT(::av::ClientTransport& av_t, GLuint texture, GL
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -36148,6 +36630,7 @@ void av_glTextureParameterIuivEXT(::av::ClientTransport& av_t, GLuint texture, G
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -36254,6 +36737,7 @@ void av_glMultiTexParameterIivEXT(::av::ClientTransport& av_t, GLenum texunit, G
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -36296,6 +36780,7 @@ void av_glMultiTexParameterIuivEXT(::av::ClientTransport& av_t, GLenum texunit, 
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -36468,6 +36953,7 @@ void av_glProgramUniform1uivEXT(::av::ClientTransport& av_t, GLuint program, GLi
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -36510,6 +36996,7 @@ void av_glProgramUniform2uivEXT(::av::ClientTransport& av_t, GLuint program, GLi
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -36552,6 +37039,7 @@ void av_glProgramUniform3uivEXT(::av::ClientTransport& av_t, GLuint program, GLi
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -36594,6 +37082,7 @@ void av_glProgramUniform4uivEXT(::av::ClientTransport& av_t, GLuint program, GLi
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -36637,6 +37126,7 @@ void av_glNamedProgramLocalParameters4fvEXT(::av::ClientTransport& av_t, GLuint 
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -36698,6 +37188,7 @@ void av_glNamedProgramLocalParameterI4ivEXT(::av::ClientTransport& av_t, GLuint 
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -36741,6 +37232,7 @@ void av_glNamedProgramLocalParametersI4ivEXT(::av::ClientTransport& av_t, GLuint
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -36802,6 +37294,7 @@ void av_glNamedProgramLocalParameterI4uivEXT(::av::ClientTransport& av_t, GLuint
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -36845,6 +37338,7 @@ void av_glNamedProgramLocalParametersI4uivEXT(::av::ClientTransport& av_t, GLuin
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -37042,6 +37536,7 @@ void av_glNamedProgramStringEXT(::av::ClientTransport& av_t, GLuint program, GLe
                 string_via_blob = true;
             }
         }
+        if (!string_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(string == nullptr ? 0 : (string_via_blob ? 3 : 1));
     if (string_via_blob) {
@@ -37103,6 +37598,7 @@ void av_glNamedProgramLocalParameter4dvEXT(::av::ClientTransport& av_t, GLuint p
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -37164,6 +37660,7 @@ void av_glNamedProgramLocalParameter4fvEXT(::av::ClientTransport& av_t, GLuint p
                 params_via_blob = true;
             }
         }
+        if (!params_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(params == nullptr ? 0 : (params_via_blob ? 3 : 1));
     if (params_via_blob) {
@@ -37579,6 +38076,7 @@ void av_glFramebufferDrawBuffersEXT(::av::ClientTransport& av_t, GLuint framebuf
                 bufs_via_blob = true;
             }
         }
+        if (!bufs_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(bufs == nullptr ? 0 : (bufs_via_blob ? 3 : 1));
     if (bufs_via_blob) {
@@ -38078,6 +38576,7 @@ void av_glNamedBufferStorageEXT(::av::ClientTransport& av_t, GLuint buffer, GLsi
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data == nullptr ? 0 : (data_via_blob ? 3 : 1));
     if (data_via_blob) {
@@ -38121,6 +38620,7 @@ void av_glClearNamedBufferDataEXT(::av::ClientTransport& av_t, GLuint buffer, GL
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -38167,6 +38667,7 @@ void av_glClearNamedBufferSubDataEXT(::av::ClientTransport& av_t, GLuint buffer,
                 data_via_blob = true;
             }
         }
+        if (!data_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(data_is_offset ? 2 : (data_via_blob ? 3 : (data != nullptr ? 1 : 0)));
     if (data_is_offset) {
@@ -38323,6 +38824,7 @@ void av_glProgramUniform1dvEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38365,6 +38867,7 @@ void av_glProgramUniform2dvEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38407,6 +38910,7 @@ void av_glProgramUniform3dvEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38449,6 +38953,7 @@ void av_glProgramUniform4dvEXT(::av::ClientTransport& av_t, GLuint program, GLin
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38492,6 +38997,7 @@ void av_glProgramUniformMatrix2dvEXT(::av::ClientTransport& av_t, GLuint program
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38535,6 +39041,7 @@ void av_glProgramUniformMatrix3dvEXT(::av::ClientTransport& av_t, GLuint program
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38578,6 +39085,7 @@ void av_glProgramUniformMatrix4dvEXT(::av::ClientTransport& av_t, GLuint program
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38621,6 +39129,7 @@ void av_glProgramUniformMatrix2x3dvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38664,6 +39173,7 @@ void av_glProgramUniformMatrix2x4dvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38707,6 +39217,7 @@ void av_glProgramUniformMatrix3x2dvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38750,6 +39261,7 @@ void av_glProgramUniformMatrix3x4dvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38793,6 +39305,7 @@ void av_glProgramUniformMatrix4x2dvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {
@@ -38836,6 +39349,7 @@ void av_glProgramUniformMatrix4x3dvEXT(::av::ClientTransport& av_t, GLuint progr
                 value_via_blob = true;
             }
         }
+        if (!value_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);
     }
     av_b.write_pod<uint8_t>(value == nullptr ? 0 : (value_via_blob ? 3 : 1));
     if (value_via_blob) {

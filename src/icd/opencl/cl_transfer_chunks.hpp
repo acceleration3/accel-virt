@@ -40,7 +40,6 @@ public:
     uint32_t commands() const;
 
 private:
-    void   note_inline();
     cl_int read_inline(uint64_t buffer, size_t offset, size_t bytes, uint8_t *to);
     cl_int write_inline(uint64_t buffer, size_t offset, size_t bytes, const uint8_t *source);
     cl_int read_image_inline(uint64_t image, const ClImageRegion &region, uint8_t *to);

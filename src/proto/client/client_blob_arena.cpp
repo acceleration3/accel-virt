@@ -38,7 +38,7 @@ size_t   ClientBlobLease::bytes() const
 
 ClientBlobArena::ClientBlobArena()
     : block_(nullptr), lent_(0u), capacity_(0u), base_(0u), top_(0u), end_(0u), wrapped_(false), lap_(0u),
-      base_lap_(0u), sealed_(0u), sealed_lap_(0u), marks_{}, first_mark_(0u), mark_count_(0u), declined_(0u)
+      base_lap_(0u), sealed_(0u), sealed_lap_(0u), marks_{}, first_mark_(0u), mark_count_(0u)
 {
     AV_SCOPE("ClientBlobArena::ClientBlobArena");
 }
@@ -58,18 +58,10 @@ void ClientBlobArena::lend(uint8_t *block, size_t capacity)
     empty();
 }
 
-bool ClientBlobArena::ready()
+bool ClientBlobArena::ready() const
 {
     AV_SCOPE("ClientBlobArena::ready");
-    if (block_ != nullptr) return true;
-    __atomic_fetch_add(&declined_, 1u, __ATOMIC_RELAXED);
-    return false;
-}
-
-uint64_t ClientBlobArena::declined() const
-{
-    AV_SCOPE("ClientBlobArena::declined");
-    return __atomic_load_n(&declined_, __ATOMIC_RELAXED);
+    return block_ != nullptr;
 }
 
 ClientBlobLease ClientBlobArena::take(size_t count)

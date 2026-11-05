@@ -272,6 +272,7 @@ def _lease_for_write(name: str, out: list[str], guard: str) -> None:
     out.append(f"                {name}_via_blob = true;")
     out.append("            }")
     out.append("        }")
+    out.append(f"        if (!{name}_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);")
     out.append("    }")
 
 
@@ -348,6 +349,7 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
             out.append(f"            if ({name}_via_blob) "
                        f"__builtin_memset({name}_lease.data(), 0, {name}_want);")
             out.append("        }")
+            out.append(f"        if (!{name}_via_blob) av_t.note(::av::ChannelCounter::inline_bulk, 1u);")
             out.append("    }")
         out.append(f"    av_b.write_pod<uint8_t>(")
         out.append(f"        {name}_is_offset ? 2 : ({name}_via_blob ? 3 : "
