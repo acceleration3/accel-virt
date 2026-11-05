@@ -15,6 +15,7 @@
 #include "icd/opengl/batch_ready.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "icd/opengl/pixel_format.hpp"
+#include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/shared_object_answer.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -51,11 +52,12 @@ struct BackBufferPresenterProbe {
     static void drop_colour(BackBufferPresenter &presenter) { presenter.renderbuffers_[0] = 0u; }
     static std::uint8_t *room(BackBufferPresenter &presenter)
     {
-        return static_cast<std::uint8_t *>(presenter.room_.data());
+        return static_cast<std::uint8_t *>(presenter.room_.view());
     }
     static std::size_t room_bytes(BackBufferPresenter &presenter) { return presenter.room_.bytes(); }
+    static std::uint64_t room_offset(BackBufferPresenter &presenter) { return presenter.room_.offset(); }
     static void set_pending(BackBufferPresenter &presenter, std::uint32_t slot) { presenter.pending_ = slot; }
-    static void drop_arena(BackBufferPresenter &presenter) { presenter.arena_ = nullptr; }
+    static void drop_room(BackBufferPresenter &presenter) { presenter.room_.close(); }
 };
 
 }
@@ -79,6 +81,7 @@ struct Rig {
     int                        dc = 0;
     int                        window = 0;
     Presenter                  presenter{context_rig.platform(), context_rig.lines()};
+    std::uint32_t              imports_ = 0u;
 
     explicit Rig(bool arena = true, std::uint32_t width = 8u, std::uint32_t height = 4u)
     {
@@ -100,6 +103,8 @@ struct Rig {
         CHECK_STATUS(context.make(), Status::ok);
         surface.add_dc(&dc, &window, width, height);
     }
+    void                 room_import() { host().blob_import(0u, 0x0000600000000200ull + imports_++); }
+    void                 room_release() { host().nop(); }
     av::ScriptedHost    &host() { return context_rig.host(); }
     av::MockKmt         &kmt() { return context_rig.kmt(); }
     av::ClientTransport &wire() { return *context.wire(); }
@@ -531,17 +536,19 @@ TEST(back_buffer_presenter, with_a_present_thread_a_frame_is_read_one_way_and_sh
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
   const std::size_t lendable = rig.wire().blobs().room();
   const std::size_t frame = 8u * 4u * 4u;
+  rig.room_import();
   std::uint32_t     read = rig.commands();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
-  CHECK_EQ(rig.commands() - read, 1u);
-  const IntoBlob first = into_blob(rig, read);
+  CHECK_EQ(rig.commands() - read, 2u);
+  CHECK_EQ(rig.id(read), av::CommandHeader::import_blob_id);
+  const IntoBlob first = into_blob(rig, read + 1u);
   CHECK_EQ(first.texture, 101u);
   CHECK_EQ(first.width, 8u);
   CHECK_EQ(first.height, 4u);
   CHECK_EQ(first.mode, 3u);
   CHECK_EQ(first.bytes, frame);
-  CHECK_EQ(rig.wire().blobs().room(), lendable - 2u * frame);
-  CHECK_EQ(first.at, lendable - 2u * frame);
+  CHECK_EQ(rig.wire().blobs().room(), lendable);
+  CHECK_EQ(first.at, Probe::room_offset(rig.presenter));
   CHECK_EQ(Probe::room_bytes(rig.presenter), 2u * frame);
   CHECK_EQ(rig.surface.blits(), 0u);
   CHECK_EQ(presents.loop.queued(), 0u);
@@ -578,7 +585,9 @@ TEST(back_buffer_presenter, a_resize_takes_new_room_after_the_thread_and_release
   const std::size_t lendable = rig.wire().blobs().room();
   rig.host().gl_window(1u, 1u);
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
+  rig.room_import();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
+  CHECK_EQ(Probe::room_bytes(rig.presenter), 2u * 8u * 4u * 4u);
   rig.context.flush();
   rig.presenter.hand_over(rig.context.mark());
   rig.surface.resize(&rig.window, 16u, 8u);
@@ -586,14 +595,18 @@ TEST(back_buffer_presenter, a_resize_takes_new_room_after_the_thread_and_release
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
   CHECK_EQ(presents.loop.queued(), 0u);
   CHECK_EQ(presents.loop.dropped_frames(), 1u);
+  rig.room_release();
+  rig.room_import();
   const std::uint32_t read = rig.commands();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
-  CHECK_EQ(into_blob(rig, read).bytes, 16u * 8u * 4u);
+  CHECK_EQ(into_blob(rig, rig.commands() - 1u).bytes, 16u * 8u * 4u);
+  CHECK(rig.commands() > read);
   CHECK_EQ(Probe::room_bytes(rig.presenter), 2u * 16u * 8u * 4u);
-  CHECK_EQ(rig.wire().blobs().room(), lendable - 2u * 16u * 8u * 4u);
-  rig.presenter.release(&rig.wire());
   CHECK_EQ(rig.wire().blobs().room(), lendable);
+  rig.room_release();
+  rig.presenter.release(&rig.wire());
   CHECK_EQ(Probe::room_bytes(rig.presenter), 0u);
+  CHECK_EQ(rig.wire().blobs().room(), lendable);
   CHECK(rig.presenter.invariants_hold()); }
 
 TEST(back_buffer_presenter, without_room_or_a_thread_the_swap_shows_the_frame_itself)
@@ -607,8 +620,8 @@ TEST(back_buffer_presenter, without_room_or_a_thread_the_swap_shows_the_frame_it
     CHECK_EQ(presents.thread.starts(), 1u); }
   { Rig      rig;
     Presents presents(rig);
-    rig.wire().blobs().set_aside(rig.wire().blobs().room() - 64u);
     rig.host().gl_window(1u, 1u);
+    rig.host().blob_import(av::BlobImportAnswer::no_room, 0u);
     CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
     rig.host().gl_bytes(nullptr, 0u);
     CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
@@ -627,11 +640,13 @@ TEST(back_buffer_presenter, without_room_or_a_thread_the_swap_shows_the_frame_it
   rig.host().gl_window(1u, 1u);
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
   rig.state.bind_buffer(ClientArrayState::pixel_pack_buffer, 9u);
+  rig.room_import();
   const std::uint32_t read = rig.commands();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
-  CHECK_EQ(rig.commands() - read, 15u);
-  CHECK_EQ(into_blob(rig, read + 7u).mode, 3u);
-  CHECK_EQ(rig.argument(read + 8u, 1u), 9u); }
+  CHECK_EQ(rig.commands() - read, 16u);
+  CHECK_EQ(rig.id(read), av::CommandHeader::import_blob_id);
+  CHECK_EQ(into_blob(rig, read + 8u).mode, 3u);
+  CHECK_EQ(rig.argument(read + 9u, 1u), 9u); }
 
 TEST(back_buffer_presenter, a_hand_over_with_no_frame_read_hands_nothing)
 { Rig      rig;
@@ -653,7 +668,7 @@ TEST(back_buffer_presenter, a_hand_over_with_no_frame_read_hands_nothing)
   rig.presenter.done(Frame(rig.presenter, 0u, pixels, Frame::Rows::bgra_bottom_up, 8u, 4u, &rig.window, mark), true);
   CHECK(rig.presenter.front().presented()); }
 
-TEST(back_buffer_presenter_invariants, fail_for_a_frame_pending_without_room_or_room_without_its_arena)
+TEST(back_buffer_presenter_invariants, fail_for_a_frame_pending_without_room_or_room_that_is_gone)
 { Rig      rig;
   Presents presents(rig);
   rig.host().gl_window(1u, 1u);
@@ -663,9 +678,10 @@ TEST(back_buffer_presenter_invariants, fail_for_a_frame_pending_without_room_or_
   Probe::set_pending(rig.presenter, 0u);
   CHECK(!rig.presenter.invariants_hold());
   Probe::set_pending(rig.presenter, Presenter::slot_count);
+  rig.room_import();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   CHECK(rig.presenter.invariants_hold());
-  Probe::drop_arena(rig.presenter);
+  Probe::drop_room(rig.presenter);
   CHECK(!rig.presenter.invariants_hold()); }
 
 TEST(back_buffer_presenter, with_a_chain_a_frame_is_drawn_into_a_slot_and_presented_by_the_thread)
@@ -720,6 +736,7 @@ TEST(back_buffer_presenter, a_refused_chain_reads_frames_back_until_the_window_r
   Presents presents(rig);
   rig.host().gl_window(1u, 1u);
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
+  rig.room_import();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
   CHECK_EQ(presents.chains.opens(), 1u);
   CHECK_EQ(into_blob(rig, rig.commands() - 1u).width, 8u);
@@ -733,6 +750,8 @@ TEST(back_buffer_presenter, a_refused_chain_reads_frames_back_until_the_window_r
   rig.surface.resize(&rig.window, 16u, 8u);
   rig.host().gl_window(1u, 1u, 300u);
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
+  rig.room_release();
+  rig.room_import();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
   CHECK_EQ(presents.chains.opens(), 2u);
   rig.presenter.hand_over(rig.context.mark());
