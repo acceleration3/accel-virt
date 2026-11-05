@@ -1,7 +1,8 @@
-#include "executor/vulkan/handle_registry.hpp"
+#include "core/log/driver_log.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "harness/executor/vulkan_backend_probe.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
 #include "proto/generated/vulkan/vk_default_dispatch.h"
 #include "proto/generated/vulkan/vk_dispatch_server.h"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
@@ -35,6 +36,18 @@ H as_handle(std::uint64_t raw)
 
 class InventingDriver final : public vkproto::DefaultServerDispatch {
 public:
+    explicit InventingDriver(VulkanBackend &backend) : backend_(backend) {}
+
+    bool handle_for(vkproto::HandleKind kind, std::uint64_t wire, std::uint64_t &handle) const override
+    { return backend_.handle_for(kind, wire, handle); }
+    std::uint64_t template_bytes(VkDescriptorUpdateTemplate made) const override
+    { return backend_.template_bytes(made); }
+    void made(vkproto::HandleKind kind, std::uint64_t handle) override { backend_.made(kind, handle); }
+    bool room_for(std::uint64_t handles) override { return backend_.room_for(handles); }
+    void made_through(std::uint64_t parent) override { backend_.made_through(parent); }
+    void ended(std::uint64_t handle) override { backend_.ended(handle); }
+    void children_ended(std::uint64_t handle) override { backend_.children_ended(handle); }
+
     VkResult on_vkCreateInstance(const VkInstanceCreateInfo *, const VkAllocationCallbacks *,
                                  VkInstance *out) override
     { *out = invent<VkInstance>(); return VK_SUCCESS; }
@@ -82,6 +95,7 @@ private:
     { next_ += 0x100u;
       return as_handle<H>(next_); }
 
+    VulkanBackend &backend_;
     std::uint64_t next_ = 0x10000u;
     std::uint32_t destroyed_buffers_ = 0u;
     std::uint32_t asked_requirements_ = 0u;
@@ -89,7 +103,7 @@ private:
 
 class GuestContext {
 public:
-    GuestContext() : backend_(), probe_(backend_), driver_(), block_{}, reply_{}, answered_(0u) {}
+    GuestContext() : sink_(), lines_(sink_, "vulkan: "), backend_(lines_), probe_(backend_), driver_(backend_), block_{}, reply_{}, answered_(0u) {}
 
     VulkanBackend        &backend() { return backend_; }
     const InventingDriver &driver() const { return driver_; }
@@ -117,7 +131,7 @@ public:
     { WireWriter writer = frame();
       VkInstanceCreateInfo create = {};
       create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-      vkproto::serialize_VkInstanceCreateInfo(writer, create);
+      vkproto::serialize_VkInstanceCreateInfo(writer, identity_, create);
       return send(vkproto::kCmd_vkCreateInstance, writer) ? answered(0u) : 0u; }
 
     std::uint64_t physical_device(std::uint64_t instance)
@@ -133,7 +147,7 @@ public:
       writer.write_pod(physical);
       VkDeviceCreateInfo create = {};
       create.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-      vkproto::serialize_VkDeviceCreateInfo(writer, create);
+      vkproto::serialize_VkDeviceCreateInfo(writer, identity_, create);
       return send(vkproto::kCmd_vkCreateDevice, writer) ? answered(0u) : 0u; }
 
     std::uint64_t queue(std::uint64_t device)
@@ -149,7 +163,7 @@ public:
       VkBufferCreateInfo create = {};
       create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
       create.size = 4096u;
-      vkproto::serialize_VkBufferCreateInfo(writer, create);
+      vkproto::serialize_VkBufferCreateInfo(writer, identity_, create);
       return send(vkproto::kCmd_vkCreateBuffer, writer) ? answered(0u) : 0u; }
 
     std::uint64_t memory(std::uint64_t device)
@@ -158,7 +172,7 @@ public:
       VkMemoryAllocateInfo allocate = {};
       allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
       allocate.allocationSize = 4096u;
-      vkproto::serialize_VkMemoryAllocateInfo(writer, allocate);
+      vkproto::serialize_VkMemoryAllocateInfo(writer, identity_, allocate);
       return send(vkproto::kCmd_vkAllocateMemory, writer) ? answered(0u) : 0u; }
 
     std::uint64_t command_pool(std::uint64_t device)
@@ -166,7 +180,7 @@ public:
       writer.write_pod(device);
       VkCommandPoolCreateInfo create = {};
       create.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-      vkproto::serialize_VkCommandPoolCreateInfo(writer, create);
+      vkproto::serialize_VkCommandPoolCreateInfo(writer, identity_, create);
       return send(vkproto::kCmd_vkCreateCommandPool, writer) ? answered(0u) : 0u; }
 
     bool command_buffers(std::uint64_t device, std::uint64_t pool, std::uint32_t count,
@@ -177,7 +191,7 @@ public:
       allocate.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
       allocate.commandPool = as_handle<VkCommandPool>(pool);
       allocate.commandBufferCount = count;
-      vkproto::serialize_VkCommandBufferAllocateInfo(writer, allocate);
+      vkproto::serialize_VkCommandBufferAllocateInfo(writer, identity_, allocate);
       if (!send(vkproto::kCmd_vkAllocateCommandBuffers, writer)) return false;
       for (std::uint32_t i = 0u; i < count; i++) out[i] = answered(i);
       return true; }
@@ -188,7 +202,7 @@ public:
       VkDescriptorPoolCreateInfo create = {};
       create.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
       create.maxSets = most_listed;
-      vkproto::serialize_VkDescriptorPoolCreateInfo(writer, create);
+      vkproto::serialize_VkDescriptorPoolCreateInfo(writer, identity_, create);
       return send(vkproto::kCmd_vkCreateDescriptorPool, writer) ? answered(0u) : 0u; }
 
     bool descriptor_sets(std::uint64_t device, std::uint64_t pool, std::uint32_t count,
@@ -201,7 +215,7 @@ public:
       allocate.descriptorPool = as_handle<VkDescriptorPool>(pool);
       allocate.descriptorSetCount = count;
       allocate.pSetLayouts = layouts;
-      vkproto::serialize_VkDescriptorSetAllocateInfo(writer, allocate);
+      vkproto::serialize_VkDescriptorSetAllocateInfo(writer, identity_, allocate);
       if (!send(vkproto::kCmd_vkAllocateDescriptorSets, writer)) return false;
       for (std::uint32_t i = 0u; i < count; i++) out[i] = answered(i);
       return true; }
@@ -234,9 +248,12 @@ public:
       return send(vkproto::kCmd_vkResetDescriptorPool, writer); }
 
 private:
+    av::RecordingLog   sink_;
+    av::DriverLog      lines_;
     VulkanBackend      backend_;
     VulkanBackendProbe probe_;
     InventingDriver    driver_;
+    vkproto::HandleIdentity identity_;
     std::uint8_t       block_[block_bytes];
     std::uint8_t       frame_[reply_bytes];
     std::uint8_t       reply_[reply_bytes];
@@ -307,9 +324,11 @@ TEST(vulkan_backend_lifetime, every_destroy_and_free_of_a_device_s_object_ends_i
   constexpr std::uint64_t device = 0x1000u, object = 0x2000u, neighbour = 0x3000u;
   for (const std::uint32_t command : commands) {
       GuestContext guest;
-      guest.backend().made(device, av::HandleKind::device);
-      guest.backend().made(object);
-      guest.backend().made(neighbour);
+      guest.backend().made(vkproto::HandleKind::device, device);
+      guest.backend().made_through(device);
+      guest.backend().made(vkproto::HandleKind::buffer, object);
+      guest.backend().made(vkproto::HandleKind::buffer, neighbour);
+      guest.backend().made_through(0u);
       CHECK(guest.end(command, device, object));
       CHECK(!guest.knows(object));
       CHECK(guest.knows(device));
@@ -323,9 +342,10 @@ TEST(vulkan_backend_lifetime, destroying_an_instance_or_a_device_ends_it)
   constexpr std::uint64_t root = 0x1000u, neighbour = 0x3000u;
   for (const std::uint32_t command : commands) {
       GuestContext guest;
-      guest.backend().made(root, command == vkproto::kCmd_vkDestroyInstance ? av::HandleKind::instance
-                                                                            : av::HandleKind::device);
-      guest.backend().made(neighbour);
+      guest.backend().made(command == vkproto::kCmd_vkDestroyInstance ? vkproto::HandleKind::instance
+                                                                       : vkproto::HandleKind::device,
+                           root);
+      guest.backend().made(vkproto::HandleKind::buffer, neighbour);
       CHECK(guest.end(command, root));
       CHECK(!guest.knows(root));
       CHECK(guest.knows(neighbour));
@@ -457,7 +477,7 @@ TEST(vulkan_backend_lifetime, destroying_a_descriptor_pool_ends_its_sets)
 TEST(vulkan_backend_lifetime, a_command_s_parent_does_not_outlive_the_command)
 { GuestContext guest;
   const Chain chain(guest);
-  guest.backend().made(0x7000u);
+  guest.backend().made(vkproto::HandleKind::buffer, 0x7000u);
   const std::uint64_t second = guest.instance();
   CHECK(guest.end(vkproto::kCmd_vkDestroyInstance, chain.instance));
   CHECK(!guest.knows(chain.device));
@@ -465,29 +485,21 @@ TEST(vulkan_backend_lifetime, a_command_s_parent_does_not_outlive_the_command)
   CHECK(guest.knows(second)); }
 
 TEST(vulkan_backend_lifetime, made_through_ended_and_children_ended_follow_the_parent)
-{ VulkanBackend backend;
-  backend.made(0x1000u);
+{ av::RecordingLog sink;
+  av::DriverLog    lines(sink, "vulkan: ");
+  VulkanBackend    backend(lines);
+  backend.made(vkproto::HandleKind::physical_device, 0x1000u);
   backend.made_through(0x1000u);
-  backend.made(0x2000u);
+  backend.made(vkproto::HandleKind::queue, 0x2000u);
   backend.made_through(0x2000u);
-  backend.made(0x3000u);
+  backend.made(vkproto::HandleKind::command_buffer, 0x3000u);
   backend.children_ended(0x1000u);
   CHECK(backend.knows_handle(0x1000u));
   CHECK(!backend.knows_handle(0x2000u));
   CHECK(!backend.knows_handle(0x3000u));
   backend.made_through(0u);
-  backend.made(0x4000u);
+  backend.made(vkproto::HandleKind::buffer, 0x4000u);
   backend.ended(0x1000u);
   CHECK(!backend.knows_handle(0x1000u));
-  CHECK(backend.knows_handle(0x4000u)); }
-
-TEST(vulkan_backend_lifetime, outside_a_dispatch_an_ending_forgets_nothing)
-{ VulkanBackend backend;
-  backend.made(0x1000u);
-  backend.made(0x2000u);
-  vkproto::handles_made_through(0x1000u);
-  vkproto::handle_children_ended(0x1000u);
-  vkproto::handle_ended(0x2000u);
-  CHECK(backend.knows_handle(0x1000u));
-  CHECK(backend.knows_handle(0x2000u));
-  CHECK(VulkanBackend::deciding() == nullptr); }
+  CHECK(backend.knows_handle(0x4000u));
+  backend.shut_down(); }
