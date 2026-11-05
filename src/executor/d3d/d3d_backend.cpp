@@ -260,7 +260,7 @@ bool D3dBackend::lose_device()
     return device11_ != nullptr && device11_->lose();
 }
 
-bool D3dBackend::adopt(const SourceMemory &memory, uint64_t &handle)
+bool D3dBackend::adopt(SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("D3dBackend::adopt");
     if (!region_.held()) return region_.adopt(memory, handle);

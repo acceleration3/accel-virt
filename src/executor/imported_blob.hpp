@@ -21,7 +21,7 @@ public:
     bool                holds(uint64_t blob_id) const;
     bool                live() const;
     uint64_t            id() const;
-    const SourceMemory &memory() const;
+    SourceMemory &memory() const;
     uint64_t            handle() const;
 
     bool invariants_hold() const;

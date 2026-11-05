@@ -127,7 +127,7 @@ public:
     VkResult on_vkEnumeratePhysicalDeviceGroupsKHR(VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,
                                                    VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties) override;
 
-    [[nodiscard]] bool adopt(const SourceMemory &memory, uint64_t &handle) override;
+    [[nodiscard]] bool adopt(SourceMemory &memory, uint64_t &handle) override;
     void abandon(const SourceMemory &memory, uint64_t handle) override;
 
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,

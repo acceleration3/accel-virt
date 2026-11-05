@@ -46,7 +46,7 @@ Status ImportTable::name(ImportedBlob &blob, uint64_t handle)
     return Status::ok;
 }
 
-const SourceMemory *ImportTable::named(uint64_t handle) const
+SourceMemory *ImportTable::named(uint64_t handle) const
 {
     AV_SCOPE("ImportTable::named");
     if (handle == 0u) return nullptr;

@@ -45,7 +45,7 @@ public:
     bool poll() override;
     void bind_signal(void (*signal)(void *context), void *context) override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
-    [[nodiscard]] bool adopt(const SourceMemory &memory, uint64_t &handle) override;
+    [[nodiscard]] bool adopt(SourceMemory &memory, uint64_t &handle) override;
     void abandon(const SourceMemory &memory, uint64_t handle) override;
 
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,

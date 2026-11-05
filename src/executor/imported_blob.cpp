@@ -47,7 +47,7 @@ uint64_t ImportedBlob::id() const
     return id_;
 }
 
-const SourceMemory &ImportedBlob::memory() const
+SourceMemory &ImportedBlob::memory() const
 {
     AV_SCOPE("ImportedBlob::memory");
     return *memory_;

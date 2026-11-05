@@ -654,7 +654,7 @@ uint32_t VulkanBackend::import_type(const SourceMemory &memory, int fd) const
     return first_memory_type(reported);
 }
 
-bool VulkanBackend::adopt(const SourceMemory &memory, uint64_t &handle)
+bool VulkanBackend::adopt(SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("VulkanBackend::adopt");
     handle = 0u;

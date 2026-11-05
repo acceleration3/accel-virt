@@ -251,7 +251,7 @@ bool OpenGlBackend::lost() const
     return lost_;
 }
 
-bool OpenGlBackend::adopt(const SourceMemory &memory, uint64_t &handle)
+bool OpenGlBackend::adopt(SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("OpenGlBackend::adopt");
     if (region_.held()) return lend(memory, handle);

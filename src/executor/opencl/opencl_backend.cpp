@@ -20,6 +20,7 @@
 #include "core/trace/function_scope.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/opencl/cl_event_registration.hpp"
+#include "executor/host_memory_source.hpp"
 #include "executor/import_table.hpp"
 #include "executor/source_memory.hpp"
 #include "proto/d3d/dxgi_format.hpp"
@@ -61,6 +62,12 @@ extern "C" void CL_CALLBACK av_cl_event_completed(cl_event, cl_int, void *user_d
     static_cast<ClEventRegistration *>(user_data)->completed();
 }
 
+extern "C" void CL_CALLBACK av_cl_memory_destroyed(cl_mem, void *user_data)
+{
+    SourceMemory *const memory = static_cast<SourceMemory *>(user_data);
+    memory->owner()->release(*memory);
+}
+
 OpenClBackend::OpenClBackend(DriverLog &lines) : OpenClBackend(heap_, lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
@@ -71,7 +78,7 @@ OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
-       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_), imported_(nullptr), events_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_), arena_memory_(nullptr), imported_(nullptr), events_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false), lines_(lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
@@ -373,10 +380,14 @@ bool OpenClBackend::lost() const
     return lost_;
 }
 
-bool OpenClBackend::adopt(const SourceMemory &memory, uint64_t &handle)
+bool OpenClBackend::adopt(SourceMemory &memory, uint64_t &handle)
 {
     AV_SCOPE("OpenClBackend::adopt");
-    if (!arena_.held()) return arena_.adopt(memory, handle);
+    if (!arena_.held()) {
+        if (!arena_.adopt(memory, handle)) return false;
+        arena_memory_ = &memory;
+        return true;
+    }
     handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&memory));
     return memory.pointer() != nullptr;
 }
@@ -384,6 +395,7 @@ bool OpenClBackend::adopt(const SourceMemory &memory, uint64_t &handle)
 void OpenClBackend::abandon(const SourceMemory &memory, uint64_t)
 {
     AV_SCOPE("OpenClBackend::abandon");
+    if (arena_.is(memory)) arena_memory_ = nullptr;
     arena_.abandon(memory);
 }
 
@@ -398,11 +410,10 @@ cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
         return ::clCreateBufferWithProperties(context, properties, flags, size, host_ptr,
                                               errcode_ret);
     }
-    const SourceMemory *const lent =
-        backing.memory() != 0u && imported_ != nullptr ? imported_->named(backing.memory()) : nullptr;
-    uint8_t *const at = backing.memory() == 0u ? guest_.at(backing.offset(), static_cast<uint64_t>(size))
-                        : lent != nullptr      ? lent->at(backing.offset(), static_cast<uint64_t>(size))
-                                               : nullptr;
+    SourceMemory *const store = backing.memory() == 0u ? arena_memory_
+                                : imported_ != nullptr ? imported_->named(backing.memory())
+                                                       : nullptr;
+    uint8_t *const at = store != nullptr ? store->at(backing.offset(), static_cast<uint64_t>(size)) : nullptr;
     if (at == nullptr) {
         if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_VALUE;
         return nullptr;
@@ -410,7 +421,22 @@ cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
     const cl_mem_flags over_arena =
         (flags & ~static_cast<cl_mem_flags>(CL_MEM_ALLOC_HOST_PTR | CL_MEM_COPY_HOST_PTR)) |
         static_cast<cl_mem_flags>(CL_MEM_USE_HOST_PTR);
-    return ::clCreateBuffer(context, over_arena, size, at, errcode_ret);
+    cl_int made_status = CL_SUCCESS;
+    const cl_mem made = ::clCreateBuffer(context, over_arena, size, at, &made_status);
+    if (made == nullptr) {
+        if (errcode_ret != nullptr) *errcode_ret = made_status;
+        return nullptr;
+    }
+    store->acquire();
+    made_status = ::clSetMemObjectDestructorCallback(made, &av_cl_memory_destroyed, store);
+    if (made_status != CL_SUCCESS) {
+        store->owner()->release(*store);
+        static_cast<void>(::clReleaseMemObject(made));
+        if (errcode_ret != nullptr) *errcode_ret = made_status;
+        return nullptr;
+    }
+    if (errcode_ret != nullptr) *errcode_ret = CL_SUCCESS;
+    return made;
 }
 
 void *OpenClBackend::handle_for(clproto::HandleKind kind, uint64_t wire) const
