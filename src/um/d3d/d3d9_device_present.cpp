@@ -26,7 +26,9 @@ HRESULT D3d9Device::flush()
     AV_SCOPE("D3d9Device::flush");
     if (!channel_.constructed()) return S_OK;
     if (!send_states() || wire().application_flush() != Status::ok) return lost(__func__);
-    return follow_host();
+    const HRESULT followed = follow_host();
+    trim_memory();
+    return followed;
 }
 
 HRESULT D3d9Device::allocate(D3d9Resource &resource)
@@ -190,6 +192,7 @@ HRESULT D3d9Device::present(const D3DDDIARG_PRESENT *args)
         lines_.once("a Direct3D 9 present whose buffer could not be read back");
         return published;
     }
+    trim_memory();
     const HRESULT followed = follow_host();
     if (FAILED(followed)) {
         withdraw_point(*source);

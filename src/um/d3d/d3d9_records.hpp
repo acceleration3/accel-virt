@@ -1,6 +1,7 @@
 #ifndef AV_UM_D3D9_RECORDS_HPP
 #define AV_UM_D3D9_RECORDS_HPP
 
+#include "icd/common/stream_memory.hpp"
 #include "icd/d3d/present_count.hpp"
 #include "um/d3d/d3d9_ddi.hpp"
 
@@ -24,6 +25,9 @@ struct D3d9Subresource {
     bool             locked;
     D3DDDI_LOCKFLAGS lock_flags;
     D3DDDIARG_LOCK   lock;
+    icd::StreamMemory::Slice slice;
+    bool                     on_slice;
+    bool                     copies_only;
 };
 
 struct D3d9Resource {

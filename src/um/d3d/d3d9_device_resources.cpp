@@ -14,6 +14,7 @@
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_device.hpp"
+#include "um/d3d/d3d_session.hpp"
 
 #include <string.h>
 
@@ -174,7 +175,8 @@ void D3d9Device::release_resource(D3d9Resource &resource)
     for (uint32_t index = 0u; resource.subresources != nullptr && index < resource.count; index++) {
         D3d9Subresource &subresource = resource.subresources[index];
         if (subresource.id != 0u) static_cast<void>(d3d9proto::av_d3d9_Destroy9(wire(), subresource.id));
-        if (subresource.shadow != nullptr) memory_.release(subresource.shadow);
+        if (subresource.on_slice) leave_slice(subresource);
+        else if (subresource.shadow != nullptr) memory_.release(subresource.shadow);
     }
     if (resource.subresources != nullptr) memory_.release(resource.subresources);
     resource.subresources = nullptr;
@@ -333,7 +335,10 @@ HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
         args->SlicePitch = subresource.system_slice_pitch;
         return S_OK;
     }
-    if (!make_shadow(*locked, subresource)) return E_OUTOFMEMORY;
+    bool          served = false;
+    const HRESULT sliced = lock_on_slice(*locked, subresource, *args, served);
+    if (FAILED(sliced)) return sliced;
+    if (!served && !make_shadow(*locked, subresource)) return E_OUTOFMEMORY;
     if (subresource.locked && !subresource.lock_flags.ReadOnly) {
         char       said[160] = {};
         TextBuffer text(said, sizeof(said));
@@ -379,6 +384,7 @@ HRESULT D3d9Device::unlock(const D3DDDIARG_UNLOCK *args)
 HRESULT D3d9Device::unlock_subresource(const D3d9Resource &resource, D3d9Subresource &subresource, uint32_t index)
 {
     AV_SCOPE("D3d9Device::unlock_subresource");
+    if (subresource.on_slice) return S_OK;
     const D3DDDIARG_LOCK &lock = subresource.lock;
     const uint32_t flags = (lock.Flags.Discard ? write_discard : 0u) | (lock.Flags.NoOverwrite ? write_no_overwrite : 0u);
     const size_t offset = lock_offset(resource, lock, subresource.shadow_pitch, subresource.shadow_slice_pitch);
@@ -398,6 +404,108 @@ HRESULT D3d9Device::unlock_subresource(const D3d9Resource &resource, D3d9Subreso
                          subresource.shadow_slice_pitch, flags);
 }
 
+
+bool D3d9Device::sliceable(const D3d9Resource &resource) const
+{
+    AV_SCOPE("D3d9Device::sliceable");
+    return (resource.kind == D3d9Resource::Kind::vertex_buffer || resource.kind == D3d9Resource::Kind::index_buffer) &&
+           resource.flags.Dynamic && resource.pool != D3DDDIPOOL_SYSTEMMEM;
+}
+
+HRESULT D3d9Device::lock_on_slice(D3d9Resource &resource, D3d9Subresource &subresource, const D3DDDIARG_LOCK &lock,
+                                  bool &served)
+{
+    AV_SCOPE("D3d9Device::lock_on_slice");
+    served = false;
+    if (!sliceable(resource)) return S_OK;
+    if (!slices_.available()) {
+        if (!lock.Flags.ReadOnly) wire().note(ChannelCounter::copied_mappings, 1u);
+        return S_OK;
+    }
+    if (subresource.copies_only) return S_OK;
+    if (!subresource.on_slice) {
+        served = lock.Flags.Discard && place_on_slice(resource, subresource);
+        return S_OK;
+    }
+    if (lock.Flags.Discard) {
+        served = rename_slice(resource, subresource);
+        if (served) return S_OK;
+        lines_.once("no slice free for a discarding lock: the buffer is copied from then on");
+    } else if (lock.Flags.NoOverwrite || lock.Flags.ReadOnly) {
+        served = true;
+        return S_OK;
+    } else {
+        lines_.once("a lock of a dynamic buffer with neither DISCARD nor NOOVERWRITE: the buffer is copied from then on");
+    }
+    return leave_slice_for_copies(resource, subresource) ? S_OK : E_OUTOFMEMORY;
+}
+
+bool D3d9Device::place_on_slice(const D3d9Resource &resource, D3d9Subresource &subresource)
+{
+    AV_SCOPE("D3d9Device::place_on_slice");
+    icd::StreamMemory::Slice slice = {};
+    if (!slices_.place(subresource.width, slice)) return false;
+    uint8_t *const owned = subresource.shadow;
+    subresource.slice = slice;
+    subresource.on_slice = true;
+    if (!bind_slice(resource, subresource)) {
+        slices_.leave(subresource.slice);
+        subresource.on_slice = false;
+        return false;
+    }
+    if (owned != nullptr) memory_.release(owned);
+    subresource.shadow = slices_.view(slice);
+    subresource.shadow_bytes = subresource.width;
+    subresource.shadow_pitch = subresource.width;
+    subresource.shadow_slice_pitch = subresource.width;
+    return true;
+}
+
+bool D3d9Device::rename_slice(const D3d9Resource &resource, D3d9Subresource &subresource)
+{
+    AV_SCOPE("D3d9Device::rename_slice");
+    if (!slices_.rename(subresource.shadow_bytes, subresource.slice)) return false;
+    subresource.shadow = slices_.view(subresource.slice);
+    return bind_slice(resource, subresource);
+}
+
+bool D3d9Device::leave_slice_for_copies(const D3d9Resource &resource, D3d9Subresource &subresource)
+{
+    AV_SCOPE("D3d9Device::leave_slice_for_copies");
+    auto *const shadow = static_cast<uint8_t *>(memory_.allocate(subresource.shadow_bytes, Pool::paged));
+    if (shadow == nullptr) return false;
+    memcpy(shadow, subresource.shadow, subresource.shadow_bytes);
+    if (!d3d9proto::av_d3d9_BindBufferSlice9(wire(), resource.id, 0u, 0u, 0u)) {
+        memory_.release(shadow);
+        return false;
+    }
+    leave_slice(subresource);
+    subresource.shadow = shadow;
+    subresource.copies_only = true;
+    return true;
+}
+
+bool D3d9Device::bind_slice(const D3d9Resource &resource, const D3d9Subresource &subresource)
+{
+    AV_SCOPE("D3d9Device::bind_slice");
+    return d3d9proto::av_d3d9_BindBufferSlice9(wire(), resource.id, slices_.memory(subresource.slice),
+                                               slices_.offset_in_block(subresource.slice), subresource.slice.bytes_);
+}
+
+void D3d9Device::leave_slice(D3d9Subresource &subresource)
+{
+    AV_SCOPE("D3d9Device::leave_slice");
+    slices_.leave(subresource.slice);
+    subresource.on_slice = false;
+    subresource.shadow = nullptr;
+}
+
+void D3d9Device::trim_memory()
+{
+    AV_SCOPE("D3d9Device::trim_memory");
+    session_.reclaim_retired();
+    slices_.trim();
+}
 
 HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data, uint32_t bytes, uint32_t flags)
 {

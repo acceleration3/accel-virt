@@ -5,6 +5,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
 #include "icd/common/pieces.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -52,7 +53,7 @@ D3d9Device::D3d9Device(d3d::D3dSession &session, BlockSource &memory, KeyedLog &
       scissor_set_(false), streams_{}, bound_{}, indices_(nullptr), index_stride_(0u), user_indices_(nullptr),
       user_index_bytes_(0u), bound_indices_(0u), vertex_ring_{}, index16_ring_{}, index32_ring_{},
       readback_(nullptr), readback_bytes_(0u), trace_(trace), context_number_(trace.number_context()),
-      call_began_(0u), busy_(0u), calls_(0u), draws_{}, rebased_(0u), null_shaders_(0u), written_(0u)
+      call_began_(0u), busy_(0u), calls_(0u), draws_{}, rebased_(0u), null_shaders_(0u), written_(0u), slices_()
 {
     AV_SCOPE("D3d9Device::D3d9Device");
 }
@@ -102,6 +103,7 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
         session_.leave();
         return E_FAIL;
     }
+    slices_.own(session_.memory_stream(HostMemoryRequest::Kind::upload));
     return S_OK;
 }
 

@@ -8,6 +8,7 @@
 #include "executor/d3d/shared_surfaces.hpp"
 #include "executor/d3d/frame_stager.hpp"
 #include "executor/d3d/staged_frame.hpp"
+#include "proto/d3d/buffer_slice_support.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "proto/resources/subresource_layout.hpp"
 #include "proto/d3d/d3d9_format_layout.hpp"
@@ -306,7 +307,7 @@ bool D3d9Session::on_WriteBuffer9(uint32_t buffer, uint32_t offset, uint32_t fla
 bool D3d9Session::on_QueryBufferSlices9(uint32_t &supported)
 {
     AV_SCOPE("D3d9Session::on_QueryBufferSlices9");
-    supported = slices_.supported() ? 1u : 0u;
+    supported = static_cast<uint32_t>(slices_.supported() ? BufferSliceSupport::direct3d9 : BufferSliceSupport::none);
     return true;
 }
 

@@ -6,6 +6,7 @@
 #include "core/support/object_storage.hpp"
 #include "icd/common/loss_latch.hpp"
 #include "icd/common/refused_calls.hpp"
+#include "icd/d3d/context_slices.hpp"
 #include "icd/d3d/d3d9_state_batch.hpp"
 #include "icd/d3d/d3d9_state_block.hpp"
 #include "icd/d3d/d3d9_state_shadow.hpp"
@@ -135,6 +136,15 @@ private:
     HRESULT read_surface(const D3d9Resource &resource, uint32_t index, uint32_t &pitch, uint32_t &rows);
     [[nodiscard]] bool readback_room(size_t bytes);
     HRESULT unlock_subresource(const D3d9Resource &resource, D3d9Subresource &subresource, uint32_t index);
+    bool    sliceable(const D3d9Resource &resource) const;
+    HRESULT lock_on_slice(D3d9Resource &resource, D3d9Subresource &subresource, const D3DDDIARG_LOCK &lock,
+                          bool &served);
+    [[nodiscard]] bool place_on_slice(const D3d9Resource &resource, D3d9Subresource &subresource);
+    [[nodiscard]] bool rename_slice(const D3d9Resource &resource, D3d9Subresource &subresource);
+    [[nodiscard]] bool leave_slice_for_copies(const D3d9Resource &resource, D3d9Subresource &subresource);
+    [[nodiscard]] bool bind_slice(const D3d9Resource &resource, const D3d9Subresource &subresource);
+    void    leave_slice(D3d9Subresource &subresource);
+    void    trim_memory();
     HRESULT blt_level(const D3d9Resource &source, uint32_t source_index, const D3d9Resource &destination,
                       uint32_t destination_index, const RECT &area, POINT at);
     HRESULT blt_to_system(const D3d9Resource &source, const D3d9Resource &destination, const D3DDDIARG_BLT &blt);
@@ -206,6 +216,7 @@ private:
     uint32_t                             rebased_;
     uint32_t                             null_shaders_;
     uint64_t                             written_;
+    d3d::ContextSlices                   slices_;
 };
 
 template <typename... Arguments>

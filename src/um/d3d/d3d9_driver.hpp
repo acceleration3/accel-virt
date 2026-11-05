@@ -5,6 +5,7 @@
 #include "core/support/object_pool.hpp"
 #include "core/support/object_storage.hpp"
 #include "icd/d3d/hresult.hpp"
+#include "um/d3d/buffer_slice_offer9.hpp"
 #include "um/d3d/adapter_sessions.hpp"
 #include "um/d3d/d3d9_device.hpp"
 #include "um/d3d/d3d9_host_caps.hpp"
@@ -47,6 +48,7 @@ private:
     KeyedLog               &lines_;
     d3d::D3dCallTrace       &trace_;
     ObjectPool<D3d9Device>         devices_;
+    BufferSliceOffer9              offer_;
     AdapterSessions<D3d9HostCaps>  adapters_;
 };
 
