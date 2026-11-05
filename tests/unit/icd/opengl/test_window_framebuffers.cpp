@@ -9,8 +9,9 @@
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
+#include "icd/opengl/batch_ready.hpp"
 #include "icd/opengl/client_array_state.hpp"
-#include "icd/opengl/gl_present_loop.hpp"
+#include "icd/common/window_present_queue.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "icd/opengl/pixel_format.hpp"
 #include "icd/opengl/window_framebuffers.hpp"
@@ -49,12 +50,12 @@ struct WindowFramebuffersProbe {
     {
         return **windows.presenters_.at(slot);
     }
-    static void unnamed(WindowFramebuffers &windows, BlockSource &memory, LogSink &log)
+    static void unnamed(WindowFramebuffers &windows, BlockSource &memory, DriverLog &log)
     {
         BackBufferPresenter *made = nullptr;
         static_cast<void>(windows.pool_.create(made, memory, log));
     }
-    static void copy_window(WindowFramebuffers &windows, BlockSource &memory, LogSink &log, void *window, void *other)
+    static void copy_window(WindowFramebuffers &windows, BlockSource &memory, DriverLog &log, void *window, void *other)
     {
         BackBufferPresenter *made = nullptr;
         static_cast<void>(windows.pool_.create(made, memory, log));
@@ -74,16 +75,17 @@ const PixelFormat single(24u, 8u, false, false, 0u);
 struct Rig {
     GlContextRig              context_rig;
     GuestGlContext            context{context_rig.connection(), context_rig.platform(), context_rig.send_lock(),
-                                      context_rig.log(), context_rig.extensions(), context_rig.handles(), 1, GlContextOptions()};
+                                      context_rig.groups(), context_rig.lines(), context_rig.extensions(),
+                                      context_rig.handles(), 1, GlContextOptions()};
     av::ScriptedWindowSurface surface;
     ClientArrayState          state{context_rig.platform()};
     int                       dcs[10] = {};
     int                       windows[10] = {};
-    Windows                   framebuffers{context_rig.platform(), context_rig.log()};
+    Windows                   framebuffers{context_rig.platform(), context_rig.lines()};
 
     Rig()
     {
-        context_rig.host().gl_make("renderer", "4.6");
+        context_rig.host().gl_made("renderer", "4.6");
         CHECK_STATUS(context.make(), Status::ok);
         for (int index = 0; index < 10; index++) surface.add_dc(&dcs[index], &windows[index], 8u, 4u);
     }
@@ -404,7 +406,7 @@ TEST(window_framebuffers, reports_its_bindings_and_each_window)
 TEST(window_framebuffers_invariants, fail_for_a_current_window_not_held_a_window_held_twice_or_a_broken_presenter)
 { using Probe = av::glicd::WindowFramebuffersProbe;
   Rig nowhere;
-  av::glicd::BackBufferPresenter stray(nowhere.context_rig.platform(), nowhere.context_rig.log());
+  av::glicd::BackBufferPresenter stray(nowhere.context_rig.platform(), nowhere.context_rig.lines());
   Probe::point_at(nowhere.framebuffers, &stray);
   CHECK(!nowhere.framebuffers.invariants_hold());
   Probe::point_at(nowhere.framebuffers, nullptr);
@@ -412,11 +414,11 @@ TEST(window_framebuffers_invariants, fail_for_a_current_window_not_held_a_window
   Rig twice;
   CHECK_STATUS(twice.current_on(0, 100u), Status::ok);
   CHECK_STATUS(twice.current_on(1, 200u), Status::ok);
-  Probe::copy_window(twice.framebuffers, twice.context_rig.platform(), twice.context_rig.log(), &twice.windows[1],
+  Probe::copy_window(twice.framebuffers, twice.context_rig.platform(), twice.context_rig.lines(), &twice.windows[1],
                      &twice.windows[2]);
   CHECK(!twice.framebuffers.invariants_hold());
   Rig leaked;
-  Probe::unnamed(leaked.framebuffers, leaked.context_rig.platform(), leaked.context_rig.log());
+  Probe::unnamed(leaked.framebuffers, leaked.context_rig.platform(), leaked.context_rig.lines());
   CHECK(!leaked.framebuffers.invariants_hold());
   Rig broken;
   CHECK_STATUS(broken.current_on(0, 100u), Status::ok);
@@ -430,9 +432,10 @@ TEST(window_framebuffers, a_frame_read_for_the_thread_is_handed_over_once)
   av::CountedWakeSignal    shown;
   av::LockTrace            trace;
   av::RecordingThreadLock  lock{trace, 'P'};
-  av::RecordingLog         log;
   av::ScriptedWindowChains chains;
-  av::glicd::GlPresentLoop loop{thread, handed, shown, lock, rig.context_rig.kmt(), rig.surface, chains, log};
+  av::glicd::BatchReady    ready{rig.context_rig.kmt()};
+  av::glicd::GlPresentQueue loop{rig.context_rig.platform(), thread, handed, shown, lock, ready, rig.surface,
+                                 chains, rig.context_rig.lines()};
   CHECK_STATUS(rig.current_on(0, 100u), Status::ok);
   CHECK(rig.framebuffers.present(rig.wire(), rig.state, &rig.dcs[0], &rig.windows[0], rig.surface, &loop, 0u));
   rig.context.flush();
@@ -451,7 +454,7 @@ TEST(window_framebuffers, a_frame_read_for_the_thread_is_handed_over_once)
 
 TEST(window_framebuffers_invariants, fail_for_a_presented_window_not_held)
 { Rig rig;
-  av::glicd::BackBufferPresenter stray(rig.context_rig.platform(), rig.context_rig.log());
+  av::glicd::BackBufferPresenter stray(rig.context_rig.platform(), rig.context_rig.lines());
   av::glicd::WindowFramebuffersProbe::presented(rig.framebuffers, &stray);
   CHECK(!rig.framebuffers.invariants_hold());
   av::glicd::WindowFramebuffersProbe::presented(rig.framebuffers, nullptr);

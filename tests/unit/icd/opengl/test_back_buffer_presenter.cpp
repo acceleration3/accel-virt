@@ -11,7 +11,8 @@
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/opengl/back_buffer_presenter.hpp"
 #include "icd/opengl/client_array_state.hpp"
-#include "icd/opengl/gl_present_loop.hpp"
+#include "icd/common/window_present_queue.hpp"
+#include "icd/opengl/batch_ready.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "icd/opengl/pixel_format.hpp"
 #include "proto/submission/command_header.hpp"
@@ -61,6 +62,9 @@ struct BackBufferPresenterProbe {
 
 namespace {
 
+constexpr std::uint32_t gl_rgba8 = 0x8058u;
+constexpr std::uint32_t gl_srgb8_alpha8 = 0x8C43u;
+
 const PixelFormat plain_d24s8(24u, 8u, true, false, 0u);
 const PixelFormat multisampled_d32_srgb(32u, 0u, false, true, 4u);
 const PixelFormat bare(0u, 0u, true, false, 0u);
@@ -68,12 +72,13 @@ const PixelFormat bare(0u, 0u, true, false, 0u);
 struct Rig {
     GlContextRig               context_rig;
     GuestGlContext             context{context_rig.connection(), context_rig.platform(), context_rig.send_lock(),
-                                       context_rig.log(), context_rig.extensions(), context_rig.handles(), 1, GlContextOptions()};
+                                       context_rig.groups(), context_rig.lines(), context_rig.extensions(),
+                                       context_rig.handles(), 1, GlContextOptions()};
     av::ScriptedWindowSurface  surface;
-    ClientArrayState           state;
+    ClientArrayState           state{context_rig.platform()};
     int                        dc = 0;
     int                        window = 0;
-    Presenter                  presenter{context_rig.platform(), context_rig.log()};
+    Presenter                  presenter{context_rig.platform(), context_rig.lines()};
 
     explicit Rig(bool arena = true, std::uint32_t width = 8u, std::uint32_t height = 4u)
     {
@@ -88,8 +93,9 @@ struct Rig {
             host().gl_integer(4);
             host().gl_integer(6);
             host().gl_integer(2);
+            host().gl_integer(0);
         } else {
-            host().gl_make("renderer", "4.6");
+            host().gl_made("renderer", "4.6");
         }
         CHECK_STATUS(context.make(), Status::ok);
         surface.add_dc(&dc, &window, width, height);
@@ -134,11 +140,16 @@ struct Presents {
     av::CountedWakeSignal    shown;
     av::LockTrace            trace;
     av::RecordingThreadLock  lock{trace, 'P'};
-    av::RecordingLog         log;
     av::ScriptedWindowChains chains;
-    av::glicd::GlPresentLoop loop;
+    av::glicd::BatchReady    ready;
+    av::glicd::GlPresentQueue loop;
 
-    explicit Presents(Rig &rig) : loop(thread, handed, shown, lock, rig.kmt(), rig.surface, chains, log), rig_(rig) {}
+    explicit Presents(Rig &rig)
+        : ready(rig.kmt()),
+          loop(rig.context_rig.platform(), thread, handed, shown, lock, ready, rig.surface, chains,
+               rig.context_rig.lines()),
+          rig_(rig)
+    {}
     ~Presents() { rig_.presenter.release(nullptr); }
 
 private:
@@ -194,7 +205,7 @@ TEST(back_buffer_presenter, a_first_frame_makes_the_framebuffer_and_puts_the_hos
   CHECK_EQ(rig.commands() - made, 7u);
   for (std::uint32_t at = 0u; at < 7u; at++) CHECK_EQ(rig.id(made + at), expected[at]);
   CHECK_EQ(rig.argument(made + 3u, 0u), 101u);
-  CHECK_EQ(rig.argument(made + 3u, 2u), Presenter::gl_rgba8);
+  CHECK_EQ(rig.argument(made + 3u, 2u), gl_rgba8);
   CHECK_EQ(rig.argument(made + 3u, 3u), 8u);
   CHECK_EQ(rig.argument(made + 3u, 4u), 4u);
   CHECK_EQ(rig.argument(made + 4u, 0u), 100u);
@@ -291,8 +302,8 @@ TEST(back_buffer_presenter, an_srgb_format_stores_srgb_colour)
   rig.host().gl_window(2u, 2u);
   const std::uint32_t made = rig.commands();
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, multisampled_d32_srgb, rig.surface), Status::ok);
-  CHECK_EQ(rig.argument(made + 3u, 2u), Presenter::gl_srgb8_alpha8);
-  CHECK_EQ(rig.argument(made + 5u, 2u), Presenter::gl_srgb8_alpha8); }
+  CHECK_EQ(rig.argument(made + 3u, 2u), gl_srgb8_alpha8);
+  CHECK_EQ(rig.argument(made + 5u, 2u), gl_srgb8_alpha8); }
 
 TEST(back_buffer_presenter, a_format_without_depth_makes_no_renderbuffer)
 { Rig rig;
@@ -407,18 +418,24 @@ TEST(back_buffer_presenter, the_applications_pack_state_is_set_aside_for_the_rea
   CHECK_EQ(rig.commands() - read, 1u); }
 
 TEST(back_buffer_presenter, a_tall_frame_is_read_in_rows_a_reply_holds)
-{ Rig rig(false, 64u, 200u);
+{ Rig rig(false, 64u, 300u);
+  const std::uint32_t row_bytes = 64u * 4u;
+  const std::uint32_t rows = static_cast<std::uint32_t>(rig.wire().room().inline_read()) / row_bytes;
+  CHECK(rows > 0u && rows < 300u);
   rig.host().gl_window(1u, 1u);
   CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
   rig.host().gl_bytes(nullptr, 0u);
   rig.host().gl_bytes(nullptr, 0u);
   const std::uint32_t read = rig.commands();
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, nullptr, 0u));
-  CHECK_EQ(rig.commands() - read, 2u);
+  CHECK_EQ(rig.commands() - read, 3u);
+  CHECK_EQ(rig.id(read), ids::kCmd_glGetTextureSubImage);
+  CHECK(rig.id(read + 1u) != ids::kCmd_glGetTextureSubImage);
+  CHECK_EQ(rig.id(read + 2u), ids::kCmd_glGetTextureSubImage);
   CHECK_EQ(rig.argument(read, 3u), 0u);
-  CHECK_EQ(rig.argument(read, 6u), 192u);
-  CHECK_EQ(rig.argument(read + 1u, 3u), 192u);
-  CHECK_EQ(rig.argument(read + 1u, 6u), 8u); }
+  CHECK_EQ(rig.argument(read, 6u), rows);
+  CHECK_EQ(rig.argument(read + 2u, 3u), rows);
+  CHECK_EQ(rig.argument(read + 2u, 6u), 300u - rows); }
 
 TEST(back_buffer_presenter, a_refused_blit_is_logged_once_and_the_swap_happened)
 { Rig rig;
@@ -625,9 +642,15 @@ TEST(back_buffer_presenter, a_hand_over_with_no_frame_read_hands_nothing)
   rig.presenter.hand_over(rig.context.mark());
   CHECK_EQ(presents.loop.queued(), 0u);
   std::uint8_t pixels[16u * 8u * 4u] = {};
-  rig.presenter.shown(pixels, 16u, 8u);
+  const av::BatchMark mark = rig.context.mark();
+  using Frame = av::glicd::GlFrame;
+  rig.presenter.done(Frame(rig.presenter, 0u, pixels, Frame::Rows::bgra_bottom_up, 16u, 8u, &rig.window, mark), true);
   CHECK(!rig.presenter.front().presented());
-  rig.presenter.shown(pixels, 8u, 4u);
+  rig.presenter.done(Frame(rig.presenter, 0u, pixels, Frame::Rows::bgra_bottom_up, 8u, 4u, &rig.window, mark), false);
+  CHECK(!rig.presenter.front().presented());
+  rig.presenter.done(Frame(rig.presenter, 0u, nullptr, Frame::Rows::bgra_bottom_up, 8u, 4u, &rig.window, mark), true);
+  CHECK(!rig.presenter.front().presented());
+  rig.presenter.done(Frame(rig.presenter, 0u, pixels, Frame::Rows::bgra_bottom_up, 8u, 4u, &rig.window, mark), true);
   CHECK(rig.presenter.front().presented()); }
 
 TEST(back_buffer_presenter_invariants, fail_for_a_frame_pending_without_room_or_room_without_its_arena)

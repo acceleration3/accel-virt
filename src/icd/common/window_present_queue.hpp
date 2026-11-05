@@ -22,6 +22,8 @@
 
 namespace av::icd {
 
+struct WindowPresentQueueProbe;
+
 template <typename Source, typename Readiness>
 class WindowPresentQueue final : public ServiceLoop {
 public:
@@ -102,6 +104,8 @@ private:
     uint32_t        stopping_;
     bool            refused_;
     OnceLatch       refusal_logged_;
+
+    friend struct WindowPresentQueueProbe;
 };
 
 template <typename Source, typename Readiness>
