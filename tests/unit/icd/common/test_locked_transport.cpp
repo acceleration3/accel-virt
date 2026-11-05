@@ -296,7 +296,8 @@ TEST(locked_transport, makes_blob_room_under_the_lock_and_lends_the_inner_room_a
   LockedTransport transport(inner, lock);
   CHECK(&transport.room() == &inner.room());
   CHECK(!lock.held());
-  CHECK(!transport.make_room_for_blobs(1u << 30u));
+  const std::uint64_t sizes[] = {1u << 30u};
+  CHECK(!transport.make_room_for_blobs(sizes, 1u));
   CHECK(std::strcmp(trace.text(), "Ss") == 0);
   transport.note(av::ChannelCounter::split_pieces, 3u);
   CHECK_EQ(inner.noted(av::ChannelCounter::split_pieces), 3u);

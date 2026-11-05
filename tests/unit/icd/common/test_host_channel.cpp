@@ -18,6 +18,7 @@
 #include "proto/resources/host_memory_request.hpp"
 #include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/published_slot_layout.hpp"
 #include "proto/wire/spill_block.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -46,6 +47,7 @@ using av::KmtBlobArena;
 using av::KmtTransportProbe;
 using av::MockKmt;
 using av::PciIdentity;
+using av::PublishedSlotLayout;
 using av::Status;
 using av::SubApi;
 using av::TransportResult;
@@ -92,6 +94,11 @@ public:
     ~Rig() { CHECK_EQ(kmt_.misuses(), 0u); }
 
     MockKmt              &kmt() { return kmt_; }
+    void arena_imports()
+    {
+        host_.blob_import(0u, imported_memory);
+        host_.blob_import(0u, imported_memory + 1u);
+    }
     av::MockPlatform     &platform() { return platform_; }
     GuestConnection      &device() { return connection_; }
     av::ScriptedHost     &host() { return host_; }
@@ -110,7 +117,7 @@ public:
     {
         CHECK(!channel.opened());
         CHECK(!channel.faulted());
-        CHECK(channel.arena_view() == nullptr);
+        CHECK(!channel.has_arena());
         CHECK_EQ(channel.arena_bytes(), 0u);
         CHECK_EQ(kmt_.open_objects(), linked_);
         CHECK_EQ(platform_.live_allocations(), tables);
@@ -179,33 +186,38 @@ TEST(host_channel, a_closed_channel_holds_nothing_and_closing_it_again_is_nothin
 TEST(host_channel, opening_holds_the_transport_the_batch_and_the_arena_at_the_shapes_size)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
-  rig.host().blob_import(0u, imported_memory);
+  rig.arena_imports();
   CHECK_STATUS(channel.open(rig.device()), Status::ok);
   CHECK(channel.opened());
   CHECK(!channel.faulted());
-  CHECK_EQ(channel.arena_bytes(), 2u * KmtBlobArena::default_bytes);
-  CHECK(channel.arena_view() != nullptr);
+  CHECK_EQ(channel.arena_bytes(), PublishedSlotLayout::control_bytes + 2u * KmtBlobArena::default_bytes);
+  CHECK(channel.has_arena());
   CHECK(channel.transport().blobs().ready());
   CHECK(channel.invariants_hold());
   char bytes[128];
   CHECK(std::strcmp(report_of(channel, bytes, sizeof bytes),
-                    "channel/0 opened=true faulted=false arena_bytes=33554432") == 0);
+                    "channel/0 opened=true faulted=false arena_bytes=33685504") == 0);
   CHECK_STATUS(channel.open(rig.device()), Status::invalid_state);
   CHECK(channel.opened());
-  CHECK_EQ(channel.arena_bytes(), 2u * KmtBlobArena::default_bytes);
+  CHECK_EQ(channel.arena_bytes(), PublishedSlotLayout::control_bytes + 2u * KmtBlobArena::default_bytes);
+  rig.host().nop();
   rig.host().nop();
   channel.close(false);
   rig.check_nothing_held(channel);
   CHECK_EQ(rig.log().lines(), 0u); }
 
-TEST(host_channel, the_host_error_word_is_the_arenas_tail)
+TEST(host_channel, the_host_error_word_is_the_control_segments_tail)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
-  rig.host().blob_import(0u, imported_memory);
+  rig.arena_imports();
   CHECK_STATUS(channel.open(rig.device()), Status::ok);
   CHECK_EQ(channel.host_errors(), 0u);
   const std::uint64_t word = 0x0000000500000502ull;
-  std::memcpy(channel.arena_view() + channel.arena_bytes() - sizeof word, &word, sizeof word);
+  std::uint8_t  *slots = nullptr;
+  std::uint64_t  offset = 0u;
+  CHECK(channel.take_query_slots(1u, slots, offset));
+  const PublishedSlotLayout layout(PublishedSlotLayout::control_bytes);
+  std::memcpy(slots - layout.slots_at(1u) + layout.error_word(), &word, sizeof word);
   CHECK_EQ(channel.host_errors(), word);
   rig.host().nop();
   channel.close(false); }
@@ -213,7 +225,7 @@ TEST(host_channel, the_host_error_word_is_the_arenas_tail)
 TEST(host_channel, what_is_batched_reaches_the_host_before_its_context_goes)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
-  rig.host().blob_import(0u, imported_memory);
+  rig.arena_imports();
   CHECK_STATUS(channel.open(rig.device()), Status::ok);
   const std::uint32_t sent = rig.commands();
   CHECK(rig.send(channel.wire()) == TransportResult::ok);
@@ -227,7 +239,7 @@ TEST(host_channel, what_is_batched_reaches_the_host_before_its_context_goes)
 TEST(host_channel, a_lost_channel_closes_without_asking_the_host_anything)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
-  rig.host().blob_import(0u, imported_memory);
+  rig.arena_imports();
   CHECK_STATUS(channel.open(rig.device()), Status::ok);
   CHECK(rig.send(channel.wire()) == TransportResult::ok);
   const std::uint32_t sent = rig.commands();
@@ -241,11 +253,12 @@ TEST(host_channel, a_lost_channel_closes_without_asking_the_host_anything)
 TEST(host_channel, an_arena_the_device_refuses_is_asked_again_at_half_the_size)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
-  rig.host().blob_import(import_refused, 0u);
   rig.host().blob_import(0u, imported_memory);
+  rig.host().blob_import(import_refused, 0u);
+  rig.host().blob_import(0u, imported_memory + 1u);
   CHECK_STATUS(channel.open(rig.device()), Status::ok);
-  CHECK_EQ(channel.arena_bytes(), KmtBlobArena::default_bytes);
-  CHECK(channel.arena_view() != nullptr);
+  CHECK_EQ(channel.arena_bytes(), PublishedSlotLayout::control_bytes + KmtBlobArena::default_bytes);
+  CHECK(channel.has_arena());
   CHECK_EQ(rig.log().holding("no blob arena"), 0u);
   CHECK(channel.invariants_hold());
   rig.host().nop();
@@ -255,11 +268,13 @@ TEST(host_channel, an_arena_the_device_refuses_is_asked_again_at_half_the_size)
 TEST(host_channel, a_device_that_will_not_import_at_the_least_size_leaves_a_channel_without_an_arena)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
+  rig.host().blob_import(0u, imported_memory);
   rig.host().blob_import(import_refused, 0u);
   rig.host().blob_import(import_refused, 0u);
+  rig.host().nop();
   CHECK_STATUS(channel.open(rig.device()), Status::ok);
   CHECK(channel.opened());
-  CHECK(channel.arena_view() == nullptr);
+  CHECK(!channel.has_arena());
   CHECK_EQ(channel.arena_bytes(), 0u);
   CHECK_EQ(channel.host_errors(), 0u);
   CHECK(!channel.transport().blobs().ready());
@@ -301,7 +316,7 @@ TEST(host_channel, a_shape_that_neither_batches_nor_lends_opens_the_transport_al
   HostChannel channel(rig.platform(), rig.lines(), plain(), rig.lock());
   CHECK_STATUS(channel.open(rig.device()), Status::ok);
   CHECK(channel.opened());
-  CHECK(channel.arena_view() == nullptr);
+  CHECK(!channel.has_arena());
   CHECK_EQ(rig.commands(), 0u);
   CHECK_EQ(rig.platform().live_allocations(), 1u);
   CHECK(channel.invariants_hold());
@@ -322,7 +337,7 @@ TEST(host_channel, a_transport_the_host_failed_is_a_faulted_channel)
 TEST(host_channel, an_arena_that_does_not_close_whole_is_logged_and_closed_anyway)
 { Rig rig;
   HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
-  rig.host().blob_import(0u, imported_memory);
+  rig.arena_imports();
   CHECK_STATUS(channel.open(rig.device()), Status::ok);
   channel.close(false);
   CHECK_EQ(rig.log().holding("avtest: the blob arena did not close whole"), 1u);
@@ -341,7 +356,7 @@ TEST(host_channel, the_invariant_catches_every_state_the_channel_never_builds)
   CHECK(!channel.invariants_hold());
   CHECK(probe.swap_batch_block(nullptr) == &stray);
   CHECK(channel.invariants_hold());
-  rig.host().blob_import(0u, imported_memory);
+  rig.arena_imports();
   CHECK_STATUS(channel.open(rig.device()), Status::ok);
   std::uint8_t *const staging = probe.swap_staging(nullptr);
   CHECK(!channel.invariants_hold());
@@ -378,26 +393,28 @@ TEST(host_channel, a_transport_no_open_made_is_an_open_channel_with_no_staging)
   rig.check_nothing_held(channel); }
 
 TEST(host_channel, the_window_decides_the_arena_and_none_leaves_bulk_data_inline)
-{ { Rig rig;
-    rig.kmt().open_host_window(KmtBlobArena::default_bytes);
+{ const std::uint64_t whole = PublishedSlotLayout::control_bytes + KmtBlobArena::default_bytes;
+  { Rig rig;
+    rig.kmt().open_host_window(whole);
     HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
-    rig.host().blob_import(0u, imported_memory);
+    rig.arena_imports();
     CHECK_STATUS(channel.open(rig.device()), Status::ok);
-    CHECK_EQ(channel.arena_bytes(), KmtBlobArena::default_bytes);
-    CHECK(channel.arena_view() == rig.kmt().window_base());
+    CHECK_EQ(channel.arena_bytes(), whole);
+    CHECK(channel.has_arena());
     rig.host().nop();
     channel.close(false);
     rig.check_nothing_held(channel); }
-  const std::uint64_t windows[] = {0u, KmtBlobArena::default_bytes - 4096u};
+  const std::uint64_t windows[] = {0u, whole - 4096u};
   for (const std::uint64_t window : windows) {
       Rig rig;
       rig.kmt().open_host_window(window);
       HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
+      if (window != 0u) rig.arena_imports();
       CHECK_STATUS(channel.open(rig.device()), Status::ok);
-      CHECK(channel.arena_view() == nullptr);
-      CHECK_EQ(rig.commands(), 0u);
+      CHECK(!channel.has_arena());
       CHECK_EQ(rig.log().holding("avtest: no blob arena for the context; bulk data crosses inline"), 1u);
       CHECK(rig.send(channel.wire()) == TransportResult::ok);
+      rig.host().nop();
       channel.close(false);
       rig.check_nothing_held(channel);
   } }
@@ -602,7 +619,7 @@ TEST(host_channel, what_the_channel_sends_goes_under_its_send_lock_behind_what_i
   const ChannelShape shape(SubApi::opengl, 16u, reply_bytes, staging_bytes, 2u * staging_bytes,
                            2u * KmtBlobArena::default_bytes);
   HostChannel channel(rig.platform(), rig.lines(), shape, rig.lock());
-  rig.host().blob_import(0u, imported_memory);
+  rig.arena_imports();
   CHECK_STATUS(channel.open(rig.device()), Status::ok);
   static_cast<void>(rig.locked());
   const std::uint32_t sent = rig.commands();

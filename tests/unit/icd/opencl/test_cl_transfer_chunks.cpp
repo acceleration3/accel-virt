@@ -419,7 +419,7 @@ public:
     Arena(ClTransferHost &host, std::size_t bytes)
         : memory_(static_cast<std::uint8_t *>(std::aligned_alloc(4096u, bytes))), blocks_(platform, lock)
     {
-        blocks_.lend(memory_, bytes);
+        blocks_.lend(0u, memory_, bytes);
         host.lend(memory_, bytes);
     }
     ~Arena() { std::free(memory_); }
