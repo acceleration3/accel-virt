@@ -1,5 +1,6 @@
 #include "device/abi/av_executor.h"
 #include "executor/exported_memory.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/source_memory.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -60,18 +61,23 @@ TEST(source_memory, shares_a_descriptor_of_its_own_memory_that_the_caller_owns)
   auto *const own = static_cast<std::uint8_t *>(::mmap(nullptr, 4096u, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
   CHECK(own != MAP_FAILED);
   const SourceMemory memory(1u, 1u, 0u, AV_MEMORY_WRITE_BACK, ExportedMemory(1u, fd, own, 4096u));
-  const int shared = memory.share();
+  av::OwnedFd owned;
+  CHECK(memory.share(owned));
+  const int shared = owned.fd();
   CHECK(shared >= 0);
   CHECK(shared != fd);
   CHECK((::fcntl(shared, F_GETFD) & FD_CLOEXEC) != 0);
   const std::uint8_t byte = 0xA5u;
   CHECK_EQ(::pwrite(shared, &byte, 1u, 100), 1);
   CHECK_EQ(memory.pointer()[100], 0xA5u);
-  ::close(shared);
+  owned.close();
+  CHECK_EQ(::fcntl(shared, F_GETFD), -1);
   CHECK(::fcntl(fd, F_GETFD) != -1);
   ::munmap(own, 4096u);
   ::close(fd); }
 
 TEST(source_memory, memory_with_no_descriptor_shares_none)
 { const SourceMemory memory(1u, 1u, 0u, AV_MEMORY_WRITE_BACK, ExportedMemory(1u, -1, mapping, sizeof mapping));
-  CHECK_EQ(memory.share(), -1); }
+  av::OwnedFd owned;
+  CHECK(!memory.share(owned));
+  CHECK(!owned.held()); }

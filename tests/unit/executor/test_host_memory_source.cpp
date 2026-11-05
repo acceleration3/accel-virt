@@ -17,6 +17,7 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <unistd.h>
 
 namespace av {
@@ -98,6 +99,23 @@ std::uint32_t open_descriptors()
     ::closedir(directory);
     return count;
 }
+
+class DescriptorRoom {
+public:
+    DescriptorRoom() : saved_{}
+    { ::getrlimit(RLIMIT_NOFILE, &saved_);
+      int lowest_free = 0;
+      while (::fcntl(lowest_free, F_GETFD) != -1) lowest_free++;
+      rlimit limit = saved_;
+      limit.rlim_cur = static_cast<rlim_t>(lowest_free) + 1u;
+      ::setrlimit(RLIMIT_NOFILE, &limit); }
+    ~DescriptorRoom() { ::setrlimit(RLIMIT_NOFILE, &saved_); }
+    DescriptorRoom(const DescriptorRoom &) = delete;
+    DescriptorRoom &operator=(const DescriptorRoom &) = delete;
+
+private:
+    rlimit saved_;
+};
 
 }
 
@@ -418,9 +436,11 @@ TEST(host_memory_source_allocate, the_descriptor_answered_is_the_caller_s_own_of
 TEST(host_memory_source_allocate, memory_that_cannot_be_shared_goes_back_at_once)
 { Rig rig;
   rig.discrete();
-  rig.exporter.fail_share_at(1u);
   AvHostMemory memory = {};
-  CHECK_STATUS(rig.allocate(1u, upload, memory), Status::no_memory);
+  {
+    const DescriptorRoom room;
+    CHECK_STATUS(rig.allocate(1u, upload, memory), Status::no_memory);
+  }
   CHECK_EQ(memory.fd, -1);
   CHECK_EQ(rig.exporter.live(), 0u);
   CHECK_EQ(rig.source.live(), 0u);
