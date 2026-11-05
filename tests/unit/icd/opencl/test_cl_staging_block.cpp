@@ -22,7 +22,7 @@ av::MockPlatform        platform;
 
 TEST(cl_staging_block, a_transfer_the_arena_has_room_for_is_staged_whole_in_pages)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(0u, arena, sizeof arena);
   { ClStagingBlock staging(blocks);
     CHECK(staging.take((3u << 20) + 1u, ClStagingBlock::least));
     CHECK_EQ(staging.bytes(), (3u << 20) + 4096u);
@@ -36,7 +36,7 @@ TEST(cl_staging_block, a_transfer_the_arena_has_room_for_is_staged_whole_in_page
 
 TEST(cl_staging_block, a_transfer_larger_than_most_takes_most)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(0u, arena, sizeof arena);
   ClStagingBlock staging(blocks);
   CHECK(staging.take(ClStagingBlock::most + 1u, ClStagingBlock::least));
   CHECK_EQ(staging.bytes(), ClStagingBlock::most);
@@ -47,7 +47,7 @@ TEST(cl_staging_block, a_transfer_larger_than_most_takes_most)
 
 TEST(cl_staging_block, a_crowded_arena_lends_half_and_half_again_down_to_least)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, 1u << 20);
+  blocks.lend(0u, arena, 1u << 20);
   { ClStagingBlock staging(blocks);
     CHECK(staging.take(3u << 20, ClStagingBlock::least));
     CHECK_EQ(staging.bytes(), 768u << 10); }
@@ -69,7 +69,7 @@ TEST(cl_staging_block, a_crowded_arena_lends_half_and_half_again_down_to_least)
 
 TEST(cl_staging_block, a_small_transfer_or_no_arena_is_not_staged)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(0u, arena, sizeof arena);
   { ClStagingBlock staging(blocks);
     CHECK(!staging.take(ClStagingBlock::least - 1u, ClStagingBlock::least));
     CHECK(!staging.take(0u, ClStagingBlock::least));
@@ -81,7 +81,7 @@ TEST(cl_staging_block, a_small_transfer_or_no_arena_is_not_staged)
 
 TEST(cl_staging_block, a_caller_s_own_floor_stages_a_small_transfer)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(0u, arena, sizeof arena);
   { ClStagingBlock staging(blocks);
     CHECK(!staging.take(0u, 1u));
     CHECK(staging.take(1000u, 1u));
@@ -90,7 +90,7 @@ TEST(cl_staging_block, a_caller_s_own_floor_stages_a_small_transfer)
   { ClStagingBlock staging(blocks);
     CHECK(!staging.take(1000u, 1001u)); }
   ClArenaBlocks crowded(platform, lock);
-  crowded.lend(arena, 8192u);
+  crowded.lend(0u, arena, 8192u);
   std::uint64_t held = 0u;
   CHECK(crowded.take(4096u, held));
   ClStagingBlock staging(crowded);

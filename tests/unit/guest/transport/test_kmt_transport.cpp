@@ -59,6 +59,13 @@ struct KmtTransportProbe {
 using av::KmtTransportProbe;
 
 namespace {
+
+bool room_for(av::KmtTransport &transport, std::uint64_t bytes)
+{
+    const std::uint64_t wanted[1] = {bytes};
+    return transport.make_room_for_blobs(wanted, 1u);
+}
+
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::uint32_t reply_bytes = 4096u;
 
@@ -347,13 +354,13 @@ TEST(kmt_transport, room_for_a_lease_waits_for_the_oldest_batches_alone)
   send_with_lease(1u);
   send_with_lease(2u);
   CHECK_EQ(transport.blobs().room(), 16u);
-  CHECK(transport.make_room_for_blobs(16u));
+  CHECK(room_for(transport, 16u));
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 0u);
-  CHECK(transport.make_room_for_blobs(24u));
+  CHECK(room_for(transport, 24u));
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 1u);
   CHECK(transport.blobs().room() >= 24u);
   CHECK(transport.blobs().take(transport.blobs().room()).taken());
-  CHECK(!transport.make_room_for_blobs(1u));
+  CHECK(!room_for(transport, 1u));
   CHECK(!transport.faulted());
   CHECK(transport.invariants_hold()); }
 
@@ -371,7 +378,7 @@ TEST(kmt_transport, room_waited_for_while_the_head_lags_the_fence_comes_back)
   writer.write_u32(1u);
   CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
   fixture.kmt().consume_late_at(1u);
-  CHECK(transport.make_room_for_blobs(8u));
+  CHECK(room_for(transport, 8u));
   CHECK(!transport.faulted());
   CHECK_EQ(transport.blobs().room(), 32u);
   CHECK(transport.invariants_hold()); }
@@ -390,9 +397,9 @@ TEST(kmt_transport, room_waited_for_from_a_host_that_stopped_faults_the_context)
   writer.write_u32(1u);
   CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
   fixture.kmt().fail_first(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
-  CHECK(!transport.make_room_for_blobs(8u));
+  CHECK(!room_for(transport, 8u));
   CHECK(transport.faulted());
-  CHECK(!transport.make_room_for_blobs(8u)); }
+  CHECK(!room_for(transport, 8u)); }
 
 TEST(kmt_transport, before_setup_and_the_refusing_arenas)
 { Fixture fixture;
@@ -1912,7 +1919,7 @@ TEST(kmt_transport_holding, a_long_commands_lease_stays_lent_across_the_batches_
       CHECK(!transport.blobs().take(60u).taken());
       CHECK_EQ(room[59], 0xA5u);
       CHECK(!transport.faulted());
-      CHECK(transport.make_room_for_blobs(100u));
+      CHECK(room_for(transport, 100u));
       CHECK_EQ(transport.blobs().used(), 0u);
       CHECK_EQ(fixture.kmt().command_id(fixture.kmt().commands() - 1u), 0x30001u);
       CHECK_EQ(memory.live_allocations(), 0u);
@@ -2109,16 +2116,16 @@ TEST(kmt_transport_holding, room_held_commands_hold_comes_back_once_they_are_sen
   WireWriter writer = transport.request_writer();
   writer.write_u64(transport.blobs().take(64u).offset());
   CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
-  CHECK(transport.make_room_for_blobs(0u));
+  CHECK(room_for(transport, 0u));
   CHECK_EQ(fixture.kmt().commands(), 0u);
-  CHECK(transport.make_room_for_blobs(64u));
+  CHECK(room_for(transport, 64u));
   CHECK_EQ(fixture.kmt().commands(), 1u);
   CHECK_EQ(transport.blobs().room(), 64u);
   WireWriter again = transport.request_writer();
   again.write_u64(transport.blobs().take(64u).offset());
   CHECK(transport.send_async(0x30001u, again) == TransportResult::ok);
   fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
-  CHECK(!transport.make_room_for_blobs(1u));
+  CHECK(!room_for(transport, 1u));
   CHECK(transport.faulted()); }
 
 TEST(kmt_transport_holding, the_publish_barrier_runs_what_is_held_before_it_returns)
