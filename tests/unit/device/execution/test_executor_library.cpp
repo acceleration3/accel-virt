@@ -253,14 +253,14 @@ TEST(executor_library_shared, shares_opens_and_closes_through_the_library)
   AvExecutor *const reader = opened.library.create(SubApi::vulkan, AvContextOptions{}, nullptr);
   CHECK_EQ(opened.library.share_object(maker, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_DONE});
   std::uint64_t made = 0u;
-  CHECK_EQ(opened.library.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_DONE});
+  CHECK_EQ(opened.library.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_DONE});
   CHECK(made != 0u);
   std::uint64_t held = 0u;
   CHECK(opened.ops.opened_as(reader, 0x2Au, held));
   CHECK_EQ(held, made);
-  CHECK_EQ(opened.library.open_object(reader, 0x2Bu, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_UNKNOWN});
+  CHECK_EQ(opened.library.open_object(reader, 0x2Bu, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_UNKNOWN});
   CHECK_EQ(made, 0u);
-  opened.library.close_object(reader, 0x2Au);
+  opened.library.close_object(reader, 0x2Au, held);
   CHECK(!opened.ops.opened_as(reader, 0x2Au, held));
   CHECK_EQ(opened.ops.closed_objects(), 1u);
   opened.library.destroy(reader);
@@ -274,7 +274,7 @@ TEST(executor_library_shared, an_open_that_names_nothing_is_refused_and_closed)
   CHECK_EQ(opened.library.share_object(maker, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_DONE});
   opened.ops.withhold_open_handle_at(1u);
   std::uint64_t made = 7u;
-  CHECK_EQ(opened.library.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_REFUSED});
+  CHECK_EQ(opened.library.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_REFUSED});
   CHECK_EQ(made, 0u);
   CHECK_EQ(opened.ops.closed_objects(), 1u);
   opened.library.destroy(reader);

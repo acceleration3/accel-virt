@@ -155,9 +155,9 @@ TEST(local_context_plane, runs_contexts_through_its_table)
   CHECK_STATUS(plane.initialize(), Status::ok);
   CHECK_STATUS(plane.accept(&fixture.ops().table()), Status::ok);
   CHECK_STATUS(plane.start(uuid, capset()), Status::ok);
-  CHECK_STATUS(fixture.plane().create(0u), Status::invalid_parameter);
-  CHECK_STATUS(fixture.plane().create(3u), Status::ok);
-  CHECK_STATUS(fixture.plane().create(3u), Status::conflict);
+  CHECK_STATUS(fixture.plane().create(0u, "test"), Status::invalid_parameter);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::conflict);
   CHECK(fixture.plane().holds(3u));
   CHECK(!fixture.plane().holds(4u));
   CHECK_EQ(fixture.plane().live(), 1u);
@@ -166,7 +166,7 @@ TEST(local_context_plane, runs_contexts_through_its_table)
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::ok);
   CHECK(LocalContextPlaneProbe::table(fixture.plane()).find(3u)->binding().bound());
   CHECK(fixture.plane().holds_doorbell(5u));
-  CHECK_STATUS(fixture.plane().create(6u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(6u, "test"), Status::ok);
   CHECK(!fixture.plane().can_share(6u, 3u));
   CHECK(fixture.plane().invariants_hold());
   CHECK_STATUS(fixture.plane().destroy(3u), Status::ok);
@@ -239,7 +239,7 @@ TEST(local_context_plane, the_renderers_hooks_change_nothing_in_process)
   CHECK_STATUS(fixture.plane().initialize(), Status::ok);
   CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
   CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
-  CHECK_STATUS(fixture.plane().create(3u), Status::ok);
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
   CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::ok);
   const std::uint32_t threads = fixture.host().live_threads();
   av::ContextPlane &plane = fixture.plane();

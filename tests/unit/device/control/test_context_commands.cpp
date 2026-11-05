@@ -90,12 +90,12 @@ GpuRequestBuilder submit(std::uint32_t id, const ContextSetup &setup, std::uint3
     std::uint8_t bytes[ContextSetup::encoded_size] = {};
     static_cast<void>(setup.encode(bytes, sizeof bytes));
     GpuRequestBuilder request(ContextCommands::submit_3d);
-    request.context(id).u32(size != 0u ? size : static_cast<std::uint32_t>(setup.size())).u32(0u);
-    request.append(bytes, setup.size());
+    request.context(id).u32(size != 0u ? size : static_cast<std::uint32_t>(ContextSetup::encoded_size)).u32(0u);
+    request.append(bytes, ContextSetup::encoded_size);
     return request;
 }
 
-ContextSetup setup(std::uint32_t ring_id = ring, std::uint8_t order = 12u, std::uint16_t major = 1u,
+ContextSetup setup(std::uint32_t ring_id = ring, std::uint8_t order = 12u, std::uint16_t major = ProtocolVersion::current_major,
                    std::uint32_t doorbell = 0u, std::uint32_t reply = 0u, std::uint16_t minor = 0u)
 {
     return ContextSetup(ProtocolVersion(major, minor), SubApi::vulkan, ring_id, order, fence, doorbell, reply);
@@ -177,23 +177,23 @@ TEST(context_commands_capset_info, names_one_capset_at_index_zero)
   CHECK_EQ(fixture.send(capset_info(0u)), ok_capset_info);
   CHECK_EQ(fixture.last_size(), 40u);
   CHECK_EQ(u32(fixture.last(), 24u), 0x72u);
-  CHECK_EQ(u32(fixture.last(), 28u), 1u);
+  CHECK_EQ(u32(fixture.last(), 28u), ProtocolVersion::current_major);
   CHECK_EQ(u32(fixture.last(), 32u), 128u);
   CHECK_EQ(fixture.send(capset_info(1u)), err_invalid_parameter);
   CHECK_EQ(fixture.send(capset_info(0u).truncate(31u)), err_invalid_parameter); }
 
 TEST(context_commands_capset, answers_the_described_capset_for_its_id_and_version_only)
 { Fixture fixture;
-  CHECK_EQ(fixture.send(capset(0x72u, 1u)), ok_capset);
+  CHECK_EQ(fixture.send(capset(0x72u, ProtocolVersion::current_major)), ok_capset);
   CHECK_EQ(fixture.last_size(), 152u);
   CapsetInfo decoded;
   CHECK_STATUS(decoded.decode(fixture.last() + 24u, CapsetInfo::encoded_size), Status::ok);
   CHECK(decoded.offers(SubApi::vulkan));
   CHECK(decoded.has_feature(CapsetInfo::feature_host_visible_memory));
   CHECK(std::memcmp(decoded.gpu().uuid(), uuid, sizeof uuid) == 0);
-  CHECK_EQ(fixture.send(capset(0x04u, 1u)), err_invalid_parameter);
-  CHECK_EQ(fixture.send(capset(0x72u, 2u)), err_invalid_parameter);
-  CHECK_EQ(fixture.send(capset(0x72u, 1u).truncate(31u)), err_invalid_parameter); }
+  CHECK_EQ(fixture.send(capset(0x04u, ProtocolVersion::current_major)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(capset(0x72u, ProtocolVersion::current_major + 1u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(capset(0x72u, ProtocolVersion::current_major).truncate(31u)), err_invalid_parameter); }
 
 TEST(context_commands_create, creates_a_context_on_the_av_capset)
 { Fixture fixture;
@@ -240,7 +240,7 @@ TEST(context_commands_submit, a_setup_binds_the_context_until_it_is_destroyed)
   CHECK(context != nullptr && context->binding().bound());
   CHECK_EQ(context->binding().ring_resource(), ring);
   CHECK_EQ(context->binding().fence_resource(), fence);
-  CHECK_EQ(context->binding().version().major_version(), 1u);
+  CHECK_EQ(context->binding().version().major_version(), ProtocolVersion::current_major);
   CHECK_STATUS(fixture.blobs().release(ring), Status::invalid_state);
   CHECK_EQ(fixture.send(submit(4u, setup())), err_invalid_parameter);
   CHECK_EQ(fixture.send(destroy(4u)), ok_nodata);
@@ -263,27 +263,26 @@ TEST(context_commands_submit, refuses_every_setup_it_cannot_bind)
       {submit(5u, setup()).truncate(31u), err_invalid_parameter},
       {submit(5u, setup(), 31u), err_invalid_parameter},
       {submit(5u, setup()).truncate(48u), err_invalid_parameter},
-      {submit(5u, setup(), 48u), err_invalid_parameter},
-      {submit(5u, setup(ring, 12u, 1u, 0u, 0u, 1u), 32u), err_invalid_parameter},
-      {submit(5u, setup(ring, 12u, 1u, 0u, 0u, 1u)).truncate(79u), err_invalid_parameter},
+      {submit(5u, setup(), 47u), err_invalid_parameter},
+      {submit(5u, setup(ring, 12u, ProtocolVersion::current_major, 0u, 0u, 1u), 32u), err_invalid_parameter},
+      {submit(5u, setup(ring, 12u, ProtocolVersion::current_major, 0u, 0u, 1u)).truncate(79u), err_invalid_parameter},
       {submit(5u, setup(), 49u), err_invalid_parameter},
       {malformed, err_invalid_parameter},
       {submit(5u, setup(99u)), err_invalid_resource_id},
       {submit(5u, setup(small_ring)), err_invalid_parameter},
-      {submit(5u, setup(ring, 12u, 2u)), err_invalid_parameter},
-      {submit(5u, setup(ring, 12u, 1u, 64u)), err_invalid_parameter},
+      {submit(5u, setup(ring, 12u, ProtocolVersion::current_major + 1u)), err_invalid_parameter},
+      {submit(5u, setup(ring, 12u, ProtocolVersion::current_major, 64u)), err_invalid_parameter},
       {submit(5u, setup(headless_ring)), err_invalid_parameter},
-      {submit(5u, setup(ring, 12u, 1u, 0u, 99u)), err_invalid_resource_id},
+      {submit(5u, setup(ring, 12u, ProtocolVersion::current_major, 0u, 99u)), err_invalid_resource_id},
   };
   for (Case &c : cases) CHECK_EQ(fixture.send(c.request), c.answer);
   CHECK(!fixture.contexts().find(5u)->binding().bound());
   CHECK_EQ(fixture.send(submit(5u, setup())), ok_nodata); }
 
-TEST(context_commands_submit, binds_a_setup_of_the_current_minor)
+TEST(context_commands_submit, binds_a_setup_of_a_later_minor)
 { Fixture fixture;
   CHECK_EQ(fixture.send(create(5u)), ok_nodata);
-  const ContextSetup current = setup(ring, 12u, 1u, 0u, 0u, 1u);
-  CHECK_EQ(current.size(), 48u);
+  const ContextSetup current = setup(ring, 12u, ProtocolVersion::current_major, 0u, 0u, 1u);
   CHECK_EQ(fixture.send(submit(5u, current)), ok_nodata);
   CHECK(fixture.contexts().find(5u)->binding().bound()); }
 
@@ -298,11 +297,11 @@ TEST(context_commands_submit, a_doorbell_another_context_holds_is_refused)
 { Fixture fixture;
   CHECK_EQ(fixture.send(create(1u)), ok_nodata);
   CHECK_EQ(fixture.send(create(2u)), ok_nodata);
-  CHECK_EQ(fixture.send(submit(1u, setup(ring, 12u, 1u, 7u))), ok_nodata);
-  CHECK_EQ(fixture.send(submit(2u, setup(second_ring, 12u, 1u, 7u))), err_invalid_parameter);
+  CHECK_EQ(fixture.send(submit(1u, setup(ring, 12u, ProtocolVersion::current_major, 7u))), ok_nodata);
+  CHECK_EQ(fixture.send(submit(2u, setup(second_ring, 12u, ProtocolVersion::current_major, 7u))), err_invalid_parameter);
   CHECK(!fixture.contexts().find(2u)->binding().bound());
   CHECK_EQ(fixture.send(destroy(1u)), ok_nodata);
-  CHECK_EQ(fixture.send(submit(2u, setup(second_ring, 12u, 1u, 7u))), ok_nodata); }
+  CHECK_EQ(fixture.send(submit(2u, setup(second_ring, 12u, ProtocolVersion::current_major, 7u))), ok_nodata); }
 
 TEST(context_commands, a_device_without_a_capset_refuses_capset_queries_and_contexts)
 { MockHost host;
@@ -312,7 +311,7 @@ TEST(context_commands, a_device_without_a_capset_refuses_capset_queries_and_cont
   av::FenceInterrupts interrupts(host);
   av::WireRecorder recorder(host);
   av::LocalContextPlane contexts(host, blobs, owners, interrupts, recorder);
-  const GpuRequestBuilder requests[] = {capset_info(0u), capset(0x72u, 1u), create(1u)};
+  const GpuRequestBuilder requests[] = {capset_info(0u), capset(0x72u, ProtocolVersion::current_major), create(1u)};
   DeviceCapset undescribed(host);
   undescribed.describe(0u, 0u, 0u);
   ContextCommands commands(host, contexts, undescribed);
@@ -356,7 +355,7 @@ namespace {
 
 ContextSetup gl_setup(std::uint32_t ring_id, std::uint32_t doorbell, const av::GlContextOptions &options)
 {
-    return ContextSetup(ProtocolVersion(1u, ContextSetup::options_minor), SubApi::opengl, ring_id, 12u, fence,
+    return ContextSetup(ProtocolVersion(ProtocolVersion::current_major, 0u), SubApi::opengl, ring_id, 12u, fence,
                         doorbell, 0u, options);
 }
 
@@ -369,7 +368,7 @@ TEST(context_commands_submit, a_gl_context_shares_only_another_bound_gl_context)
   CHECK_EQ(fixture.send(create(1u)), ok_nodata);
   CHECK_EQ(fixture.send(submit(1u, gl_setup(ring, 1u, core_33))), ok_nodata);
   CHECK_EQ(fixture.send(create(2u)), ok_nodata);
-  CHECK_EQ(fixture.send(submit(2u, setup(second_ring, 12u, 1u, 2u))), ok_nodata);
+  CHECK_EQ(fixture.send(submit(2u, setup(second_ring, 12u, ProtocolVersion::current_major, 2u))), ok_nodata);
   CHECK_EQ(fixture.send(create(3u)), ok_nodata);
   CHECK_EQ(fixture.send(create(4u)), ok_nodata);
   const std::uint32_t refused[] = {99u, 3u, 2u, 4u};

@@ -42,7 +42,7 @@ struct DeviceContextTableProbe {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
                 static_cast<void>(slot.construct(table.host_, table.blobs_, table.owners_, table.interrupts_, table.library_, table.shares_,
-                                                table.recorder_, table.ordering_, table.pulse_, id));
+                                                table.recorder_, table.ordering_, table.pulse_, id, "test"));
                 if (started) static_cast<void>(slot.object().start());
                 return;
             }
@@ -54,8 +54,8 @@ struct DeviceContextTableProbe {
 TEST(device_context_table_create, each_context_gets_its_own_running_worker)
 { MockHost host; BlobTable blobs(host); av::HostBlobTable owners(host); FenceInterrupts interrupts(host); ExecutorLibrary library; av::WireRecorder recorder(host);
   DeviceContextTable table(host, blobs, owners, interrupts, library, recorder);
-  CHECK_STATUS(table.create(1u), Status::ok);
-  CHECK_STATUS(table.create(7u), Status::ok);
+  CHECK_STATUS(table.create(1u, "test"), Status::ok);
+  CHECK_STATUS(table.create(7u, "test"), Status::ok);
   CHECK(table.invariants_hold());
   CHECK_EQ(table.live(), 2u);
   CHECK_EQ(host.live_threads(), 2u);
@@ -80,15 +80,15 @@ TEST(device_context_table_report, writes_each_context_and_its_worker)
   empty.open("device", 0u);
   table.report(empty);
   CHECK(std::strcmp(empty.dump(), "device/0\ndevice/0/contexts/0 live=0") == 0);
-  CHECK_STATUS(table.create(1u), Status::ok);
-  CHECK_STATUS(table.create(7u), Status::ok);
+  CHECK_STATUS(table.create(1u, "test"), Status::ok);
+  CHECK_STATUS(table.create(7u, "test"), Status::ok);
   av::StateWriter two(bytes, sizeof bytes);
   table.report(two);
   const char *const expected =
       "contexts/0 live=2\n"
-      "contexts/0/context/1 bound=false attached=false faulted=false head=0 last_fence=0 batches=0 executor=false\n"
+      "contexts/0/context/1 name=test bound=false attached=false faulted=false head=0 last_fence=0 batches=0 executor=false\n"
       "contexts/0/context/1/worker/0 running=true pending=0 stopping=false\n"
-      "contexts/0/context/7 bound=false attached=false faulted=false head=0 last_fence=0 batches=0 executor=false\n"
+      "contexts/0/context/7 name=test bound=false attached=false faulted=false head=0 last_fence=0 batches=0 executor=false\n"
       "contexts/0/context/7/worker/0 running=true pending=0 stopping=false";
   CHECK(std::strcmp(two.dump(), expected) == 0);
   CHECK(two.invariants_hold());
@@ -97,12 +97,12 @@ TEST(device_context_table_report, writes_each_context_and_its_worker)
 TEST(device_context_table_create, refuses_id_zero_a_live_id_and_a_full_table)
 { MockHost host; BlobTable blobs(host); av::HostBlobTable owners(host); FenceInterrupts interrupts(host); ExecutorLibrary library; av::WireRecorder recorder(host);
   DeviceContextTable table(host, blobs, owners, interrupts, library, recorder);
-  CHECK_STATUS(table.create(0u), Status::invalid_parameter);
-  CHECK_STATUS(table.create(3u), Status::ok);
-  CHECK_STATUS(table.create(3u), Status::conflict);
+  CHECK_STATUS(table.create(0u, "test"), Status::invalid_parameter);
+  CHECK_STATUS(table.create(3u, "test"), Status::ok);
+  CHECK_STATUS(table.create(3u, "test"), Status::conflict);
   for (std::uint32_t id = 100u; table.live() < DeviceContextTable::max_contexts; id++)
-      CHECK_STATUS(table.create(id), Status::ok);
-  CHECK_STATUS(table.create(9999u), Status::no_space);
+      CHECK_STATUS(table.create(id, "test"), Status::ok);
+  CHECK_STATUS(table.create(9999u, "test"), Status::no_space);
   CHECK(table.invariants_hold());
   table.destroy_all();
   CHECK_EQ(table.live(), 0u);
@@ -112,15 +112,15 @@ TEST(device_context_table_create, a_worker_that_cannot_start_leaves_no_context)
 { MockHost host; BlobTable blobs(host); av::HostBlobTable owners(host); FenceInterrupts interrupts(host); ExecutorLibrary library; av::WireRecorder recorder(host);
   DeviceContextTable table(host, blobs, owners, interrupts, library, recorder);
   host.fail_thread_start_at(1u);
-  CHECK_STATUS(table.create(5u), Status::no_memory);
+  CHECK_STATUS(table.create(5u, "test"), Status::no_memory);
   CHECK_EQ(table.live(), 0u);
   CHECK(table.invariants_hold());
-  CHECK_STATUS(table.create(5u), Status::ok); }
+  CHECK_STATUS(table.create(5u, "test"), Status::ok); }
 
 TEST(device_context_table_destroy, stops_the_worker_once)
 { MockHost host; BlobTable blobs(host); av::HostBlobTable owners(host); FenceInterrupts interrupts(host); ExecutorLibrary library; av::WireRecorder recorder(host);
   DeviceContextTable table(host, blobs, owners, interrupts, library, recorder);
-  CHECK_STATUS(table.create(4u), Status::ok);
+  CHECK_STATUS(table.create(4u, "test"), Status::ok);
   CHECK_STATUS(table.destroy(4u), Status::ok);
   CHECK(table.invariants_hold());
   CHECK_EQ(host.live_threads(), 0u);
@@ -136,8 +136,8 @@ TEST(device_context_table_holds_doorbell, only_a_bound_context_holds_its_doorbel
   CHECK_STATUS(maker.create(1u, 0x2000u), Status::ok);
   CHECK_STATUS(maker.create(2u, 0x1000u), Status::ok);
   av::RingBlobWriter(blobs).write_header(1u, 12u);
-  CHECK_STATUS(table.create(1u), Status::ok);
-  CHECK_STATUS(table.create(2u), Status::ok);
+  CHECK_STATUS(table.create(1u, "test"), Status::ok);
+  CHECK_STATUS(table.create(2u, "test"), Status::ok);
   CHECK(!table.holds_doorbell(5u));
   const std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {};
   const av::CapsetInfo capset(av::ProtocolVersion(1u, 0u), 1u, 64u, 12u, 24u, 0u,
@@ -156,7 +156,7 @@ TEST(device_context_table, is_main_loop_only)
   CHECK_STATUS(host.start_thread(
                    [](void *context) {
                        auto *const t = static_cast<DeviceContextTable *>(context);
-                       static_cast<void>(t->create(0u));
+                       static_cast<void>(t->create(0u, "test"));
                        static_cast<void>(t->destroy(1u));
                        static_cast<void>(t->find(1u));
                        static_cast<void>(t->holds_doorbell(1u));
@@ -174,8 +174,8 @@ TEST(device_context_table_invariants, a_duplicate_id_a_zero_id_or_a_stopped_work
   ExecutorLibrary library;
   av::WireRecorder recorder(host);
   DeviceContextTable duplicate(host, blobs, owners, interrupts, library, recorder);
-  CHECK_STATUS(duplicate.create(6u), Status::ok);
-  CHECK_STATUS(duplicate.create(8u), Status::ok);
+  CHECK_STATUS(duplicate.create(6u, "test"), Status::ok);
+  CHECK_STATUS(duplicate.create(8u, "test"), Status::ok);
   av::DeviceContextTableProbe::place(duplicate, 6u, true);
   CHECK(!duplicate.invariants_hold());
   DeviceContextTable zero(host, blobs, owners, interrupts, library, recorder);
@@ -192,7 +192,7 @@ TEST(device_context_table_settle_d3d, a_table_with_no_direct3d_stream_does_not_w
   clock_gettime(CLOCK_MONOTONIC, &before);
   table.settle_d3d();
   CHECK_STATUS(table.initialize(), Status::ok);
-  CHECK_STATUS(table.create(3u), Status::ok);
+  CHECK_STATUS(table.create(3u, "test"), Status::ok);
   table.settle_d3d();
   clock_gettime(CLOCK_MONOTONIC, &after);
   const long long waited = (after.tv_sec - before.tv_sec) * 1000000000ll + (after.tv_nsec - before.tv_nsec);

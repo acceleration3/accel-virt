@@ -340,9 +340,9 @@ TEST(context_executor_shared, refuses_without_an_executor)
   fixture.on_worker([](ContextExecutor &executor) {
       CHECK_STATUS(executor.share_object(0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), Status::invalid_state);
       std::uint64_t made = 9u;
-      CHECK_STATUS(executor.open_object(0x2Au, AV_SHARED_MEMORY, 4096u, made), Status::invalid_state);
+      CHECK_STATUS(executor.open_object(0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), Status::invalid_state);
       CHECK_EQ(made, 0u);
-      executor.close_object(0x2Au);
+      executor.close_object(0x2Au, made);
   });
   CHECK_EQ(fixture.ops().shared_objects(), 0u);
   CHECK_EQ(fixture.ops().closed_objects(), 0u); }
@@ -357,14 +357,15 @@ TEST(context_executor_shared, shares_opens_and_closes_through_the_library)
       CHECK_STATUS(reader.create(), Status::ok);
       CHECK_STATUS(maker.share_object(0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), Status::ok);
       std::uint64_t made = 0u;
-      CHECK_STATUS(reader.open_object(0x2Au, AV_SHARED_MEMORY, 4096u, made), Status::ok);
+      CHECK_STATUS(reader.open_object(0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), Status::ok);
       CHECK(made != 0u);
-      CHECK_STATUS(reader.open_object(0x2Au, AV_SHARED_MEMORY, 4096u, made), Status::conflict);
-      CHECK_STATUS(reader.open_object(0x2Bu, AV_SHARED_MEMORY, 4096u, made), Status::not_found);
-      CHECK_STATUS(reader.open_object(0x2Au, AV_SHARED_MEMORY, 8192u, made), Status::invalid_parameter);
+      const std::uint64_t held = made;
+      CHECK_STATUS(reader.open_object(0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), Status::conflict);
+      CHECK_STATUS(reader.open_object(0x2Bu, AV_SHARED_MEMORY, 4096u, 0u, made), Status::not_found);
+      CHECK_STATUS(reader.open_object(0x2Au, AV_SHARED_MEMORY, 8192u, 0u, made), Status::invalid_parameter);
       fixture.ops().refuse_share_at(1u);
       CHECK_STATUS(maker.share_object(0x2Cu, AV_SHARED_MEMORY, 4096u, 0x41u), Status::not_supported);
-      reader.close_object(0x2Au);
+      reader.close_object(0x2Au, held);
       CHECK_EQ(fixture.ops().closed_objects(), 1u);
       CHECK_EQ(fixture.ops().live_opens(), 0u);
       reader.destroy();

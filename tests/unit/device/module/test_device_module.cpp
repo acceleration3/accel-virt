@@ -54,7 +54,7 @@ TEST(device_module_create, realizes_a_device_on_the_named_gpu)
   CHECK_EQ(error[0], '\0');
   CHECK_EQ(module.live(), 1u);
   instance->device().status(av::DriverStatus::driver_ok);
-  CHECK_STATUS(instance->device().create_context(3u), Status::ok);
+  CHECK_STATUS(instance->device().create_context(3u, "test"), Status::ok);
   CHECK_STATUS(module.destroy(instance), Status::ok);
   CHECK_EQ(module.live(), 0u);
   CHECK_EQ(host.live_threads(), 0u);
@@ -76,10 +76,11 @@ TEST(device_module_report, writes_every_live_device_under_its_slot)
   CHECK_STATUS(module.destroy(first), Status::ok);
   av::StateWriter one(dump, sizeof dump);
   root.report(one);
-  CHECK(std::strcmp(one.dump(), "module/0 devices=1\n"
+  CHECK(std::strcmp(one.dump(), "module/0 devices=1 lendings=0 lent_pages=0\n"
                                 "module/0/device/1 realized=true gpu=0 capsets=0 blobs=0 scanouts=0 "
-                                "contexts=0 driver_ok=false\n"
+                                "host_window_bytes=0 contexts=0 driver_ok=false\n"
                                 "module/0/device/1/host_blobs/0 live=0\n"
+                                "module/0/device/1/window_stats/0 attached=false stable=false\n"
                                 "module/0/device/1/contexts/0 live=0") == 0);
   CHECK_STATUS(module.destroy(second), Status::ok); }
 
@@ -130,7 +131,7 @@ TEST(av_device_abi, create_reset_and_destroy_through_the_c_entry_points)
   auto *const instance = reinterpret_cast<DeviceInstance *>(device);
   av_device_status(device, 0x0Fu);
   CHECK(host.fence_interrupts_connected());
-  CHECK_STATUS(instance->device().create_context(1u), Status::ok);
+  CHECK_STATUS(instance->device().create_context(1u, "test"), Status::ok);
   av_device_reset(device);
   CHECK(!host.fence_interrupts_connected());
   CHECK_EQ(instance->device().contexts(), 0u);

@@ -1,5 +1,4 @@
 #include "core/support/status.hpp"
-#include "device/replay/context_api.hpp"
 #include "device/replay/recording_filter.hpp"
 #include "device/recording/record_header.hpp"
 #include "device/recording/record_kind.hpp"
@@ -26,7 +25,6 @@
 using av::AtCeiling;
 using av::BlobAction;
 using av::CommandHeader;
-using av::ContextApi;
 using av::ContextSetup;
 using av::FaultCode;
 using av::GpuIdentity;
@@ -66,7 +64,7 @@ public:
     std::uint32_t       length() const { return length_; }
 
 private:
-    std::uint8_t  bytes_[512];
+    std::uint8_t  bytes_[8192];
     std::uint32_t length_;
 };
 
@@ -74,7 +72,7 @@ class Printed {
 public:
     Printed(const std::uint8_t *bytes, std::size_t length, const RecordingFilter &filter,
             std::uint32_t payload_bytes)
-        : reader_(bytes, length), printer_(reader_, filter, payload_bytes), count_(0u), lines_{}
+        : memory_(), reader_(bytes, length), printer_(reader_, filter, payload_bytes, memory_), count_(0u), lines_{}
     {
         const char *line = nullptr;
         while (printer_.next(line) == Status::ok) {
@@ -102,6 +100,7 @@ public:
     }
 
 private:
+    MockHost         memory_;
     RecordingReader  reader_;
     RecordingPrinter printer_;
     std::size_t      count_;
@@ -186,14 +185,6 @@ private:
 }
 
 namespace av {
-
-struct ContextApiProbe {
-    static void half_learn(ContextApi &api, std::uint32_t context, std::uint16_t half)
-    {
-        api.context_ = context;
-        api.api_ = half;
-    }
-};
 
 struct RecordingFilterProbe {
     static void invert(RecordingFilter &filter) { filter.first_fence_ = 9u; filter.last_fence_ = 8u; }
@@ -367,32 +358,6 @@ TEST(recording_printer_next, a_batch_whose_commands_are_framed_wrong_says_where_
   CHECK(printed.holds("are framed wrong"));
   CHECK(std::strstr(printed.line(0u), " 1 commands") != nullptr); }
 
-TEST(context_api_invariants, catch_a_slot_that_remembers_what_it_never_learned)
-{ ContextApi api;
-  CHECK(api.invariants_hold());
-  av::ContextApiProbe::half_learn(api, 3u, ContextApi::unknown_api);
-  CHECK(!api.invariants_hold());
-  av::ContextApiProbe::half_learn(api, 0u, 1u);
-  CHECK(!api.invariants_hold());
-  av::ContextApiProbe::half_learn(api, 0u, ContextApi::unknown_api);
-  CHECK(api.invariants_hold()); }
-
-TEST(context_api, remembers_one_context_and_answers_for_no_other)
-{ ContextApi api;
-  CHECK(!api.known());
-  CHECK(!api.names(0u));
-  CHECK_EQ(api.api(), ContextApi::unknown_api);
-  CHECK(api.invariants_hold());
-  api.learn(7u, 1u);
-  CHECK(api.known());
-  CHECK(api.names(7u));
-  CHECK(!api.names(8u));
-  CHECK_EQ(api.api(), 1u);
-  CHECK(api.invariants_hold());
-  api.learn(7u, 3u);
-  CHECK_EQ(api.api(), 3u);
-  CHECK(api.invariants_hold()); }
-
 TEST(recording_printer_next, prints_the_time_a_record_was_taken_to_the_nanosecond)
 { MockHost     host;
   WireRecorder recorder(host);
@@ -504,19 +469,19 @@ TEST(recording_printer_next, an_empty_batch_is_a_batch_of_no_commands)
 
 TEST(recording_printer_next, learns_each_contexts_sub_api_and_forgets_none_of_the_contexts_it_holds)
 { Handmade made;
-  std::uint8_t setup[ContextSetup::base_size] = {};
+  std::uint8_t setup[ContextSetup::encoded_size] = {};
   CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, 40u, 16u, 41u, 1u, 42u)
                    .encode(setup, sizeof setup),
                Status::ok);
-  std::uint8_t opencl[ContextSetup::base_size] = {};
+  std::uint8_t opencl[ContextSetup::encoded_size] = {};
   CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::opencl, 40u, 16u, 41u, 1u, 42u)
                    .encode(opencl, sizeof opencl),
                Status::ok);
-  std::uint8_t opengl[ContextSetup::base_size] = {};
+  std::uint8_t opengl[ContextSetup::encoded_size] = {};
   CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::opengl, 40u, 16u, 41u, 1u, 42u)
                    .encode(opengl, sizeof opengl),
                Status::ok);
-  std::uint8_t d3d[ContextSetup::base_size] = {};
+  std::uint8_t d3d[ContextSetup::encoded_size] = {};
   CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::d3d, 40u, 16u, 41u, 1u, 42u).encode(d3d, sizeof d3d),
                Status::ok);
   const std::uint8_t nothing[1] = {};
@@ -547,39 +512,47 @@ TEST(recording_printer_next, learns_each_contexts_sub_api_and_forgets_none_of_th
       CHECK(!kept.holds("ctx=9 fence=9"));
   } }
 
-TEST(recording_printer_next, a_recording_of_more_contexts_than_it_remembers_keeps_reading)
+TEST(recording_printer_next, a_recording_of_many_contexts_remembers_each_ones_api)
 { Handmade made;
-  std::uint8_t setup[ContextSetup::base_size] = {};
+  std::uint8_t vulkan_setup[ContextSetup::encoded_size] = {};
+  std::uint8_t opengl_setup[ContextSetup::encoded_size] = {};
   CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, 40u, 16u, 41u, 1u, 42u)
-                   .encode(setup, sizeof setup),
+                   .encode(vulkan_setup, sizeof vulkan_setup),
                Status::ok);
-  for (std::uint32_t context = 1u; context <= RecordingPrinter::max_contexts + 2u; context++)
-      made.add(av::RecordKind::context_setup, context, 0u, setup, sizeof setup);
+  CHECK_STATUS(ContextSetup(ProtocolVersion(1u, 0u), SubApi::opengl, 40u, 16u, 41u, 1u, 42u)
+                   .encode(opengl_setup, sizeof opengl_setup),
+               Status::ok);
+  constexpr std::uint32_t contexts = 40u;
+  for (std::uint32_t context = 1u; context <= contexts; context++) {
+      const std::uint8_t *const setup = context % 2u == 0u ? vulkan_setup : opengl_setup;
+      made.add(av::RecordKind::context_setup, context, 0u, setup, ContextSetup::encoded_size);
+  }
   const RecordingFilter filter;
   const Printed         printed(made.bytes(), made.length(), filter, 0u);
-  CHECK_EQ(printed.count(), RecordingPrinter::max_contexts + 2u);
+  CHECK_EQ(printed.count(), contexts);
   CHECK(!printed.damaged());
   RecordingFilter vulkan;
   CHECK_STATUS(vulkan.keep_api("vulkan"), Status::ok);
   const Printed kept(made.bytes(), made.length(), vulkan, 0u);
-  CHECK_EQ(kept.count(), RecordingPrinter::max_contexts); }
+  CHECK_EQ(kept.count(), contexts / 2u); }
 
 TEST(recording_printer_invariants, catch_a_printer_that_lost_the_batch_it_is_showing)
 { const Written        written;
   const RecordingFilter filter;
   RecordingReader      reader(written.bytes(), written.length());
-  RecordingPrinter     printer(reader, filter, 0u);
+  MockHost             memory;
+  RecordingPrinter     printer(reader, filter, 0u, memory);
   CHECK(printer.invariants_hold());
   av::RecordingPrinterProbe::show_too_much(printer);
   CHECK(!printer.invariants_hold());
 
   RecordingReader  second(written.bytes(), written.length());
-  RecordingPrinter lost(second, filter, 0u);
+  RecordingPrinter lost(second, filter, 0u, memory);
   av::RecordingPrinterProbe::lose_the_payload(lost);
   CHECK(!lost.invariants_hold());
 
   RecordingReader  third(written.bytes(), written.length());
-  RecordingPrinter walked(third, filter, 0u);
+  RecordingPrinter walked(third, filter, 0u, memory);
   av::RecordingPrinterProbe::walk_past_the_batch(walked);
   CHECK(!walked.invariants_hold()); }
 
@@ -587,7 +560,8 @@ TEST(recording_printer_invariants, catch_a_filter_that_stopped_making_sense)
 { const Written    written;
   RecordingFilter  filter;
   RecordingReader  reader(written.bytes(), written.length());
-  RecordingPrinter printer(reader, filter, 0u);
+  MockHost         memory;
+  RecordingPrinter printer(reader, filter, 0u, memory);
   CHECK(printer.invariants_hold());
   av::RecordingFilterProbe::invert(filter);
   CHECK(!printer.invariants_hold()); }

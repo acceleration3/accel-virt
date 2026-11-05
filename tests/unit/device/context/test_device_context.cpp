@@ -102,7 +102,7 @@ public:
         : blobs_(host_), maker_(host_, blobs_), interrupts_(host_), ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(),
           shares_(host_, library_), recorder_(host_), ordering_(host_), pulse_(host_), plane_(),
           host_blobs_(host_),
-          context_(host_, blobs_, host_blobs_, interrupts_, library_, shares_, recorder_, ordering_, pulse_, 5u)
+          context_(host_, blobs_, host_blobs_, interrupts_, library_, shares_, recorder_, ordering_, pulse_, 5u, "test")
     {
         static_cast<void>(pulse_.initialize());
         plane_.allocate_through(library_);

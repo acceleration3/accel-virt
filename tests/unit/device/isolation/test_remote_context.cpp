@@ -49,7 +49,7 @@ av::ContextSetup setup(std::uint32_t ring_id = ring)
 
 class Fixture {
 public:
-    Fixture() : blobs_(host_), interrupts_(host_), peer_(host_), link_(host_), context_(host_, blobs_, interrupts_, context_id)
+    Fixture() : blobs_(host_), interrupts_(host_), peer_(host_), link_(host_), context_(host_, blobs_, interrupts_, context_id, "test")
     {
         host_.add_guest_ram(ram, 0x3000u);
         static_cast<void>(blobs_.initialize());
@@ -144,8 +144,8 @@ TEST(remote_context_bind, pins_registers_the_doorbell_and_sends_its_descriptor_w
   CHECK_EQ(message.doorbell(), doorbell);
   std::uint8_t expected[av::ContextSetup::encoded_size] = {};
   CHECK_STATUS(setup().encode(expected, sizeof expected), Status::ok);
-  CHECK_EQ(message.setup_length(), static_cast<std::uint32_t>(setup().size()));
-  CHECK(std::memcmp(message.setup(), expected, setup().size()) == 0);
+  CHECK_EQ(message.setup_length(), static_cast<std::uint32_t>(av::ContextSetup::encoded_size));
+  CHECK(std::memcmp(message.setup(), expected, av::ContextSetup::encoded_size) == 0);
   CHECK(fixture.context().invariants_hold());
   CHECK_STATUS(fixture.bind(outcome), Status::ok);
   CHECK_STATUS(outcome, Status::invalid_state);
@@ -216,7 +216,7 @@ TEST(remote_context_bind, qemus_own_refusals_send_nothing)
     CHECK_EQ(fixture.host().live_doorbells(), 0u);
     CHECK_EQ(fixture.peer().delivered(), 0u); }
   { Fixture fixture;
-    RemoteContext nameless(fixture.host(), fixture.blobs(), fixture.interrupts(), 0u);
+    RemoteContext nameless(fixture.host(), fixture.blobs(), fixture.interrupts(), 0u, nullptr);
     Status outcome = Status::ok;
     CHECK_STATUS(nameless.bind(setup(), capset(), fixture.link(), outcome), Status::ok);
     CHECK_STATUS(outcome, Status::invalid_parameter);
@@ -300,7 +300,7 @@ TEST(remote_context_unbind, releases_pins_and_doorbell_and_sends_nothing)
   CHECK_EQ(fixture.host().live_events(), fixture.events());
   CHECK_EQ(fixture.peer().delivered(), 1u);
   CHECK(fixture.context().invariants_hold());
-  { RemoteContext other(fixture.host(), fixture.blobs(), fixture.interrupts(), 3u);
+  { RemoteContext other(fixture.host(), fixture.blobs(), fixture.interrupts(), 3u, "other");
     CHECK_STATUS(other.bind(setup(), capset(), fixture.link(), outcome), Status::ok);
     CHECK_STATUS(outcome, Status::ok);
     CHECK(fixture.pinned(ring));

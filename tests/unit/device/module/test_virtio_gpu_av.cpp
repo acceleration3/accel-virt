@@ -50,7 +50,7 @@ struct DeviceContextTableProbe {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
                 static_cast<void>(slot.construct(table.host_, table.blobs_, table.owners_, table.interrupts_,
-                                                 table.library_, table.shares_, table.recorder_, table.ordering_, table.pulse_, id));
+                                                 table.library_, table.shares_, table.recorder_, table.ordering_, table.pulse_, id, "test"));
                 static_cast<void>(slot.object().start());
                 return;
             }
@@ -60,8 +60,8 @@ struct DeviceContextTableProbe {
 struct BlobTableProbe {
     static void place(BlobTable &table, std::uint32_t id)
     {
-        for (ObjectStorage<BlobResource> &slot : table.slots_)
-            if (slot.construct(table.host_, id) == Status::ok) return;
+        BlobResource *blob = nullptr;
+        static_cast<void>(table.blobs_.create(blob, table.host_, id));
     }
 };
 
@@ -80,18 +80,14 @@ struct VirtioGpuAvProbe {
     {
         RingBlobWriter(device.blobs_).write_header(id, 12u);
     }
-    static void duplicate_blob(VirtioGpuAv &device, std::uint32_t id)
-    {
-        BlobTableProbe::place(device.blobs_, id);
-        BlobTableProbe::place(device.blobs_, id);
-    }
+    static void orphan_blob(VirtioGpuAv &device, std::uint32_t id) { BlobTableProbe::place(device.blobs_, id); }
     static void orphan_context(VirtioGpuAv &device, std::uint32_t id)
     {
-        static_cast<void>(device.contexts_->create(id));
+        static_cast<void>(device.contexts_->create(id, "test"));
     }
     static void duplicate_context(VirtioGpuAv &device, std::uint32_t id)
     {
-        static_cast<void>(device.contexts_->create(id));
+        static_cast<void>(device.contexts_->create(id, "test"));
         DeviceContextTableProbe::place(LocalContextPlaneProbe::table(device.local_), id);
     }
 };
@@ -113,16 +109,16 @@ TEST(virtio_gpu_av_realize, binds_once_and_contexts_follow)
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   CHECK(!device.realized());
-  CHECK_STATUS(device.create_context(1u), Status::invalid_state);
+  CHECK_STATUS(device.create_context(1u, "test"), Status::invalid_state);
   CHECK_STATUS(device.realize("02000000-0000-0000-0000-000000000000", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
   CHECK_EQ(device.gpu_index(), 1u);
   CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::invalid_state);
-  CHECK_STATUS(device.create_context(1u), Status::invalid_state);
+  CHECK_STATUS(device.create_context(1u, "test"), Status::invalid_state);
   device.status(DriverStatus::driver_ok);
-  CHECK_STATUS(device.create_context(1u), Status::ok);
-  CHECK_STATUS(device.create_context(2u), Status::ok);
+  CHECK_STATUS(device.create_context(1u, "test"), Status::ok);
+  CHECK_STATUS(device.create_context(2u, "test"), Status::ok);
   CHECK(device.invariants_hold());
   CHECK_EQ(device.contexts(), 2u);
   CHECK_STATUS(device.destroy_context(1u), Status::ok);
@@ -212,7 +208,7 @@ TEST(virtio_gpu_av_control, a_host_blob_is_the_librarys_memory_where_the_guest_m
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, message), Status::ok);
   device.status(DriverStatus::driver_ok);
-  CHECK_STATUS(device.create_context(5u), Status::ok);
+  CHECK_STATUS(device.create_context(5u, "test"), Status::ok);
   constexpr std::uint32_t host_blob = 0x01000000u;
   const std::uint64_t     upload = 1u;
   GpuRequestBuilder create(0x010Cu);
@@ -249,6 +245,7 @@ TEST(virtio_gpu_av_report, an_unrealized_device_says_so_and_has_no_contexts)
   writer.open("device", 0u);
   device.report(writer);
   CHECK(std::strcmp(writer.dump(), "device/0 realized=false\ndevice/0/host_blobs/0 live=0\n"
+                                  "device/0/window_stats/0 attached=false stable=false\n"
                                   "device/0/contexts/0 live=0") == 0); }
 
 TEST(virtio_gpu_av_control, an_unrealized_device_answers_nothing_and_offers_no_capset)
@@ -356,11 +353,11 @@ TEST(virtio_gpu_av_control, answers_context_requests_and_reset_destroys_contexts
   CHECK(device.control(&create_request, 0x0200u));
   CHECK_EQ(create_request.response_type(), 0x1100u);
   std::uint8_t setup_bytes[av::ContextSetup::encoded_size] = {};
-  CHECK_STATUS(av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 1u, 12u, 2u, 0u, 0u)
+  CHECK_STATUS(av::ContextSetup(av::ProtocolVersion(av::ProtocolVersion::current_major, 0u), av::SubApi::vulkan, 1u, 12u, 2u, 0u, 0u)
                    .encode(setup_bytes, sizeof setup_bytes),
                Status::ok);
   GpuRequestBuilder submit(0x0207u);
-  submit.context(7u).u32(32u).u32(0u).append(setup_bytes, sizeof setup_bytes);
+  submit.context(7u).u32(static_cast<std::uint32_t>(av::ContextSetup::encoded_size)).u32(0u).append(setup_bytes, sizeof setup_bytes);
   MockRequest submit_request(submit.bytes(), submit.size());
   CHECK(device.control(&submit_request, 0x0207u));
   CHECK_EQ(submit_request.response_type(), 0x1100u);
@@ -369,15 +366,17 @@ TEST(virtio_gpu_av_control, answers_context_requests_and_reset_destroys_contexts
   av::StateWriter writer(dump, sizeof dump);
   writer.open("device", 3u);
   device.report(writer);
-  CHECK(std::strncmp(writer.dump(), "device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 contexts=1 driver_ok=true\n"
+  CHECK(std::strncmp(writer.dump(), "device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 host_window_bytes=65536 contexts=1 driver_ok=true\n"
                                     "device/3/host_blobs/0 live=0\n"
+                                    "device/3/window_stats/0 attached=false stable=false\n"
                                     "device/3/contexts/0 live=1\n"
-                                    "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
+                                    "device/3/contexts/0/context/7 name= bound=true sub_api=1 version=2.0 ring=1 "
                                     "ring_order=12 fence=2 doorbell=0 reply=0 attached=",
-                     std::strlen("device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 contexts=1 driver_ok=true\n"
+                     std::strlen("device/3 realized=true gpu=0 capsets=1 blobs=2 scanouts=0 host_window_bytes=65536 contexts=1 driver_ok=true\n"
                                  "device/3/host_blobs/0 live=0\n"
+                                 "device/3/window_stats/0 attached=false stable=false\n"
                                  "device/3/contexts/0 live=1\n"
-                                 "device/3/contexts/0/context/7 bound=true sub_api=1 version=1.0 ring=1 "
+                                 "device/3/contexts/0/context/7 name= bound=true sub_api=1 version=2.0 ring=1 "
                                  "ring_order=12 fence=2 doorbell=0 reply=0 attached=")) == 0);
   CHECK(std::strstr(writer.dump(), "\ndevice/3/contexts/0/context/7/worker/0 running=true ") != nullptr);
   device.reset();
@@ -413,7 +412,7 @@ TEST(virtio_gpu_av_status, the_fence_interrupts_follow_the_drivers_status_byte)
   device.status(DriverStatus::driver_ok);
   CHECK(!host.fence_interrupts_connected());
   CHECK_EQ(host.logged(), before + 1u);
-  CHECK_STATUS(device.create_context(1u), Status::invalid_state);
+  CHECK_STATUS(device.create_context(1u, "test"), Status::invalid_state);
   device.status(DriverStatus::driver_ok);
   CHECK(host.fence_interrupts_connected());
   CHECK(device.invariants_hold());
@@ -502,7 +501,7 @@ TEST(virtio_gpu_av, lifecycle_is_main_loop_only)
                        TextBuffer message(bytes, sizeof bytes);
                        static_cast<void>(d->realize("x", false, nullptr, nullptr, nullptr, nullptr, message));
                        d->reset();
-                       static_cast<void>(d->create_context(1u));
+                       static_cast<void>(d->create_context(1u, "test"));
                        static_cast<void>(d->destroy_context(1u));
                        static_cast<void>(d->control(nullptr, 0x0100u));
                    },
@@ -535,7 +534,7 @@ TEST(virtio_gpu_av_invariants, a_broken_blob_table_is_detected)
 { MockHost host;
   host.add_gpu(first);
   VirtioGpuAv broken_blobs(host);
-  av::VirtioGpuAvProbe::duplicate_blob(broken_blobs, 9u);
+  av::VirtioGpuAvProbe::orphan_blob(broken_blobs, 9u);
   CHECK(!broken_blobs.invariants_hold());
   broken_blobs.reset(); }
 
@@ -566,7 +565,7 @@ TEST(virtio_gpu_av_invariants, fence_interrupts_connected_without_driver_ok_are_
 namespace {
 std::uint32_t features_of(VirtioGpuAv &device)
 { GpuRequestBuilder request(0x0109u);
-  request.u32(0x72u).u32(1u);
+  request.u32(0x72u).u32(av::ProtocolVersion::current_major);
   MockRequest answer(request.bytes(), request.size());
   if (!device.control(&answer, 0x0109u)) return 0xFFFFFFFFu;
   return answer.response_u32(24u + 24u); }
@@ -637,7 +636,7 @@ TEST(virtio_gpu_av_realize, opens_the_recording_its_properties_asked_for)
   CHECK_EQ(header_only.header().uuid()[0], first[0]);
   CHECK_EQ(header_only.header().kinds(), av::RecordKinds::every_kind);
   CHECK(header_only.header().limit() == (1u << 20));
-  CHECK_EQ(header_only.header().wire_version().major_version(), 1u);
+  CHECK_EQ(header_only.header().wire_version().major_version(), av::ProtocolVersion::current_major);
   CHECK_EQ(header_only.remaining(), 0u);
   device.reset();
   CHECK(device.invariants_hold()); }
@@ -651,11 +650,11 @@ void bind_and_destroy(VirtioGpuAv &device, std::uint32_t context)
     CHECK(device.control(&create_request, 0x0200u));
     CHECK_EQ(create_request.response_type(), 0x1100u);
     std::uint8_t setup_bytes[av::ContextSetup::encoded_size] = {};
-    CHECK_STATUS(av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 1u, 12u, 2u, 0u, 0u)
+    CHECK_STATUS(av::ContextSetup(av::ProtocolVersion(av::ProtocolVersion::current_major, 0u), av::SubApi::vulkan, 1u, 12u, 2u, 0u, 0u)
                      .encode(setup_bytes, sizeof setup_bytes),
                  Status::ok);
     GpuRequestBuilder submit(0x0207u);
-    submit.context(context).u32(av::ContextSetup::base_size).u32(0u).append(setup_bytes, sizeof setup_bytes);
+    submit.context(context).u32(av::ContextSetup::encoded_size).u32(0u).append(setup_bytes, sizeof setup_bytes);
     MockRequest submit_request(submit.bytes(), submit.size());
     CHECK(device.control(&submit_request, 0x0207u));
     CHECK_EQ(submit_request.response_type(), 0x1100u);
@@ -680,7 +679,7 @@ TEST(virtio_gpu_av_realize, record_wrap_decides_what_the_ceiling_does)
       char                bytes[160];
       TextBuffer          message(bytes, sizeof bytes);
       const std::uint64_t ceiling =
-          av::RecordingHeader::encoded_size + av::RecordHeader::encoded_size + av::ContextSetup::base_size;
+          av::RecordingHeader::encoded_size + av::RecordHeader::encoded_size + av::ContextSetup::encoded_size;
       const AvRecordingOptions options = {"run.av", ceiling, "setup", c.wrap};
       CHECK_STATUS(device.realize("auto", false, &executor.table(), &options, nullptr, nullptr, message), Status::ok);
       device.status(DriverStatus::driver_ok);
@@ -821,12 +820,12 @@ TEST(virtio_gpu_av_renderer_lost, with_the_contexts_in_process_nothing_happens)
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, &executor.table(), nullptr, nullptr, nullptr, message), Status::ok);
   device.status(DriverStatus::driver_ok);
-  CHECK_STATUS(device.create_context(1u), Status::ok);
+  CHECK_STATUS(device.create_context(1u, "test"), Status::ok);
   device.renderer_lost();
   CHECK_EQ(device.contexts(), 1u);
   CHECK_EQ(host.raised(0u), 0u);
   CHECK_EQ(host.renderer_starts(), 0u);
-  CHECK_STATUS(device.create_context(2u), Status::ok);
+  CHECK_STATUS(device.create_context(2u, "test"), Status::ok);
   CHECK(device.invariants_hold());
   device.reset(); }
 
@@ -876,7 +875,7 @@ TEST(virtio_gpu_av_realize, with_a_renderer_the_capset_is_what_the_renderer_offe
   CHECK_EQ(features_of(importing.device()) & av::CapsetInfo::feature_present_from_image, 0u);
   CHECK((features_of(importing.device()) & av::CapsetInfo::feature_present_engine) != 0u);
   CHECK_EQ(importing.peer().resources().interrupt_lines(), 64u);
-  CHECK_STATUS(importing.device().create_context(1u), Status::ok);
+  CHECK_STATUS(importing.device().create_context(1u, "test"), Status::ok);
   CHECK_EQ(importing.device().contexts(), 1u);
   CHECK(importing.device().invariants_hold()); }
 
@@ -884,7 +883,7 @@ TEST(virtio_gpu_av_renderer_lost, with_a_renderer_it_is_started_again)
 { RendererDevice rig;
   CHECK_STATUS(rig.realize("/usr/libexec/av-renderer", "/opt/av/libav_executor.so"), Status::ok);
   rig.device().status(DriverStatus::driver_ok);
-  CHECK_STATUS(rig.device().create_context(1u), Status::ok);
+  CHECK_STATUS(rig.device().create_context(1u, "test"), Status::ok);
   rig.host().renderer_gone();
   rig.device().renderer_lost();
   CHECK_EQ(rig.host().renderer_starts(), 2u);
