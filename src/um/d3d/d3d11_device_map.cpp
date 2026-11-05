@@ -3,6 +3,7 @@
 #include "core/log/keyed_log.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "um/d3d/d3d11_device.hpp"
+#include "um/d3d/device_call.hpp"
 #include "um/d3d/d3d_session.hpp"
 
 namespace av::d3d11 {
@@ -250,7 +251,9 @@ bool D3d11Device::leave_immediate_slice(const ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::leave_immediate_slice");
     ResourceRecord *const immediate = resource.immediate;
-    if (immediate == nullptr || immediate->on_slice == 0u) return true;
+    if (immediate == nullptr) return true;
+    const d3d::DeviceCall<D3d11Device> parent_call(*parent_);
+    if (immediate->on_slice == 0u) return true;
     return parent_->leave_slice_for_copies(*immediate);
 }
 
