@@ -186,7 +186,7 @@ bool KmtTransport::knows_gpu_progress() const
 uint64_t KmtTransport::published_fence() const
 {
     AV_SCOPE("KmtTransport::published_fence");
-    return newest_fence_;
+    return __atomic_load_n(&newest_fence_, __ATOMIC_ACQUIRE);
 }
 
 Status KmtTransport::await_gpu(uint64_t fence)
@@ -723,7 +723,7 @@ TransportResult KmtTransport::submit_written(uint64_t begin, uint64_t end, uint6
     previous_end_ = newest_end_;
     newest_end_ = end;
     fence = fences_.open();
-    newest_fence_ = fence;
+    __atomic_store_n(&newest_fence_, fence, __ATOMIC_RELEASE);
     fence_ends_[fence % TransportFence::max_outstanding] = end;
     blobs_.mark(fence);
     uint8_t      descriptor[SubmissionDescriptor::encoded_size] = {};
