@@ -369,6 +369,26 @@ TEST(cl_icd_root, a_queue_a_buffer_a_program_and_a_kernel_are_objects_of_their_c
   CHECK_EQ(rig.root().release(kernel, ClObject::Kind::kernel), CL_INVALID_KERNEL);
   CHECK(rig.root().invariants_hold()); }
 
+TEST(cl_icd_root, a_flush_publishes_the_batch_it_queued)
+{ ClIcdRig rig;
+  cl_device_id device = opened_device(rig);
+  rig.host().arena_import(0x77u, 3u);
+  rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+  rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+  rig.host().cl_handle(host_context, CL_SUCCESS);
+  cl_context context = rig.loader().create_context(device, nullptr);
+  rig.host().cl_handle(host_queue, CL_SUCCESS);
+  cl_command_queue queue = rig.loader().create_queue(context, device, nullptr);
+  CHECK(queue != nullptr);
+  const std::uint32_t before = rig.kmt().commands();
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.root().flush(queue), CL_SUCCESS);
+  bool published = false;
+  for (std::uint32_t index = before; index < rig.kmt().commands(); index++)
+      published = published || rig.kmt().command_id(index) == av::clproto::kCmd_clFlush;
+  CHECK(published);
+  CHECK(rig.root().invariants_hold()); }
+
 TEST(cl_icd_root, a_buffer_of_no_bytes_is_refused_before_the_host_is_asked)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);

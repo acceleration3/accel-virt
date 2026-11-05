@@ -62,8 +62,12 @@ GuestClContext made_context(ClContextRig &rig)
 
 void arena_answers(ClContextRig &rig, std::uint32_t status = 0u)
 {
+    if (status == 0u) {
+        rig.host().arena_import(0x77u, 3u);
+        return;
+    }
     rig.host().blob_import(status, 0x77u);
-    if (status != 0u) rig.host().blob_import(status, 0x77u);
+    rig.host().blob_import(status, 0x77u);
 }
 
 }
@@ -497,33 +501,47 @@ TEST(guest_cl_context, a_context_says_whether_it_got_an_arena)
     CHECK_STATUS(context.make(), Status::ok);
     CHECK(!context.has_arena()); } }
 
-TEST(guest_cl_context, the_arena_lends_its_bottom_to_buffers_and_its_top_to_transfers)
+TEST(guest_cl_context, flush_publishes_the_batch_the_channel_holds_and_only_for_a_made_context)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK(context.flush() == av::TransportResult::failed);
+  CHECK_STATUS(context.make(), Status::ok);
+  const std::uint32_t before = rig.kmt().commands();
+  av::WireWriter writer = context.wire()->request_writer();
+  writer.write_u32(7u);
+  CHECK(context.wire()->send_async(0x10001u, writer) == av::TransportResult::ok);
+  CHECK_EQ(rig.kmt().commands(), before);
+  CHECK(context.flush() == av::TransportResult::ok);
+  CHECK(rig.kmt().commands() > before);
+  CHECK_EQ(rig.kmt().command_id(before), 0x10001u);
+  CHECK(context.invariants_hold()); }
+
+TEST(guest_cl_context, one_region_lends_its_bottom_to_transfers_and_its_top_to_buffers)
 { ClContextRig rig;
   arena_answers(rig);
   GuestClContext context = made_context(rig);
   CHECK_STATUS(context.make(), Status::ok);
   const std::uint64_t page = av::clicd::ClArenaBlocks::alignment;
   const std::uint64_t reserve = GuestClContext::staging_reserve;
+  const std::uint64_t buffers = GuestClContext::blocks_reserve;
   std::uint64_t       staged = ~std::uint64_t{0};
   CHECK(!context.staging().take(reserve + page, staged));
   CHECK(context.staging().take(reserve, staged));
-  CHECK_EQ(staged, 0u);
+  CHECK_EQ(staged % page, 0u);
   std::uint64_t named = ~std::uint64_t{0};
   CHECK(context.wire()->blobs().holds(context.staging().at(staged, reserve), reserve, named));
-  const std::uint64_t buffers = named;
-  CHECK(buffers > 0u);
-  CHECK(buffers % page == 0u);
-  CHECK(buffers + reserve <= GuestClContext::arena_bytes);
+  CHECK_EQ(named, staged);
   std::uint64_t more = 0u;
   CHECK(!context.staging().take(page, more));
 
   std::uint64_t offset = 0u;
   CHECK(!context.blocks().take(buffers + page, offset));
   CHECK(context.blocks().take(buffers, offset));
-  CHECK_EQ(offset, 0u);
+  CHECK_EQ(offset, staged + reserve);
   named = ~std::uint64_t{0};
-  CHECK(context.wire()->blobs().holds(context.blocks().at(0u, buffers), buffers, named));
-  CHECK_EQ(named, 0u);
+  CHECK(context.wire()->blobs().holds(context.blocks().at(offset, buffers), buffers, named));
+  CHECK_EQ(named, offset);
   CHECK(context.invariants_hold()); }
 
 TEST(guest_cl_context, the_invariant_reaches_the_allocations_and_the_mappings_it_holds)
