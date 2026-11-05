@@ -11,7 +11,7 @@
 namespace av {
 
 D3d12QueueProgress::D3d12QueueProgress(EventfdWake &wake, BlockSource &blocks)
-    : wake_(wake), queues_(blocks, Pool::paged), marked_(0u)
+    : wake_(wake), queues_(blocks, Pool::paged), draining_(blocks, Pool::paged), marked_(0u)
 {
     AV_SCOPE("D3d12QueueProgress::D3d12QueueProgress");
 }
@@ -24,10 +24,26 @@ uint32_t D3d12QueueProgress::index_of(uint32_t id) const
     return queues_.size();
 }
 
+void D3d12QueueProgress::release_completed()
+{
+    AV_SCOPE("D3d12QueueProgress::release_completed");
+    uint32_t index = 0u;
+    while (index < draining_.size()) {
+        Queue &gone = draining_.at(index);
+        if (gone.fence_->GetCompletedValue() < gone.signalled_) {
+            index++;
+            continue;
+        }
+        gone.fence_->Release();
+        draining_.remove_swap(index);
+    }
+}
+
 bool D3d12QueueProgress::executed(uint32_t id, ID3D12CommandQueue *queue, ID3D12Device *device)
 {
     AV_SCOPE("D3d12QueueProgress::executed");
     if (queue == nullptr || device == nullptr) return false;
+    release_completed();
     uint32_t index = index_of(id);
     if (index == queues_.size()) {
         ID3D12Fence *made = nullptr;
@@ -76,8 +92,15 @@ void D3d12QueueProgress::forget(uint32_t id)
     AV_SCOPE("D3d12QueueProgress::forget");
     const uint32_t index = index_of(id);
     if (index == queues_.size()) return;
-    queues_.at(index).fence_->Release();
+    Queue &gone = queues_.at(index);
+    if (gone.fence_->GetCompletedValue() < gone.signalled_ && draining_.append(gone) == Status::ok) {
+        draining_.at(draining_.size() - 1u).queue_ = nullptr;
+        queues_.remove_swap(index);
+        return;
+    }
+    gone.fence_->Release();
     queues_.remove_swap(index);
+    release_completed();
 }
 
 void D3d12QueueProgress::log_stuck(DriverLog &lines) const
@@ -92,6 +115,15 @@ void D3d12QueueProgress::log_stuck(DriverLog &lines) const
             .text(" completed ")
             .number(kept.fence_->GetCompletedValue())
             .write();
+    for (const Queue &gone : draining_)
+        LogLine(lines)
+            .text("destroyed queue ")
+            .number(gone.id_)
+            .text(" progress signalled ")
+            .number(gone.signalled_)
+            .text(" completed ")
+            .number(gone.fence_->GetCompletedValue())
+            .write();
 }
 
 void D3d12QueueProgress::clear()
@@ -99,6 +131,8 @@ void D3d12QueueProgress::clear()
     AV_SCOPE("D3d12QueueProgress::clear");
     for (Queue &kept : queues_) kept.fence_->Release();
     queues_.clear();
+    for (Queue &gone : draining_) gone.fence_->Release();
+    draining_.clear();
 }
 
 uint64_t D3d12QueueProgress::marked() const
@@ -115,6 +149,10 @@ uint64_t D3d12QueueProgress::reached() const
         const uint64_t completed = kept.fence_->GetCompletedValue();
         if (completed < kept.signalled_ && completed < reached) reached = completed;
     }
+    for (const Queue &gone : draining_) {
+        const uint64_t completed = gone.fence_->GetCompletedValue();
+        if (completed < gone.signalled_ && completed < reached) reached = completed;
+    }
     return reached;
 }
 
@@ -124,6 +162,9 @@ bool D3d12QueueProgress::invariants_hold() const
     if (!queues_.invariants_hold()) return false;
     for (const Queue &kept : queues_)
         if (kept.queue_ == nullptr || kept.fence_ == nullptr || kept.signalled_ > marked_) return false;
+    if (!draining_.invariants_hold()) return false;
+    for (const Queue &gone : draining_)
+        if (gone.fence_ == nullptr || gone.signalled_ > marked_) return false;
     return true;
 }
 

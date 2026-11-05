@@ -379,12 +379,7 @@ bool D3d12Session::on_Finish12(uint32_t &hresult)
 bool D3d12Session::on_QueryHeapSlices12(uint32_t &supported)
 {
     AV_SCOPE("D3d12Session::on_QueryHeapSlices12");
-    ID3D12Device *const host = device_ != nullptr ? device_->device() : nullptr;
-    ID3D12Fence        *probe = nullptr;
-    const bool          follows = host != nullptr && SUCCEEDED(host->CreateFence(0u, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence),
-                                                                         reinterpret_cast<void **>(&probe)));
-    if (probe != nullptr) probe->Release();
-    supported = static_cast<uint32_t>(follows ? HeapSliceSupport::windows : HeapSliceSupport::none);
+    supported = static_cast<uint32_t>(device_ != nullptr ? HeapSliceSupport::windows : HeapSliceSupport::none);
     return true;
 }
 
@@ -490,8 +485,13 @@ bool D3d12Session::on_CreatePlacedResource12(uint32_t resource, uint32_t heap, u
     uint64_t              extent = heap_desc.SizeInBytes;
     const bool            windowed = block_heaps_.window(heap, base, extent);
     const bool            buffer = desc.dimension == buffer_dimension;
-    if (offset > extent || (buffer && desc.width > extent - offset) || (windowed && !buffer)) {
-        LogLine(lines_).text("a resource placed past its heap: offset ").number(offset).text(", ").number(desc.width)
+    uint64_t              bytes = desc.width;
+    if (windowed && !buffer) {
+        const D3D12_RESOURCE_DESC sized = host_desc(desc);
+        bytes = device_->device()->GetResourceAllocationInfo(0u, 1u, &sized).SizeInBytes;
+    }
+    if (offset > extent || ((buffer || windowed) && bytes > extent - offset)) {
+        LogLine(lines_).text("a resource placed past its heap: offset ").number(offset).text(", ").number(bytes)
             .text(" bytes wide, in a heap of ").number(extent).write();
         return false;
     }
@@ -809,7 +809,11 @@ bool D3d12Session::on_ExecuteCommandLists12(uint32_t queue, uint32_t count, cons
     if (count == 0u) return true;
     if (!progress_.after_siblings(queue, on)) return false;
     on->ExecuteCommandLists(count, executed);
-    return progress_.executed(queue, on, device_->device());
+    if (progress_.executed(queue, on, device_->device())) return true;
+    LogLine(lines_).text("the progress of queue ").number(queue).text(" is not followed after its lists ran; the device is removed").write();
+    if (removed_ == 0u) removed_ = static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR);
+    drain();
+    return false;
 }
 
 bool D3d12Session::on_CreateQueryHeap12(uint32_t heap, uint32_t type, uint32_t count)

@@ -46,9 +46,14 @@ private:
         uint64_t        size_;
     };
 
-    bool            window_holds(const SourceMemory &store, uint64_t base, uint64_t size) const;
-    D3d12BlockHeap *block_for(const D3d12HostDevice &device, SourceMemory &store, bool &fresh);
-    void            forget_fresh(D3d12BlockHeap *block);
+    struct BlockLookup {
+        D3d12BlockHeap *block_;
+        bool            fresh_;
+    };
+
+    bool        window_holds(const SourceMemory &store, uint64_t base, uint64_t size) const;
+    BlockLookup block_for(const D3d12HostDevice &device, SourceMemory &store);
+    void        forget_fresh(D3d12BlockHeap *block);
 
     ObjectPool<D3d12BlockHeap>             blocks_;
     KeyedSlots<uint32_t, Window>           windows_;

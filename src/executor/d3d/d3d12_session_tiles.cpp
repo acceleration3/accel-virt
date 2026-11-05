@@ -82,16 +82,15 @@ bool D3d12Session::on_UpdateTileMappings12(uint32_t queue, uint32_t resource, ui
         return false;
     uint64_t window_base = 0u;
     uint64_t window_bytes = 0u;
-    const bool windowed = in != nullptr && block_heaps_.window(heap, window_base, window_bytes);
-    if (windowed && window_base != 0u) {
-        LogLine(lines_).text("tiles mapped from a heap window at ").number(window_base).text(": only a heap at the start of its memory maps").write();
+    if (in != nullptr && block_heaps_.window(heap, window_base, window_bytes)) {
+        LogLine(lines_).text("tiles mapped from heap ").number(heap).text(", a window of host memory: no tile mapping into one is followed").write();
         return false;
     }
     tile_update_.begin();
     for (uint32_t index = 0u; index < region_count; index++)
         if (!tiles_hold(tiled, regions[index].start, regions[index].size) || !tile_update_.add_region(regions[index]))
             return false;
-    const uint64_t heap_tiles = in == nullptr ? 0u : (windowed ? window_bytes : in->GetDesc().SizeInBytes) / tile_bytes;
+    const uint64_t heap_tiles = in == nullptr ? 0u : in->GetDesc().SizeInBytes / tile_bytes;
     for (uint32_t index = 0u; index < range_count; index++)
         if (!tile_update_.add_range(ranges[index], heap_tiles)) return false;
     tile_update_.apply(on, tiled, in, flags);

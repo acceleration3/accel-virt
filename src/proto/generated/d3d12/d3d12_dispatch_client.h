@@ -26,12 +26,12 @@ namespace av::d3d12proto {
 // has no device, and then nothing else is answered.
 [[nodiscard]] bool av_d3d12_QueryCaps12(::av::ClientTransport& t, uint32_t* hresult, Caps12* caps, void* formats, uint64_t formats_capacity, uint64_t* formats_size);
 // Whether a CPU-visible heap can be a window into a block of shared host memory (CreateHeap12's `offset`): 1
-// when every queue's progress is followed, so the host can tell when a block's last heap and resource are done with,
-// 0 when it cannot. The guest then gives each heap memory of its own.
+// when the host has a device, which follows every queue's progress so it can tell when a block's last heap and
+// resource are done with, 0 when it has none. The guest then gives each heap memory of its own.
 [[nodiscard]] bool av_d3d12_QueryHeapSlices12(::av::ClientTransport& t, uint32_t* supported);
 // A heap of `size` bytes. A heap of a CPU-visible type (upload, readback, or custom with a CPU page)
 // is the window of `size` bytes at `offset` in the host memory the guest opened and imported, named by the handle
-// IMPORT_BLOB answered as `memory`; the window lies inside that memory, and `offset` and `size` are multiples of 64 KiB.
+// IMPORT_BLOB answered as `memory`; the window lies inside that memory, and `offset` is a multiple of 64 KiB.
 // It can hold only buffers (docs/host-memory.md). The host keeps the memory's imported heap until the guest has
 // released the memory, every heap and resource in it is destroyed and the GPU is done with it. Any other heap is the
 // host GPU's own and memory and offset are ignored.

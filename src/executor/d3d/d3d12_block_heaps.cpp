@@ -19,29 +19,26 @@ bool D3d12BlockHeaps::window_holds(const SourceMemory &store, uint64_t base, uin
 {
     AV_SCOPE("D3d12BlockHeaps::window_holds");
     const uint64_t whole = store.size();
-    const bool     aligned = base % window_alignment == 0u && size % window_alignment == 0u;
-    if (size != 0u && aligned && base <= whole && size <= whole - base) return true;
+    if (size != 0u && base % window_alignment == 0u && base <= whole && size <= whole - base) return true;
     LogLine(lines_).text("a heap window of ").number(size).text(" bytes at ").number(base).text(" is not inside memory of ")
-        .number(whole).text(" bytes in 64 KiB steps").write();
+        .number(whole).text(" bytes at a multiple of 64 KiB").write();
     return false;
 }
 
-D3d12BlockHeap *D3d12BlockHeaps::block_for(const D3d12HostDevice &device, SourceMemory &store, bool &fresh)
+D3d12BlockHeaps::BlockLookup D3d12BlockHeaps::block_for(const D3d12HostDevice &device, SourceMemory &store)
 {
     AV_SCOPE("D3d12BlockHeaps::block_for");
-    fresh = false;
     D3d12BlockHeap *found = blocks_.find_if([&store](const D3d12BlockHeap &block) { return block.holds(store); });
-    if (found != nullptr) return found->abandoned() ? nullptr : found;
+    if (found != nullptr) return BlockLookup{found->abandoned() ? nullptr : found, false};
     const Status created = blocks_.create(found, store);
     if (created != Status::ok) {
         LogLine(lines_).text("a heap window's memory kept nowhere, status ").number(static_cast<uint32_t>(created)).write();
-        return nullptr;
+        return BlockLookup{nullptr, false};
     }
-    fresh = true;
-    if (found->import(device)) return found;
+    if (found->import(device)) return BlockLookup{found, true};
     LogLine(lines_).text("the host did not open a heap over ").number(store.size()).text(" bytes").write();
     forget_fresh(found);
-    return nullptr;
+    return BlockLookup{nullptr, false};
 }
 
 void D3d12BlockHeaps::forget_fresh(D3d12BlockHeap *block)
@@ -59,14 +56,14 @@ ID3D12Heap *D3d12BlockHeaps::open(const D3d12HostDevice &device, SourceMemory &s
         LogLine(lines_).text("a heap window made again under heap ").number(heap).write();
         return nullptr;
     }
-    bool                  fresh = false;
-    D3d12BlockHeap *const block = block_for(device, store, fresh);
+    const BlockLookup     looked = block_for(device, store);
+    D3d12BlockHeap *const block = looked.block_;
     if (block == nullptr) return nullptr;
     uint32_t     slot = 0u;
     const Status kept = windows_.insert(heap, Window{block, base, size}, slot);
     if (kept != Status::ok) {
         LogLine(lines_).text("a heap window kept nowhere, status ").number(static_cast<uint32_t>(kept)).write();
-        if (fresh) forget_fresh(block);
+        if (looked.fresh_) forget_fresh(block);
         return nullptr;
     }
     block->took_heap();

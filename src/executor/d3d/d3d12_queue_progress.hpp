@@ -44,9 +44,11 @@ private:
     };
 
     uint32_t index_of(uint32_t id) const;
+    void     release_completed();
 
     EventfdWake         &wake_;
     GrowableArray<Queue> queues_;
+    GrowableArray<Queue> draining_;
     uint64_t             marked_;
 
     friend struct D3d12QueueProgressProbe;
