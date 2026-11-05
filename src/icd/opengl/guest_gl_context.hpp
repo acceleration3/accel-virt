@@ -13,7 +13,7 @@
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/opengl/gl_extension_list.hpp"
 #include "icd/common/present_pacing.hpp"
-#include "icd/common/transport_timeline.hpp"
+#include "icd/common/locked_timeline.hpp"
 #include "icd/opengl/frames_in_flight.hpp"
 #include "icd/opengl/granted_profile.hpp"
 #include "icd/opengl/gl_external_objects.hpp"
@@ -149,7 +149,7 @@ private:
     GrantedProfile                 profile_;
     icd::PresentPacing             pacing_;
     FramesInFlight                 frames_;
-    icd::TransportTimeline         timeline_;
+    icd::LockedTimeline            timeline_;
     GlExtensionList                extensions_;
     WindowFramebuffers             framebuffers_;
     BufferShadows                  shadows_;

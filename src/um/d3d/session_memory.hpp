@@ -7,7 +7,7 @@
 #include "um/common/performance_clock.hpp"
 #include "um/common/srw_lock.hpp"
 #include "um/d3d/lent_pages.hpp"
-#include "icd/d3d/session_timeline.hpp"
+#include "icd/common/locked_timeline.hpp"
 
 #include <stdint.h>
 
@@ -58,7 +58,7 @@ private:
     const SliceOffer                *offer_;
     const void                      *owner_;
     SrwLock                          slices_lock_;
-    ObjectStorage<SessionTimeline>   timeline_;
+    ObjectStorage<icd::LockedTimeline> timeline_;
     ObjectStorage<icd::StreamMemory> streams_[stream_kinds];
     LentPages                        lent_pages_;
     PerformanceClock                 clock_;
