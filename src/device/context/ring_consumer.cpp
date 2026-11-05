@@ -161,6 +161,7 @@ bool RingConsumer::settle()
 {
     AV_SCOPE("RingConsumer::settle");
     if (held_.empty()) return false;
+    static_cast<void>(executor_.poll());
     uint64_t marked = 0u;
     uint64_t reached = 0u;
     executor_.gpu_progress(marked, reached);
