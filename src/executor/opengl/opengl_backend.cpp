@@ -219,7 +219,10 @@ bool OpenGlBackend::poll()
         wake_.settled();
         return false;
     }
-    if (!context_.make_current()) return false;
+    if (!context_.make_current()) {
+        wake_.retry_later();
+        return true;
+    }
     static_cast<void>(progress_.settle());
     slices_.reclaim();
     const bool unwatched = progress_.polled();
