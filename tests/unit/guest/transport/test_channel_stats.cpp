@@ -36,17 +36,19 @@ TEST(channel_stats, a_fresh_collector_is_zero_and_not_due)
 
 TEST(channel_stats_note, adds_to_the_named_counter_only)
 { ChannelStats stats;
-  stats.note(ChannelCounter::room_waits, 3u);
-  stats.note(ChannelCounter::room_waits, 4u);
-  stats.note(ChannelCounter::room_wait_us, 250u);
-  CHECK_EQ(value_of(stats, ChannelCounter::room_waits), 7u);
-  CHECK_EQ(value_of(stats, ChannelCounter::room_wait_us), 250u);
+  stats.note(ChannelCounter::blob_room_waits, 3u);
+  stats.note(ChannelCounter::blob_room_waits, 4u);
+  stats.note(ChannelCounter::blob_room_wait_us, 250u);
+  CHECK_EQ(value_of(stats, ChannelCounter::blob_room_waits), 7u);
+  CHECK_EQ(value_of(stats, ChannelCounter::blob_room_wait_us), 250u);
   CHECK_EQ(value_of(stats, ChannelCounter::inline_bulk), 0u);
   CHECK(stats.invariants_hold()); }
 
 TEST(channel_stats_note, every_event_counter_accepts_a_note)
 { const ChannelCounter events[] = {ChannelCounter::split_transfers, ChannelCounter::split_pieces,
-                                   ChannelCounter::room_waits,      ChannelCounter::room_wait_us,
+                                   ChannelCounter::blob_room_waits, ChannelCounter::blob_room_wait_us,
+                                   ChannelCounter::ring_waits,      ChannelCounter::ring_wait_us,
+                                   ChannelCounter::fence_waits,     ChannelCounter::fence_wait_us,
                                    ChannelCounter::inline_bulk,     ChannelCounter::copied_mappings,
                                    ChannelCounter::slice_waits,     ChannelCounter::refused_no_space,
                                    ChannelCounter::refused_no_memory, ChannelCounter::refused_other,
@@ -57,8 +59,8 @@ TEST(channel_stats_note, every_event_counter_accepts_a_note)
 
 TEST(channel_stats_note, a_zero_amount_changes_nothing_and_is_not_a_reason_to_report)
 { ChannelStats stats;
-  stats.note(ChannelCounter::room_waits, 0u);
-  CHECK_EQ(value_of(stats, ChannelCounter::room_waits), 0u);
+  stats.note(ChannelCounter::blob_room_waits, 0u);
+  CHECK_EQ(value_of(stats, ChannelCounter::blob_room_waits), 0u);
   CHECK(!stats.due(interval * 10u)); }
 
 TEST(channel_stats_note, the_gauges_and_out_of_range_counters_cannot_be_noted)
@@ -75,10 +77,10 @@ TEST(channel_stats_note, the_gauges_and_out_of_range_counters_cannot_be_noted)
 
 TEST(channel_stats_note, wraps_at_sixty_four_bits_without_disturbing_its_neighbours)
 { ChannelStats stats;
-  stats.note(ChannelCounter::room_wait_us, ~0ull);
-  stats.note(ChannelCounter::room_wait_us, 2u);
-  CHECK_EQ(value_of(stats, ChannelCounter::room_wait_us), 1u);
-  CHECK_EQ(value_of(stats, ChannelCounter::room_waits), 0u);
+  stats.note(ChannelCounter::blob_room_wait_us, ~0ull);
+  stats.note(ChannelCounter::blob_room_wait_us, 2u);
+  CHECK_EQ(value_of(stats, ChannelCounter::blob_room_wait_us), 1u);
+  CHECK_EQ(value_of(stats, ChannelCounter::blob_room_waits), 0u);
   CHECK_EQ(value_of(stats, ChannelCounter::inline_bulk), 0u); }
 
 TEST(channel_stats_piece, the_second_piece_splits_a_transfer_and_every_later_one_adds_a_piece)
@@ -167,16 +169,16 @@ TEST(channel_stats_due, after_a_send_it_waits_a_full_interval_for_the_next_chang
 
 TEST(channel_stats_due, a_send_clears_only_what_it_reported)
 { ChannelStats stats;
-  stats.note(ChannelCounter::room_waits, 1u);
+  stats.note(ChannelCounter::blob_room_waits, 1u);
   stats.sent(5u);
-  stats.note(ChannelCounter::room_waits, 1u);
+  stats.note(ChannelCounter::blob_room_waits, 1u);
   stats.sent(6u);
   CHECK(!stats.due(6u + interval * 4u));
   CHECK(stats.invariants_hold()); }
 
 TEST(channel_stats_frame_report, writes_a_header_and_a_report_that_decode_to_the_snapshot)
 { ChannelStats stats;
-  stats.note(ChannelCounter::room_waits, 11u);
+  stats.note(ChannelCounter::blob_room_waits, 11u);
   stats.note(ChannelCounter::refused_no_space, 22u);
   std::uint8_t frame[ChannelStats::command_bytes] = {};
   CHECK(stats.frame_report(frame, sizeof frame));
@@ -186,7 +188,7 @@ TEST(channel_stats_frame_report, writes_a_header_and_a_report_that_decode_to_the
   CHECK_EQ(header.id(), CommandHeader::channel_stats_id);
   ChannelStatsReport report;
   CHECK_STATUS(report.decode(frame + CommandHeader::encoded_size, ChannelStatsReport::encoded_size), Status::ok);
-  CHECK_EQ(report.value(ChannelCounter::room_waits), 11u);
+  CHECK_EQ(report.value(ChannelCounter::blob_room_waits), 11u);
   CHECK_EQ(report.value(ChannelCounter::refused_no_space), 22u);
   CHECK_EQ(report.value(ChannelCounter::inline_bulk), 0u); }
 
@@ -213,10 +215,10 @@ TEST(channel_stats_frame_report, a_longer_buffer_is_written_only_to_the_frame)
 
 TEST(channel_stats_frame_report, reporting_changes_nothing_until_it_is_marked_sent)
 { ChannelStats stats;
-  stats.note(ChannelCounter::room_waits, 1u);
+  stats.note(ChannelCounter::blob_room_waits, 1u);
   std::uint8_t frame[ChannelStats::command_bytes] = {};
   CHECK(stats.frame_report(frame, sizeof frame));
   CHECK(stats.due(0u));
   stats.sent(0u);
-  stats.note(ChannelCounter::room_waits, 1u);
+  stats.note(ChannelCounter::blob_room_waits, 1u);
   CHECK(stats.due(interval)); }

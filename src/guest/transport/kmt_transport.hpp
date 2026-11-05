@@ -141,7 +141,7 @@ private:
                                                   uint64_t &end);
     [[nodiscard]] TransportResult submit_written(uint64_t begin, uint64_t end, uint64_t &fence);
     uint32_t                      stats_trailer(const uint8_t *batch, uint32_t length, uint64_t now, uint8_t *into);
-    void                          note_wait(uint64_t began);
+    void                          note_wait(uint64_t began, ChannelCounter waits, ChannelCounter wait_us);
     [[nodiscard]] TransportResult hold(uint32_t command_id, const WireWriter &writer, uint8_t flags);
     [[nodiscard]] TransportResult hold_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags);
     [[nodiscard]] TransportResult publish_held_answered(WireReader &reply);

@@ -50,8 +50,12 @@ void ChannelStatsLatest::report(StateWriter &writer, uint32_t parked_blobs) cons
     writer.number("rejected", __atomic_load_n(&rejected_, __ATOMIC_RELAXED));
     writer.number("split_transfers", value(ChannelCounter::split_transfers));
     writer.number("split_pieces", value(ChannelCounter::split_pieces));
-    writer.number("room_waits", value(ChannelCounter::room_waits));
-    writer.number("room_wait_us", value(ChannelCounter::room_wait_us));
+    writer.number("blob_room_waits", value(ChannelCounter::blob_room_waits));
+    writer.number("blob_room_wait_us", value(ChannelCounter::blob_room_wait_us));
+    writer.number("ring_waits", value(ChannelCounter::ring_waits));
+    writer.number("ring_wait_us", value(ChannelCounter::ring_wait_us));
+    writer.number("fence_waits", value(ChannelCounter::fence_waits));
+    writer.number("fence_wait_us", value(ChannelCounter::fence_wait_us));
     writer.number("inline_bulk", value(ChannelCounter::inline_bulk));
     writer.number("copied_mappings", value(ChannelCounter::copied_mappings));
     writer.number("slice_waits", value(ChannelCounter::slice_waits));

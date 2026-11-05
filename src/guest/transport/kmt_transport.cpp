@@ -611,7 +611,7 @@ bool KmtTransport::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
             const uint64_t began = published_now();
             const bool     arrived = wait_for_host(oldest) == Status::ok &&
                                  arrives_eventually([this, end] { return ring_.head() >= end; });
-            note_wait(began);
+            note_wait(began, ChannelCounter::blob_room_waits, ChannelCounter::blob_room_wait_us);
             if (!arrived) {
                 faulted_ = true;
                 return false;
@@ -776,7 +776,7 @@ bool KmtTransport::room_for_fence()
         roomy = !fences_.full();
     }
     if (!roomy) roomy = drain();
-    note_wait(began);
+    note_wait(began, ChannelCounter::fence_waits, ChannelCounter::fence_wait_us);
     return roomy;
 }
 
@@ -819,13 +819,13 @@ Status KmtTransport::write_when_room(const uint8_t *batch, uint32_t length, cons
         written = ring_.write_batch(batch, length, trailer, trailer_length, next, published_now(), begin, end);
     if (written == Status::no_space) {
         if (!drain()) {
-            note_wait(began);
+            note_wait(began, ChannelCounter::ring_waits, ChannelCounter::ring_wait_us);
             return Status::invalid_state;
         }
         next = fences_.peek();
         written = ring_.write_batch(batch, length, trailer, trailer_length, next, published_now(), begin, end);
     }
-    note_wait(began);
+    note_wait(began, ChannelCounter::ring_waits, ChannelCounter::ring_wait_us);
     return written;
 }
 
@@ -860,12 +860,12 @@ uint32_t KmtTransport::stats_trailer(const uint8_t *batch, uint32_t length, uint
     return size;
 }
 
-void KmtTransport::note_wait(uint64_t began)
+void KmtTransport::note_wait(uint64_t began, ChannelCounter waits, ChannelCounter wait_us)
 {
     AV_SCOPE("KmtTransport::note_wait");
     constexpr uint64_t ticks_per_microsecond = 10u;
-    stats_.note(ChannelCounter::room_waits, 1u);
-    stats_.note(ChannelCounter::room_wait_us, (published_now() - began) / ticks_per_microsecond);
+    stats_.note(waits, 1u);
+    stats_.note(wait_us, (published_now() - began) / ticks_per_microsecond);
 }
 
 void KmtTransport::note(ChannelCounter counter, uint64_t amount)

@@ -68,9 +68,10 @@ TEST(channel_stats_latest_accept, keeps_the_newest_report_and_the_context_it_cam
   CHECK(latest.invariants_hold());
   const Dump dump(latest, 3u);
   CHECK(dump.has("channel/9 reports=2 rejected=0"));
-  CHECK(dump.has("split_transfers=5000 split_pieces=5001 room_waits=5002 room_wait_us=5003"));
-  CHECK(dump.has("arena_grows=5010 arena_bytes=5011 arena_peak_ring_bytes=5012 arena_set_aside_bytes=5013 "
-                 "arena_segments=5014 parked_blobs=3")); }
+  CHECK(dump.has("split_transfers=5000 split_pieces=5001 blob_room_waits=5002 blob_room_wait_us=5003 ring_waits=5004 "
+                 "ring_wait_us=5005 fence_waits=5006 fence_wait_us=5007"));
+  CHECK(dump.has("arena_grows=5014 arena_bytes=5015 arena_peak_ring_bytes=5016 arena_set_aside_bytes=5017 "
+                 "arena_segments=5018 parked_blobs=3")); }
 
 TEST(channel_stats_latest_accept, a_malformed_report_is_counted_and_changes_nothing_else)
 { ChannelStatsLatest latest;
@@ -98,13 +99,13 @@ TEST(channel_stats_latest_accept, only_rejections_still_count_as_received)
 
 TEST(channel_stats_latest_accept, a_counter_keeps_all_sixty_four_bits)
 { ChannelStatsReport report;
-  report.set(ChannelCounter::room_wait_us, 0xFFFFFFFFFFFFFFFFull);
+  report.set(ChannelCounter::blob_room_wait_us, 0xFFFFFFFFFFFFFFFFull);
   std::uint8_t bytes[ChannelStatsReport::encoded_size] = {};
   CHECK_STATUS(report.encode(bytes, sizeof bytes), Status::ok);
   ChannelStatsLatest latest;
   latest.accept(1u, bytes, sizeof bytes);
   const Dump dump(latest);
-  CHECK(dump.has("room_wait_us=18446744073709551615")); }
+  CHECK(dump.has("blob_room_wait_us=18446744073709551615")); }
 
 TEST(channel_stats_latest_reset, forgets_every_report_and_every_value)
 { ChannelStatsLatest latest;
@@ -131,7 +132,8 @@ TEST(channel_stats_latest_reset, a_reset_collector_accepts_again)
 TEST(channel_stats_latest, the_report_names_every_counter_once_in_order)
 { ChannelStatsLatest latest;
   const Dump           dump(latest);
-  const char *const    names[] = {"split_transfers", "split_pieces", "room_waits", "room_wait_us", "inline_bulk",
+  const char *const    names[] = {"split_transfers", "split_pieces", "blob_room_waits", "blob_room_wait_us", "ring_waits",
+                                  "ring_wait_us", "fence_waits", "fence_wait_us", "inline_bulk",
                                   "copied_mappings", "slice_waits", "refused_no_space", "refused_no_memory",
                                   "refused_other", "arena_grows", "arena_bytes", "arena_peak_ring_bytes",
                                   "arena_set_aside_bytes", "arena_segments"};
