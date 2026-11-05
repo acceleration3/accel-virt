@@ -198,8 +198,8 @@ HRESULT D3d12Device::heap_memory(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRe
     const HostMemoryRequest::Kind kind =
         heap.type == heap_upload ? HostMemoryRequest::Kind::upload : HostMemoryRequest::Kind::readback;
     const bool small = args.ByteSize <= suballocated_heap_bytes_most && args.Alignment <= buffer_alignment;
-    if (small && memories_.take_slice(kind, args.ByteSize, heap.backing) == Status::ok) return S_OK;
     if (heap.type == heap_readback && memories_.lend_pages(args.ByteSize, heap.backing) == Status::ok) return S_OK;
+    if (small && memories_.take_slice(kind, args.ByteSize, heap.backing) == Status::ok) return S_OK;
     if (memories_.open_dedicated(kind, args.ByteSize, heap.backing) == Status::ok) return S_OK;
     lines_.write("no host memory for an upload or readback heap");
     return E_OUTOFMEMORY;
