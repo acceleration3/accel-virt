@@ -86,9 +86,12 @@ public:
     void gl_make_profile(const char *renderer, const char *version, std::int32_t major, std::int32_t minor,
                          std::int32_t mask);
     void gl_policy(std::int32_t listed);
+    void gl_slices(std::uint32_t supported = 0u);
+    void gl_made(const char *renderer, const char *version);
     void gl_window(std::uint32_t framebuffers, std::uint32_t renderbuffers, std::uint32_t first = 100u);
-    static constexpr std::uint32_t gl_make_waits = 11u;
-    static constexpr std::uint32_t gl_policy_waits = 1u;
+    static constexpr std::uint32_t gl_make_waits = 12u;
+    static constexpr std::uint32_t gl_policy_waits = 2u;
+    static constexpr std::uint32_t gl_slices_waits = 1u;
 
     void cut_next(std::uint32_t bytes);
 

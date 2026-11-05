@@ -199,11 +199,27 @@ void ScriptedHost::gl_make_profile(const char *renderer, const char *version, st
     gl_integer(major);
     gl_integer(minor);
     gl_integer(mask);
+    const bool legacy = mask == 0x2 || (mask == 0 && major > 0 && major < 3);
+    if (legacy) gl_integer(0);
 }
 
 void ScriptedHost::gl_policy(std::int32_t listed)
 {
     gl_integer(listed);
+    gl_slices();
+}
+
+void ScriptedHost::gl_slices(std::uint32_t supported)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_pod(supported);
+    queue(writer);
+}
+
+void ScriptedHost::gl_made(const char *renderer, const char *version)
+{
+    gl_make(renderer, version);
+    gl_slices();
 }
 
 void ScriptedHost::gl_window(std::uint32_t framebuffers, std::uint32_t renderbuffers, std::uint32_t first)

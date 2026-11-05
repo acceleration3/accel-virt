@@ -16,6 +16,7 @@
 
 #include "gl_dispatch_client.h"
 
+#include <cstdio>
 #include <cstring>
 
 using av::GlContextOptions;
@@ -31,9 +32,16 @@ struct GuestGlContextProbe {
     static void claim_made(GuestGlContext &context) { context.state_ = GuestGlContext::State::made; }
     static av::icd::HostChannel &channel(GuestGlContext &context) { return context.channel_; }
     static void unterminate(GuestGlContext &context) { std::memset(context.strings_[2], 'x', GuestGlContext::string_bytes); }
-    static void connect(GuestGlContext &context, bool connected)
+    static av::icd::DeviceLink *disconnect(GuestGlContext &context)
     {
-        av::icd::ContextLinkProbe(context.link_).link() = connected ? 0u : av::icd::IcdConnection::no_link;
+        av::icd::DeviceLink *&link = av::icd::ContextLinkProbe(context.link_).link();
+        av::icd::DeviceLink *const held = link;
+        link = nullptr;
+        return held;
+    }
+    static void reconnect(GuestGlContext &context, av::icd::DeviceLink *held)
+    {
+        av::icd::ContextLinkProbe(context.link_).link() = held;
     }
     static void report_loss(GuestGlContext &context) { context.loss_reported_ = true; }
 };
@@ -81,7 +89,7 @@ constexpr const char *renderer = "av host renderer";
 class Context {
 public:
     explicit Context(GlContextRig &rig, const GlContextOptions &options = GlContextOptions())
-        : context_(rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.extensions(), rig.handles(), 7,
+        : context_(rig.connection(), rig.platform(), rig.send_lock(), rig.groups(), rig.lines(), rig.extensions(), rig.handles(), 7,
                    options)
     {}
     GuestGlContext &operator*() { return context_; }
@@ -90,6 +98,17 @@ public:
 private:
     GuestGlContext context_;
 };
+
+std::uint32_t warmed(GlContextRig &rig)
+{
+    {
+        Context context(rig);
+        rig.host().gl_made(renderer, "4.6");
+        CHECK_STATUS(context->make(), Status::ok);
+    }
+    CHECK_EQ(rig.kmt().open_objects(), 0u);
+    return rig.platform().live_allocations();
+}
 
 }
 
@@ -111,7 +130,7 @@ TEST(guest_gl_context, make_opens_an_opengl_context_with_its_options_and_learns_
 { GlContextRig rig;
   const GlContextOptions options(4u, 5u, GlContextOptions::Profile::core, GlContextOptions::debug, 0u);
   Context context(rig, options);
-  rig.host().gl_make(renderer, "4.6.0 NVIDIA 580");
+  rig.host().gl_made(renderer, "4.6.0 NVIDIA 580");
   CHECK_STATUS(context->make(), Status::ok);
   CHECK(context->invariants_hold());
   CHECK(context->state() == State::made);
@@ -141,6 +160,7 @@ TEST(guest_gl_context, a_make_learns_the_profile_the_host_granted)
   Context context(rig);
   context->asking(av::glicd::GrantedProfile::Rung::compatibility_46);
   rig.host().gl_make_profile(renderer, "4.6.0 NVIDIA 580", 4, 6, 2);
+  rig.host().gl_slices();
   CHECK_STATUS(context->make(), Status::ok);
   CHECK(context->invariants_hold());
   CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::compatibility_46);
@@ -154,6 +174,7 @@ TEST(guest_gl_context, a_core_or_silent_host_leaves_the_legacy_calls_shut)
   Context core_context(core);
   core_context->asking(av::glicd::GrantedProfile::Rung::core_46);
   core.host().gl_make_profile(renderer, "4.6 (Core Profile) Mesa", 4, 6, 1);
+  core.host().gl_slices();
   CHECK_STATUS(core_context->make(), Status::ok);
   CHECK_EQ(core_context->profile().mask(), 1u);
   CHECK(!core_context->profile().legacy_calls_live());
@@ -161,6 +182,7 @@ TEST(guest_gl_context, a_core_or_silent_host_leaves_the_legacy_calls_shut)
   GlContextRig silent;
   Context silent_context(silent);
   silent.host().gl_make_profile(renderer, "1.1", -1, -1, 0);
+  silent.host().gl_slices();
   CHECK_STATUS(silent_context->make(), Status::ok);
   CHECK(silent_context->invariants_hold());
   CHECK(!silent_context->profile().known());
@@ -170,6 +192,7 @@ TEST(guest_gl_context, a_legacy_context_asks_for_compatibility_first)
 { GlContextRig rig;
   Context context(rig);
   rig.host().gl_make_profile(renderer, "4.6 (Compatibility Profile) Mesa", 4, 6, 2);
+  rig.host().gl_slices();
   CHECK_STATUS(context->make(), Status::ok);
   CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::compatibility_46);
   av::AvContextRecord record;
@@ -184,6 +207,7 @@ TEST(guest_gl_context, a_host_with_no_compatibility_profile_gets_the_next_rung)
   Context context(rig);
   rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 1u, MockKmt::invalid_parameter);
   rig.host().gl_make_profile(renderer, "1.4 Mesa", 1, 4, 0);
+  rig.host().gl_slices();
   CHECK_STATUS(context->make(), Status::ok);
   CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::host_default);
   av::AvContextRecord record;
@@ -197,6 +221,7 @@ TEST(guest_gl_context, a_host_with_neither_falls_to_core_and_says_so)
   Context context(rig);
   rig.kmt().fail_first(MockKmt::Call::create_context_virtual, 2u, MockKmt::invalid_parameter);
   rig.host().gl_make_profile(renderer, "4.6 (Core Profile) Mesa", 4, 6, 1);
+  rig.host().gl_slices();
   CHECK_STATUS(context->make(), Status::ok);
   CHECK(context->profile().rung() == av::glicd::GrantedProfile::Rung::core_46);
   CHECK(!context->profile().legacy_calls_live());
@@ -215,10 +240,24 @@ TEST(guest_gl_context, a_host_that_refuses_every_rung_holds_nothing)
 TEST(guest_gl_context, a_refusal_that_is_not_the_profiles_stops_the_ladder)
 { GlContextRig rig;
   Context context(rig);
+  av::icd::DeviceLink *link = nullptr;
+  CHECK_STATUS(rig.connection().acquire(link), Status::ok);
   rig.platform().fail_allocation_at(1u);
   CHECK_STATUS(context->make(), Status::no_memory);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 0u);
-  CHECK(context->state() == State::created); }
+  CHECK(context->state() == State::created);
+  rig.connection().release(*link); }
+
+TEST(guest_gl_context, a_link_that_cannot_be_had_is_not_supported_with_nothing_held)
+{ GlContextRig rig;
+  Context context(rig);
+  rig.platform().fail_allocation_at(1u);
+  CHECK_STATUS(context->make(), Status::not_supported);
+  CHECK(context->state() == State::created);
+  CHECK(context->invariants_hold());
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK_EQ(rig.connection().users(), 0u);
+  CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
 TEST(guest_gl_context, a_context_created_with_attributes_asks_once)
 { GlContextRig rig;
@@ -244,20 +283,21 @@ TEST(guest_gl_context, an_unmade_context_paces_nothing)
 { GlContextRig rig;
   Context context(rig);
   const std::uint32_t blanks = rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank);
-  context->pace();
+  context->pacing().after_present();
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), blanks); }
 
 TEST(guest_gl_context, a_destroyed_context_gives_back_everything)
 { GlContextRig rig;
+  const std::uint32_t baseline = warmed(rig);
   {
     Context context(rig);
-    rig.host().gl_make(renderer, "4.6");
+    rig.host().gl_made(renderer, "4.6");
     CHECK_STATUS(context->make(), Status::ok);
     CHECK(rig.kmt().open_objects() > GlContextRig::link_objects);
   }
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.connection().users(), 0u);
-  CHECK_EQ(rig.platform().live_allocations(), 0u);
+  CHECK_EQ(rig.platform().live_allocations(), baseline);
   CHECK_EQ(rig.kmt().window_chunks(), 0u); }
 
 TEST(guest_gl_context, no_avgpu_device_is_not_supported)
@@ -272,12 +312,19 @@ TEST(guest_gl_context, no_avgpu_device_is_not_supported)
 TEST(guest_gl_context, staging_that_cannot_be_had_is_no_memory_with_nothing_held)
 { GlContextRig rig;
   Context context(rig);
+  const std::uint32_t baseline = warmed(rig);
+  av::icd::DeviceLink *link = nullptr;
+  CHECK_STATUS(rig.connection().acquire(link), Status::ok);
+  const std::uint32_t objects = rig.kmt().open_objects();
   rig.platform().fail_allocation_at(1u);
   CHECK_STATUS(context->make(), Status::no_memory);
   CHECK(context->invariants_hold());
+  CHECK_EQ(rig.kmt().open_objects(), objects);
+  CHECK_EQ(rig.connection().users(), 1u);
+  rig.connection().release(*link);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.connection().users(), 0u);
-  CHECK_EQ(rig.platform().live_allocations(), 0u); }
+  CHECK_EQ(rig.platform().live_allocations(), baseline); }
 
 TEST(guest_gl_context, a_driver_refusal_of_the_transport_is_invalid_parameter_with_nothing_held)
 {
@@ -325,6 +372,7 @@ TEST(guest_gl_context, without_a_blob_arena_the_context_is_made_and_says_so)
   rig.host().gl_integer(4);
   rig.host().gl_integer(6);
   rig.host().gl_integer(2);
+  rig.host().gl_integer(0);
   CHECK_STATUS(context->make(), Status::ok);
   CHECK_EQ(rig.log().holding("no blob arena"), 1u);
   char bytes[512];
@@ -339,8 +387,9 @@ TEST(guest_gl_context, without_a_blob_arena_the_context_is_made_and_says_so)
 TEST(guest_gl_context, a_host_refusal_is_invalid_parameter_with_nothing_held)
 { for (std::uint32_t wait = 2u; wait <= GlContextRig::link_objects + 5u; wait++) {
       GlContextRig rig;
+      const std::uint32_t baseline = warmed(rig);
       Context context(rig);
-      rig.host().gl_make(renderer, "4.6");
+      rig.host().gl_made(renderer, "4.6");
       rig.kmt().withhold_answer_at(wait);
       CHECK_STATUS(context->make(), Status::invalid_parameter);
       CHECK(context->state() == State::created);
@@ -348,13 +397,13 @@ TEST(guest_gl_context, a_host_refusal_is_invalid_parameter_with_nothing_held)
                    rig.log().holding("faulted opening its blob arena"),
                3u);
       CHECK_EQ(rig.kmt().open_objects(), 0u);
-      CHECK_EQ(rig.platform().live_allocations(), 0u);
+      CHECK_EQ(rig.platform().live_allocations(), baseline);
   } }
 
 TEST(guest_gl_context, a_faulted_transport_makes_the_context_lost)
 { GlContextRig rig;
   Context context(rig);
-  rig.host().gl_make(renderer, "4.6");
+  rig.host().gl_made(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   rig.kmt().withhold_answer_at(1u);
@@ -378,7 +427,7 @@ TEST(guest_gl_context, a_lost_context_reports_its_loss_by_its_robustness)
     Context context(rig, GlContextOptions(4u, 6u, GlContextOptions::Profile::core, flags, 0u));
     CHECK_EQ(context->robust(), robust);
     CHECK_EQ(context->lost_reset_status(), 0u);
-    rig.host().gl_make(renderer, "4.6");
+    rig.host().gl_made(renderer, "4.6");
     CHECK_STATUS(context->make(), Status::ok);
     CHECK_EQ(context->take_error(), 0u);
     CHECK_EQ(context->lost_reset_status(), 0u);
@@ -402,9 +451,9 @@ TEST(guest_gl_context, a_fault_on_its_device_loses_it_and_it_goes_without_the_ho
   {
     Context first(rig);
     Context second(rig);
-    rig.host().gl_make(renderer, "4.6");
+    rig.host().gl_made(renderer, "4.6");
     CHECK_STATUS(first->make(), Status::ok);
-    rig.host().gl_make(renderer, "4.6");
+    rig.host().gl_made(renderer, "4.6");
     CHECK_STATUS(second->make(), Status::ok);
     rig.kmt().withhold_answer_at(1u);
     CHECK_EQ(av::glproto::av_glGetError(*first->wire()), 0u);
@@ -446,7 +495,7 @@ TEST(guest_gl_context, a_host_newer_than_4_6_is_reported_as_4_6)
   for (const Row &row : rows) {
       GlContextRig rig;
       Context context(rig);
-      rig.host().gl_make(renderer, row.host);
+      rig.host().gl_made(renderer, row.host);
       CHECK_STATUS(context->make(), Status::ok);
       CHECK(std::strcmp(context->string(GuestGlContext::gl_version), row.reported) == 0);
   } }
@@ -457,7 +506,7 @@ TEST(guest_gl_context, a_string_longer_than_its_row_is_cut)
   char long_name[400];
   std::memset(long_name, 'n', sizeof long_name - 1u);
   long_name[sizeof long_name - 1u] = '\0';
-  rig.host().gl_make(long_name, "4.6");
+  rig.host().gl_made(long_name, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
   CHECK_EQ(std::strlen(context->string(GuestGlContext::gl_renderer)), GuestGlContext::string_bytes - 2u);
   CHECK(context->invariants_hold()); }
@@ -469,21 +518,30 @@ TEST(guest_gl_context, reports_its_state_options_and_renderer)
   av::StateWriter created(bytes, sizeof bytes);
   context->report(created, 0x10001u);
   CHECK(std::strcmp(created.dump(), "context/65537 state=created owner=0 pixel_format=7 major=3 minor=3 "
-                                    "profile=2 flags=0 share=0 share_target=0 error=0 link=4 arena=false renderer= extensions=0\n"
+                                    "profile=2 flags=0 share=0 share_target=0 error=0 device=0 lost=false fault_code=0 "
+                                    "arena=false renderer= extensions=0\n"
                                     "context/65537/windows/0 held=0 draws_window=false reads_window=false\n"
-                     "context/65537/mappings/0 held=0 persistent_writers=0\n"
-                     "context/65537/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0);
-  rig.host().gl_make(renderer, "4.6");
+                                    "context/65537/mappings/0 held=0 persistent_writers=0\n"
+                                    "context/65537/sliced_buffers/0 granted=false stopped=false group=1 owned=0 held=0\n"
+                                    "context/65537/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0);
+  rig.host().gl_made(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
   context->set_owner(2u);
   context->record(0x0502u);
   av::StateWriter made(bytes, sizeof bytes);
   context->report(made, 1u);
-  CHECK(std::strcmp(made.dump(), "context/1 state=made owner=2 pixel_format=7 major=3 minor=3 profile=2 flags=0 "
-                                 "share=0 share_target=0 error=1282 link=0 arena=true renderer=av host renderer extensions=0\n"
-                                 "context/1/windows/0 held=0 draws_window=false reads_window=false\n"
-                     "context/1/mappings/0 held=0 persistent_writers=0\n"
-                     "context/1/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0); }
+  char expected[512];
+  std::snprintf(expected, sizeof expected,
+                "context/1 state=made owner=2 pixel_format=7 major=3 minor=3 profile=2 flags=0 "
+                "share=0 share_target=0 error=1282 device=%u lost=false fault_code=0 arena=true "
+                "renderer=av\\x20host\\x20renderer extensions=0\n"
+                "context/1/windows/0 held=0 draws_window=false reads_window=false\n"
+                "context/1/mappings/0 held=0 persistent_writers=0\n"
+                "context/1/sliced_buffers/0 granted=false stopped=false group=1 owned=0 held=0\n"
+                "context/1/shadows/0 trusted=true held=0 held_bytes=0 sizes=0",
+                context->guest_device());
+  CHECK(context->guest_device() != 0u);
+  CHECK(std::strcmp(made.dump(), expected) == 0); }
 
 TEST(guest_gl_context_invariants, fail_when_the_state_and_what_is_held_disagree)
 { GlContextRig rig;
@@ -500,9 +558,12 @@ TEST(guest_gl_context_invariants, fail_when_the_state_and_what_is_held_disagree)
   av::glicd::GuestGlContextProbe::unterminate(*unterminated);
   CHECK(!unterminated->invariants_hold());
   Context connected(rig);
-  av::glicd::GuestGlContextProbe::connect(*connected, true);
+  av::icd::DeviceLink *const idle = av::glicd::GuestGlContextProbe::disconnect(*connected);
+  CHECK(idle == nullptr);
+  char marker = 0;
+  av::glicd::GuestGlContextProbe::reconnect(*connected, reinterpret_cast<av::icd::DeviceLink *>(&marker));
   CHECK(!connected->invariants_hold());
-  av::glicd::GuestGlContextProbe::connect(*connected, false);
+  av::glicd::GuestGlContextProbe::reconnect(*connected, idle);
   CHECK(connected->invariants_hold());
   Context reported(rig);
   av::glicd::GuestGlContextProbe::report_loss(*reported);
@@ -512,7 +573,7 @@ TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_i
 { using av::glicd::GuestGlContextProbe;
   GlContextRig rig;
   Context made(rig);
-  rig.host().gl_make(renderer, "4.6");
+  rig.host().gl_made(renderer, "4.6");
   CHECK_STATUS(made->make(), Status::ok);
   CHECK(made->invariants_hold());
   av::icd::HostChannelProbe channel(GuestGlContextProbe::channel(*made));
@@ -520,9 +581,9 @@ TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_i
   CHECK(!made->invariants_hold());
   channel.restore_locked();
   CHECK(made->invariants_hold());
-  GuestGlContextProbe::connect(*made, false);
+  av::icd::DeviceLink *const link = GuestGlContextProbe::disconnect(*made);
   CHECK(!made->invariants_hold());
-  GuestGlContextProbe::connect(*made, true);
+  GuestGlContextProbe::reconnect(*made, link);
   av::glicd::ClientArrayStateProbe::name_default(made->arrays());
   CHECK(!made->invariants_hold());
   av::glicd::ClientArrayStateProbe::unname_default(made->arrays());
@@ -533,7 +594,7 @@ TEST(guest_gl_context_invariants, fail_when_a_made_context_or_its_client_state_i
   CHECK(!made->invariants_hold());
   av::glicd::QueryShapesProbe::overflow(made->queries(), 0u);
   CHECK(made->invariants_hold());
-  av::glicd::BackBufferPresenter stray(rig.platform(), rig.log());
+  av::glicd::BackBufferPresenter stray(rig.platform(), rig.lines());
   av::glicd::WindowFramebuffersProbe::point_at(made->framebuffers(), &stray);
   CHECK(!made->invariants_hold());
   av::glicd::WindowFramebuffersProbe::point_at(made->framebuffers(), nullptr);
@@ -559,20 +620,24 @@ TEST(guest_gl_context, sharing_either_way_ends_its_buffer_copies)
 
 TEST(guest_gl_context, a_make_that_fails_keeps_no_copies_of_buffers)
 { GlContextRig rig;
+  const std::uint32_t baseline = warmed(rig);
   Context      context(rig);
   std::uint8_t bytes[4] = {};
   context->shadows().keep(1u, 0u, sizeof bytes, bytes);
   CHECK_EQ(context->shadows().held(), 1u);
+  av::icd::DeviceLink *link = nullptr;
+  CHECK_STATUS(rig.connection().acquire(link), Status::ok);
   rig.platform().fail_allocation_at(1u);
   CHECK_STATUS(context->make(), Status::no_memory);
   CHECK_EQ(context->shadows().held(), 0u);
-  CHECK_EQ(rig.platform().live_allocations(), 0u); }
+  rig.connection().release(*link);
+  CHECK_EQ(rig.platform().live_allocations(), baseline); }
 
 TEST(guest_gl_context, marks_its_newest_batch_for_another_thread)
 { GlContextRig rig;
   Context      context(rig);
   CHECK(!context->mark().waitable());
-  rig.host().gl_make(renderer, "4.6");
+  rig.host().gl_made(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
   av::glproto::av_glFlush(*context->wire());
   context->flush();
@@ -584,7 +649,7 @@ TEST(guest_gl_context, run_held_has_the_host_run_the_held_calls_before_it_return
 { GlContextRig rig;
   Context      context(rig);
   CHECK_STATUS(context->run_held(), Status::invalid_state);
-  rig.host().gl_make(renderer, "4.6");
+  rig.host().gl_made(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
   const std::uint32_t before = rig.kmt().commands();
   av::glproto::av_glBindTexture(*context->wire(), 0x0DE1u, 186u);
@@ -599,7 +664,7 @@ TEST(guest_gl_context, run_held_has_the_host_run_the_held_calls_before_it_return
 TEST(guest_gl_context, a_held_calls_lease_stays_lent_until_the_batch_carrying_it_has_run)
 { GlContextRig rig;
   Context      context(rig);
-  rig.host().gl_make(renderer, "4.6");
+  rig.host().gl_made(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
   av::ClientBlobArena &arena = av::glicd::GuestGlContextProbe::channel(*context).transport().blobs();
   CHECK(arena.ready());
@@ -634,7 +699,7 @@ constexpr std::uint64_t frame_apart = av::MockKmt::ticks_per_second / 1000u * 60
 TEST(guest_gl_context, a_frame_ends_without_waiting_on_a_host_that_keeps_up)
 { GlContextRig rig;
   Context      context(rig);
-  rig.host().gl_make(renderer, "4.6");
+  rig.host().gl_made(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
   const std::uint32_t ring = av::glicd::GuestGlContextProbe::channel(*context).transport().context();
   const std::uint32_t waits = rig.kmt().calls(av::MockKmt::Call::wait_for_context);
@@ -651,7 +716,7 @@ TEST(guest_gl_context, a_frame_ends_without_waiting_on_a_host_that_keeps_up)
 TEST(guest_gl_context, a_frame_the_host_never_finishes_loses_the_context)
 { GlContextRig rig;
   Context      context(rig);
-  rig.host().gl_make(renderer, "4.6");
+  rig.host().gl_made(renderer, "4.6");
   CHECK_STATUS(context->make(), Status::ok);
   rig.kmt().reads_clock(nullptr, frame_apart);
   end_a_frame(*context);

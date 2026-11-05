@@ -1,6 +1,5 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_transfer_host.hpp"
-#include "icd/opengl/buffer_pieces.hpp"
 #include "icd/opengl/pixel_staging_buffer.hpp"
 
 #include "gl_dispatch_client.h"
@@ -11,7 +10,6 @@
 #include <cstring>
 
 using av::GlTransferHost;
-using av::glicd::BufferPieces;
 using av::glicd::PixelStagingBuffer;
 namespace ids = av::glproto;
 
@@ -75,7 +73,7 @@ TEST(pixel_staging_buffer, a_read_past_the_reply_comes_back_where_the_pack_store
   ids::av_glPixelStorei(host, pack_skip_rows, skip_rows);
   ids::av_glPixelStorei(host, pack_skip_pixels, skip_pixels);
   const std::size_t bytes = reach(columns, rows, length, skip_rows, skip_pixels);
-  CHECK(bytes > BufferPieces::read_room);
+  CHECK(bytes > host.room().inline_read());
   Memory memory(bytes + 4u, 0xEEu);
   CHECK(staged_read(host, staging, 10, 20, columns, rows, memory.bytes(), bytes));
   std::uint32_t wrong = 0u;
@@ -90,7 +88,7 @@ TEST(pixel_staging_buffer, a_read_past_the_reply_comes_back_where_the_pack_store
   CHECK_EQ(host.bound(pack_buffer), 0u);
   CHECK_EQ(host.refusals(), 0u);
   CHECK_EQ(host.count_of(ids::kCmd_glGetBufferSubData),
-           static_cast<std::uint32_t>((bytes + BufferPieces::read_room - 1u) / BufferPieces::read_room));
+           static_cast<std::uint32_t>((bytes + host.room().inline_read() - 1u) / host.room().inline_read()));
   CHECK(staging.invariants_hold()); }
 
 TEST(pixel_staging_buffer, one_buffer_serves_every_transfer_at_its_size)
@@ -133,7 +131,7 @@ TEST(pixel_staging_buffer, an_upload_past_the_request_reaches_the_texture_throug
               wrong++;
   CHECK_EQ(wrong, 0u);
   CHECK_EQ(host.count_of(ids::kCmd_glBufferSubData),
-           static_cast<std::uint32_t>((bytes + BufferPieces::write_room - 1u) / BufferPieces::write_room));
+           static_cast<std::uint32_t>((bytes + host.room().inline_write() - 1u) / host.room().inline_write()));
   CHECK(host.largest_request() <= 256u * 1024u);
   CHECK_EQ(host.refusals(), 0u); }
 
@@ -141,8 +139,8 @@ TEST(pixel_staging_buffer, what_crosses_otherwise_is_not_staged)
 { GlTransferHost     host;
   PixelStagingBuffer staging;
   Memory             memory(4u << 20u, 0u);
-  CHECK(!staging.stage_download(host, memory.bytes(), BufferPieces::read_room));
-  CHECK(!staging.stage_upload(host, memory.bytes(), BufferPieces::write_room));
+  CHECK(!staging.stage_download(host, memory.bytes(), host.room().inline_read()));
+  CHECK(!staging.stage_upload(host, memory.bytes(), host.room().inline_write()));
   CHECK(!staging.stage_download(host, nullptr, 1u << 20u));
   CHECK(!staging.stage_upload(host, nullptr, 1u << 20u));
   CHECK(!staging.stage_download(host, memory.bytes(), ~std::size_t{0}));

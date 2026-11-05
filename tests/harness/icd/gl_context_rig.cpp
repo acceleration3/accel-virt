@@ -8,7 +8,8 @@
 namespace av {
 
 GlContextRig::GlContextRig()
-    : platform_(), kmt_(), host_(kmt_), trace_(), send_lock_(trace_, 'S'), log_(), connection_(platform_, kmt_, 0u),
+    : platform_(), kmt_(), host_(kmt_), trace_(), send_lock_(trace_, 'S'), log_(),
+      lines_(platform_, log_, "avgl: "), slice_lock_(trace_, 'L'), groups_(platform_, slice_lock_), connection_(platform_, kmt_, 0u),
       extensions_(nullptr, 0u, nullptr, 0u), handles_lock_(trace_, 'H'), handles_(kmt_, handles_lock_, platform_)
 {
     const PciIdentity avgpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
@@ -24,6 +25,8 @@ ScriptedHost        &GlContextRig::host() { return host_; }
 LockTrace           &GlContextRig::trace() { return trace_; }
 RecordingThreadLock &GlContextRig::send_lock() { return send_lock_; }
 RecordingLog        &GlContextRig::log() { return log_; }
+KeyedLog            &GlContextRig::lines() { return lines_; }
+glicd::SliceGroups  &GlContextRig::groups() { return groups_; }
 av::icd::IcdConnection &GlContextRig::connection() { return connection_; }
 const glicd::GlExtensionPolicy &GlContextRig::extensions() const { return extensions_; }
 

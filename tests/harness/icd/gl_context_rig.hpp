@@ -1,6 +1,7 @@
 #ifndef AV_GL_CONTEXT_RIG_HPP
 #define AV_GL_CONTEXT_RIG_HPP
 
+#include "core/log/keyed_log.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/lock_trace.hpp"
@@ -10,6 +11,7 @@
 #include "icd/common/icd_connection.hpp"
 #include "icd/common/shared_handles.hpp"
 #include "icd/opengl/gl_extension_policy.hpp"
+#include "icd/opengl/slice_groups.hpp"
 
 namespace av {
 
@@ -28,6 +30,8 @@ public:
     LockTrace            &trace();
     RecordingThreadLock  &send_lock();
     RecordingLog         &log();
+    KeyedLog            &lines();
+    glicd::SliceGroups  &groups();
     av::icd::IcdConnection  &connection();
     const glicd::GlExtensionPolicy &extensions() const;
     av::icd::SharedHandles &handles();
@@ -39,6 +43,9 @@ private:
     LockTrace           trace_;
     RecordingThreadLock send_lock_;
     RecordingLog        log_;
+    KeyedLog            lines_;
+    RecordingThreadLock slice_lock_;
+    glicd::SliceGroups  groups_;
     av::icd::IcdConnection connection_;
     glicd::GlExtensionPolicy extensions_;
     RecordingThreadLock    handles_lock_;

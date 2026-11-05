@@ -44,7 +44,7 @@ GLuint made_buffer(GlTransferHost &host, std::size_t bytes)
     return name;
 }
 
-constexpr std::size_t awkward = 3u * BufferPieces::write_room + 17u;
+std::size_t awkward_for(const GlTransferHost &host) { return 3u * host.room().inline_write() + 17u; }
 
 }
 
@@ -52,7 +52,7 @@ TEST(buffer_pieces, a_write_is_cut_only_past_the_room_and_what_no_lease_holds)
 { GlTransferHost host;
   BufferPieces   pieces(host);
   std::uint8_t   byte = 0u;
-  constexpr auto room = static_cast<intptr_t>(BufferPieces::write_room);
+  const auto room = static_cast<intptr_t>(host.room().inline_write());
   CHECK(!pieces.cuts_write(room, &byte));
   CHECK(pieces.cuts_write(room + 1, &byte));
   CHECK(pieces.cuts_write(static_cast<intptr_t>(BufferPieces::max_bytes), &byte));
@@ -71,7 +71,7 @@ TEST(buffer_pieces, a_read_is_cut_only_past_one_reply)
 { GlTransferHost host;
   const BufferPieces pieces(host);
   std::uint8_t   byte = 0u;
-  constexpr auto room = static_cast<intptr_t>(BufferPieces::read_room);
+  const auto room = static_cast<intptr_t>(host.room().inline_read());
   CHECK(!pieces.cuts_read(room, &byte));
   CHECK(pieces.cuts_read(room + 1, &byte));
   CHECK(!pieces.cuts_read(static_cast<intptr_t>(BufferPieces::max_bytes) + 1, &byte));
@@ -80,19 +80,20 @@ TEST(buffer_pieces, a_read_is_cut_only_past_one_reply)
 
 TEST(buffer_pieces, one_command_past_the_room_is_lost)
 { GlTransferHost host;
-  Pattern        data(BufferPieces::write_room * 2u);
+  Pattern        data(host.room().inline_write() * 2u);
   const GLuint   name = made_buffer(host, data.size());
   const std::uint32_t before = host.commands();
   ids::av_glBufferSubData(host, array_buffer, 0, static_cast<GLsizeiptr>(data.size()), data.bytes());
   CHECK_EQ(host.commands(), before);
   CHECK_EQ(host.buffer(name)[1], 0u);
-  ids::av_glGetBufferSubData(host, array_buffer, 0, static_cast<GLsizeiptr>(BufferPieces::read_room * 2u),
+  ids::av_glGetBufferSubData(host, array_buffer, 0, static_cast<GLsizeiptr>(host.room().inline_read() * 2u),
                              data.bytes());
   CHECK_EQ(host.refusals(), 1u); }
 
 TEST(buffer_pieces, a_write_of_any_size_lands_whole_at_its_offset)
 { for (std::uint32_t way = 0u; way < 3u; way++) {
       GlTransferHost host;
+      const std::size_t awkward = awkward_for(host);
       Pattern        data(awkward);
       const GLuint   name = made_buffer(host, awkward + 5u);
       BufferPieces   pieces(host);
@@ -111,6 +112,7 @@ TEST(buffer_pieces, a_write_of_any_size_lands_whole_at_its_offset)
 TEST(buffer_pieces, a_read_of_any_size_comes_back_whole_from_its_offset)
 { for (std::uint32_t way = 0u; way < 3u; way++) {
       GlTransferHost host;
+      const std::size_t awkward = awkward_for(host);
       Pattern        data(awkward);
       const GLuint   name = made_buffer(host, awkward + 9u);
       ids::av_glBufferSubData(host, array_buffer, 0, 9, data.bytes());
@@ -121,7 +123,7 @@ TEST(buffer_pieces, a_read_of_any_size_comes_back_whole_from_its_offset)
       if (way == 0u) pieces.read(array_buffer, 9, awkward, back.bytes());
       if (way == 1u) pieces.read_named(name, 9, awkward, back.bytes());
       if (way == 2u) pieces.read_named_ext(name, 9, awkward, back.bytes());
-      const std::size_t replies = (awkward + BufferPieces::read_room - 1u) / BufferPieces::read_room;
+      const std::size_t replies = (awkward + host.room().inline_read() - 1u) / host.room().inline_read();
       CHECK_EQ(pieces.commands(), static_cast<std::uint32_t>(replies));
       CHECK_EQ(host.refusals(), 0u);
       CHECK(std::memcmp(back.bytes(), data.bytes(), awkward) == 0);

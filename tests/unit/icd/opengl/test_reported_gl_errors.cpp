@@ -1,5 +1,6 @@
 #include "harness/framework/test_registry.hpp"
 #include "icd/opengl/reported_gl_errors.hpp"
+#include "proto/submission/gl_error_word.hpp"
 
 #include <cstdint>
 
@@ -10,9 +11,11 @@ namespace {
 constexpr std::uint32_t invalid_enum = 0x0500u, invalid_value = 0x0501u, invalid_operation = 0x0502u,
                         invalid_framebuffer_operation = 0x0506u;
 
+const std::uint64_t published = av::GlErrorWord().word();
+
 std::uint64_t word(std::uint8_t enums, std::uint8_t values, std::uint8_t operations, std::uint8_t framebuffers)
 {
-    return ReportedGlErrors::published | std::uint64_t{enums} | std::uint64_t{values} << 8u |
+    return published | std::uint64_t{enums} | std::uint64_t{values} << 8u |
            std::uint64_t{operations} << 16u | std::uint64_t{framebuffers} << 48u;
 }
 
@@ -22,7 +25,7 @@ TEST(reported_gl_errors, reads_only_a_word_the_host_marked)
 { ReportedGlErrors reported;
   CHECK(!reported.readable(0u));
   CHECK(!reported.readable(0x0000000000010203ull));
-  CHECK(reported.readable(ReportedGlErrors::published));
+  CHECK(reported.readable(published));
   CHECK(reported.readable(word(1u, 0u, 0u, 0u))); }
 
 TEST(reported_gl_errors, reports_each_kind_that_moved_once_lowest_first)
