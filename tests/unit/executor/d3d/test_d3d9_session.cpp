@@ -2,8 +2,11 @@
 #include "executor/d3d/d3d9_session.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/shim/d3d_headers.hpp"
-#include "executor/guest_region.hpp"
-#include "harness/executor/local_import.hpp"
+#include "core/log/driver_log.hpp"
+#include "executor/d3d/slice_storages.hpp"
+#include "executor/eventfd_wake.hpp"
+#include "harness/icd/recording_log.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -16,7 +19,6 @@
 #include <cstdint>
 
 using av::D3d9Session;
-using av::GuestRegion;
 using namespace av::d3d9proto;
 
 namespace av {
@@ -54,12 +56,13 @@ public:
 
 class FreshSession {
 public:
-    FreshSession() : import_(guest, sizeof guest)
+    FreshSession() : sink_(), lines_(sink_, "d3d9: "), slices_(blocks, lines_), wake_()
     {
-        CHECK(region_.adopt(import_.blob()));
+        CHECK_STATUS(bytes_.bind(0u, guest, sizeof guest), av::Status::ok);
         CHECK_STATUS(table_storage.construct(blocks), av::Status::ok);
-        CHECK_STATUS(session_storage.construct(region_, table_storage.object(), blocks), av::Status::ok);
-        session_storage.object().initialize(nullptr, nullptr, nullptr, nullptr);
+        CHECK_STATUS(session_storage.construct(bytes_, table_storage.object(), blocks, slices_, wake_, lines_),
+                     av::Status::ok);
+        session_storage.object().initialize(nullptr, nullptr, nullptr, nullptr, nullptr);
     }
     ~FreshSession()
     {
@@ -74,21 +77,13 @@ public:
     av::D3dObjectTable &table() { return table_storage.object(); }
 
 private:
-    av::LocalImport import_;
-    GuestRegion     region_;
+    av::RecordingLog sink_;
+    av::DriverLog    lines_;
+    av::SliceStorages slices_;
+    av::EventfdWake  wake_;
+    av::GuestBytes   bytes_;
 };
 
-}
-
-TEST(d3d9_session_guest_bytes, are_the_session_s_region_and_nothing_past_it)
-{
-    FreshSession fresh;
-    D3d9Session &session = fresh.session();
-    CHECK(session.guest_bytes(0u, 16u) == guest);
-    CHECK(session.guest_bytes_out(16u, 16u) == guest + 16u);
-    CHECK(session.guest_bytes(sizeof guest - 4u, 8u) == nullptr);
-    CHECK(session.guest_bytes_out(sizeof guest, 1u) == nullptr);
-    CHECK(session.invariants_hold());
 }
 
 TEST(d3d9_session_knows, its_own_range_and_no_other)
@@ -116,21 +111,14 @@ TEST(d3d9_session_on_CreateDevice9, a_gpu_with_no_d3d9_makes_no_device)
     CHECK(session.on_Finish9(hresult));
     CHECK_EQ(hresult, invalid_call);
 
-    std::uint8_t  caps[512] = {};
-    std::uint64_t caps_size = 1u;
-    std::uint32_t vendor = 0u, device = 0u, subsystem = 0u, revision = 0u, memory = 0u;
-    CHECK(session.on_QueryCaps9(hresult, vendor, device, subsystem, revision, memory, caps, sizeof caps, caps_size));
+    std::uint8_t        caps[512] = {};
+    std::uint64_t       caps_size = 1u, rows_size = 1u;
+    const std::uint32_t formats[1] = {21u};
+    std::uint8_t        rows[64] = {};
+    CHECK(session.on_QueryCaps9(1u, formats, hresult, caps, sizeof caps, caps_size, rows, sizeof rows, rows_size));
     CHECK_EQ(hresult, not_available);
     CHECK_EQ(caps_size, 0u);
-    std::uint32_t levels = 9u;
-    CHECK(session.on_QueryMultisample9(21u, 4u, hresult, levels));
-    CHECK_EQ(hresult, not_available);
-    CHECK_EQ(levels, 0u);
-    const std::uint32_t formats[1] = {21u};
-    std::uint8_t        support[8] = {};
-    std::uint64_t       support_size = 1u;
-    CHECK(!session.on_QueryFormats9(1u, formats, support, sizeof support, support_size));
-    CHECK_EQ(support_size, 0u);
+    CHECK_EQ(rows_size, 0u);
 }
 
 TEST(d3d9_session_on_CreateDevice9, a_device_there_is_no_memory_to_keep_is_out_of_memory)
@@ -260,7 +248,7 @@ TEST(d3d9_session_shut_down, lets_go_of_direct3d_9_objects_and_keeps_the_rest)
     CHECK(fresh.table().find_any(5u, kind) == &eleven);
     CHECK(fresh.table().find_any(6u, kind) == nullptr);
     CHECK(fresh.session().invariants_hold());
-    fresh.table().clear();
+    fresh.table().release_all();
 }
 
 TEST(d3d9_session_on_Destroy9, removes_only_direct3d_9_objects)
