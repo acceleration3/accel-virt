@@ -1,11 +1,11 @@
 #include "executor/monotonic_clock.hpp"
-#include "executor/poll_budget.hpp"
+#include "core/platform/poll_budget.hpp"
 #include "harness/executor/scripted_clock.hpp"
 #include "harness/framework/test_registry.hpp"
 
-#include <cstdint>
+#include <stdint.h>
 
-using av::HostClock;
+using av::PollClock;
 using av::MonotonicClock;
 using av::PollBudget;
 using av::ScriptedClock;
@@ -79,10 +79,10 @@ TEST(poll_budget, the_deadline_counts_from_the_first_poll)
 
 TEST(poll_budget, on_the_host_clock_a_wait_is_given_up_once_its_deadline_has_passed)
 { MonotonicClock    monotonic;
-  HostClock        &clock = monotonic;
+  PollClock        &clock = monotonic;
   PollBudget        budget(clock, 0u, 1000000u, 5000000u);
-  const std::uint64_t started = clock.now_nanoseconds();
-  std::uint32_t     polls = 0u;
+  const uint64_t started = clock.now_nanoseconds();
+  uint32_t     polls = 0u;
   while (budget.next()) polls++;
   CHECK(clock.now_nanoseconds() - started >= 5000000u);
   CHECK(budget.expired());
