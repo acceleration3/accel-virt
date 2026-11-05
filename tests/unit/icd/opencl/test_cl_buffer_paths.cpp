@@ -2,6 +2,7 @@
 #include "harness/icd/cl_icd_rig.hpp"
 #include "harness/icd/fake_cl_loader.hpp"
 #include "harness/icd/recording_log.hpp"
+#include "core/support/object_pool.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
@@ -27,17 +28,20 @@ struct ClIcdRootProbe {
     static GuestClContext *context(ClIcdRoot &root, cl_context handle)
     { ClObject *const held = root.judged(handle, ClObject::Kind::context);
       return held != nullptr ? root.context_of(*held) : nullptr; }
+    static ClObjectTable &objects_of(ClIcdRoot &root) { return root.objects_; }
 };
 
 }
 
 namespace {
+constexpr std::uint32_t full_table = 16u + 32u + 64u + 128u + 256u;
+
 bool fill_mappings(ClIcdRig &rig, cl_context context)
 {
     av::clicd::GuestClContext *const guest = av::clicd::ClIcdRootProbe::context(rig.root(), context);
     if (guest == nullptr) return false;
-    static std::uint8_t somewhere[av::clicd::GuestClContext::max_mappings];
-    for (std::uint32_t row = guest->mappings(); row < av::clicd::GuestClContext::max_mappings; ++row)
+    static std::uint8_t somewhere[full_table];
+    for (std::uint32_t row = guest->mappings(); row < full_table; ++row)
         if (guest->take_shared_mapping(0x5eedu, 0x5eedu, 0u, 1u, somewhere + row) == nullptr) return false;
     return true;
 }
@@ -232,48 +236,34 @@ TEST(cl_buffer_paths, the_acquire_and_release_of_an_external_object_are_answered
   CHECK(rig.root().invariants_hold()); }
 
 TEST(cl_buffer_paths, an_object_the_guest_cannot_keep_is_given_back_to_the_device)
-{ ClIcdRig rig;
-  Opened   opened(rig, false);
-  CHECK(opened.made());
-  if (!opened.made()) return;
-  const std::uint64_t handle = shared_handle(rig);
-
-  const std::uint64_t earlier = shared_handle(rig);
-  const cl_mem_properties first[] = {CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR,
-                                     static_cast<cl_mem_properties>(earlier), 0u};
-  rig.host().shared_object(0u, 0x9000u);
-  cl_int imported = CL_OUT_OF_RESOURCES;
-  CHECK(rig.loader().create_buffer_with_properties(opened.context(), first, CL_MEM_READ_WRITE, buffer_bytes,
-                                                   &imported) != nullptr);
-  CHECK_EQ(imported, CL_SUCCESS);
-
-  const std::uint32_t before = rig.platform().live_allocations();
-  std::uint32_t       made = 0u;
-  for (; made < 256u; made++) {
-      rig.host().cl_handle(host_buffer + made, CL_SUCCESS);
-      CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE, buffer_bytes, nullptr) !=
-            nullptr);
-      if (rig.platform().live_allocations() != before) break;
+{ bool given_back = false;
+  for (std::uint32_t nth = 1u; nth <= 8u && !given_back; ++nth) {
+      ClIcdRig rig;
+      Opened   opened(rig, false);
+      CHECK(opened.made());
+      if (!opened.made()) return;
+      const std::uint64_t handle = shared_handle(rig);
+      std::uint32_t       made = 0u;
+      while (av::clicd::ClIcdRootProbe::objects_of(rig.root()).live() % av::ObjectPool<int>::chunk_slots != 0u &&
+             made < 2u * av::ObjectPool<int>::chunk_slots) {
+          rig.host().cl_handle(host_buffer + made, CL_SUCCESS);
+          CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE, buffer_bytes, nullptr) != nullptr);
+          ++made;
+      }
+      CHECK(made < 2u * av::ObjectPool<int>::chunk_slots);
+      const cl_mem_properties list[] = {CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR,
+                                        static_cast<cl_mem_properties>(handle), 0u};
+      rig.host().shared_object(0u, 0x9100u);
+      rig.host().shared_object(0u, 0u);
+      CHECK_EQ(rig.kmt().queued_answers(), 2u);
+      rig.platform().fail_allocation_at(nth);
+      cl_int error = CL_SUCCESS;
+      const cl_mem object = rig.loader().create_buffer_with_properties(opened.context(), list, CL_MEM_READ_WRITE,
+                                                                       buffer_bytes, &error);
+      if (object == nullptr && error == CL_OUT_OF_HOST_MEMORY && rig.kmt().queued_answers() == 0u) given_back = true;
+      CHECK(rig.root().invariants_hold());
   }
-  CHECK(made < 256u);
-  for (std::uint32_t index = 1u; index < 64u; index++) {
-      rig.host().cl_handle(host_buffer + 256u + index, CL_SUCCESS);
-      CHECK(rig.loader().create_buffer(opened.context(), CL_MEM_READ_WRITE, buffer_bytes, nullptr) !=
-            nullptr);
-  }
-
-  const cl_mem_properties list[] = {CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR,
-                                    static_cast<cl_mem_properties>(handle), 0u};
-  rig.host().shared_object(0u, 0x9100u);
-  rig.host().shared_object(0u, 0u);
-  CHECK_EQ(rig.kmt().queued_answers(), 2u);
-  rig.platform().fail_allocation_at(1u);
-  cl_int error = CL_SUCCESS;
-  CHECK(rig.loader().create_buffer_with_properties(opened.context(), list, CL_MEM_READ_WRITE,
-                                                   buffer_bytes, &error) == nullptr);
-  CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
-  CHECK_EQ(rig.kmt().queued_answers(), 0u);
-  CHECK(rig.root().invariants_hold()); }
+  CHECK(given_back); }
 
 TEST(cl_buffer_paths, an_external_buffer_this_driver_cannot_make_is_refused_before_the_device)
 { ClIcdRig rig;
@@ -792,7 +782,7 @@ TEST(cl_buffer_paths, a_map_past_the_end_of_its_backing_is_staged_rather_than_sh
            static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueReadBuffer));
   CHECK(rig.root().invariants_hold()); }
 
-TEST(cl_buffer_paths, a_map_with_more_mappings_than_the_context_holds_is_refused_on_both_paths)
+TEST(cl_buffer_paths, a_shared_map_whose_row_cannot_grow_is_refused_and_given_back)
 { ClIcdRig rig;
   Opened   opened(rig, true);
   CHECK(opened.made());
@@ -807,6 +797,7 @@ TEST(cl_buffer_paths, a_map_with_more_mappings_than_the_context_holds_is_refused
   rig.host().cl_handle(host_mapped + 1u, CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, 0u);
   const std::uint32_t sent = rig.kmt().commands();
+  rig.platform().fail_allocation_at(1u);
   cl_int error = CL_SUCCESS;
   CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 1u, nullptr,
                               &error) == nullptr);
@@ -902,7 +893,7 @@ TEST(cl_buffer_paths, a_map_beginning_past_its_backing_is_staged)
   CHECK_EQ(rig.kmt().commands(), sent + 2u);
   CHECK(rig.root().invariants_hold()); }
 
-TEST(cl_buffer_paths, a_staged_map_with_no_row_left_gives_its_block_back)
+TEST(cl_buffer_paths, a_staged_map_whose_row_cannot_grow_gives_its_block_back)
 { ClIcdRig rig;
   Opened   opened(rig, false);
   CHECK(opened.made());
@@ -911,11 +902,11 @@ TEST(cl_buffer_paths, a_staged_map_with_no_row_left_gives_its_block_back)
   CHECK(buffer != nullptr);
   if (buffer == nullptr) return;
 
-  CHECK(av::clicd::GuestClContext::max_mappings > 64u);
   CHECK(fill_mappings(rig, opened.context()));
   rig.host().cl_handle(host_mapped, CL_SUCCESS);
   rig.host().cl_enqueued(CL_SUCCESS, 0u);
   const std::uint32_t sent = rig.kmt().commands();
+  rig.platform().fail_allocation_at(2u);
   cl_int error = CL_SUCCESS;
   CHECK(rig.root().map_buffer(opened.queue(), buffer, CL_TRUE, CL_MAP_READ, 0u, 1u, nullptr,
                               &error) == nullptr);

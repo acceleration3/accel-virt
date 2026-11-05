@@ -1,3 +1,4 @@
+#include "core/support/growable_array.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
@@ -63,14 +64,17 @@ public:
     void note(char which, const void *object)
     {
         if (count_ < sizeof order_ - 1u) order_[count_++] = which;
+        ++total_;
         last_ = object;
     }
     const char *order() const { return order_; }
+    std::size_t total() const { return total_; }
     const void *last() const { return last_; }
 
 private:
     char        order_[16] = {};
     std::size_t count_ = 0u;
+    std::size_t total_ = 0u;
     const void *last_ = nullptr;
 };
 
@@ -410,13 +414,16 @@ TEST(cl_info_paths, a_destructor_callback_is_refused_for_no_object_no_callback_o
   rig.host().cl_handle(host_buffer, CL_SUCCESS);
   const cl_mem buffer = rig.loader().create_buffer(context, CL_MEM_READ_WRITE, 64u, nullptr);
   CHECK_EQ(table.clSetMemObjectDestructorCallback(buffer, nullptr, &tag), CL_INVALID_VALUE);
-  for (std::uint32_t index = 0u; index < av::clicd::ClDestructorCallbacks::max_rows; ++index)
+  constexpr std::uint32_t rows = 2u * av::GrowableArray<char>::first_capacity;
+  for (std::uint32_t index = 0u; index < rows; ++index)
       CHECK_EQ(table.clSetContextDestructorCallback(context, &context_went, &tag), CL_SUCCESS);
+  rig.platform().fail_allocation_at(1u);
   CHECK_EQ(table.clSetMemObjectDestructorCallback(buffer, &mem_went, &tag), CL_OUT_OF_HOST_MEMORY);
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.loader().release_mem(buffer), CL_SUCCESS);
   CHECK_EQ(std::strcmp(seen.order(), ""), 0);
   CHECK_EQ(rig.loader().release_context(context), CL_SUCCESS);
+  CHECK_EQ(seen.total(), rows);
   CHECK_EQ(std::strlen(seen.order()), 15u);
   CHECK(rig.root().invariants_hold()); }
 

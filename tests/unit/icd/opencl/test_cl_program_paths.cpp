@@ -236,13 +236,14 @@ TEST(cl_program_paths, a_compile_names_its_headers_by_the_host_s_numbers_and_a_l
            CL_INVALID_PROGRAM);
   CHECK_EQ(table.clCompileProgram(run.program(), 0u, nullptr, nullptr, 0u, &header, nullptr, nullptr, nullptr),
            CL_INVALID_VALUE);
-  cl_program many[av::clicd::ClIcdRoot::max_linked + 1u] = {};
-  const char *names[av::clicd::ClIcdRoot::max_linked + 1u] = {};
+  cl_program many[av::clicd::ClHostNumbers::kept_inline + 1u] = {};
+  const char *names[av::clicd::ClHostNumbers::kept_inline + 1u] = {};
   for (cl_program &one : many) one = run.program();
   for (const char *&one : names) one = name;
-  CHECK_EQ(table.clCompileProgram(run.program(), 0u, nullptr, nullptr, av::clicd::ClIcdRoot::max_linked + 1u, many,
+  rig.platform().fail_allocation_at(1u);
+  CHECK_EQ(table.clCompileProgram(run.program(), 0u, nullptr, nullptr, av::clicd::ClHostNumbers::kept_inline + 1u, many,
                                   names, nullptr, nullptr),
-           CL_OUT_OF_RESOURCES);
+           CL_OUT_OF_HOST_MEMORY);
   CHECK_EQ(table.clCompileProgram(run.program(), 0u, nullptr, nullptr, 0u, nullptr, nullptr, nullptr, &heard),
            CL_INVALID_VALUE);
   const std::uint32_t sent = rig.kmt().commands();
@@ -451,9 +452,10 @@ TEST(cl_program_paths, kernels_made_together_or_cloned_are_this_icd_s_and_say_wh
            CL_INVALID_VALUE);
   CHECK_EQ(kernel_table.clSetKernelExecInfo(kernels[0], CL_KERNEL_EXEC_INFO_SVM_PTRS, 3u, &outside),
            CL_INVALID_VALUE);
-  void *many[av::clicd::ClIcdRoot::max_linked + 1u] = {};
+  void *many[av::clicd::ClHostNumbers::kept_inline + 1u] = {};
+  rig.platform().fail_allocation_at(1u);
   CHECK_EQ(kernel_table.clSetKernelExecInfo(kernels[0], CL_KERNEL_EXEC_INFO_SVM_PTRS, sizeof many, many),
-           CL_OUT_OF_RESOURCES);
+           CL_OUT_OF_HOST_MEMORY);
   CHECK_EQ(kernel_table.clSetKernelExecInfo(kernels[0], 0x4203u, sizeof outside, &outside), CL_INVALID_VALUE);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }

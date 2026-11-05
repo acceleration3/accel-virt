@@ -1,3 +1,4 @@
+#include "core/support/extension_words.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
@@ -92,8 +93,9 @@ TEST(cl_d3d10_sharing, a_dxgi_adapter_or_d3d10_device_on_the_avgpu_adapter_is_th
   CHECK_EQ(count, 1u);
 
   av::clicd::ClExtensionPolicy policy(av::clicd::reported_extensions, av::clicd::reported_extension_count);
+  av::ExtensionWords           no_host(rig.platform(), av::Pool::paged);
   char                         reported[256] = {};
-  CHECK(policy.report("", 0u, reported, sizeof reported) > 1u);
+  CHECK(policy.report(no_host, reported, sizeof reported) > 1u);
   CHECK(std::strstr(reported, "cl_khr_d3d10_sharing") != nullptr);
   CHECK(std::strstr(reported, "cl_khr_gl_sharing") == nullptr);
   CHECK(rig.root().invariants_hold()); }
