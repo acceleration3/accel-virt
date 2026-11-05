@@ -74,7 +74,6 @@ private:
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   staging_bytes = 512u * 1024u;
     static constexpr size_t   batch_bytes = 1u << 20u;
-    static constexpr uint32_t multi_block_slices = 2u;
 
     HRESULT open(uint32_t adapter);
     void    close();

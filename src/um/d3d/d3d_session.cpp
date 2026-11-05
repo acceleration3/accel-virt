@@ -8,6 +8,7 @@
 #include "core/log/driver_log.hpp"
 #include "core/log/log_line.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/d3d/buffer_slice_support.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "guest/kmt/kmt.hpp"
@@ -104,7 +105,7 @@ bool D3dSession::host_has_slices()
     uint32_t     supported = 0u;
     const bool   asked = d3dproto::av_d3d_QueryBufferSlices11(stream_.object(), &supported);
     stream_.object().end_call();
-    if (asked && supported == multi_block_slices) return true;
+    if (asked && supported == static_cast<uint32_t>(BufferSliceSupport::multi_block)) return true;
     lines_.write("the host copies mapped buffers: it cannot draw them from the arena in place");
     return false;
 }

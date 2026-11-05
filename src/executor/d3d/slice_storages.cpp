@@ -7,7 +7,7 @@
 namespace av {
 
 SliceStorages::SliceStorages(BlockSource &blocks, DriverLog &lines)
-    : storages_(blocks), lines_(lines), retiring_(0u), reported_(false)
+    : storages_(blocks), bindings_(blocks), lines_(lines), retiring_(0u), reported_(false)
 {
     AV_SCOPE("SliceStorages::SliceStorages");
 }
@@ -28,11 +28,30 @@ const VulkanBuffer *SliceStorages::bind(D3d11HostDevice &device, SourceMemory &s
     return &storage->buffer();
 }
 
-void SliceStorages::retire(const SourceMemory &store)
+bool SliceStorages::attach(const SliceBindings::Binding &binding)
+{
+    AV_SCOPE("SliceStorages::attach");
+    return bindings_.bind(binding) == Status::ok;
+}
+
+bool SliceStorages::leave(uint32_t resource, SliceBindings::Binding &was)
+{
+    AV_SCOPE("SliceStorages::leave");
+    return bindings_.take(resource, was);
+}
+
+bool SliceStorages::next_bound_to(const SourceMemory &store, SliceBindings::Binding &was)
+{
+    AV_SCOPE("SliceStorages::next_bound_to");
+    return bindings_.take_bound_to(store, was);
+}
+
+void SliceStorages::retire(const SourceMemory &store, const D3d11BatchProgress &progress)
 {
     AV_SCOPE("SliceStorages::retire");
     SliceStorage *const storage = find(store);
     if (storage == nullptr || storage->retired()) return;
+    storage->used_at(progress.next());
     storage->retire();
     retiring_++;
 }
@@ -51,6 +70,7 @@ void SliceStorages::destroy_all()
 {
     AV_SCOPE("SliceStorages::destroy_all");
     storages_.destroy_all();
+    bindings_.clear();
     retiring_ = 0u;
     reported_ = false;
 }
@@ -59,12 +79,6 @@ uint32_t SliceStorages::count() const
 {
     AV_SCOPE("SliceStorages::count");
     return storages_.live();
-}
-
-uint32_t SliceStorages::retiring() const
-{
-    AV_SCOPE("SliceStorages::retiring");
-    return retiring_;
 }
 
 SliceStorage *SliceStorages::find(const SourceMemory &store)
@@ -78,7 +92,7 @@ bool SliceStorages::invariants_hold() const
     AV_SCOPE("SliceStorages::invariants_hold");
     uint32_t retired = 0u;
     storages_.for_each([&retired](const SliceStorage &storage) { retired += storage.retired() ? 1u : 0u; });
-    return retired == retiring_ && storages_.invariants_hold();
+    return retired == retiring_ && storages_.invariants_hold() && bindings_.invariants_hold();
 }
 
 }

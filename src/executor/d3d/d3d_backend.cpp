@@ -15,6 +15,7 @@
 #include "executor/source_memory.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/d3d/dxbc_container.hpp"
+#include "proto/d3d/buffer_slice_support.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
 #include "proto/d3d/resource_misc.hpp"
 #include "proto/resources/pitched_extent.hpp"
@@ -271,14 +272,37 @@ bool D3dBackend::adopt(SourceMemory &memory, uint64_t &handle)
 void D3dBackend::abandon(const SourceMemory &memory, uint64_t)
 {
     AV_SCOPE("D3dBackend::abandon");
-    if (device11_ != nullptr && slices_.count() != 0u) {
-        device11_->lock(nullptr);
-        slices_.retire(memory);
-        device11_->unlock();
-    }
+    if (device11_ != nullptr && slices_.count() != 0u) retire_slices(memory);
     if (!region_.is(memory)) return;
     published_.unbind();
     region_.abandon(memory);
+}
+
+void D3dBackend::retire_slices(const SourceMemory &memory)
+{
+    AV_SCOPE("D3dBackend::retire_slices");
+    const bool locked = !held_;
+    if (locked) device11_->lock(nullptr);
+    slices_.retire(memory, progress11_);
+    SliceBindings::Binding bound = {};
+    while (slices_.next_bound_to(memory, bound)) {
+        ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(bound.resource_, D3dObjectKind::resource);
+        if (found == nullptr) continue;
+        device11_->context()->DiscardResource(found);
+    }
+    if (locked) device11_->unlock();
+}
+
+void D3dBackend::leave_slice(ID3D11Buffer *buffer, const SliceBindings::Binding &was)
+{
+    AV_SCOPE("D3dBackend::leave_slice");
+    D3D11_BUFFER_DESC desc = {};
+    buffer->GetDesc(&desc);
+    D3D11_MAPPED_SUBRESOURCE mapped = {};
+    if (FAILED(device11_->context()->Map(buffer, 0u, D3D11_MAP_WRITE_DISCARD, 0u, &mapped))) return;
+    const uint64_t kept = desc.ByteWidth < was.bytes_ ? desc.ByteWidth : was.bytes_;
+    __builtin_memcpy(mapped.pData, was.slice_, static_cast<size_t>(kept));
+    device11_->context()->Unmap(buffer, 0u);
 }
 
 ID3D11Texture2D *D3dBackend::shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc)
@@ -696,6 +720,8 @@ bool D3dBackend::on_DestroyObject(uint32_t id)
     if (found == nullptr || kind >= D3dObjectKind::heap12) return false;
     published_.forget(id);
     constants_.forget(id);
+    SliceBindings::Binding was = {};
+    static_cast<void>(slices_.leave(id, was));
     objects_.remove(id);
     return true;
 }
@@ -1683,22 +1709,44 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
 bool D3dBackend::on_QueryBufferSlices11(uint32_t &supported)
 {
     AV_SCOPE("D3dBackend::on_QueryBufferSlices11");
-    supported = device11_ != nullptr && device11_->slices() ? multi_block_slices : 0u;
+    const bool marked = device11_ != nullptr && device11_->slices() && !mark_refused_ && marks_batches();
+    supported = static_cast<uint32_t>(marked ? BufferSliceSupport::multi_block : BufferSliceSupport::none);
     return true;
 }
 
 bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t offset, uint64_t bytes)
 {
     AV_SCOPE("D3dBackend::on_BindBufferSlice");
+    if (memory == 0u) return detach_buffer_slice(resource, offset, bytes);
     ID3D11Resource *const     found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
     SourceMemory *const       store = imports_ != nullptr ? imports_->named(memory) : nullptr;
     uint8_t *const            slice = store != nullptr ? store->at(offset, bytes) : nullptr;
-    if (!ready() || found == nullptr || slice == nullptr || !device11_->slices() || !dynamic_buffer(found)) return false;
+    if (!ready() || found == nullptr || slice == nullptr || !device11_->slices() || mark_refused_ ||
+        !dynamic_buffer(found))
+        return false;
     const VulkanBuffer *const storage = slices_.bind(*device11_, *store, progress11_);
     if (storage == nullptr) return false;
     auto *const buffer = static_cast<ID3D11Buffer *>(found);
     constants_.release(device11_->context(), states_.selected_id(), resource, buffer);
-    return device11_->bind_storage(buffer, *storage, offset, bytes, slice);
+    if (!device11_->bind_storage(buffer, *storage, offset, bytes, slice)) return false;
+    return slices_.attach({resource, store, slice, bytes});
+}
+
+bool D3dBackend::detach_buffer_slice(uint32_t resource, uint64_t offset, uint64_t bytes)
+{
+    AV_SCOPE("D3dBackend::detach_buffer_slice");
+    ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
+    if (!ready() || found == nullptr || offset != 0u || bytes != 0u || !dynamic_buffer(found)) return false;
+    SliceBindings::Binding was = {};
+    if (slices_.leave(resource, was)) leave_slice(static_cast<ID3D11Buffer *>(found), was);
+    return true;
+}
+
+bool D3dBackend::marks_batches()
+{
+    AV_SCOPE("D3dBackend::marks_batches");
+    if (progress11_.fence() == nullptr) progress11_.adopt(device11_->make_fence(progress11_.marked()));
+    return progress11_.fence() != nullptr;
 }
 
 bool D3dBackend::dynamic_buffer(ID3D11Resource *resource) const

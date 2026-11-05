@@ -28,6 +28,8 @@ public:
     bool                done(uint64_t reached) const;
     const VulkanBuffer &buffer() const;
 
+    bool invariants_hold() const;
+
 private:
     SourceMemory *store_;
     VulkanBuffer  buffer_;

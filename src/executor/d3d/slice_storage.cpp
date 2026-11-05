@@ -33,7 +33,7 @@ bool SliceStorage::import(D3d11HostDevice &device)
 void SliceStorage::used_at(uint64_t mark)
 {
     AV_SCOPE("SliceStorage::used_at");
-    mark_ = mark;
+    if (mark > mark_) mark_ = mark;
 }
 
 void SliceStorage::retire()
@@ -76,6 +76,12 @@ const VulkanBuffer &SliceStorage::buffer() const
 {
     AV_SCOPE("SliceStorage::buffer");
     return buffer_;
+}
+
+bool SliceStorage::invariants_hold() const
+{
+    AV_SCOPE("SliceStorage::invariants_hold");
+    return store_ != nullptr && !(refused_ && buffer_.made());
 }
 
 }

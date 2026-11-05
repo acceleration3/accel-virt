@@ -250,7 +250,10 @@ bool D3d11Device::own_shadow(ResourceRecord &resource)
                           ? shadows_.allocate(resource.shadow_bytes, watched)
                           : static_cast<uint8_t *>(memory_.allocate(resource.shadow_bytes, Pool::paged));
     if (shadow == nullptr) return false;
-    if (resource.on_slice != 0u) leave_slice(resource);
+    if (resource.on_slice != 0u) {
+        resource.slice = d3d::BufferSlices::Slice{0u, 0u};
+        resource.on_slice = 0u;
+    }
     resource.shadow = shadow;
     resource.shadow_watched = watched ? 1u : 0u;
     resource.shadow_local = 1u;
@@ -273,6 +276,10 @@ bool D3d11Device::leave_slice_for_copies(ResourceRecord &resource)
     if (shadow == nullptr) return false;
     __builtin_memcpy(shadow, resource.shadow, resource.shadow_bytes);
     if (watched) shadows_.forget_writes(shadow, resource.shadow_bytes);
+    if (!detach_slice(resource)) {
+        shadows_.release(shadow, watched);
+        return false;
+    }
     leave_slice(resource);
     resource.shadow = shadow;
     resource.shadow_watched = watched ? 1u : 0u;
@@ -284,6 +291,12 @@ bool D3d11Device::bind_slice(const ResourceRecord &resource)
     AV_SCOPE("D3d11Device::bind_slice");
     return d3dproto::av_d3d_BindBufferSlice(wire(), resource.stamp.id(), slices_.memory(resource.slice),
                                             slices_.offset_in_block(resource.slice), resource.slice.bytes_);
+}
+
+bool D3d11Device::detach_slice(const ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::detach_slice");
+    return d3dproto::av_d3d_BindBufferSlice(wire(), resource.stamp.id(), 0u, 0u, 0u);
 }
 
 void D3d11Device::leave_slice(ResourceRecord &resource)

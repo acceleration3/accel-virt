@@ -126,7 +126,10 @@ namespace av::d3dproto {
 // (docs/host-memory.md) - which the guest writes and the host GPU reads in place: commands before this one read the
 // buffer's storage before it, commands after it this slice (docs/mapped-buffers-plan.md, 3.2). `bytes` covers at
 // least the buffer; a slice outside its block, a resource that is no buffer, or a host QueryBufferSlices11 answered 0
-// for, is refused. The host keeps a released block until its GPU work has run.
+// for, is refused. The host keeps a released block until its GPU work has run. A `memory` of 0, with `offset` and `bytes` 0,
+// is the buffer leaving its slice: it owns its storage again, keeping what the slice held, and the guest sends it before
+// it stops using the slice for any reason but destroying the buffer or binding it to another slice, since the host retires
+// a block's storage when the block is released and takes every buffer still bound to it back.
 [[nodiscard]] bool av_d3d_BindBufferSlice(::av::ClientTransport& t, uint32_t resource, uint64_t memory, uint64_t offset, uint64_t bytes);
 [[nodiscard]] bool av_d3d_BeginQuery(::av::ClientTransport& t, uint32_t query);
 [[nodiscard]] bool av_d3d_EndQuery(::av::ClientTransport& t, uint32_t query);

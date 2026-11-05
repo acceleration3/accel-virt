@@ -120,6 +120,7 @@ private:
     [[nodiscard]] bool place_on_slice(ResourceRecord &resource, size_t bytes);
     [[nodiscard]] bool rename_slice(ResourceRecord &resource);
     [[nodiscard]] bool bind_slice(const ResourceRecord &resource);
+    [[nodiscard]] bool detach_slice(const ResourceRecord &resource);
     void               leave_slice(ResourceRecord &resource);
     [[nodiscard]] bool leave_slice_for_copies(ResourceRecord &resource);
     [[nodiscard]] bool own_shadow(ResourceRecord &resource);

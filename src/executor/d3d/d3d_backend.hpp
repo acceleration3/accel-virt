@@ -174,10 +174,13 @@ public:
 
 private:
     bool dynamic_buffer(ID3D11Resource *resource) const;
+    bool detach_buffer_slice(uint32_t resource, uint64_t offset, uint64_t bytes);
+    bool marks_batches();
+    void retire_slices(const SourceMemory &memory);
+    void leave_slice(ID3D11Buffer *buffer, const SliceBindings::Binding &was);
     friend struct D3dBackendProbe;
 
     static constexpr uint32_t stage_count = 6u;
-    static constexpr uint32_t multi_block_slices = 2u;
 
     void             describe_shared_image(uint64_t shared_key, IUnknown *made);
     ID3D11Texture2D         *shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc);
