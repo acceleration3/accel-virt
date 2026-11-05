@@ -114,7 +114,7 @@ void D3dSession::open_slices()
 {
     AV_SCOPE("D3dSession::open_slices");
     static_cast<void>(timeline_.construct(channel_, lock_));
-    static_cast<void>(slices_.construct(memory_, channel_, this, timeline_.object(), slices_lock_, clock_));
+    static_cast<void>(slices_.construct(memory_, channel_, this, timeline_.object(), slices_lock_, clock_, lines_));
     lines_.write("dynamic buffers are drawn in place from slice memory that grows as maps need it");
 }
 

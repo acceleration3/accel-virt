@@ -2,14 +2,14 @@
 #define AV_D3D_BUFFER_SLICES_HPP
 
 #include "core/support/growable_array.hpp"
-#include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
-#include "icd/d3d/slice_block.hpp"
+#include "icd/d3d/slice_blocks.hpp"
 
 #include <stdint.h>
 
 namespace av {
 class BlockSource;
+class DriverLog;
 class PollClock;
 class ThreadLock;
 }
@@ -33,17 +33,10 @@ public:
     static constexpr uint64_t largest_small = uint64_t{64} * 1024u;
     static constexpr uint32_t small_classes = 9u;
     static constexpr uint64_t chunk_bytes = uint64_t{256} * 1024u;
-    static constexpr uint64_t large_alignment = uint64_t{64} * 1024u;
-    static constexpr uint32_t slot_shift = 26u;
-    static constexpr uint64_t slot_bytes = uint64_t{1} << slot_shift;
-    static constexpr uint64_t first_block_bytes = uint64_t{4} << 20u;
-    static constexpr uint64_t largest_block_bytes = slot_bytes;
-    static constexpr uint64_t ceiling_bytes = uint64_t{512} << 20u;
-    static constexpr uint32_t slot_count = 16u;
-    static constexpr uint64_t spare_lifetime_nanoseconds = uint64_t{10} * 1000000000u;
+    static constexpr uint64_t large_alignment = SliceBlocks::large_alignment;
 
     BufferSlices(BlockSource &memory, icd::HostChannel &channel, const void *owner, GpuTimeline &timeline,
-                 ThreadLock &lock, PollClock &clock);
+                 ThreadLock &lock, PollClock &clock, DriverLog &lines);
     ~BufferSlices();
     BufferSlices(const BufferSlices &) = delete;
     BufferSlices &operator=(const BufferSlices &) = delete;
@@ -72,18 +65,12 @@ private:
     };
 
     static constexpr uint32_t no_class = ~0u;
-    static constexpr uint32_t no_slot = ~0u;
 
     uint32_t             class_of(uint64_t bytes) const;
     uint64_t             class_bytes(uint32_t which) const;
     [[nodiscard]] Status take_once(uint64_t bytes, Slice &slice);
     [[nodiscard]] Status carve(uint32_t which);
-    [[nodiscard]] Status place_in_blocks(uint64_t bytes, uint64_t &offset);
-    [[nodiscard]] Status open_block(uint64_t bytes);
-    uint64_t             next_block_bytes(uint64_t bytes) const;
-    void                 close_block(uint32_t slot);
-    void                 note_empty(uint32_t slot);
-    bool                 has_spare(uint32_t except) const;
+    void                 forget_free_in(uint32_t slot);
     [[nodiscard]] Status make_retired_room();
     void                 compact_retired();
     void                 reclaim();
@@ -95,9 +82,7 @@ private:
     const void                 *owner_;
     GpuTimeline                &timeline_;
     ThreadLock                 &lock_;
-    PollClock                  &clock_;
-    ObjectStorage<SliceBlock>   blocks_[slot_count];
-    uint64_t                    total_bytes_;
+    SliceBlocks                 blocks_;
     GrowableArray<uint64_t>     free_[small_classes];
     uint32_t                    carved_[small_classes];
     GrowableArray<Retired>      retired_;

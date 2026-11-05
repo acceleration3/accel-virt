@@ -97,8 +97,12 @@ bool SliceStorages::invariants_hold() const
 {
     AV_SCOPE("SliceStorages::invariants_hold");
     uint32_t retired = 0u;
-    storages_.for_each([&retired](const SliceStorage &storage) { retired += storage.retired() ? 1u : 0u; });
-    return retired == retiring_ && storages_.invariants_hold() && bindings_.invariants_hold();
+    bool sound = true;
+    storages_.for_each([&retired, &sound](const SliceStorage &storage) {
+        retired += storage.retired() ? 1u : 0u;
+        sound = sound && storage.invariants_hold();
+    });
+    return sound && retired == retiring_ && storages_.invariants_hold() && bindings_.invariants_hold();
 }
 
 }
