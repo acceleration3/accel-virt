@@ -1,6 +1,7 @@
 #include "icd/d3d/slice_blocks.hpp"
 
 #include "core/log/driver_log.hpp"
+#include "core/log/log_line.hpp"
 #include "core/platform/poll_clock.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/host_allocation.hpp"
@@ -72,6 +73,7 @@ Status SliceBlocks::open(uint64_t bytes, uint32_t &slot)
         release_memory(*made);
         return built;
     }
+    blocks_[free_slot].object().empty_since(now);
     total_bytes_ += blocks_[free_slot].object().bytes();
     slot = free_slot;
     return Status::ok;
@@ -146,9 +148,10 @@ void SliceBlocks::close(uint32_t slot)
 void SliceBlocks::release_memory(HostAllocation &allocation)
 {
     AV_SCOPE("SliceBlocks::release_memory");
-    if (channel_.close_memory(allocation) == Status::ok || close_reported_) return;
+    const Status closed = channel_.close_memory(allocation);
+    if (closed == Status::ok || close_reported_) return;
     close_reported_ = true;
-    lines_.write("slice memory could not be given back to the host");
+    LogLine(lines_).text("slice memory could not be given back to the host: status ").number(static_cast<uint32_t>(closed)).write();
 }
 
 bool SliceBlocks::close_unused(uint32_t slot)
