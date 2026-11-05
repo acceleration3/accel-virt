@@ -38,7 +38,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, BlockSource &memory, Sub
       room_(staging != nullptr ? staging_bytes : 0u, reply_bytes), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
       path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_{}, route_(nullptr), standby_(nullptr), gates_busy_(0u), pending_(nullptr, 0u), unpublished_(0u), answered_(false), answered_fence_(0u),
-      decode_arena_(nullptr, 0u), blobs_(), arena_(nullptr), room_pressure_(0u), room_wait_ticks_(0u), spill_(memory), answer_(memory)
+      decode_arena_(nullptr, 0u), blobs_(), arena_(nullptr), room_pressure_(0u), room_wait_ticks_(0u), window_began_(0u), windowed_(false), spill_(memory), answer_(memory)
 {
     AV_SCOPE("KmtTransport::KmtTransport");
 }
@@ -50,7 +50,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
       room_(staging != nullptr ? staging_bytes : 0u, reply_bytes), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
       path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_{}, route_(nullptr), standby_(nullptr), gates_busy_(0u), pending_(nullptr, 0u), unpublished_(0u), answered_(false), answered_fence_(0u),
-      decode_arena_(nullptr, 0u), blobs_(), arena_(nullptr), room_pressure_(0u), room_wait_ticks_(0u), spill_(), answer_()
+      decode_arena_(nullptr, 0u), blobs_(), arena_(nullptr), room_pressure_(0u), room_wait_ticks_(0u), window_began_(0u), windowed_(false), spill_(), answer_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
 }
@@ -664,17 +664,20 @@ bool KmtTransport::grow_if_pressed()
 {
     AV_SCOPE("KmtTransport::grow_if_pressed");
     if (arena_ == nullptr || faulted_ || !blobs_.ready()) return false;
+    const uint64_t now = published_now();
+    if (!windowed_) {
+        windowed_ = true;
+        window_began_ = now;
+    }
     const bool waiting = room_pressure_ >= pressure_waits || room_wait_ticks_ >= pressure_wait_ticks;
     const bool pressed = waiting && uint64_t{blobs_.window_peak()} * 100u >=
                                         uint64_t{blobs_.ring_bytes()} * pressure_percent;
+    if (!pressed && now - window_began_ < pressure_window_ticks) return false;
     blobs_.restart_window();
-    if (!pressed) {
-        room_pressure_ >>= 1u;
-        room_wait_ticks_ >>= 1u;
-        return false;
-    }
     room_pressure_ = 0u;
     room_wait_ticks_ = 0u;
+    window_began_ = now;
+    if (!pressed) return false;
     static_cast<void>(grow_arena(0u));
     return true;
 }

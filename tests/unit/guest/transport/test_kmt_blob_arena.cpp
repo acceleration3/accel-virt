@@ -496,20 +496,25 @@ TEST(kmt_transport_pressure, a_hundred_milliseconds_of_waiting_grows_the_ring_ho
   rig.host_takes_the_releases(3u);
   CHECK_STATUS(rig.arena().close(), Status::ok); }
 
-TEST(kmt_transport_pressure, a_ring_that_never_came_near_full_or_too_few_waits_grow_nothing_and_the_waits_fade)
+TEST(kmt_transport_pressure, a_ring_that_never_came_near_full_or_too_few_waits_grow_nothing_and_the_waits_end_with_their_second)
 { Rig rig;
   rig.host_takes_the_imports();
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
   const std::uint32_t before = rig.kmt().commands();
+  rig.kmt().reads_clock(nullptr, MockKmt::ticks_per_second / 100u);
   KmtTransportProbe::press(rig.transport(), 12u);
-  rig.transport().grow_if_pressed();
+  CHECK(!rig.transport().grow_if_pressed());
   CHECK_EQ(rig.kmt().commands(), before);
-  CHECK_EQ(KmtTransportProbe::pressure(rig.transport()), 6u);
+  CHECK_EQ(KmtTransportProbe::pressure(rig.transport()), 12u);
+  rig.kmt().reads_clock(nullptr, 2u * MockKmt::ticks_per_second);
+  CHECK(!rig.transport().grow_if_pressed());
+  CHECK_EQ(KmtTransportProbe::pressure(rig.transport()), 0u);
   fill_the_ring(rig);
+  rig.kmt().reads_clock(nullptr, MockKmt::ticks_per_second / 100u);
   KmtTransportProbe::press(rig.transport(), KmtTransport::pressure_waits - 1u);
-  rig.transport().grow_if_pressed();
+  CHECK(!rig.transport().grow_if_pressed());
   CHECK_EQ(rig.kmt().commands(), before);
-  CHECK_EQ(KmtTransportProbe::pressure(rig.transport()), (KmtTransport::pressure_waits - 1u) / 2u);
+  CHECK_EQ(KmtTransportProbe::pressure(rig.transport()), KmtTransport::pressure_waits - 1u);
   CHECK_EQ(rig.transport().blobs().segments(), 1u);
   rig.host_takes_the_releases(2u);
   CHECK_STATUS(rig.arena().close(), Status::ok); }

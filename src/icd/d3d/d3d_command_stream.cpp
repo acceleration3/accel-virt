@@ -29,7 +29,11 @@ Status D3dCommandStream::flush()
 {
     AV_SCOPE("D3dCommandStream::flush");
     if (failed_) return Status::invalid_state;
-    if (recording_ != nullptr || transport_.held() == 0u) return Status::ok;
+    if (recording_ != nullptr) return Status::ok;
+    if (transport_.held() == 0u) {
+        transport_.tune_arena();
+        return Status::ok;
+    }
     const TransportResult sent = transport_.flush();
     batches_++;
     if (sent == TransportResult::ok) {
@@ -57,7 +61,7 @@ Status D3dCommandStream::application_flush()
         flushed_at_ = recorded_;
     }
     if (failed_) return Status::invalid_state;
-    return recorded_bytes() == 0u ? Status::ok : flush();
+    return flush();
 }
 
 Status D3dCommandStream::run_held()

@@ -41,6 +41,7 @@ public:
     static constexpr uint32_t pressure_waits = 4u;
     static constexpr uint64_t pressure_wait_ticks = 1000000u;
     static constexpr uint64_t pressure_percent = 75u;
+    static constexpr uint64_t pressure_window_ticks = 10000000u;
 
     static constexpr uint32_t dma_bytes    = 4096u;
 
@@ -198,6 +199,8 @@ private:
     KmtBlobArena    *arena_;
     uint32_t         room_pressure_;
     uint64_t         room_wait_ticks_;
+    uint64_t         window_began_;
+    bool             windowed_;
     SpillBlock       spill_;
     SpillBlock       answer_;
     ChannelStats     stats_;
