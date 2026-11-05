@@ -24,7 +24,8 @@ using Root = GlIcdRoot;
 namespace av::icd {
 
 struct IcdConnectionProbe {
-    static void set_users(IcdConnection &connection, uint32_t users) { connection.users_[0] = users; }
+    static Status find_adapter(IcdConnection &connection) { return connection.search_.find_avgpu(connection.luid_); }
+    static void lose_adapter(IcdConnection &connection) { static_cast<void>(connection.search_.close()); }
 };
 
 }
@@ -33,14 +34,11 @@ namespace av::glicd {
 
 struct GlIcdRootProbe {
     static GuestGlContext *context(GlIcdRoot &root, std::uint64_t handle) { return root.contexts_.resolve(handle); }
-    static void fill_pending(GlIcdRoot &root)
+    static void plant_pending(GlIcdRoot &root, uint32_t thread, uint64_t handle)
     {
-        for (uint32_t row = 0u; row < GlIcdRoot::max_pending; row++) {
-            root.pending_threads_[row] = 100u + row;
-            root.pending_handles_[row] = 1u;
-        }
+        uint32_t slot = 0u;
+        static_cast<void>(root.pending_.insert(thread, handle, slot));
     }
-    static void unpair_pending(GlIcdRoot &root) { root.pending_threads_[0] = 5u; }
     static void empty_slot(GlIcdRoot &root) { root.proc_table_.slots[4] = nullptr; }
     static void miscount_table(GlIcdRoot &root) { root.proc_table_.entries = 3; }
     static void overcount_callbacks(GlIcdRoot &root) { root.callback_count_ = 10u; }
@@ -52,7 +50,7 @@ struct GlIcdRootProbe {
 };
 
 struct GlExtensionPolicyProbe {
-    static void overcount(GlExtensionPolicy &policy) { policy.gl_count_ = GlExtensionPolicy::max_rows + 1u; }
+    static void blank_wgl(GlExtensionPolicy &policy) { policy.wgl_[0] = '\0'; }
 };
 
 struct PixelFormatTableProbe {
@@ -136,15 +134,15 @@ TEST(gl_icd_root, validates_only_version_2_and_keeps_nine_callbacks)
   char bytes[512];
   av::StateWriter none(bytes, sizeof bytes);
   rig.root().report(none);
-  CHECK(std::strncmp(none.dump(), "root/0 busy=false callbacks=0 ", 30u) == 0);
+  CHECK(std::strncmp(none.dump(), "avgl/0 busy=false callbacks=0 ", 30u) == 0);
   rig.root().set_callback_procs(12, procs);
   av::StateWriter nine(bytes, sizeof bytes);
   rig.root().report(nine);
-  CHECK(std::strncmp(nine.dump(), "root/0 busy=false callbacks=9 ", 30u) == 0);
+  CHECK(std::strncmp(nine.dump(), "avgl/0 busy=false callbacks=9 ", 30u) == 0);
   rig.root().set_callback_procs(2, procs);
   av::StateWriter two(bytes, sizeof bytes);
   rig.root().report(two);
-  CHECK(std::strncmp(two.dump(), "root/0 busy=false callbacks=2 ", 30u) == 0);
+  CHECK(std::strncmp(two.dump(), "avgl/0 busy=false callbacks=2 ", 30u) == 0);
   CHECK(rig.root().invariants_hold()); }
 
 TEST(gl_icd_root, describes_formats_only_for_a_dc_on_a_window)
@@ -227,10 +225,14 @@ TEST(gl_icd_root, a_swap_forgets_the_windows_that_are_gone)
 TEST(gl_icd_root, nothing_reaches_the_device_until_a_context_is_made_current)
 { GlIcdRig rig;
   rig.load_with_format();
+  void *const warm = rig.current_context();
+  CHECK(warm != nullptr);
+  CHECK(rig.opengl32().delete_context(warm));
   const std::uint32_t windows = rig.platform().live_allocations();
+  const std::uint32_t enumerated = rig.kmt().calls(MockKmt::Call::enumerate_adapters);
   void *const context = rig.opengl32().create_context(rig.dc());
   CHECK(context != nullptr);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::enumerate_adapters), 0u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::enumerate_adapters), enumerated);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   rig.host().gl_make("host gpu", "4.6.0");
   rig.host().gl_policy(0);
@@ -319,7 +321,13 @@ TEST(gl_icd_root, a_make_that_fails_answers_why_and_leaves_the_context_to_retry)
   check_error(rig, Root::error_not_supported);
   rig.platform().fail_allocation_at(1u);
   CHECK(rig.root().set_context(rig.dc(), handle, nullptr) == nullptr);
+  check_error(rig, Root::error_not_supported);
+  av::icd::DeviceLink *held = nullptr;
+  CHECK_STATUS(av::glicd::GlIcdRootProbe::connection(rig.root()).acquire(held), Status::ok);
+  rig.platform().fail_allocation_at(1u);
+  CHECK(rig.root().set_context(rig.dc(), handle, nullptr) == nullptr);
   check_error(rig, Root::error_not_enough_memory);
+  av::glicd::GlIcdRootProbe::connection(rig.root()).release(*held);
   rig.host().arena_import(0x77u, 2u);
   rig.kmt().withhold_answer_at(2u);
   CHECK(rig.root().set_context(rig.dc(), handle, nullptr) == nullptr);
@@ -405,7 +413,7 @@ TEST(gl_icd_root, gl_calls_go_through_the_threads_table_to_its_context)
   rig.opengl32().gl<GetIntegervFn>(slot_get_integerv)(gl_viewport, viewport);
   CHECK_EQ(viewport[2], 64);
   CHECK_EQ(viewport[3], 48);
-  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetIntegerv), 8u); }
+  CHECK_EQ(sent(rig, av::glproto::kCmd_glGetIntegerv), 9u); }
 
 TEST(gl_icd_root, the_line_names_whichever_profile_the_host_gave)
 { GlIcdRig core;
@@ -827,7 +835,7 @@ TEST(gl_icd_root, a_create_with_attributes_opengl32_does_not_finish_leaves_nothi
   check_error(rig, Root::error_invalid_operation);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.root().invariants_hold());
-  av::glicd::GlIcdRootProbe::fill_pending(rig.root());
+  av::glicd::GlIcdRootProbe::plant_pending(rig.root(), 1u, 1u);
   rig.host().gl_make("host gpu", "4.6");
   rig.host().gl_policy(0);
   CHECK(rig.root().create_context_attribs(rig.dc(), nullptr, none) == nullptr);
@@ -859,13 +867,13 @@ TEST(gl_icd_root, reports_busy_when_its_lock_is_held_and_everything_otherwise)
   rig.lock().held_elsewhere(true);
   av::StateWriter busy(bytes, sizeof bytes);
   rig.root().report(busy);
-  CHECK(std::strcmp(busy.dump(), "root/0 busy=true") == 0);
+  CHECK(std::strcmp(busy.dump(), "avgl/0 busy=true") == 0);
   rig.lock().held_elsewhere(false);
   av::StateWriter full(bytes, sizeof bytes);
   rig.root().report(full);
-  CHECK(std::strncmp(full.dump(), "root/0 busy=false callbacks=9 current_anywhere=1\nconnection/0 users=1 ", 69u) == 0);
+  CHECK(std::strncmp(full.dump(), "avgl/0 busy=false callbacks=9 current_anywhere=1\nconnection/0 users=1 ", 69u) == 0);
   CHECK(std::strstr(full.dump(), "\nwindows/0 held=1\n") != nullptr);
-  CHECK(std::strstr(full.dump(), "\ncontexts/0 live=1\ncontexts/0/context/1 state=made owner=1 ") != nullptr); }
+  CHECK(std::strstr(full.dump(), "\ncontexts/0 live=1 retired=0\ncontexts/0/context/1 state=made owner=1 ") != nullptr); }
 
 TEST(gl_icd_root, a_dropped_command_is_logged_and_sync_tokens_count_up)
 { GlIcdRig rig;
@@ -949,7 +957,7 @@ TEST(gl_icd_root, a_create_takes_the_root_lock_a_call_takes_none_and_a_flush_the
   rig.host().gl_policy(0);
   rig.host().gl_window(1u, 1u);
   CHECK(rig.opengl32().make_current(rig.dc(), context));
-  CHECK(std::strcmp(rig.trace().text(), "Hh") == 0);
+  CHECK(std::strcmp(rig.trace().text(), "HLlh") == 0);
   rig.trace().clear();
   rig.opengl32().gl<ClearFn>(slot_clear)(0x4000u);
   CHECK(std::strcmp(rig.trace().text(), "") == 0);
@@ -959,7 +967,7 @@ TEST(gl_icd_root, a_create_takes_the_root_lock_a_call_takes_none_and_a_flush_the
 
 TEST(gl_icd_root_invariants, fail_for_state_no_entry_makes)
 { GlIcdRig pending;
-  av::glicd::GlIcdRootProbe::unpair_pending(pending.root());
+  av::glicd::GlIcdRootProbe::plant_pending(pending.root(), 5u, 0u);
   CHECK(!pending.root().invariants_hold());
   GlIcdRig slot;
   av::glicd::GlIcdRootProbe::empty_slot(slot.root());
@@ -974,7 +982,7 @@ TEST(gl_icd_root_invariants, fail_for_state_no_entry_makes)
 TEST(gl_icd_root_invariants, fail_when_a_part_it_owns_is_broken)
 { using av::glicd::GlIcdRootProbe;
   GlIcdRig extensions;
-  av::glicd::GlExtensionPolicyProbe::overcount(GlIcdRootProbe::extensions(extensions.root()));
+  av::glicd::GlExtensionPolicyProbe::blank_wgl(GlIcdRootProbe::extensions(extensions.root()));
   CHECK(!extensions.root().invariants_hold());
   GlIcdRig formats;
   av::glicd::PixelFormatTableProbe::repeat_row(GlIcdRootProbe::formats(formats.root()));
@@ -983,9 +991,11 @@ TEST(gl_icd_root_invariants, fail_when_a_part_it_owns_is_broken)
   av::glicd::WindowTableProbe::plant_unformatted(GlIcdRootProbe::windows(windows.root()));
   CHECK(!windows.root().invariants_hold());
   GlIcdRig connection;
-  av::icd::IcdConnectionProbe::set_users(GlIcdRootProbe::connection(connection.root()), 1u);
+  CHECK_STATUS(av::icd::IcdConnectionProbe::find_adapter(GlIcdRootProbe::connection(connection.root())),
+               Status::ok);
   CHECK(!connection.root().invariants_hold());
-  av::icd::IcdConnectionProbe::set_users(GlIcdRootProbe::connection(connection.root()), 0u);
+  av::icd::IcdConnectionProbe::lose_adapter(GlIcdRootProbe::connection(connection.root()));
+  CHECK(connection.root().invariants_hold());
   GlIcdRig contexts;
   av::glicd::GlContextTableProbe::zero_next(GlIcdRootProbe::contexts(contexts.root()));
   CHECK(!contexts.root().invariants_hold()); }
@@ -1065,10 +1075,16 @@ TEST(gl_icd_root, a_window_the_context_cannot_draw_on_refuses_the_make_current)
   for (int index = 0; index < 8; index++) {
     rig.surface().add_dc(&dcs[index], &windows[index], 4u, 4u);
     CHECK(rig.opengl32().set_pixel_format(&dcs[index], 1));
-    if (index < 7) rig.host().gl_window(1u, 1u);
-    const bool current = rig.opengl32().make_current(&dcs[index], context);
-    CHECK_EQ(current, index < 7);
+    rig.host().gl_window(1u, 1u);
+    CHECK(rig.opengl32().make_current(&dcs[index], context));
   }
+  CHECK(rig.root().invariants_hold());
+  int more_dc = 0, more_window = 0;
+  rig.surface().add_dc(&more_dc, &more_window, 4u, 4u);
+  CHECK(rig.opengl32().set_pixel_format(&more_dc, 1));
+  rig.platform().fail_allocation_at(1u);
+  CHECK(!rig.opengl32().make_current(&more_dc, context));
+  rig.platform().fail_allocation_at(0u);
   check_error(rig, Root::error_not_enough_memory);
   rig.surface().resize(window, 8u, 8u);
   void *const other = rig.opengl32().create_context(rig.dc());
