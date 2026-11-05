@@ -72,6 +72,7 @@ public:
     void                            retire_memory(HostAllocation &allocation);
     void                            retire_pages(void *pages);
     void                            reclaim_retired();
+    void                            trim_streams();
 
 private:
     static constexpr uint8_t  ring_order = 22u;

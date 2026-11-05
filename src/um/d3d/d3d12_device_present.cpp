@@ -73,6 +73,7 @@ void D3d12Device::present(D3D12DDI_HCOMMANDQUEUE queue_handle, const D3D12DDIARG
         lost("a present could not be sent");
         return;
     }
+    trim_memory();
     if (!follow(queue)) return;
     out->BroadcastSrcAllocation[0] = source->allocation;
     out->BroadcastDstAllocation[0] = destination != nullptr ? destination->allocation : 0u;

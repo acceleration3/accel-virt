@@ -290,6 +290,7 @@ VOID D3d12Device::execute_command_lists(D3D12DDI_HCOMMANDQUEUE handle, UINT coun
         lost("the queue's work could not be sent");
         return;
     }
+    trim_memory();
     if (!follow(queue)) return;
     if (queue.executed % verdict_every != 0u) return;
     uint32_t removed = 0u;

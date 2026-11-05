@@ -1,6 +1,7 @@
 #ifndef AV_UM_D3D12_RECORDS_HPP
 #define AV_UM_D3D12_RECORDS_HPP
 
+#include "icd/common/stream_memory.hpp"
 #include "icd/d3d/present_count.hpp"
 #include "icd/d3d/record_stamp.hpp"
 #include "proto/generated/d3d12/d3d12_wire_types.h"
@@ -24,18 +25,27 @@ struct RecordHeader {
     D3d12Recorder *recorder;
 };
 
+enum class HeapMemory : uint32_t {
+    none,
+    stream_slice,
+    dedicated,
+    lent_pages,
+};
+
 struct HeapRecord {
     static constexpr uint32_t tag = 0x00485641u;
 
-    RecordHeader    header;
-    uint64_t        size;
-    uint64_t        address;
-    HostAllocation *memory;
-    void           *own_pages;
-    uint32_t     type;
-    uint32_t     flags;
-    uint32_t     made;
-    D3DKMT_HANDLE allocation;
+    RecordHeader             header;
+    uint64_t                 size;
+    uint64_t                 address;
+    HostAllocation          *memory;
+    void                    *own_pages;
+    icd::StreamMemory::Slice slice;
+    HeapMemory               source;
+    uint32_t                 type;
+    uint32_t                 flags;
+    uint32_t                 made;
+    D3DKMT_HANDLE            allocation;
 };
 
 struct ResourceRecord {

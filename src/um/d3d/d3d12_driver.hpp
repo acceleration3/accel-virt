@@ -8,6 +8,7 @@
 #include "um/d3d/adapter_sessions.hpp"
 #include "um/d3d/d3d12_device.hpp"
 #include "um/d3d/d3d12_host_caps.hpp"
+#include "um/d3d/heap_slice_offer12.hpp"
 #include "um/d3d/d3d_session.hpp"
 #include "um/common/srw_lock.hpp"
 
@@ -51,6 +52,7 @@ private:
     KeyedLog                     &lines_;
     d3d::D3dCallTrace             &trace_;
     ObjectPool<D3d12Device>         devices_;
+    HeapSliceOffer12                offer_;
     AdapterSessions<D3d12HostCaps>  adapters_;
     void                           *list_table_;
 };

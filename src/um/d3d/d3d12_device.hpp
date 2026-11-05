@@ -73,8 +73,15 @@ private:
                               D3D12DDI_HRTRESOURCE runtime, const D3D12DDIARG_CREATERESOURCE_0109 *args,
                               const D3D12DDI_CLEAR_VALUES *clear, D3D12DDI_HRESOURCE handle);
     HRESULT                  make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap, bool committed);
-    HRESULT                  heap_memory(uint64_t bytes, HeapRecord &heap);
+    HRESULT                  heap_memory(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap);
     Status                   lend_pages(uint64_t bytes, HeapRecord &heap);
+    Status                   take_slice(uint64_t bytes, HeapRecord &heap);
+    Status                   open_dedicated(uint64_t bytes, HeapRecord &heap);
+    void                     release_heap_memory(HeapRecord &heap);
+    icd::StreamMemory       *heap_stream(const HeapRecord &heap);
+    uint64_t                 memory_handle(const HeapRecord &heap);
+    uint64_t                 memory_offset(const HeapRecord &heap);
+    void                     trim_memory();
     HRESULT                  open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRecord &heap,
                                            ResourceRecord &resource);
     HRESULT                  make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, const D3D12DDI_CLEAR_VALUES *clear,

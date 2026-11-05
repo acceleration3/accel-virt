@@ -163,6 +163,19 @@ void D3dSession::reclaim_retired()
     lent_pages_.reclaim(completed);
 }
 
+void D3dSession::trim_streams()
+{
+    AV_SCOPE("D3dSession::trim_streams");
+    for (ObjectStorage<icd::StreamMemory> &stream : streams_) {
+        icd::StreamMemory *trimmed = nullptr;
+        {
+            const ThreadLockHold held(slices_lock_);
+            if (stream.constructed()) trimmed = &stream.object();
+        }
+        if (trimmed != nullptr) trimmed->trim();
+    }
+}
+
 icd::StreamMemory *D3dSession::memory_stream(HostMemoryRequest::Kind kind)
 {
     AV_SCOPE("D3dSession::memory_stream");
