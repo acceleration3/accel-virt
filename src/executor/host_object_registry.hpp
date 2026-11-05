@@ -79,9 +79,8 @@ template <typename Key, typename Kind, typename Detail>
 Status HostObjectRegistry<Key, Kind, Detail>::make_room(uint64_t objects)
 {
     AV_SCOPE("HostObjectRegistry::make_room");
-    const uint64_t wanted = uint64_t{entries_.count()} + objects;
-    if (wanted > KeyedSlots<Key, Entry>::most_entries) return Status::no_memory;
-    return entries_.reserve(static_cast<uint32_t>(wanted));
+    if (objects > KeyedSlots<Key, Entry>::most_entries - entries_.count()) return Status::no_memory;
+    return entries_.reserve(entries_.count() + static_cast<uint32_t>(objects));
 }
 
 template <typename Key, typename Kind, typename Detail>
