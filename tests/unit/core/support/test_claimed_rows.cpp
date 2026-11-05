@@ -129,6 +129,7 @@ TEST(claimed_rows_append, starts_with_nothing_and_makes_the_first_chunk_on_the_f
   CHECK_STATUS(rows.append(Line{"a", 1}), Status::ok);
   CHECK(rows.invariants_hold());
   CHECK_EQ(rows.claimed(), 1u);
+  CHECK_EQ(rows.ready(), 1u);
   CHECK_EQ(ClaimedRowsProbe::chunks(rows), 1u);
   const Line *const found = rows.find_if([](const Line &line) { return line.code == 1; });
   CHECK(found != nullptr);
@@ -162,13 +163,17 @@ TEST(claimed_rows_append, a_chunk_that_cannot_be_made_leaves_its_row_unready_and
   CHECK_STATUS(rows.append(Line{"lost", 16}), Status::no_memory);
   CHECK(rows.invariants_hold());
   CHECK_EQ(rows.claimed(), 17u);
+  CHECK_EQ(rows.ready(), 16u);
   CHECK(!holds(rows, 16));
   CHECK_STATUS(rows.append(Line{"kept", 17}), Status::ok);
+  CHECK_EQ(rows.claimed(), 18u);
+  CHECK_EQ(rows.ready(), 17u);
   CHECK(holds(rows, 17));
   CHECK(!holds(rows, 16));
   std::uint32_t visited = 0u;
   rows.for_each([&](const Line &) { visited++; });
   CHECK_EQ(visited, 17u);
+  CHECK_EQ(visited, rows.ready());
   CHECK(rows.invariants_hold()); }
 
 TEST(claimed_rows_append, a_writer_that_loses_the_race_for_a_chunk_writes_into_the_winners)

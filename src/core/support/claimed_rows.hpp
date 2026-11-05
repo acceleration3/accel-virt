@@ -43,6 +43,7 @@ public:
     template <typename Visitor>
     void                 for_each(Visitor visit) const;
     uint32_t             claimed() const;
+    uint32_t             ready() const;
 
     bool invariants_hold() const;
 
@@ -56,13 +57,14 @@ private:
     Pool         pool_;
     Cell        *chunks_[most_chunks];
     uint32_t     claimed_;
+    uint32_t     ready_;
 
     friend struct ClaimedRowsProbe;
 };
 
 template <typename Row>
 ClaimedRows<Row>::ClaimedRows(BlockSource &blocks, Pool pool)
-    : blocks_(blocks), pool_(pool), chunks_{}, claimed_(0u)
+    : blocks_(blocks), pool_(pool), chunks_{}, claimed_(0u), ready_(0u)
 {
     AV_SCOPE("ClaimedRows::ClaimedRows");
 }
@@ -120,6 +122,7 @@ Status ClaimedRows<Row>::append(const Row &row)
     Cell &cell = cells[index - first_of(owner)];
     cell.row_ = row;
     __atomic_store_n(&cell.ready_, true, __ATOMIC_RELEASE);
+    __atomic_fetch_add(&ready_, 1u, __ATOMIC_RELEASE);
     return Status::ok;
 }
 
@@ -167,11 +170,18 @@ uint32_t ClaimedRows<Row>::claimed() const
 }
 
 template <typename Row>
+uint32_t ClaimedRows<Row>::ready() const
+{
+    AV_SCOPE("ClaimedRows::ready");
+    return __atomic_load_n(&ready_, __ATOMIC_ACQUIRE);
+}
+
+template <typename Row>
 bool ClaimedRows<Row>::invariants_hold() const
 {
     AV_SCOPE("ClaimedRows::invariants_hold");
     const uint32_t claimed = this->claimed();
-    if (claimed > most_rows) return false;
+    if (claimed > most_rows || ready() > claimed) return false;
     for (uint32_t owner = 0u; owner < most_chunks; owner++) {
         const Cell *const cells = chunks_[owner];
         if (cells == nullptr) continue;

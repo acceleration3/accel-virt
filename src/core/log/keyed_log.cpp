@@ -33,7 +33,7 @@ void KeyedLog::once_name(const char *what, const char *name_of)
 uint32_t KeyedLog::keys() const
 {
     AV_SCOPE("KeyedLog::keys");
-    return keys_.claimed();
+    return keys_.ready();
 }
 
 }

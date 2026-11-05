@@ -70,7 +70,9 @@ TEST(cl_info_answers, answers_are_kept_without_a_fixed_bound_and_one_the_memory_
   platform.fail_allocation_at(1u);
   const std::uint64_t refused = 5000u, later = 5001u;
   answers.keep(device, 5000u, &refused, sizeof refused);
+  CHECK_EQ(answers.kept(), many);
   answers.keep(device, 5001u, &later, sizeof later);
+  CHECK_EQ(answers.kept(), many + 1u);
   std::uint64_t got = 0u;
   cl_int        result = CL_INVALID_OPERATION;
   CHECK(!answers.answer(device, 5000u, ClInfoRequest(sizeof got, &got, nullptr), result));

@@ -72,7 +72,7 @@ template <size_t Bytes>
 uint32_t ClInfoAnswers<Bytes>::kept() const
 {
     AV_SCOPE("ClInfoAnswers::kept");
-    return entries_.claimed();
+    return entries_.ready();
 }
 
 }
