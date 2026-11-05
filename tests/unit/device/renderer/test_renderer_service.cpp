@@ -220,10 +220,10 @@ public:
     }
     Status bind(std::uint32_t id, std::uint32_t page, int descriptor, std::uint64_t sequence)
     {
-        const av::ContextSetup setup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, ring, 12u, fence, page, 0u);
+        const av::ContextSetup setup(av::ProtocolVersion(av::ProtocolVersion::current_major, 0u), av::SubApi::vulkan, ring, 12u, fence, page, 0u);
         std::uint8_t           setup_bytes[av::ContextSetup::encoded_size] = {};
         static_cast<void>(setup.encode(setup_bytes, sizeof setup_bytes));
-        const av::BindContextMessage message(id, setup_bytes, static_cast<std::uint32_t>(setup.size()), page);
+        const av::BindContextMessage message(id, setup_bytes, static_cast<std::uint32_t>(av::ContextSetup::encoded_size), page);
         std::uint8_t                 body[128] = {};
         static_cast<void>(message.encode(body, sizeof body));
         return send(Kind::bind_context, sequence, body, static_cast<std::uint32_t>(message.encoded_length()),
@@ -604,7 +604,7 @@ TEST(renderer_service_context, an_answer_that_does_not_fit_is_too_large)
   CHECK_STATUS(RendererMessageHeader(Kind::create_context, av::ContextMessage::encoded_size, 5u)
                    .encode(datagram, sizeof datagram),
                Status::ok);
-  CHECK_STATUS(av::ContextMessage(context_id).encode(datagram + RendererMessageHeader::encoded_size, 4u), Status::ok);
+  CHECK_STATUS(av::ContextMessage(context_id).encode(datagram + RendererMessageHeader::encoded_size, av::ContextMessage::encoded_size), Status::ok);
   std::size_t  answered = 0u;
   int          descriptor = -1;
   std::uint8_t small[RendererMessageHeader::encoded_size] = {};
@@ -677,10 +677,10 @@ TEST(renderer_service_bind, a_bind_without_a_doorbell_offers_none)
   CHECK_STATUS(rig.region(), Status::ok);
   rig.rings();
   CHECK_STATUS(rig.context(Kind::create_context, context_id, 1u), Status::ok);
-  const av::ContextSetup setup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, ring, 12u, fence, doorbell, 0u);
+  const av::ContextSetup setup(av::ProtocolVersion(av::ProtocolVersion::current_major, 0u), av::SubApi::vulkan, ring, 12u, fence, doorbell, 0u);
   std::uint8_t           setup_bytes[av::ContextSetup::encoded_size] = {};
   CHECK_STATUS(setup.encode(setup_bytes, sizeof setup_bytes), Status::ok);
-  const av::BindContextMessage message(context_id, setup_bytes, static_cast<std::uint32_t>(setup.size()));
+  const av::BindContextMessage message(context_id, setup_bytes, static_cast<std::uint32_t>(av::ContextSetup::encoded_size));
   std::uint8_t                 body[128] = {};
   CHECK_STATUS(message.encode(body, sizeof body), Status::ok);
   CHECK_STATUS(rig.send(Kind::bind_context, 4u, body, static_cast<std::uint32_t>(message.encoded_length())), Status::ok);
@@ -694,7 +694,7 @@ TEST(renderer_service_bind, a_bind_without_a_doorbell_offers_none)
 TEST(renderer_service_bind, a_bind_that_does_not_decode_is_malformed_and_closed)
 { Rig rig;
   CHECK_STATUS(rig.hello(), Status::ok);
-  std::uint8_t garbage_setup[av::ContextSetup::base_size] = {};
+  std::uint8_t garbage_setup[av::ContextSetup::encoded_size] = {};
   std::memset(garbage_setup, 0x11, sizeof garbage_setup);
   const av::BindContextMessage message(context_id, garbage_setup, sizeof garbage_setup, doorbell);
   std::uint8_t                 body[128] = {};

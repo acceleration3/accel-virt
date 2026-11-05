@@ -185,7 +185,8 @@ void BlobCommands::map(ControlRequest &request, GpuResponse &response)
                                                               : GpuResponse::map_cache_wc);
         break;
     case Status::not_found: response.set(GpuResponse::err_invalid_resource_id); break;
-    case Status::invalid_parameter: response.set(GpuResponse::err_invalid_parameter); break;
+    case Status::invalid_parameter:
+    case Status::invalid_state: response.set(GpuResponse::err_invalid_parameter); break;
     default: response.set(GpuResponse::err_unspec); break;
     }
 }

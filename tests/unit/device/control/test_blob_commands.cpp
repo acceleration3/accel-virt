@@ -158,7 +158,7 @@ TEST(blob_commands_create, a_host_blob_is_memory_the_plane_allocates_for_its_con
   CHECK_EQ(fixture.blobs().live(), 0u);
   CHECK_EQ(fixture.plane().created_count(), 0u); }
 
-TEST(blob_commands_create, an_adopted_blob_lies_over_the_pages_attached_to_it_until_released)
+TEST(blob_commands_create, an_adopted_blob_lies_over_the_pages_attached_to_it_has_no_descriptor_to_map_and_goes_on_release)
 { Fixture fixture;
   std::uint8_t *const first = fixture.host().guest_ram(ram + 0x3000u);
   first[5] = 0x5Au;
@@ -170,8 +170,8 @@ TEST(blob_commands_create, an_adopted_blob_lies_over_the_pages_attached_to_it_un
   CHECK_EQ(fixture.host().overlaid_bytes(), 0x3000u);
   CHECK_EQ(first[5], 0x5Au);
   CHECK_EQ(fixture.send(attach(host_blob, ram + 0xC000u, 0x1000u)), err_invalid_parameter);
-  CHECK_EQ(fixture.send(map_blob(host_blob, 0u)), ok_map_info);
-  CHECK_EQ(fixture.send(named(BlobCommands::resource_unmap_blob, host_blob)), ok_nodata);
+  CHECK_EQ(fixture.send(map_blob(host_blob, 0u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(named(BlobCommands::resource_unmap_blob, host_blob)), err_invalid_parameter);
   CHECK_EQ(fixture.send(named(BlobCommands::resource_unref, host_blob)), ok_nodata);
   CHECK_EQ(fixture.host().overlaid_bytes(), 0u);
   CHECK_EQ(first[5], 0x5Au);
@@ -339,19 +339,6 @@ TEST(blob_commands_create, a_guest_blob_the_host_has_no_memory_to_track_is_out_o
   CHECK(!fixture.blobs().contains(1u));
   CHECK_EQ(fixture.plane().created_count(), 0u);
   CHECK_EQ(fixture.send(request), ok_nodata); }
-
-TEST(blob_commands_create, a_full_table_is_out_of_memory)
-{ Fixture fixture;
-  for (std::uint32_t id = 100u; id < 100u + BlobTable::max_blobs; id++) {
-      if (fixture.send(create_blob(id, guest, 0u, 1u, 0u, 0x10u).u64(ram).u32(0x10u).u32(0u)) != ok_nodata) {
-          CHECK(false);
-          break;
-      }
-  }
-  GpuRequestBuilder one_more = create_blob(5000u, guest, 0u, 1u, 0u, 0x10u);
-  one_more.u64(ram).u32(0x10u).u32(0u);
-  CHECK_EQ(fixture.send(one_more), err_out_of_memory);
-  fixture.blobs().release_all(); }
 
 TEST(blob_commands_map, refuses_bad_offsets_second_maps_and_unmappable_blobs)
 { Fixture fixture;

@@ -180,14 +180,14 @@ TEST(mock_host, every_create_can_be_failed_and_the_catalog_answers_what_was_adde
 
 TEST(mock_host_memory, allocations_are_tracked_and_can_fail)
 { MockHost mock;
-  void *const block = mock.allocate(16u);
+  void *const block = mock.allocate(16u, av::Pool::paged);
   CHECK(block != nullptr);
   CHECK_EQ(mock.live_allocations(), 1u);
   mock.release(block);
   mock.release(block);
   CHECK(mock.claim(HostViolation::unknown_handle));
   mock.fail_allocation_at(1u);
-  CHECK(mock.allocate(16u) == nullptr); }
+  CHECK(mock.allocate(16u, av::Pool::paged) == nullptr); }
 
 TEST(mock_host_map_guest, maps_ram_up_to_a_boundary_and_bounces_the_rest)
 { MockHost mock;

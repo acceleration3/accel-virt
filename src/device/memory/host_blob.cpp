@@ -94,7 +94,7 @@ Status HostBlob::map(uint64_t offset)
 {
     AV_SCOPE("HostBlob::map");
     host_.require_main_loop("HostBlob::map");
-    if (mapped_) return Status::invalid_state;
+    if (mapped_ || fd_ < 0) return Status::invalid_state;
     if (host_.place_in_hostmem(fd_, size_, offset) != Status::ok) return Status::no_memory;
     offset_ = offset;
     mapped_ = true;
