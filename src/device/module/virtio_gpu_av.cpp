@@ -351,6 +351,7 @@ void VirtioGpuAv::report(StateWriter &writer)
         writer.number("capsets", capsets());
         writer.number("blobs", blobs());
         writer.number("scanouts", scanouts());
+        writer.number("host_window_bytes", host_.hostmem_size());
         writer.number("contexts", contexts());
         writer.flag("driver_ok", (status_.value() & DriverStatus::driver_ok) != 0u);
     }
