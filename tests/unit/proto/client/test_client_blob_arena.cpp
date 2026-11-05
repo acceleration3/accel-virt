@@ -192,7 +192,7 @@ TEST(client_blob_arena, fits_counts_what_earlier_blobs_of_the_same_command_will_
   CHECK(arena.take(1u).taken());
   CHECK(!arena.fits(each, 2u)); }
 
-TEST(client_blob_arena, fits_places_from_the_segment_the_next_take_starts_at)
+TEST(client_blob_arena, fits_places_each_blob_in_the_first_segment_with_room)
 { std::uint8_t first[10];
   std::uint8_t second[11];
   ClientBlobArena arena(first, sizeof first);
@@ -201,11 +201,13 @@ TEST(client_blob_arena, fits_places_from_the_segment_the_next_take_starts_at)
   arena.seal();
   arena.mark(1u);
   arena.retire_through(1u);
-  CHECK(arena.take(5u).offset() == slot);
-  const std::uint64_t wanted[] = {5u, 5u, 6u};
-  CHECK(!arena.fits(wanted, 3u));
-  CHECK(arena.take(5u).taken());
-  CHECK(arena.take(5u).taken());
+  CHECK(arena.take(5u).offset() == 0u);
+  const std::uint64_t spills[] = {5u, 6u};
+  const std::uint64_t over[] = {5u, 6u, 6u};
+  CHECK(arena.fits(spills, 2u));
+  CHECK(!arena.fits(over, 3u));
+  CHECK(arena.take(5u).offset() == 5u);
+  CHECK(arena.take(6u).offset() == slot);
   CHECK(!arena.take(6u).taken());
   CHECK(arena.invariants_hold()); }
 
@@ -317,3 +319,18 @@ TEST(client_blob_arena, idle_at_names_a_segment_by_its_base_and_is_true_only_whi
   CHECK(arena.idle_at(slot));
   CHECK(arena.remove_segment(slot));
   CHECK(!arena.idle_at(slot)); }
+
+TEST(client_blob_arena, small_blobs_return_to_the_first_segment_once_it_has_room_so_a_later_segment_can_idle)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  const ClientBlobLease whole = arena.take(64u);
+  CHECK(whole.data() == first);
+  const ClientBlobLease spilled = arena.take(8u);
+  CHECK_EQ(spilled.offset(), slot);
+  arena.give_back(whole);
+  arena.give_back(spilled);
+  CHECK(arena.take(8u).data() == first);
+  CHECK(arena.idle_at(slot));
+  CHECK(arena.invariants_hold()); }

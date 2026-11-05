@@ -4,7 +4,7 @@
 
 namespace av {
 
-ClientBlobArena::ClientBlobArena() : segments_{}, regions_{}, count_(0u), current_(0u), peak_ring_(0u), window_peak_(0u)
+ClientBlobArena::ClientBlobArena() : segments_{}, regions_{}, count_(0u), peak_ring_(0u), window_peak_(0u)
 {
     AV_SCOPE("ClientBlobArena::ClientBlobArena");
 }
@@ -24,7 +24,6 @@ void ClientBlobArena::lend(uint8_t *block, size_t capacity)
     }
     for (Region &region : regions_) region = Region{0u, nullptr, 0u};
     count_ = 0u;
-    current_ = 0u;
     peak_ring_ = 0u;
     window_peak_ = 0u;
     if (block != nullptr && capacity != 0u) static_cast<void>(add_segment(0u, block, capacity));
@@ -121,12 +120,10 @@ ClientBlobLease ClientBlobArena::take(size_t count)
     AV_SCOPE("ClientBlobArena::take");
     if (count == 0u || count_ == 0u) return ClientBlobLease{};
     for (uint32_t tried = 0u; tried < max_segments; tried++) {
-        const uint32_t index = (current_ + tried) % max_segments;
-        Segment       &held = segments_[index];
+        Segment &held = segments_[tried];
         if (!held.ring_.ready()) continue;
         const ClientBlobLease lease = held.ring_.take(count);
         if (!lease.taken()) continue;
-        current_ = index;
         const size_t in_use = used();
         if (in_use > peak_ring_) peak_ring_ = in_use;
         if (in_use > window_peak_) window_peak_ = in_use;
@@ -202,17 +199,14 @@ bool ClientBlobArena::fits_drained(const uint64_t *sizes, uint32_t wanted) const
 bool ClientBlobArena::placed(BlobRing::Placement *plans, const uint64_t *sizes, uint32_t wanted) const
 {
     AV_SCOPE("ClientBlobArena::placed");
-    uint32_t cursor = current_;
     for (uint32_t blob = 0u; blob < wanted; blob++) {
         if (sizes[blob] == 0u) continue;
         if (sizes[blob] > ~size_t{0}) return false;
         bool found = false;
         for (uint32_t tried = 0u; tried < max_segments && !found; tried++) {
-            const uint32_t index = (cursor + tried) % max_segments;
             size_t         at = 0u;
             bool           wraps = false;
-            if (!plans[index].place(static_cast<size_t>(sizes[blob]), at, wraps)) continue;
-            cursor = index;
+            if (!plans[tried].place(static_cast<size_t>(sizes[blob]), at, wraps)) continue;
             found = true;
         }
         if (!found) return false;
@@ -342,7 +336,7 @@ bool ClientBlobArena::invariants_hold() const
             if (ring.ring_.ready() && held.base_ < ring.base_ + ring.ring_.lent() && ring.base_ < held.base_ + held.bytes_)
                 return false;
     }
-    return live == count_ && current_ < max_segments && window_peak_ <= peak_ring_;
+    return live == count_ && window_peak_ <= peak_ring_;
 }
 
 }

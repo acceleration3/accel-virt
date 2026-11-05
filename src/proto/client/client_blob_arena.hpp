@@ -72,7 +72,6 @@ private:
     Segment  segments_[max_segments];
     Region   regions_[max_regions];
     uint32_t count_;
-    uint32_t current_;
     size_t   peak_ring_;
     size_t   window_peak_;
 
