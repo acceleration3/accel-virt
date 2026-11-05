@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <ctime>
 #include <fcntl.h>
+#include <sys/eventfd.h>
 #include <unistd.h>
 
 using av::EventfdWake;
@@ -213,4 +214,41 @@ TEST(eventfd_wake_watch, a_direct3d_11_fence_and_a_direct3d_12_one_wake_through_
   CHECK(woken_reaches(1u));
   fence12.reach();
   CHECK(woken_reaches(2u));
+  wake.unbind(); }
+
+TEST(eventfd_wake_watch_descriptor, a_descriptor_that_becomes_readable_wakes_the_signal_once_for_each_arming)
+{ woken = 0u;
+  EventfdWake wake;
+  const int own = eventfd(0u, EFD_CLOEXEC | EFD_NONBLOCK);
+  CHECK(own >= 0);
+  CHECK(wake.watch_descriptor(own));
+  CHECK_EQ(woken.load(), 0u);
+  wake.bind(&::wake, &woken);
+  CHECK(!wake.watch_descriptor(-1));
+  CHECK(wake.watch_descriptor(own));
+  const std::uint64_t one = 1u;
+  CHECK(write(own, &one, sizeof one) == static_cast<ssize_t>(sizeof one));
+  CHECK(woken_reaches(1u));
+  wake.unbind();
+  close(own); }
+
+TEST(eventfd_wake_retry_later, wakes_the_signal_after_a_delay_that_doubles_until_it_settles)
+{ woken = 0u;
+  EventfdWake wake;
+  wake.retry_later();
+  const timespec unbound = {0, 5000000};
+  nanosleep(&unbound, nullptr);
+  CHECK_EQ(woken.load(), 0u);
+  wake.bind(&::wake, &woken);
+  wake.retry_later();
+  wake.retry_later();
+  CHECK(woken_reaches(1u));
+  const timespec settle = {0, 5000000};
+  nanosleep(&settle, nullptr);
+  CHECK_EQ(woken.load(), 1u);
+  wake.retry_later();
+  CHECK(woken_reaches(2u));
+  wake.settled();
+  wake.retry_later();
+  CHECK(woken_reaches(3u));
   wake.unbind(); }

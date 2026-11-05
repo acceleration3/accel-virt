@@ -141,3 +141,23 @@ TEST(import_table, offers_every_import_still_held_so_none_is_left_behind)
   CHECK_EQ(released, 4u);
   CHECK_EQ(table.count(), 0u);
   CHECK(table.invariants_hold()); }
+
+TEST(import_table_unname, forgets_the_handle_a_blob_was_named_by_and_nothing_else)
+{ Memory       held;
+  MockPlatform platform;
+  ImportTable  table(platform);
+  ImportedBlob *taken = nullptr;
+  CHECK_STATUS(table.take(9u, held.memory, taken), Status::ok);
+  CHECK_STATUS(table.name(*taken, 0x77u), Status::ok);
+  CHECK(table.named(0x77u) == &held.memory);
+  table.unname(0u);
+  table.unname(0x78u);
+  CHECK(table.named(0x77u) == &held.memory);
+  table.unname(0x77u);
+  CHECK(table.named(0x77u) == nullptr);
+  CHECK(table.find(9u) == taken);
+  CHECK(table.invariants_hold());
+  table.unname(0x77u);
+  CHECK_STATUS(table.name(*taken, 0x79u), Status::ok);
+  CHECK(table.named(0x79u) == &held.memory);
+  CHECK(table.invariants_hold()); }
