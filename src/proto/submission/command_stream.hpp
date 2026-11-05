@@ -16,6 +16,7 @@ public:
 
     [[nodiscard]] Status next(CommandHeader &header, const uint8_t *&payload);
     size_t               offset() const;
+    [[nodiscard]] bool   ends_in_piece();
 
     bool invariants_hold() const;
 

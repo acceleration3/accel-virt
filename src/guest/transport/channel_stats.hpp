@@ -2,8 +2,10 @@
 #define AV_CHANNEL_STATS_HPP
 
 #include "proto/submission/channel_counter.hpp"
+#include "proto/submission/command_header.hpp"
 #include "proto/submission/channel_stats_report.hpp"
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av {
@@ -11,6 +13,7 @@ namespace av {
 class ChannelStats {
 public:
     static constexpr uint64_t interval = 10000000u;
+    static constexpr size_t   command_bytes = CommandHeader::encoded_size + ChannelStatsReport::encoded_size;
 
     ChannelStats();
     ChannelStats(const ChannelStats &) = delete;
@@ -18,10 +21,12 @@ public:
 
     void               note(ChannelCounter counter, uint64_t amount);
     void               piece(uint64_t number);
-    void               observe(ChannelCounter counter, uint64_t total);
     bool               due(uint64_t now) const;
+    [[nodiscard]] bool frame_report(uint8_t *into, size_t capacity) const;
     void               sent(uint64_t now);
     ChannelStatsReport snapshot() const;
+
+    bool invariants_hold() const;
 
 private:
     uint64_t counters_[ChannelStatsReport::counters];

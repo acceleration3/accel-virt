@@ -121,10 +121,11 @@ private:
     [[nodiscard]] bool room_for_fence();
     uint64_t           published_now() const;
     [[nodiscard]] TransportResult publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence);
-    [[nodiscard]] Status          write_when_room(const uint8_t *batch, uint32_t length, uint64_t &next, uint64_t &begin,
+    [[nodiscard]] Status          write_when_room(const uint8_t *batch, uint32_t length, const uint8_t *trailer,
+                                                  uint32_t trailer_length, uint64_t &next, uint64_t &begin,
                                                   uint64_t &end);
     [[nodiscard]] TransportResult submit_written(uint64_t begin, uint64_t end, uint64_t &fence);
-    void                          report_stats();
+    uint32_t                      stats_trailer(const uint8_t *batch, uint32_t length, uint64_t now, uint8_t *into);
     void                          note_wait(uint64_t began);
     [[nodiscard]] TransportResult hold(uint32_t command_id, const WireWriter &writer, uint8_t flags);
     [[nodiscard]] TransportResult hold_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags);

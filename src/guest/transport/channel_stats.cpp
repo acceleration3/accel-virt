@@ -25,20 +25,21 @@ void ChannelStats::piece(uint64_t number)
     if (number >= 2u) note(ChannelCounter::split_pieces, 1u);
 }
 
-void ChannelStats::observe(ChannelCounter counter, uint64_t total)
-{
-    AV_SCOPE("ChannelStats::observe");
-    const uint32_t index = static_cast<uint32_t>(counter);
-    if (index >= ChannelStatsReport::counters || __atomic_exchange_n(&counters_[index], total, __ATOMIC_RELAXED) == total)
-        return;
-    __atomic_fetch_add(&changes_, 1u, __ATOMIC_RELAXED);
-}
-
 bool ChannelStats::due(uint64_t now) const
 {
     AV_SCOPE("ChannelStats::due");
     const uint64_t changes = __atomic_load_n(&changes_, __ATOMIC_RELAXED);
     return changes != reported_changes_ && (reported_at_ == 0u || now - reported_at_ >= interval);
+}
+
+bool ChannelStats::frame_report(uint8_t *into, size_t capacity) const
+{
+    AV_SCOPE("ChannelStats::frame_report");
+    if (capacity < command_bytes) return false;
+    return CommandHeader(CommandHeader::channel_stats_id, static_cast<uint32_t>(command_bytes), 0u)
+                   .encode(into, command_bytes) == Status::ok &&
+           snapshot().encode(into + CommandHeader::encoded_size, command_bytes - CommandHeader::encoded_size) ==
+               Status::ok;
 }
 
 void ChannelStats::sent(uint64_t now)
@@ -55,6 +56,12 @@ ChannelStatsReport ChannelStats::snapshot() const
     for (uint32_t index = 0u; index < ChannelStatsReport::counters; index++)
         report.set(static_cast<ChannelCounter>(index), __atomic_load_n(&counters_[index], __ATOMIC_RELAXED));
     return report;
+}
+
+bool ChannelStats::invariants_hold() const
+{
+    AV_SCOPE("ChannelStats::invariants_hold");
+    return reported_changes_ <= __atomic_load_n(&changes_, __ATOMIC_RELAXED);
 }
 
 }

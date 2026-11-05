@@ -684,31 +684,34 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
     if (fences_.full() && !room_for_fence()) return TransportResult::failed;
     uint64_t next = fences_.peek();
     if (next == 0u) return TransportResult::failed;
-    uint64_t begin = 0u;
-    uint64_t end = 0u;
-    Status   written = ring_.write_batch(batch, length, next, published_now(), begin, end);
-    if (written == Status::no_space) written = write_when_room(batch, length, next, begin, end);
+    uint64_t       begin = 0u;
+    uint64_t       end = 0u;
+    uint8_t        trailer[ChannelStats::command_bytes] = {};
+    const uint64_t now = published_now();
+    const uint32_t trailer_length = stats_trailer(batch, length, now, trailer);
+    Status written = ring_.write_batch(batch, length, trailer, trailer_length, next, now, begin, end);
+    if (written == Status::no_space)
+        written = write_when_room(batch, length, trailer, trailer_length, next, begin, end);
     if (written != Status::ok) return TransportResult::failed;
-    const TransportResult submitted = submit_written(begin, end, fence);
-    if (submitted == TransportResult::ok) report_stats();
-    return submitted;
+    if (trailer_length != 0u) stats_.sent(now);
+    return submit_written(begin, end, fence);
 }
 
-Status KmtTransport::write_when_room(const uint8_t *batch, uint32_t length, uint64_t &next, uint64_t &begin,
-                                     uint64_t &end)
+Status KmtTransport::write_when_room(const uint8_t *batch, uint32_t length, const uint8_t *trailer,
+                                     uint32_t trailer_length, uint64_t &next, uint64_t &begin, uint64_t &end)
 {
     AV_SCOPE("KmtTransport::write_when_room");
     const uint64_t began = published_now();
     Status         written = Status::no_space;
-    if (room_within_spin(BatchHeader(length, next, 0u).span()))
-        written = ring_.write_batch(batch, length, next, published_now(), begin, end);
+    if (room_within_spin(BatchHeader(length + trailer_length, next, 0u).span()))
+        written = ring_.write_batch(batch, length, trailer, trailer_length, next, published_now(), begin, end);
     if (written == Status::no_space) {
         if (!drain()) {
             note_wait(began);
             return Status::invalid_state;
         }
         next = fences_.peek();
-        written = ring_.write_batch(batch, length, next, published_now(), begin, end);
+        written = ring_.write_batch(batch, length, trailer, trailer_length, next, published_now(), begin, end);
     }
     note_wait(began);
     return written;
@@ -734,25 +737,14 @@ TransportResult KmtTransport::submit_written(uint64_t begin, uint64_t end, uint6
     return TransportResult::ok;
 }
 
-void KmtTransport::report_stats()
+uint32_t KmtTransport::stats_trailer(const uint8_t *batch, uint32_t length, uint64_t now, uint8_t *into)
 {
-    AV_SCOPE("KmtTransport::report_stats");
-    stats_.observe(ChannelCounter::inline_bulk, blobs_.declined());
-    const uint64_t now = published_now();
-    if (!stats_.due(now) || fences_.full()) return;
-    constexpr uint32_t size = static_cast<uint32_t>(CommandHeader::encoded_size + ChannelStatsReport::encoded_size);
-    uint8_t            command[size] = {};
-    if (CommandHeader(CommandHeader::channel_stats_id, size, 0u).encode(command, size) != Status::ok ||
-        stats_.snapshot().encode(command + CommandHeader::encoded_size, sizeof command - CommandHeader::encoded_size) !=
-            Status::ok)
-        return;
-    const uint64_t next = fences_.peek();
-    uint64_t       begin = 0u;
-    uint64_t       end = 0u;
-    if (next == 0u || ring_.write_batch(command, size, next, now, begin, end) != Status::ok) return;
-    stats_.sent(now);
-    uint64_t fence = 0u;
-    static_cast<void>(submit_written(begin, end, fence));
+    AV_SCOPE("KmtTransport::stats_trailer");
+    constexpr uint32_t size = static_cast<uint32_t>(ChannelStats::command_bytes);
+    if (!stats_.due(now) || uint64_t{length} + size > max_batch) return 0u;
+    if (!BatchHeader(length + size, 1u, now).fits(ring_.capacity())) return 0u;
+    if (CommandStream(batch, length).ends_in_piece() || !stats_.frame_report(into, size)) return 0u;
+    return size;
 }
 
 void KmtTransport::note_wait(uint64_t began)

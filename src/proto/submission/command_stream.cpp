@@ -28,6 +28,18 @@ Status CommandStream::next(CommandHeader &header, const uint8_t *&payload)
     return Status::ok;
 }
 
+bool CommandStream::ends_in_piece()
+{
+    AV_SCOPE("CommandStream::ends_in_piece");
+    CommandHeader  header;
+    const uint8_t *payload = nullptr;
+    bool           piece = false;
+    Status         framing = Status::ok;
+    while ((framing = next(header, payload)) == Status::ok)
+        piece = header.api() == CommandHeader::transport_api && header.id() == CommandHeader::piece_id;
+    return framing != Status::no_space || piece;
+}
+
 size_t CommandStream::offset() const
 {
     AV_SCOPE("CommandStream::offset");

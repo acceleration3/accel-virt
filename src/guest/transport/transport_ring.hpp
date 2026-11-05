@@ -15,8 +15,9 @@ public:
     TransportRing();
 
     [[nodiscard]] Status initialize(uint8_t *ring, uint8_t order);
-    [[nodiscard]] Status write_batch(const uint8_t *payload, uint32_t length, uint64_t fence_id,
-                                     uint64_t published_at, uint64_t &begin, uint64_t &end);
+    [[nodiscard]] Status write_batch(const uint8_t *payload, uint32_t length, const uint8_t *trailer,
+                                     uint32_t trailer_length, uint64_t fence_id, uint64_t published_at,
+                                     uint64_t &begin, uint64_t &end);
 
     [[nodiscard]] Status publish_tail();
     uint64_t tail() const;
