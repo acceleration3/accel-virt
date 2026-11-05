@@ -484,3 +484,53 @@ TEST(kmt_transport_grow, no_arena_no_growth)
   CHECK(!rig.transport().make_room_for_blobs(wanted, 1u));
   CHECK_STATUS(rig.arena().grow(1u), Status::invalid_state); }
 
+TEST(kmt_blob_arena_shrink, a_grown_segment_idle_for_ten_seconds_is_released_and_the_first_never_is)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  av::ClientBlobArena &blobs = rig.transport().blobs();
+  rig.host().blob_import(0u, imported_memory + 2u);
+  const std::uint64_t wanted[1] = {18u * mib};
+  CHECK(rig.transport().make_room_for_blobs(wanted, 1u));
+  CHECK(blobs.idle_at(slot));
+  CHECK(blobs.idle_at(2u * slot));
+  const std::uint64_t t0 = 1000u;
+  CHECK_STATUS(rig.arena().release_idle(t0), Status::ok);
+  CHECK_STATUS(rig.arena().release_idle(t0 + KmtBlobArena::idle_release_ticks - 1u), Status::ok);
+  CHECK_EQ(blobs.segments(), 2u);
+  rig.host().nop();
+  CHECK_STATUS(rig.arena().release_idle(t0 + KmtBlobArena::idle_release_ticks), Status::ok);
+  CHECK_EQ(blobs.segments(), 1u);
+  CHECK_EQ(blobs.segment_base(0u), slot);
+  CHECK_EQ(blobs.ring_bytes(), 16u * mib);
+  CHECK(rig.arena().invariants_hold());
+  CHECK_EQ(u64_at(body_of(rig.kmt(), CommandHeader::release_blob_id, 0u), 0u), imported_memory + 2u);
+  CHECK_STATUS(rig.arena().release_idle(t0 + 100u * KmtBlobArena::idle_release_ticks), Status::ok);
+  CHECK_EQ(blobs.segments(), 1u);
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok);
+  rig.check_nothing_is_held(); }
+
+TEST(kmt_blob_arena_shrink, a_segment_with_data_in_it_restarts_its_idle_clock)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  av::ClientBlobArena &blobs = rig.transport().blobs();
+  rig.host().blob_import(0u, imported_memory + 2u);
+  const std::uint64_t wanted[1] = {18u * mib};
+  CHECK(rig.transport().make_room_for_blobs(wanted, 1u));
+  CHECK_STATUS(rig.arena().release_idle(1000u), Status::ok);
+  const ClientBlobLease lease = blobs.take(18u * mib);
+  CHECK_EQ(lease.offset(), 2u * slot);
+  CHECK_STATUS(rig.arena().release_idle(1000u + KmtBlobArena::idle_release_ticks), Status::ok);
+  CHECK_EQ(blobs.segments(), 2u);
+  blobs.give_back(lease);
+  CHECK_STATUS(rig.arena().release_idle(1000u + KmtBlobArena::idle_release_ticks + 1u), Status::ok);
+  CHECK_EQ(blobs.segments(), 2u);
+  CHECK_STATUS(rig.arena().release_idle(1000u + 2u * KmtBlobArena::idle_release_ticks), Status::ok);
+  CHECK_EQ(blobs.segments(), 2u);
+  rig.host().nop();
+  CHECK_STATUS(rig.arena().release_idle(1000u + 2u * KmtBlobArena::idle_release_ticks + 1u), Status::ok);
+  CHECK_EQ(blobs.segments(), 1u);
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok); }

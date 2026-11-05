@@ -593,6 +593,7 @@ bool KmtTransport::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
 {
     AV_SCOPE("KmtTransport::make_room_for_blobs");
     if (!blobs_.ready()) return false;
+    release_idle_segments();
     if (blobs_.fits(sizes, count)) return true;
     if (flush() != TransportResult::ok) return false;
     retire_consumed();
@@ -650,6 +651,12 @@ void KmtTransport::close_region(const ClientBlobLease &region)
 {
     AV_SCOPE("KmtTransport::close_region");
     if (arena_ != nullptr && region.taken()) static_cast<void>(arena_->close_region(region.offset()));
+}
+
+void KmtTransport::release_idle_segments()
+{
+    AV_SCOPE("KmtTransport::release_idle_segments");
+    if (arena_ != nullptr && !faulted_) static_cast<void>(arena_->release_idle(published_now()));
 }
 
 void KmtTransport::attach_arena(KmtBlobArena *arena)

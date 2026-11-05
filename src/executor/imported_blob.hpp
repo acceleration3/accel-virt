@@ -23,6 +23,8 @@ public:
     uint64_t            id() const;
     SourceMemory &memory() const;
     uint64_t            handle() const;
+    bool                arena() const;
+    void                keep_as_arena();
 
     bool invariants_hold() const;
 
@@ -35,6 +37,7 @@ private:
     uint64_t      id_;
     SourceMemory *memory_;
     uint64_t      handle_;
+    bool          arena_;
 };
 
 }

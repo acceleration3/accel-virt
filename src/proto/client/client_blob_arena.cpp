@@ -222,6 +222,14 @@ bool ClientBlobArena::segment_idle(uint32_t index) const
     return index < max_segments && segments_[index].ring_.idle();
 }
 
+bool ClientBlobArena::idle_at(uint64_t base) const
+{
+    AV_SCOPE("ClientBlobArena::idle_at");
+    for (const Segment &held : segments_)
+        if (held.ring_.ready() && held.base_ == base) return held.ring_.idle();
+    return false;
+}
+
 size_t ClientBlobArena::used() const
 {
     AV_SCOPE("ClientBlobArena::used");

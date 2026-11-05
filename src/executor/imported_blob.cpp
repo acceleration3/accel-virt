@@ -4,7 +4,7 @@
 
 namespace av {
 
-ImportedBlob::ImportedBlob() : id_(0u), memory_(nullptr), handle_(0u)
+ImportedBlob::ImportedBlob() : id_(0u), memory_(nullptr), handle_(0u), arena_(false)
 {
     AV_SCOPE("ImportedBlob::ImportedBlob");
 }
@@ -16,6 +16,7 @@ Status ImportedBlob::take(uint64_t blob_id, SourceMemory &memory)
     id_ = blob_id;
     memory_ = &memory;
     handle_ = 0u;
+    arena_ = false;
     return Status::ok;
 }
 
@@ -26,6 +27,7 @@ SourceMemory *ImportedBlob::give_back()
     id_ = 0u;
     memory_ = nullptr;
     handle_ = 0u;
+    arena_ = false;
     return held;
 }
 
@@ -59,6 +61,18 @@ uint64_t ImportedBlob::handle() const
     return handle_;
 }
 
+bool ImportedBlob::arena() const
+{
+    AV_SCOPE("ImportedBlob::arena");
+    return arena_;
+}
+
+void ImportedBlob::keep_as_arena()
+{
+    AV_SCOPE("ImportedBlob::keep_as_arena");
+    arena_ = memory_ != nullptr;
+}
+
 void ImportedBlob::record(uint64_t handle)
 {
     AV_SCOPE("ImportedBlob::record");
@@ -68,7 +82,7 @@ void ImportedBlob::record(uint64_t handle)
 bool ImportedBlob::invariants_hold() const
 {
     AV_SCOPE("ImportedBlob::invariants_hold");
-    return memory_ != nullptr || (id_ == 0u && handle_ == 0u);
+    return (memory_ != nullptr || (id_ == 0u && handle_ == 0u)) && (memory_ != nullptr || !arena_);
 }
 
 }

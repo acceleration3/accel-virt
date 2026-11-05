@@ -23,6 +23,7 @@ class StateWriter;
 class ContextSession {
 public:
     static constexpr size_t arena_bytes = 1u << 20;
+    static constexpr uint32_t parked_most = 8u;
 
     explicit ContextSession(DriverLog &lines);
     ContextSession(const ContextSession &) = delete;
@@ -53,11 +54,20 @@ public:
 
 
     size_t   starved() const;
+    uint32_t parked() const;
 
     bool invariants_hold() const;
 
 private:
     friend struct ContextSessionProbe;
+
+    struct Parked {
+        uint64_t blob_id_;
+        uint64_t mark_;
+    };
+
+    void retire_blob(uint64_t blob_id);
+    void drain_parked();
 
     SessionBackend *backend_;
     GpuClockHold   *clocks_;
@@ -71,6 +81,8 @@ private:
     size_t          starved_;
     ChannelStatsLatest channel_;
     bool            faulted_;
+    Parked          parked_[parked_most];
+    uint32_t        parked_count_;
     DriverLog      &lines_;
 };
 

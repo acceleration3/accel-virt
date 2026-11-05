@@ -28,6 +28,7 @@ public:
     void          set_answer_bytes(std::size_t bytes);
     std::uint32_t ran() const;
     void          set_adopts(bool adopts);
+    void          set_progress(std::uint64_t marked, std::uint64_t reached);
     std::uint32_t adopted() const;
     std::uint32_t abandoned() const;
 
@@ -74,6 +75,8 @@ private:
     bool          lost_;
     bool          losable_;
     bool          adopts_;
+    std::uint64_t marked_;
+    std::uint64_t reached_;
     bool          shares_;
     std::uint32_t exported_objects_;
     std::uint32_t imported_objects_;

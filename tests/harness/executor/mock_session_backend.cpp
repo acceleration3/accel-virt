@@ -11,7 +11,7 @@
 namespace av {
 
 MockSessionBackend::MockSessionBackend()
-    : answer_bytes_(0u), ran_(0u), adopted_(0u), abandoned_(0u), lost_(false), losable_(true), adopts_(true),
+    : answer_bytes_(0u), ran_(0u), adopted_(0u), abandoned_(0u), lost_(false), losable_(true), adopts_(true), marked_(0u), reached_(0u),
       shares_(true), exported_objects_(0u), imported_objects_(0u), released_objects_(0u),
       descriptor_(-1), signal_(nullptr), signal_context_(nullptr), during_export_(nullptr),
       during_export_context_(nullptr)
@@ -89,8 +89,14 @@ bool MockSessionBackend::signal()
 
 void MockSessionBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 {
-    marked = 0u;
-    reached = 0u;
+    marked = marked_;
+    reached = reached_;
+}
+
+void          MockSessionBackend::set_progress(std::uint64_t marked, std::uint64_t reached)
+{
+    marked_ = marked;
+    reached_ = reached;
 }
 
 void          MockSessionBackend::set_adopts(bool adopts) { adopts_ = adopts; }

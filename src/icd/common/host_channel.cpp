@@ -314,7 +314,9 @@ TransportResult HostChannel::flush()
     AV_SCOPE("HostChannel::flush");
     if (!opened()) return TransportResult::failed;
     const ThreadLockHold release(lock_);
-    return transport_.object().flush();
+    const TransportResult flushed = transport_.object().flush();
+    if (flushed == TransportResult::ok) transport_.object().release_idle_segments();
+    return flushed;
 }
 
 TransportResult HostChannel::send_batch(const uint8_t *framed, size_t length)

@@ -88,6 +88,7 @@ public:
     ClientBlobLease    open_region(uint64_t bytes) override;
     void               close_region(const ClientBlobLease &region) override;
     void               attach_arena(KmtBlobArena *arena);
+    void               release_idle_segments();
     const TransferRoom &room() const override;
     void                note(ChannelCounter counter, uint64_t amount) override;
     TransportResult send_batch(const uint8_t *framed, size_t length, WireReader &reply);

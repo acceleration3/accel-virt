@@ -15,7 +15,7 @@ namespace av {
 
 ContextSession::ContextSession(DriverLog &lines)
     : backend_(nullptr), clocks_(nullptr), source_(nullptr), domain_(0u), heap_(), arena_(nullptr, 0u), answer_(heap_),
-      answer_length_(0u), imports_(heap_), starved_(0u), channel_(), faulted_(false),
+      answer_length_(0u), imports_(heap_), starved_(0u), channel_(), faulted_(false), parked_{}, parked_count_(0u),
       lines_(lines)
 {
     AV_SCOPE("ContextSession::ContextSession");
@@ -37,7 +37,8 @@ Status ContextSession::initialize(SessionBackend &backend, uint8_t *block, size_
 void ContextSession::release()
 {
     AV_SCOPE("ContextSession::release");
-    for (ImportedBlob *blob = imports_.any(); blob != nullptr; blob = imports_.any()) release_blob(blob->id());
+    for (ImportedBlob *blob = imports_.any(); blob != nullptr; blob = imports_.any()) retire_blob(blob->id());
+    parked_count_ = 0u;
     if (backend_ != nullptr) backend_->shut_down();
     backend_ = nullptr;
     clocks_ = nullptr;
@@ -65,6 +66,7 @@ uint32_t ContextSession::poll()
 {
     AV_SCOPE("ContextSession::poll");
     if (backend_ == nullptr) return AV_POLL_IDLE;
+    drain_parked();
     if (faulted_ || backend_->lost()) {
         if (!faulted_) lines_.write("a session's host device was lost while it was idle");
         faulted_ = true;
@@ -104,6 +106,7 @@ void ContextSession::end_batch()
     AV_SCOPE("ContextSession::end_batch");
     if (backend_ != nullptr) backend_->end_batch();
     if (clocks_ != nullptr) clocks_->busy();
+    drain_parked();
 }
 
 void ContextSession::hold_clocks(GpuClockHold &clocks)
@@ -189,6 +192,7 @@ uint32_t ContextSession::import_blob(uint64_t blob_id, uint64_t memory_key, cons
         source_->release(*imports_.forget(blob_id));
         return AV_UNDECODABLE;
     }
+    if (role.is_arena()) taken->keep_as_arena();
     return AV_EXECUTED;
 }
 
@@ -203,8 +207,49 @@ void ContextSession::release_blob(uint64_t blob_id)
     AV_SCOPE("ContextSession::release_blob");
     ImportedBlob *const blob = imports_.find(blob_id);
     if (blob == nullptr) return;
+    for (uint32_t index = 0u; index < parked_count_; index++)
+        if (parked_[index].blob_id_ == blob_id) return;
+    uint64_t marked = 0u;
+    uint64_t reached = 0u;
+    if (blob->arena() && backend_ != nullptr) backend_->gpu_progress(marked, reached);
+    if (reached < marked && parked_count_ < parked_most) {
+        parked_[parked_count_++] = Parked{blob_id, marked};
+        return;
+    }
+    retire_blob(blob_id);
+}
+
+void ContextSession::retire_blob(uint64_t blob_id)
+{
+    AV_SCOPE("ContextSession::retire_blob");
+    ImportedBlob *const blob = imports_.find(blob_id);
+    if (blob == nullptr) return;
     if (blob->handle() != 0u) backend_->abandon(blob->memory(), blob->handle());
     source_->release(*imports_.forget(blob_id));
+}
+
+void ContextSession::drain_parked()
+{
+    AV_SCOPE("ContextSession::drain_parked");
+    if (parked_count_ == 0u || backend_ == nullptr) return;
+    uint64_t marked = 0u;
+    uint64_t reached = 0u;
+    backend_->gpu_progress(marked, reached);
+    uint32_t kept = 0u;
+    for (uint32_t index = 0u; index < parked_count_; index++) {
+        if (reached < parked_[index].mark_) {
+            parked_[kept++] = parked_[index];
+            continue;
+        }
+        retire_blob(parked_[index].blob_id_);
+    }
+    parked_count_ = kept;
+}
+
+uint32_t ContextSession::parked() const
+{
+    AV_SCOPE("ContextSession::parked");
+    return parked_count_;
 }
 
 uint64_t ContextSession::imported_handle(uint64_t blob_id)
@@ -229,6 +274,9 @@ size_t ContextSession::starved() const
 bool ContextSession::invariants_hold() const
 {
     AV_SCOPE("ContextSession::invariants_hold");
+    if (parked_count_ > parked_most || parked_count_ > imports_.count()) return false;
+    for (uint32_t index = 0u; index < parked_count_; index++)
+        if (parked_[index].blob_id_ == 0u) return false;
     return arena_.invariants_hold() && imports_.invariants_hold() && (backend_ != nullptr || !faulted_) &&
            (backend_ != nullptr || imports_.count() == 0u) && (source_ != nullptr || imports_.count() == 0u);
 }

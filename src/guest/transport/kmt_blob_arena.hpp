@@ -20,6 +20,7 @@ public:
     static constexpr uint64_t default_bytes = uint64_t{16} << 20u;
     static constexpr uint64_t max_bytes = uint64_t{1} << 30u;
     static constexpr uint32_t max_regions = 8u;
+    static constexpr uint64_t idle_release_ticks = uint64_t{100000000};
 
     KmtBlobArena(GuestConnection &connection, KmtTransport &transport);
     ~KmtBlobArena();
@@ -30,6 +31,7 @@ public:
     [[nodiscard]] Status close();
     [[nodiscard]] Status abandon();
     [[nodiscard]] Status grow(uint64_t need);
+    [[nodiscard]] Status release_idle(uint64_t now);
     [[nodiscard]] Status open_region(uint64_t bytes, ArenaSegment *&region);
     [[nodiscard]] Status close_region(uint64_t base);
     [[nodiscard]] bool   take_query_slots(uint32_t count, uint8_t *&view, uint64_t &offset);
@@ -50,6 +52,7 @@ private:
     ObjectStorage<ArenaSegment>    rings_[ClientBlobArena::max_segments];
     ObjectStorage<ArenaSegment>    regions_[max_regions];
     bool                           slots_taken_;
+    uint64_t                       idle_since_[ClientBlobArena::max_segments];
 
     friend struct KmtBlobArenaProbe;
 };

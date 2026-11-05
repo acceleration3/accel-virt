@@ -9,7 +9,7 @@
 namespace av {
 
 KmtBlobArena::KmtBlobArena(GuestConnection &connection, KmtTransport &transport)
-    : connection_(connection), transport_(transport), slots_(), control_(), rings_(), regions_(), slots_taken_(false)
+    : connection_(connection), transport_(transport), slots_(), control_(), rings_(), regions_(), slots_taken_(false), idle_since_{}
 {
     AV_SCOPE("KmtBlobArena::KmtBlobArena");
 }
@@ -133,6 +133,31 @@ Status KmtBlobArena::grow(uint64_t need)
         return Status::ok;
     }
     return Status::no_space;
+}
+
+Status KmtBlobArena::release_idle(uint64_t now)
+{
+    AV_SCOPE("KmtBlobArena::release_idle");
+    Status result = Status::ok;
+    for (uint32_t index = 1u; index < ClientBlobArena::max_segments; index++) {
+        ObjectStorage<ArenaSegment> &storage = rings_[index];
+        if (!storage.constructed()) {
+            idle_since_[index] = 0u;
+            continue;
+        }
+        if (!transport_.blobs().idle_at(storage.object().base())) {
+            idle_since_[index] = 0u;
+            continue;
+        }
+        if (idle_since_[index] == 0u) idle_since_[index] = now;
+        if (now - idle_since_[index] < idle_release_ticks) continue;
+        static_cast<void>(transport_.blobs().remove_segment(storage.object().base()));
+        const Status closed = storage.object().close();
+        if (result == Status::ok) result = closed;
+        storage.destroy();
+        idle_since_[index] = 0u;
+    }
+    return result;
 }
 
 Status KmtBlobArena::open_region(uint64_t bytes, ArenaSegment *&region)

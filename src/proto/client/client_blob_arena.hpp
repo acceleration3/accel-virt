@@ -40,6 +40,7 @@ public:
     uint64_t segment_base(uint32_t index) const;
     size_t   segment_bytes(uint32_t index) const;
     bool     segment_idle(uint32_t index) const;
+    bool     idle_at(uint64_t base) const;
     size_t   used() const;
     size_t   room() const;
     size_t   lent() const;
