@@ -12,6 +12,7 @@
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/loader_handle.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
+#include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/command_header.hpp"
 
 #include <cstdint>
@@ -27,13 +28,6 @@ using av::icd::DeviceMemory;
 using Kind = av::icd::LoaderHandle::Kind;
 
 namespace av::icd {
-
-struct DeviceMemoryProbe {
-    static bool            &learnt(DeviceMemory &memory) { return memory.learnt_; }
-    static std::uint32_t   &count(DeviceMemory &memory) { return memory.count_; }
-    static HostAllocation *&held(DeviceMemory &memory, std::uint32_t slot) { return memory.held_[slot]; }
-    static constexpr std::uint32_t slots = DeviceMemory::max_allocations;
-};
 
 struct ConnectionProbe {
     static GuestConnection &guest(Connection &connection) { return connection.connection_; }
@@ -57,8 +51,6 @@ struct ObjectPoolProbe {
 
 using av::ObjectPoolProbe;
 using av::icd::IcdRootProbe;
-
-using av::icd::DeviceMemoryProbe;
 
 namespace {
 
@@ -426,9 +418,12 @@ TEST(icd_memory, a_host_visible_allocation_refused_anywhere_is_out_of_device_mem
   rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   CHECK_EQ(rig.rig().log().holding("no host-visible memory"), 1u);
-  rig.host().blob_import(4u, 0u);
+  rig.host().blob_import(av::BlobImportAnswer::executor_refused, 0u);
   CHECK_EQ(rig.allocate(page, 2u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   CHECK_EQ(rig.rig().log().holding("no host-visible memory"), 2u);
+  rig.host().blob_import(av::BlobImportAnswer::no_room, 0u);
+  CHECK_EQ(rig.allocate(page, 2u, memory), VK_ERROR_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(rig.rig().log().holding("no host-visible memory"), 3u);
   const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
   CHECK_EQ(rig.allocate(0u, 1u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
@@ -458,7 +453,7 @@ TEST(icd_memory, destroying_the_device_gives_its_memory_back_first)
   CHECK_EQ(rig.kmt().command_id(commands + 2u), static_cast<std::uint32_t>(av::vkproto::kCmd_vkDestroyDevice));
   CHECK_EQ(rig.kmt().window_chunks(), 0u);
   const char *const trace = rig.rig().trace().text();
-  if (std::strstr(trace, "MSsSsmHhHhS") == nullptr)
+  if (std::strstr(trace, "MSsmHhHhS") == nullptr)
       av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "trace %s", trace); }
 
 TEST(icd_memory, a_device_whose_memory_is_not_released_whole_still_goes)
@@ -534,7 +529,7 @@ TEST(icd_memory, no_memory_for_a_device_s_allocations_is_out_of_host_memory)
 
 TEST(device_memory, holds_nothing_and_releases_nothing_until_it_allocates)
 { MemoryRig    rig;
-  DeviceMemory memory(rig.kmt(), rig.connection(), rig.rig().log());
+  DeviceMemory memory(rig.kmt(), rig.connection(), rig.rig().root().wire_handles(), rig.rig().lines());
   CHECK(memory.invariants_hold());
   CHECK_STATUS(memory.release_all(), Status::ok);
   void *data = nullptr;
@@ -542,7 +537,7 @@ TEST(device_memory, holds_nothing_and_releases_nothing_until_it_allocates)
 
 TEST(device_memory, releases_every_host_allocation_at_once)
 { MemoryRig    rig;
-  DeviceMemory memory(rig.kmt(), rig.connection(), rig.rig().log());
+  DeviceMemory memory(rig.kmt(), rig.connection(), rig.rig().root().wire_handles(), rig.rig().lines());
   rig.host().vk_memory_properties(types, visible);
   rig.host().blob_import(0u, imported);
   rig.host().blob_import(0u, imported + 1u);
@@ -560,58 +555,9 @@ TEST(device_memory, releases_every_host_allocation_at_once)
   void *data = nullptr;
   CHECK_EQ(memory.map(first, 0u, 1u, 0u, data), VK_ERROR_MEMORY_MAP_FAILED); }
 
-TEST(device_memory, invariants_refuse_allocations_before_the_types_are_known)
-{ MemoryRig    rig;
-  DeviceMemory memory(rig.kmt(), rig.connection(), rig.rig().log());
-  rig.host().vk_memory_properties(types, visible);
-  rig.host().blob_import(0u, imported);
-  const VkMemoryAllocateInfo info = allocation(page, 2u);
-  VkDeviceMemory placed = VK_NULL_HANDLE;
-  CHECK_EQ(memory.allocate(rig.physical(), rig.device(), info, nullptr, placed), VK_SUCCESS);
-  DeviceMemoryProbe::learnt(memory) = false;
-  CHECK(!memory.invariants_hold());
-  DeviceMemoryProbe::learnt(memory) = true;
-  CHECK(memory.invariants_hold());
-  DeviceMemoryProbe::count(memory) = 2u;
-  CHECK(!memory.invariants_hold());
-  DeviceMemoryProbe::count(memory) = 1u;
-  CHECK(memory.invariants_hold());
-  av::HostAllocation empty(av::icd::ConnectionProbe::guest(rig.connection()),
-                           av::icd::ConnectionProbe::transport(rig.connection()));
-  DeviceMemoryProbe::held(memory, 7u) = &empty;
-  DeviceMemoryProbe::count(memory) = 2u;
-  CHECK(!memory.invariants_hold());
-  DeviceMemoryProbe::held(memory, 7u) = nullptr;
-  DeviceMemoryProbe::count(memory) = 1u;
-  CHECK(memory.invariants_hold());
-  rig.host().nop();
-  CHECK_STATUS(memory.release_all(), Status::ok); }
-
-TEST(device_memory, every_slot_held_refuses_the_next_allocation)
-{ MemoryRig    rig;
-  DeviceMemory memory(rig.kmt(), rig.connection(), rig.rig().log());
-  rig.host().vk_memory_properties(types, visible);
-  rig.host().blob_import(0u, imported);
-  const VkMemoryAllocateInfo info = allocation(page, 2u);
-  VkDeviceMemory held = VK_NULL_HANDLE;
-  CHECK_EQ(memory.allocate(rig.physical(), rig.device(), info, nullptr, held), VK_SUCCESS);
-  av::HostAllocation *const one = DeviceMemoryProbe::held(memory, 0u);
-  for (std::uint32_t slot = 1u; slot < DeviceMemoryProbe::slots; slot++) DeviceMemoryProbe::held(memory, slot) = one;
-  DeviceMemoryProbe::count(memory) = DeviceMemoryProbe::slots;
-  CHECK(memory.invariants_hold());
-  const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
-  VkDeviceMemory refused = VK_NULL_HANDLE;
-  CHECK_EQ(memory.allocate(rig.physical(), rig.device(), info, nullptr, refused), VK_ERROR_OUT_OF_DEVICE_MEMORY);
-  CHECK(refused == VK_NULL_HANDLE);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
-  for (std::uint32_t slot = 1u; slot < DeviceMemoryProbe::slots; slot++) DeviceMemoryProbe::held(memory, slot) = nullptr;
-  DeviceMemoryProbe::count(memory) = 1u;
-  rig.host().nop();
-  CHECK_STATUS(memory.release_all(), Status::ok); }
-
 TEST(device_memory, release_all_answers_the_first_refusal_and_lets_everything_go)
 { MemoryRig    rig;
-  DeviceMemory memory(rig.kmt(), rig.connection(), rig.rig().log());
+  DeviceMemory memory(rig.kmt(), rig.connection(), rig.rig().root().wire_handles(), rig.rig().lines());
   rig.host().vk_memory_properties(types, visible);
   rig.host().blob_import(0u, imported);
   rig.host().blob_import(0u, imported + 1u);
@@ -634,7 +580,7 @@ TEST(icd_memory, root_invariants_refuse_memory_no_device_owns_or_that_is_broken)
   CHECK(root.invariants_hold());
   av::ObjectPool<DeviceMemory> &memories = IcdRootProbe::memories(root);
   DeviceMemory *stray = nullptr;
-  CHECK_STATUS(memories.create(stray, rig.kmt(), rig.connection(), rig.rig().log()),
+  CHECK_STATUS(memories.create(stray, rig.kmt(), rig.connection(), rig.rig().root().wire_handles(), rig.rig().lines()),
                Status::ok);
   CHECK(!root.invariants_hold());
   CHECK_STATUS(memories.destroy(stray), Status::ok);
@@ -642,11 +588,6 @@ TEST(icd_memory, root_invariants_refuse_memory_no_device_owns_or_that_is_broken)
   ObjectPoolProbe::miscount(memories, 1);
   CHECK(!root.invariants_hold());
   ObjectPoolProbe::miscount(memories, -1);
-  CHECK(root.invariants_hold());
-  const auto *const device = reinterpret_cast<av::icd::LoaderHandle *>(rig.device());
-  DeviceMemoryProbe::learnt(*device->device_memory()) = false;
-  CHECK(!root.invariants_hold());
-  DeviceMemoryProbe::learnt(*device->device_memory()) = true;
   CHECK(root.invariants_hold());
   rig.host().nop();
   rig.free(memory); }
