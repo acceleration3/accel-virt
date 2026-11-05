@@ -408,7 +408,7 @@ bool OpenGlBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     if (fd < 0 || into != 0u) return false;
     uint32_t name = 0u;
     if (kind == AV_SHARED_MEMORY) {
-        if (handle_kind != AV_SHARED_HANDLE_DMA_BUF || size == 0u || !import_.import_memory(fd, size, name))
+        if (handle_kind != AV_SHARED_HANDLE_DMA_BUF || size == 0u || !import_.import_dedicated_memory(fd, size, name))
             return false;
         if (memories_.add(name, size) != Status::ok) {
             import_.delete_memory(name);

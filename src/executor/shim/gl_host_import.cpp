@@ -10,6 +10,7 @@ namespace av {
 
 namespace {
 constexpr GLenum handle_type_opaque_fd = 0x9586u;
+constexpr GLenum dedicated_memory_object = 0x9581u;
 constexpr GLenum major_version = 0x821Bu;
 constexpr GLenum minor_version = 0x821Cu;
 constexpr GLint  first_version_with_named_storage = 45;
@@ -19,7 +20,7 @@ constexpr GLenum extensions_name = 0x1F03u;
 }
 
 GlHostImport::GlHostImport()
-    : create_memory_objects_(nullptr), import_memory_fd_(nullptr),
+    : create_memory_objects_(nullptr), import_memory_fd_(nullptr), memory_parameter_(nullptr),
       delete_memory_objects_(nullptr),
       gen_semaphores_(nullptr), import_semaphore_fd_(nullptr), delete_semaphores_(nullptr),
       get_integerv_(nullptr), get_stringi_(nullptr), errors_(), context_(nullptr),
@@ -37,6 +38,8 @@ void GlHostImport::configure(GlContext &context)
         reinterpret_cast<void(APIENTRY *)(GLsizei, GLuint *)>(context.resolve("glCreateMemoryObjectsEXT"));
     import_memory_fd_ =
         reinterpret_cast<void(APIENTRY *)(GLuint, GLuint64, GLenum, GLint)>(context.resolve("glImportMemoryFdEXT"));
+    memory_parameter_ = reinterpret_cast<void(APIENTRY *)(GLuint, GLenum, const GLint *)>(
+        context.resolve("glMemoryObjectParameterivEXT"));
     delete_memory_objects_ =
         reinterpret_cast<void(APIENTRY *)(GLsizei, const GLuint *)>(context.resolve("glDeleteMemoryObjectsEXT"));
     gen_semaphores_ = reinterpret_cast<void(APIENTRY *)(GLsizei, GLuint *)>(context.resolve("glGenSemaphoresEXT"));
@@ -48,7 +51,7 @@ void GlHostImport::configure(GlContext &context)
     get_stringi_ = reinterpret_cast<const GLubyte *(APIENTRY *)(GLenum, GLuint)>(context.resolve("glGetStringi"));
     errors_.resolve(context);
     memory_ = create_memory_objects_ != nullptr && import_memory_fd_ != nullptr &&
-              delete_memory_objects_ != nullptr && errors_.resolved() && lists("GL_EXT_memory_object_fd");
+              memory_parameter_ != nullptr && delete_memory_objects_ != nullptr && errors_.resolved() && lists("GL_EXT_memory_object_fd");
     buffers_ = memory_ && lists("GL_EXT_memory_object") && names_buffers();
     fences_ = gen_semaphores_ != nullptr && import_semaphore_fd_ != nullptr && delete_semaphores_ != nullptr &&
               errors_.resolved() && lists("GL_EXT_semaphore_fd");
@@ -109,11 +112,24 @@ bool GlHostImport::places_buffers() const
 bool GlHostImport::import_memory(int fd, uint64_t size, uint32_t &name)
 {
     AV_SCOPE("GlHostImport::import_memory");
+    return import_with(fd, size, 0, name);
+}
+
+bool GlHostImport::import_dedicated_memory(int fd, uint64_t size, uint32_t &name)
+{
+    AV_SCOPE("GlHostImport::import_dedicated_memory");
+    return import_with(fd, size, 1, name);
+}
+
+bool GlHostImport::import_with(int fd, uint64_t size, GLint dedicated, uint32_t &name)
+{
+    AV_SCOPE("GlHostImport::import_with");
     OwnedFd taken;
     if (!memory_ || current() == nullptr || !taken.hold_copy(fd)) return false;
     GLuint made = 0u;
     create_memory_objects_(1, &made);
     static_cast<void>(errors_.clear());
+    memory_parameter_(made, dedicated_memory_object, &dedicated);
     import_memory_fd_(made, static_cast<GLuint64>(size), handle_type_opaque_fd, taken.fd());
     if (!errors_.clear()) {
         delete_memory_objects_(1, &made);
