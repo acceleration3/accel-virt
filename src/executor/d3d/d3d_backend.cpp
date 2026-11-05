@@ -1731,25 +1731,26 @@ bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t
     ID3D11Resource *const     found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
     SourceMemory *const       store = imports_ != nullptr ? imports_->named(memory) : nullptr;
     uint8_t *const            slice = store != nullptr ? store->at(offset, bytes) : nullptr;
-    if (!ready() || found == nullptr || slice == nullptr || !device11_->slices() || mark_refused_ ||
-        !dynamic_buffer(found))
+    if (!ready() || found == nullptr || !device11_->slices() || mark_refused_ || !dynamic_buffer(found)) return false;
+    const VulkanBuffer *const storage = slice != nullptr ? slices_.bind(*device11_, *store, progress11_) : nullptr;
+    if (storage == nullptr) {
+        static_cast<void>(detach_buffer_slice(resource, 0u, 0u));
         return false;
-    const VulkanBuffer *const storage = slices_.bind(*device11_, *store, progress11_);
-    if (storage == nullptr) return false;
+    }
     auto *const buffer = static_cast<ID3D11Buffer *>(found);
     constants_.release(device11_->context(), states_.selected_id(), resource, buffer);
     SliceBindings::Binding previous = {};
     const bool             had_previous = slices_.leave(resource, previous);
-    const auto             restore = [this, had_previous, &previous]() {
-        if (had_previous) static_cast<void>(slices_.attach(previous));
+    const auto             abandon = [this, buffer, had_previous, &previous]() {
+        if (had_previous) static_cast<void>(leave_slice(buffer, previous));
     };
     if (!slices_.attach({resource, store, slice, bytes})) {
-        restore();
+        abandon();
         return false;
     }
     if (device11_->bind_storage(buffer, *storage, offset, bytes, slice)) return true;
     drop_slice(resource);
-    restore();
+    abandon();
     return false;
 }
 
