@@ -96,10 +96,10 @@ uint32_t LocalContextPlane::memory_domain() const
     return library_.domain();
 }
 
-Status LocalContextPlane::create(uint32_t id)
+Status LocalContextPlane::create(uint32_t id, const char *name)
 {
     AV_SCOPE("LocalContextPlane::create");
-    return contexts_.create(id);
+    return contexts_.create(id, name);
 }
 
 Status LocalContextPlane::destroy(uint32_t id)

@@ -19,12 +19,13 @@ public:
     static constexpr size_t max_request_size = 96u;
     static constexpr size_t guest_blob_fixed_size = 56u;
     static constexpr size_t guest_blob_entry_size = 16u;
+    static constexpr uint32_t name_bytes = 64u;
 
     AvRequestWriter(uint8_t *bytes, size_t capacity);
 
     [[nodiscard]] Status capset_info(uint32_t index);
     [[nodiscard]] Status capset(uint32_t capset_id, uint32_t version);
-    [[nodiscard]] Status create_context(uint32_t context_id, uint32_t capset_id);
+    [[nodiscard]] Status create_context(uint32_t context_id, uint32_t capset_id, const char *name, uint32_t name_length);
     [[nodiscard]] Status destroy_context(uint32_t context_id);
     [[nodiscard]] Status guest_blob(uint32_t resource_id, uint64_t address, uint32_t length);
     [[nodiscard]] Status guest_blob_pages(uint32_t resource_id, const GuestPageList &pages);
@@ -61,7 +62,6 @@ private:
     static constexpr size_t   guest_blob_size = guest_blob_fixed_size + guest_blob_entry_size;
     static constexpr size_t   host_blob_size = 56u;
     static constexpr size_t   map_blob_size = 40u;
-    static constexpr uint32_t name_bytes = 64u;
     static constexpr uint32_t blob_memory_guest = 1u;
     static constexpr uint32_t blob_memory_host3d = 2u;
     static constexpr uint32_t blob_memory_host3d_guest = 3u;

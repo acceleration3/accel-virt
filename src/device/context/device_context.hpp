@@ -11,6 +11,7 @@
 #include "device/fence/fence_reporter.hpp"
 #include "device/context/ring_consumer.hpp"
 #include "device/threading/worker.hpp"
+#include "proto/context/context_label.hpp"
 
 #include <stdint.h>
 
@@ -36,7 +37,7 @@ class DeviceContext {
 public:
     DeviceContext(Host &host, BlobTable &blobs, HostBlobOwners &owners, FenceInterrupts &interrupts,
                   const ExecutorLibrary &library, ExecutorShares &shares, WireRecorder &recorder, D3dOrdering &ordering,
-                  DevicePulse &pulse, uint32_t id);
+                  DevicePulse &pulse, uint32_t id, const char *name);
     ~DeviceContext();
     DeviceContext(const DeviceContext &) = delete;
     DeviceContext &operator=(const DeviceContext &) = delete;
@@ -55,6 +56,7 @@ private:
     DevicePulse          &pulse_;
     WireRecorder  &recorder_;
     uint32_t       id_;
+    ContextLabel   label_;
     ContextBinding binding_;
     FenceReporter   fences_;
     BlobImports          imports_;

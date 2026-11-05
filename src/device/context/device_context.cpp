@@ -27,8 +27,8 @@ namespace av {
 DeviceContext::DeviceContext(Host &host, BlobTable &blobs, HostBlobOwners &owners, FenceInterrupts &interrupts,
                              const ExecutorLibrary &library,
                              ExecutorShares &shares, WireRecorder &recorder, D3dOrdering &ordering,
-                             DevicePulse &pulse, uint32_t id)
-    : ordering_(ordering), pulse_(pulse), recorder_(recorder), id_(id), binding_(host, blobs), fences_(host, interrupts, recorder, id),
+                             DevicePulse &pulse, uint32_t id, const char *name)
+    : ordering_(ordering), pulse_(pulse), recorder_(recorder), id_(id), label_(name), binding_(host, blobs), fences_(host, interrupts, recorder, id),
       imports_(host, owners, executor_, recorder, id),
       executor_(host, library, shares, id), staging_(host),
       batches_(host, executor_, imports_, staging_, fences_, recorder, id),
@@ -137,6 +137,7 @@ void DeviceContext::report(StateWriter &writer)
 {
     AV_SCOPE("DeviceContext::report");
     writer.open("context", id_);
+    writer.text("name", label_.text());
     writer.flag("bound", binding_.bound());
     if (binding_.bound()) {
         char       version[24];

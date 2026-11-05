@@ -1,5 +1,6 @@
 #include "miniport/av_context/context_request_sequence.hpp"
 
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/resources/guest_page_list.hpp"
@@ -62,11 +63,28 @@ Status ContextRequestSequence::write_setup_request(uint8_t *bytes, size_t capaci
     const uint32_t      resources[blob_count] = {setup_.ring_resource(), setup_.fence_resource(), setup_.reply_resource()};
     const GuestPageList blobs[blob_count] = {pages_.ring(), pages_.fence(), pages_.reply()};
     Status              status = Status::ok;
-    if (step_ == context_step) status = writer.create_context(context_id_, CapsetInfo::capset_id);
-    else if (step_ == setup_step) status = writer.setup(context_id_, setup_);
+    if (step_ == context_step) {
+        char           label[AvRequestWriter::name_bytes] = {};
+        const uint32_t label_length = describe_process(label, sizeof label);
+        status = writer.create_context(context_id_, CapsetInfo::capset_id, label, label_length);
+    } else if (step_ == setup_step) status = writer.setup(context_id_, setup_);
     else status = writer.guest_blob_pages(resources[step_ - first_blob_step], blobs[step_ - first_blob_step]);
     length = writer.length();
     return status;
+}
+
+uint32_t ContextRequestSequence::describe_process(char *label, size_t capacity)
+{
+    AV_SCOPE("ContextRequestSequence::describe_process");
+    platform_.require_irql_at_most(Irql::passive, "ContextRequestSequence::describe_process");
+    char       image[image_bytes] = {};
+    TextBuffer text(label, capacity);
+    text.append_decimal(platform_.current_process_id());
+    if (platform_.current_process_image(image, sizeof image) != 0u) {
+        text.append(" ");
+        text.append(image);
+    }
+    return static_cast<uint32_t>(text.length());
 }
 
 Status ContextRequestSequence::write_teardown_request(uint8_t *bytes, size_t capacity, size_t &length)

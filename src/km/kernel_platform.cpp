@@ -606,6 +606,30 @@ Status KernelPlatform::write_driver_value(void *physical_device_object, const ch
     return NT_SUCCESS(written) ? Status::ok : Status::not_supported;
 }
 
+uint32_t KernelPlatform::current_process_id()
+{
+    AV_SCOPE("KernelPlatform::current_process_id");
+    return HandleToULong(PsGetCurrentProcessId());
+}
+
+size_t KernelPlatform::current_process_image(char *name, size_t capacity)
+{
+    AV_SCOPE("KernelPlatform::current_process_image");
+    if (capacity == 0u) return 0u;
+    name[0] = '\0';
+    PUNICODE_STRING path = nullptr;
+    if (!NT_SUCCESS(SeLocateProcessImageName(PsGetCurrentProcess(), &path)) || path == nullptr) return 0u;
+    ScopeExit        free_path([path] { ExFreePool(path); });
+    const size_t     end = path->Length / sizeof(WCHAR);
+    size_t           begin = end;
+    while (begin != 0u && path->Buffer[begin - 1u] != L'\\') begin--;
+    size_t length = 0u;
+    for (size_t at = begin; at < end && length + 1u < capacity; at++, length++)
+        name[length] = path->Buffer[at] >= 0x20 && path->Buffer[at] < 0x7F ? static_cast<char>(path->Buffer[at]) : '?';
+    name[length] = '\0';
+    return length;
+}
+
 uint32_t KernelPlatform::read_service_u32(void *registry_path, const char *name, uint32_t fallback)
 {
     AV_SCOPE("KernelPlatform::read_service_u32");

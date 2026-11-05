@@ -58,7 +58,7 @@ ObjectStorage<DeviceContext> *DeviceContextTable::slot_of(uint32_t id)
     return nullptr;
 }
 
-Status DeviceContextTable::create(uint32_t id)
+Status DeviceContextTable::create(uint32_t id, const char *name)
 {
     AV_SCOPE("DeviceContextTable::create");
     host_.require_main_loop("DeviceContextTable::create");
@@ -66,7 +66,7 @@ Status DeviceContextTable::create(uint32_t id)
     if (slot_of(id) != nullptr) return Status::conflict;
     for (ObjectStorage<DeviceContext> &slot : slots_) {
         if (slot.construct(host_, blobs_, owners_, interrupts_, library_, shares_, recorder_, ordering_, pulse_,
-                           id) != Status::ok)
+                           id, name) != Status::ok)
             continue;
         const Status status = slot.object().start();
         if (status != Status::ok) slot.destroy();

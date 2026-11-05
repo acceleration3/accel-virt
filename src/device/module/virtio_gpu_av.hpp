@@ -57,7 +57,7 @@ public:
     bool                 pci_identity(AvPciIdentity &identity) const;
     uint32_t             blobs() const;
     uint32_t             scanouts() const;
-    [[nodiscard]] Status create_context(uint32_t id);
+    [[nodiscard]] Status create_context(uint32_t id, const char *name);
     [[nodiscard]] Status destroy_context(uint32_t id);
     uint32_t             contexts() const;
     void                 renderer_lost();

@@ -26,6 +26,7 @@ public:
     uint32_t             name_length() const;
     uint32_t             context_init() const;
     uint32_t             command_size() const;
+    const char          *name() const;
 
 private:
     static constexpr size_t context_id_offset = 16u;
@@ -36,6 +37,7 @@ private:
     uint32_t name_length_;
     uint32_t context_init_;
     uint32_t command_size_;
+    char     name_[name_capacity + 1u];
 };
 
 }

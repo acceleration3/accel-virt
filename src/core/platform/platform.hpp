@@ -100,6 +100,9 @@ public:
     [[nodiscard]] virtual Status write_driver_u64(void *physical_device_object, const char *name,
                                                   uint64_t value) = 0;
 
+    virtual uint32_t current_process_id() = 0;
+    virtual size_t   current_process_image(char *name, size_t capacity) = 0;
+
     virtual uint32_t read_service_u32(void *registry_path, const char *name, uint32_t fallback) = 0;
     virtual int32_t register_miniport(void *driver_object, void *registry_path,
                                       const DdiTable &table) = 0;

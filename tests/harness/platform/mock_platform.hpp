@@ -90,6 +90,8 @@ public:
     Status   write_driver_text(void *physical_device_object, const char *name, const std::uint16_t *text,
                                std::uint32_t bytes) override;
     Status   write_driver_u32(void *physical_device_object, const char *name, std::uint32_t value) override;
+    std::uint32_t current_process_id() override;
+    std::size_t   current_process_image(char *name, std::size_t capacity) override;
     std::uint32_t read_service_u32(void *registry_path, const char *name, std::uint32_t fallback) override;
     Status   write_driver_u64(void *physical_device_object, const char *name, std::uint64_t value) override;
 
@@ -100,6 +102,8 @@ public:
     bool          driver_text_is(const char *name, const char *ascii) const;
     std::uint64_t driver_number(const char *name) const;
     std::uint32_t driver_value_type(const char *name) const;
+
+    void set_current_process(std::uint32_t id, const char *image);
 
     void fail_allocation_at(std::uint32_t nth);
 
@@ -277,6 +281,8 @@ private:
     std::uint32_t process_fail_at_ = 0u;
     ProcessViewResolver process_resolver_ = nullptr;
     void         *process_resolver_context_ = nullptr;
+    std::uint32_t process_id_ = 4u;
+    char          process_image_[64] = "System";
     std::uint32_t fail_at_;
     Irql          irql_;
     HeldLock      held_[lock_stack_depth];

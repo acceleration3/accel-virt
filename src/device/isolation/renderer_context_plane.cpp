@@ -199,7 +199,7 @@ const ObjectStorage<RemoteContext> *RendererContextPlane::slot_of(uint32_t id) c
     return nullptr;
 }
 
-Status RendererContextPlane::create(uint32_t id)
+Status RendererContextPlane::create(uint32_t id, const char *name)
 {
     AV_SCOPE("RendererContextPlane::create");
     host_.require_main_loop("RendererContextPlane::create");
@@ -219,7 +219,7 @@ Status RendererContextPlane::create(uint32_t id)
             return Status::invalid_state;
         }
         if (outcome != Status::ok) return outcome;
-        return slot.construct(host_, blobs_, interrupts_, id);
+        return slot.construct(host_, blobs_, interrupts_, id, name);
     }
     return Status::no_space;
 }
@@ -565,6 +565,15 @@ void RendererContextPlane::report(StateWriter &writer)
     writer.number("losses", loss_count_);
     writer.number("blobs", mirrored_.size());
     writer.number("contexts", live());
+    writer.close();
+    writer.open("contexts", 0u);
+    writer.number("live", live());
+    for (const ObjectStorage<RemoteContext> &slot : slots_) {
+        if (!slot.constructed()) continue;
+        writer.open("context", slot.object().id());
+        writer.text("name", slot.object().label());
+        writer.close();
+    }
     writer.close();
 }
 

@@ -13,8 +13,8 @@
 
 namespace av {
 
-RemoteContext::RemoteContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, uint32_t id)
-    : host_(host), interrupts_(interrupts), binding_(host, blobs), id_(id), doorbell_event_(nullptr), lost_(false)
+RemoteContext::RemoteContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, uint32_t id, const char *name)
+    : host_(host), interrupts_(interrupts), binding_(host, blobs), id_(id), label_(name), doorbell_event_(nullptr), lost_(false)
 {
     AV_SCOPE("RemoteContext::RemoteContext");
 }
@@ -104,6 +104,12 @@ uint32_t RemoteContext::id() const
 {
     AV_SCOPE("RemoteContext::id");
     return id_;
+}
+
+const char *RemoteContext::label() const
+{
+    AV_SCOPE("RemoteContext::label");
+    return label_.text();
 }
 
 bool RemoteContext::bound() const

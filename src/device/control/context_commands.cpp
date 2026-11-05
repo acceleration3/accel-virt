@@ -76,7 +76,7 @@ uint32_t ContextCommands::create(ControlRequest &request)
         create.context_init() != CapsetInfo::capset_id ||
         create.name_length() > ContextRequest::name_capacity)
         return GpuResponse::err_invalid_parameter;
-    switch (contexts_.create(create.context_id())) {
+    switch (contexts_.create(create.context_id(), create.name())) {
     case Status::ok: return GpuResponse::ok_nodata;
     case Status::invalid_parameter:
     case Status::conflict: return GpuResponse::err_invalid_context_id;

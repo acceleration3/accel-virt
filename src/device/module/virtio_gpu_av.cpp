@@ -261,12 +261,12 @@ uint32_t VirtioGpuAv::scanouts() const
     return heads_.showing();
 }
 
-Status VirtioGpuAv::create_context(uint32_t id)
+Status VirtioGpuAv::create_context(uint32_t id, const char *name)
 {
     AV_SCOPE("VirtioGpuAv::create_context");
     host_.require_main_loop("VirtioGpuAv::create_context");
     if (!binding_.bound() || !interrupts_.connected()) return Status::invalid_state;
-    return contexts_->create(id);
+    return contexts_->create(id, name);
 }
 
 Status VirtioGpuAv::destroy_context(uint32_t id)

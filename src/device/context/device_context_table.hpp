@@ -33,7 +33,7 @@ public:
 
     [[nodiscard]] Status initialize();
     void                 settle_d3d();
-    [[nodiscard]] Status create(uint32_t id);
+    [[nodiscard]] Status create(uint32_t id, const char *name);
     [[nodiscard]] Status destroy(uint32_t id);
     void                 destroy_all();
     DeviceContext       *find(uint32_t id);

@@ -51,14 +51,17 @@ Status AvRequestWriter::capset(uint32_t capset_id, uint32_t version)
     return Status::ok;
 }
 
-Status AvRequestWriter::create_context(uint32_t context_id, uint32_t capset_id)
+Status AvRequestWriter::create_context(uint32_t context_id, uint32_t capset_id, const char *name,
+                                       uint32_t name_length)
 {
     AV_SCOPE("AvRequestWriter::create_context");
+    if (name_length > name_bytes || (name_length != 0u && name == nullptr)) return Status::invalid_parameter;
     WireWriter writer(bytes_, capacity_);
     if (!begin(writer, ctx_create, context_id, create_context_size)) return Status::too_large;
-    writer.write_u32(0u);
+    writer.write_u32(name_length);
     writer.write_u32(capset_id);
-    writer.write_zeros(name_bytes);
+    writer.write(name, name_length);
+    writer.write_zeros(name_bytes - name_length);
     return Status::ok;
 }
 

@@ -3,6 +3,7 @@
 
 #include "core/support/status.hpp"
 #include "device/context/context_binding.hpp"
+#include "proto/context/context_label.hpp"
 
 #include <stdint.h>
 
@@ -17,7 +18,7 @@ class RendererLink;
 
 class RemoteContext {
 public:
-    RemoteContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, uint32_t id);
+    RemoteContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, uint32_t id, const char *name);
     ~RemoteContext();
     RemoteContext(const RemoteContext &) = delete;
     RemoteContext &operator=(const RemoteContext &) = delete;
@@ -28,6 +29,7 @@ public:
     void                 lose();
 
     uint32_t id() const;
+    const char *label() const;
     bool     bound() const;
     bool     lost() const;
     SubApi   sub_api() const;
@@ -43,6 +45,7 @@ private:
     FenceInterrupts &interrupts_;
     ContextBinding   binding_;
     uint32_t         id_;
+    ContextLabel     label_;
     void            *doorbell_event_;
     bool             lost_;
 };

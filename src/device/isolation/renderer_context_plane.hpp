@@ -47,7 +47,7 @@ public:
                                       AvHostMemory &memory) override;
     uint32_t             memory_domain() const override;
 
-    [[nodiscard]] Status create(uint32_t id) override;
+    [[nodiscard]] Status create(uint32_t id, const char *name) override;
     [[nodiscard]] Status destroy(uint32_t id) override;
     void                 destroy_all() override;
     bool                 holds(uint32_t id) override;

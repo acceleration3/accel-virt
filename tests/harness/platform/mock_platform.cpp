@@ -953,6 +953,31 @@ Status MockPlatform::write_driver_text(void *physical_device_object, const char 
     return Status::ok;
 }
 
+std::uint32_t MockPlatform::current_process_id() { return process_id_; }
+
+std::size_t MockPlatform::current_process_image(char *name, std::size_t capacity)
+{
+    if (capacity == 0u) return 0u;
+    std::size_t length = 0u;
+    while (process_image_[length] != '\0' && length + 1u < capacity) {
+        name[length] = process_image_[length];
+        length++;
+    }
+    name[length] = '\0';
+    return length;
+}
+
+void MockPlatform::set_current_process(std::uint32_t id, const char *image)
+{
+    process_id_ = id;
+    std::size_t length = 0u;
+    while (image[length] != '\0' && length + 1u < sizeof process_image_) {
+        process_image_[length] = image[length];
+        length++;
+    }
+    process_image_[length] = '\0';
+}
+
 std::uint32_t MockPlatform::read_service_u32(void *, const char *name, std::uint32_t fallback)
 {
     return service_ != nullptr ? service_->read(name, fallback) : fallback;

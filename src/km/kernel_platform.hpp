@@ -71,6 +71,8 @@ public:
     void     signal_event(void *event) override;
     void     release_event(void *event) override;
     void     report_broken_invariant(const char *what, const char *function) override;
+    uint32_t current_process_id() override;
+    size_t   current_process_image(char *name, size_t capacity) override;
     uint32_t read_service_u32(void *registry_path, const char *name, uint32_t fallback) override;
     int32_t  register_miniport(void *driver_object, void *registry_path,
                                const DdiTable &table) override;

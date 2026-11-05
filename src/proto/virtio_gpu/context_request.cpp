@@ -5,7 +5,7 @@
 
 namespace av {
 
-ContextRequest::ContextRequest() : context_id_(0u), name_length_(0u), context_init_(0u), command_size_(0u)
+ContextRequest::ContextRequest() : context_id_(0u), name_length_(0u), context_init_(0u), command_size_(0u), name_{}
 {
     AV_SCOPE("ContextRequest::ContextRequest");
 }
@@ -33,7 +33,15 @@ Status ContextRequest::decode_create(WireReader &reader)
     read_header(reader);
     name_length_ = reader.read_u32();
     context_init_ = reader.read_u32();
-    reader.skip(name_capacity);
+    uint8_t raw[name_capacity] = {};
+    reader.copy_bytes(raw, sizeof raw);
+    const uint32_t kept = name_length_ < name_capacity ? name_length_ : name_capacity;
+    uint32_t       length = 0u;
+    while (length < kept && raw[length] != 0u) {
+        name_[length] = raw[length] >= 0x20u && raw[length] < 0x7Fu ? static_cast<char>(raw[length]) : '?';
+        length++;
+    }
+    name_[length] = '\0';
     return Status::ok;
 }
 
@@ -66,6 +74,11 @@ uint32_t ContextRequest::command_size() const
 {
     AV_SCOPE("ContextRequest::command_size");
     return command_size_;
+}
+const char *ContextRequest::name() const
+{
+    AV_SCOPE("ContextRequest::name");
+    return name_;
 }
 
 }

@@ -29,7 +29,7 @@ public:
                                               AvHostMemory &memory) = 0;
     virtual uint32_t             memory_domain() const = 0;
 
-    [[nodiscard]] virtual Status create(uint32_t id) = 0;
+    [[nodiscard]] virtual Status create(uint32_t id, const char *name) = 0;
     [[nodiscard]] virtual Status destroy(uint32_t id) = 0;
     virtual void                 destroy_all() = 0;
     virtual bool                 holds(uint32_t id) = 0;
