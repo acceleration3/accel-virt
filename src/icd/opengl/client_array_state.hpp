@@ -28,7 +28,9 @@ public:
     static constexpr uint32_t max_attributes = 16u;
     static constexpr uint32_t client_pixel_store_bit = 0x00000001u;
     static constexpr uint32_t client_vertex_array_bit = 0x00000002u;
-    static constexpr uint32_t most_pushed = 16u;
+    static constexpr uint32_t most_pushed = 64u;
+    static constexpr uint32_t least_depth_limit = 16u;
+    static constexpr uint32_t max_depth_query = 0x0D3Bu;
 
     explicit ClientArrayState(BlockSource &memory);
     ClientArrayState(const ClientArrayState &) = delete;
@@ -44,6 +46,8 @@ public:
     bool     tracks(uint32_t target) const;
     void     push_client(uint32_t mask);
     void     pop_client();
+    void     limit_client_depth(int32_t reported);
+    void     forget_buffer(uint32_t target);
     void     reset_client(uint32_t mask);
     void     set_vertex_array_elements(uint32_t array, uint32_t buffer);
     void     delete_buffers(int32_t count, const uint32_t *buffers);
@@ -93,6 +97,7 @@ private:
     uint32_t   buffers_[buffer_targets];
     Pushed     pushed_[most_pushed];
     uint32_t   depth_;
+    uint32_t   depth_limit_;
     PixelStore pack_;
     PixelStore unpack_;
     uint32_t   vertex_array_;

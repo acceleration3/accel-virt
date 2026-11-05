@@ -277,6 +277,7 @@ void ManualCalls::bind_buffers_indexed(uint32_t target)
     AV_SCOPE("ManualCalls::bind_buffers_indexed");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
+    context->arrays().forget_buffer(target);
     if (shader_writable(target)) context->shadows().distrust();
 }
 

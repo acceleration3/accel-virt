@@ -497,6 +497,11 @@ bool GuestGlContext::learn()
     glproto::av_glGetIntegerv(wire, GrantedProfile::mask_query, &mask);
     profile_.learn(major < 0 ? 0u : static_cast<uint32_t>(major), minor < 0 ? 0u : static_cast<uint32_t>(minor),
                    static_cast<uint32_t>(mask));
+    if (profile_.legacy_calls_live()) {
+        int32_t depth = 0;
+        glproto::av_glGetIntegerv(wire, ClientArrayState::max_depth_query, &depth);
+        arrays_.limit_client_depth(depth);
+    }
     cap_version(version_row, latest_minor);
     cap_version(shading_row, latest_language_minor);
     policy_.learn(wire, extensions_);

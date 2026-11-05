@@ -32,7 +32,7 @@ constexpr uint32_t texture_targets_kept[] = {
 }
 
 ClientArrayState::ClientArrayState(BlockSource &memory)
-    : buffers_{}, pushed_{}, depth_(0u), pack_(), unpack_(), vertex_array_(0u), default_elements_(0u),
+    : buffers_{}, pushed_{}, depth_(0u), depth_limit_(least_depth_limit), pack_(), unpack_(), vertex_array_(0u), default_elements_(0u),
       elements_(memory, Pool::paged), attribute_pointers_{}, active_unit_(unknown), textures_{}, samplers_{},
       offsets_(memory, Pool::paged), no_offsets_(0u)
 {
@@ -90,7 +90,7 @@ bool ClientArrayState::tracks(uint32_t target) const
 void ClientArrayState::push_client(uint32_t mask)
 {
     AV_SCOPE("ClientArrayState::push_client");
-    if (depth_ == most_pushed) return;
+    if (depth_ >= depth_limit_) return;
     const uint32_t *const elements = elements_of(vertex_array_);
     pushed_[depth_] = Pushed{mask,
                              buffers_[buffer_slot(array_buffer)],
@@ -123,6 +123,21 @@ void ClientArrayState::pop_client()
     }
     vertex_array_ = saved.vertex_array_;
     set_vertex_array_elements(vertex_array_, saved.elements_);
+}
+
+void ClientArrayState::limit_client_depth(int32_t reported)
+{
+    AV_SCOPE("ClientArrayState::limit_client_depth");
+    if (reported <= 0) return;
+    const uint32_t wanted = static_cast<uint32_t>(reported);
+    depth_limit_ = wanted > most_pushed ? most_pushed : wanted;
+}
+
+void ClientArrayState::forget_buffer(uint32_t target)
+{
+    AV_SCOPE("ClientArrayState::forget_buffer");
+    const uint32_t slot = buffer_slot(target);
+    if (slot != buffer_targets) buffers_[slot] = unknown;
 }
 
 void ClientArrayState::reset_client(uint32_t mask)
@@ -285,7 +300,7 @@ bool ClientArrayState::invariants_hold() const
     AV_SCOPE("ClientArrayState::invariants_hold");
     if (!pack_.invariants_hold() || !unpack_.invariants_hold()) return false;
     if (active_unit_ != unknown && active_unit_ >= units) return false;
-    if (depth_ > most_pushed) return false;
+    if (depth_ > depth_limit_ || depth_limit_ > most_pushed) return false;
     return elements_.find(0u) == nullptr && elements_.invariants_hold();
 }
 
