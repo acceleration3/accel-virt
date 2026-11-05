@@ -20,6 +20,7 @@ public:
     [[nodiscard]] bool make_current();
     void              *resolve(const char *name) const;
     void              *handle() const;
+    void              *display() const;
 
 private:
     const GlDisplay *display_;

@@ -2,6 +2,7 @@
 #define AV_OPENGL_BACKEND_HPP
 
 #include "device/abi/av_executor.h"
+#include "executor/eventfd_wake.hpp"
 #include "executor/guest_region.hpp"
 #include "proto/wire/guest_bytes.hpp"
 #include "executor/published_slots.hpp"
@@ -14,6 +15,7 @@
 #include "executor/shim/gl_context.hpp"
 #include "executor/opengl/gl_pack_buffer.hpp"
 #include "executor/shim/gl_host_import.hpp"
+#include "executor/shim/gl_native_fences.hpp"
 #include "executor/shim/gl_shared_buffer.hpp"
 #include "proto/generated/glmem/glmem_dispatch_server.h"
 #include "proto/generated/opengl/gl_real_dispatch.h"
@@ -84,6 +86,8 @@ private:
     glproto::RealGl gl_;
     GlHostImport    import_;
     GlSharedBuffer  buffers_;
+    GlNativeFences  natives_;
+    EventfdWake     wake_;
     GlPackBuffer    pack_;
     SyncTokens  fences_;
     GlBatchProgress progress_;

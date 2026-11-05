@@ -8,11 +8,14 @@
 
 namespace av {
 
+class EventfdWake;
+class GlNativeFences;
+
 class GlBatchProgress final : public SliceProgress {
 public:
     static constexpr uint32_t most_pending = 32u;
 
-    explicit GlBatchProgress(const glproto::RealGl &gl);
+    GlBatchProgress(const glproto::RealGl &gl, const GlNativeFences &natives, EventfdWake &wake);
     GlBatchProgress(const GlBatchProgress &) = delete;
     GlBatchProgress &operator=(const GlBatchProgress &) = delete;
 
@@ -26,18 +29,25 @@ public:
     uint64_t reached() const override;
     uint64_t marked() const;
     bool     pending() const;
+    bool     polled() const;
 
     bool invariants_hold() const;
 
 private:
     struct Pending {
         void    *sync_;
+        int      fd_;
+        bool     watched_;
         uint64_t mark_;
     };
 
-    void drop_sync(void *sync);
+    bool glsync_fences() const;
+    bool signalled(const Pending &row) const;
+    void drop(Pending &row);
 
     const glproto::RealGl &gl_;
+    const GlNativeFences  &natives_;
+    EventfdWake           &wake_;
     Pending                pending_[most_pending];
     uint32_t               first_;
     uint32_t               count_;

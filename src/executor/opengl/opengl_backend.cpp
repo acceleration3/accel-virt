@@ -111,7 +111,7 @@ OpenGlBackend::OpenGlBackend(DriverLog &lines) : OpenGlBackend(heap_, lines)
 }
 
 OpenGlBackend::OpenGlBackend(BlockSource &blocks, DriverLog &lines)
-    : glmemproto::ServerDispatch(guest_), heap_(), context_(), gl_(), import_(), buffers_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_), memories_(blocks, progress_), guest_(), region_(guest_), published_(guest_), errors_(),
+    : glmemproto::ServerDispatch(guest_), heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), memories_(blocks, progress_), guest_(), region_(guest_), published_(guest_), errors_(),
       resolved_(0u), ran_(0u),
       lost_(false), current_(false), lines_(lines)
 {
@@ -134,6 +134,7 @@ bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions 
     install_hooks();
     gl_.av_fixed_function = granted_fixed_function();
     import_.configure(context_);
+    natives_.configure(context_);
     buffers_.configure(context_, import_);
     return true;
 }
@@ -172,10 +173,12 @@ void OpenGlBackend::shut_down()
         memories_.destroy_all(import_);
         import_.give_back();
         progress_.release();
+        natives_.give_back();
         void *fence = nullptr;
         while (fences_.take_any(fence))
             if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
     }
+    wake_.unbind();
     context_.close();
     gl_ = glproto::RealGl{};
     resolved_ = 0u;
@@ -214,15 +217,23 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
 bool OpenGlBackend::poll()
 {
     AV_SCOPE("OpenGlBackend::poll");
-    if (!progress_.pending() || !context_.make_current()) return false;
-    const bool pending = progress_.settle();
+    if (!progress_.pending()) {
+        wake_.settled();
+        return false;
+    }
+    if (!context_.make_current()) return false;
+    static_cast<void>(progress_.settle());
     memories_.reclaim(import_);
-    return pending;
+    const bool unwatched = progress_.polled();
+    if (unwatched) wake_.retry_later();
+    else wake_.settled();
+    return unwatched;
 }
 
-void OpenGlBackend::bind_signal(void (*)(void *context), void *)
+void OpenGlBackend::bind_signal(void (*signal)(void *context), void *context)
 {
     AV_SCOPE("OpenGlBackend::bind_signal");
+    wake_.bind(signal, context);
 }
 
 void OpenGlBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const

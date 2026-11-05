@@ -2,7 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 
-#include <poll.h>
+#include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
@@ -20,7 +20,7 @@ void *run_eventfd_wake(void *wake)
 
 }
 
-EventfdWake::EventfdWake() : signal_(), reached_fd_(-1), stop_fd_(-1), timer_fd_(-1), retry_delay_(0u), retry_armed_(false), thread_{}, running_(false)
+EventfdWake::EventfdWake() : signal_(), reached_fd_(-1), stop_fd_(-1), timer_fd_(-1), epoll_fd_(-1), retry_delay_(0u), retry_armed_(false), thread_{}, running_(false)
 {
     AV_SCOPE("EventfdWake::EventfdWake");
 }
@@ -32,6 +32,7 @@ EventfdWake::~EventfdWake()
     if (reached_fd_ >= 0) close(reached_fd_);
     if (stop_fd_ >= 0) close(stop_fd_);
     if (timer_fd_ >= 0) close(timer_fd_);
+    if (epoll_fd_ >= 0) close(epoll_fd_);
 }
 
 void EventfdWake::bind(void (*signal)(void *context), void *context)
@@ -56,18 +57,40 @@ int EventfdWake::descriptor()
 bool EventfdWake::open()
 {
     AV_SCOPE("EventfdWake::open");
-    if (reached_fd_ > 0 && stop_fd_ >= 0 && timer_fd_ >= 0) return true;
+    if (reached_fd_ > 0 && stop_fd_ >= 0 && timer_fd_ >= 0 && epoll_fd_ >= 0) return true;
     reached_fd_ = eventfd(0u, EFD_CLOEXEC | EFD_NONBLOCK);
     stop_fd_ = eventfd(0u, EFD_CLOEXEC | EFD_NONBLOCK);
     timer_fd_ = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
-    if (reached_fd_ > 0 && stop_fd_ >= 0 && timer_fd_ >= 0) return true;
+    epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
+    const bool opened = reached_fd_ > 0 && stop_fd_ >= 0 && timer_fd_ >= 0 && epoll_fd_ >= 0;
+    if (opened && add_to_epoll(reached_fd_, EPOLLIN) && add_to_epoll(stop_fd_, EPOLLIN) &&
+        add_to_epoll(timer_fd_, EPOLLIN))
+        return true;
     if (reached_fd_ >= 0) close(reached_fd_);
     if (stop_fd_ >= 0) close(stop_fd_);
     if (timer_fd_ >= 0) close(timer_fd_);
+    if (epoll_fd_ >= 0) close(epoll_fd_);
     reached_fd_ = -1;
     stop_fd_ = -1;
     timer_fd_ = -1;
+    epoll_fd_ = -1;
     return false;
+}
+
+bool EventfdWake::add_to_epoll(int fd, uint32_t events)
+{
+    AV_SCOPE("EventfdWake::add_to_epoll");
+    epoll_event added = {};
+    added.events = events;
+    added.data.fd = fd;
+    return epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &added) == 0;
+}
+
+bool EventfdWake::watch_descriptor(int fd)
+{
+    AV_SCOPE("EventfdWake::watch_descriptor");
+    if (!signal_.bound()) return true;
+    return fd >= 0 && descriptor() > 0 && add_to_epoll(fd, EPOLLIN | EPOLLONESHOT);
 }
 
 bool EventfdWake::start()
@@ -120,15 +143,26 @@ void EventfdWake::unbind()
 void EventfdWake::run()
 {
     AV_SCOPE("EventfdWake::run");
-    pollfd watched[3] = {{reached_fd_, POLLIN, 0}, {stop_fd_, POLLIN, 0}, {timer_fd_, POLLIN, 0}};
+    constexpr int most_events = 8;
     for (;;) {
-        if (poll(watched, 3u, -1) < 0) continue;
-        if (watched[1].revents != 0) return;
-        uint64_t count = 0u;
-        const bool fenced = watched[0].revents != 0 && read(reached_fd_, &count, sizeof count) == sizeof count;
-        const bool retried = watched[2].revents != 0 && read(timer_fd_, &count, sizeof count) == sizeof count;
-        if (retried) __atomic_store_n(&retry_armed_, false, __ATOMIC_RELEASE);
-        if (fenced || retried) static_cast<void>(signal_.raise());
+        epoll_event events[most_events];
+        const int   ready = epoll_wait(epoll_fd_, events, most_events, -1);
+        if (ready < 0) continue;
+        bool woken = false;
+        for (int at = 0; at < ready; at++)
+            if (events[at].data.fd == stop_fd_) return;
+        for (int at = 0; at < ready; at++) {
+            const int fd = events[at].data.fd;
+            uint64_t  count = 0u;
+            if (fd != reached_fd_ && fd != timer_fd_) {
+                woken = true;
+                continue;
+            }
+            if (read(fd, &count, sizeof count) != sizeof count) continue;
+            if (fd == timer_fd_) __atomic_store_n(&retry_armed_, false, __ATOMIC_RELEASE);
+            woken = true;
+        }
+        if (woken) static_cast<void>(signal_.raise());
     }
 }
 

@@ -54,6 +54,12 @@ void *GlContext::handle() const
     return context_;
 }
 
+void *GlContext::display() const
+{
+    AV_SCOPE("GlContext::display");
+    return display_ != nullptr ? display_->handle() : nullptr;
+}
+
 void *GlContext::resolve(const char *name) const
 {
     AV_SCOPE("GlContext::resolve");
