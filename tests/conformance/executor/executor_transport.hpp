@@ -19,6 +19,7 @@ public:
     ~ExecutorTransport() = default;
 
     WireWriter                    request_writer() override;
+    WireWriter                    request_writer_with_room(const std::uint64_t *sizes, std::uint32_t count) override;
     [[nodiscard]] TransportResult send_async(std::uint32_t command_id, WireWriter &writer) override;
     [[nodiscard]] TransportResult send_sync(std::uint32_t command_id, WireWriter &writer,
                                             WireReader &reply) override;

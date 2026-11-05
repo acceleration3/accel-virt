@@ -9,6 +9,12 @@ ExecutorTransport::ExecutorTransport(const AvExecutorOps &ops, AvExecutor *execu
 
 WireWriter ExecutorTransport::request_writer() { return WireWriter(request_, sizeof request_); }
 
+WireWriter ExecutorTransport::request_writer_with_room(const std::uint64_t *sizes, std::uint32_t count)
+{
+    static_cast<void>(make_room_for_blobs(sizes, count));
+    return request_writer();
+}
+
 TransportResult ExecutorTransport::send_async(std::uint32_t command_id, WireWriter &writer)
 {
     std::size_t answered = 0u;
