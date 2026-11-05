@@ -3,12 +3,16 @@
 #include "core/platform/mutex_guard.hpp"
 #include "core/platform/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
+#include "miniport/virtio/virtio_gpu_device.hpp"
+#include "proto/pages/window_stats.hpp"
+#include "proto/virtio_gpu/av_request_writer.hpp"
+#include "proto/virtio_gpu/gpu_response_reader.hpp"
 
 namespace av {
 
 HostWindow::HostWindow(Platform &platform)
     : platform_(platform), lock_(platform, LockRank::host_window), map_(nullptr), base_(0u), pages_(0u), used_(0u),
-      offered_(false)
+      peak_(0u), refusals_(0u), refused_bytes_(0u), largest_run_(0u), offered_(false), view_(platform)
 {
     AV_SCOPE("HostWindow::HostWindow");
 }
@@ -27,10 +31,12 @@ Status HostWindow::initialize(uint64_t base, uint64_t bytes)
     InvariantScope<HostWindow> guard(platform_, *this, "initialize");
     const uint64_t         pages = bytes / page_bytes;
     if (pages == 0u || pages > UINT32_MAX) return Status::invalid_parameter;
+    static_cast<void>(view_.initialize());
     if (map_ != nullptr) {
         if (pages != pages_ || (base != base_ && used_ != 0u)) return Status::invalid_state;
         base_ = base;
         offered_ = true;
+        publish();
         return Status::ok;
     }
     const size_t words = static_cast<size_t>((pages + bits_per_word - 1u) / bits_per_word);
@@ -40,6 +46,7 @@ Status HostWindow::initialize(uint64_t base, uint64_t bytes)
     base_ = base;
     pages_ = static_cast<uint32_t>(pages);
     offered_ = true;
+    publish();
     return Status::ok;
 }
 
@@ -78,8 +85,13 @@ Status HostWindow::take(uint32_t pages, uint32_t &first)
         if (run < pages) continue;
         first = static_cast<uint32_t>(page + 1u - pages);
         mark(first, pages);
+        publish();
         return Status::ok;
     }
+    refusals_++;
+    refused_bytes_ += uint64_t{pages} * page_bytes;
+    largest_run_ = largest_free_run();
+    publish();
     return Status::no_space;
 }
 
@@ -98,6 +110,7 @@ void HostWindow::give_back(uint32_t first, uint32_t pages)
         word &= ~bit;
         used_--;
     }
+    publish();
 }
 
 uint64_t HostWindow::physical(uint32_t first) const
@@ -112,12 +125,56 @@ uint32_t HostWindow::pages_in_use() const
     return used_;
 }
 
+Status HostWindow::announce(VirtioGpuDevice &device)
+{
+    AV_SCOPE("HostWindow::announce");
+    platform_.require_irql_at_most(Irql::passive, "HostWindow::announce");
+    if (!view_.ready()) return Status::invalid_state;
+    uint8_t         request[AvRequestWriter::max_request_size] = {};
+    AvRequestWriter writer(request, sizeof request);
+    const Status    written = writer.window_stats(view_.address());
+    if (written != Status::ok) return written;
+    uint8_t      answer[answer_bytes] = {};
+    uint32_t     received = 0u;
+    const Status asked = device.ask_control(request, writer.length(), answer, sizeof answer, received);
+    if (asked != Status::ok) return asked;
+    GpuResponseReader response;
+    const Status      decoded = response.decode(answer, received);
+    if (decoded != Status::ok) return decoded;
+    return response.ok() ? Status::ok : Status::not_supported;
+}
+
 void HostWindow::mark(uint32_t first, uint32_t pages)
 {
     AV_SCOPE("HostWindow::mark");
     for (uint32_t page = first; page < first + pages; page++)
         map_[page / bits_per_word] |= uint64_t{1} << (page % bits_per_word);
     used_ += pages;
+    if (used_ > peak_) peak_ = used_;
+}
+
+uint32_t HostWindow::largest_free_run() const
+{
+    AV_SCOPE("HostWindow::largest_free_run");
+    uint32_t best = 0u;
+    uint32_t run = 0u;
+    for (uint64_t page = 0u; page < pages_; page++) {
+        if (page % bits_per_word == 0u && map_[page / bits_per_word] == UINT64_MAX) {
+            page += bits_per_word - 1u;
+            run = 0u;
+            continue;
+        }
+        const bool used = (map_[page / bits_per_word] >> (page % bits_per_word) & 1u) != 0u;
+        run = used ? 0u : run + 1u;
+        if (run > best) best = run;
+    }
+    return best;
+}
+
+void HostWindow::publish()
+{
+    AV_SCOPE("HostWindow::publish");
+    view_.publish(WindowStats(pages_, used_, peak_, refusals_, refused_bytes_, largest_run_));
 }
 
 bool HostWindow::invariants_hold() const
@@ -127,7 +184,7 @@ bool HostWindow::invariants_hold() const
     uint32_t set = 0u;
     for (uint64_t word = 0u; word < (uint64_t{pages_} + bits_per_word - 1u) / bits_per_word; word++)
         set += static_cast<uint32_t>(__builtin_popcountll(map_[word]));
-    return set == used_ && used_ <= pages_;
+    return set == used_ && used_ <= pages_ && used_ <= peak_ && peak_ <= pages_;
 }
 
 }

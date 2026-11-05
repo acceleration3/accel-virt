@@ -219,9 +219,12 @@ void Adapter::remember_device()
         memory_.offer_local(capset);
         scanout_.offer(capset);
         overlays_.offer(capset);
-        if (host_visible_.offered())
-            log_status("avgpu: host window",
-                       NtStatus(window_.initialize(host_visible_.base(), host_visible_.size())).value());
+        if (host_visible_.offered()) {
+            const Status opened = window_.initialize(host_visible_.base(), host_visible_.size());
+            log_status("avgpu: host window", NtStatus(opened).value());
+            if (opened == Status::ok)
+                log_status("avgpu: host window counters", NtStatus(window_.announce(device_.object())).value());
+        }
         log_status("avgpu: adapter description",
                    NtStatus(description_.publish(physical_device_object_, capset.gpu())).value());
     }

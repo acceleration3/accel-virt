@@ -14,6 +14,7 @@ class PageRequest {
 public:
     static constexpr uint32_t display_clock = 0x02F4u;
     static constexpr uint32_t present_engine = 0x02F6u;
+    static constexpr uint32_t window_stats = 0x02F9u;
     static constexpr size_t   encoded_size = 32u;
     static constexpr uint64_t page_size = 4096u;
 

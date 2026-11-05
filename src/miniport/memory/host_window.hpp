@@ -4,11 +4,13 @@
 #include "core/platform/mutex.hpp"
 #include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
+#include "miniport/memory/window_stats_view.hpp"
 
 #include <stdint.h>
 
 namespace av {
 
+class VirtioGpuDevice;
 struct HostWindowProbe;
 
 class HostWindow {
@@ -27,13 +29,17 @@ public:
     void                 give_back(uint32_t first, uint32_t pages);
     uint64_t             physical(uint32_t first) const;
     uint32_t             pages_in_use() const;
+    [[nodiscard]] Status announce(VirtioGpuDevice &device);
 
     bool invariants_hold() const;
 
 private:
     static constexpr uint32_t bits_per_word = 64u;
+    static constexpr size_t   answer_bytes = 24u;
 
-    void mark(uint32_t first, uint32_t pages);
+    void     mark(uint32_t first, uint32_t pages);
+    uint32_t largest_free_run() const;
+    void     publish();
 
     Platform &platform_;
     Mutex     lock_;
@@ -41,7 +47,12 @@ private:
     uint64_t  base_;
     uint32_t  pages_;
     uint32_t  used_;
+    uint32_t  peak_;
+    uint64_t  refusals_;
+    uint64_t  refused_bytes_;
+    uint32_t  largest_run_;
     bool      offered_;
+    WindowStatsView view_;
 
     friend struct HostWindowProbe;
 };

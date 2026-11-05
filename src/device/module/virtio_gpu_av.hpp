@@ -16,6 +16,7 @@
 #include "device/gpu/host_pci_identity.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/memory/host_blob_table.hpp"
+#include "device/memory/window_stats_window.hpp"
 #include "device/present/present_engine.hpp"
 #include "device/feasibility/host_feasibility.hpp"
 #include "device/recording/wire_recorder.hpp"
@@ -80,6 +81,7 @@ private:
     WireRecorder       recorder_;
     BlobTable          blobs_;
     HostBlobTable      host_blobs_;
+    WindowStatsWindow  window_stats_;
     DisplayHeads       heads_;
     DisplayModes       display_modes_;
     FenceInterrupts    interrupts_;

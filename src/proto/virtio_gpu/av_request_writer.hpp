@@ -39,6 +39,7 @@ public:
     [[nodiscard]] Status display_modes();
     [[nodiscard]] Status display_clock(uint64_t address);
     [[nodiscard]] Status present_engine(uint64_t address);
+    [[nodiscard]] Status window_stats(uint64_t address);
     [[nodiscard]] Status display_timing(uint32_t head, uint32_t refresh_millihz);
     [[nodiscard]] Status scanout_plane(const ScanoutPlaneRequest &plane);
     [[nodiscard]] Status setup(uint32_t context_id, const ContextSetup &setup);

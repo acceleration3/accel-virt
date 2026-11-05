@@ -198,6 +198,12 @@ Status AvRequestWriter::present_engine(uint64_t address)
     return page(PageRequest::present_engine, address);
 }
 
+Status AvRequestWriter::window_stats(uint64_t address)
+{
+    AV_SCOPE("AvRequestWriter::window_stats");
+    return page(PageRequest::window_stats, address);
+}
+
 Status AvRequestWriter::page(uint32_t type, uint64_t address)
 {
     AV_SCOPE("AvRequestWriter::page");

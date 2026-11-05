@@ -10,6 +10,7 @@
 #include "device/control/scanout_commands.hpp"
 #include "device/control/present_commands.hpp"
 #include "device/control/present_engine_commands.hpp"
+#include "device/control/window_stats_commands.hpp"
 #include "device/present/present_frames.hpp"
 #include "device/control/shared_commands.hpp"
 #include "device/control/control_request.hpp"
@@ -25,7 +26,7 @@ namespace av {
 
 VirtioGpuAv::VirtioGpuAv(Host &host)
     : host_(host), binding_(host), pci_(host), feasibility_(host), capset_(host), recorder_(host), blobs_(host),
-      host_blobs_(host), heads_(host, blobs_), display_modes_(host), interrupts_(host),
+      host_blobs_(host), window_stats_(host), heads_(host, blobs_), display_modes_(host), interrupts_(host),
       clock_(host, interrupts_, &AvDisplayFramesShow, this), planes_(host), presents_(host, interrupts_), status_(host, interrupts_), local_(host, blobs_, host_blobs_, interrupts_, recorder_),
       remote_(host, blobs_, interrupts_), contexts_(&local_), exports_(host, clock_)
       {
@@ -139,6 +140,7 @@ void VirtioGpuAv::reset()
     AV_SCOPE("VirtioGpuAv::reset");
     host_.require_main_loop("VirtioGpuAv::reset");
     clock_.detach();
+    window_stats_.release();
     planes_.clear();
     presents_.detach();
     contexts_->destroy_all();
@@ -185,7 +187,8 @@ bool VirtioGpuAv::control(void *request, uint32_t type)
            DisplayModeCommands(host_, display_modes_).answer(control, type) ||
            DisplayClockCommands(host_, clock_).answer(control, type) ||
            ScanoutPlaneCommands(host_, planes_).answer(control, type) ||
-           PresentEngineCommands(host_, presents_, snapshots).answer(control, type);
+           PresentEngineCommands(host_, presents_, snapshots).answer(control, type) ||
+           WindowStatsCommands(host_, window_stats_).answer(control, type);
 }
 
 bool VirtioGpuAv::export_accepted(int connection, bool same_user)
@@ -357,6 +360,7 @@ void VirtioGpuAv::report(StateWriter &writer)
     }
     heads_.report(writer);
     host_blobs_.report(writer);
+    window_stats_.report(writer);
     contexts_->report(writer);
 }
 
