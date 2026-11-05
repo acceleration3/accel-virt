@@ -169,8 +169,8 @@ bool SliceGroups::invariants_hold() const
     bool sound = next_ != 0u && next_member_ != 0u;
     rows_.for_each([&sound](uint64_t key, const Row &row) {
         sound = sound && static_cast<uint32_t>(key) != 0u && row.owner_ != nullptr && row.size_ != 0u &&
-                row.size_ <= row.slice_.bytes_ && row.map_offset_ + row.map_bytes_ <= row.size_ &&
-                (row.access_ != 0u || row.map_bytes_ == 0u);
+                row.size_ <= row.slice_.bytes_ && row.map_bytes_ <= row.size_ &&
+                row.map_offset_ <= row.size_ - row.map_bytes_ && (row.access_ != 0u || row.map_bytes_ == 0u);
     });
     parents_.for_each([this, &sound](uint32_t token, const uint32_t &parent) {
         sound = sound && token != parent && root_of(parent) != token;
