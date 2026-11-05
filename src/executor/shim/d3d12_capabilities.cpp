@@ -80,8 +80,8 @@ void D3d12Capabilities::measure_formats(ID3D12Device &device)
         D3D12_FEATURE_DATA_FORMAT_SUPPORT support = {};
         support.Format = static_cast<DXGI_FORMAT>(format);
         if (SUCCEEDED(device.CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &support, sizeof(support)))) {
-            row.support = static_cast<uint32_t>(support.Support1);
-            row.support2 = static_cast<uint32_t>(support.Support2);
+            __builtin_memcpy(&row.support, &support.Support1, sizeof row.support);
+            __builtin_memcpy(&row.support2, &support.Support2, sizeof row.support2);
         }
         const uint32_t asked =
             (row.support & D3D12_FORMAT_SUPPORT1_MULTISAMPLE_RENDERTARGET) != 0u ? multisample_counts : 0u;

@@ -1,6 +1,9 @@
 #include "device/abi/av_executor.h"
 #include "executor/exported_memory.hpp"
-#include "executor/imported_blob.hpp"
+#include "core/log/driver_log.hpp"
+#include "executor/executor_log.hpp"
+#include "executor/import_table.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/opencl/opencl_backend.hpp"
 #include "executor/opengl/gl_context_attributes.hpp"
@@ -11,6 +14,8 @@
 #include "executor/shim/opencl_device.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <CL/cl.h>
 #include <CL/cl_gl.h>
@@ -42,6 +47,12 @@ extern "C" const char *__lsan_default_suppressions(void)
            "leak:libz\n";
 }
 
+extern "C" const char *__asan_default_options(void);
+extern "C" const char *__asan_default_options(void)
+{
+    return "detect_leaks=0";
+}
+
 using av::OpenClBackend;
 
 namespace {
@@ -49,9 +60,19 @@ std::uint64_t detail = 0u;
 
 constexpr std::uint64_t page = 4096u;
 
+struct Lines {
+    Lines() : memory(), imports(memory), sink(), executor(sink), log(executor.opencl()) {}
+
+    av::MockPlatform memory;
+    av::ImportTable  imports;
+    av::RecordingLog sink;
+    av::ExecutorLog  executor;
+    av::DriverLog   &log;
+};
+
 class Hosts {
 public:
-    Hosts() : count_(0u)
+    Hosts() : sink_(), log_(sink_), host_(log_), count_(0u)
     {
         host_.open();
         for (std::uint32_t i = 0u; i < host_.gpu_count(); i++) {
@@ -71,6 +92,8 @@ public:
     const std::uint8_t           *uuid(std::uint32_t index) const { return uuids_[index]; }
 
 private:
+    av::RecordingLog        sink_;
+    av::ExecutorLog         log_;
     av::LoaderHostApis      host_;
     const av::OpenClDevice *devices_[16] = {};
     const av::GlDisplay    *displays_[16] = {};
@@ -221,14 +244,15 @@ TEST(opencl_backend_device, a_descriptor_another_api_wrote_is_read_back_through_
           std::fprintf(stderr, "gpu %u exports no writable dma-buf\n", index);
           continue;
       }
-      OpenClBackend backend;
-      CHECK(backend.initialize(hosts.device(index), hosts.display(index), nullptr));
+      Lines lines;
+      OpenClBackend backend(lines.log);
+      CHECK(backend.initialize(hosts.device(index), hosts.display(index), nullptr, lines.imports));
       cl_context const context = guest_context(backend, *hosts.device(index));
       if (context == nullptr) { std::fprintf(stderr, "gpu %u makes no context\n", index); backend.shut_down(); continue; }
 
       std::uint64_t shared = 0u;
       if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(),
-                                 shared, detail)) {
+                                 0u, shared, detail)) {
           std::fprintf(stderr, "gpu %u imports no shared object into OpenCL\n", index);
           backend.shut_down();
           continue;
@@ -267,8 +291,9 @@ TEST(opencl_backend_device, a_descriptor_another_api_wrote_is_read_back_through_
 TEST(opencl_backend_device, a_context_that_can_share_leaves_gl_sharing_in_the_device_s_extensions)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   cl_device_id const device = static_cast<cl_device_id>(hosts.device(0u)->device());
   char   host_list[4096] = {};
   size_t host_bytes = 0u;
@@ -288,29 +313,31 @@ TEST(opencl_backend_device, a_context_that_can_share_leaves_gl_sharing_in_the_de
 TEST(opencl_backend_device, an_import_with_no_guest_context_is_refused_and_costs_the_descriptor_nothing)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   Exported written;
   if (!written.make(hosts.uuid(0u))) { backend.shut_down(); return; }
 
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), 0u, made, detail));
   CHECK_EQ(made, 0u);
 
   if (guest_context(backend, *hosts.device(0u)) == nullptr) { backend.shut_down(); return; }
-  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), made, detail)) {
+  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), 0u, made, detail)) {
       CHECK(made != 0u);
       backend.release_object(AV_SHARED_MEMORY, made, detail);
   }
-  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), made, detail))
+  if (backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), 0u, made, detail))
       CHECK(backend.handle_for(av::clproto::HandleKind::mem, made) != nullptr);
   backend.shut_down(); }
 
 TEST(opencl_backend_device, a_property_list_longer_than_the_drivers_own_is_refused)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   cl_device_id named = static_cast<cl_device_id>(hosts.device(0u)->device());
 
   cl_context_properties overlong[34] = {};
@@ -340,25 +367,29 @@ TEST(opencl_backend_device, an_import_of_the_wrong_shape_makes_nothing)
   Exported written;
   if (!written.make(hosts.uuid(0u))) return;
 
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   cl_context const context = guest_context(backend, *hosts.device(0u));
   if (context == nullptr) { backend.shut_down(); return; }
 
   std::uint64_t made = 9u;
   CHECK(!backend.import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u, av::SharedImageShape(),
-                               made, detail));
+                               0u, made, detail));
   CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u, av::SharedImageShape(),
-                               made, detail));
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, written.handle(), page, av::SharedImageShape(), made, detail));
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, -1, page, av::SharedImageShape(), made, detail));
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u, av::SharedImageShape(), made, detail));
+                               0u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, written.handle(), page, av::SharedImageShape(), 0u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, -1, page, av::SharedImageShape(), 0u, made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), 0u, av::SharedImageShape(), 0u, made, detail));
   CHECK(!backend.import_object(AV_SHARED_NATIVE_FENCE + 1u, AV_SHARED_HANDLE_DMA_BUF, written.handle(),
-                               page, av::SharedImageShape(), made, detail));
+                               page, av::SharedImageShape(), 0u, made, detail));
   CHECK_EQ(made, 0u);
   std::uint32_t handle_kind = 9u;
-  int           fd = 9;
+  av::OwnedFd   fd;
   CHECK(!backend.export_object(AV_SHARED_MEMORY, 1u, handle_kind, fd));
+  CHECK_EQ(handle_kind, 0u);
+  CHECK(!fd.held());
   backend.shut_down(); }
 
 TEST(opencl_backend_device, each_import_is_released_with_the_gl_objects_it_answered)
@@ -367,18 +398,20 @@ TEST(opencl_backend_device, each_import_is_released_with_the_gl_objects_it_answe
   Exported written;
   if (!written.make(hosts.uuid(0u))) return;
 
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   cl_context const context = guest_context(backend, *hosts.device(0u));
   if (context == nullptr) { backend.shut_down(); return; }
   std::uint64_t first = 0u;
   std::uint64_t second = 0u;
-  if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), first, detail)) {
+  if (!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), 0u, first, detail)) {
       backend.shut_down();
       return;
   }
   const std::uint64_t first_detail = detail;
-  CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), second, detail));
+  CHECK(backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page, av::SharedImageShape(), 0u, second, detail));
   const std::uint64_t second_detail = detail;
   CHECK(first != second);
   CHECK(first_detail != second_detail);
@@ -394,8 +427,9 @@ TEST(opencl_backend_device, each_import_is_released_with_the_gl_objects_it_answe
 TEST(opencl_backend_device, a_write_has_taken_its_bytes_by_the_time_it_returns_whatever_the_guest_asked)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   cl_context const context = guest_context(backend, *hosts.device(0u));
   if (context == nullptr) { backend.shut_down(); return; }
   cl_int                 error = CL_SUCCESS;
@@ -457,16 +491,17 @@ TEST(opencl_backend_device, a_write_has_taken_its_bytes_by_the_time_it_returns_w
 TEST(opencl_backend_device, a_read_has_written_its_bytes_by_the_time_it_returns_whatever_the_guest_asked)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   cl_context const context = guest_context(backend, *hosts.device(0u));
   if (context == nullptr) { backend.shut_down(); return; }
   constexpr std::size_t bytes = std::size_t{1} << 20;
   alignas(4096) static std::uint8_t lent[bytes];
   av::SourceMemory memory(1u, 1u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(1u, -1, lent, sizeof lent));
-  av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, memory), av::Status::ok);
-  CHECK(backend.adopt(blob));
+  std::uint64_t arena = 0u;
+  CHECK(backend.adopt(memory, arena));
+  CHECK_EQ(arena, reinterpret_cast<std::uintptr_t>(lent));
   cl_int                 error = CL_SUCCESS;
   const cl_command_queue queue = ::clCreateCommandQueueWithProperties(
       context, static_cast<cl_device_id>(hosts.device(0u)->device()), nullptr, &error);
@@ -478,7 +513,7 @@ TEST(opencl_backend_device, a_read_has_written_its_bytes_by_the_time_it_returns_
   for (std::uint32_t copy = 0u; copy < 32u; ++copy)
       CHECK_EQ(::clEnqueueCopyBuffer(queue, busy, source, 0u, 0u, bytes, 0u, nullptr, nullptr), CL_SUCCESS);
   std::memset(lent, 0, sizeof lent);
-  void *const into = backend.lent_for(0u, bytes);
+  void *const into = lent;
   CHECK(into == lent);
   CHECK_EQ(backend.on_clEnqueueReadBuffer(queue, source, CL_FALSE, 0u, bytes, into, 0u, nullptr, nullptr),
            CL_SUCCESS);
@@ -530,21 +565,22 @@ TEST(opencl_backend_device, a_read_has_written_its_bytes_by_the_time_it_returns_
   ::clReleaseMemObject(busy);
   ::clReleaseMemObject(source);
   ::clReleaseCommandQueue(queue);
-  backend.abandon(blob);
+  backend.abandon(memory, arena);
   backend.shut_down(); }
 
 TEST(opencl_backend_device, a_rectangle_the_host_refused_into_the_arena_is_bounced_into_it)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   cl_context const context = guest_context(backend, *hosts.device(0u));
   if (context == nullptr) { backend.shut_down(); return; }
   alignas(4096) static std::uint8_t lent[64u * 1024u];
   av::SourceMemory memory(1u, 1u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(1u, -1, lent, sizeof lent));
-  av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, memory), av::Status::ok);
-  CHECK(backend.adopt(blob));
+  std::uint64_t arena = 0u;
+  CHECK(backend.adopt(memory, arena));
+  CHECK_EQ(arena, reinterpret_cast<std::uintptr_t>(lent));
   cl_int                 error = CL_SUCCESS;
   const cl_command_queue queue = ::clCreateCommandQueueWithProperties(
       context, static_cast<cl_device_id>(hosts.device(0u)->device()), nullptr, &error);
@@ -557,7 +593,7 @@ TEST(opencl_backend_device, a_rectangle_the_host_refused_into_the_arena_is_bounc
   CHECK(probe.refuse());
   const std::size_t from[3] = {8u, 2u, 0u}, at[3] = {4u, 1u, 0u}, region[3] = {32u, 3u, 1u};
   std::memset(lent, 0xEE, sizeof lent);
-  void *const into = backend.lent_for(0u, sizeof lent);
+  void *const into = lent;
   CHECK_EQ(backend.on_clEnqueueReadBufferRect(queue, source, CL_FALSE, from, at, region, 128u, 0u, 64u, 0u, into, 0u,
                                               nullptr, nullptr),
            CL_SUCCESS);
@@ -582,14 +618,15 @@ TEST(opencl_backend_device, a_rectangle_the_host_refused_into_the_arena_is_bounc
 
   ::clReleaseMemObject(source);
   ::clReleaseCommandQueue(queue);
-  backend.abandon(blob);
+  backend.abandon(memory, arena);
   backend.shut_down(); }
 
 TEST(opencl_backend_device, on_clReleaseMemObject_of_a_mapped_buffer_forgets_its_mapping)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   cl_context const context = guest_context(backend, *hosts.device(0u));
   if (context == nullptr) { backend.shut_down(); return; }
   cl_int                 error = CL_SUCCESS;
@@ -616,8 +653,9 @@ TEST(opencl_backend_device, on_clReleaseMemObject_of_a_mapped_buffer_forgets_its
 TEST(opencl_backend_device, a_kernel_runs_without_the_guest_flushing_it)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   cl_context const context = guest_context(backend, *hosts.device(0u));
   if (context == nullptr) { backend.shut_down(); return; }
   cl_int                 error = CL_SUCCESS;
@@ -661,8 +699,9 @@ TEST(opencl_backend_device, a_kernel_runs_without_the_guest_flushing_it)
 TEST(opencl_backend_device, an_event_the_guest_asks_after_is_flushed_on_its_way)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   cl_context const context = guest_context(backend, *hosts.device(0u));
   if (context == nullptr) { backend.shut_down(); return; }
   cl_int                 error = CL_SUCCESS;
@@ -735,8 +774,9 @@ TEST(opencl_backend_device, the_copy_path_says_gl_sharing_and_imports_nothing)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
   Exported written;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   av::OpenClBackendProbe probe{backend};
   if (probe.vehicle() == nullptr) { backend.shut_down(); return; }
   CHECK(probe.copy());
@@ -750,7 +790,7 @@ TEST(opencl_backend_device, the_copy_path_says_gl_sharing_and_imports_nothing)
   if (guest_context(backend, *hosts.device(0u)) != nullptr && written.make(hosts.uuid(0u))) {
       std::uint64_t made = 9u;
       CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, written.handle(), page,
-                                   av::SharedImageShape(), made, detail));
+                                   av::SharedImageShape(), 0u, made, detail));
       CHECK_EQ(made, 0u);
   }
   backend.shut_down(); }
@@ -758,8 +798,9 @@ TEST(opencl_backend_device, the_copy_path_says_gl_sharing_and_imports_nothing)
 TEST(opencl_backend_device, the_copy_path_carries_gl_objects_through_the_backend)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), nullptr, lines.imports));
   av::OpenClBackendProbe probe{backend};
   av::GlContext *const   gl = probe.vehicle();
   if (gl == nullptr || !probe.copy()) { backend.shut_down(); return; }
@@ -846,12 +887,13 @@ TEST(opencl_backend_device, the_copy_path_carries_gl_objects_through_the_backend
 TEST(opencl_backend_device, a_gl_context_s_cl_context_reaches_its_objects_by_copies)
 { Hosts hosts;
   if (hosts.count() == 0u) return;
-  av::OpenGlBackend guest_gl;
+  Lines lines;
+  av::OpenGlBackend guest_gl(lines.executor.opengl());
   if (!guest_gl.initialize(hosts.display(0u), nullptr, nullptr)) return;
-  { OpenClBackend refused;
-    CHECK(!refused.initialize(hosts.device(0u), nullptr, &guest_gl)); }
-  OpenClBackend backend;
-  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), &guest_gl));
+  { OpenClBackend refused(lines.log);
+    CHECK(!refused.initialize(hosts.device(0u), nullptr, &guest_gl, lines.imports)); }
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(hosts.device(0u), hosts.display(0u), &guest_gl, lines.imports));
   av::OpenClBackendProbe probe{backend};
   CHECK(probe.copy());
   av::GlContext                   application;

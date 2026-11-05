@@ -1,4 +1,7 @@
+#include "core/log/driver_log.hpp"
+#include "executor/executor_log.hpp"
 #include "executor/exported_memory.hpp"
+#include "executor/import_table.hpp"
 #include "executor/imported_blob.hpp"
 #include "executor/source_memory.hpp"
 #include "device/abi/av_executor.h"
@@ -10,6 +13,8 @@
 #include "executor/shim/opencl_device.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "proto/resources/cl_blob_backing.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
@@ -45,6 +50,16 @@ extern "C" const char *__lsan_default_suppressions(void)
 namespace {
 std::uint64_t detail = 0u;
 
+struct Lines {
+    Lines() : memory(), imports(memory), sink(), executor(sink), log(executor.opencl()) {}
+
+    av::MockPlatform memory;
+    av::ImportTable  imports;
+    av::RecordingLog sink;
+    av::ExecutorLog  executor;
+    av::DriverLog   &log;
+};
+
 constexpr std::size_t block_bytes = 65536u;
 
 alignas(4096) std::uint8_t arena_region[2u * 4096u];
@@ -59,19 +74,26 @@ av::SourceMemory &memory_over(std::uint8_t *base, std::uint64_t bytes)
     return base == arena_region && bytes == sizeof arena_region ? whole : other;
 }
 
+std::uint64_t wire_of(const void *object)
+{
+    return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(object));
+}
+
 void nothing_to_wake(void *) {}
 
 }
 
 TEST(opencl_backend, knows_the_ids_the_profile_carries_and_no_others)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   CHECK(backend.knows(av::clproto::kCmd_clGetPlatformIDs));
   CHECK(!backend.knows(0x2FFFFu));
   CHECK(!backend.knows(av::clproto::kCmd_clGetPlatformIDs ^ 0x30000u));
   CHECK(!backend.knows(0u)); }
 
 TEST(opencl_backend, a_well_formed_command_decodes_and_answers)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   std::uint8_t frame[64];
   WireWriter writer(frame, sizeof frame);
   writer.write_pod<std::uint32_t>(0u);
@@ -90,7 +112,8 @@ TEST(opencl_backend, a_well_formed_command_decodes_and_answers)
   CHECK_EQ(backend.ran(), 0u); }
 
 TEST(opencl_backend, a_truncated_command_is_refused_at_every_length)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   std::uint8_t frame[64];
   WireWriter writer(frame, sizeof frame);
   writer.write_pod<std::uint32_t>(0u);
@@ -119,53 +142,50 @@ TEST(opencl_backend, a_truncated_command_is_refused_at_every_length)
   backend.shut_down(); }
 
 TEST(opencl_backend, adopts_one_host_pointer_as_the_memory_a_buffer_can_be_made_over)
-{ OpenClBackend backend;
-  CHECK(backend.lent_for(0u, 1u) == nullptr);
-  av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, memory_over(arena_region, sizeof arena_region)), av::Status::ok);
-  CHECK(backend.adopt(blob));
-  CHECK(blob.wire_handle() != 0u);
-  CHECK(backend.lent_for(0u, sizeof arena_region) == arena_region);
-  CHECK(backend.lent_for(4096u, 64u) == arena_region + 4096u);
-  CHECK(backend.lent_for(0u, sizeof arena_region + 1u) == nullptr);
-  CHECK(backend.lent_for(sizeof arena_region, 1u) == nullptr);
-  CHECK(backend.lent_for(~std::uint64_t{0}, 1u) == nullptr);
+{ Lines lines;
+  OpenClBackend backend(lines.log);
+  av::SourceMemory &whole = memory_over(arena_region, sizeof arena_region);
+  av::SourceMemory &other = memory_over(second_arena_region, sizeof second_arena_region);
+  std::uint64_t handle = 7u;
+  CHECK(backend.adopt(whole, handle));
+  CHECK_EQ(handle, wire_of(arena_region));
 
-  av::ImportedBlob second;
-  CHECK_STATUS(second.take(2u, memory_over(second_arena_region, sizeof second_arena_region)),
-               av::Status::ok);
-  CHECK(!backend.adopt(second));
+  std::uint64_t second = 0u;
+  CHECK(backend.adopt(other, second));
+  CHECK_EQ(second, wire_of(&other));
+  backend.abandon(other, second);
 
-  backend.abandon(blob);
-  CHECK_EQ(blob.object(), 0u);
-  CHECK(backend.lent_for(0u, 1u) == nullptr);
-  CHECK(backend.adopt(second));
-  backend.abandon(second);
+  backend.abandon(whole, handle);
+  handle = 0u;
+  CHECK(backend.adopt(other, handle));
+  CHECK_EQ(handle, wire_of(second_arena_region));
+  backend.abandon(other, handle);
   backend.shut_down(); }
 
 TEST(opencl_backend, memory_with_no_mapping_is_not_memory_a_buffer_can_be_made_over)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   av::SourceMemory unmapped(1u, 3u, 0u, AV_MEMORY_WRITE_BACK, av::ExportedMemory(3u, -1, nullptr, 4096u));
-  av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, unmapped), av::Status::ok);
-  CHECK(!backend.adopt(blob));
-  CHECK(backend.lent_for(0u, 1u) == nullptr);
-  backend.abandon(blob);
-  CHECK_EQ(blob.object(), 0u); }
+  std::uint64_t handle = 5u;
+  CHECK(!backend.adopt(unmapped, handle));
+  CHECK_EQ(handle, 0u);
+  av::SourceMemory &whole = memory_over(arena_region, sizeof arena_region);
+  CHECK(backend.adopt(whole, handle));
+  std::uint64_t second = 5u;
+  CHECK(!backend.adopt(unmapped, second));
+  backend.abandon(unmapped, second);
+  backend.abandon(whole, handle);
+  backend.shut_down(); }
 
 namespace {
 
 unsigned char host_objects[3001u];
 
-std::uint64_t wire_of(const void *object)
-{
-    return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(object));
-}
-
 }
 
 TEST(opencl_backend, answers_the_decoder_only_for_objects_its_calls_made)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   void *const queue = &host_objects[0];
   CHECK(backend.handle_for(av::clproto::HandleKind::command_queue, wire_of(queue)) == nullptr);
   backend.made(av::clproto::HandleKind::command_queue, queue);
@@ -180,7 +200,8 @@ TEST(opencl_backend, answers_the_decoder_only_for_objects_its_calls_made)
 
 TEST(opencl_backend, holds_thousands_of_objects_with_room_made_first)
 { av::MockPlatform platform;
-  OpenClBackend    backend(platform);
+  Lines            lines;
+  OpenClBackend    backend(platform, lines.log);
   constexpr std::size_t many = 3000u;
   CHECK(backend.room_for(many));
   for (std::size_t i = 0u; i < many; i++) backend.made(av::clproto::HandleKind::mem, &host_objects[i]);
@@ -194,7 +215,8 @@ TEST(opencl_backend, holds_thousands_of_objects_with_room_made_first)
 
 TEST(opencl_backend, no_room_refuses_before_the_icd_and_loses_nothing)
 { av::MockPlatform platform;
-  OpenClBackend    backend(platform);
+  Lines            lines;
+  OpenClBackend    backend(platform, lines.log);
   CHECK(!backend.room_for(~std::uint64_t{0}));
   platform.fail_allocation_at(1u);
   CHECK(!backend.room_for(1u));
@@ -206,7 +228,8 @@ TEST(opencl_backend, no_room_refuses_before_the_icd_and_loses_nothing)
 
 TEST(opencl_backend, an_address_held_as_another_kind_loses_the_device)
 { av::MockPlatform platform;
-  OpenClBackend    backend(platform);
+  Lines            lines;
+  OpenClBackend    backend(platform, lines.log);
   backend.made(av::clproto::HandleKind::event, &host_objects[0]);
   CHECK(!backend.lost());
   backend.made(av::clproto::HandleKind::mem, &host_objects[0]);
@@ -228,7 +251,8 @@ TEST(opencl_backend, shutting_down_releases_the_references_the_guest_still_held)
   const cl_context context = ::clCreateContext(nullptr, 1u, &device, nullptr, nullptr, &error);
   if (context == nullptr) return;
 
-  OpenClBackend backend;
+  Lines lines;
+  OpenClBackend backend(lines.log);
   backend.made(av::clproto::HandleKind::context, context);
   CHECK_EQ(::clRetainContext(context), CL_SUCCESS);
   backend.retained(av::clproto::HandleKind::context, context);
@@ -246,7 +270,7 @@ TEST(opencl_backend, shutting_down_releases_the_references_the_guest_still_held)
 namespace {
 class HostOpenCl {
 public:
-    HostOpenCl() : device_(nullptr), uuid_{}
+    HostOpenCl() : sink_(), log_(sink_), host_(log_), device_(nullptr), uuid_{}
     { host_.open();
       for (std::uint32_t i = 0u; i < host_.gpu_count() && device_ == nullptr; i++) {
           device_ = host_.opencl_device(i);
@@ -260,6 +284,8 @@ public:
     av::LoaderHostApis     &host() { return host_; }
 
 private:
+    av::RecordingLog        sink_;
+    av::ExecutorLog         log_;
     av::LoaderHostApis      host_;
     const av::OpenClDevice *device_;
     std::uint8_t            uuid_[16];
@@ -273,11 +299,12 @@ TEST(opencl_backend, a_display_that_never_opened_leaves_the_context_sharing_noth
 { HostOpenCl host;
   if (host.device() == nullptr) return;
   av::GlDisplay closed;
-  OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), &closed, nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(host.device(), &closed, nullptr, lines.imports));
   cl_device_id const device = static_cast<cl_device_id>(host.device()->device());
   std::uint64_t made = 9u;
-  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, av::SharedImageShape(), made, detail));
+  CHECK(!backend.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, 0, 4096u, av::SharedImageShape(), 0u, made, detail));
   CHECK_EQ(made, 0u);
   char   answered[4096] = {};
   CHECK_EQ(backend.on_clGetDeviceInfo(device, CL_DEVICE_EXTENSIONS, sizeof answered, answered, nullptr),
@@ -289,8 +316,9 @@ TEST(opencl_backend, a_display_that_never_opened_leaves_the_context_sharing_noth
 TEST(opencl_backend, a_context_with_no_gl_names_no_gl_object)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), nullptr, nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(host.device(), nullptr, nullptr, lines.imports));
   int    nothing = 0;
   auto  *context = reinterpret_cast<cl_context>(&nothing);
   auto  *mem = reinterpret_cast<cl_mem>(&nothing);
@@ -324,8 +352,9 @@ TEST(opencl_backend, a_context_with_no_gl_names_no_gl_object)
   backend.shut_down(); }
 
 TEST(opencl_backend, unbound_it_offers_no_platform_device_or_context)
-{ OpenClBackend backend;
-  CHECK(!backend.initialize(nullptr, nullptr, nullptr));
+{ Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(!backend.initialize(nullptr, nullptr, nullptr, lines.imports));
   cl_platform_id platforms[2] = {other_platform(), other_platform()};
   cl_uint count = 7u;
   CHECK_EQ(backend.on_clGetPlatformIDs(2u, platforms, &count), CL_PLATFORM_NOT_FOUND_KHR);
@@ -342,7 +371,8 @@ TEST(opencl_backend, unbound_it_offers_no_platform_device_or_context)
   CHECK(backend.on_clCreateContextFromType(nullptr, CL_DEVICE_TYPE_GPU, nullptr) == nullptr); }
 
 TEST(opencl_backend, lists_asked_for_nowhere_are_invalid_values)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   cl_platform_id platforms[1] = {};
   cl_uint count = 0u;
   CHECK_EQ(backend.on_clGetPlatformIDs(0u, platforms, &count), CL_INVALID_VALUE);
@@ -354,8 +384,9 @@ TEST(opencl_backend, lists_asked_for_nowhere_are_invalid_values)
 TEST(opencl_backend, a_context_that_cannot_share_strikes_gl_sharing_out_of_the_device_s_extensions)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), nullptr, nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(host.device(), nullptr, nullptr, lines.imports));
   cl_device_id const device = static_cast<cl_device_id>(host.device()->device());
 
   char   host_list[4096] = {};
@@ -390,8 +421,9 @@ TEST(opencl_backend, a_context_that_cannot_share_strikes_gl_sharing_out_of_the_d
 TEST(opencl_backend, bound_it_offers_its_gpu_s_platform_and_device_alone)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), nullptr, nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(host.device(), nullptr, nullptr, lines.imports));
   const cl_platform_id platform = static_cast<cl_platform_id>(host.device()->platform());
   const cl_device_id   device = static_cast<cl_device_id>(host.device()->device());
 
@@ -444,8 +476,9 @@ TEST(opencl_backend, bound_it_offers_its_gpu_s_platform_and_device_alone)
 TEST(opencl_backend, a_context_from_a_type_holds_the_bound_device_alone)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), nullptr, nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(host.device(), nullptr, nullptr, lines.imports));
   cl_int error = CL_INVALID_VALUE;
   const cl_context context = backend.on_clCreateContextFromType(nullptr, CL_DEVICE_TYPE_ALL, &error);
   CHECK_EQ(error, CL_SUCCESS);
@@ -467,8 +500,9 @@ TEST(opencl_backend, a_context_from_a_type_holds_the_bound_device_alone)
 TEST(opencl_backend, the_guest_can_name_only_the_platform_it_was_shown)
 { HostOpenCl host;
   if (host.device() == nullptr) return;
-  OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), nullptr, nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(host.device(), nullptr, nullptr, lines.imports));
   std::uint8_t frame[16];
   WireWriter writer(frame, sizeof frame);
   writer.write_varint<std::uint32_t>(4u);
@@ -494,23 +528,27 @@ TEST(opencl_backend, the_guest_can_name_only_the_platform_it_was_shown)
   backend.shut_down(); }
 
 TEST(opencl_backend, svm_for_answers_nothing_before_the_guest_allocates_anything)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   CHECK(backend.svm_for(0x1000u, 1u) == nullptr);
   CHECK(backend.svm_for(0u, 0u) == nullptr);
   CHECK(backend.svm_for(~std::uint64_t{0}, 1u) == nullptr); }
 
 TEST(opencl_backend, on_clSVMFree_frees_nothing_it_did_not_allocate)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   backend.on_clSVMFree(nullptr, nullptr);
   backend.on_clSVMFree(nullptr, reinterpret_cast<void *>(std::uintptr_t{0x1000}));
   CHECK(!backend.lost()); }
 
 TEST(opencl_backend, on_clSetEventCallback_is_refused_when_the_device_cannot_wake_the_guest)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   CHECK_EQ(backend.on_clSetEventCallback(nullptr, CL_COMPLETE), CL_INVALID_OPERATION); }
 
 TEST(opencl_backend, bind_signal_is_what_makes_an_event_callback_possible_at_all)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   CHECK_EQ(backend.on_clSetEventCallback(nullptr, CL_COMPLETE), CL_INVALID_OPERATION);
   backend.bind_signal(&nothing_to_wake, nullptr);
   CHECK(backend.on_clSetEventCallback(nullptr, CL_COMPLETE) != CL_INVALID_OPERATION);
@@ -626,7 +664,8 @@ void kernel_arg_svm_frame(ClCommand &command, std::uint64_t address)
 }
 
 TEST(opencl_backend, clSVMAlloc_the_host_refuses_answers_a_null_address_and_remembers_nothing)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand command(av::clproto::kCmd_clSVMAlloc);
   svm_alloc_frame(command, 0u, 256u);
   CHECK(command.decodes(backend));
@@ -638,7 +677,8 @@ TEST(opencl_backend, clSVMAlloc_the_host_refuses_answers_a_null_address_and_reme
   backend.shut_down(); }
 
 TEST(opencl_backend, clSVMFree_of_an_address_no_allocation_answered_is_refused_before_the_host)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand invented(av::clproto::kCmd_clSVMFree);
   invented.frame().write_pod<std::uint64_t>(0u);
   invented.frame().write_pod<std::uint64_t>(invented_address);
@@ -655,7 +695,8 @@ TEST(opencl_backend, clSVMFree_of_an_address_no_allocation_answered_is_refused_b
   backend.shut_down(); }
 
 TEST(opencl_backend, an_unmap_of_an_address_no_map_answered_is_refused_before_the_host)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand invented(av::clproto::kCmd_clEnqueueUnmapMemObject);
   invented.frame().write_pod<std::uint64_t>(0u);
   invented.frame().write_pod<std::uint64_t>(0u);
@@ -669,7 +710,8 @@ TEST(opencl_backend, an_unmap_of_an_address_no_map_answered_is_refused_before_th
   backend.shut_down(); }
 
 TEST(opencl_backend, a_map_the_host_refuses_answers_a_null_address_and_remembers_no_mapping)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand command(av::clproto::kCmd_clEnqueueMapBuffer);
   command.frame().write_pod<std::uint64_t>(0u);
   command.frame().write_pod<std::uint64_t>(0u);
@@ -710,10 +752,11 @@ void buffer_with_properties_frame(ClCommand &command, bool named, std::uint64_t 
 }
 
 TEST(opencl_backend, a_buffer_over_an_offset_outside_the_arena_is_refused)
-{ OpenClBackend backend;
-  av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, memory_over(arena_region, sizeof arena_region)), av::Status::ok);
-  CHECK(backend.adopt(blob));
+{ Lines lines;
+  OpenClBackend backend(lines.log);
+  std::uint64_t arena = 0u;
+  av::SourceMemory &blob = memory_over(arena_region, sizeof arena_region);
+  CHECK(backend.adopt(blob, arena));
 
   ClCommand beyond(av::clproto::kCmd_clCreateBufferWithProperties);
   buffer_with_properties_frame(beyond, true, sizeof arena_region, 16u);
@@ -726,7 +769,7 @@ TEST(opencl_backend, a_buffer_over_an_offset_outside_the_arena_is_refused)
   CHECK(overrunning.decodes(backend));
   CHECK_EQ(overrunning.address(), 0u);
 
-  backend.abandon(blob);
+  backend.abandon(blob, arena);
   ClCommand unbacked(av::clproto::kCmd_clCreateBufferWithProperties);
   buffer_with_properties_frame(unbacked, true, 0u, 16u);
   CHECK(unbacked.decodes(backend));
@@ -735,7 +778,8 @@ TEST(opencl_backend, a_buffer_over_an_offset_outside_the_arena_is_refused)
   backend.shut_down(); }
 
 TEST(opencl_backend, a_buffer_naming_no_backing_is_the_ordinary_call)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand plain(av::clproto::kCmd_clCreateBufferWithProperties);
   buffer_with_properties_frame(plain, false, 0u, 16u);
   CHECK(plain.decodes(backend));
@@ -746,7 +790,8 @@ TEST(opencl_backend, a_buffer_naming_no_backing_is_the_ordinary_call)
   backend.shut_down(); }
 
 TEST(opencl_backend, clEnqueueSVMMap_of_an_address_outside_every_range_is_refused)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand invented(av::clproto::kCmd_clEnqueueSVMMap);
   svm_map_frame(invented, invented_address, 64u);
   CHECK(!invented.decodes(backend));
@@ -761,7 +806,8 @@ TEST(opencl_backend, clEnqueueSVMMap_of_an_address_outside_every_range_is_refuse
   backend.shut_down(); }
 
 TEST(opencl_backend, clEnqueueSVMUnmap_of_an_address_outside_every_range_is_refused)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand invented(av::clproto::kCmd_clEnqueueSVMUnmap);
   invented.frame().write_pod<std::uint64_t>(0u);
   invented.frame().write_pod<std::uint64_t>(invented_address);
@@ -784,7 +830,8 @@ TEST(opencl_backend, clEnqueueSVMUnmap_of_an_address_outside_every_range_is_refu
   backend.shut_down(); }
 
 TEST(opencl_backend, clEnqueueSVMMemcpy_judges_both_of_its_addresses)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand invented_source(av::clproto::kCmd_clEnqueueSVMMemcpy);
   svm_memcpy_frame(invented_source, 0u, invented_address, 16u);
   CHECK(!invented_source.decodes(backend));
@@ -803,7 +850,8 @@ TEST(opencl_backend, clEnqueueSVMMemcpy_judges_both_of_its_addresses)
   backend.shut_down(); }
 
 TEST(opencl_backend, clEnqueueSVMMemFill_refuses_a_pattern_shorter_than_the_size_it_claims)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand claimed(av::clproto::kCmd_clEnqueueSVMMemFill);
   claimed.frame().write_pod<std::uint64_t>(0u);
   claimed.frame().write_pod<std::uint64_t>(0u);
@@ -836,7 +884,8 @@ TEST(opencl_backend, clEnqueueSVMMemFill_refuses_a_pattern_shorter_than_the_size
   backend.shut_down(); }
 
 TEST(opencl_backend, clSetKernelArgSVMPointer_refuses_an_address_this_context_never_allocated)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand invented(av::clproto::kCmd_clSetKernelArgSVMPointer);
   kernel_arg_svm_frame(invented, invented_address);
   CHECK(!invented.decodes(backend));
@@ -851,7 +900,8 @@ TEST(opencl_backend, clSetKernelArgSVMPointer_refuses_an_address_this_context_ne
   backend.shut_down(); }
 
 TEST(opencl_backend, clEnqueueMapBuffer_that_failed_answers_no_address_and_no_event)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand command(av::clproto::kCmd_clEnqueueMapBuffer);
   command.frame().write_pod<std::uint64_t>(0u);
   command.frame().write_pod<std::uint64_t>(0u);
@@ -879,7 +929,8 @@ TEST(opencl_backend, clEnqueueMapBuffer_that_failed_answers_no_address_and_no_ev
   backend.shut_down(); }
 
 TEST(opencl_backend, clEnqueueUnmapMemObject_refuses_a_mapped_address_it_never_answered)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand invented(av::clproto::kCmd_clEnqueueUnmapMemObject);
   invented.frame().write_pod<std::uint64_t>(0u);
   invented.frame().write_pod<std::uint64_t>(0u);
@@ -904,7 +955,8 @@ TEST(opencl_backend, clEnqueueUnmapMemObject_refuses_a_mapped_address_it_never_a
   backend.shut_down(); }
 
 TEST(opencl_backend, clSetEventCallback_over_the_wire_reaches_the_backends_own_registration)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand unheard(av::clproto::kCmd_clSetEventCallback);
   unheard.frame().write_pod<std::uint64_t>(0u);
   unheard.frame().write_varint<std::uint64_t>(static_cast<std::uint64_t>(CL_COMPLETE));
@@ -929,8 +981,9 @@ TEST(opencl_backend, an_allocated_address_is_the_only_one_the_ten_commands_accep
   const cl_context context = ::clCreateContext(nullptr, 1u, &device, nullptr, nullptr, &error);
   if (context == nullptr) return;
 
-  OpenClBackend backend;
-  CHECK(backend.initialize(host.device(), nullptr, nullptr));
+  Lines lines;
+  OpenClBackend backend(lines.log);
+  CHECK(backend.initialize(host.device(), nullptr, nullptr, lines.imports));
   CHECK_EQ(::clRetainContext(context), CL_SUCCESS);
   backend.made(av::clproto::HandleKind::context, context);
 
@@ -979,20 +1032,22 @@ TEST(opencl_backend, an_allocated_address_is_the_only_one_the_ten_commands_accep
   CHECK_EQ(::clReleaseContext(context), CL_SUCCESS); }
 
 TEST(opencl_backend, a_buffer_over_a_bad_offset_with_nowhere_to_report_it_is_still_refused)
-{ OpenClBackend backend;
-  av::ImportedBlob blob;
-  CHECK_STATUS(blob.take(1u, memory_over(arena_region, sizeof arena_region)), av::Status::ok);
-  CHECK(backend.adopt(blob));
+{ Lines lines;
+  OpenClBackend backend(lines.log);
+  std::uint64_t arena = 0u;
+  av::SourceMemory &blob = memory_over(arena_region, sizeof arena_region);
+  CHECK(backend.adopt(blob, arena));
   ClCommand beyond(av::clproto::kCmd_clCreateBufferWithProperties);
   buffer_with_properties_frame(beyond, true, sizeof arena_region, 16u, false);
   CHECK(beyond.decodes(backend));
   CHECK_EQ(beyond.address(), 0u);
   beyond.is_refused_at_every_shorter_length(backend);
-  backend.abandon(blob);
+  backend.abandon(blob, arena);
   backend.shut_down(); }
 
 TEST(opencl_backend, a_callback_the_host_refuses_gives_its_registration_back)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   int            device = 0;
   backend.bind_signal(&nothing_to_wake, &device);
 
@@ -1006,7 +1061,8 @@ TEST(opencl_backend, a_callback_the_host_refuses_gives_its_registration_back)
   backend.shut_down(); }
 
 TEST(opencl_backend, a_callback_on_a_session_with_no_device_to_wake_is_refused)
-{ OpenClBackend backend;
+{ Lines lines;
+  OpenClBackend backend(lines.log);
   ClCommand command(av::clproto::kCmd_clSetEventCallback);
   command.frame().write_pod<std::uint64_t>(0u);
   command.frame().write_varint<std::uint64_t>(0u);
@@ -1055,7 +1111,8 @@ TEST(opencl_backend, shared_allocations_grow_and_are_refused_before_the_host_whe
   HostSession session(host);
   if (session.context() == nullptr) return;
   av::MockPlatform platform;
-  OpenClBackend    backend(platform);
+  Lines            lines;
+  OpenClBackend    backend(platform, lines.log);
   static void     *held[HostSession::mappings] = {};
   std::uint32_t    made = 0u;
   for (; made < 200u; ++made) {
@@ -1080,7 +1137,8 @@ TEST(opencl_backend, mappings_grow_and_are_refused_before_the_host_when_no_room_
   HostSession session(host);
   if (session.queue() == nullptr || session.buffer() == nullptr) return;
   av::MockPlatform platform;
-  OpenClBackend    backend(platform);
+  Lines            lines;
+  OpenClBackend    backend(platform, lines.log);
   static void     *held[HostSession::mappings] = {};
   std::uint32_t    made = 0u;
   for (; made < 200u; ++made) {
@@ -1117,7 +1175,8 @@ TEST(opencl_backend, callback_registrations_grow_and_are_refused_only_with_no_ro
   HostSession session(host);
   if (session.context() == nullptr) return;
   av::MockPlatform platform;
-  OpenClBackend    backend(platform);
+  Lines            lines;
+  OpenClBackend    backend(platform, lines.log);
   int              device = 0;
   backend.bind_signal(&nothing_to_wake, &device);
   constexpr std::uint32_t many = 200u;
