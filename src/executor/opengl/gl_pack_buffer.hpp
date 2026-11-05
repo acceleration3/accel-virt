@@ -27,6 +27,7 @@ public:
     [[nodiscard]] bool bind(uint64_t at, uint64_t bytes, void *&offset);
     void               unbind();
     bool               packing() const;
+    void               sweep();
     void               release();
 
 private:

@@ -259,6 +259,7 @@ void OpenGlBackend::end_batch()
         publish_errors();
         progress_.fence();
         slices_.reclaim();
+        pack_.sweep();
     }
     current_ = false;
 }

@@ -100,6 +100,13 @@ bool GlPackBuffer::packing() const
     return false;
 }
 
+void GlPackBuffer::sweep()
+{
+    AV_SCOPE("GlPackBuffer::sweep");
+    for (Segment &segment : segments_)
+        if (segment.stale_) destroy(segment);
+}
+
 void GlPackBuffer::release()
 {
     AV_SCOPE("GlPackBuffer::release");
