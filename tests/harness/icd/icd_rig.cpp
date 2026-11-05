@@ -36,6 +36,7 @@ RecordingThreadLock  &IcdRig::memory_lock() { return memory_lock_; }
 RecordingLog         &IcdRig::log() { return log_; }
 KeyedLog             &IcdRig::lines() { return lines_; }
 ScriptedThread       &IcdRig::present_thread() { return present_thread_; }
+RecordingThreadLock  &IcdRig::present_lock() { return present_lock_; }
 CountedWakeSignal    &IcdRig::handed() { return handed_; }
 CountedWakeSignal    &IcdRig::shown() { return shown_; }
 ScriptedWindowSurface &IcdRig::windows() { return windows_; }

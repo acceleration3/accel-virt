@@ -1,6 +1,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/icd_rig.hpp"
 #include "harness/icd/scripted_vulkan_device.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/presentation.hpp"
 #include "icd/vulkan/surface_table.hpp"
 #include "icd/vulkan/win32_surface_create_record.hpp"
@@ -9,7 +10,7 @@
 
 namespace av::icd {
 struct SurfaceTableProbe {
-    static void orphan(SurfaceTable &table) { table.slots_[0].window_ = reinterpret_cast<void *>(0x99u); }
+    static void orphan(SurfaceTable &table) { table.slots_.at(table.slots_.next_live(0u))->instance_ = VK_NULL_HANDLE; }
 };
 
 }
@@ -37,7 +38,10 @@ Win32SurfaceCreateRecord surface_of(void *window)
 
 class WsiRig {
 public:
-    WsiRig() : wsi_(rig_.platform(), rig_.kmt(), rig_.windows(), rig_.chains(), rig_.log(), rig_.root(), host_) {}
+    WsiRig()
+        : wsi_(rig_.platform(), rig_.kmt(), rig_.windows(), rig_.chains(), rig_.lines(), rig_.root(), host_,
+               rig_.present_thread(), rig_.handed(), rig_.shown(), rig_.present_lock())
+    {}
 
     IcdRig       &rig() { return rig_; }
     Presentation &wsi() { return wsi_; }
@@ -51,7 +55,8 @@ private:
 }
 
 TEST(surface_table, a_surface_is_its_window_until_it_is_destroyed)
-{ SurfaceTable surfaces;
+{ av::MockPlatform memory;
+  SurfaceTable surfaces(memory);
   CHECK(surfaces.invariants_hold());
   CHECK_EQ(surfaces.live(), 0u);
   VkSurfaceKHR first = VK_NULL_HANDLE;
@@ -64,9 +69,6 @@ TEST(surface_table, a_surface_is_its_window_until_it_is_destroyed)
   CHECK_EQ(surfaces.live(), 2u);
   CHECK(surfaces.window_of(first) == as_window(0x10u));
   CHECK(surfaces.window_of(second) == as_window(0x20u));
-  const SurfaceSlot *const slot = reinterpret_cast<const SurfaceSlot *>(first);
-  CHECK(slot->window_ == as_window(0x10u));
-  CHECK(slot->instance_ == as_instance(1u));
   CHECK(surfaces.window_of(reinterpret_cast<VkSurfaceKHR>(0x30u)) == nullptr);
   CHECK(surfaces.window_of(VK_NULL_HANDLE) == nullptr);
   surfaces.destroy(as_instance(1u), first);
@@ -79,7 +81,8 @@ TEST(surface_table, a_surface_is_its_window_until_it_is_destroyed)
   CHECK(surfaces.invariants_hold()); }
 
 TEST(surface_table, only_the_instance_that_made_a_surface_destroys_or_forgets_it)
-{ SurfaceTable surfaces;
+{ av::MockPlatform memory;
+  SurfaceTable surfaces(memory);
   VkSurfaceKHR mine = VK_NULL_HANDLE;
   VkSurfaceKHR theirs = VK_NULL_HANDLE;
   CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x10u), mine), VK_SUCCESS);
@@ -95,25 +98,40 @@ TEST(surface_table, only_the_instance_that_made_a_surface_destroys_or_forgets_it
   CHECK_EQ(surfaces.live(), 0u);
   CHECK(surfaces.invariants_hold()); }
 
-TEST(surface_table, a_surface_without_a_window_is_refused_and_a_full_table_is_out_of_memory)
-{ SurfaceTable surfaces;
-  VkSurfaceKHR surface = reinterpret_cast<VkSurfaceKHR>(0x1u);
+TEST(surface_table, a_surface_without_a_window_is_refused_and_the_table_grows_until_memory_runs_out)
+{ av::MockPlatform memory;
+  SurfaceTable     surfaces(memory);
+  VkSurfaceKHR     surface = reinterpret_cast<VkSurfaceKHR>(0x1u);
   CHECK_EQ(surfaces.create(as_instance(1u), nullptr, surface), VK_ERROR_INITIALIZATION_FAILED);
   CHECK(surface == VK_NULL_HANDLE);
   CHECK_EQ(surfaces.live(), 0u);
-  VkSurfaceKHR made[SurfaceTable::max_surfaces] = {};
-  for (std::uint32_t index = 0u; index < SurfaceTable::max_surfaces; index++)
+  constexpr std::uint32_t many = 500u;
+  static VkSurfaceKHR made[many];
+  for (std::uint32_t index = 0u; index < many; index++)
       CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x100u + index), made[index]), VK_SUCCESS);
-  CHECK_EQ(surfaces.live(), SurfaceTable::max_surfaces);
-  VkSurfaceKHR past = reinterpret_cast<VkSurfaceKHR>(0x1u);
-  CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x900u), past), VK_ERROR_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(surfaces.live(), many);
+  CHECK(surfaces.invariants_hold());
+  for (std::uint32_t index = 0u; index < many; index++)
+      CHECK(surfaces.window_of(made[index]) == as_window(0x100u + index));
+  std::uint32_t added = 0u;
+  VkResult      result = VK_SUCCESS;
+  VkSurfaceKHR  past = reinterpret_cast<VkSurfaceKHR>(0x1u);
+  while (result == VK_SUCCESS && added < 8u * many) {
+      memory.fail_allocation_at(1u);
+      result = surfaces.create(as_instance(1u), as_window(0x900u + added), past);
+      if (result == VK_SUCCESS) added++;
+  }
+  CHECK_EQ(result, VK_ERROR_OUT_OF_HOST_MEMORY);
   CHECK(past == VK_NULL_HANDLE);
+  CHECK_EQ(surfaces.live(), many + added);
   CHECK(surfaces.invariants_hold());
   surfaces.destroy(as_instance(1u), made[3u]);
+  CHECK(surfaces.window_of(made[3u]) == nullptr);
+  memory.fail_allocation_at(0u);
   VkSurfaceKHR again = VK_NULL_HANDLE;
   CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x900u), again), VK_SUCCESS);
-  CHECK(again == made[3u]);
-  CHECK_EQ(surfaces.live(), SurfaceTable::max_surfaces);
+  CHECK(surfaces.window_of(again) == as_window(0x900u));
+  CHECK_EQ(surfaces.live(), many + added);
   CHECK(surfaces.invariants_hold()); }
 
 TEST(icd_presentation, a_win32_surface_is_made_from_its_window_and_nothing_else)
@@ -168,8 +186,12 @@ TEST(icd_presentation, an_instance_that_goes_takes_its_surfaces)
   CHECK_EQ(rig.wsi().surface_support(theirs, &supported), VK_ERROR_SURFACE_LOST_KHR);
   CHECK(rig.wsi().invariants_hold()); }
 
-TEST(surface_table, its_invariants_refuse_a_window_no_instance_owns)
-{ SurfaceTable surfaces;
+TEST(surface_table, its_invariants_refuse_a_surface_no_instance_owns)
+{ av::MockPlatform memory;
+  SurfaceTable surfaces(memory);
+  CHECK(surfaces.invariants_hold());
+  VkSurfaceKHR surface = VK_NULL_HANDLE;
+  CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x10u), surface), VK_SUCCESS);
   CHECK(surfaces.invariants_hold());
   SurfaceTableProbe::orphan(surfaces);
   CHECK(!surfaces.invariants_hold()); }

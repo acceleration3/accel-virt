@@ -38,6 +38,7 @@ public:
     RecordingLog         &log();
     KeyedLog             &lines();
     ScriptedThread       &present_thread();
+    RecordingThreadLock  &present_lock();
     CountedWakeSignal    &handed();
     CountedWakeSignal    &shown();
     ScriptedWindowSurface &windows();
