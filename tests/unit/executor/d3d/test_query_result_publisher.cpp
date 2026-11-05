@@ -4,6 +4,8 @@
 #include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "proto/submission/published_slot_layout.hpp"
+#include "proto/wire/guest_bytes.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -14,7 +16,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+using av::GuestBytes;
 using av::MockPlatform;
+using av::PublishedSlotLayout;
 using av::QueryResultPublisher;
 using av::Status;
 
@@ -39,14 +43,20 @@ public:
     ULONG references = 1u;
 };
 
-alignas(8) std::uint8_t results[4u * QueryResultPublisher::slot_bytes];
+alignas(8) std::uint8_t results[4u * PublishedSlotLayout::slot_bytes + PublishedSlotLayout::error_word_bytes];
+
+struct Bound {
+    Bound() { CHECK_STATUS(bytes.bind(0u, results, sizeof results), Status::ok); }
+    GuestBytes bytes;
+};
 
 }
 
 TEST(query_result_publisher_ended, holds_a_reference_to_each_pending_query_and_asks_for_a_flush)
 { MockPlatform         platform;
-  QueryResultPublisher publisher(platform);
-  publisher.bind(results, 4u);
+  Bound                bound;
+  QueryResultPublisher publisher(platform, bound.bytes);
+  CHECK(publisher.bind(0u, 4u));
   CountedQuery query;
   CHECK(!publisher.needs_flush());
   CHECK(!publisher.pending());
@@ -63,8 +73,9 @@ TEST(query_result_publisher_ended, holds_a_reference_to_each_pending_query_and_a
 
 TEST(query_result_publisher_ended, a_query_ended_again_supersedes_its_last_end)
 { MockPlatform         platform;
-  QueryResultPublisher publisher(platform);
-  publisher.bind(results, 4u);
+  Bound                bound;
+  QueryResultPublisher publisher(platform, bound.bytes);
+  CHECK(publisher.bind(0u, 4u));
   CountedQuery first, second;
   CHECK_STATUS(publisher.ended(1u, &first), Status::ok);
   CHECK_STATUS(publisher.ended(1u, &second), Status::ok);
@@ -78,27 +89,33 @@ TEST(query_result_publisher_ended, a_query_ended_again_supersedes_its_last_end)
 
 TEST(query_result_publisher_ended, an_unbound_publisher_or_a_missing_query_holds_nothing)
 { MockPlatform         platform;
-  QueryResultPublisher publisher(platform);
+  Bound                bound;
+  QueryResultPublisher publisher(platform, bound.bytes);
   CountedQuery query;
   CHECK_STATUS(publisher.ended(1u, &query), Status::ok);
   CHECK_EQ(query.references, 1u);
   CHECK(!publisher.needs_flush());
-  publisher.bind(results, 0u);
+  CHECK(!publisher.bind(0u, 0u));
   CHECK_STATUS(publisher.ended(1u, &query), Status::ok);
   CHECK_EQ(query.references, 1u);
-  publisher.bind(results, 4u);
+  CHECK(!publisher.bind(0u, 5u));
+  CHECK(!publisher.bind(1u, 1u));
+  CHECK_STATUS(publisher.ended(1u, &query), Status::ok);
+  CHECK_EQ(query.references, 1u);
+  CHECK(publisher.bind(0u, 4u));
   CHECK_STATUS(publisher.ended(2u, nullptr), Status::ok);
   CHECK(!publisher.needs_flush());
   CHECK(!publisher.pending()); }
 
 TEST(query_result_publisher_bind, a_new_binding_or_an_unbind_drops_every_pending_query)
 { MockPlatform         platform;
-  QueryResultPublisher publisher(platform);
-  publisher.bind(results, 4u);
+  Bound                bound;
+  QueryResultPublisher publisher(platform, bound.bytes);
+  CHECK(publisher.bind(0u, 4u));
   CountedQuery one, two;
   CHECK_STATUS(publisher.ended(1u, &one), Status::ok);
   CHECK_STATUS(publisher.ended(2u, &two), Status::ok);
-  publisher.bind(results, 2u);
+  CHECK(publisher.bind(0u, 2u));
   CHECK_EQ(one.references, 1u);
   CHECK_EQ(two.references, 1u);
   CHECK(!publisher.pending());
@@ -110,8 +127,9 @@ TEST(query_result_publisher_bind, a_new_binding_or_an_unbind_drops_every_pending
 
 TEST(query_result_publisher_ended, keeps_every_query_pending_well_past_the_old_list)
 { MockPlatform         platform;
-  QueryResultPublisher publisher(platform);
-  publisher.bind(results, 4u);
+  Bound                bound;
+  QueryResultPublisher publisher(platform, bound.bytes);
+  CHECK(publisher.bind(0u, 4u));
   constexpr std::uint32_t many = 5000u;
   static CountedQuery queries[many];
   for (std::uint32_t id = 0u; id < many; id++) {
@@ -128,8 +146,9 @@ TEST(query_result_publisher_ended, keeps_every_query_pending_well_past_the_old_l
 
 TEST(query_result_publisher_ended, a_query_that_cannot_be_kept_holds_nothing)
 { MockPlatform         platform;
-  QueryResultPublisher publisher(platform);
-  publisher.bind(results, 4u);
+  Bound                bound;
+  QueryResultPublisher publisher(platform, bound.bytes);
+  CHECK(publisher.bind(0u, 4u));
   CountedQuery query;
   platform.fail_allocation_at(1u);
   CHECK_STATUS(publisher.ended(1u, &query), Status::no_memory);
@@ -198,8 +217,10 @@ Published publish_an_event_query()
         return seen;
     std::memset(results, 0, sizeof results);
     av::HostHeap         heap;
-    QueryResultPublisher publisher(heap);
-    publisher.bind(results, 4u);
+    GuestBytes           bytes;
+    if (bytes.bind(0u, results, sizeof results) != Status::ok) return seen;
+    QueryResultPublisher publisher(heap, bytes);
+    if (!publisher.bind(0u, 4u)) return seen;
     if (publisher.ended(9u, nullptr) != Status::ok) return seen;
     context->End(query);
     if (publisher.ended(6u, query) != Status::ok) return seen;
@@ -211,12 +232,12 @@ Published publish_an_event_query()
         const timespec pause = {0, 1000000};
         if (pending) nanosleep(&pause, nullptr);
     }
-    const std::uint8_t *const slot = results + (6u % 4u) * QueryResultPublisher::slot_bytes;
+    const std::uint8_t *const slot = results + (6u % 4u) * PublishedSlotLayout::slot_bytes;
     seen.ran = 1u;
     seen.pending = pending ? 1u : 0u;
     std::memcpy(&seen.end, slot, sizeof seen.end);
     std::memcpy(&seen.size, slot + 8u, sizeof seen.size);
-    seen.first_byte = slot[QueryResultPublisher::data_at];
+    seen.first_byte = slot[PublishedSlotLayout::data_at];
     return seen;
 }
 
