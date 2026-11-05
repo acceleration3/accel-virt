@@ -65,7 +65,8 @@ TEST(generated_vulkan, a_truncated_frame_is_refused_at_every_length)
 /* A structure that points at things: the string and the pNext chain are what
  * the arena is for, and what a flat frame has to rebuild. */
 TEST(generated_vulkan, a_struct_that_points_at_things_round_trips)
-{ std::uint8_t frame[512] = {};
+{ av::vkproto::HandleIdentity handles;
+  std::uint8_t frame[512] = {};
   WireWriter writer(frame, sizeof frame);
   VkApplicationInfo sent = {};
   sent.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -76,14 +77,14 @@ TEST(generated_vulkan, a_struct_that_points_at_things_round_trips)
   sent.engineVersion = 4u;
   constexpr std::uint32_t api_version_1_3 = (1u << 22) | (3u << 12);
   sent.apiVersion = api_version_1_3;
-  av::vkproto::serialize_VkApplicationInfo(writer, sent);
+  av::vkproto::serialize_VkApplicationInfo(writer, handles, sent);
   CHECK_STATUS(writer.status(), av::Status::ok);
 
   std::uint8_t block[arena_bytes];
   WireArena arena(block, sizeof block);
   WireReader reader(frame, writer.offset());
   VkApplicationInfo received = {};
-  CHECK(av::vkproto::deserialize_VkApplicationInfo(reader, &received, arena));
+  CHECK(av::vkproto::deserialize_VkApplicationInfo(reader, handles, &received, arena));
   CHECK_EQ(received.sType, VK_STRUCTURE_TYPE_APPLICATION_INFO);
   CHECK(received.pApplicationName != nullptr);
   CHECK(std::strcmp(received.pApplicationName, "accel-virt") == 0);
@@ -97,20 +98,21 @@ TEST(generated_vulkan, a_struct_that_points_at_things_round_trips)
 /* An arena too small for what the frame describes: the decode fails rather
  * than the host writing past the block it was given. */
 TEST(generated_vulkan, a_decode_with_no_room_fails_instead_of_overrunning)
-{ std::uint8_t frame[512] = {};
+{ av::vkproto::HandleIdentity handles;
+  std::uint8_t frame[512] = {};
   WireWriter writer(frame, sizeof frame);
   VkApplicationInfo sent = {};
   sent.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   sent.pApplicationName = "a name longer than the block it will be given";
   sent.pEngineName = "av";
-  av::vkproto::serialize_VkApplicationInfo(writer, sent);
+  av::vkproto::serialize_VkApplicationInfo(writer, handles, sent);
   CHECK_STATUS(writer.status(), av::Status::ok);
 
   std::uint8_t block[8];
   WireArena arena(block, sizeof block);
   WireReader reader(frame, writer.offset());
   VkApplicationInfo received = {};
-  CHECK(!av::vkproto::deserialize_VkApplicationInfo(reader, &received, arena));
+  CHECK(!av::vkproto::deserialize_VkApplicationInfo(reader, handles, &received, arena));
   CHECK(arena.used() <= sizeof block); }
 
 namespace {
@@ -118,6 +120,18 @@ namespace {
 /* `sent` serialized as the guest's ICD sends it, and decoded as the host
  * decodes it into `received` over `block`: whether the decoder took the
  * frame. */
+template <typename T>
+bool decoded(void (*write)(WireWriter &, av::vkproto::HandleTranslation &, const T &),
+             bool (*read)(WireReader &, const av::vkproto::HandleTranslation &, T *, WireArena &), const T &sent, T &received,
+             std::uint8_t (&block)[arena_bytes])
+{ av::vkproto::HandleIdentity handles;
+  std::uint8_t frame[512] = {};
+  WireWriter writer(frame, sizeof frame);
+  write(writer, handles, sent);
+  WireArena arena(block, sizeof block);
+  WireReader reader(frame, writer.offset());
+  return read(reader, handles, &received, arena); }
+
 template <typename T>
 bool decoded(void (*write)(WireWriter &, const T &), bool (*read)(WireReader &, T *, WireArena &), const T &sent,
              T &received, std::uint8_t (&block)[arena_bytes])
