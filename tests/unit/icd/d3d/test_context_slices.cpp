@@ -1,18 +1,18 @@
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "harness/icd/lock_trace.hpp"
-#include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/scripted_gpu_timeline.hpp"
-#include "harness/platform/mock_platform.hpp"
+#include "harness/icd/slice_channel_rig.hpp"
+#include "icd/common/slice_blocks.hpp"
 #include "icd/common/stream_memory.hpp"
 #include "icd/d3d/context_slices.hpp"
+#include "proto/resources/host_memory_request.hpp"
 
 #include <cstdint>
 
-using av::LockTrace;
-using av::RecordingThreadLock;
+using av::HostMemoryRequest;
 using av::ScriptedGpuTimeline;
-using av::Status;
+using av::SliceChannelRig;
+using av::icd::SliceBlocks;
 using av::icd::StreamMemory;
 using av::d3d::ContextSlices;
 
@@ -22,9 +22,12 @@ constexpr std::uint64_t page = StreamMemory::large_alignment;
 
 class Rig {
 public:
-    Rig() : lock_(trace_, 'S'), slices_(platform_, timeline_, lock_)
+    Rig()
+        : timeline_(), slices_(channel_.platform(), channel_.channel(), this, timeline_, channel_.stream_lock(),
+                               channel_.clock(), channel_.lines(), HostMemoryRequest::Kind::upload, 256u),
+          immediate_(), deferred_()
     {
-        slices_.take(16u * page);
+        channel_.will_open();
         immediate_.own(&slices_);
     }
     StreamMemory        &slices() { return slices_; }
@@ -33,9 +36,7 @@ public:
     ScriptedGpuTimeline &timeline() { return timeline_; }
 
 private:
-    av::MockPlatform    platform_;
-    LockTrace           trace_;
-    RecordingThreadLock lock_;
+    SliceChannelRig     channel_;
     ScriptedGpuTimeline timeline_;
     StreamMemory        slices_;
     ContextSlices       immediate_;
@@ -102,7 +103,7 @@ TEST(context_slices_rename, takes_a_fresh_slice_and_retires_the_old_or_changes_n
   CHECK_EQ(slice.bytes_, 8u * page);
   CHECK_EQ(rig.slices().retired(), 1u);
   const StreamMemory::Slice second = slice;
-  CHECK(!rig.immediate().rename(16u * page + 1u, slice));
+  CHECK(!rig.immediate().rename(SliceBlocks::largest_block_bytes + 1u, slice));
   CHECK_EQ(slice.offset_, second.offset_);
   CHECK_EQ(slice.bytes_, second.bytes_);
   CHECK_EQ(rig.slices().retired(), 1u);
