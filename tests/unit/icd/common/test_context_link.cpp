@@ -6,7 +6,6 @@
 #include "harness/platform/mock_platform.hpp"
 #include "icd/common/context_link.hpp"
 #include "icd/common/host_channel.hpp"
-#include "icd/common/icd_connection.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -23,7 +22,6 @@ using av::WireWriter;
 using av::icd::ChannelShape;
 using av::icd::ContextLink;
 using av::icd::HostChannel;
-using av::icd::IcdConnection;
 
 namespace {
 
@@ -45,9 +43,8 @@ void fault(HostChannel &channel)
 TEST(context_link, an_unheld_link_names_nothing_and_loses_nothing)
 { ClContextRig rig;
   ContextLink  link(rig.connection());
-  HostChannel  channel(rig.platform(), rig.log(), "avtest: ", plain(), rig.send_lock());
+  HostChannel  channel(rig.platform(), rig.lines(), plain(), rig.send_lock());
   CHECK(!link.held());
-  CHECK_EQ(link.link(), IcdConnection::no_link);
   CHECK(!link.lost(channel));
   link.release();
   CHECK_EQ(rig.connection().users(), 0u);
@@ -58,7 +55,6 @@ TEST(context_link, acquiring_holds_a_device_until_it_is_released)
   ContextLink  link(rig.connection());
   CHECK_STATUS(link.acquire(), Status::ok);
   CHECK(link.held());
-  CHECK(link.link() != IcdConnection::no_link);
   CHECK(link.device().device() != 0u);
   CHECK_EQ(rig.connection().users(), 1u);
   CHECK_EQ(rig.kmt().open_objects(), ClContextRig::link_objects);
@@ -91,9 +87,9 @@ TEST(context_link, a_faulted_channel_loses_the_device_for_every_context_on_it)
   ContextLink  sibling(rig.connection());
   CHECK_STATUS(first.acquire(), Status::ok);
   CHECK_STATUS(sibling.acquire(), Status::ok);
-  CHECK_EQ(first.link(), sibling.link());
-  HostChannel faulting(rig.platform(), rig.log(), "avtest: ", plain(), rig.send_lock());
-  HostChannel quiet(rig.platform(), rig.log(), "avtest: ", plain(), rig.send_lock());
+  CHECK(&first.device() == &sibling.device());
+  HostChannel faulting(rig.platform(), rig.lines(), plain(), rig.send_lock());
+  HostChannel quiet(rig.platform(), rig.lines(), plain(), rig.send_lock());
   CHECK_STATUS(faulting.open(first.device()), Status::ok);
   CHECK(!first.lost(faulting));
   CHECK(!sibling.lost(quiet));
@@ -102,6 +98,6 @@ TEST(context_link, a_faulted_channel_loses_the_device_for_every_context_on_it)
   CHECK(sibling.lost(quiet));
   ContextLink later(rig.connection());
   CHECK_STATUS(later.acquire(), Status::ok);
-  CHECK(later.link() != first.link());
+  CHECK(&later.device() != &first.device());
   CHECK(!later.lost(quiet));
   faulting.close(true); }
