@@ -27,6 +27,7 @@ ScriptedHost        &OpenConnection::host() { return host_; }
 LockTrace           &OpenConnection::trace() { return trace_; }
 RecordingThreadLock &OpenConnection::lock() { return lock_; }
 RecordingLog        &OpenConnection::log() { return log_; }
+KeyedLog            &OpenConnection::lines() { return lines_; }
 icd::Connection     &OpenConnection::connection() { return connection_; }
 
 }

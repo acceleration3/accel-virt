@@ -2,13 +2,18 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/open_connection.hpp"
+#include "harness/icd/counted_wake_signal.hpp"
 #include "harness/icd/recording_log.hpp"
+#include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_vulkan_device.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/surface_properties.hpp"
 #include "core/support/object_storage.hpp"
+#include "icd/vulkan/fence_ready.hpp"
+#include "icd/common/window_present_queue.hpp"
 #include "icd/vulkan/swapchain.hpp"
 
 #include <cstdint>
@@ -18,31 +23,22 @@ struct PresentDeviceProbe {
     static void forget_image(PresentDevice &device) { device.made_[0].image_ = VK_NULL_HANDLE; }
 };
 
-struct FramePacerProbe {
-    static void count_a_blank_without_an_adapter(FramePacer &pacer)
-    { pacer.adapter_ = 0u;
-      pacer.blanks_ = 1u; }
-};
-
 struct SwapchainProbe {
-    static void hold_past_the_count(Swapchain &chain) { chain.held_[chain.count_] = true; }
+    static void hold_past_the_count(Swapchain &chain) { chain.holders_[chain.count_] = Swapchain::Holder::application; }
     static void miscount(Swapchain &chain) { chain.count_ = PresentDevice::max_images + 1u; }
-    static std::uint8_t *take_frame(Swapchain &chain)
-    { std::uint8_t *const frame = chain.frame_;
-      chain.frame_ = nullptr;
-      return frame; }
-    static void put_frame(Swapchain &chain, std::uint8_t *frame) { chain.frame_ = frame; }
     static void forget_image(Swapchain &chain) { PresentDeviceProbe::forget_image(chain.device_); }
     static void undercount(Swapchain &chain) { chain.count_ = 1u; }
-    static void pace_without_an_adapter(Swapchain &chain)
-    { FramePacerProbe::count_a_blank_without_an_adapter(chain.pacer_); }
     static VkImage slot(Swapchain &chain) { return chain.chained_.slot(); }
     static void lose_slot(Swapchain &chain) { chain.chained_.release(); }
 };
 
 }
 
+using av::CountedWakeSignal;
 using av::MockKmt;
+using av::RecordingThreadLock;
+using av::ScriptedHost;
+using av::ScriptedThread;
 using av::MockPlatform;
 using av::RecordingLog;
 using av::ScriptedVulkanDevice;
@@ -79,13 +75,16 @@ VkSwapchainCreateInfoKHR create_info()
 
 class SwapchainRig {
 public:
-    SwapchainRig()
-    { windows_.add_dc(as_window(0x20u), window(), width, height);
-      CHECK_STATUS(first_.construct(memory_, windows_, chains_, host_, host_.device(), host_.physical(), open_.kmt(),
-                                    open_.log(), open_.connection()),
+    explicit SwapchainRig(bool queued = false)
+        : present_lock_(open_.trace(), 'P'), ready_(host_),
+          presents_(memory_, thread_, handed_, shown_, present_lock_, ready_, windows_, chains_, open_.lines())
+    { if (!queued) thread_.refuse_start();
+      windows_.add_dc(as_window(0x20u), window(), width, height);
+      CHECK_STATUS(first_.construct(windows_, chains_, host_, host_.device(), ScriptedHost::vk_device, host_.physical(),
+                                    open_.kmt(), open_.lines(), open_.connection(), presents_),
                    av::Status::ok);
-      CHECK_STATUS(second_.construct(memory_, windows_, chains_, host_, host_.device(), host_.physical(),
-                                     open_.kmt(), open_.log(), open_.connection()),
+      CHECK_STATUS(second_.construct(windows_, chains_, host_, host_.device(), ScriptedHost::vk_device,
+                                     host_.physical(), open_.kmt(), open_.lines(), open_.connection(), presents_),
                    av::Status::ok); }
     ~SwapchainRig()
     { if (second_.constructed()) second_.destroy();
@@ -100,6 +99,8 @@ public:
     { SurfaceProperties properties(windows_, window());
       return chain.initialize(info, window(), properties); }
 
+    void pump() { thread_.run_until_done(); }
+
     MockPlatform          &memory() { return memory_; }
     MockKmt               &kmt() { return open_.kmt(); }
     av::ScriptedHost      &device() { return open_.host(); }
@@ -108,6 +109,8 @@ public:
     ScriptedVulkanDevice  &host() { return host_; }
     ScriptedWindowSurface &windows() { return windows_; }
     ScriptedWindowChains  &chains() { return chains_; }
+    ScriptedThread        &thread() { return thread_; }
+    av::icd::VkPresentQueue &presents() { return presents_; }
     void                  *window() { return as_window(0x10u); }
 
 private:
@@ -116,6 +119,12 @@ private:
     ScriptedVulkanDevice       host_;
     ScriptedWindowSurface      windows_;
     ScriptedWindowChains       chains_;
+    ScriptedThread             thread_;
+    CountedWakeSignal          handed_;
+    CountedWakeSignal          shown_;
+    RecordingThreadLock        present_lock_;
+    av::icd::FenceReady        ready_;
+    av::icd::VkPresentQueue    presents_;
     av::ObjectStorage<Swapchain> first_;
     av::ObjectStorage<Swapchain> second_;
 };
@@ -173,6 +182,54 @@ TEST(swapchain, images_are_acquired_in_turn_and_a_present_frees_the_one_it_was_h
   CHECK_EQ(chain.presented(), 2u);
   CHECK(chain.invariants_hold()); }
 
+TEST(swapchain, a_queued_present_returns_at_once_and_the_present_thread_shows_the_frame_and_frees_the_image)
+{ SwapchainRig rig(true);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
+  std::uint32_t first = 9u;
+  CHECK_EQ(chain.acquire(0u, first), VK_SUCCESS);
+  VkImage made[images] = {};
+  std::uint32_t count = images;
+  CHECK_EQ(chain.images(count, made), VK_SUCCESS);
+  rig.host().paint(made[first], 0x51u, 0x52u, 0x53u, 0x54u);
+  CHECK_EQ(chain.present(rig.host().queue(), first, 0u, nullptr), VK_SUCCESS);
+  CHECK_EQ(chain.presented(), 1u);
+  CHECK_EQ(rig.thread().starts(), 1u);
+  CHECK_EQ(rig.windows().blits(), 0u);
+  CHECK_EQ(rig.presents().queued(), 1u);
+  CHECK(chain.invariants_hold());
+  std::uint32_t second = 9u;
+  CHECK_EQ(chain.acquire(0u, second), VK_SUCCESS);
+  CHECK(second != first);
+  std::uint32_t none = 9u;
+  CHECK_EQ(chain.acquire(0u, none), VK_NOT_READY);
+  CHECK_EQ(chain.present(rig.host().queue(), first, 0u, nullptr), VK_ERROR_UNKNOWN);
+  rig.pump();
+  CHECK_EQ(rig.windows().blits(), 1u);
+  CHECK_EQ(rig.windows().last_blit_bytes()[0], 0x51u);
+  CHECK_EQ(rig.windows().last_blit_bytes()[3], 0x54u);
+  CHECK_EQ(rig.presents().shown_frames(), 1u);
+  CHECK_EQ(rig.presents().queued(), 0u);
+  std::uint32_t again = 9u;
+  CHECK_EQ(chain.acquire(0u, again), VK_SUCCESS);
+  CHECK_EQ(again, first);
+  CHECK(chain.invariants_hold());
+  CHECK(rig.presents().invariants_hold()); }
+
+TEST(swapchain, a_swapchain_that_goes_while_its_frame_is_queued_takes_the_frame_with_it)
+{ SwapchainRig rig(true);
+  Swapchain &chain = rig.chain();
+  CHECK_EQ(rig.initialize(chain, create_info()), VK_SUCCESS);
+  std::uint32_t index = 0u;
+  CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
+  CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_SUCCESS);
+  CHECK_EQ(rig.presents().queued(), 1u);
+  rig.reset_first();
+  CHECK_EQ(rig.presents().queued(), 0u);
+  rig.pump();
+  CHECK_EQ(rig.windows().blits(), 0u);
+  CHECK(rig.presents().invariants_hold()); }
+
 TEST(swapchain, a_present_puts_the_frame_on_the_window_top_down_in_the_window_s_channel_order)
 { const VkFormat formats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_B8G8R8A8_SRGB,
                               VK_FORMAT_R8G8B8A8_SRGB};
@@ -219,7 +276,7 @@ TEST(swapchain, fifo_paces_a_present_on_the_vertical_blank_and_immediate_does_no
       CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
       CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_SUCCESS);
       const bool fifo = mode == VK_PRESENT_MODE_FIFO_KHR;
-      CHECK_EQ(chain.pacer().blanks(), fifo ? 1u : 0u);
+      CHECK_EQ(chain.pacing().blanks(), fifo ? 1u : 0u);
       CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), fifo ? 1u : 0u);
   } }
 
@@ -304,14 +361,7 @@ TEST(swapchain, a_swapchain_whose_host_objects_cannot_be_made_leaves_nothing_beh
   CHECK_EQ(rig.initialize(chain, create_info()), VK_ERROR_OUT_OF_DEVICE_MEMORY);
   CHECK_EQ(rig.host().images(), 0u);
   CHECK(chain.invariants_hold());
-  SwapchainRig starved;
-  Swapchain &none = starved.chain();
-  starved.memory().fail_allocation_at(1u);
-  VkSwapchainCreateInfoKHR rgba = create_info();
-  rgba.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
-  CHECK_EQ(starved.initialize(none, rgba), VK_ERROR_OUT_OF_HOST_MEMORY);
-  CHECK_EQ(starved.host().images(), 0u);
-  CHECK(none.invariants_hold()); }
+  CHECK(chain.invariants_hold()); }
 
 TEST(swapchain, a_window_of_another_height_is_out_of_date_too)
 { SwapchainRig rig;
@@ -347,16 +397,6 @@ TEST(swapchain, its_invariants_refuse_a_hold_past_the_count_a_miscount_and_a_los
       SwapchainProbe::miscount(miscounted.chain());
       CHECK(!miscounted.chain().invariants_hold());
   });
-  with_rig([](SwapchainRig &frameless) {
-      VkSwapchainCreateInfoKHR rgba = create_info();
-      rgba.imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
-      CHECK_EQ(frameless.initialize(frameless.chain(), rgba), VK_SUCCESS);
-      std::uint8_t *const frame = SwapchainProbe::take_frame(frameless.chain());
-      CHECK(frame != nullptr);
-      CHECK(!frameless.chain().invariants_hold());
-      SwapchainProbe::put_frame(frameless.chain(), frame);
-      CHECK(frameless.chain().invariants_hold());
-  });
   with_rig([](SwapchainRig &lost) {
       CHECK_EQ(lost.initialize(lost.chain(), create_info()), VK_SUCCESS);
       SwapchainProbe::undercount(lost.chain());
@@ -366,20 +406,7 @@ TEST(swapchain, its_invariants_refuse_a_hold_past_the_count_a_miscount_and_a_los
       CHECK_EQ(broken.initialize(broken.chain(), create_info()), VK_SUCCESS);
       SwapchainProbe::forget_image(broken.chain());
       CHECK(!broken.chain().invariants_hold());
-  });
-  with_rig([](SwapchainRig &unpaced) {
-      CHECK_EQ(unpaced.initialize(unpaced.chain(), create_info()), VK_SUCCESS);
-      SwapchainProbe::pace_without_an_adapter(unpaced.chain());
-      CHECK(!unpaced.chain().invariants_hold());
   }); }
-
-TEST(swapchain, a_bgra_swapchain_holds_no_frame_buffer)
-{ SwapchainRig framed;
-  CHECK_EQ(framed.initialize(framed.chain(), create_info()), VK_SUCCESS);
-  CHECK(framed.chain().invariants_hold());
-  CHECK(SwapchainProbe::take_frame(framed.chain()) == nullptr);
-  SwapchainProbe::put_frame(framed.chain(), static_cast<std::uint8_t *>(framed.memory().allocate(4u, av::Pool::paged)));
-  CHECK(!framed.chain().invariants_hold()); }
 
 TEST(swapchain, a_resized_window_puts_a_swapchain_out_of_date)
 { SwapchainRig rig;
@@ -430,13 +457,13 @@ TEST(swapchain, a_window_that_refuses_the_frame_is_not_a_present)
   std::uint32_t index = 0u;
   CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
   rig.windows().refuse_next_blit();
-  CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_SUCCESS);
+  CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_ERROR_OUT_OF_DATE_KHR);
   CHECK_EQ(chain.presented(), 0u);
   CHECK_EQ(rig.log().holding("a presented frame was refused by its window"), 1u);
   std::uint32_t again = 0u;
   CHECK_EQ(chain.acquire(0u, again), VK_SUCCESS);
   rig.windows().refuse_next_blit();
-  CHECK_EQ(chain.present(rig.host().queue(), again, 0u, nullptr), VK_SUCCESS);
+  CHECK_EQ(chain.present(rig.host().queue(), again, 0u, nullptr), VK_ERROR_OUT_OF_DATE_KHR);
   CHECK_EQ(chain.presented(), 0u);
   CHECK_EQ(rig.log().holding("a presented frame was refused by its window"), 1u);
   std::uint32_t next = 0u;
@@ -480,7 +507,7 @@ TEST(swapchain, a_window_with_a_chain_is_shown_the_frame_copied_into_its_slot_no
       CHECK_EQ(bytes[0], 0x10u);
       CHECK_EQ(bytes[2], 0x30u);
       CHECK_EQ(bytes[frame_bytes - 1u], 0x40u);
-      CHECK_EQ(chain.pacer().blanks(), 1u);
+      CHECK_EQ(chain.pacing().blanks(), 1u);
       CHECK(chain.invariants_hold());
   } }
 
@@ -493,13 +520,13 @@ TEST(swapchain, a_frame_the_chain_refuses_is_said_and_a_failed_copy_is_the_devic
   std::uint32_t index = 0u;
   CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
   rig.chains().refuse_presents(true);
-  CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_SUCCESS);
-  CHECK_EQ(rig.log().holding("a presented frame was refused by its window's chain"), 1u);
+  CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_ERROR_OUT_OF_DATE_KHR);
+  CHECK_EQ(rig.log().holding("a presented frame was refused by its window"), 1u);
   CHECK_EQ(chain.presented(), 0u);
   CHECK_EQ(rig.windows().blits(), 0u);
   CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
-  CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_SUCCESS);
-  CHECK_EQ(rig.log().holding("a presented frame was refused by its window's chain"), 1u);
+  CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_ERROR_OUT_OF_DATE_KHR);
+  CHECK_EQ(rig.log().holding("a presented frame was refused by its window"), 1u);
   CHECK_EQ(chain.acquire(0u, index), VK_SUCCESS);
   rig.host().refuse("vkQueueSubmit", 1u, VK_ERROR_DEVICE_LOST);
   CHECK_EQ(chain.present(rig.host().queue(), index, 0u, nullptr), VK_ERROR_DEVICE_LOST);

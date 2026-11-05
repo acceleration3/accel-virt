@@ -29,6 +29,7 @@ public:
     LockTrace           &trace();
     RecordingThreadLock &lock();
     RecordingLog        &log();
+    KeyedLog            &lines();
     icd::Connection     &connection();
 
 private:
