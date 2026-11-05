@@ -103,12 +103,12 @@ void          MockSessionBackend::set_adopts(bool adopts) { adopts_ = adopts; }
 std::uint32_t MockSessionBackend::adopted() const { return adopted_; }
 std::uint32_t MockSessionBackend::abandoned() const { return abandoned_; }
 
-bool MockSessionBackend::adopt(SourceMemory &memory, const BlobRole &, std::uint64_t &handle)
+bool MockSessionBackend::adopt(SourceMemory &, const BlobRole &, std::uint64_t &handle)
 {
     handle = 0u;
     if (!adopts_) return false;
     adopted_++;
-    handle = memory.key() + wire_offset;
+    handle = wire_offset + adopted_;
     return true;
 }
 

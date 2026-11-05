@@ -1,3 +1,4 @@
+#include "core/log/driver_log.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
 #include "harness/wire/wire_arena_probe.hpp"
@@ -11,8 +12,10 @@
 #include "harness/executor/mock_memory_exporter.hpp"
 #include "proto/resources/host_memory_request.hpp"
 #include "harness/executor/context_session_probe.hpp"
+#include "harness/executor/imported_blob_probe.hpp"
 #include "harness/executor/mock_session_backend.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -30,7 +33,7 @@ constexpr std::size_t  block_bytes = 4096u;
 
 class Bound {
 public:
-    Bound() : block_{}
+    Bound() : sink_(), lines_(sink_, "t: "), block_{}, session_(lines_)
     {
         status_ = session_.initialize(backend_, block_, sizeof block_);
     }
@@ -40,6 +43,8 @@ public:
     std::uint8_t       *block() { return block_; }
 
 private:
+    av::RecordingLog   sink_;
+    av::DriverLog      lines_;
     std::uint8_t       block_[block_bytes];
     MockSessionBackend backend_;
     ContextSession     session_;
@@ -149,7 +154,9 @@ TEST(context_session, a_lost_device_is_lost_for_every_command_after_it)
   CHECK(session.invariants_hold()); }
 
 TEST(context_session, a_session_with_no_backend_runs_nothing)
-{ ContextSession session;
+{ av::RecordingLog sink;
+  av::DriverLog    lines(sink, "t: ");
+  ContextSession session(lines);
   CHECK(!session.live());
   std::size_t answer = 1u;
   CHECK_EQ(session.execute(MockSessionBackend::echo_id, payload, sizeof payload, nullptr, 0u,
@@ -222,14 +229,14 @@ private:
 
 TEST(context_session_import, memory_the_backend_takes_is_held_until_released)
 { Drawing drawing;
-  CHECK_EQ(drawing.session().imports(), 0u);
+  CHECK_EQ(drawing.session().imports().count(), 0u);
   CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(drawing.session().imports(), 1u);
+  CHECK_EQ(drawing.session().imports().count(), 1u);
   CHECK_EQ(drawing.backend().adopted(), 1u);
   CHECK(drawing.session().invariants_hold());
 
   drawing.session().release_blob(5u);
-  CHECK_EQ(drawing.session().imports(), 0u);
+  CHECK_EQ(drawing.session().imports().count(), 0u);
   CHECK_EQ(drawing.backend().abandoned(), 1u);
   CHECK(drawing.session().invariants_hold()); }
 
@@ -248,14 +255,14 @@ TEST(context_session_import, answers_the_handle_the_guest_names_an_import_by)
   CHECK_EQ(drawing.session().imported_handle(5u), 0u);
   CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
   CHECK_EQ(drawing.session().import_blob(6u, key), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(drawing.session().imported_handle(5u), 5u + MockSessionBackend::wire_offset);
-  CHECK_EQ(drawing.session().imported_handle(6u), 6u + MockSessionBackend::wire_offset);
+  CHECK_EQ(drawing.session().imported_handle(5u), 1u + MockSessionBackend::wire_offset);
+  CHECK_EQ(drawing.session().imported_handle(6u), 2u + MockSessionBackend::wire_offset);
   CHECK_EQ(drawing.session().imported_handle(7u), 0u);
   CHECK(drawing.session().invariants_hold());
 
   drawing.session().release_blob(5u);
   CHECK_EQ(drawing.session().imported_handle(5u), 0u);
-  CHECK_EQ(drawing.session().imported_handle(6u), 6u + MockSessionBackend::wire_offset);
+  CHECK_EQ(drawing.session().imported_handle(6u), 2u + MockSessionBackend::wire_offset);
 
   drawing.backend().set_adopts(false);
   CHECK_EQ(drawing.session().import_blob(8u, key), std::uint32_t{AV_UNDECODABLE});
@@ -272,7 +279,7 @@ TEST(context_session_import, the_same_id_twice_is_refused)
 { Drawing drawing;
   CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
   CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_UNDECODABLE});
-  CHECK_EQ(drawing.session().imports(), 1u);
+  CHECK_EQ(drawing.session().imports().count(), 1u);
   CHECK_EQ(drawing.backend().adopted(), 1u);
   drawing.session().release_blob(5u);
   drawing.source().free(domain, key);
@@ -287,7 +294,7 @@ TEST(context_session_import, a_key_with_no_memory_never_reaches_the_backend)
   drawing.source().free(domain, key);
   CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(drawing.backend().adopted(), 0u);
-  CHECK_EQ(drawing.session().imports(), 0u);
+  CHECK_EQ(drawing.session().imports().count(), 0u);
   drawing.source().free(domain + 1u, key + 2u);
   close(elsewhere.fd); }
 
@@ -295,10 +302,10 @@ TEST(context_session_import, a_backend_that_will_not_take_it_costs_no_slot)
 { Drawing drawing;
   drawing.backend().set_adopts(false);
   CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_UNDECODABLE});
-  CHECK_EQ(drawing.session().imports(), 0u);
+  CHECK_EQ(drawing.session().imports().count(), 0u);
   drawing.backend().set_adopts(true);
   CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(drawing.session().imports(), 1u);
+  CHECK_EQ(drawing.session().imports().count(), 1u);
   drawing.session().release_blob(5u);
   drawing.source().free(domain, key);
   CHECK_EQ(drawing.exporter().live(), 0u); }
@@ -308,7 +315,7 @@ TEST(context_session_import, imports_past_any_old_bound_are_all_held_and_given_b
   constexpr std::uint64_t many = 5000u;
   for (std::uint64_t id = 1u; id <= many; id++)
       CHECK_EQ(drawing.session().import_blob(id, key), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(drawing.session().imports(), many);
+  CHECK_EQ(drawing.session().imports().count(), many);
   drawing.session().release();
   drawing.source().free(domain, key);
   CHECK_EQ(drawing.exporter().live(), 0u); }
@@ -317,12 +324,12 @@ TEST(context_session_import, releasing_the_session_gives_back_what_the_guest_did
 { Drawing drawing;
   for (std::uint64_t id = 1u; id <= 3u; id++)
       CHECK_EQ(drawing.session().import_blob(id, key), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(drawing.session().imports(), 3u);
+  CHECK_EQ(drawing.session().imports().count(), 3u);
   drawing.source().free(domain, key);
   CHECK_EQ(drawing.exporter().live(), 1u);
   drawing.session().release();
   CHECK_EQ(drawing.backend().abandoned(), 3u);
-  CHECK_EQ(drawing.session().imports(), 0u);
+  CHECK_EQ(drawing.session().imports().count(), 0u);
   CHECK_EQ(drawing.exporter().live(), 0u);
   CHECK(drawing.session().invariants_hold()); }
 
@@ -340,9 +347,11 @@ TEST(context_session_release, shuts_its_backend_down_after_its_imports)
 
 
 TEST(context_session_import, a_session_with_no_backend_or_source_imports_nothing)
-{ ContextSession session;
+{ av::RecordingLog sink;
+  av::DriverLog    lines(sink, "t: ");
+  ContextSession session(lines);
   CHECK_EQ(session.import_blob(5u, key), std::uint32_t{AV_UNDECODABLE});
-  CHECK_EQ(session.imports(), 0u);
+  CHECK_EQ(session.imports().count(), 0u);
   session.release_blob(5u);
   CHECK(session.invariants_hold());
   Bound bound;
@@ -356,18 +365,18 @@ TEST(context_session_import, a_lost_device_imports_nothing)
            std::uint32_t{AV_DEVICE_LOST});
   CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(drawing.backend().adopted(), 0u);
-  CHECK_EQ(drawing.session().imports(), 0u);
+  CHECK_EQ(drawing.session().imports().count(), 0u);
   CHECK(drawing.session().invariants_hold()); }
 
 TEST(context_session_invariants, an_import_table_that_breaks_its_own_breaks_them)
 { Drawing drawing;
   CHECK_EQ(drawing.session().import_blob(5u, key), std::uint32_t{AV_EXECUTED});
   ContextSessionProbe probe(drawing.session());
-  av::ImportedBlob *const dropped = probe.imports().drop(5u);
+  av::ImportedBlob *const held = probe.imports().find(5u);
+  CHECK(held != nullptr);
+  av::ImportedBlobProbe(*held).set_id(6u);
   CHECK(!drawing.session().invariants_hold());
-  av::ImportedBlob *taken = nullptr;
-  av::SourceMemory &memory = *dropped->give_back();
-  CHECK_STATUS(probe.imports().take(5u, memory, taken), Status::ok);
+  av::ImportedBlobProbe(*held).set_id(5u);
   CHECK(drawing.session().invariants_hold()); }
 
 TEST(context_session_invariants, imports_with_no_source_break_them)
@@ -380,7 +389,9 @@ TEST(context_session_invariants, imports_with_no_source_break_them)
   CHECK(drawing.session().invariants_hold()); }
 
 TEST(context_session_invariants, a_fault_with_no_backend_breaks_them)
-{ ContextSession session;
+{ av::RecordingLog sink;
+  av::DriverLog    lines(sink, "t: ");
+  ContextSession session(lines);
   ContextSessionProbe(session).set_faulted(true);
   CHECK(!session.invariants_hold()); }
 
@@ -390,8 +401,9 @@ TEST(context_session_invariants, imports_with_no_backend_break_them)
   ContextSessionProbe probe(drawing.session());
   probe.drop_backend();
   CHECK(!drawing.session().invariants_hold());
-  av::ImportedBlob *const dropped = probe.imports().drop(5u);
-  drawing.source().release(*dropped->give_back());
+  av::SourceMemory *const dropped = probe.imports().forget(5u);
+  CHECK(dropped != nullptr);
+  drawing.source().release(*dropped);
   CHECK(drawing.session().invariants_hold()); }
 
 TEST(context_session_invariants, an_arena_used_past_its_room_breaks_it)
@@ -436,7 +448,9 @@ void count_wake(void *context) { ++*static_cast<std::uint32_t *>(context); }
 }
 
 TEST(context_session, a_signal_is_given_to_its_backend)
-{ ContextSession unbound;
+{ av::RecordingLog sink;
+  av::DriverLog    lines(sink, "t: ");
+  ContextSession unbound(lines);
   std::uint32_t  woken = 0u;
   unbound.bind_signal(&count_wake, &woken);
   Bound bound;
@@ -459,7 +473,9 @@ TEST(context_session_poll, a_device_lost_while_idle_is_lost_from_the_next_poll_o
   std::size_t answer = 0u;
   CHECK_EQ(session.execute(0x10001u, payload, sizeof payload, nullptr, 0u, answer), std::uint32_t{AV_DEVICE_LOST});
   CHECK(session.invariants_hold());
-  ContextSession unbound;
+  av::RecordingLog sink;
+  av::DriverLog    lines(sink, "t: ");
+  ContextSession unbound(lines);
   CHECK_EQ(unbound.poll(), std::uint32_t{AV_POLL_IDLE});
   CHECK_EQ(unbound.lose_device(), std::uint32_t{AV_UNKNOWN}); }
 
