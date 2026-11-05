@@ -146,13 +146,24 @@ params = []
 reply = ["u32 hresult", "Caps12 caps", "out_bytes formats"]
 
 [[command]]
+name = "QueryHeapSlices12"
+id = 0x1005
+doc = """Whether a CPU-visible heap can be a window into a block of shared host memory (CreateHeap12's `offset`): 1
+when every queue's progress is followed, so the host can tell when a block's last heap and resource are done with,
+0 when it cannot. The guest then gives each heap memory of its own."""
+params = []
+reply = ["u32 supported"]
+
+[[command]]
 name = "CreateHeap12"
 id = 0x1100
 doc = """A heap of `size` bytes. A heap of a CPU-visible type (upload, readback, or custom with a CPU page)
-is the host memory the guest opened for it and imported, named by the handle IMPORT_BLOB answered as `memory`,
-which must hold `size` bytes, and can hold only buffers (docs/host-memory.md); any other heap is the host GPU's
-own and memory is ignored."""
-params = ["u32 heap", "HeapProperties properties", "u32 flags", "u64 size", "u64 alignment", "u64 memory"]
+is the window of `size` bytes at `offset` in the host memory the guest opened and imported, named by the handle
+IMPORT_BLOB answered as `memory`; the window lies inside that memory, and `offset` and `size` are multiples of 64 KiB.
+It can hold only buffers (docs/host-memory.md). The host keeps the memory's imported heap until the guest has
+released the memory, every heap and resource in it is destroyed and the GPU is done with it. Any other heap is the
+host GPU's own and memory and offset are ignored."""
+params = ["u32 heap", "HeapProperties properties", "u32 flags", "u64 size", "u64 alignment", "u64 memory", "u64 offset"]
 
 [[command]]
 name = "CreateCommittedResource12"

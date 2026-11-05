@@ -3,7 +3,6 @@
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/d3d12_host_device.hpp"
 #include "executor/source_memory.hpp"
-#include "executor/owned_fd.hpp"
 #include "executor/import_table.hpp"
 
 #include "core/log/log_line.hpp"
@@ -19,6 +18,7 @@
 #include "executor/d3d/frame_stager.hpp"
 #include "executor/d3d/staged_frame.hpp"
 #include "proto/d3d/dxgi_format_layout.hpp"
+#include "proto/d3d/heap_slice_support.hpp"
 #include "proto/generated/d3d12/d3d12_command_names.h"
 #include "proto/generated/d3d12/d3d12_protocol_ids.h"
 #include "proto/resources/surface_point.hpp"
@@ -130,7 +130,7 @@ D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, Wak
                            EventfdWake &fence_wake, WatchedBlocks &blocks, DriverLog &lines)
     : d3d12proto::ServerDispatch(guest), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
-      progress_(fence_wake, blocks), views_(objects_, addresses_),
+      progress_(fence_wake, blocks), block_heaps_(blocks, progress_, lines), views_(objects_, addresses_),
       pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), removed_(0u), lines_(lines), refusal_(lines_), clock_()
 {
     AV_SCOPE("D3d12Session::D3d12Session");
@@ -166,6 +166,7 @@ void D3d12Session::shut_down()
     progress_.clear();
     addresses_.clear();
     objects_.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12);
+    block_heaps_.destroy_all();
     views_.bind(nullptr);
     pipelines_.bind(nullptr);
     if (joined_) device_->dismiss(tenant_);
@@ -191,6 +192,7 @@ bool D3d12Session::knows(uint32_t command_id) const
 bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena)
 {
     AV_SCOPE("D3d12Session::run");
+    block_heaps_.reclaim();
     const bool ran = d3d12proto::dispatch_command(*this, command_id, payload, reply, arena);
     if (ran) return true;
     if (!refusal_.removes(d3d12proto::command_name(command_id), only_device, removed_ != 0u)) return false;
@@ -203,6 +205,12 @@ void D3d12Session::gpu_progress(uint64_t &marked, uint64_t &reached) const
     AV_SCOPE("D3d12Session::gpu_progress");
     marked = progress_.marked();
     reached = progress_.reached();
+}
+
+void D3d12Session::abandon(const SourceMemory &memory)
+{
+    AV_SCOPE("D3d12Session::abandon");
+    block_heaps_.abandon(memory);
 }
 
 uint32_t D3d12Session::removed_reason() const
@@ -347,7 +355,11 @@ bool D3d12Session::on_Destroy12(uint32_t id)
     if (objects_.find_any(id, kind) == nullptr || kind < D3dObjectKind::heap12 ||
         kind > D3dObjectKind::command_signature12)
         return false;
-    if (kind == D3dObjectKind::resource12) addresses_.remove(id);
+    if (kind == D3dObjectKind::resource12) {
+        addresses_.remove(id);
+        block_heaps_.detach(id);
+    }
+    if (kind == D3dObjectKind::heap12) block_heaps_.release_heap(id);
     if (kind == D3dObjectKind::queue12) progress_.forget(id);
     objects_.remove(id);
     return true;
@@ -364,29 +376,42 @@ bool D3d12Session::on_Finish12(uint32_t &hresult)
     return true;
 }
 
+bool D3d12Session::on_QueryHeapSlices12(uint32_t &supported)
+{
+    AV_SCOPE("D3d12Session::on_QueryHeapSlices12");
+    ID3D12Device *const host = device_ != nullptr ? device_->device() : nullptr;
+    ID3D12Fence        *probe = nullptr;
+    const bool          follows = host != nullptr && SUCCEEDED(host->CreateFence(0u, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence),
+                                                                         reinterpret_cast<void **>(&probe)));
+    if (probe != nullptr) probe->Release();
+    supported = static_cast<uint32_t>(follows ? HeapSliceSupport::windows : HeapSliceSupport::none);
+    return true;
+}
+
+bool D3d12Session::window_heap(uint32_t heap, uint64_t size, uint64_t memory, uint64_t base)
+{
+    AV_SCOPE("D3d12Session::window_heap");
+    SourceMemory *const backing = imports_ != nullptr ? imports_->named(memory) : nullptr;
+    if (backing == nullptr) {
+        LogLine(lines_).text("a heap of ").number(size).text(" bytes names no memory, handle ").number(memory).write();
+        return false;
+    }
+    ID3D12Heap *const block = block_heaps_.open(*device_, *backing, heap, base, size);
+    if (block == nullptr) return false;
+    block->AddRef();
+    if (kept(heap, D3dObjectKind::heap12, block)) return true;
+    block_heaps_.release_heap(heap);
+    return false;
+}
+
 bool D3d12Session::on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties &properties, uint32_t flags,
-                                   uint64_t size, uint64_t alignment, uint64_t memory)
+                                   uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset)
 {
     AV_SCOPE("D3d12Session::on_CreateHeap12");
     if (device_ == nullptr || properties.type == 0u || properties.type > most_heap_type || size == 0u ||
         size > max_heap_bytes)
         return false;
-    if (cpu_visible(properties)) {
-        const SourceMemory *const backing = imports_ != nullptr ? imports_->named(memory) : nullptr;
-        if (backing == nullptr || size > backing->size()) {
-            LogLine(lines_).text("a heap of ").number(size).text(" bytes names no memory that holds it").write();
-            return false;
-        }
-        OwnedFd             descriptor;
-        ID3D12Heap *const  made = backing->share(descriptor)
-                                      ? device_->import_dmabuf_heap(backing->pointer(), descriptor.fd(), backing->size())
-                                      : nullptr;
-        if (made == nullptr) {
-            LogLine(lines_).text("the host did not open a heap over ").number(backing->size()).text(" bytes").write();
-            return false;
-        }
-        return kept(heap, D3dObjectKind::heap12, made);
-    }
+    if (cpu_visible(properties)) return window_heap(heap, size, memory, offset);
     D3D12_HEAP_DESC desc = {};
     desc.SizeInBytes = size;
     desc.Properties = host_properties(properties);
@@ -461,12 +486,19 @@ bool D3d12Session::on_CreatePlacedResource12(uint32_t resource, uint32_t heap, u
     ID3D12Heap *const in = objects_.find_as<ID3D12Heap>(heap, D3dObjectKind::heap12);
     if (device_ == nullptr || in == nullptr || !resource_holds(desc)) return false;
     const D3D12_HEAP_DESC heap_desc = in->GetDesc();
-    if (offset > heap_desc.SizeInBytes || (desc.dimension == buffer_dimension && desc.width > heap_desc.SizeInBytes - offset)) {
+    uint64_t              base = 0u;
+    uint64_t              extent = heap_desc.SizeInBytes;
+    const bool            windowed = block_heaps_.window(heap, base, extent);
+    const bool            buffer = desc.dimension == buffer_dimension;
+    if (offset > extent || (buffer && desc.width > extent - offset) || (windowed && !buffer)) {
         LogLine(lines_).text("a resource placed past its heap: offset ").number(offset).text(", ").number(desc.width)
-            .text(" bytes wide, in a heap of ").number(heap_desc.SizeInBytes).write();
+            .text(" bytes wide, in a heap of ").number(extent).write();
         return false;
     }
-    return placed(resource, in, offset, desc, state, clear, address);
+    if (windowed && !block_heaps_.attach(resource, heap)) return false;
+    const bool made = placed(resource, in, base + offset, desc, state, clear, address);
+    if (windowed && !made) block_heaps_.detach(resource);
+    return made;
 }
 
 bool D3d12Session::placed(uint32_t resource, ID3D12Heap *in, uint64_t offset, const d3d12proto::ResourceDesc &desc,

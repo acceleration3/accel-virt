@@ -272,6 +272,7 @@ bool D3dBackend::adopt(SourceMemory &memory, uint64_t &handle)
 void D3dBackend::abandon(const SourceMemory &memory, uint64_t)
 {
     AV_SCOPE("D3dBackend::abandon");
+    d3d12_.abandon(memory);
     if (device11_ != nullptr && slices_.holds(memory)) retire_slices(memory);
     if (!region_.is(memory)) return;
     published_.unbind();

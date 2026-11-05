@@ -13,6 +13,7 @@ inline constexpr uint32_t kCmd_OpenDevice12 = 0x00041000;
 inline constexpr uint32_t kCmd_Destroy12 = 0x00041002;
 inline constexpr uint32_t kCmd_Finish12 = 0x00041003;
 inline constexpr uint32_t kCmd_QueryCaps12 = 0x00041004;
+inline constexpr uint32_t kCmd_QueryHeapSlices12 = 0x00041005;
 inline constexpr uint32_t kCmd_CreateHeap12 = 0x00041100;
 inline constexpr uint32_t kCmd_CreateCommittedResource12 = 0x00041101;
 inline constexpr uint32_t kCmd_CreatePlacedResource12 = 0x00041102;

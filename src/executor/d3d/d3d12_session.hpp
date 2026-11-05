@@ -4,6 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
 #include "executor/d3d/d3d12_address_map.hpp"
+#include "executor/d3d/d3d12_block_heaps.hpp"
 #include "executor/d3d/d3d12_pipeline_builder.hpp"
 #include "executor/d3d/d3d12_pipeline_compiles.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
@@ -30,6 +31,7 @@ namespace av {
 class DriverLog;
 class D3d11HostDevice;
 class SessionShares;
+class SourceMemory;
 class SharedSurfaces;
 class WatchedBlocks;
 class D3d12HostDevice;
@@ -51,6 +53,7 @@ public:
     bool               knows(uint32_t command_id) const;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena);
     void               gpu_progress(uint64_t &marked, uint64_t &reached) const;
+    void               abandon(const SourceMemory &memory);
     uint32_t           removed_reason() const;
     bool               lost() const;
 
@@ -60,7 +63,8 @@ public:
                         uint64_t& formats_size) override;
     bool on_Destroy12(uint32_t object) override;
     bool on_Finish12(uint32_t& hresult) override;
-    bool on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t arena_offset) override;
+    bool on_QueryHeapSlices12(uint32_t& supported) override;
+    bool on_CreateHeap12(uint32_t heap, const d3d12proto::HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset) override;
     bool on_CreateCommittedResource12(uint32_t resource, const d3d12proto::HeapProperties& properties, uint32_t heap_flags, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
     bool on_CreateReservedResource12(uint32_t resource, const d3d12proto::ResourceDesc& desc, uint32_t state, const d3d12proto::ClearValue& clear, uint64_t address) override;
     bool on_ResourceTiling12(uint32_t resource, uint32_t& tiles, uint32_t& packed_mips, uint32_t& packed_tiles) override;
@@ -130,6 +134,7 @@ private:
     bool                       cpu_handle(const d3d12proto::DescriptorRef &ref, uint32_t type, size_t &handle) const;
     bool                       gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &handle) const;
     bool                       place(uint32_t id, IUnknown *resource, uint64_t address, uint64_t width);
+    bool                       window_heap(uint32_t heap, uint64_t size, uint64_t memory, uint64_t base);
     bool                       kept(uint32_t id, D3dObjectKind kind, IUnknown *made);
     bool                       placed(uint32_t resource, ID3D12Heap *in, uint64_t offset,
                                       const d3d12proto::ResourceDesc &desc, uint32_t state,
@@ -157,6 +162,7 @@ private:
     WatchedBlocks         &blocks_;
     D3d12AddressMap        addresses_;
     D3d12QueueProgress     progress_;
+    D3d12BlockHeaps        block_heaps_;
     D3d12ViewWriter        views_;
     D3d12PipelineBuilder   pipelines_;
     D3d12PipelineCompiles  compiles_;

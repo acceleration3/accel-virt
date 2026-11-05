@@ -25,11 +25,17 @@ namespace av::d3d12proto {
 // and d3d.toml's FormatCaps for every DXGI_FORMAT from 0 up, as many as fit. hresult is not S_OK when this GPU
 // has no device, and then nothing else is answered.
 [[nodiscard]] bool av_d3d12_QueryCaps12(::av::ClientTransport& t, uint32_t* hresult, Caps12* caps, void* formats, uint64_t formats_capacity, uint64_t* formats_size);
+// Whether a CPU-visible heap can be a window into a block of shared host memory (CreateHeap12's `offset`): 1
+// when every queue's progress is followed, so the host can tell when a block's last heap and resource are done with,
+// 0 when it cannot. The guest then gives each heap memory of its own.
+[[nodiscard]] bool av_d3d12_QueryHeapSlices12(::av::ClientTransport& t, uint32_t* supported);
 // A heap of `size` bytes. A heap of a CPU-visible type (upload, readback, or custom with a CPU page)
-// is the host memory the guest opened for it and imported, named by the handle IMPORT_BLOB answered as `memory`,
-// which must hold `size` bytes, and can hold only buffers (docs/host-memory.md); any other heap is the host GPU's
-// own and memory is ignored.
-[[nodiscard]] bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory);
+// is the window of `size` bytes at `offset` in the host memory the guest opened and imported, named by the handle
+// IMPORT_BLOB answered as `memory`; the window lies inside that memory, and `offset` and `size` are multiples of 64 KiB.
+// It can hold only buffers (docs/host-memory.md). The host keeps the memory's imported heap until the guest has
+// released the memory, every heap and resource in it is destroyed and the GPU is done with it. Any other heap is the
+// host GPU's own and memory and offset are ignored.
+[[nodiscard]] bool av_d3d12_CreateHeap12(::av::ClientTransport& t, uint32_t heap, const HeapProperties& properties, uint32_t flags, uint64_t size, uint64_t alignment, uint64_t memory, uint64_t offset);
 // A resource with a heap of its own on the host GPU. A buffer is found by `address` from then on.
 [[nodiscard]] bool av_d3d12_CreateCommittedResource12(::av::ClientTransport& t, uint32_t resource, const HeapProperties& properties, uint32_t heap_flags, const ResourceDesc& desc, uint32_t state, const ClearValue& clear, uint64_t address);
 // `resource` - a committed 2D texture made with D3D12_HEAP_FLAG_SHARED, a swap chain buffer - shown to

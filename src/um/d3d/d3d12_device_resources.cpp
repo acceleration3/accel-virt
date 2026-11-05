@@ -174,7 +174,7 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
     }
     const uint64_t memory = heap.memory != nullptr ? heap.memory->handle() : 0u;
     if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), heap.flags,
-                                                 heap.size, args.Alignment, memory),
+                                                 heap.size, args.Alignment, memory, 0u),
               "CreateHeap12"))
         return E_OUTOFMEMORY;
     heap.made = 1u;
@@ -372,7 +372,7 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
         return E_OUTOFMEMORY;
     }
     if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), 0u, heap.size,
-                                                 buffer_alignment, heap.memory->handle()),
+                                                 buffer_alignment, heap.memory->handle(), 0u),
               "CreateHeap12"))
         return E_OUTOFMEMORY;
     heap.made = 1u;
