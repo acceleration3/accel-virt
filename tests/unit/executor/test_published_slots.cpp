@@ -51,7 +51,7 @@ TEST(published_slots_bind, slots_that_reach_the_error_word_the_ring_or_nothing_a
   PublishedSlots slots(held.bytes);
   CHECK(!slots.bind(0u, 0u));
   CHECK(!slots.bind(1u, 1u));
-  CHECK(!slots.bind(0u, 512u));
+  CHECK(!slots.bind(0u, 1024u));
   CHECK(!slots.bind(sizeof control, 1u));
   CHECK(!slots.bind(GuestBytes::slot_bytes, 1u));
   CHECK(!slots.bound());

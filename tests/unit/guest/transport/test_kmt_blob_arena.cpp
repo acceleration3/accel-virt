@@ -227,12 +227,12 @@ TEST(kmt_blob_arena, query_slots_come_from_the_control_segment_once)
   std::uint64_t offset = 0u;
   CHECK(!rig.arena().take_query_slots(0u, view, offset));
   CHECK(!rig.arena().take_query_slots(av::PublishedSlotLayout::control_bytes, view, offset));
-  CHECK(rig.arena().take_query_slots(64u, view, offset));
+  CHECK(rig.arena().take_query_slots(512u, view, offset));
   const av::PublishedSlotLayout tail(av::PublishedSlotLayout::control_bytes);
-  CHECK_EQ(offset, tail.slots_at(64u));
+  CHECK_EQ(offset, tail.slots_at(512u));
   CHECK(view == rig.kmt().window_chunk_memory(MockKmt::first_window_resource) + offset);
-  CHECK(offset + 64u * av::PublishedSlotLayout::slot_bytes <= tail.error_word());
-  CHECK(!rig.arena().take_query_slots(64u, view, offset));
+  CHECK(offset + 512u * av::PublishedSlotLayout::slot_bytes <= tail.error_word());
+  CHECK(!rig.arena().take_query_slots(512u, view, offset));
   rig.host_takes_the_releases(2u);
   CHECK_STATUS(rig.arena().close(), Status::ok); }
 

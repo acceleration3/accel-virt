@@ -7,7 +7,7 @@ namespace av {
 
 class PublishedSlotLayout {
 public:
-    static constexpr uint64_t control_bytes = uint64_t{64} << 10u;
+    static constexpr uint64_t control_bytes = uint64_t{128} << 10u;
     static constexpr uint64_t error_word_bytes = sizeof(uint64_t);
     static constexpr uint32_t slot_bytes = 128u;
     static constexpr uint32_t sequence_at = 0u;
