@@ -26,7 +26,7 @@ public:
 
 private:
     enum class Step : uint8_t { send_info, await_info, send_capset, await_capset, done, failed };
-    static constexpr uint32_t capset_version = 1u;
+    static constexpr uint32_t capset_version = 2u;
 
     [[nodiscard]] Status accept_info(const uint8_t *bytes, size_t length);
     [[nodiscard]] Status accept_capset(const uint8_t *bytes, size_t length);

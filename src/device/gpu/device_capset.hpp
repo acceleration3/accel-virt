@@ -11,7 +11,7 @@ class Host;
 
 class DeviceCapset {
 public:
-    static constexpr uint32_t capset_version = 1u;
+    static constexpr uint32_t capset_version = 2u;
 
     explicit DeviceCapset(Host &host);
     DeviceCapset(const DeviceCapset &) = delete;
