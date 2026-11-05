@@ -116,15 +116,17 @@ namespace av::d3dproto {
 // that was not shared, or one that is not a 2D texture of four-byte pixels stages nothing, and the present that
 // names the point is refused.
 [[nodiscard]] bool av_d3d_PresentPoint(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint32_t point);
-// Whether a buffer can be pointed at a slice of a slice store (BindBufferSlice): 1 when the host's
-// Direct3D 11 can draw from host memory in place, 0 when it cannot - the host's DXVK cannot rename a buffer to
-// storage it imported - and the guest then copies what it writes, as before (docs/mapped-buffers-plan.md).
+// Whether a buffer can be pointed at a slice of a block of slice memory (BindBufferSlice): 2 when the host's
+// Direct3D 11 can draw from host memory in place and takes any number of blocks, 0 when it cannot - the host's DXVK
+// cannot rename a buffer to storage it imported - and the guest then copies what it writes, as before
+// (docs/mapped-buffers-plan.md).
 [[nodiscard]] bool av_d3d_QueryBufferSlices11(::av::ClientTransport& t, uint32_t* supported);
-// The buffer from now on is `bytes` at `offset` of the session's slice store - host upload memory the
-// guest opened for slices and imported, named by the handle IMPORT_BLOB answered as `memory` (docs/host-memory.md) -
-// which the guest writes and the host GPU reads in place: commands before this one read the buffer's storage before
-// it, commands after it this slice (docs/mapped-buffers-plan.md, 3.2). `bytes` covers at least the buffer; a slice
-// outside the store, a resource that is no buffer, or a host QueryBufferSlices11 answered 0 for, is refused.
+// The buffer from now on is `bytes` at `offset` of a block of the session's slice memory - host upload memory
+// the guest opened for slices and imported, named by the handle IMPORT_BLOB answered as `memory`
+// (docs/host-memory.md) - which the guest writes and the host GPU reads in place: commands before this one read the
+// buffer's storage before it, commands after it this slice (docs/mapped-buffers-plan.md, 3.2). `bytes` covers at
+// least the buffer; a slice outside its block, a resource that is no buffer, or a host QueryBufferSlices11 answered 0
+// for, is refused. The host keeps a released block until its GPU work has run.
 [[nodiscard]] bool av_d3d_BindBufferSlice(::av::ClientTransport& t, uint32_t resource, uint64_t memory, uint64_t offset, uint64_t bytes);
 [[nodiscard]] bool av_d3d_BeginQuery(::av::ClientTransport& t, uint32_t query);
 [[nodiscard]] bool av_d3d_EndQuery(::av::ClientTransport& t, uint32_t query);

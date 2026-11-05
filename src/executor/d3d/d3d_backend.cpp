@@ -113,8 +113,7 @@ D3dBackend::D3dBackend(ExecutorLog &log)
       lines_(log.d3d11()), refusal_(lines_), arena_(nullptr), objects_(blocks_), guest_(),
       region_(guest_), imports_(nullptr), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_, log.d3d12()),
       d3d9_(guest_, objects_, blocks_, log.d3d9()),
-      published_(blocks_, guest_), progress11_(fence_wake_), constants_(blocks_), slice_storage_(), slice_memory_(nullptr),
-      slice_storage_refused_(false),
+      published_(blocks_, guest_), progress11_(fence_wake_), constants_(blocks_), slices_(blocks_, lines_),
       missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
@@ -151,8 +150,9 @@ void D3dBackend::shut_down()
         device11_->lock(nullptr);
         published_.unbind();
         constants_.close();
-        release_slice_storage();
         objects_.release_all();
+        if (slices_.count() != 0u) device11_->vulkan().idle();
+        slices_.destroy_all();
         progress11_.release();
         device11_->unlock();
     }
@@ -163,7 +163,6 @@ void D3dBackend::shut_down()
     fence_wake_.unbind();
     device11_ = nullptr;
     shares_ = nullptr;
-    slice_storage_refused_ = false;
     imports_ = nullptr;
 }
 
@@ -205,6 +204,7 @@ void D3dBackend::end_batch()
     if (device11_->signal(progress11_.fence(), progress11_.next())) {
         progress11_.signalled();
         published_.flushed();
+        slices_.reclaim(progress11_);
     } else {
         if (!mark_refused_)
             LogLine(lines_).text("no fence marks the session's batches: they complete as recorded").write();
@@ -271,9 +271,9 @@ bool D3dBackend::adopt(SourceMemory &memory, uint64_t &handle)
 void D3dBackend::abandon(const SourceMemory &memory, uint64_t)
 {
     AV_SCOPE("D3dBackend::abandon");
-    if (&memory == slice_memory_ && device11_ != nullptr) {
+    if (device11_ != nullptr && slices_.count() != 0u) {
         device11_->lock(nullptr);
-        release_slice_storage();
+        slices_.retire(memory);
         device11_->unlock();
     }
     if (!region_.is(memory)) return;
@@ -1683,7 +1683,7 @@ bool D3dBackend::update_dynamic_buffer(uint32_t id, ID3D11Resource *resource, ui
 bool D3dBackend::on_QueryBufferSlices11(uint32_t &supported)
 {
     AV_SCOPE("D3dBackend::on_QueryBufferSlices11");
-    supported = device11_ != nullptr && device11_->slices() ? 1u : 0u;
+    supported = device11_ != nullptr && device11_->slices() ? multi_block_slices : 0u;
     return true;
 }
 
@@ -1691,13 +1691,14 @@ bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t
 {
     AV_SCOPE("D3dBackend::on_BindBufferSlice");
     ID3D11Resource *const     found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
-    const SourceMemory *const store = imports_ != nullptr ? imports_->named(memory) : nullptr;
+    SourceMemory *const       store = imports_ != nullptr ? imports_->named(memory) : nullptr;
     uint8_t *const            slice = store != nullptr ? store->at(offset, bytes) : nullptr;
-    if (!ready() || found == nullptr || slice == nullptr) return false;
-    if (!dynamic_buffer(found) || !slice_storage_for(*store)) return false;
+    if (!ready() || found == nullptr || slice == nullptr || !device11_->slices() || !dynamic_buffer(found)) return false;
+    const VulkanBuffer *const storage = slices_.bind(*device11_, *store, progress11_);
+    if (storage == nullptr) return false;
     auto *const buffer = static_cast<ID3D11Buffer *>(found);
     constants_.release(device11_->context(), states_.selected_id(), resource, buffer);
-    return device11_->bind_storage(buffer, slice_storage_, offset, bytes, slice);
+    return device11_->bind_storage(buffer, *storage, offset, bytes, slice);
 }
 
 bool D3dBackend::dynamic_buffer(ID3D11Resource *resource) const
@@ -1709,37 +1710,6 @@ bool D3dBackend::dynamic_buffer(ID3D11Resource *resource) const
     D3D11_BUFFER_DESC desc = {};
     static_cast<ID3D11Buffer *>(resource)->GetDesc(&desc);
     return desc.Usage == D3D11_USAGE_DYNAMIC;
-}
-
-bool D3dBackend::slice_storage_for(const SourceMemory &store)
-{
-    AV_SCOPE("D3dBackend::slice_storage_for");
-    if (slice_memory_ == &store) return true;
-    if (slice_memory_ != nullptr || slice_storage_refused_ || !device11_->slices()) return false;
-    OwnedFd descriptor;
-    if (store.share(descriptor) && device11_->import_to_draw(descriptor, store.size(), slice_storage_)) {
-        slice_memory_ = &store;
-        return true;
-    }
-    slice_storage_refused_ = true;
-    lines_.write("the slice store could not be imported to draw from: mapped buffers are copied");
-    return false;
-}
-
-void D3dBackend::release_slice_storage()
-{
-    AV_SCOPE("D3dBackend::release_slice_storage");
-    if (!slice_storage_.made()) return;
-    for (uint32_t slot = objects_.next_used(0u); slot != D3dObjectTable::no_slot; slot = objects_.next_used(slot + 1u)) {
-        uint32_t      id = 0u;
-        D3dObjectKind kind = D3dObjectKind::none;
-        static_cast<void>(objects_.at(slot, id, kind));
-        ID3D11Resource *const resource = objects_.find_as<ID3D11Resource>(id, D3dObjectKind::resource);
-        if (resource != nullptr && dynamic_buffer(resource)) device11_->context()->DiscardResource(resource);
-    }
-    device11_->vulkan().idle();
-    slice_storage_.release();
-    slice_memory_ = nullptr;
 }
 
 void D3dBackend::await_gpu_unlocked()

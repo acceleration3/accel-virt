@@ -11,7 +11,7 @@
 #include "executor/guest_region.hpp"
 #include "proto/wire/guest_bytes.hpp"
 #include "executor/shim/host_heap.hpp"
-#include "executor/shim/vulkan_buffer.hpp"
+#include "executor/d3d/slice_storages.hpp"
 #include "executor/d3d/constant_ring.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
 #include "executor/session_backend.hpp"
@@ -173,12 +173,11 @@ public:
     bool invariants_hold() const;
 
 private:
-    bool slice_storage_for(const SourceMemory &store);
-    void release_slice_storage();
     bool dynamic_buffer(ID3D11Resource *resource) const;
     friend struct D3dBackendProbe;
 
     static constexpr uint32_t stage_count = 6u;
+    static constexpr uint32_t multi_block_slices = 2u;
 
     void             describe_shared_image(uint64_t shared_key, IUnknown *made);
     ID3D11Texture2D         *shareable(const D3D11_TEXTURE2D_DESC &texture, uint32_t guest_misc);
@@ -227,9 +226,7 @@ private:
     QueryResultPublisher    published_;
     D3d11BatchProgress      progress11_;
     ConstantRing            constants_;
-    VulkanBuffer            slice_storage_;
-    const SourceMemory     *slice_memory_;
-    bool                    slice_storage_refused_;
+    SliceStorages           slices_;
     uint64_t                missed_key_;
     bool                    mark_refused_;
     bool                    show_refused_;
