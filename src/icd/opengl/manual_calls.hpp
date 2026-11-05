@@ -11,6 +11,7 @@ class Kmt;
 namespace av::glicd {
 
 class CurrentContexts;
+class GlContextTable;
 class GuestGlContext;
 
 class ManualCalls {
@@ -24,7 +25,7 @@ public:
         gl_texture_depth = 0x8071u, gl_texture_compressed_image_size = 0x86A0u,
     };
 
-    ManualCalls(CurrentContexts &currents, const Kmt &kmt);
+    ManualCalls(CurrentContexts &currents, GlContextTable &contexts, const Kmt &kmt);
     ManualCalls(const ManualCalls &) = delete;
     ManualCalls &operator=(const ManualCalls &) = delete;
 
@@ -57,6 +58,24 @@ public:
     void  bind_buffer_indexed(uint32_t target, uint32_t buffer);
     void  bind_buffers_indexed(uint32_t target);
     void  shaders_write_buffers();
+    bool  unpack_slice_bound();
+    bool  slice_unpack_pixels(const void *&pixels, size_t bytes);
+    void  unpack_slice_done();
+    bool  pack_slice_bound();
+    bool  slice_pack_pixels(void *&pixels, size_t bytes);
+    void  pack_slice_done();
+    bool  refuse_sliced_unpack();
+    bool  refuse_sliced_pack();
+    bool  clear_bound_buffer(uint32_t target, uint32_t internal_format, uint32_t format, uint32_t type,
+                             const void *data);
+    bool  clear_bound_buffer_range(uint32_t target, uint32_t internal_format, intptr_t offset, intptr_t size,
+                                   uint32_t format, uint32_t type, const void *data);
+    bool  clear_named_buffer(uint32_t buffer, uint32_t internal_format, uint32_t format, uint32_t type,
+                             const void *data);
+    bool  clear_named_buffer_range(uint32_t buffer, uint32_t internal_format, intptr_t offset, intptr_t size,
+                                   uint32_t format, uint32_t type, const void *data);
+    bool  invalidate_named_buffer(uint32_t buffer);
+    bool  invalidate_named_buffer_range(uint32_t buffer, intptr_t offset, intptr_t length);
     void  client_attributes_pushed(uint32_t mask);
     void  client_attributes_popped();
     void  client_attributes_reset(uint32_t mask);
@@ -161,10 +180,6 @@ private:
     bool            unmap_name(GuestGlContext &context, uint32_t buffer);
     void            mark_name(GuestGlContext &context, uint32_t buffer, intptr_t offset, intptr_t length);
     uint32_t        sliced_buffer(GuestGlContext &context, uint32_t target);
-    void            read_sliced(GuestGlContext &context, uint32_t buffer, intptr_t offset, intptr_t size, void *data);
-    bool            offers_slice(GuestGlContext &context, intptr_t size, uint32_t flags);
-    bool            placed_in_slice(GuestGlContext &context, uint32_t buffer, intptr_t size, const void *data,
-                                    uint32_t flags);
     void            forget_bound(GuestGlContext &context, uint32_t target);
     void            respecify_bound(GuestGlContext &context, uint32_t target, intptr_t size, bool with_data);
     void            pin_storage(GuestGlContext &context, intptr_t size, const void *data);
@@ -172,6 +187,7 @@ private:
                                 const void *data);
 
     CurrentContexts &currents_;
+    GlContextTable  &contexts_;
     const Kmt       &kmt_;
 };
 

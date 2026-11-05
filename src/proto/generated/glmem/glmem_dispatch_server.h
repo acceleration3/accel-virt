@@ -30,7 +30,7 @@ public:
     uint8_t* guest_bytes(uint64_t offset, uint64_t size) const;
 
     virtual bool on_QueryBufferSlicesGL(uint32_t& supported) = 0;
-    virtual bool on_PlaceBufferSlice(uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes) = 0;
+    virtual bool on_PlaceBufferSlice(uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes, uint32_t& placed) = 0;
     virtual bool on_ForgetBufferSlice(uint32_t buffer) = 0;
 
 protected:

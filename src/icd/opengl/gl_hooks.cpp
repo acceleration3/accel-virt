@@ -249,6 +249,92 @@ bool answer_named_buffer_map_state(GLuint buffer, GLenum pname, GLint64 *params)
     return true;
 }
 
+bool unpack_slice_bound() noexcept
+{
+    AV_SCOPE("unpack_slice_bound");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().unpack_slice_bound();
+}
+
+bool slice_unpack_pixels(const void *&pixels, size_t bytes) noexcept
+{
+    AV_SCOPE("slice_unpack_pixels");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().slice_unpack_pixels(pixels, bytes);
+}
+
+void unpack_slice_done() noexcept
+{
+    AV_SCOPE("unpack_slice_done");
+    if (gl_icd_binding.bound()) gl_icd_binding.root().manual().unpack_slice_done();
+}
+
+bool pack_slice_bound() noexcept
+{
+    AV_SCOPE("pack_slice_bound");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().pack_slice_bound();
+}
+
+bool slice_pack_pixels(void *&pixels, size_t bytes) noexcept
+{
+    AV_SCOPE("slice_pack_pixels");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().slice_pack_pixels(pixels, bytes);
+}
+
+void pack_slice_done() noexcept
+{
+    AV_SCOPE("pack_slice_done");
+    if (gl_icd_binding.bound()) gl_icd_binding.root().manual().pack_slice_done();
+}
+
+bool refuse_sliced_unpack() noexcept
+{
+    AV_SCOPE("refuse_sliced_unpack");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().refuse_sliced_unpack();
+}
+
+bool refuse_sliced_pack() noexcept
+{
+    AV_SCOPE("refuse_sliced_pack");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().refuse_sliced_pack();
+}
+
+bool clear_bound_buffer(GLenum target, GLenum internalformat, GLenum format, GLenum type, const void *data) noexcept
+{
+    AV_SCOPE("clear_bound_buffer");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().clear_bound_buffer(target, internalformat, format, type, data);
+}
+
+bool clear_bound_buffer_range(GLenum target, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format,
+                              GLenum type, const void *data) noexcept
+{
+    AV_SCOPE("clear_bound_buffer_range");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().clear_bound_buffer_range(target, internalformat, offset, size, format, type, data);
+}
+
+bool clear_named_buffer(GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const void *data) noexcept
+{
+    AV_SCOPE("clear_named_buffer");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().clear_named_buffer(buffer, internalformat, format, type, data);
+}
+
+bool clear_named_buffer_range(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format,
+                              GLenum type, const void *data) noexcept
+{
+    AV_SCOPE("clear_named_buffer_range");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().clear_named_buffer_range(buffer, internalformat, offset, size, format, type, data);
+}
+
+bool invalidate_named_buffer(GLuint buffer) noexcept
+{
+    AV_SCOPE("invalidate_named_buffer");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().invalidate_named_buffer(buffer);
+}
+
+bool invalidate_named_buffer_range(GLuint buffer, GLintptr offset, GLsizeiptr length) noexcept
+{
+    AV_SCOPE("invalidate_named_buffer_range");
+    return gl_icd_binding.bound() && gl_icd_binding.root().manual().invalidate_named_buffer_range(buffer, offset, length);
+}
+
 bool legacy_calls_live() noexcept
 {
     AV_SCOPE("legacy_calls_live");

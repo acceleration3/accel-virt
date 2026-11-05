@@ -89,14 +89,20 @@ bool av_glmem_QueryBufferSlicesGL(::av::ClientTransport& t, uint32_t* supported)
     return r.remaining() == 0u;
 }
 
-bool av_glmem_PlaceBufferSlice(::av::ClientTransport& t, uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes) {
+bool av_glmem_PlaceBufferSlice(::av::ClientTransport& t, uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes, uint32_t* placed) {
     AV_SCOPE("av_glmem_PlaceBufferSlice");
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint32_t>(buffer);
     b.write_pod<uint64_t>(memory);
     b.write_pod<uint64_t>(offset);
     b.write_pod<uint64_t>(bytes);
-    return t.send_async(kCmd_PlaceBufferSlice, b) == ::av::TransportResult::ok;
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_PlaceBufferSlice, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (placed != nullptr) *placed = value; }
+    return r.remaining() == 0u;
 }
 
 bool av_glmem_ForgetBufferSlice(::av::ClientTransport& t, uint32_t buffer) {

@@ -92,8 +92,10 @@ static bool decode_PlaceBufferSlice(ServerDispatch& s, ::av::WireReader& r, ::av
     if (!r.read_pod(offset)) return false;
     uint64_t bytes{};
     if (!r.read_pod(bytes)) return false;
+    uint32_t placed{};
     if (r.remaining() != 0u) return false;
-    if (!s.on_PlaceBufferSlice(buffer, memory, offset, bytes)) return false;
+    if (!s.on_PlaceBufferSlice(buffer, memory, offset, bytes, placed)) return false;
+    reply.write_pod(placed);
     return true;
 }
 

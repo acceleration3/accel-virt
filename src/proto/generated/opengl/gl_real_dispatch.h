@@ -57,6 +57,13 @@ struct RealGl {
     // granted; a core context has none to ask of.
     bool av_fixed_function = true;
 
+    // A command the host owner judges before it reaches GL: its
+    // hook is handed the decoded arguments and answers whether the
+    // call is still to be made. false means the owner answered the
+    // command itself - made the call, or refused it - and the
+    // dispatch ends there with the frame decoded.
+    void* av_hook_user = nullptr;
+
     // The vertex array objects a draw found reading only from
     // buffers (arrays_verified). Mutable because dispatch is handed
     // the table const: these are a cache of what the context would
@@ -1457,6 +1464,10 @@ struct RealGl {
     void (*glVertexArrayVertexBindingDivisorEXT)(GLuint, GLuint, GLuint) = nullptr;
     void (*glVertexArrayVertexAttribLOffsetEXT)(GLuint, GLuint, GLuint, GLint, GLenum, GLsizei, GLintptr) = nullptr;
     void (*glVertexArrayVertexAttribDivisorEXT)(GLuint, GLuint, GLuint) = nullptr;
+    bool (*av_hook_glBufferStorageMemEXT)(void*, GLenum, GLsizeiptr, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glNamedBufferStorageMemEXT)(void*, GLuint, GLsizeiptr, GLuint, GLuint64) = nullptr;
+    bool (*av_hook_glDeleteMemoryObjectsEXT)(void*, GLsizei, const GLuint*) = nullptr;
+    bool (*av_hook_glDeleteBuffers)(void*, GLsizei, const GLuint*) = nullptr;
 };
 
 // Fills the table. `load` is the platform's resolver:

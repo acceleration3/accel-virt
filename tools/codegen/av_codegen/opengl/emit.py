@@ -588,6 +588,10 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
 
 SYNC_TAKEN = {"glDeleteSync"}
 
+HOST_HOOKED = (
+    "glBufferStorageMemEXT", "glNamedBufferStorageMemEXT", "glDeleteMemoryObjectsEXT", "glDeleteBuffers",
+)
+
 
 def _decode_param(p: Param, out: list[str], taken: bool = False) -> None:
     name = p.name
@@ -1542,6 +1546,9 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
              else (f"({p.name}_packs ? {p.name}_packed : {p.name})" if p in packed else p.name))
             for p in cmd.params)
         c.append(f"    if (av_gl.{cmd.name} == nullptr) return false;")
+        if cmd.name in HOST_HOOKED:
+            hook = f"av_gl.av_hook_{cmd.name}"
+            c.append(f"    if ({hook} != nullptr && !{hook}(av_gl.av_hook_user, {call_args})) return true;")
         if cmd.name in SYNC_TAKEN:
             for p in cmd.params:
                 if p.role is Role.SYNC:
@@ -1663,6 +1670,13 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "    // granted; a core context has none to ask of.",
            "    bool av_fixed_function = true;",
            "",
+           "    // A command the host owner judges before it reaches GL: its",
+           "    // hook is handed the decoded arguments and answers whether the",
+           "    // call is still to be made. false means the owner answered the",
+           "    // command itself - made the call, or refused it - and the",
+           "    // dispatch ends there with the frame decoded.",
+           "    void* av_hook_user = nullptr;",
+           "",
            "    // The vertex array objects a draw found reading only from",
            "    // buffers (arrays_verified). Mutable because dispatch is handed",
            "    // the table const: these are a cache of what the context would",
@@ -1673,6 +1687,10 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
     for cmd in reg.commands.values():
         params = ", ".join(p.type.cpp() for p in cmd.params) or "void"
         out.append(f"    {cmd.return_type.cpp()} (*{cmd.name})({params}) = nullptr;")
+    for name in HOST_HOOKED:
+        cmd = reg.commands[name]
+        params = ", ".join(["void*"] + [p.type.cpp() for p in cmd.params])
+        out.append(f"    bool (*av_hook_{name})({params}) = nullptr;")
     out += ["};", "",
             "// Fills the table. `load` is the platform's resolver:",
             "// eglGetProcAddress, glXGetProcAddress or wglGetProcAddress.",
@@ -1822,6 +1840,25 @@ BUFFER_WRITES = {
     "glVertexArrayElementBuffer": "::av::glicd::vertex_array_elements(vaobj, buffer)",
 }
 
+SLICED_PBO_REFUSED = {
+    "glBitmap": "refuse_sliced_unpack", "glPolygonStipple": "refuse_sliced_unpack",
+    "glPixelMapfv": "refuse_sliced_unpack", "glPixelMapuiv": "refuse_sliced_unpack",
+    "glPixelMapusv": "refuse_sliced_unpack",
+    "glGetPolygonStipple": "refuse_sliced_pack", "glGetPixelMapfv": "refuse_sliced_pack",
+    "glGetPixelMapuiv": "refuse_sliced_pack", "glGetPixelMapusv": "refuse_sliced_pack",
+}
+
+SLICED_BUFFER_ANSWERS = {
+    "glClearBufferData": "clear_bound_buffer(target, internalformat, format, type, data)",
+    "glClearBufferSubData": "clear_bound_buffer_range(target, internalformat, offset, size, format, type, data)",
+    "glClearNamedBufferData": "clear_named_buffer(buffer, internalformat, format, type, data)",
+    "glClearNamedBufferDataEXT": "clear_named_buffer(buffer, internalformat, format, type, data)",
+    "glClearNamedBufferSubData": "clear_named_buffer_range(buffer, internalformat, offset, size, format, type, data)",
+    "glClearNamedBufferSubDataEXT": "clear_named_buffer_range(buffer, internalformat, offset, size, format, type, data)",
+    "glInvalidateBufferData": "invalidate_named_buffer(buffer)",
+    "glInvalidateBufferSubData": "invalidate_named_buffer_range(buffer, offset, length)",
+}
+
 PACK_TARGET = "0x88EBu"
 QUERY_TARGET = "0x9192u"
 
@@ -1884,12 +1921,20 @@ def _icd_prologue(cmd: Command) -> list[str]:
         if p.role is Role.PIXELS_IN or p.role is Role.PIXELS_OUT:
             if cmd.name.startswith("glGetQueryObject"):
                 bound = "::av::glicd::query_buffer_bound()"
+                lines.append(f"    const bool av_{p.name}_offset = {bound};")
             else:
-                packing = "true" if p.role is Role.PIXELS_OUT else "false"
-                bound = f"::av::glicd::pixel_buffer_bound({packing})"
-            lines.append(f"    const bool av_{p.name}_offset = {bound};")
+                packing = p.role is Role.PIXELS_OUT
+                kind = "pack" if packing else "unpack"
+                lines.append(f"    const bool av_{p.name}_slice = "
+                             f"::av::glicd::{kind}_slice_bound();")
+                lines.append(f"    const bool av_{p.name}_offset = !av_{p.name}_slice && "
+                             f"::av::glicd::pixel_buffer_bound({'true' if packing else 'false'});")
             lines.append(f"    const size_t av_{p.name}_bytes = av_{p.name}_offset ? 0 : "
                          f"{_icd_pixel_bytes(cmd, p)};")
+            if not cmd.name.startswith("glGetQueryObject"):
+                kind = "pack" if p.role is Role.PIXELS_OUT else "unpack"
+                lines.append(f"    if (av_{p.name}_slice && !::av::glicd::slice_{kind}_pixels("
+                             f"{p.name}, av_{p.name}_bytes)) return;")
         if _stages(cmd, p):
             hook = ("stage_download" if p.role is Role.PIXELS_OUT
                     else "stage_upload")
@@ -1908,8 +1953,10 @@ def _icd_epilogue(cmd: Command) -> list[str]:
         if p.role is Role.PIXELS_OUT:
             lines.append(f"    if (av_{p.name}_staged) "
                          f"::av::glicd::finish_download({p.name}, av_{p.name}_bytes);")
+            lines.append(f"    if (av_{p.name}_slice) ::av::glicd::pack_slice_done();")
         else:
             lines.append(f"    if (av_{p.name}_staged) ::av::glicd::finish_upload();")
+            lines.append(f"    if (av_{p.name}_slice) ::av::glicd::unpack_slice_done();")
     return lines
 
 
@@ -2056,6 +2103,10 @@ def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
         for rewritten in _framebuffer_names(cmd):
             out.append(f"    {rewritten} = "
                        f"::av::glicd::framebuffer_name({rewritten});")
+        if cmd.name in SLICED_PBO_REFUSED:
+            out.append(f"    if (::av::glicd::{SLICED_PBO_REFUSED[cmd.name]}()) return;")
+        if cmd.name in SLICED_BUFFER_ANSWERS:
+            out.append(f"    if (::av::glicd::{SLICED_BUFFER_ANSWERS[cmd.name]}) return;")
         if _reads_buffers(cmd):
             out.append("    ::av::glicd::flush_persistent_mappings();")
         if cmd.name in BIND_SHADOW_FORGETS:

@@ -60,7 +60,7 @@ public:
     };
 
     GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
-                   ThreadLock &slice_lock, KeyedLog &lines, const GlExtensionPolicy &extensions, icd::SharedHandles &handles, int32_t pixel_format,
+                   SliceGroups &groups, KeyedLog &lines, const GlExtensionPolicy &extensions, icd::SharedHandles &handles, int32_t pixel_format,
                    const GlContextOptions &options);
     ~GuestGlContext();
     GuestGlContext(const GuestGlContext &) = delete;
@@ -79,6 +79,8 @@ public:
     uint64_t             share_target() const;
     [[nodiscard]] Status share(uint32_t share_name);
     void                 lend();
+    uint32_t             slice_group() const;
+    uint32_t             slices_owned() const;
     ClientTransport     *wire();
     uint32_t             guest_device() const;
     void                 flush();
@@ -95,6 +97,7 @@ public:
     MappedBuffers         &mappings();
     BufferShadows         &shadows();
     SlicedBuffers         &slices();
+    void                   read_sliced(uint32_t buffer, intptr_t offset, intptr_t size, void *data);
     GlExternalObjects     &externals();
     PixelStagingBuffer    &staging();
 

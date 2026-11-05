@@ -21,12 +21,9 @@ namespace {
 
 constexpr uint32_t gl_context_profile_mask = 0x9126u, gl_context_core_profile_bit = 0x1u;
 constexpr uint32_t error_flags = 8u;
-constexpr uint32_t gl_context_lost = 0x0507u;
 constexpr uint32_t gl_sync_flush_commands_bit = 0x1u;
 constexpr uint32_t gl_already_signaled = 0x911Au, gl_condition_satisfied = 0x911Cu;
 constexpr uint32_t gl_out_of_memory = 0x0505u;
-constexpr uint32_t gl_invalid_value = 0x0501u;
-constexpr uint32_t gl_invalid_operation = 0x0502u;
 
 constexpr GLenum gl_device_node_mask = 0x959Au;
 
@@ -111,9 +108,9 @@ OpenGlBackend::OpenGlBackend(DriverLog &lines) : OpenGlBackend(heap_, lines)
 }
 
 OpenGlBackend::OpenGlBackend(BlockSource &blocks, DriverLog &lines)
-    : glmemproto::ServerDispatch(guest_), heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), memories_(blocks, progress_), guest_(), region_(guest_), published_(guest_), errors_(),
+    : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), pending_(gl_, errors_), slices_(blocks, gl_, import_, progress_, pending_, guest_, lines), guest_(), region_(guest_), published_(guest_), errors_(),
       resolved_(0u), ran_(0u),
-      lost_(false), current_(false), lines_(lines)
+      current_(false), lines_(lines)
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
 }
@@ -150,6 +147,7 @@ void OpenGlBackend::install_hooks()
     gl_.av_pack_blob = pack_blob;
     gl_.av_unpack_blob = unpack_blob;
     gl_.av_blob_user = this;
+    slices_.install();
 }
 
 bool OpenGlBackend::granted_fixed_function()
@@ -170,7 +168,7 @@ void OpenGlBackend::shut_down()
         pack_.release();
         pack_.abandon();
         buffers_.give_back();
-        memories_.destroy_all(import_);
+        slices_.destroy_all();
         import_.give_back();
         progress_.release();
         void *fence = nullptr;
@@ -184,16 +182,16 @@ void OpenGlBackend::shut_down()
     natives_.give_back();
     wake_.unbind();
     context_.close();
+    pending_.recover();
     gl_ = glproto::RealGl{};
     resolved_ = 0u;
     ran_ = 0u;
-    lost_ = false;
 }
 
 bool OpenGlBackend::knows(uint32_t command_id) const
 {
     AV_SCOPE("OpenGlBackend::knows");
-    return glproto::knows_command(command_id) || glmemproto::knows_command(command_id);
+    return glproto::knows_command(command_id) || slices_.knows(command_id);
 }
 
 bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -205,11 +203,7 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
         return false;
     }
     current_ = true;
-    if (glmemproto::knows_command(command_id)) {
-        if (glmemproto::dispatch_command(*this, command_id, payload, reply, arena)) return true;
-        LogLine(lines_).text(glmemproto::command_name(command_id)).text(" could not run").write();
-        return false;
-    }
+    if (slices_.knows(command_id)) return slices_.run(command_id, payload, reply, arena);
     if (!glproto::dispatch_command(gl_, command_id, payload, reply, arena)) {
         LogLine(lines_).text(glproto::cmd_id_to_string(command_id)).text(" could not run").write();
         return false;
@@ -227,7 +221,7 @@ bool OpenGlBackend::poll()
     }
     if (!context_.make_current()) return false;
     static_cast<void>(progress_.settle());
-    memories_.reclaim(import_);
+    slices_.reclaim();
     const bool unwatched = progress_.polled();
     if (unwatched) wake_.retry_later();
     else wake_.settled();
@@ -253,7 +247,7 @@ void OpenGlBackend::end_batch()
     if (current_ && context_.make_current()) {
         publish_errors();
         progress_.fence();
-        memories_.reclaim(import_);
+        slices_.reclaim();
     }
     current_ = false;
 }
@@ -262,12 +256,7 @@ void OpenGlBackend::publish_errors()
 {
     AV_SCOPE("OpenGlBackend::publish_errors");
     if (gl_.glGetError == nullptr) return;
-    for (uint32_t flag = 0u; flag < error_flags; flag++) {
-        const uint32_t error = gl_.glGetError();
-        if (error == 0u) break;
-        if (error == gl_context_lost) lost_ = true;
-        errors_.record(error);
-    }
+    pending_.collect();
     static_cast<void>(published_.publish_error_word(errors_.word()));
 }
 
@@ -280,7 +269,7 @@ bool OpenGlBackend::lose_device()
 bool OpenGlBackend::lost() const
 {
     AV_SCOPE("OpenGlBackend::lost");
-    return lost_;
+    return pending_.lost();
 }
 
 bool OpenGlBackend::adopt(SourceMemory &memory, uint64_t &handle)
@@ -306,7 +295,7 @@ bool OpenGlBackend::lend(const SourceMemory &memory, uint64_t &handle)
         LogLine(lines_).text("no memory object over ").number(memory.size()).text(" lent bytes").write();
         return false;
     }
-    if (memories_.add(name, memory.size()) != Status::ok) {
+    if (slices_.add_memory(name, memory.size()) != Status::ok) {
         import_.delete_memory(name);
         LogLine(lines_).text("no room to track the memory object over ").number(memory.size()).text(" lent bytes").write();
         return false;
@@ -331,8 +320,8 @@ void OpenGlBackend::abandon(const SourceMemory &memory, uint64_t handle)
 {
     AV_SCOPE("OpenGlBackend::abandon");
     if (!region_.is(memory)) {
-        memories_.retire(static_cast<uint32_t>(handle));
-        memories_.reclaim(import_);
+        slices_.retire_memory(static_cast<uint32_t>(handle));
+        slices_.reclaim();
         return;
     }
     region_.abandon(memory);
@@ -412,7 +401,7 @@ bool OpenGlBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
     if (kind == AV_SHARED_MEMORY) {
         if (handle_kind != AV_SHARED_HANDLE_DMA_BUF || size == 0u || !import_.import_dedicated_memory(fd, size, name))
             return false;
-        if (memories_.add(name, size) != Status::ok) {
+        if (slices_.add_memory(name, size) != Status::ok) {
             import_.delete_memory(name);
             return false;
         }
@@ -431,43 +420,12 @@ void OpenGlBackend::release_object(uint32_t kind, uint64_t wire_handle, uint64_t
     destroy_made(kind, static_cast<uint32_t>(wire_handle));
 }
 
-bool OpenGlBackend::on_QueryBufferSlicesGL(uint32_t &supported)
-{
-    AV_SCOPE("OpenGlBackend::on_QueryBufferSlicesGL");
-    supported = import_.places_buffers() && gl_.glNamedBufferStorageMemEXT != nullptr && progress_.fences() ? 1u : 0u;
-    return true;
-}
-
-bool OpenGlBackend::on_PlaceBufferSlice(uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes)
-{
-    AV_SCOPE("OpenGlBackend::on_PlaceBufferSlice");
-    if (!import_.places_buffers() || gl_.glNamedBufferStorageMemEXT == nullptr || memory > UINT32_MAX) {
-        errors_.record(gl_invalid_operation);
-        return true;
-    }
-    const Status placed = memories_.place(buffer, static_cast<uint32_t>(memory), offset, bytes);
-    if (placed != Status::ok) {
-        LogLine(lines_).text("a buffer slice was refused, status ").number(static_cast<uint32_t>(placed)).write();
-        errors_.record(placed == Status::no_memory ? gl_out_of_memory : gl_invalid_value);
-        return true;
-    }
-    gl_.glNamedBufferStorageMemEXT(buffer, static_cast<GLsizeiptr>(bytes), static_cast<GLuint>(memory), offset);
-    return true;
-}
-
-bool OpenGlBackend::on_ForgetBufferSlice(uint32_t buffer)
-{
-    AV_SCOPE("OpenGlBackend::on_ForgetBufferSlice");
-    memories_.leave(buffer);
-    return true;
-}
-
 void OpenGlBackend::destroy_made(uint32_t kind, uint32_t name)
 {
     AV_SCOPE("OpenGlBackend::destroy_made");
     if (kind == AV_SHARED_MEMORY) {
-        memories_.retire(name);
-        memories_.reclaim(import_);
+        slices_.retire_memory(name);
+        slices_.reclaim();
         return;
     }
     import_.delete_semaphore(name);

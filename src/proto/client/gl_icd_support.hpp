@@ -44,6 +44,24 @@ bool             answer_buffer_map_state(GLenum target, GLenum pname, GLint *par
 bool             answer_buffer_map_state(GLenum target, GLenum pname, GLint64 *params) noexcept;
 bool             answer_named_buffer_map_state(GLuint buffer, GLenum pname, GLint *params) noexcept;
 bool             answer_named_buffer_map_state(GLuint buffer, GLenum pname, GLint64 *params) noexcept;
+bool             unpack_slice_bound() noexcept;
+bool             slice_unpack_pixels(const void *&pixels, size_t bytes) noexcept;
+void             unpack_slice_done() noexcept;
+bool             pack_slice_bound() noexcept;
+bool             slice_pack_pixels(void *&pixels, size_t bytes) noexcept;
+void             pack_slice_done() noexcept;
+bool             refuse_sliced_unpack() noexcept;
+bool             refuse_sliced_pack() noexcept;
+bool             clear_bound_buffer(GLenum target, GLenum internalformat, GLenum format, GLenum type,
+                                    const void *data) noexcept;
+bool             clear_bound_buffer_range(GLenum target, GLenum internalformat, GLintptr offset, GLsizeiptr size,
+                                          GLenum format, GLenum type, const void *data) noexcept;
+bool             clear_named_buffer(GLuint buffer, GLenum internalformat, GLenum format, GLenum type,
+                                    const void *data) noexcept;
+bool             clear_named_buffer_range(GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size,
+                                          GLenum format, GLenum type, const void *data) noexcept;
+bool             invalidate_named_buffer(GLuint buffer) noexcept;
+bool             invalidate_named_buffer_range(GLuint buffer, GLintptr offset, GLsizeiptr length) noexcept;
 bool             legacy_calls_live() noexcept;
 void             refuse_legacy() noexcept;
 

@@ -110,7 +110,7 @@ private:
     void     fail(uint32_t error);
     uint32_t made_error(Status status) const;
     uint32_t make_error(Status status, const GlContextOptions &options) const;
-    GuestGlContext *shared_context(void *share);
+    GuestGlContext *shared_context(void *share, uint64_t &handle);
     bool            shares_into(uint64_t first, uint64_t second) const;
     [[nodiscard]] Status make_chain(GuestGlContext &context);
     GuestGlContext      &farthest_unmade(GuestGlContext &context) const;

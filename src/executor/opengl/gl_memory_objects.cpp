@@ -20,18 +20,26 @@ Status GlMemoryObjects::add(uint32_t name, uint64_t size)
     return memories_.insert(name, Memory{size, 0u, 0u, false}, slot);
 }
 
+Status GlMemoryObjects::admit(uint32_t buffer, uint32_t name, uint64_t offset, uint64_t bytes)
+{
+    AV_SCOPE("GlMemoryObjects::admit");
+    const Memory *const memory = memories_.find(name);
+    if (buffer == 0u || memory == nullptr || memory->retired_ || bytes == 0u) return Status::invalid_parameter;
+    if (offset > memory->size_ || bytes > memory->size_ - offset) return Status::invalid_parameter;
+    if (placements_.count() >= most_placements) return Status::no_memory;
+    return placements_.reserve(placements_.count() + 1u);
+}
+
 Status GlMemoryObjects::place(uint32_t buffer, uint32_t name, uint64_t offset, uint64_t bytes)
 {
     AV_SCOPE("GlMemoryObjects::place");
-    Memory *const memory = memories_.find(name);
-    if (buffer == 0u || memory == nullptr || memory->retired_ || bytes == 0u) return Status::invalid_parameter;
-    if (offset > memory->size_ || bytes > memory->size_ - offset) return Status::invalid_parameter;
+    const Status admitted = admit(buffer, name, offset, bytes);
+    if (admitted != Status::ok) return admitted;
     leave(buffer);
-    if (placements_.count() >= most_placements) return Status::no_memory;
     uint32_t slot = 0u;
     const Status held = placements_.insert(buffer, name, slot);
     if (held != Status::ok) return held;
-    memory->placed_++;
+    memories_.find(name)->placed_++;
     return Status::ok;
 }
 

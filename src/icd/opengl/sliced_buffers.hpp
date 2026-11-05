@@ -1,11 +1,11 @@
 #ifndef AV_GLICD_SLICED_BUFFERS_HPP
 #define AV_GLICD_SLICED_BUFFERS_HPP
 
-#include "core/support/keyed_slots.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "icd/common/stream_memory.hpp"
 #include "icd/opengl/gl_poll_clock.hpp"
+#include "icd/opengl/slice_groups.hpp"
 #include "proto/resources/host_memory_request.hpp"
 
 #include <stdint.h>
@@ -16,7 +16,6 @@ class ClientTransport;
 class DriverLog;
 class Kmt;
 class StateWriter;
-class ThreadLock;
 }
 
 namespace av::icd {
@@ -30,6 +29,8 @@ struct SlicedBuffersProbe;
 
 class SlicedBuffers {
 public:
+    using Row = SliceGroups::Row;
+
     static constexpr uint64_t most_bytes = uint64_t{64} << 20u;
     static constexpr uint64_t alignment = icd::StreamMemory::smallest;
     static constexpr int64_t  whole_buffer = -1;
@@ -41,8 +42,8 @@ public:
         gl_buffer_map_length = 0x9120u, gl_buffer_map_offset = 0x9121u, gl_buffer_storage_flags = 0x8220u,
     };
 
-    SlicedBuffers(BlockSource &memory, icd::HostChannel &channel, icd::GpuTimeline &timeline, ThreadLock &lock,
-                  DriverLog &lines, const void *owner);
+    SlicedBuffers(BlockSource &memory, icd::HostChannel &channel, icd::GpuTimeline &timeline, SliceGroups &groups,
+                  uint32_t group, DriverLog &lines, const void *owner);
     SlicedBuffers(const SlicedBuffers &) = delete;
     SlicedBuffers &operator=(const SlicedBuffers &) = delete;
 
@@ -50,53 +51,59 @@ public:
     void stop_placing();
     void release();
 
-    bool offers(uint64_t size, uint32_t flags) const;
+    bool offers(int64_t size, uint32_t flags) const;
     [[nodiscard]] Status place(ClientTransport &wire, uint32_t buffer, uint64_t size, uint32_t flags,
                                const void *data);
-    void                 forget(ClientTransport &wire, int32_t count, const uint32_t *buffers);
+    void                 forget(int32_t count, const uint32_t *buffers);
+    void                 release_row(uint32_t buffer, const Row &row);
     void                 trim();
 
+    uint8_t *view_of(const Row &row) const;
     bool     holds(uint32_t buffer) const;
     uint32_t map(uint32_t buffer, int64_t offset, int64_t length, uint32_t access, void *&pointer);
     uint32_t unmap(uint32_t buffer);
     uint32_t mark(uint32_t buffer, int64_t offset, int64_t length);
     uint32_t read(uint32_t buffer, int64_t offset, int64_t size, void *data);
+    uint32_t unpack_source(uint32_t buffer, uint64_t offset, uint64_t bytes, const uint8_t *&data);
+    uint32_t pack_target(uint32_t buffer, uint64_t offset, uint64_t bytes, uint8_t *&data);
+    uint32_t clear_all(uint32_t buffer, uint32_t internal_format, uint32_t format, uint32_t type, const void *data);
+    uint32_t clear_range(uint32_t buffer, uint32_t internal_format, int64_t offset, int64_t size, uint32_t format,
+                         uint32_t type, const void *data);
+    uint32_t invalidate(uint32_t buffer, int64_t offset, int64_t length);
     void    *pointer_of(uint32_t buffer) const;
     bool     mapping(uint32_t buffer, uint32_t &access, uint64_t &offset, uint64_t &bytes) const;
     bool     storage_flags(uint32_t buffer, int64_t &value) const;
     uint32_t held() const;
+    uint32_t owned() const;
+    uint32_t group() const;
 
     void report(StateWriter &writer) const;
 
     bool invariants_hold() const;
 
 private:
-    struct Row {
-        icd::StreamMemory::Slice slice_;
-        uint64_t                 size_;
-        uint32_t                 flags_;
-        uint32_t                 access_;
-        uint64_t                 map_offset_;
-        uint64_t                 map_bytes_;
-        HostMemoryRequest::Kind  kind_;
-    };
-
     static constexpr uint32_t stream_kinds = 2u;
+    static constexpr uint32_t upload_stream = 0u;
+    static constexpr uint32_t readback_stream = 1u;
+    static constexpr HostMemoryRequest::Kind stream_requests_[stream_kinds] = {HostMemoryRequest::Kind::upload,
+                                                                               HostMemoryRequest::Kind::readback};
 
-    icd::StreamMemory *stream_of(HostMemoryRequest::Kind kind);
-    icd::StreamMemory *made_stream(HostMemoryRequest::Kind kind);
-    uint32_t           stream_index(HostMemoryRequest::Kind kind) const;
+    icd::StreamMemory *stream_of(uint32_t stream);
+    icd::StreamMemory *made_stream(uint32_t stream);
+    bool               snapshot(uint32_t buffer, Row &copy) const;
     uint32_t           access_error(const Row &row, int64_t offset, int64_t length, uint32_t access) const;
+    uint32_t           window_error(const Row &row, uint64_t offset, uint64_t bytes) const;
+    bool               settled(const Row &row);
 
     BlockSource                     &memory_;
     icd::HostChannel                &channel_;
     icd::GpuTimeline                &timeline_;
-    ThreadLock                      &lock_;
+    SliceGroups                     &groups_;
+    uint32_t                         group_;
     DriverLog                       &lines_;
     const void                      *owner_;
     GlPollClock                      clock_;
     ObjectStorage<icd::StreamMemory> streams_[stream_kinds];
-    KeyedSlots<uint32_t, Row>        rows_;
     bool                             granted_;
     bool                             stopped_;
 

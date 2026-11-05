@@ -10,14 +10,14 @@
 #include "executor/session_backend.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/opengl/gl_batch_progress.hpp"
-#include "executor/opengl/gl_memory_objects.hpp"
+#include "executor/opengl/gl_buffer_slices.hpp"
+#include "executor/opengl/gl_error_queue.hpp"
 #include "executor/opengl/sync_tokens.hpp"
 #include "executor/shim/gl_context.hpp"
 #include "executor/opengl/gl_pack_buffer.hpp"
 #include "executor/shim/gl_host_import.hpp"
 #include "executor/shim/gl_native_fences.hpp"
 #include "executor/shim/gl_shared_buffer.hpp"
-#include "proto/generated/glmem/glmem_dispatch_server.h"
 #include "proto/generated/opengl/gl_real_dispatch.h"
 
 #include <stdint.h>
@@ -31,7 +31,7 @@ class SharedImageShape;
 class GlDisplay;
 class SourceMemory;
 
-class OpenGlBackend final : public SessionBackend, public glmemproto::ServerDispatch {
+class OpenGlBackend final : public SessionBackend {
 public:
     explicit OpenGlBackend(DriverLog &lines);
     OpenGlBackend(BlockSource &blocks, DriverLog &lines);
@@ -60,10 +60,6 @@ public:
                                      uint64_t &wire_handle, uint64_t &detail) override;
     void               release_object(uint32_t kind, uint64_t wire_handle, uint64_t detail) override;
 
-    bool on_QueryBufferSlicesGL(uint32_t &supported) override;
-    bool on_PlaceBufferSlice(uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes) override;
-    bool on_ForgetBufferSlice(uint32_t buffer) override;
-
     [[nodiscard]] bool bind_fence(uint64_t token, void *fence);
     void              *fence_for(uint64_t token) const;
     void              *forget_fence(uint64_t token);
@@ -91,14 +87,14 @@ private:
     GlPackBuffer    pack_;
     SyncTokens  fences_;
     GlBatchProgress progress_;
-    GlMemoryObjects memories_;
+    GlErrorQueue    pending_;
+    GlBufferSlices  slices_;
     GuestBytes  guest_;
     GuestRegion region_;
     PublishedSlots published_;
     GlErrorWord  errors_;
     uint32_t    resolved_;
     uint64_t    ran_;
-    bool        lost_;
     bool        current_;
     DriverLog  &lines_;
 

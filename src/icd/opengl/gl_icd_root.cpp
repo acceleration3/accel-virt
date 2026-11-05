@@ -106,8 +106,8 @@ GlIcdRoot::GlIcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock
       query_(formats_), windows_(memory), currents_(slot), connection_(memory, kmt, 0u),
       extensions_(reported_extensions, reported_count, reported_wgl_extensions, reported_wgl_count),
       shared_handles_(kmt, lock, memory),
-      contexts_(memory, connection_, send_lock, slice_lock, lines_, extensions_, shared_handles_),
-      manual_(currents_, kmt), callbacks_{}, callback_count_(0u), proc_table_(), pending_(memory, Pool::paged), sync_tokens_()
+      contexts_(memory, connection_, lock, send_lock, slice_lock, lines_, extensions_, shared_handles_),
+      manual_(currents_, contexts_, kmt), callbacks_{}, callback_count_(0u), proc_table_(), pending_(memory, Pool::paged), sync_tokens_()
 {
     AV_SCOPE("GlIcdRoot::GlIcdRoot");
     generated::fill_proc_table(proc_table_);
@@ -275,11 +275,10 @@ bool GlIcdRoot::share_lists(uint64_t first, uint64_t second)
         return false;
     }
     if (target->state() == GuestGlContext::State::lost || shares_into(first, second) ||
-        sharer->share_after(first) != Status::ok) {
+        contexts_.join(second, first) != Status::ok) {
         fail(error_invalid_operation);
         return false;
     }
-    target->lend();
     return true;
 }
 
@@ -410,14 +409,14 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
     }
     const GlContextOptions options = attribs.options();
     uint32_t               share_name = 0u;
+    uint64_t               share_handle = 0u;
     if (share != nullptr) {
-        GuestGlContext *const target = shared_context(share);
+        GuestGlContext *const target = shared_context(share, share_handle);
         if (target == nullptr) {
             fail(error_invalid_operation);
             return nullptr;
         }
         share_name = target->share_name();
-        target->lend();
     }
     const uint32_t thread = slot_.thread_id();
     uint64_t       handle = 0u;
@@ -431,8 +430,13 @@ void *GlIcdRoot::create_context_attribs(void *dc, void *share, const int32_t *at
         return nullptr;
     }
     GuestGlContext *const context = contexts_.resolve(handle);
-    if (share_name != 0u) static_cast<void>(context->share(share_name));
-    const Status made = context->make();
+    Status                grouped = Status::ok;
+    if (share_name != 0u) {
+        const ThreadLockHold locked(lock_);
+        grouped = contexts_.join(handle, share_handle);
+        if (grouped == Status::ok) static_cast<void>(context->share(share_name));
+    }
+    const Status made = grouped == Status::ok ? context->make() : grouped;
     Status       pended = made;
     if (made == Status::ok) {
         const ThreadLockHold locked(lock_);
@@ -699,17 +703,20 @@ GuestGlContext &GlIcdRoot::farthest_unmade(GuestGlContext &context) const
     return *link;
 }
 
-GuestGlContext *GlIcdRoot::shared_context(void *share)
+GuestGlContext *GlIcdRoot::shared_context(void *share, uint64_t &handle)
 {
     AV_SCOPE("GlIcdRoot::shared_context");
+    handle = 0u;
     if (callback_count_ <= callback_get_dhglrc) return nullptr;
     using GetDhglrc = uintptr_t (APIENTRY *)(void *);
-    const uintptr_t handle = reinterpret_cast<GetDhglrc>(callbacks_[callback_get_dhglrc])(share);
+    const uintptr_t found = reinterpret_cast<GetDhglrc>(callbacks_[callback_get_dhglrc])(share);
     const ThreadLockHold release(lock_);
-    GuestGlContext *const target = contexts_.resolve(handle);
+    GuestGlContext *const target = contexts_.resolve(found);
     if (target == nullptr) return nullptr;
     if (target->state() == GuestGlContext::State::created && make_chain(*target) != Status::ok) return nullptr;
-    return target->wire() != nullptr ? target : nullptr;
+    if (target->wire() == nullptr) return nullptr;
+    handle = found;
+    return target;
 }
 
 }

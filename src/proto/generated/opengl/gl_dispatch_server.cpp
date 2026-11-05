@@ -4169,6 +4169,7 @@ static bool decode_glDeleteBuffers(const RealGl& av_gl, ::av::WireReader& av_r, 
     if (__builtin_mul_overflow(buffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &buffers_needed)) return false;
     if (buffers == nullptr ? (buffers_needed != 0 && !(false)) : buffers_room < buffers_needed) return false;
     if (av_gl.glDeleteBuffers == nullptr) return false;
+    if (av_gl.av_hook_glDeleteBuffers != nullptr && !av_gl.av_hook_glDeleteBuffers(av_gl.av_hook_user, n, buffers)) return true;
     av_gl.glDeleteBuffers(n, buffers);
     return true;
 }
@@ -35632,6 +35633,7 @@ static bool decode_glBufferStorageMemEXT(const RealGl& av_gl, ::av::WireReader& 
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glBufferStorageMemEXT == nullptr) return false;
+    if (av_gl.av_hook_glBufferStorageMemEXT != nullptr && !av_gl.av_hook_glBufferStorageMemEXT(av_gl.av_hook_user, target, size, memory, offset)) return true;
     av_gl.glBufferStorageMemEXT(target, size, memory, offset);
     return true;
 }
@@ -35705,6 +35707,7 @@ static bool decode_glDeleteMemoryObjectsEXT(const RealGl& av_gl, ::av::WireReade
     if (__builtin_mul_overflow(memoryObjects_elements, static_cast<uint64_t>(sizeof(GLuint)), &memoryObjects_needed)) return false;
     if (memoryObjects == nullptr ? (memoryObjects_needed != 0 && !(false)) : memoryObjects_room < memoryObjects_needed) return false;
     if (av_gl.glDeleteMemoryObjectsEXT == nullptr) return false;
+    if (av_gl.av_hook_glDeleteMemoryObjectsEXT != nullptr && !av_gl.av_hook_glDeleteMemoryObjectsEXT(av_gl.av_hook_user, n, memoryObjects)) return true;
     av_gl.glDeleteMemoryObjectsEXT(n, memoryObjects);
     return true;
 }
@@ -36274,6 +36277,7 @@ static bool decode_glNamedBufferStorageMemEXT(const RealGl& av_gl, ::av::WireRea
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       offset = static_cast<GLuint64>(av_v); }
     if (av_gl.glNamedBufferStorageMemEXT == nullptr) return false;
+    if (av_gl.av_hook_glNamedBufferStorageMemEXT != nullptr && !av_gl.av_hook_glNamedBufferStorageMemEXT(av_gl.av_hook_user, buffer, size, memory, offset)) return true;
     av_gl.glNamedBufferStorageMemEXT(buffer, size, memory, offset);
     return true;
 }

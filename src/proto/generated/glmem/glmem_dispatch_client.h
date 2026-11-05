@@ -20,10 +20,12 @@ namespace av::glmemproto {
 [[nodiscard]] bool av_glmem_QueryBufferSlicesGL(::av::ClientTransport& t, uint32_t* supported);
 // The buffer `buffer` of the context, which has no storage yet, from now on is `bytes` at `offset` of the memory object
 // `memory` - a block of the context's slice memory, named by the handle IMPORT_BLOB answered (docs/host-memory.md) - which the
-// guest writes and the host GPU reads or writes in place. A `memory` the context did not import, or an `offset` and `bytes`
-// that are not inside it, places nothing and records GL_INVALID_VALUE. The host keeps an imported block until its GPU work has
-// run and every buffer placed in it was forgotten.
-[[nodiscard]] bool av_glmem_PlaceBufferSlice(::av::ClientTransport& t, uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes);
+// guest writes and the host GPU reads or writes in place. Answers 1 when the host placed it, and 0 when it did not: a `memory`
+// the context did not import, an `offset` and `bytes` that are not inside it, a buffer that already has immutable storage, or a
+// host GL that refused the storage. A refusal records no GL error and counts nothing; the guest then specifies the buffer's
+// storage the ordinary way. The host keeps an imported block until its GPU work has run and every buffer placed in it was
+// forgotten or deleted.
+[[nodiscard]] bool av_glmem_PlaceBufferSlice(::av::ClientTransport& t, uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes, uint32_t* placed);
 // The buffer was placed in a slice (PlaceBufferSlice) and is deleted by the commands before this one: the host stops
 // counting it among the buffers that keep the block it was placed in.
 [[nodiscard]] bool av_glmem_ForgetBufferSlice(::av::ClientTransport& t, uint32_t buffer);

@@ -34,13 +34,13 @@ constexpr uint32_t no_error = 0u;
 }
 
 GuestGlContext::GuestGlContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
-                               ThreadLock &slice_lock, KeyedLog &lines, const GlExtensionPolicy &extensions,
+                               SliceGroups &groups, KeyedLog &lines, const GlExtensionPolicy &extensions,
                                icd::SharedHandles &handles, int32_t pixel_format,
                                const GlContextOptions &options)
     : memory_(memory), lines_(lines), policy_(extensions),
       pixel_format_(pixel_format),
       options_(options), state_(State::created), owner_(0u), current_dc_(nullptr), been_current_(false), error_(no_error), share_target_(0u), link_(connection), loss_(lines), loss_reported_(false),
-      channel_(memory, lines, icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_, send_lock), extensions_(memory), framebuffers_(memory, lines), shadows_(memory), staging_(), slices_(memory, channel_, timeline_, slice_lock, lines, this), mappings_(memory, shadows_, slices_, lines), externals_(handles, memory, lines), pinned_(memory, channel_),
+      channel_(memory, lines, icd::ChannelShape(SubApi::opengl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes), send_lock), reported_(), arrays_(memory), uniforms_(memory), queries_(), profile_(), pacing_(), frames_(), timeline_(channel_, send_lock), extensions_(memory), framebuffers_(memory, lines), shadows_(memory), staging_(), slices_(memory, channel_, timeline_, groups, groups.mint(), lines, this), mappings_(memory, shadows_, slices_, lines), externals_(handles, memory, lines), pinned_(memory, channel_),
       strings_{},
       debug_callback_(0u), debug_user_(0u), luid_(0u)
 {
@@ -274,6 +274,13 @@ SlicedBuffers &GuestGlContext::slices()
     return slices_;
 }
 
+void GuestGlContext::read_sliced(uint32_t buffer, intptr_t offset, intptr_t size, void *data)
+{
+    AV_SCOPE("GuestGlContext::read_sliced");
+    const uint32_t error = slices_.read(buffer, offset, size, data);
+    if (error != SlicedBuffers::gl_no_error) record(error);
+}
+
 PixelStagingBuffer &GuestGlContext::staging()
 {
     AV_SCOPE("GuestGlContext::staging");
@@ -284,7 +291,18 @@ void GuestGlContext::lend()
 {
     AV_SCOPE("GuestGlContext::lend");
     shadows_.distrust();
-    slices_.stop_placing();
+}
+
+uint32_t GuestGlContext::slice_group() const
+{
+    AV_SCOPE("GuestGlContext::slice_group");
+    return slices_.group();
+}
+
+uint32_t GuestGlContext::slices_owned() const
+{
+    AV_SCOPE("GuestGlContext::slices_owned");
+    return slices_.owned();
 }
 
 GlExternalObjects &GuestGlContext::externals()

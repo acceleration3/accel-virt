@@ -21,6 +21,7 @@ public:
     GlMemoryObjects &operator=(const GlMemoryObjects &) = delete;
 
     [[nodiscard]] Status add(uint32_t name, uint64_t size);
+    [[nodiscard]] Status admit(uint32_t buffer, uint32_t name, uint64_t offset, uint64_t bytes);
     [[nodiscard]] Status place(uint32_t buffer, uint32_t name, uint64_t offset, uint64_t bytes);
     void                 leave(uint32_t buffer);
     void                 retire(uint32_t name);
