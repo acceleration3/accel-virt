@@ -59,7 +59,7 @@ TEST(loopback_capset, the_driver_reads_the_devices_capset_and_refuses_another_ma
   CHECK(rig.device().device().realized());
   CHECK(rig.read_capset());
   CapsetQuery other(rig.platform());
-  rig.driver().tamper_answer(2u, capset_major_offset, 2u);
+  rig.driver().tamper_answer(2u, capset_major_offset, static_cast<std::uint8_t>(ProtocolVersion::current_major + 1u));
   CHECK(rig.driver().query(other) != Status::ok);
   CHECK(other.failed());
   CHECK(other.invariants_hold()); }
@@ -96,10 +96,10 @@ TEST(loopback_capset, the_device_refuses_a_setup_of_another_major)
                    Status::ok);
       CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
   }
-  CHECK_STATUS(writer.setup(5u, ContextSetup(ProtocolVersion(2u, 0u), SubApi::vulkan, 40u, 12u, 41u, 3u, 42u)),
+  CHECK_STATUS(writer.setup(5u, ContextSetup(ProtocolVersion(ProtocolVersion::current_major + 1u, 0u), SubApi::vulkan, 40u, 12u, 41u, 3u, 42u)),
                Status::ok);
   CHECK(answer_type(rig, writer, request) != GpuResponse::ok_nodata);
-  CHECK_STATUS(writer.setup(5u, ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, 40u, 12u, 41u, 3u, 42u)),
+  CHECK_STATUS(writer.setup(5u, ContextSetup(ProtocolVersion(ProtocolVersion::current_major, ProtocolVersion::current_minor), SubApi::vulkan, 40u, 12u, 41u, 3u, 42u)),
                Status::ok);
   CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
   CHECK_STATUS(writer.destroy_context(5u), Status::ok);

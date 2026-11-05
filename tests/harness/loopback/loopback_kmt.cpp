@@ -232,7 +232,7 @@ Status LoopbackKmt::create_context_virtual(std::uint32_t, const std::uint8_t *pr
     const std::uint32_t doorbell = next_doorbell_++;
     std::uint8_t     request[AvRequestWriter::max_request_size] = {};
     AvRequestWriter created(request, sizeof request);
-    const ContextSetup setup(ProtocolVersion(1u, 0u), record.sub_api(), ring_id, record.ring_order(), fence_id,
+    const ContextSetup setup(ProtocolVersion(ProtocolVersion::current_major, ProtocolVersion::current_minor), record.sub_api(), ring_id, record.ring_order(), fence_id,
                              doorbell, reply_id);
     AvRequestWriter set(request, sizeof request);
     if (created.create_context(handle, av_capset, "loopback", 8u) != Status::ok || !control(request, created.length()) ||

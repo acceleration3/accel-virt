@@ -39,7 +39,7 @@ bool LoopbackRig::read_capset() { return driver_.query(query_) == Status::ok && 
 Status LoopbackRig::set_up(std::uint32_t index)
 {
     const std::uint32_t base = (index + 1u) * resources_per_context;
-    const ContextSetup  setup(ProtocolVersion(1u, 0u), SubApi::vulkan, base, ring_order, base + 1u, line(index),
+    const ContextSetup  setup(ProtocolVersion(ProtocolVersion::current_major, ProtocolVersion::current_minor), SubApi::vulkan, base, ring_order, base + 1u, line(index),
                               base + 2u);
     if (context(index).state() == GuestContext::State::idle) {
         memory(index).release();
