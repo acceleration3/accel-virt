@@ -305,6 +305,18 @@ uint32_t GuestGlContext::slices_owned() const
     return slices_.owned();
 }
 
+uint32_t GuestGlContext::slices_pinned() const
+{
+    AV_SCOPE("GuestGlContext::slices_pinned");
+    return slices_.pinned();
+}
+
+uint32_t GuestGlContext::slices_busy() const
+{
+    AV_SCOPE("GuestGlContext::slices_busy");
+    return slices_.busy();
+}
+
 GlExternalObjects &GuestGlContext::externals()
 {
     AV_SCOPE("GuestGlContext::externals");
@@ -452,6 +464,7 @@ Status GuestGlContext::build()
     GuestConnection &device = link_.device();
     const Status     opened = channel_.open(device, options_);
     if (opened != Status::ok) return opened == Status::no_memory ? Status::no_memory : Status::invalid_parameter;
+    if (slices_.enroll() != Status::ok) return Status::no_memory;
     static_cast<void>(pacing_.bind(device.kmt(), lines_, device.adapter(), device.device()));
     if (device.kmt().adapter_luid(device.adapter(), luid_) != Status::ok) luid_ = 0u;
     return Status::ok;

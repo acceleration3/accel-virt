@@ -80,13 +80,14 @@ bool GlContextTable::shares_live(const GuestGlContext &context) const
 bool GlContextTable::retires(const GuestGlContext &context) const
 {
     AV_SCOPE("GlContextTable::retires");
-    return context.slices_owned() != 0u && shares_live(context);
+    return context.slices_busy() != 0u && shares_live(context);
 }
 
 bool GlContextTable::reapable(const GuestGlContext &context) const
 {
     AV_SCOPE("GlContextTable::reapable");
-    return context.slices_owned() == 0u || !shares_live(context);
+    const uint32_t owned = context.slices_owned();
+    return context.slices_pinned() == 0u && (owned == 0u || !shares_live(context));
 }
 
 Status GlContextTable::destroy(uint64_t handle)

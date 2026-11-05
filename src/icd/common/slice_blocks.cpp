@@ -191,7 +191,9 @@ uint64_t SliceBlocks::bytes_of(uint32_t slot) const
 uint8_t *SliceBlocks::view(uint64_t offset) const
 {
     AV_SCOPE("SliceBlocks::view");
-    return blocks_[slot_of(offset)].object().view() + within(offset);
+    const uint32_t slot = slot_of(offset);
+    if (!holds(slot) || within(offset) >= blocks_[slot].object().bytes()) return nullptr;
+    return blocks_[slot].object().view() + within(offset);
 }
 
 uint64_t SliceBlocks::handle(uint64_t offset) const

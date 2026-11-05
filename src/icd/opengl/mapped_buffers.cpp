@@ -53,7 +53,7 @@ uint32_t MappedBuffers::map(ClientTransport &wire, uint32_t buffer, int64_t offs
     if (slices_.holds(buffer)) return slices_.map(buffer, offset, length, access, pointer);
     const uint32_t refused = access_error(access);
     if (refused != gl_no_error) return refused;
-    if (offset < 0 || length == 0 || length < whole_buffer) return gl_invalid_value;
+    if (offset < 0 || length == 0 || (length < 0 && length != whole_buffer)) return gl_invalid_value;
     if (buffer == 0u || find(buffer) != nullptr) return gl_invalid_operation;
     uint64_t known = 0u;
     int64_t  size = -1;

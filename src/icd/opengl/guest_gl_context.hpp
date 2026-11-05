@@ -81,6 +81,8 @@ public:
     void                 lend();
     uint32_t             slice_group() const;
     uint32_t             slices_owned() const;
+    uint32_t             slices_pinned() const;
+    uint32_t             slices_busy() const;
     ClientTransport     *wire();
     uint32_t             guest_device() const;
     void                 flush();

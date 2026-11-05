@@ -33,7 +33,7 @@ public:
 
     static constexpr uint64_t most_bytes = uint64_t{64} << 20u;
     static constexpr uint64_t alignment = icd::StreamMemory::smallest;
-    static constexpr int64_t  whole_buffer = -1;
+    static constexpr int64_t  whole_buffer = INT64_MIN;
     enum : uint32_t {
         gl_no_error = 0u, gl_invalid_value = 0x0501u, gl_invalid_operation = 0x0502u,
         gl_map_coherent_bit = 0x0080u, gl_dynamic_storage_bit = 0x0100u, gl_client_storage_bit = 0x0200u,
@@ -75,6 +75,12 @@ public:
     bool     storage_flags(uint32_t buffer, int64_t &value) const;
     uint32_t held() const;
     uint32_t owned() const;
+    uint32_t busy() const;
+    uint32_t pinned() const;
+    void     pin();
+    void     unpin();
+    bool     wait_recorded();
+    [[nodiscard]] Status enroll();
     uint32_t group() const;
 
     void report(StateWriter &writer) const;
@@ -93,7 +99,7 @@ private:
     bool               snapshot(uint32_t buffer, Row &copy) const;
     uint32_t           access_error(const Row &row, int64_t offset, int64_t length, uint32_t access) const;
     uint32_t           window_error(const Row &row, uint64_t offset, uint64_t bytes) const;
-    bool               settled(const Row &row);
+    bool               settle_group(const SlicedBuffers *except);
 
     BlockSource                     &memory_;
     icd::HostChannel                &channel_;
@@ -102,6 +108,7 @@ private:
     uint32_t                         group_;
     DriverLog                       &lines_;
     const void                      *owner_;
+    uint32_t                         pins_;
     GlPollClock                      clock_;
     ObjectStorage<icd::StreamMemory> streams_[stream_kinds];
     bool                             granted_;

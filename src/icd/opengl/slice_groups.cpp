@@ -10,7 +10,7 @@ constexpr uint32_t group_shift = 32u;
 }
 
 SliceGroups::SliceGroups(BlockSource &memory, ThreadLock &lock)
-    : lock_(lock), rows_(memory, Pool::paged), parents_(memory, Pool::paged), next_(1u)
+    : lock_(lock), rows_(memory, Pool::paged), parents_(memory, Pool::paged), members_(memory, Pool::paged), next_(1u)
 {
     AV_SCOPE("SliceGroups::SliceGroups");
 }
@@ -45,16 +45,21 @@ uint64_t SliceGroups::key_of(uint32_t group, uint32_t buffer) const
     return (static_cast<uint64_t>(root_of(group)) << group_shift) | buffer;
 }
 
+bool SliceGroups::placed_under(uint32_t root) const
+{
+    AV_SCOPE("SliceGroups::placed_under");
+    bool placed = false;
+    rows_.for_each([&placed, root](uint64_t key, const Row &) {
+        placed = placed || static_cast<uint32_t>(key >> group_shift) == root;
+    });
+    return placed;
+}
+
 Status SliceGroups::admit_join(uint32_t joiner)
 {
     AV_SCOPE("SliceGroups::admit_join");
     const ThreadLockHold hold(lock_);
-    const uint32_t       from = root_of(joiner);
-    bool                 placed_here = false;
-    rows_.for_each([&placed_here, from](uint64_t key, const Row &) {
-        placed_here = placed_here || static_cast<uint32_t>(key >> group_shift) == from;
-    });
-    if (placed_here) return Status::invalid_state;
+    if (placed_under(root_of(joiner))) return Status::invalid_state;
     return parents_.reserve(parents_.count() + 1u);
 }
 
@@ -65,6 +70,7 @@ Status SliceGroups::join(uint32_t joiner, uint32_t target)
     const uint32_t       from = root_of(joiner);
     const uint32_t       into = root_of(target);
     if (from == into) return Status::ok;
+    if (placed_under(from)) return Status::invalid_state;
     uint32_t slot = 0u;
     return parents_.insert(from, into, slot);
 }
@@ -102,6 +108,35 @@ void SliceGroups::drop_owner(const SlicedBuffers *owner)
     static_cast<void>(rows_.erase_if([owner](uint64_t, const Row &row) { return row.owner_ == owner; }));
 }
 
+Status SliceGroups::enroll(SlicedBuffers *member, uint32_t group)
+{
+    AV_SCOPE("SliceGroups::enroll");
+    const uint64_t key = reinterpret_cast<uintptr_t>(member);
+    if (members_.find(key) != nullptr) return Status::ok;
+    uint32_t slot = 0u;
+    return members_.insert(key, Member{member, group}, slot);
+}
+
+void SliceGroups::withdraw(const SlicedBuffers *member)
+{
+    AV_SCOPE("SliceGroups::withdraw");
+    static_cast<void>(members_.erase(reinterpret_cast<uintptr_t>(member)));
+}
+
+SlicedBuffers *SliceGroups::next_member(uint32_t group, uint32_t &cursor) const
+{
+    AV_SCOPE("SliceGroups::next_member");
+    const uint32_t root = root_of(group);
+    for (uint32_t slot = members_.next_live(cursor); slot != members_.no_slot; slot = members_.next_live(slot + 1u)) {
+        const Member *const found = members_.at(slot);
+        if (root_of(found->group_) != root) continue;
+        cursor = slot + 1u;
+        return found->member_;
+    }
+    cursor = members_.no_slot;
+    return nullptr;
+}
+
 uint32_t SliceGroups::owned_by(const SlicedBuffers *owner) const
 {
     AV_SCOPE("SliceGroups::owned_by");
@@ -128,7 +163,10 @@ bool SliceGroups::invariants_hold() const
     parents_.for_each([this, &sound](uint32_t token, const uint32_t &parent) {
         sound = sound && token != parent && root_of(parent) != token;
     });
-    return sound && rows_.invariants_hold() && parents_.invariants_hold();
+    members_.for_each([&sound](uint64_t key, const Member &found) {
+        sound = sound && found.member_ != nullptr && key == reinterpret_cast<uintptr_t>(found.member_);
+    });
+    return sound && rows_.invariants_hold() && parents_.invariants_hold() && members_.invariants_hold();
 }
 
 }

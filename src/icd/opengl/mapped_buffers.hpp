@@ -5,6 +5,7 @@
 #include "icd/common/open_mappings.hpp"
 #include "icd/opengl/buffer_map_transfer.hpp"
 #include "icd/opengl/buffer_mapping.hpp"
+#include "icd/opengl/sliced_buffers.hpp"
 
 #include <stdint.h>
 
@@ -26,7 +27,7 @@ struct MappedBuffersProbe;
 
 class MappedBuffers {
 public:
-    static constexpr int64_t  whole_buffer = -1;
+    static constexpr int64_t  whole_buffer = SlicedBuffers::whole_buffer;
     enum : uint32_t {
         gl_no_error = 0u, gl_invalid_value = 0x0501u, gl_invalid_operation = 0x0502u, gl_out_of_memory = 0x0505u,
         gl_buffer_size = 0x8764u, gl_read_only = 0x88B8u, gl_write_only = 0x88B9u, gl_read_write = 0x88BAu,

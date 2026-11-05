@@ -24,7 +24,7 @@ constexpr uint32_t both = BufferMapping::map_read | BufferMapping::map_write;
 SlicedBuffers::SlicedBuffers(BlockSource &memory, icd::HostChannel &channel, icd::GpuTimeline &timeline,
                              SliceGroups &groups, uint32_t group, DriverLog &lines, const void *owner)
     : memory_(memory), channel_(channel), timeline_(timeline), groups_(groups), group_(group), lines_(lines),
-      owner_(owner), clock_(), streams_{}, granted_(false), stopped_(false)
+      owner_(owner), pins_(0u), clock_(), streams_{}, granted_(false), stopped_(false)
 {
     AV_SCOPE("SlicedBuffers::SlicedBuffers");
 }
@@ -48,6 +48,9 @@ void SlicedBuffers::release()
     {
         const ThreadLockHold hold(groups_.lock());
         groups_.drop_owner(this);
+        groups_.withdraw(this);
+    }
+    while (__atomic_load_n(&pins_, __ATOMIC_ACQUIRE) != 0u) {
     }
     for (ObjectStorage<icd::StreamMemory> &stream : streams_) stream.destroy();
     granted_ = false;
@@ -75,7 +78,8 @@ icd::StreamMemory *SlicedBuffers::made_stream(uint32_t stream)
 uint8_t *SlicedBuffers::view_of(const Row &row) const
 {
     AV_SCOPE("SlicedBuffers::view_of");
-    const ObjectStorage<icd::StreamMemory> &made = streams_[row.stream_];
+    if (row.owner_ == nullptr || row.stream_ >= stream_kinds) return nullptr;
+    const ObjectStorage<icd::StreamMemory> &made = row.owner_->streams_[row.stream_];
     return made.constructed() ? made.object().view(row.slice_) : nullptr;
 }
 
@@ -101,7 +105,12 @@ Status SlicedBuffers::place(ClientTransport &wire, uint32_t buffer, uint64_t siz
     icd::StreamMemory::Slice slice = {};
     const Status             taken = stream->take_slice(size, slice);
     if (taken != Status::ok) return taken;
-    if (data != nullptr) __builtin_memcpy(stream->view(slice), data, static_cast<size_t>(size));
+    uint8_t *const own = stream->view(slice);
+    if (own == nullptr) {
+        stream->give_back(slice);
+        return Status::invalid_state;
+    }
+    if (data != nullptr) __builtin_memcpy(own, data, static_cast<size_t>(size));
     Status inserted = Status::ok;
     {
         const ThreadLockHold hold(groups_.lock());
@@ -132,10 +141,12 @@ void SlicedBuffers::forget(int32_t count, const uint32_t *buffers)
         {
             const ThreadLockHold hold(groups_.lock());
             if (!groups_.take(group_, buffers[at], row)) continue;
+            row.owner_->pin();
         }
-        if (row.owner_ != this && !timeline_.wait(timeline_.recording()))
+        if (!settle_group(row.owner_))
             lines_.write("the GPU work that may use a deleted shared buffer slice could not be waited for");
         row.owner_->release_row(buffers[at], row);
+        row.owner_->unpin();
     }
 }
 
@@ -143,7 +154,7 @@ void SlicedBuffers::release_row(uint32_t buffer, const Row &row)
 {
     AV_SCOPE("SlicedBuffers::release_row");
     if (channel_.opened() && !channel_.lost())
-        static_cast<void>(glmemproto::av_glmem_ForgetBufferSlice(channel_.transport(), buffer));
+        static_cast<void>(glmemproto::av_glmem_ForgetBufferSlice(channel_.wire(), buffer));
     icd::StreamMemory *const stream = made_stream(row.stream_);
     if (stream != nullptr) stream->retire(row.slice_);
 }
@@ -177,7 +188,7 @@ uint32_t SlicedBuffers::access_error(const Row &row, int64_t offset, int64_t len
     AV_SCOPE("SlicedBuffers::access_error");
     constexpr uint32_t not_with_read =
         BufferMapping::map_invalidate_range | BufferMapping::map_invalidate_buffer | BufferMapping::map_unsynchronized;
-    if ((access & ~known_access) != 0u || offset < 0 || length == 0 || length < whole_buffer) return gl_invalid_value;
+    if ((access & ~known_access) != 0u || offset < 0 || length == 0 || (length < 0 && length != whole_buffer)) return gl_invalid_value;
     if ((access & both) == 0u) return gl_invalid_operation;
     if ((access & BufferMapping::map_read) != 0u && (access & not_with_read) != 0u) return gl_invalid_operation;
     if ((access & BufferMapping::map_flush_explicit) != 0u && (access & BufferMapping::map_write) == 0u)
@@ -199,10 +210,54 @@ uint32_t SlicedBuffers::window_error(const Row &row, uint64_t offset, uint64_t b
     return offset > row.size_ || bytes > row.size_ - offset ? gl_invalid_operation : gl_no_error;
 }
 
-bool SlicedBuffers::settled(const Row &row)
+bool SlicedBuffers::wait_recorded()
 {
-    AV_SCOPE("SlicedBuffers::settled");
-    return (row.flags_ & BufferMapping::map_read) == 0u || timeline_.wait(timeline_.recording());
+    AV_SCOPE("SlicedBuffers::wait_recorded");
+    return timeline_.wait(timeline_.recording());
+}
+
+bool SlicedBuffers::settle_group(const SlicedBuffers *except)
+{
+    AV_SCOPE("SlicedBuffers::settle_group");
+    bool     settled = true;
+    uint32_t cursor = 0u;
+    for (;;) {
+        SlicedBuffers *member = nullptr;
+        {
+            const ThreadLockHold hold(groups_.lock());
+            member = groups_.next_member(group_, cursor);
+            if (member != nullptr && member != except) member->pin();
+        }
+        if (member == nullptr) return settled;
+        if (member == except) continue;
+        settled = member->wait_recorded() && settled;
+        member->unpin();
+    }
+}
+
+void SlicedBuffers::pin()
+{
+    AV_SCOPE("SlicedBuffers::pin");
+    __atomic_add_fetch(&pins_, 1u, __ATOMIC_ACQ_REL);
+}
+
+void SlicedBuffers::unpin()
+{
+    AV_SCOPE("SlicedBuffers::unpin");
+    __atomic_sub_fetch(&pins_, 1u, __ATOMIC_ACQ_REL);
+}
+
+uint32_t SlicedBuffers::pinned() const
+{
+    AV_SCOPE("SlicedBuffers::pinned");
+    return __atomic_load_n(&pins_, __ATOMIC_ACQUIRE);
+}
+
+Status SlicedBuffers::enroll()
+{
+    AV_SCOPE("SlicedBuffers::enroll");
+    const ThreadLockHold hold(groups_.lock());
+    return groups_.enroll(this, group_);
 }
 
 uint32_t SlicedBuffers::map(uint32_t buffer, int64_t offset, int64_t length, uint32_t access, void *&pointer)
@@ -216,7 +271,7 @@ uint32_t SlicedBuffers::map(uint32_t buffer, int64_t offset, int64_t length, uin
     const uint32_t refused = access_error(row, offset, length, access);
     if (refused != gl_no_error) return refused;
     constexpr uint32_t unsynchronized = BufferMapping::map_persistent | BufferMapping::map_unsynchronized;
-    if ((access & unsynchronized) == 0u && !timeline_.wait(timeline_.recording())) return gl_invalid_operation;
+    if ((access & unsynchronized) == 0u && !settle_group(nullptr)) return gl_invalid_operation;
     const uint64_t at = static_cast<uint64_t>(offset);
     {
         const ThreadLockHold hold(groups_.lock());
@@ -268,7 +323,7 @@ uint32_t SlicedBuffers::read(uint32_t buffer, int64_t offset, int64_t size, void
     const uint64_t bytes = static_cast<uint64_t>(size);
     if (at > row.size_ || bytes > row.size_ - at) return gl_invalid_value;
     if (bytes == 0u || data == nullptr) return gl_no_error;
-    if (!timeline_.wait(timeline_.recording())) return gl_invalid_operation;
+    if (!settle_group(nullptr)) return gl_invalid_operation;
     __builtin_memcpy(data, view + at, static_cast<size_t>(bytes));
     return gl_no_error;
 }
@@ -282,7 +337,7 @@ uint32_t SlicedBuffers::unpack_source(uint32_t buffer, uint64_t offset, uint64_t
     const uint32_t refused = window_error(row, offset, bytes);
     if (refused != gl_no_error) return refused;
     const uint8_t *const view = view_of(row);
-    if (view == nullptr || !settled(row)) return gl_invalid_operation;
+    if (view == nullptr || !settle_group(nullptr)) return gl_invalid_operation;
     data = view + offset;
     return gl_no_error;
 }
@@ -296,7 +351,7 @@ uint32_t SlicedBuffers::pack_target(uint32_t buffer, uint64_t offset, uint64_t b
     const uint32_t refused = window_error(row, offset, bytes);
     if (refused != gl_no_error) return refused;
     uint8_t *const view = view_of(row);
-    if (view == nullptr || !settled(row)) return gl_invalid_operation;
+    if (view == nullptr || !settle_group(nullptr)) return gl_invalid_operation;
     data = view + offset;
     return gl_no_error;
 }
@@ -326,7 +381,7 @@ uint32_t SlicedBuffers::clear_range(uint32_t buffer, uint32_t internal_format, i
         return gl_invalid_value;
     if (row.access_ != 0u && (row.access_ & BufferMapping::map_persistent) == 0u) return gl_invalid_operation;
     uint8_t *const view = view_of(row);
-    if (view == nullptr || !timeline_.wait(timeline_.recording())) return gl_invalid_operation;
+    if (view == nullptr || !settle_group(nullptr)) return gl_invalid_operation;
     pattern.fill(view + at, bytes);
     return gl_no_error;
 }
@@ -338,7 +393,11 @@ uint32_t SlicedBuffers::invalidate(uint32_t buffer, int64_t offset, int64_t leng
     if (!snapshot(buffer, row)) return gl_invalid_operation;
     if (offset < 0 || length < 0) return gl_invalid_value;
     const uint64_t at = static_cast<uint64_t>(offset);
-    return at > row.size_ || static_cast<uint64_t>(length) > row.size_ - at ? gl_invalid_value : gl_no_error;
+    const uint64_t bytes = static_cast<uint64_t>(length);
+    if (at > row.size_ || bytes > row.size_ - at) return gl_invalid_value;
+    const bool overlaps = row.access_ != 0u && bytes != 0u && at < row.map_offset_ + row.map_bytes_ &&
+                          row.map_offset_ < at + bytes;
+    return overlaps && (row.access_ & BufferMapping::map_persistent) == 0u ? gl_invalid_operation : gl_no_error;
 }
 
 void *SlicedBuffers::pointer_of(uint32_t buffer) const
@@ -382,6 +441,13 @@ uint32_t SlicedBuffers::owned() const
     AV_SCOPE("SlicedBuffers::owned");
     const ThreadLockHold hold(groups_.lock());
     return groups_.owned_by(this);
+}
+
+uint32_t SlicedBuffers::busy() const
+{
+    AV_SCOPE("SlicedBuffers::busy");
+    const uint32_t rows = owned();
+    return rows + pinned();
 }
 
 uint32_t SlicedBuffers::group() const
