@@ -60,7 +60,7 @@ D3d11Device::~D3d11Device()
     }
     if (waits_.constructed()) waits_.destroy();
     if (present_order_.constructed()) present_order_.destroy();
-    if (joined) session_.reclaim_retired();
+    if (joined) session_.shared_memory().reclaim();
     if (joined) session_.leave();
     kernel_.destroy_context(context_);
 }
@@ -93,7 +93,7 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
         return E_FAIL;
     }
     session_.query_results().bind(channel_.object());
-    slices_.own(session_.memory_stream(HostMemoryRequest::Kind::upload));
+    slices_.own(session_.shared_memory().stream(HostMemoryRequest::Kind::upload));
     return S_OK;
 }
 
@@ -351,7 +351,7 @@ BOOL D3d11Device::flush(UINT, UINT)
         return TRUE;
     }
     if (FAILED(follow_host())) lost(__func__);
-    session_.reclaim_retired();
+    session_.shared_memory().reclaim();
     slices_.trim();
     return TRUE;
 }

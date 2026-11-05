@@ -270,7 +270,7 @@ VOID D3d11Device::destroy_resource(D3D10DDI_HRESOURCE handle)
     forget_maps(resource.stamp.id());
     destroy_object(resource.stamp.id());
     if (resource.lent != nullptr) lender_.retire(*resource.lent);
-    session_.reclaim_retired();
+    session_.shared_memory().reclaim();
     if (resource.slice.bytes_ != 0u) leave_slice(resource);
     else if (resource.shadow != nullptr) shadows_.release(resource.shadow, resource.shadow_watched != 0u);
     if (resource.allocation_owned != 0u)

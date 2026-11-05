@@ -49,6 +49,7 @@ private:
 
     d3d::D3dSession *session(uint32_t slot);
 
+    BlockSource                  &memory_;
     KeyedLog                     &lines_;
     d3d::D3dCallTrace             &trace_;
     ObjectPool<D3d12Device>         devices_;

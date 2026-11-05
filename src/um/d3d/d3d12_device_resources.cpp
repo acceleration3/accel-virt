@@ -28,7 +28,6 @@ constexpr uint32_t state_copy_dest = 0x400u;
 constexpr uint32_t buffer_dimension = 1u;
 constexpr uint64_t buffer_alignment = uint64_t{64} * 1024u;
 constexpr uint64_t refused_size = ~uint64_t{0};
-constexpr uint64_t page_bytes = 4096u;
 constexpr uint64_t suballocated_heap_bytes_most = uint64_t{4} << 20u;
 constexpr UINT32   no_additional_data_alignment = 1u;
 
@@ -161,7 +160,7 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
     heap.type = heap_type_of(args);
     heap.size = args.ByteSize;
     heap.flags = api_heap_flags(static_cast<uint32_t>(args.Flags));
-    heap.memory = nullptr;
+    heap.backing = nullptr;
     heap.address = addresses_.reserve(args.ByteSize);
     if (heap.address == 0u) {
         LogLine(lines_).text("no guest address space for a heap of ").number(args.ByteSize).text(" bytes").write();
@@ -173,9 +172,7 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
     } else if (committed) {
         return S_OK;
     }
-    if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), heap.flags,
-                                                 heap.size, args.Alignment, memory_handle(heap), memory_offset(heap)),
-              "CreateHeap12")) {
+    if (!send_heap(heap, args.Alignment)) {
         release_heap_memory(heap);
         return E_OUTOFMEMORY;
     }
@@ -183,100 +180,43 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
     return S_OK;
 }
 
+bool D3d12Device::send_heap(const HeapRecord &heap, uint64_t alignment)
+{
+    AV_SCOPE("D3d12Device::send_heap");
+    const HeapMemory *const backing = heap.backing;
+    const uint64_t          size = backing != nullptr ? backing->window_bytes(heap.size) : heap.size;
+    const uint64_t          memory = backing != nullptr ? backing->handle() : 0u;
+    const uint64_t          offset = backing != nullptr ? backing->offset() : 0u;
+    return sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), heap.flags,
+                                                   size, alignment, memory, offset),
+                "CreateHeap12");
+}
+
 HRESULT D3d12Device::heap_memory(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap)
 {
     AV_SCOPE("D3d12Device::heap_memory");
-    if (heap.type == heap_readback && lend_pages(args.ByteSize, heap) == Status::ok) return S_OK;
+    const HostMemoryRequest::Kind kind =
+        heap.type == heap_upload ? HostMemoryRequest::Kind::upload : HostMemoryRequest::Kind::readback;
     const bool small = args.ByteSize <= suballocated_heap_bytes_most && args.Alignment <= buffer_alignment;
-    if (small && take_slice(args.ByteSize, heap) == Status::ok) return S_OK;
-    if (open_dedicated(args.ByteSize, heap) == Status::ok) return S_OK;
+    if (small && memories_.take_slice(kind, args.ByteSize, heap.backing) == Status::ok) return S_OK;
+    if (heap.type == heap_readback && memories_.lend_pages(args.ByteSize, heap.backing) == Status::ok) return S_OK;
+    if (memories_.open_dedicated(kind, args.ByteSize, heap.backing) == Status::ok) return S_OK;
     lines_.write("no host memory for an upload or readback heap");
     return E_OUTOFMEMORY;
-}
-
-Status D3d12Device::take_slice(uint64_t bytes, HeapRecord &heap)
-{
-    AV_SCOPE("D3d12Device::take_slice");
-    icd::StreamMemory *const stream = heap_stream(heap);
-    if (stream == nullptr) return Status::invalid_state;
-    const Status taken = stream->take_slice(bytes, heap.slice);
-    if (taken == Status::ok) heap.source = HeapMemory::stream_slice;
-    return taken;
-}
-
-Status D3d12Device::open_dedicated(uint64_t bytes, HeapRecord &heap)
-{
-    AV_SCOPE("D3d12Device::open_dedicated");
-    const HostMemoryRequest memory(heap.type == heap_upload ? HostMemoryRequest::Kind::upload
-                                                            : HostMemoryRequest::Kind::readback,
-                                   0u);
-    const Status opened = session_.open_memory(bytes, memory, heap.memory);
-    if (opened == Status::ok) heap.source = HeapMemory::dedicated;
-    return opened;
-}
-
-icd::StreamMemory *D3d12Device::heap_stream(const HeapRecord &heap)
-{
-    AV_SCOPE("D3d12Device::heap_stream");
-    return session_.memory_stream(heap.type == heap_upload ? HostMemoryRequest::Kind::upload
-                                                           : HostMemoryRequest::Kind::readback);
-}
-
-uint64_t D3d12Device::memory_handle(const HeapRecord &heap)
-{
-    AV_SCOPE("D3d12Device::memory_handle");
-    if (heap.source == HeapMemory::stream_slice) return heap_stream(heap)->memory(heap.slice);
-    return heap.memory != nullptr ? heap.memory->handle() : 0u;
-}
-
-uint64_t D3d12Device::memory_offset(const HeapRecord &heap)
-{
-    AV_SCOPE("D3d12Device::memory_offset");
-    return heap.source == HeapMemory::stream_slice ? heap_stream(heap)->offset_in_block(heap.slice) : 0u;
 }
 
 void D3d12Device::release_heap_memory(HeapRecord &heap)
 {
     AV_SCOPE("D3d12Device::release_heap_memory");
-    switch (heap.source) {
-    case HeapMemory::none: break;
-    case HeapMemory::stream_slice: heap_stream(heap)->retire(heap.slice); break;
-    case HeapMemory::lent_pages:
-        session_.retire_memory(*heap.memory);
-        session_.retire_pages(heap.own_pages);
-        break;
-    case HeapMemory::dedicated: session_.retire_memory(*heap.memory); break;
-    }
-    heap.source = HeapMemory::none;
-    heap.memory = nullptr;
-    heap.own_pages = nullptr;
-    heap.slice = icd::StreamMemory::Slice{0u, 0u};
+    if (heap.backing != nullptr) heap.backing->release();
+    heap.backing = nullptr;
 }
 
 void D3d12Device::trim_memory()
 {
     AV_SCOPE("D3d12Device::trim_memory");
-    session_.reclaim_retired();
-    session_.trim_streams();
-}
-
-Status D3d12Device::lend_pages(uint64_t bytes, HeapRecord &heap)
-{
-    AV_SCOPE("D3d12Device::lend_pages");
-    const uint64_t pages = (bytes + page_bytes - 1u) & ~(page_bytes - 1u);
-    void *const    own = VirtualAlloc(nullptr, static_cast<SIZE_T>(pages), MEM_RESERVE | MEM_COMMIT | MEM_WRITE_WATCH,
-                                      PAGE_READWRITE);
-    if (own == nullptr) return Status::no_memory;
-    const Status lent =
-        session_.adopt_memory(own, pages, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), heap.memory);
-    if (lent != Status::ok) {
-        static_cast<void>(VirtualFree(own, 0u, MEM_RELEASE));
-        lines_.write("the device took no write-back heap's pages; its memory is the host's");
-        return lent;
-    }
-    heap.own_pages = own;
-    heap.source = HeapMemory::lent_pages;
-    return Status::ok;
+    session_.shared_memory().reclaim();
+    session_.shared_memory().trim();
 }
 
 HRESULT D3d12Device::make_resource(const D3D12DDIARG_CREATERESOURCE_0109 &args, const D3D12DDI_CLEAR_VALUES *clear,
@@ -435,14 +375,16 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
     heap.size = described.size();
     heap.address = addresses_.reserve(heap.size);
     if (heap.address == 0u) return E_OUTOFMEMORY;
-    if (lender_.lend(opened.hAllocation, heap.size, heap.memory) != Status::ok) {
+    HostAllocation *lent = nullptr;
+    if (lender_.lend(opened.hAllocation, heap.size, lent) != Status::ok) {
         lines_.write("the device took no existing heap's pages");
         return E_OUTOFMEMORY;
     }
-    heap.source = HeapMemory::dedicated;
-    if (!sent(d3d12proto::av_d3d12_CreateHeap12(wire(), heap.header.stamp.id(), properties_of(heap.type), 0u, heap.size,
-                                                 buffer_alignment, heap.memory->handle(), 0u),
-              "CreateHeap12")) {
+    if (memories_.adopt(*lent, heap.backing) != Status::ok) {
+        lender_.close(*lent);
+        return E_OUTOFMEMORY;
+    }
+    if (!send_heap(heap, buffer_alignment)) {
         release_heap_memory(heap);
         return E_OUTOFMEMORY;
     }
@@ -487,7 +429,7 @@ VOID D3d12Device::destroy_heap_and_resource(D3D12DDI_HHEAP heap_handle, D3D12DDI
     if (!heap.header.stamp.holds(HeapRecord::tag)) return;
     if (heap.made != 0u) static_cast<void>(sent(d3d12proto::av_d3d12_Destroy12(wire(), heap.header.stamp.id()), "Destroy12"));
     release_heap_memory(heap);
-    session_.reclaim_retired();
+    session_.shared_memory().reclaim();
     heap = HeapRecord{};
 }
 
@@ -497,8 +439,7 @@ HRESULT D3d12Device::map_heap(D3D12DDI_HHEAP handle, void **data)
     if (data == nullptr) return E_INVALIDARG;
     *data = nullptr;
     const HeapRecord &heap = *static_cast<const HeapRecord *>(handle.pDrvPrivate);
-    if (heap.source == HeapMemory::stream_slice) *data = heap_stream(heap)->view(heap.slice);
-    else if (heap.memory != nullptr) *data = heap.memory->view_at(0u, heap.size);
+    if (heap.backing != nullptr) *data = heap.backing->view(heap.size);
     return *data != nullptr ? S_OK : E_INVALIDARG;
 }
 

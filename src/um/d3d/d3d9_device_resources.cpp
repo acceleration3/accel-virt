@@ -503,7 +503,7 @@ void D3d9Device::leave_slice(D3d9Subresource &subresource)
 void D3d9Device::trim_memory()
 {
     AV_SCOPE("D3d9Device::trim_memory");
-    session_.reclaim_retired();
+    session_.shared_memory().reclaim();
     slices_.trim();
 }
 

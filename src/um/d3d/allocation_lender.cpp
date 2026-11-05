@@ -44,7 +44,7 @@ void AllocationLender::close(HostAllocation &made) const
 void AllocationLender::retire(HostAllocation &made) const
 {
     AV_SCOPE("AllocationLender::retire");
-    session_.retire_memory(made);
+    session_.shared_memory().retire_memory(made);
 }
 
 }

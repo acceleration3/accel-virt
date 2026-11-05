@@ -1,7 +1,6 @@
 #include "um/d3d/d3d_session.hpp"
 
 #include "core/platform/block_source.hpp"
-#include "core/platform/thread_lock_hold.hpp"
 #include "icd/common/arena_spans.hpp"
 #include "guest/transport/host_allocation.hpp"
 #include "um/d3d/d3d11_device.hpp"
@@ -10,17 +9,15 @@
 #include "core/log/log_line.hpp"
 #include "proto/context/sub_api.hpp"
 #include "guest/kmt/kmt.hpp"
-#include "um/d3d/slice_offer.hpp"
 
 namespace av::d3d {
 
 D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, DriverLog &log, uint64_t arena_size, uint32_t select_command,
                        uint32_t flush_command, const SliceOffer *offer)
-    : memory_(memory), lines_(log), lock_(), connection_(kmt),
+    : lines_(log), lock_(), connection_(kmt),
       channel_(memory, log,
                icd::ChannelShape(SubApi::d3d, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_size), lock_),
-      stream_(), offer_(offer), slices_lock_(), timeline_(), streams_{}, lent_pages_(memory, slices_lock_), clock_(),
-      query_results_(), contexts_(memory), members_(0u), ids_(),
+      stream_(), shared_memory_(memory, channel_, lock_, log, offer, this), query_results_(), contexts_(memory), members_(0u), ids_(),
       select_command_(select_command), flush_command_(flush_command)
 {
     AV_SCOPE("D3dSession::D3dSession");
@@ -94,15 +91,8 @@ HRESULT D3dSession::open(uint32_t adapter)
     uint8_t        *slots = nullptr;
     uint64_t        slots_at = 0u;
     if (spans.slots(d3d11::QueryResults::slots, slots, slots_at)) query_results_.take(slots, slots_at);
-    if (host_grants_slices()) static_cast<void>(timeline_.construct(channel_, lock_));
+    shared_memory_.open(stream_.object());
     return S_OK;
-}
-
-bool D3dSession::host_grants_slices()
-{
-    AV_SCOPE("D3dSession::host_grants_slices");
-    if (offer_ == nullptr || channel_.arena_view() == nullptr) return false;
-    return offer_->granted(stream_.object(), lines_);
 }
 
 Status D3dSession::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
@@ -123,85 +113,23 @@ void D3dSession::close_memory(HostAllocation &allocation)
     static_cast<void>(channel_.close_memory(allocation));
 }
 
-void D3dSession::retire_memory(HostAllocation &allocation)
-{
-    AV_SCOPE("D3dSession::retire_memory");
-    if (!timeline_.constructed()) {
-        static_cast<void>(channel_.close_memory(allocation));
-        return;
-    }
-    const uint64_t fence = timeline_.object().recording();
-    while (channel_.retire_memory_after(allocation, fence) != Status::ok) {
-        HostAllocation *oldest = nullptr;
-        uint64_t        oldest_fence = fence;
-        const bool      waited = channel_.take_oldest_retired(oldest, oldest_fence);
-        static_cast<void>(timeline_.object().wait(oldest_fence));
-        static_cast<void>(channel_.close_memory(waited ? *oldest : allocation));
-        if (!waited) return;
-    }
-}
-
-void D3dSession::retire_pages(void *pages)
-{
-    AV_SCOPE("D3dSession::retire_pages");
-    if (!timeline_.constructed()) {
-        static_cast<void>(VirtualFree(pages, 0u, MEM_RELEASE));
-        return;
-    }
-    const uint64_t fence = timeline_.object().recording();
-    if (lent_pages_.retire(pages, fence) == Status::ok) return;
-    static_cast<void>(timeline_.object().wait(fence));
-    static_cast<void>(VirtualFree(pages, 0u, MEM_RELEASE));
-}
-
-void D3dSession::reclaim_retired()
-{
-    AV_SCOPE("D3dSession::reclaim_retired");
-    if (!timeline_.constructed()) return;
-    const uint64_t completed = timeline_.object().completed();
-    channel_.reclaim_retired_through(completed);
-    lent_pages_.reclaim(completed);
-}
-
-void D3dSession::trim_streams()
-{
-    AV_SCOPE("D3dSession::trim_streams");
-    for (ObjectStorage<icd::StreamMemory> &stream : streams_) {
-        icd::StreamMemory *trimmed = nullptr;
-        {
-            const ThreadLockHold held(slices_lock_);
-            if (stream.constructed()) trimmed = &stream.object();
-        }
-        if (trimmed != nullptr) trimmed->trim();
-    }
-}
-
-icd::StreamMemory *D3dSession::memory_stream(HostMemoryRequest::Kind kind)
-{
-    AV_SCOPE("D3dSession::memory_stream");
-    if (!timeline_.constructed() || (kind != HostMemoryRequest::Kind::upload && kind != HostMemoryRequest::Kind::readback))
-        return nullptr;
-    ObjectStorage<icd::StreamMemory> &stream = streams_[static_cast<uint32_t>(kind) - 1u];
-    const ThreadLockHold              held(slices_lock_);
-    if (!stream.constructed() &&
-        stream.construct(memory_, channel_, this, timeline_.object(), slices_lock_, clock_, lines_, kind,
-                         offer_->alignment()) != Status::ok)
-        return nullptr;
-    return &stream.object();
-}
-
 void D3dSession::close()
 {
     AV_SCOPE("D3dSession::close");
-    for (ObjectStorage<icd::StreamMemory> &stream : streams_) stream.destroy();
-    if (timeline_.constructed()) timeline_.destroy();
+    shared_memory_.close_streams();
     if (stream_.constructed()) {
         static_cast<void>(stream_.object().flush());
         stream_.destroy();
     }
     channel_.close(false);
-    lent_pages_.release_all();
+    shared_memory_.release_pages();
     connection_.close();
+}
+
+SessionMemory &D3dSession::shared_memory()
+{
+    AV_SCOPE("D3dSession::shared_memory");
+    return shared_memory_;
 }
 
 uint32_t D3dSession::next_id()

@@ -16,10 +16,12 @@
 #include "um/d3d/d3d12_recorder.hpp"
 #include "um/d3d/d3d12_records.hpp"
 #include "um/d3d/d3d12_residency.hpp"
+#include "um/d3d/heap_memories.hpp"
 
 #include <stdint.h>
 
 namespace av {
+class BlockSource;
 class KeyedLog;
 }
 
@@ -35,7 +37,7 @@ class D3d12Device {
 public:
     static constexpr UINT descriptor_bytes = 32u;
 
-    D3d12Device(d3d::D3dSession &session, KeyedLog &log, const D3d12HostCaps &caps,
+    D3d12Device(BlockSource &memory, d3d::D3dSession &session, KeyedLog &log, const D3d12HostCaps &caps,
                 void *const &list_table, d3d::D3dCallTrace &trace);
     ~D3d12Device();
     D3d12Device(const D3d12Device &) = delete;
@@ -74,13 +76,8 @@ private:
                               const D3D12DDI_CLEAR_VALUES *clear, D3D12DDI_HRESOURCE handle);
     HRESULT                  make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap, bool committed);
     HRESULT                  heap_memory(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapRecord &heap);
-    Status                   lend_pages(uint64_t bytes, HeapRecord &heap);
-    Status                   take_slice(uint64_t bytes, HeapRecord &heap);
-    Status                   open_dedicated(uint64_t bytes, HeapRecord &heap);
+    bool                     send_heap(const HeapRecord &heap, uint64_t alignment);
     void                     release_heap_memory(HeapRecord &heap);
-    icd::StreamMemory       *heap_stream(const HeapRecord &heap);
-    uint64_t                 memory_handle(const HeapRecord &heap);
-    uint64_t                 memory_offset(const HeapRecord &heap);
     void                     trim_memory();
     HRESULT                  open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRecord &heap,
                                            ResourceRecord &resource);
@@ -119,6 +116,7 @@ private:
     const D3D12DDI_CORELAYER_DEVICECALLBACKS_0050 *core_;
     const D3DDDI_DEVICECALLBACKS                  *kernel_;
     d3d::AllocationLender                          lender_;
+    HeapMemories                          memories_;
     ObjectStorage<d3d::BatchFollower>     follower_;
     ObjectStorage<D3d12Residency>         residency_;
     ObjectStorage<d3d::D3dDeviceChannel>  channel_;

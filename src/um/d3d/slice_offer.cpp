@@ -15,4 +15,10 @@ uint64_t SliceOffer::alignment() const
     return alignment_;
 }
 
+bool SliceOffer::invariants_hold() const
+{
+    AV_SCOPE("SliceOffer::invariants_hold");
+    return alignment_ != 0u && (alignment_ & (alignment_ - 1u)) == 0u;
+}
+
 }

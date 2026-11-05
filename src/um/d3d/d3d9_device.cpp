@@ -103,7 +103,7 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
         session_.leave();
         return E_FAIL;
     }
-    slices_.own(session_.memory_stream(HostMemoryRequest::Kind::upload));
+    slices_.own(session_.shared_memory().stream(HostMemoryRequest::Kind::upload));
     return S_OK;
 }
 

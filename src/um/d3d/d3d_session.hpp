@@ -9,13 +9,10 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/common/host_channel.hpp"
 #include "icd/common/id_mint.hpp"
-#include "icd/common/stream_memory.hpp"
 #include "icd/d3d/d3d_command_stream.hpp"
-#include "icd/d3d/session_timeline.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
-#include "um/d3d/lent_pages.hpp"
+#include "um/d3d/session_memory.hpp"
 #include "core/support/object_pool.hpp"
-#include "um/common/performance_clock.hpp"
 #include "um/common/srw_lock.hpp"
 
 #include <stdint.h>
@@ -64,39 +61,27 @@ public:
     KmtTransport          &transport();
     Kmt                   &kmt() const;
     ObjectPool<d3d11::D3d11Device> &contexts();
-    icd::StreamMemory              *memory_stream(HostMemoryRequest::Kind kind);
+    SessionMemory                  &shared_memory();
     [[nodiscard]] Status            open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
     [[nodiscard]] Status            adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory,
                                                  HostAllocation *&made);
     void                            close_memory(HostAllocation &allocation);
-    void                            retire_memory(HostAllocation &allocation);
-    void                            retire_pages(void *pages);
-    void                            reclaim_retired();
-    void                            trim_streams();
 
 private:
     static constexpr uint8_t  ring_order = 22u;
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   staging_bytes = 512u * 1024u;
     static constexpr size_t   batch_bytes = 1u << 20u;
-    static constexpr uint32_t stream_kinds = 2u;
 
     HRESULT open(uint32_t adapter);
     void    close();
-    bool    host_grants_slices();
 
-    BlockSource                    &memory_;
     DriverLog                      &lines_;
     SrwLock                              lock_;
     GuestConnection                      connection_;
     icd::HostChannel                     channel_;
     ObjectStorage<d3d::D3dCommandStream> stream_;
-    const SliceOffer                    *offer_;
-    SrwLock                              slices_lock_;
-    ObjectStorage<SessionTimeline>        timeline_;
-    ObjectStorage<icd::StreamMemory>      streams_[stream_kinds];
-    LentPages                            lent_pages_;
-    PerformanceClock                     clock_;
+    SessionMemory                        shared_memory_;
     d3d11::QueryResults                  query_results_;
     ObjectPool<d3d11::D3d11Device>       contexts_;
     uint32_t                             members_;

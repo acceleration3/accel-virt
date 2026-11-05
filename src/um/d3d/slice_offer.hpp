@@ -19,6 +19,8 @@ public:
 
     uint64_t alignment() const;
 
+    bool invariants_hold() const;
+
 protected:
     explicit SliceOffer(uint64_t alignment);
     ~SliceOffer() = default;
