@@ -819,7 +819,7 @@ class GuestSuiteRun(unittest.TestCase):
                  "ok opengl.interval 59\r\n"
                  "ok opengl.resized 32\r\n"
                  "ok opengl.attribs 8342\r\n"
-                 "ok opengl.lost 33365\r\n"
+                 "ok opengl.lost 33363\r\n"
                  "ok opengl.recreated 4096\r\n"
                  "avglprobe: 12 passed, 0 failed\r\n")
 

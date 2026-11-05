@@ -18,7 +18,7 @@ constexpr std::uint32_t error_invalid_version_arb = 0x2095u, error_invalid_profi
 constexpr std::uint32_t error_proc_not_found = 127u;
 constexpr std::uint32_t error_busy = 170u;
 constexpr std::int32_t  context_flags = 0x2094, robust_access_bit = 0x4, reset_strategy = 0x8256, lose_on_reset = 0x8252;
-constexpr std::uint32_t gl_out_of_memory = 0x0505u, gl_context_lost = 0x0507u, gl_unknown_context_reset = 0x8255u;
+constexpr std::uint32_t gl_out_of_memory = 0x0505u, gl_context_lost = 0x0507u, gl_guilty_context_reset = 0x8253u;
 constexpr std::uint8_t  solid[4] = {64u, 128u, 191u, 255u};
 constexpr std::uintptr_t handle_base = 0x4000u;
 
@@ -214,7 +214,7 @@ std::uint32_t ScriptedGl::reset_status()
 {
     if (!current_or_misuse()) return 0u;
     const Context &context = contexts_[current_];
-    return context.lost && context.robust && !forgets_resets_ ? gl_unknown_context_reset : 0u;
+    return context.lost && context.robust && !forgets_resets_ ? gl_guilty_context_reset : 0u;
 }
 
 const char *ScriptedGl::string(std::uint32_t name)

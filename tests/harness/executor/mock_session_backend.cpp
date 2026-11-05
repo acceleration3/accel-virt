@@ -100,6 +100,7 @@ void          MockSessionBackend::set_progress(std::uint64_t marked, std::uint64
 }
 
 void          MockSessionBackend::set_adopts(bool adopts) { adopts_ = adopts; }
+void          MockSessionBackend::set_one_handle(bool one) { one_handle_ = one; }
 std::uint32_t MockSessionBackend::adopted() const { return adopted_; }
 std::uint32_t MockSessionBackend::abandoned() const { return abandoned_; }
 
@@ -108,7 +109,7 @@ bool MockSessionBackend::adopt(SourceMemory &, const BlobRole &, std::uint64_t &
     handle = 0u;
     if (!adopts_) return false;
     adopted_++;
-    handle = wire_offset + adopted_;
+    handle = wire_offset + (one_handle_ ? 0u : adopted_);
     return true;
 }
 

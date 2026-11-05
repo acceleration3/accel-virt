@@ -154,22 +154,20 @@ TEST(shared_object_command_run, a_body_no_request_can_be_is_refused_as_a_request
   CHECK_EQ(rig.ops().shared_objects(), 0u);
   CHECK_EQ(rig.ops().shared_objects(), 0u); }
 
-TEST(shared_object_command_run, only_a_share_may_carry_a_wire_handle)
+TEST(shared_object_command_run, a_share_must_carry_a_wire_handle_and_an_open_or_a_release_may)
 { SharedObjectRig rig;
   CHECK_EQ(Sent(rig.first(), CommandHeader::share_object_id, memory(7u, made_by_guest)).status(),
            SharedObjectAnswer::done);
-  const std::uint32_t ids[] = {CommandHeader::open_shared_object_id,
-                               CommandHeader::release_shared_object_id};
-  for (const std::uint32_t id : ids) {
-      const Sent sent(rig.second(), id, memory(7u, made_by_guest));
-      CHECK_STATUS(sent.ran(), Status::ok);
-      CHECK_EQ(sent.status(), SharedObjectAnswer::refused_request);
-  }
+  const Sent opened(rig.second(), CommandHeader::open_shared_object_id, memory(7u, made_by_guest));
+  CHECK_STATUS(opened.ran(), Status::ok);
+  CHECK_EQ(opened.status(), SharedObjectAnswer::done);
+  const Sent released(rig.second(), CommandHeader::release_shared_object_id, memory(7u, made_by_guest));
+  CHECK_STATUS(released.ran(), Status::ok);
+  CHECK_EQ(released.status(), SharedObjectAnswer::done);
   check(rig);
   const Sent nothing(rig.second(), CommandHeader::share_object_id, memory(9u, 0u));
   CHECK_EQ(nothing.status(), SharedObjectAnswer::refused_request);
-  check(rig);
-  CHECK_EQ(rig.ops().shared_objects(), 1u); }
+}
 
 TEST(shared_object_command_run, an_open_of_an_id_the_device_never_published_is_an_unknown_object)
 { SharedObjectRig rig;

@@ -7,6 +7,7 @@
 #include "proto/context/capset_info.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/context/protocol_version.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -40,8 +41,8 @@ TEST(device_capset_describe, offers_vulkan_every_ring_order_and_the_bound_gpu)
   capset.describe(1u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
   CHECK(capset.described());
   const CapsetInfo &info = capset.info();
-  CHECK_EQ(info.version().major_version(), 1u);
-  CHECK_EQ(info.version().minor_version(), 1u);
+  CHECK_EQ(info.version().major_version(), av::ProtocolVersion::current_major);
+  CHECK_EQ(info.version().minor_version(), av::ProtocolVersion::current_minor);
   CHECK(info.offers(SubApi::vulkan));
   CHECK(!info.offers(SubApi::opengl));
   CHECK(!info.offers(SubApi::opencl));

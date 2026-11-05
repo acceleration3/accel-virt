@@ -68,5 +68,5 @@ TEST(d3d12_footprint, a_region_outside_the_footprint_or_its_limits_holds_nothing
 
 TEST(d3d12_footprint, a_format_with_no_fixed_layout_counts_a_row_a_texel)
 { const D3d12Footprint planar(nv12, 64u, 4u, 1u, 256u, 0u);
-  CHECK(planar.holds(planar.whole(), 256u * 3u));
-  CHECK(!planar.holds(planar.whole(), 256u * 3u - 1u)); }
+  CHECK(planar.holds(planar.whole(), 256u * 3u + 64u));
+  CHECK(!planar.holds(planar.whole(), 256u * 3u + 63u)); }

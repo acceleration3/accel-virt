@@ -88,7 +88,7 @@ TEST(gl_probe, every_step_passes_on_a_gl_that_does_what_it_is_asked)
                                          "ok opengl.interval 60\n"
                                          "ok opengl.resized 16\n"
                                          "ok opengl.attribs 8342\n"
-                                         "ok opengl.lost 33365\n"
+                                         "ok opengl.lost 33363\n"
                                          "ok opengl.recreated 32\n"
                                          "avglprobe: 12 passed, 0 failed\n") == 0);
   CHECK_EQ(rig.gl().calls(Call::swap_buffers), 2u + 1u + GlProbe::paced_frames + 2u);
@@ -241,7 +241,7 @@ TEST(gl_probe, a_context_another_thread_may_take_fails_the_busy_step)
   taken.gl().let_other_threads_take_contexts();
   taken.run();
   CHECK(taken.holds("FAIL opengl.busy status=7 0\n"));
-  CHECK(taken.holds("ok opengl.lost 33365\n"));
+  CHECK(taken.holds("ok opengl.lost 33363\n"));
   ProbeRig other;
   other.gl().fail_at(Call::make_current_elsewhere, 1u);
   other.run();
@@ -265,11 +265,11 @@ TEST(gl_probe, a_loss_that_is_not_reported_as_the_arb_says_fails_the_lost_step)
   ProbeRig unreported;
   unreported.gl().leave_losses_unreported();
   unreported.run();
-  CHECK(unreported.holds("FAIL opengl.lost status=7 33365\n"));
+  CHECK(unreported.holds("FAIL opengl.lost status=7 33363\n"));
   ProbeRig repeated;
   repeated.gl().report_losses_forever();
   repeated.run();
-  CHECK(repeated.holds("FAIL opengl.lost status=7 33365\n"));
+  CHECK(repeated.holds("FAIL opengl.lost status=7 33363\n"));
   ProbeRig uncreated;
   uncreated.gl().fail_at(Call::create_context, 4u);
   uncreated.run();
@@ -366,7 +366,7 @@ TEST(gl_probe, a_context_that_cannot_be_made_again_fails_the_recreated_step)
 { ProbeRig uncreated;
   uncreated.gl().fail_at(Call::create_context, 5u);
   uncreated.run();
-  CHECK(uncreated.holds("ok opengl.lost 33365\n"));
+  CHECK(uncreated.holds("ok opengl.lost 33363\n"));
   CHECK(uncreated.holds("FAIL opengl.recreated status=7 123\n"));
   ProbeRig uncurrent;
   uncurrent.gl().fail_at(Call::make_current, 6u);

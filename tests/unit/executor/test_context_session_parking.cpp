@@ -166,8 +166,9 @@ TEST(context_session_parking, a_teardown_wide_enough_for_every_segment_a_channel
 
 TEST(context_session_parking, an_arena_segment_whose_handle_is_taken_is_unbound_and_retired_not_abandoned_plain)
 { Parking parking;
+  parking.backend().set_one_handle(true);
   CHECK_EQ(parking.session().import_blob(1u, first_key), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(parking.session().import_blob(2u, first_key, arena_at(1u)), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(parking.session().import_blob(2u, first_key + 1u, arena_at(1u)), std::uint32_t{AV_UNDECODABLE});
   CHECK_EQ(parking.backend().unbound(), 1u);
   CHECK_EQ(parking.backend().unbound_when_retired(), 1u);
   CHECK_EQ(parking.backend().abandoned(), 1u);
