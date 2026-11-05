@@ -1,6 +1,7 @@
 #include "guest/transport/channel_stats.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "proto/client/client_blob_arena.hpp"
 
 namespace av {
 
@@ -13,7 +14,7 @@ void ChannelStats::note(ChannelCounter counter, uint64_t amount)
 {
     AV_SCOPE("ChannelStats::note");
     const uint32_t index = static_cast<uint32_t>(counter);
-    if (index >= ChannelStatsReport::counters || amount == 0u) return;
+    if (index >= static_cast<uint32_t>(ChannelCounter::arena_bytes) || amount == 0u) return;
     __atomic_fetch_add(&counters_[index], amount, __ATOMIC_RELAXED);
     __atomic_fetch_add(&changes_, 1u, __ATOMIC_RELAXED);
 }
@@ -23,6 +24,23 @@ void ChannelStats::piece(uint64_t number)
     AV_SCOPE("ChannelStats::piece");
     if (number == 2u) note(ChannelCounter::split_transfers, 1u);
     if (number >= 2u) note(ChannelCounter::split_pieces, 1u);
+}
+
+void ChannelStats::observe(const ClientBlobArena &arena)
+{
+    AV_SCOPE("ChannelStats::observe");
+    gauge(ChannelCounter::arena_bytes, arena.lent());
+    gauge(ChannelCounter::arena_peak_ring_bytes, arena.peak_ring());
+    gauge(ChannelCounter::arena_set_aside_bytes, arena.set_aside_bytes());
+}
+
+void ChannelStats::gauge(ChannelCounter counter, uint64_t value)
+{
+    AV_SCOPE("ChannelStats::gauge");
+    const uint32_t index = static_cast<uint32_t>(counter);
+    if (index >= ChannelStatsReport::counters || __atomic_load_n(&counters_[index], __ATOMIC_RELAXED) == value) return;
+    __atomic_store_n(&counters_[index], value, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&changes_, 1u, __ATOMIC_RELAXED);
 }
 
 bool ChannelStats::due(uint64_t now) const

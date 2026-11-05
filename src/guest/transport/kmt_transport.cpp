@@ -741,6 +741,7 @@ uint32_t KmtTransport::stats_trailer(const uint8_t *batch, uint32_t length, uint
 {
     AV_SCOPE("KmtTransport::stats_trailer");
     constexpr uint32_t size = static_cast<uint32_t>(ChannelStats::command_bytes);
+    stats_.observe(blobs_);
     if (!stats_.due(now) || uint64_t{length} + size > max_batch) return 0u;
     if (!BatchHeader(length + size, 1u, now).fits(ring_.capacity())) return 0u;
     if (CommandStream(batch, length).ends_in_piece() || !stats_.frame_report(into, size)) return 0u;

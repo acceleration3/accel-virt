@@ -16,6 +16,9 @@ enum class ChannelCounter : uint32_t {
     refused_no_space,
     refused_no_memory,
     refused_other,
+    arena_bytes,
+    arena_peak_ring_bytes,
+    arena_set_aside_bytes,
     count
 };
 

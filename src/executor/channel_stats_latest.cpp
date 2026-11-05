@@ -58,6 +58,9 @@ void ChannelStatsLatest::report(StateWriter &writer) const
     writer.number("refused_no_space", value(ChannelCounter::refused_no_space));
     writer.number("refused_no_memory", value(ChannelCounter::refused_no_memory));
     writer.number("refused_other", value(ChannelCounter::refused_other));
+    writer.number("arena_bytes", value(ChannelCounter::arena_bytes));
+    writer.number("arena_peak_ring_bytes", value(ChannelCounter::arena_peak_ring_bytes));
+    writer.number("arena_set_aside_bytes", value(ChannelCounter::arena_set_aside_bytes));
     writer.close();
 }
 

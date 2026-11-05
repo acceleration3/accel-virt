@@ -10,6 +10,8 @@
 
 namespace av {
 
+class ClientBlobArena;
+
 class ChannelStats {
 public:
     static constexpr uint64_t interval = 10000000u;
@@ -21,6 +23,7 @@ public:
 
     void               note(ChannelCounter counter, uint64_t amount);
     void               piece(uint64_t number);
+    void               observe(const ClientBlobArena &arena);
     bool               due(uint64_t now) const;
     [[nodiscard]] bool frame_report(uint8_t *into, size_t capacity) const;
     void               sent(uint64_t now);
@@ -29,6 +32,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    void gauge(ChannelCounter counter, uint64_t value);
+
     uint64_t counters_[ChannelStatsReport::counters];
     uint64_t changes_;
     uint64_t reported_changes_;

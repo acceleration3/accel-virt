@@ -23,7 +23,7 @@ public:
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 
 private:
-    static constexpr uint32_t version = 1u;
+    static constexpr uint32_t version = 2u;
 
     uint64_t values_[counters];
 };

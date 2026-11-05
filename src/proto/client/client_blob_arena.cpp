@@ -37,7 +37,7 @@ size_t   ClientBlobLease::bytes() const
 }
 
 ClientBlobArena::ClientBlobArena()
-    : block_(nullptr), lent_(0u), capacity_(0u), base_(0u), top_(0u), end_(0u), wrapped_(false), lap_(0u),
+    : block_(nullptr), lent_(0u), capacity_(0u), base_(0u), top_(0u), end_(0u), peak_ring_(0u), wrapped_(false), lap_(0u),
       base_lap_(0u), sealed_(0u), sealed_lap_(0u), marks_{}, first_mark_(0u), mark_count_(0u)
 {
     AV_SCOPE("ClientBlobArena::ClientBlobArena");
@@ -55,6 +55,7 @@ void ClientBlobArena::lend(uint8_t *block, size_t capacity)
     block_ = block;
     lent_ = block == nullptr ? 0u : capacity;
     capacity_ = lent_;
+    peak_ring_ = 0u;
     empty();
 }
 
@@ -79,6 +80,8 @@ ClientBlobLease ClientBlobArena::take(size_t count)
     }
     const size_t at = top_;
     top_ += count;
+    const size_t in_ring = wrapped_ ? end_ - base_ + top_ : top_ - base_;
+    if (in_ring > peak_ring_) peak_ring_ = in_ring;
     return ClientBlobLease(block_ + at, at, count);
 }
 
@@ -180,6 +183,24 @@ size_t ClientBlobArena::room() const
     return above > base_ ? above : base_;
 }
 
+size_t ClientBlobArena::lent() const
+{
+    AV_SCOPE("ClientBlobArena::lent");
+    return lent_;
+}
+
+size_t ClientBlobArena::peak_ring() const
+{
+    AV_SCOPE("ClientBlobArena::peak_ring");
+    return peak_ring_;
+}
+
+size_t ClientBlobArena::set_aside_bytes() const
+{
+    AV_SCOPE("ClientBlobArena::set_aside_bytes");
+    return lent_ - capacity_;
+}
+
 bool ClientBlobArena::invariants_hold() const
 {
     AV_SCOPE("ClientBlobArena::invariants_hold");
@@ -187,7 +208,7 @@ bool ClientBlobArena::invariants_hold() const
                                : base_ <= top_ && top_ <= capacity_;
     const bool sealed = sealed_lap_ == base_lap_ ? base_ <= sealed_ && sealed_ <= (wrapped_ ? end_ : top_)
                                                  : wrapped_ && sealed_lap_ == lap_ && sealed_ <= top_;
-    return laid && sealed && capacity_ <= lent_ && (block_ != nullptr || lent_ == 0u) && mark_count_ <= max_marks &&
+    return laid && sealed && capacity_ <= lent_ && (block_ != nullptr || lent_ == 0u) && peak_ring_ <= lent_ && mark_count_ <= max_marks &&
            first_mark_ < max_marks && (wrapped_ ? lap_ == base_lap_ + 1u : lap_ == base_lap_);
 }
 

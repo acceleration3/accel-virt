@@ -44,6 +44,9 @@ public:
 
     size_t used() const;
     size_t room() const;
+    size_t lent() const;
+    size_t peak_ring() const;
+    size_t set_aside_bytes() const;
     bool   invariants_hold() const;
 
     static constexpr uint32_t max_marks = 64u;
@@ -63,6 +66,7 @@ private:
     size_t   base_;
     size_t   top_;
     size_t   end_;
+    size_t   peak_ring_;
     bool     wrapped_;
     uint64_t lap_;
     uint64_t base_lap_;
