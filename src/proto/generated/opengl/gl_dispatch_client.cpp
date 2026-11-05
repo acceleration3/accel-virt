@@ -186,12 +186,8 @@ void av_glBindBufferRange(::av::ClientTransport& av_t, GLenum target, GLuint ind
 
 void av_glBindBuffersBase(::av::ClientTransport& av_t, GLenum target, GLuint first, GLsizei count, const GLuint* buffers) {
     AV_SCOPE("av_glBindBuffersBase");
-    {
-        const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -234,12 +230,8 @@ void av_glBindBuffersBase(::av::ClientTransport& av_t, GLenum target, GLuint fir
 
 void av_glBindBuffersRange(::av::ClientTransport& av_t, GLenum target, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizeiptr* sizes) {
     AV_SCOPE("av_glBindBuffersRange");
-    {
-        const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr)))) : 0u, sizes != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizeiptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizeiptr)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 3u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr)))) : 0u, sizes != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizeiptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizeiptr)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 3u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -412,12 +404,8 @@ void av_glBindImageTexture(::av::ClientTransport& av_t, GLuint unit, GLuint text
 
 void av_glBindImageTextures(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLuint* textures) {
     AV_SCOPE("av_glBindImageTextures");
-    {
-        const uint64_t av_blob_sizes[] = {textures != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {textures != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t textures_want = 0;
@@ -500,12 +488,8 @@ void av_glBindSampler(::av::ClientTransport& av_t, GLuint unit, GLuint sampler) 
 
 void av_glBindSamplers(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLuint* samplers) {
     AV_SCOPE("av_glBindSamplers");
-    {
-        const uint64_t av_blob_sizes[] = {samplers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {samplers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t samplers_want = 0;
@@ -575,12 +559,8 @@ void av_glBindTextureUnit(::av::ClientTransport& av_t, GLuint unit, GLuint textu
 
 void av_glBindTextures(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLuint* textures) {
     AV_SCOPE("av_glBindTextures");
-    {
-        const uint64_t av_blob_sizes[] = {textures != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {textures != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t textures_want = 0;
@@ -665,12 +645,8 @@ void av_glBindVertexBuffer(::av::ClientTransport& av_t, GLuint bindingindex, GLu
 
 void av_glBindVertexBuffers(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizei* strides) {
     AV_SCOPE("av_glBindVertexBuffers");
-    {
-        const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr)))) : 0u, strides != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 3u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr)))) : 0u, strides != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 3u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t buffers_want = 0;
@@ -948,12 +924,8 @@ void av_glBlitNamedFramebuffer(::av::ClientTransport& av_t, GLuint readFramebuff
 
 void av_glBufferData(::av::ClientTransport& av_t, GLenum target, GLsizeiptr size, const void* data, GLenum usage) {
     AV_SCOPE("av_glBufferData");
-    {
-        const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(size));
     size_t data_want = 0;
@@ -996,12 +968,8 @@ void av_glBufferData(::av::ClientTransport& av_t, GLenum target, GLsizeiptr size
 
 void av_glBufferStorage(::av::ClientTransport& av_t, GLenum target, GLsizeiptr size, const void* data, GLbitfield flags) {
     AV_SCOPE("av_glBufferStorage");
-    {
-        const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(size));
     size_t data_want = 0;
@@ -1044,12 +1012,8 @@ void av_glBufferStorage(::av::ClientTransport& av_t, GLenum target, GLsizeiptr s
 
 void av_glBufferSubData(::av::ClientTransport& av_t, GLenum target, GLintptr offset, GLsizeiptr size, const void* data) {
     AV_SCOPE("av_glBufferSubData");
-    {
-        const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(offset));
     av_b.write_varint(static_cast<uint64_t>(size));
@@ -1162,12 +1126,8 @@ void av_glClear(::av::ClientTransport& av_t, GLbitfield mask) {
 
 void av_glClearBufferData(::av::ClientTransport& av_t, GLenum target, GLenum internalformat, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glClearBufferData");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
     av_b.write_varint(static_cast<uint64_t>(format));
@@ -1212,12 +1172,8 @@ void av_glClearBufferData(::av::ClientTransport& av_t, GLenum target, GLenum int
 
 void av_glClearBufferSubData(::av::ClientTransport& av_t, GLenum target, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glClearBufferSubData");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
     av_b.write_varint(static_cast<uint64_t>(offset));
@@ -1280,12 +1236,8 @@ void av_glClearBufferfi(::av::ClientTransport& av_t, GLenum buffer, GLint drawbu
 
 void av_glClearBufferfv(::av::ClientTransport& av_t, GLenum buffer, GLint drawbuffer, const GLfloat* value) {
     AV_SCOPE("av_glClearBufferfv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(drawbuffer));
     size_t value_want = 0;
@@ -1327,12 +1279,8 @@ void av_glClearBufferfv(::av::ClientTransport& av_t, GLenum buffer, GLint drawbu
 
 void av_glClearBufferiv(::av::ClientTransport& av_t, GLenum buffer, GLint drawbuffer, const GLint* value) {
     AV_SCOPE("av_glClearBufferiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(drawbuffer));
     size_t value_want = 0;
@@ -1374,12 +1322,8 @@ void av_glClearBufferiv(::av::ClientTransport& av_t, GLenum buffer, GLint drawbu
 
 void av_glClearBufferuiv(::av::ClientTransport& av_t, GLenum buffer, GLint drawbuffer, const GLuint* value) {
     AV_SCOPE("av_glClearBufferuiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(drawbuffer));
     size_t value_want = 0;
@@ -1463,12 +1407,8 @@ void av_glClearDepthf(::av::ClientTransport& av_t, GLfloat d) {
 
 void av_glClearNamedBufferData(::av::ClientTransport& av_t, GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glClearNamedBufferData");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
     av_b.write_varint(static_cast<uint64_t>(format));
@@ -1513,12 +1453,8 @@ void av_glClearNamedBufferData(::av::ClientTransport& av_t, GLuint buffer, GLenu
 
 void av_glClearNamedBufferSubData(::av::ClientTransport& av_t, GLuint buffer, GLenum internalformat, GLintptr offset, GLsizeiptr size, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glClearNamedBufferSubData");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
     av_b.write_varint(static_cast<uint64_t>(offset));
@@ -1582,12 +1518,8 @@ void av_glClearNamedFramebufferfi(::av::ClientTransport& av_t, GLuint framebuffe
 
 void av_glClearNamedFramebufferfv(::av::ClientTransport& av_t, GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLfloat* value) {
     AV_SCOPE("av_glClearNamedFramebufferfv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(framebuffer));
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(drawbuffer));
@@ -1630,12 +1562,8 @@ void av_glClearNamedFramebufferfv(::av::ClientTransport& av_t, GLuint framebuffe
 
 void av_glClearNamedFramebufferiv(::av::ClientTransport& av_t, GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLint* value) {
     AV_SCOPE("av_glClearNamedFramebufferiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(framebuffer));
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(drawbuffer));
@@ -1678,12 +1606,8 @@ void av_glClearNamedFramebufferiv(::av::ClientTransport& av_t, GLuint framebuffe
 
 void av_glClearNamedFramebufferuiv(::av::ClientTransport& av_t, GLuint framebuffer, GLenum buffer, GLint drawbuffer, const GLuint* value) {
     AV_SCOPE("av_glClearNamedFramebufferuiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((buffer == 0x1800 ? 4 : 1)) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(framebuffer));
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(drawbuffer));
@@ -1739,12 +1663,8 @@ void av_glClearStencil(::av::ClientTransport& av_t, GLint s) {
 
 void av_glClearTexImage(::av::ClientTransport& av_t, GLuint texture, GLint level, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glClearTexImage");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(format));
@@ -1789,12 +1709,8 @@ void av_glClearTexImage(::av::ClientTransport& av_t, GLuint texture, GLint level
 
 void av_glClearTexSubImage(::av::ClientTransport& av_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glClearTexSubImage");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -1929,12 +1845,8 @@ void av_glColorP3ui(::av::ClientTransport& av_t, GLenum type, GLuint color) {
 
 void av_glColorP3uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* color) {
     AV_SCOPE("av_glColorP3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {color != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {color != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t color_want = 0;
     if (color != nullptr) color_want = (1 * sizeof(GLuint));
@@ -1989,12 +1901,8 @@ void av_glColorP4ui(::av::ClientTransport& av_t, GLenum type, GLuint color) {
 
 void av_glColorP4uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* color) {
     AV_SCOPE("av_glColorP4uiv");
-    {
-        const uint64_t av_blob_sizes[] = {color != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {color != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t color_want = 0;
     if (color != nullptr) color_want = (1 * sizeof(GLuint));
@@ -2048,12 +1956,8 @@ void av_glCompileShader(::av::ClientTransport& av_t, GLuint shader) {
 
 void av_glCompressedTexImage1D(::av::ClientTransport& av_t, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLint border, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glCompressedTexImage1D");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -2100,12 +2004,8 @@ void av_glCompressedTexImage1D(::av::ClientTransport& av_t, GLenum target, GLint
 
 void av_glCompressedTexImage2D(::av::ClientTransport& av_t, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glCompressedTexImage2D");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -2153,12 +2053,8 @@ void av_glCompressedTexImage2D(::av::ClientTransport& av_t, GLenum target, GLint
 
 void av_glCompressedTexImage3D(::av::ClientTransport& av_t, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glCompressedTexImage3D");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -2207,12 +2103,8 @@ void av_glCompressedTexImage3D(::av::ClientTransport& av_t, GLenum target, GLint
 
 void av_glCompressedTexSubImage1D(::av::ClientTransport& av_t, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glCompressedTexSubImage1D");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -2259,12 +2151,8 @@ void av_glCompressedTexSubImage1D(::av::ClientTransport& av_t, GLenum target, GL
 
 void av_glCompressedTexSubImage2D(::av::ClientTransport& av_t, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glCompressedTexSubImage2D");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -2313,12 +2201,8 @@ void av_glCompressedTexSubImage2D(::av::ClientTransport& av_t, GLenum target, GL
 
 void av_glCompressedTexSubImage3D(::av::ClientTransport& av_t, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glCompressedTexSubImage3D");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -2369,12 +2253,8 @@ void av_glCompressedTexSubImage3D(::av::ClientTransport& av_t, GLenum target, GL
 
 void av_glCompressedTextureSubImage1D(::av::ClientTransport& av_t, GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glCompressedTextureSubImage1D");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -2421,12 +2301,8 @@ void av_glCompressedTextureSubImage1D(::av::ClientTransport& av_t, GLuint textur
 
 void av_glCompressedTextureSubImage2D(::av::ClientTransport& av_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glCompressedTextureSubImage2D");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -2475,12 +2351,8 @@ void av_glCompressedTextureSubImage2D(::av::ClientTransport& av_t, GLuint textur
 
 void av_glCompressedTextureSubImage3D(::av::ClientTransport& av_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glCompressedTextureSubImage3D");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -3121,12 +2993,8 @@ void av_glDebugMessageCallback(::av::ClientTransport& av_t) {
 
 void av_glDebugMessageControl(::av::ClientTransport& av_t, GLenum source, GLenum type, GLenum severity, GLsizei count, const GLuint* ids, GLboolean enabled) {
     AV_SCOPE("av_glDebugMessageControl");
-    {
-        const uint64_t av_blob_sizes[] = {ids != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {ids != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(source));
     av_b.write_varint(static_cast<uint64_t>(type));
     av_b.write_varint(static_cast<uint64_t>(severity));
@@ -3194,12 +3062,8 @@ void av_glDebugMessageInsert(::av::ClientTransport& av_t, GLenum source, GLenum 
 
 void av_glDeleteBuffers(::av::ClientTransport& av_t, GLsizei n, const GLuint* buffers) {
     AV_SCOPE("av_glDeleteBuffers");
-    {
-        const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t buffers_want = 0;
     if (buffers != nullptr) buffers_want = (static_cast<size_t>(n) * sizeof(GLuint));
@@ -3240,12 +3104,8 @@ void av_glDeleteBuffers(::av::ClientTransport& av_t, GLsizei n, const GLuint* bu
 
 void av_glDeleteFramebuffers(::av::ClientTransport& av_t, GLsizei n, const GLuint* framebuffers) {
     AV_SCOPE("av_glDeleteFramebuffers");
-    {
-        const uint64_t av_blob_sizes[] = {framebuffers != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {framebuffers != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t framebuffers_want = 0;
     if (framebuffers != nullptr) framebuffers_want = (static_cast<size_t>(n) * sizeof(GLuint));
@@ -3299,12 +3159,8 @@ void av_glDeleteProgram(::av::ClientTransport& av_t, GLuint program) {
 
 void av_glDeleteProgramPipelines(::av::ClientTransport& av_t, GLsizei n, const GLuint* pipelines) {
     AV_SCOPE("av_glDeleteProgramPipelines");
-    {
-        const uint64_t av_blob_sizes[] = {pipelines != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {pipelines != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t pipelines_want = 0;
     if (pipelines != nullptr) pipelines_want = (static_cast<size_t>(n) * sizeof(GLuint));
@@ -3345,12 +3201,8 @@ void av_glDeleteProgramPipelines(::av::ClientTransport& av_t, GLsizei n, const G
 
 void av_glDeleteQueries(::av::ClientTransport& av_t, GLsizei n, const GLuint* ids) {
     AV_SCOPE("av_glDeleteQueries");
-    {
-        const uint64_t av_blob_sizes[] = {ids != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {ids != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t ids_want = 0;
     if (ids != nullptr) ids_want = (static_cast<size_t>(n) * sizeof(GLuint));
@@ -3391,12 +3243,8 @@ void av_glDeleteQueries(::av::ClientTransport& av_t, GLsizei n, const GLuint* id
 
 void av_glDeleteRenderbuffers(::av::ClientTransport& av_t, GLsizei n, const GLuint* renderbuffers) {
     AV_SCOPE("av_glDeleteRenderbuffers");
-    {
-        const uint64_t av_blob_sizes[] = {renderbuffers != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {renderbuffers != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t renderbuffers_want = 0;
     if (renderbuffers != nullptr) renderbuffers_want = (static_cast<size_t>(n) * sizeof(GLuint));
@@ -3437,12 +3285,8 @@ void av_glDeleteRenderbuffers(::av::ClientTransport& av_t, GLsizei n, const GLui
 
 void av_glDeleteSamplers(::av::ClientTransport& av_t, GLsizei count, const GLuint* samplers) {
     AV_SCOPE("av_glDeleteSamplers");
-    {
-        const uint64_t av_blob_sizes[] = {samplers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {samplers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t samplers_want = 0;
     if (samplers != nullptr) samplers_want = (static_cast<size_t>(count) * sizeof(GLuint));
@@ -3509,12 +3353,8 @@ void av_glDeleteSync(::av::ClientTransport& av_t, uint64_t sync) {
 
 void av_glDeleteTextures(::av::ClientTransport& av_t, GLsizei n, const GLuint* textures) {
     AV_SCOPE("av_glDeleteTextures");
-    {
-        const uint64_t av_blob_sizes[] = {textures != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {textures != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t textures_want = 0;
     if (textures != nullptr) textures_want = (static_cast<size_t>(n) * sizeof(GLuint));
@@ -3555,12 +3395,8 @@ void av_glDeleteTextures(::av::ClientTransport& av_t, GLsizei n, const GLuint* t
 
 void av_glDeleteTransformFeedbacks(::av::ClientTransport& av_t, GLsizei n, const GLuint* ids) {
     AV_SCOPE("av_glDeleteTransformFeedbacks");
-    {
-        const uint64_t av_blob_sizes[] = {ids != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {ids != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t ids_want = 0;
     if (ids != nullptr) ids_want = (static_cast<size_t>(n) * sizeof(GLuint));
@@ -3601,12 +3437,8 @@ void av_glDeleteTransformFeedbacks(::av::ClientTransport& av_t, GLsizei n, const
 
 void av_glDeleteVertexArrays(::av::ClientTransport& av_t, GLsizei n, const GLuint* arrays) {
     AV_SCOPE("av_glDeleteVertexArrays");
-    {
-        const uint64_t av_blob_sizes[] = {arrays != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {arrays != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t arrays_want = 0;
     if (arrays != nullptr) arrays_want = (static_cast<size_t>(n) * sizeof(GLuint));
@@ -3687,12 +3519,8 @@ void av_glDepthRange(::av::ClientTransport& av_t, GLdouble n, GLdouble f) {
 
 void av_glDepthRangeArrayv(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLdouble* v) {
     AV_SCOPE("av_glDepthRangeArrayv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t v_want = 0;
@@ -3934,12 +3762,8 @@ void av_glDrawBuffer(::av::ClientTransport& av_t, GLenum buf) {
 
 void av_glDrawBuffers(::av::ClientTransport& av_t, GLsizei n, const GLenum* bufs) {
     AV_SCOPE("av_glDrawBuffers");
-    {
-        const uint64_t av_blob_sizes[] = {bufs != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bufs != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t bufs_want = 0;
     if (bufs != nullptr) bufs_want = (static_cast<size_t>(n) * sizeof(GLenum));
@@ -5184,12 +5008,8 @@ void av_glGetActiveUniformName(::av::ClientTransport& av_t, GLuint program, GLui
 
 void av_glGetActiveUniformsiv(::av::ClientTransport& av_t, GLuint program, GLsizei uniformCount, const GLuint* uniformIndices, GLenum pname, GLint* params) {
     AV_SCOPE("av_glGetActiveUniformsiv");
-    {
-        const uint64_t av_blob_sizes[] = {uniformIndices != nullptr && static_cast<size_t>((static_cast<size_t>(uniformCount) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(uniformCount) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {uniformIndices != nullptr && static_cast<size_t>((static_cast<size_t>(uniformCount) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(uniformCount) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(uniformCount));
@@ -5478,12 +5298,8 @@ void av_glGetBufferSubData(::av::ClientTransport& av_t, GLenum target, GLintptr 
 
 void av_glGetCompressedTexImage(::av::ClientTransport& av_t, GLenum target, GLint level, void* img, size_t img_bytes, bool img_is_offset) {
     AV_SCOPE("av_glGetCompressedTexImage");
-    {
-        const uint64_t av_blob_sizes[] = {!img_is_offset && img != nullptr && static_cast<size_t>(img_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(img_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!img_is_offset && img != nullptr && static_cast<size_t>(img_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(img_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -5538,12 +5354,8 @@ void av_glGetCompressedTexImage(::av::ClientTransport& av_t, GLenum target, GLin
 
 void av_glGetCompressedTextureImage(::av::ClientTransport& av_t, GLuint texture, GLint level, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
     AV_SCOPE("av_glGetCompressedTextureImage");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -5599,12 +5411,8 @@ void av_glGetCompressedTextureImage(::av::ClientTransport& av_t, GLuint texture,
 
 void av_glGetCompressedTextureSubImage(::av::ClientTransport& av_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
     AV_SCOPE("av_glGetCompressedTextureSubImage");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -6846,12 +6654,8 @@ void av_glGetProgramResourceName(::av::ClientTransport& av_t, GLuint program, GL
 
 void av_glGetProgramResourceiv(::av::ClientTransport& av_t, GLuint program, GLenum programInterface, GLuint index, GLsizei propCount, const GLenum* props, GLsizei count, GLsizei* length, GLint* params) {
     AV_SCOPE("av_glGetProgramResourceiv");
-    {
-        const uint64_t av_blob_sizes[] = {props != nullptr && static_cast<size_t>((static_cast<size_t>(propCount) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(propCount) * sizeof(GLenum)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {props != nullptr && static_cast<size_t>((static_cast<size_t>(propCount) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(propCount) * sizeof(GLenum)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(programInterface));
@@ -7088,12 +6892,8 @@ void av_glGetQueryIndexediv(::av::ClientTransport& av_t, GLenum target, GLuint i
 
 void av_glGetQueryObjecti64v(::av::ClientTransport& av_t, GLuint id, GLenum pname, void* params, size_t params_bytes, bool params_is_offset) {
     AV_SCOPE("av_glGetQueryObjecti64v");
-    {
-        const uint64_t av_blob_sizes[] = {!params_is_offset && params != nullptr && static_cast<size_t>(params_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(params_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!params_is_offset && params != nullptr && static_cast<size_t>(params_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(params_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(id));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -7148,12 +6948,8 @@ void av_glGetQueryObjecti64v(::av::ClientTransport& av_t, GLuint id, GLenum pnam
 
 void av_glGetQueryObjectiv(::av::ClientTransport& av_t, GLuint id, GLenum pname, void* params, size_t params_bytes, bool params_is_offset) {
     AV_SCOPE("av_glGetQueryObjectiv");
-    {
-        const uint64_t av_blob_sizes[] = {!params_is_offset && params != nullptr && static_cast<size_t>(params_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(params_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!params_is_offset && params != nullptr && static_cast<size_t>(params_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(params_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(id));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -7208,12 +7004,8 @@ void av_glGetQueryObjectiv(::av::ClientTransport& av_t, GLuint id, GLenum pname,
 
 void av_glGetQueryObjectui64v(::av::ClientTransport& av_t, GLuint id, GLenum pname, void* params, size_t params_bytes, bool params_is_offset) {
     AV_SCOPE("av_glGetQueryObjectui64v");
-    {
-        const uint64_t av_blob_sizes[] = {!params_is_offset && params != nullptr && static_cast<size_t>(params_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(params_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!params_is_offset && params != nullptr && static_cast<size_t>(params_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(params_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(id));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -7268,12 +7060,8 @@ void av_glGetQueryObjectui64v(::av::ClientTransport& av_t, GLuint id, GLenum pna
 
 void av_glGetQueryObjectuiv(::av::ClientTransport& av_t, GLuint id, GLenum pname, void* params, size_t params_bytes, bool params_is_offset) {
     AV_SCOPE("av_glGetQueryObjectuiv");
-    {
-        const uint64_t av_blob_sizes[] = {!params_is_offset && params != nullptr && static_cast<size_t>(params_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(params_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!params_is_offset && params != nullptr && static_cast<size_t>(params_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(params_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(id));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -7847,12 +7635,8 @@ void av_glGetSynciv(::av::ClientTransport& av_t, uint64_t sync, GLenum pname, GL
 
 void av_glGetTexImage(::av::ClientTransport& av_t, GLenum target, GLint level, GLenum format, GLenum type, void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glGetTexImage");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -8097,12 +7881,8 @@ void av_glGetTexParameteriv(::av::ClientTransport& av_t, GLenum target, GLenum p
 
 void av_glGetTextureImage(::av::ClientTransport& av_t, GLuint texture, GLint level, GLenum format, GLenum type, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
     AV_SCOPE("av_glGetTextureImage");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -8348,12 +8128,8 @@ void av_glGetTextureParameteriv(::av::ClientTransport& av_t, GLuint texture, GLe
 
 void av_glGetTextureSubImage(::av::ClientTransport& av_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
     AV_SCOPE("av_glGetTextureSubImage");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -9139,12 +8915,8 @@ void av_glGetVertexAttribiv(::av::ClientTransport& av_t, GLuint index, GLenum pn
 
 void av_glGetnCompressedTexImage(::av::ClientTransport& av_t, GLenum target, GLint lod, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
     AV_SCOPE("av_glGetnCompressedTexImage");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(lod));
@@ -9200,12 +8972,8 @@ void av_glGetnCompressedTexImage(::av::ClientTransport& av_t, GLenum target, GLi
 
 void av_glGetnTexImage(::av::ClientTransport& av_t, GLenum target, GLint level, GLenum format, GLenum type, GLsizei bufSize, void* pixels, bool pixels_is_offset) {
     AV_SCOPE("av_glGetnTexImage");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -9433,12 +9201,8 @@ void av_glInvalidateBufferSubData(::av::ClientTransport& av_t, GLuint buffer, GL
 
 void av_glInvalidateFramebuffer(::av::ClientTransport& av_t, GLenum target, GLsizei numAttachments, const GLenum* attachments) {
     AV_SCOPE("av_glInvalidateFramebuffer");
-    {
-        const uint64_t av_blob_sizes[] = {attachments != nullptr && static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {attachments != nullptr && static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(numAttachments));
     size_t attachments_want = 0;
@@ -9480,12 +9244,8 @@ void av_glInvalidateFramebuffer(::av::ClientTransport& av_t, GLenum target, GLsi
 
 void av_glInvalidateNamedFramebufferData(::av::ClientTransport& av_t, GLuint framebuffer, GLsizei numAttachments, const GLenum* attachments) {
     AV_SCOPE("av_glInvalidateNamedFramebufferData");
-    {
-        const uint64_t av_blob_sizes[] = {attachments != nullptr && static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {attachments != nullptr && static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(framebuffer));
     av_b.write_varint(static_cast<uint64_t>(numAttachments));
     size_t attachments_want = 0;
@@ -9527,12 +9287,8 @@ void av_glInvalidateNamedFramebufferData(::av::ClientTransport& av_t, GLuint fra
 
 void av_glInvalidateNamedFramebufferSubData(::av::ClientTransport& av_t, GLuint framebuffer, GLsizei numAttachments, const GLenum* attachments, GLint x, GLint y, GLsizei width, GLsizei height) {
     AV_SCOPE("av_glInvalidateNamedFramebufferSubData");
-    {
-        const uint64_t av_blob_sizes[] = {attachments != nullptr && static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {attachments != nullptr && static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(framebuffer));
     av_b.write_varint(static_cast<uint64_t>(numAttachments));
     size_t attachments_want = 0;
@@ -9578,12 +9334,8 @@ void av_glInvalidateNamedFramebufferSubData(::av::ClientTransport& av_t, GLuint 
 
 void av_glInvalidateSubFramebuffer(::av::ClientTransport& av_t, GLenum target, GLsizei numAttachments, const GLenum* attachments, GLint x, GLint y, GLsizei width, GLsizei height) {
     AV_SCOPE("av_glInvalidateSubFramebuffer");
-    {
-        const uint64_t av_blob_sizes[] = {attachments != nullptr && static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {attachments != nullptr && static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numAttachments) * sizeof(GLenum)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(numAttachments));
     size_t attachments_want = 0;
@@ -10036,12 +9788,8 @@ void av_glMinSampleShading(::av::ClientTransport& av_t, GLfloat value) {
 
 void av_glMultiDrawArrays(::av::ClientTransport& av_t, GLenum mode, const GLint* first, const GLsizei* count, GLsizei drawcount) {
     AV_SCOPE("av_glMultiDrawArrays");
-    {
-        const uint64_t av_blob_sizes[] = {first != nullptr && static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLint)))) : 0u, count != nullptr && static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 2u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {first != nullptr && static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLint)))) : 0u, count != nullptr && static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 2u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(mode));
     size_t first_want = 0;
     if (first != nullptr) first_want = (static_cast<size_t>(drawcount) * sizeof(GLint));
@@ -10144,12 +9892,8 @@ void av_glMultiDrawArraysIndirectCount(::av::ClientTransport& av_t, GLenum mode,
 
 void av_glMultiDrawElements(::av::ClientTransport& av_t, GLenum mode, const GLsizei* count, GLenum type, const uint64_t* indices, GLsizei drawcount) {
     AV_SCOPE("av_glMultiDrawElements");
-    {
-        const uint64_t av_blob_sizes[] = {count != nullptr && static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {count != nullptr && static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(mode));
     size_t count_want = 0;
     if (count != nullptr) count_want = (static_cast<size_t>(drawcount) * sizeof(GLsizei));
@@ -10200,12 +9944,8 @@ void av_glMultiDrawElements(::av::ClientTransport& av_t, GLenum mode, const GLsi
 
 void av_glMultiDrawElementsBaseVertex(::av::ClientTransport& av_t, GLenum mode, const GLsizei* count, GLenum type, const uint64_t* indices, GLsizei drawcount, const GLint* basevertex) {
     AV_SCOPE("av_glMultiDrawElementsBaseVertex");
-    {
-        const uint64_t av_blob_sizes[] = {count != nullptr && static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei)))) : 0u, basevertex != nullptr && static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 2u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {count != nullptr && static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLsizei)))) : 0u, basevertex != nullptr && static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(drawcount) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 2u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(mode));
     size_t count_want = 0;
     if (count != nullptr) count_want = (static_cast<size_t>(drawcount) * sizeof(GLsizei));
@@ -10334,12 +10074,8 @@ void av_glMultiTexCoordP1ui(::av::ClientTransport& av_t, GLenum texture, GLenum 
 
 void av_glMultiTexCoordP1uiv(::av::ClientTransport& av_t, GLenum texture, GLenum type, const GLuint* coords) {
     AV_SCOPE("av_glMultiTexCoordP1uiv");
-    {
-        const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
@@ -10396,12 +10132,8 @@ void av_glMultiTexCoordP2ui(::av::ClientTransport& av_t, GLenum texture, GLenum 
 
 void av_glMultiTexCoordP2uiv(::av::ClientTransport& av_t, GLenum texture, GLenum type, const GLuint* coords) {
     AV_SCOPE("av_glMultiTexCoordP2uiv");
-    {
-        const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
@@ -10458,12 +10190,8 @@ void av_glMultiTexCoordP3ui(::av::ClientTransport& av_t, GLenum texture, GLenum 
 
 void av_glMultiTexCoordP3uiv(::av::ClientTransport& av_t, GLenum texture, GLenum type, const GLuint* coords) {
     AV_SCOPE("av_glMultiTexCoordP3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
@@ -10520,12 +10248,8 @@ void av_glMultiTexCoordP4ui(::av::ClientTransport& av_t, GLenum texture, GLenum 
 
 void av_glMultiTexCoordP4uiv(::av::ClientTransport& av_t, GLenum texture, GLenum type, const GLuint* coords) {
     AV_SCOPE("av_glMultiTexCoordP4uiv");
-    {
-        const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
@@ -10567,12 +10291,8 @@ void av_glMultiTexCoordP4uiv(::av::ClientTransport& av_t, GLenum texture, GLenum
 
 void av_glNamedBufferData(::av::ClientTransport& av_t, GLuint buffer, GLsizeiptr size, const void* data, GLenum usage) {
     AV_SCOPE("av_glNamedBufferData");
-    {
-        const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(size));
     size_t data_want = 0;
@@ -10615,12 +10335,8 @@ void av_glNamedBufferData(::av::ClientTransport& av_t, GLuint buffer, GLsizeiptr
 
 void av_glNamedBufferStorage(::av::ClientTransport& av_t, GLuint buffer, GLsizeiptr size, const void* data, GLbitfield flags) {
     AV_SCOPE("av_glNamedBufferStorage");
-    {
-        const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(size));
     size_t data_want = 0;
@@ -10663,12 +10379,8 @@ void av_glNamedBufferStorage(::av::ClientTransport& av_t, GLuint buffer, GLsizei
 
 void av_glNamedBufferSubData(::av::ClientTransport& av_t, GLuint buffer, GLintptr offset, GLsizeiptr size, const void* data) {
     AV_SCOPE("av_glNamedBufferSubData");
-    {
-        const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(offset));
     av_b.write_varint(static_cast<uint64_t>(size));
@@ -10725,12 +10437,8 @@ void av_glNamedFramebufferDrawBuffer(::av::ClientTransport& av_t, GLuint framebu
 
 void av_glNamedFramebufferDrawBuffers(::av::ClientTransport& av_t, GLuint framebuffer, GLsizei n, const GLenum* bufs) {
     AV_SCOPE("av_glNamedFramebufferDrawBuffers");
-    {
-        const uint64_t av_blob_sizes[] = {bufs != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bufs != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(framebuffer));
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t bufs_want = 0;
@@ -10897,12 +10605,8 @@ void av_glNormalP3ui(::av::ClientTransport& av_t, GLenum type, GLuint coords) {
 
 void av_glNormalP3uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* coords) {
     AV_SCOPE("av_glNormalP3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
     if (coords != nullptr) coords_want = (1 * sizeof(GLuint));
@@ -10984,12 +10688,8 @@ void av_glObjectPtrLabel(::av::ClientTransport& av_t, uint64_t ptr, GLsizei leng
 
 void av_glPatchParameterfv(::av::ClientTransport& av_t, GLenum pname, const GLfloat* values) {
     AV_SCOPE("av_glPatchParameterfv");
-    {
-        const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t values_want = 0;
     if (values != nullptr) values_want = (::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat));
@@ -11098,12 +10798,8 @@ void av_glPointParameterf(::av::ClientTransport& av_t, GLenum pname, GLfloat par
 
 void av_glPointParameterfv(::av::ClientTransport& av_t, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glPointParameterfv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
     if (params != nullptr) params_want = (::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat));
@@ -11158,12 +10854,8 @@ void av_glPointParameteri(::av::ClientTransport& av_t, GLenum pname, GLint param
 
 void av_glPointParameteriv(::av::ClientTransport& av_t, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glPointParameteriv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
     if (params != nullptr) params_want = (::av::glproto::pname_count(av_t, pname) * sizeof(GLint));
@@ -11285,12 +10977,8 @@ void av_glPrimitiveRestartIndex(::av::ClientTransport& av_t, GLuint index) {
 
 void av_glProgramBinary(::av::ClientTransport& av_t, GLuint program, GLenum binaryFormat, const void* binary, GLsizei length) {
     AV_SCOPE("av_glProgramBinary");
-    {
-        const uint64_t av_blob_sizes[] = {binary != nullptr && static_cast<size_t>((static_cast<size_t>(length) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(length) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {binary != nullptr && static_cast<size_t>((static_cast<size_t>(length) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(length) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(binaryFormat));
     size_t binary_want = 0;
@@ -11363,12 +11051,8 @@ void av_glProgramUniform1d(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform1dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniform1dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -11426,12 +11110,8 @@ void av_glProgramUniform1f(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform1fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniform1fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -11489,12 +11169,8 @@ void av_glProgramUniform1i(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform1iv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glProgramUniform1iv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -11552,12 +11228,8 @@ void av_glProgramUniform1ui(::av::ClientTransport& av_t, GLuint program, GLint l
 
 void av_glProgramUniform1uiv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glProgramUniform1uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -11616,12 +11288,8 @@ void av_glProgramUniform2d(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform2dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniform2dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -11680,12 +11348,8 @@ void av_glProgramUniform2f(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform2fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniform2fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -11744,12 +11408,8 @@ void av_glProgramUniform2i(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform2iv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glProgramUniform2iv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -11808,12 +11468,8 @@ void av_glProgramUniform2ui(::av::ClientTransport& av_t, GLuint program, GLint l
 
 void av_glProgramUniform2uiv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glProgramUniform2uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -11873,12 +11529,8 @@ void av_glProgramUniform3d(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform3dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniform3dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -11938,12 +11590,8 @@ void av_glProgramUniform3f(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform3fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniform3fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12003,12 +11651,8 @@ void av_glProgramUniform3i(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform3iv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glProgramUniform3iv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12068,12 +11712,8 @@ void av_glProgramUniform3ui(::av::ClientTransport& av_t, GLuint program, GLint l
 
 void av_glProgramUniform3uiv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glProgramUniform3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12134,12 +11774,8 @@ void av_glProgramUniform4d(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform4dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniform4dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12200,12 +11836,8 @@ void av_glProgramUniform4f(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform4fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniform4fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12266,12 +11898,8 @@ void av_glProgramUniform4i(::av::ClientTransport& av_t, GLuint program, GLint lo
 
 void av_glProgramUniform4iv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glProgramUniform4iv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12332,12 +11960,8 @@ void av_glProgramUniform4ui(::av::ClientTransport& av_t, GLuint program, GLint l
 
 void av_glProgramUniform4uiv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glProgramUniform4uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12380,12 +12004,8 @@ void av_glProgramUniform4uiv(::av::ClientTransport& av_t, GLuint program, GLint 
 
 void av_glProgramUniformMatrix2dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix2dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12429,12 +12049,8 @@ void av_glProgramUniformMatrix2dv(::av::ClientTransport& av_t, GLuint program, G
 
 void av_glProgramUniformMatrix2fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix2fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12478,12 +12094,8 @@ void av_glProgramUniformMatrix2fv(::av::ClientTransport& av_t, GLuint program, G
 
 void av_glProgramUniformMatrix2x3dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix2x3dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12527,12 +12139,8 @@ void av_glProgramUniformMatrix2x3dv(::av::ClientTransport& av_t, GLuint program,
 
 void av_glProgramUniformMatrix2x3fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix2x3fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12576,12 +12184,8 @@ void av_glProgramUniformMatrix2x3fv(::av::ClientTransport& av_t, GLuint program,
 
 void av_glProgramUniformMatrix2x4dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix2x4dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12625,12 +12229,8 @@ void av_glProgramUniformMatrix2x4dv(::av::ClientTransport& av_t, GLuint program,
 
 void av_glProgramUniformMatrix2x4fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix2x4fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12674,12 +12274,8 @@ void av_glProgramUniformMatrix2x4fv(::av::ClientTransport& av_t, GLuint program,
 
 void av_glProgramUniformMatrix3dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix3dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12723,12 +12319,8 @@ void av_glProgramUniformMatrix3dv(::av::ClientTransport& av_t, GLuint program, G
 
 void av_glProgramUniformMatrix3fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix3fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12772,12 +12364,8 @@ void av_glProgramUniformMatrix3fv(::av::ClientTransport& av_t, GLuint program, G
 
 void av_glProgramUniformMatrix3x2dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix3x2dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12821,12 +12409,8 @@ void av_glProgramUniformMatrix3x2dv(::av::ClientTransport& av_t, GLuint program,
 
 void av_glProgramUniformMatrix3x2fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix3x2fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12870,12 +12454,8 @@ void av_glProgramUniformMatrix3x2fv(::av::ClientTransport& av_t, GLuint program,
 
 void av_glProgramUniformMatrix3x4dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix3x4dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12919,12 +12499,8 @@ void av_glProgramUniformMatrix3x4dv(::av::ClientTransport& av_t, GLuint program,
 
 void av_glProgramUniformMatrix3x4fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix3x4fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -12968,12 +12544,8 @@ void av_glProgramUniformMatrix3x4fv(::av::ClientTransport& av_t, GLuint program,
 
 void av_glProgramUniformMatrix4dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix4dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -13017,12 +12589,8 @@ void av_glProgramUniformMatrix4dv(::av::ClientTransport& av_t, GLuint program, G
 
 void av_glProgramUniformMatrix4fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix4fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -13066,12 +12634,8 @@ void av_glProgramUniformMatrix4fv(::av::ClientTransport& av_t, GLuint program, G
 
 void av_glProgramUniformMatrix4x2dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix4x2dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -13115,12 +12679,8 @@ void av_glProgramUniformMatrix4x2dv(::av::ClientTransport& av_t, GLuint program,
 
 void av_glProgramUniformMatrix4x2fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix4x2fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -13164,12 +12724,8 @@ void av_glProgramUniformMatrix4x2fv(::av::ClientTransport& av_t, GLuint program,
 
 void av_glProgramUniformMatrix4x3dv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix4x3dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -13213,12 +12769,8 @@ void av_glProgramUniformMatrix4x3dv(::av::ClientTransport& av_t, GLuint program,
 
 void av_glProgramUniformMatrix4x3fv(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix4x3fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -13323,12 +12875,8 @@ void av_glReadBuffer(::av::ClientTransport& av_t, GLenum src) {
 
 void av_glReadPixels(::av::ClientTransport& av_t, GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glReadPixels");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(x));
     av_b.write_varint(static_cast<uint64_t>(y));
@@ -13387,12 +12935,8 @@ void av_glReadPixels(::av::ClientTransport& av_t, GLint x, GLint y, GLsizei widt
 
 void av_glReadnPixels(::av::ClientTransport& av_t, GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLsizei bufSize, void* data, bool data_is_offset) {
     AV_SCOPE("av_glReadnPixels");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(static_cast<size_t>(bufSize)) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(static_cast<size_t>(bufSize))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(x));
     av_b.write_varint(static_cast<uint64_t>(y));
@@ -13537,12 +13081,8 @@ void av_glSampleMaski(::av::ClientTransport& av_t, GLuint maskNumber, GLbitfield
 
 void av_glSamplerParameterIiv(::av::ClientTransport& av_t, GLuint sampler, GLenum pname, const GLint* param) {
     AV_SCOPE("av_glSamplerParameterIiv");
-    {
-        const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(sampler));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t param_want = 0;
@@ -13584,12 +13124,8 @@ void av_glSamplerParameterIiv(::av::ClientTransport& av_t, GLuint sampler, GLenu
 
 void av_glSamplerParameterIuiv(::av::ClientTransport& av_t, GLuint sampler, GLenum pname, const GLuint* param) {
     AV_SCOPE("av_glSamplerParameterIuiv");
-    {
-        const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(sampler));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t param_want = 0;
@@ -13646,12 +13182,8 @@ void av_glSamplerParameterf(::av::ClientTransport& av_t, GLuint sampler, GLenum 
 
 void av_glSamplerParameterfv(::av::ClientTransport& av_t, GLuint sampler, GLenum pname, const GLfloat* param) {
     AV_SCOPE("av_glSamplerParameterfv");
-    {
-        const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(sampler));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t param_want = 0;
@@ -13708,12 +13240,8 @@ void av_glSamplerParameteri(::av::ClientTransport& av_t, GLuint sampler, GLenum 
 
 void av_glSamplerParameteriv(::av::ClientTransport& av_t, GLuint sampler, GLenum pname, const GLint* param) {
     AV_SCOPE("av_glSamplerParameteriv");
-    {
-        const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(sampler));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t param_want = 0;
@@ -13771,12 +13299,8 @@ void av_glScissor(::av::ClientTransport& av_t, GLint x, GLint y, GLsizei width, 
 
 void av_glScissorArrayv(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLint* v) {
     AV_SCOPE("av_glScissorArrayv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t v_want = 0;
@@ -13835,12 +13359,8 @@ void av_glScissorIndexed(::av::ClientTransport& av_t, GLuint index, GLint left, 
 
 void av_glScissorIndexedv(::av::ClientTransport& av_t, GLuint index, const GLint* v) {
     AV_SCOPE("av_glScissorIndexedv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
@@ -13895,12 +13415,8 @@ void av_glSecondaryColorP3ui(::av::ClientTransport& av_t, GLenum type, GLuint co
 
 void av_glSecondaryColorP3uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* color) {
     AV_SCOPE("av_glSecondaryColorP3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {color != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {color != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t color_want = 0;
     if (color != nullptr) color_want = (1 * sizeof(GLuint));
@@ -13941,12 +13457,8 @@ void av_glSecondaryColorP3uiv(::av::ClientTransport& av_t, GLenum type, const GL
 
 void av_glShaderBinary(::av::ClientTransport& av_t, GLsizei count, const GLuint* shaders, GLenum binaryFormat, const void* binary, GLsizei length) {
     AV_SCOPE("av_glShaderBinary");
-    {
-        const uint64_t av_blob_sizes[] = {shaders != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, binary != nullptr && static_cast<size_t>((static_cast<size_t>(length) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(length) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 2u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {shaders != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, binary != nullptr && static_cast<size_t>((static_cast<size_t>(length) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(length) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 2u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t shaders_want = 0;
     if (shaders != nullptr) shaders_want = (static_cast<size_t>(count) * sizeof(GLuint));
@@ -14017,12 +13529,8 @@ void av_glShaderBinary(::av::ClientTransport& av_t, GLsizei count, const GLuint*
 
 void av_glShaderSource(::av::ClientTransport& av_t, GLuint shader, GLsizei count, const GLchar*const* string, const GLint* length) {
     AV_SCOPE("av_glShaderSource");
-    {
-        const uint64_t av_blob_sizes[] = {length != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {length != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(shader));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_pod<uint8_t>(string != nullptr ? 1 : 0);
@@ -14093,12 +13601,8 @@ void av_glShaderStorageBlockBinding(::av::ClientTransport& av_t, GLuint program,
 
 void av_glSpecializeShader(::av::ClientTransport& av_t, GLuint shader, const GLchar* pEntryPoint, GLuint numSpecializationConstants, const GLuint* pConstantIndex, const GLuint* pConstantValue) {
     AV_SCOPE("av_glSpecializeShader");
-    {
-        const uint64_t av_blob_sizes[] = {pConstantIndex != nullptr && static_cast<size_t>((static_cast<size_t>(numSpecializationConstants) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numSpecializationConstants) * sizeof(GLuint)))) : 0u, pConstantValue != nullptr && static_cast<size_t>((static_cast<size_t>(numSpecializationConstants) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numSpecializationConstants) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 2u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {pConstantIndex != nullptr && static_cast<size_t>((static_cast<size_t>(numSpecializationConstants) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numSpecializationConstants) * sizeof(GLuint)))) : 0u, pConstantValue != nullptr && static_cast<size_t>((static_cast<size_t>(numSpecializationConstants) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numSpecializationConstants) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 2u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(shader));
     av_b.write_pod<uint8_t>(pEntryPoint != nullptr ? 1 : 0);
     if (pEntryPoint != nullptr) {
@@ -14309,12 +13813,8 @@ void av_glTexCoordP1ui(::av::ClientTransport& av_t, GLenum type, GLuint coords) 
 
 void av_glTexCoordP1uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* coords) {
     AV_SCOPE("av_glTexCoordP1uiv");
-    {
-        const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
     if (coords != nullptr) coords_want = (1 * sizeof(GLuint));
@@ -14369,12 +13869,8 @@ void av_glTexCoordP2ui(::av::ClientTransport& av_t, GLenum type, GLuint coords) 
 
 void av_glTexCoordP2uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* coords) {
     AV_SCOPE("av_glTexCoordP2uiv");
-    {
-        const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
     if (coords != nullptr) coords_want = (1 * sizeof(GLuint));
@@ -14429,12 +13925,8 @@ void av_glTexCoordP3ui(::av::ClientTransport& av_t, GLenum type, GLuint coords) 
 
 void av_glTexCoordP3uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* coords) {
     AV_SCOPE("av_glTexCoordP3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
     if (coords != nullptr) coords_want = (1 * sizeof(GLuint));
@@ -14489,12 +13981,8 @@ void av_glTexCoordP4ui(::av::ClientTransport& av_t, GLenum type, GLuint coords) 
 
 void av_glTexCoordP4uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* coords) {
     AV_SCOPE("av_glTexCoordP4uiv");
-    {
-        const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {coords != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t coords_want = 0;
     if (coords != nullptr) coords_want = (1 * sizeof(GLuint));
@@ -14535,12 +14023,8 @@ void av_glTexCoordP4uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* 
 
 void av_glTexImage1D(::av::ClientTransport& av_t, GLenum target, GLint level, GLint internalformat, GLsizei width, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTexImage1D");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -14588,12 +14072,8 @@ void av_glTexImage1D(::av::ClientTransport& av_t, GLenum target, GLint level, GL
 
 void av_glTexImage2D(::av::ClientTransport& av_t, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTexImage2D");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -14660,12 +14140,8 @@ void av_glTexImage2DMultisample(::av::ClientTransport& av_t, GLenum target, GLsi
 
 void av_glTexImage3D(::av::ClientTransport& av_t, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTexImage3D");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
@@ -14734,12 +14210,8 @@ void av_glTexImage3DMultisample(::av::ClientTransport& av_t, GLenum target, GLsi
 
 void av_glTexParameterIiv(::av::ClientTransport& av_t, GLenum target, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glTexParameterIiv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -14781,12 +14253,8 @@ void av_glTexParameterIiv(::av::ClientTransport& av_t, GLenum target, GLenum pna
 
 void av_glTexParameterIuiv(::av::ClientTransport& av_t, GLenum target, GLenum pname, const GLuint* params) {
     AV_SCOPE("av_glTexParameterIuiv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -14843,12 +14311,8 @@ void av_glTexParameterf(::av::ClientTransport& av_t, GLenum target, GLenum pname
 
 void av_glTexParameterfv(::av::ClientTransport& av_t, GLenum target, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glTexParameterfv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -14905,12 +14369,8 @@ void av_glTexParameteri(::av::ClientTransport& av_t, GLenum target, GLenum pname
 
 void av_glTexParameteriv(::av::ClientTransport& av_t, GLenum target, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glTexParameteriv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -15040,12 +14500,8 @@ void av_glTexStorage3DMultisample(::av::ClientTransport& av_t, GLenum target, GL
 
 void av_glTexSubImage1D(::av::ClientTransport& av_t, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTexSubImage1D");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -15092,12 +14548,8 @@ void av_glTexSubImage1D(::av::ClientTransport& av_t, GLenum target, GLint level,
 
 void av_glTexSubImage2D(::av::ClientTransport& av_t, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTexSubImage2D");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -15146,12 +14598,8 @@ void av_glTexSubImage2D(::av::ClientTransport& av_t, GLenum target, GLint level,
 
 void av_glTexSubImage3D(::av::ClientTransport& av_t, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTexSubImage3D");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -15246,12 +14694,8 @@ void av_glTextureBufferRange(::av::ClientTransport& av_t, GLuint texture, GLenum
 
 void av_glTextureParameterIiv(::av::ClientTransport& av_t, GLuint texture, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glTextureParameterIiv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -15293,12 +14737,8 @@ void av_glTextureParameterIiv(::av::ClientTransport& av_t, GLuint texture, GLenu
 
 void av_glTextureParameterIuiv(::av::ClientTransport& av_t, GLuint texture, GLenum pname, const GLuint* params) {
     AV_SCOPE("av_glTextureParameterIuiv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -15355,12 +14795,8 @@ void av_glTextureParameterf(::av::ClientTransport& av_t, GLuint texture, GLenum 
 
 void av_glTextureParameterfv(::av::ClientTransport& av_t, GLuint texture, GLenum pname, const GLfloat* param) {
     AV_SCOPE("av_glTextureParameterfv");
-    {
-        const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t param_want = 0;
@@ -15417,12 +14853,8 @@ void av_glTextureParameteri(::av::ClientTransport& av_t, GLuint texture, GLenum 
 
 void av_glTextureParameteriv(::av::ClientTransport& av_t, GLuint texture, GLenum pname, const GLint* param) {
     AV_SCOPE("av_glTextureParameteriv");
-    {
-        const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {param != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t param_want = 0;
@@ -15552,12 +14984,8 @@ void av_glTextureStorage3DMultisample(::av::ClientTransport& av_t, GLuint textur
 
 void av_glTextureSubImage1D(::av::ClientTransport& av_t, GLuint texture, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTextureSubImage1D");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -15604,12 +15032,8 @@ void av_glTextureSubImage1D(::av::ClientTransport& av_t, GLuint texture, GLint l
 
 void av_glTextureSubImage2D(::av::ClientTransport& av_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTextureSubImage2D");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -15658,12 +15082,8 @@ void av_glTextureSubImage2D(::av::ClientTransport& av_t, GLuint texture, GLint l
 
 void av_glTextureSubImage3D(::av::ClientTransport& av_t, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTextureSubImage3D");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(level));
     av_b.write_varint(static_cast<uint64_t>(xoffset));
@@ -15807,12 +15227,8 @@ void av_glUniform1d(::av::ClientTransport& av_t, GLint location, GLdouble x) {
 
 void av_glUniform1dv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glUniform1dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -15868,12 +15284,8 @@ void av_glUniform1f(::av::ClientTransport& av_t, GLint location, GLfloat v0) {
 
 void av_glUniform1fv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glUniform1fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -15929,12 +15341,8 @@ void av_glUniform1i(::av::ClientTransport& av_t, GLint location, GLint v0) {
 
 void av_glUniform1iv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glUniform1iv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -15990,12 +15398,8 @@ void av_glUniform1ui(::av::ClientTransport& av_t, GLint location, GLuint v0) {
 
 void av_glUniform1uiv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glUniform1uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16052,12 +15456,8 @@ void av_glUniform2d(::av::ClientTransport& av_t, GLint location, GLdouble x, GLd
 
 void av_glUniform2dv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glUniform2dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16114,12 +15514,8 @@ void av_glUniform2f(::av::ClientTransport& av_t, GLint location, GLfloat v0, GLf
 
 void av_glUniform2fv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glUniform2fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16176,12 +15572,8 @@ void av_glUniform2i(::av::ClientTransport& av_t, GLint location, GLint v0, GLint
 
 void av_glUniform2iv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glUniform2iv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16238,12 +15630,8 @@ void av_glUniform2ui(::av::ClientTransport& av_t, GLint location, GLuint v0, GLu
 
 void av_glUniform2uiv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glUniform2uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16301,12 +15689,8 @@ void av_glUniform3d(::av::ClientTransport& av_t, GLint location, GLdouble x, GLd
 
 void av_glUniform3dv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glUniform3dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16364,12 +15748,8 @@ void av_glUniform3f(::av::ClientTransport& av_t, GLint location, GLfloat v0, GLf
 
 void av_glUniform3fv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glUniform3fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16427,12 +15807,8 @@ void av_glUniform3i(::av::ClientTransport& av_t, GLint location, GLint v0, GLint
 
 void av_glUniform3iv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glUniform3iv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16490,12 +15866,8 @@ void av_glUniform3ui(::av::ClientTransport& av_t, GLint location, GLuint v0, GLu
 
 void av_glUniform3uiv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glUniform3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16554,12 +15926,8 @@ void av_glUniform4d(::av::ClientTransport& av_t, GLint location, GLdouble x, GLd
 
 void av_glUniform4dv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glUniform4dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16618,12 +15986,8 @@ void av_glUniform4f(::av::ClientTransport& av_t, GLint location, GLfloat v0, GLf
 
 void av_glUniform4fv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glUniform4fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16682,12 +16046,8 @@ void av_glUniform4i(::av::ClientTransport& av_t, GLint location, GLint v0, GLint
 
 void av_glUniform4iv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glUniform4iv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16746,12 +16106,8 @@ void av_glUniform4ui(::av::ClientTransport& av_t, GLint location, GLuint v0, GLu
 
 void av_glUniform4uiv(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glUniform4uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -16808,12 +16164,8 @@ void av_glUniformBlockBinding(::av::ClientTransport& av_t, GLuint program, GLuin
 
 void av_glUniformMatrix2dv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glUniformMatrix2dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -16856,12 +16208,8 @@ void av_glUniformMatrix2dv(::av::ClientTransport& av_t, GLint location, GLsizei 
 
 void av_glUniformMatrix2fv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glUniformMatrix2fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -16904,12 +16252,8 @@ void av_glUniformMatrix2fv(::av::ClientTransport& av_t, GLint location, GLsizei 
 
 void av_glUniformMatrix2x3dv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glUniformMatrix2x3dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -16952,12 +16296,8 @@ void av_glUniformMatrix2x3dv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformMatrix2x3fv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glUniformMatrix2x3fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17000,12 +16340,8 @@ void av_glUniformMatrix2x3fv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformMatrix2x4dv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glUniformMatrix2x4dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17048,12 +16384,8 @@ void av_glUniformMatrix2x4dv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformMatrix2x4fv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glUniformMatrix2x4fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17096,12 +16428,8 @@ void av_glUniformMatrix2x4fv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformMatrix3dv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glUniformMatrix3dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17144,12 +16472,8 @@ void av_glUniformMatrix3dv(::av::ClientTransport& av_t, GLint location, GLsizei 
 
 void av_glUniformMatrix3fv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glUniformMatrix3fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17192,12 +16516,8 @@ void av_glUniformMatrix3fv(::av::ClientTransport& av_t, GLint location, GLsizei 
 
 void av_glUniformMatrix3x2dv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glUniformMatrix3x2dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17240,12 +16560,8 @@ void av_glUniformMatrix3x2dv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformMatrix3x2fv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glUniformMatrix3x2fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17288,12 +16604,8 @@ void av_glUniformMatrix3x2fv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformMatrix3x4dv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glUniformMatrix3x4dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17336,12 +16648,8 @@ void av_glUniformMatrix3x4dv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformMatrix3x4fv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glUniformMatrix3x4fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17384,12 +16692,8 @@ void av_glUniformMatrix3x4fv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformMatrix4dv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glUniformMatrix4dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17432,12 +16736,8 @@ void av_glUniformMatrix4dv(::av::ClientTransport& av_t, GLint location, GLsizei 
 
 void av_glUniformMatrix4fv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glUniformMatrix4fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17480,12 +16780,8 @@ void av_glUniformMatrix4fv(::av::ClientTransport& av_t, GLint location, GLsizei 
 
 void av_glUniformMatrix4x2dv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glUniformMatrix4x2dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17528,12 +16824,8 @@ void av_glUniformMatrix4x2dv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformMatrix4x2fv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glUniformMatrix4x2fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17576,12 +16868,8 @@ void av_glUniformMatrix4x2fv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformMatrix4x3dv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glUniformMatrix4x3dv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17624,12 +16912,8 @@ void av_glUniformMatrix4x3dv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformMatrix4x3fv(::av::ClientTransport& av_t, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glUniformMatrix4x3fv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     av_b.write_varint(static_cast<uint64_t>(transpose));
@@ -17672,12 +16956,8 @@ void av_glUniformMatrix4x3fv(::av::ClientTransport& av_t, GLint location, GLsize
 
 void av_glUniformSubroutinesuiv(::av::ClientTransport& av_t, GLenum shadertype, GLsizei count, const GLuint* indices) {
     AV_SCOPE("av_glUniformSubroutinesuiv");
-    {
-        const uint64_t av_blob_sizes[] = {indices != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {indices != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(shadertype));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t indices_want = 0;
@@ -17886,12 +17166,8 @@ void av_glVertexArrayVertexBuffer(::av::ClientTransport& av_t, GLuint vaobj, GLu
 
 void av_glVertexArrayVertexBuffers(::av::ClientTransport& av_t, GLuint vaobj, GLuint first, GLsizei count, const GLuint* buffers, const GLintptr* offsets, const GLsizei* strides) {
     AV_SCOPE("av_glVertexArrayVertexBuffers");
-    {
-        const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr)))) : 0u, strides != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 3u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u, offsets != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLintptr)))) : 0u, strides != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLsizei)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 3u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(vaobj));
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -18004,12 +17280,8 @@ void av_glVertexAttrib1d(::av::ClientTransport& av_t, GLuint index, GLdouble x) 
 
 void av_glVertexAttrib1dv(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
     AV_SCOPE("av_glVertexAttrib1dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLdouble));
@@ -18064,12 +17336,8 @@ void av_glVertexAttrib1f(::av::ClientTransport& av_t, GLuint index, GLfloat x) {
 
 void av_glVertexAttrib1fv(::av::ClientTransport& av_t, GLuint index, const GLfloat* v) {
     AV_SCOPE("av_glVertexAttrib1fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLfloat));
@@ -18124,12 +17392,8 @@ void av_glVertexAttrib1s(::av::ClientTransport& av_t, GLuint index, GLshort x) {
 
 void av_glVertexAttrib1sv(::av::ClientTransport& av_t, GLuint index, const GLshort* v) {
     AV_SCOPE("av_glVertexAttrib1sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLshort));
@@ -18185,12 +17449,8 @@ void av_glVertexAttrib2d(::av::ClientTransport& av_t, GLuint index, GLdouble x, 
 
 void av_glVertexAttrib2dv(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
     AV_SCOPE("av_glVertexAttrib2dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLdouble));
@@ -18246,12 +17506,8 @@ void av_glVertexAttrib2f(::av::ClientTransport& av_t, GLuint index, GLfloat x, G
 
 void av_glVertexAttrib2fv(::av::ClientTransport& av_t, GLuint index, const GLfloat* v) {
     AV_SCOPE("av_glVertexAttrib2fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLfloat));
@@ -18307,12 +17563,8 @@ void av_glVertexAttrib2s(::av::ClientTransport& av_t, GLuint index, GLshort x, G
 
 void av_glVertexAttrib2sv(::av::ClientTransport& av_t, GLuint index, const GLshort* v) {
     AV_SCOPE("av_glVertexAttrib2sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLshort));
@@ -18369,12 +17621,8 @@ void av_glVertexAttrib3d(::av::ClientTransport& av_t, GLuint index, GLdouble x, 
 
 void av_glVertexAttrib3dv(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
     AV_SCOPE("av_glVertexAttrib3dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
@@ -18431,12 +17679,8 @@ void av_glVertexAttrib3f(::av::ClientTransport& av_t, GLuint index, GLfloat x, G
 
 void av_glVertexAttrib3fv(::av::ClientTransport& av_t, GLuint index, const GLfloat* v) {
     AV_SCOPE("av_glVertexAttrib3fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
@@ -18493,12 +17737,8 @@ void av_glVertexAttrib3s(::av::ClientTransport& av_t, GLuint index, GLshort x, G
 
 void av_glVertexAttrib3sv(::av::ClientTransport& av_t, GLuint index, const GLshort* v) {
     AV_SCOPE("av_glVertexAttrib3sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
@@ -18539,12 +17779,8 @@ void av_glVertexAttrib3sv(::av::ClientTransport& av_t, GLuint index, const GLsho
 
 void av_glVertexAttrib4Nbv(::av::ClientTransport& av_t, GLuint index, const GLbyte* v) {
     AV_SCOPE("av_glVertexAttrib4Nbv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLbyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLbyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLbyte));
@@ -18585,12 +17821,8 @@ void av_glVertexAttrib4Nbv(::av::ClientTransport& av_t, GLuint index, const GLby
 
 void av_glVertexAttrib4Niv(::av::ClientTransport& av_t, GLuint index, const GLint* v) {
     AV_SCOPE("av_glVertexAttrib4Niv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
@@ -18631,12 +17863,8 @@ void av_glVertexAttrib4Niv(::av::ClientTransport& av_t, GLuint index, const GLin
 
 void av_glVertexAttrib4Nsv(::av::ClientTransport& av_t, GLuint index, const GLshort* v) {
     AV_SCOPE("av_glVertexAttrib4Nsv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
@@ -18694,12 +17922,8 @@ void av_glVertexAttrib4Nub(::av::ClientTransport& av_t, GLuint index, GLubyte x,
 
 void av_glVertexAttrib4Nubv(::av::ClientTransport& av_t, GLuint index, const GLubyte* v) {
     AV_SCOPE("av_glVertexAttrib4Nubv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLubyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLubyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLubyte));
@@ -18740,12 +17964,8 @@ void av_glVertexAttrib4Nubv(::av::ClientTransport& av_t, GLuint index, const GLu
 
 void av_glVertexAttrib4Nuiv(::av::ClientTransport& av_t, GLuint index, const GLuint* v) {
     AV_SCOPE("av_glVertexAttrib4Nuiv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLuint));
@@ -18786,12 +18006,8 @@ void av_glVertexAttrib4Nuiv(::av::ClientTransport& av_t, GLuint index, const GLu
 
 void av_glVertexAttrib4Nusv(::av::ClientTransport& av_t, GLuint index, const GLushort* v) {
     AV_SCOPE("av_glVertexAttrib4Nusv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLushort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLushort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLushort));
@@ -18832,12 +18048,8 @@ void av_glVertexAttrib4Nusv(::av::ClientTransport& av_t, GLuint index, const GLu
 
 void av_glVertexAttrib4bv(::av::ClientTransport& av_t, GLuint index, const GLbyte* v) {
     AV_SCOPE("av_glVertexAttrib4bv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLbyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLbyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLbyte));
@@ -18895,12 +18107,8 @@ void av_glVertexAttrib4d(::av::ClientTransport& av_t, GLuint index, GLdouble x, 
 
 void av_glVertexAttrib4dv(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
     AV_SCOPE("av_glVertexAttrib4dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLdouble));
@@ -18958,12 +18166,8 @@ void av_glVertexAttrib4f(::av::ClientTransport& av_t, GLuint index, GLfloat x, G
 
 void av_glVertexAttrib4fv(::av::ClientTransport& av_t, GLuint index, const GLfloat* v) {
     AV_SCOPE("av_glVertexAttrib4fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLfloat));
@@ -19004,12 +18208,8 @@ void av_glVertexAttrib4fv(::av::ClientTransport& av_t, GLuint index, const GLflo
 
 void av_glVertexAttrib4iv(::av::ClientTransport& av_t, GLuint index, const GLint* v) {
     AV_SCOPE("av_glVertexAttrib4iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
@@ -19067,12 +18267,8 @@ void av_glVertexAttrib4s(::av::ClientTransport& av_t, GLuint index, GLshort x, G
 
 void av_glVertexAttrib4sv(::av::ClientTransport& av_t, GLuint index, const GLshort* v) {
     AV_SCOPE("av_glVertexAttrib4sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
@@ -19113,12 +18309,8 @@ void av_glVertexAttrib4sv(::av::ClientTransport& av_t, GLuint index, const GLsho
 
 void av_glVertexAttrib4ubv(::av::ClientTransport& av_t, GLuint index, const GLubyte* v) {
     AV_SCOPE("av_glVertexAttrib4ubv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLubyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLubyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLubyte));
@@ -19159,12 +18351,8 @@ void av_glVertexAttrib4ubv(::av::ClientTransport& av_t, GLuint index, const GLub
 
 void av_glVertexAttrib4uiv(::av::ClientTransport& av_t, GLuint index, const GLuint* v) {
     AV_SCOPE("av_glVertexAttrib4uiv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLuint));
@@ -19205,12 +18393,8 @@ void av_glVertexAttrib4uiv(::av::ClientTransport& av_t, GLuint index, const GLui
 
 void av_glVertexAttrib4usv(::av::ClientTransport& av_t, GLuint index, const GLushort* v) {
     AV_SCOPE("av_glVertexAttrib4usv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLushort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLushort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLushort));
@@ -19310,12 +18494,8 @@ void av_glVertexAttribI1i(::av::ClientTransport& av_t, GLuint index, GLint x) {
 
 void av_glVertexAttribI1iv(::av::ClientTransport& av_t, GLuint index, const GLint* v) {
     AV_SCOPE("av_glVertexAttribI1iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLint));
@@ -19370,12 +18550,8 @@ void av_glVertexAttribI1ui(::av::ClientTransport& av_t, GLuint index, GLuint x) 
 
 void av_glVertexAttribI1uiv(::av::ClientTransport& av_t, GLuint index, const GLuint* v) {
     AV_SCOPE("av_glVertexAttribI1uiv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLuint));
@@ -19431,12 +18607,8 @@ void av_glVertexAttribI2i(::av::ClientTransport& av_t, GLuint index, GLint x, GL
 
 void av_glVertexAttribI2iv(::av::ClientTransport& av_t, GLuint index, const GLint* v) {
     AV_SCOPE("av_glVertexAttribI2iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLint));
@@ -19492,12 +18664,8 @@ void av_glVertexAttribI2ui(::av::ClientTransport& av_t, GLuint index, GLuint x, 
 
 void av_glVertexAttribI2uiv(::av::ClientTransport& av_t, GLuint index, const GLuint* v) {
     AV_SCOPE("av_glVertexAttribI2uiv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLuint));
@@ -19554,12 +18722,8 @@ void av_glVertexAttribI3i(::av::ClientTransport& av_t, GLuint index, GLint x, GL
 
 void av_glVertexAttribI3iv(::av::ClientTransport& av_t, GLuint index, const GLint* v) {
     AV_SCOPE("av_glVertexAttribI3iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
@@ -19616,12 +18780,8 @@ void av_glVertexAttribI3ui(::av::ClientTransport& av_t, GLuint index, GLuint x, 
 
 void av_glVertexAttribI3uiv(::av::ClientTransport& av_t, GLuint index, const GLuint* v) {
     AV_SCOPE("av_glVertexAttribI3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLuint));
@@ -19662,12 +18822,8 @@ void av_glVertexAttribI3uiv(::av::ClientTransport& av_t, GLuint index, const GLu
 
 void av_glVertexAttribI4bv(::av::ClientTransport& av_t, GLuint index, const GLbyte* v) {
     AV_SCOPE("av_glVertexAttribI4bv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLbyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLbyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLbyte));
@@ -19725,12 +18881,8 @@ void av_glVertexAttribI4i(::av::ClientTransport& av_t, GLuint index, GLint x, GL
 
 void av_glVertexAttribI4iv(::av::ClientTransport& av_t, GLuint index, const GLint* v) {
     AV_SCOPE("av_glVertexAttribI4iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
@@ -19771,12 +18923,8 @@ void av_glVertexAttribI4iv(::av::ClientTransport& av_t, GLuint index, const GLin
 
 void av_glVertexAttribI4sv(::av::ClientTransport& av_t, GLuint index, const GLshort* v) {
     AV_SCOPE("av_glVertexAttribI4sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
@@ -19817,12 +18965,8 @@ void av_glVertexAttribI4sv(::av::ClientTransport& av_t, GLuint index, const GLsh
 
 void av_glVertexAttribI4ubv(::av::ClientTransport& av_t, GLuint index, const GLubyte* v) {
     AV_SCOPE("av_glVertexAttribI4ubv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLubyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLubyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLubyte));
@@ -19880,12 +19024,8 @@ void av_glVertexAttribI4ui(::av::ClientTransport& av_t, GLuint index, GLuint x, 
 
 void av_glVertexAttribI4uiv(::av::ClientTransport& av_t, GLuint index, const GLuint* v) {
     AV_SCOPE("av_glVertexAttribI4uiv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLuint));
@@ -19926,12 +19066,8 @@ void av_glVertexAttribI4uiv(::av::ClientTransport& av_t, GLuint index, const GLu
 
 void av_glVertexAttribI4usv(::av::ClientTransport& av_t, GLuint index, const GLushort* v) {
     AV_SCOPE("av_glVertexAttribI4usv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLushort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLushort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLushort));
@@ -20019,12 +19155,8 @@ void av_glVertexAttribL1d(::av::ClientTransport& av_t, GLuint index, GLdouble x)
 
 void av_glVertexAttribL1dv(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
     AV_SCOPE("av_glVertexAttribL1dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLdouble));
@@ -20080,12 +19212,8 @@ void av_glVertexAttribL2d(::av::ClientTransport& av_t, GLuint index, GLdouble x,
 
 void av_glVertexAttribL2dv(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
     AV_SCOPE("av_glVertexAttribL2dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLdouble));
@@ -20142,12 +19270,8 @@ void av_glVertexAttribL3d(::av::ClientTransport& av_t, GLuint index, GLdouble x,
 
 void av_glVertexAttribL3dv(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
     AV_SCOPE("av_glVertexAttribL3dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
@@ -20205,12 +19329,8 @@ void av_glVertexAttribL4d(::av::ClientTransport& av_t, GLuint index, GLdouble x,
 
 void av_glVertexAttribL4dv(::av::ClientTransport& av_t, GLuint index, const GLdouble* v) {
     AV_SCOPE("av_glVertexAttribL4dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLdouble));
@@ -20300,12 +19420,8 @@ void av_glVertexAttribP1ui(::av::ClientTransport& av_t, GLuint index, GLenum typ
 
 void av_glVertexAttribP1uiv(::av::ClientTransport& av_t, GLuint index, GLenum type, GLboolean normalized, const GLuint* value) {
     AV_SCOPE("av_glVertexAttribP1uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     av_b.write_varint(static_cast<uint64_t>(type));
     av_b.write_varint(static_cast<uint64_t>(normalized));
@@ -20364,12 +19480,8 @@ void av_glVertexAttribP2ui(::av::ClientTransport& av_t, GLuint index, GLenum typ
 
 void av_glVertexAttribP2uiv(::av::ClientTransport& av_t, GLuint index, GLenum type, GLboolean normalized, const GLuint* value) {
     AV_SCOPE("av_glVertexAttribP2uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     av_b.write_varint(static_cast<uint64_t>(type));
     av_b.write_varint(static_cast<uint64_t>(normalized));
@@ -20428,12 +19540,8 @@ void av_glVertexAttribP3ui(::av::ClientTransport& av_t, GLuint index, GLenum typ
 
 void av_glVertexAttribP3uiv(::av::ClientTransport& av_t, GLuint index, GLenum type, GLboolean normalized, const GLuint* value) {
     AV_SCOPE("av_glVertexAttribP3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     av_b.write_varint(static_cast<uint64_t>(type));
     av_b.write_varint(static_cast<uint64_t>(normalized));
@@ -20492,12 +19600,8 @@ void av_glVertexAttribP4ui(::av::ClientTransport& av_t, GLuint index, GLenum typ
 
 void av_glVertexAttribP4uiv(::av::ClientTransport& av_t, GLuint index, GLenum type, GLboolean normalized, const GLuint* value) {
     AV_SCOPE("av_glVertexAttribP4uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     av_b.write_varint(static_cast<uint64_t>(type));
     av_b.write_varint(static_cast<uint64_t>(normalized));
@@ -20586,12 +19690,8 @@ void av_glVertexP2ui(::av::ClientTransport& av_t, GLenum type, GLuint value) {
 
 void av_glVertexP2uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* value) {
     AV_SCOPE("av_glVertexP2uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t value_want = 0;
     if (value != nullptr) value_want = (1 * sizeof(GLuint));
@@ -20646,12 +19746,8 @@ void av_glVertexP3ui(::av::ClientTransport& av_t, GLenum type, GLuint value) {
 
 void av_glVertexP3uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* value) {
     AV_SCOPE("av_glVertexP3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t value_want = 0;
     if (value != nullptr) value_want = (1 * sizeof(GLuint));
@@ -20706,12 +19802,8 @@ void av_glVertexP4ui(::av::ClientTransport& av_t, GLenum type, GLuint value) {
 
 void av_glVertexP4uiv(::av::ClientTransport& av_t, GLenum type, const GLuint* value) {
     AV_SCOPE("av_glVertexP4uiv");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((1 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t value_want = 0;
     if (value != nullptr) value_want = (1 * sizeof(GLuint));
@@ -20768,12 +19860,8 @@ void av_glViewport(::av::ClientTransport& av_t, GLint x, GLint y, GLsizei width,
 
 void av_glViewportArrayv(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLfloat* v) {
     AV_SCOPE("av_glViewportArrayv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t v_want = 0;
@@ -20832,12 +19920,8 @@ void av_glViewportIndexedf(::av::ClientTransport& av_t, GLuint index, GLfloat x,
 
 void av_glViewportIndexedfv(::av::ClientTransport& av_t, GLuint index, const GLfloat* v) {
     AV_SCOPE("av_glViewportIndexedfv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLfloat));
@@ -20921,12 +20005,8 @@ void av_glAlphaFunc(::av::ClientTransport& av_t, GLenum func, GLfloat ref) {
 
 GLboolean av_glAreTexturesResident(::av::ClientTransport& av_t, GLsizei n, const GLuint* textures, GLboolean* residences) {
     AV_SCOPE("av_glAreTexturesResident");
-    {
-        const uint64_t av_blob_sizes[] = {textures != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {textures != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t textures_want = 0;
@@ -21017,12 +20097,8 @@ void av_glBegin(::av::ClientTransport& av_t, GLenum mode) {
 
 void av_glBitmap(::av::ClientTransport& av_t, GLsizei width, GLsizei height, GLfloat xorig, GLfloat yorig, GLfloat xmove, GLfloat ymove, const GLubyte* bitmap) {
     AV_SCOPE("av_glBitmap");
-    {
-        const uint64_t av_blob_sizes[] = {bitmap != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::bitmap_bytes(av_t, width, height)) * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::bitmap_bytes(av_t, width, height)) * sizeof(GLubyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bitmap != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::bitmap_bytes(av_t, width, height)) * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::bitmap_bytes(av_t, width, height)) * sizeof(GLubyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(width));
     av_b.write_varint(static_cast<uint64_t>(height));
     av_b.write_pod<GLfloat>(xorig);
@@ -21081,12 +20157,8 @@ void av_glCallList(::av::ClientTransport& av_t, GLuint list) {
 
 void av_glCallLists(::av::ClientTransport& av_t, GLsizei n, GLenum type, const void* lists) {
     AV_SCOPE("av_glCallLists");
-    {
-        const uint64_t av_blob_sizes[] = {lists != nullptr && static_cast<size_t>((static_cast<size_t>(n) * ::av::glproto::type_size(type))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * ::av::glproto::type_size(type)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {lists != nullptr && static_cast<size_t>((static_cast<size_t>(n) * ::av::glproto::type_size(type))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * ::av::glproto::type_size(type)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     av_b.write_varint(static_cast<uint64_t>(type));
     size_t lists_want = 0;
@@ -21170,12 +20242,8 @@ void av_glClientActiveTexture(::av::ClientTransport& av_t, GLenum texture) {
 
 void av_glClipPlane(::av::ClientTransport& av_t, GLenum plane, const GLdouble* equation) {
     AV_SCOPE("av_glClipPlane");
-    {
-        const uint64_t av_blob_sizes[] = {equation != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {equation != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(plane));
     size_t equation_want = 0;
     if (equation != nullptr) equation_want = (4 * sizeof(GLdouble));
@@ -21231,12 +20299,8 @@ void av_glColor3b(::av::ClientTransport& av_t, GLbyte red, GLbyte green, GLbyte 
 
 void av_glColor3bv(::av::ClientTransport& av_t, const GLbyte* v) {
     AV_SCOPE("av_glColor3bv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLbyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLbyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLbyte));
     ::av::ClientBlobLease v_lease{};
@@ -21291,12 +20355,8 @@ void av_glColor3d(::av::ClientTransport& av_t, GLdouble red, GLdouble green, GLd
 
 void av_glColor3dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glColor3dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -21351,12 +20411,8 @@ void av_glColor3f(::av::ClientTransport& av_t, GLfloat red, GLfloat green, GLflo
 
 void av_glColor3fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glColor3fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -21411,12 +20467,8 @@ void av_glColor3i(::av::ClientTransport& av_t, GLint red, GLint green, GLint blu
 
 void av_glColor3iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glColor3iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -21471,12 +20523,8 @@ void av_glColor3s(::av::ClientTransport& av_t, GLshort red, GLshort green, GLsho
 
 void av_glColor3sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glColor3sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -21531,12 +20579,8 @@ void av_glColor3ub(::av::ClientTransport& av_t, GLubyte red, GLubyte green, GLub
 
 void av_glColor3ubv(::av::ClientTransport& av_t, const GLubyte* v) {
     AV_SCOPE("av_glColor3ubv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLubyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLubyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLubyte));
     ::av::ClientBlobLease v_lease{};
@@ -21591,12 +20635,8 @@ void av_glColor3ui(::av::ClientTransport& av_t, GLuint red, GLuint green, GLuint
 
 void av_glColor3uiv(::av::ClientTransport& av_t, const GLuint* v) {
     AV_SCOPE("av_glColor3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLuint));
     ::av::ClientBlobLease v_lease{};
@@ -21651,12 +20691,8 @@ void av_glColor3us(::av::ClientTransport& av_t, GLushort red, GLushort green, GL
 
 void av_glColor3usv(::av::ClientTransport& av_t, const GLushort* v) {
     AV_SCOPE("av_glColor3usv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLushort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLushort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLushort));
     ::av::ClientBlobLease v_lease{};
@@ -21712,12 +20748,8 @@ void av_glColor4b(::av::ClientTransport& av_t, GLbyte red, GLbyte green, GLbyte 
 
 void av_glColor4bv(::av::ClientTransport& av_t, const GLbyte* v) {
     AV_SCOPE("av_glColor4bv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLbyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLbyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLbyte));
     ::av::ClientBlobLease v_lease{};
@@ -21773,12 +20805,8 @@ void av_glColor4d(::av::ClientTransport& av_t, GLdouble red, GLdouble green, GLd
 
 void av_glColor4dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glColor4dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -21834,12 +20862,8 @@ void av_glColor4f(::av::ClientTransport& av_t, GLfloat red, GLfloat green, GLflo
 
 void av_glColor4fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glColor4fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -21895,12 +20919,8 @@ void av_glColor4i(::av::ClientTransport& av_t, GLint red, GLint green, GLint blu
 
 void av_glColor4iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glColor4iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -21956,12 +20976,8 @@ void av_glColor4s(::av::ClientTransport& av_t, GLshort red, GLshort green, GLsho
 
 void av_glColor4sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glColor4sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -22017,12 +21033,8 @@ void av_glColor4ub(::av::ClientTransport& av_t, GLubyte red, GLubyte green, GLub
 
 void av_glColor4ubv(::av::ClientTransport& av_t, const GLubyte* v) {
     AV_SCOPE("av_glColor4ubv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLubyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLubyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLubyte));
     ::av::ClientBlobLease v_lease{};
@@ -22078,12 +21090,8 @@ void av_glColor4ui(::av::ClientTransport& av_t, GLuint red, GLuint green, GLuint
 
 void av_glColor4uiv(::av::ClientTransport& av_t, const GLuint* v) {
     AV_SCOPE("av_glColor4uiv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLuint));
     ::av::ClientBlobLease v_lease{};
@@ -22139,12 +21147,8 @@ void av_glColor4us(::av::ClientTransport& av_t, GLushort red, GLushort green, GL
 
 void av_glColor4usv(::av::ClientTransport& av_t, const GLushort* v) {
     AV_SCOPE("av_glColor4usv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLushort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLushort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLushort));
     ::av::ClientBlobLease v_lease{};
@@ -22258,12 +21262,8 @@ void av_glDisableClientState(::av::ClientTransport& av_t, GLenum array) {
 
 void av_glDrawPixels(::av::ClientTransport& av_t, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glDrawPixels");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(width));
     av_b.write_varint(static_cast<uint64_t>(height));
     av_b.write_varint(static_cast<uint64_t>(format));
@@ -22335,12 +21335,8 @@ void av_glEdgeFlagPointer(::av::ClientTransport& av_t, GLsizei stride, uint64_t 
 
 void av_glEdgeFlagv(::av::ClientTransport& av_t, const GLboolean* flag) {
     AV_SCOPE("av_glEdgeFlagv");
-    {
-        const uint64_t av_blob_sizes[] = {flag != nullptr && static_cast<size_t>((1 * sizeof(GLboolean))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLboolean)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {flag != nullptr && static_cast<size_t>((1 * sizeof(GLboolean))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLboolean)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t flag_want = 0;
     if (flag != nullptr) flag_want = (1 * sizeof(GLboolean));
     ::av::ClientBlobLease flag_lease{};
@@ -22430,12 +21426,8 @@ void av_glEvalCoord1d(::av::ClientTransport& av_t, GLdouble u) {
 
 void av_glEvalCoord1dv(::av::ClientTransport& av_t, const GLdouble* u) {
     AV_SCOPE("av_glEvalCoord1dv");
-    {
-        const uint64_t av_blob_sizes[] = {u != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {u != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t u_want = 0;
     if (u != nullptr) u_want = (1 * sizeof(GLdouble));
     ::av::ClientBlobLease u_lease{};
@@ -22488,12 +21480,8 @@ void av_glEvalCoord1f(::av::ClientTransport& av_t, GLfloat u) {
 
 void av_glEvalCoord1fv(::av::ClientTransport& av_t, const GLfloat* u) {
     AV_SCOPE("av_glEvalCoord1fv");
-    {
-        const uint64_t av_blob_sizes[] = {u != nullptr && static_cast<size_t>((1 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {u != nullptr && static_cast<size_t>((1 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t u_want = 0;
     if (u != nullptr) u_want = (1 * sizeof(GLfloat));
     ::av::ClientBlobLease u_lease{};
@@ -22547,12 +21535,8 @@ void av_glEvalCoord2d(::av::ClientTransport& av_t, GLdouble u, GLdouble v) {
 
 void av_glEvalCoord2dv(::av::ClientTransport& av_t, const GLdouble* u) {
     AV_SCOPE("av_glEvalCoord2dv");
-    {
-        const uint64_t av_blob_sizes[] = {u != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {u != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t u_want = 0;
     if (u != nullptr) u_want = (2 * sizeof(GLdouble));
     ::av::ClientBlobLease u_lease{};
@@ -22606,12 +21590,8 @@ void av_glEvalCoord2f(::av::ClientTransport& av_t, GLfloat u, GLfloat v) {
 
 void av_glEvalCoord2fv(::av::ClientTransport& av_t, const GLfloat* u) {
     AV_SCOPE("av_glEvalCoord2fv");
-    {
-        const uint64_t av_blob_sizes[] = {u != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {u != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t u_want = 0;
     if (u != nullptr) u_want = (2 * sizeof(GLfloat));
     ::av::ClientBlobLease u_lease{};
@@ -22769,12 +21749,8 @@ void av_glFogCoordd(::av::ClientTransport& av_t, GLdouble coord) {
 
 void av_glFogCoorddv(::av::ClientTransport& av_t, const GLdouble* coord) {
     AV_SCOPE("av_glFogCoorddv");
-    {
-        const uint64_t av_blob_sizes[] = {coord != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {coord != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t coord_want = 0;
     if (coord != nullptr) coord_want = (1 * sizeof(GLdouble));
     ::av::ClientBlobLease coord_lease{};
@@ -22827,12 +21803,8 @@ void av_glFogCoordf(::av::ClientTransport& av_t, GLfloat coord) {
 
 void av_glFogCoordfv(::av::ClientTransport& av_t, const GLfloat* coord) {
     AV_SCOPE("av_glFogCoordfv");
-    {
-        const uint64_t av_blob_sizes[] = {coord != nullptr && static_cast<size_t>((1 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {coord != nullptr && static_cast<size_t>((1 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t coord_want = 0;
     if (coord != nullptr) coord_want = (1 * sizeof(GLfloat));
     ::av::ClientBlobLease coord_lease{};
@@ -22886,12 +21858,8 @@ void av_glFogf(::av::ClientTransport& av_t, GLenum pname, GLfloat param) {
 
 void av_glFogfv(::av::ClientTransport& av_t, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glFogfv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
     if (params != nullptr) params_want = (::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat));
@@ -22946,12 +21914,8 @@ void av_glFogi(::av::ClientTransport& av_t, GLenum pname, GLint param) {
 
 void av_glFogiv(::av::ClientTransport& av_t, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glFogiv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
     if (params != nullptr) params_want = (::av::glproto::pname_count(av_t, pname) * sizeof(GLint));
@@ -23852,12 +22816,8 @@ void av_glLightModelf(::av::ClientTransport& av_t, GLenum pname, GLfloat param) 
 
 void av_glLightModelfv(::av::ClientTransport& av_t, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glLightModelfv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
     if (params != nullptr) params_want = (::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat));
@@ -23912,12 +22872,8 @@ void av_glLightModeli(::av::ClientTransport& av_t, GLenum pname, GLint param) {
 
 void av_glLightModeliv(::av::ClientTransport& av_t, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glLightModeliv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
     if (params != nullptr) params_want = (::av::glproto::pname_count(av_t, pname) * sizeof(GLint));
@@ -23973,12 +22929,8 @@ void av_glLightf(::av::ClientTransport& av_t, GLenum light, GLenum pname, GLfloa
 
 void av_glLightfv(::av::ClientTransport& av_t, GLenum light, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glLightfv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(light));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -24035,12 +22987,8 @@ void av_glLighti(::av::ClientTransport& av_t, GLenum light, GLenum pname, GLint 
 
 void av_glLightiv(::av::ClientTransport& av_t, GLenum light, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glLightiv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(light));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -24121,12 +23069,8 @@ void av_glLoadIdentity(::av::ClientTransport& av_t) {
 
 void av_glLoadMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
     AV_SCOPE("av_glLoadMatrixd");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
     ::av::ClientBlobLease m_lease{};
@@ -24166,12 +23110,8 @@ void av_glLoadMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
 
 void av_glLoadMatrixf(::av::ClientTransport& av_t, const GLfloat* m) {
     AV_SCOPE("av_glLoadMatrixf");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
     ::av::ClientBlobLease m_lease{};
@@ -24224,12 +23164,8 @@ void av_glLoadName(::av::ClientTransport& av_t, GLuint name) {
 
 void av_glLoadTransposeMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
     AV_SCOPE("av_glLoadTransposeMatrixd");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
     ::av::ClientBlobLease m_lease{};
@@ -24269,12 +23205,8 @@ void av_glLoadTransposeMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
 
 void av_glLoadTransposeMatrixf(::av::ClientTransport& av_t, const GLfloat* m) {
     AV_SCOPE("av_glLoadTransposeMatrixf");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
     ::av::ClientBlobLease m_lease{};
@@ -24314,12 +23246,8 @@ void av_glLoadTransposeMatrixf(::av::ClientTransport& av_t, const GLfloat* m) {
 
 void av_glMap1d(::av::ClientTransport& av_t, GLenum target, GLdouble u1, GLdouble u2, GLint stride, GLint order, const GLdouble* points) {
     AV_SCOPE("av_glMap1d");
-    {
-        const uint64_t av_blob_sizes[] = {points != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(stride) * static_cast<size_t>(order - 1)) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(stride) * static_cast<size_t>(order - 1)) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {points != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(stride) * static_cast<size_t>(order - 1)) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(stride) * static_cast<size_t>(order - 1)) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_pod<GLdouble>(u1);
     av_b.write_pod<GLdouble>(u2);
@@ -24364,12 +23292,8 @@ void av_glMap1d(::av::ClientTransport& av_t, GLenum target, GLdouble u1, GLdoubl
 
 void av_glMap1f(::av::ClientTransport& av_t, GLenum target, GLfloat u1, GLfloat u2, GLint stride, GLint order, const GLfloat* points) {
     AV_SCOPE("av_glMap1f");
-    {
-        const uint64_t av_blob_sizes[] = {points != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(stride) * static_cast<size_t>(order - 1)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(stride) * static_cast<size_t>(order - 1)) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {points != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(stride) * static_cast<size_t>(order - 1)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(stride) * static_cast<size_t>(order - 1)) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_pod<GLfloat>(u1);
     av_b.write_pod<GLfloat>(u2);
@@ -24414,12 +23338,8 @@ void av_glMap1f(::av::ClientTransport& av_t, GLenum target, GLfloat u1, GLfloat 
 
 void av_glMap2d(::av::ClientTransport& av_t, GLenum target, GLdouble u1, GLdouble u2, GLint ustride, GLint uorder, GLdouble v1, GLdouble v2, GLint vstride, GLint vorder, const GLdouble* points) {
     AV_SCOPE("av_glMap2d");
-    {
-        const uint64_t av_blob_sizes[] = {points != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * static_cast<size_t>(uorder - 1) + static_cast<size_t>(vstride) * static_cast<size_t>(vorder - 1)) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * static_cast<size_t>(uorder - 1) + static_cast<size_t>(vstride) * static_cast<size_t>(vorder - 1)) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {points != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * static_cast<size_t>(uorder - 1) + static_cast<size_t>(vstride) * static_cast<size_t>(vorder - 1)) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * static_cast<size_t>(uorder - 1) + static_cast<size_t>(vstride) * static_cast<size_t>(vorder - 1)) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_pod<GLdouble>(u1);
     av_b.write_pod<GLdouble>(u2);
@@ -24468,12 +23388,8 @@ void av_glMap2d(::av::ClientTransport& av_t, GLenum target, GLdouble u1, GLdoubl
 
 void av_glMap2f(::av::ClientTransport& av_t, GLenum target, GLfloat u1, GLfloat u2, GLint ustride, GLint uorder, GLfloat v1, GLfloat v2, GLint vstride, GLint vorder, const GLfloat* points) {
     AV_SCOPE("av_glMap2f");
-    {
-        const uint64_t av_blob_sizes[] = {points != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * static_cast<size_t>(uorder - 1) + static_cast<size_t>(vstride) * static_cast<size_t>(vorder - 1)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * static_cast<size_t>(uorder - 1) + static_cast<size_t>(vstride) * static_cast<size_t>(vorder - 1)) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {points != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * static_cast<size_t>(uorder - 1) + static_cast<size_t>(vstride) * static_cast<size_t>(vorder - 1)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * static_cast<size_t>(uorder - 1) + static_cast<size_t>(vstride) * static_cast<size_t>(vorder - 1)) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_pod<GLfloat>(u1);
     av_b.write_pod<GLfloat>(u2);
@@ -24603,12 +23519,8 @@ void av_glMaterialf(::av::ClientTransport& av_t, GLenum face, GLenum pname, GLfl
 
 void av_glMaterialfv(::av::ClientTransport& av_t, GLenum face, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glMaterialfv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(face));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -24665,12 +23577,8 @@ void av_glMateriali(::av::ClientTransport& av_t, GLenum face, GLenum pname, GLin
 
 void av_glMaterialiv(::av::ClientTransport& av_t, GLenum face, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glMaterialiv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(face));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -24725,12 +23633,8 @@ void av_glMatrixMode(::av::ClientTransport& av_t, GLenum mode) {
 
 void av_glMultMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
     AV_SCOPE("av_glMultMatrixd");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
     ::av::ClientBlobLease m_lease{};
@@ -24770,12 +23674,8 @@ void av_glMultMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
 
 void av_glMultMatrixf(::av::ClientTransport& av_t, const GLfloat* m) {
     AV_SCOPE("av_glMultMatrixf");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
     ::av::ClientBlobLease m_lease{};
@@ -24815,12 +23715,8 @@ void av_glMultMatrixf(::av::ClientTransport& av_t, const GLfloat* m) {
 
 void av_glMultTransposeMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
     AV_SCOPE("av_glMultTransposeMatrixd");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
     ::av::ClientBlobLease m_lease{};
@@ -24860,12 +23756,8 @@ void av_glMultTransposeMatrixd(::av::ClientTransport& av_t, const GLdouble* m) {
 
 void av_glMultTransposeMatrixf(::av::ClientTransport& av_t, const GLfloat* m) {
     AV_SCOPE("av_glMultTransposeMatrixf");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
     ::av::ClientBlobLease m_lease{};
@@ -24919,12 +23811,8 @@ void av_glMultiTexCoord1d(::av::ClientTransport& av_t, GLenum target, GLdouble s
 
 void av_glMultiTexCoord1dv(::av::ClientTransport& av_t, GLenum target, const GLdouble* v) {
     AV_SCOPE("av_glMultiTexCoord1dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLdouble));
@@ -24979,12 +23867,8 @@ void av_glMultiTexCoord1f(::av::ClientTransport& av_t, GLenum target, GLfloat s)
 
 void av_glMultiTexCoord1fv(::av::ClientTransport& av_t, GLenum target, const GLfloat* v) {
     AV_SCOPE("av_glMultiTexCoord1fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLfloat));
@@ -25039,12 +23923,8 @@ void av_glMultiTexCoord1i(::av::ClientTransport& av_t, GLenum target, GLint s) {
 
 void av_glMultiTexCoord1iv(::av::ClientTransport& av_t, GLenum target, const GLint* v) {
     AV_SCOPE("av_glMultiTexCoord1iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLint));
@@ -25099,12 +23979,8 @@ void av_glMultiTexCoord1s(::av::ClientTransport& av_t, GLenum target, GLshort s)
 
 void av_glMultiTexCoord1sv(::av::ClientTransport& av_t, GLenum target, const GLshort* v) {
     AV_SCOPE("av_glMultiTexCoord1sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLshort));
@@ -25160,12 +24036,8 @@ void av_glMultiTexCoord2d(::av::ClientTransport& av_t, GLenum target, GLdouble s
 
 void av_glMultiTexCoord2dv(::av::ClientTransport& av_t, GLenum target, const GLdouble* v) {
     AV_SCOPE("av_glMultiTexCoord2dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLdouble));
@@ -25221,12 +24093,8 @@ void av_glMultiTexCoord2f(::av::ClientTransport& av_t, GLenum target, GLfloat s,
 
 void av_glMultiTexCoord2fv(::av::ClientTransport& av_t, GLenum target, const GLfloat* v) {
     AV_SCOPE("av_glMultiTexCoord2fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLfloat));
@@ -25282,12 +24150,8 @@ void av_glMultiTexCoord2i(::av::ClientTransport& av_t, GLenum target, GLint s, G
 
 void av_glMultiTexCoord2iv(::av::ClientTransport& av_t, GLenum target, const GLint* v) {
     AV_SCOPE("av_glMultiTexCoord2iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLint));
@@ -25343,12 +24207,8 @@ void av_glMultiTexCoord2s(::av::ClientTransport& av_t, GLenum target, GLshort s,
 
 void av_glMultiTexCoord2sv(::av::ClientTransport& av_t, GLenum target, const GLshort* v) {
     AV_SCOPE("av_glMultiTexCoord2sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLshort));
@@ -25405,12 +24265,8 @@ void av_glMultiTexCoord3d(::av::ClientTransport& av_t, GLenum target, GLdouble s
 
 void av_glMultiTexCoord3dv(::av::ClientTransport& av_t, GLenum target, const GLdouble* v) {
     AV_SCOPE("av_glMultiTexCoord3dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
@@ -25467,12 +24323,8 @@ void av_glMultiTexCoord3f(::av::ClientTransport& av_t, GLenum target, GLfloat s,
 
 void av_glMultiTexCoord3fv(::av::ClientTransport& av_t, GLenum target, const GLfloat* v) {
     AV_SCOPE("av_glMultiTexCoord3fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
@@ -25529,12 +24381,8 @@ void av_glMultiTexCoord3i(::av::ClientTransport& av_t, GLenum target, GLint s, G
 
 void av_glMultiTexCoord3iv(::av::ClientTransport& av_t, GLenum target, const GLint* v) {
     AV_SCOPE("av_glMultiTexCoord3iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
@@ -25591,12 +24439,8 @@ void av_glMultiTexCoord3s(::av::ClientTransport& av_t, GLenum target, GLshort s,
 
 void av_glMultiTexCoord3sv(::av::ClientTransport& av_t, GLenum target, const GLshort* v) {
     AV_SCOPE("av_glMultiTexCoord3sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
@@ -25654,12 +24498,8 @@ void av_glMultiTexCoord4d(::av::ClientTransport& av_t, GLenum target, GLdouble s
 
 void av_glMultiTexCoord4dv(::av::ClientTransport& av_t, GLenum target, const GLdouble* v) {
     AV_SCOPE("av_glMultiTexCoord4dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLdouble));
@@ -25717,12 +24557,8 @@ void av_glMultiTexCoord4f(::av::ClientTransport& av_t, GLenum target, GLfloat s,
 
 void av_glMultiTexCoord4fv(::av::ClientTransport& av_t, GLenum target, const GLfloat* v) {
     AV_SCOPE("av_glMultiTexCoord4fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLfloat));
@@ -25780,12 +24616,8 @@ void av_glMultiTexCoord4i(::av::ClientTransport& av_t, GLenum target, GLint s, G
 
 void av_glMultiTexCoord4iv(::av::ClientTransport& av_t, GLenum target, const GLint* v) {
     AV_SCOPE("av_glMultiTexCoord4iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
@@ -25843,12 +24675,8 @@ void av_glMultiTexCoord4s(::av::ClientTransport& av_t, GLenum target, GLshort s,
 
 void av_glMultiTexCoord4sv(::av::ClientTransport& av_t, GLenum target, const GLshort* v) {
     AV_SCOPE("av_glMultiTexCoord4sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
@@ -25918,12 +24746,8 @@ void av_glNormal3b(::av::ClientTransport& av_t, GLbyte nx, GLbyte ny, GLbyte nz)
 
 void av_glNormal3bv(::av::ClientTransport& av_t, const GLbyte* v) {
     AV_SCOPE("av_glNormal3bv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLbyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLbyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLbyte));
     ::av::ClientBlobLease v_lease{};
@@ -25978,12 +24802,8 @@ void av_glNormal3d(::av::ClientTransport& av_t, GLdouble nx, GLdouble ny, GLdoub
 
 void av_glNormal3dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glNormal3dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -26038,12 +24858,8 @@ void av_glNormal3f(::av::ClientTransport& av_t, GLfloat nx, GLfloat ny, GLfloat 
 
 void av_glNormal3fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glNormal3fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -26098,12 +24914,8 @@ void av_glNormal3i(::av::ClientTransport& av_t, GLint nx, GLint ny, GLint nz) {
 
 void av_glNormal3iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glNormal3iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -26158,12 +24970,8 @@ void av_glNormal3s(::av::ClientTransport& av_t, GLshort nx, GLshort ny, GLshort 
 
 void av_glNormal3sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glNormal3sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -26249,12 +25057,8 @@ void av_glPassThrough(::av::ClientTransport& av_t, GLfloat token) {
 
 void av_glPixelMapfv(::av::ClientTransport& av_t, GLenum map, GLsizei mapsize, const GLfloat* values) {
     AV_SCOPE("av_glPixelMapfv");
-    {
-        const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(map));
     av_b.write_varint(static_cast<uint64_t>(mapsize));
     size_t values_want = 0;
@@ -26296,12 +25100,8 @@ void av_glPixelMapfv(::av::ClientTransport& av_t, GLenum map, GLsizei mapsize, c
 
 void av_glPixelMapuiv(::av::ClientTransport& av_t, GLenum map, GLsizei mapsize, const GLuint* values) {
     AV_SCOPE("av_glPixelMapuiv");
-    {
-        const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(map));
     av_b.write_varint(static_cast<uint64_t>(mapsize));
     size_t values_want = 0;
@@ -26343,12 +25143,8 @@ void av_glPixelMapuiv(::av::ClientTransport& av_t, GLenum map, GLsizei mapsize, 
 
 void av_glPixelMapusv(::av::ClientTransport& av_t, GLenum map, GLsizei mapsize, const GLushort* values) {
     AV_SCOPE("av_glPixelMapusv");
-    {
-        const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLushort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(mapsize) * sizeof(GLushort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(map));
     av_b.write_varint(static_cast<uint64_t>(mapsize));
     size_t values_want = 0;
@@ -26432,12 +25228,8 @@ void av_glPixelZoom(::av::ClientTransport& av_t, GLfloat xfactor, GLfloat yfacto
 
 void av_glPolygonStipple(::av::ClientTransport& av_t, const GLubyte* mask) {
     AV_SCOPE("av_glPolygonStipple");
-    {
-        const uint64_t av_blob_sizes[] = {mask != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::stipple_bytes(av_t, false)) * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::stipple_bytes(av_t, false)) * sizeof(GLubyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {mask != nullptr && static_cast<size_t>((static_cast<size_t>(::av::glproto::stipple_bytes(av_t, false)) * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(::av::glproto::stipple_bytes(av_t, false)) * sizeof(GLubyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t mask_want = 0;
     if (mask != nullptr) mask_want = (static_cast<size_t>(::av::glproto::stipple_bytes(av_t, false)) * sizeof(GLubyte));
     ::av::ClientBlobLease mask_lease{};
@@ -26525,12 +25317,8 @@ void av_glPopName(::av::ClientTransport& av_t) {
 
 void av_glPrioritizeTextures(::av::ClientTransport& av_t, GLsizei n, const GLuint* textures, const GLfloat* priorities) {
     AV_SCOPE("av_glPrioritizeTextures");
-    {
-        const uint64_t av_blob_sizes[] = {textures != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u, priorities != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 2u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {textures != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u, priorities != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 2u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t textures_want = 0;
     if (textures != nullptr) textures_want = (static_cast<size_t>(n) * sizeof(GLuint));
@@ -26664,12 +25452,8 @@ void av_glRasterPos2d(::av::ClientTransport& av_t, GLdouble x, GLdouble y) {
 
 void av_glRasterPos2dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glRasterPos2dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -26723,12 +25507,8 @@ void av_glRasterPos2f(::av::ClientTransport& av_t, GLfloat x, GLfloat y) {
 
 void av_glRasterPos2fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glRasterPos2fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -26782,12 +25562,8 @@ void av_glRasterPos2i(::av::ClientTransport& av_t, GLint x, GLint y) {
 
 void av_glRasterPos2iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glRasterPos2iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -26841,12 +25617,8 @@ void av_glRasterPos2s(::av::ClientTransport& av_t, GLshort x, GLshort y) {
 
 void av_glRasterPos2sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glRasterPos2sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -26901,12 +25673,8 @@ void av_glRasterPos3d(::av::ClientTransport& av_t, GLdouble x, GLdouble y, GLdou
 
 void av_glRasterPos3dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glRasterPos3dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -26961,12 +25729,8 @@ void av_glRasterPos3f(::av::ClientTransport& av_t, GLfloat x, GLfloat y, GLfloat
 
 void av_glRasterPos3fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glRasterPos3fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -27021,12 +25785,8 @@ void av_glRasterPos3i(::av::ClientTransport& av_t, GLint x, GLint y, GLint z) {
 
 void av_glRasterPos3iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glRasterPos3iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -27081,12 +25841,8 @@ void av_glRasterPos3s(::av::ClientTransport& av_t, GLshort x, GLshort y, GLshort
 
 void av_glRasterPos3sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glRasterPos3sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -27142,12 +25898,8 @@ void av_glRasterPos4d(::av::ClientTransport& av_t, GLdouble x, GLdouble y, GLdou
 
 void av_glRasterPos4dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glRasterPos4dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -27203,12 +25955,8 @@ void av_glRasterPos4f(::av::ClientTransport& av_t, GLfloat x, GLfloat y, GLfloat
 
 void av_glRasterPos4fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glRasterPos4fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -27264,12 +26012,8 @@ void av_glRasterPos4i(::av::ClientTransport& av_t, GLint x, GLint y, GLint z, GL
 
 void av_glRasterPos4iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glRasterPos4iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -27325,12 +26069,8 @@ void av_glRasterPos4s(::av::ClientTransport& av_t, GLshort x, GLshort y, GLshort
 
 void av_glRasterPos4sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glRasterPos4sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -27386,12 +26126,8 @@ void av_glRectd(::av::ClientTransport& av_t, GLdouble x1, GLdouble y1, GLdouble 
 
 void av_glRectdv(::av::ClientTransport& av_t, const GLdouble* v1, const GLdouble* v2) {
     AV_SCOPE("av_glRectdv");
-    {
-        const uint64_t av_blob_sizes[] = {v1 != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u, v2 != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 2u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v1 != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u, v2 != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 2u) : av_t.request_writer();
     size_t v1_want = 0;
     if (v1 != nullptr) v1_want = (2 * sizeof(GLdouble));
     ::av::ClientBlobLease v1_lease{};
@@ -27475,12 +26211,8 @@ void av_glRectf(::av::ClientTransport& av_t, GLfloat x1, GLfloat y1, GLfloat x2,
 
 void av_glRectfv(::av::ClientTransport& av_t, const GLfloat* v1, const GLfloat* v2) {
     AV_SCOPE("av_glRectfv");
-    {
-        const uint64_t av_blob_sizes[] = {v1 != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u, v2 != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 2u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v1 != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u, v2 != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 2u) : av_t.request_writer();
     size_t v1_want = 0;
     if (v1 != nullptr) v1_want = (2 * sizeof(GLfloat));
     ::av::ClientBlobLease v1_lease{};
@@ -27564,12 +26296,8 @@ void av_glRecti(::av::ClientTransport& av_t, GLint x1, GLint y1, GLint x2, GLint
 
 void av_glRectiv(::av::ClientTransport& av_t, const GLint* v1, const GLint* v2) {
     AV_SCOPE("av_glRectiv");
-    {
-        const uint64_t av_blob_sizes[] = {v1 != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u, v2 != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 2u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v1 != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u, v2 != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 2u) : av_t.request_writer();
     size_t v1_want = 0;
     if (v1 != nullptr) v1_want = (2 * sizeof(GLint));
     ::av::ClientBlobLease v1_lease{};
@@ -27653,12 +26381,8 @@ void av_glRects(::av::ClientTransport& av_t, GLshort x1, GLshort y1, GLshort x2,
 
 void av_glRectsv(::av::ClientTransport& av_t, const GLshort* v1, const GLshort* v2) {
     AV_SCOPE("av_glRectsv");
-    {
-        const uint64_t av_blob_sizes[] = {v1 != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u, v2 != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 2u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v1 != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u, v2 != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 2u) : av_t.request_writer();
     size_t v1_want = 0;
     if (v1 != nullptr) v1_want = (2 * sizeof(GLshort));
     ::av::ClientBlobLease v1_lease{};
@@ -27824,12 +26548,8 @@ void av_glSecondaryColor3b(::av::ClientTransport& av_t, GLbyte red, GLbyte green
 
 void av_glSecondaryColor3bv(::av::ClientTransport& av_t, const GLbyte* v) {
     AV_SCOPE("av_glSecondaryColor3bv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLbyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLbyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLbyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLbyte));
     ::av::ClientBlobLease v_lease{};
@@ -27884,12 +26604,8 @@ void av_glSecondaryColor3d(::av::ClientTransport& av_t, GLdouble red, GLdouble g
 
 void av_glSecondaryColor3dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glSecondaryColor3dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -27944,12 +26660,8 @@ void av_glSecondaryColor3f(::av::ClientTransport& av_t, GLfloat red, GLfloat gre
 
 void av_glSecondaryColor3fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glSecondaryColor3fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -28004,12 +26716,8 @@ void av_glSecondaryColor3i(::av::ClientTransport& av_t, GLint red, GLint green, 
 
 void av_glSecondaryColor3iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glSecondaryColor3iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -28064,12 +26772,8 @@ void av_glSecondaryColor3s(::av::ClientTransport& av_t, GLshort red, GLshort gre
 
 void av_glSecondaryColor3sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glSecondaryColor3sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -28124,12 +26828,8 @@ void av_glSecondaryColor3ub(::av::ClientTransport& av_t, GLubyte red, GLubyte gr
 
 void av_glSecondaryColor3ubv(::av::ClientTransport& av_t, const GLubyte* v) {
     AV_SCOPE("av_glSecondaryColor3ubv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLubyte)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLubyte))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLubyte)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLubyte));
     ::av::ClientBlobLease v_lease{};
@@ -28184,12 +26884,8 @@ void av_glSecondaryColor3ui(::av::ClientTransport& av_t, GLuint red, GLuint gree
 
 void av_glSecondaryColor3uiv(::av::ClientTransport& av_t, const GLuint* v) {
     AV_SCOPE("av_glSecondaryColor3uiv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLuint));
     ::av::ClientBlobLease v_lease{};
@@ -28244,12 +26940,8 @@ void av_glSecondaryColor3us(::av::ClientTransport& av_t, GLushort red, GLushort 
 
 void av_glSecondaryColor3usv(::av::ClientTransport& av_t, const GLushort* v) {
     AV_SCOPE("av_glSecondaryColor3usv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLushort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLushort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLushort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLushort));
     ::av::ClientBlobLease v_lease{};
@@ -28361,12 +27053,8 @@ void av_glTexCoord1d(::av::ClientTransport& av_t, GLdouble s) {
 
 void av_glTexCoord1dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glTexCoord1dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -28419,12 +27107,8 @@ void av_glTexCoord1f(::av::ClientTransport& av_t, GLfloat s) {
 
 void av_glTexCoord1fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glTexCoord1fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -28477,12 +27161,8 @@ void av_glTexCoord1i(::av::ClientTransport& av_t, GLint s) {
 
 void av_glTexCoord1iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glTexCoord1iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -28535,12 +27215,8 @@ void av_glTexCoord1s(::av::ClientTransport& av_t, GLshort s) {
 
 void av_glTexCoord1sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glTexCoord1sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -28594,12 +27270,8 @@ void av_glTexCoord2d(::av::ClientTransport& av_t, GLdouble s, GLdouble t) {
 
 void av_glTexCoord2dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glTexCoord2dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -28653,12 +27325,8 @@ void av_glTexCoord2f(::av::ClientTransport& av_t, GLfloat s, GLfloat t) {
 
 void av_glTexCoord2fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glTexCoord2fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -28712,12 +27380,8 @@ void av_glTexCoord2i(::av::ClientTransport& av_t, GLint s, GLint t) {
 
 void av_glTexCoord2iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glTexCoord2iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -28771,12 +27435,8 @@ void av_glTexCoord2s(::av::ClientTransport& av_t, GLshort s, GLshort t) {
 
 void av_glTexCoord2sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glTexCoord2sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -28831,12 +27491,8 @@ void av_glTexCoord3d(::av::ClientTransport& av_t, GLdouble s, GLdouble t, GLdoub
 
 void av_glTexCoord3dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glTexCoord3dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -28891,12 +27547,8 @@ void av_glTexCoord3f(::av::ClientTransport& av_t, GLfloat s, GLfloat t, GLfloat 
 
 void av_glTexCoord3fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glTexCoord3fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -28951,12 +27603,8 @@ void av_glTexCoord3i(::av::ClientTransport& av_t, GLint s, GLint t, GLint r) {
 
 void av_glTexCoord3iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glTexCoord3iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -29011,12 +27659,8 @@ void av_glTexCoord3s(::av::ClientTransport& av_t, GLshort s, GLshort t, GLshort 
 
 void av_glTexCoord3sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glTexCoord3sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -29072,12 +27716,8 @@ void av_glTexCoord4d(::av::ClientTransport& av_t, GLdouble s, GLdouble t, GLdoub
 
 void av_glTexCoord4dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glTexCoord4dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -29133,12 +27773,8 @@ void av_glTexCoord4f(::av::ClientTransport& av_t, GLfloat s, GLfloat t, GLfloat 
 
 void av_glTexCoord4fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glTexCoord4fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -29194,12 +27830,8 @@ void av_glTexCoord4i(::av::ClientTransport& av_t, GLint s, GLint t, GLint r, GLi
 
 void av_glTexCoord4iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glTexCoord4iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -29255,12 +27887,8 @@ void av_glTexCoord4s(::av::ClientTransport& av_t, GLshort s, GLshort t, GLshort 
 
 void av_glTexCoord4sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glTexCoord4sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -29331,12 +27959,8 @@ void av_glTexEnvf(::av::ClientTransport& av_t, GLenum target, GLenum pname, GLfl
 
 void av_glTexEnvfv(::av::ClientTransport& av_t, GLenum target, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glTexEnvfv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -29393,12 +28017,8 @@ void av_glTexEnvi(::av::ClientTransport& av_t, GLenum target, GLenum pname, GLin
 
 void av_glTexEnviv(::av::ClientTransport& av_t, GLenum target, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glTexEnviv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -29455,12 +28075,8 @@ void av_glTexGend(::av::ClientTransport& av_t, GLenum coord, GLenum pname, GLdou
 
 void av_glTexGendv(::av::ClientTransport& av_t, GLenum coord, GLenum pname, const GLdouble* params) {
     AV_SCOPE("av_glTexGendv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(coord));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -29517,12 +28133,8 @@ void av_glTexGenf(::av::ClientTransport& av_t, GLenum coord, GLenum pname, GLflo
 
 void av_glTexGenfv(::av::ClientTransport& av_t, GLenum coord, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glTexGenfv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(coord));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -29579,12 +28191,8 @@ void av_glTexGeni(::av::ClientTransport& av_t, GLenum coord, GLenum pname, GLint
 
 void av_glTexGeniv(::av::ClientTransport& av_t, GLenum coord, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glTexGeniv");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(coord));
     av_b.write_varint(static_cast<uint64_t>(pname));
     size_t params_want = 0;
@@ -29670,12 +28278,8 @@ void av_glVertex2d(::av::ClientTransport& av_t, GLdouble x, GLdouble y) {
 
 void av_glVertex2dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glVertex2dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -29729,12 +28333,8 @@ void av_glVertex2f(::av::ClientTransport& av_t, GLfloat x, GLfloat y) {
 
 void av_glVertex2fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glVertex2fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -29788,12 +28388,8 @@ void av_glVertex2i(::av::ClientTransport& av_t, GLint x, GLint y) {
 
 void av_glVertex2iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glVertex2iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -29847,12 +28443,8 @@ void av_glVertex2s(::av::ClientTransport& av_t, GLshort x, GLshort y) {
 
 void av_glVertex2sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glVertex2sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -29907,12 +28499,8 @@ void av_glVertex3d(::av::ClientTransport& av_t, GLdouble x, GLdouble y, GLdouble
 
 void av_glVertex3dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glVertex3dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -29967,12 +28555,8 @@ void av_glVertex3f(::av::ClientTransport& av_t, GLfloat x, GLfloat y, GLfloat z)
 
 void av_glVertex3fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glVertex3fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -30027,12 +28611,8 @@ void av_glVertex3i(::av::ClientTransport& av_t, GLint x, GLint y, GLint z) {
 
 void av_glVertex3iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glVertex3iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -30087,12 +28667,8 @@ void av_glVertex3s(::av::ClientTransport& av_t, GLshort x, GLshort y, GLshort z)
 
 void av_glVertex3sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glVertex3sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -30148,12 +28724,8 @@ void av_glVertex4d(::av::ClientTransport& av_t, GLdouble x, GLdouble y, GLdouble
 
 void av_glVertex4dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glVertex4dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -30209,12 +28781,8 @@ void av_glVertex4f(::av::ClientTransport& av_t, GLfloat x, GLfloat y, GLfloat z,
 
 void av_glVertex4fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glVertex4fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -30270,12 +28838,8 @@ void av_glVertex4i(::av::ClientTransport& av_t, GLint x, GLint y, GLint z, GLint
 
 void av_glVertex4iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glVertex4iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -30331,12 +28895,8 @@ void av_glVertex4s(::av::ClientTransport& av_t, GLshort x, GLshort y, GLshort z,
 
 void av_glVertex4sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glVertex4sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((4 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (4 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -30406,12 +28966,8 @@ void av_glWindowPos2d(::av::ClientTransport& av_t, GLdouble x, GLdouble y) {
 
 void av_glWindowPos2dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glWindowPos2dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -30465,12 +29021,8 @@ void av_glWindowPos2f(::av::ClientTransport& av_t, GLfloat x, GLfloat y) {
 
 void av_glWindowPos2fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glWindowPos2fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -30524,12 +29076,8 @@ void av_glWindowPos2i(::av::ClientTransport& av_t, GLint x, GLint y) {
 
 void av_glWindowPos2iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glWindowPos2iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -30583,12 +29131,8 @@ void av_glWindowPos2s(::av::ClientTransport& av_t, GLshort x, GLshort y) {
 
 void av_glWindowPos2sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glWindowPos2sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((2 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((2 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (2 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -30643,12 +29187,8 @@ void av_glWindowPos3d(::av::ClientTransport& av_t, GLdouble x, GLdouble y, GLdou
 
 void av_glWindowPos3dv(::av::ClientTransport& av_t, const GLdouble* v) {
     AV_SCOPE("av_glWindowPos3dv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLdouble));
     ::av::ClientBlobLease v_lease{};
@@ -30703,12 +29243,8 @@ void av_glWindowPos3f(::av::ClientTransport& av_t, GLfloat x, GLfloat y, GLfloat
 
 void av_glWindowPos3fv(::av::ClientTransport& av_t, const GLfloat* v) {
     AV_SCOPE("av_glWindowPos3fv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLfloat));
     ::av::ClientBlobLease v_lease{};
@@ -30763,12 +29299,8 @@ void av_glWindowPos3i(::av::ClientTransport& av_t, GLint x, GLint y, GLint z) {
 
 void av_glWindowPos3iv(::av::ClientTransport& av_t, const GLint* v) {
     AV_SCOPE("av_glWindowPos3iv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLint));
     ::av::ClientBlobLease v_lease{};
@@ -30823,12 +29355,8 @@ void av_glWindowPos3s(::av::ClientTransport& av_t, GLshort x, GLshort y, GLshort
 
 void av_glWindowPos3sv(::av::ClientTransport& av_t, const GLshort* v) {
     AV_SCOPE("av_glWindowPos3sv");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((3 * sizeof(GLshort))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((3 * sizeof(GLshort)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     size_t v_want = 0;
     if (v != nullptr) v_want = (3 * sizeof(GLshort));
     ::av::ClientBlobLease v_lease{};
@@ -31182,12 +29710,8 @@ void av_glScissorExclusiveNV(::av::ClientTransport& av_t, GLint x, GLint y, GLsi
 
 void av_glScissorExclusiveArrayvNV(::av::ClientTransport& av_t, GLuint first, GLsizei count, const GLint* v) {
     AV_SCOPE("av_glScissorExclusiveArrayvNV");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 4)) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(first));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t v_want = 0;
@@ -31229,12 +29753,8 @@ void av_glScissorExclusiveArrayvNV(::av::ClientTransport& av_t, GLuint first, GL
 
 void av_glFramebufferSampleLocationsfvNV(::av::ClientTransport& av_t, GLenum target, GLuint start, GLsizei count, const GLfloat* v) {
     AV_SCOPE("av_glFramebufferSampleLocationsfvNV");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(start));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -31277,12 +29797,8 @@ void av_glFramebufferSampleLocationsfvNV(::av::ClientTransport& av_t, GLenum tar
 
 void av_glNamedFramebufferSampleLocationsfvNV(::av::ClientTransport& av_t, GLuint framebuffer, GLuint start, GLsizei count, const GLfloat* v) {
     AV_SCOPE("av_glNamedFramebufferSampleLocationsfvNV");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((static_cast<size_t>(count) * 2)) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(framebuffer));
     av_b.write_varint(static_cast<uint64_t>(start));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -31472,12 +29988,8 @@ void av_glUniformHandleui64ARB(::av::ClientTransport& av_t, GLint location, GLui
 
 void av_glUniformHandleui64vARB(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLuint64* value) {
     AV_SCOPE("av_glUniformHandleui64vARB");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -31534,12 +30046,8 @@ void av_glProgramUniformHandleui64ARB(::av::ClientTransport& av_t, GLuint progra
 
 void av_glProgramUniformHandleui64vARB(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint64* values) {
     AV_SCOPE("av_glProgramUniformHandleui64vARB");
-    {
-        const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -31638,12 +30146,8 @@ void av_glVertexAttribL1ui64ARB(::av::ClientTransport& av_t, GLuint index, GLuin
 
 void av_glVertexAttribL1ui64vARB(::av::ClientTransport& av_t, GLuint index, const GLuint64EXT* v) {
     AV_SCOPE("av_glVertexAttribL1ui64vARB");
-    {
-        const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {v != nullptr && static_cast<size_t>((1 * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((1 * sizeof(GLuint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(index));
     size_t v_want = 0;
     if (v != nullptr) v_want = (1 * sizeof(GLuint64EXT));
@@ -31850,12 +30354,8 @@ void av_glUniformHandleui64NV(::av::ClientTransport& av_t, GLint location, GLuin
 
 void av_glUniformHandleui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLuint64* value) {
     AV_SCOPE("av_glUniformHandleui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -31912,12 +30412,8 @@ void av_glProgramUniformHandleui64NV(::av::ClientTransport& av_t, GLuint program
 
 void av_glProgramUniformHandleui64vNV(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint64* values) {
     AV_SCOPE("av_glProgramUniformHandleui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {values != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -32037,12 +30533,8 @@ void av_glTextureStorageMem2DEXT(::av::ClientTransport& av_t, GLuint texture, GL
 
 void av_glDeleteMemoryObjectsEXT(::av::ClientTransport& av_t, GLsizei n, const GLuint* memoryObjects) {
     AV_SCOPE("av_glDeleteMemoryObjectsEXT");
-    {
-        const uint64_t av_blob_sizes[] = {memoryObjects != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {memoryObjects != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t memoryObjects_want = 0;
     if (memoryObjects != nullptr) memoryObjects_want = (static_cast<size_t>(n) * sizeof(GLuint));
@@ -32083,12 +30575,8 @@ void av_glDeleteMemoryObjectsEXT(::av::ClientTransport& av_t, GLsizei n, const G
 
 void av_glDeleteSemaphoresEXT(::av::ClientTransport& av_t, GLsizei n, const GLuint* semaphores) {
     AV_SCOPE("av_glDeleteSemaphoresEXT");
-    {
-        const uint64_t av_blob_sizes[] = {semaphores != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {semaphores != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t semaphores_want = 0;
     if (semaphores != nullptr) semaphores_want = (static_cast<size_t>(n) * sizeof(GLuint));
@@ -32129,12 +30617,8 @@ void av_glDeleteSemaphoresEXT(::av::ClientTransport& av_t, GLsizei n, const GLui
 
 void av_glSignalSemaphoreEXT(::av::ClientTransport& av_t, GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* dstLayouts) {
     AV_SCOPE("av_glSignalSemaphoreEXT");
-    {
-        const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(numBufferBarriers) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numBufferBarriers) * sizeof(GLuint)))) : 0u, textures != nullptr && static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLuint)))) : 0u, dstLayouts != nullptr && static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLenum)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 3u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(numBufferBarriers) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numBufferBarriers) * sizeof(GLuint)))) : 0u, textures != nullptr && static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLuint)))) : 0u, dstLayouts != nullptr && static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLenum)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 3u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(semaphore));
     av_b.write_varint(static_cast<uint64_t>(numBufferBarriers));
     size_t buffers_want = 0;
@@ -32233,12 +30717,8 @@ void av_glSignalSemaphoreEXT(::av::ClientTransport& av_t, GLuint semaphore, GLui
 
 void av_glWaitSemaphoreEXT(::av::ClientTransport& av_t, GLuint semaphore, GLuint numBufferBarriers, const GLuint* buffers, GLuint numTextureBarriers, const GLuint* textures, const GLenum* srcLayouts) {
     AV_SCOPE("av_glWaitSemaphoreEXT");
-    {
-        const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(numBufferBarriers) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numBufferBarriers) * sizeof(GLuint)))) : 0u, textures != nullptr && static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLuint)))) : 0u, srcLayouts != nullptr && static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLenum)))) : 0u};
-        if ((av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 3u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {buffers != nullptr && static_cast<size_t>((static_cast<size_t>(numBufferBarriers) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numBufferBarriers) * sizeof(GLuint)))) : 0u, textures != nullptr && static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLuint)))) : 0u, srcLayouts != nullptr && static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(numTextureBarriers) * sizeof(GLenum)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0] | av_blob_sizes[1] | av_blob_sizes[2]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 3u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(semaphore));
     av_b.write_varint(static_cast<uint64_t>(numBufferBarriers));
     size_t buffers_want = 0;
@@ -32793,12 +31273,8 @@ void av_glUniformui64NV(::av::ClientTransport& av_t, GLint location, GLuint64EXT
 
 void av_glUniformui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLuint64EXT* value) {
     AV_SCOPE("av_glUniformui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -32886,12 +31362,8 @@ void av_glProgramUniformui64NV(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniformui64vNV(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint64EXT* value) {
     AV_SCOPE("av_glProgramUniformui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -33191,12 +31663,8 @@ void av_glUniform4i64NV(::av::ClientTransport& av_t, GLint location, GLint64EXT 
 
 void av_glUniform1i64vNV(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLint64EXT* value) {
     AV_SCOPE("av_glUniform1i64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -33238,12 +31706,8 @@ void av_glUniform1i64vNV(::av::ClientTransport& av_t, GLint location, GLsizei co
 
 void av_glUniform2i64vNV(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLint64EXT* value) {
     AV_SCOPE("av_glUniform2i64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -33285,12 +31749,8 @@ void av_glUniform2i64vNV(::av::ClientTransport& av_t, GLint location, GLsizei co
 
 void av_glUniform3i64vNV(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLint64EXT* value) {
     AV_SCOPE("av_glUniform3i64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -33332,12 +31792,8 @@ void av_glUniform3i64vNV(::av::ClientTransport& av_t, GLint location, GLsizei co
 
 void av_glUniform4i64vNV(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLint64EXT* value) {
     AV_SCOPE("av_glUniform4i64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -33441,12 +31897,8 @@ void av_glUniform4ui64NV(::av::ClientTransport& av_t, GLint location, GLuint64EX
 
 void av_glUniform1ui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLuint64EXT* value) {
     AV_SCOPE("av_glUniform1ui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*1) * sizeof(GLuint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -33488,12 +31940,8 @@ void av_glUniform1ui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei c
 
 void av_glUniform2ui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLuint64EXT* value) {
     AV_SCOPE("av_glUniform2ui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -33535,12 +31983,8 @@ void av_glUniform2ui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei c
 
 void av_glUniform3ui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLuint64EXT* value) {
     AV_SCOPE("av_glUniform3ui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -33582,12 +32026,8 @@ void av_glUniform3ui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei c
 
 void av_glUniform4ui64vNV(::av::ClientTransport& av_t, GLint location, GLsizei count, const GLuint64EXT* value) {
     AV_SCOPE("av_glUniform4ui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
     size_t value_want = 0;
@@ -33726,12 +32166,8 @@ void av_glProgramUniform4i64NV(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform1i64vNV(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint64EXT* value) {
     AV_SCOPE("av_glProgramUniform1i64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -33774,12 +32210,8 @@ void av_glProgramUniform1i64vNV(::av::ClientTransport& av_t, GLuint program, GLi
 
 void av_glProgramUniform2i64vNV(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint64EXT* value) {
     AV_SCOPE("av_glProgramUniform2i64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -33822,12 +32254,8 @@ void av_glProgramUniform2i64vNV(::av::ClientTransport& av_t, GLuint program, GLi
 
 void av_glProgramUniform3i64vNV(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint64EXT* value) {
     AV_SCOPE("av_glProgramUniform3i64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -33870,12 +32298,8 @@ void av_glProgramUniform3i64vNV(::av::ClientTransport& av_t, GLuint program, GLi
 
 void av_glProgramUniform4i64vNV(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint64EXT* value) {
     AV_SCOPE("av_glProgramUniform4i64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -33984,12 +32408,8 @@ void av_glProgramUniform4ui64NV(::av::ClientTransport& av_t, GLuint program, GLi
 
 void av_glProgramUniform1ui64vNV(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint64EXT* value) {
     AV_SCOPE("av_glProgramUniform1ui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -34032,12 +32452,8 @@ void av_glProgramUniform1ui64vNV(::av::ClientTransport& av_t, GLuint program, GL
 
 void av_glProgramUniform2ui64vNV(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint64EXT* value) {
     AV_SCOPE("av_glProgramUniform2ui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -34080,12 +32496,8 @@ void av_glProgramUniform2ui64vNV(::av::ClientTransport& av_t, GLuint program, GL
 
 void av_glProgramUniform3ui64vNV(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint64EXT* value) {
     AV_SCOPE("av_glProgramUniform3ui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -34128,12 +32540,8 @@ void av_glProgramUniform3ui64vNV(::av::ClientTransport& av_t, GLuint program, GL
 
 void av_glProgramUniform4ui64vNV(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint64EXT* value) {
     AV_SCOPE("av_glProgramUniform4ui64vNV");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint64EXT)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint64EXT))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint64EXT)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -34176,12 +32584,8 @@ void av_glProgramUniform4ui64vNV(::av::ClientTransport& av_t, GLuint program, GL
 
 void av_glMatrixLoadfEXT(::av::ClientTransport& av_t, GLenum mode, const GLfloat* m) {
     AV_SCOPE("av_glMatrixLoadfEXT");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
@@ -34222,12 +32626,8 @@ void av_glMatrixLoadfEXT(::av::ClientTransport& av_t, GLenum mode, const GLfloat
 
 void av_glMatrixLoaddEXT(::av::ClientTransport& av_t, GLenum mode, const GLdouble* m) {
     AV_SCOPE("av_glMatrixLoaddEXT");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
@@ -34268,12 +32668,8 @@ void av_glMatrixLoaddEXT(::av::ClientTransport& av_t, GLenum mode, const GLdoubl
 
 void av_glMatrixMultfEXT(::av::ClientTransport& av_t, GLenum mode, const GLfloat* m) {
     AV_SCOPE("av_glMatrixMultfEXT");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
@@ -34314,12 +32710,8 @@ void av_glMatrixMultfEXT(::av::ClientTransport& av_t, GLenum mode, const GLfloat
 
 void av_glMatrixMultdEXT(::av::ClientTransport& av_t, GLenum mode, const GLdouble* m) {
     AV_SCOPE("av_glMatrixMultdEXT");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
@@ -34577,12 +32969,8 @@ void av_glTextureParameterfEXT(::av::ClientTransport& av_t, GLuint texture, GLen
 
 void av_glTextureParameterfvEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glTextureParameterfvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -34641,12 +33029,8 @@ void av_glTextureParameteriEXT(::av::ClientTransport& av_t, GLuint texture, GLen
 
 void av_glTextureParameterivEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glTextureParameterivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -34689,12 +33073,8 @@ void av_glTextureParameterivEXT(::av::ClientTransport& av_t, GLuint texture, GLe
 
 void av_glTextureImage1DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLint internalformat, GLsizei width, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTextureImage1DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -34743,12 +33123,8 @@ void av_glTextureImage1DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum 
 
 void av_glTextureImage2DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTextureImage2DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -34798,12 +33174,8 @@ void av_glTextureImage2DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum 
 
 void av_glTextureSubImage1DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTextureSubImage1DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -34851,12 +33223,8 @@ void av_glTextureSubImage1DEXT(::av::ClientTransport& av_t, GLuint texture, GLen
 
 void av_glTextureSubImage2DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTextureSubImage2DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -34987,12 +33355,8 @@ void av_glCopyTextureSubImage2DEXT(::av::ClientTransport& av_t, GLuint texture, 
 
 void av_glGetTextureImageEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLenum format, GLenum type, void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glGetTextureImageEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
@@ -35180,12 +33544,8 @@ void av_glGetTextureLevelParameterivEXT(::av::ClientTransport& av_t, GLuint text
 
 void av_glTextureImage3DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTextureImage3DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -35236,12 +33596,8 @@ void av_glTextureImage3DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum 
 
 void av_glTextureSubImage3DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glTextureSubImage3DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -35363,12 +33719,8 @@ void av_glMultiTexEnvfEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum ta
 
 void av_glMultiTexEnvfvEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glMultiTexEnvfvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -35427,12 +33779,8 @@ void av_glMultiTexEnviEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum ta
 
 void av_glMultiTexEnvivEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glMultiTexEnvivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -35491,12 +33839,8 @@ void av_glMultiTexGendEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum co
 
 void av_glMultiTexGendvEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum coord, GLenum pname, const GLdouble* params) {
     AV_SCOPE("av_glMultiTexGendvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(coord));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -35555,12 +33899,8 @@ void av_glMultiTexGenfEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum co
 
 void av_glMultiTexGenfvEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum coord, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glMultiTexGenfvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(coord));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -35619,12 +33959,8 @@ void av_glMultiTexGeniEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum co
 
 void av_glMultiTexGenivEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum coord, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glMultiTexGenivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(coord));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -35843,12 +34179,8 @@ void av_glMultiTexParameteriEXT(::av::ClientTransport& av_t, GLenum texunit, GLe
 
 void av_glMultiTexParameterivEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glMultiTexParameterivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -35907,12 +34239,8 @@ void av_glMultiTexParameterfEXT(::av::ClientTransport& av_t, GLenum texunit, GLe
 
 void av_glMultiTexParameterfvEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLenum pname, const GLfloat* params) {
     AV_SCOPE("av_glMultiTexParameterfvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -35955,12 +34283,8 @@ void av_glMultiTexParameterfvEXT(::av::ClientTransport& av_t, GLenum texunit, GL
 
 void av_glMultiTexImage1DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLint internalformat, GLsizei width, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glMultiTexImage1DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -36009,12 +34333,8 @@ void av_glMultiTexImage1DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum
 
 void av_glMultiTexImage2DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glMultiTexImage2DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -36064,12 +34384,8 @@ void av_glMultiTexImage2DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum
 
 void av_glMultiTexSubImage1DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glMultiTexSubImage1DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -36117,12 +34433,8 @@ void av_glMultiTexSubImage1DEXT(::av::ClientTransport& av_t, GLenum texunit, GLe
 
 void av_glMultiTexSubImage2DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glMultiTexSubImage2DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -36253,12 +34565,8 @@ void av_glCopyMultiTexSubImage2DEXT(::av::ClientTransport& av_t, GLenum texunit,
 
 void av_glGetMultiTexImageEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLenum format, GLenum type, void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glGetMultiTexImageEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
@@ -36446,12 +34754,8 @@ void av_glGetMultiTexLevelParameterivEXT(::av::ClientTransport& av_t, GLenum tex
 
 void av_glMultiTexImage3DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glMultiTexImage3DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -36502,12 +34806,8 @@ void av_glMultiTexImage3DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum
 
 void av_glMultiTexSubImage3DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, const void* pixels, size_t pixels_bytes, bool pixels_is_offset) {
     AV_SCOPE("av_glMultiTexSubImage3DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!pixels_is_offset && pixels != nullptr && static_cast<size_t>(pixels_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(pixels_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -36783,12 +35083,8 @@ void av_glGetBooleanIndexedvEXT(::av::ClientTransport& av_t, GLenum target, GLui
 
 void av_glCompressedTextureImage3DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedTextureImage3DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -36837,12 +35133,8 @@ void av_glCompressedTextureImage3DEXT(::av::ClientTransport& av_t, GLuint textur
 
 void av_glCompressedTextureImage2DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedTextureImage2DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -36890,12 +35182,8 @@ void av_glCompressedTextureImage2DEXT(::av::ClientTransport& av_t, GLuint textur
 
 void av_glCompressedTextureImage1DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLint border, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedTextureImage1DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -36942,12 +35230,8 @@ void av_glCompressedTextureImage1DEXT(::av::ClientTransport& av_t, GLuint textur
 
 void av_glCompressedTextureSubImage3DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedTextureSubImage3DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -36998,12 +35282,8 @@ void av_glCompressedTextureSubImage3DEXT(::av::ClientTransport& av_t, GLuint tex
 
 void av_glCompressedTextureSubImage2DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedTextureSubImage2DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -37052,12 +35332,8 @@ void av_glCompressedTextureSubImage2DEXT(::av::ClientTransport& av_t, GLuint tex
 
 void av_glCompressedTextureSubImage1DEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedTextureSubImage1DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -37104,12 +35380,8 @@ void av_glCompressedTextureSubImage1DEXT(::av::ClientTransport& av_t, GLuint tex
 
 void av_glGetCompressedTextureImageEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLint lod, void* img, size_t img_bytes, bool img_is_offset) {
     AV_SCOPE("av_glGetCompressedTextureImageEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!img_is_offset && img != nullptr && static_cast<size_t>(img_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(img_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!img_is_offset && img != nullptr && static_cast<size_t>(img_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(img_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
@@ -37165,12 +35437,8 @@ void av_glGetCompressedTextureImageEXT(::av::ClientTransport& av_t, GLuint textu
 
 void av_glCompressedMultiTexImage3DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedMultiTexImage3DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -37219,12 +35487,8 @@ void av_glCompressedMultiTexImage3DEXT(::av::ClientTransport& av_t, GLenum texun
 
 void av_glCompressedMultiTexImage2DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedMultiTexImage2DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -37272,12 +35536,8 @@ void av_glCompressedMultiTexImage2DEXT(::av::ClientTransport& av_t, GLenum texun
 
 void av_glCompressedMultiTexImage1DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLenum internalformat, GLsizei width, GLint border, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedMultiTexImage1DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -37324,12 +35584,8 @@ void av_glCompressedMultiTexImage1DEXT(::av::ClientTransport& av_t, GLenum texun
 
 void av_glCompressedMultiTexSubImage3DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedMultiTexSubImage3DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -37380,12 +35636,8 @@ void av_glCompressedMultiTexSubImage3DEXT(::av::ClientTransport& av_t, GLenum te
 
 void av_glCompressedMultiTexSubImage2DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedMultiTexSubImage2DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -37434,12 +35686,8 @@ void av_glCompressedMultiTexSubImage2DEXT(::av::ClientTransport& av_t, GLenum te
 
 void av_glCompressedMultiTexSubImage1DEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint level, GLint xoffset, GLsizei width, GLenum format, GLsizei imageSize, const void* bits) {
     AV_SCOPE("av_glCompressedMultiTexSubImage1DEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bits != nullptr && static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(imageSize) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(level));
@@ -37486,12 +35734,8 @@ void av_glCompressedMultiTexSubImage1DEXT(::av::ClientTransport& av_t, GLenum te
 
 void av_glGetCompressedMultiTexImageEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLint lod, void* img, size_t img_bytes, bool img_is_offset) {
     AV_SCOPE("av_glGetCompressedMultiTexImageEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!img_is_offset && img != nullptr && static_cast<size_t>(img_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(img_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!img_is_offset && img != nullptr && static_cast<size_t>(img_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(img_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     const ::av::SyncCallScope av_call{av_t};
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
@@ -37547,12 +35791,8 @@ void av_glGetCompressedMultiTexImageEXT(::av::ClientTransport& av_t, GLenum texu
 
 void av_glMatrixLoadTransposefEXT(::av::ClientTransport& av_t, GLenum mode, const GLfloat* m) {
     AV_SCOPE("av_glMatrixLoadTransposefEXT");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
@@ -37593,12 +35833,8 @@ void av_glMatrixLoadTransposefEXT(::av::ClientTransport& av_t, GLenum mode, cons
 
 void av_glMatrixLoadTransposedEXT(::av::ClientTransport& av_t, GLenum mode, const GLdouble* m) {
     AV_SCOPE("av_glMatrixLoadTransposedEXT");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
@@ -37639,12 +35875,8 @@ void av_glMatrixLoadTransposedEXT(::av::ClientTransport& av_t, GLenum mode, cons
 
 void av_glMatrixMultTransposefEXT(::av::ClientTransport& av_t, GLenum mode, const GLfloat* m) {
     AV_SCOPE("av_glMatrixMultTransposefEXT");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLfloat));
@@ -37685,12 +35917,8 @@ void av_glMatrixMultTransposefEXT(::av::ClientTransport& av_t, GLenum mode, cons
 
 void av_glMatrixMultTransposedEXT(::av::ClientTransport& av_t, GLenum mode, const GLdouble* m) {
     AV_SCOPE("av_glMatrixMultTransposedEXT");
-    {
-        const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {m != nullptr && static_cast<size_t>((16 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((16 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(mode));
     size_t m_want = 0;
     if (m != nullptr) m_want = (16 * sizeof(GLdouble));
@@ -37731,12 +35959,8 @@ void av_glMatrixMultTransposedEXT(::av::ClientTransport& av_t, GLenum mode, cons
 
 void av_glNamedBufferDataEXT(::av::ClientTransport& av_t, GLuint buffer, GLsizeiptr size, const void* data, GLenum usage) {
     AV_SCOPE("av_glNamedBufferDataEXT");
-    {
-        const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>((size < 0 ? 0 : static_cast<size_t>(size))) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((size < 0 ? 0 : static_cast<size_t>(size))) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>((size < 0 ? 0 : static_cast<size_t>(size))) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((size < 0 ? 0 : static_cast<size_t>(size))) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(size));
     size_t data_want = 0;
@@ -37779,12 +36003,8 @@ void av_glNamedBufferDataEXT(::av::ClientTransport& av_t, GLuint buffer, GLsizei
 
 void av_glNamedBufferSubDataEXT(::av::ClientTransport& av_t, GLuint buffer, GLintptr offset, GLsizeiptr size, const void* data) {
     AV_SCOPE("av_glNamedBufferSubDataEXT");
-    {
-        const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>((size < 0 ? 0 : static_cast<size_t>(size))) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((size < 0 ? 0 : static_cast<size_t>(size))) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>((size < 0 ? 0 : static_cast<size_t>(size))) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>((size < 0 ? 0 : static_cast<size_t>(size))) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(offset));
     av_b.write_varint(static_cast<uint64_t>(size));
@@ -38022,12 +36242,8 @@ void av_glProgramUniform4iEXT(::av::ClientTransport& av_t, GLuint program, GLint
 
 void av_glProgramUniform1fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniform1fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38070,12 +36286,8 @@ void av_glProgramUniform1fvEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform2fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniform2fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38118,12 +36330,8 @@ void av_glProgramUniform2fvEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform3fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniform3fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38166,12 +36374,8 @@ void av_glProgramUniform3fvEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform4fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniform4fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38214,12 +36418,8 @@ void av_glProgramUniform4fvEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform1ivEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glProgramUniform1ivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38262,12 +36462,8 @@ void av_glProgramUniform1ivEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform2ivEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glProgramUniform2ivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38310,12 +36506,8 @@ void av_glProgramUniform2ivEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform3ivEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glProgramUniform3ivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38358,12 +36550,8 @@ void av_glProgramUniform3ivEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform4ivEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLint* value) {
     AV_SCOPE("av_glProgramUniform4ivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38406,12 +36594,8 @@ void av_glProgramUniform4ivEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniformMatrix2fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix2fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38455,12 +36639,8 @@ void av_glProgramUniformMatrix2fvEXT(::av::ClientTransport& av_t, GLuint program
 
 void av_glProgramUniformMatrix3fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix3fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38504,12 +36684,8 @@ void av_glProgramUniformMatrix3fvEXT(::av::ClientTransport& av_t, GLuint program
 
 void av_glProgramUniformMatrix4fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix4fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38553,12 +36729,8 @@ void av_glProgramUniformMatrix4fvEXT(::av::ClientTransport& av_t, GLuint program
 
 void av_glProgramUniformMatrix2x3fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix2x3fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38602,12 +36774,8 @@ void av_glProgramUniformMatrix2x3fvEXT(::av::ClientTransport& av_t, GLuint progr
 
 void av_glProgramUniformMatrix3x2fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix3x2fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38651,12 +36819,8 @@ void av_glProgramUniformMatrix3x2fvEXT(::av::ClientTransport& av_t, GLuint progr
 
 void av_glProgramUniformMatrix2x4fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix2x4fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38700,12 +36864,8 @@ void av_glProgramUniformMatrix2x4fvEXT(::av::ClientTransport& av_t, GLuint progr
 
 void av_glProgramUniformMatrix4x2fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix4x2fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38749,12 +36909,8 @@ void av_glProgramUniformMatrix4x2fvEXT(::av::ClientTransport& av_t, GLuint progr
 
 void av_glProgramUniformMatrix3x4fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix3x4fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38798,12 +36954,8 @@ void av_glProgramUniformMatrix3x4fvEXT(::av::ClientTransport& av_t, GLuint progr
 
 void av_glProgramUniformMatrix4x3fvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value) {
     AV_SCOPE("av_glProgramUniformMatrix4x3fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -38879,12 +37031,8 @@ void av_glMultiTexBufferEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum 
 
 void av_glTextureParameterIivEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glTextureParameterIivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -38927,12 +37075,8 @@ void av_glTextureParameterIivEXT(::av::ClientTransport& av_t, GLuint texture, GL
 
 void av_glTextureParameterIuivEXT(::av::ClientTransport& av_t, GLuint texture, GLenum target, GLenum pname, const GLuint* params) {
     AV_SCOPE("av_glTextureParameterIuivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texture));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -39039,12 +37183,8 @@ void av_glGetTextureParameterIuivEXT(::av::ClientTransport& av_t, GLuint texture
 
 void av_glMultiTexParameterIivEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLenum pname, const GLint* params) {
     AV_SCOPE("av_glMultiTexParameterIivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -39087,12 +37227,8 @@ void av_glMultiTexParameterIivEXT(::av::ClientTransport& av_t, GLenum texunit, G
 
 void av_glMultiTexParameterIuivEXT(::av::ClientTransport& av_t, GLenum texunit, GLenum target, GLenum pname, const GLuint* params) {
     AV_SCOPE("av_glMultiTexParameterIuivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((::av::glproto::pname_count(av_t, pname) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(texunit));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(pname));
@@ -39265,12 +37401,8 @@ void av_glProgramUniform4uiEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform1uivEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glProgramUniform1uivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -39313,12 +37445,8 @@ void av_glProgramUniform1uivEXT(::av::ClientTransport& av_t, GLuint program, GLi
 
 void av_glProgramUniform2uivEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glProgramUniform2uivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -39361,12 +37489,8 @@ void av_glProgramUniform2uivEXT(::av::ClientTransport& av_t, GLuint program, GLi
 
 void av_glProgramUniform3uivEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glProgramUniform3uivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -39409,12 +37533,8 @@ void av_glProgramUniform3uivEXT(::av::ClientTransport& av_t, GLuint program, GLi
 
 void av_glProgramUniform4uivEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLuint* value) {
     AV_SCOPE("av_glProgramUniform4uivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -39457,12 +37577,8 @@ void av_glProgramUniform4uivEXT(::av::ClientTransport& av_t, GLuint program, GLi
 
 void av_glNamedProgramLocalParameters4fvEXT(::av::ClientTransport& av_t, GLuint program, GLenum target, GLuint index, GLsizei count, const GLfloat* params) {
     AV_SCOPE("av_glNamedProgramLocalParameters4fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(index));
@@ -39525,12 +37641,8 @@ void av_glNamedProgramLocalParameterI4iEXT(::av::ClientTransport& av_t, GLuint p
 
 void av_glNamedProgramLocalParameterI4ivEXT(::av::ClientTransport& av_t, GLuint program, GLenum target, GLuint index, const GLint* params) {
     AV_SCOPE("av_glNamedProgramLocalParameterI4ivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(index));
@@ -39573,12 +37685,8 @@ void av_glNamedProgramLocalParameterI4ivEXT(::av::ClientTransport& av_t, GLuint 
 
 void av_glNamedProgramLocalParametersI4ivEXT(::av::ClientTransport& av_t, GLuint program, GLenum target, GLuint index, GLsizei count, const GLint* params) {
     AV_SCOPE("av_glNamedProgramLocalParametersI4ivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(index));
@@ -39641,12 +37749,8 @@ void av_glNamedProgramLocalParameterI4uiEXT(::av::ClientTransport& av_t, GLuint 
 
 void av_glNamedProgramLocalParameterI4uivEXT(::av::ClientTransport& av_t, GLuint program, GLenum target, GLuint index, const GLuint* params) {
     AV_SCOPE("av_glNamedProgramLocalParameterI4uivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(index));
@@ -39689,12 +37793,8 @@ void av_glNamedProgramLocalParameterI4uivEXT(::av::ClientTransport& av_t, GLuint
 
 void av_glNamedProgramLocalParametersI4uivEXT(::av::ClientTransport& av_t, GLuint program, GLenum target, GLuint index, GLsizei count, const GLuint* params) {
     AV_SCOPE("av_glNamedProgramLocalParametersI4uivEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLuint)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(index));
@@ -39892,12 +37992,8 @@ void av_glGetDoublei_vEXT(::av::ClientTransport& av_t, GLenum pname, GLuint inde
 
 void av_glNamedProgramStringEXT(::av::ClientTransport& av_t, GLuint program, GLenum target, GLenum format, GLsizei len, const void* string) {
     AV_SCOPE("av_glNamedProgramStringEXT");
-    {
-        const uint64_t av_blob_sizes[] = {string != nullptr && static_cast<size_t>((static_cast<size_t>(len) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(len) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {string != nullptr && static_cast<size_t>((static_cast<size_t>(len) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(len) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(format));
@@ -39960,12 +38056,8 @@ void av_glNamedProgramLocalParameter4dEXT(::av::ClientTransport& av_t, GLuint pr
 
 void av_glNamedProgramLocalParameter4dvEXT(::av::ClientTransport& av_t, GLuint program, GLenum target, GLuint index, const GLdouble* params) {
     AV_SCOPE("av_glNamedProgramLocalParameter4dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(index));
@@ -40027,12 +38119,8 @@ void av_glNamedProgramLocalParameter4fEXT(::av::ClientTransport& av_t, GLuint pr
 
 void av_glNamedProgramLocalParameter4fvEXT(::av::ClientTransport& av_t, GLuint program, GLenum target, GLuint index, const GLfloat* params) {
     AV_SCOPE("av_glNamedProgramLocalParameter4fvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {params != nullptr && static_cast<size_t>((4 * sizeof(GLfloat))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((4 * sizeof(GLfloat)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(target));
     av_b.write_varint(static_cast<uint64_t>(index));
@@ -40449,12 +38537,8 @@ void av_glFramebufferDrawBufferEXT(::av::ClientTransport& av_t, GLuint framebuff
 
 void av_glFramebufferDrawBuffersEXT(::av::ClientTransport& av_t, GLuint framebuffer, GLsizei n, const GLenum* bufs) {
     AV_SCOPE("av_glFramebufferDrawBuffersEXT");
-    {
-        const uint64_t av_blob_sizes[] = {bufs != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {bufs != nullptr && static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(n) * sizeof(GLenum)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(framebuffer));
     av_b.write_varint(static_cast<uint64_t>(n));
     size_t bufs_want = 0;
@@ -40954,12 +39038,8 @@ void av_glGetVertexArrayIntegeri_vEXT(::av::ClientTransport& av_t, GLuint vaobj,
 
 void av_glNamedBufferStorageEXT(::av::ClientTransport& av_t, GLuint buffer, GLsizeiptr size, const void* data, GLbitfield flags) {
     AV_SCOPE("av_glNamedBufferStorageEXT");
-    {
-        const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {data != nullptr && static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(size) * sizeof(uint8_t)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(size));
     size_t data_want = 0;
@@ -41002,12 +39082,8 @@ void av_glNamedBufferStorageEXT(::av::ClientTransport& av_t, GLuint buffer, GLsi
 
 void av_glClearNamedBufferDataEXT(::av::ClientTransport& av_t, GLuint buffer, GLenum internalformat, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glClearNamedBufferDataEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
     av_b.write_varint(static_cast<uint64_t>(format));
@@ -41052,12 +39128,8 @@ void av_glClearNamedBufferDataEXT(::av::ClientTransport& av_t, GLuint buffer, GL
 
 void av_glClearNamedBufferSubDataEXT(::av::ClientTransport& av_t, GLuint buffer, GLenum internalformat, GLsizeiptr offset, GLsizeiptr size, GLenum format, GLenum type, const void* data, size_t data_bytes, bool data_is_offset) {
     AV_SCOPE("av_glClearNamedBufferSubDataEXT");
-    {
-        const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {!data_is_offset && data != nullptr && static_cast<size_t>(data_bytes) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>(data_bytes)) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(buffer));
     av_b.write_varint(static_cast<uint64_t>(internalformat));
     av_b.write_varint(static_cast<uint64_t>(offset));
@@ -41216,12 +39288,8 @@ void av_glProgramUniform4dEXT(::av::ClientTransport& av_t, GLuint program, GLint
 
 void av_glProgramUniform1dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniform1dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41264,12 +39332,8 @@ void av_glProgramUniform1dvEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform2dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniform2dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*2) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41312,12 +39376,8 @@ void av_glProgramUniform2dvEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform3dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniform3dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*3) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41360,12 +39420,8 @@ void av_glProgramUniform3dvEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniform4dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniform4dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41408,12 +39464,8 @@ void av_glProgramUniform4dvEXT(::av::ClientTransport& av_t, GLuint program, GLin
 
 void av_glProgramUniformMatrix2dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix2dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*4) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41457,12 +39509,8 @@ void av_glProgramUniformMatrix2dvEXT(::av::ClientTransport& av_t, GLuint program
 
 void av_glProgramUniformMatrix3dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix3dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*9) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41506,12 +39554,8 @@ void av_glProgramUniformMatrix3dvEXT(::av::ClientTransport& av_t, GLuint program
 
 void av_glProgramUniformMatrix4dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix4dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*16) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41555,12 +39599,8 @@ void av_glProgramUniformMatrix4dvEXT(::av::ClientTransport& av_t, GLuint program
 
 void av_glProgramUniformMatrix2x3dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix2x3dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41604,12 +39644,8 @@ void av_glProgramUniformMatrix2x3dvEXT(::av::ClientTransport& av_t, GLuint progr
 
 void av_glProgramUniformMatrix2x4dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix2x4dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41653,12 +39689,8 @@ void av_glProgramUniformMatrix2x4dvEXT(::av::ClientTransport& av_t, GLuint progr
 
 void av_glProgramUniformMatrix3x2dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix3x2dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*6) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41702,12 +39734,8 @@ void av_glProgramUniformMatrix3x2dvEXT(::av::ClientTransport& av_t, GLuint progr
 
 void av_glProgramUniformMatrix3x4dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix3x4dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41751,12 +39779,8 @@ void av_glProgramUniformMatrix3x4dvEXT(::av::ClientTransport& av_t, GLuint progr
 
 void av_glProgramUniformMatrix4x2dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix4x2dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*8) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));
@@ -41800,12 +39824,8 @@ void av_glProgramUniformMatrix4x2dvEXT(::av::ClientTransport& av_t, GLuint progr
 
 void av_glProgramUniformMatrix4x3dvEXT(::av::ClientTransport& av_t, GLuint program, GLint location, GLsizei count, GLboolean transpose, const GLdouble* value) {
     AV_SCOPE("av_glProgramUniformMatrix4x3dvEXT");
-    {
-        const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
-        if ((av_blob_sizes[0]) != 0u)
-            static_cast<void>(av_t.make_room_for_blobs(av_blob_sizes, 1u));
-    }
-    ::av::WireWriter av_b = av_t.request_writer();
+    const uint64_t av_blob_sizes[] = {value != nullptr && static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble))) >= ::av::glproto::kPixelBlobFloor ? static_cast<uint64_t>(static_cast<size_t>((static_cast<size_t>(count*12) * sizeof(GLdouble)))) : 0u};
+    ::av::WireWriter av_b = (av_blob_sizes[0]) != 0u ? av_t.request_writer_with_room(av_blob_sizes, 1u) : av_t.request_writer();
     av_b.write_varint(static_cast<uint64_t>(program));
     av_b.write_varint(static_cast<uint64_t>(location));
     av_b.write_varint(static_cast<uint64_t>(count));

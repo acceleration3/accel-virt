@@ -234,17 +234,15 @@ def _encode(reg: Registry, p: Param, lines: list[str]) -> None:
         lines.append(f"    b.write_pod({p.name});")
 
 
-def _blob_room(cmd) -> list[str]:
+def _blob_room(cmd) -> tuple[list[str], str]:
     sizes = [f"{p.name}_size > inline_bytes ? {p.name}_size : 0u" for p in cmd.params if p.type == "bytes"]
     sizes += [f"{p.name}_capacity > inline_reply_bytes ? {p.name}_capacity : 0u"
               for p in cmd.reply if p.type == "out_bytes"]
     if not sizes:
-        return []
-    return ["    {",
-            f"        const uint64_t blob_sizes[] = {{{', '.join(sizes)}}};",
-            f"        if (({' | '.join(f'blob_sizes[{i}]' for i in range(len(sizes)))}) != 0u)",
-            f"            static_cast<void>(t.make_room_for_blobs(blob_sizes, {len(sizes)}u));",
-            "    }"]
+        return [], "t.request_writer()"
+    anything = " | ".join(f"blob_sizes[{i}]" for i in range(len(sizes)))
+    return ([f"    const uint64_t blob_sizes[] = {{{', '.join(sizes)}}};"],
+            f"({anything}) != 0u ? t.request_writer_with_room(blob_sizes, {len(sizes)}u) : t.request_writer()")
 
 
 def emit_client_cpp(reg: Registry) -> str:
@@ -256,8 +254,9 @@ def emit_client_cpp(reg: Registry) -> str:
         params = ", ".join(["::av::ClientTransport& t"] + _client_params(reg, cmd))
         lines.append(f"bool av_{PREFIX}_{cmd.name}({params}) {{")
         lines.append(f'    AV_SCOPE("av_{PREFIX}_{cmd.name}");')
-        lines += _blob_room(cmd)
-        lines.append("    ::av::WireWriter b = t.request_writer();")
+        room, opener = _blob_room(cmd)
+        lines += room
+        lines.append(f"    ::av::WireWriter b = {opener};")
         for p in cmd.params:
             _encode(reg, p, lines)
         leases = [p for p in cmd.reply if p.type == "out_bytes"]

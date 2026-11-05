@@ -152,6 +152,12 @@ WireWriter D3dDeviceChannel::request_writer()
     return locked_.request_writer();
 }
 
+WireWriter D3dDeviceChannel::request_writer_with_room(const uint64_t *sizes, uint32_t count)
+{
+    AV_SCOPE("D3dDeviceChannel::request_writer_with_room");
+    return locked_.request_writer_with_room(sizes, count);
+}
+
 TransportResult D3dDeviceChannel::send_async(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("D3dDeviceChannel::send_async");

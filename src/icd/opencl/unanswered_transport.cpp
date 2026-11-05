@@ -17,6 +17,12 @@ WireWriter UnansweredTransport::request_writer()
     return inner_.request_writer();
 }
 
+WireWriter UnansweredTransport::request_writer_with_room(const uint64_t *sizes, uint32_t count)
+{
+    AV_SCOPE("UnansweredTransport::request_writer_with_room");
+    return inner_.request_writer_with_room(sizes, count);
+}
+
 TransportResult UnansweredTransport::send_async(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("UnansweredTransport::send_async");

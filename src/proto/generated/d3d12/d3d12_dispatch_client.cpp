@@ -111,12 +111,8 @@ bool av_d3d12_Finish12(::av::ClientTransport& t, uint32_t* hresult) {
 
 bool av_d3d12_QueryCaps12(::av::ClientTransport& t, uint32_t* hresult, Caps12* caps, void* formats, uint64_t formats_capacity, uint64_t* formats_size) {
     AV_SCOPE("av_d3d12_QueryCaps12");
-    {
-        const uint64_t blob_sizes[] = {formats_capacity > inline_reply_bytes ? formats_capacity : 0u};
-        if ((blob_sizes[0]) != 0u)
-            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
-    }
-    ::av::WireWriter b = t.request_writer();
+    const uint64_t blob_sizes[] = {formats_capacity > inline_reply_bytes ? formats_capacity : 0u};
+    ::av::WireWriter b = (blob_sizes[0]) != 0u ? t.request_writer_with_room(blob_sizes, 1u) : t.request_writer();
     ::av::ClientBlobLease formats_lease;
     if (!ask_bytes(t, b, formats, formats_capacity, formats_lease)) return abandon(t);
     const ::av::SyncCallScope call{t};
@@ -340,12 +336,8 @@ bool av_d3d12_CreateCommandSignature12(::av::ClientTransport& t, uint32_t signat
 
 bool av_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const GraphicsState& state, uint32_t element_count, const InputElement* elements, uint32_t signature_count, const SignatureEntry* signatures, const void* vs, uint64_t vs_size, const void* hs, uint64_t hs_size, const void* ds, uint64_t ds_size, const void* gs, uint64_t gs_size, const void* ps, uint64_t ps_size) {
     AV_SCOPE("av_d3d12_CreateGraphicsPipeline12");
-    {
-        const uint64_t blob_sizes[] = {vs_size > inline_bytes ? vs_size : 0u, hs_size > inline_bytes ? hs_size : 0u, ds_size > inline_bytes ? ds_size : 0u, gs_size > inline_bytes ? gs_size : 0u, ps_size > inline_bytes ? ps_size : 0u};
-        if ((blob_sizes[0] | blob_sizes[1] | blob_sizes[2] | blob_sizes[3] | blob_sizes[4]) != 0u)
-            static_cast<void>(t.make_room_for_blobs(blob_sizes, 5u));
-    }
-    ::av::WireWriter b = t.request_writer();
+    const uint64_t blob_sizes[] = {vs_size > inline_bytes ? vs_size : 0u, hs_size > inline_bytes ? hs_size : 0u, ds_size > inline_bytes ? ds_size : 0u, gs_size > inline_bytes ? gs_size : 0u, ps_size > inline_bytes ? ps_size : 0u};
+    ::av::WireWriter b = (blob_sizes[0] | blob_sizes[1] | blob_sizes[2] | blob_sizes[3] | blob_sizes[4]) != 0u ? t.request_writer_with_room(blob_sizes, 5u) : t.request_writer();
     b.write_pod<uint32_t>(pipeline);
     b.write_pod<uint32_t>(root);
     b.write_pod(state);
@@ -365,12 +357,8 @@ bool av_d3d12_CreateGraphicsPipeline12(::av::ClientTransport& t, uint32_t pipeli
 
 bool av_d3d12_CreateComputePipeline12(::av::ClientTransport& t, uint32_t pipeline, uint32_t root, const void* cs, uint64_t cs_size) {
     AV_SCOPE("av_d3d12_CreateComputePipeline12");
-    {
-        const uint64_t blob_sizes[] = {cs_size > inline_bytes ? cs_size : 0u};
-        if ((blob_sizes[0]) != 0u)
-            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
-    }
-    ::av::WireWriter b = t.request_writer();
+    const uint64_t blob_sizes[] = {cs_size > inline_bytes ? cs_size : 0u};
+    ::av::WireWriter b = (blob_sizes[0]) != 0u ? t.request_writer_with_room(blob_sizes, 1u) : t.request_writer();
     b.write_pod<uint32_t>(pipeline);
     b.write_pod<uint32_t>(root);
     if (!put_bytes(t, b, cs, cs_size)) return abandon(t);
@@ -774,12 +762,8 @@ bool av_d3d12_ResolveQueryData12(::av::ClientTransport& t, uint32_t list, uint32
 
 bool av_d3d12_BeginEvent12(::av::ClientTransport& t, uint32_t list, uint32_t metadata, const void* data, uint64_t data_size) {
     AV_SCOPE("av_d3d12_BeginEvent12");
-    {
-        const uint64_t blob_sizes[] = {data_size > inline_bytes ? data_size : 0u};
-        if ((blob_sizes[0]) != 0u)
-            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
-    }
-    ::av::WireWriter b = t.request_writer();
+    const uint64_t blob_sizes[] = {data_size > inline_bytes ? data_size : 0u};
+    ::av::WireWriter b = (blob_sizes[0]) != 0u ? t.request_writer_with_room(blob_sizes, 1u) : t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(metadata);
     if (!put_bytes(t, b, data, data_size)) return abandon(t);
@@ -795,12 +779,8 @@ bool av_d3d12_EndEvent12(::av::ClientTransport& t, uint32_t list) {
 
 bool av_d3d12_SetMarker12(::av::ClientTransport& t, uint32_t list, uint32_t metadata, const void* data, uint64_t data_size) {
     AV_SCOPE("av_d3d12_SetMarker12");
-    {
-        const uint64_t blob_sizes[] = {data_size > inline_bytes ? data_size : 0u};
-        if ((blob_sizes[0]) != 0u)
-            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
-    }
-    ::av::WireWriter b = t.request_writer();
+    const uint64_t blob_sizes[] = {data_size > inline_bytes ? data_size : 0u};
+    ::av::WireWriter b = (blob_sizes[0]) != 0u ? t.request_writer_with_room(blob_sizes, 1u) : t.request_writer();
     b.write_pod<uint32_t>(list);
     b.write_pod<uint32_t>(metadata);
     if (!put_bytes(t, b, data, data_size)) return abandon(t);

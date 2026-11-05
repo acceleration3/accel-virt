@@ -97,12 +97,8 @@ bool av_d3d_CreateDevice11(::av::ClientTransport& t, uint32_t device, uint32_t f
 
 bool av_d3d_QueryCaps11(::av::ClientTransport& t, Caps11* caps, void* formats, uint64_t formats_capacity, uint64_t* formats_size) {
     AV_SCOPE("av_d3d_QueryCaps11");
-    {
-        const uint64_t blob_sizes[] = {formats_capacity > inline_reply_bytes ? formats_capacity : 0u};
-        if ((blob_sizes[0]) != 0u)
-            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
-    }
-    ::av::WireWriter b = t.request_writer();
+    const uint64_t blob_sizes[] = {formats_capacity > inline_reply_bytes ? formats_capacity : 0u};
+    ::av::WireWriter b = (blob_sizes[0]) != 0u ? t.request_writer_with_room(blob_sizes, 1u) : t.request_writer();
     ::av::ClientBlobLease formats_lease;
     if (!ask_bytes(t, b, formats, formats_capacity, formats_lease)) return abandon(t);
     const ::av::SyncCallScope call{t};
@@ -225,12 +221,8 @@ bool av_d3d_CreateUnorderedAccessView(::av::ClientTransport& t, uint32_t view, c
 
 bool av_d3d_CreateShader(::av::ClientTransport& t, uint32_t shader, uint32_t stage, uint32_t input_count, const SignatureEntry* inputs, uint32_t output_count, const SignatureEntry* outputs, uint32_t patch_count, const SignatureEntry* patch_constants, uint32_t stream_out_count, const StreamOutEntry* stream_out, uint32_t stride_count, const uint32_t* strides, uint32_t rasterized_stream, const void* code, uint64_t code_size) {
     AV_SCOPE("av_d3d_CreateShader");
-    {
-        const uint64_t blob_sizes[] = {code_size > inline_bytes ? code_size : 0u};
-        if ((blob_sizes[0]) != 0u)
-            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
-    }
-    ::av::WireWriter b = t.request_writer();
+    const uint64_t blob_sizes[] = {code_size > inline_bytes ? code_size : 0u};
+    ::av::WireWriter b = (blob_sizes[0]) != 0u ? t.request_writer_with_room(blob_sizes, 1u) : t.request_writer();
     b.write_pod<uint32_t>(shader);
     b.write_pod<uint32_t>(stage);
     b.write_pod<uint32_t>(input_count);
@@ -654,12 +646,8 @@ bool av_d3d_CopyStructureCount(::av::ClientTransport& t, uint32_t destination, u
 
 bool av_d3d_UpdateSubresource(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint32_t has_box, const Box& box, uint32_t row_pitch, uint32_t depth_pitch, uint32_t copy_flags, const void* data, uint64_t data_size) {
     AV_SCOPE("av_d3d_UpdateSubresource");
-    {
-        const uint64_t blob_sizes[] = {data_size > inline_bytes ? data_size : 0u};
-        if ((blob_sizes[0]) != 0u)
-            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
-    }
-    ::av::WireWriter b = t.request_writer();
+    const uint64_t blob_sizes[] = {data_size > inline_bytes ? data_size : 0u};
+    ::av::WireWriter b = (blob_sizes[0]) != 0u ? t.request_writer_with_room(blob_sizes, 1u) : t.request_writer();
     b.write_pod<uint32_t>(resource);
     b.write_pod<uint32_t>(subresource);
     b.write_pod<uint32_t>(has_box);
@@ -673,12 +661,8 @@ bool av_d3d_UpdateSubresource(::av::ClientTransport& t, uint32_t resource, uint3
 
 bool av_d3d_ReadSubresource(::av::ClientTransport& t, uint32_t resource, uint32_t subresource, uint32_t* hresult, uint32_t* row_pitch, uint32_t* depth_pitch, void* data, uint64_t data_capacity, uint64_t* data_size) {
     AV_SCOPE("av_d3d_ReadSubresource");
-    {
-        const uint64_t blob_sizes[] = {data_capacity > inline_reply_bytes ? data_capacity : 0u};
-        if ((blob_sizes[0]) != 0u)
-            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
-    }
-    ::av::WireWriter b = t.request_writer();
+    const uint64_t blob_sizes[] = {data_capacity > inline_reply_bytes ? data_capacity : 0u};
+    ::av::WireWriter b = (blob_sizes[0]) != 0u ? t.request_writer_with_room(blob_sizes, 1u) : t.request_writer();
     b.write_pod<uint32_t>(resource);
     b.write_pod<uint32_t>(subresource);
     ::av::ClientBlobLease data_lease;
@@ -754,12 +738,8 @@ bool av_d3d_BindQueryResults(::av::ClientTransport& t, uint64_t offset, uint32_t
 
 bool av_d3d_GetQueryData(::av::ClientTransport& t, uint32_t query, uint32_t flags, uint32_t* ready, void* data, uint64_t data_capacity, uint64_t* data_size) {
     AV_SCOPE("av_d3d_GetQueryData");
-    {
-        const uint64_t blob_sizes[] = {data_capacity > inline_reply_bytes ? data_capacity : 0u};
-        if ((blob_sizes[0]) != 0u)
-            static_cast<void>(t.make_room_for_blobs(blob_sizes, 1u));
-    }
-    ::av::WireWriter b = t.request_writer();
+    const uint64_t blob_sizes[] = {data_capacity > inline_reply_bytes ? data_capacity : 0u};
+    ::av::WireWriter b = (blob_sizes[0]) != 0u ? t.request_writer_with_room(blob_sizes, 1u) : t.request_writer();
     b.write_pod<uint32_t>(query);
     b.write_pod<uint32_t>(flags);
     ::av::ClientBlobLease data_lease;

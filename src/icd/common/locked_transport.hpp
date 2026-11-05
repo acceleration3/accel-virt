@@ -18,6 +18,7 @@ public:
     LockedTransport(ClientTransport &inner, ThreadLock &lock);
 
     WireWriter       request_writer() override;
+    WireWriter       request_writer_with_room(const uint64_t *sizes, uint32_t count) override;
     TransportResult  send_async(uint32_t command_id, WireWriter &writer) override;
     TransportResult  send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply) override;
     void             end_call() override;

@@ -22,6 +22,16 @@ WireWriter LockedTransport::request_writer()
     return inner_.request_writer();
 }
 
+WireWriter LockedTransport::request_writer_with_room(const uint64_t *sizes, uint32_t count)
+{
+    AV_SCOPE("LockedTransport::request_writer_with_room");
+    lock_.acquire();
+    holds_ = true;
+    phase_ = Phase::writing;
+    static_cast<void>(inner_.make_room_for_blobs(sizes, count));
+    return inner_.request_writer();
+}
+
 TransportResult LockedTransport::send_async(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("LockedTransport::send_async");
