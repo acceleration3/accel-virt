@@ -1,3 +1,4 @@
+#include "core/log/driver_log.hpp"
 #include "core/trace/state_writer.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/kmt/adapter_search.hpp"
@@ -8,7 +9,6 @@
 #include "harness/platform/mock_platform.hpp"
 #include "icd/d3d/adapter_table.hpp"
 #include "icd/d3d/ddi/d3dddi_adapter_callbacks_record.hpp"
-#include "icd/d3d/device_removal.hpp"
 #include "icd/d3d/umd_binding.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
@@ -216,39 +216,6 @@ TEST(umd_connection, reports_what_it_holds)
   CHECK(std::strstr(writer.dump(), "opens=1") != nullptr);
   CHECK_STATUS(connection.release(), Status::ok); }
 
-TEST(device_removal, keeps_the_first_cause_and_counts_the_rest)
-{ RecordingLog  log;
-  DeviceRemoval removal;
-  CHECK(removal.invariants_hold());
-  CHECK(!removal.removed());
-  CHECK_EQ(removal.reason(), hr_ok);
-  CHECK_EQ(removal.check(log, "pfnPresent"), hr_ok);
-  CHECK_EQ(log.lines(), 0u);
-
-  removal.remove(hr_ok);
-  CHECK(!removal.removed());
-  CHECK(removal.invariants_hold());
-
-  removal.remove(hr_dxgi_device_reset);
-  CHECK(removal.removed());
-  CHECK_EQ(removal.reason(), hr_dxgi_device_reset);
-  removal.remove(hr_dxgi_device_removed);
-  removal.remove(hr_dxgi_device_hung);
-  CHECK_EQ(removal.reason(), hr_dxgi_device_reset);
-  CHECK_EQ(removal.later_causes(), 2u);
-  CHECK(removal.invariants_hold()); }
-
-TEST(device_removal, logs_the_reason_once_however_many_callers_notice)
-{ RecordingLog  log;
-  DeviceRemoval removal;
-  removal.remove(hr_dxgi_device_removed);
-  CHECK_EQ(removal.check(log, "pfnBlt"), hr_dxgi_device_removed);
-  CHECK_EQ(removal.check(log, "pfnPresent"), hr_dxgi_device_removed);
-  CHECK_EQ(removal.check(log, "pfnSetDisplayMode"), hr_dxgi_device_removed);
-  CHECK_EQ(log.lines(), 1u);
-  CHECK_EQ(log.holding("device removed, pfnBlt answers 0x887A0005"), 1u);
-  CHECK(removal.invariants_hold()); }
-
 TEST(umd_binding, answers_the_root_it_is_bound_to_and_nothing_once_unbound)
 { UmdBinding binding;
   CHECK(!binding.bound());
@@ -257,7 +224,8 @@ TEST(umd_binding, answers_the_root_it_is_bound_to_and_nothing_once_unbound)
   kmt.add_adapter(avgpu, AdapterScenario::wddm_3_2);
   av::LockTrace           trace;
   av::RecordingThreadLock lock(trace, 'U');
-  RecordingLog            log;
+  RecordingLog            sink;
+  av::DriverLog           log(sink, "umd: ");
   { UmdRoot root(platform, kmt, lock, log, binding);
     CHECK(binding.bound());
     CHECK(&binding.root() == &root); }
