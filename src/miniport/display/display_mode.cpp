@@ -11,6 +11,7 @@ namespace {
 
 uint64_t greatest_common_divisor(uint64_t first, uint64_t second)
 {
+    AV_SCOPE("greatest_common_divisor");
     while (second != 0u) {
         const uint64_t rest = first % second;
         first = second;
@@ -21,6 +22,7 @@ uint64_t greatest_common_divisor(uint64_t first, uint64_t second)
 
 void rational(uint64_t numerator, uint64_t denominator, uint32_t &numerator_out, uint32_t &denominator_out)
 {
+    AV_SCOPE("rational");
     const uint64_t divisor = greatest_common_divisor(numerator, denominator);
     numerator /= divisor;
     denominator /= divisor;

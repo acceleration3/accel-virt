@@ -224,13 +224,10 @@ class ScopeMarks(unittest.TestCase):
                            f"{scope_id('Wrap_vkCreateInstance'):08x} Wrap_vkCreateInstance"])
         self.assertEqual(result.stdout.splitlines(), expected)
 
-    def test_the_repository_is_judged_and_its_unmarked_core_reported(self):
+    def test_the_repository_is_judged_and_every_function_in_it_is_marked(self):
         result = run(TOOL, "--check", ROOT)
-        findings = [line for line in result.stderr.splitlines() if line.startswith("src/core/")]
         self.assertNotIn("cannot be parsed", result.stderr)
-        if result.returncode == 0:
-            return
-        self.assertGreaterEqual(len(findings), 500)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

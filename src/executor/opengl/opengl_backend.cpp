@@ -36,6 +36,7 @@ public:
 
     static void *wrap(void *found)
     {
+        AV_SCOPE("GuardedQuery::wrap");
         Query expected = nullptr;
         const Query query = reinterpret_cast<Query>(found);
         if (!real_.compare_exchange_strong(expected, query) && expected != query) return found;
@@ -45,6 +46,7 @@ public:
 private:
     static void guarded(GLenum pname, Value *data)
     {
+        AV_SCOPE("GuardedQuery::guarded");
         if (pname == gl_device_node_mask) {
             if (data != nullptr) *data = static_cast<Value>(1);
             return;
@@ -57,6 +59,7 @@ private:
 
 void *guard_query(const char *name, void *found)
 {
+    AV_SCOPE("guard_query");
     if (found == nullptr) return nullptr;
     if (strcmp(name, "glGetIntegerv") == 0) return GuardedQuery<GLint>::wrap(found);
     if (strcmp(name, "glGetInteger64v") == 0) return GuardedQuery<GLint64>::wrap(found);
