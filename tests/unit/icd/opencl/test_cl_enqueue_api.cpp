@@ -2,6 +2,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
 #include "harness/icd/fake_cl_loader.hpp"
+#include "icd/opencl/cl_host_numbers.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 #include "icd/opencl/cl_wait_list.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
@@ -15,6 +16,7 @@
 
 using av::ClIcdRig;
 using av::FakeClLoader;
+using av::clicd::ClHostNumbers;
 using av::clicd::ClIcdRoot;
 using av::clicd::ClWaitList;
 
@@ -265,11 +267,12 @@ TEST(cl_enqueue_api, a_wait_list_the_api_refuses_is_refused_by_every_enqueue_and
       const cl_mem moved = run.buffer();
       CHECK_EQ(rig.root().enqueue_migrate(run.queue(), 1u, &moved, 0u, nullptr, *list), CL_INVALID_EVENT_WAIT_LIST);
   }
-  cl_event many[ClIcdRoot::max_waited + 1u] = {};
+  cl_event many[ClHostNumbers::kept_inline + 1u] = {};
   for (cl_event &one : many) one = *run.gate();
+  rig.platform().fail_allocation_at(1u);
   CHECK_EQ(rig.root().enqueue_kernel(run.queue(), run.kernel(), 1u, nullptr, &global, nullptr, nullptr,
-                                     ClWaitList(ClIcdRoot::max_waited + 1u, many)),
-           CL_OUT_OF_RESOURCES);
+                                     ClWaitList(ClHostNumbers::kept_inline + 1u, many)),
+           CL_OUT_OF_HOST_MEMORY);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
 
@@ -491,10 +494,11 @@ TEST(cl_enqueue_api, image_buffer_copies_an_image_fill_and_a_migration_cross_as_
   CHECK_EQ(rig.root().enqueue_migrate(not_a_queue, 2u, moved, 0u, nullptr), CL_INVALID_COMMAND_QUEUE);
   CHECK_EQ(rig.root().enqueue_migrate(run.queue(), 0u, moved, 0u, nullptr), CL_INVALID_VALUE);
   CHECK_EQ(rig.root().enqueue_migrate(run.queue(), 1u, &not_memory, 0u, nullptr), CL_INVALID_MEM_OBJECT);
-  cl_mem too_many[ClIcdRoot::max_waited + 1u] = {};
+  cl_mem too_many[ClHostNumbers::kept_inline + 1u] = {};
   for (cl_mem &one : too_many) one = run.buffer();
-  CHECK_EQ(rig.root().enqueue_migrate(run.queue(), ClIcdRoot::max_waited + 1u, too_many, 0u, nullptr),
-           CL_OUT_OF_RESOURCES);
+  rig.platform().fail_allocation_at(1u);
+  CHECK_EQ(rig.root().enqueue_migrate(run.queue(), ClHostNumbers::kept_inline + 1u, too_many, 0u, nullptr),
+           CL_OUT_OF_HOST_MEMORY);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }

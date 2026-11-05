@@ -184,12 +184,13 @@ TEST(cl_devices, a_context_and_its_queues_are_its_devices_alone)
 
 TEST(cl_devices, learns_a_device_for_each_adapter_with_a_luid_once)
 { MockKmt kmt;
+  av::MockPlatform platform;
   kmt.add_adapter(on_radeon, AdapterScenario::wddm_3_2);
   kmt.add_adapter(on_raphael, AdapterScenario::wddm_3_2);
   kmt.set_adapter_luid(0u, 0x22u);
   kmt.set_adapter_luid(1u, 0x33u);
   kmt.set_primary_display_luid(0x33u);
-  ClDevices devices(kmt);
+  ClDevices devices(platform, kmt);
   CHECK(devices.invariants_hold());
   { AvgpuAdapters adapters(kmt);
     CHECK_STATUS(adapters.learn(), Status::ok);
@@ -211,12 +212,13 @@ TEST(cl_devices, learns_a_device_for_each_adapter_with_a_luid_once)
 
 TEST(cl_devices, an_adapter_without_a_luid_is_left_out)
 { MockKmt kmt;
+  av::MockPlatform platform;
   kmt.add_adapter(on_radeon, AdapterScenario::wddm_3_2);
   kmt.add_adapter(on_raphael, AdapterScenario::wddm_3_2);
   kmt.add_adapter(on_radeon, AdapterScenario::wddm_3_2);
   kmt.set_adapter_luid(2u, 0x44u);
   kmt.fail_at(MockKmt::Call::adapter_luid, 1u, 0xC0000001u);
-  ClDevices devices(kmt);
+  ClDevices devices(platform, kmt);
   { AvgpuAdapters adapters(kmt);
     CHECK_STATUS(adapters.learn(), Status::ok);
     devices.learn(adapters); }

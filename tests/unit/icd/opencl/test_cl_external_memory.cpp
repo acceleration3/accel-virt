@@ -1,3 +1,4 @@
+#include "core/log/driver_log.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -28,10 +29,10 @@
 namespace av::icd {
 
 struct OpenedObjectsProbe {
-    static void add(OpenedObjects &opened, const OpenedObjectRow &row)
+    static void add(OpenedObjects &opened, std::uint64_t made, const OpenedObjectRow &row)
     {
-        OpenedObjectRow *made = nullptr;
-        CHECK_STATUS(opened.rows_.create(made, row), Status::ok);
+        std::uint32_t slot = 0u;
+        CHECK_STATUS(opened.opens_[0].insert(made, row, slot), Status::ok);
     }
 };
 
@@ -74,8 +75,8 @@ private:
 
 class Process {
 public:
-    Process() : blocks_(), trace_(), lock_(trace_, 'S'), kmt_(), log_(), wire_(), device_(0u),
-                handles_(kmt_, lock_, blocks_), memory_(handles_, blocks_, log_)
+    Process() : blocks_(), trace_(), lock_(trace_, 'S'), kmt_(), log_(), lines_(log_, "avcl: "), wire_(), device_(0u),
+                handles_(kmt_, lock_, blocks_), memory_(handles_, blocks_, lines_)
     {
         kmt_.add_adapter(av::PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u), 3200u);
         std::uint32_t adapter = 0u;
@@ -122,6 +123,7 @@ private:
     av::RecordingThreadLock lock_;
     MockKmt                 kmt_;
     av::RecordingLog        log_;
+    av::DriverLog           lines_;
     MockTransport           wire_;
     std::uint32_t           device_;
     av::icd::SharedHandles  handles_;
@@ -367,7 +369,7 @@ TEST(cl_external_memory, a_context_going_gives_back_everything_it_opened)
   process.memory().release_all(process.wire());
   CHECK_EQ(process.wire().sends(), sends + 3u); }
 
-TEST(cl_external_memory, an_object_this_context_already_holds_is_not_opened_again)
+TEST(cl_external_memory, an_object_the_device_says_this_context_already_holds_is_not_opened_again)
 { Process             process;
   const std::uint64_t named = process.handle();
   const Properties    properties(CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR, named);
@@ -381,14 +383,38 @@ TEST(cl_external_memory, an_object_this_context_already_holds_is_not_opened_agai
   const std::uint64_t again = process.share_again();
   const Properties    twice(CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR, again);
   CHECK(again != named);
+  const Answer conflict(SharedObjectAnswer::conflict, 0u);
+  process.wire().set_reply(conflict.bytes(), SharedObjectAnswer::encoded_size);
   std::uint64_t second = 9u;
   CHECK_EQ(process.memory().open(process.wire(), process.device(), twice.list(), object_bytes, second),
            CL_INVALID_VALUE);
   CHECK_EQ(second, 0u);
-  CHECK_EQ(process.wire().sends(), sends);
+  CHECK_EQ(process.wire().sends(), sends + 1u);
   CHECK_EQ(process.memory().live(), 1u);
   CHECK(process.memory().invariants_hold());
-  CHECK_EQ(process.log().holding("avcl: an object this context already imported"), 1u); }
+  CHECK_EQ(process.log().holding("avcl: an object this context already opened into the same object"), 1u); }
+
+TEST(cl_external_memory, a_name_the_device_answers_that_another_object_holds_is_given_back)
+{ Process             process;
+  const std::uint64_t named = process.handle();
+  const Properties    properties(CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR, named);
+  const Answer        answered(0u, host_buffer);
+  process.wire().set_reply(answered.bytes(), SharedObjectAnswer::encoded_size);
+  std::uint64_t made = 0u;
+  CHECK_EQ(process.memory().open(process.wire(), process.device(), properties.list(), object_bytes, made),
+           CL_SUCCESS);
+  const std::uint32_t sends = process.wire().sends();
+
+  const std::uint64_t again = process.share_again();
+  const Properties    twice(CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR, again);
+  std::uint64_t       second = 9u;
+  CHECK_EQ(process.memory().open(process.wire(), process.device(), twice.list(), object_bytes, second),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(second, 0u);
+  CHECK_EQ(process.wire().sends(), sends + 2u);
+  CHECK_EQ(process.memory().live(), 1u);
+  CHECK(process.memory().invariants_hold());
+  CHECK_EQ(process.log().holding("avcl: the device answered a name another object of this context holds"), 1u); }
 
 TEST(cl_external_memory, no_memory_for_a_row_refuses_before_the_device_is_asked)
 { Process             process;
@@ -407,6 +433,6 @@ TEST(cl_external_memory, no_memory_for_a_row_refuses_before_the_device_is_asked)
 TEST(cl_external_memory, invariants_reject_rows_no_open_leaves_behind)
 { Process process;
   CHECK(process.memory().invariants_hold());
-  av::icd::OpenedObjectsProbe::add(ClExternalMemoryProbe::opened(process.memory()),
+  av::icd::OpenedObjectsProbe::add(ClExternalMemoryProbe::opened(process.memory()), 0x77u,
                                    av::icd::OpenedObjectRow{});
   CHECK(!process.memory().invariants_hold()); }

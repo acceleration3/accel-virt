@@ -746,11 +746,12 @@ TEST(cl_icd_root, a_wait_of_nothing_or_of_something_that_is_not_an_event_asks_th
   CHECK_EQ(rig.root().wait_for_events(1u, nullptr), CL_INVALID_VALUE);
   const cl_event mixed[] = {event, reinterpret_cast<cl_event>(context)};
   CHECK_EQ(rig.root().wait_for_events(2u, mixed), CL_INVALID_EVENT);
-  cl_event many[av::clicd::ClIcdRoot::max_waited + 1u] = {};
-  for (cl_uint index = 0u; index < av::clicd::ClIcdRoot::max_waited + 1u; ++index)
+  cl_event many[av::clicd::ClHostNumbers::kept_inline + 1u] = {};
+  for (cl_uint index = 0u; index < av::clicd::ClHostNumbers::kept_inline + 1u; ++index)
       many[index] = event;
-  CHECK_EQ(rig.root().wait_for_events(av::clicd::ClIcdRoot::max_waited + 1u, many),
-           CL_OUT_OF_RESOURCES);
+  rig.platform().fail_allocation_at(1u);
+  CHECK_EQ(rig.root().wait_for_events(av::clicd::ClHostNumbers::kept_inline + 1u, many),
+           CL_OUT_OF_HOST_MEMORY);
   CHECK_EQ(rig.kmt().commands(), before);
   CHECK(rig.root().invariants_hold()); }
 
@@ -1159,6 +1160,7 @@ TEST(cl_icd_root, a_finish_on_a_context_the_driver_wakes_sleeps_until_it_does)
   rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
   rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&running), sizeof running);
+  rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&running), sizeof running);
   rig.host().cl_result(CL_SUCCESS);
   rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
   rig.host().cl_result(CL_SUCCESS);
@@ -1168,7 +1170,10 @@ TEST(cl_icd_root, a_finish_on_a_context_the_driver_wakes_sleeps_until_it_does)
   const std::uint32_t before = rig.kmt().commands();
   CHECK_EQ(rig.loader().finish(queue), CL_SUCCESS);
   for (const unsigned char byte : into) CHECK_EQ(byte, 3u);
-  CHECK_EQ(rig.kmt().command_id(before + 3u), av::clproto::kCmd_clSetEventCallback);
+  std::uint32_t raised = 0u;
+  for (std::uint32_t index = before; index < rig.kmt().commands(); ++index)
+      if (rig.kmt().command_id(index) == av::clproto::kCmd_clSetEventCallback) ++raised;
+  CHECK_EQ(raised, 1u);
   CHECK_EQ(rig.watcher().awaits(), 1u);
   CHECK(rig.watcher().running());
   CHECK(rig.root().invariants_hold()); }
@@ -1284,8 +1289,12 @@ struct ClPlatformProbe {
 };
 
 struct ClExtensionPolicyProbe {
-    static void count_past_the_table(ClExtensionPolicy &policy)
-    { policy.count_ = ClExtensionPolicy::max_rows + 1u; }
+    static void a_row_nothing_could_report(ClExtensionPolicy &policy)
+    {
+        static const ClExtensionPolicy::Row nameless[] = {{nullptr, 1u, "cl_icd_root.the_invariant_is_every_part_of_it"}};
+        new (&policy.rows_) icd::ExtensionRows(nameless, 1u, "cl_", icd::ExtensionRows::Names(nullptr, 0u),
+                                               icd::ExtensionRows::Names(nullptr, 0u));
+    }
 };
 
 struct ClObjectTableProbe {
@@ -1294,7 +1303,7 @@ struct ClObjectTableProbe {
 
 struct ClDeviceReportProbe {
     static void a_version_that_runs_off_its_room(ClDeviceReport &device)
-    { for (char &byte : device.version_) byte = 'x'; }
+    { for (char &byte : device.version_text_) byte = 'x'; }
 };
 
 struct ClPendingReadsProbe {
@@ -1310,8 +1319,7 @@ struct ClEventWatcherProbe {
 namespace av::icd {
 
 struct IcdConnectionProbe {
-    static void set_users(IcdConnection &connection, std::uint32_t users)
-    { connection.users_[0] = users; }
+    static void lose_adapter(IcdConnection &connection) { static_cast<void>(connection.search_.close()); }
 };
 
 }
@@ -1322,14 +1330,17 @@ TEST(cl_icd_root, the_invariant_is_every_part_of_it)
     av::clicd::ClPlatformProbe::an_empty_version(av::clicd::ClIcdRootProbe::platform(rig.root()));
     CHECK(!rig.root().invariants_hold()); }
   { ClIcdRig rig;
-    av::clicd::ClExtensionPolicyProbe::count_past_the_table(
+    av::clicd::ClExtensionPolicyProbe::a_row_nothing_could_report(
         av::clicd::ClIcdRootProbe::extensions(rig.root()));
     CHECK(!rig.root().invariants_hold()); }
   { ClIcdRig rig;
     av::clicd::ClObjectTableProbe::miscount(av::clicd::ClIcdRootProbe::objects_of(rig.root()));
     CHECK(!rig.root().invariants_hold()); }
   { ClIcdRig rig;
-    av::icd::IcdConnectionProbe::set_users(av::clicd::ClIcdRootProbe::connection(rig.root()), 1u);
+    av::icd::DeviceLink *link = nullptr;
+    CHECK_STATUS(av::clicd::ClIcdRootProbe::connection(rig.root()).acquire(link), av::Status::ok);
+    CHECK(rig.root().invariants_hold());
+    av::icd::IcdConnectionProbe::lose_adapter(av::clicd::ClIcdRootProbe::connection(rig.root()));
     CHECK(!rig.root().invariants_hold()); }
   { ClIcdRig rig;
     av::clicd::ClDeviceReportProbe::a_version_that_runs_off_its_room(
@@ -1747,7 +1758,7 @@ TEST(cl_icd_root, a_state_dump_reads_under_the_lock_or_says_busy)
   char            free_bytes[2048] = {};
   av::StateWriter free_writer(free_bytes, sizeof free_bytes);
   rig.root().report(free_writer);
-  CHECK(std::strstr(free_writer.dump(), "clicd/0 busy=false") != nullptr);
+  CHECK(std::strstr(free_writer.dump(), "avcl/0 busy=false") != nullptr);
   CHECK(std::strstr(free_writer.dump(), "devices/0 learnt=false left_out=0") != nullptr);
   CHECK(std::strstr(free_writer.dump(), "reads_outstanding=0") != nullptr);
   CHECK(!rig.lock().held());
@@ -1755,7 +1766,7 @@ TEST(cl_icd_root, a_state_dump_reads_under_the_lock_or_says_busy)
   char            busy_bytes[256] = {};
   av::StateWriter busy_writer(busy_bytes, sizeof busy_bytes);
   rig.root().report(busy_writer);
-  CHECK(std::strstr(busy_writer.dump(), "clicd/0 busy=true") != nullptr);
+  CHECK(std::strstr(busy_writer.dump(), "avcl/0 busy=true") != nullptr);
   CHECK(std::strstr(busy_writer.dump(), "reads_outstanding") == nullptr);
   rig.lock().held_elsewhere(false); }
 

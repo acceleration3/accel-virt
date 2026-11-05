@@ -4,11 +4,13 @@
 #include "harness/icd/fake_cl_loader.hpp"
 #include "icd/opencl/cl_arena_blocks.hpp"
 #include "icd/opencl/cl_buffer_rect.hpp"
+#include "icd/opencl/cl_host_numbers.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
 #include "icd/opencl/cl_object.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
 #include "icd/opencl/cl_transfer_chunks.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
+#include "proto/client/transfer_room.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -21,6 +23,8 @@ using av::FakeClLoader;
 using av::clicd::ClBufferRect;
 
 namespace {
+constexpr std::size_t write_room = av::clicd::GuestClContext::staging_bytes - av::TransferRoom::command_bytes;
+
 
 constexpr std::uint64_t host_platform = 0x6200u;
 constexpr std::uint64_t host_device = 0x6300u;
@@ -658,8 +662,8 @@ TEST(cl_image_paths, a_buffer_copied_from_more_memory_than_one_command_carries_i
   Running  run(rig);
   CHECK(run.made());
   if (!run.made()) return;
-  const std::size_t bytes = 2u * av::clicd::ClTransferChunks::write_room + 1u;
-  static std::uint8_t from[2u * av::clicd::ClTransferChunks::write_room + 1u];
+  const std::size_t bytes = 2u * write_room + 1u;
+  static std::uint8_t from[2u * write_room + 1u];
   for (std::size_t index = 0u; index < bytes; ++index) from[index] = static_cast<std::uint8_t>(index);
 
   std::uint32_t sent = rig.kmt().commands();
@@ -718,10 +722,25 @@ TEST(cl_image_paths, transfers_are_staged_while_buffers_fill_their_part_of_the_a
   CHECK(run.made());
   if (!run.made()) return;
   av::clicd::GuestClContext *const on = static_cast<av::clicd::ClObject *>(static_cast<void *>(run.context()))->context();
-  std::uint64_t full = 0u;
-  CHECK(on->blocks().take(av::clicd::GuestClContext::arena_bytes - av::clicd::GuestClContext::staging_reserve, full));
-  const std::size_t   bytes = 2u * av::clicd::ClTransferChunks::write_room + 1u;
-  static std::uint8_t from[2u * av::clicd::ClTransferChunks::write_room + 1u];
+  constexpr std::uint64_t page = av::clicd::ClArenaBlocks::alignment;
+  std::uint64_t           low = 0u;
+  std::uint64_t           high = av::clicd::GuestClContext::arena_bytes / page + 1u;
+  std::uint64_t           full = 0u;
+  while (high - low > 1u) {
+      const std::uint64_t middle = (low + high) / 2u;
+      if (on->blocks().take(middle * page, full)) {
+          on->blocks().give_back(full);
+          low = middle;
+      } else {
+          high = middle;
+      }
+  }
+  CHECK(low * page > av::clicd::GuestClContext::arena_bytes / 2u);
+  CHECK(on->blocks().take(low * page, full));
+  std::uint64_t more = 0u;
+  CHECK(!on->blocks().take(page, more));
+  const std::size_t   bytes = 2u * write_room + 1u;
+  static std::uint8_t from[2u * write_room + 1u];
   const std::uint32_t sent = rig.kmt().commands();
   rig.host().cl_handle(host_buffer + 2u, CL_SUCCESS);
   rig.host().cl_handle(own_queue, CL_SUCCESS);
@@ -804,10 +823,11 @@ TEST(cl_image_paths, a_marker_or_a_barrier_names_the_hosts_events_and_hands_back
   CHECK_EQ(rig.root().enqueue_marker(run.queue(), 0u, &copied, nullptr), CL_INVALID_EVENT_WAIT_LIST);
   const cl_event not_an_event = reinterpret_cast<cl_event>(run.kernel());
   CHECK_EQ(rig.root().enqueue_marker(run.queue(), 1u, &not_an_event, nullptr), CL_INVALID_EVENT_WAIT_LIST);
-  cl_event many[av::clicd::ClIcdRoot::max_waited + 1u] = {};
+  cl_event many[av::clicd::ClHostNumbers::kept_inline + 1u] = {};
   for (cl_event &one : many) one = copied;
-  CHECK_EQ(rig.root().enqueue_barrier(run.queue(), av::clicd::ClIcdRoot::max_waited + 1u, many, nullptr),
-           CL_OUT_OF_RESOURCES);
+  rig.platform().fail_allocation_at(1u);
+  CHECK_EQ(rig.root().enqueue_barrier(run.queue(), av::clicd::ClHostNumbers::kept_inline + 1u, many, nullptr),
+           CL_OUT_OF_HOST_MEMORY);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }
 
