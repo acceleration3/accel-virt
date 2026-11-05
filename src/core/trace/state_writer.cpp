@@ -76,7 +76,7 @@ void StateWriter::append_escaped(const char *value)
             piece[0] = byte == '\n' ? 'n' : 'r';
         } else if (byte == '=' || byte == '\\') {
             out_.append("\\");
-        } else if (byte < 0x20u || byte == 0x7Fu) {
+        } else if (byte <= 0x20u || byte == 0x7Fu) {
             out_.append("\\x");
             out_.append_hex(byte, 2u);
             continue;
