@@ -50,7 +50,8 @@ bool D3d12QueueProgress::executed(uint32_t id, ID3D12CommandQueue *queue, ID3D12
         if (FAILED(device->CreateFence(0u, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence),
                                        reinterpret_cast<void **>(&made))))
             return false;
-        if (queues_.append(Queue{id, queue, made, 0u}) != Status::ok) {
+        if (draining_.reserve(queues_.size() + draining_.size() + 1u) != Status::ok ||
+            queues_.append(Queue{id, queue, made, 0u}) != Status::ok) {
             made->Release();
             return false;
         }
@@ -93,10 +94,13 @@ void D3d12QueueProgress::forget(uint32_t id)
     const uint32_t index = index_of(id);
     if (index == queues_.size()) return;
     Queue &gone = queues_.at(index);
-    if (gone.fence_->GetCompletedValue() < gone.signalled_ && draining_.append(gone) == Status::ok) {
-        draining_.at(draining_.size() - 1u).queue_ = nullptr;
-        queues_.remove_swap(index);
-        return;
+    if (gone.fence_->GetCompletedValue() < gone.signalled_) {
+        if (draining_.append(gone) == Status::ok) {
+            draining_.at(draining_.size() - 1u).queue_ = nullptr;
+            queues_.remove_swap(index);
+            return;
+        }
+        static_cast<void>(gone.fence_->SetEventOnCompletion(gone.signalled_, nullptr));
     }
     gone.fence_->Release();
     queues_.remove_swap(index);
