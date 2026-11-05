@@ -344,6 +344,7 @@ HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
     }
     if (subresource.lock_depth != 0u && sliceable(*locked) && subresource.shadow != nullptr) {
         subresource.lock_depth++;
+        merge_nested_lock(subresource, *args);
         args->pSurfData =
             subresource.shadow + lock_offset(*locked, *args, subresource.shadow_pitch, subresource.shadow_slice_pitch);
         args->Pitch = subresource.shadow_pitch;
@@ -419,6 +420,36 @@ HRESULT D3d9Device::unlock_subresource(const D3d9Resource &resource, D3d9Subreso
                          subresource.shadow_slice_pitch, flags);
 }
 
+
+void D3d9Device::merge_nested_lock(D3d9Subresource &subresource, const D3DDDIARG_LOCK &inner)
+{
+    AV_SCOPE("D3d9Device::merge_nested_lock");
+    if (inner.Flags.ReadOnly) return;
+    D3DDDIARG_LOCK &held = subresource.lock;
+    const uint64_t  width = subresource.width;
+    const uint64_t  inner_begin = inner.Flags.RangeValid ? (inner.Range.Offset < width ? inner.Range.Offset : width) : 0u;
+    uint64_t        inner_end = inner.Flags.RangeValid && inner.Range.Size != 0u ? inner_begin + inner.Range.Size : width;
+    if (inner_end > width) inner_end = width;
+    uint64_t begin = inner_begin;
+    uint64_t end = inner_end;
+    if (!held.Flags.ReadOnly) {
+        const uint64_t held_begin = held.Flags.RangeValid ? (held.Range.Offset < width ? held.Range.Offset : width) : 0u;
+        uint64_t       held_end = held.Flags.RangeValid && held.Range.Size != 0u ? held_begin + held.Range.Size : width;
+        if (held_end > width) held_end = width;
+        if (held_begin < begin) begin = held_begin;
+        if (held_end > end) end = held_end;
+        held.Flags.Discard = held.Flags.Discard || inner.Flags.Discard;
+        held.Flags.NoOverwrite = held.Flags.NoOverwrite && inner.Flags.NoOverwrite;
+    } else {
+        held.Flags.Discard = inner.Flags.Discard;
+        held.Flags.NoOverwrite = inner.Flags.NoOverwrite;
+        held.Flags.ReadOnly = 0u;
+    }
+    held.Flags.RangeValid = begin != 0u || end != width;
+    held.Range.Offset = static_cast<UINT>(begin);
+    held.Range.Size = static_cast<UINT>(end - begin);
+    subresource.lock_flags = held.Flags;
+}
 
 bool D3d9Device::sliceable(const D3d9Resource &resource) const
 {

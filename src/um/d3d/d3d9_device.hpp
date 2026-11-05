@@ -137,6 +137,7 @@ private:
     [[nodiscard]] bool readback_room(size_t bytes);
     HRESULT unlock_subresource(const D3d9Resource &resource, D3d9Subresource &subresource, uint32_t index);
     bool    sliceable(const D3d9Resource &resource) const;
+    void    merge_nested_lock(D3d9Subresource &subresource, const D3DDDIARG_LOCK &inner);
     HRESULT lock_on_slice(D3d9Resource &resource, D3d9Subresource &subresource, const D3DDDIARG_LOCK &lock,
                           bool &served);
     [[nodiscard]] bool place_on_slice(const D3d9Resource &resource, D3d9Subresource &subresource);
