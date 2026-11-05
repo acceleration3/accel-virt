@@ -160,7 +160,7 @@ class Rig {
 public:
     Rig() : writer_(session_objects(), session_addresses())
     {
-        objects().clear();
+        objects().release_all();
         addresses().clear();
         static_cast<void>(objects().insert(texture, D3dObjectKind::resource12, &texture_));
         static_cast<void>(objects().insert(counter, D3dObjectKind::resource12, &counter_));
@@ -170,7 +170,7 @@ public:
     }
     ~Rig()
     {
-        objects().clear();
+        objects().release_all();
         addresses().clear();
     }
     Rig(const Rig &) = delete;
