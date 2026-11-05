@@ -26,6 +26,7 @@ public:
     bool                leave(uint32_t resource, SliceBindings::Binding &was);
     bool                next_bound_to(const SourceMemory &store, SliceBindings::Binding &was);
     void                retire(const SourceMemory &store, const D3d11BatchProgress &progress);
+    bool                holds(const SourceMemory &store);
     void                reclaim(const D3d11BatchProgress &progress);
     void                destroy_all();
 

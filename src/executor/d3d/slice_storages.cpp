@@ -56,6 +56,12 @@ void SliceStorages::retire(const SourceMemory &store, const D3d11BatchProgress &
     retiring_++;
 }
 
+bool SliceStorages::holds(const SourceMemory &store)
+{
+    AV_SCOPE("SliceStorages::holds");
+    return find(store) != nullptr;
+}
+
 void SliceStorages::reclaim(const D3d11BatchProgress &progress)
 {
     AV_SCOPE("SliceStorages::reclaim");
