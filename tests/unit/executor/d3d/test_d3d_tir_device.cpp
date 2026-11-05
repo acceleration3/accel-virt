@@ -5,6 +5,7 @@
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "harness/executor/executor_log_rig.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 
@@ -512,25 +513,26 @@ template <typename Judge>
 void on_every_gpu(Judge judge)
 {
     if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     apis.open();
     std::uint32_t judged = 0u;
     for (std::uint32_t index = 0u; index < apis.gpu_count(); index++) {
         av::D3d11HostDevice *const device = apis.d3d11_device(index);
         if (device == nullptr) continue;
-        CHECK_STATUS(backend_storage.construct(), av::Status::ok);
+        CHECK_STATUS(backend_storage.construct(rig.log), av::Status::ok);
         av::D3dBackend &backend = backend_storage.object();
         av::SessionShares unshared;
-        CHECK(backend.initialize(unshared, device));
+        CHECK(backend.initialize(unshared, rig.imports, device));
         {
-            av::D3dLoopback wire(backend);
+            av::D3dLoopback wire(backend, rig.imports);
             std::uint32_t hresult = 1u, level = 0u;
             CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
             CHECK_EQ(hresult, 0u);
             CHECK(level >= 0xb100u);
-            TirRig rig(wire);
-            rig.make();
-            judge(rig);
+            TirRig tir(wire);
+            tir.make();
+            judge(tir);
             CHECK_EQ(wire.refused(), 0u);
             CHECK(backend.invariants_hold());
         }
