@@ -1,5 +1,5 @@
 #include "core/log/driver_log.hpp"
-#include "executor/d3d/d3d12_fence_wake.hpp"
+#include "executor/eventfd_wake.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <cstring>
 
-using av::D3d12FenceWake;
+using av::EventfdWake;
 using av::D3d12QueueProgress;
 
 namespace {
@@ -164,7 +164,7 @@ public:
 
 TEST(d3d12_queue_progress_executed, each_execute_signals_its_queue_s_fence_with_the_next_mark)
 { av::MockPlatform   platform;
-  D3d12FenceWake     wake;
+  EventfdWake         wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      direct, copy;
@@ -185,7 +185,7 @@ TEST(d3d12_queue_progress_executed, each_execute_signals_its_queue_s_fence_with_
 
 TEST(d3d12_queue_progress_reached, is_held_by_the_queue_furthest_behind_its_last_signal)
 { av::MockPlatform   platform;
-  D3d12FenceWake     wake;
+  EventfdWake         wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      direct, copy;
@@ -203,7 +203,7 @@ TEST(d3d12_queue_progress_reached, is_held_by_the_queue_furthest_behind_its_last
 
 TEST(d3d12_queue_progress_after_siblings, waits_on_every_other_queue_still_behind_and_never_its_own)
 { av::MockPlatform   platform;
-  D3d12FenceWake     wake;
+  EventfdWake         wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      direct, copy, compute;
@@ -232,7 +232,7 @@ TEST(d3d12_queue_progress_after_siblings, waits_on_every_other_queue_still_behin
 
 TEST(d3d12_queue_progress_after_siblings, a_refused_wait_or_no_queue_is_refused)
 { av::MockPlatform   platform;
-  D3d12FenceWake     wake;
+  EventfdWake         wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      direct, copy;
@@ -244,7 +244,7 @@ TEST(d3d12_queue_progress_after_siblings, a_refused_wait_or_no_queue_is_refused)
 
 TEST(d3d12_queue_progress_executed, refuses_what_cannot_be_made_or_signalled)
 { av::MockPlatform   platform;
-  D3d12FenceWake     wake;
+  EventfdWake         wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      queue;
@@ -263,7 +263,7 @@ TEST(d3d12_queue_progress_executed, refuses_what_cannot_be_made_or_signalled)
 
 TEST(d3d12_queue_progress_executed, serves_well_more_queues_than_the_old_table_held)
 { av::MockPlatform   platform;
-  D3d12FenceWake     wake;
+  EventfdWake         wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      queue;
@@ -281,7 +281,7 @@ TEST(d3d12_queue_progress_executed, serves_well_more_queues_than_the_old_table_h
 
 TEST(d3d12_queue_progress_executed, gives_the_fence_back_when_the_queue_cannot_be_kept)
 { av::MockPlatform   platform;
-  D3d12FenceWake     wake;
+  EventfdWake         wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      queue;
@@ -297,12 +297,13 @@ TEST(d3d12_queue_progress_executed, gives_the_fence_back_when_the_queue_cannot_b
 
 TEST(d3d12_queue_progress_forget, lets_one_queue_s_fence_go_and_clear_every_fence_while_marks_keep_rising)
 { av::MockPlatform   platform;
-  D3d12FenceWake     wake;
+  EventfdWake         wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      direct, copy;
   CHECK(progress.executed(1u, &direct, &device));
   CHECK(progress.executed(2u, &copy, &device));
+  device.fences[0].completed = 1u;
   progress.forget(1u);
   progress.forget(7u);
   CHECK_EQ(device.fences[0].references, 0u);
@@ -323,7 +324,7 @@ TEST(d3d12_queue_progress_forget, lets_one_queue_s_fence_go_and_clear_every_fenc
 
 TEST(d3d12_queue_progress_mark_all, signals_each_queue_s_own_fence_and_is_reached_only_once_all_are)
 { av::MockPlatform   platform;
-  D3d12FenceWake     wake;
+  EventfdWake         wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      direct, copy;
@@ -358,7 +359,7 @@ TEST(d3d12_queue_progress_mark_all, signals_each_queue_s_own_fence_and_is_reache
 
 TEST(d3d12_queue_progress_log_stuck, names_each_queue_with_its_signalled_and_completed_marks)
 { av::MockPlatform   platform;
-  D3d12FenceWake     wake;
+  EventfdWake         wake;
   D3d12QueueProgress progress(wake, platform);
   ScriptedDevice     device;
   ScriptedQueue      direct, copy;
@@ -378,3 +379,130 @@ TEST(d3d12_queue_progress_log_stuck, names_each_queue_with_its_signalled_and_com
   progress.log_stuck(lines);
   CHECK_EQ(log.lines(), 2u);
   CHECK(progress.invariants_hold()); }
+
+TEST(d3d12_queue_progress_forget, a_queue_with_unfinished_work_keeps_its_fence_draining_and_reached_still_counts_it)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      direct, copy;
+  CHECK(progress.executed(1u, &direct, &device));
+  CHECK(progress.executed(2u, &copy, &device));
+  device.fences[1].completed = 2u;
+  progress.forget(1u);
+  CHECK_EQ(device.fences[0].references, 1u);
+  CHECK(progress.invariants_hold());
+  CHECK_EQ(progress.marked(), 2u);
+  CHECK_EQ(progress.reached(), 0u);
+  device.fences[0].completed = 1u;
+  CHECK_EQ(progress.reached(), 2u);
+  CHECK_EQ(device.fences[0].references, 1u);
+  CHECK(progress.invariants_hold()); }
+
+TEST(d3d12_queue_progress_forget, a_drained_fence_is_released_by_the_next_execute_and_not_before)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      direct, copy;
+  CHECK(progress.executed(1u, &direct, &device));
+  progress.forget(1u);
+  CHECK_EQ(device.fences[0].references, 1u);
+  CHECK(progress.executed(2u, &copy, &device));
+  CHECK_EQ(device.fences[0].references, 1u);
+  device.fences[0].completed = 1u;
+  CHECK(progress.executed(2u, &copy, &device));
+  CHECK_EQ(device.fences[0].references, 0u);
+  CHECK_EQ(progress.reached(), 0u);
+  CHECK(progress.invariants_hold()); }
+
+TEST(d3d12_queue_progress_forget, a_fence_already_completed_is_released_at_once_and_never_drains)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      direct;
+  CHECK(progress.executed(1u, &direct, &device));
+  device.fences[0].completed = 1u;
+  progress.forget(1u);
+  CHECK_EQ(device.fences[0].references, 0u);
+  CHECK_EQ(progress.reached(), progress.marked());
+  CHECK(progress.invariants_hold()); }
+
+TEST(d3d12_queue_progress_forget, several_drained_fences_each_hold_the_reached_mark_back_until_they_finish)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      first, second, third;
+  CHECK(progress.executed(1u, &first, &device));
+  CHECK(progress.executed(2u, &second, &device));
+  CHECK(progress.executed(3u, &third, &device));
+  progress.forget(1u);
+  progress.forget(2u);
+  device.fences[2].completed = 3u;
+  CHECK_EQ(progress.reached(), 0u);
+  device.fences[1].completed = 2u;
+  CHECK_EQ(progress.reached(), 0u);
+  device.fences[0].completed = 1u;
+  CHECK_EQ(progress.reached(), 3u);
+  CHECK(progress.invariants_hold()); }
+
+TEST(d3d12_queue_progress_forget, a_drained_queue_is_not_signalled_or_waited_on_again)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      gone, kept;
+  CHECK(progress.executed(1u, &gone, &device));
+  CHECK(progress.executed(2u, &kept, &device));
+  progress.forget(1u);
+  const UINT64 signalled = gone.signalled_value;
+  CHECK(progress.mark_all());
+  CHECK_EQ(gone.signalled_value, signalled);
+  CHECK(progress.after_siblings(2u, &kept));
+  CHECK_EQ(kept.waits, 0u);
+  CHECK(progress.invariants_hold()); }
+
+TEST(d3d12_queue_progress_forget, forgetting_a_queue_twice_changes_nothing)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      direct;
+  CHECK(progress.executed(1u, &direct, &device));
+  progress.forget(1u);
+  progress.forget(1u);
+  CHECK_EQ(device.fences[0].references, 1u);
+  CHECK(progress.invariants_hold()); }
+
+TEST(d3d12_queue_progress_clear, releases_the_draining_fences_too)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      direct, copy;
+  CHECK(progress.executed(1u, &direct, &device));
+  CHECK(progress.executed(2u, &copy, &device));
+  progress.forget(1u);
+  progress.clear();
+  CHECK_EQ(device.fences[0].references, 0u);
+  CHECK_EQ(device.fences[1].references, 0u);
+  CHECK_EQ(progress.reached(), progress.marked());
+  CHECK(progress.invariants_hold()); }
+
+TEST(d3d12_queue_progress_log_stuck, names_a_drained_queue_as_destroyed)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      direct, copy;
+  av::RecordingLog   log;
+  av::DriverLog      lines(log, "d3d12: ");
+  CHECK(progress.executed(5u, &direct, &device));
+  CHECK(progress.executed(9u, &copy, &device));
+  progress.forget(5u);
+  progress.log_stuck(lines);
+  CHECK_EQ(log.lines(), 2u);
+  CHECK(std::strcmp(log.line(0u), "d3d12: queue 9 progress signalled 2 completed 0") == 0);
+  CHECK(std::strcmp(log.line(1u), "d3d12: destroyed queue 5 progress signalled 1 completed 0") == 0); }
