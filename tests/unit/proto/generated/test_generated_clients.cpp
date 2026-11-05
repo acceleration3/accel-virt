@@ -10,6 +10,7 @@
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 #include "vk_dispatch_client.h"
+#include "vk_handle_translation.h"
 #include "vk_protocol_ids.h"
 
 #include <cstdint>
@@ -19,6 +20,7 @@ using av::WireWriter;
 
 TEST(generated_clients, the_vulkan_client_creates_an_instance_and_reads_it_back)
 { MockTransport transport;
+  av::vkproto::HandleIdentity handles;
   /* The device answers VK_SUCCESS and the instance handle it minted. */
   std::uint8_t reply[64] = {};
   WireWriter answer(reply, sizeof reply);
@@ -29,7 +31,7 @@ TEST(generated_clients, the_vulkan_client_creates_an_instance_and_reads_it_back)
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;
-  const VkResult result = av::vkproto::av_vkCreateInstance(transport, &info, nullptr, &instance);
+  const VkResult result = av::vkproto::av_vkCreateInstance(transport, handles, &info, nullptr, &instance);
   CHECK(result == VK_SUCCESS);
   CHECK_EQ(instance, 0xABCDEFull);
   CHECK_EQ(transport.sends(), 1u);
@@ -58,23 +60,25 @@ TEST(generated_clients, the_opencl_client_enumerates_platforms)
 /* A transport that fails the send gives the client the API's own error. */
 TEST(generated_clients, a_failed_send_returns_the_apis_error)
 { MockTransport transport;
+  av::vkproto::HandleIdentity handles;
   transport.fail_next();
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;
-  CHECK(av::vkproto::av_vkCreateInstance(transport, &info, nullptr, &instance) == VK_ERROR_DEVICE_LOST);
+  CHECK(av::vkproto::av_vkCreateInstance(transport, handles, &info, nullptr, &instance) == VK_ERROR_DEVICE_LOST);
   CHECK_EQ(transport.end_calls(), 1u); }
 
 /* A reply cut short is a failed call, and the call still ends once: the
  * transport learns the decode is over on every return path. */
 TEST(generated_clients, a_short_reply_ends_the_call_once)
 { MockTransport transport;
+  av::vkproto::HandleIdentity handles;
   const std::uint8_t reply[2] = {};
   transport.set_reply(reply, sizeof reply);
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;
-  CHECK(av::vkproto::av_vkCreateInstance(transport, &info, nullptr, &instance) == VK_ERROR_DEVICE_LOST);
+  CHECK(av::vkproto::av_vkCreateInstance(transport, handles, &info, nullptr, &instance) == VK_ERROR_DEVICE_LOST);
   CHECK_EQ(transport.end_calls(), 1u);
   transport.set_reply(reply, 0u);
   cl_uint count = 0u;
@@ -84,7 +88,8 @@ TEST(generated_clients, a_short_reply_ends_the_call_once)
 /* A recorded command answers nothing, so it opens no call to end. */
 TEST(generated_clients, an_async_command_ends_no_call)
 { MockTransport transport;
-  av::vkproto::av_vkCmdDraw(transport, nullptr, 3u, 1u, 0u, 0u);
+  av::vkproto::HandleIdentity handles;
+  av::vkproto::av_vkCmdDraw(transport, handles, nullptr, 3u, 1u, 0u, 0u);
   CHECK_EQ(transport.sends(), 1u);
   CHECK_EQ(transport.end_calls(), 0u); }
 
