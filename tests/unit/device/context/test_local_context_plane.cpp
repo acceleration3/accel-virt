@@ -276,3 +276,19 @@ TEST(local_context_plane, exports_surfaces_through_its_library)
   CHECK(fixture.plane().sync_surface(uuid, 5u, 0u, writes, sync_fd));
   CHECK_EQ(writes, 3u);
   CHECK_EQ(sync_fd, 12); }
+
+TEST(local_context_plane, names_the_domain_its_library_opened_and_composes_as_the_library_does)
+{ Fixture fixture;
+  CHECK_EQ(fixture.plane().memory_domain(), 0u);
+  CHECK(!fixture.plane().composes());
+  CHECK_STATUS(fixture.plane().accept(&fixture.ops().table()), Status::ok);
+  CHECK_EQ(fixture.plane().memory_domain(), 0u);
+  CHECK_STATUS(fixture.plane().start(uuid, capset()), Status::ok);
+  CHECK(fixture.plane().memory_domain() != 0u);
+  CHECK_EQ(fixture.plane().memory_domain(), fixture.ops().last_opened_domain());
+  CHECK(!fixture.plane().composes());
+  fixture.ops().editable().compose_planes = +[](void *, std::uint32_t, const AvScanoutPlane *, std::uint32_t,
+                                                std::uint32_t, std::uint32_t, AvExportedImage *) -> std::uint32_t {
+      return AV_EXECUTED;
+  };
+  CHECK(fixture.plane().composes()); }

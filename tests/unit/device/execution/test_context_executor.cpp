@@ -1,3 +1,10 @@
+#include "device/context/context_signal.hpp"
+#include "device/context/ring_consumer.hpp"
+#include "device/fence/fence_interrupts.hpp"
+#include "device/fence/fence_reporter.hpp"
+#include "device/recording/wire_recorder.hpp"
+#include "device/threading/worker.hpp"
+#include "harness/executor/mock_context_execution.hpp"
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/execution/context_executor.hpp"
@@ -401,3 +408,26 @@ TEST(context_executor_answer_part, hands_on_what_the_library_kept_of_a_long_answ
       CHECK_EQ(length, 0u);
       executor.destroy();
   }); }
+
+TEST(context_executor_signals_through, installs_the_signal_on_the_executor_it_makes_and_only_then)
+{ Fixture fixture;
+  av::FenceInterrupts      interrupts(fixture.host());
+  av::WireRecorder         recorder(fixture.host());
+  av::FenceReporter        fences(fixture.host(), interrupts, recorder, 1u);
+  av::MockContextExecution execution(fixture.host(), fences, 12u);
+  av::RingConsumer         ring(fixture.host(), fences, execution.batches());
+  av::Worker               worker(fixture.host(), ring);
+  av::ContextSignal        signal(fixture.host(), worker, fences);
+  fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
+  fixture.on_worker([](ContextExecutor &executor) { CHECK_STATUS(executor.create(), Status::ok); });
+  CHECK_EQ(fixture.ops().signals_set(), 0u);
+  CHECK(!fixture.ops().signal_bound());
+  fixture.on_worker([](ContextExecutor &executor) { executor.destroy(); });
+  fixture.executor().signals_through(signal);
+  fixture.on_worker([](ContextExecutor &executor) { CHECK_STATUS(executor.create(), Status::ok); });
+  CHECK_EQ(fixture.ops().signals_set(), 1u);
+  CHECK(fixture.ops().signal_bound());
+  CHECK(fixture.ops().fire_signal());
+  CHECK_EQ(signal.raised(), 1u);
+  fixture.on_worker([](ContextExecutor &executor) { executor.destroy(); });
+  worker.stop(); }

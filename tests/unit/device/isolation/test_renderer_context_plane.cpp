@@ -955,3 +955,11 @@ TEST(renderer_context_plane, exports_no_surface)
   std::uint64_t writes = 1u;
   int           sync_fd = 1;
   CHECK(!fixture.plane().sync_surface(uuid, 9u, 0u, writes, sync_fd)); }
+
+TEST(renderer_context_plane, owns_no_memory_domain_of_its_own_and_composes_nothing)
+{ Fixture fixture;
+  CHECK_EQ(fixture.plane().memory_domain(), 0u);
+  CHECK(!fixture.plane().composes());
+  CHECK_STATUS(fixture.start(), Status::ok);
+  CHECK_EQ(fixture.plane().memory_domain(), 0u);
+  CHECK(!fixture.plane().composes()); }

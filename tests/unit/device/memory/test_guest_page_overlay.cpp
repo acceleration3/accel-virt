@@ -262,3 +262,17 @@ TEST(guest_page_overlay_invariants, a_record_that_is_not_its_runs_breaks_them)
   CHECK(!fixture.overlay().invariants_hold());
   CHECK_STATUS(fixture.lent().claim(ram, page, fixture.owner()), Status::ok);
   CHECK(fixture.overlay().invariants_hold()); }
+
+TEST(guest_page_overlay_extents, name_each_stretch_of_guest_address_space_in_the_order_the_blob_is_laid)
+{ Fixture fixture;
+  CHECK_EQ(fixture.overlay().extents(), 0u);
+  EntryList apart(2u);
+  apart.add(ram + 5u * page, static_cast<std::uint32_t>(2u * page));
+  apart.add(ram + 2u * page, static_cast<std::uint32_t>(page));
+  CHECK_STATUS(fixture.add(apart, 2u), Status::ok);
+  CHECK_EQ(fixture.overlay().extents(), 2u);
+  CHECK_EQ(fixture.overlay().extent_address(0u), ram + 5u * page);
+  CHECK_EQ(fixture.overlay().extent_length(0u), 2u * page);
+  CHECK_EQ(fixture.overlay().extent_address(1u), ram + 2u * page);
+  CHECK_EQ(fixture.overlay().extent_length(1u), page);
+  CHECK(fixture.overlay().invariants_hold()); }

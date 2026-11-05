@@ -369,3 +369,31 @@ TEST(executor_library_surfaces, are_exported_and_synced_in_the_device_s_domain)
   CHECK_EQ(image.fd, -1);
   CHECK(!library.sync_surface(0x52u, 0u, writes, fd));
   CHECK_EQ(fd, -1); }
+
+namespace {
+
+std::uint32_t composed(void *, std::uint32_t, const AvScanoutPlane *, std::uint32_t, std::uint32_t, std::uint32_t,
+                       AvExportedImage *)
+{
+    return AV_EXECUTED;
+}
+
+}
+
+TEST(executor_library_composes, only_a_library_whose_table_composes_planes_does)
+{ ExecutorLibrary none;
+  CHECK(!none.composes());
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK_STATUS(library.open_domain(some_gpu), Status::ok);
+  AvScanoutPlane plane = {};
+  AvExportedImage image = {};
+  CHECK(!library.composes());
+  CHECK(!library.compose_planes(&plane, 1u, 8u, 8u, image));
+  ops.editable().compose_planes = composed;
+  CHECK(library.composes());
+  CHECK(library.compose_planes(&plane, 1u, 8u, 8u, image));
+  library.close_domain();
+  CHECK(library.composes());
+  CHECK(!library.compose_planes(&plane, 1u, 8u, 8u, image)); }
