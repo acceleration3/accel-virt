@@ -11,11 +11,14 @@
 #include <cstring>
 
 namespace av::icd {
+struct ChainSlotsProbe {
+    static void forget_identity(ChainSlots &slots) { slots.ids_[0] = 0u; }
+    static void forget_bytes(ChainSlots &slots) { slots.bytes_[0] = 0u; }
+    static void forget_window(ChainSlots &slots) { slots.window_ = nullptr; }
+};
+
 struct ChainedImageProbe {
-    static void forget_memory(ChainedImage &chained) { chained.memory_ = VK_NULL_HANDLE; }
-    static void forget_identity(ChainedImage &chained) { chained.id_ = 0u; }
-    static void forget_bytes(ChainedImage &chained) { chained.bytes_ = 0u; }
-    static void forget_window(ChainedImage &chained) { chained.window_ = nullptr; }
+    static ChainSlots &slots(ChainedImage &chained) { return chained.slots_; }
 };
 
 }
@@ -27,6 +30,7 @@ using av::ScriptedWindowChains;
 using av::SharedObjectAnswer;
 using av::icd::ChainedImage;
 using av::icd::ChainedImageProbe;
+using av::icd::ChainSlotsProbe;
 using av::icd::SlotLayout;
 
 namespace {
@@ -34,6 +38,7 @@ namespace {
 constexpr std::uint64_t luid = 0x0000000200001234ull;
 constexpr VkExtent2D    extent = {64u, 32u};
 constexpr std::uint64_t opened_memory = 0x7700u;
+constexpr std::uint64_t host_id = 0x4410u;
 constexpr std::uint64_t slot_bytes = std::uint64_t{64u} * 32u * 4u;
 
 void *window() { return reinterpret_cast<void *>(0x10u); }
@@ -50,7 +55,7 @@ void answer(MockTransport &wire, std::uint32_t status, std::uint64_t handle)
 
 class ChainedRig {
 public:
-    ChainedRig() : host_(), chains_(), wire_(), chained_(host_, host_.device(), chains_, wire_)
+    ChainedRig() : host_(), chains_(), wire_(), chained_(host_, host_.device(), host_id, chains_, wire_)
     { chains_.refuse_opens(false);
       answer(wire_, SharedObjectAnswer::done, opened_memory); }
 
@@ -87,6 +92,7 @@ TEST(chained_image, a_blue_first_frame_opens_a_blue_first_top_down_slot_made_as_
   CHECK_EQ(rig.wire().sends(), 1u);
   CHECK_EQ(rig.wire().last_command(), CommandHeader::open_shared_object_id);
   CHECK_EQ(u64_at(rig.wire().last_payload(), 0u), ScriptedWindowChains::first_id);
+  CHECK_EQ(u64_at(rig.wire().last_payload(), 16u), host_id);
   CHECK_EQ(u64_at(rig.wire().last_payload(), 24u), slot_bytes);
   const ScriptedVulkanDevice::Described made = rig.host().described(chained.slot());
   CHECK_EQ(made.format, VK_FORMAT_B8G8R8A8_UNORM);
@@ -157,14 +163,16 @@ TEST(chained_image, a_slot_that_cannot_be_opened_or_made_an_image_leaves_nothing
 
 TEST(chained_image, the_slot_is_shown_through_the_window_s_chain)
 { ChainedRig rig;
-  CHECK(!rig.chained().show());
+  av::icd::ChainSlots &slots = ChainedImageProbe::slots(rig.chained());
+  CHECK(!slots.present(0u));
   CHECK_EQ(rig.chains().presents(), 0u);
   CHECK(rig.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
-  CHECK(rig.chained().show());
+  CHECK(slots.present(0u));
   CHECK_EQ(rig.chains().presents(), 1u);
   CHECK_EQ(rig.chains().last_slot(), 0u);
+  CHECK(!slots.present(1u));
   rig.chains().refuse_presents(true);
-  CHECK(!rig.chained().show());
+  CHECK(!slots.present(0u));
   CHECK_EQ(rig.chains().presents(), 1u); }
 
 TEST(chained_image, a_release_gives_the_slot_back_and_a_close_the_chain_as_well)
@@ -177,7 +185,7 @@ TEST(chained_image, a_release_gives_the_slot_back_and_a_close_the_chain_as_well)
   CHECK_EQ(rig.wire().last_command(), CommandHeader::release_shared_object_id);
   CHECK_EQ(u64_at(rig.wire().last_payload(), 24u), slot_bytes);
   CHECK_EQ(rig.chains().closes(), 0u);
-  CHECK(!rig.chained().show());
+  CHECK(!ChainedImageProbe::slots(rig.chained()).present(0u));
   CHECK(rig.chained().invariants_hold());
   const std::uint32_t sent = rig.wire().sends();
   rig.chained().close();
@@ -187,23 +195,25 @@ TEST(chained_image, a_release_gives_the_slot_back_and_a_close_the_chain_as_well)
   rig.chained().close();
   CHECK_EQ(rig.chains().closes(), 1u); }
 
-TEST(chained_image, its_invariants_refuse_an_image_without_memory_and_memory_without_its_identity_or_window)
+TEST(chained_image, its_invariants_refuse_an_image_without_memory_and_memory_without_its_identity_size_or_window)
 { ChainedRig unbacked;
   CHECK(unbacked.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
-  ChainedImageProbe::forget_memory(unbacked.chained());
+  ChainedImageProbe::slots(unbacked.chained()).release(unbacked.wire());
   CHECK(!unbacked.chained().invariants_hold());
+  unbacked.chained().close();
+  CHECK(unbacked.chained().invariants_hold());
 
   ChainedRig nameless;
   CHECK(nameless.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
-  ChainedImageProbe::forget_identity(nameless.chained());
+  ChainSlotsProbe::forget_identity(ChainedImageProbe::slots(nameless.chained()));
   CHECK(!nameless.chained().invariants_hold());
 
   ChainedRig sizeless;
   CHECK(sizeless.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
-  ChainedImageProbe::forget_bytes(sizeless.chained());
+  ChainSlotsProbe::forget_bytes(ChainedImageProbe::slots(sizeless.chained()));
   CHECK(!sizeless.chained().invariants_hold());
 
   ChainedRig windowless;
   CHECK(windowless.chained().open(window(), luid, VK_FORMAT_B8G8R8A8_UNORM, extent));
-  ChainedImageProbe::forget_window(windowless.chained());
+  ChainSlotsProbe::forget_window(ChainedImageProbe::slots(windowless.chained()));
   CHECK(!windowless.chained().invariants_hold()); }

@@ -11,6 +11,8 @@ class ClientTransport;
 
 namespace av::icd {
 
+struct ChainSlotsProbe;
+
 class ChainSlots {
 public:
     static constexpr uint32_t max_slots = WindowChains::max_slots;
@@ -45,6 +47,8 @@ private:
     uint64_t      bytes_[max_slots];
     uint64_t      memories_[max_slots];
     bool          opened_;
+
+    friend struct ChainSlotsProbe;
 };
 
 }
