@@ -1,4 +1,5 @@
 #include "framework.h"
+#include "core/log/keyed_log.hpp"
 
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
@@ -253,17 +254,18 @@ int main(int argc, char **argv)
         av::RecordingThreadLock   objects_lock(trace, 'O');
         av::RecordingThreadLock   blocks_lock(trace, 'B');
         av::RecordingLog          icd_log;
+        av::KeyedLog              icd_lines(memory, icd_log, "avcl: ");
         av::ScriptedThread        watcher;
         av::ScriptedGlShareSource no_gl;
         av::ScriptedD3dAdapterSource no_d3d;
         av::ScriptedD3d11Bridge      no_d3d11;
-        av::clicd::ClIcdRoot      root(memory, rig.kmt(), lock, send_lock, objects_lock, blocks_lock, icd_log, watcher, no_gl, no_d3d,
+        av::clicd::ClIcdRoot      root(memory, rig.kmt(), lock, send_lock, objects_lock, blocks_lock, icd_lines, watcher, no_gl, no_d3d,
                                        no_d3d11,
                                        av::clicd::cl_icd_binding);
         samples::icd = &root;
         code = samples::run(argc, argv);
         for (std::uint32_t line = 0; line < icd_log.lines() && line < av::RecordingLog::max_lines; line++)
-            fprintf(stderr, "avcl: %s\n", icd_log.line(line));
+            fprintf(stderr, "%s\n", icd_log.line(line));
         samples::icd = nullptr;
     }
     return code;
