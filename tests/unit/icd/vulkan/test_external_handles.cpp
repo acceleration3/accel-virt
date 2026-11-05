@@ -2,9 +2,11 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
+#include "icd/common/opened_objects.hpp"
 #include "icd/vulkan/external_objects.hpp"
 #include "icd/vulkan/host_extension_list.hpp"
 #include "icd/vulkan/icd_root.hpp"
+#include "icd/vulkan/loader_handle.hpp"
 #include "icd/vulkan/memory_win32_handle_record.hpp"
 #include "icd/vulkan/semaphore_win32_handle_record.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
@@ -37,6 +39,8 @@ using namespace av::vkproto;
 
 namespace {
 
+HandleIdentity identity_translation;
+
 using ExportMemory = VkResult (*)(VkDevice, const MemoryGetWin32HandleRecord *, void **);
 using ExportSemaphore = VkResult (*)(VkDevice, const SemaphoreGetWin32HandleRecord *, void **);
 using ImportSemaphore = VkResult (*)(VkDevice, const ImportSemaphoreWin32HandleRecord *);
@@ -51,9 +55,17 @@ using SemaphorePropertiesEntry = void (*)(VkPhysicalDevice, const VkPhysicalDevi
 
 constexpr std::uint64_t host_memory = 0x5500u;
 constexpr std::uint64_t host_semaphore = 0x6600u;
-constexpr int shared_fd = 9;
 constexpr std::uint64_t shared_size = 4096u;
 constexpr std::uint32_t max_host_extensions = 1024u;
+
+std::uint32_t command_back(MockKmt &kmt, std::uint32_t back)
+{
+    for (std::uint32_t index = kmt.commands(); index-- > 0u;) {
+        if (kmt.command_id(index) == CommandHeader::channel_stats_id) continue;
+        if (back-- == 0u) return index;
+    }
+    return 0u;
+}
 
 class SharingRig {
 public:
@@ -183,10 +195,10 @@ public:
       return handle; }
 
     std::uint32_t last_command()
-    { return rig_.kmt().command_id(rig_.kmt().commands() - 1u); }
+    { return rig_.kmt().command_id(command_back(rig_.kmt(), 0u)); }
 
     WireReader body_before_last()
-    { const std::uint32_t sent = rig_.kmt().commands() - 2u;
+    { const std::uint32_t sent = command_back(rig_.kmt(), 1u);
       const std::uint8_t *bytes = rig_.kmt().command_bytes(sent);
       WireReader          body(bytes + CommandHeader::encoded_size,
                                MockKmt::journal_bytes - CommandHeader::encoded_size);
@@ -194,13 +206,13 @@ public:
       return body; }
 
     WireReader last_body_whole()
-    { const std::uint32_t sent = rig_.kmt().commands() - 1u;
+    { const std::uint32_t sent = command_back(rig_.kmt(), 0u);
       const std::uint8_t *bytes = rig_.kmt().command_bytes(sent);
       return WireReader(bytes + CommandHeader::encoded_size,
                         MockKmt::journal_bytes - CommandHeader::encoded_size); }
 
     WireReader last_body()
-    { const std::uint32_t sent = rig_.kmt().commands() - 1u;
+    { const std::uint32_t sent = command_back(rig_.kmt(), 0u);
       const std::uint8_t *bytes = rig_.kmt().command_bytes(sent);
       WireReader          body(bytes + CommandHeader::encoded_size,
                                MockKmt::journal_bytes - CommandHeader::encoded_size);
@@ -257,7 +269,7 @@ TEST(icd_external_handles, a_handle_exported_is_opened_by_the_device_on_import)
   CHECK(object_id != 0u);
   CHECK_EQ(body.read_u32(), std::uint32_t{av::SharedObjectKind::memory});
   CHECK_EQ(body.read_u32(), 0u);
-  CHECK_EQ(body.read_u64(), 0u);
+  CHECK_EQ(body.read_u64(), ScriptedHost::vk_device);
   CHECK_EQ(body.read_u64(), shared_size);
 
   rig.rig().host().shared_object(0u, 0u);
@@ -278,11 +290,10 @@ TEST(icd_external_handles, freeing_an_exported_allocation_gives_the_carrier_back
   CHECK_EQ(rig.rig().kmt().calls(MockKmt::Call::destroy_shared_allocation), 1u);
   CHECK_EQ(rig.rig().kmt().calls(MockKmt::Call::destroy_allocation), 0u); }
 
-TEST(icd_external_handles, a_semaphore_handle_becomes_the_host_s_own_fd_import)
+TEST(icd_external_handles, a_semaphore_handle_is_opened_by_the_device_into_the_semaphore_it_names)
 { SharingRig  rig;
   void *const handle = rig.exported_semaphore();
-  rig.rig().host().vk_fd(0, shared_fd);
-  rig.rig().host().vk_result(0);
+  rig.rig().host().shared_object(0u, 0x8800u);
   ImportSemaphoreWin32HandleRecord importing = {};
   importing.type_ = av::icd::import_semaphore_win32_handle_info;
   importing.semaphore_ = reinterpret_cast<VkSemaphore>(0x8800u);
@@ -290,24 +301,48 @@ TEST(icd_external_handles, a_semaphore_handle_becomes_the_host_s_own_fd_import)
   importing.flags_ = VK_SEMAPHORE_IMPORT_TEMPORARY_BIT;
   importing.handle_ = handle;
   CHECK_EQ(rig.entry<ImportSemaphore>("vkImportSemaphoreWin32HandleKHR")(rig.device(), &importing), VK_SUCCESS);
-  CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkImportSemaphoreFdKHR));
-  WireReader                 body = rig.last_body();
-  VkImportSemaphoreFdInfoKHR sent = {};
-  std::uint8_t               block[1024] = {};
-  av::WireArena              arena(block, sizeof block);
-  CHECK(deserialize_VkImportSemaphoreFdInfoKHR(body, &sent, arena));
-  CHECK_EQ(sent.fd, shared_fd);
-  CHECK_EQ(static_cast<std::uint32_t>(sent.handleType),
-           static_cast<std::uint32_t>(VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT));
-  CHECK_EQ(sent.flags, static_cast<VkFlags>(VK_SEMAPHORE_IMPORT_TEMPORARY_BIT));
-  CHECK(sent.semaphore == reinterpret_cast<VkSemaphore>(0x8800u));
+  CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id);
+  WireReader          body = rig.last_body_whole();
+  CHECK(body.read_u64() != 0u);
+  CHECK_EQ(body.read_u32(), std::uint32_t{av::SharedObjectKind::monitored_fence});
+  CHECK_EQ(body.read_u32(), 0u);
+  CHECK_EQ(body.read_u64(), 0x8800u);
+  CHECK_EQ(body.read_u64(), 0u);
+  av::icd::OpenedObjects &opened =
+      rig.rig().root().connection_of(rig.device(), av::icd::LoaderHandle::Kind::device)->opened_objects();
+  CHECK_EQ(opened.live(), 1u);
+  CHECK(opened.answered(av::SharedObjectKind::monitored_fence, 0x8800u));
 
   rig.rig().host().shared_object(0u, 0u);
-  rig.entry<DestroySemaphore>("vkDestroySemaphore")(rig.device(),
-                                                    reinterpret_cast<VkSemaphore>(host_semaphore), nullptr);
+  rig.rig().host().shared_object(0u, 0x8800u);
+  CHECK_EQ(rig.entry<ImportSemaphore>("vkImportSemaphoreWin32HandleKHR")(rig.device(), &importing), VK_SUCCESS);
+  CHECK_EQ(opened.live(), 1u);
+  rig.rig().host().shared_object(0u, 0u);
+  rig.entry<DestroySemaphore>("vkDestroySemaphore")(rig.device(), reinterpret_cast<VkSemaphore>(0x8800u), nullptr);
+  CHECK_EQ(opened.live(), 0u);
+  CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkDestroySemaphore));
+  CHECK(rig.rig().root().invariants_hold()); }
+
+TEST(icd_external_handles, a_semaphore_import_that_answers_another_semaphore_is_given_back)
+{ SharingRig  rig;
+  void *const handle = rig.exported_semaphore();
+  rig.rig().host().shared_object(0u, 0x8801u);
+  rig.rig().host().shared_object(0u, 0u);
+  ImportSemaphoreWin32HandleRecord importing = {};
+  importing.type_ = av::icd::import_semaphore_win32_handle_info;
+  importing.semaphore_ = reinterpret_cast<VkSemaphore>(0x8800u);
+  importing.handle_type_ = av::icd::opaque_win32_semaphore;
+  importing.handle_ = handle;
   CHECK_EQ(rig.entry<ImportSemaphore>("vkImportSemaphoreWin32HandleKHR")(rig.device(), &importing),
            VK_ERROR_INVALID_EXTERNAL_HANDLE);
-  CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkDestroySemaphore)); }
+  CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id);
+  CHECK_EQ(rig.rig()
+               .root()
+               .connection_of(rig.device(), av::icd::LoaderHandle::Kind::device)
+               ->opened_objects()
+               .live(),
+           0u);
+  CHECK(rig.rig().root().invariants_hold()); }
 
 TEST(icd_external_handles, a_handle_it_did_not_export_is_refused_before_the_host)
 { SharingRig rig;
@@ -385,8 +420,7 @@ TEST(icd_external_handles, the_external_properties_of_a_win32_handle_are_the_hos
   CHECK_EQ(answered.externalMemoryProperties.externalMemoryFeatures,
            static_cast<VkFlags>(VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
                                 VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT));
-  CHECK_EQ(answered.externalMemoryProperties.exportFromImportedHandleTypes,
-           static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT));
+  CHECK_EQ(answered.externalMemoryProperties.exportFromImportedHandleTypes, 0u);
   CHECK_EQ(answered.externalMemoryProperties.compatibleHandleTypes,
            static_cast<VkFlags>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT));
   CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkGetPhysicalDeviceExternalBufferProperties));
@@ -475,7 +509,7 @@ TEST(icd_external_handles, an_allocation_made_to_be_shared_is_exported_as_an_fd)
   VkMemoryAllocateInfo sent = {};
   std::uint8_t         block[1024] = {};
   av::WireArena        arena(block, sizeof block);
-  CHECK(deserialize_VkMemoryAllocateInfo(body, &sent, arena));
+  CHECK(deserialize_VkMemoryAllocateInfo(body, identity_translation, &sent, arena));
   CHECK_EQ(sent.allocationSize, 8192u);
   const auto *const node = static_cast<const VkBaseInStructure *>(sent.pNext);
   CHECK(node != nullptr);
@@ -558,7 +592,7 @@ TEST(icd_external_handles, a_chain_longer_than_it_reads_and_a_host_that_refuses_
            VK_ERROR_INVALID_EXTERNAL_HANDLE);
   CHECK_EQ(rig.rig().kmt().commands(), quiet); }
 
-TEST(icd_external_handles, a_lost_device_and_a_refused_semaphore_fd_are_both_the_answer)
+TEST(icd_external_handles, a_lost_device_and_a_refused_semaphore_open_are_both_the_answer)
 { SharingRig rig;
   void *const handle = rig.exported_semaphore();
   av::icd::ImportSemaphoreWin32HandleRecord importing = {};
@@ -567,10 +601,10 @@ TEST(icd_external_handles, a_lost_device_and_a_refused_semaphore_fd_are_both_the
   importing.handle_type_ = av::icd::opaque_win32_semaphore;
   importing.handle_ = handle;
 
-  rig.rig().host().vk_fd(VK_ERROR_TOO_MANY_OBJECTS, -1);
+  rig.rig().host().shared_object(av::SharedObjectAnswer::unknown_object, 0u);
   CHECK_EQ(rig.entry<ImportSemaphore>("vkImportSemaphoreWin32HandleKHR")(rig.device(), &importing),
-           VK_ERROR_TOO_MANY_OBJECTS);
-  CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkGetSemaphoreFdKHR));
+           VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id);
 
   const std::uint32_t before = rig.rig().kmt().commands();
   rig.rig().kmt().withhold_answer_at(1u);
@@ -587,7 +621,7 @@ TEST(icd_external_handles, a_host_with_the_dma_buf_extension_shares_by_it_and_as
   VkMemoryAllocateInfo sent = {};
   std::uint8_t         block[1024] = {};
   av::WireArena        arena(block, sizeof block);
-  CHECK(deserialize_VkMemoryAllocateInfo(body, &sent, arena));
+  CHECK(deserialize_VkMemoryAllocateInfo(body, identity_translation, &sent, arena));
   const auto *const node = static_cast<const VkBaseInStructure *>(sent.pNext);
   CHECK(node != nullptr);
   CHECK_EQ(static_cast<std::uint32_t>(node->sType),
@@ -604,22 +638,13 @@ TEST(icd_external_handles, a_host_with_the_dma_buf_extension_shares_by_it_and_as
   sharing.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   sharing.pNext = &importing;
   sharing.allocationSize = shared_size;
-  rig.rig().host().vk_fd(0, shared_fd);
-  rig.rig().host().vk_handle(0, 0x7900u);
+  rig.rig().host().shared_object(0u, 0x7900u);
+  const std::uint32_t before = rig.rig().kmt().commands();
   VkDeviceMemory imported = VK_NULL_HANDLE;
   CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &sharing, nullptr, &imported), VK_SUCCESS);
-  WireReader           second = rig.last_body();
-  VkMemoryAllocateInfo taken = {};
-  std::uint8_t         more[1024] = {};
-  av::WireArena        arena_again(more, sizeof more);
-  CHECK(deserialize_VkMemoryAllocateInfo(second, &taken, arena_again));
-  const auto *const import_node = static_cast<const VkBaseInStructure *>(taken.pNext);
-  CHECK(import_node != nullptr);
-  CHECK_EQ(static_cast<std::uint32_t>(import_node->sType),
-           static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR));
-  CHECK_EQ(static_cast<std::uint32_t>(
-               reinterpret_cast<const VkImportMemoryFdInfoKHR *>(import_node)->handleType),
-           static_cast<std::uint32_t>(VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT)); }
+  CHECK(imported == reinterpret_cast<VkDeviceMemory>(0x7900u));
+  CHECK(rig.rig().kmt().commands() > before);
+  CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id); }
 
 TEST(icd_external_handles, a_host_without_the_dma_buf_extension_shares_by_its_opaque_fd)
 { SharingRig rig;
@@ -628,7 +653,7 @@ TEST(icd_external_handles, a_host_without_the_dma_buf_extension_shares_by_its_op
   VkMemoryAllocateInfo sent = {};
   std::uint8_t         block[1024] = {};
   av::WireArena        arena(block, sizeof block);
-  CHECK(deserialize_VkMemoryAllocateInfo(body, &sent, arena));
+  CHECK(deserialize_VkMemoryAllocateInfo(body, identity_translation, &sent, arena));
   const auto *const node = static_cast<const VkBaseInStructure *>(sent.pNext);
   CHECK(node != nullptr);
   CHECK_EQ(reinterpret_cast<const VkExportMemoryAllocateInfo *>(node)->handleTypes,
@@ -741,9 +766,14 @@ TEST(icd_external_handles, a_semaphore_import_of_memory_or_of_another_process_is
   importing.handle_type_ = av::icd::opaque_win32_semaphore;
   importing.semaphore_ = reinterpret_cast<VkSemaphore>(0x8800u);
   importing.handle_ = rig.exported_memory();
+  rig.rig().host().shared_object(av::SharedObjectAnswer::mismatched_object, 0u);
   CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id);
   importing.handle_ = rig.foreign_handle();
-  CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE); }
+  rig.rig().host().shared_object(av::SharedObjectAnswer::mismatched_object, 0u);
+  CHECK_EQ(root.import_semaphore_handle(rig.device(), &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id);
+  CHECK_EQ(root.connection_of(rig.device(), av::icd::LoaderHandle::Kind::device)->opened_objects().live(), 0u); }
 
 TEST(icd_external_handles, destroying_a_semaphore_of_a_foreign_device_sends_nothing)
 { SharingRig rig;
@@ -839,106 +869,101 @@ TEST(icd_external_handles, each_way_a_publish_can_fail_gives_the_carrier_back)
              VK_ERROR_TOO_MANY_OBJECTS);
     CHECK(memory == VK_NULL_HANDLE);
     CHECK_EQ(rig.rig().kmt().open_objects(), objects);
-    CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id); } }
+    CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkFreeMemory)); } }
 
-TEST(icd_external_handles, no_memory_to_remember_an_object_releases_what_was_made_for_it)
-{ {
-    SharingRig          rig;
-    rig.rig().host().vk_handle(0, host_memory);
-    rig.rig().host().shared_object(0u, 0u);
-    rig.rig().host().shared_object(0u, 0u);
-    const std::uint32_t objects = rig.rig().kmt().open_objects();
-    rig.rig().platform().fail_allocation_at(2u);
-    VkExportMemoryAllocateInfo exporting = {};
-    exporting.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
-    exporting.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
-    VkMemoryAllocateInfo allocate = {};
-    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocate.pNext = &exporting;
-    allocate.allocationSize = shared_size;
-    allocate.memoryTypeIndex = 0u;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
-             VK_ERROR_OUT_OF_HOST_MEMORY);
-    CHECK(memory == VK_NULL_HANDLE);
-    MockKmt &kmt = rig.rig().kmt();
-    CHECK_EQ(kmt.command_id(kmt.commands() - 2u), av::CommandHeader::release_shared_object_id);
-    CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkFreeMemory));
-    CHECK_EQ(kmt.calls(MockKmt::Call::close_shared_object), 1u);
-    CHECK_EQ(rig.rig().kmt().open_objects(), objects); }
+TEST(icd_external_handles, no_memory_anywhere_in_a_shared_allocation_gives_back_what_was_made_for_it)
+{ bool refused_somewhere = false;
+  bool succeeded_somewhere = false;
+  for (std::uint32_t failing = 1u; failing <= 12u; failing++) {
+      SharingRig rig;
+      rig.rig().host().vk_handle(0, host_memory);
+      rig.rig().host().shared_object(0u, 0u);
+      const std::uint32_t objects = rig.rig().kmt().open_objects();
+      VkExportMemoryAllocateInfo exporting = {};
+      exporting.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
+      exporting.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+      VkMemoryAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocate.pNext = &exporting;
+      allocate.allocationSize = shared_size;
+      allocate.memoryTypeIndex = 0u;
+      VkDeviceMemory memory = VK_NULL_HANDLE;
+      rig.rig().platform().fail_allocation_at(failing);
+      const VkResult result = rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory);
+      rig.rig().platform().fail_allocation_at(0u);
+      if (result == VK_SUCCESS) {
+          succeeded_somewhere = true;
+          CHECK(memory != VK_NULL_HANDLE);
+          CHECK(rig.rig().root().invariants_hold());
+          continue;
+      }
+      refused_somewhere = true;
+      CHECK_EQ(result, VK_ERROR_OUT_OF_HOST_MEMORY);
+      CHECK(memory == VK_NULL_HANDLE);
+      CHECK_EQ(rig.rig().kmt().open_objects(), objects);
+      CHECK_EQ(rig.last_command(), static_cast<std::uint32_t>(kCmd_vkFreeMemory));
+      CHECK(rig.rig().root().invariants_hold());
+  }
+  CHECK(refused_somewhere);
+  CHECK(succeeded_somewhere); }
 
-  {
-    SharingRig  rig;
-    void *const handle = rig.foreign_handle();
-    rig.rig().host().shared_object(0u, 0x7700u);
-    rig.rig().host().shared_object(0u, 0u);
-    rig.rig().platform().fail_allocation_at(2u);
-    ImportMemoryWin32HandleRecord importing = {};
-    importing.type_ = av::icd::import_memory_win32_handle_info;
-    importing.handle_type_ = av::icd::opaque_win32_memory;
-    importing.handle_ = handle;
-    VkMemoryAllocateInfo allocate = {};
-    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocate.pNext = &importing;
-    allocate.allocationSize = 4096u;
-    allocate.memoryTypeIndex = 0u;
-    VkDeviceMemory imported = VK_NULL_HANDLE;
-    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &imported),
-             VK_ERROR_OUT_OF_HOST_MEMORY);
-    CHECK(imported == VK_NULL_HANDLE);
-    CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id); }
+TEST(icd_external_handles, no_memory_anywhere_in_an_import_keeps_nothing_and_answers_out_of_host_memory)
+{ bool refused_somewhere = false;
+  for (std::uint32_t failing = 1u; failing <= 12u; failing++) {
+      SharingRig  rig;
+      void *const handle = rig.foreign_handle();
+      rig.rig().host().shared_object(0u, 0x7700u);
+      ImportMemoryWin32HandleRecord importing = {};
+      importing.type_ = av::icd::import_memory_win32_handle_info;
+      importing.handle_type_ = av::icd::opaque_win32_memory;
+      importing.handle_ = handle;
+      VkMemoryAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocate.pNext = &importing;
+      allocate.allocationSize = 4096u;
+      allocate.memoryTypeIndex = 0u;
+      VkDeviceMemory imported = VK_NULL_HANDLE;
+      rig.rig().platform().fail_allocation_at(failing);
+      const VkResult result = rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &imported);
+      rig.rig().platform().fail_allocation_at(0u);
+      if (result == VK_SUCCESS) {
+          CHECK(imported != VK_NULL_HANDLE);
+          continue;
+      }
+      refused_somewhere = true;
+      CHECK_EQ(result, VK_ERROR_OUT_OF_HOST_MEMORY);
+      CHECK(imported == VK_NULL_HANDLE);
+      CHECK(rig.rig().root().invariants_hold());
+  }
+  CHECK(refused_somewhere); }
 
-  {
-    SharingRig          rig;
-    rig.rig().host().vk_handle(0, host_memory);
-    rig.rig().host().shared_object(0u, 0u);
-    rig.rig().host().shared_object(0u, 0u);
-    rig.rig().platform().fail_allocation_at(1u);
-    VkExportMemoryAllocateInfo exporting = {};
-    exporting.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
-    exporting.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
-    VkMemoryAllocateInfo allocate = {};
-    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocate.pNext = &exporting;
-    allocate.allocationSize = shared_size;
-    allocate.memoryTypeIndex = 0u;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
-             VK_ERROR_OUT_OF_HOST_MEMORY);
-    MockKmt &kmt = rig.rig().kmt();
-    CHECK_EQ(kmt.command_id(kmt.commands() - 2u), av::CommandHeader::release_shared_object_id);
-    CHECK_EQ(kmt.calls(MockKmt::Call::share_object), 0u); }
-
-  {
-    SharingRig          rig;
-    void *const         handle = rig.foreign_handle();
-    const std::uint32_t sent = rig.rig().kmt().commands();
-    rig.rig().platform().fail_allocation_at(1u);
-    ImportMemoryWin32HandleRecord importing = {};
-    importing.type_ = av::icd::import_memory_win32_handle_info;
-    importing.handle_type_ = av::icd::opaque_win32_memory;
-    importing.handle_ = handle;
-    VkMemoryAllocateInfo allocate = {};
-    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocate.pNext = &importing;
-    allocate.allocationSize = 4096u;
-    allocate.memoryTypeIndex = 0u;
-    VkDeviceMemory imported = VK_NULL_HANDLE;
-    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &imported),
-             VK_ERROR_OUT_OF_HOST_MEMORY);
-    CHECK(imported == VK_NULL_HANDLE);
-    ImportSemaphoreWin32HandleRecord fence = {};
-    fence.type_ = av::icd::import_semaphore_win32_handle_info;
-    fence.handle_type_ = av::icd::opaque_win32_semaphore;
-    fence.handle_ = handle;
-    fence.semaphore_ = reinterpret_cast<VkSemaphore>(0x8800u);
-    rig.rig().platform().fail_allocation_at(1u);
-    CHECK_EQ(rig.rig().root().import_semaphore_handle(rig.device(), &fence), VK_ERROR_OUT_OF_HOST_MEMORY);
-    CHECK_EQ(rig.rig().kmt().commands(), sent);
-    CHECK_EQ(rig.rig().log().holding("avvk: no memory to keep the Win32 handle named to vkAllocateMemory"), 1u);
-    CHECK_EQ(rig.rig().log().holding(
-                 "avvk: no memory to keep the Win32 handle named to vkImportSemaphoreWin32HandleKHR"),
-             1u); } }
+TEST(icd_external_handles, no_memory_to_keep_a_win32_handle_is_logged_and_sends_nothing)
+{ SharingRig          rig;
+  void *const         handle = rig.foreign_handle();
+  const std::uint32_t sent = rig.rig().kmt().commands();
+  rig.rig().platform().fail_allocation_at(1u);
+  ImportMemoryWin32HandleRecord importing = {};
+  importing.type_ = av::icd::import_memory_win32_handle_info;
+  importing.handle_type_ = av::icd::opaque_win32_memory;
+  importing.handle_ = handle;
+  VkMemoryAllocateInfo allocate = {};
+  allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate.pNext = &importing;
+  allocate.allocationSize = 4096u;
+  allocate.memoryTypeIndex = 0u;
+  VkDeviceMemory imported = VK_NULL_HANDLE;
+  CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &imported),
+           VK_ERROR_OUT_OF_HOST_MEMORY);
+  CHECK(imported == VK_NULL_HANDLE);
+  ImportSemaphoreWin32HandleRecord fence = {};
+  fence.type_ = av::icd::import_semaphore_win32_handle_info;
+  fence.handle_type_ = av::icd::opaque_win32_semaphore;
+  fence.handle_ = handle;
+  fence.semaphore_ = reinterpret_cast<VkSemaphore>(0x8800u);
+  rig.rig().platform().fail_allocation_at(1u);
+  CHECK_EQ(rig.rig().root().import_semaphore_handle(rig.device(), &fence), VK_ERROR_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(rig.rig().kmt().commands(), sent);
+  CHECK_EQ(rig.rig().log().holding("avvk: no memory to keep a Win32 handle"), 2u); }
 
 TEST(icd_external_handles, a_host_that_cannot_be_asked_what_it_shares_by_keeps_the_opaque_fd)
 { const SharingRig::HostExtensions cases[] = {
@@ -966,7 +991,7 @@ TEST(icd_external_handles, a_host_that_cannot_be_asked_what_it_shares_by_keeps_t
       VkMemoryAllocateInfo sent = {};
       std::uint8_t         block[1024] = {};
       av::WireArena        arena(block, sizeof block);
-      CHECK(deserialize_VkMemoryAllocateInfo(body, &sent, arena));
+      CHECK(deserialize_VkMemoryAllocateInfo(body, identity_translation, &sent, arena));
       const auto *const node = static_cast<const VkBaseInStructure *>(sent.pNext);
       CHECK(node != nullptr);
       CHECK_EQ(reinterpret_cast<const VkExportMemoryAllocateInfo *>(node)->handleTypes,
@@ -1072,36 +1097,57 @@ TEST(icd_external_handles, a_semaphore_export_says_a_lost_device_and_a_refused_p
     CHECK(handle == nullptr);
     CHECK_EQ(rig.rig().kmt().commands(), before); } }
 
-TEST(icd_external_handles, an_in_process_import_refuses_a_host_that_will_not_give_an_fd_or_a_chain_it_cannot_send)
-{ { SharingRig rig;
-    ImportMemoryWin32HandleRecord importing = {};
-    importing.type_ = av::icd::import_memory_win32_handle_info;
-    importing.handle_type_ = av::icd::opaque_win32_memory;
-    importing.handle_ = rig.exported_memory();
-    VkMemoryAllocateInfo allocate = {};
-    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocate.pNext = &importing;
-    allocate.allocationSize = shared_size;
-    rig.rig().host().vk_fd(VK_ERROR_TOO_MANY_OBJECTS, -1);
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
-             VK_ERROR_TOO_MANY_OBJECTS);
-    CHECK(memory == VK_NULL_HANDLE); }
+TEST(icd_external_handles, an_import_the_device_refuses_or_finds_already_opened_is_refused_and_keeps_nothing)
+{ const std::uint32_t answers[] = {av::SharedObjectAnswer::unknown_object, av::SharedObjectAnswer::mismatched_object,
+                                   av::SharedObjectAnswer::conflict};
+  for (const std::uint32_t answer : answers) {
+      SharingRig rig;
+      ImportMemoryWin32HandleRecord importing = {};
+      importing.type_ = av::icd::import_memory_win32_handle_info;
+      importing.handle_type_ = av::icd::opaque_win32_memory;
+      importing.handle_ = rig.exported_memory();
+      VkMemoryAllocateInfo allocate = {};
+      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      allocate.pNext = &importing;
+      allocate.allocationSize = shared_size;
+      rig.rig().host().shared_object(answer, 0u);
+      VkDeviceMemory memory = VK_NULL_HANDLE;
+      CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
+               VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      CHECK(memory == VK_NULL_HANDLE);
+      CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id);
+      CHECK_EQ(rig.rig()
+                   .root()
+                   .connection_of(rig.device(), av::icd::LoaderHandle::Kind::device)
+                   ->opened_objects()
+                   .live(),
+               0u);
+      CHECK(rig.rig().root().invariants_hold());
+  } }
 
-  { SharingRig rig;
-    ImportMemoryWin32HandleRecord importing = {};
-    importing.type_ = av::icd::import_memory_win32_handle_info;
-    importing.handle_type_ = av::icd::opaque_win32_memory;
-    importing.handle_ = rig.exported_memory();
-    VkMemoryOpaqueCaptureAddressAllocateInfo captured = {};
-    captured.sType = VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO;
-    importing.next_ = &captured;
-    VkMemoryAllocateInfo allocate = {};
-    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocate.pNext = &importing;
-    allocate.allocationSize = shared_size;
-    rig.rig().host().vk_fd(0, shared_fd);
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory),
-             VK_ERROR_INVALID_EXTERNAL_HANDLE);
-    CHECK(memory == VK_NULL_HANDLE); } }
+TEST(icd_external_handles, an_import_the_device_opens_is_kept_under_the_name_it_answered_and_given_back_at_free)
+{ SharingRig rig;
+  ImportMemoryWin32HandleRecord importing = {};
+  importing.type_ = av::icd::import_memory_win32_handle_info;
+  importing.handle_type_ = av::icd::opaque_win32_memory;
+  importing.handle_ = rig.exported_memory();
+  VkMemoryAllocateInfo allocate = {};
+  allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate.pNext = &importing;
+  allocate.allocationSize = shared_size;
+  rig.rig().host().shared_object(0u, 0x7900u);
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  CHECK_EQ(rig.entry<Allocate>("vkAllocateMemory")(rig.device(), &allocate, nullptr, &memory), VK_SUCCESS);
+  CHECK(memory == reinterpret_cast<VkDeviceMemory>(0x7900u));
+  CHECK_EQ(rig.last_command(), av::CommandHeader::open_shared_object_id);
+  av::icd::OpenedObjects &opened =
+      rig.rig().root().connection_of(rig.device(), av::icd::LoaderHandle::Kind::device)->opened_objects();
+  CHECK_EQ(opened.live(), 1u);
+  CHECK(opened.answered(av::SharedObjectKind::memory, 0x7900u));
+  rig.rig().host().shared_object(0u, 0u);
+  rig.entry<void (*)(VkDevice, VkDeviceMemory, const VkAllocationCallbacks *)>("vkFreeMemory")(rig.device(), memory,
+                                                                                                nullptr);
+  CHECK_EQ(opened.live(), 0u);
+  CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id);
+  CHECK(rig.rig().root().invariants_hold()); }
+

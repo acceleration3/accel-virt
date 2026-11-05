@@ -74,6 +74,11 @@ using av::icd::IcdRootProbe;
 
 namespace {
 
+std::uint64_t wire_of(av::IcdRig &rig, av::vkproto::HandleKind kind, const void *handle)
+{
+    return rig.root().wire_handles().wire_for(kind, reinterpret_cast<std::uint64_t>(handle));
+}
+
 using CreateDevice = VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo *, const VkAllocationCallbacks *,
                                   VkDevice *);
 using DestroyDevice = void (*)(VkDevice, const VkAllocationCallbacks *);
@@ -255,13 +260,13 @@ TEST(icd_command_buffers, destroying_a_device_destroys_its_queues_command_buffer
   rig.rig().host().vk_handle(0, queue_host + 1u);
   rig.entry<GetDeviceQueue2>("vkGetDeviceQueue2")(rig.device(), &info, &second);
   CHECK(rig.rig().root().invariants_hold());
-  CHECK_EQ(handle_to_wire(queue), queue_host);
-  CHECK_EQ(handle_to_wire(second), queue_host + 1u);
+  CHECK_EQ(wire_of(rig.rig(), av::vkproto::HandleKind::queue, queue), queue_host);
+  CHECK_EQ(wire_of(rig.rig(), av::vkproto::HandleKind::queue, second), queue_host + 1u);
   WireReader asked = last_body(rig.kmt());
   CHECK_EQ(asked.read_u64(), ScriptedHost::vk_device);
   VkCommandBuffer command_buffers[2] = {};
   CHECK_EQ(rig.allocate(2u, command_buffers), VK_SUCCESS);
-  CHECK_EQ(handle_to_wire(command_buffers[1]), command_buffer_host + 1u);
+  CHECK_EQ(wire_of(rig.rig(), av::vkproto::HandleKind::command_buffer, command_buffers[1]), command_buffer_host + 1u);
   CHECK_EQ(rig.begin(command_buffers[0]), VK_SUCCESS);
   rig.draw(command_buffers[0], 1u);
   const LoaderHandle *const device = static_cast<LoaderHandle *>(static_cast<void *>(rig.device()));
@@ -410,7 +415,7 @@ TEST(icd_command_buffers, ending_on_a_lost_connection_answers_device_lost)
   CHECK_EQ(rig.entry<GetFenceStatus>("vkGetFenceStatus")(rig.device(), VK_NULL_HANDLE), VK_ERROR_DEVICE_LOST);
   const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
   CHECK_EQ(rig.end(command_buffer), VK_ERROR_DEVICE_LOST);
-  CHECK_EQ(rig.rig().log().holding("avvk: vkEndCommandBuffer on a lost device"), 1u);
+  CHECK_EQ(rig.rig().log().holding("avvk: vkEndCommandBuffer: the context is lost"), 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted); }
 
 TEST(icd_command_buffers, a_publish_the_kernel_refuses_answers_device_lost)
@@ -422,7 +427,7 @@ TEST(icd_command_buffers, a_publish_the_kernel_refuses_answers_device_lost)
   rig.kmt().fail_at(MockKmt::Call::submit, 1u, MockKmt::invalid_parameter);
   CHECK_EQ(rig.end(command_buffer), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(rig.rig().log().holding("vkEndCommandBuffer: batch not shipped, status"), 1u);
-  CHECK(rig.rig().root().connection_of(rig.device(), Kind::device)->faulted());
+  CHECK(rig.rig().root().connection_of(rig.device(), Kind::device)->lost());
   CHECK(rig.rig().root().invariants_hold()); }
 
 

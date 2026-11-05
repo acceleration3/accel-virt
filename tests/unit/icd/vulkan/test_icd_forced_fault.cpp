@@ -92,7 +92,7 @@ TEST(icd_forced_fault, a_withheld_answer_loses_the_instance)
   rig.kmt().withhold_answer_at(1u);
   CHECK_EQ(rig.force()(device), VK_ERROR_DEVICE_LOST);
   CHECK(rig.rig().root().invariants_hold());
-  CHECK(rig.connection()->faulted());
+  CHECK(rig.connection()->lost());
   CHECK_EQ(rig.kmt().commands(), sent + 1u);
   CHECK_EQ(rig.kmt().command_id(sent), av::vkproto::kCmd_vkCreateInstance);
   CHECK_EQ(rig.kmt().command_size(sent), CommandHeader::encoded_size + 4u);
@@ -103,7 +103,7 @@ TEST(icd_forced_fault, a_withheld_answer_loses_the_instance)
   CHECK_EQ(rig.rig().entry<DeviceWaitIdle>(rig.instance(), "vkDeviceWaitIdle")(device), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(rig.force()(device), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(kmt_calls(rig.kmt()), before);
-  CHECK(rig.rig().log().holding("vkAvForceContextFault on a lost device") == 1u); }
+  CHECK(rig.rig().log().holding("vkAvForceContextFault: the context is lost") == 1u); }
 
 TEST(icd_forced_fault, a_new_instance_is_not_lost)
 { FaultRig rig;
@@ -113,7 +113,7 @@ TEST(icd_forced_fault, a_new_instance_is_not_lost)
   const VkInstance again = rig.rig().create_instance();
   CHECK(again != VK_NULL_HANDLE);
   CHECK(rig.rig().root().invariants_hold());
-  CHECK(!rig.rig().root().connection_of(again, Kind::instance)->faulted());
+  CHECK(!rig.rig().root().connection_of(again, Kind::instance)->lost());
   const VkPhysicalDevice physical = rig.rig().physical_device(again);
   CHECK(physical != VK_NULL_HANDLE);
   rig.rig().destroy_instance(again);
@@ -125,7 +125,7 @@ TEST(icd_forced_fault, an_answered_frame_is_refused_as_not_faulting)
   rig.rig().host().vk_result(VK_ERROR_INITIALIZATION_FAILED);
   CHECK_EQ(rig.force()(device), VK_ERROR_INITIALIZATION_FAILED);
   CHECK(rig.rig().root().invariants_hold());
-  CHECK(!rig.connection()->faulted());
+  CHECK(!rig.connection()->lost());
   CHECK_EQ(rig.rig().log().holding("avvk: the host answered a truncated vkCreateInstance"), 1u);
   CHECK(rig.device() != VK_NULL_HANDLE); }
 

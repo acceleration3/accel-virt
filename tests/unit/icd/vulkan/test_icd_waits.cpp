@@ -273,7 +273,7 @@ TEST(icd_waits, a_queue_idle_passes_on_a_refused_fence_a_refused_submission_and_
   CHECK_EQ(rig.id_back(0u), static_cast<std::uint32_t>(kCmd_vkWaitForFences));
   rig.kmt().fail_at(MockKmt::Call::submit, 2u, MockKmt::invalid_parameter);
   CHECK_EQ(rig.rig().root().queue_wait_idle(queue), VK_ERROR_DEVICE_LOST);
-  CHECK(av::icd::connection_of(queue)->faulted());
+  CHECK(av::icd::connection_of(queue)->lost());
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.rig().root().invariants_hold()); }
 
@@ -349,13 +349,15 @@ TEST(icd_waits, present_context_answers_a_device_s_physical_device_and_connectio
 { WaitRig rig;
   VkPhysicalDevice  physical = VK_NULL_HANDLE;
   av::icd::Connection *connection = nullptr;
-  CHECK(rig.rig().root().present_context(rig.device(), physical, connection));
+  std::uint64_t        host_device = 0u;
+  CHECK(rig.rig().root().present_context(rig.device(), physical, host_device, connection));
+  CHECK_EQ(host_device, ScriptedHost::vk_device);
   CHECK(physical == rig.physical());
   CHECK(connection == av::icd::connection_of(rig.device()));
   CHECK(connection != nullptr);
   int stack = 0;
   physical = VK_NULL_HANDLE;
   connection = nullptr;
-  CHECK(!rig.rig().root().present_context(reinterpret_cast<VkDevice>(&stack), physical, connection));
+  CHECK(!rig.rig().root().present_context(reinterpret_cast<VkDevice>(&stack), physical, host_device, connection));
   CHECK(physical == VK_NULL_HANDLE);
   CHECK(connection == nullptr); }

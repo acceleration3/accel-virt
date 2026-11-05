@@ -26,6 +26,13 @@ using namespace av::vkproto;
 
 namespace {
 
+HandleIdentity identity_translation;
+
+std::uint64_t wire_of(av::IcdRig &rig, HandleKind kind, const void *handle)
+{
+    return rig.root().wire_handles().wire_for(kind, reinterpret_cast<std::uint64_t>(handle));
+}
+
 using EnumerateDeviceExtensions = VkResult (*)(VkPhysicalDevice, const char *, std::uint32_t *,
                                                VkExtensionProperties *);
 using CreateDevice = VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo *, const VkAllocationCallbacks *,
@@ -218,7 +225,7 @@ TEST(icd_extensions, a_device_naming_no_extension_is_made_through_its_physical_d
   VkDevice device = VK_NULL_HANDLE;
   rig.rig().host().vk_handle(0, ScriptedHost::vk_device);
   CHECK_EQ(rig.create(nullptr, 0u, &device), VK_SUCCESS);
-  CHECK_EQ(handle_to_wire(device), ScriptedHost::vk_device);
+  CHECK_EQ(wire_of(rig.rig(), HandleKind::device, device), ScriptedHost::vk_device);
   CHECK(static_cast<LoaderHandle *>(static_cast<void *>(device))->parent() ==
         static_cast<LoaderHandle *>(static_cast<void *>(rig.physical_device())));
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), static_cast<std::uint32_t>(kCmd_vkCreateDevice));
@@ -237,7 +244,7 @@ TEST(icd_extensions, the_swapchain_the_application_enables_is_not_asked_of_the_h
   rig.rig().host().vk_handle(0, ScriptedHost::vk_device);
   const char *const enabled[] = {"VK_KHR_swapchain"};
   CHECK_EQ(rig.create(enabled, 1u, &device), VK_SUCCESS);
-  CHECK_EQ(handle_to_wire(device), ScriptedHost::vk_device);
+  CHECK_EQ(wire_of(rig.rig(), HandleKind::device, device), ScriptedHost::vk_device);
   const std::uint32_t sent = rig.kmt().commands() - 1u;
   CHECK_EQ(rig.kmt().command_id(sent), static_cast<std::uint32_t>(kCmd_vkCreateDevice));
   std::uint8_t        block[512] = {};
@@ -246,7 +253,7 @@ TEST(icd_extensions, the_swapchain_the_application_enables_is_not_asked_of_the_h
   WireReader          body(bytes + CommandHeader::encoded_size, MockKmt::journal_bytes - CommandHeader::encoded_size);
   CHECK_EQ(body.read_u64(), ScriptedHost::vk_physical_device);
   VkDeviceCreateInfo forwarded = {};
-  CHECK(deserialize_VkDeviceCreateInfo(body, &forwarded, arena));
+  CHECK(deserialize_VkDeviceCreateInfo(body, identity_translation, &forwarded, arena));
   CHECK_EQ(forwarded.enabledExtensionCount, 0u); }
 
 TEST(icd_extensions, the_window_system_instance_extensions_are_not_asked_of_the_host)
@@ -261,26 +268,41 @@ TEST(icd_extensions, the_window_system_instance_extensions_are_not_asked_of_the_
   const std::uint8_t *bytes = rig.kmt().command_bytes(sent);
   WireReader          body(bytes + CommandHeader::encoded_size, MockKmt::journal_bytes - CommandHeader::encoded_size);
   VkInstanceCreateInfo forwarded = {};
-  CHECK(deserialize_VkInstanceCreateInfo(body, &forwarded, arena));
+  CHECK(deserialize_VkInstanceCreateInfo(body, identity_translation, &forwarded, arena));
   CHECK_EQ(forwarded.enabledExtensionCount, 0u);
   CHECK(rig.root().invariants_hold());
   rig.destroy_instance(instance); }
 
-TEST(icd_extensions, a_list_longer_than_the_driver_passes_on_is_refused)
-{ const char *too_many[av::icd::HostExtensionList::max_names + 1u] = {};
-  for (const char *&name : too_many) name = "VK_KHR_get_physical_device_properties2";
+TEST(icd_extensions, a_list_naming_nothing_is_refused_and_a_long_one_is_passed_on_once_per_name)
+{ const char *unnamed[] = {"VK_KHR_get_physical_device_properties2", nullptr};
   { IcdRig              rig;
     const std::uint32_t quiet = rig.kmt().commands();
-    CHECK(rig.create_instance(too_many, av::icd::HostExtensionList::max_names + 1u) == VK_NULL_HANDLE);
+    CHECK(rig.create_instance(unnamed, 2u) == VK_NULL_HANDLE);
     CHECK_EQ(rig.kmt().commands(), quiet);
     CHECK_EQ(rig.log().holding("not a list this driver can pass on"), 1u);
     CHECK(rig.root().invariants_hold()); }
+  static const char *many[400];
+  for (const char *&name : many) name = "VK_KHR_get_physical_device_properties2";
+  { IcdRig         rig;
+    const VkInstance instance = rig.create_instance(many, 400u);
+    CHECK(instance != VK_NULL_HANDLE);
+    const std::uint32_t sent = rig.kmt().commands() - 1u;
+    CHECK_EQ(rig.kmt().command_id(sent), static_cast<std::uint32_t>(kCmd_vkCreateInstance));
+    std::uint8_t         block[512] = {};
+    av::WireArena        arena(block, sizeof block);
+    const std::uint8_t  *bytes = rig.kmt().command_bytes(sent);
+    WireReader           body(bytes + CommandHeader::encoded_size, MockKmt::journal_bytes - CommandHeader::encoded_size);
+    VkInstanceCreateInfo forwarded = {};
+    CHECK(deserialize_VkInstanceCreateInfo(body, identity_translation, &forwarded, arena));
+    CHECK_EQ(forwarded.enabledExtensionCount, 1u);
+    CHECK(rig.root().invariants_hold());
+    rig.destroy_instance(instance); }
   { ExtensionRig        rig;
     const std::uint32_t quiet = rig.kmt().commands();
     VkDevice            device = VK_NULL_HANDLE;
-    const char *many[av::icd::HostExtensionList::max_names + 1u] = {};
-    for (const char *&name : many) name = "VK_EXT_memory_budget";
-    CHECK_EQ(rig.create(many, av::icd::HostExtensionList::max_names + 1u, &device), VK_ERROR_EXTENSION_NOT_PRESENT);
+    const char *const   enabled[] = {"VK_KHR_swapchain"};
+    rig.rig().platform().fail_allocation_at(1u);
+    CHECK_EQ(rig.create(enabled, 1u, &device), VK_ERROR_OUT_OF_HOST_MEMORY);
     CHECK(device == VK_NULL_HANDLE);
     CHECK_EQ(rig.kmt().commands(), quiet);
     CHECK_EQ(rig.rig().log().holding("not a list this driver can pass on"), 1u); } }

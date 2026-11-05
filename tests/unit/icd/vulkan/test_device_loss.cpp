@@ -3,6 +3,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
+#include "proto/submission/blob_import_answer.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/loader_handle.hpp"
@@ -168,7 +169,7 @@ public:
         kmt().withhold_answer_at(1u);
         CHECK_EQ(entry<GetFenceStatus>("vkGetFenceStatus")(device_, reinterpret_cast<VkFence>(fence_host)),
                  VK_ERROR_DEVICE_LOST);
-        CHECK(connection()->faulted());
+        CHECK(connection()->lost());
         CHECK(rig_.root().invariants_hold());
     }
 
@@ -213,7 +214,7 @@ TEST(device_loss, local_entry_points_answer_lost_with_no_kmt_call)
   CHECK_EQ(rig.entry<BeginCommandBuffer>("vkBeginCommandBuffer")(ended, &begin), VK_SUCCESS);
   rig.lose();
   const std::uint32_t before = kmt_calls(rig.kmt());
-  const std::uint32_t logged = rig.rig().log().holding("on a lost device");
+  const std::uint32_t logged = rig.rig().log().holding("the context is lost");
   std::uint32_t count = 1u;
   VkPhysicalDevice physical = VK_NULL_HANDLE;
   const auto enumerate = rig.entry<EnumerateAdapter>("vk_icdEnumerateAdapterPhysicalDevices");
@@ -265,9 +266,9 @@ TEST(device_loss, local_entry_points_answer_lost_with_no_kmt_call)
   CHECK_EQ(rig.entry<DeviceWaitIdle>("vkDeviceWaitIdle")(rig.device()), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(rig.entry<DeviceWaitIdle>("vkDeviceWaitIdle")(idle), VK_ERROR_DEVICE_LOST);
   CHECK_EQ(kmt_calls(rig.kmt()), before);
-  CHECK_EQ(rig.rig().log().holding("on a lost device"), logged + 14u);
-  CHECK_EQ(rig.rig().log().holding("avvk: vkQueueWaitIdle on a lost device"), 1u);
-  CHECK_EQ(rig.rig().log().holding("avvk: vkDeviceWaitIdle on a lost device"), 1u);
+  CHECK_EQ(rig.rig().log().holding("the context is lost"), logged + 14u);
+  CHECK_EQ(rig.rig().log().holding("avvk: vkQueueWaitIdle: the context is lost"), 1u);
+  CHECK_EQ(rig.rig().log().holding("avvk: vkDeviceWaitIdle: the context is lost"), 1u);
   CHECK(rig.rig().root().invariants_hold()); }
 
 TEST(device_loss, the_memory_properties_of_a_lost_device_are_empty)
@@ -300,7 +301,7 @@ TEST(device_loss, a_memory_properties_query_the_host_faults_asks_no_budget)
   VkPhysicalDeviceMemoryProperties properties = {};
   properties.memoryTypeCount = 9u;
   rig.entry<MemoryProperties>("vkGetPhysicalDeviceMemoryProperties")(rig.physical(), &properties);
-  CHECK(rig.connection()->faulted());
+  CHECK(rig.connection()->lost());
   CHECK_EQ(properties.memoryTypeCount, 0u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::query_video_memory), budgets); }
 
@@ -403,7 +404,7 @@ TEST(device_loss, a_fault_while_the_types_are_learnt_is_lost)
   VkDeviceMemory memory = VK_NULL_HANDLE;
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_DEVICE_LOST);
   CHECK(memory == VK_NULL_HANDLE);
-  CHECK(rig.connection()->faulted());
+  CHECK(rig.connection()->lost());
   CHECK_EQ(rig.kmt().open_objects(), objects);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::query_video_memory), budgets);
   CHECK_EQ(rig.rig().log().holding("cannot be learnt"), 1u); }
@@ -417,7 +418,7 @@ TEST(device_loss, a_fault_while_importing_is_lost_and_the_chunk_goes_back)
   VkDeviceMemory memory = VK_NULL_HANDLE;
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_DEVICE_LOST);
   CHECK(memory == VK_NULL_HANDLE);
-  CHECK(rig.connection()->faulted());
+  CHECK(rig.connection()->lost());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes + 1u);
   CHECK_EQ(rig.kmt().window_chunks(), 1u);
   CHECK_EQ(rig.kmt().open_objects(), objects); }
@@ -425,10 +426,20 @@ TEST(device_loss, a_fault_while_importing_is_lost_and_the_chunk_goes_back)
 TEST(device_loss, an_import_refused_without_a_loss_is_out_of_device_memory)
 { LossRig rig;
   rig.host().vk_memory_properties(types, visible);
-  rig.host().blob_import(4u, 0u);
+  rig.host().blob_import(av::BlobImportAnswer::executor_refused, 0u);
   VkDeviceMemory memory = VK_NULL_HANDLE;
   CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_OUT_OF_DEVICE_MEMORY);
-  CHECK(!rig.connection()->faulted()); }
+  CHECK(!rig.connection()->lost()); }
+
+TEST(device_loss, an_import_the_host_has_no_room_for_is_out_of_host_memory)
+{ LossRig rig;
+  rig.host().vk_memory_properties(types, visible);
+  rig.host().blob_import(av::BlobImportAnswer::no_room, 0u);
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  CHECK_EQ(rig.allocate(page, 1u, memory), VK_ERROR_OUT_OF_HOST_MEMORY);
+  CHECK(memory == VK_NULL_HANDLE);
+  CHECK(!rig.connection()->lost());
+  CHECK(rig.rig().root().invariants_hold()); }
 
 TEST(device_loss, a_new_instance_opens_a_new_connection_that_works)
 { LossRig rig;
@@ -440,7 +451,7 @@ TEST(device_loss, a_new_instance_opens_a_new_connection_that_works)
   av::icd::Connection *const fresh = rig.rig().root().connection_of(instance, Kind::instance);
   CHECK(fresh != nullptr);
   CHECK(fresh != lost);
-  CHECK(!fresh->faulted());
+  CHECK(!fresh->lost());
   const VkPhysicalDevice physical = rig.rig().physical_device(instance);
   CHECK(physical != VK_NULL_HANDLE);
   VkDeviceCreateInfo info = {};
