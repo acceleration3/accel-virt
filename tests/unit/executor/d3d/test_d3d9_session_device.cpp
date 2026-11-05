@@ -8,6 +8,7 @@
 #include "executor/d3d/shared_surfaces.hpp"
 #include "proto/resources/surface_point.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "harness/executor/executor_log_rig.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -82,14 +83,15 @@ bool read(av::D3dLoopback &wire, std::uint32_t surface, Pixels &out)
 
 TEST(d3d9_session_device, a_cleared_render_target_reads_back_as_cleared)
 {
-    av::LoaderHostApis      apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice    *device11 = nullptr;
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
-    av::D3dBackend backend;
+    av::D3dBackend backend(rig.log);
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
-    av::D3dLoopback wire(backend);
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports);
 
     std::uint32_t hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
@@ -126,14 +128,15 @@ TEST(d3d9_session_device, a_cleared_render_target_reads_back_as_cleared)
 
 TEST(d3d9_session_device, another_devices_surface_is_refused_and_removes_the_device)
 {
-    av::LoaderHostApis      apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice    *device11 = nullptr;
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
-    av::D3dBackend backend;
+    av::D3dBackend backend(rig.log);
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
-    av::D3dLoopback wire(backend);
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports);
 
     std::uint32_t hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
@@ -160,14 +163,15 @@ TEST(d3d9_session_device, another_devices_surface_is_refused_and_removes_the_dev
 
 TEST(d3d9_session_device, a_surface_the_host_cannot_make_names_nothing)
 {
-    av::LoaderHostApis      apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice    *device11 = nullptr;
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
-    av::D3dBackend backend;
+    av::D3dBackend backend(rig.log);
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
-    av::D3dLoopback wire(backend);
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports);
 
     std::uint32_t hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
@@ -236,14 +240,15 @@ void make_target(av::D3dLoopback &wire)
 
 TEST(d3d9_session_device, a_shaded_triangle_lands_where_it_was_drawn)
 {
-    av::LoaderHostApis      apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice    *device11 = nullptr;
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
-    av::D3dBackend backend;
+    av::D3dBackend backend(rig.log);
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
-    av::D3dLoopback wire(backend);
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports);
     make_target(wire);
 
     const ClipVertex triangle[3] = {{-1.0f, 1.0f, 0.5f, 1.0f, green},
@@ -277,14 +282,15 @@ TEST(d3d9_session_device, a_shaded_triangle_lands_where_it_was_drawn)
 
 TEST(d3d9_session_device, a_pretransformed_triangle_needs_no_shader)
 {
-    av::LoaderHostApis      apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice    *device11 = nullptr;
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
-    av::D3dBackend backend;
+    av::D3dBackend backend(rig.log);
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
-    av::D3dLoopback wire(backend);
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports);
     make_target(wire);
 
     const float               edge = static_cast<float>(size);
@@ -308,14 +314,15 @@ TEST(d3d9_session_device, a_pretransformed_triangle_needs_no_shader)
 
 TEST(d3d9_session_device, a_texture_write_reads_back_where_it_was_written)
 {
-    av::LoaderHostApis      apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice    *device11 = nullptr;
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
-    av::D3dBackend backend;
+    av::D3dBackend backend(rig.log);
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
-    av::D3dLoopback wire(backend);
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports);
     std::uint32_t hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, draw_device, 0u, &hresult));
     CHECK_EQ(hresult, 0u);
@@ -356,14 +363,15 @@ TEST(d3d9_session_device, a_texture_write_reads_back_where_it_was_written)
 
 TEST(d3d9_session_device, a_surface_write_reads_back_where_it_was_written)
 {
-    av::LoaderHostApis      apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice    *device11 = nullptr;
     av::D3d9HostDevice     *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
-    av::D3dBackend backend;
+    av::D3dBackend backend(rig.log);
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device11, nullptr, nullptr, device9));
-    av::D3dLoopback wire(backend);
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports);
     std::uint32_t hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, draw_device, 0u, &hresult));
     CHECK_EQ(hresult, 0u);
@@ -401,7 +409,8 @@ TEST(d3d9_session_device, a_surface_write_reads_back_where_it_was_written)
 
 TEST(d3d9_session_device, a_present_point_stages_the_frame_the_commands_before_it_drew)
 {
-    av::LoaderHostApis   apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d9HostDevice  *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
@@ -409,10 +418,16 @@ TEST(d3d9_session_device, a_present_point_stages_the_frame_the_commands_before_i
     constexpr std::uint32_t format_r5g6b5 = 23u;
     av::HostHeap            surfaces_heap;
     av::SharedSurfaces      surfaces(surfaces_heap);
-    av::D3dBackend          backend;
-    av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device11, nullptr, &surfaces, device9));
-    av::D3dLoopback wire(backend);
+    av::D3dBackend          backend(rig.log);
+    av::HostShares *shares = nullptr;
+    for (std::uint32_t index = 0u; index < apis.gpu_count(); index++)
+        if (apis.d3d11_device(index) == device11) shares = apis.shares(index);
+    CHECK(shares != nullptr);
+    if (shares == nullptr) return;
+    av::SessionShares session;
+    session.bind(*shares, 1u, backend);
+    CHECK(backend.initialize(session, rig.imports, device11, nullptr, &surfaces, device9));
+    av::D3dLoopback wire(backend, rig.imports);
     std::uint32_t   hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
     CHECK(av_d3d9_CreateSurface9(wire, target, kind_render_target, size, size, format_a8r8g8b8, 0u, 0u, 0u));
@@ -460,20 +475,24 @@ TEST(d3d9_session_device, a_present_point_stages_the_frame_the_commands_before_i
     CHECK_EQ(hresult, 0u);
     CHECK_EQ(wire.refused(), 0u);
     CHECK(surfaces.invariants_hold());
+    backend.shut_down();
+    shares->release(1u, key);
+    device11->retire_shares();
 }
 
 TEST(d3d9_session_device, a_present_point_of_nothing_is_refused)
 {
-    av::LoaderHostApis   apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d9HostDevice  *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
     av::HostHeap       surfaces_heap;
     av::SharedSurfaces surfaces(surfaces_heap);
-    av::D3dBackend     backend;
+    av::D3dBackend     backend(rig.log);
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device11, nullptr, &surfaces, device9));
-    av::D3dLoopback wire(backend);
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, &surfaces, device9));
+    av::D3dLoopback wire(backend, rig.imports);
     std::uint32_t   hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
     CHECK(av_d3d9_PresentPoint9(wire, target, 0u, 0x9151u, 1u));
@@ -485,7 +504,8 @@ TEST(d3d9_session_device, a_present_point_of_nothing_is_refused)
 
 TEST(d3d9_session_device, a_flipped_primary_is_shared_under_its_key_as_it_was_drawn)
 {
-    av::LoaderHostApis   apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d9HostDevice  *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
@@ -494,11 +514,11 @@ TEST(d3d9_session_device, a_flipped_primary_is_shared_under_its_key_as_it_was_dr
     constexpr std::uint32_t domain = 1u, format_r5g6b5 = 23u;
     av::HostHeap       surfaces_heap;
     av::SharedSurfaces surfaces(surfaces_heap);
-    av::D3dBackend     backend;
+    av::D3dBackend     backend(rig.log);
     av::SessionShares  session;
     session.bind(*shares, domain, backend);
-    CHECK(backend.initialize(session, device11, nullptr, &surfaces, device9));
-    av::D3dLoopback wire(backend);
+    CHECK(backend.initialize(session, rig.imports, device11, nullptr, &surfaces, device9));
+    av::D3dLoopback wire(backend, rig.imports);
     std::uint32_t   hresult = 1u;
     CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
     CHECK(av_d3d9_CreateSurface9(wire, target, kind_render_target, size, size, format_a8r8g8b8, 0u, 0u, 0u));
@@ -536,7 +556,8 @@ TEST(d3d9_session_device, a_flipped_primary_is_shared_under_its_key_as_it_was_dr
 
 TEST(d3d9_session_device, a_flip_with_no_compositor_crosses_through_the_cpu)
 {
-    av::LoaderHostApis   apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d9HostDevice  *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
@@ -548,11 +569,11 @@ TEST(d3d9_session_device, a_flip_with_no_compositor_crosses_through_the_cpu)
     {
         av::HostHeap       surfaces_heap;
         av::SharedSurfaces surfaces(surfaces_heap);
-        av::D3dBackend     backend;
+        av::D3dBackend     backend(rig.log);
         av::SessionShares  session;
         session.bind(*shares, domain, backend);
-        CHECK(backend.initialize(session, device11, nullptr, &surfaces, device9));
-        av::D3dLoopback wire(backend);
+        CHECK(backend.initialize(session, rig.imports, device11, nullptr, &surfaces, device9));
+        av::D3dLoopback wire(backend, rig.imports);
         std::uint32_t   hresult = 1u;
         CHECK(av_d3d9_CreateDevice9(wire, device, 0u, &hresult));
         CHECK(av_d3d9_CreateSurface9(wire, target, kind_render_target, size, size, format_a8r8g8b8, 0u, 0u, 0u));
@@ -575,7 +596,8 @@ TEST(d3d9_session_device, a_flip_with_no_compositor_crosses_through_the_cpu)
 
 TEST(d3d9_session_device, each_flipping_device_has_a_lane_of_its_own_and_gives_it_back)
 {
-    av::LoaderHostApis   apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *device11 = nullptr;
     av::D3d9HostDevice  *device9 = nullptr;
     if (!host_devices(apis, device11, device9)) return;
@@ -585,12 +607,12 @@ TEST(d3d9_session_device, each_flipping_device_has_a_lane_of_its_own_and_gives_i
     {
         av::HostHeap       surfaces_heap;
         av::SharedSurfaces surfaces(surfaces_heap);
-        av::D3dBackend     backend;
+        av::D3dBackend     backend(rig.log);
         av::WatchedBlocksProbe::draw_from(av::D3dBackendProbe::blocks(backend), platform);
         av::SessionShares session;
         session.bind(*shares, domain, backend);
-        CHECK(backend.initialize(session, device11, nullptr, &surfaces, device9));
-        av::D3dLoopback wire(backend);
+        CHECK(backend.initialize(session, rig.imports, device11, nullptr, &surfaces, device9));
+        av::D3dLoopback wire(backend, rig.imports);
         std::uint32_t   hresult = 1u;
         std::uint32_t   shown[size * size] = {};
         const auto      shows = [&](std::uint32_t made, std::uint32_t drawn, std::uint64_t key, bool starved) {
