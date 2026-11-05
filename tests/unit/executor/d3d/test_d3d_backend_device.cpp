@@ -6,7 +6,9 @@
 #include "executor/host_memory_source.hpp"
 #include "executor/shim/d3d11_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "executor/sharing/d3d_shares.hpp"
 #include "executor/sharing/host_shares.hpp"
+#include "harness/executor/executor_log_rig.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
@@ -161,9 +163,9 @@ av::ObjectStorage<av::D3dBackend> first_backend, second_backend;
 
 class HeldBackend {
 public:
-    explicit HeldBackend(av::ObjectStorage<av::D3dBackend> &storage) : storage_(storage)
+    HeldBackend(av::ObjectStorage<av::D3dBackend> &storage, av::ExecutorLog &log) : storage_(storage)
     {
-        CHECK_STATUS(storage_.construct(), av::Status::ok);
+        CHECK_STATUS(storage_.construct(log), av::Status::ok);
     }
     ~HeldBackend() { storage_.destroy(); }
     HeldBackend(const HeldBackend &) = delete;
@@ -179,13 +181,14 @@ private:
 
 TEST(d3d_backend_device, a_triangle_drawn_from_ddi_shaders_reads_back_where_it_was_drawn)
 {
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
-    HeldBackend     held(first_backend);
+    HeldBackend     held(first_backend, rig.log);
     av::D3dBackend &backend = held.backend();
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device));
+    CHECK(backend.initialize(unshared, rig.imports, device));
     av::D3dLoopback wire(backend);
 
     std::uint32_t hresult = 1u, level = 0u;
@@ -236,13 +239,14 @@ void count_batch_wake(void *count)
 
 TEST(d3d_backend_device, a_batch_the_gpu_finishes_wakes_the_worker_instead_of_being_polled_for)
 {
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
-    HeldBackend     held(first_backend);
+    HeldBackend     held(first_backend, rig.log);
     av::D3dBackend &backend = held.backend();
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device));
+    CHECK(backend.initialize(unshared, rig.imports, device));
     batch_wakes = 0u;
     backend.bind_signal(&count_batch_wake, &batch_wakes);
     av::D3dLoopback wire(backend);
@@ -268,13 +272,14 @@ TEST(d3d_backend_device, a_batch_the_gpu_finishes_wakes_the_worker_instead_of_be
 
 TEST(d3d_backend_device, a_stream_output_with_no_shader_is_a_pass_through_geometry_shader)
 {
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
-    HeldBackend     held(first_backend);
+    HeldBackend     held(first_backend, rig.log);
     av::D3dBackend &backend = held.backend();
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device));
+    CHECK(backend.initialize(unshared, rig.imports, device));
     av::D3dLoopback wire(backend);
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
@@ -298,13 +303,14 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_is_a_pass_through_geomet
 
 TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_shader_wrote)
 {
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
-    HeldBackend     held(first_backend);
+    HeldBackend     held(first_backend, rig.log);
     av::D3dBackend &backend = held.backend();
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device));
+    CHECK(backend.initialize(unshared, rig.imports, device));
     av::D3dLoopback wire(backend);
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
@@ -353,18 +359,19 @@ TEST(d3d_backend_device, a_stream_output_with_no_shader_streams_what_the_vertex_
 
 TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_releases_it)
 {
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
     constexpr std::uint64_t key = 0x5100000000000007ull;
-    HeldBackend     held_creator(first_backend), held_opener(second_backend);
+    HeldBackend     held_creator(first_backend, rig.log), held_opener(second_backend, rig.log);
     av::D3dBackend &creator = held_creator.backend(), &opener = held_opener.backend();
     av::HostShares   &shares = shares_of(apis, device);
     av::SessionShares creator_shares, opener_shares;
     creator_shares.bind(shares, 1u, creator);
     opener_shares.bind(shares, 1u, opener);
-    CHECK(creator.initialize(creator_shares, device));
-    CHECK(opener.initialize(opener_shares, device));
+    CHECK(creator.initialize(creator_shares, rig.imports, device));
+    CHECK(opener.initialize(opener_shares, rig.imports, device));
     av::D3dLoopback made(creator), opening(opener);
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(made, 1u, 0u, 0u, &hresult, &level));
@@ -411,13 +418,14 @@ TEST(d3d_backend_device, a_shared_surface_outlives_its_creator_until_the_guest_r
 
 TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_state)
 {
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
-    HeldBackend     held(first_backend);
+    HeldBackend     held(first_backend, rig.log);
     av::D3dBackend &backend = held.backend();
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device));
+    CHECK(backend.initialize(unshared, rig.imports, device));
     av::D3dLoopback wire(backend);
 
     std::uint32_t hresult = 1u, level = 0u, removed = 1u;
@@ -481,16 +489,17 @@ TEST(d3d_backend_device, each_device_of_a_session_draws_with_its_own_pipeline_st
 
 TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it_drew)
 {
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
     constexpr std::uint64_t shown = 0x5150u;
     av::HostHeap            surfaces_heap;
     av::SharedSurfaces      surfaces(surfaces_heap);
-    HeldBackend             held(first_backend);
+    HeldBackend             held(first_backend, rig.log);
     av::D3dBackend         &backend = held.backend();
     av::SessionShares unshared;
-    CHECK(backend.initialize(unshared, device, nullptr, &surfaces));
+    CHECK(backend.initialize(unshared, rig.imports, device, nullptr, &surfaces));
     av::D3dLoopback wire(backend);
     std::uint32_t hresult = 1u, level = 0u, removed = 1u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
@@ -537,16 +546,17 @@ TEST(d3d_backend_device, a_present_point_stages_the_frame_the_commands_before_it
 
 TEST(d3d_backend_device, a_flip_of_a_shared_target_is_shown_through_its_copy)
 {
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
     constexpr std::uint64_t key = 0x5100000000000009ull;
-    HeldBackend       held(first_backend);
+    HeldBackend       held(first_backend, rig.log);
     av::D3dBackend   &backend = held.backend();
     av::HostShares   &shares = shares_of(apis, device);
     av::SessionShares session;
     session.bind(shares, 1u, backend);
-    CHECK(backend.initialize(session, device));
+    CHECK(backend.initialize(session, rig.imports, device));
     av::D3dLoopback wire(backend);
     std::uint32_t hresult = 1u, level = 0u, removed = 1u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
@@ -560,13 +570,14 @@ TEST(d3d_backend_device, a_flip_of_a_shared_target_is_shown_through_its_copy)
     target.sample_count = 1u;
     target.bind_flags = bind_render_target;
     CHECK(av_d3d_CreateResource(wire, 1u, target, key, 0u, 0u));
-    IUnknown *copy = shares.shown(1u, key);
+    av::D3dShares d3d_shares(shares);
+    IUnknown *copy = d3d_shares.shown(1u, key);
     CHECK(copy == nullptr);
     CHECK(av_d3d_PresentPoint(wire, 1u, 0u, 0u));
-    copy = shares.shown(1u, key);
+    copy = d3d_shares.shown(1u, key);
     CHECK(copy != nullptr);
     CHECK(av_d3d_PresentPoint(wire, 1u, 0u, 0u));
-    IUnknown *const again = shares.shown(1u, key);
+    IUnknown *const again = d3d_shares.shown(1u, key);
     CHECK(again == copy);
     if (again != nullptr) again->Release();
     if (copy != nullptr) copy->Release();
@@ -581,7 +592,8 @@ TEST(d3d_backend_device, a_flip_of_a_shared_target_is_shown_through_its_copy)
 
 TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the_guest)
 {
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
     av::HostMemorySource *source = nullptr;
@@ -590,11 +602,11 @@ TEST(d3d_backend_device, what_the_host_has_no_memory_for_is_out_of_memory_to_the
     constexpr std::uint32_t out_of_memory = 0x8007000Eu;
     av::MockPlatform platform;
     {
-        HeldBackend     held(first_backend);
+        HeldBackend     held(first_backend, rig.log);
         av::D3dBackend &backend = held.backend();
         av::WatchedBlocksProbe::draw_from(av::D3dBackendProbe::blocks(backend), platform);
         av::SessionShares unshared;
-        CHECK(backend.initialize(unshared, device));
+        CHECK(backend.initialize(unshared, rig.imports, device));
         constexpr std::size_t region_bytes = 16u * 4096u;
         av::D3dLoopback wire(backend, source, source != nullptr ? region_bytes : 0u);
 
