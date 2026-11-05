@@ -12,6 +12,7 @@ namespace av {
 
 class RoomedTransport : public ClientTransport {
 public:
+    WireWriter          request_writer_with_room(const std::uint64_t *sizes, std::uint32_t count) override;
     [[nodiscard]] bool make_room_for_blobs(const std::uint64_t *sizes, std::uint32_t count) override;
     ClientBlobLease     open_region(std::uint64_t bytes) override;
     void                close_region(const ClientBlobLease &region) override;

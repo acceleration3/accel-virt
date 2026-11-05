@@ -51,7 +51,7 @@ TEST(locked_transport, a_room_writer_given_up_lets_the_lock_go)
   CHECK(transport.invariants_hold());
   CHECK(std::strcmp(trace.text(), "Ss") == 0); }
 
-TEST(client_transport, a_transport_that_does_not_lock_asks_for_room_and_then_lends_the_writer)
+TEST(roomed_transport, a_transport_that_does_not_lock_asks_for_room_and_then_lends_the_writer)
 { MockTransport inner;
   const std::uint64_t sizes[1] = {4096u};
   WireWriter writer = inner.request_writer_with_room(sizes, 1u);

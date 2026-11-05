@@ -160,6 +160,13 @@ bool D3dCommandStream::room_for(size_t wanted)
     return true;
 }
 
+WireWriter D3dCommandStream::request_writer_with_room(const uint64_t *sizes, uint32_t count)
+{
+    AV_SCOPE("D3dCommandStream::request_writer_with_room");
+    static_cast<void>(make_room_for_blobs(sizes, count));
+    return request_writer();
+}
+
 bool D3dCommandStream::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
 {
     AV_SCOPE("D3dCommandStream::make_room_for_blobs");

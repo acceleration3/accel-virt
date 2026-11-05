@@ -17,6 +17,13 @@ WireWriter D3dDeviceSelection::request_writer()
     return stream_.request_writer();
 }
 
+WireWriter D3dDeviceSelection::request_writer_with_room(const uint64_t *sizes, uint32_t count)
+{
+    AV_SCOPE("D3dDeviceSelection::request_writer_with_room");
+    static_cast<void>(stream_.make_room_for_blobs(sizes, count));
+    return request_writer();
+}
+
 TransportResult D3dDeviceSelection::send_async(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("D3dDeviceSelection::send_async");

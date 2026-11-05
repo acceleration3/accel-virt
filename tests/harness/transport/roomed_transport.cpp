@@ -16,6 +16,12 @@ std::uint32_t RoomedTransport::last_room_blobs() const { return last_room_blobs_
 std::uint64_t RoomedTransport::last_room_bytes() const { return last_room_bytes_; }
 std::uint32_t RoomedTransport::room_asked_at() const { return room_asked_at_; }
 
+WireWriter RoomedTransport::request_writer_with_room(const std::uint64_t *sizes, std::uint32_t count)
+{
+    static_cast<void>(make_room_for_blobs(sizes, count));
+    return request_writer();
+}
+
 bool RoomedTransport::make_room_for_blobs(const std::uint64_t *sizes, std::uint32_t count)
 {
     room_requests_++;

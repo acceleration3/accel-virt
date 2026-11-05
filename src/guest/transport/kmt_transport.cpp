@@ -864,6 +864,13 @@ void KmtTransport::note(ChannelCounter counter, uint64_t amount)
     stats_.note(counter, amount);
 }
 
+WireWriter KmtTransport::request_writer_with_room(const uint64_t *sizes, uint32_t count)
+{
+    AV_SCOPE("KmtTransport::request_writer_with_room");
+    static_cast<void>(make_room_for_blobs(sizes, count));
+    return request_writer();
+}
+
 TransportResult KmtTransport::send_async(uint32_t command_id, WireWriter &writer)
 {
     AV_SCOPE("KmtTransport::send_async");

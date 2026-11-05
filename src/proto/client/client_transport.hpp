@@ -26,7 +26,7 @@ public:
     ClientTransport &operator=(const ClientTransport &) = delete;
 
     virtual WireWriter request_writer() = 0;
-    virtual WireWriter request_writer_with_room(const uint64_t *sizes, uint32_t count);
+    virtual WireWriter request_writer_with_room(const uint64_t *sizes, uint32_t count) = 0;
     [[nodiscard]] virtual TransportResult send_async(uint32_t command_id, WireWriter &writer) = 0;
     [[nodiscard]] virtual TransportResult send_sync(uint32_t command_id, WireWriter &writer,
                                                     WireReader &reply) = 0;

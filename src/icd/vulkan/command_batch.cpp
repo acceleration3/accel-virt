@@ -157,6 +157,13 @@ ClientBlobArena &CommandBatch::blobs()
     return blobs_;
 }
 
+WireWriter CommandBatch::request_writer_with_room(const uint64_t *sizes, uint32_t count)
+{
+    AV_SCOPE("CommandBatch::request_writer_with_room");
+    static_cast<void>(make_room_for_blobs(sizes, count));
+    return request_writer();
+}
+
 bool CommandBatch::make_room_for_blobs(const uint64_t *, uint32_t)
 {
     AV_SCOPE("CommandBatch::make_room_for_blobs");
