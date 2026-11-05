@@ -74,21 +74,21 @@ class Emitted(unittest.TestCase):
     def test_the_server_resolves_a_lent_parameter_and_refuses_one_outside_the_arena(self):
         write = function_body(self.server, "clLentWrite")
         self.assertIn("if (wire_present == 2) {", write)
-        self.assertIn("void* wire_bytes = s.lent_for(wire_offset, wire_count);", write)
+        self.assertIn("void* wire_bytes = s.guest_bytes(wire_offset, wire_count);", write)
         self.assertIn("if (wire_bytes == nullptr) return false;", write)
         read = function_body(self.server, "clLentRead")
-        self.assertIn("ptr_lent = s.lent_for(wire_offset, static_cast<uint64_t>(ptr_capacity));", read)
+        self.assertIn("ptr_lent = s.guest_bytes(wire_offset, static_cast<uint64_t>(ptr_capacity));", read)
         self.assertIn("if (ptr_lent == nullptr) return false;", read)
         self.assertIn("if (wire_written != 0 && ptr_lent == nullptr) reply.write(ptr,", read)
 
     def test_bytes_not_lent_cross_as_they_always_have(self):
         for name in ("clSentRead", "clSentWrite"):
             self.assertNotIn("holds(", function_body(self.client, name), name)
-            self.assertNotIn("lent_for(", function_body(self.server, name), name)
+            self.assertNotIn("guest_bytes(", function_body(self.server, name), name)
         self.assertIn("if (wire_written != 0) reply.write(ptr,", function_body(self.server, "clSentRead"))
 
-    def test_lent_for_is_on_the_server_interface(self):
-        self.assertIn("virtual void* lent_for(uint64_t offset, uint64_t bytes) const = 0;", self.server_header)
+    def test_guest_bytes_is_on_the_server_interface(self):
+        self.assertIn("uint8_t* guest_bytes(uint64_t offset, uint64_t bytes) const;", self.server_header)
 
 
 class LoweredFromTheRegistry(unittest.TestCase):

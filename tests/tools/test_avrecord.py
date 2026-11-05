@@ -102,7 +102,7 @@ class AvRecord(unittest.TestCase):
             self.skipTest(f"{ECHO} is not built")
         setup_only = self.scratch / "setup.av"
         whole = (CORPUS / "one-of-each").read_bytes()
-        setup_only.write_bytes(whole[:128])
+        setup_only.write_bytes(whole[:144])
         answered = run(TOOL, "replay", setup_only, "--executor", ECHO)
         self.assertEqual(answered.returncode, 0, answered.stdout + answered.stderr)
         self.assertIn("replay: 1 contexts, 0 commands, 0 differences", answered.stdout)

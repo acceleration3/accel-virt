@@ -106,7 +106,7 @@ class KernelPlatformLinks(unittest.TestCase):
                      "src/core/platform/mutex_guard.cpp", "src/core/platform/lock_marks.cpp",
                      "src/core/trace/function_scope.cpp", "src/core/trace/scope_binding.cpp",
                      "src/core/trace/trace_table.cpp", "src/core/trace/trace_layout.cpp",
-                     "src/core/support/byte_range.cpp",
+                     "src/core/support/byte_range.cpp", "src/core/support/fnv1a_digest.cpp",
                      "src/core/trace/event_ring.cpp", "src/core/trace/event_ring_layout.cpp",
                      "src/proto/resources/guest_page_list.cpp",
                      "src/proto/wire/wire_writer.cpp"),
