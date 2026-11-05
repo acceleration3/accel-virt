@@ -1,6 +1,9 @@
+#include "core/log/driver_log.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
+#include "executor/executor_log.hpp"
 #include "executor/executor_root.hpp"
+#include "executor/sharing/d3d_shares.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "proto/resources/surface_point.hpp"
@@ -14,6 +17,7 @@
 #include "harness/executor/host_gpu_set_probe.hpp"
 #include "harness/executor/mock_session_backend.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
 #include "proto/generated/opengl/gl_protocol_ids.h"
 
 #include <cstdint>
@@ -67,6 +71,16 @@ public:
     ULONG STDMETHODCALLTYPE Release() override { return --references; }
 
     ULONG references = 1u;
+};
+
+class QuietLog {
+public:
+    QuietLog() : sink_(), lines_(sink_, "t: ") {}
+    av::DriverLog &lines() { return lines_; }
+
+private:
+    av::RecordingLog sink_;
+    av::DriverLog    lines_;
 };
 
 }
@@ -194,22 +208,23 @@ TEST(executor_root, a_shared_release_reaches_only_the_named_domain)
   const std::uint32_t on_intel = held.domain_of(intel);
   const std::uint32_t on_nvidia = held.domain_of(nvidia);
   HostShares        &shares = *apis.shares(0u);
+  av::D3dShares      d3d(shares);
   MockSessionBackend publisher;
-  CHECK_STATUS(shares.publish_resource(on_intel, 7u, &surface, ShareOrigin::d3d11, publisher), Status::ok);
+  CHECK_STATUS(d3d.publish_resource(on_intel, 7u, &surface, ShareOrigin::d3d11, publisher), Status::ok);
   root.release_shared(on_nvidia, 7u);
   root.release_shared(on_intel + 100u, 7u);
   CHECK_EQ(shares.live(), 1u);
   root.release_shared(on_intel, 7u);
   CHECK_EQ(shares.live(), 0u);
-  CHECK_STATUS(shares.publish_resource(on_intel, 8u, &surface, ShareOrigin::d3d11, publisher), Status::ok);
-  CHECK_STATUS(shares.publish_resource(on_intel, 9u, &other, ShareOrigin::d3d11, publisher), Status::ok);
-  CHECK_STATUS(shares.publish_resource(on_nvidia, 8u, &elsewhere, ShareOrigin::d3d11, publisher), Status::ok);
+  CHECK_STATUS(d3d.publish_resource(on_intel, 8u, &surface, ShareOrigin::d3d11, publisher), Status::ok);
+  CHECK_STATUS(d3d.publish_resource(on_intel, 9u, &other, ShareOrigin::d3d11, publisher), Status::ok);
+  CHECK_STATUS(d3d.publish_resource(on_nvidia, 8u, &elsewhere, ShareOrigin::d3d11, publisher), Status::ok);
   root.release_shared(on_intel, 0u);
   CHECK_EQ(shares.live(), 1u);
   root.close_domain(on_nvidia);
   CHECK_EQ(shares.live(), 0u);
   IUnknown *objects[4] = {};
-  for (std::uint32_t taken = shares.take_retired(objects, 4u); taken != 0u; taken = shares.take_retired(objects, 4u))
+  for (std::uint32_t taken = d3d.take_retired(objects, 4u); taken != 0u; taken = d3d.take_retired(objects, 4u))
       for (std::uint32_t index = 0u; index < taken; index++) objects[index]->Release();
   CHECK_EQ(surface.references, 1u);
   CHECK_EQ(other.references, 1u);
@@ -233,7 +248,7 @@ TEST(executor_root, a_surface_is_exported_only_through_the_domain_s_device)
   const std::uint32_t on_intel = held.domain_of(intel);
   const std::uint32_t on_nvidia = held.domain_of(nvidia);
   MockSessionBackend  publisher;
-  CHECK_STATUS(apis.shares(0u)->publish_resource(on_intel, 7u, &surface, ShareOrigin::d3d11, publisher),
+  CHECK_STATUS(av::D3dShares(*apis.shares(0u)).publish_resource(on_intel, 7u, &surface, ShareOrigin::d3d11, publisher),
                Status::ok);
   CHECK(!root.export_surface(on_intel + 100u, 7u, 0u, image));
   CHECK(!root.export_surface(on_nvidia, 7u, 0u, image));
@@ -253,7 +268,7 @@ TEST(executor_root, a_surface_is_exported_only_through_the_domain_s_device)
   CHECK_EQ(writes, 0u);
   apis.shares(0u)->clear();
   IUnknown *objects[1] = {};
-  while (apis.shares(0u)->take_retired(objects, 1u) != 0u) objects[0]->Release();
+  while (av::D3dShares(*apis.shares(0u)).take_retired(objects, 1u) != 0u) objects[0]->Release();
   CHECK_EQ(surface.references, 1u);
   CHECK(root.invariants_hold()); }
 
@@ -291,7 +306,7 @@ TEST(executor_root_memory, a_session_on_a_gpu_with_no_source_opens_and_imports_n
   CHECK(session != nullptr);
   if (session == nullptr) return;
   CHECK_EQ(session->import_blob(1u, 1u), std::uint32_t{AV_UNDECODABLE});
-  CHECK_EQ(session->imports(), 0u);
+  CHECK_EQ(session->imports().count(), 0u);
   root.close(session);
   CHECK(root.invariants_hold()); }
 
@@ -390,7 +405,8 @@ TEST(executor_root_open, a_closed_session_s_slot_comes_back)
 
 TEST(executor_root_open, a_session_it_never_handed_out_is_not_closed)
 { Opened opened;
-  ContextSession stranger;
+  QuietLog        quiet;
+  ContextSession  stranger(quiet.lines());
   opened.root().close(&stranger);
   opened.root().close(nullptr);
   CHECK_EQ(opened.root().live(), 0u); }
@@ -410,12 +426,13 @@ TEST(executor_root_open, a_session_s_imported_handle_is_answered_through_the_roo
 
   CHECK_EQ(opened.root().imported_handle(session, 9u), 0u);
   CHECK_EQ(session->import_blob(9u, 0x30u), std::uint32_t{AV_EXECUTED});
-  CHECK_EQ(opened.root().imported_handle(session, 9u), 9u + MockSessionBackend::wire_offset);
+  CHECK_EQ(opened.root().imported_handle(session, 9u), 1u + MockSessionBackend::wire_offset);
   CHECK_EQ(opened.root().imported_handle(session, 10u), 0u);
 
   static std::uint8_t stranger_block[4096];
   MockSessionBackend stranger_backend;
-  ContextSession stranger;
+  QuietLog        quiet;
+  ContextSession  stranger(quiet.lines());
   CHECK_STATUS(stranger.initialize(stranger_backend, stranger_block, sizeof stranger_block), Status::ok);
   stranger.draw_from(opened.apis().source(), domain);
   CHECK_EQ(stranger.import_blob(9u, 0x30u), std::uint32_t{AV_EXECUTED});
@@ -469,7 +486,9 @@ TEST(executor_root_open, an_opengl_context_that_will_not_open_gives_the_slot_bac
   CHECK(root.invariants_hold()); }
 
 TEST(executor_root_open, contexts_on_a_real_gpu_are_sessions_that_close_alone)
-{ av::LoaderHostApis host;
+{ av::RecordingLog   sink;
+  av::ExecutorLog    log(sink);
+  av::LoaderHostApis host(log);
   host.open();
   RootUnderTest held;
   ExecutorRoot &root = *held;
@@ -512,14 +531,17 @@ TEST(executor_root_open, options_or_a_share_for_another_api_get_no_session)
   CHECK(vulkan != nullptr);
   CHECK(opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel, nullptr, vulkan) == nullptr);
   CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENGL, intel, nullptr, vulkan) == nullptr);
-  ContextSession stranger;
+  QuietLog        quiet;
+  ContextSession  stranger(quiet.lines());
   CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENGL, intel, nullptr, &stranger) == nullptr);
   opened.root().close(vulkan);
   CHECK(opened.held().open(AV_EXECUTOR_SUB_API_OPENGL, intel, nullptr, vulkan) == nullptr);
   CHECK_EQ(opened.root().live(), 0u); }
 
 TEST(executor_root_open, an_opengl_session_shares_one_on_its_own_gpu)
-{ av::LoaderHostApis host;
+{ av::RecordingLog   sink;
+  av::ExecutorLog    log(sink);
+  av::LoaderHostApis host(log);
   host.open();
   RootUnderTest held;
   ExecutorRoot &root = *held;
@@ -550,7 +572,8 @@ TEST(executor_root_open, an_opengl_session_shares_one_on_its_own_gpu)
 TEST(executor_root_open, a_signal_for_a_session_this_root_never_made_binds_nothing)
 { Opened opened;
   CHECK_STATUS(opened.status(), Status::ok);
-  ContextSession stranger;
+  QuietLog        quiet;
+  ContextSession  stranger(quiet.lines());
   opened.root().set_signal(&stranger, nullptr, nullptr);
   CHECK_EQ(opened.root().live(), 0u);
   CHECK(opened.root().invariants_hold()); }
@@ -558,7 +581,8 @@ TEST(executor_root_open, a_signal_for_a_session_this_root_never_made_binds_nothi
 TEST(executor_root_lose_device, only_a_session_with_a_host_device_this_root_made_loses_one)
 { Opened opened;
   CHECK_STATUS(opened.status(), Status::ok);
-  ContextSession stranger;
+  QuietLog        quiet;
+  ContextSession  stranger(quiet.lines());
   CHECK_EQ(opened.root().lose_device(nullptr), std::uint32_t{AV_UNKNOWN});
   CHECK_EQ(opened.root().lose_device(&stranger), std::uint32_t{AV_UNKNOWN});
   ContextSession *const session = opened.held().open(AV_EXECUTOR_SUB_API_VULKAN, intel);
@@ -585,33 +609,34 @@ TEST(executor_root, the_shared_object_calls_reach_the_domain_as_the_session_that
   CHECK_EQ(root.share_object(maker, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_DONE});
   CHECK_EQ(root.share_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x41u), std::uint32_t{AV_SHARED_CONFLICT});
   std::uint64_t made = 9u;
-  CHECK_EQ(root.open_object(reader, 0x2Bu, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_UNKNOWN});
+  CHECK_EQ(root.open_object(reader, 0x2Bu, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_UNKNOWN});
   CHECK_EQ(made, 0u);
-  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 8192u, made), std::uint32_t{AV_SHARED_MISMATCHED});
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 8192u, 0u, made), std::uint32_t{AV_SHARED_MISMATCHED});
   reader_backend.set_shares(false);
-  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_REFUSED});
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_REFUSED});
   reader_backend.set_shares(true);
-  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_DONE});
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_DONE});
   CHECK(made != 0u);
-  root.close_object(reader, 0x2Au);
+  root.close_object(reader, 0x2Au, made);
   CHECK_EQ(reader_backend.released_objects(), 1u);
 
   static std::uint8_t stranger_block[4096];
   MockSessionBackend  stranger_backend;
-  ContextSession      stranger;
+  QuietLog        quiet;
+  ContextSession  stranger(quiet.lines());
   CHECK_STATUS(stranger.initialize(stranger_backend, stranger_block, sizeof stranger_block), Status::ok);
   CHECK_EQ(root.share_object(&stranger, 0x2Cu, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_REFUSED});
   CHECK_EQ(root.share_object(nullptr, 0x2Cu, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_REFUSED});
-  CHECK_EQ(root.open_object(&stranger, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_REFUSED});
-  CHECK_EQ(root.open_object(nullptr, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_REFUSED});
-  root.close_object(&stranger, 0x2Au);
-  root.close_object(nullptr, 0x2Au);
+  CHECK_EQ(root.open_object(&stranger, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_REFUSED});
+  CHECK_EQ(root.open_object(nullptr, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_REFUSED});
+  root.close_object(&stranger, 0x2Au, made);
+  root.close_object(nullptr, 0x2Au, made);
   CHECK_EQ(stranger_backend.released_objects(), 0u);
 
   std::size_t answer = 0u;
   CHECK_EQ(reader->execute(MockSessionBackend::lose_id, nullptr, 0u, nullptr, 0u, answer),
            std::uint32_t{AV_DEVICE_LOST});
-  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_REFUSED});
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_REFUSED});
   CHECK_EQ(root.share_object(reader, 0x2Du, AV_SHARED_MEMORY, 4096u, 0x41u), std::uint32_t{AV_SHARED_REFUSED});
   stranger.release();
   probe.shares_at(1u).end();
@@ -636,7 +661,7 @@ TEST(executor_root, closing_a_session_shuts_down_the_backend_it_ran_after_its_sh
   probe.remember(1u, AV_EXECUTOR_SUB_API_OPENCL, 0u);
   CHECK_EQ(root.share_object(maker, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_DONE});
   std::uint64_t made = 0u;
-  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, made), std::uint32_t{AV_SHARED_DONE});
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0u, made), std::uint32_t{AV_SHARED_DONE});
 
   root.close(reader);
   CHECK_EQ(reader_backend.shut_downs(), 1u);
@@ -651,3 +676,38 @@ TEST(executor_root, closing_a_session_shuts_down_the_backend_it_ran_after_its_sh
   root.close(maker);
   CHECK_EQ(maker_backend.shut_downs(), 1u);
   CHECK(root.invariants_hold()); }
+
+TEST(executor_root, an_object_is_opened_into_what_the_session_names_and_closed_by_that_handle)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t maker_block[4096], reader_block[4096];
+  MockSessionBackend  maker_backend, reader_backend;
+  ContextSession *const maker = &probe.session_at(0u);
+  ContextSession *const reader = &probe.session_at(1u);
+  CHECK_STATUS(maker->initialize(maker_backend, maker_block, sizeof maker_block), Status::ok);
+  CHECK_STATUS(reader->initialize(reader_backend, reader_block, sizeof reader_block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, maker_backend);
+  probe.shares_at(1u).bind(*opened.apis().shares(0u), domain, reader_backend);
+  CHECK_EQ(root.share_object(maker, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x40u), std::uint32_t{AV_SHARED_DONE});
+  std::uint64_t device = 0u;
+  std::uint64_t semaphore = 0u;
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x7001u, device), std::uint32_t{AV_SHARED_DONE});
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x7002u, semaphore),
+           std::uint32_t{AV_SHARED_DONE});
+  CHECK_EQ(device, 0x7001u);
+  CHECK_EQ(semaphore, 0x7002u);
+  std::uint64_t again = 9u;
+  CHECK_EQ(root.open_object(reader, 0x2Au, AV_SHARED_MEMORY, 4096u, 0x7001u, again), std::uint32_t{AV_SHARED_CONFLICT});
+  CHECK_EQ(again, 0u);
+  root.close_object(reader, 0x2Au, 0x7003u);
+  CHECK_EQ(reader_backend.released_objects(), 0u);
+  root.close_object(reader, 0x2Au, 0x7002u);
+  CHECK_EQ(reader_backend.released_objects(), 1u);
+  root.close_object(reader, 0x2Au, 0x7001u);
+  CHECK_EQ(reader_backend.released_objects(), 2u);
+  probe.shares_at(1u).end();
+  probe.shares_at(0u).end();
+  reader->release();
+  maker->release(); }
