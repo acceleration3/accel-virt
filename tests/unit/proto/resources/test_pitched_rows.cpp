@@ -1,10 +1,10 @@
 #include "harness/framework/test_registry.hpp"
-#include "icd/d3d/pitched_rows.hpp"
+#include "proto/resources/pitched_rows.hpp"
 
 #include <cstdint>
 #include <cstring>
 
-using av::d3d::PitchedRows;
+using av::PitchedRows;
 
 TEST(pitched_rows, each_row_takes_the_narrower_pitch)
 { std::uint8_t from_bytes[12] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
@@ -23,7 +23,7 @@ TEST(pitched_rows, stops_where_the_source_or_the_count_ends)
   CHECK_EQ(into.copy_from(from, 9u), 2u);
   CHECK_EQ(into_bytes[8], 0u);
   CHECK_EQ(into.copy_from(from, 1u), 1u);
-  PitchedRows nothing(nullptr, 4u, 64u);
+  PitchedRows nothing(static_cast<const std::uint8_t *>(nullptr), 4u, 64u);
   CHECK_EQ(into.copy_from(nothing, 4u), 0u);
   PitchedRows flat(from_bytes, 0u, sizeof from_bytes);
   CHECK_EQ(into.copy_from(flat, 4u), 0u); }

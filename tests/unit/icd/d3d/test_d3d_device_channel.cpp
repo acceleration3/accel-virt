@@ -57,6 +57,7 @@ constexpr std::uint8_t  ring_order = 20u;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::size_t   block_bytes = D3dCommandStream::command_room + 4096u;
+constexpr std::size_t   lent_room = 4096u;
 constexpr std::uint32_t device_a = 3u;
 constexpr std::uint32_t device_b = 5u;
 
@@ -141,9 +142,13 @@ TEST(d3d_device_channel, the_lock_is_held_for_each_call_and_no_longer)
   CHECK(!fixture.lock().held());
   CHECK(av_d3d_Draw(fixture.b(), 3u, 0u));
   CHECK_STATUS(fixture.b().flush(), Status::ok);
-  CHECK(fixture.b().make_room_for(av::d3d::D3dCommandStream::inline_data));
+  const std::uint64_t none = 0u;
+  CHECK(fixture.b().make_room_for_blobs(&none, 1u));
+  CHECK(std::strcmp(fixture.trace().text(), "PpPpPp") == 0);
+  const std::uint64_t past_staging = fixture.transport().room().inline_write() + 1u;
+  CHECK(!fixture.b().make_room_for_blobs(&past_staging, 1u));
   CHECK(!fixture.lock().held());
-  CHECK(std::strcmp(fixture.trace().text(), "PpPpPp") == 0); }
+  CHECK(std::strcmp(fixture.trace().text(), "PpPpPpPp") == 0); }
 
 TEST(d3d_device_channel, a_synchronous_call_keeps_the_lock_until_it_ends)
 { Fixture fixture;
@@ -160,7 +165,7 @@ TEST(d3d_device_channel, a_synchronous_call_keeps_the_lock_until_it_ends)
 
 TEST(d3d_device_channel, room_held_commands_hold_comes_back_once_they_are_sent_and_run)
 { Fixture fixture;
-  alignas(64) static std::uint8_t block[2u * av::d3d::D3dCommandStream::inline_data];
+  alignas(64) static std::uint8_t block[2u * lent_room];
   static std::uint8_t             upload[sizeof block];
   av::ClientBlobArena &arena = fixture.transport().blobs();
   arena.lend(block, sizeof block);
@@ -168,26 +173,27 @@ TEST(d3d_device_channel, room_held_commands_hold_comes_back_once_they_are_sent_a
   CHECK(av_d3d_UpdateSubresource(fixture.a(), 1u, 0u, 0u, whole, 0u, 0u, 0u, upload, sizeof upload));
   CHECK_EQ(arena.room(), 0u);
   CHECK_EQ(fixture.kmt().commands(), 0u);
-  const std::size_t past_inline = av::d3d::D3dCommandStream::inline_data + 1u;
-  CHECK(fixture.a().make_room_for(past_inline));
-  CHECK(arena.room() >= past_inline);
+  const std::uint64_t past_lent = lent_room + 1u;
+  CHECK(fixture.a().make_room_for_blobs(&past_lent, 1u));
+  CHECK(arena.room() >= past_lent);
   std::uint32_t ids[4] = {}, selected[4] = {};
-  CHECK_EQ(fixture.shipped(ids, selected, 4u), 2u);
+  CHECK_EQ(fixture.shipped(ids, selected, 4u), 3u);
   CHECK_EQ(ids[1], kCmd_UpdateSubresource);
+  CHECK_EQ(ids[2], av::CommandHeader::channel_stats_id);
   CHECK(!fixture.lock().held()); }
 
 TEST(d3d_device_channel, room_a_sent_batch_holds_comes_back_without_a_finish)
 { Fixture fixture;
-  alignas(64) static std::uint8_t block[2u * av::d3d::D3dCommandStream::inline_data];
+  alignas(64) static std::uint8_t block[2u * lent_room];
   av::ClientBlobArena &arena = fixture.transport().blobs();
   arena.lend(block, sizeof block);
   CHECK(arena.take(arena.room()).taken());
   CHECK(av_d3d_Draw(fixture.a(), 3u, 0u));
   CHECK_STATUS(fixture.a().flush(), Status::ok);
   const std::uint32_t sent = fixture.kmt().commands();
-  const std::size_t past_inline = av::d3d::D3dCommandStream::inline_data + 1u;
-  CHECK(fixture.a().make_room_for(past_inline));
-  CHECK(arena.room() >= past_inline);
+  const std::uint64_t past_lent = lent_room + 1u;
+  CHECK(fixture.a().make_room_for_blobs(&past_lent, 1u));
+  CHECK(arena.room() >= past_lent);
   CHECK_EQ(fixture.kmt().commands(), sent);
   CHECK(!fixture.lock().held()); }
 

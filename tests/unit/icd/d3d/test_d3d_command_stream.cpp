@@ -43,6 +43,31 @@ constexpr std::size_t   staging_bytes = 1024u;
 constexpr std::size_t   block_bytes = D3dCommandStream::command_room + 4096u;
 constexpr std::uint32_t refused = 0xC0000001u;
 
+class Shipped {
+public:
+    explicit Shipped(const MockKmt &kmt) : kmt_(kmt) {}
+
+    std::uint32_t count() const
+    {
+        std::uint32_t counted = 0u;
+        for (std::uint32_t index = 0u; index < kmt_.commands(); index++)
+            if (kmt_.command_id(index) != CommandHeader::channel_stats_id) counted++;
+        return counted;
+    }
+
+    std::uint32_t id(std::uint32_t counted) const
+    {
+        for (std::uint32_t index = 0u; index < kmt_.commands(); index++) {
+            if (kmt_.command_id(index) == CommandHeader::channel_stats_id) continue;
+            if (counted-- == 0u) return kmt_.command_id(index);
+        }
+        return 0u;
+    }
+
+private:
+    const MockKmt &kmt_;
+};
+
 class Fixture {
 public:
     Fixture()
@@ -63,7 +88,8 @@ public:
     KmtTransport     &transport() { return transport_; }
     D3dCommandStream &stream() { return stream_; }
     std::uint32_t     submits() { return kmt_.calls(MockKmt::Call::submit); }
-    std::uint32_t     id(std::uint32_t index) { return kmt_.command_id(index); }
+    std::uint32_t     commands() { return Shipped(kmt_).count(); }
+    std::uint32_t     id(std::uint32_t index) { return Shipped(kmt_).id(index); }
 
 private:
     MockKmt          kmt_;
@@ -106,14 +132,14 @@ TEST(d3d_command_stream, an_application_flush_asks_the_host_once_and_sends_the_b
   const std::uint64_t drawn = fixture.stream().recorded_total();
   CHECK(drawn != 0u);
   CHECK_STATUS(fixture.stream().application_flush(), Status::ok);
-  CHECK_EQ(fixture.kmt().commands(), 2u);
+  CHECK_EQ(fixture.commands(), 2u);
   CHECK_EQ(fixture.id(0u), kCmd_Draw);
   CHECK_EQ(fixture.id(1u), kCmd_Flush11);
   CHECK(fixture.stream().recorded_total() > drawn);
   CHECK_EQ(fixture.stream().recorded_bytes(), 0u);
   const std::uint32_t submits = fixture.submits();
   CHECK_STATUS(fixture.stream().application_flush(), Status::ok);
-  CHECK_EQ(fixture.kmt().commands(), 2u);
+  CHECK_EQ(fixture.commands(), 2u);
   CHECK_EQ(fixture.submits(), submits);
   CHECK(fixture.stream().invariants_hold()); }
 
@@ -183,7 +209,7 @@ TEST(d3d_command_stream, a_recording_is_kept_and_taken_out_whole)
   CHECK(av_d3d_Draw(fixture.stream(), 6u, 0u));
   CHECK_STATUS(fixture.stream().flush(), Status::ok);
   CHECK_EQ(fixture.submits(), 0u);
-  CHECK_EQ(fixture.kmt().commands(), 0u);
+  CHECK_EQ(fixture.commands(), 0u);
   std::uint32_t removed = 0u;
   CHECK(!av_d3d_Finish11(fixture.stream(), &removed));
   const std::size_t recorded = fixture.stream().recorded_bytes();
@@ -275,8 +301,10 @@ TEST(d3d_command_stream, a_recorded_command_whose_data_does_not_fit_leaves_the_r
 { Fixture fixture;
   Recorded recorded(block_bytes);
   fixture.stream().record(recorded.recording());
-  CHECK(fixture.stream().make_room_for(D3dCommandStream::recorded_data));
-  CHECK(!fixture.stream().make_room_for(D3dCommandStream::recorded_data + 1u));
+  const std::uint64_t fits = D3dCommandStream::recorded_data;
+  const std::uint64_t over = D3dCommandStream::recorded_data + 1u;
+  CHECK(fixture.stream().make_room_for_blobs(&fits, 1u));
+  CHECK(!fixture.stream().make_room_for_blobs(&over, 1u));
   CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
   static std::uint8_t data[D3dCommandStream::command_room];
   const Box box{};
@@ -306,7 +334,7 @@ TEST(d3d_command_stream, recorded_commands_join_the_stream_a_block_of_whole_comm
   CHECK_EQ(fixture.stream().recorded_total(), before + small);
   CHECK_EQ(fixture.submits(), 0u);
   CHECK_STATUS(fixture.stream().flush(), Status::ok);
-  CHECK_EQ(fixture.kmt().commands(), 2u);
+  CHECK_EQ(fixture.commands(), 2u);
   CHECK_EQ(fixture.id(1u), kCmd_Draw);
 
   constexpr std::size_t draw = CommandHeader::encoded_size + 8u;
@@ -373,7 +401,7 @@ TEST(d3d_command_stream, a_device_is_selected_only_when_the_speaker_changes)
   CHECK_STATUS(fixture.stream().flush(), Status::ok);
   CHECK_EQ(fixture.id(0u), kCmd_SelectDevice11);
   CHECK_EQ(fixture.id(1u), kCmd_SelectDevice11);
-  CHECK_EQ(fixture.kmt().commands(), 2u); }
+  CHECK_EQ(fixture.commands(), 2u); }
 
 TEST(d3d_command_stream, a_refused_batch_fails_everything_after_it)
 { Fixture fixture;
@@ -422,9 +450,10 @@ TEST(d3d_command_stream, a_command_longer_than_its_room_is_sent_in_pieces)
     CHECK(writer.spilled());
     CHECK(stream.send_async(kCmd_Draw, writer) == TransportResult::ok);
     CHECK_STATUS(stream.flush(), Status::ok);
-    const std::uint32_t last = kmt.commands() - 1u;
-    CHECK_EQ(kmt.command_id(last), static_cast<std::uint32_t>(kCmd_Draw));
-    CHECK_EQ(kmt.command_id(last - 1u), CommandHeader::piece_id);
+    const Shipped shipped(kmt);
+    const std::uint32_t last = shipped.count() - 1u;
+    CHECK_EQ(shipped.id(last), static_cast<std::uint32_t>(kCmd_Draw));
+    CHECK_EQ(shipped.id(last - 1u), CommandHeader::piece_id);
     CHECK(!stream.failed());
     CHECK(stream.invariants_hold());
     Recorded recorded(4u * block_bytes);
@@ -447,19 +476,19 @@ TEST(d3d_command_stream, a_blob_import_goes_after_the_shaders_the_stream_holds)
       second[at] = static_cast<std::uint8_t>(0xFFu - at);
   }
   CHECK(av::d3d12proto::av_d3d12_CreateComputePipeline12(fixture.stream(), 1u, 0u, first, sizeof first));
-  CHECK_EQ(fixture.kmt().commands(), 0u);
+  CHECK_EQ(fixture.commands(), 0u);
   CHECK_EQ(fixture.transport().blobs().used(), code_bytes);
   std::uint8_t answer[BlobImportAnswer::encoded_size] = {};
   CHECK_STATUS(BlobImportAnswer(BlobImportAnswer::imported, 0x77u).encode(answer, sizeof answer), Status::ok);
   fixture.kmt().queue_answer(answer, sizeof answer);
   BlobImport heap(fixture.transport());
   CHECK_STATUS(heap.import(5u), Status::ok);
-  CHECK_EQ(fixture.kmt().commands(), 2u);
+  CHECK_EQ(fixture.commands(), 2u);
   CHECK_EQ(fixture.id(0u), av::d3d12proto::kCmd_CreateComputePipeline12);
   CHECK_EQ(fixture.id(1u), CommandHeader::import_blob_id);
   CHECK_EQ(fixture.transport().blobs().used(), 0u);
   CHECK(av::d3d12proto::av_d3d12_CreateComputePipeline12(fixture.stream(), 2u, 0u, second, sizeof second));
   CHECK_STATUS(fixture.stream().flush(), Status::ok);
-  CHECK_EQ(fixture.kmt().commands(), 3u);
+  CHECK_EQ(fixture.commands(), 3u);
   CHECK_EQ(fixture.id(2u), av::d3d12proto::kCmd_CreateComputePipeline12);
   CHECK(fixture.stream().invariants_hold()); }
