@@ -13,6 +13,7 @@ struct ImportedBlobProbe {
     void set_id(uint64_t id);
     void forget_memory();
     void set_handle(uint64_t handle);
+    void record(uint64_t handle);
 
     ImportedBlob &blob;
 };

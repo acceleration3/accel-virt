@@ -10,4 +10,6 @@ void ImportedBlobProbe::forget_memory() { blob.memory_ = nullptr; }
 
 void ImportedBlobProbe::set_handle(uint64_t handle) { blob.handle_ = handle; }
 
+void ImportedBlobProbe::record(uint64_t handle) { blob.record(handle); }
+
 }
