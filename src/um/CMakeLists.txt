@@ -150,7 +150,8 @@ list(REMOVE_ITEM AVGL_SOURCES ${AVTEST_GENERATED})
 list(APPEND AVGL_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/kmt/gdi_kmt.cpp
   ${AVTEST_GENERATED_DIR}/opengl/gl_icd_entries.cpp
-  ${AVTEST_GENERATED_DIR}/opengl/gl_dispatch_client.cpp)
+  ${AVTEST_GENERATED_DIR}/opengl/gl_dispatch_client.cpp
+  ${AVTEST_GENERATED_DIR}/glmem/glmem_dispatch_client.cpp)
 add_library(avgl SHARED ${AVGL_SOURCES} ${AV_STACK_PROBE} ${AV_CRT_STUBS})
 add_dependencies(avgl avtest_imports avglprobe_imports)
 set_target_properties(avgl PROPERTIES PREFIX "")

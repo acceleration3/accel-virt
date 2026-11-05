@@ -57,7 +57,7 @@ bool ask_bytes(::av::ClientTransport& t, ::av::WireWriter& b, void* data, uint64
 
 /* A command given up before it was sent still ends its call: a transport
    that lent the writer under a lock lets the lock go there. */
-bool abandon(::av::ClientTransport& t) {
+[[maybe_unused]] bool abandon(::av::ClientTransport& t) {
     t.end_call();
     return false;
 }

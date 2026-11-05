@@ -20,6 +20,8 @@ public:
     bool settle();
     void release();
 
+    bool fences() const;
+
     uint64_t next() const override;
     uint64_t reached() const override;
     uint64_t marked() const;
@@ -33,7 +35,6 @@ private:
         uint64_t mark_;
     };
 
-    bool fences() const;
     void drop_sync(void *sync);
 
     const glproto::RealGl &gl_;

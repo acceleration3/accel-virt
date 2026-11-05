@@ -19,6 +19,7 @@ public:
     void configure(GlContext &context);
     void give_back();
     bool imports_memory() const;
+    bool places_buffers() const;
 
     [[nodiscard]] bool import_memory(int fd, uint64_t size, uint32_t &name);
     [[nodiscard]] bool import_semaphore(int fd, uint32_t &name);
@@ -27,11 +28,11 @@ public:
 
 private:
     bool lists(const char *extension) const;
+    bool names_buffers() const;
     GlContext *current();
 
     void (APIENTRY *create_memory_objects_)(GLsizei, GLuint *);
     void (APIENTRY *import_memory_fd_)(GLuint, GLuint64, GLenum, GLint);
-    void (APIENTRY *memory_parameter_)(GLuint, GLenum, const GLint *);
     void (APIENTRY *delete_memory_objects_)(GLsizei, const GLuint *);
     void (APIENTRY *gen_semaphores_)(GLsizei, GLuint *);
     void (APIENTRY *import_semaphore_fd_)(GLuint, GLenum, GLint);
@@ -41,6 +42,7 @@ private:
     GlErrorFlags errors_;
     GlContext *context_;
     bool memory_;
+    bool buffers_;
     bool fences_;
 };
 

@@ -58,14 +58,16 @@ set(AV_GENERATED_NAMES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_command_names.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d9/d3d9_command_names.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d9/d3d9_command_names.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/glmem/glmem_command_names.cpp)
 set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_server.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_server.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_dispatch_server.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_dispatch_server.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_dispatch_server.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d9/d3d9_dispatch_server.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d9/d3d9_dispatch_server.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/glmem/glmem_dispatch_server.cpp)
 
 set(AV_GENERATED_OPENGL_INCLUDE ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl)
 if(EXISTS ${AV_KHRONOS_INCLUDE}/vulkan/vulkan_core.h)
@@ -92,7 +94,8 @@ set(AV_GENERATED_CLIENT_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_client.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d/d3d_dispatch_client.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d12/d3d12_dispatch_client.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d9/d3d9_dispatch_client.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/d3d9/d3d9_dispatch_client.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/glmem/glmem_dispatch_client.cpp)
 if(AV_GENERATED)
   list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_SOURCES} ${AV_GENERATED_CLIENT_SOURCES})
 endif()

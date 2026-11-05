@@ -9,3 +9,4 @@ opengl av_codegen.opengl third_party/khronos/gl.xml src/proto/generated/opengl -
 d3d av_codegen.d3d tools/codegen/registry/d3d.toml src/proto/generated/d3d
 d3d12 av_codegen.d3d tools/codegen/registry/d3d12.toml src/proto/generated/d3d12
 d3d9 av_codegen.d3d tools/codegen/registry/d3d9.toml src/proto/generated/d3d9
+glmem av_codegen.d3d tools/codegen/registry/glmem.toml src/proto/generated/glmem
