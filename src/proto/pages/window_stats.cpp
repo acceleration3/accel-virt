@@ -12,8 +12,8 @@ WindowStats::WindowStats() : fields_{}
 }
 
 WindowStats::WindowStats(uint64_t total_pages, uint64_t pages_in_use, uint64_t peak_pages_in_use, uint64_t refusals,
-                         uint64_t refused_bytes, uint64_t largest_free_run)
-    : fields_{total_pages, pages_in_use, peak_pages_in_use, refusals, refused_bytes, largest_free_run}
+                         uint64_t refused_bytes, uint64_t largest_free_run_at_refusal)
+    : fields_{total_pages, pages_in_use, peak_pages_in_use, refusals, refused_bytes, largest_free_run_at_refusal}
 {
     AV_SCOPE("WindowStats::WindowStats");
 }
@@ -48,9 +48,9 @@ uint64_t WindowStats::refused_bytes() const
     return fields_[4];
 }
 
-uint64_t WindowStats::largest_free_run() const
+uint64_t WindowStats::largest_free_run_at_refusal() const
 {
-    AV_SCOPE("WindowStats::largest_free_run");
+    AV_SCOPE("WindowStats::largest_free_run_at_refusal");
     return fields_[5];
 }
 

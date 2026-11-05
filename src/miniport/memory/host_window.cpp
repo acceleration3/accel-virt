@@ -12,7 +12,7 @@ namespace av {
 
 HostWindow::HostWindow(Platform &platform)
     : platform_(platform), lock_(platform, LockRank::host_window), map_(nullptr), base_(0u), pages_(0u), used_(0u),
-      peak_(0u), refusals_(0u), refused_bytes_(0u), largest_run_(0u), offered_(false), view_(platform)
+      peak_(0u), refusals_(0u), refused_bytes_(0u), largest_run_at_refusal_(0u), offered_(false), view_(platform)
 {
     AV_SCOPE("HostWindow::HostWindow");
 }
@@ -90,7 +90,7 @@ Status HostWindow::take(uint32_t pages, uint32_t &first)
     }
     refusals_++;
     refused_bytes_ += uint64_t{pages} * page_bytes;
-    largest_run_ = largest_free_run();
+    largest_run_at_refusal_ = largest_free_run();
     publish();
     return Status::no_space;
 }
@@ -174,7 +174,7 @@ uint32_t HostWindow::largest_free_run() const
 void HostWindow::publish()
 {
     AV_SCOPE("HostWindow::publish");
-    view_.publish(WindowStats(pages_, used_, peak_, refusals_, refused_bytes_, largest_run_));
+    view_.publish(WindowStats(pages_, used_, peak_, refusals_, refused_bytes_, largest_run_at_refusal_));
 }
 
 bool HostWindow::invariants_hold() const

@@ -92,7 +92,7 @@ void WindowStatsWindow::report(StateWriter &writer) const
         writer.number("peak_pages_in_use", stats.peak_pages_in_use());
         writer.number("refusals", stats.refusals());
         writer.number("refused_bytes", stats.refused_bytes());
-        writer.number("largest_free_run", stats.largest_free_run());
+        writer.number("largest_free_run_at_refusal", stats.largest_free_run_at_refusal());
     }
     writer.close();
 }

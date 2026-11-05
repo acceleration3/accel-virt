@@ -18,14 +18,14 @@ public:
 
     WindowStats();
     WindowStats(uint64_t total_pages, uint64_t pages_in_use, uint64_t peak_pages_in_use, uint64_t refusals,
-                uint64_t refused_bytes, uint64_t largest_free_run);
+                uint64_t refused_bytes, uint64_t largest_free_run_at_refusal);
 
     uint64_t total_pages() const;
     uint64_t pages_in_use() const;
     uint64_t peak_pages_in_use() const;
     uint64_t refusals() const;
     uint64_t refused_bytes() const;
-    uint64_t largest_free_run() const;
+    uint64_t largest_free_run_at_refusal() const;
     uint64_t field(uint32_t index) const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;

@@ -50,7 +50,7 @@ private:
     uint32_t  peak_;
     uint64_t  refusals_;
     uint64_t  refused_bytes_;
-    uint32_t  largest_run_;
+    uint32_t  largest_run_at_refusal_;
     bool      offered_;
     WindowStatsView view_;
 
