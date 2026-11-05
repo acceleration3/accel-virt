@@ -22,6 +22,8 @@ void ScriptedClock::pause(uint64_t nanoseconds)
     now_ += nanoseconds;
 }
 
+void ScriptedClock::advance(uint64_t nanoseconds) { now_ += nanoseconds; }
+
 uint32_t ScriptedClock::pauses() const { return pauses_; }
 
 uint32_t ScriptedClock::yields() const { return yields_; }

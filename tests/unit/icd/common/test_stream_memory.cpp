@@ -1,256 +1,470 @@
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
-#include "harness/icd/lock_trace.hpp"
-#include "harness/icd/recording_thread_lock.hpp"
 #include "harness/icd/scripted_gpu_timeline.hpp"
-#include "harness/platform/mock_platform.hpp"
+#include "harness/icd/slice_channel_rig.hpp"
+#include "icd/common/slice_blocks.hpp"
 #include "icd/common/stream_memory.hpp"
+#include "proto/resources/host_memory_request.hpp"
 
 #include <cstdint>
+#include <cstring>
 
-using av::LockTrace;
-using av::MockPlatform;
+using av::HostMemoryRequest;
 using av::ScriptedGpuTimeline;
-using av::RecordingThreadLock;
+using av::SliceChannelRig;
 using av::Status;
+using av::icd::SliceBlocks;
 using av::icd::StreamMemory;
 
 namespace {
 
 constexpr std::uint64_t kib = 1024u;
+constexpr std::uint64_t mib = 1024u * kib;
 constexpr std::uint64_t page = StreamMemory::large_alignment;
-constexpr std::uint64_t start = 0u;
+constexpr std::uint64_t seconds = 1000000000u;
 
 class Rig {
 public:
-    Rig() : lock_(trace_, 'S'), slices_(platform_, timeline_, lock_) {}
-    StreamMemory &slices() { return slices_; }
-    void          take(std::uint64_t pages) { slices_.take(pages * page); }
+    explicit Rig(std::uint64_t alignment = 256u)
+        : timeline_(), memory_(channel_.platform(), channel_.channel(), this, timeline_, channel_.stream_lock(),
+                               channel_.clock(), channel_.lines(), HostMemoryRequest::Kind::upload, alignment)
+    {
+    }
+
+    StreamMemory        &memory() { return memory_; }
+    SliceChannelRig     &host() { return channel_; }
     ScriptedGpuTimeline &timeline() { return timeline_; }
-    MockPlatform        &platform() { return platform_; }
+
+    StreamMemory::Slice take(std::uint64_t bytes)
+    {
+        channel_.will_open();
+        StreamMemory::Slice slice = {};
+        CHECK_STATUS(memory_.take_slice(bytes, slice), Status::ok);
+        return slice;
+    }
+
+    StreamMemory::Slice again(std::uint64_t bytes)
+    {
+        StreamMemory::Slice slice = {};
+        CHECK_STATUS(memory_.take_slice(bytes, slice), Status::ok);
+        return slice;
+    }
+
+    void trim_closing(std::uint32_t blocks)
+    {
+        for (std::uint32_t closing = 0u; closing < blocks; closing++) channel_.will_close();
+        memory_.trim();
+    }
 
 private:
-    MockPlatform        platform_;
-    LockTrace           trace_;
-    RecordingThreadLock lock_;
+    SliceChannelRig     channel_;
     ScriptedGpuTimeline timeline_;
-    StreamMemory        slices_;
+    StreamMemory        memory_;
 };
 
 }
 
-TEST(buffer_slices, small_slices_come_from_their_class_and_come_back)
+TEST(stream_memory, constructing_one_asks_the_host_for_nothing)
 { Rig rig;
-  rig.take(16u);
-  StreamMemory::Slice first = {}, second = {}, again = {};
-  CHECK_STATUS(rig.slices().take_slice(100u, first), Status::ok);
-  CHECK_EQ(first.bytes_, 256u);
-  CHECK_EQ(first.offset_, start);
-  CHECK_STATUS(rig.slices().take_slice(256u, second), Status::ok);
-  CHECK_EQ(second.offset_, start + 256u);
-  StreamMemory::Slice wider = {};
-  CHECK_STATUS(rig.slices().take_slice(257u, wider), Status::ok);
-  CHECK_EQ(wider.bytes_, 512u);
-  CHECK_EQ(wider.offset_ % 512u, 0u);
-  CHECK(wider.offset_ + wider.bytes_ <= start + 16u * page);
-  const std::uint32_t free = rig.slices().free_in_class(256u);
-  rig.slices().give_back(first);
-  CHECK_EQ(rig.slices().free_in_class(256u), free + 1u);
-  CHECK_STATUS(rig.slices().take_slice(1u, again), Status::ok);
-  CHECK_EQ(again.offset_, first.offset_);
-  CHECK_EQ(rig.timeline().waits(), 0u);
-  CHECK(rig.slices().invariants_hold()); }
+  CHECK_EQ(rig.memory().open_blocks(), 0u);
+  CHECK_EQ(rig.memory().open_bytes(), 0u);
+  CHECK_EQ(rig.memory().retired(), 0u);
+  CHECK_EQ(rig.host().channel().memories(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
 
-TEST(buffer_slices, a_retired_slice_waits_for_the_gpu_to_finish_its_batch)
+TEST(stream_memory, the_first_slice_opens_a_four_mebibyte_block_and_carves_a_chunk_of_its_class)
 { Rig rig;
-  rig.take(16u);
-  StreamMemory::Slice old = {};
-  CHECK_STATUS(rig.slices().take_slice(64u * kib, old), Status::ok);
-  rig.slices().retire(old);
-  CHECK_EQ(rig.slices().retired(), 1u);
-  StreamMemory::Slice next = {};
-  CHECK_STATUS(rig.slices().take_slice(64u * kib, next), Status::ok);
+  const StreamMemory::Slice slice = rig.take(100u);
+  CHECK_EQ(slice.bytes_, 256u);
+  CHECK_EQ(slice.offset_, 0u);
+  CHECK_EQ(rig.memory().open_blocks(), 1u);
+  CHECK_EQ(rig.memory().open_bytes(), SliceBlocks::first_block_bytes);
+  CHECK_EQ(rig.host().channel().memories(), 1u);
+  CHECK_EQ(rig.memory().free_in_class(256u), StreamMemory::chunk_bytes / 256u - 1u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_take, rounds_up_to_the_smallest_class_that_holds_it_and_aligns_to_that_class)
+{ Rig rig;
+  const std::uint64_t asked[] = {1u, 256u, 257u, 512u, 513u, 1024u, 3000u, 4096u, 5000u, 8192u,
+                                 10000u, 16384u, 20000u, 32768u, 40000u, 64u * kib};
+  const std::uint64_t given[] = {256u, 256u, 512u, 512u, 1024u, 1024u, 4096u, 4096u, 8192u, 8192u,
+                                 16384u, 16384u, 32768u, 32768u, 64u * kib, 64u * kib};
+  rig.host().will_open();
+  for (std::uint32_t index = 0u; index < sizeof asked / sizeof asked[0]; index++) {
+      const StreamMemory::Slice slice = rig.again(asked[index]);
+      CHECK_EQ(slice.bytes_, given[index]);
+      CHECK_EQ(slice.offset_ % given[index], 0u);
+      CHECK(rig.memory().invariants_hold());
+  } }
+
+TEST(stream_memory_take, a_slice_over_sixty_four_kibibytes_is_whole_pages_of_that_size)
+{ Rig rig;
+  const StreamMemory::Slice one = rig.take(64u * kib + 1u);
+  CHECK_EQ(one.bytes_, 2u * page);
+  CHECK_EQ(one.offset_ % page, 0u);
+  const StreamMemory::Slice two = rig.again(3u * page);
+  CHECK_EQ(two.bytes_, 3u * page);
+  CHECK(two.offset_ >= one.offset_ + one.bytes_ || two.offset_ + two.bytes_ <= one.offset_);
+  CHECK_EQ(rig.memory().free_in_class(2u * page), 0u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_take, refuses_nothing_and_nobody_a_zero_or_oversized_request_and_asks_no_one)
+{ Rig rig;
+  StreamMemory::Slice slice = {7u, 7u};
+  CHECK_STATUS(rig.memory().take_slice(0u, slice), Status::invalid_parameter);
+  CHECK_EQ(slice.bytes_, 0u);
+  CHECK_EQ(slice.offset_, 0u);
+  slice = StreamMemory::Slice{7u, 7u};
+  CHECK_STATUS(rig.memory().take_slice(SliceBlocks::largest_block_bytes + 1u, slice), Status::invalid_parameter);
+  CHECK_EQ(slice.bytes_, 0u);
+  CHECK_STATUS(rig.memory().take_slice(~std::uint64_t{0}, slice), Status::invalid_parameter);
+  CHECK_EQ(rig.memory().open_blocks(), 0u);
+  CHECK_EQ(rig.host().kmt().commands(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_take, a_request_of_exactly_one_slot_gets_a_whole_sixty_four_mebibyte_block)
+{ Rig rig;
+  const StreamMemory::Slice slice = rig.take(SliceBlocks::largest_block_bytes);
+  CHECK_EQ(slice.bytes_, SliceBlocks::largest_block_bytes);
+  CHECK_EQ(slice.offset_, 0u);
+  CHECK_EQ(rig.memory().open_bytes(), SliceBlocks::slot_bytes);
+  const StreamMemory::Slice next = [&] {
+      rig.host().will_open();
+      return rig.again(page);
+  }();
+  CHECK_EQ(next.offset_ >> SliceBlocks::slot_shift, 1u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_take, slices_from_a_later_block_carry_its_slot_in_their_offset)
+{ Rig rig;
+  const StreamMemory::Slice first = rig.take(4u * mib);
+  CHECK_EQ(first.offset_ >> SliceBlocks::slot_shift, 0u);
+  const StreamMemory::Slice second = rig.take(page);
+  CHECK_EQ(second.offset_ >> SliceBlocks::slot_shift, 1u);
+  CHECK_EQ(rig.memory().offset_in_block(second), second.offset_ & (SliceBlocks::slot_bytes - 1u));
+  CHECK_EQ(rig.memory().offset_in_block(first), 0u);
+  CHECK(rig.memory().memory(first) != rig.memory().memory(second));
+  CHECK(rig.memory().view(first) != rig.memory().view(second));
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_view, is_the_blocks_memory_at_the_slices_offset_and_is_writable)
+{ Rig rig;
+  const StreamMemory::Slice a = rig.take(256u);
+  const StreamMemory::Slice b = rig.again(256u);
+  std::uint8_t *const       base = rig.memory().view(a);
+  CHECK(base != nullptr);
+  CHECK(rig.memory().view(b) == base - a.offset_ + b.offset_);
+  std::memset(rig.memory().view(a), 0x11, 256u);
+  std::memset(rig.memory().view(b), 0x22, 256u);
+  CHECK_EQ(rig.memory().view(a)[255], 0x11u);
+  CHECK_EQ(rig.memory().view(b)[0], 0x22u);
+  CHECK(rig.memory().memory(a) == rig.memory().memory(b));
+  CHECK(rig.memory().memory(a) != 0u); }
+
+TEST(stream_memory_view, a_slice_in_no_block_has_no_view)
+{ Rig rig;
+  const StreamMemory::Slice nothing = {0u, 256u};
+  CHECK(rig.memory().view(nothing) == nullptr);
+  const StreamMemory::Slice past = {5u * SliceBlocks::slot_bytes, 256u};
+  CHECK(rig.memory().view(past) == nullptr); }
+
+TEST(stream_memory_give_back, a_returned_small_slice_is_the_next_one_taken)
+{ Rig rig;
+  const StreamMemory::Slice a = rig.take(100u);
+  const StreamMemory::Slice b = rig.again(100u);
+  const std::uint32_t       free = rig.memory().free_in_class(256u);
+  rig.memory().give_back(a);
+  CHECK_EQ(rig.memory().free_in_class(256u), free + 1u);
+  const StreamMemory::Slice c = rig.again(256u);
+  CHECK_EQ(c.offset_, a.offset_);
+  CHECK(c.offset_ != b.offset_);
+  CHECK_EQ(rig.timeline().waits(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_give_back, a_returned_large_slice_makes_its_pages_placeable_again)
+{ Rig rig;
+  const StreamMemory::Slice a = rig.take(2u * page);
+  const StreamMemory::Slice b = rig.again(2u * page);
+  CHECK_EQ(b.offset_, a.offset_ + a.bytes_);
+  rig.memory().give_back(a);
+  const StreamMemory::Slice c = rig.again(2u * page);
+  CHECK_EQ(c.offset_, a.offset_);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_give_back, an_empty_slice_is_ignored)
+{ Rig rig;
+  const StreamMemory::Slice a = rig.take(100u);
+  const std::uint32_t       free = rig.memory().free_in_class(256u);
+  rig.memory().give_back(StreamMemory::Slice{0u, 0u});
+  rig.memory().retire(StreamMemory::Slice{a.offset_, 0u});
+  CHECK_EQ(rig.memory().free_in_class(256u), free);
+  CHECK_EQ(rig.memory().retired(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_retire, a_retired_slice_is_reusable_only_once_the_gpu_passed_its_batch)
+{ Rig rig;
+  const StreamMemory::Slice old = rig.take(64u * kib);
+  rig.memory().retire(old);
+  CHECK_EQ(rig.memory().retired(), 1u);
+  const StreamMemory::Slice next = rig.again(64u * kib);
   CHECK(next.offset_ != old.offset_);
-  rig.slices().give_back(next);
+  rig.memory().give_back(next);
   rig.timeline().send();
-  StreamMemory::Slice still = {};
-  CHECK_STATUS(rig.slices().take_slice(64u * kib, still), Status::ok);
+  const StreamMemory::Slice still = rig.again(64u * kib);
   CHECK(still.offset_ != old.offset_);
-  CHECK_EQ(rig.slices().retired(), 1u);
+  CHECK_EQ(rig.memory().retired(), 1u);
+  rig.memory().give_back(still);
   rig.timeline().finish(1u);
-  StreamMemory::Slice back = {};
-  CHECK_STATUS(rig.slices().take_slice(64u * kib, back), Status::ok);
-  CHECK_EQ(rig.slices().retired(), 0u);
+  const StreamMemory::Slice back = rig.again(64u * kib);
+  CHECK_EQ(rig.memory().retired(), 0u);
   CHECK_EQ(back.offset_, old.offset_);
   CHECK_EQ(rig.timeline().waits(), 0u);
-  CHECK(rig.slices().invariants_hold()); }
+  CHECK(rig.memory().invariants_hold()); }
 
-TEST(buffer_slices, a_large_slice_is_whole_pages_and_goes_back_whole)
+TEST(stream_memory_retire, a_slice_is_tagged_with_the_batch_being_recorded_when_it_retires)
 { Rig rig;
-  rig.slices().take(3u * page + 100u);
-  CHECK_EQ(rig.slices().begin(), start);
-  CHECK_EQ(rig.slices().end(), start + 3u * page);
-  StreamMemory::Slice large = {}, rest = {}, again = {};
-  CHECK_STATUS(rig.slices().take_slice(64u * kib + 1u, large), Status::ok);
-  CHECK_EQ(large.offset_, start);
-  CHECK_EQ(large.bytes_, 2u * page);
-  CHECK_STATUS(rig.slices().take_slice(page + 1u, rest), Status::no_space);
-  CHECK_STATUS(rig.slices().take_slice(64u * kib, rest), Status::no_space);
-  CHECK_EQ(rest.bytes_, 0u);
-  rig.slices().retire(large);
-  rig.timeline().finish(1u);
-  CHECK_STATUS(rig.slices().take_slice(2u * page, again), Status::ok);
-  CHECK_EQ(again.offset_, large.offset_);
-  CHECK(rig.slices().invariants_hold()); }
-
-TEST(buffer_slices, a_full_arena_waits_for_the_oldest_retired_slice)
-{ Rig rig;
-  rig.take(4u);
-  StreamMemory::Slice first = {}, second = {}, third = {};
-  CHECK_STATUS(rig.slices().take_slice(2u * page, first), Status::ok);
-  CHECK_STATUS(rig.slices().take_slice(2u * page, second), Status::ok);
-  CHECK_STATUS(rig.slices().take_slice(2u * page, third), Status::no_space);
-  CHECK_EQ(rig.timeline().waits(), 0u);
-  rig.slices().retire(first);
-  CHECK_STATUS(rig.slices().take_slice(2u * page, third), Status::ok);
-  CHECK_EQ(rig.timeline().waits(), 1u);
-  CHECK_EQ(third.offset_, first.offset_);
-  const av::icd::GpuTimeline &gpu = rig.timeline();
-  CHECK(gpu.completed() >= 1u);
-  CHECK(gpu.recording() > 1u);
-  CHECK(rig.slices().invariants_hold()); }
-
-TEST(buffer_slices, a_class_carves_while_the_store_has_room)
-{ Rig rig;
-  rig.take(1024u);
-  static bool         used[1024u * 64u * 1024u / 256u];
-  StreamMemory::Slice slice = {};
-  std::uint32_t       twice = 0u;
-  for (std::uint32_t index = 0u; index < 40000u; index++) {
-      CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::ok);
-      twice += used[slice.offset_ / 256u] ? 1u : 0u;
-      used[slice.offset_ / 256u] = true;
-  }
-  CHECK_EQ(twice, 0u);
-  CHECK_EQ(rig.timeline().waits(), 0u);
-  CHECK(rig.slices().invariants_hold()); }
-
-TEST(buffer_slices, the_retired_queue_holds_every_slice_in_flight)
-{ Rig rig;
-  rig.take(1024u);
-  StreamMemory::Slice slice = {};
-  for (std::uint32_t index = 0u; index < 40000u; index++) {
-      CHECK_STATUS(rig.slices().take_slice(index % 2u == 0u ? 256u : 512u, slice), Status::ok);
-      rig.slices().retire(slice);
-      if (index % 1000u == 999u) rig.timeline().send();
-  }
-  CHECK_EQ(rig.slices().retired(), 40000u);
-  CHECK_EQ(rig.timeline().waits(), 0u);
-  CHECK(rig.slices().invariants_hold());
-  rig.timeline().finish(20u);
-  CHECK_STATUS(rig.slices().take_slice(256u, slice), Status::ok);
-  CHECK_EQ(rig.slices().retired(), 20000u);
-  CHECK(rig.slices().invariants_hold());
-  rig.timeline().finish(41u);
-  CHECK_STATUS(rig.slices().take_slice(256u, slice), Status::ok);
-  CHECK_EQ(rig.slices().retired(), 0u);
-  CHECK_EQ(rig.slices().free_in_class(256u), 20u * 1024u - 2u);
-  CHECK(rig.slices().invariants_hold()); }
-
-TEST(buffer_slices, a_partly_reclaimed_queue_keeps_its_order)
-{ Rig rig;
-  rig.take(16u);
-  StreamMemory::Slice a = {}, b = {}, c = {}, next = {};
-  CHECK_STATUS(rig.slices().take_slice(256u, a), Status::ok);
-  CHECK_STATUS(rig.slices().take_slice(256u, b), Status::ok);
-  CHECK_STATUS(rig.slices().take_slice(256u, c), Status::ok);
-  rig.slices().retire(a);
+  const StreamMemory::Slice a = rig.take(64u * kib);
+  const StreamMemory::Slice b = rig.again(64u * kib);
+  rig.memory().retire(a);
   rig.timeline().send();
-  rig.slices().retire(b);
-  rig.slices().retire(c);
+  rig.memory().retire(b);
   rig.timeline().finish(1u);
-  CHECK_STATUS(rig.slices().take_slice(256u, next), Status::ok);
-  CHECK_EQ(next.offset_, a.offset_);
-  CHECK_EQ(rig.slices().retired(), 2u);
-  CHECK(rig.slices().invariants_hold());
+  const StreamMemory::Slice c = rig.again(256u);
+  static_cast<void>(c);
+  CHECK_EQ(rig.memory().retired(), 1u);
   rig.timeline().finish(2u);
-  CHECK_STATUS(rig.slices().take_slice(256u, next), Status::ok);
-  CHECK_EQ(rig.slices().retired(), 0u);
-  CHECK(rig.slices().invariants_hold()); }
+  const StreamMemory::Slice d = rig.again(256u);
+  static_cast<void>(d);
+  CHECK_EQ(rig.memory().retired(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
 
-TEST(buffer_slices, no_memory_for_the_bookkeeping_refuses_the_slice)
+TEST(stream_memory_retire, a_long_run_of_retirements_reclaims_in_order_and_keeps_its_invariants)
 { Rig rig;
-  rig.take(16u);
-  StreamMemory::Slice slice = {7u, 7u};
-  rig.platform().fail_allocation_at(1u);
-  CHECK_STATUS(rig.slices().take_slice(256u, slice), Status::no_memory);
-  CHECK_EQ(slice.bytes_, 0u);
-  rig.platform().fail_allocation_at(2u);
-  CHECK_STATUS(rig.slices().take_slice(256u, slice), Status::no_memory);
-  CHECK_EQ(rig.slices().free_in_class(256u), 0u);
-  rig.platform().fail_allocation_at(2u);
-  CHECK_STATUS(rig.slices().take_slice(page, slice), Status::no_memory);
-  CHECK(rig.slices().invariants_hold());
-  StreamMemory::Slice small = {}, large = {};
-  CHECK_STATUS(rig.slices().take_slice(256u, small), Status::ok);
-  CHECK_STATUS(rig.slices().take_slice(page, large), Status::ok);
-  rig.slices().retire(small);
-  rig.slices().give_back(large);
-  CHECK_EQ(rig.slices().retired(), 1u);
-  CHECK(rig.slices().invariants_hold()); }
+  StreamMemory::Slice slices[40];
+  slices[0] = rig.take(64u * kib);
+  for (std::uint32_t index = 1u; index < 40u; index++) slices[index] = rig.again(64u * kib);
+  for (std::uint32_t index = 0u; index < 40u; index++) {
+      rig.memory().retire(slices[index]);
+      rig.timeline().send();
+      CHECK(rig.memory().invariants_hold());
+  }
+  CHECK_EQ(rig.memory().retired(), 40u);
+  rig.timeline().finish(10u);
+  static_cast<void>(rig.again(256u));
+  CHECK_EQ(rig.memory().retired(), 30u);
+  rig.timeline().finish(25u);
+  static_cast<void>(rig.again(256u));
+  CHECK_EQ(rig.memory().retired(), 15u);
+  rig.timeline().finish(100u);
+  static_cast<void>(rig.again(256u));
+  CHECK_EQ(rig.memory().retired(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
 
-TEST(buffer_slices, a_slice_from_before_the_store_was_taken_again_is_harmless)
+TEST(stream_memory_pressure, a_full_block_is_grown_before_the_gpu_is_waited_for)
 { Rig rig;
-  rig.take(16u);
-  StreamMemory::Slice old = {}, other = {};
-  CHECK_STATUS(rig.slices().take_slice(page, old), Status::ok);
-  CHECK_STATUS(rig.slices().take_slice(page, other), Status::ok);
-  rig.take(16u);
-  rig.slices().retire(old);
-  rig.slices().give_back(other);
-  CHECK_EQ(rig.slices().retired(), 1u);
-  CHECK(rig.slices().invariants_hold()); }
+  StreamMemory::Slice slices[4];
+  slices[0] = rig.take(mib);
+  for (std::uint32_t index = 1u; index < 4u; index++) slices[index] = rig.again(mib);
+  CHECK_EQ(rig.memory().open_blocks(), 1u);
+  rig.memory().retire(slices[0]);
+  rig.host().will_open();
+  const StreamMemory::Slice grown = rig.again(mib);
+  CHECK_EQ(rig.memory().open_blocks(), 2u);
+  CHECK_EQ(grown.offset_ >> SliceBlocks::slot_shift, 1u);
+  CHECK_EQ(rig.memory().open_bytes(), 12u * mib);
+  CHECK_EQ(rig.timeline().waits(), 0u);
+  CHECK_EQ(rig.memory().retired(), 1u);
+  CHECK(rig.memory().invariants_hold()); }
 
-TEST(buffer_slices, a_lost_session_hands_out_nothing_more)
+TEST(stream_memory_pressure, a_finished_batch_is_reclaimed_before_anything_is_grown)
 { Rig rig;
-  rig.take(2u);
-  StreamMemory::Slice slice = {};
-  CHECK_STATUS(rig.slices().take_slice(2u * page, slice), Status::ok);
-  rig.slices().retire(slice);
+  StreamMemory::Slice slices[4];
+  slices[0] = rig.take(mib);
+  for (std::uint32_t index = 1u; index < 4u; index++) slices[index] = rig.again(mib);
+  rig.memory().retire(slices[1]);
+  rig.timeline().finish(1u);
+  const std::uint32_t asked = rig.host().kmt().commands();
+  const StreamMemory::Slice reused = rig.again(mib);
+  CHECK_EQ(reused.offset_, slices[1].offset_);
+  CHECK_EQ(rig.memory().open_blocks(), 1u);
+  CHECK_EQ(rig.host().kmt().commands(), asked);
+  CHECK_EQ(rig.timeline().waits(), 0u);
+  CHECK_EQ(rig.memory().retired(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_pressure, with_no_room_to_grow_it_waits_for_the_oldest_retired_slice)
+{ Rig rig;
+  StreamMemory::Slice slices[4];
+  slices[0] = rig.take(mib);
+  for (std::uint32_t index = 1u; index < 4u; index++) slices[index] = rig.again(mib);
+  rig.memory().retire(slices[2]);
+  rig.timeline().send();
+  rig.memory().retire(slices[0]);
+  rig.host().will_refuse_open();
+  const StreamMemory::Slice waited = rig.again(mib);
+  CHECK_EQ(rig.timeline().waits(), 1u);
+  CHECK_EQ(waited.offset_, slices[2].offset_);
+  CHECK_EQ(rig.memory().retired(), 1u);
+  CHECK_EQ(rig.memory().open_blocks(), 1u);
+  CHECK(rig.timeline().completed() >= 1u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_pressure, with_nothing_retired_and_no_room_to_grow_it_is_no_space_and_waits_for_nothing)
+{ Rig rig;
+  StreamMemory::Slice slices[4];
+  slices[0] = rig.take(mib);
+  for (std::uint32_t index = 1u; index < 4u; index++) slices[index] = rig.again(mib);
+  rig.host().will_refuse_open();
+  StreamMemory::Slice none = {9u, 9u};
+  CHECK_STATUS(rig.memory().take_slice(mib, none), Status::no_space);
+  CHECK_EQ(none.bytes_, 0u);
+  CHECK_EQ(rig.timeline().waits(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_pressure, a_refused_open_pauses_the_next_ones_for_a_second)
+{ Rig rig;
+  StreamMemory::Slice slices[4];
+  slices[0] = rig.take(mib);
+  for (std::uint32_t index = 1u; index < 4u; index++) slices[index] = rig.again(mib);
+  rig.host().will_refuse_open();
+  StreamMemory::Slice none = {};
+  CHECK_STATUS(rig.memory().take_slice(mib, none), Status::no_space);
+  const std::uint32_t asked = rig.host().kmt().commands();
+  rig.host().will_open();
+  CHECK_STATUS(rig.memory().take_slice(mib, none), Status::no_space);
+  CHECK_EQ(rig.host().kmt().commands(), asked);
+  rig.host().clock().advance(seconds);
+  CHECK_STATUS(rig.memory().take_slice(mib, none), Status::ok);
+  CHECK_EQ(rig.memory().open_blocks(), 2u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_pressure, a_wait_the_gpu_cannot_answer_loses_the_memory_for_good)
+{ Rig rig;
+  StreamMemory::Slice slices[4];
+  slices[0] = rig.take(mib);
+  for (std::uint32_t index = 1u; index < 4u; index++) slices[index] = rig.again(mib);
+  rig.memory().retire(slices[0]);
   rig.timeline().lose();
-  CHECK_STATUS(rig.slices().take_slice(2u * page, slice), Status::invalid_state);
-  CHECK_STATUS(rig.slices().take_slice(page + 1u, slice), Status::invalid_state);
-  rig.take(2u);
-  CHECK_EQ(rig.slices().retired(), 0u);
-  CHECK_STATUS(rig.slices().take_slice(2u * page, slice), Status::ok); }
+  rig.host().will_refuse_open();
+  StreamMemory::Slice none = {};
+  CHECK_STATUS(rig.memory().take_slice(mib, none), Status::invalid_state);
+  CHECK_STATUS(rig.memory().take_slice(256u, none), Status::invalid_state);
+  CHECK_EQ(none.bytes_, 0u);
+  CHECK(rig.memory().invariants_hold()); }
 
-TEST(buffer_slices, no_bytes_or_more_than_the_arena_is_refused)
+TEST(stream_memory_pressure, a_failed_allocation_for_the_retired_list_is_no_memory_and_takes_nothing)
 { Rig rig;
-  StreamMemory::Slice slice = {7u, 7u};
-  CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::invalid_parameter);
-  CHECK_EQ(slice.bytes_, 0u);
-  rig.take(2u);
-  CHECK_STATUS(rig.slices().take_slice(0u, slice), Status::invalid_parameter);
-  CHECK_STATUS(rig.slices().take_slice(2u * page + 1u, slice), Status::invalid_parameter);
-  CHECK_STATUS(rig.slices().take_slice(2u * page, slice), Status::ok);
-  rig.slices().retire(StreamMemory::Slice{0u, 0u});
-  rig.slices().give_back(StreamMemory::Slice{0u, 0u});
-  CHECK_EQ(rig.slices().retired(), 0u);
-  CHECK(rig.slices().invariants_hold()); }
+  rig.host().platform().fail_allocation_at(1u);
+  rig.host().will_open();
+  StreamMemory::Slice none = {};
+  CHECK_STATUS(rig.memory().take_slice(256u, none), Status::no_memory);
+  CHECK_EQ(none.bytes_, 0u);
+  CHECK_EQ(rig.memory().open_blocks(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
 
-TEST(buffer_slices, a_store_under_a_page_holds_none)
+TEST(stream_memory_trim, keeps_the_newest_empty_block_for_ten_seconds_and_the_rest_for_one)
 { Rig rig;
-  StreamMemory::Slice slice = {};
-  rig.slices().take(page - 1u);
-  CHECK_EQ(rig.slices().end(), 0u);
-  CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::invalid_parameter);
-  rig.slices().retire(StreamMemory::Slice{start, 256u});
-  CHECK_EQ(rig.slices().retired(), 0u);
-  CHECK(rig.slices().invariants_hold());
-  rig.slices().take(2u * page + page / 2u);
-  CHECK_EQ(rig.slices().begin(), start);
-  CHECK_EQ(rig.slices().end(), 2u * page);
-  CHECK_STATUS(rig.slices().take_slice(1u, slice), Status::no_space);
-  CHECK_STATUS(rig.slices().take_slice(page + 1u, slice), Status::ok);
-  CHECK_EQ(slice.offset_, start);
-  CHECK(rig.slices().invariants_hold()); }
+  const StreamMemory::Slice small = rig.take(100u);
+  const StreamMemory::Slice big = rig.again(3840u * kib);
+  CHECK_EQ(big.offset_ >> SliceBlocks::slot_shift, 0u);
+  const StreamMemory::Slice other = rig.take(mib);
+  CHECK_EQ(other.offset_ >> SliceBlocks::slot_shift, 1u);
+  CHECK_EQ(rig.memory().open_blocks(), 2u);
+  rig.memory().give_back(small);
+  rig.memory().give_back(big);
+  rig.memory().give_back(other);
+  rig.trim_closing(0u);
+  CHECK_EQ(rig.memory().open_blocks(), 2u);
+  rig.host().clock().advance(seconds);
+  rig.trim_closing(1u);
+  CHECK_EQ(rig.memory().open_blocks(), 1u);
+  CHECK_EQ(rig.memory().open_bytes(), 8u * mib);
+  CHECK_EQ(rig.memory().free_in_class(256u), 0u);
+  CHECK(rig.memory().invariants_hold());
+  rig.host().clock().advance(9u * seconds - 1u);
+  rig.trim_closing(0u);
+  CHECK_EQ(rig.memory().open_blocks(), 1u);
+  rig.host().clock().advance(1u);
+  rig.trim_closing(1u);
+  CHECK_EQ(rig.memory().open_blocks(), 0u);
+  CHECK_EQ(rig.memory().open_bytes(), 0u);
+  CHECK_EQ(rig.host().channel().memories(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_trim, never_closes_a_block_with_a_slice_in_use_or_in_flight)
+{ Rig rig;
+  const StreamMemory::Slice held = rig.take(100u);
+  const StreamMemory::Slice flying = rig.again(64u * kib);
+  rig.memory().retire(flying);
+  rig.host().clock().advance(100u * seconds);
+  rig.trim_closing(0u);
+  CHECK_EQ(rig.memory().open_blocks(), 1u);
+  CHECK_EQ(rig.memory().retired(), 1u);
+  rig.timeline().finish(1u);
+  rig.trim_closing(0u);
+  CHECK_EQ(rig.memory().open_blocks(), 1u);
+  CHECK_EQ(rig.memory().retired(), 0u);
+  rig.memory().give_back(held);
+  rig.host().clock().advance(10u * seconds);
+  rig.trim_closing(1u);
+  CHECK_EQ(rig.memory().open_blocks(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_trim, a_block_closed_by_trim_comes_back_lazily_with_a_fresh_chunk)
+{ Rig rig;
+  const StreamMemory::Slice first = rig.take(100u);
+  rig.memory().give_back(first);
+  rig.host().clock().advance(10u * seconds);
+  rig.trim_closing(1u);
+  CHECK_EQ(rig.memory().open_blocks(), 0u);
+  CHECK_EQ(rig.memory().free_in_class(256u), 0u);
+  const StreamMemory::Slice again = rig.take(100u);
+  CHECK_EQ(again.offset_, 0u);
+  CHECK_EQ(rig.memory().free_in_class(256u), StreamMemory::chunk_bytes / 256u - 1u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_trim, with_nothing_open_it_does_nothing)
+{ Rig rig;
+  rig.memory().trim();
+  CHECK_EQ(rig.memory().open_blocks(), 0u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_alignment, a_sixty_four_kibibyte_alignment_has_no_small_classes)
+{ Rig rig(64u * kib);
+  const StreamMemory::Slice a = rig.take(1u);
+  CHECK_EQ(a.bytes_, page);
+  const StreamMemory::Slice b = rig.again(page);
+  CHECK_EQ(b.bytes_, page);
+  CHECK_EQ(b.offset_, a.offset_ + page);
+  for (std::uint64_t bytes = 256u; bytes <= 64u * kib; bytes *= 2u) CHECK_EQ(rig.memory().free_in_class(bytes), 0u);
+  rig.memory().give_back(a);
+  const StreamMemory::Slice c = rig.again(100u);
+  CHECK_EQ(c.offset_, a.offset_);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_alignment, a_four_kibibyte_alignment_has_five_classes_from_four_to_sixty_four)
+{ Rig rig(4u * kib);
+  const std::uint64_t asked[] = {1u, 4096u, 4097u, 8192u, 9000u, 16384u, 20000u, 32768u, 40000u, 64u * kib};
+  const std::uint64_t given[] = {4096u, 4096u, 8192u, 8192u, 16384u, 16384u, 32768u, 32768u, 64u * kib, 64u * kib};
+  rig.host().will_open();
+  for (std::uint32_t index = 0u; index < sizeof asked / sizeof asked[0]; index++) {
+      const StreamMemory::Slice slice = rig.again(asked[index]);
+      CHECK_EQ(slice.bytes_, given[index]);
+      CHECK_EQ(slice.offset_ % given[index], 0u);
+  }
+  const StreamMemory::Slice large = rig.again(64u * kib + 1u);
+  CHECK_EQ(large.bytes_, 2u * page);
+  CHECK_EQ(rig.memory().free_in_class(256u), rig.memory().free_in_class(4096u));
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_alignment, an_alignment_below_the_smallest_class_is_raised_to_it)
+{ Rig rig(1u);
+  const StreamMemory::Slice slice = rig.take(1u);
+  CHECK_EQ(slice.bytes_, StreamMemory::smallest);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_alignment, an_alignment_over_sixty_four_kibibytes_is_all_large)
+{ Rig rig(1u * mib);
+  const StreamMemory::Slice slice = rig.take(1u);
+  CHECK_EQ(slice.bytes_, page);
+  CHECK(rig.memory().invariants_hold()); }

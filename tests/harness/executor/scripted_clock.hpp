@@ -13,6 +13,7 @@ public:
 
     uint64_t now_nanoseconds() const override;
     void     pause(uint64_t nanoseconds) override;
+    void     advance(uint64_t nanoseconds);
 
     uint32_t pauses() const;
     uint32_t yields() const;
