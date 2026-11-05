@@ -10,6 +10,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "icd/vulkan/command_batch.hpp"
+#include "icd/common/shared_handles.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/device_memory.hpp"
 #include "icd/vulkan/handle_registry.hpp"
@@ -60,7 +61,7 @@ void connection_line(TextBuffer &out, std::uint32_t number, const Connection &co
 {
     out.append("connection/");
     out.append_decimal(number);
-    out.append(" opened=true faulted=false adapter=");
+    out.append(" opened=true lost=false fault_code=0 adapter=");
     out.append_decimal(connection.adapter());
     out.append(" luid=0x0000000200001234 device=");
     out.append_decimal(av::icd::ConnectionProbe::device(connection));
@@ -115,12 +116,12 @@ TEST(icd_state, dumps_each_connection_with_its_handles_memory_and_batches)
 
   char       expected_bytes[2048];
   TextBuffer expected(expected_bytes, sizeof expected_bytes);
-  expected.append("root/0 busy=false connections=2 handles=5 batches=1 memories=1\n");
+  expected.append("avvk/0 busy=false connections=2 handles=5 batches=1 memories=1\n");
   connection_line(expected, 0u, *av::icd::connection_of(instance));
   expected.append("\nconnection/0/handle/0 kind=instance host=0x0000000000001100 parent=none\n"
                   "connection/0/handle/1 kind=physical_device host=0x0000000000002200 parent=0\n"
                   "connection/0/handle/2 kind=device host=0x0000000000003300 parent=1\n"
-                  "connection/0/handle/2/memory/0 types_learnt=false host_allocations=0\n"
+                  "connection/0/handle/2/memory/0 types_learnt=false\n"
                   "connection/0/handle/3 kind=command_buffer host=0x0000000000007700 parent=2\n"
                   "connection/0/handle/3/batch/0 recorded=");
   expected.append_decimal(recorded);
@@ -142,7 +143,7 @@ TEST(icd_state, a_root_lock_held_elsewhere_is_reported_busy_without_waiting)
   char        bytes[256];
   StateWriter dump(bytes, sizeof bytes);
   rig.root().report(dump);
-  CHECK(std::strcmp(dump.dump(), "root/0 busy=true") == 0);
+  CHECK(std::strcmp(dump.dump(), "avvk/0 busy=true") == 0);
   CHECK(std::strcmp(rig.trace().text(), "!") == 0);
   CHECK(!rig.lock().held());
   rig.lock().held_elsewhere(false);
@@ -153,19 +154,20 @@ TEST(icd_state, an_empty_root_is_its_counts)
   char        bytes[256];
   StateWriter dump(bytes, sizeof bytes);
   rig.root().report(dump);
-  CHECK(std::strcmp(dump.dump(), "root/0 busy=false connections=0 handles=0 batches=0 memories=0") == 0); }
+  CHECK(std::strcmp(dump.dump(), "avvk/0 busy=false connections=0 handles=0 batches=0 memories=0") == 0); }
 
 TEST(icd_state, a_closed_connection_reports_nothing_it_does_not_hold)
 { IcdRig rig;
   av::LockTrace           trace;
   av::RecordingThreadLock lock(trace, 'C');
-  Connection              connection(rig.kmt(), rig.platform(), lock, rig.log());
+  av::icd::SharedHandles  handles(rig.kmt(), lock, rig.platform());
+  Connection              connection(rig.kmt(), rig.platform(), lock, rig.lines(), handles);
   char                    bytes[256];
   StateWriter             dump(bytes, sizeof bytes);
   dump.open("connection", 0u);
   connection.report(dump);
   CHECK(std::strcmp(dump.dump(),
-                    "connection/0 opened=false faulted=false adapter=0 luid=0x0000000000000000 device=0 context=0") == 0); }
+                    "connection/0 opened=false lost=false fault_code=0 adapter=0 luid=0x0000000000000000 device=0 context=0") == 0); }
 
 TEST(recording_thread_lock, try_acquire_takes_a_free_lock_and_refuses_a_held_one)
 { av::LockTrace           trace;
