@@ -48,7 +48,7 @@ void setup_round_trip(const std::uint8_t *bytes, std::size_t length)
 {
     av::ContextSetup decoded;
     if (decoded.decode(bytes, length) != av::Status::ok) return;
-    if (decoded.size() != length) __builtin_trap();
+    if (length != av::ContextSetup::encoded_size) __builtin_trap();
     std::uint8_t again[av::ContextSetup::encoded_size] = {};
     if (decoded.encode(again, sizeof again) != av::Status::ok) __builtin_trap();
     if (std::memcmp(again, bytes, length) != 0) __builtin_trap();

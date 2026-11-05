@@ -776,7 +776,8 @@ if(AV_FUZZ)
        name STREQUAL "fuzz_memory_type_table" OR name STREQUAL "fuzz_swapchain_create")
       target_link_libraries(${name} PRIVATE av_icd)
     endif()
-    if(name STREQUAL "fuzz_context_attributes" OR name STREQUAL "fuzz_pixel_format_query")
+    if(name STREQUAL "fuzz_context_attributes" OR name STREQUAL "fuzz_pixel_format_query" OR
+       name STREQUAL "fuzz_buffer_clear_pattern")
       target_link_libraries(${name} PRIVATE av_gl_icd)
     endif()
     if(name STREQUAL "fuzz_cl_property_list" OR name STREQUAL "fuzz_cl_info_query" OR
