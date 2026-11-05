@@ -24,14 +24,22 @@ public:
     void               run();
     int                descriptor();
     bool               bound() const;
+    void               retry_later();
+    void               settled();
 
 private:
+    static constexpr uint64_t first_retry_nanoseconds = 200000u;
+    static constexpr uint64_t last_retry_nanoseconds = 8000000u;
+
     bool open();
     bool start();
 
     WakeSignal signal_;
     int        reached_fd_;
     int        stop_fd_;
+    int        timer_fd_;
+    uint64_t   retry_delay_;
+    bool       retry_armed_;
     pthread_t  thread_;
     bool       running_;
 };

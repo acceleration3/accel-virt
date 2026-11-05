@@ -224,6 +224,12 @@ uint64_t D3d9Session::reached() const
     return lanes_.reached();
 }
 
+bool D3d9Session::polled() const
+{
+    AV_SCOPE("D3d9Session::polled");
+    return lanes_.polled();
+}
+
 IDirect3DResource9 *D3d9Session::buffer_object(uint32_t id) const
 {
     AV_SCOPE("D3d9Session::buffer_object");

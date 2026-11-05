@@ -32,6 +32,7 @@ public:
     bool               touched() const;
     [[nodiscard]] bool mark(uint64_t value, int wake);
     void               completed(uint64_t value);
+    bool               polled() const;
     void               idle() const;
     void               release();
 

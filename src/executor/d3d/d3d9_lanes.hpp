@@ -28,10 +28,12 @@ public:
     void      mark_touched();
     void      forget(IDirect3DDevice9 *device);
     void      forget_all();
+    void      begin_session();
     template <typename Visitor>
     void      for_each(Visitor visit) const;
 
     bool     marking_failed() const;
+    bool     polled() const;
     uint64_t next() const;
     uint64_t marked() const;
     uint64_t reached() const;

@@ -26,6 +26,7 @@ void D3d9Slices::initialize(D3d9HostDevice *host, ImportTable *imports)
     host_ = host;
     imports_ = imports;
     reported_ = false;
+    lanes_.begin_session();
 }
 
 void D3d9Slices::shut_down()
@@ -74,8 +75,8 @@ bool D3d9Slices::bind(IDirect3DDevice9 *device, uint32_t resource, IDirect3DReso
     if (memory == 0u) return offset == 0u && bytes == 0u && detach(resource, buffer);
     SourceMemory *const store = imports_ != nullptr ? imports_->named(memory) : nullptr;
     uint8_t *const      slice = store != nullptr ? store->at(offset, bytes) : nullptr;
-    if (buffer == nullptr || !supported() || offset % offset_alignment != 0u || !fits(buffer, bytes)) return false;
-    if (slice == nullptr) {
+    if (buffer == nullptr || !supported()) return false;
+    if (slice == nullptr || offset % offset_alignment != 0u || !fits(buffer, bytes)) {
         static_cast<void>(detach(resource, buffer));
         return false;
     }

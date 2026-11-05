@@ -48,10 +48,10 @@ void D3d9Lanes::mark_touched()
     AV_SCOPE("D3d9Lanes::mark_touched");
     const int wake = wake_.bound() ? wake_.descriptor() : -1;
     while (D3d9Lane *const due = lanes_.find_if([](const D3d9Lane &held) { return held.touched(); })) {
-        if (due->mark(marked_ + 1u, wake)) {
-            marked_++;
-            continue;
-        }
+        const uint64_t value = marked_ + 1u;
+        marked_ = value;
+        if (due->mark(value, wake)) continue;
+        marked_ = value - 1u;
         if (!marking_failed_) lines_.write("a Direct3D 9 device's batches could not be marked against the GPU: its buffers are copied");
         marking_failed_ = true;
     }
@@ -68,6 +68,21 @@ void D3d9Lanes::forget_all()
 {
     AV_SCOPE("D3d9Lanes::forget_all");
     lanes_.destroy_all();
+}
+
+void D3d9Lanes::begin_session()
+{
+    AV_SCOPE("D3d9Lanes::begin_session");
+    marking_failed_ = false;
+}
+
+bool D3d9Lanes::polled() const
+{
+    AV_SCOPE("D3d9Lanes::polled");
+    if (!wake_.bound()) return false;
+    bool unwatched = false;
+    lanes_.for_each([&unwatched](const D3d9Lane &held) { unwatched = unwatched || held.polled(); });
+    return unwatched;
 }
 
 bool D3d9Lanes::marking_failed() const

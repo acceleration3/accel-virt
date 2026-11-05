@@ -4,6 +4,7 @@
 
 #include <poll.h>
 #include <sys/eventfd.h>
+#include <sys/timerfd.h>
 #include <unistd.h>
 
 namespace av {
@@ -19,7 +20,7 @@ void *run_eventfd_wake(void *wake)
 
 }
 
-EventfdWake::EventfdWake() : signal_(), reached_fd_(-1), stop_fd_(-1), thread_{}, running_(false)
+EventfdWake::EventfdWake() : signal_(), reached_fd_(-1), stop_fd_(-1), timer_fd_(-1), retry_delay_(0u), retry_armed_(false), thread_{}, running_(false)
 {
     AV_SCOPE("EventfdWake::EventfdWake");
 }
@@ -30,6 +31,7 @@ EventfdWake::~EventfdWake()
     stop();
     if (reached_fd_ >= 0) close(reached_fd_);
     if (stop_fd_ >= 0) close(stop_fd_);
+    if (timer_fd_ >= 0) close(timer_fd_);
 }
 
 void EventfdWake::bind(void (*signal)(void *context), void *context)
@@ -54,14 +56,17 @@ int EventfdWake::descriptor()
 bool EventfdWake::open()
 {
     AV_SCOPE("EventfdWake::open");
-    if (reached_fd_ > 0 && stop_fd_ >= 0) return true;
+    if (reached_fd_ > 0 && stop_fd_ >= 0 && timer_fd_ >= 0) return true;
     reached_fd_ = eventfd(0u, EFD_CLOEXEC | EFD_NONBLOCK);
     stop_fd_ = eventfd(0u, EFD_CLOEXEC | EFD_NONBLOCK);
-    if (reached_fd_ > 0 && stop_fd_ >= 0) return true;
+    timer_fd_ = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
+    if (reached_fd_ > 0 && stop_fd_ >= 0 && timer_fd_ >= 0) return true;
     if (reached_fd_ >= 0) close(reached_fd_);
     if (stop_fd_ >= 0) close(stop_fd_);
+    if (timer_fd_ >= 0) close(timer_fd_);
     reached_fd_ = -1;
     stop_fd_ = -1;
+    timer_fd_ = -1;
     return false;
 }
 
@@ -86,6 +91,25 @@ void EventfdWake::stop()
     running_ = false;
 }
 
+void EventfdWake::retry_later()
+{
+    AV_SCOPE("EventfdWake::retry_later");
+    if (!signal_.bound() || descriptor() < 0 || __atomic_exchange_n(&retry_armed_, true, __ATOMIC_ACQ_REL)) return;
+    retry_delay_ = retry_delay_ == 0u ? first_retry_nanoseconds
+                   : retry_delay_ >= last_retry_nanoseconds ? last_retry_nanoseconds
+                                                            : retry_delay_ * 2u;
+    itimerspec due = {};
+    due.it_value.tv_sec = static_cast<time_t>(retry_delay_ / 1000000000u);
+    due.it_value.tv_nsec = static_cast<long>(retry_delay_ % 1000000000u);
+    if (timerfd_settime(timer_fd_, 0, &due, nullptr) < 0) __atomic_store_n(&retry_armed_, false, __ATOMIC_RELEASE);
+}
+
+void EventfdWake::settled()
+{
+    AV_SCOPE("EventfdWake::settled");
+    retry_delay_ = 0u;
+}
+
 void EventfdWake::unbind()
 {
     AV_SCOPE("EventfdWake::unbind");
@@ -96,12 +120,15 @@ void EventfdWake::unbind()
 void EventfdWake::run()
 {
     AV_SCOPE("EventfdWake::run");
-    pollfd watched[2] = {{reached_fd_, POLLIN, 0}, {stop_fd_, POLLIN, 0}};
+    pollfd watched[3] = {{reached_fd_, POLLIN, 0}, {stop_fd_, POLLIN, 0}, {timer_fd_, POLLIN, 0}};
     for (;;) {
-        if (poll(watched, 2u, -1) < 0) continue;
+        if (poll(watched, 3u, -1) < 0) continue;
         if (watched[1].revents != 0) return;
         uint64_t count = 0u;
-        if (read(reached_fd_, &count, sizeof count) == sizeof count) static_cast<void>(signal_.raise());
+        const bool fenced = watched[0].revents != 0 && read(reached_fd_, &count, sizeof count) == sizeof count;
+        const bool retried = watched[2].revents != 0 && read(timer_fd_, &count, sizeof count) == sizeof count;
+        if (retried) __atomic_store_n(&retry_armed_, false, __ATOMIC_RELEASE);
+        if (fenced || retried) static_cast<void>(signal_.raise());
     }
 }
 

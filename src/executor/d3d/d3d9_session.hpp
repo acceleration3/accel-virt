@@ -54,6 +54,7 @@ public:
     bool               lost() const;
     uint64_t           marked() const;
     uint64_t           reached() const;
+    bool               polled() const;
 
 
     bool on_CreateDevice9(uint32_t device, uint32_t flags, uint32_t &hresult) override;

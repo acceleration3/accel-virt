@@ -249,8 +249,10 @@ void D3dBackend::finish_d3d11()
 bool D3dBackend::poll()
 {
     AV_SCOPE("D3dBackend::poll");
-    const bool unwatched = progress11_.polled();
+    const bool unwatched = progress11_.polled() || d3d9_.polled();
     batches_.retire(completed());
+    if (unwatched) fence_wake_.retry_later();
+    else fence_wake_.settled();
     if (device11_ == nullptr || held_ || !published_.pending()) return unwatched;
     device11_->lock(nullptr);
     const bool pending = published_.publish(device11_->context());

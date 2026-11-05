@@ -109,6 +109,12 @@ void D3d9Lane::completed(uint64_t value)
     if (wake > 0) static_cast<void>(write(wake, &one, sizeof one) < 0);
 }
 
+bool D3d9Lane::polled() const
+{
+    AV_SCOPE("D3d9Lane::polled");
+    return __atomic_load_n(&wake_, __ATOMIC_RELAXED) <= 0 && __atomic_load_n(&done_, __ATOMIC_ACQUIRE) < issued_;
+}
+
 void D3d9Lane::idle() const
 {
     AV_SCOPE("D3d9Lane::idle");
