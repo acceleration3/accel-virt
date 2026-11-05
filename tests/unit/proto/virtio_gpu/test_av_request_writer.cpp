@@ -76,7 +76,7 @@ TEST(av_request_writer_capset, is_get_capset_for_the_id_and_version)
 TEST(av_request_writer_create_context, is_ctx_create_naming_the_capset_with_no_name)
 { Buffer buffer;
   AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
-  CHECK_STATUS(writer.create_context(9u, 0x72u), Status::ok);
+  CHECK_STATUS(writer.create_context(9u, 0x72u, nullptr, 0u), Status::ok);
   CHECK_EQ(writer.length(), 96u);
   CHECK(ByteLayout(buffer.bytes, 96u).at(0u, 4u) == 0x0200u);
   CHECK(zero(buffer.bytes, 32u, 96u));
@@ -86,6 +86,26 @@ TEST(av_request_writer_create_context, is_ctx_create_naming_the_capset_with_no_n
   CHECK_EQ(decoded.context_id(), 9u);
   CHECK_EQ(decoded.context_init(), 0x72u);
   CHECK_EQ(decoded.name_length(), 0u); }
+
+TEST(av_request_writer_create_context, carries_the_name_and_refuses_one_it_cannot_carry)
+{ Buffer buffer;
+  AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  CHECK_STATUS(writer.create_context(9u, 0x72u, "notepad.exe", 11u), Status::ok);
+  CHECK_EQ(writer.length(), 96u);
+  const ByteLayout layout(buffer.bytes, 96u);
+  CHECK(layout.at(24u, 4u) == 11u);
+  CHECK(layout.at(28u, 4u) == 0x72u);
+  CHECK(std::memcmp(buffer.bytes + 32u, "notepad.exe", 11u) == 0);
+  CHECK(zero(buffer.bytes, 43u, 96u));
+  WireReader reader(buffer.bytes, writer.length());
+  ContextRequest decoded;
+  CHECK_STATUS(decoded.decode_create(reader), Status::ok);
+  CHECK_EQ(decoded.name_length(), 11u);
+  CHECK(std::strcmp(decoded.name(), "notepad.exe") == 0);
+  AvRequestWriter refused(buffer.bytes, sizeof buffer.bytes);
+  CHECK_STATUS(refused.create_context(9u, 0x72u, "x", 65u), Status::invalid_parameter);
+  CHECK_STATUS(refused.create_context(9u, 0x72u, nullptr, 3u), Status::invalid_parameter);
+  CHECK_EQ(refused.length(), 0u); }
 
 TEST(av_request_writer_destroy_context, is_ctx_destroy)
 { Buffer buffer;
@@ -162,18 +182,18 @@ TEST(av_request_writer_setup, is_submit_3d_carrying_one_context_setup)
   AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
   const ContextSetup setup(ProtocolVersion(1u, 0u), SubApi::vulkan, 40u, 12u, 41u, 7u, 42u);
   CHECK_STATUS(writer.setup(9u, setup), Status::ok);
-  CHECK_EQ(writer.length(), 64u);
+  CHECK_EQ(writer.length(), 80u);
   WireReader reader(buffer.bytes, writer.length());
   ContextRequest decoded;
   CHECK_STATUS(decoded.decode_submit(reader), Status::ok);
   CHECK_EQ(decoded.context_id(), 9u);
-  CHECK_EQ(decoded.command_size(), ContextSetup::base_size);
+  CHECK_EQ(decoded.command_size(), ContextSetup::encoded_size);
   ContextSetup read_back;
-  CHECK_STATUS(read_back.decode(buffer.bytes + 32u, ContextSetup::base_size), Status::ok);
+  CHECK_STATUS(read_back.decode(buffer.bytes + 32u, ContextSetup::encoded_size), Status::ok);
   CHECK_EQ(read_back.doorbell(), 7u);
   CHECK_EQ(read_back.reply_resource(), 42u); }
 
-TEST(av_request_writer_setup, carries_a_setup_of_its_own_size)
+TEST(av_request_writer_setup, carries_the_options_and_refuses_a_setup_whose_options_do_not_fit)
 { Buffer buffer;
   AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
   const av::GlContextOptions options(4u, 6u, av::GlContextOptions::Profile::core, 0u, 3u);
@@ -204,8 +224,8 @@ TEST(av_request_writer, a_request_that_does_not_fit_writes_nothing)
   CHECK_STATUS(writer.guest_blob(1u, 0u, 1u), Status::too_large);
   CHECK_EQ(writer.length(), 0u);
   CHECK_EQ(bytes[32], 0xEEu);
-  CHECK_STATUS(writer.create_context(1u, 0x72u), Status::too_large);
-  CHECK_STATUS(writer.setup(1u, ContextSetup()), Status::ok);
+  CHECK_STATUS(writer.create_context(1u, 0x72u, nullptr, 0u), Status::too_large);
+  CHECK_STATUS(writer.setup(1u, ContextSetup()), Status::too_large);
   AvRequestWriter none(nullptr, 64u);
   CHECK_STATUS(none.destroy_context(1u), Status::too_large);
   CHECK_STATUS(none.capset(0x72u, 1u), Status::too_large);
