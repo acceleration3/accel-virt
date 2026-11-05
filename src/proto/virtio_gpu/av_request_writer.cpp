@@ -236,7 +236,7 @@ Status AvRequestWriter::setup(uint32_t context_id, const ContextSetup &setup)
 {
     AV_SCOPE("AvRequestWriter::setup");
     WireWriter   writer(bytes_, capacity_);
-    const size_t command = setup.size();
+    const size_t command = ContextSetup::encoded_size;
     if (!begin(writer, submit_3d, context_id, short_request_size + command)) return Status::too_large;
     writer.write_u32(static_cast<uint32_t>(command));
     writer.write_zeros(4u);

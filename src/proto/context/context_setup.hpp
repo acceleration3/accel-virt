@@ -15,9 +15,7 @@ class CapsetInfo;
 
 class ContextSetup {
 public:
-    static constexpr size_t   base_size = 32u;
     static constexpr size_t   encoded_size = 48u;
-    static constexpr uint16_t options_minor = 1u;
 
     ContextSetup();
     ContextSetup(const ProtocolVersion &version, SubApi sub_api, uint32_t ring_resource,
@@ -32,7 +30,6 @@ public:
     uint32_t               doorbell() const;
     uint32_t               reply_resource() const;
     GlContextOptions       options() const;
-    size_t                 size() const;
     bool                   options_fit() const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
@@ -41,6 +38,7 @@ public:
 
 private:
     static constexpr uint32_t magic         = 0x00435641u;
+    static constexpr size_t   fixed_size    = 32u;
     static constexpr uint8_t  lowest_order  = 12u;
     static constexpr uint8_t  highest_order = 24u;
 

@@ -163,7 +163,7 @@ void WireRecorder::record_context_setup(uint32_t context, const ContextSetup &se
         refuse();
         return;
     }
-    write(RecordKind::context_setup, context, 0u, nullptr, 0u, bytes, setup.size());
+    write(RecordKind::context_setup, context, 0u, nullptr, 0u, bytes, ContextSetup::encoded_size);
 }
 
 void WireRecorder::record_batch(uint32_t context, uint64_t fence, const uint8_t *payload, uint32_t length)

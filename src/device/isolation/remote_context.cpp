@@ -66,7 +66,7 @@ Status RemoteContext::bind(const ContextSetup &setup, const CapsetInfo &capset, 
     outcome = connect_doorbell(setup.doorbell(), descriptor);
     if (outcome != Status::ok) return Status::ok;
     ScopeExit disconnect([this] { disconnect_doorbell(); });
-    const BindContextMessage message(id_, setup_bytes, static_cast<uint32_t>(setup.size()), setup.doorbell());
+    const BindContextMessage message(id_, setup_bytes, static_cast<uint32_t>(ContextSetup::encoded_size), setup.doorbell());
     uint8_t                  body[BindContextMessage::fixed_size + ContextSetup::encoded_size] = {};
     outcome = Status::invalid_parameter;
     if (message.encode(body, sizeof body) != Status::ok) return Status::ok;
