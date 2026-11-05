@@ -5,7 +5,18 @@
 #include <cstdint>
 
 using av::ArenaSlots;
+using av::ArenaSlotsProbe;
 using av::GuestBytes;
+
+namespace av {
+
+struct ArenaSlotsProbe {
+    static void start_in_a_free_slot(ArenaSlots &slots) { slots.starts_ |= std::uint64_t{1} << 9u; }
+    static void forget_the_first_start(ArenaSlots &slots) { slots.starts_ &= slots.starts_ - 1u; }
+    static void forget_every_start(ArenaSlots &slots) { slots.starts_ = 0u; }
+};
+
+}
 
 namespace {
 
@@ -104,3 +115,48 @@ TEST(arena_slots_give, giving_back_what_was_never_taken_or_is_misaligned_frees_n
   CHECK_EQ(slots.taken(), 1u);
   slots.give(base, 1u);
   CHECK_EQ(slots.taken(), 0u); }
+
+TEST(arena_slots_invariants, hold_after_every_take_and_give_of_adjacent_and_long_segments)
+{ ArenaSlots slots;
+  std::uint64_t a = 0u;
+  std::uint64_t b = 0u;
+  std::uint64_t c = 0u;
+  CHECK(slots.invariants_hold());
+  CHECK(slots.take_at(0u, 4096u));
+  CHECK(slots.invariants_hold());
+  CHECK(slots.take(slot + 1u, a));
+  CHECK(slots.invariants_hold());
+  CHECK(slots.take(1u, b));
+  CHECK(slots.invariants_hold());
+  CHECK(slots.take(2u * slot, c));
+  CHECK(slots.invariants_hold());
+  slots.give(a, slot + 1u);
+  CHECK(slots.invariants_hold());
+  slots.give(c, 2u * slot);
+  CHECK(slots.invariants_hold());
+  slots.give(b, 1u);
+  slots.give(0u, 4096u);
+  CHECK(slots.invariants_hold());
+  CHECK_EQ(slots.taken(), 0u); }
+
+TEST(arena_slots_invariants, fail_for_a_start_in_a_free_slot_and_a_run_with_no_start)
+{ ArenaSlots slots;
+  std::uint64_t base = 0u;
+  CHECK(slots.take(slot + 1u, base));
+  ArenaSlotsProbe::start_in_a_free_slot(slots);
+  CHECK(!slots.invariants_hold());
+  ArenaSlots lost;
+  CHECK(lost.take(slot + 1u, base));
+  ArenaSlotsProbe::forget_the_first_start(lost);
+  CHECK(!lost.invariants_hold());
+  ArenaSlots unstarted;
+  CHECK(unstarted.take(1u, base));
+  ArenaSlotsProbe::forget_every_start(unstarted);
+  CHECK(!unstarted.invariants_hold()); }
+
+TEST(arena_slots_invariants, fail_when_a_segment_is_given_back_with_a_different_shape)
+{ ArenaSlots slots;
+  std::uint64_t base = 0u;
+  CHECK(slots.take(2u * slot, base));
+  slots.give(base, 1u);
+  CHECK(!slots.invariants_hold()); }

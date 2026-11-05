@@ -33,9 +33,9 @@ bool BlobRole::is_arena() const
     return kind_ == Kind::arena_segment;
 }
 
-bool BlobRole::valid() const
+bool BlobRole::invariants_hold() const
 {
-    AV_SCOPE("BlobRole::valid");
+    AV_SCOPE("BlobRole::invariants_hold");
     if (kind_ == Kind::plain) return base_ == 0u;
     return kind_ == Kind::arena_segment && base_ % GuestBytes::slot_bytes == 0u &&
            base_ >> GuestBytes::slot_shift < GuestBytes::slot_count;
@@ -45,7 +45,7 @@ Status BlobRole::decode(uint32_t kind, uint64_t base)
 {
     AV_SCOPE("BlobRole::decode");
     const BlobRole read(static_cast<Kind>(kind), base);
-    if (kind > static_cast<uint32_t>(Kind::arena_segment) || !read.valid()) return Status::invalid_parameter;
+    if (kind > static_cast<uint32_t>(Kind::arena_segment) || !read.invariants_hold()) return Status::invalid_parameter;
     *this = read;
     return Status::ok;
 }

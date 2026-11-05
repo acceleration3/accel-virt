@@ -14,22 +14,26 @@ TEST(blob_role, a_default_role_is_plain_with_no_base)
   CHECK(role.kind() == BlobRole::Kind::plain);
   CHECK_EQ(role.base(), 0u);
   CHECK(!role.is_arena());
-  CHECK(role.valid()); }
+  CHECK(role.invariants_hold()); }
 
 TEST(blob_role, an_arena_role_is_valid_at_every_slot_and_no_other_offset)
 { for (std::uint32_t slot = 0u; slot < GuestBytes::slot_count; slot++) {
       const BlobRole role(BlobRole::Kind::arena_segment, std::uint64_t{slot} << GuestBytes::slot_shift);
       CHECK(role.is_arena());
-      CHECK(role.valid());
+      CHECK(role.invariants_hold());
   }
-  CHECK(!BlobRole(BlobRole::Kind::arena_segment, 1u).valid());
-  CHECK(!BlobRole(BlobRole::Kind::arena_segment, GuestBytes::slot_bytes + 1u).valid());
-  CHECK(!BlobRole(BlobRole::Kind::arena_segment, GuestBytes::slot_bytes * GuestBytes::slot_count).valid());
-  CHECK(!BlobRole(BlobRole::Kind::arena_segment, ~std::uint64_t{0}).valid()); }
+  CHECK(!BlobRole(BlobRole::Kind::arena_segment, 1u).invariants_hold());
+  CHECK(!BlobRole(BlobRole::Kind::arena_segment, GuestBytes::slot_bytes + 1u).invariants_hold());
+  CHECK(!BlobRole(BlobRole::Kind::arena_segment, GuestBytes::slot_bytes * GuestBytes::slot_count).invariants_hold());
+  CHECK(!BlobRole(BlobRole::Kind::arena_segment, ~std::uint64_t{0}).invariants_hold()); }
+
+TEST(blob_role, a_kind_that_does_not_exist_breaks_the_invariant_at_any_base)
+{ CHECK(!BlobRole(static_cast<BlobRole::Kind>(2u), 0u).invariants_hold());
+  CHECK(!BlobRole(static_cast<BlobRole::Kind>(0xFFFFFFFFu), GuestBytes::slot_bytes).invariants_hold()); }
 
 TEST(blob_role, a_plain_role_carries_no_base)
-{ CHECK(!BlobRole(BlobRole::Kind::plain, GuestBytes::slot_bytes).valid());
-  CHECK(!BlobRole(BlobRole::Kind::plain, 1u).valid()); }
+{ CHECK(!BlobRole(BlobRole::Kind::plain, GuestBytes::slot_bytes).invariants_hold());
+  CHECK(!BlobRole(BlobRole::Kind::plain, 1u).invariants_hold()); }
 
 TEST(blob_role_decode, reads_the_kinds_that_exist)
 { BlobRole role;

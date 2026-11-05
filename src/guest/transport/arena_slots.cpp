@@ -7,7 +7,7 @@ namespace av {
 
 static_assert(GuestBytes::slot_count == 64u, "ArenaSlots keeps one bit per slot in a uint64_t");
 
-ArenaSlots::ArenaSlots() : used_(0u)
+ArenaSlots::ArenaSlots() : used_(0u), starts_(0u)
 {
     AV_SCOPE("ArenaSlots::ArenaSlots");
 }
@@ -30,6 +30,7 @@ bool ArenaSlots::take_at(uint64_t base, uint64_t bytes)
     const uint64_t span = span_of(base, bytes);
     if (span == 0u || (used_ & span) != 0u) return false;
     used_ |= span;
+    starts_ |= span & -span;
     return true;
 }
 
@@ -48,7 +49,17 @@ bool ArenaSlots::take(uint64_t bytes, uint64_t &base)
 void ArenaSlots::give(uint64_t base, uint64_t bytes)
 {
     AV_SCOPE("ArenaSlots::give");
-    used_ &= ~span_of(base, bytes);
+    const uint64_t span = span_of(base, bytes);
+    used_ &= ~span;
+    starts_ &= ~span;
+}
+
+bool ArenaSlots::invariants_hold() const
+{
+    AV_SCOPE("ArenaSlots::invariants_hold");
+    if ((starts_ & ~used_) != 0u) return false;
+    const uint64_t continued = used_ & ~starts_;
+    return (continued & ~(used_ << 1u)) == 0u;
 }
 
 uint32_t ArenaSlots::taken() const

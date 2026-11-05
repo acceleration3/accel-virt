@@ -30,7 +30,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         require(request.resource_id() == 0u && request.role() == av::BlobRole());
         return 0;
     }
-    require(request.resource_id() != 0u && request.role().valid());
+    require(request.resource_id() != 0u && request.role().invariants_hold());
     std::uint8_t again[av::BlobImportRequest::encoded_size] = {};
     require(request.encode(again, sizeof again) == av::Status::ok);
     require(std::memcmp(again, data, size) == 0);

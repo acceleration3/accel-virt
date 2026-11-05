@@ -17,7 +17,7 @@ public:
     Kind     kind() const;
     uint64_t base() const;
     bool     is_arena() const;
-    bool     valid() const;
+    bool     invariants_hold() const;
 
     [[nodiscard]] Status decode(uint32_t kind, uint64_t base);
 

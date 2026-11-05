@@ -5,6 +5,8 @@
 
 namespace av {
 
+struct ArenaSlotsProbe;
+
 class ArenaSlots {
 public:
     ArenaSlots();
@@ -16,10 +18,15 @@ public:
     void               give(uint64_t base, uint64_t bytes);
     uint32_t           taken() const;
 
+    bool invariants_hold() const;
+
 private:
+    friend struct ArenaSlotsProbe;
+
     uint64_t span_of(uint64_t base, uint64_t bytes) const;
 
     uint64_t used_;
+    uint64_t starts_;
 };
 
 }
