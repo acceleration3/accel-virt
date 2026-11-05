@@ -12,7 +12,7 @@ namespace av {
 
 ContextRequestSequence::ContextRequestSequence(Platform &platform)
     : platform_(platform), phase_(Phase::idle), setup_(), context_id_(0u), pages_(), step_(0u),
-      awaiting_(false), context_created_(false), blobs_created_(0u), refusal_(0u), refused_(false)
+      awaiting_(false), context_created_(false), blobs_created_(0u), refusal_(0u), refused_(false), label_{}, label_length_(0u)
       {
           AV_SCOPE("ContextRequestSequence::ContextRequestSequence");
       }
@@ -64,27 +64,26 @@ Status ContextRequestSequence::write_setup_request(uint8_t *bytes, size_t capaci
     const GuestPageList blobs[blob_count] = {pages_.ring(), pages_.fence(), pages_.reply()};
     Status              status = Status::ok;
     if (step_ == context_step) {
-        char           label[AvRequestWriter::name_bytes] = {};
-        const uint32_t label_length = describe_process(label, sizeof label);
-        status = writer.create_context(context_id_, CapsetInfo::capset_id, label, label_length);
+        static_assert(label_bytes == AvRequestWriter::name_bytes, "the label is the name a create carries");
+        status = writer.create_context(context_id_, CapsetInfo::capset_id, label_, label_length_);
     } else if (step_ == setup_step) status = writer.setup(context_id_, setup_);
     else status = writer.guest_blob_pages(resources[step_ - first_blob_step], blobs[step_ - first_blob_step]);
     length = writer.length();
     return status;
 }
 
-uint32_t ContextRequestSequence::describe_process(char *label, size_t capacity)
+void ContextRequestSequence::describe_process()
 {
     AV_SCOPE("ContextRequestSequence::describe_process");
     platform_.require_irql_at_most(Irql::passive, "ContextRequestSequence::describe_process");
     char       image[image_bytes] = {};
-    TextBuffer text(label, capacity);
+    TextBuffer text(label_, sizeof label_);
     text.append_decimal(platform_.current_process_id());
     if (platform_.current_process_image(image, sizeof image) != 0u) {
         text.append(" ");
         text.append(image);
     }
-    return static_cast<uint32_t>(text.length());
+    label_length_ = static_cast<uint32_t>(text.length());
 }
 
 Status ContextRequestSequence::write_teardown_request(uint8_t *bytes, size_t capacity, size_t &length)
@@ -173,7 +172,7 @@ uint32_t ContextRequestSequence::refusal() const
 bool ContextRequestSequence::invariants_hold() const
 {
     AV_SCOPE("ContextRequestSequence::invariants_hold");
-    return blobs_created_ <= blob_count && (context_created_ || blobs_created_ == 0u);
+    return blobs_created_ <= blob_count && (context_created_ || blobs_created_ == 0u) && label_length_ < label_bytes;
 }
 
 }

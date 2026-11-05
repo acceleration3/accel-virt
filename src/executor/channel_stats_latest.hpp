@@ -21,6 +21,8 @@ public:
     bool received() const;
     void report(StateWriter &writer) const;
 
+    bool invariants_hold() const;
+
 private:
     uint32_t context_id_;
     uint64_t reports_;

@@ -61,4 +61,13 @@ void ChannelStatsLatest::report(StateWriter &writer) const
     writer.close();
 }
 
+bool ChannelStatsLatest::invariants_hold() const
+{
+    AV_SCOPE("ChannelStatsLatest::invariants_hold");
+    if (__atomic_load_n(&reports_, __ATOMIC_RELAXED) != 0u) return true;
+    if (__atomic_load_n(&context_id_, __ATOMIC_RELAXED) != 0u) return false;
+    for (const uint64_t &value : values_)
+        if (__atomic_load_n(&value, __ATOMIC_RELAXED) != 0u) return false;
+    return true;
+}
 }

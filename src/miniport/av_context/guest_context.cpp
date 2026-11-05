@@ -23,6 +23,7 @@ Status GuestContext::set_up(const CapsetInfo &capset, uint32_t context_id, const
     platform_.require_irql_at_most(Irql::passive, "GuestContext::set_up");
     if (state_ != State::idle) return Status::invalid_state;
     if (setup.validate_against(capset) != Status::ok || !pages.complete()) return Status::invalid_parameter;
+    sequence_.describe_process();
     SpinLockGuard guard(lock_);
     static_cast<void>(sequence_.begin_setup(context_id, setup, pages));
     pages_ = pages;

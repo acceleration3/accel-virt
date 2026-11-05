@@ -11,7 +11,7 @@
 #include "device/fence/fence_reporter.hpp"
 #include "device/context/ring_consumer.hpp"
 #include "device/threading/worker.hpp"
-#include "proto/context/context_label.hpp"
+#include "device/context/context_label.hpp"
 
 #include <stdint.h>
 

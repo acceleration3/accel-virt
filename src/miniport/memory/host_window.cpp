@@ -2,6 +2,8 @@
 
 #include "core/platform/mutex_guard.hpp"
 #include "core/platform/invariant_scope.hpp"
+#include "core/support/nt_status.hpp"
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
 #include "miniport/virtio/virtio_gpu_device.hpp"
 #include "proto/pages/window_stats.hpp"
@@ -31,7 +33,14 @@ Status HostWindow::initialize(uint64_t base, uint64_t bytes)
     InvariantScope<HostWindow> guard(platform_, *this, "initialize");
     const uint64_t         pages = bytes / page_bytes;
     if (pages == 0u || pages > UINT32_MAX) return Status::invalid_parameter;
-    static_cast<void>(view_.initialize());
+    const Status viewed = view_.initialize();
+    if (viewed != Status::ok) {
+        char       text[72];
+        TextBuffer message(text, sizeof text);
+        message.append("avgpu: the host window stats page is unavailable, status 0x");
+        message.append_hex(static_cast<uint32_t>(NtStatus(viewed).value()), 8u);
+        platform_.log(message.text());
+    }
     if (map_ != nullptr) {
         if (pages != pages_ || (base != base_ && used_ != 0u)) return Status::invalid_state;
         base_ = base;

@@ -26,6 +26,8 @@ public:
     [[nodiscard]] Status read(WindowStats &stats) const;
     void                 report(StateWriter &writer) const;
 
+    bool invariants_hold() const;
+
 private:
     Host    &host_;
     uint8_t *page_;

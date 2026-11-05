@@ -22,6 +22,8 @@ public:
     uint64_t             address() const;
     void                 publish(const WindowStats &stats);
 
+    bool invariants_hold() const;
+
 private:
     uint32_t *sequence() const;
     uint64_t *field(uint32_t index) const;

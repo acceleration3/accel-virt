@@ -1,4 +1,4 @@
-#include "proto/context/context_label.hpp"
+#include "device/context/context_label.hpp"
 
 #include "core/trace/function_scope.hpp"
 

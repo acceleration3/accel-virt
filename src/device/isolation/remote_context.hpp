@@ -3,7 +3,7 @@
 
 #include "core/support/status.hpp"
 #include "device/context/context_binding.hpp"
-#include "proto/context/context_label.hpp"
+#include "device/context/context_label.hpp"
 
 #include <stdint.h>
 

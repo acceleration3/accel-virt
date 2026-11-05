@@ -17,6 +17,7 @@ class ContextRequestSequence {
 public:
     explicit ContextRequestSequence(Platform &platform);
 
+    void                 describe_process();
     [[nodiscard]] Status begin_setup(uint32_t context_id, const ContextSetup &setup, const ContextPages &pages);
     [[nodiscard]] Status begin_teardown();
     [[nodiscard]] Status next_request(uint8_t *bytes, size_t capacity, size_t &length);
@@ -37,10 +38,10 @@ private:
     static constexpr uint32_t setup_step = 4u;
     static constexpr uint32_t unreadable = 0u;
     static constexpr size_t   image_bytes = 48u;
+    static constexpr size_t   label_bytes = 64u;
 
     [[nodiscard]] Status write_setup_request(uint8_t *bytes, size_t capacity, size_t &length);
     [[nodiscard]] Status write_teardown_request(uint8_t *bytes, size_t capacity, size_t &length);
-    uint32_t             describe_process(char *label, size_t capacity);
     void                 finish_setup_step(bool done);
     void                 refuse(uint32_t type);
     uint32_t             teardown_steps() const;
@@ -56,6 +57,8 @@ private:
     uint32_t     blobs_created_;
     uint32_t     refusal_;
     bool         refused_;
+    char         label_[label_bytes];
+    uint32_t     label_length_;
 
     friend struct ContextRequestSequenceProbe;
 };

@@ -97,4 +97,9 @@ void WindowStatsWindow::report(StateWriter &writer) const
     writer.close();
 }
 
+bool WindowStatsWindow::invariants_hold() const
+{
+    AV_SCOPE("WindowStatsWindow::invariants_hold");
+    return page_ == nullptr || reinterpret_cast<uintptr_t>(page_) % alignof(uint64_t) == 0u;
+}
 }

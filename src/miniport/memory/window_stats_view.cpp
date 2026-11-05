@@ -55,6 +55,12 @@ uint64_t *WindowStatsView::field(uint32_t index) const
     return reinterpret_cast<uint64_t *>(page_ + WindowStats::fields_at + uint64_t{index} * sizeof(uint64_t));
 }
 
+bool WindowStatsView::invariants_hold() const
+{
+    AV_SCOPE("WindowStatsView::invariants_hold");
+    return page_ == nullptr || (__atomic_load_n(sequence(), __ATOMIC_RELAXED) & 1u) == 0u;
+}
+
 void WindowStatsView::publish(const WindowStats &stats)
 {
     AV_SCOPE("WindowStatsView::publish");
