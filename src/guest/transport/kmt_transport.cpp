@@ -645,6 +645,7 @@ bool KmtTransport::grow_for_blobs(const uint64_t *sizes, uint32_t count)
         sum = sizes[index] > ~sum ? ~uint64_t{0} : sum + sizes[index];
         if (sizes[index] > largest) largest = sizes[index];
     }
+    if (largest > GuestBytes::slot_bytes) return false;
     const uint64_t need = sum <= GuestBytes::slot_bytes ? sum : largest;
     return grow_arena(need) && blobs_.fits_drained(sizes, count);
 }
@@ -659,21 +660,30 @@ bool KmtTransport::grow_arena(uint64_t need)
     return true;
 }
 
-void KmtTransport::grow_if_pressed()
+bool KmtTransport::grow_if_pressed()
 {
     AV_SCOPE("KmtTransport::grow_if_pressed");
-    if (arena_ == nullptr || faulted_ || !blobs_.ready()) return;
+    if (arena_ == nullptr || faulted_ || !blobs_.ready()) return false;
     const bool waiting = room_pressure_ >= pressure_waits || room_wait_ticks_ >= pressure_wait_ticks;
-    const bool pressed = waiting && uint64_t{blobs_.peak_ring()} * 100u >=
+    const bool pressed = waiting && uint64_t{blobs_.window_peak()} * 100u >=
                                         uint64_t{blobs_.ring_bytes()} * pressure_percent;
+    blobs_.restart_window();
     if (!pressed) {
         room_pressure_ >>= 1u;
         room_wait_ticks_ >>= 1u;
-        return;
+        return false;
     }
     room_pressure_ = 0u;
     room_wait_ticks_ = 0u;
     static_cast<void>(grow_arena(0u));
+    return true;
+}
+
+void KmtTransport::tune_arena()
+{
+    AV_SCOPE("KmtTransport::tune_arena");
+    if (grow_if_pressed()) return;
+    release_idle_segments();
 }
 
 ClientBlobLease KmtTransport::open_region(uint64_t bytes)

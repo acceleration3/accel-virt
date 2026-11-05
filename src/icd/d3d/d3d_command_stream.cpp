@@ -33,7 +33,7 @@ Status D3dCommandStream::flush()
     const TransportResult sent = transport_.flush();
     batches_++;
     if (sent == TransportResult::ok) {
-        transport_.grow_if_pressed();
+        transport_.tune_arena();
         return Status::ok;
     }
     failed_ = true;

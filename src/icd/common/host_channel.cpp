@@ -321,8 +321,7 @@ TransportResult HostChannel::flush()
     const ThreadLockHold release(lock_);
     const TransportResult flushed = transport_.object().flush();
     if (flushed != TransportResult::ok) return flushed;
-    transport_.object().release_idle_segments();
-    transport_.object().grow_if_pressed();
+    transport_.object().tune_arena();
     return flushed;
 }
 

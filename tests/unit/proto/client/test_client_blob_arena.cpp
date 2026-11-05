@@ -276,6 +276,27 @@ TEST(client_blob_arena, the_peak_is_the_most_leased_across_all_segments_at_once)
   CHECK(arena.take(8u).taken());
   CHECK_EQ(arena.peak_ring(), 96u); }
 
+TEST(client_blob_arena, the_window_peak_restarts_on_request_and_when_a_segment_is_removed_but_the_peak_stays)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  const ClientBlobLease lease = arena.take(48u);
+  CHECK(lease.taken());
+  CHECK_EQ(arena.window_peak(), 48u);
+  arena.restart_window();
+  CHECK_EQ(arena.window_peak(), 0u);
+  CHECK_EQ(arena.peak_ring(), 48u);
+  CHECK(arena.take(48u).taken());
+  CHECK_EQ(arena.window_peak(), 96u);
+  arena.seal();
+  arena.mark(1u);
+  arena.retire_through(1u);
+  CHECK(arena.remove_segment(slot));
+  CHECK_EQ(arena.window_peak(), 0u);
+  CHECK_EQ(arena.peak_ring(), 96u);
+  CHECK(arena.invariants_hold()); }
+
 TEST(client_blob_arena, idle_at_names_a_segment_by_its_base_and_is_true_only_while_nothing_is_leased)
 { std::uint8_t first[64];
   std::uint8_t second[64];

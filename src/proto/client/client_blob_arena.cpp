@@ -4,7 +4,7 @@
 
 namespace av {
 
-ClientBlobArena::ClientBlobArena() : segments_{}, regions_{}, count_(0u), current_(0u), peak_ring_(0u)
+ClientBlobArena::ClientBlobArena() : segments_{}, regions_{}, count_(0u), current_(0u), peak_ring_(0u), window_peak_(0u)
 {
     AV_SCOPE("ClientBlobArena::ClientBlobArena");
 }
@@ -26,6 +26,7 @@ void ClientBlobArena::lend(uint8_t *block, size_t capacity)
     count_ = 0u;
     current_ = 0u;
     peak_ring_ = 0u;
+    window_peak_ = 0u;
     if (block != nullptr && capacity != 0u) static_cast<void>(add_segment(0u, block, capacity));
 }
 
@@ -54,6 +55,7 @@ bool ClientBlobArena::remove_segment(uint64_t base)
         held.ring_.lend(nullptr, 0u);
         held.base_ = 0u;
         count_--;
+        window_peak_ = 0u;
         return true;
     }
     return false;
@@ -127,6 +129,7 @@ ClientBlobLease ClientBlobArena::take(size_t count)
         current_ = index;
         const size_t in_use = used();
         if (in_use > peak_ring_) peak_ring_ = in_use;
+        if (in_use > window_peak_) window_peak_ = in_use;
         return ClientBlobLease(lease.data(), held.base_ + lease.offset(), lease.bytes());
     }
     return ClientBlobLease{};
@@ -288,6 +291,18 @@ size_t ClientBlobArena::peak_ring() const
     return peak_ring_;
 }
 
+size_t ClientBlobArena::window_peak() const
+{
+    AV_SCOPE("ClientBlobArena::window_peak");
+    return window_peak_;
+}
+
+void ClientBlobArena::restart_window()
+{
+    AV_SCOPE("ClientBlobArena::restart_window");
+    window_peak_ = 0u;
+}
+
 size_t ClientBlobArena::set_aside_bytes() const
 {
     AV_SCOPE("ClientBlobArena::set_aside_bytes");
@@ -327,7 +342,7 @@ bool ClientBlobArena::invariants_hold() const
             if (ring.ring_.ready() && held.base_ < ring.base_ + ring.ring_.lent() && ring.base_ < held.base_ + held.bytes_)
                 return false;
     }
-    return live == count_ && current_ < max_segments;
+    return live == count_ && current_ < max_segments && window_peak_ <= peak_ring_;
 }
 
 }

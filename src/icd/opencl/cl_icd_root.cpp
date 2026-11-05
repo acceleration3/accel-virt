@@ -1105,7 +1105,9 @@ cl_int ClIcdRoot::finish(cl_command_queue queue)
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
     const cl_int waited = drain_unless_idle(*wire, *held);
     if (waited != CL_SUCCESS) return waited;
-    return deliver_queued(*wire, context_of(*held)->staging(), held->wire());
+    const cl_int delivered = deliver_queued(*wire, context_of(*held)->staging(), held->wire());
+    if (delivered != CL_SUCCESS) return delivered;
+    return context_of(*held)->flush() == TransportResult::ok ? CL_SUCCESS : CL_OUT_OF_RESOURCES;
 }
 
 cl_int ClIcdRoot::flush(cl_command_queue queue)
@@ -1115,7 +1117,9 @@ cl_int ClIcdRoot::flush(cl_command_queue queue)
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    return av::clproto::av_clFlush(*wire, held->wire());
+    const cl_int queued = av::clproto::av_clFlush(*wire, held->wire());
+    if (queued != CL_SUCCESS) return queued;
+    return context_of(*held)->flush() == TransportResult::ok ? CL_SUCCESS : CL_OUT_OF_RESOURCES;
 }
 
 

@@ -67,6 +67,7 @@ public:
     uint32_t             properties(cl_context_properties *out, uint32_t capacity) const;
 
     ClientTransport *wire();
+    [[nodiscard]] TransportResult flush();
     [[nodiscard]] Status lend(void *address, uint64_t bytes, HostAllocation *&made);
     void                 give_back_lent(HostAllocation &lent);
     void                 retire(const uint64_t *block, HostAllocation *lent);

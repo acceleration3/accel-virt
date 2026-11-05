@@ -514,6 +514,24 @@ TEST(kmt_transport_pressure, a_ring_that_never_came_near_full_or_too_few_waits_g
   rig.host_takes_the_releases(2u);
   CHECK_STATUS(rig.arena().close(), Status::ok); }
 
+TEST(kmt_transport_pressure, a_ring_that_grew_is_not_grown_again_by_the_peak_of_the_window_before)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(slot), Status::ok);
+  fill_the_ring(rig);
+  rig.host().blob_import(0u, imported_memory + 2u);
+  KmtTransportProbe::press(rig.transport(), KmtTransport::pressure_waits);
+  CHECK(rig.transport().grow_if_pressed());
+  CHECK_EQ(rig.transport().blobs().segments(), 2u);
+  CHECK_EQ(rig.transport().blobs().window_peak(), 0u);
+  KmtTransportProbe::press(rig.transport(), KmtTransport::pressure_waits);
+  CHECK(!rig.transport().grow_if_pressed());
+  CHECK_EQ(rig.transport().blobs().segments(), 2u);
+  CHECK(rig.transport().blobs().peak_ring() >= slot);
+  CHECK(rig.arena().invariants_hold());
+  rig.host_takes_the_releases(3u);
+  CHECK_STATUS(rig.arena().close(), Status::ok); }
+
 TEST(kmt_transport_pressure, a_host_that_refuses_the_pressure_grow_is_logged_once_with_its_status)
 { Rig rig;
   rig.host_takes_the_imports();
@@ -550,7 +568,7 @@ TEST(kmt_transport_grow, a_request_past_the_channel_ceiling_grows_nothing)
   CHECK_STATUS(rig.arena().grow(KmtBlobArena::max_bytes), Status::no_space);
   CHECK_STATUS(rig.arena().grow(~std::uint64_t{0}), Status::no_space);
   CHECK(rig.arena().invariants_hold());
-  CHECK_EQ(rig.log().lines(), 4u);
+  CHECK_EQ(rig.log().lines(), 1u);
   rig.host_takes_the_releases(2u);
   CHECK_STATUS(rig.arena().close(), Status::ok); }
 
@@ -564,7 +582,7 @@ TEST(kmt_transport_grow, a_ring_segment_is_never_larger_than_one_slot_so_a_bigge
   CHECK_STATUS(rig.arena().grow(slot + 1u), Status::no_space);
   CHECK_EQ(rig.kmt().commands(), before);
   CHECK_EQ(rig.transport().blobs().segments(), 1u);
-  CHECK_EQ(rig.log().lines(), 2u);
+  CHECK_EQ(rig.log().lines(), 1u);
   CHECK(rig.arena().invariants_hold());
   rig.host().blob_import(0u, imported_memory + 2u);
   CHECK_STATUS(rig.arena().grow(slot), Status::ok);
@@ -674,6 +692,25 @@ TEST(kmt_transport_shrink, the_transport_releases_an_idle_segment_once_its_own_c
   rig.host().nop();
   rig.transport().release_idle_segments();
   rig.transport().release_idle_segments();
+  CHECK_EQ(rig.transport().blobs().segments(), 1u);
+  CHECK(rig.arena().invariants_hold());
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok); }
+
+TEST(kmt_transport_shrink, tuning_an_unpressed_channel_releases_its_idle_segment)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  rig.host().blob_import(0u, imported_memory + 2u);
+  const std::uint64_t wanted[1] = {18u * mib};
+  CHECK(rig.transport().make_room_for_blobs(wanted, 1u));
+  rig.kmt().reads_clock(nullptr, 4u * MockKmt::ticks_per_second);
+  rig.transport().tune_arena();
+  rig.transport().tune_arena();
+  CHECK_EQ(rig.transport().blobs().segments(), 2u);
+  rig.host().nop();
+  rig.transport().tune_arena();
+  rig.transport().tune_arena();
   CHECK_EQ(rig.transport().blobs().segments(), 1u);
   CHECK(rig.arena().invariants_hold());
   rig.host_takes_the_releases(2u);

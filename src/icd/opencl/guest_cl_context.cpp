@@ -177,6 +177,13 @@ ClientTransport *GuestClContext::wire()
     return &channel_.wire();
 }
 
+TransportResult GuestClContext::flush()
+{
+    AV_SCOPE("GuestClContext::flush");
+    if (state_ != State::made) return TransportResult::failed;
+    return channel_.flush();
+}
+
 ClArenaBlocks &GuestClContext::staging()
 {
     AV_SCOPE("GuestClContext::staging");

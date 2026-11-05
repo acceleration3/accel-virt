@@ -11,7 +11,7 @@
 namespace av {
 
 KmtBlobArena::KmtBlobArena(GuestConnection &connection, KmtTransport &transport, DriverLog &lines)
-    : connection_(connection), transport_(transport), lines_(lines), slots_(), control_(), rings_(), regions_(), slots_taken_(false), idle_since_{}
+    : connection_(connection), transport_(transport), lines_(lines), slots_(), control_(), rings_(), regions_(), slots_taken_(false), idle_since_{}, refusals_logged_(0u)
 {
     AV_SCOPE("KmtBlobArena::KmtBlobArena");
 }
@@ -74,6 +74,7 @@ Status KmtBlobArena::settle(bool abandoning)
     AV_SCOPE("KmtBlobArena::settle");
     transport_.attach_arena(nullptr);
     transport_.blobs().lend(nullptr, 0u);
+    refusals_logged_ = 0u;
     Status result = Status::ok;
     auto   note = [&result](Status status) {
         if (result == Status::ok) result = status;
@@ -121,7 +122,8 @@ Status KmtBlobArena::grow(uint64_t need)
         if (want != 0u && want >= need && want <= GuestBytes::slot_bytes && total + want <= max_bytes)
             grown = add_ring(want);
     }
-    if (grown != Status::ok)
+    if (grown == Status::ok) refusals_logged_ = 0u;
+    if (grown != Status::ok && first_refusal(grown))
         LogLine(lines_)
             .text("the blob arena did not grow by ")
             .number(need)
@@ -131,6 +133,15 @@ Status KmtBlobArena::grow(uint64_t need)
             .number(static_cast<uint32_t>(grown))
             .write();
     return grown;
+}
+
+bool KmtBlobArena::first_refusal(Status refused)
+{
+    AV_SCOPE("KmtBlobArena::first_refusal");
+    const uint32_t bit = uint32_t{1} << static_cast<unsigned>(refused);
+    if ((refusals_logged_ & bit) != 0u) return false;
+    refusals_logged_ |= bit;
+    return true;
 }
 
 Status KmtBlobArena::add_ring(uint64_t want)

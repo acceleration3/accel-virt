@@ -47,6 +47,8 @@ public:
     size_t   lent() const;
     size_t   ring_bytes() const;
     size_t   peak_ring() const;
+    size_t   window_peak() const;
+    void     restart_window();
     size_t   set_aside_bytes() const;
     bool     invariants_hold() const;
 
@@ -72,6 +74,7 @@ private:
     uint32_t count_;
     uint32_t current_;
     size_t   peak_ring_;
+    size_t   window_peak_;
 
     friend struct ClientBlobArenaProbe;
 };

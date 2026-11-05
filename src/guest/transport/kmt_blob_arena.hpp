@@ -46,6 +46,7 @@ private:
     [[nodiscard]] Status open_control();
     [[nodiscard]] Status settle(bool abandoning);
     [[nodiscard]] Status add_ring(uint64_t want);
+    bool                 first_refusal(Status refused);
 
     GuestConnection               &connection_;
     KmtTransport                  &transport_;
@@ -56,6 +57,7 @@ private:
     ObjectStorage<ArenaSegment>    regions_[max_regions];
     bool                           slots_taken_;
     uint64_t                       idle_since_[ClientBlobArena::max_segments];
+    uint32_t                       refusals_logged_;
 
     friend struct KmtBlobArenaProbe;
 };
