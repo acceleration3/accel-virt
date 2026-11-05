@@ -153,15 +153,36 @@ TEST(d3d9_state_block, a_block_with_no_room_is_left_as_it_was)
     CHECK(block.invariants_hold());
 }
 
-TEST(d3d9_state_block, stops_at_its_limit)
+TEST(d3d9_state_block, grows_past_its_first_room_and_keeps_every_entry)
 {
     MockPlatform   platform;
     D3d9StateBlock block(platform);
-    std::uint32_t  recorded = 0u;
-    for (std::uint32_t index = 0u; index < D3d9StateBlock::max_entries + 1u; index++) {
-        const std::uint32_t value = index;
-        if (block.record(D3d9StateEntry(Kind::render, index, index, &value, 1u)) == Status::ok) recorded++;
+    constexpr std::uint32_t entries = 1000u;
+    for (std::uint32_t index = 0u; index < entries; index++) {
+        const std::uint32_t value = index + 1u;
+        CHECK_STATUS(block.record(D3d9StateEntry(Kind::render, index, index, &value, 1u)), Status::ok);
     }
-    CHECK_EQ(recorded, D3d9StateBlock::max_entries);
-    CHECK_EQ(block.count(), D3d9StateBlock::max_entries);
+    CHECK_EQ(block.count(), entries);
+    for (std::uint32_t index = 0u; index < entries; index++) CHECK_EQ(block.at(index).value()[0], index + 1u);
+    CHECK(block.invariants_hold());
+}
+
+TEST(d3d9_state_block, a_block_that_cannot_grow_keeps_what_it_holds)
+{
+    MockPlatform   platform;
+    D3d9StateBlock block(platform);
+    constexpr std::uint32_t first_room = 64u;
+    for (std::uint32_t index = 0u; index < first_room; index++) {
+        const std::uint32_t value = index;
+        CHECK_STATUS(block.record(D3d9StateEntry(Kind::render, index, index, &value, 1u)), Status::ok);
+    }
+    platform.fail_allocation_at(1u);
+    const std::uint32_t over = first_room;
+    CHECK_STATUS(block.record(D3d9StateEntry(Kind::render, over, over, &over, 1u)), Status::no_memory);
+    CHECK_EQ(block.count(), first_room);
+    for (std::uint32_t index = 0u; index < first_room; index++) CHECK_EQ(block.at(index).value()[0], index);
+    CHECK(block.invariants_hold());
+    CHECK_STATUS(block.record(D3d9StateEntry(Kind::render, over, over, &over, 1u)), Status::ok);
+    CHECK_EQ(block.count(), first_room + 1u);
+    CHECK(block.invariants_hold());
 }
