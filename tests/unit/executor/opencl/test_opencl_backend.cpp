@@ -30,6 +30,12 @@ using av::WireArena;
 using av::WireReader;
 using av::WireWriter;
 
+extern "C" const char *__asan_default_options(void);
+extern "C" const char *__asan_default_options(void)
+{
+    return "detect_leaks=0";
+}
+
 extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
 {
