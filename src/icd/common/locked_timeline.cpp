@@ -17,6 +17,12 @@ uint64_t LockedTimeline::recording() const
     return timeline_.recording();
 }
 
+uint64_t LockedTimeline::covering() const
+{
+    AV_SCOPE("LockedTimeline::covering");
+    return timeline_.covering();
+}
+
 uint64_t LockedTimeline::completed() const
 {
     AV_SCOPE("LockedTimeline::completed");

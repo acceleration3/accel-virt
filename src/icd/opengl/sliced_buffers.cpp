@@ -18,6 +18,7 @@ namespace av::glicd {
 namespace {
 
 constexpr uint32_t known_access = 0x00FFu;
+constexpr uint64_t pin_pause_nanoseconds = 50000u;
 constexpr uint32_t both = BufferMapping::map_read | BufferMapping::map_write;
 
 }
@@ -25,7 +26,7 @@ constexpr uint32_t both = BufferMapping::map_read | BufferMapping::map_write;
 SlicedBuffers::SlicedBuffers(BlockSource &memory, icd::HostChannel &channel, icd::GpuTimeline &timeline,
                              SliceGroups &groups, uint32_t group, DriverLog &lines, const void *owner)
     : memory_(memory), channel_(channel), timeline_(timeline), groups_(groups), group_(group), lines_(lines),
-      owner_(owner), pins_(0u), deferred_(memory), forgets_(memory), clock_(), streams_{}, granted_(false), stopped_(false)
+      owner_(owner), member_(0u), pins_(0u), deferred_(memory), forgets_(memory), clock_(), streams_{}, granted_(false), stopped_(false)
 {
     AV_SCOPE("SlicedBuffers::SlicedBuffers");
 }
@@ -49,12 +50,12 @@ void SlicedBuffers::release()
     {
         const ThreadLockHold hold(groups_.lock());
         groups_.drop_owner(this);
-        groups_.withdraw(this);
+        groups_.withdraw(member_);
+        member_ = 0u;
         deferred_.clear();
         forgets_.clear();
     }
-    while (__atomic_load_n(&pins_, __ATOMIC_ACQUIRE) != 0u) {
-    }
+    while (__atomic_load_n(&pins_, __ATOMIC_ACQUIRE) != 0u) clock_.pause(pin_pause_nanoseconds);
     for (ObjectStorage<icd::StreamMemory> &stream : streams_) stream.destroy();
     granted_ = false;
 }
@@ -110,10 +111,6 @@ Status SlicedBuffers::place(ClientTransport &wire, uint32_t buffer, uint64_t siz
     const Status             taken = stream->take_slice(size, slice);
     if (taken != Status::ok) return taken;
     uint8_t *const own = stream->view(slice);
-    if (own == nullptr) {
-        stream->give_back(slice);
-        return Status::invalid_state;
-    }
     if (data != nullptr) __builtin_memcpy(own, data, static_cast<size_t>(size));
     Status inserted = Status::ok;
     {
@@ -282,10 +279,10 @@ bool SlicedBuffers::wait_recorded()
     return timeline_.wait(timeline_.recording());
 }
 
-uint64_t SlicedBuffers::recording() const
+uint64_t SlicedBuffers::covering() const
 {
-    AV_SCOPE("SlicedBuffers::recording");
-    return timeline_.recording();
+    AV_SCOPE("SlicedBuffers::covering");
+    return timeline_.covering();
 }
 
 uint64_t SlicedBuffers::completed() const
@@ -316,7 +313,7 @@ Status SlicedBuffers::enroll()
 {
     AV_SCOPE("SlicedBuffers::enroll");
     const ThreadLockHold hold(groups_.lock());
-    return groups_.enroll(this, group_);
+    return groups_.enroll(this, group_, member_);
 }
 
 uint32_t SlicedBuffers::map(uint32_t buffer, int64_t offset, int64_t length, uint32_t access, void *&pointer)

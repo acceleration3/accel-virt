@@ -29,6 +29,12 @@ public:
         uint32_t                 stream_;
     };
 
+    struct Member {
+        SlicedBuffers *member_;
+        uint32_t       group_;
+        uint64_t       id_;
+    };
+
     SliceGroups(BlockSource &memory, ThreadLock &lock);
     SliceGroups(const SliceGroups &) = delete;
     SliceGroups &operator=(const SliceGroups &) = delete;
@@ -44,21 +50,16 @@ public:
     Row                 *find(uint32_t group, uint32_t buffer);
     bool                 take(uint32_t group, uint32_t buffer, Row &row);
     void                 drop_owner(const SlicedBuffers *owner);
-    [[nodiscard]] Status enroll(SlicedBuffers *member, uint32_t group);
-    void                 withdraw(const SlicedBuffers *member);
-    bool                 enrolled(const SlicedBuffers *member) const;
-    SlicedBuffers       *next_member(uint32_t group, uint32_t &cursor) const;
+    [[nodiscard]] Status enroll(SlicedBuffers *member, uint32_t group, uint64_t &id);
+    void                 withdraw(uint64_t id);
+    const SlicedBuffers *member_of(uint64_t id) const;
+    const Member        *next_member(uint32_t group, uint32_t &cursor) const;
     uint32_t             owned_by(const SlicedBuffers *owner) const;
     uint32_t             count() const;
 
     bool invariants_hold() const;
 
 private:
-    struct Member {
-        SlicedBuffers *member_;
-        uint32_t       group_;
-    };
-
     uint32_t root_of(uint32_t token) const;
     bool     placed_under(uint32_t root) const;
     uint64_t key_of(uint32_t group, uint32_t buffer) const;
@@ -68,6 +69,7 @@ private:
     KeyedSlots<uint32_t, uint32_t> parents_;
     KeyedSlots<uint64_t, Member>   members_;
     uint32_t                       next_;
+    uint64_t                       next_member_;
 };
 
 }

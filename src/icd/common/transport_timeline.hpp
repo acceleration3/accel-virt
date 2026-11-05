@@ -14,6 +14,7 @@ public:
     TransportTimeline &operator=(const TransportTimeline &) = delete;
 
     uint64_t           recording() const;
+    uint64_t           covering() const;
     uint64_t           completed() const;
     [[nodiscard]] bool wait(uint64_t fence);
     [[nodiscard]] bool publish(uint64_t fence, uint64_t &target);

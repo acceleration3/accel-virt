@@ -19,6 +19,7 @@ public:
     LockedTimeline(HostChannel &channel, ThreadLock &lock);
 
     uint64_t           recording() const override;
+    uint64_t           covering() const override;
     uint64_t           completed() const override;
     [[nodiscard]] bool wait(uint64_t fence) override;
     void               forget();

@@ -85,7 +85,7 @@ public:
     void     pin();
     void     unpin();
     bool     wait_recorded();
-    uint64_t recording() const;
+    uint64_t covering() const;
     uint64_t completed() const;
     [[nodiscard]] Status enroll();
     uint32_t group() const;
@@ -118,6 +118,7 @@ private:
     uint32_t                         group_;
     DriverLog                       &lines_;
     const void                      *owner_;
+    uint64_t                         member_;
     uint32_t                         pins_;
     DeferredSlices                   deferred_;
     QueuedForgets                    forgets_;

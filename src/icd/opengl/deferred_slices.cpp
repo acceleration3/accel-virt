@@ -16,9 +16,9 @@ Status DeferredSlices::add(const SliceGroups &groups, uint32_t group, const Slic
     AV_SCOPE("DeferredSlices::add");
     uint32_t others = 0u;
     uint32_t cursor = 0u;
-    for (const SlicedBuffers *member = groups.next_member(group, cursor); member != nullptr;
+    for (const SliceGroups::Member *member = groups.next_member(group, cursor); member != nullptr;
          member = groups.next_member(group, cursor))
-        others += member != owner ? 1u : 0u;
+        others += member->member_ != owner ? 1u : 0u;
     const Status entry_room = entries_.reserve(entries_.size() + 1u);
     if (entry_room != Status::ok) return entry_room;
     const Status mark_room = marks_.reserve(marks_.size() + others);
@@ -27,9 +27,10 @@ Status DeferredSlices::add(const SliceGroups &groups, uint32_t group, const Slic
     kept.marks_ = others;
     static_cast<void>(entries_.append(kept));
     cursor = 0u;
-    for (const SlicedBuffers *member = groups.next_member(group, cursor); member != nullptr;
+    for (const SliceGroups::Member *member = groups.next_member(group, cursor); member != nullptr;
          member = groups.next_member(group, cursor))
-        if (member != owner) static_cast<void>(marks_.append(Mark{member, member->recording()}));
+        if (member->member_ != owner)
+            static_cast<void>(marks_.append(Mark{member->id_, member->member_->covering()}));
     return Status::ok;
 }
 
@@ -38,7 +39,8 @@ bool DeferredSlices::covered(const SliceGroups &groups, uint32_t first, uint32_t
     AV_SCOPE("DeferredSlices::covered");
     for (uint32_t index = first; index < first + count; index++) {
         const Mark &mark = marks_.at(index);
-        if (groups.enrolled(mark.member_) && mark.member_->completed() < mark.fence_) return false;
+        const SlicedBuffers *const member = groups.member_of(mark.member_);
+        if (member != nullptr && member->completed() < mark.fence_) return false;
     }
     return true;
 }

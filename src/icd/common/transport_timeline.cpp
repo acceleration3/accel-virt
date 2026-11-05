@@ -17,6 +17,12 @@ uint64_t TransportTimeline::recording() const
     return channel_.transport().published_fence() + 1u;
 }
 
+uint64_t TransportTimeline::covering() const
+{
+    AV_SCOPE("TransportTimeline::covering");
+    return channel_.transport().covering_fence();
+}
+
 uint64_t TransportTimeline::completed() const
 {
     AV_SCOPE("TransportTimeline::completed");

@@ -35,7 +35,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, BlockSource &memory, Sub
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u),
       room_(staging != nullptr ? staging_bytes : 0u, reply_bytes), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_{}, route_(nullptr), standby_(nullptr), gates_busy_(0u), pending_(nullptr, 0u), answered_(false), answered_fence_(0u),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_{}, route_(nullptr), standby_(nullptr), gates_busy_(0u), pending_(nullptr, 0u), unpublished_(0u), answered_(false), answered_fence_(0u),
       decode_arena_(nullptr, 0u), blobs_(), spill_(memory), answer_(memory)
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -47,7 +47,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u),
       room_(staging != nullptr ? staging_bytes : 0u, reply_bytes), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
-      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_{}, route_(nullptr), standby_(nullptr), gates_busy_(0u), pending_(nullptr, 0u), answered_(false), answered_fence_(0u),
+      path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_{}, route_(nullptr), standby_(nullptr), gates_busy_(0u), pending_(nullptr, 0u), unpublished_(0u), answered_(false), answered_fence_(0u),
       decode_arena_(nullptr, 0u), blobs_(), spill_(), answer_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
@@ -187,6 +187,13 @@ uint64_t KmtTransport::published_fence() const
 {
     AV_SCOPE("KmtTransport::published_fence");
     return __atomic_load_n(&newest_fence_, __ATOMIC_ACQUIRE);
+}
+
+uint64_t KmtTransport::covering_fence() const
+{
+    AV_SCOPE("KmtTransport::covering_fence");
+    const bool held = __atomic_load_n(&unpublished_, __ATOMIC_ACQUIRE) != 0u;
+    return published_fence() + (held ? 1u : 0u);
 }
 
 Status KmtTransport::await_gpu(uint64_t fence)
@@ -346,6 +353,7 @@ TransportResult KmtTransport::flush()
     uint64_t              fence = 0u;
     const TransportResult sent = publish_batch(pending_.bytes(), static_cast<uint32_t>(pending_.used()), fence);
     pending_.clear();
+    __atomic_store_n(&unpublished_, 0u, __ATOMIC_RELEASE);
     if (sent != TransportResult::ok) faulted_ = true;
     return sent;
 }
@@ -363,6 +371,7 @@ TransportResult KmtTransport::hold_framed(const uint8_t *framed, size_t length)
     if (length > pending_.capacity()) return TransportResult::failed;
     if (!pending_.fits(length) && flush() != TransportResult::ok) return TransportResult::failed;
     static_cast<void>(pending_.append(framed, length));
+    __atomic_store_n(&unpublished_, 1u, __ATOMIC_RELEASE);
     blobs_.seal();
     return TransportResult::ok;
 }
@@ -372,6 +381,7 @@ TransportResult KmtTransport::hold(uint32_t command_id, const WireWriter &writer
     AV_SCOPE("KmtTransport::hold");
     if (writer.spilled()) return hold_pieces(command_id, writer, flags);
     if (!pending_.frame(command_id, writer, flags)) return TransportResult::failed;
+    __atomic_store_n(&unpublished_, 1u, __ATOMIC_RELEASE);
     blobs_.seal();
     return TransportResult::ok;
 }
@@ -385,6 +395,7 @@ TransportResult KmtTransport::hold_pieces(uint32_t command_id, const WireWriter 
     uint64_t      cut = 0u;
     while (!pieces.done()) {
         if (pending_.frame_piece(pieces)) {
+            __atomic_store_n(&unpublished_, 1u, __ATOMIC_RELEASE);
             stats_.piece(++cut);
             continue;
         }
@@ -400,6 +411,7 @@ TransportResult KmtTransport::publish_held_answered(WireReader &reply)
     uint64_t              fence = 0u;
     const TransportResult sent = publish_batch(pending_.bytes(), static_cast<uint32_t>(pending_.used()), fence);
     pending_.clear();
+    __atomic_store_n(&unpublished_, 0u, __ATOMIC_RELEASE);
     if (sent != TransportResult::ok) {
         faulted_ = true;
         return sent;
@@ -463,6 +475,7 @@ void KmtTransport::teardown()
     route_ = nullptr;
     standby_ = nullptr;
     pending_.clear();
+    __atomic_store_n(&unpublished_, 0u, __ATOMIC_RELEASE);
     answered_ = false;
     spill_.release();
     answer_.release();

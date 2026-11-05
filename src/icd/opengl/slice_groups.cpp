@@ -10,7 +10,8 @@ constexpr uint32_t group_shift = 32u;
 }
 
 SliceGroups::SliceGroups(BlockSource &memory, ThreadLock &lock)
-    : lock_(lock), rows_(memory, Pool::paged), parents_(memory, Pool::paged), members_(memory, Pool::paged), next_(1u)
+    : lock_(lock), rows_(memory, Pool::paged), parents_(memory, Pool::paged), members_(memory, Pool::paged), next_(1u),
+      next_member_(1u)
 {
     AV_SCOPE("SliceGroups::SliceGroups");
 }
@@ -108,28 +109,33 @@ void SliceGroups::drop_owner(const SlicedBuffers *owner)
     static_cast<void>(rows_.erase_if([owner](uint64_t, const Row &row) { return row.owner_ == owner; }));
 }
 
-Status SliceGroups::enroll(SlicedBuffers *member, uint32_t group)
+Status SliceGroups::enroll(SlicedBuffers *member, uint32_t group, uint64_t &id)
 {
     AV_SCOPE("SliceGroups::enroll");
-    const uint64_t key = reinterpret_cast<uintptr_t>(member);
-    if (members_.find(key) != nullptr) return Status::ok;
-    uint32_t slot = 0u;
-    return members_.insert(key, Member{member, group}, slot);
+    if (id != 0u && members_.find(id) != nullptr) return Status::ok;
+    uint32_t       slot = 0u;
+    const uint64_t minted = next_member_;
+    const Status   inserted = members_.insert(minted, Member{member, group, minted}, slot);
+    if (inserted != Status::ok) return inserted;
+    next_member_++;
+    id = minted;
+    return Status::ok;
 }
 
-void SliceGroups::withdraw(const SlicedBuffers *member)
+void SliceGroups::withdraw(uint64_t id)
 {
     AV_SCOPE("SliceGroups::withdraw");
-    static_cast<void>(members_.erase(reinterpret_cast<uintptr_t>(member)));
+    static_cast<void>(members_.erase(id));
 }
 
-bool SliceGroups::enrolled(const SlicedBuffers *member) const
+const SlicedBuffers *SliceGroups::member_of(uint64_t id) const
 {
-    AV_SCOPE("SliceGroups::enrolled");
-    return members_.find(reinterpret_cast<uintptr_t>(member)) != nullptr;
+    AV_SCOPE("SliceGroups::member_of");
+    const Member *const found = members_.find(id);
+    return found != nullptr ? found->member_ : nullptr;
 }
 
-SlicedBuffers *SliceGroups::next_member(uint32_t group, uint32_t &cursor) const
+const SliceGroups::Member *SliceGroups::next_member(uint32_t group, uint32_t &cursor) const
 {
     AV_SCOPE("SliceGroups::next_member");
     const uint32_t root = root_of(group);
@@ -137,7 +143,7 @@ SlicedBuffers *SliceGroups::next_member(uint32_t group, uint32_t &cursor) const
         const Member *const found = members_.at(slot);
         if (root_of(found->group_) != root) continue;
         cursor = slot + 1u;
-        return found->member_;
+        return found;
     }
     cursor = members_.no_slot;
     return nullptr;
@@ -160,7 +166,7 @@ uint32_t SliceGroups::count() const
 bool SliceGroups::invariants_hold() const
 {
     AV_SCOPE("SliceGroups::invariants_hold");
-    bool sound = next_ != 0u;
+    bool sound = next_ != 0u && next_member_ != 0u;
     rows_.for_each([&sound](uint64_t key, const Row &row) {
         sound = sound && static_cast<uint32_t>(key) != 0u && row.owner_ != nullptr && row.size_ != 0u &&
                 row.size_ <= row.slice_.bytes_ && row.map_offset_ + row.map_bytes_ <= row.size_ &&
@@ -169,8 +175,8 @@ bool SliceGroups::invariants_hold() const
     parents_.for_each([this, &sound](uint32_t token, const uint32_t &parent) {
         sound = sound && token != parent && root_of(parent) != token;
     });
-    members_.for_each([&sound](uint64_t key, const Member &found) {
-        sound = sound && found.member_ != nullptr && key == reinterpret_cast<uintptr_t>(found.member_);
+    members_.for_each([this, &sound](uint64_t key, const Member &found) {
+        sound = sound && found.member_ != nullptr && key == found.id_ && key < next_member_;
     });
     return sound && rows_.invariants_hold() && parents_.invariants_hold() && members_.invariants_hold();
 }

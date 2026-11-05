@@ -53,6 +53,7 @@ public:
     uint64_t gpu_completed() const;
     bool     knows_gpu_progress() const;
     uint64_t published_fence() const;
+    uint64_t covering_fence() const;
     [[nodiscard]] Status await_gpu(uint64_t fence);
     uint64_t             submissions_through_doorbell() const;
     bool                 ready_for_batch() const;
@@ -172,6 +173,7 @@ private:
     void             lock_gates();
     void             unlock_gates();
     FramedBlock      pending_;
+    uint32_t         unpublished_;
     bool             answered_;
     uint64_t         answered_fence_;
     WireArena        decode_arena_;

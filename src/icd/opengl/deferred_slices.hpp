@@ -39,8 +39,8 @@ public:
 
 private:
     struct Mark {
-        const SlicedBuffers *member_;
-        uint64_t             fence_;
+        uint64_t member_;
+        uint64_t fence_;
     };
 
     bool covered(const SliceGroups &groups, uint32_t first, uint32_t count) const;

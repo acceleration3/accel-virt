@@ -11,6 +11,7 @@ public:
     GpuTimeline &operator=(const GpuTimeline &) = delete;
 
     virtual uint64_t recording() const = 0;
+    virtual uint64_t covering() const = 0;
     virtual uint64_t completed() const = 0;
     [[nodiscard]] virtual bool wait(uint64_t fence) = 0;
 
