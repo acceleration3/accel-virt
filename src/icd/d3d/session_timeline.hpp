@@ -2,7 +2,7 @@
 #define AV_D3D_SESSION_TIMELINE_HPP
 
 #include "icd/common/transport_timeline.hpp"
-#include "icd/d3d/gpu_timeline.hpp"
+#include "icd/common/gpu_timeline.hpp"
 
 #include <stdint.h>
 
@@ -16,7 +16,7 @@ class HostChannel;
 
 namespace av::d3d {
 
-class SessionTimeline final : public GpuTimeline {
+class SessionTimeline final : public icd::GpuTimeline {
 public:
     SessionTimeline(icd::HostChannel &channel, ThreadLock &lock);
 

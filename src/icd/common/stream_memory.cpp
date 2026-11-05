@@ -1,33 +1,37 @@
-#include "icd/d3d/buffer_slices.hpp"
+#include "icd/common/stream_memory.hpp"
 
 #include "core/platform/thread_lock.hpp"
 #include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
+#include "icd/common/gpu_timeline.hpp"
 #include "icd/common/host_channel.hpp"
-#include "icd/d3d/gpu_timeline.hpp"
 
-namespace av::d3d {
+namespace av::icd {
 
-BufferSlices::BufferSlices(BlockSource &memory, icd::HostChannel &channel, const void *owner, GpuTimeline &timeline,
-                           ThreadLock &lock, PollClock &clock, DriverLog &lines)
+StreamMemory::StreamMemory(BlockSource &memory, HostChannel &channel, const void *owner, GpuTimeline &timeline,
+                           ThreadLock &lock, PollClock &clock, DriverLog &lines, HostMemoryRequest::Kind kind,
+                           uint64_t alignment)
     : memory_(memory), channel_(channel), owner_(owner), timeline_(timeline), lock_(lock),
-      blocks_(memory, channel, owner, clock, lines),
+      blocks_(memory, channel, owner, clock, lines, kind), alignment_(alignment < smallest ? smallest : alignment),
+      small_classes_(alignment_ >= largest_small
+                         ? 0u
+                         : 1u + static_cast<uint32_t>(__builtin_ctzll(largest_small / alignment_))),
       free_{{memory, Pool::paged}, {memory, Pool::paged}, {memory, Pool::paged},
             {memory, Pool::paged}, {memory, Pool::paged}, {memory, Pool::paged},
             {memory, Pool::paged}, {memory, Pool::paged}, {memory, Pool::paged}},
       carved_{}, retired_(memory, Pool::paged), retired_first_(0u), outstanding_(0u), lost_(false)
 {
-    AV_SCOPE("BufferSlices::BufferSlices");
+    AV_SCOPE("StreamMemory::StreamMemory");
 }
 
-BufferSlices::~BufferSlices()
+StreamMemory::~StreamMemory()
 {
-    AV_SCOPE("BufferSlices::~BufferSlices");
+    AV_SCOPE("StreamMemory::~StreamMemory");
 }
 
-Status BufferSlices::take_slice(uint64_t bytes, Slice &slice)
+Status StreamMemory::take_slice(uint64_t bytes, Slice &slice)
 {
-    AV_SCOPE("BufferSlices::take_slice");
+    AV_SCOPE("StreamMemory::take_slice");
     slice = Slice{0u, 0u};
     if (bytes == 0u || bytes > SliceBlocks::largest_block_bytes) return Status::invalid_parameter;
     const ThreadLockHold release(lock_);
@@ -49,9 +53,9 @@ Status BufferSlices::take_slice(uint64_t bytes, Slice &slice)
     }
 }
 
-void BufferSlices::retire(const Slice &slice)
+void StreamMemory::retire(const Slice &slice)
 {
-    AV_SCOPE("BufferSlices::retire");
+    AV_SCOPE("StreamMemory::retire");
     if (slice.bytes_ == 0u) return;
     const ThreadLockHold release(lock_);
     reclaim();
@@ -59,18 +63,18 @@ void BufferSlices::retire(const Slice &slice)
     static_cast<void>(retired_.append(Retired{slice.offset_, slice.bytes_, timeline_.recording()}));
 }
 
-void BufferSlices::give_back(const Slice &slice)
+void StreamMemory::give_back(const Slice &slice)
 {
-    AV_SCOPE("BufferSlices::give_back");
+    AV_SCOPE("StreamMemory::give_back");
     if (slice.bytes_ == 0u) return;
     const ThreadLockHold release(lock_);
     if (outstanding_ != 0u) outstanding_--;
     free_slice(slice.offset_, slice.bytes_);
 }
 
-void BufferSlices::trim()
+void StreamMemory::trim()
 {
-    AV_SCOPE("BufferSlices::trim");
+    AV_SCOPE("StreamMemory::trim");
     const ThreadLockHold release(lock_);
     reclaim();
     uint32_t slot = 0u;
@@ -80,69 +84,69 @@ void BufferSlices::trim()
     }
 }
 
-uint8_t *BufferSlices::view(const Slice &slice) const
+uint8_t *StreamMemory::view(const Slice &slice) const
 {
-    AV_SCOPE("BufferSlices::view");
+    AV_SCOPE("StreamMemory::view");
     const ThreadLockHold release(lock_);
     return blocks_.view(slice.offset_);
 }
 
-uint64_t BufferSlices::memory(const Slice &slice) const
+uint64_t StreamMemory::memory(const Slice &slice) const
 {
-    AV_SCOPE("BufferSlices::memory");
+    AV_SCOPE("StreamMemory::memory");
     const ThreadLockHold release(lock_);
     return blocks_.handle(slice.offset_);
 }
 
-uint64_t BufferSlices::offset_in_block(const Slice &slice) const
+uint64_t StreamMemory::offset_in_block(const Slice &slice) const
 {
-    AV_SCOPE("BufferSlices::offset_in_block");
+    AV_SCOPE("StreamMemory::offset_in_block");
     return blocks_.within(slice.offset_);
 }
 
-uint32_t BufferSlices::retired() const
+uint32_t StreamMemory::retired() const
 {
-    AV_SCOPE("BufferSlices::retired");
+    AV_SCOPE("StreamMemory::retired");
     return retired_.size() - retired_first_;
 }
 
-uint32_t BufferSlices::free_in_class(uint64_t bytes) const
+uint32_t StreamMemory::free_in_class(uint64_t bytes) const
 {
-    AV_SCOPE("BufferSlices::free_in_class");
+    AV_SCOPE("StreamMemory::free_in_class");
     const uint32_t which = class_of(bytes);
     return which == no_class ? 0u : free_[which].size();
 }
 
-uint32_t BufferSlices::open_blocks() const
+uint32_t StreamMemory::open_blocks() const
 {
-    AV_SCOPE("BufferSlices::open_blocks");
+    AV_SCOPE("StreamMemory::open_blocks");
     return blocks_.open_count();
 }
 
-uint64_t BufferSlices::open_bytes() const
+uint64_t StreamMemory::open_bytes() const
 {
-    AV_SCOPE("BufferSlices::open_bytes");
+    AV_SCOPE("StreamMemory::open_bytes");
     return blocks_.open_bytes();
 }
 
-uint32_t BufferSlices::class_of(uint64_t bytes) const
+uint32_t StreamMemory::class_of(uint64_t bytes) const
 {
-    AV_SCOPE("BufferSlices::class_of");
-    if (bytes > largest_small) return no_class;
+    AV_SCOPE("StreamMemory::class_of");
+    if (bytes > largest_small || small_classes_ == 0u) return no_class;
     uint32_t which = 0u;
     while (class_bytes(which) < bytes) which++;
     return which;
 }
 
-uint64_t BufferSlices::class_bytes(uint32_t which) const
+uint64_t StreamMemory::class_bytes(uint32_t which) const
 {
-    AV_SCOPE("BufferSlices::class_bytes");
-    return smallest << which;
+    AV_SCOPE("StreamMemory::class_bytes");
+    return alignment_ << which;
 }
 
-Status BufferSlices::take_once(uint64_t bytes, Slice &slice)
+Status StreamMemory::take_once(uint64_t bytes, Slice &slice)
 {
-    AV_SCOPE("BufferSlices::take_once");
+    AV_SCOPE("StreamMemory::take_once");
     const uint32_t which = class_of(bytes);
     if (which == no_class) {
         const uint64_t rounded = (bytes + large_alignment - 1u) & ~(large_alignment - 1u);
@@ -164,9 +168,9 @@ Status BufferSlices::take_once(uint64_t bytes, Slice &slice)
     return Status::ok;
 }
 
-Status BufferSlices::carve(uint32_t which)
+Status StreamMemory::carve(uint32_t which)
 {
-    AV_SCOPE("BufferSlices::carve");
+    AV_SCOPE("StreamMemory::carve");
     const uint64_t each = class_bytes(which);
     const uint32_t count = static_cast<uint32_t>(chunk_bytes / each);
     const Status room = free_[which].reserve(carved_[which] + count);
@@ -180,10 +184,10 @@ Status BufferSlices::carve(uint32_t which)
     return Status::ok;
 }
 
-void BufferSlices::forget_free_in(uint32_t slot)
+void StreamMemory::forget_free_in(uint32_t slot)
 {
-    AV_SCOPE("BufferSlices::forget_free_in");
-    for (uint32_t which = 0u; which < small_classes; which++) {
+    AV_SCOPE("StreamMemory::forget_free_in");
+    for (uint32_t which = 0u; which < most_small_classes; which++) {
         uint32_t kept = 0u;
         for (uint32_t index = 0u; index < free_[which].size(); index++) {
             const uint64_t offset = free_[which].at(index);
@@ -194,15 +198,15 @@ void BufferSlices::forget_free_in(uint32_t slot)
     }
 }
 
-Status BufferSlices::make_retired_room()
+Status StreamMemory::make_retired_room()
 {
-    AV_SCOPE("BufferSlices::make_retired_room");
+    AV_SCOPE("StreamMemory::make_retired_room");
     return retired_.reserve(retired_.size() + outstanding_ + 1u);
 }
 
-void BufferSlices::compact_retired()
+void StreamMemory::compact_retired()
 {
-    AV_SCOPE("BufferSlices::compact_retired");
+    AV_SCOPE("StreamMemory::compact_retired");
     if (retired_first_ == 0u || 2u * retired_first_ < retired_.size()) return;
     const uint32_t left = retired();
     for (uint32_t index = 0u; index < left; index++) retired_.at(index) = retired_.at(retired_first_ + index);
@@ -210,9 +214,9 @@ void BufferSlices::compact_retired()
     retired_first_ = 0u;
 }
 
-void BufferSlices::reclaim()
+void StreamMemory::reclaim()
 {
-    AV_SCOPE("BufferSlices::reclaim");
+    AV_SCOPE("StreamMemory::reclaim");
     if (retired() == 0u) return;
     const uint64_t done = timeline_.completed();
     while (retired() != 0u && retired_.at(retired_first_).tag_ <= done) {
@@ -222,9 +226,9 @@ void BufferSlices::reclaim()
     compact_retired();
 }
 
-void BufferSlices::free_slice(uint64_t offset, uint64_t bytes)
+void StreamMemory::free_slice(uint64_t offset, uint64_t bytes)
 {
-    AV_SCOPE("BufferSlices::free_slice");
+    AV_SCOPE("StreamMemory::free_slice");
     if (!blocks_.holds(blocks_.slot_of(offset))) return;
     const uint32_t which = class_of(bytes);
     if (which == no_class) blocks_.remove(offset);
@@ -232,9 +236,9 @@ void BufferSlices::free_slice(uint64_t offset, uint64_t bytes)
     blocks_.freed(offset);
 }
 
-bool BufferSlices::wait_oldest()
+bool StreamMemory::wait_oldest()
 {
-    AV_SCOPE("BufferSlices::wait_oldest");
+    AV_SCOPE("StreamMemory::wait_oldest");
     channel_.transport().note(ChannelCounter::slice_waits, 1u);
     if (!timeline_.wait(retired_.at(retired_first_).tag_)) {
         lost_ = true;
@@ -244,12 +248,12 @@ bool BufferSlices::wait_oldest()
     return true;
 }
 
-bool BufferSlices::invariants_hold() const
+bool StreamMemory::invariants_hold() const
 {
-    AV_SCOPE("BufferSlices::invariants_hold");
+    AV_SCOPE("StreamMemory::invariants_hold");
     if (retired_first_ > retired_.size() || retired_.capacity() < retired_.size() + outstanding_) return false;
     if (!blocks_.invariants_hold()) return false;
-    for (uint32_t which = 0u; which < small_classes; which++) {
+    for (uint32_t which = 0u; which < most_small_classes; which++) {
         if (free_[which].size() > carved_[which]) return false;
         for (const uint64_t offset : free_[which]) {
             if (offset % class_bytes(which) != 0u || blocks_.within(offset) >= blocks_.bytes_of(blocks_.slot_of(offset)))

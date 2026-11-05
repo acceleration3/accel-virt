@@ -1,5 +1,5 @@
-#ifndef AV_D3D_SLICE_BLOCK_HPP
-#define AV_D3D_SLICE_BLOCK_HPP
+#ifndef AV_ICD_SLICE_BLOCK_HPP
+#define AV_ICD_SLICE_BLOCK_HPP
 
 #include "core/support/status.hpp"
 #include "icd/common/range_table.hpp"
@@ -11,7 +11,7 @@ class BlockSource;
 class HostAllocation;
 }
 
-namespace av::d3d {
+namespace av::icd {
 
 class SliceBlock {
 public:
@@ -37,7 +37,7 @@ public:
 
 private:
     HostAllocation *allocation_;
-    icd::RangeTable ranges_;
+    RangeTable ranges_;
     uint64_t        bytes_;
     uint32_t        live_;
     bool            empty_;

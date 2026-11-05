@@ -1,7 +1,7 @@
 #ifndef AV_D3D_CONTEXT_SLICES_HPP
 #define AV_D3D_CONTEXT_SLICES_HPP
 
-#include "icd/d3d/buffer_slices.hpp"
+#include "icd/common/stream_memory.hpp"
 
 #include <stdint.h>
 
@@ -13,19 +13,20 @@ public:
     ContextSlices(const ContextSlices &) = delete;
     ContextSlices &operator=(const ContextSlices &) = delete;
 
-    void own(BufferSlices *slices);
+    void own(icd::StreamMemory *slices);
 
-    [[nodiscard]] bool place(uint64_t bytes, BufferSlices::Slice &slice);
-    [[nodiscard]] bool rename(uint64_t bytes, BufferSlices::Slice &slice);
-    void               leave(BufferSlices::Slice &slice);
+    [[nodiscard]] bool place(uint64_t bytes, icd::StreamMemory::Slice &slice);
+    [[nodiscard]] bool rename(uint64_t bytes, icd::StreamMemory::Slice &slice);
+    void               leave(icd::StreamMemory::Slice &slice);
     void               trim();
 
-    uint8_t *view(const BufferSlices::Slice &slice) const;
-    uint64_t memory(const BufferSlices::Slice &slice) const;
-    uint64_t offset_in_block(const BufferSlices::Slice &slice) const;
+    bool     available() const;
+    uint8_t *view(const icd::StreamMemory::Slice &slice) const;
+    uint64_t memory(const icd::StreamMemory::Slice &slice) const;
+    uint64_t offset_in_block(const icd::StreamMemory::Slice &slice) const;
 
 private:
-    BufferSlices *slices_;
+    icd::StreamMemory *slices_;
 };
 
 }

@@ -6,6 +6,7 @@
 #include "icd/d3d/hresult.hpp"
 #include "icd/d3d/shared_rows_request.hpp"
 #include "um/d3d/adapter_sessions.hpp"
+#include "um/d3d/buffer_slice_offer11.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "um/d3d/d3d11_host_caps.hpp"
 #include "um/d3d/d3d_session.hpp"
@@ -46,6 +47,7 @@ private:
     d3d::D3dCallTrace       &trace_;
     d3d::SharedRowsRequest   rows_;
     ObjectPool<D3d11Device>  devices_;
+    BufferSliceOffer11       offer_;
     AdapterSessions<D3d11HostCaps> adapters_;
 };
 

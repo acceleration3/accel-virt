@@ -12,6 +12,7 @@
 #include "core/trace/function_scope.hpp"
 #include "um/common/srw_lock.hpp"
 #include "um/d3d/d3d_session.hpp"
+#include "um/d3d/slice_offer.hpp"
 
 #include <stdint.h>
 
@@ -27,7 +28,7 @@ public:
     static constexpr uint32_t none = max_adapters;
 
     AdapterSessions(Kmt &kmt, BlockSource &memory, DriverLog &log, const char *refusal, uint64_t arena_bytes,
-                    uint32_t select_command, uint32_t flush_command);
+                    uint32_t select_command, uint32_t flush_command, const d3d::SliceOffer *offer);
     ~AdapterSessions();
     AdapterSessions(const AdapterSessions &) = delete;
     AdapterSessions &operator=(const AdapterSessions &) = delete;
@@ -50,6 +51,7 @@ private:
     uint64_t                       arena_bytes_;
     uint32_t                       select_command_;
     uint32_t                       flush_command_;
+    const d3d::SliceOffer         *offer_;
     Caps                           caps_[max_adapters];
     ObjectStorage<icd::LinkGenerations<d3d::D3dSession>> sessions_[max_adapters];
     uint32_t                       adapters_[max_adapters];
@@ -58,9 +60,9 @@ private:
 template <typename Caps>
 AdapterSessions<Caps>::AdapterSessions(Kmt &kmt, BlockSource &memory, DriverLog &log, const char *refusal,
                                        uint64_t arena_bytes, uint32_t select_command,
-                                       uint32_t flush_command)
+                                       uint32_t flush_command, const d3d::SliceOffer *offer)
     : kmt_(kmt), memory_(memory), lines_(log), refusal_(refusal), arena_bytes_(arena_bytes),
-      select_command_(select_command), flush_command_(flush_command), caps_(),
+      select_command_(select_command), flush_command_(flush_command), offer_(offer), caps_(),
       sessions_(), adapters_{}
 {
     AV_SCOPE("AdapterSessions::AdapterSessions");
@@ -125,7 +127,7 @@ d3d::D3dSession *AdapterSessions<Caps>::session(uint32_t slot)
     AV_SCOPE("AdapterSessions::session");
     bool                   left_lost = false;
     d3d::D3dSession *const joined = sessions_[slot].object().join(left_lost, kmt_, memory_, lines_, arena_bytes_,
-                                                                  select_command_, flush_command_);
+                                                                  select_command_, flush_command_, offer_);
     if (left_lost) lines_.write("the host faulted the adapter's session: new devices open one of their own");
     return joined;
 }

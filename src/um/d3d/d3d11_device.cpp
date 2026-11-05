@@ -93,7 +93,7 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
         return E_FAIL;
     }
     session_.query_results().bind(channel_.object());
-    slices_.own(session_.slices());
+    slices_.own(session_.memory_stream(HostMemoryRequest::Kind::upload));
     return S_OK;
 }
 

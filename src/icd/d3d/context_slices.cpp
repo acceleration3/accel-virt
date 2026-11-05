@@ -9,36 +9,36 @@ ContextSlices::ContextSlices() : slices_(nullptr)
     AV_SCOPE("ContextSlices::ContextSlices");
 }
 
-void ContextSlices::own(BufferSlices *slices)
+void ContextSlices::own(icd::StreamMemory *slices)
 {
     AV_SCOPE("ContextSlices::own");
     slices_ = slices;
 }
 
-bool ContextSlices::place(uint64_t bytes, BufferSlices::Slice &slice)
+bool ContextSlices::place(uint64_t bytes, icd::StreamMemory::Slice &slice)
 {
     AV_SCOPE("ContextSlices::place");
-    BufferSlices::Slice taken = {};
+    icd::StreamMemory::Slice taken = {};
     if (slices_ == nullptr || slices_->take_slice(bytes, taken) != Status::ok) return false;
     slice = taken;
     return true;
 }
 
-bool ContextSlices::rename(uint64_t bytes, BufferSlices::Slice &slice)
+bool ContextSlices::rename(uint64_t bytes, icd::StreamMemory::Slice &slice)
 {
     AV_SCOPE("ContextSlices::rename");
-    BufferSlices::Slice fresh = {};
+    icd::StreamMemory::Slice fresh = {};
     if (!place(bytes, fresh)) return false;
     slices_->retire(slice);
     slice = fresh;
     return true;
 }
 
-void ContextSlices::leave(BufferSlices::Slice &slice)
+void ContextSlices::leave(icd::StreamMemory::Slice &slice)
 {
     AV_SCOPE("ContextSlices::leave");
     if (slices_ != nullptr) slices_->retire(slice);
-    slice = BufferSlices::Slice{0u, 0u};
+    slice = icd::StreamMemory::Slice{0u, 0u};
 }
 
 void ContextSlices::trim()
@@ -47,19 +47,25 @@ void ContextSlices::trim()
     if (slices_ != nullptr) slices_->trim();
 }
 
-uint8_t *ContextSlices::view(const BufferSlices::Slice &slice) const
+bool ContextSlices::available() const
+{
+    AV_SCOPE("ContextSlices::available");
+    return slices_ != nullptr;
+}
+
+uint8_t *ContextSlices::view(const icd::StreamMemory::Slice &slice) const
 {
     AV_SCOPE("ContextSlices::view");
     return slices_->view(slice);
 }
 
-uint64_t ContextSlices::memory(const BufferSlices::Slice &slice) const
+uint64_t ContextSlices::memory(const icd::StreamMemory::Slice &slice) const
 {
     AV_SCOPE("ContextSlices::memory");
     return slices_->memory(slice);
 }
 
-uint64_t ContextSlices::offset_in_block(const BufferSlices::Slice &slice) const
+uint64_t ContextSlices::offset_in_block(const icd::StreamMemory::Slice &slice) const
 {
     AV_SCOPE("ContextSlices::offset_in_block");
     return slices_->offset_in_block(slice);

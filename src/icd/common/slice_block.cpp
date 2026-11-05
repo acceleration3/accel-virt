@@ -1,9 +1,9 @@
-#include "icd/d3d/slice_block.hpp"
+#include "icd/common/slice_block.hpp"
 
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/host_allocation.hpp"
 
-namespace av::d3d {
+namespace av::icd {
 
 SliceBlock::SliceBlock(BlockSource &memory, HostAllocation &allocation, uint64_t usable_bytes,
                        uint64_t alignment)

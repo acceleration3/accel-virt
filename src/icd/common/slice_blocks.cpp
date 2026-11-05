@@ -1,4 +1,4 @@
-#include "icd/d3d/slice_blocks.hpp"
+#include "icd/common/slice_blocks.hpp"
 
 #include "core/log/driver_log.hpp"
 #include "core/log/log_line.hpp"
@@ -8,15 +8,16 @@
 #include "icd/common/host_channel.hpp"
 #include "proto/resources/host_memory_request.hpp"
 
-namespace av::d3d {
+namespace av::icd {
 
 static_assert(SliceBlocks::slot_bytes == SliceBlocks::largest_block_bytes, "a block fits one slot");
 static_assert(SliceBlocks::slot_count * SliceBlocks::slot_bytes >= SliceBlocks::ceiling_bytes,
               "the slots cover the ceiling");
 
-SliceBlocks::SliceBlocks(BlockSource &memory, icd::HostChannel &channel, const void *owner, PollClock &clock,
-                         DriverLog &lines)
-    : memory_(memory), channel_(channel), owner_(owner), clock_(clock), lines_(lines), blocks_{}, total_bytes_(0u),
+SliceBlocks::SliceBlocks(BlockSource &memory, HostChannel &channel, const void *owner, PollClock &clock,
+                         DriverLog &lines, HostMemoryRequest::Kind kind)
+    : memory_(memory), channel_(channel), owner_(owner), clock_(clock), lines_(lines), kind_(kind), blocks_{},
+      total_bytes_(0u),
       reopen_at_(0u), close_reported_(false)
 {
     AV_SCOPE("SliceBlocks::SliceBlocks");
@@ -62,7 +63,7 @@ Status SliceBlocks::open(uint64_t bytes, uint32_t &slot)
     if (free_slot == slot_count) return Status::no_space;
     HostAllocation *made = nullptr;
     const Status    opened =
-        channel_.open_memory(size, HostMemoryRequest(HostMemoryRequest::Kind::upload, 0u), owner_, made);
+        channel_.open_memory(size, HostMemoryRequest(kind_, 0u), owner_, made);
     if (opened != Status::ok) {
         reopen_at_ = now + reopen_pause_nanoseconds;
         return opened;

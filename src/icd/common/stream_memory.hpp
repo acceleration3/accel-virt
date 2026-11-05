@@ -1,9 +1,10 @@
-#ifndef AV_D3D_BUFFER_SLICES_HPP
-#define AV_D3D_BUFFER_SLICES_HPP
+#ifndef AV_ICD_STREAM_MEMORY_HPP
+#define AV_ICD_STREAM_MEMORY_HPP
 
 #include "core/support/growable_array.hpp"
 #include "core/support/status.hpp"
-#include "icd/d3d/slice_blocks.hpp"
+#include "icd/common/slice_blocks.hpp"
+#include "proto/resources/host_memory_request.hpp"
 
 #include <stdint.h>
 
@@ -15,14 +16,11 @@ class ThreadLock;
 }
 
 namespace av::icd {
-class HostChannel;
-}
-
-namespace av::d3d {
 
 class GpuTimeline;
+class HostChannel;
 
-class BufferSlices {
+class StreamMemory {
 public:
     struct Slice {
         uint64_t offset_;
@@ -31,15 +29,16 @@ public:
 
     static constexpr uint64_t smallest = 256u;
     static constexpr uint64_t largest_small = uint64_t{64} * 1024u;
-    static constexpr uint32_t small_classes = 9u;
+    static constexpr uint32_t most_small_classes = 9u;
     static constexpr uint64_t chunk_bytes = uint64_t{256} * 1024u;
     static constexpr uint64_t large_alignment = SliceBlocks::large_alignment;
 
-    BufferSlices(BlockSource &memory, icd::HostChannel &channel, const void *owner, GpuTimeline &timeline,
-                 ThreadLock &lock, PollClock &clock, DriverLog &lines);
-    ~BufferSlices();
-    BufferSlices(const BufferSlices &) = delete;
-    BufferSlices &operator=(const BufferSlices &) = delete;
+    StreamMemory(BlockSource &memory, HostChannel &channel, const void *owner, GpuTimeline &timeline,
+                 ThreadLock &lock, PollClock &clock, DriverLog &lines, HostMemoryRequest::Kind kind,
+                 uint64_t alignment);
+    ~StreamMemory();
+    StreamMemory(const StreamMemory &) = delete;
+    StreamMemory &operator=(const StreamMemory &) = delete;
 
     [[nodiscard]] Status take_slice(uint64_t bytes, Slice &slice);
     void                 retire(const Slice &slice);
@@ -78,19 +77,21 @@ private:
     bool                 wait_oldest();
 
     BlockSource                &memory_;
-    icd::HostChannel           &channel_;
+    HostChannel           &channel_;
     const void                 *owner_;
     GpuTimeline                &timeline_;
     ThreadLock                 &lock_;
     SliceBlocks                 blocks_;
-    GrowableArray<uint64_t>     free_[small_classes];
-    uint32_t                    carved_[small_classes];
+    uint64_t                    alignment_;
+    uint32_t                    small_classes_;
+    GrowableArray<uint64_t>     free_[most_small_classes];
+    uint32_t                    carved_[most_small_classes];
     GrowableArray<Retired>      retired_;
     uint32_t                    retired_first_;
     uint32_t                    outstanding_;
     bool                        lost_;
 
-    friend struct BufferSlicesProbe;
+    friend struct StreamMemoryProbe;
 };
 
 }

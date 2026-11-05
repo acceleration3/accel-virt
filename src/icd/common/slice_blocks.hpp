@@ -1,9 +1,10 @@
-#ifndef AV_D3D_SLICE_BLOCKS_HPP
-#define AV_D3D_SLICE_BLOCKS_HPP
+#ifndef AV_ICD_SLICE_BLOCKS_HPP
+#define AV_ICD_SLICE_BLOCKS_HPP
 
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
-#include "icd/d3d/slice_block.hpp"
+#include "icd/common/slice_block.hpp"
+#include "proto/resources/host_memory_request.hpp"
 
 #include <stdint.h>
 
@@ -15,10 +16,8 @@ class PollClock;
 }
 
 namespace av::icd {
-class HostChannel;
-}
 
-namespace av::d3d {
+class HostChannel;
 
 class SliceBlocks {
 public:
@@ -33,8 +32,8 @@ public:
     static constexpr uint64_t extra_lifetime_nanoseconds = uint64_t{1} * 1000000000u;
     static constexpr uint64_t reopen_pause_nanoseconds = uint64_t{1} * 1000000000u;
 
-    SliceBlocks(BlockSource &memory, icd::HostChannel &channel, const void *owner, PollClock &clock,
-                DriverLog &lines);
+    SliceBlocks(BlockSource &memory, HostChannel &channel, const void *owner, PollClock &clock,
+                DriverLog &lines, HostMemoryRequest::Kind kind);
     ~SliceBlocks();
     SliceBlocks(const SliceBlocks &) = delete;
     SliceBlocks &operator=(const SliceBlocks &) = delete;
@@ -68,10 +67,11 @@ private:
     static constexpr uint32_t none = ~0u;
 
     BlockSource               &memory_;
-    icd::HostChannel          &channel_;
+    HostChannel          &channel_;
     const void                *owner_;
     PollClock                 &clock_;
     DriverLog                 &lines_;
+    HostMemoryRequest::Kind    kind_;
     ObjectStorage<SliceBlock>  blocks_[slot_count];
     uint64_t                   total_bytes_;
     uint64_t                   reopen_at_;

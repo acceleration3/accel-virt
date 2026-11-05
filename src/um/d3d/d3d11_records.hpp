@@ -1,7 +1,7 @@
 #ifndef AV_UM_D3D11_RECORDS_HPP
 #define AV_UM_D3D11_RECORDS_HPP
 
-#include "icd/d3d/buffer_slices.hpp"
+#include "icd/common/stream_memory.hpp"
 #include "icd/d3d/present_count.hpp"
 #include "icd/d3d/record_stamp.hpp"
 #include "icd/d3d/row_band.hpp"
@@ -46,7 +46,7 @@ struct ResourceRecord {
     void    *runtime_resource;
     uint8_t *shadow;
     size_t   shadow_bytes;
-    d3d::BufferSlices::Slice slice;
+    icd::StreamMemory::Slice slice;
     uint32_t                 on_slice;
     HostAllocation          *lent;
     ResourceRecord          *immediate;

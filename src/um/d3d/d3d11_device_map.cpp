@@ -45,7 +45,7 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
         return;
     }
     if (resource.dimension == D3D10DDIRESOURCE_BUFFER && (resource.cpu_access & D3D10_DDI_CPU_ACCESS_WRITE) != 0u &&
-        type != D3D10_DDI_MAP_READ && session_.slices() == nullptr)
+        type != D3D10_DDI_MAP_READ && !slices_.available())
         wire().note(ChannelCounter::copied_mappings, 1u);
     const uint32_t flags = type == D3D10_DDI_MAP_WRITE_DISCARD      ? copy_discard
                            : type == D3D10_DDI_MAP_WRITE_NOOVERWRITE ? copy_no_overwrite
@@ -263,7 +263,7 @@ bool D3d11Device::own_shadow(ResourceRecord &resource)
                           : static_cast<uint8_t *>(memory_.allocate(resource.shadow_bytes, Pool::paged));
     if (shadow == nullptr) return false;
     if (resource.on_slice != 0u) {
-        resource.slice = d3d::BufferSlices::Slice{0u, 0u};
+        resource.slice = icd::StreamMemory::Slice{0u, 0u};
         resource.on_slice = 0u;
     }
     resource.shadow = shadow;

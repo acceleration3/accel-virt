@@ -1,9 +1,9 @@
-#ifndef AV_D3D_GPU_TIMELINE_HPP
-#define AV_D3D_GPU_TIMELINE_HPP
+#ifndef AV_ICD_GPU_TIMELINE_HPP
+#define AV_ICD_GPU_TIMELINE_HPP
 
 #include <stdint.h>
 
-namespace av::d3d {
+namespace av::icd {
 
 class GpuTimeline {
 public:

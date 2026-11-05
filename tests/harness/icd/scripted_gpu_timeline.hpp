@@ -1,13 +1,13 @@
 #ifndef AV_SCRIPTED_GPU_TIMELINE_HPP
 #define AV_SCRIPTED_GPU_TIMELINE_HPP
 
-#include "icd/d3d/gpu_timeline.hpp"
+#include "icd/common/gpu_timeline.hpp"
 
 #include <cstdint>
 
 namespace av {
 
-class ScriptedGpuTimeline final : public d3d::GpuTimeline {
+class ScriptedGpuTimeline final : public icd::GpuTimeline {
 public:
     ScriptedGpuTimeline();
 
