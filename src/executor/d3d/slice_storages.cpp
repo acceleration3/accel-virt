@@ -2,7 +2,6 @@
 
 #include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
-#include "executor/d3d/d3d11_batch_progress.hpp"
 
 namespace av {
 
@@ -12,19 +11,19 @@ SliceStorages::SliceStorages(BlockSource &blocks, DriverLog &lines)
     AV_SCOPE("SliceStorages::SliceStorages");
 }
 
-const VulkanBuffer *SliceStorages::bind(D3d11HostDevice &device, SourceMemory &store, const D3d11BatchProgress &progress)
+const VulkanBuffer *SliceStorages::bind(SliceImporter &importer, SourceMemory &store, uint64_t next, uint64_t reached)
 {
     AV_SCOPE("SliceStorages::bind");
-    reclaim(progress);
+    reclaim(reached);
     SliceStorage *storage = find(store);
     if (storage == nullptr && storages_.create(storage, store) != Status::ok) return nullptr;
     if (storage->retired() || storage->refused()) return nullptr;
-    if (!storage->imported() && !storage->import(device)) {
+    if (!storage->imported() && !storage->import(importer)) {
         if (!reported_) lines_.write("a block of slice memory could not be imported to draw from: its buffers are copied");
         reported_ = true;
         return nullptr;
     }
-    storage->used_at(progress.next());
+    storage->used_at(next);
     return &storage->buffer();
 }
 
@@ -46,12 +45,12 @@ bool SliceStorages::bound(uint32_t resource, SliceBindings::Binding &was) const
     return bindings_.find(resource, was);
 }
 
-void SliceStorages::retire(const SourceMemory &store, const D3d11BatchProgress &progress)
+void SliceStorages::retire(const SourceMemory &store, uint64_t next)
 {
     AV_SCOPE("SliceStorages::retire");
     SliceStorage *const storage = find(store);
     if (storage == nullptr || storage->retired()) return;
-    storage->used_at(progress.next());
+    storage->used_at(next);
     storage->retire();
     retiring_++;
 }
@@ -62,11 +61,10 @@ bool SliceStorages::holds(const SourceMemory &store)
     return find(store) != nullptr;
 }
 
-void SliceStorages::reclaim(const D3d11BatchProgress &progress)
+void SliceStorages::reclaim(uint64_t reached)
 {
     AV_SCOPE("SliceStorages::reclaim");
     if (retiring_ == 0u) return;
-    const uint64_t reached = progress.reached();
     const uint32_t before = storages_.live();
     storages_.destroy_if([reached](const SliceStorage &storage) { return storage.done(reached); });
     retiring_ -= before - storages_.live();

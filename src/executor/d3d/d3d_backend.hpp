@@ -177,6 +177,7 @@ private:
     bool detach_buffer_slice(uint32_t resource, uint64_t offset, uint64_t bytes);
     bool marks_batches();
     void retire_slices(const SourceMemory &memory);
+    void finish_d3d11();
     bool leave_slice(ID3D11Buffer *buffer, const SliceBindings::Binding &was);
     void drop_slice(uint32_t id);
     friend struct D3dBackendProbe;
@@ -225,12 +226,12 @@ private:
     GuestBytes              guest_;
     GuestRegion             region_;
     ImportTable            *imports_;
+    SliceStorages           slices_;
     D3d12Session            d3d12_;
     D3d9Session             d3d9_;
     QueryResultPublisher    published_;
     D3d11BatchProgress      progress11_;
     ConstantRing            constants_;
-    SliceStorages           slices_;
     uint64_t                missed_key_;
     bool                    mark_refused_;
     bool                    show_refused_;

@@ -42,8 +42,18 @@ ID3D9VkInteropDevice : public IUnknown {
     virtual void STDMETHODCALLTYPE ReleaseSubmissionQueue() = 0;
     virtual void STDMETHODCALLTYPE LockDevice() = 0;
     virtual void STDMETHODCALLTYPE UnlockDevice() = 0;
+    virtual bool STDMETHODCALLTYPE WaitForResource(IDirect3DResource9 *resource, DWORD map_flags) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateImage(const void *desc, IDirect3DResource9 **result) = 0;
 };
 __CRT_UUID_DECL(ID3D9VkInteropDevice, 0x2eaa4b89, 0x0107, 0x4bdb, 0x87, 0xf7, 0x0f, 0x54, 0x1c, 0x49, 0x3c, 0xe0);
+
+MIDL_INTERFACE("9c3a6f27-5b81-4e0d-a7d2-1f48c6b0e395")
+ID3D9VkInteropDevice1 : public ID3D9VkInteropDevice {
+    virtual HRESULT STDMETHODCALLTYPE BindBufferStorage(IDirect3DResource9 *resource, VkBuffer storage,
+                                                        VkDeviceSize offset, VkDeviceSize length, void *map_ptr) = 0;
+    virtual void STDMETHODCALLTYPE FlushCommands() = 0;
+};
+__CRT_UUID_DECL(ID3D9VkInteropDevice1, 0x9c3a6f27, 0x5b81, 0x4e0d, 0xa7, 0xd2, 0x1f, 0x48, 0xc6, 0xb0, 0xe3, 0x95);
 
 MIDL_INTERFACE("61f307d3-d34e-4e7c-8374-3ba4de23cccb")
 ID3D12DeviceFactory : public IUnknown {

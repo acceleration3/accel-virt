@@ -1,6 +1,8 @@
 #include "executor/shim/d3d9_host_device.hpp"
 
+#include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/shim/d3d9_slice_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/d3d_runtime.hpp"
 #include "executor/shim/physical_device_identity.hpp"
@@ -40,7 +42,7 @@ constexpr uint32_t depth_texture_bit = 15u;
 
 }
 
-D3d9HostDevice::D3d9HostDevice() : d3d9_(nullptr), adapter_(~0u), frames_()
+D3d9HostDevice::D3d9HostDevice() : d3d9_(nullptr), adapter_(~0u), slices_(false), frames_()
 {
     AV_SCOPE("D3d9HostDevice::D3d9HostDevice");
 }
@@ -58,9 +60,12 @@ bool D3d9HostDevice::open(const D3dRuntime &runtime, const uint8_t *uuid)
     d3d9_ = runtime.create_d3d9();
     if (d3d9_ == nullptr) return false;
     adapter_ = adapter_for(uuid);
-    if (adapter_ != ~0u) return true;
-    close();
-    return false;
+    if (adapter_ == ~0u) {
+        close();
+        return false;
+    }
+    slices_ = probe_slices();
+    return true;
 }
 
 void D3d9HostDevice::close()
@@ -70,6 +75,7 @@ void D3d9HostDevice::close()
     if (d3d9_ != nullptr) d3d9_->Release();
     d3d9_ = nullptr;
     adapter_ = ~0u;
+    slices_ = false;
 }
 
 StagedFrame *D3d9HostDevice::stage_frame(IDirect3DDevice9 *device, IDirect3DSurface9 *source, uint32_t width,
@@ -83,6 +89,25 @@ bool D3d9HostDevice::opened() const
 {
     AV_SCOPE("D3d9HostDevice::opened");
     return d3d9_ != nullptr;
+}
+
+bool D3d9HostDevice::slices() const
+{
+    AV_SCOPE("D3d9HostDevice::slices");
+    return slices_;
+}
+
+bool D3d9HostDevice::probe_slices() const
+{
+    AV_SCOPE("D3d9HostDevice::probe_slices");
+    IDirect3DDevice9 *device = nullptr;
+    if (FAILED(make_device(device))) return false;
+    ScopeExit release_device([device] { device->Release(); });
+    IDirect3DQuery9 *marker = nullptr;
+    if (FAILED(device->CreateQuery(D3DQUERYTYPE_EVENT, &marker))) return false;
+    marker->Release();
+    D3d9SliceDevice lane;
+    return lane.connect(device);
 }
 
 uint32_t D3d9HostDevice::adapter_for(const uint8_t *uuid)

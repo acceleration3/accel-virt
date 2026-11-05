@@ -52,6 +52,20 @@ namespace av::d3d9proto {
 [[nodiscard]] bool av_d3d9_WriteTexture9(::av::ClientTransport& t, uint32_t texture, uint32_t subresource, const Box& box, uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags, const void* data, uint64_t data_size);
 // `data` at `offset` of a vertex or index buffer; flags as WriteTexture9's.
 [[nodiscard]] bool av_d3d9_WriteBuffer9(::av::ClientTransport& t, uint32_t buffer, uint32_t offset, uint32_t flags, const void* data, uint64_t data_size);
+// Whether a vertex or index buffer made dynamic in D3DPOOL_DEFAULT can be pointed at a slice of a block of slice
+// memory (BindBufferSlice9): 1 when the host's Direct3D 9 can draw from host memory in place, marks each batch against
+// the GPU, and takes any number of blocks, 0 when it cannot - the host's DXVK cannot rename a buffer to storage it
+// imported - and the guest then copies what it writes, as before (docs/mapped-buffers-plan.md).
+[[nodiscard]] bool av_d3d9_QueryBufferSlices9(::av::ClientTransport& t, uint32_t* supported);
+// The vertex or index buffer from now on is `bytes` at `offset` of a block of the session's slice memory - host
+// upload memory the guest opened for slices and imported, named by the handle IMPORT_BLOB answered as `memory`
+// (docs/host-memory.md) - which the guest writes and the host GPU reads in place: commands before this one read the
+// buffer's storage before it, commands after it this slice. `bytes` covers at least the buffer; a slice outside its
+// block, a buffer that was not made dynamic in D3DPOOL_DEFAULT, or a host QueryBufferSlices9 answered 0 for, is
+// refused. A `memory` of 0, with `offset` and `bytes` 0, is the buffer leaving its slice, as BindBufferSlice's is: it
+// owns its storage again, keeping what the slice held. The host never locks a buffer bound to a slice, and a
+// WriteBuffer9 to one takes it off the slice first.
+[[nodiscard]] bool av_d3d9_BindBufferSlice9(::av::ClientTransport& t, uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes);
 // Every level below the top of a texture made with D3DUSAGE_AUTOGENMIPMAP, from the top, filtered with
 // `filter` (a D3DTEXTUREFILTERTYPE).
 [[nodiscard]] bool av_d3d9_GenerateMips9(::av::ClientTransport& t, uint32_t texture, uint32_t filter);

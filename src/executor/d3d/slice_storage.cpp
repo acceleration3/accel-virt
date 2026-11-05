@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/owned_fd.hpp"
-#include "executor/shim/d3d11_host_device.hpp"
+#include "executor/shim/slice_importer.hpp"
 #include "executor/source_memory.hpp"
 
 namespace av {
@@ -21,11 +21,11 @@ SliceStorage::~SliceStorage()
     store_->owner()->release(*store_);
 }
 
-bool SliceStorage::import(D3d11HostDevice &device)
+bool SliceStorage::import(SliceImporter &importer)
 {
     AV_SCOPE("SliceStorage::import");
     OwnedFd descriptor;
-    if (store_->share(descriptor) && device.import_to_draw(descriptor, store_->size(), buffer_)) return true;
+    if (store_->share(descriptor) && importer.import_to_draw(descriptor, store_->size(), buffer_)) return true;
     refused_ = true;
     return false;
 }

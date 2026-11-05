@@ -291,6 +291,7 @@ bool D3d9Session::on_WriteBuffer9(uint32_t buffer, uint32_t offset, uint32_t fla
     const uint64_t size = vertices != nullptr ? vertex_desc.Size : index_desc.Size;
     const DWORD    lock = lock_flags(vertices != nullptr ? vertex_desc.Pool : index_desc.Pool, flags);
     if (data_size == 0u || data_size > size || offset > size - data_size) return false;
+    if (!slices_.detach(buffer, buffer_object(buffer))) return false;
     void *mapped = nullptr;
     const HRESULT opened =
         vertices != nullptr ? vertices->Lock(offset, static_cast<UINT>(data_size), &mapped, lock)
@@ -300,6 +301,24 @@ bool D3d9Session::on_WriteBuffer9(uint32_t buffer, uint32_t offset, uint32_t fla
     if (vertices != nullptr) vertices->Unlock();
     else indices->Unlock();
     return true;
+}
+
+bool D3d9Session::on_QueryBufferSlices9(uint32_t &supported)
+{
+    AV_SCOPE("D3d9Session::on_QueryBufferSlices9");
+    supported = slices_.supported() ? 1u : 0u;
+    return true;
+}
+
+bool D3d9Session::on_BindBufferSlice9(uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes)
+{
+    AV_SCOPE("D3d9Session::on_BindBufferSlice9");
+    IDirect3DResource9 *const found = buffer_object(buffer);
+    if (device() == nullptr || found == nullptr || owned(buffer, found->GetType() == D3DRTYPE_VERTEXBUFFER
+                                                                  ? D3dObjectKind::vertex_buffer9
+                                                                  : D3dObjectKind::index_buffer9) == nullptr)
+        return false;
+    return slices_.bind(device(), buffer, found, memory, offset, bytes);
 }
 
 bool D3d9Session::on_GenerateMips9(uint32_t texture, uint32_t filter)

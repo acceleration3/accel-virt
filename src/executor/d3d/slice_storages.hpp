@@ -11,9 +11,8 @@
 namespace av {
 
 class BlockSource;
-class D3d11BatchProgress;
-class D3d11HostDevice;
 class DriverLog;
+class SliceImporter;
 class SourceMemory;
 
 class SliceStorages {
@@ -22,15 +21,15 @@ public:
     SliceStorages(const SliceStorages &) = delete;
     SliceStorages &operator=(const SliceStorages &) = delete;
 
-    const VulkanBuffer *bind(D3d11HostDevice &device, SourceMemory &store, const D3d11BatchProgress &progress);
+    const VulkanBuffer *bind(SliceImporter &importer, SourceMemory &store, uint64_t next, uint64_t reached);
     [[nodiscard]] bool  attach(const SliceBindings::Binding &binding);
     bool                leave(uint32_t resource, SliceBindings::Binding &was);
     bool                bound(uint32_t resource, SliceBindings::Binding &was) const;
     template <typename Visitor>
     void                take_all_bound_to(const SourceMemory &store, Visitor visit);
-    void                retire(const SourceMemory &store, const D3d11BatchProgress &progress);
+    void                retire(const SourceMemory &store, uint64_t next);
     bool                holds(const SourceMemory &store);
-    void                reclaim(const D3d11BatchProgress &progress);
+    void                reclaim(uint64_t reached);
     void                destroy_all();
 
     uint32_t count() const;

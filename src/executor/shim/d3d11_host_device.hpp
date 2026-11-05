@@ -15,6 +15,7 @@
 #include "executor/shim/exportable_images.hpp"
 #include "executor/shim/host_image_export.hpp"
 #include "executor/shim/plane_composer.hpp"
+#include "executor/shim/slice_importer.hpp"
 
 #include <stdint.h>
 
@@ -45,7 +46,7 @@ class D3d12HostDevice;
 class Vkd3dImageExport;
 class WakeSignal;
 
-class D3d11HostDevice final : public RenewableDevice {
+class D3d11HostDevice final : public RenewableDevice, public SliceImporter {
 public:
     explicit D3d11HostDevice(DriverLog &lines);
     ~D3d11HostDevice();
@@ -95,7 +96,7 @@ public:
     ID3D11Texture2D   *make_tiled(const D3D11_TEXTURE2D_DESC1 &desc);
     [[nodiscard]] bool export_memory(ID3D11Texture2D *texture, OwnedFd &descriptor);
     bool               slices() const;
-    [[nodiscard]] bool import_to_draw(OwnedFd &descriptor, uint64_t bytes, VulkanBuffer &buffer);
+    [[nodiscard]] bool import_to_draw(OwnedFd &descriptor, uint64_t bytes, VulkanBuffer &buffer) override;
     [[nodiscard]] bool bind_storage(ID3D11Buffer *buffer, const VulkanBuffer &storage, uint64_t offset,
                                     uint64_t bytes, void *host);
     DxvkVulkanDevice  &vulkan();

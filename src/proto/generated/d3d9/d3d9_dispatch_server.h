@@ -41,6 +41,8 @@ public:
     virtual bool on_CreateIndexBuffer9(uint32_t buffer, uint32_t length, uint32_t usage, uint32_t format, uint32_t pool) = 0;
     virtual bool on_WriteTexture9(uint32_t texture, uint32_t subresource, const Box& box, uint32_t row_pitch, uint32_t slice_pitch, uint32_t flags, const uint8_t* data, uint64_t data_size) = 0;
     virtual bool on_WriteBuffer9(uint32_t buffer, uint32_t offset, uint32_t flags, const uint8_t* data, uint64_t data_size) = 0;
+    virtual bool on_QueryBufferSlices9(uint32_t& supported) = 0;
+    virtual bool on_BindBufferSlice9(uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes) = 0;
     virtual bool on_GenerateMips9(uint32_t texture, uint32_t filter) = 0;
     virtual bool on_ReadSurface9(uint32_t surface, uint32_t subresource, uint32_t& hresult, uint32_t& width, uint32_t& height, uint32_t& format, uint32_t& pitch, uint8_t* pixels, uint64_t pixels_capacity, uint64_t& pixels_size) = 0;
     virtual bool on_StretchRect9(uint32_t source, uint32_t source_subresource, const Rect& source_rect, uint32_t destination, uint32_t destination_subresource, const Rect& destination_rect, uint32_t filter) = 0;

@@ -120,6 +120,29 @@ doc = """`data` at `offset` of a vertex or index buffer; flags as WriteTexture9'
 params = ["u32 buffer", "u32 offset", "u32 flags", "bytes data"]
 
 [[command]]
+name = "QueryBufferSlices9"
+id = 0x210b
+doc = """Whether a vertex or index buffer made dynamic in D3DPOOL_DEFAULT can be pointed at a slice of a block of slice
+memory (BindBufferSlice9): 1 when the host's Direct3D 9 can draw from host memory in place, marks each batch against
+the GPU, and takes any number of blocks, 0 when it cannot - the host's DXVK cannot rename a buffer to storage it
+imported - and the guest then copies what it writes, as before (docs/mapped-buffers-plan.md)."""
+params = []
+reply = ["u32 supported"]
+
+[[command]]
+name = "BindBufferSlice9"
+id = 0x210c
+doc = """The vertex or index buffer from now on is `bytes` at `offset` of a block of the session's slice memory - host
+upload memory the guest opened for slices and imported, named by the handle IMPORT_BLOB answered as `memory`
+(docs/host-memory.md) - which the guest writes and the host GPU reads in place: commands before this one read the
+buffer's storage before it, commands after it this slice. `bytes` covers at least the buffer; a slice outside its
+block, a buffer that was not made dynamic in D3DPOOL_DEFAULT, or a host QueryBufferSlices9 answered 0 for, is
+refused. A `memory` of 0, with `offset` and `bytes` 0, is the buffer leaving its slice, as BindBufferSlice's is: it
+owns its storage again, keeping what the slice held. The host never locks a buffer bound to a slice, and a
+WriteBuffer9 to one takes it off the slice first."""
+params = ["u32 buffer", "u64 memory", "u64 offset", "u64 bytes"]
+
+[[command]]
 name = "GenerateMips9"
 id = 0x2107
 doc = """Every level below the top of a texture made with D3DUSAGE_AUTOGENMIPMAP, from the top, filtered with

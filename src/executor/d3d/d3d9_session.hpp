@@ -3,7 +3,9 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
+#include "executor/d3d/d3d9_batch_progress.hpp"
 #include "executor/d3d/d3d9_flip_shares.hpp"
+#include "executor/d3d/d3d9_slices.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/d3d/guest_devices.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_server.h"
@@ -11,6 +13,7 @@
 #include <stdint.h>
 
 struct IDirect3DDevice9;
+struct IDirect3DResource9;
 struct IDirect3DSurface9;
 struct IUnknown;
 
@@ -22,6 +25,8 @@ class SharedSurfaces;
 class SessionShares;
 class D3d11HostDevice;
 class GuestBytes;
+class ImportTable;
+class SliceStorages;
 class WatchedBlocks;
 class WireArena;
 class WireReader;
@@ -31,18 +36,26 @@ class D3d9Session final : public d3d9proto::ServerDispatch {
 public:
     static constexpr uint32_t max_dimension = 16384u;
 
-    D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks, DriverLog &lines);
+    D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks, SliceStorages &storages,
+                DriverLog &lines);
     ~D3d9Session();
     D3d9Session(const D3d9Session &) = delete;
     D3d9Session &operator=(const D3d9Session &) = delete;
 
     void initialize(D3d9HostDevice *host, SharedSurfaces *surfaces, D3d11HostDevice *device11,
-                    SessionShares *shares);
+                    SessionShares *shares, ImportTable *imports);
     void shut_down();
+    void end_batch();
+    void discard_slice(uint32_t resource);
 
     bool               knows(uint32_t command_id) const;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena);
     bool               lost() const;
+    bool               slicing() const;
+    bool               polled() const;
+    uint64_t           next_mark() const;
+    uint64_t           marked() const;
+    uint64_t           reached() const;
 
 
     bool on_CreateDevice9(uint32_t device, uint32_t flags, uint32_t &hresult) override;
@@ -66,6 +79,8 @@ public:
                           uint32_t slice_pitch, uint32_t flags, const uint8_t *data, uint64_t data_size) override;
     bool on_WriteBuffer9(uint32_t buffer, uint32_t offset, uint32_t flags, const uint8_t *data,
                          uint64_t data_size) override;
+    bool on_QueryBufferSlices9(uint32_t &supported) override;
+    bool on_BindBufferSlice9(uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes) override;
     bool on_GenerateMips9(uint32_t texture, uint32_t filter) override;
     bool on_ReadSurface9(uint32_t surface, uint32_t subresource, uint32_t &hresult, uint32_t &width,
                          uint32_t &height, uint32_t &format, uint32_t &pitch, uint8_t *pixels,
@@ -118,6 +133,7 @@ public:
 private:
     IDirect3DDevice9 *device() const;
     IUnknown *owned(uint32_t id, D3dObjectKind kind) const;
+    IDirect3DResource9 *buffer_object(uint32_t id) const;
     template <typename T>
     T                 *mine(uint32_t id, D3dObjectKind kind) const;
     IDirect3DSurface9 *surface(uint32_t id, uint32_t subresource) const;
@@ -142,6 +158,10 @@ private:
     DriverLog      &lines_;
     CommandRefusal  refusal_;
     WireArena      *arena_;
+    D3d9BatchProgress progress_;
+    D3d9Slices      slices_;
+    bool            dirty_;
+    bool            mark_refused_;
     bool            lost_;
 };
 

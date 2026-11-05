@@ -7,7 +7,7 @@
 
 namespace av {
 
-class D3d11HostDevice;
+class SliceImporter;
 class SourceMemory;
 
 class SliceStorage {
@@ -17,7 +17,7 @@ public:
     SliceStorage(const SliceStorage &) = delete;
     SliceStorage &operator=(const SliceStorage &) = delete;
 
-    [[nodiscard]] bool import(D3d11HostDevice &device);
+    [[nodiscard]] bool import(SliceImporter &importer);
     void               used_at(uint64_t mark);
     void               retire();
 
