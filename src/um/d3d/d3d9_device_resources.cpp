@@ -492,10 +492,6 @@ bool D3d9Device::place_on_slice(const D3d9Resource &resource, D3d9Subresource &s
     icd::StreamMemory::Slice slice = {};
     if (!slices_.place(subresource.width, slice)) return false;
     uint8_t *const view = slices_.view(slice);
-    if (view == nullptr) {
-        slices_.leave(slice);
-        return false;
-    }
     uint8_t *const owned = subresource.shadow;
     subresource.slice = slice;
     subresource.on_slice = true;
@@ -516,9 +512,7 @@ bool D3d9Device::rename_slice(const D3d9Resource &resource, D3d9Subresource &sub
 {
     AV_SCOPE("D3d9Device::rename_slice");
     if (!slices_.rename(subresource.shadow_bytes, subresource.slice)) return false;
-    uint8_t *const view = slices_.view(subresource.slice);
-    if (view == nullptr) return false;
-    subresource.shadow = view;
+    subresource.shadow = slices_.view(subresource.slice);
     return bind_slice(resource, subresource);
 }
 

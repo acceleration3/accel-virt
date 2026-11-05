@@ -64,7 +64,8 @@ Status HostWindowChunk::take(HostWindowRecord &record)
     if (escaped != Status::ok) return escaped;
     const Status answered = record.accept_answer(encoded, sizeof encoded);
     if (answered != Status::ok) return answered;
-    if (record.bytes() % page_bytes != 0u || record.address() % page_bytes != 0u) return Status::malformed;
+    if (record.address() == 0u || record.bytes() % page_bytes != 0u || record.address() % page_bytes != 0u)
+        return Status::malformed;
     resource_id_ = record.resource_id();
     bytes_ = record.bytes();
     view_ = reinterpret_cast<unsigned char *>(static_cast<uintptr_t>(record.address()));

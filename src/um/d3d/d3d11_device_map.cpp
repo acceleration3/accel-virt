@@ -234,13 +234,8 @@ bool D3d11Device::place_on_slice(ResourceRecord &resource, size_t bytes)
     if (resource.dimension != D3D10DDIRESOURCE_BUFFER || (resource.cpu_access & D3D10_DDI_CPU_ACCESS_WRITE) == 0u ||
         !slices_.place(bytes, resource.slice))
         return false;
-    uint8_t *const view = slices_.view(resource.slice);
-    if (view == nullptr) {
-        slices_.leave(resource.slice);
-        return false;
-    }
     resource.on_slice = 1u;
-    resource.shadow = view;
+    resource.shadow = slices_.view(resource.slice);
     return true;
 }
 
@@ -248,9 +243,7 @@ bool D3d11Device::rename_slice(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::rename_slice");
     if (!slices_.rename(resource.shadow_bytes, resource.slice)) return false;
-    uint8_t *const view = slices_.view(resource.slice);
-    if (view == nullptr) return false;
-    resource.shadow = view;
+    resource.shadow = slices_.view(resource.slice);
     return bind_slice(resource);
 }
 
