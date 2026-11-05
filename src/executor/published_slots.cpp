@@ -15,7 +15,7 @@ bool PublishedSlots::bind(uint64_t offset, uint32_t count)
 {
     AV_SCOPE("PublishedSlots::bind");
     unbind();
-    const PublishedSlotLayout tail(bytes_.length());
+    const PublishedSlotLayout tail(bytes_.segment_bytes(0u));
     if (!tail.keeps_word_clear(offset, count)) return false;
     if (bytes_.at(offset, uint64_t{count} * PublishedSlotLayout::slot_bytes) == nullptr) return false;
     offset_ = offset;
@@ -58,7 +58,7 @@ bool PublishedSlots::write(uint32_t index, uint64_t sequence, const uint8_t *pay
 bool PublishedSlots::publish_error_word(uint64_t value)
 {
     AV_SCOPE("PublishedSlots::publish_error_word");
-    const PublishedSlotLayout tail(bytes_.length());
+    const PublishedSlotLayout tail(bytes_.segment_bytes(0u));
     if (!tail.holds_tail()) return false;
     uint8_t *const word = bytes_.at(tail.error_word(), PublishedSlotLayout::error_word_bytes);
     if (word == nullptr || reinterpret_cast<uintptr_t>(word) % sizeof(uint64_t) != 0u) return false;

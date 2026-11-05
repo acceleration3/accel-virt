@@ -114,6 +114,7 @@ private:
     const std::uint8_t *block_;
     const WireArena    &arena_;
     GuestBytes          guest_;
+    std::uint8_t       *bound_;
     std::uint8_t       *lent_;
     std::size_t         lent_bytes_;
     HostObjectRegistry<std::uint64_t, clproto::HandleKind, void *> handles_;

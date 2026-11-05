@@ -11,6 +11,7 @@
 
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/submission/blob_role.hpp"
 #include "executor/owned_fd.hpp"
 #include "executor/source_memory.hpp"
 #include "device/abi/av_executor.h"
@@ -286,10 +287,10 @@ bool D3dBackend::lose_device()
     return device11_ != nullptr && device11_->lose();
 }
 
-bool D3dBackend::adopt(SourceMemory &memory, uint64_t &handle)
+bool D3dBackend::adopt(SourceMemory &memory, const BlobRole &role, uint64_t &handle)
 {
     AV_SCOPE("D3dBackend::adopt");
-    if (!region_.held()) return region_.adopt(memory, handle);
+    if (role.is_arena()) return region_.adopt(memory, role, handle);
     handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&memory));
     return true;
 }
@@ -300,7 +301,7 @@ void D3dBackend::abandon(const SourceMemory &memory, uint64_t)
     d3d12_.abandon(memory);
     if (device11_ != nullptr && slices_.holds(memory)) retire_slices(memory);
     if (!region_.is(memory)) return;
-    published_.unbind();
+    if (region_.base_of(memory) == 0u) published_.unbind();
     region_.abandon(memory);
 }
 

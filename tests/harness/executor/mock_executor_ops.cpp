@@ -26,7 +26,7 @@ private:
 }
 
 MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
-    : table_{}, sub_apis_(sub_apis), imported_(0u), released_blobs_(0u), lock_(), released_(),
+    : table_{}, sub_apis_(sub_apis), imported_(0u), last_role_(0u), last_arena_base_(0u), released_blobs_(0u), lock_(), released_(),
       held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u), executed_(0u), kept_(nullptr), kept_length_(0u), ids_{},
       sizes_{}, last_sub_api_(0u), misuses_(0u), imports_{}, refuse_import_(0u), withhold_handle_(0u),
       answered_handle_(0u), option_creates_(0u), signals_set_(0u), signal_(nullptr), signal_context_(nullptr),
@@ -55,7 +55,7 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         mock.settle(*memory);
     };
     table_.import_blob = [](void *opaque, AvExecutor *handle, std::uint64_t blob_id,
-                            std::uint64_t memory_key) -> std::uint32_t {
+                            std::uint64_t memory_key, std::uint32_t role, std::uint64_t arena_base) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
         Executor *const  executor = mock.executor_of(handle);
         if (executor == nullptr) return AV_UNDECODABLE;
@@ -68,6 +68,8 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
             import = Import{blob_id, memory_key, memory, handle, true};
             memory->imports++;
             mock.imported_++;
+            mock.last_role_ = role;
+            mock.last_arena_base_ = arena_base;
             return AV_EXECUTED;
         }
         return AV_UNDECODABLE;
@@ -503,6 +505,18 @@ int MockExecutorOps::answered_descriptor(std::uint32_t domain, std::uint64_t key
     for (const Memory &memory : memory_)
         if (memory.fd >= 0 && memory.domain == domain && memory.key == key) return memory.answered;
     return -1;
+}
+
+std::uint32_t MockExecutorOps::last_role()
+{
+    Lock lock(lock_);
+    return last_role_;
+}
+
+std::uint64_t MockExecutorOps::last_arena_base()
+{
+    Lock lock(lock_);
+    return last_arena_base_;
 }
 
 std::uint32_t MockExecutorOps::imported()

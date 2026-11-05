@@ -1,35 +1,33 @@
 #include "executor/exported_memory.hpp"
 #include "executor/guest_region.hpp"
-#include "executor/imported_blob.hpp"
 #include "executor/source_memory.hpp"
-#include "harness/executor/guest_region_probe.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/submission/blob_role.hpp"
+#include "proto/wire/guest_bytes.hpp"
 
 #include <cstdint>
-#include <cstring>
 
+using av::BlobRole;
 using av::ExportedMemory;
+using av::GuestBytes;
 using av::GuestRegion;
-using av::GuestRegionProbe;
-using av::ImportedBlob;
 using av::SourceMemory;
-using av::Status;
 
 namespace {
 
-alignas(4096) std::uint8_t mapping[8192];
+alignas(4096) std::uint8_t mapping[16384];
 
-class Import {
+class Memory {
 public:
-    Import(std::uint8_t *pointer = mapping, std::uint64_t size = sizeof mapping)
-        : memory(1u, 0x40u, 0u, 1u, ExportedMemory(0x99u, -1, pointer, size)), blob()
-    {
-        static_cast<void>(blob.take(5u, memory));
-    }
+    Memory(std::uint8_t *pointer, std::uint64_t size) : memory(1u, 0x40u, 0u, 1u, ExportedMemory(0x99u, -1, pointer, size)) {}
 
     SourceMemory memory;
-    ImportedBlob blob;
 };
+
+BlobRole arena_at(std::uint32_t slot)
+{
+    return BlobRole(BlobRole::Kind::arena_segment, std::uint64_t{slot} << GuestBytes::slot_shift);
+}
 
 std::uint64_t address_of(const void *pointer)
 {
@@ -38,137 +36,99 @@ std::uint64_t address_of(const void *pointer)
 
 }
 
-TEST(guest_region_adopt, an_import_becomes_the_region_and_is_named_by_its_address)
-{ GuestRegion region;
-  Import      import;
-  CHECK(region.memory() == nullptr);
-  CHECK(region.adopt(import.blob));
-  CHECK(region.memory() == &import.memory);
-  CHECK_EQ(region.length(), sizeof mapping);
-  CHECK(region.at(0u, sizeof mapping) == mapping);
-  CHECK_EQ(import.blob.object(), address_of(mapping));
-  CHECK_EQ(import.blob.wire_handle(), address_of(mapping));
+TEST(guest_region_adopt, an_arena_import_becomes_a_segment_named_by_its_address)
+{ GuestBytes bytes;
+  GuestRegion region(bytes);
+  Memory      import(mapping, sizeof mapping);
+  std::uint64_t handle = 1u;
+  CHECK(!region.held());
+  CHECK(region.adopt(import.memory, arena_at(0u), handle));
+  CHECK_EQ(handle, address_of(mapping));
+  CHECK(region.held());
+  CHECK(region.is(import.memory));
+  CHECK_EQ(region.base_of(import.memory), 0u);
+  CHECK(bytes.at(0u, sizeof mapping) == mapping);
+  CHECK(region.memory_at(100u) == &import.memory);
   CHECK(region.invariants_hold()); }
 
-TEST(guest_region_adopt, a_second_import_is_refused_untouched)
-{ GuestRegion region;
-  Import      first;
-  Import      second(mapping + 4096, 4096u);
-  CHECK(region.adopt(first.blob));
-  CHECK(!region.adopt(second.blob));
-  CHECK_EQ(second.blob.object(), 0u);
-  CHECK_EQ(second.blob.wire_handle(), 0u);
-  CHECK(region.memory() == &first.memory);
-  CHECK_EQ(region.length(), sizeof mapping);
+TEST(guest_region_adopt, a_plain_role_is_not_a_segment)
+{ GuestBytes bytes;
+  GuestRegion region(bytes);
+  Memory      import(mapping, sizeof mapping);
+  std::uint64_t handle = 1u;
+  CHECK(!region.adopt(import.memory, BlobRole(), handle));
+  CHECK_EQ(handle, 0u);
+  CHECK(!region.held());
+  CHECK(region.invariants_hold()); }
+
+TEST(guest_region_adopt, segments_adopted_in_any_order_land_at_their_roles_bases)
+{ GuestBytes bytes;
+  GuestRegion region(bytes);
+  Memory      later(mapping + 8192, 4096u);
+  Memory      earlier(mapping, 4096u);
+  std::uint64_t handle = 0u;
+  CHECK(region.adopt(later.memory, arena_at(2u), handle));
+  CHECK(region.adopt(earlier.memory, arena_at(0u), handle));
+  CHECK(region.memory_at(GuestBytes::slot_bytes * 2u) == &later.memory);
+  CHECK(region.memory_at(0u) == &earlier.memory);
+  CHECK(region.memory_at(GuestBytes::slot_bytes) == nullptr);
+  CHECK(bytes.at(GuestBytes::slot_bytes * 2u, 4096u) == mapping + 8192);
+  CHECK(region.invariants_hold()); }
+
+TEST(guest_region_adopt, a_taken_slot_a_repeated_memory_or_a_bad_base_is_refused_untouched)
+{ GuestBytes bytes;
+  GuestRegion region(bytes);
+  Memory      first(mapping, 4096u);
+  Memory      second(mapping + 4096, 4096u);
+  std::uint64_t handle = 0u;
+  CHECK(region.adopt(first.memory, arena_at(1u), handle));
+  CHECK(!region.adopt(second.memory, arena_at(1u), handle));
+  CHECK_EQ(handle, 0u);
+  CHECK(!region.adopt(first.memory, arena_at(2u), handle));
+  CHECK(!region.adopt(second.memory, BlobRole(BlobRole::Kind::arena_segment, 4096u), handle));
+  CHECK(!region.is(second.memory));
+  CHECK_EQ(bytes.segments(), 1u);
   CHECK(region.invariants_hold()); }
 
 TEST(guest_region_adopt, memory_with_no_mapping_or_no_bytes_is_refused)
-{ GuestRegion region;
-  Import      unmapped(nullptr, 4096u);
-  Import      empty(mapping, 0u);
-  CHECK(!region.adopt(unmapped.blob));
-  CHECK(!region.adopt(empty.blob));
-  CHECK(region.memory() == nullptr);
-  CHECK_EQ(region.length(), 0u);
-  CHECK_EQ(unmapped.blob.object(), 0u);
-  CHECK_EQ(empty.blob.object(), 0u);
-  CHECK(region.at(0u, 0u) == nullptr);
+{ GuestBytes bytes;
+  GuestRegion region(bytes);
+  Memory      unmapped(nullptr, 4096u);
+  Memory      empty(mapping, 0u);
+  std::uint64_t handle = 0u;
+  CHECK(!region.adopt(unmapped.memory, arena_at(0u), handle));
+  CHECK(!region.adopt(empty.memory, arena_at(0u), handle));
+  CHECK(!region.held());
   CHECK(region.invariants_hold()); }
 
-TEST(guest_region_adopt, only_the_region_s_own_import_gives_it_back)
-{ GuestRegion region;
-  Import      held;
-  Import      other(mapping + 4096, 4096u);
-  region.abandon(held.blob);
+TEST(guest_region_abandon, only_the_adopted_memory_gives_its_segment_back)
+{ GuestBytes bytes;
+  GuestRegion region(bytes);
+  Memory      held(mapping, 4096u);
+  Memory      stranger(mapping + 4096, 4096u);
+  std::uint64_t handle = 0u;
+  CHECK(region.adopt(held.memory, arena_at(0u), handle));
+  region.abandon(stranger.memory);
+  CHECK(region.held());
+  CHECK(bytes.at(0u, 4096u) == mapping);
+  region.abandon(held.memory);
+  CHECK(!region.held());
+  CHECK(bytes.at(0u, 1u) == nullptr);
+  CHECK(region.memory_at(0u) == nullptr);
+  CHECK(!region.is(held.memory));
   CHECK(region.invariants_hold());
-  CHECK(region.adopt(held.blob));
-  region.abandon(other.blob);
-  CHECK_EQ(region.length(), sizeof mapping);
-  CHECK(region.memory() == &held.memory);
-  region.abandon(held.blob);
-  CHECK(region.memory() == nullptr);
-  CHECK_EQ(region.length(), 0u);
-  CHECK(region.at(0u, 1u) == nullptr);
-  CHECK_EQ(held.blob.object(), 0u);
-  CHECK_EQ(held.blob.wire_handle(), 0u);
-  CHECK(region.invariants_hold());
-  CHECK(region.adopt(other.blob));
-  CHECK(region.at(0u, 1u) == mapping + 4096);
-  region.abandon(other.blob); }
-
-TEST(guest_region, answers_inside_the_mapping_it_was_given)
-{ GuestRegion region;
-  Import      import;
-  CHECK(region.adopt(import.blob));
-  CHECK(region.at(16u, 32u) == mapping + 16u);
-  CHECK(region.at(sizeof mapping, 0u) == mapping + sizeof mapping);
+  CHECK(region.adopt(stranger.memory, arena_at(0u), handle));
+  CHECK(bytes.at(0u, 4096u) == mapping + 4096);
   CHECK(region.invariants_hold()); }
 
-TEST(guest_region, holds_only_pointers_into_the_mapping)
-{ GuestRegion  region;
-  std::uint8_t elsewhere = 0u;
-  Import       import(mapping + 16, sizeof mapping - 32u);
-  CHECK(!region.holds(mapping + 16));
-  CHECK(region.adopt(import.blob));
-  CHECK(region.holds(mapping + 16));
-  CHECK(region.holds(mapping + sizeof mapping - 17u));
-  CHECK(!region.holds(mapping + sizeof mapping - 16u));
-  CHECK(!region.holds(mapping + 15));
-  CHECK(!region.holds(&elsewhere));
-  CHECK(!region.holds(nullptr));
-  region.abandon(import.blob);
-  CHECK(!region.holds(mapping + 16)); }
-
-TEST(guest_region, refuses_anything_past_the_end)
-{ GuestRegion region;
-  Import      import;
-  CHECK(region.adopt(import.blob));
-  CHECK(region.at(0u, sizeof mapping + 1u) == nullptr);
-  CHECK(region.at(sizeof mapping, 1u) == nullptr);
-  CHECK(region.at(sizeof mapping + 1u, 0u) == nullptr);
-  CHECK(region.at(16u, sizeof mapping) == nullptr); }
-
-TEST(guest_region, refuses_a_length_that_would_wrap)
-{ GuestRegion region;
-  Import      import;
-  CHECK(region.adopt(import.blob));
-  CHECK(region.at(~std::uint64_t{0}, 1u) == nullptr);
-  CHECK(region.at(1u, ~std::uint64_t{0}) == nullptr);
-  CHECK(region.at(~std::uint64_t{0}, ~std::uint64_t{0}) == nullptr);
-  CHECK(region.at(8u, ~std::uint64_t{0} - 7u) == nullptr); }
-
-TEST(guest_region, with_no_region_it_answers_nothing)
-{ GuestRegion region;
-  CHECK_EQ(region.length(), 0u);
-  CHECK(region.at(0u, 0u) == nullptr);
-  CHECK(region.at(0u, 1u) == nullptr);
-  CHECK(!region.publish(0u, 1u));
+TEST(guest_region_memory_at, a_long_segment_answers_with_its_memory_in_every_slot_it_covers)
+{ GuestBytes bytes;
+  GuestRegion region(bytes);
+  Memory      long_memory(mapping, GuestBytes::slot_bytes + 4096u);
+  std::uint64_t handle = 0u;
+  CHECK(region.adopt(long_memory.memory, arena_at(1u), handle));
+  CHECK(region.memory_at(GuestBytes::slot_bytes) == &long_memory.memory);
+  CHECK(region.memory_at(GuestBytes::slot_bytes * 2u + 10u) == &long_memory.memory);
+  CHECK(region.memory_at(GuestBytes::slot_bytes * 3u) == nullptr);
+  CHECK(region.memory_at(~std::uint64_t{0}) == nullptr);
   CHECK(region.invariants_hold()); }
-
-TEST(guest_region_publish, stores_an_aligned_word_inside_the_region_only)
-{ GuestRegion region;
-  Import      import;
-  CHECK(region.adopt(import.blob));
-  CHECK(region.publish(8u, 0x1122334455667788ull));
-  std::uint64_t read = 0u;
-  std::memcpy(&read, mapping + 8u, sizeof read);
-  CHECK_EQ(read, 0x1122334455667788ull);
-  CHECK(!region.publish(4u, 9u));
-  CHECK(!region.publish(sizeof mapping - 4u, 9u));
-  CHECK(!region.publish(sizeof mapping, 9u));
-  CHECK(region.publish(sizeof mapping - 8u, 9u));
-  std::memcpy(&read, mapping + sizeof mapping - 8u, sizeof read);
-  CHECK_EQ(read, 9u);
-  region.abandon(import.blob); }
-
-TEST(guest_region_invariants, a_length_with_no_mapping_behind_it_breaks_them)
-{ GuestRegion region;
-  GuestRegionProbe(region).set_length(sizeof mapping);
-  CHECK(!region.invariants_hold()); }
-
-TEST(guest_region_invariants, memory_without_a_mapping_breaks_them)
-{ GuestRegion region;
-  Import      import;
-  CHECK(region.adopt(import.blob));
-  GuestRegionProbe(region).forget_base();
-  CHECK(!region.invariants_hold()); }

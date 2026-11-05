@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "proto/resources/surface_point.hpp"
+#include "proto/submission/blob_role.hpp"
 
 namespace av {
 
@@ -150,10 +151,12 @@ void ExecutorLibrary::set_signal(AvExecutor *executor, void (*signal)(void *cont
     if (executor != nullptr) ops_->set_signal(ops_->opaque, executor, signal, context);
 }
 
-uint32_t ExecutorLibrary::import_blob(AvExecutor *executor, uint64_t blob_id, uint64_t memory_key) const
+uint32_t ExecutorLibrary::import_blob(AvExecutor *executor, uint64_t blob_id, uint64_t memory_key,
+                                      const BlobRole &role) const
 {
     AV_SCOPE("ExecutorLibrary::import_blob");
-    return ops_->import_blob(ops_->opaque, executor, blob_id, memory_key);
+    return ops_->import_blob(ops_->opaque, executor, blob_id, memory_key, static_cast<uint32_t>(role.kind()),
+                             role.base());
 }
 
 void ExecutorLibrary::release_blob(AvExecutor *executor, uint64_t blob_id) const

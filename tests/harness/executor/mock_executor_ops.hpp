@@ -78,6 +78,8 @@ public:
     std::uint8_t *memory_bytes(std::uint32_t domain, std::uint64_t key);
     int           answered_descriptor(std::uint32_t domain, std::uint64_t key);
     std::uint32_t imported();
+    std::uint32_t last_role();
+    std::uint64_t last_arena_base();
     std::uint32_t released();
     void          refuse_import_at(std::uint32_t nth);
     void          withhold_handle_at(std::uint32_t nth);
@@ -158,6 +160,8 @@ private:
     AvExecutorOps             table_;
     std::uint32_t              sub_apis_;
     std::uint32_t              imported_;
+    std::uint32_t              last_role_;
+    std::uint64_t              last_arena_base_;
     std::uint32_t              released_blobs_;
     pthread_mutex_t            lock_;
     pthread_cond_t             released_;

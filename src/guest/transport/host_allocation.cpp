@@ -18,13 +18,13 @@ HostAllocation::~HostAllocation()
     static_cast<void>(close());
 }
 
-Status HostAllocation::open(uint64_t bytes, HostMemoryRequest memory)
+Status HostAllocation::open(uint64_t bytes, HostMemoryRequest memory, const BlobRole &role)
 {
     AV_SCOPE("HostAllocation::open");
     if (chunk_.resource_id() != 0u) return Status::invalid_state;
     const Status opened = chunk_.open(bytes, memory);
     if (opened != Status::ok) return opened;
-    return import_taken();
+    return import_taken(role);
 }
 
 Status HostAllocation::adopt(void *address, uint64_t bytes, HostMemoryRequest memory)
@@ -33,14 +33,14 @@ Status HostAllocation::adopt(void *address, uint64_t bytes, HostMemoryRequest me
     if (chunk_.resource_id() != 0u) return Status::invalid_state;
     const Status lent = chunk_.adopt(address, bytes, memory);
     if (lent != Status::ok) return lent;
-    return import_taken();
+    return import_taken(BlobRole());
 }
 
-Status HostAllocation::import_taken()
+Status HostAllocation::import_taken(const BlobRole &role)
 {
     AV_SCOPE("HostAllocation::import_taken");
     ScopeExit    undo([this] { static_cast<void>(chunk_.release()); });
-    const Status imported = import_.import(chunk_.resource_id());
+    const Status imported = import_.import(chunk_.resource_id(), role);
     if (imported != Status::ok) return imported;
     undo.dismiss();
     return Status::ok;

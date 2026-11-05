@@ -16,12 +16,12 @@ BlobImport::BlobImport(ClientTransport &transport) : transport_(transport), memo
     AV_SCOPE("BlobImport::BlobImport");
 }
 
-Status BlobImport::import(uint32_t resource_id)
+Status BlobImport::import(uint32_t resource_id, const BlobRole &role)
 {
     AV_SCOPE("BlobImport::import");
     if (memory_ != 0u) return Status::invalid_state;
     uint8_t body[BlobImportRequest::encoded_size] = {};
-    static_cast<void>(BlobImportRequest(resource_id).encode(body, sizeof body));
+    static_cast<void>(BlobImportRequest(resource_id, role).encode(body, sizeof body));
     WireWriter request = transport_.request_writer();
     request.write(body, sizeof body);
     const SyncCallScope call(transport_);

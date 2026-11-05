@@ -2,6 +2,7 @@
 #define AV_BLOB_IMPORT_HPP
 
 #include "core/support/status.hpp"
+#include "proto/submission/blob_role.hpp"
 
 #include <stdint.h>
 
@@ -17,7 +18,7 @@ public:
     BlobImport(const BlobImport &) = delete;
     BlobImport &operator=(const BlobImport &) = delete;
 
-    [[nodiscard]] Status import(uint32_t resource_id);
+    [[nodiscard]] Status import(uint32_t resource_id, const BlobRole &role = BlobRole());
     [[nodiscard]] Status release();
     void                 forget();
     uint64_t             memory() const;

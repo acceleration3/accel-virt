@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define AV_EXECUTOR_ABI_VERSION 26u
+#define AV_EXECUTOR_ABI_VERSION 27u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 #define AV_EXECUTOR_SUB_API_VULKAN 1u
@@ -124,7 +124,8 @@ typedef struct AvExecutorOps {
     void (*gpu_progress)(void *opaque, AvExecutor *executor, uint64_t *marked, uint64_t *reached);
     void (*set_signal)(void *opaque, AvExecutor *executor, void (*signal)(void *context), void *context);
 
-    uint32_t (*import_blob)(void *opaque, AvExecutor *executor, uint64_t blob_id, uint64_t memory_key);
+    uint32_t (*import_blob)(void *opaque, AvExecutor *executor, uint64_t blob_id, uint64_t memory_key,
+                            uint32_t role, uint64_t arena_base);
     void (*release_blob)(void *opaque, AvExecutor *executor, uint64_t blob_id);
     uint64_t (*imported_handle)(void *opaque, AvExecutor *executor, uint64_t blob_id);
 

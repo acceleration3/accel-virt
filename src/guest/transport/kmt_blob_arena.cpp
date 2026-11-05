@@ -32,7 +32,8 @@ Status KmtBlobArena::open(uint64_t bytes)
     if (bytes > max_bytes) return Status::invalid_parameter;
     const uint64_t pages = (bytes + page_bytes - 1u) / page_bytes;
     const uint64_t size = pages * page_bytes < default_bytes ? default_bytes : pages * page_bytes;
-    const Status opened = memory_.open(size, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u));
+    const Status opened = memory_.open(size, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u),
+                                      BlobRole(BlobRole::Kind::arena_segment, 0u));
     if (opened != Status::ok) return opened;
     bytes_ = size;
     const PublishedSlotLayout     tail(size);

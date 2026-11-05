@@ -2,7 +2,6 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/owned_fd.hpp"
-#include "proto/wire/guest_bytes.hpp"
 
 
 namespace av {
@@ -60,7 +59,9 @@ uint8_t *SourceMemory::pointer() const
 uint8_t *SourceMemory::at(uint64_t offset, uint64_t bytes) const
 {
     AV_SCOPE("SourceMemory::at");
-    return GuestBytes(memory_.pointer(), memory_.size()).at(offset, bytes);
+    const uint64_t size = memory_.size();
+    if (memory_.pointer() == nullptr || size == 0u || offset > size || bytes > size - offset) return nullptr;
+    return memory_.pointer() + static_cast<uintptr_t>(offset);
 }
 
 const ExportedMemory &SourceMemory::exported() const

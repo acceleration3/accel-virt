@@ -25,7 +25,8 @@ D3dLoopback::D3dLoopback(D3dBackend &backend, HostMemorySource *source, std::siz
       decode_arena_(nullptr, 0u), blobs_(), refused_(0u), answers_(0u), next_key_(1u), region_(), memories_()
 {
     if (region_bytes == 0u) return;
-    if (open(HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), region_bytes, region_))
+    if (open(HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), region_bytes, region_,
+             BlobRole(BlobRole::Kind::arena_segment, 0u)))
         blobs_.lend(region_.blob.memory().pointer(), lent_bytes);
 }
 
@@ -38,7 +39,7 @@ D3dLoopback::~D3dLoopback()
     std::free(arena_block_);
 }
 
-bool D3dLoopback::open(HostMemoryRequest request, std::uint64_t bytes, Held &held)
+bool D3dLoopback::open(HostMemoryRequest request, std::uint64_t bytes, Held &held, const BlobRole &role)
 {
     if (source_ == nullptr) return false;
     const std::uint64_t key = next_key_++;
@@ -47,7 +48,7 @@ bool D3dLoopback::open(HostMemoryRequest request, std::uint64_t bytes, Held &hel
     if (source_->allocate(domain, key, pages, request, made) != Status::ok) return false;
     ::close(made.fd);
     SourceMemory *const memory = source_->acquire(domain, key);
-    if (memory != nullptr && held.blob.take(key, *memory) == Status::ok && backend_.adopt(*memory, held.handle))
+    if (memory != nullptr && held.blob.take(key, *memory) == Status::ok && backend_.adopt(*memory, role, held.handle))
         return true;
     if (held.blob.live()) static_cast<void>(held.blob.give_back());
     held.handle = 0u;

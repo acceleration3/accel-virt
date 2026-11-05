@@ -18,6 +18,7 @@
 
 #include "core/support/untestable.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/submission/blob_role.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/opencl/cl_event_registration.hpp"
 #include "executor/host_memory_source.hpp"
@@ -78,7 +79,7 @@ OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
-       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_), arena_memory_(nullptr), imported_(nullptr), events_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_), imported_(nullptr), events_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false), lines_(lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
@@ -380,14 +381,10 @@ bool OpenClBackend::lost() const
     return lost_;
 }
 
-bool OpenClBackend::adopt(SourceMemory &memory, uint64_t &handle)
+bool OpenClBackend::adopt(SourceMemory &memory, const BlobRole &role, uint64_t &handle)
 {
     AV_SCOPE("OpenClBackend::adopt");
-    if (!arena_.held()) {
-        if (!arena_.adopt(memory, handle)) return false;
-        arena_memory_ = &memory;
-        return true;
-    }
+    if (role.is_arena()) return arena_.adopt(memory, role, handle);
     handle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&memory));
     return memory.pointer() != nullptr;
 }
@@ -395,7 +392,6 @@ bool OpenClBackend::adopt(SourceMemory &memory, uint64_t &handle)
 void OpenClBackend::abandon(const SourceMemory &memory, uint64_t)
 {
     AV_SCOPE("OpenClBackend::abandon");
-    if (arena_.is(memory)) arena_memory_ = nullptr;
     arena_.abandon(memory);
 }
 
@@ -410,10 +406,13 @@ cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
         return ::clCreateBufferWithProperties(context, properties, flags, size, host_ptr,
                                               errcode_ret);
     }
-    SourceMemory *const store = backing.memory() == 0u ? arena_memory_
+    const bool          in_arena = backing.memory() == 0u;
+    SourceMemory *const store = in_arena                ? arena_.memory_at(backing.offset())
                                 : imported_ != nullptr ? imported_->named(backing.memory())
                                                        : nullptr;
-    uint8_t *const at = store != nullptr ? store->at(backing.offset(), static_cast<uint64_t>(size)) : nullptr;
+    uint8_t *const at = store == nullptr ? nullptr
+                        : in_arena       ? guest_.at(backing.offset(), static_cast<uint64_t>(size))
+                                         : store->at(backing.offset(), static_cast<uint64_t>(size));
     if (at == nullptr) {
         if (errcode_ret != nullptr) *errcode_ret = CL_INVALID_VALUE;
         return nullptr;

@@ -5,6 +5,7 @@
 #include "core/log/log_line.hpp"
 #include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/submission/blob_role.hpp"
 #include "executor/owned_fd.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/opengl/gl_context_attributes.hpp"
@@ -167,7 +168,7 @@ void OpenGlBackend::shut_down()
     AV_SCOPE("OpenGlBackend::shut_down");
     if (context_.make_current()) {
         pack_.release();
-        pack_.abandon();
+        pack_.abandon_all();
         buffers_.give_back();
         slices_.destroy_all();
         import_.give_back();
@@ -282,14 +283,14 @@ bool OpenGlBackend::lost() const
     return pending_.lost();
 }
 
-bool OpenGlBackend::adopt(SourceMemory &memory, uint64_t &handle)
+bool OpenGlBackend::adopt(SourceMemory &memory, const BlobRole &role, uint64_t &handle)
 {
     AV_SCOPE("OpenGlBackend::adopt");
-    if (region_.held()) return lend(memory, handle);
-    if (!region_.adopt(memory, handle)) return false;
+    if (!role.is_arena()) return lend(memory, handle);
+    if (!region_.adopt(memory, role, handle)) return false;
     OwnedFd packed;
     static_cast<void>(memory.share(packed));
-    pack_.adopt(packed, memory.size());
+    pack_.adopt(packed, role.base(), memory.size());
     return true;
 }
 
@@ -334,8 +335,8 @@ void OpenGlBackend::abandon(const SourceMemory &memory, uint64_t handle)
         slices_.reclaim();
         return;
     }
+    pack_.abandon(region_.base_of(memory));
     region_.abandon(memory);
-    pack_.abandon();
 }
 
 bool OpenGlBackend::bind_fence(uint64_t token, void *fence)

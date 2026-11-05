@@ -21,7 +21,7 @@ public:
     HostAllocation(const HostAllocation &) = delete;
     HostAllocation &operator=(const HostAllocation &) = delete;
 
-    [[nodiscard]] Status open(uint64_t bytes, HostMemoryRequest memory);
+    [[nodiscard]] Status open(uint64_t bytes, HostMemoryRequest memory, const BlobRole &role = BlobRole());
     [[nodiscard]] Status adopt(void *address, uint64_t bytes, HostMemoryRequest memory);
     [[nodiscard]] Status close();
     [[nodiscard]] Status abandon();
@@ -36,7 +36,7 @@ public:
     bool invariants_hold() const;
 
 private:
-    [[nodiscard]] Status import_taken();
+    [[nodiscard]] Status import_taken(const BlobRole &role);
 
     HostWindowChunk chunk_;
     BlobImport      import_;

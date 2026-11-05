@@ -84,7 +84,7 @@ GlTransferHost::GlTransferHost()
       unpack_binding_(0u), other_binding_(0u), pack_{{4, 0, 0, 0, 0, 0}}, unpack_{{4, 0, 0, 0, 0, 0}},
       name_nothing_(false), generated_(0u), commands_(0u), ids_{}, id_counts_{}, id_kinds_(0u), refusals_(0u),
       largest_(0u), answered_(0u), lent_(nullptr), lent_bytes_(0u), host_arena_(block_, arena_bytes),
-      guest_arena_(nullptr, 0u), blobs_(), guest_(), table_()
+      guest_arena_(nullptr, 0u), blobs_(), guest_(), bound_(nullptr), table_()
 {
     live = this;
     for (GLsizei y = 0; y < height; y++)
@@ -130,8 +130,9 @@ void GlTransferHost::lend(std::uint8_t *block, std::size_t bytes)
     lent_ = block;
     lent_bytes_ = bytes;
     blobs_.lend(block, bytes);
-    guest_.unbind();
-    static_cast<void>(guest_.bind(block, bytes));
+    if (bound_ != nullptr) static_cast<void>(guest_.unbind(bound_));
+    bound_ = block;
+    static_cast<void>(guest_.bind(0u, block, bytes));
     table_.av_guest = &guest_;
 }
 

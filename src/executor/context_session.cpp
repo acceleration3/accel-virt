@@ -163,7 +163,7 @@ size_t ContextSession::answer_part(uint64_t offset, uint8_t *out, size_t capacit
     return copied;
 }
 
-uint32_t ContextSession::import_blob(uint64_t blob_id, uint64_t memory_key)
+uint32_t ContextSession::import_blob(uint64_t blob_id, uint64_t memory_key, const BlobRole &role)
 {
     AV_SCOPE("ContextSession::import_blob");
     if (backend_ == nullptr || faulted_ || source_ == nullptr) return AV_UNDECODABLE;
@@ -179,7 +179,7 @@ uint32_t ContextSession::import_blob(uint64_t blob_id, uint64_t memory_key)
         return AV_UNDECODABLE;
     }
     uint64_t handle = 0u;
-    if (!backend_->adopt(*memory, handle)) {
+    if (!backend_->adopt(*memory, role, handle)) {
         source_->release(*imports_.forget(blob_id));
         return AV_UNDECODABLE;
     }

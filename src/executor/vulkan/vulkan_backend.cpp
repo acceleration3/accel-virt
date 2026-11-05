@@ -5,6 +5,7 @@
 
 #include "core/support/untestable.hpp"
 #include "core/trace/function_scope.hpp"
+#include "proto/submission/blob_role.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/host_gpu.hpp"
 #include "executor/import_table.hpp"
@@ -654,11 +655,11 @@ uint32_t VulkanBackend::import_type(const SourceMemory &memory, int fd) const
     return first_memory_type(reported);
 }
 
-bool VulkanBackend::adopt(SourceMemory &memory, uint64_t &handle)
+bool VulkanBackend::adopt(SourceMemory &memory, const BlobRole &role, uint64_t &handle)
 {
     AV_SCOPE("VulkanBackend::adopt");
     handle = 0u;
-    if (adopting_ == nullptr || !memory_import_) return false;
+    if (role.is_arena() || adopting_ == nullptr || !memory_import_) return false;
     OwnedFd  descriptor;
     uint64_t made = 0u;
     if (!memory.share(descriptor)) return false;

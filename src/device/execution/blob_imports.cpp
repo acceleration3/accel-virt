@@ -21,7 +21,7 @@ BlobImports::~BlobImports()
     AV_SCOPE("BlobImports::~BlobImports");
 }
 
-Status BlobImports::import(uint32_t resource, uint64_t &device_memory)
+Status BlobImports::import(uint32_t resource, uint64_t &device_memory, const BlobRole &role)
 {
     AV_SCOPE("BlobImports::import");
     host_.require_worker("BlobImports::import");
@@ -30,7 +30,7 @@ Status BlobImports::import(uint32_t resource, uint64_t &device_memory)
     if (blob_ids_.reserve(blob_ids_.count() + 1u) != Status::ok) return Status::no_memory;
     const uint64_t blob_id = next_blob_id_++;
     uint64_t       made = 0u;
-    if (executor_.import(blob_id, resource, made) != Status::ok) return Status::not_supported;
+    if (executor_.import(blob_id, resource, made, role) != Status::ok) return Status::not_supported;
     uint32_t slot = 0u;
     if (made == 0u || blob_ids_.insert(made, blob_id, slot) != Status::ok) {
         executor_.release(blob_id);

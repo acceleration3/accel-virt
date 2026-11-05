@@ -6,6 +6,8 @@
 #include "harness/host/host_violation.hpp"
 #include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/blob_import_request.hpp"
+#include "proto/submission/blob_role.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "proto/submission/command_header.hpp"
 
 #include <cstddef>
@@ -105,6 +107,24 @@ TEST(blob_import_command_run, an_import_of_a_host_blob_answers_status_0_and_the_
   CHECK_STATUS(release(rig, run.answer().device_memory()).status(), Status::ok);
   CHECK_EQ(rig.imports().imports(), 0u); }
 
+TEST(blob_import_command_run, the_role_in_the_request_is_the_role_the_executor_is_told)
+{ Chunked chunked;
+  ImportRig &rig = chunked.rig();
+  const Run plain = import(rig, ImportBody(rig.blob(0u)));
+  CHECK_EQ(plain.answer().status(), BlobImportAnswer::imported);
+  CHECK_EQ(rig.ops().last_role(), 0u);
+  CHECK_EQ(rig.ops().last_arena_base(), 0u);
+  CHECK_STATUS(release(rig, plain.answer().device_memory()).status(), Status::ok);
+  const av::BlobRole arena(av::BlobRole::Kind::arena_segment, av::GuestBytes::slot_bytes * 3u);
+  std::uint8_t       body[BlobImportRequest::encoded_size] = {};
+  CHECK_STATUS(BlobImportRequest(rig.blob(0u), arena).encode(body, sizeof body), Status::ok);
+  const Run roled(rig, CommandHeader::import_blob_id, body, sizeof body);
+  CHECK_EQ(roled.answer().status(), BlobImportAnswer::imported);
+  CHECK_EQ(rig.ops().last_role(), 1u);
+  CHECK_EQ(rig.ops().last_arena_base(), av::GuestBytes::slot_bytes * 3u);
+  CHECK_STATUS(release(rig, roled.answer().device_memory()).status(), Status::ok);
+  CHECK_EQ(rig.imports().imports(), 0u); }
+
 TEST(blob_import_command_run, every_refusal_is_its_own_status_with_no_handle_and_no_fault)
 { Chunked chunked;
   ImportRig &rig = chunked.rig();
@@ -160,7 +180,7 @@ TEST(blob_import_command_run, a_body_of_the_wrong_length_is_framing_and_answers_
   std::uint8_t bytes[64] = {};
   const ImportBody valid(rig.blob(0u));
   std::memcpy(bytes, valid.bytes(), BlobImportRequest::encoded_size);
-  const std::size_t import_lengths[] = {0u, 4u, 7u, 9u, 16u, 32u, 64u};
+  const std::size_t import_lengths[] = {0u, 4u, 7u, 8u, 9u, 15u, 17u, 32u, 64u};
   for (const std::size_t length : import_lengths) {
       const Run run(rig, CommandHeader::import_blob_id, bytes, length);
       CHECK_STATUS(run.status(), Status::malformed);
@@ -220,17 +240,26 @@ TEST(blob_import_command_run, every_bit_flip_of_an_import_is_an_answer_and_leave
   ImportRig &rig = chunked.rig();
   const ImportBody    valid(rig.blob(0u));
   const std::uint32_t only_bit = 24u;
+  const std::uint32_t arena_bit = 32u;
   for (std::uint32_t bit = 0u; bit < BlobImportRequest::encoded_size * 8u; bit++) {
       ImportBody flipped = valid;
       flipped.bytes()[bit / 8u] = static_cast<std::uint8_t>(flipped.bytes()[bit / 8u] ^ (1u << (bit % 8u)));
       const Run run = import(rig, flipped);
       CHECK_STATUS(run.status(), Status::ok);
       const BlobImportAnswer answer = run.answer();
-      const std::uint32_t    expected = bit >= 32u || bit == only_bit ? BlobImportAnswer::refused_request
-                                                                      : BlobImportAnswer::unknown_resource;
+      if (bit == arena_bit) {
+          CHECK_EQ(answer.status(), BlobImportAnswer::imported);
+          CHECK(answer.device_memory() != 0u);
+          CHECK_EQ(rig.imports().imports(), 1u);
+          static_cast<void>(release(rig, answer.device_memory()));
+          CHECK_EQ(rig.imports().imports(), 0u);
+          continue;
+      }
+      const std::uint32_t expected = bit >= 32u || bit == only_bit ? BlobImportAnswer::refused_request
+                                                                   : BlobImportAnswer::unknown_resource;
       if (answer.status() != expected)
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "bit %u answered %u", bit, answer.status());
       CHECK_EQ(answer.device_memory(), 0u);
       CHECK_EQ(rig.imports().imports(), 0u);
   }
-  CHECK_EQ(rig.ops().imported(), 0u); }
+  CHECK_EQ(rig.ops().imported(), 1u); }

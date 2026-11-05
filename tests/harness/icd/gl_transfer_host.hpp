@@ -111,6 +111,7 @@ private:
     WireArena       guest_arena_;
     ClientBlobArena blobs_;
     GuestBytes      guest_;
+    std::uint8_t   *bound_;
     glproto::RealGl table_;
 };
 

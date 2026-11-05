@@ -159,11 +159,14 @@ uint32_t alias_memory(void *, uint32_t domain, uint64_t key, uint32_t from_domai
     return library.root().alias_memory(domain, key, from_domain, from_key, *memory) == av::Status::ok ? 0u : 1u;
 }
 
-uint32_t import_blob(void *, AvExecutor *executor, uint64_t blob_id, uint64_t memory_key)
+uint32_t import_blob(void *, AvExecutor *executor, uint64_t blob_id, uint64_t memory_key, uint32_t role,
+                     uint64_t arena_base)
 {
     AV_SCOPE("import_blob");
     av::ContextSession *const session = session_of(executor);
-    return session != nullptr ? session->import_blob(blob_id, memory_key) : AV_UNDECODABLE;
+    av::BlobRole        decoded;
+    if (session == nullptr || decoded.decode(role, arena_base) != av::Status::ok) return AV_UNDECODABLE;
+    return session->import_blob(blob_id, memory_key, decoded);
 }
 
 void release_blob(void *, AvExecutor *executor, uint64_t blob_id)

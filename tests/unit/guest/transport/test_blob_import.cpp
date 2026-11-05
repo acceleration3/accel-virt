@@ -1,5 +1,6 @@
 #include "core/support/status.hpp"
 #include "guest/transport/blob_import.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/transport/mock_transport.hpp"
 #include "proto/submission/blob_import_answer.hpp"
@@ -75,10 +76,11 @@ TEST(blob_import, import_sends_the_contracts_request_and_holds_the_hosts_memory)
   CHECK_EQ(transport.end_calls(), 1u);
   CHECK_EQ(transport.last_command(), CommandHeader::import_blob_id);
   CHECK_EQ(transport.last_length(), BlobImportRequest::encoded_size);
-  CHECK_EQ(BlobImportRequest::encoded_size, 8u);
+  CHECK_EQ(BlobImportRequest::encoded_size, 16u);
   const std::uint8_t *const request = transport.last_payload();
   CHECK_EQ(u32_at(request, 0u), chunk_resource);
   CHECK_EQ(u32_at(request, 4u), 0u);
+  CHECK_EQ(u64_at(request, 8u), 0u);
   CHECK_STATUS(import.import(chunk_resource), Status::invalid_state);
   CHECK_EQ(transport.sends(), 1u);
   transport.set_reply(taken.bytes(), 0u);
@@ -91,6 +93,19 @@ TEST(blob_import, import_sends_the_contracts_request_and_holds_the_hosts_memory)
   CHECK_EQ(import.memory(), 0u);
   CHECK_STATUS(import.release(), Status::ok);
   CHECK_EQ(transport.sends(), 2u); }
+
+TEST(blob_import, an_arena_role_travels_with_its_base_in_the_request)
+{ MockTransport transport;
+  BlobImport import(transport);
+  const Answer taken(0u, 0u, device_memory);
+  transport.set_reply(taken.bytes(), BlobImportAnswer::encoded_size);
+  const av::BlobRole role(av::BlobRole::Kind::arena_segment, av::GuestBytes::slot_bytes * 5u);
+  CHECK_STATUS(import.import(chunk_resource, role), Status::ok);
+  const std::uint8_t *const request = transport.last_payload();
+  CHECK_EQ(u32_at(request, 0u), chunk_resource);
+  CHECK_EQ(u32_at(request, 4u), 1u);
+  CHECK_EQ(u64_at(request, 8u), av::GuestBytes::slot_bytes * 5u);
+  CHECK(import.invariants_hold()); }
 
 TEST(blob_import, a_host_with_no_room_is_out_of_memory)
 { MockTransport transport;

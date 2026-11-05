@@ -5,6 +5,7 @@
 #include "executor/channel_stats_latest.hpp"
 #include "executor/import_table.hpp"
 #include "executor/shim/host_heap.hpp"
+#include "proto/submission/blob_role.hpp"
 #include "proto/wire/spill_block.hpp"
 #include "proto/wire/wire_arena.hpp"
 
@@ -42,7 +43,7 @@ public:
                      size_t reply_capacity, size_t &answer);
     size_t   answer_part(uint64_t offset, uint8_t *out, size_t capacity, uint64_t &length) const;
 
-    uint32_t import_blob(uint64_t blob_id, uint64_t memory_key);
+    uint32_t import_blob(uint64_t blob_id, uint64_t memory_key, const BlobRole &role = BlobRole());
     void     release_blob(uint64_t blob_id);
     uint64_t imported_handle(uint64_t blob_id);
     ImportTable &imports();

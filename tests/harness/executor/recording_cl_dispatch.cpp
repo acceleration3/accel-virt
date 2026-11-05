@@ -41,7 +41,7 @@ cl_int answer_info(const void *answer, std::size_t bytes, std::size_t room, void
 }
 
 RecordingClDispatch::RecordingClDispatch(const std::uint8_t *block, const WireArena &arena)
-    : clproto::DefaultDispatch(guest_), platform_(), block_(block), arena_(arena), guest_(), lent_(nullptr), lent_bytes_(0u), handles_(platform_), svm_(platform_), shared_(), shared_used_(0u), objects_{}, produced_(0u), calls_(0u),
+    : clproto::DefaultDispatch(guest_), platform_(), block_(block), arena_(arena), guest_(), bound_(nullptr), lent_(nullptr), lent_bytes_(0u), handles_(platform_), svm_(platform_), shared_(), shared_used_(0u), objects_{}, produced_(0u), calls_(0u),
       last_called_(0u), strangers_(0u), strays_(0u), refused_(0u), builds_without_argument_info_(0u),
       answer_pending_(false), answer_result_(CL_SUCCESS), answer_reported_(0u), logged_{}
 {}
@@ -129,8 +129,9 @@ void RecordingClDispatch::lend(std::uint8_t *block, std::size_t bytes)
 {
     lent_ = block;
     lent_bytes_ = block == nullptr ? 0u : bytes;
-    guest_.unbind();
-    static_cast<void>(guest_.bind(block, bytes));
+    if (bound_ != nullptr) static_cast<void>(guest_.unbind(bound_));
+    bound_ = block;
+    static_cast<void>(guest_.bind(0u, block, bytes));
 }
 
 bool RecordingClDispatch::inside_lent(const void *bytes, std::size_t length) const

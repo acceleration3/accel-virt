@@ -5,6 +5,7 @@
 #include "device/execution/host_poll.hpp"
 #include "device/abi/av_executor.h"
 #include "proto/context/device_uuid.hpp"
+#include "proto/submission/blob_role.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 
@@ -38,7 +39,8 @@ public:
     void                 gpu_progress(uint64_t &marked, uint64_t &reached) const;
     [[nodiscard]] Status execute(uint32_t command_id, const uint8_t *payload, size_t size, uint8_t *reply,
                                  size_t reply_capacity, size_t &reply_size);
-    [[nodiscard]] Status import(uint64_t blob_id, uint64_t memory_key, uint64_t &device_memory);
+    [[nodiscard]] Status import(uint64_t blob_id, uint64_t memory_key, uint64_t &device_memory,
+                                const BlobRole &role = BlobRole());
     void                 release(uint64_t blob_id);
     void                 channel_stats(const uint8_t *body, size_t size);
     size_t               answer_part(uint64_t offset, uint8_t *out, size_t capacity, uint64_t &length);

@@ -5,6 +5,7 @@
 #include "proto/client/client_blob_arena.hpp"
 #include "harness/transport/roomed_transport.hpp"
 #include "proto/resources/host_memory_request.hpp"
+#include "proto/submission/blob_role.hpp"
 #include "proto/wire/wire_arena.hpp"
 
 #include <cstddef>
@@ -52,7 +53,7 @@ private:
         std::uint64_t handle = 0u;
     };
 
-    bool open(HostMemoryRequest request, std::uint64_t bytes, Held &held);
+    bool open(HostMemoryRequest request, std::uint64_t bytes, Held &held, const BlobRole &role = BlobRole());
     void close(Held &held);
 
     D3dBackend       &backend_;

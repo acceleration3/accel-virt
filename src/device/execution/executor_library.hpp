@@ -12,6 +12,7 @@
 namespace av {
 
 
+class BlobRole;
 class SurfacePoint;
 
 class ExecutorLibrary {
@@ -38,7 +39,7 @@ public:
     HostPoll    poll(AvExecutor *executor) const;
     void        gpu_progress(AvExecutor *executor, uint64_t &marked, uint64_t &reached) const;
     void        set_signal(AvExecutor *executor, void (*signal)(void *context), void *context) const;
-    uint32_t    import_blob(AvExecutor *executor, uint64_t blob_id, uint64_t memory_key) const;
+    uint32_t    import_blob(AvExecutor *executor, uint64_t blob_id, uint64_t memory_key, const BlobRole &role) const;
     void        release_blob(AvExecutor *executor, uint64_t blob_id) const;
     uint64_t    imported_handle(AvExecutor *executor, uint64_t blob_id) const;
     [[nodiscard]] Status lose_device(AvExecutor *executor) const;

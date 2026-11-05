@@ -60,7 +60,7 @@ public:
     void end_batch() override;
     bool poll() override;
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
-    [[nodiscard]] bool adopt(SourceMemory &memory, uint64_t &handle) override;
+    [[nodiscard]] bool adopt(SourceMemory &memory, const BlobRole &role, uint64_t &handle) override;
     void abandon(const SourceMemory &memory, uint64_t handle) override;
 
     [[nodiscard]] bool export_object(uint32_t kind, uint64_t wire_handle, uint32_t &handle_kind,
@@ -230,7 +230,6 @@ private:
     HostSvmRanges    mapped_;
     GuestBytes       guest_;
     GuestRegion      arena_;
-    SourceMemory     *arena_memory_;
     const ImportTable *imported_;
     ClEventSignals   events_;
     ClReadAhead      read_ahead_;

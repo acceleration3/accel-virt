@@ -295,7 +295,8 @@ std::uint32_t alias_memory(void *, std::uint32_t, std::uint64_t, std::uint32_t, 
     return 1u;
 }
 
-std::uint32_t import_blob(void *, AvExecutor *handle, std::uint64_t blob_id, std::uint64_t memory_key)
+std::uint32_t import_blob(void *, AvExecutor *handle, std::uint64_t blob_id, std::uint64_t memory_key, std::uint32_t,
+                          std::uint64_t)
 {
     Executor *const executor = executor_of(handle);
     pthread_mutex_lock(&memories_lock);

@@ -39,7 +39,7 @@ Status BlobImportCommand::import(uint8_t *reply, size_t capacity, size_t &produc
     if (decoded == Status::malformed) return Status::malformed;
     uint64_t     device_memory = 0u;
     const Status imported =
-        decoded == Status::ok ? imports_.import(request.resource_id(), device_memory) : Status::invalid_parameter;
+        decoded == Status::ok ? imports_.import(request.resource_id(), device_memory, request.role()) : Status::invalid_parameter;
     uint32_t answer = BlobImportAnswer::executor_refused;
     switch (imported) {
     case Status::ok: answer = BlobImportAnswer::imported; break;

@@ -43,7 +43,7 @@ public:
     void gpu_progress(uint64_t &marked, uint64_t &reached) const override;
     void bind_signal(void (*signal)(void *context), void *context) override;
     bool signal();
-    [[nodiscard]] bool adopt(SourceMemory &memory, std::uint64_t &handle) override;
+    [[nodiscard]] bool adopt(SourceMemory &memory, const BlobRole &role, std::uint64_t &handle) override;
     void abandon(const SourceMemory &memory, std::uint64_t handle) override;
     [[nodiscard]] bool export_object(std::uint32_t kind, std::uint64_t wire_handle,
                                      std::uint32_t &handle_kind, OwnedFd &descriptor) override;

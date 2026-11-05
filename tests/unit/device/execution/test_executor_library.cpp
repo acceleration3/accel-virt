@@ -1,6 +1,7 @@
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
 #include "device/execution/executor_library.hpp"
+#include "proto/submission/blob_role.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/context/sub_api.hpp"
@@ -178,12 +179,12 @@ TEST(executor_library_import_blob, forwards_the_import_of_a_key_its_release_and_
   CHECK_STATUS(opened.library.allocate_memory(0x30u, 4096u, 1u, memory), Status::ok);
   close(memory.fd);
   CHECK_EQ(opened.library.imported_handle(executor, 0x21u), 0u);
-  CHECK_EQ(opened.library.import_blob(executor, 0x21u, 0x30u), std::uint32_t{AV_EXECUTED});
+  CHECK_EQ(opened.library.import_blob(executor, 0x21u, 0x30u, av::BlobRole()), std::uint32_t{AV_EXECUTED});
   CHECK_EQ(opened.library.imported_handle(executor, 0x21u), 0x21u | MockExecutorOps::handle_bit);
   std::uint64_t key = 0u;
   CHECK(opened.ops.import_of(0x21u, key));
   CHECK_EQ(key, 0x30u);
-  CHECK_EQ(opened.library.import_blob(executor, 0x22u, 0x31u), std::uint32_t{AV_UNDECODABLE});
+  CHECK_EQ(opened.library.import_blob(executor, 0x22u, 0x31u, av::BlobRole()), std::uint32_t{AV_UNDECODABLE});
   opened.library.release_blob(executor, 0x21u);
   CHECK_EQ(opened.library.imported_handle(executor, 0x21u), 0u);
   CHECK_EQ(opened.ops.released(), 1u);

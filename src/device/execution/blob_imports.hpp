@@ -3,6 +3,7 @@
 
 #include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
+#include "proto/submission/blob_role.hpp"
 
 #include <stdint.h>
 
@@ -22,7 +23,7 @@ public:
     BlobImports(const BlobImports &) = delete;
     BlobImports &operator=(const BlobImports &) = delete;
 
-    [[nodiscard]] Status import(uint32_t resource, uint64_t &device_memory);
+    [[nodiscard]] Status import(uint32_t resource, uint64_t &device_memory, const BlobRole &role = BlobRole());
     void                 release(uint64_t device_memory);
     uint32_t             imports() const;
 

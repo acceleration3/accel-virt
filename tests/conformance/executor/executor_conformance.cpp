@@ -481,7 +481,7 @@ void ExecutorConformance::check_memory_channel(AvExecutor *executor, std::uint32
     require(true, "release_blob tolerated an id that was never imported");
     require(ops_->imported_handle(ops_->opaque, executor, never_imported_blob) == 0u,
             "imported_handle answered a handle for an id that was never imported");
-    require(ops_->import_blob(ops_->opaque, executor, channel_blob, never_allocated_key) == AV_UNDECODABLE,
+    require(ops_->import_blob(ops_->opaque, executor, channel_blob, never_allocated_key, 0u, 0u) == AV_UNDECODABLE,
             "import_blob took a key no memory was allocated under");
     require(ops_->imported_handle(ops_->opaque, executor, channel_blob) == 0u,
             "imported_handle answered a handle for an import that was refused");
@@ -495,7 +495,7 @@ void ExecutorConformance::check_memory_channel(AvExecutor *executor, std::uint32
         return;
     }
     if (memory.fd >= 0) (void)close(memory.fd);
-    const std::uint32_t imported = ops_->import_blob(ops_->opaque, executor, channel_blob, channel_key);
+    const std::uint32_t imported = ops_->import_blob(ops_->opaque, executor, channel_blob, channel_key, 0u, 0u);
     require(imported == AV_EXECUTED || imported == AV_UNDECODABLE,
             "import_blob answered something other than AV_EXECUTED or AV_UNDECODABLE");
     if (imported == AV_EXECUTED) {
@@ -514,7 +514,7 @@ void ExecutorConformance::check_memory_channel(AvExecutor *executor, std::uint32
                 "imported_handle answered a handle for an import that was refused");
         ops_->free_memory(ops_->opaque, domain_, channel_key);
     }
-    const std::uint32_t late = ops_->import_blob(ops_->opaque, executor, channel_blob, channel_key);
+    const std::uint32_t late = ops_->import_blob(ops_->opaque, executor, channel_blob, channel_key, 0u, 0u);
     require(late == AV_UNDECODABLE, "import_blob took a key after free_memory had let it go");
     if (late == AV_EXECUTED) ops_->release_blob(ops_->opaque, executor, channel_blob);
 }
@@ -527,7 +527,7 @@ void ExecutorConformance::check_foreign_key(AvExecutor *executor, HostMemoryRequ
     AvHostMemory memory = {-1, 0u, 0u};
     if (allocate(other, foreign_key, page_bytes, request, memory) == 0u) {
         if (memory.fd >= 0) (void)close(memory.fd);
-        const std::uint32_t imported = ops_->import_blob(ops_->opaque, executor, foreign_blob, foreign_key);
+        const std::uint32_t imported = ops_->import_blob(ops_->opaque, executor, foreign_blob, foreign_key, 0u, 0u);
         require(imported == AV_UNDECODABLE, "import_blob took memory allocated in another domain");
         if (imported == AV_EXECUTED) ops_->release_blob(ops_->opaque, executor, foreign_blob);
         ops_->free_memory(ops_->opaque, other, foreign_key);
@@ -692,7 +692,7 @@ void ExecutorConformance::check_gpu_round_trip(AvExecutor *executor, ExecutorTra
         for (std::uint64_t at = 0u; at < page_bytes; at++)
             window[at] = static_cast<std::uint8_t>(at < half ? at * 7u + 1u : 0u);
 
-    const std::uint32_t imported = ops_->import_blob(ops_->opaque, executor, imported_blob, imported_key);
+    const std::uint32_t imported = ops_->import_blob(ops_->opaque, executor, imported_blob, imported_key, 0u, 0u);
     require(imported == AV_EXECUTED,
             "import_blob refused memory allocated for a type the guest's device maps, once it had a device");
     const std::uint64_t handle = ops_->imported_handle(ops_->opaque, executor, imported_blob);
