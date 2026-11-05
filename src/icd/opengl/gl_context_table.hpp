@@ -35,6 +35,7 @@ public:
     GuestGlContext      *resolve(uint64_t handle) const;
     [[nodiscard]] Status destroy(uint64_t handle);
     void                 reap();
+    void                 reap_held();
     uint32_t             live() const;
     uint32_t             retired() const;
     void                 report(StateWriter &writer) const;

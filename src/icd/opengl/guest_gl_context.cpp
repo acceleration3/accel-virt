@@ -183,6 +183,7 @@ void GuestGlContext::flush()
 {
     AV_SCOPE("GuestGlContext::flush");
     if (state_ != State::made) return;
+    slices_.send_forgets();
     const TransportResult sent = channel_.flush();
     if (sent != TransportResult::ok) lines_.write("the held calls could not be sent");
 }
@@ -225,9 +226,19 @@ ClientTransport *GuestGlContext::wire()
         loss_.lose(channel_.fault_code());
         static_cast<void>(loss_.refuses("an OpenGL call"));
     }
-    if (state_ != State::made) return nullptr;
-    slices_.send_forgets();
-    return &channel_.transport();
+    return state_ == State::made ? &channel_.transport() : nullptr;
+}
+
+void GuestGlContext::send_forgets()
+{
+    AV_SCOPE("GuestGlContext::send_forgets");
+    if (state_ == State::made) slices_.send_forgets();
+}
+
+bool GuestGlContext::shareable() const
+{
+    AV_SCOPE("GuestGlContext::shareable");
+    return state_ == State::made && !loss_.lost() && !channel_.lost();
 }
 
 ClientArrayState &GuestGlContext::arrays()

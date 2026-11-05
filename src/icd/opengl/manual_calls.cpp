@@ -1263,7 +1263,9 @@ GuestGlContext *ManualCalls::sending()
 {
     AV_SCOPE("ManualCalls::sending");
     GuestGlContext *const context = currents_.current();
-    return context != nullptr && context->wire() != nullptr ? context : nullptr;
+    if (context == nullptr || context->wire() == nullptr) return nullptr;
+    context->send_forgets();
+    return context;
 }
 
 void ManualCalls::record(uint32_t error)

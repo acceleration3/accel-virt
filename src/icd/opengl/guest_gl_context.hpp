@@ -86,6 +86,8 @@ public:
     uint32_t             slices_deferred() const;
     void                 slices_reclaim();
     ClientTransport     *wire();
+    bool                 shareable() const;
+    void                 send_forgets();
     uint32_t             guest_device() const;
     void                 flush();
     [[nodiscard]] Status run_held();

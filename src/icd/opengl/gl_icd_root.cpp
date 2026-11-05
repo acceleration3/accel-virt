@@ -242,6 +242,7 @@ void *GlIcdRoot::set_context(void *dc, uint64_t handle, void *)
     }
     context->set_current_dc(dc);
     static_cast<void>(currents_.make_current(*context));
+    contexts_.reap_held();
     return &proc_table_;
 }
 
@@ -333,6 +334,7 @@ bool GlIcdRoot::swap_buffers(void *dc)
     if (shown == Shown::refused) return false;
     currents_.current()->end_frame();
     if (shown == Shown::handed) currents_.current()->pacing().after_present();
+    contexts_.reap();
     return true;
 }
 
@@ -502,7 +504,9 @@ ClientTransport *GlIcdRoot::wire()
 {
     AV_SCOPE("GlIcdRoot::wire");
     GuestGlContext *const context = currents_.current();
-    return context != nullptr ? context->wire() : nullptr;
+    ClientTransport *const transport = context != nullptr ? context->wire() : nullptr;
+    if (transport != nullptr) context->send_forgets();
+    return transport;
 }
 
 uintptr_t GlIcdRoot::record_legacy()
@@ -680,7 +684,7 @@ Status GlIcdRoot::make_chain(GuestGlContext &context)
          round++) {
         GuestGlContext &link = farthest_unmade(context);
         GuestGlContext *const target = contexts_.resolve(link.share_target());
-        if (target != nullptr && target->wire() == nullptr) return Status::invalid_state;
+        if (target != nullptr && !target->shareable()) return Status::invalid_state;
         if (target != nullptr) {
             target->lend();
             static_cast<void>(link.share(target->share_name()));
@@ -714,7 +718,7 @@ GuestGlContext *GlIcdRoot::shared_context(void *share, uint64_t &handle)
     GuestGlContext *const target = contexts_.resolve(found);
     if (target == nullptr) return nullptr;
     if (target->state() == GuestGlContext::State::created && make_chain(*target) != Status::ok) return nullptr;
-    if (target->wire() == nullptr) return nullptr;
+    if (!target->shareable()) return nullptr;
     handle = found;
     return target;
 }

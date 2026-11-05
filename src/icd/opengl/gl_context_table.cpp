@@ -117,6 +117,12 @@ void GlContextTable::reap()
     reap_locked();
 }
 
+void GlContextTable::reap_held()
+{
+    AV_SCOPE("GlContextTable::reap_held");
+    if (__atomic_load_n(&retired_count_, __ATOMIC_ACQUIRE) != 0u) reap_locked();
+}
+
 void GlContextTable::reap_locked()
 {
     AV_SCOPE("GlContextTable::reap_locked");
