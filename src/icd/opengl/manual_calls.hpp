@@ -137,6 +137,7 @@ public:
     void gen_vertex_arrays(int32_t count, uint32_t *arrays);
     void bind_vertex_array(uint32_t array);
     void delete_vertex_arrays(int32_t count, const uint32_t *arrays);
+    void delete_transform_feedbacks(int32_t count, const uint32_t *ids);
     void buffer_data(uint32_t target, intptr_t size, const void *data, uint32_t usage);
     void buffer_storage(uint32_t target, intptr_t size, const void *data, uint32_t flags);
     void named_buffer_data(uint32_t buffer, intptr_t size, const void *data, uint32_t usage);

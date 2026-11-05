@@ -922,13 +922,6 @@ void APIENTRY Wrap_glDeleteTextures(GLsizei n, const GLuint* textures) {
     ::av::glproto::av_glDeleteTextures(*av_t, n, textures);
 }
 
-void APIENTRY Wrap_glDeleteTransformFeedbacks(GLsizei n, const GLuint* ids) {
-    AV_SCOPE("glDeleteTransformFeedbacks");
-    auto* av_t = ::av::glicd::wire();
-    if (av_t == nullptr) return;
-    ::av::glproto::av_glDeleteTransformFeedbacks(*av_t, n, ids);
-}
-
 void APIENTRY Wrap_glDepthFunc(GLenum func) {
     AV_SCOPE("glDepthFunc");
     auto* av_t = ::av::glicd::wire();

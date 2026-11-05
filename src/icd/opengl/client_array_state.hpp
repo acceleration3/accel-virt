@@ -24,6 +24,7 @@ public:
     static constexpr uint32_t pixel_pack_buffer = 0x88EBu;
     static constexpr uint32_t pixel_unpack_buffer = 0x88ECu;
     static constexpr uint32_t query_buffer = 0x9192u;
+    static constexpr uint32_t transform_feedback_buffer = 0x8C8Eu;
     static constexpr uint32_t unknown = 0xFFFFFFFFu;
     static constexpr uint32_t max_attributes = 16u;
     static constexpr uint32_t client_pixel_store_bit = 0x00000001u;
@@ -87,6 +88,7 @@ private:
         PixelStore unpack_;
     };
 
+    void        forget_unsaved_bindings();
     uint32_t    buffer_slot(uint32_t target) const;
     bool        indexed(uint32_t target) const;
     uint32_t    texture_slot(uint32_t target) const;
@@ -97,7 +99,8 @@ private:
     uint32_t   buffers_[buffer_targets];
     Pushed     pushed_[most_pushed];
     uint32_t   depth_;
-    uint32_t   depth_limit_;
+    uint32_t   unsaved_;
+    uint32_t   host_depth_limit_;
     PixelStore pack_;
     PixelStore unpack_;
     uint32_t   vertex_array_;

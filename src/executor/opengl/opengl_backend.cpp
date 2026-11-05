@@ -3,6 +3,7 @@
 #include "executor/sharing/shared_image_shape.hpp"
 
 #include "core/log/log_line.hpp"
+#include "core/support/status.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/owned_fd.hpp"
 #include "executor/source_memory.hpp"
@@ -110,7 +111,7 @@ OpenGlBackend::OpenGlBackend(DriverLog &lines) : OpenGlBackend(heap_, lines)
 OpenGlBackend::OpenGlBackend(BlockSource &blocks, DriverLog &lines)
     : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), pending_(gl_, errors_), slices_(blocks, gl_, import_, progress_, pending_, guest_, lines), guest_(), region_(guest_), published_(guest_), errors_(),
       resolved_(0u), ran_(0u),
-      current_(false), lines_(lines)
+      current_(false), poll_failure_logged_(false), lines_(lines)
 {
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
 }
@@ -220,6 +221,12 @@ bool OpenGlBackend::poll()
         return false;
     }
     if (!context_.make_current()) {
+        if (!poll_failure_logged_)
+            LogLine(lines_)
+                .text("the context could not be made current to poll the host: status ")
+                .number(static_cast<uint32_t>(Status::invalid_state))
+                .write();
+        poll_failure_logged_ = true;
         wake_.retry_later();
         return true;
     }

@@ -96,6 +96,7 @@ private:
     uint32_t    resolved_;
     uint64_t    ran_;
     bool        current_;
+    bool        poll_failure_logged_;
     DriverLog  &lines_;
 
     friend struct OpenGlBackendProbe;

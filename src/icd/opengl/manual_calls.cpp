@@ -613,6 +613,15 @@ void ManualCalls::delete_vertex_arrays(int32_t count, const uint32_t *arrays)
     glproto::av_glDeleteVertexArrays(*context->wire(), count, arrays);
 }
 
+void ManualCalls::delete_transform_feedbacks(int32_t count, const uint32_t *ids)
+{
+    AV_SCOPE("ManualCalls::delete_transform_feedbacks");
+    GuestGlContext *const context = sending();
+    if (context == nullptr) return;
+    if (count > 0 && ids != nullptr) context->arrays().forget_buffer(ClientArrayState::transform_feedback_buffer);
+    glproto::av_glDeleteTransformFeedbacks(*context->wire(), count, ids);
+}
+
 void ManualCalls::pin_storage(GuestGlContext &context, intptr_t size, const void *data)
 {
     AV_SCOPE("ManualCalls::pin_storage");

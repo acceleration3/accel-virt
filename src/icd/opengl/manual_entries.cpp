@@ -91,6 +91,12 @@ void APIENTRY Wrap_glDeleteProgram(GLuint program)
     ::av::glicd::gl_icd_binding.root().manual().delete_program(program);
 }
 
+void APIENTRY Wrap_glDeleteTransformFeedbacks(GLsizei n, const GLuint* ids)
+{
+    AV_SCOPE("Wrap_glDeleteTransformFeedbacks");
+    ::av::glicd::gl_icd_binding.root().manual().delete_transform_feedbacks(n, ids);
+}
+
 void APIENTRY Wrap_glDeleteVertexArrays(GLsizei n, const GLuint* arrays)
 {
     AV_SCOPE("Wrap_glDeleteVertexArrays");

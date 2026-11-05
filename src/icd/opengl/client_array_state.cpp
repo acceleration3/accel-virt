@@ -32,7 +32,7 @@ constexpr uint32_t texture_targets_kept[] = {
 }
 
 ClientArrayState::ClientArrayState(BlockSource &memory)
-    : buffers_{}, pushed_{}, depth_(0u), depth_limit_(least_depth_limit), pack_(), unpack_(), vertex_array_(0u), default_elements_(0u),
+    : buffers_{}, pushed_{}, depth_(0u), unsaved_(0u), host_depth_limit_(least_depth_limit), pack_(), unpack_(), vertex_array_(0u), default_elements_(0u),
       elements_(memory, Pool::paged), attribute_pointers_{}, active_unit_(unknown), textures_{}, samplers_{},
       offsets_(memory, Pool::paged), no_offsets_(0u)
 {
@@ -90,7 +90,11 @@ bool ClientArrayState::tracks(uint32_t target) const
 void ClientArrayState::push_client(uint32_t mask)
 {
     AV_SCOPE("ClientArrayState::push_client");
-    if (depth_ >= depth_limit_) return;
+    if (depth_ + unsaved_ >= host_depth_limit_) return;
+    if (depth_ >= most_pushed) {
+        unsaved_++;
+        return;
+    }
     const uint32_t *const elements = elements_of(vertex_array_);
     pushed_[depth_] = Pushed{mask,
                              buffers_[buffer_slot(array_buffer)],
@@ -106,6 +110,11 @@ void ClientArrayState::push_client(uint32_t mask)
 void ClientArrayState::pop_client()
 {
     AV_SCOPE("ClientArrayState::pop_client");
+    if (unsaved_ != 0u) {
+        unsaved_--;
+        forget_unsaved_bindings();
+        return;
+    }
     if (depth_ == 0u) return;
     depth_--;
     const Pushed &saved = pushed_[depth_];
@@ -129,8 +138,16 @@ void ClientArrayState::limit_client_depth(int32_t reported)
 {
     AV_SCOPE("ClientArrayState::limit_client_depth");
     if (reported <= 0) return;
-    const uint32_t wanted = static_cast<uint32_t>(reported);
-    depth_limit_ = wanted > most_pushed ? most_pushed : wanted;
+    host_depth_limit_ = static_cast<uint32_t>(reported);
+}
+
+void ClientArrayState::forget_unsaved_bindings()
+{
+    AV_SCOPE("ClientArrayState::forget_unsaved_bindings");
+    buffers_[buffer_slot(array_buffer)] = unknown;
+    buffers_[buffer_slot(pixel_pack_buffer)] = unknown;
+    buffers_[buffer_slot(pixel_unpack_buffer)] = unknown;
+    set_vertex_array_elements(vertex_array_, unknown);
 }
 
 void ClientArrayState::forget_buffer(uint32_t target)
@@ -300,7 +317,7 @@ bool ClientArrayState::invariants_hold() const
     AV_SCOPE("ClientArrayState::invariants_hold");
     if (!pack_.invariants_hold() || !unpack_.invariants_hold()) return false;
     if (active_unit_ != unknown && active_unit_ >= units) return false;
-    if (depth_ > depth_limit_ || depth_limit_ > most_pushed) return false;
+    if (depth_ > most_pushed || (unsaved_ != 0u && depth_ != most_pushed)) return false;
     return elements_.find(0u) == nullptr && elements_.invariants_hold();
 }
 

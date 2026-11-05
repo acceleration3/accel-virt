@@ -1768,6 +1768,7 @@ HANDWRITTEN = {
     "glEnableVertexAttribArray", "glDisableVertexAttribArray",
     "glClientActiveTexture",
     "glBindVertexArray", "glDeleteVertexArrays",
+    "glDeleteTransformFeedbacks",
     "glDrawArrays", "glDrawArraysInstanced", "glDrawElements",
     "glDrawElementsInstanced", "glDrawRangeElements", "glArrayElement",
 
