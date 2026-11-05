@@ -243,7 +243,7 @@ Status RendererService::context(RendererMessageHeader::Kind kind, const uint8_t 
     AV_SCOPE("RendererService::context");
     ContextMessage message;
     if (message.decode(body, length, count) != Status::ok) return Status::malformed;
-    outcome = kind == RendererMessageHeader::Kind::create_context ? plane_.create(message.context(), nullptr)
+    outcome = kind == RendererMessageHeader::Kind::create_context ? plane_.create(message.context(), message.name())
                                                                   : plane_.destroy(message.context());
     return Status::ok;
 }

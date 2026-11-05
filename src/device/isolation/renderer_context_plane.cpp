@@ -209,7 +209,7 @@ Status RendererContextPlane::create(uint32_t id, const char *name)
     for (ObjectStorage<RemoteContext> &slot : slots_) {
         if (slot.constructed()) continue;
         uint8_t       body[ContextMessage::encoded_size] = {};
-        const Status  encoded = ContextMessage(id).encode(body, sizeof body);
+        const Status  encoded = ContextMessage(id, name).encode(body, sizeof body);
         Status        outcome = Status::ok;
         const Status  sent = encoded == Status::ok ? link_.request(RendererMessageHeader::Kind::create_context, body,
                                                                    ContextMessage::encoded_size, nullptr, 0u, outcome)
