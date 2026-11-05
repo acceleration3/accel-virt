@@ -401,7 +401,7 @@ void ScriptedVulkanDevice::record_barrier(std::uint32_t count, const VkImageMemo
 void ScriptedVulkanDevice::record_copy(VkImage image, const VkBufferImageCopy *region)
 {
     if (copy_count_ == max_barriers) return;
-    copies_[copy_count_] = Copy{image, region->imageExtent};
+    copies_[copy_count_] = Copy{image, region->imageExtent, region->bufferOffset};
     copy_count_++;
 }
 
@@ -423,7 +423,9 @@ VkResult ScriptedVulkanDevice::submit(VkQueue, const VkSubmitInfo *info, VkFence
         const Image *const slot = image_of(copies_[index].image);
         if (slot == nullptr) continue;
         const std::uint32_t bytes = copies_[index].extent.width * copies_[index].extent.height * 4u;
-        std::memcpy(buffer_bytes_, slot->bytes, bytes < max_image_bytes ? bytes : max_image_bytes);
+        const VkDeviceSize  at = copies_[index].offset < max_image_bytes ? copies_[index].offset : max_image_bytes;
+        const VkDeviceSize  room = max_image_bytes - at;
+        std::memcpy(buffer_bytes_ + at, slot->bytes, bytes < room ? bytes : room);
     }
     for (std::uint32_t index = 0u; index < image_copy_count_; index++) {
         const Image *const source = image_of(image_copies_[index].source);

@@ -114,8 +114,9 @@ private:
         std::uint32_t type;
     };
     struct Copy {
-        VkImage    image;
-        VkExtent3D extent;
+        VkImage      image;
+        VkExtent3D   extent;
+        VkDeviceSize offset;
     };
     struct ImageCopy {
         VkImage    source;
