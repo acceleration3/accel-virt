@@ -13,7 +13,6 @@
 #include "icd/d3d/ddi/dxgi_ddi_args_record.hpp"
 #include "icd/d3d/ddi_version_list.hpp"
 #include "icd/d3d/device_cookie.hpp"
-#include "icd/d3d/device_removal.hpp"
 #include "icd/d3d/device_table.hpp"
 #include "icd/d3d/umd_connection.hpp"
 #include "icd/d3d/umd_connections.hpp"
@@ -61,7 +60,6 @@ struct UmdAdapterProbe {
 
 struct UmdDeviceProbe {
     static void forget_the_callbacks(UmdDevice &device) { device.kernel_callbacks_ = nullptr; }
-    static void break_its_removal(UmdDevice &device);
     static void unpublish_its_dxgi(UmdDevice &device);
     static void forget_the_runtime_device(UmdDevice &device) { device.runtime_device_ = nullptr; }
     static void remember_a_version_it_never_adopted(UmdDevice &device) { device.interface_version_ = 7u; }
@@ -208,38 +206,6 @@ TEST(umd_connection, an_enumeration_the_kernel_refuses_is_not_a_missing_adapter)
   CHECK(!connection.open());
   CHECK(connection.invariants_hold()); }
 
-TEST(device_removal_invariants, fail_for_a_cause_counted_on_a_live_device)
-{ RecordingLog  log;
-  DeviceRemoval removal;
-  removal.remove(hr_dxgi_device_reset);
-  CHECK_EQ(removal.check(log, "pfnBlt"), hr_dxgi_device_reset);
-  CHECK(removal.invariants_hold());
-  DeviceRemoval blank;
-  CHECK(blank.invariants_hold()); }
-
-namespace av::d3d {
-struct DeviceRemovalProbe {
-    static void forget_the_reason(DeviceRemoval &removal) { removal.reason_ = hr_ok; }
-    static void report_then_forget(DeviceRemoval &removal)
-    {
-        removal.reason_ = hr_dxgi_device_removed;
-        av::RecordingLog log;
-        static_cast<void>(removal.check(log, "pfnPresent"));
-        removal.reason_ = hr_ok;
-    }
-};
-
-}
-
-TEST(device_removal_invariants, fail_when_a_reported_removal_has_no_reason)
-{ RecordingLog  log;
-  DeviceRemoval removal;
-  removal.remove(hr_dxgi_device_removed);
-  removal.remove(hr_dxgi_device_hung);
-  CHECK_EQ(removal.check(log, "pfnPresent"), hr_dxgi_device_removed);
-  DeviceRemovalProbe::forget_the_reason(removal);
-  CHECK(!removal.invariants_hold()); }
-
 namespace {
 class Adopted {
 public:
@@ -312,12 +278,12 @@ TEST(umd_device_invariants, fail_for_a_device_that_never_adopted_but_remembers_o
   CHECK(adapter != nullptr);
   if (adapter == nullptr) return;
 
-  UmdDevice fresh(*adapter, rig.log());
+  UmdDevice fresh(*adapter);
   CHECK(fresh.invariants_hold());
   UmdDeviceProbe::remember_a_version_it_never_adopted(fresh);
   CHECK(!fresh.invariants_hold());
 
-  UmdDevice second(*adapter, rig.log());
+  UmdDevice second(*adapter);
   UmdDeviceProbe::remember_callbacks_it_never_adopted(second);
   CHECK(!second.invariants_hold());
   CHECK_EQ(runtime.close_adapter(), hr_ok); }
@@ -330,7 +296,7 @@ TEST(dxgi_base_table_invariants, fail_for_callbacks_kept_without_a_revision)
   CHECK_EQ(runtime.open(), hr_ok);
   UmdAdapter *const adapter = UmdRootProbe::adapter_of(rig.root(), runtime.adapter());
   if (adapter == nullptr) return;
-  UmdDevice unpublished(*adapter, rig.log());
+  UmdDevice unpublished(*adapter);
   CHECK(unpublished.dxgi().invariants_hold());
   DxgiBaseTableProbe::keep_callbacks_without_a_revision(unpublished.dxgi(), &adopted.dxgi_callbacks());
   CHECK(!unpublished.dxgi().invariants_hold());
@@ -381,35 +347,6 @@ TEST(dxgi_seam, every_slot_refuses_a_device_handle_this_driver_never_gave)
   CHECK_EQ(adopted.call(10u, static_cast<DxgiDdiArgReclaimResourcesRecord *>(nullptr)), hr_invalid_arg);
   CHECK_EQ(adopted.call(21u, static_cast<DxgiDdiArgReclaimResources1Record *>(nullptr)), hr_invalid_arg); }
 
-TEST(dxgi_seam, every_capability_slot_answers_the_removal_before_it_writes)
-{ Adopted adopted;
-  if (!adopted.made()) return;
-  adopted.device().removal().remove(hr_dxgi_device_removed);
-
-  DxgiDdiArgGetMultiplaneOverlayCapsRecord planes = {};
-  planes.hDevice = adopted.block();
-  planes.MaxPlanes = 4u;
-  CHECK_EQ(adopted.call(11u, &planes), hr_dxgi_device_removed);
-  CHECK_EQ(planes.MaxPlanes, 4u);
-
-  DxgiDdiArgGetMultiplaneOverlayGroupCapsRecord groups = {};
-  groups.hDevice = adopted.block();
-  groups.MaxPlanes = 3u;
-  CHECK_EQ(adopted.call(12u, &groups), hr_dxgi_device_removed);
-  CHECK_EQ(groups.MaxPlanes, 3u);
-
-  DxgiDdiArgCheckPresentDurationSupportRecord duration = {};
-  duration.hDevice = adopted.block();
-  duration.ClosestLargerDuration = 5u;
-  CHECK_EQ(adopted.call(17u, &duration), hr_dxgi_device_removed);
-  CHECK_EQ(duration.ClosestLargerDuration, 5u);
-
-  DxgiDdiArgCheckMultiplaneOverlayColorSpaceSupportRecord space = {};
-  space.hDevice = adopted.block();
-  space.Supported = 1;
-  CHECK_EQ(adopted.call(19u, &space), hr_dxgi_device_removed);
-  CHECK_EQ(space.Supported, 1); }
-
 TEST(umd_root_open, a_kernel_that_refuses_the_adapter_close_is_logged_not_lost)
 { UmdRig rig;
   FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
@@ -449,23 +386,10 @@ TEST(umd_root_open, the_caps_and_create_slots_refuse_a_null_argument)
   CHECK(rig.root().invariants_hold());
   CHECK_EQ(eleven.close_adapter(), hr_ok); }
 
-namespace av::d3d {
-inline void UmdDeviceProbe::break_its_removal(UmdDevice &device)
-{
-    DeviceRemovalProbe::report_then_forget(device.removal_);
-}
-
-}
-
 TEST(ddi_version_list_invariants, fail_for_a_repeat_that_is_not_the_first_pair)
 { DdiVersionList list(RuntimeKind::d3d10_11);
   DdiVersionListProbe::repeat_the_first_word_third(list);
   CHECK(!list.invariants_hold()); }
-
-TEST(device_removal_invariants, fail_for_a_removal_reported_and_then_forgotten)
-{ DeviceRemoval removal;
-  DeviceRemovalProbe::report_then_forget(removal);
-  CHECK(!removal.invariants_hold()); }
 
 TEST(umd_adapter_invariants, fail_when_a_part_of_the_adapter_is_broken)
 { UmdAdapter versions(RuntimeKind::d3d10_11, &runtime_handle, &callbacks, unopened, d3d11_interface, 0u);
@@ -485,12 +409,7 @@ TEST(adapter_table_invariants, fail_when_an_adapter_it_holds_is_broken)
   CHECK_STATUS(table.close(adapter), Status::ok); }
 
 TEST(umd_device_invariants, fail_when_a_part_of_the_device_is_broken)
-{ Adopted removal;
-  if (!removal.made()) return;
-  UmdDeviceProbe::break_its_removal(removal.device());
-  CHECK(!removal.device().invariants_hold());
-
-  Adopted unpublished;
+{ Adopted unpublished;
   if (!unpublished.made()) return;
   UmdDeviceProbe::unpublish_its_dxgi(unpublished.device());
   CHECK(!unpublished.device().invariants_hold());
@@ -556,7 +475,7 @@ TEST(dxgi_base_table, publish_refuses_a_null_argument_and_a_version_it_does_not_
   CHECK_EQ(runtime.open(), hr_ok);
   UmdAdapter *const adapter = UmdRootProbe::adapter_of(rig.root(), runtime.adapter());
   if (adapter == nullptr) return;
-  UmdDevice device(*adapter, rig.log());
+  UmdDevice device(*adapter);
   CHECK_EQ(device.dxgi().publish(nullptr, d3d11_interface), hr_invalid_arg);
 
   Dxgi161DdiBaseFunctionsRecord table = {};
