@@ -27,159 +27,164 @@ struct GuestConnectionProbe {
 namespace av::icd {
 
 struct IcdConnectionProbe {
-    static void set_users(av::icd::IcdConnection &connection, std::uint32_t link, std::uint32_t users)
-    {
-        connection.users_[link] = users;
-    }
     static void lose_adapter(av::icd::IcdConnection &connection) { static_cast<void>(connection.search_.close()); }
-    static void set_lost(av::icd::IcdConnection &connection, std::uint32_t link, bool lost) { connection.lost_[link] = lost; }
-    static void set_current(av::icd::IcdConnection &connection, std::uint32_t link) { connection.current_ = link; }
+    static Status find_adapter(av::icd::IcdConnection &connection) { return connection.search_.find_avgpu(connection.luid_); }
 };
 
 }
 
+using av::icd::DeviceLink;
 using av::icd::IcdConnectionProbe;
-
-namespace {
-
-constexpr std::uint32_t no_link = av::icd::IcdConnection::no_link;
-
-}
 
 TEST(gl_connection, the_first_user_opens_a_device_the_rest_share_it_and_the_last_closes_it)
 { GlContextRig rig;
   av::icd::IcdConnection &connection = rig.connection();
   CHECK(connection.invariants_hold());
   CHECK_EQ(connection.users(), 0u);
-  std::uint32_t first = no_link;
+  DeviceLink *first = nullptr;
   CHECK_STATUS(connection.acquire(first), Status::ok);
-  CHECK(first < av::icd::IcdConnection::max_links);
+  CHECK(first != nullptr);
   CHECK(connection.invariants_hold());
   CHECK_EQ(rig.kmt().open_objects(), GlContextRig::link_objects);
-  CHECK(connection.device(first).opened());
-  std::uint32_t second = no_link;
+  CHECK(first->device().opened());
+  CHECK_EQ(connection.adapter(), first->device().adapter());
+  DeviceLink *second = nullptr;
   CHECK_STATUS(connection.acquire(second), Status::ok);
-  CHECK_EQ(second, first);
+  CHECK(second == first);
   CHECK_EQ(connection.users(), 2u);
+  CHECK_EQ(first->users(), 2u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_device), 1u);
-  CHECK(!connection.lost(first));
-  connection.release(first);
-  CHECK(connection.device(first).opened());
+  CHECK(!first->lost());
+  connection.release(*first);
+  CHECK(first->device().opened());
+  CHECK_EQ(first->users(), 1u);
   CHECK(connection.invariants_hold());
-  connection.release(second);
+  connection.release(*second);
   CHECK(connection.invariants_hold());
   CHECK_EQ(connection.users(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::close_adapter), 1u);
-  connection.release(first);
-  connection.release(no_link);
-  connection.release(0xFFFFFFFFu);
-  CHECK_EQ(connection.users(), 0u);
-  CHECK(connection.invariants_hold()); }
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::destroy_device), 1u); }
 
 TEST(gl_connection, a_lost_device_is_retired_and_the_next_user_opens_a_new_one)
 { GlContextRig rig;
   av::icd::IcdConnection &connection = rig.connection();
-  std::uint32_t old_link = no_link;
+  DeviceLink *old_link = nullptr;
   CHECK_STATUS(connection.acquire(old_link), Status::ok);
-  std::uint32_t sharer = no_link;
+  DeviceLink *sharer = nullptr;
   CHECK_STATUS(connection.acquire(sharer), Status::ok);
-  connection.lose(old_link);
+  CHECK(sharer == old_link);
+  old_link->lose();
   CHECK(connection.invariants_hold());
-  CHECK(connection.lost(old_link));
-  CHECK(connection.lost(sharer));
-  CHECK(connection.device(old_link).opened());
-  std::uint32_t fresh = no_link;
+  CHECK(old_link->lost());
+  CHECK(old_link->device().opened());
+  DeviceLink *fresh = nullptr;
   CHECK_STATUS(connection.acquire(fresh), Status::ok);
+  CHECK(fresh != nullptr);
   CHECK(fresh != old_link);
-  CHECK(!connection.lost(fresh));
+  CHECK(!fresh->lost());
   CHECK(connection.invariants_hold());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_device), 2u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::enumerate_adapters), 1u);
   CHECK_EQ(connection.users(), 3u);
-  connection.lose(old_link);
-  connection.lose(no_link);
-  std::uint32_t idle = 0u;
-  while (idle == old_link || idle == fresh) idle++;
-  connection.lose(idle);
-  CHECK(!connection.lost(idle));
-  CHECK(!connection.lost(no_link));
-  CHECK(connection.invariants_hold());
-  connection.release(old_link);
-  connection.release(sharer);
+  DeviceLink *shared = nullptr;
+  CHECK_STATUS(connection.acquire(shared), Status::ok);
+  CHECK(shared == fresh);
+  connection.release(*shared);
+  connection.release(*old_link);
+  connection.release(*sharer);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::destroy_device), 1u);
-  CHECK(!connection.lost(old_link));
-  CHECK(connection.device(fresh).opened());
+  CHECK(fresh->device().opened());
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::close_adapter), 0u);
-  connection.release(fresh);
+  CHECK(connection.invariants_hold());
+  connection.release(*fresh);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(connection.invariants_hold()); }
 
-TEST(gl_connection, every_link_lost_and_held_leaves_no_room)
+TEST(gl_connection, lost_and_held_devices_pile_up_each_in_a_row_of_its_own)
 { GlContextRig rig;
   av::icd::IcdConnection &connection = rig.connection();
-  std::uint32_t links[av::icd::IcdConnection::max_links] = {};
-  for (std::uint32_t &link : links) {
-    CHECK_STATUS(connection.acquire(link), Status::ok);
-    connection.lose(link);
+  constexpr std::uint32_t many = 8u;
+  DeviceLink *links[many] = {};
+  for (std::uint32_t at = 0u; at < many; at++) {
+    CHECK_STATUS(connection.acquire(links[at]), Status::ok);
+    CHECK(links[at] != nullptr);
+    for (std::uint32_t earlier = 0u; earlier < at; earlier++) CHECK(links[at] != links[earlier]);
+    links[at]->lose();
     CHECK(connection.invariants_hold());
   }
-  std::uint32_t refused = 7u;
-  CHECK_STATUS(connection.acquire(refused), Status::no_space);
-  CHECK_EQ(refused, no_link);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_device), av::icd::IcdConnection::max_links);
-  connection.release(links[2]);
-  std::uint32_t again = no_link;
-  CHECK_STATUS(connection.acquire(again), Status::ok);
-  CHECK_EQ(again, links[2]);
-  for (std::uint32_t &link : links) connection.release(link);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_device), many);
+  CHECK_EQ(connection.users(), many);
+  for (DeviceLink *link : links) connection.release(*link);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(connection.invariants_hold()); }
+
+TEST(gl_connection, a_row_that_cannot_be_had_is_no_memory_and_leaves_the_adapter_closed)
+{ GlContextRig rig;
+  av::icd::IcdConnection &connection = rig.connection();
+  DeviceLink *link = nullptr;
+  rig.platform().fail_allocation_at(1u);
+  CHECK_STATUS(connection.acquire(link), Status::no_memory);
+  CHECK(link == nullptr);
+  CHECK_EQ(connection.users(), 0u);
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK(connection.invariants_hold());
+  rig.platform().fail_allocation_at(0u);
+  CHECK_STATUS(connection.acquire(link), Status::ok);
+  CHECK(link != nullptr);
+  CHECK(connection.invariants_hold());
+  connection.release(*link);
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
 TEST(gl_connection, no_avgpu_adapter_or_no_device_is_not_supported_with_nothing_open)
 { GlContextRig rig;
-  std::uint32_t link = 3u;
+  DeviceLink *link = nullptr;
   rig.kmt().fail_at(MockKmt::Call::enumerate_adapters, 1u, MockKmt::invalid_parameter);
   CHECK_STATUS(rig.connection().acquire(link), Status::not_supported);
-  CHECK_EQ(link, no_link);
+  CHECK(link == nullptr);
   CHECK_EQ(rig.connection().users(), 0u);
   rig.kmt().fail_at(MockKmt::Call::create_device, 1u, MockKmt::invalid_parameter);
   CHECK_STATUS(rig.connection().acquire(link), Status::not_supported);
-  CHECK_EQ(link, no_link);
+  CHECK(link == nullptr);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK(rig.connection().invariants_hold());
-  std::uint32_t first = no_link;
+  DeviceLink *first = nullptr;
   CHECK_STATUS(rig.connection().acquire(first), Status::ok);
-  rig.connection().lose(first);
+  first->lose();
   rig.kmt().fail_at(MockKmt::Call::create_device, 1u, MockKmt::invalid_parameter);
   CHECK_STATUS(rig.connection().acquire(link), Status::not_supported);
-  CHECK(rig.connection().device(first).opened());
+  CHECK(link == nullptr);
+  CHECK(first->device().opened());
   CHECK_EQ(rig.kmt().open_objects(), GlContextRig::link_objects);
   CHECK(rig.connection().invariants_hold());
-  rig.connection().release(first);
+  rig.connection().release(*first);
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
 TEST(gl_connection, other_adapters_are_not_the_avgpu_one)
-{ av::MockKmt kmt;
+{ av::MockPlatform platform;
+  av::MockKmt kmt;
   kmt.add_adapter(av::PciIdentity(0x8086u, 0x46A6u, 0u, 0u), 3200u);
-  av::icd::IcdConnection connection(kmt, 0u);
-  std::uint32_t link = 0u;
+  av::icd::IcdConnection connection(platform, kmt, 0u);
+  DeviceLink *link = nullptr;
   CHECK_STATUS(connection.acquire(link), Status::not_supported);
+  CHECK(link == nullptr);
   CHECK_EQ(kmt.open_objects(), 0u); }
 
 TEST(gl_connection, a_connection_destroyed_with_users_closes_what_it_opened)
-{ av::MockKmt kmt;
+{ av::MockPlatform platform;
+  av::MockKmt kmt;
   kmt.add_adapter(av::PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u), 3200u);
   {
-    av::icd::IcdConnection connection(kmt, 0u);
-    std::uint32_t link = no_link;
+    av::icd::IcdConnection connection(platform, kmt, 0u);
+    DeviceLink *link = nullptr;
     CHECK_STATUS(connection.acquire(link), Status::ok);
     CHECK_STATUS(connection.acquire(link), Status::ok);
-    connection.lose(link);
+    link->lose();
     CHECK_STATUS(connection.acquire(link), Status::ok);
   }
   CHECK_EQ(kmt.open_objects(), 0u);
-  CHECK_EQ(kmt.misuses(), 0u); }
+  CHECK_EQ(kmt.misuses(), 0u);
+  CHECK_EQ(platform.live_allocations(), 0u); }
 
 TEST(gl_connection, reports_its_users_and_each_link)
 { GlContextRig rig;
@@ -187,65 +192,51 @@ TEST(gl_connection, reports_its_users_and_each_link)
   av::StateWriter idle(bytes, sizeof bytes);
   rig.connection().report(idle);
   CHECK(std::strcmp(idle.dump(), "connection/0 users=0 adapter=0 luid=0") == 0);
-  std::uint32_t link = no_link;
+  DeviceLink *link = nullptr;
   CHECK_STATUS(rig.connection().acquire(link), Status::ok);
-  rig.connection().lose(link);
-  std::uint32_t fresh = no_link;
+  link->lose();
+  DeviceLink *fresh = nullptr;
   CHECK_STATUS(rig.connection().acquire(fresh), Status::ok);
   av::StateWriter open(bytes, sizeof bytes);
   rig.connection().report(open);
   char expected[256];
   std::snprintf(expected, sizeof expected,
                 "connection/0 users=2 adapter=%u luid=0\n"
-                "connection/0/link/%u users=1 lost=true device=%u\n"
-                "connection/0/link/%u users=1 lost=false device=%u",
-                static_cast<unsigned>(rig.connection().device(link).adapter()), static_cast<unsigned>(link),
-                static_cast<unsigned>(rig.connection().device(link).device()), static_cast<unsigned>(fresh),
-                static_cast<unsigned>(rig.connection().device(fresh).device()));
+                "connection/0/link/%u users=1 lost=true\n"
+                "connection/0/link/%u users=1 lost=false",
+                static_cast<unsigned>(rig.connection().adapter()), static_cast<unsigned>(link->device().device()),
+                static_cast<unsigned>(fresh->device().device()));
   CHECK(std::strcmp(open.dump(), expected) == 0);
-  rig.connection().release(link);
-  rig.connection().release(fresh); }
+  rig.connection().release(*link);
+  rig.connection().release(*fresh); }
 
 TEST(gl_connection, invariants_fail_when_links_devices_and_the_adapter_disagree)
 { { GlContextRig rig;
-    std::uint32_t link = no_link;
+    DeviceLink *link = nullptr;
     CHECK_STATUS(rig.connection().acquire(link), Status::ok);
-    IcdConnectionProbe::set_users(rig.connection(), link, 0u);
+    CHECK(link->let_go());
     CHECK(!rig.connection().invariants_hold());
-    IcdConnectionProbe::set_users(rig.connection(), link, 1u);
+    link->hold();
     CHECK(rig.connection().invariants_hold());
-    const std::uint32_t queue = av::GuestConnectionProbe::queue(rig.connection().device(link));
-    av::GuestConnectionProbe::set_queue(rig.connection().device(link), 0u);
+    const std::uint32_t queue = av::GuestConnectionProbe::queue(link->device());
+    av::GuestConnectionProbe::set_queue(link->device(), 0u);
     CHECK(!rig.connection().invariants_hold());
-    av::GuestConnectionProbe::set_queue(rig.connection().device(link), queue);
-    const std::uint32_t device = av::GuestConnectionProbe::device(rig.connection().device(link));
-    av::GuestConnectionProbe::set_device(rig.connection().device(link), 0u);
+    av::GuestConnectionProbe::set_queue(link->device(), queue);
+    const std::uint32_t device = av::GuestConnectionProbe::device(link->device());
+    av::GuestConnectionProbe::set_device(link->device(), 0u);
     CHECK(!rig.connection().invariants_hold());
-    av::GuestConnectionProbe::set_device(rig.connection().device(link), device);
+    av::GuestConnectionProbe::set_device(link->device(), device);
     CHECK(rig.connection().invariants_hold());
-    IcdConnectionProbe::set_current(rig.connection(), no_link);
-    CHECK(!rig.connection().invariants_hold());
-    IcdConnectionProbe::set_current(rig.connection(), link);
-    CHECK(rig.connection().invariants_hold());
-    rig.connection().release(link); }
+    rig.connection().release(*link); }
   { GlContextRig rig;
-    std::uint32_t link = no_link;
+    DeviceLink *link = nullptr;
     CHECK_STATUS(rig.connection().acquire(link), Status::ok);
     IcdConnectionProbe::lose_adapter(rig.connection());
     CHECK(!rig.connection().invariants_hold());
-    rig.connection().release(link); }
+    rig.connection().release(*link); }
   { GlContextRig rig;
-    IcdConnectionProbe::set_lost(rig.connection(), 1u, true);
-    CHECK(!rig.connection().invariants_hold());
-    IcdConnectionProbe::set_lost(rig.connection(), 1u, false);
-    std::uint32_t link = no_link;
-    CHECK_STATUS(rig.connection().acquire(link), Status::ok);
-    IcdConnectionProbe::set_lost(rig.connection(), link, true);
-    CHECK(!rig.connection().invariants_hold());
-    IcdConnectionProbe::set_lost(rig.connection(), link, false);
     CHECK(rig.connection().invariants_hold());
-    rig.connection().release(link);
-    IcdConnectionProbe::set_current(rig.connection(), link);
+    CHECK_STATUS(IcdConnectionProbe::find_adapter(rig.connection()), Status::ok);
     CHECK(!rig.connection().invariants_hold());
-    IcdConnectionProbe::set_current(rig.connection(), no_link);
+    IcdConnectionProbe::lose_adapter(rig.connection());
     CHECK(rig.connection().invariants_hold()); } }

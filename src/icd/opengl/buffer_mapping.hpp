@@ -12,6 +12,8 @@ class StateWriter;
 
 namespace av::glicd {
 
+struct BufferMappingProbe;
+
 class BufferMapping : public icd::StagedMapping {
 public:
     enum : uint32_t {
@@ -36,6 +38,8 @@ public:
 private:
     uint64_t dirty_from_;
     uint64_t dirty_to_;
+
+    friend struct BufferMappingProbe;
 };
 
 }

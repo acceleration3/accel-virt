@@ -24,18 +24,10 @@ namespace av::glicd {
 
 struct MappedBuffersProbe {
     static void miscount(MappedBuffers &mappings) { mappings.persistent_writers_++; }
-    static BufferMapping &mapping(MappedBuffers &mappings, std::uint32_t slot) { return **mappings.mappings_.at(slot); }
-    static void unnamed(MappedBuffers &mappings, BlockSource &memory, BufferShadows &shadows)
+    static BufferMapping &mapping(MappedBuffers &mappings, std::uint32_t buffer)
     {
-        BufferMapping *made = nullptr;
-        static_cast<void>(mappings.pool_.create(made, memory, shadows));
+        return *mappings.mappings_.find(buffer, 0u);
     }
-    static void duplicate(MappedBuffers &mappings)
-    {
-        std::uint32_t slot = 0u;
-        static_cast<void>(mappings.mappings_.insert(77u, *mappings.mappings_.at(0u), slot));
-    }
-    static void unduplicate(MappedBuffers &mappings) { static_cast<void>(mappings.mappings_.erase(77u)); }
 };
 
 struct BufferMappingProbe {
@@ -60,13 +52,14 @@ constexpr std::uint32_t persistent = BufferMapping::map_persistent, explicit_flu
 struct Rig {
     GlContextRig   context_rig;
     GuestGlContext context{context_rig.connection(), context_rig.platform(), context_rig.send_lock(),
-                           context_rig.log(), context_rig.extensions(), context_rig.handles(), 1, GlContextOptions()};
+                           context_rig.groups(), context_rig.lines(), context_rig.extensions(), context_rig.handles(), 1,
+                           GlContextOptions()};
     BufferShadows  shadows{context_rig.platform()};
-    MappedBuffers  mappings{context_rig.platform(), shadows, context_rig.log()};
+    MappedBuffers  mappings{context_rig.platform(), shadows, context.slices(), context_rig.lines()};
 
     Rig()
     {
-        context_rig.host().gl_make("renderer", "4.6");
+        context_rig.host().gl_made("renderer", "4.6");
         CHECK_STATUS(context.make(), Status::ok);
     }
     av::ScriptedHost    &host() { return context_rig.host(); }
@@ -155,7 +148,7 @@ TEST(mapped_buffers, a_range_past_the_buffer_or_a_buffer_the_host_does_not_size_
   CHECK_EQ(rig.mappings.held(), 0u);
   before = rig.commands();
   CHECK(rig.map(3u, 16, 0, MappedBuffers::whole_buffer, write, no_error) != nullptr);
-  CHECK_EQ(av::glicd::MappedBuffersProbe::mapping(rig.mappings, 0u).length(), 16u);
+  CHECK_EQ(av::glicd::MappedBuffersProbe::mapping(rig.mappings, 3u).bytes(), 16u);
   CHECK(rig.map(4u, 16, 12, 4, write, no_error) != nullptr);
   CHECK_EQ(rig.commands() - before, 4u);
   CHECK_EQ(rig.mappings.held(), 2u);
@@ -294,24 +287,17 @@ TEST(mapped_buffers, forget_and_release_give_up_ranges_without_writing)
   rig.mappings.flush_persistent(rig.wire());
   CHECK_EQ(rig.commands() - before, 1u); }
 
-TEST(mapped_buffers_invariants, fail_for_a_miscount_a_buffer_mapped_twice_or_a_broken_mapping)
+TEST(mapped_buffers_invariants, fail_for_a_miscount_or_a_broken_mapping)
 { Rig counted;
   CHECK(counted.map(1u, 4, 0, 4, write, no_error) != nullptr);
   av::glicd::MappedBuffersProbe::miscount(counted.mappings);
   CHECK(!counted.mappings.invariants_hold());
-  Rig twice;
-  CHECK(twice.map(1u, 4, 0, 4, write, no_error) != nullptr);
-  av::glicd::MappedBuffersProbe::duplicate(twice.mappings);
-  CHECK(!twice.mappings.invariants_hold());
-  av::glicd::MappedBuffersProbe::unduplicate(twice.mappings);
-  CHECK(twice.mappings.invariants_hold());
   Rig broken;
   CHECK(broken.map(1u, 4, 0, 4, write, no_error) != nullptr);
-  av::glicd::BufferMappingProbe::set_dirty(av::glicd::MappedBuffersProbe::mapping(broken.mappings, 0u), 0u, 1u);
+  av::glicd::BufferMappingProbe::set_dirty(av::glicd::MappedBuffersProbe::mapping(broken.mappings, 1u), 0u, 1u);
   CHECK(!broken.mappings.invariants_hold());
   Rig empty;
-  av::glicd::MappedBuffersProbe::unnamed(empty.mappings, empty.context_rig.platform(), empty.shadows);
-  CHECK(!empty.mappings.invariants_hold()); }
+  CHECK(empty.mappings.invariants_hold()); }
 
 TEST(mapped_buffers, a_map_that_writes_one_block_keeps_the_blocks_earlier_maps_wrote)
 { Rig                     rig;

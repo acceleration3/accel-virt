@@ -16,9 +16,9 @@ struct Threads {
     GlContextRig       rig;
     ScriptedThreadSlot slot;
     CurrentContexts    currents{slot};
-    GuestGlContext     first{rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.extensions(), rig.handles(), 1,
+    GuestGlContext     first{rig.connection(), rig.platform(), rig.send_lock(), rig.groups(), rig.lines(), rig.extensions(), rig.handles(), 1,
                           GlContextOptions()};
-    GuestGlContext     second{rig.connection(), rig.platform(), rig.send_lock(), rig.log(), rig.extensions(), rig.handles(), 1,
+    GuestGlContext     second{rig.connection(), rig.platform(), rig.send_lock(), rig.groups(), rig.lines(), rig.extensions(), rig.handles(), 1,
                           GlContextOptions()};
 };
 

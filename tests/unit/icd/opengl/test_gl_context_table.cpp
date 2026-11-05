@@ -7,6 +7,7 @@
 
 using av::GlContextOptions;
 using av::GlContextRig;
+using av::RecordingThreadLock;
 using av::Status;
 using av::glicd::GlContextTable;
 using av::glicd::GuestGlContext;
@@ -36,8 +37,11 @@ struct GlContextTableProbe {
 namespace {
 
 struct Table {
-    GlContextRig   rig;
-    GlContextTable table{rig.platform(), rig.connection(), rig.send_lock(), rig.log(), rig.extensions(), rig.handles()};
+    GlContextRig        rig;
+    RecordingThreadLock lock{rig.trace(), 'T'};
+    RecordingThreadLock slice_lock{rig.trace(), 'L'};
+    GlContextTable      table{rig.platform(), rig.connection(), lock, rig.send_lock(), slice_lock, rig.lines(),
+                              rig.extensions(), rig.handles()};
 };
 
 }
@@ -132,16 +136,18 @@ TEST(gl_context_table, reports_each_live_context_under_its_handle)
 { Table fixture;
   std::uint64_t handle = 0u;
   CHECK_STATUS(fixture.table.create(1, GlContextOptions(), handle), Status::ok);
-  char bytes[512];
+  char bytes[1024];
   av::StateWriter writer(bytes, sizeof bytes);
   fixture.table.report(writer);
-  CHECK(std::strcmp(writer.dump(), "contexts/0 live=1\ncontexts/0/context/1 state=created owner=0 "
-                                   "pixel_format=1 major=0 minor=0 profile=0 flags=0 share=0 share_target=0 error=0 "
-                                   "link=4 arena=false renderer= extensions=0\n"
-                                   "contexts/0/context/1/windows/0 held=0 draws_window=false "
-                                   "reads_window=false\n"
-                     "contexts/0/context/1/mappings/0 held=0 persistent_writers=0\n"
-                    "contexts/0/context/1/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0); }
+  CHECK(std::strcmp(writer.dump(), "contexts/0 live=1 retired=0\n"
+                                   "contexts/0/context/1 state=created owner=0 pixel_format=1 major=0 minor=0 "
+                                   "profile=0 flags=0 share=0 share_target=0 error=0 device=0 lost=false "
+                                   "fault_code=0 arena=false renderer= extensions=0\n"
+                                   "contexts/0/context/1/windows/0 held=0 draws_window=false reads_window=false\n"
+                                   "contexts/0/context/1/mappings/0 held=0 persistent_writers=0\n"
+                                   "contexts/0/context/1/sliced_buffers/0 granted=false stopped=false group=1 "
+                                   "owned=0 held=0\n"
+                                   "contexts/0/context/1/shadows/0 trusted=true held=0 held_bytes=0 sizes=0") == 0); }
 
 TEST(gl_context_table_invariants, fail_for_no_next_handle_or_a_broken_context)
 { Table zero;

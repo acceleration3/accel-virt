@@ -46,7 +46,10 @@ void check_nothing_answers(av::ClientTransport &wire)
     glicd::bind_buffer_indexed(0x90D2u, 1u);
     glicd::bind_buffers_indexed(0x90D2u);
     glicd::shaders_write_buffers();
-    glicd::bindings_restored();
+    glicd::client_attributes_pushed(1u);
+    glicd::client_attributes_popped();
+    glicd::client_attributes_reset(1u);
+    glicd::vertex_array_elements(1u, 1u);
     CHECK_EQ(glproto::pname_count(wire, max_viewport_dims), 2u);
     CHECK_EQ(glproto::uniform_value_count(wire, 1u, 0), 0u);
     CHECK_EQ(glproto::uniform_block_value_count(wire, 1u, 0u, uniform_block_binding), 0u);
@@ -137,7 +140,7 @@ TEST(gl_hooks, answer_from_the_current_context)
   CHECK_EQ(context.arrays().bound_buffer(0x8A11u), 6u);
   glicd::bind_buffers_indexed(0x8A11u);
   CHECK_EQ(context.arrays().bound_buffer(0x8A11u), av::glicd::ClientArrayState::unknown);
-  glicd::bindings_restored();
+  glicd::client_attributes_popped();
   CHECK_EQ(shadows.held(), 0u);
   CHECK(shadows.trusted());
   glicd::shaders_write_buffers();
