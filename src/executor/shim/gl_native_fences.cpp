@@ -9,7 +9,8 @@
 
 namespace av {
 
-GlNativeFences::GlNativeFences() : extensions_(nullptr), display_(nullptr), create_(nullptr), destroy_(nullptr), duplicate_(nullptr)
+GlNativeFences::GlNativeFences() : extensions_(nullptr), display_(nullptr), create_(nullptr), destroy_(nullptr), duplicate_(nullptr),
+      flush_(nullptr)
 {
     AV_SCOPE("GlNativeFences::GlNativeFences");
 }
@@ -25,7 +26,8 @@ void GlNativeFences::configure(const GlContext &context)
     create_ = reinterpret_cast<void *(*)(void *, unsigned, const int *)>(eglGetProcAddress("eglCreateSyncKHR"));
     destroy_ = reinterpret_cast<unsigned (*)(void *, void *)>(eglGetProcAddress("eglDestroySyncKHR"));
     duplicate_ = reinterpret_cast<int (*)(void *, void *)>(eglGetProcAddress("eglDupNativeFenceFDANDROID"));
-    if (create_ != nullptr && destroy_ != nullptr && duplicate_ != nullptr) {
+    flush_ = reinterpret_cast<void (*)()>(context.resolve("glFlush"));
+    if (create_ != nullptr && destroy_ != nullptr && duplicate_ != nullptr && flush_ != nullptr) {
         display_ = display;
         return;
     }
@@ -50,6 +52,7 @@ void GlNativeFences::give_back()
     create_ = nullptr;
     destroy_ = nullptr;
     duplicate_ = nullptr;
+    flush_ = nullptr;
 }
 
 bool GlNativeFences::available() const
@@ -64,6 +67,7 @@ int GlNativeFences::make() const
     if (display_ == nullptr) return -1;
     void *const sync = create_(display_, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr);
     if (sync == nullptr) return -1;
+    flush_();
     const int fd = duplicate_(display_, sync);
     static_cast<void>(destroy_(display_, sync));
     return fd >= 0 ? fd : -1;

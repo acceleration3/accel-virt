@@ -25,6 +25,7 @@ private:
     void *(*create_)(void *, unsigned, const int *);
     unsigned (*destroy_)(void *, void *);
     int (*duplicate_)(void *, void *);
+    void (*flush_)();
 };
 
 }
