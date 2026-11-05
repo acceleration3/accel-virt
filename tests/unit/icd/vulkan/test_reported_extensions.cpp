@@ -4,6 +4,7 @@
 #include "harness/icd/icd_rig.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
+#include "proto/generated/vulkan/vk_handle_translation.h"
 #include "proto/generated/vulkan/vk_serialize.h"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_arena.hpp"
@@ -22,6 +23,8 @@ using av::WireReader;
 using namespace av::vkproto;
 
 namespace {
+
+av::vkproto::HandleIdentity identity_translation;
 struct Node {
     VkStructureType sType;
     void           *pNext;
@@ -78,7 +81,7 @@ public:
         std::uint8_t answer[MockKmt::max_answer] = {};
         av::WireWriter writer(answer, sizeof answer);
         writer.write_pod<std::int32_t>(0);
-        serialize_VkPhysicalDeviceFeatures2(writer, features);
+        serialize_VkPhysicalDeviceFeatures2(writer, identity_translation, features);
         CHECK_STATUS(writer.status(), av::Status::ok);
         rig_.kmt().queue_answer(answer, static_cast<std::uint32_t>(writer.offset()));
     }
@@ -195,7 +198,7 @@ TEST(reported_extensions, an_extension_with_no_structure_of_its_own_is_enabled_o
       std::uint8_t block[1024] = {};
       WireArena    arena(block, sizeof block);
       VkDeviceCreateInfo decoded = {};
-      CHECK(deserialize_VkDeviceCreateInfo(body, &decoded, arena));
+      CHECK(deserialize_VkDeviceCreateInfo(body, identity_translation, &decoded, arena));
       CHECK_EQ(decoded.enabledExtensionCount, 1u);
       CHECK(decoded.ppEnabledExtensionNames != nullptr && decoded.ppEnabledExtensionNames[0] != nullptr &&
             std::strcmp(decoded.ppEnabledExtensionNames[0], name) == 0);
@@ -217,7 +220,7 @@ TEST(reported_extensions, a_structure_the_wire_does_not_carry_is_not_sent)
   std::uint8_t   answer[MockKmt::max_answer] = {};
   av::WireWriter writer(answer, sizeof answer);
   writer.write_pod<std::int32_t>(0);
-  serialize_VkPhysicalDeviceFeatures2(writer, answered);
+  serialize_VkPhysicalDeviceFeatures2(writer, identity_translation, answered);
   CHECK_STATUS(writer.status(), av::Status::ok);
   rig.rig().kmt().queue_answer(answer, static_cast<std::uint32_t>(writer.offset()));
   features2(rig.physical(), &asked);
@@ -273,7 +276,7 @@ TEST(reported_extensions, a_pipeline_library_in_a_create_reaches_the_host)
   CHECK(body.read_pod(count));
   CHECK_EQ(count, 1u);
   VkGraphicsPipelineCreateInfo decoded = {};
-  CHECK(deserialize_VkGraphicsPipelineCreateInfo(body, &decoded, arena));
+  CHECK(deserialize_VkGraphicsPipelineCreateInfo(body, identity_translation, &decoded, arena));
   bool library_list = false;
   bool library_parts = false;
   for (const VkBaseOutStructure *at = static_cast<const VkBaseOutStructure *>(decoded.pNext); at != nullptr;
@@ -318,7 +321,7 @@ TEST(reported_extensions, an_image_s_format_list_reaches_the_host)
   std::uint8_t block[4096] = {};
   WireArena    arena(block, sizeof block);
   VkImageCreateInfo decoded = {};
-  CHECK(deserialize_VkImageCreateInfo(body, &decoded, arena));
+  CHECK(deserialize_VkImageCreateInfo(body, identity_translation, &decoded, arena));
   const auto *list = static_cast<const VkImageFormatListCreateInfo *>(decoded.pNext);
   CHECK(list != nullptr);
   CHECK_EQ(static_cast<std::uint32_t>(list->sType),
@@ -350,7 +353,7 @@ TEST(reported_extensions, the_core_features_vkd3d_requires_are_the_host_s_answer
   std::uint8_t   answer[MockKmt::max_answer] = {};
   av::WireWriter writer(answer, sizeof answer);
   writer.write_pod<std::int32_t>(0);
-  serialize_VkPhysicalDeviceFeatures2(writer, answered);
+  serialize_VkPhysicalDeviceFeatures2(writer, identity_translation, answered);
   CHECK_STATUS(writer.status(), av::Status::ok);
   rig.rig().kmt().queue_answer(answer, static_cast<std::uint32_t>(writer.offset()));
 
@@ -385,7 +388,7 @@ TEST(reported_extensions, a_feature_the_host_does_not_have_is_absent_here_too)
   std::uint8_t   answer[MockKmt::max_answer] = {};
   av::WireWriter writer(answer, sizeof answer);
   writer.write_pod<std::int32_t>(0);
-  serialize_VkPhysicalDeviceFeatures2(writer, answered);
+  serialize_VkPhysicalDeviceFeatures2(writer, identity_translation, answered);
   CHECK_STATUS(writer.status(), av::Status::ok);
   rig.rig().kmt().queue_answer(answer, static_cast<std::uint32_t>(writer.offset()));
 
