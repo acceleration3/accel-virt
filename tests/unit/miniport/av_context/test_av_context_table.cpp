@@ -1845,3 +1845,63 @@ TEST(av_context_table_kick, rings_a_live_context_s_doorbell_and_nothing_else)
   fixture.table().kick(&first_context);
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), rings); }
+
+TEST(av_context_table_release_batch, releases_batches_in_ring_order_and_holds_one_that_arrived_early)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  std::uint64_t awaited = 0u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(2u, 32u, 64u), awaited), Status::ok);
+  CHECK_EQ(awaited, 2u);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), 0u);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
+  CHECK_EQ(awaited, 1u);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), 2u);
+  std::uint64_t tail = 0u;
+  std::memcpy(&tail, fixture.ring_memory() + 8u, sizeof tail);
+  CHECK_EQ(tail, 64u);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), 2u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(av_context_table_release_batch, refuses_a_context_it_does_not_hold_and_a_batch_the_ring_cannot_hold)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  std::uint64_t awaited = 9u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited),
+               Status::invalid_parameter);
+  CHECK_EQ(awaited, 0u);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(1u, 0u, 5000u), awaited),
+               Status::invalid_parameter);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), 0u);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(av_context_table_fault_if_held, loses_a_context_that_holds_a_batch_no_earlier_one_released)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  std::uint64_t awaited = 0u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK(!fixture.table().fault_if_held(&first_context));
+  CHECK(!fixture.table().fault_if_held(nullptr));
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(2u, 32u, 64u), awaited), Status::ok);
+  CHECK(!fixture.table().fault_if_held(&second_context));
+  CHECK(fixture.table().fault_if_held(&first_context));
+  CHECK(!fixture.table().fault_if_held(&first_context));
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited),
+               Status::invalid_parameter);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }

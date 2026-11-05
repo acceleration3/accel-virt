@@ -394,3 +394,18 @@ TEST(guest_context_kick, rings_an_established_context_only)
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.doorbells().rings(2u), 1u);
   CHECK_EQ(fixture.answer_all(), 4u); }
+
+TEST(guest_context_next_begin, is_the_later_of_the_tail_it_kept_and_the_one_the_ring_header_shows)
+{ Fixture fixture;
+  CHECK_EQ(fixture.context().next_begin(), 0u);
+  fixture.established();
+  CHECK_EQ(fixture.context().next_begin(), 0u);
+  CHECK_STATUS(fixture.submit(1u, 0u, 24u), Status::ok);
+  CHECK_EQ(fixture.context().next_begin(), 24u);
+  const std::uint64_t ahead = 100u;
+  std::memcpy(fixture.memory().pages().ring_view() + 8u, &ahead, sizeof ahead);
+  CHECK_EQ(fixture.context().next_begin(), 100u);
+  const std::uint64_t behind = 8u;
+  std::memcpy(fixture.memory().pages().ring_view() + 8u, &behind, sizeof behind);
+  CHECK_EQ(fixture.context().next_begin(), 24u);
+  CHECK(fixture.context().invariants_hold()); }

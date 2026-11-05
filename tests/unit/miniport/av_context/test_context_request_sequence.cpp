@@ -416,3 +416,30 @@ TEST(context_request_sequence_begin_setup, a_new_setup_forgets_the_last_refusal)
   answer_setup(fixture, 5u);
   CHECK(fixture.sequence().finished());
   CHECK(!fixture.sequence().refused()); }
+
+TEST(context_request_sequence_describe_process, names_the_creating_process_in_the_context_it_creates)
+{ Fixture fixture;
+  fixture.platform().set_current_process(4321u, "dwm.exe");
+  fixture.sequence().describe_process();
+  CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.pages()), Status::ok);
+  std::uint8_t bytes[request_capacity] = {};
+  std::size_t  length = 0u;
+  CHECK_STATUS(fixture.sequence().next_request(bytes, sizeof bytes, length), Status::ok);
+  WireReader     reader(bytes, length);
+  ContextRequest created;
+  CHECK_STATUS(created.decode_create(reader), Status::ok);
+  CHECK_EQ(std::strcmp(created.name(), "4321 dwm.exe"), 0);
+  CHECK(fixture.sequence().invariants_hold()); }
+
+TEST(context_request_sequence_describe_process, a_process_with_no_image_is_named_by_its_number_alone)
+{ Fixture fixture;
+  fixture.platform().set_current_process(77u, "");
+  fixture.sequence().describe_process();
+  CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.pages()), Status::ok);
+  std::uint8_t bytes[request_capacity] = {};
+  std::size_t  length = 0u;
+  CHECK_STATUS(fixture.sequence().next_request(bytes, sizeof bytes, length), Status::ok);
+  WireReader     reader(bytes, length);
+  ContextRequest created;
+  CHECK_STATUS(created.decode_create(reader), Status::ok);
+  CHECK_EQ(std::strcmp(created.name(), "77"), 0); }

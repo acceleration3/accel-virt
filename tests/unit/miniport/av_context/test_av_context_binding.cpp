@@ -364,3 +364,18 @@ TEST(av_context_binding, forget_progress_reaches_the_context_for_its_own_locatio
   CHECK_EQ(progress, 0u);
   fixture.mapped().platform().set_irql(av::Irql::passive);
   CHECK(binding.invariants_hold()); }
+
+TEST(av_context_binding, begins_its_next_batch_where_the_context_left_the_ring)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  AvContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, 0u, lent, sizeof lent);
+  CHECK_EQ(binding.next_begin(), 0u);
+  CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
+  static_cast<void>(FencePage(0u, 0u).encode(const_cast<std::uint8_t *>(fixture.pages().fence_view()), av::FencePage::encoded_size));
+  CHECK_EQ(binding.next_begin(), 0u);
+  fixture.mapped().platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(binding.submit(SubmissionDescriptor(1u, 0u, 16u)), Status::ok);
+  fixture.mapped().platform().set_irql(Irql::passive);
+  CHECK_EQ(binding.next_begin(), 16u);
+  CHECK(binding.invariants_hold()); }

@@ -1,4 +1,5 @@
 #include "miniport/adapter/driver_capabilities.hpp"
+#include "miniport/ddi/dxgkarg_doorbell_records.hpp"
 #include "miniport/ddi/dxgkarg_native_fence_records.hpp"
 #include "miniport/ddi/dxgk_driver_caps_record.hpp"
 #include "miniport/ddi/dxgk_physical_adapter_caps_record.hpp"
@@ -224,3 +225,21 @@ TEST(driver_capabilities_report_native_fence_caps, asks_for_one_value_a_fence_an
   static_cast<void>(capabilities.report_native_fence_caps(AdapterInfoQuery(platform, record)));
   platform.set_irql(av::Irql::passive);
   while (platform.claim(av::Violation::irql_ceiling)) {} }
+
+TEST(driver_capabilities_report_user_mode_submission_caps, names_a_doorbell_of_one_dword_and_no_secondary)
+{ MockPlatform platform; const DriverCapabilities capabilities(platform);
+  GuardedBuffer output(sizeof(av::DxgkUserModeSubmissionCapsRecord));
+  std::memset(output.data(), 0xA5, output.size());
+  const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, output.data(), static_cast<std::uint32_t>(output.size()));
+  CHECK_STATUS(capabilities.report_user_mode_submission_caps(AdapterInfoQuery(platform, record)), Status::ok);
+  av::DxgkUserModeSubmissionCapsRecord expected = {};
+  expected.DoorbellSizeInBytes = DriverCapabilities::doorbell_store_bytes;
+  CHECK(std::memcmp(output.data(), &expected, sizeof expected) == 0);
+  CHECK(output.guards_intact()); }
+
+TEST(driver_capabilities_report_user_mode_submission_caps, refuses_an_output_too_small_for_the_record)
+{ MockPlatform platform; const DriverCapabilities capabilities(platform);
+  GuardedBuffer output(sizeof(av::DxgkUserModeSubmissionCapsRecord) - 1u);
+  const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, output.data(), static_cast<std::uint32_t>(output.size()));
+  CHECK(capabilities.report_user_mode_submission_caps(AdapterInfoQuery(platform, record)) != Status::ok);
+  CHECK(output.guards_intact()); }

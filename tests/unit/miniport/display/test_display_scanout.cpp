@@ -457,3 +457,12 @@ TEST(display_scanout_refresh, a_keyed_source_posts_each_flip_at_once_and_the_res
   CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
   CHECK_EQ(control.respond_all(ok_nodata), 4u);
   CHECK(fixture.scanout().invariants_hold()); }
+
+TEST(display_scanout_wait_for_refresh, returns_once_the_lock_a_refresh_holds_is_free)
+{ Fixture fixture;
+  fixture.scanout().wait_for_refresh();
+  CHECK_EQ(fixture.platform().locks_held(), 0u);
+  fixture.platform().set_irql(av::Irql::dispatch);
+  fixture.scanout().wait_for_refresh();
+  fixture.platform().set_irql(av::Irql::passive);
+  CHECK(fixture.platform().claim(av::Violation::irql_ceiling)); }
