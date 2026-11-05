@@ -1,12 +1,16 @@
 #include "core/support/object_storage.hpp"
-#include "executor/d3d/d3d12_fence_publisher.hpp"
+#include "executor/imported_blob.hpp"
 #include "executor/d3d/d3d12_session.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
-#include "executor/guest_region.hpp"
-#include "executor/imported_memories.hpp"
+#include "executor/eventfd_wake.hpp"
+#include "executor/import_table.hpp"
+#include "executor/imported_blob.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "harness/executor/local_import.hpp"
 #include "executor/wake_signal.hpp"
+#include "core/log/driver_log.hpp"
+#include "harness/icd/recording_log.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -17,7 +21,6 @@
 #include <cstdint>
 
 using av::D3d12Session;
-using av::GuestRegion;
 using namespace av::d3d12proto;
 
 namespace {
@@ -43,16 +46,20 @@ av::HostHeap                    session_heap;
 av::WatchedBlocks               blocks(session_heap);
 av::D3dObjectTable              objects(blocks);
 av::WakeSignal tenant;
+av::EventfdWake fence_wake;
+av::RecordingLog session_sink;
+av::DriverLog    session_lines(session_sink, "d3d12: ");
 alignas(64) std::uint8_t guest[8192];
 
 class FreshSession {
 public:
-    FreshSession() : import_(guest, sizeof guest)
+    FreshSession() : imports_(session_heap)
     {
-        CHECK(region_.adopt(import_.blob()));
-        objects.clear();
-        CHECK_STATUS(session_storage.construct(region_, imported_, objects, tenant, blocks), av::Status::ok);
-        session_storage.object().initialize(nullptr);
+        CHECK_STATUS(guest_.bind(0u, guest, sizeof guest), av::Status::ok);
+        objects.release_all();
+        CHECK_STATUS(session_storage.construct(guest_, objects, tenant, fence_wake, blocks, session_lines),
+                     av::Status::ok);
+        session_storage.object().initialize(imports_, nullptr);
     }
     ~FreshSession()
     {
@@ -62,42 +69,33 @@ public:
     FreshSession(const FreshSession &) = delete;
     FreshSession &operator=(const FreshSession &) = delete;
 
-    D3d12Session         &session() { return session_storage.object(); }
-    av::ImportedMemories &imported() { return imported_; }
+    D3d12Session   &session() { return session_storage.object(); }
+    av::ImportTable &imports() { return imports_; }
 
 private:
-    av::LocalImport      import_;
-    GuestRegion          region_;
-    av::ImportedMemories imported_;
+    av::GuestBytes  guest_;
+    av::ImportTable imports_;
 };
 
 }
 
-TEST(d3d12_session_guest_bytes_out, is_the_session_s_region_and_nothing_past_it)
-{ FreshSession fresh;
-  D3d12Session &session = fresh.session();
-  CHECK(session.guest_bytes_out(0u, 16u) == guest);
-  CHECK(session.guest_bytes_out(4096u, 4096u) == guest + 4096u);
-  CHECK(session.guest_bytes_out(4096u, 4097u) == nullptr);
-  CHECK(session.guest_bytes_out(sizeof guest, 1u) == nullptr);
-  CHECK(session.guest_bytes(8u, 8u) == guest + 8u); }
-
 TEST(d3d12_session_on_OpenDevice12, a_session_with_no_device_answers_unsupported_and_no_caps)
+{ FreshSession fresh;
+  std::uint32_t hresult = 0u;
+  CHECK(fresh.session().on_OpenDevice12(0u, hresult));
+  CHECK_EQ(hresult, dxgi_error_unsupported); }
+
+TEST(d3d12_session_on_QueryCaps12, a_session_with_no_device_supports_nothing)
 { FreshSession fresh;
   std::uint32_t hresult = 0u;
   Caps12 caps = {};
   caps.feature_level = 0xC100u;
-  CHECK(fresh.session().on_OpenDevice12(0u, hresult, caps));
+  std::uint8_t  formats[64] = {};
+  std::uint64_t formats_size = 9u;
+  CHECK(fresh.session().on_QueryCaps12(hresult, caps, formats, sizeof formats, formats_size));
   CHECK_EQ(hresult, dxgi_error_unsupported);
-  CHECK_EQ(caps.feature_level, 0u); }
-
-TEST(d3d12_session_on_QueryFormat12, a_session_with_no_device_supports_nothing)
-{ FreshSession fresh;
-  std::uint32_t support1 = 9u, support2 = 9u, levels = 9u;
-  CHECK(!fresh.session().on_QueryFormat12(28u, 4u, support1, support2, levels));
-  CHECK_EQ(support1, 0u);
-  CHECK_EQ(support2, 0u);
-  CHECK_EQ(levels, 0u); }
+  CHECK_EQ(caps.feature_level, 0u);
+  CHECK_EQ(formats_size, 0u); }
 
 TEST(d3d12_session_on_ResourceAllocation12, a_session_with_no_device_answers_a_size_no_heap_holds)
 { FreshSession fresh;
@@ -129,14 +127,18 @@ TEST(d3d12_session, makes_nothing_without_a_device)
   buffer.mip_levels = 1u;
   buffer.sample_count = 1u;
   const ClearValue none = {};
-  CHECK(!session.on_CreateHeap12(1u, upload, 0u, 4096u, 0u, 0u));
-  CHECK(!session.on_CreateHeap12(1u, device_local, 0u, 4096u, 0u, 0u));
+  CHECK(!session.on_CreateHeap12(1u, upload, 0u, 4096u, 0u, 0u, 0u));
+  CHECK(!session.on_CreateHeap12(1u, device_local, 0u, 4096u, 0u, 0u, 0u));
   alignas(4096) static std::uint8_t heap_memory[4096];
   av::LocalImport heap(heap_memory, sizeof heap_memory, 2u);
-  CHECK(fresh.imported().adopt(heap.blob()));
-  CHECK(!session.on_CreateHeap12(1u, upload, 0u, 4096u, 0u, heap.blob().wire_handle()));
+  constexpr std::uint64_t heap_handle = 0x7001u;
+  av::ImportedBlob *taken = nullptr;
+  CHECK_STATUS(fresh.imports().take(2u, heap.memory(), taken), av::Status::ok);
+  CHECK_STATUS(fresh.imports().name(*taken, heap_handle), av::Status::ok);
+  CHECK(!session.on_CreateHeap12(1u, upload, 0u, 4096u, 0u, heap_handle, 0u));
   CHECK(objects.find(1u, av::D3dObjectKind::heap12) == nullptr);
-  fresh.imported().abandon(heap.blob());
+  CHECK(fresh.imports().invariants_hold());
+  CHECK(fresh.imports().forget(2u) == &heap.memory());
   CHECK(!session.on_CreateCommittedResource12(2u, device_local, 0u, buffer, 0u, none, 0u));
   CHECK(!session.on_CreatePlacedResource12(3u, 1u, 0u, buffer, 0u, none, 0u));
   CHECK(!session.on_CreateReservedResource12(3u, buffer, 0u, none, 0u));
@@ -150,7 +152,6 @@ TEST(d3d12_session, makes_nothing_without_a_device)
   CHECK(!session.on_CreateCommandQueue12(6u, 0u, 0u, 0u));
   CHECK(!session.on_CreateCommandAllocator12(7u, 0u));
   CHECK(!session.on_CreateCommandList12(8u, 7u, 0u, 0u));
-  CHECK(!session.on_CreateFence12(9u, 0u, 0u));
   CHECK(!session.on_CreateQueryHeap12(10u, 0u, 4u));
   const GraphicsState state = {};
   const std::uint8_t *const nothing = nullptr;
@@ -174,22 +175,14 @@ TEST(d3d12_session, every_view_and_descriptor_naming_a_heap_it_never_made_is_ref
   CHECK(!session.on_CreateSampler12(at, SamplerDesc{}));
   CHECK(!session.on_CopyDescriptors12(at, DescriptorRef{nobody + 1u, 0u}, 1u)); }
 
-TEST(d3d12_session, every_queue_list_and_fence_command_naming_nothing_is_refused)
+TEST(d3d12_session, every_queue_and_list_command_naming_nothing_is_refused)
 { FreshSession fresh;
   D3d12Session &session = fresh.session();
   const std::uint32_t lists[1] = {nobody};
-  std::uint64_t completed = 9u;
   CHECK(!session.on_ResetCommandAllocator12(nobody));
   CHECK(!session.on_ResetCommandList12(nobody, nobody, 0u));
   CHECK(!session.on_CloseCommandList12(nobody));
   CHECK(!session.on_ExecuteCommandLists12(nobody, 1u, lists));
-  CHECK(!session.on_SignalFence12(0u, nobody, 1u));
-  CHECK(!session.on_SignalFence12(nobody, nobody, 1u));
-  CHECK(!session.on_WaitFence12(nobody, nobody, 1u));
-  CHECK(!session.on_FenceValue12(nobody, 1u, 1u, completed));
-  CHECK(completed == 0u);
-  CHECK(!session.on_PublishFence12(nobody, 64u));
-  CHECK(session.on_PublishFence12(nobody, av::D3d12FencePublisher::stop));
   CHECK(!session.on_ShareResource12(nobody, 0x5eedu));
   CHECK(!session.on_PresentResource12(nobody, nobody, 1u));
   const TileRegion region = {TileCoordinate{}, TileSize{1u, 0u, 0u, 0u, 0u}};
@@ -252,7 +245,7 @@ TEST(d3d12_session, a_session_that_executed_nothing_has_no_gpu_work_outstanding)
   fresh.session().gpu_progress(marked, reached);
   CHECK(marked == 0u);
   CHECK(reached == 0u);
-  CHECK(!fresh.session().poll()); }
+  CHECK(fresh.session().invariants_hold()); }
 
 TEST(d3d12_session_objects, are_its_own_kinds_in_the_shared_table)
 { Counted eleven, twelve;
