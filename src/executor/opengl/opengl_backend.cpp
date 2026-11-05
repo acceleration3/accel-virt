@@ -108,7 +108,7 @@ OpenGlBackend::OpenGlBackend(DriverLog &lines) : OpenGlBackend(heap_, lines)
 }
 
 OpenGlBackend::OpenGlBackend(BlockSource &blocks, DriverLog &lines)
-    : heap_(), context_(), gl_(), import_(), buffers_(), pack_(gl_, buffers_), fences_(blocks), guest_(), region_(guest_), published_(guest_), errors_(),
+    : heap_(), context_(), gl_(), import_(), buffers_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_), guest_(), region_(guest_), published_(guest_), errors_(),
       resolved_(0u), ran_(0u),
       lost_(false), current_(false), lines_(lines)
 {
@@ -167,6 +167,7 @@ void OpenGlBackend::shut_down()
         pack_.abandon();
         buffers_.give_back();
         import_.give_back();
+        progress_.release();
         void *fence = nullptr;
         while (fences_.take_any(fence))
             if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
@@ -204,7 +205,8 @@ bool OpenGlBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
 bool OpenGlBackend::poll()
 {
     AV_SCOPE("OpenGlBackend::poll");
-    return false;
+    if (!progress_.pending() || !context_.make_current()) return false;
+    return progress_.settle();
 }
 
 void OpenGlBackend::bind_signal(void (*)(void *context), void *)
@@ -215,14 +217,17 @@ void OpenGlBackend::bind_signal(void (*)(void *context), void *)
 void OpenGlBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 {
     AV_SCOPE("OpenGlBackend::gpu_progress");
-    marked = 0u;
-    reached = 0u;
+    marked = progress_.marked();
+    reached = progress_.reached();
 }
 
 void OpenGlBackend::end_batch()
 {
     AV_SCOPE("OpenGlBackend::end_batch");
-    if (current_ && context_.make_current()) publish_errors();
+    if (current_ && context_.make_current()) {
+        publish_errors();
+        progress_.fence();
+    }
     current_ = false;
 }
 

@@ -3,7 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/owned_fd.hpp"
-#include "executor/d3d/slice_progress.hpp"
+#include "executor/slice_progress.hpp"
 #include "executor/shim/slice_importer.hpp"
 #include "executor/source_memory.hpp"
 

@@ -2,7 +2,7 @@
 
 #include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
-#include "executor/d3d/slice_progress.hpp"
+#include "executor/slice_progress.hpp"
 
 namespace av {
 

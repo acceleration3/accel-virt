@@ -1,7 +1,7 @@
 #ifndef AV_D3D11_BATCH_PROGRESS_HPP
 #define AV_D3D11_BATCH_PROGRESS_HPP
 
-#include "executor/d3d/slice_progress.hpp"
+#include "executor/slice_progress.hpp"
 
 #include <stdint.h>
 

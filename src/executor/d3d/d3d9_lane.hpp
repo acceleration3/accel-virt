@@ -1,7 +1,7 @@
 #ifndef AV_D3D9_LANE_HPP
 #define AV_D3D9_LANE_HPP
 
-#include "executor/d3d/slice_progress.hpp"
+#include "executor/slice_progress.hpp"
 #include "executor/shim/d3d9_interop.hpp"
 #include "executor/shim/slice_importer.hpp"
 #include "executor/shim/vulkan_device_table.hpp"

@@ -8,6 +8,7 @@
 #include "proto/submission/gl_error_word.hpp"
 #include "executor/session_backend.hpp"
 #include "executor/shim/host_heap.hpp"
+#include "executor/opengl/gl_batch_progress.hpp"
 #include "executor/opengl/sync_tokens.hpp"
 #include "executor/shim/gl_context.hpp"
 #include "executor/opengl/gl_pack_buffer.hpp"
@@ -79,6 +80,7 @@ private:
     GlSharedBuffer  buffers_;
     GlPackBuffer    pack_;
     SyncTokens  fences_;
+    GlBatchProgress progress_;
     GuestBytes  guest_;
     GuestRegion region_;
     PublishedSlots published_;
