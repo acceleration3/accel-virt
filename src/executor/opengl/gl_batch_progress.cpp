@@ -14,6 +14,7 @@ namespace {
 constexpr uint32_t gl_sync_gpu_commands_complete = 0x9117u;
 constexpr uint32_t gl_sync_flush_commands_bit = 0x1u;
 constexpr uint32_t gl_timeout_expired = 0x911Bu;
+constexpr uint32_t gl_wait_failed = 0x911Du;
 
 }
 
@@ -50,7 +51,8 @@ bool GlBatchProgress::signalled(const Pending &row) const
         pollfd waiting = {row.fd_, POLLIN, 0};
         return poll(&waiting, 1u, 0) != 0;
     }
-    return gl_.glClientWaitSync(static_cast<GLsync>(row.sync_), gl_sync_flush_commands_bit, 0u) != gl_timeout_expired;
+    const uint32_t waited = gl_.glClientWaitSync(static_cast<GLsync>(row.sync_), gl_sync_flush_commands_bit, 0u);
+    return waited != gl_timeout_expired && waited != gl_wait_failed;
 }
 
 void GlBatchProgress::fence()
@@ -106,6 +108,19 @@ void GlBatchProgress::release()
     AV_SCOPE("GlBatchProgress::release");
     while (count_ != 0u) {
         drop(pending_[first_]);
+        first_ = (first_ + 1u) % most_pending;
+        count_--;
+    }
+    __atomic_store_n(&reached_, __atomic_load_n(&marked_, __ATOMIC_ACQUIRE), __ATOMIC_RELEASE);
+}
+
+void GlBatchProgress::forget()
+{
+    AV_SCOPE("GlBatchProgress::forget");
+    while (count_ != 0u) {
+        Pending &oldest = pending_[first_];
+        if (oldest.fd_ >= 0) close(oldest.fd_);
+        oldest = Pending{nullptr, -1, false, 0u};
         first_ = (first_ + 1u) % most_pending;
         count_--;
     }

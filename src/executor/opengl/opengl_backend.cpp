@@ -173,11 +173,13 @@ void OpenGlBackend::shut_down()
         memories_.destroy_all(import_);
         import_.give_back();
         progress_.release();
-        natives_.give_back();
         void *fence = nullptr;
         while (fences_.take_any(fence))
             if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
+    } else {
+        progress_.forget();
     }
+    natives_.give_back();
     wake_.unbind();
     context_.close();
     gl_ = glproto::RealGl{};

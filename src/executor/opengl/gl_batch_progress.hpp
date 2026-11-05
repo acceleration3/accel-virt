@@ -22,6 +22,7 @@ public:
     void fence();
     bool settle();
     void release();
+    void forget();
 
     bool fences() const;
 
