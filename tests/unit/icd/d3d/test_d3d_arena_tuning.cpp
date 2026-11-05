@@ -204,3 +204,25 @@ TEST(d3d_arena_tuning, a_flush_with_commands_held_still_releases_an_idle_segment
   CHECK_STATUS(rig.stream().flush(), Status::ok);
   CHECK_EQ(rig.transport().blobs().segments(), 1u);
   rig.host().nop(); }
+
+TEST(d3d_arena_tuning, a_grown_segment_that_held_published_blobs_is_released_once_the_host_consumed_them)
+{ Rig rig;
+  rig.host().blob_import(0u, imported_memory + 2u);
+  const std::uint64_t wanted[1] = {18u * mib};
+  CHECK(rig.transport().make_room_for_blobs(wanted, 1u));
+  CHECK_EQ(rig.transport().blobs().segments(), 2u);
+  CHECK(rig.transport().blobs().take(18u * mib).taken());
+  CHECK(av_d3d_Draw(rig.stream(), 1u, 0u));
+  CHECK_STATUS(rig.stream().flush(), Status::ok);
+  rig.host().nop();
+  CHECK_STATUS(rig.transport().await_gpu(rig.transport().published_fence()), Status::ok);
+  rig.host().nop();
+  CHECK(rig.transport().blobs().used() != 0u);
+  rig.kmt().reads_clock(nullptr, 4u * MockKmt::ticks_per_second);
+  CHECK_STATUS(rig.stream().flush(), Status::ok);
+  CHECK_STATUS(rig.stream().flush(), Status::ok);
+  CHECK_STATUS(rig.stream().flush(), Status::ok);
+  CHECK_EQ(rig.transport().blobs().used(), 0u);
+  CHECK_EQ(rig.transport().blobs().segments(), 1u);
+  CHECK(rig.arena().invariants_hold());
+  rig.host().nop(); }

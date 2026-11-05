@@ -685,6 +685,7 @@ bool KmtTransport::grow_if_pressed()
 void KmtTransport::tune_arena()
 {
     AV_SCOPE("KmtTransport::tune_arena");
+    if (arena_ != nullptr && !faulted_) retire_consumed();
     if (grow_if_pressed()) return;
     release_idle_segments();
 }
