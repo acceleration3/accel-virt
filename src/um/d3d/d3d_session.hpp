@@ -14,6 +14,7 @@
 #include "icd/d3d/session_timeline.hpp"
 #include "um/d3d/d3d11_ddi.hpp"
 #include "core/support/object_pool.hpp"
+#include "um/common/performance_clock.hpp"
 #include "um/common/srw_lock.hpp"
 
 #include <stdint.h>
@@ -37,8 +38,8 @@ namespace av::d3d {
 
 class D3dSession {
 public:
-    D3dSession(Kmt &kmt, BlockSource &memory, DriverLog &log, uint64_t arena_size, uint64_t slice_store_size,
-               uint32_t select_command, uint32_t flush_command);
+    D3dSession(Kmt &kmt, BlockSource &memory, DriverLog &log, uint64_t arena_size, uint32_t select_command,
+               uint32_t flush_command);
     ~D3dSession();
     D3dSession(const D3dSession &) = delete;
     D3dSession &operator=(const D3dSession &) = delete;
@@ -61,8 +62,6 @@ public:
     Kmt                   &kmt() const;
     ObjectPool<d3d11::D3d11Device> &contexts();
     BufferSlices                   *slices();
-    uint64_t                        slice_memory() const;
-    uint8_t                        *slice_view() const;
     [[nodiscard]] Status            open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made);
     [[nodiscard]] Status            adopt_memory(void *address, uint64_t bytes, HostMemoryRequest memory,
                                                  HostAllocation *&made);
@@ -75,6 +74,7 @@ private:
     static constexpr uint32_t reply_bytes = 64u * 1024u;
     static constexpr size_t   staging_bytes = 512u * 1024u;
     static constexpr size_t   batch_bytes = 1u << 20u;
+    static constexpr uint32_t multi_block_slices = 2u;
 
     HRESULT open(uint32_t adapter);
     void    close();
@@ -90,8 +90,7 @@ private:
     SrwLock                              slices_lock_;
     ObjectStorage<SessionTimeline>        timeline_;
     ObjectStorage<BufferSlices>          slices_;
-    uint64_t                             slice_store_bytes_;
-    HostAllocation                      *slice_store_;
+    PerformanceClock                     clock_;
     d3d11::QueryResults                  query_results_;
     ObjectPool<d3d11::D3d11Device>       contexts_;
     uint32_t                             members_;

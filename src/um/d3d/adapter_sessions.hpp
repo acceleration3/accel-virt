@@ -27,7 +27,7 @@ public:
     static constexpr uint32_t none = max_adapters;
 
     AdapterSessions(Kmt &kmt, BlockSource &memory, DriverLog &log, const char *refusal, uint64_t arena_bytes,
-                    uint64_t slice_store_bytes, uint32_t select_command, uint32_t flush_command);
+                    uint32_t select_command, uint32_t flush_command);
     ~AdapterSessions();
     AdapterSessions(const AdapterSessions &) = delete;
     AdapterSessions &operator=(const AdapterSessions &) = delete;
@@ -48,7 +48,6 @@ private:
     DriverLog                     &lines_;
     const char                    *refusal_;
     uint64_t                       arena_bytes_;
-    uint64_t slice_store_bytes_;
     uint32_t                       select_command_;
     uint32_t                       flush_command_;
     Caps                           caps_[max_adapters];
@@ -58,10 +57,9 @@ private:
 
 template <typename Caps>
 AdapterSessions<Caps>::AdapterSessions(Kmt &kmt, BlockSource &memory, DriverLog &log, const char *refusal,
-                                       uint64_t arena_bytes, uint64_t slice_store_bytes, uint32_t select_command,
+                                       uint64_t arena_bytes, uint32_t select_command,
                                        uint32_t flush_command)
     : kmt_(kmt), memory_(memory), lines_(log), refusal_(refusal), arena_bytes_(arena_bytes),
-      slice_store_bytes_(slice_store_bytes),
       select_command_(select_command), flush_command_(flush_command), caps_(),
       sessions_(), adapters_{}
 {
@@ -127,7 +125,7 @@ d3d::D3dSession *AdapterSessions<Caps>::session(uint32_t slot)
     AV_SCOPE("AdapterSessions::session");
     bool                   left_lost = false;
     d3d::D3dSession *const joined = sessions_[slot].object().join(left_lost, kmt_, memory_, lines_, arena_bytes_,
-                                                                  slice_store_bytes_, select_command_, flush_command_);
+                                                                  select_command_, flush_command_);
     if (left_lost) lines_.write("the host faulted the adapter's session: new devices open one of their own");
     return joined;
 }

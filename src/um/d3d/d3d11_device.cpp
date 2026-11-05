@@ -352,6 +352,7 @@ BOOL D3d11Device::flush(UINT, UINT)
     }
     if (FAILED(follow_host())) lost(__func__);
     session_.reclaim_retired();
+    slices_.trim();
     return TRUE;
 }
 

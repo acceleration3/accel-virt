@@ -12,13 +12,12 @@ namespace av::d3d11 {
 
 namespace {
 constexpr uint64_t session_arena_bytes = uint64_t{32} << 20u;
-constexpr uint64_t slice_store_bytes = uint64_t{128} << 20u;
 
 }
 
 D3d11Driver::D3d11Driver(BlockSource &memory, Kmt &kmt, KeyedLog &log, d3d::D3dCallTrace &trace)
     : memory_(memory), lines_(log), trace_(trace), rows_(), devices_(memory),
-      adapters_(kmt, memory, log, "the host answers no Direct3D 11 on this adapter", session_arena_bytes, slice_store_bytes,
+      adapters_(kmt, memory, log, "the host answers no Direct3D 11 on this adapter", session_arena_bytes,
                 d3dproto::kCmd_SelectDevice11, d3dproto::kCmd_Flush11)
 {
     AV_SCOPE("D3d11Driver::D3d11Driver");

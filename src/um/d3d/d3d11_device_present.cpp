@@ -64,6 +64,7 @@ HRESULT D3d11Device::present_surface(ResourceRecord &source, uint32_t subresourc
                                      void *dxgi_context)
 {
     AV_SCOPE("D3d11Device::present_surface");
+    slices_.trim();
     if (source.shared_key == 0u) return present_pages(source, subresource, destination, dxgi_context);
     if (FAILED(show_flip(source, subresource)) || wire().flush() != Status::ok) {
         return lost(__func__);

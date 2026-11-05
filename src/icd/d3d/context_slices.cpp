@@ -41,4 +41,28 @@ void ContextSlices::leave(BufferSlices::Slice &slice)
     slice = BufferSlices::Slice{0u, 0u};
 }
 
+void ContextSlices::trim()
+{
+    AV_SCOPE("ContextSlices::trim");
+    if (slices_ != nullptr) slices_->trim();
+}
+
+uint8_t *ContextSlices::view(const BufferSlices::Slice &slice) const
+{
+    AV_SCOPE("ContextSlices::view");
+    return slices_->view(slice);
+}
+
+uint64_t ContextSlices::memory(const BufferSlices::Slice &slice) const
+{
+    AV_SCOPE("ContextSlices::memory");
+    return slices_->memory(slice);
+}
+
+uint64_t ContextSlices::offset_in_block(const BufferSlices::Slice &slice) const
+{
+    AV_SCOPE("ContextSlices::offset_in_block");
+    return slices_->offset_in_block(slice);
+}
+
 }

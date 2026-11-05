@@ -17,6 +17,7 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
                       D3D10DDI_MAPPED_SUBRESOURCE *mapped)
 {
     AV_SCOPE("D3d11Device::map");
+    slices_.trim();
     ResourceRecord &resource = record(handle);
     if (resource.shadow == nullptr || subresource >= subresource_count(resource) || mapped == nullptr) {
         set_error(E_INVALIDARG);
@@ -229,7 +230,7 @@ bool D3d11Device::place_on_slice(ResourceRecord &resource, size_t bytes)
         !slices_.place(bytes, resource.slice))
         return false;
     resource.on_slice = 1u;
-    resource.shadow = session_.slice_view() + resource.slice.offset_;
+    resource.shadow = slices_.view(resource.slice);
     return true;
 }
 
@@ -237,7 +238,7 @@ bool D3d11Device::rename_slice(ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::rename_slice");
     if (!slices_.rename(resource.shadow_bytes, resource.slice)) return false;
-    resource.shadow = session_.slice_view() + resource.slice.offset_;
+    resource.shadow = slices_.view(resource.slice);
     return bind_slice(resource);
 }
 
@@ -281,8 +282,8 @@ bool D3d11Device::leave_slice_for_copies(ResourceRecord &resource)
 bool D3d11Device::bind_slice(const ResourceRecord &resource)
 {
     AV_SCOPE("D3d11Device::bind_slice");
-    return d3dproto::av_d3d_BindBufferSlice(wire(), resource.stamp.id(), session_.slice_memory(), resource.slice.offset_,
-                                            resource.slice.bytes_);
+    return d3dproto::av_d3d_BindBufferSlice(wire(), resource.stamp.id(), slices_.memory(resource.slice),
+                                            slices_.offset_in_block(resource.slice), resource.slice.bytes_);
 }
 
 void D3d11Device::leave_slice(ResourceRecord &resource)

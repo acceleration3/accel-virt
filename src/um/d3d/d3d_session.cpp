@@ -14,12 +14,12 @@
 
 namespace av::d3d {
 
-D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, DriverLog &log, uint64_t arena_size, uint64_t slice_store_size,
-                       uint32_t select_command, uint32_t flush_command)
+D3dSession::D3dSession(Kmt &kmt, BlockSource &memory, DriverLog &log, uint64_t arena_size, uint32_t select_command,
+                       uint32_t flush_command)
     : memory_(memory), lines_(log), lock_(), connection_(kmt),
       channel_(memory, log,
                icd::ChannelShape(SubApi::d3d, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_size), lock_),
-      stream_(), slices_lock_(), timeline_(), slices_(), slice_store_bytes_(slice_store_size), slice_store_(nullptr), query_results_(), contexts_(memory), members_(0u), ids_(),
+      stream_(), slices_lock_(), timeline_(), slices_(), clock_(), query_results_(), contexts_(memory), members_(0u), ids_(),
       select_command_(select_command), flush_command_(flush_command)
 {
     AV_SCOPE("D3dSession::D3dSession");
@@ -100,12 +100,11 @@ HRESULT D3dSession::open(uint32_t adapter)
 bool D3dSession::host_has_slices()
 {
     AV_SCOPE("D3dSession::host_has_slices");
-    if (slice_store_bytes_ == 0u || select_command_ != d3dproto::kCmd_SelectDevice11 || channel_.arena_view() == nullptr)
-        return false;
+    if (select_command_ != d3dproto::kCmd_SelectDevice11 || channel_.arena_view() == nullptr) return false;
     uint32_t     supported = 0u;
     const bool   asked = d3dproto::av_d3d_QueryBufferSlices11(stream_.object(), &supported);
     stream_.object().end_call();
-    if (asked && supported == 1u) return true;
+    if (asked && supported == multi_block_slices) return true;
     lines_.write("the host copies mapped buffers: it cannot draw them from the arena in place");
     return false;
 }
@@ -113,29 +112,9 @@ bool D3dSession::host_has_slices()
 void D3dSession::open_slices()
 {
     AV_SCOPE("D3dSession::open_slices");
-    HostAllocation *store = nullptr;
-    if (channel_.open_memory(slice_store_bytes_, HostMemoryRequest(HostMemoryRequest::Kind::upload, 0u), this, store) !=
-        Status::ok) {
-        lines_.write("no host memory for the slice store; mapped buffers are copied");
-        return;
-    }
-    slice_store_ = store;
     static_cast<void>(timeline_.construct(channel_, lock_));
-    static_cast<void>(slices_.construct(memory_, timeline_.object(), slices_lock_, channel_.transport()));
-    slices_.object().take(store->bytes());
-    LogLine(lines_).text("dynamic buffers are drawn in place from ").number(store->bytes() >> 20u).text(" MiB").write();
-}
-
-uint64_t D3dSession::slice_memory() const
-{
-    AV_SCOPE("D3dSession::slice_memory");
-    return slice_store_ != nullptr ? slice_store_->handle() : 0u;
-}
-
-uint8_t *D3dSession::slice_view() const
-{
-    AV_SCOPE("D3dSession::slice_view");
-    return slice_store_ != nullptr ? slice_store_->view() : nullptr;
+    static_cast<void>(slices_.construct(memory_, channel_, this, timeline_.object(), slices_lock_, clock_));
+    lines_.write("dynamic buffers are drawn in place from slice memory that grows as maps need it");
 }
 
 Status D3dSession::open_memory(uint64_t bytes, HostMemoryRequest memory, HostAllocation *&made)
@@ -191,7 +170,6 @@ void D3dSession::close()
     AV_SCOPE("D3dSession::close");
     if (slices_.constructed()) slices_.destroy();
     if (timeline_.constructed()) timeline_.destroy();
-    slice_store_ = nullptr;
     if (stream_.constructed()) {
         static_cast<void>(stream_.object().flush());
         stream_.destroy();
