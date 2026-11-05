@@ -36,6 +36,7 @@ private:
     static constexpr uint32_t hex_digits = 16u;
 
     void key(const char *name);
+    void append_escaped(const char *value);
 
     TextBuffer  out_;
     size_t      capacity_;

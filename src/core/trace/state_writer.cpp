@@ -50,7 +50,7 @@ void StateWriter::address(const char *name, const void *object)
 void StateWriter::text(const char *name, const char *value)
 {
     key(name);
-    out_.append(value != nullptr ? value : "");
+    append_escaped(value != nullptr ? value : "");
 }
 
 void StateWriter::flag(const char *name, bool value) { text(name, value ? "true" : "false"); }
@@ -64,6 +64,25 @@ bool StateWriter::invariants_hold() const
 {
     if (depth_ > opened_) return false;
     return capacity_ == 0u ? out_.length() == 0u : out_.length() < capacity_;
+}
+
+void StateWriter::append_escaped(const char *value)
+{
+    for (const char *at = value; *at != '\0'; at++) {
+        const auto byte = static_cast<unsigned char>(*at);
+        char       piece[2] = {*at, '\0'};
+        if (byte == '\n' || byte == '\r') {
+            out_.append("\\");
+            piece[0] = byte == '\n' ? 'n' : 'r';
+        } else if (byte == '=' || byte == '\\') {
+            out_.append("\\");
+        } else if (byte < 0x20u || byte == 0x7Fu) {
+            out_.append("\\x");
+            out_.append_hex(byte, 2u);
+            continue;
+        }
+        out_.append(piece);
+    }
 }
 
 void StateWriter::key(const char *name)
