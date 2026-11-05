@@ -178,6 +178,8 @@ void OpenGlBackend::shut_down()
             if (gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(fence));
     } else {
         progress_.forget();
+        void *fence = nullptr;
+        while (fences_.take_any(fence)) fence = nullptr;
     }
     natives_.give_back();
     wake_.unbind();
