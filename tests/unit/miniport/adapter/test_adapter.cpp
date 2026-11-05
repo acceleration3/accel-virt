@@ -99,6 +99,7 @@
 #include "miniport/ddi/dxgkarg_submit_command_virtual_record.hpp"
 #include "miniport/scheduling/execution_node.hpp"
 #include "proto/escape/follow_record.hpp"
+#include "proto/escape/release_record.hpp"
 #include "proto/escape/next_point_record.hpp"
 #include "miniport/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "miniport/ddi/linked_device_record.hpp"
@@ -395,7 +396,7 @@ private:
         if (asked == get_capset_info || asked == get_capset) {
             av::GpuResponse answer;
             if (asked == get_capset_info)
-                answer.set_capset_info(av::CapsetInfo::capset_id, 1u, av::CapsetInfo::encoded_size);
+                answer.set_capset_info(av::CapsetInfo::capset_id, 2u, av::CapsetInfo::encoded_size);
             else
                 answer.set_capset(fixture->capset_);
             static_cast<void>(fixture->control().respond_all(answer.bytes(),
@@ -3196,12 +3197,12 @@ TEST(adapter_present, a_point_named_by_escape_is_the_next_blt_s_frame)
   std::memcpy(&named_point, fixture.last_queued() + 36u, sizeof named_point);
   CHECK_EQ(kind, 1u);
   CHECK_EQ(named_point, 0x55u);
+  const std::uint32_t queued = fixture.queued_presents();
   av::DxgkargPresentRecord again = bare;
   again.pDmaBuffer = dma;
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &again)), success);
   fixture.serve();
-  std::memcpy(&kind, fixture.last_queued() + 32u, sizeof kind);
-  CHECK_EQ(kind, 0u);
+  CHECK_EQ(fixture.queued_presents(), queued);
 
   CHECK_STATUS(av::NextPointRecord(surface + 1000u, 0x55u).encode(named, sizeof named), av::Status::ok);
   CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
@@ -5455,7 +5456,7 @@ TEST(adapter_submit_command_virtual, a_follow_record_holds_the_packet_until_the_
   av::DxgkargCreateContextRecord queue = {};
   queue.Flags = 0x4u;
   CHECK_EQ(nt(fixture.adapter().create_context(process.device(), &queue)), success);
-  CHECK_EQ(queue.ContextInfoDmaBufferPrivateDataSize, av::FollowRecord::encoded_size);
+  CHECK_EQ(queue.ContextInfoDmaBufferPrivateDataSize, av::ReleaseRecord::encoded_size);
   CHECK_EQ(process.submit(context.hContext, 7u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
 
   std::uint8_t follow[av::FollowRecord::encoded_size] = {};

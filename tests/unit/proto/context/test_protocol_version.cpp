@@ -3,9 +3,9 @@
 
 using av::ProtocolVersion;
 
-TEST(protocol_version, the_current_version_is_1_1)
-{ CHECK_EQ(ProtocolVersion::current_major, 1u);
-  CHECK_EQ(ProtocolVersion::current_minor, 1u);
+TEST(protocol_version, the_current_version_is_2_0)
+{ CHECK_EQ(ProtocolVersion::current_major, 2u);
+  CHECK_EQ(ProtocolVersion::current_minor, 0u);
   const ProtocolVersion version(2u, 7u);
   CHECK_EQ(version.major_version(), 2u);
   CHECK_EQ(version.minor_version(), 7u); }

@@ -56,7 +56,7 @@ private:
         if (host->answered_ == host->refuse_at_) {
             answer.set(GpuResponse::err_unspec);
         } else if (host->answered_ == 1u) {
-            answer.set_capset_info(CapsetInfo::capset_id, 1u, CapsetInfo::encoded_size);
+            answer.set_capset_info(CapsetInfo::capset_id, 2u, CapsetInfo::encoded_size);
         } else {
             answer.set_capset(host_capset());
         }

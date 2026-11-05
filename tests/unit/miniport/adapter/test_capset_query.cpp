@@ -41,8 +41,9 @@ struct CapsetQueryProbe {
 namespace {
 
 constexpr std::uint8_t uuid[GpuIdentity::uuid_bytes] = {5};
+constexpr std::uint32_t capset_version = 2u;
 
-CapsetInfo capset(std::uint16_t major = 1u)
+CapsetInfo capset(std::uint16_t major = ProtocolVersion::current_major)
 {
     return CapsetInfo(ProtocolVersion(major, 3u), static_cast<std::uint32_t>(SubApi::vulkan), 64u, 12u, 24u, 1u,
                       GpuIdentity(1u, 2u, GpuIdentity::cpu, uuid, 0u, 1u, "llvmpipe"));
@@ -75,7 +76,7 @@ private:
     CapsetQuery  query_;
 };
 
-GpuResponse info(std::uint32_t id = 0x72u, std::uint32_t version = 1u, std::uint32_t size = 128u)
+GpuResponse info(std::uint32_t id = 0x72u, std::uint32_t version = capset_version, std::uint32_t size = 128u)
 {
     GpuResponse response;
     response.set_capset_info(id, version, size);
@@ -112,7 +113,7 @@ TEST(capset_query, reads_the_av_capset_in_two_requests)
   CHECK_STATUS(fixture.next(decoded, is_info), Status::ok);
   CHECK(!is_info);
   CHECK_EQ(decoded.capset_id(), 0x72u);
-  CHECK_EQ(decoded.capset_version(), 1u);
+  CHECK_EQ(decoded.capset_version(), capset_version);
   CHECK_STATUS(fixture.answer(whole()), Status::ok);
   CHECK(fixture.query().complete());
   CHECK(!fixture.query().failed());
@@ -133,8 +134,9 @@ TEST(capset_query_accept, a_device_without_the_av_capset_or_of_another_major_is_
       {"refused info", plain(GpuResponse::err_invalid_parameter), GpuResponse(), true},
       {"another capset", info(0x04u), GpuResponse(), true},
       {"no version", info(0x72u, 0u), GpuResponse(), true},
+      {"an older version", info(0x72u, capset_version - 1u), GpuResponse(), true},
       {"refused capset", info(), plain(GpuResponse::err_invalid_parameter), false},
-      {"another major", info(), whole(capset(2u)), false},
+      {"another major", info(), whole(capset(ProtocolVersion::current_major + 1u)), false},
   };
   for (const Case &c : cases) {
       Fixture fixture;
@@ -164,7 +166,7 @@ TEST(capset_query_accept, an_answer_no_device_gives_is_malformed)
   };
   const Case cases[] = {
       {"info answered with nodata", plain(GpuResponse::ok_nodata), GpuResponse(), true},
-      {"info smaller than a capset", info(0x72u, 1u, 127u), GpuResponse(), true},
+      {"info smaller than a capset", info(0x72u, capset_version, 127u), GpuResponse(), true},
       {"capset answered with info", info(), info(), false},
   };
   for (const Case &c : cases) {

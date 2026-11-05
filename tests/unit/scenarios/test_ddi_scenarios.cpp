@@ -61,6 +61,7 @@
 #include "harness/vidpn/fake_vidpn.hpp"
 #include "harness/vidsch/fake_hw_queue.hpp"
 #include "harness/vidsch/fake_vidsch.hpp"
+#include "proto/context/av_device_count.hpp"
 #include "proto/dma/present_command.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/shared_object_kind.hpp"
@@ -68,6 +69,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <optional>
 
 using av::CapabilityRule;
@@ -265,7 +267,7 @@ private:
         if (asked == get_capset_info || asked == get_capset) {
             av::GpuResponse answer;
             if (asked == get_capset_info)
-                answer.set_capset_info(av::CapsetInfo::capset_id, 1u, av::CapsetInfo::encoded_size);
+                answer.set_capset_info(av::CapsetInfo::capset_id, 2u, av::CapsetInfo::encoded_size);
             else
                 answer.set_capset(device->capset_);
             static_cast<void>(device->control().respond_all(answer.bytes(),
@@ -413,17 +415,13 @@ TEST(ddi_scenario, add_device_past_the_adapter_ceiling_is_no_memory)
 { LoadedDriver driver;
   FakeVirtioGpuFunction function;
   FakeDxgkrnlAdapter dxgkrnl(driver.platform(), function);
-  FakeDxgkrnlFdo fdos[] = {
-      {driver.platform(), driver.table(), dxgkrnl}, {driver.platform(), driver.table(), dxgkrnl},
-      {driver.platform(), driver.table(), dxgkrnl}, {driver.platform(), driver.table(), dxgkrnl},
-      {driver.platform(), driver.table(), dxgkrnl}, {driver.platform(), driver.table(), dxgkrnl},
-      {driver.platform(), driver.table(), dxgkrnl}, {driver.platform(), driver.table(), dxgkrnl},
-      {driver.platform(), driver.table(), dxgkrnl},
-  };
-  for (std::uint32_t i = 0u; i < 8u; i++) CHECK_EQ(fdos[i].add_device(), 0);
-  CHECK_EQ(nt(fdos[8].add_device()), no_memory);
-  CHECK(fdos[8].context() == nullptr);
-  CHECK_EQ(driver.platform().logged(), 10u);
+  std::deque<FakeDxgkrnlFdo> fdos;
+  for (std::uint32_t i = 0u; i <= av::most_av_devices; i++) fdos.emplace_back(driver.platform(), driver.table(), dxgkrnl);
+  for (std::uint32_t i = 0u; i < av::most_av_devices; i++) CHECK_EQ(fdos[i].add_device(), 0);
+  FakeDxgkrnlFdo &past = fdos[av::most_av_devices];
+  CHECK_EQ(nt(past.add_device()), no_memory);
+  CHECK(past.context() == nullptr);
+  CHECK_EQ(driver.platform().logged(), av::most_av_devices + 2u);
   CHECK(std::strstr(driver.platform().last_log(), "no free adapter slot") != nullptr); }
 
 
