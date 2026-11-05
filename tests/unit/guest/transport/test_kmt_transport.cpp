@@ -4,6 +4,7 @@
 #include "guest/transport/blob_import.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/host_watch.hpp"
+#include "guest/transport/channel_stats.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "guest/transport/publish_gate.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -64,6 +65,21 @@ bool room_for(av::KmtTransport &transport, std::uint64_t bytes)
 {
     const std::uint64_t wanted[1] = {bytes};
     return transport.make_room_for_blobs(wanted, 1u);
+}
+
+std::uint32_t sent_commands(const av::MockKmt &kmt)
+{
+    std::uint32_t counted = 0u;
+    for (std::uint32_t index = 0u; index < kmt.commands(); index++)
+        if (kmt.command_id(index) != CommandHeader::channel_stats_id) counted++;
+    return counted;
+}
+
+std::uint32_t last_sent_command(const av::MockKmt &kmt)
+{
+    for (std::uint32_t index = kmt.commands(); index != 0u; index--)
+        if (kmt.command_id(index - 1u) != CommandHeader::channel_stats_id) return kmt.command_id(index - 1u);
+    return 0u;
 }
 
 constexpr std::size_t   staging_bytes = 1024u;
@@ -1921,7 +1937,7 @@ TEST(kmt_transport_holding, a_long_commands_lease_stays_lent_across_the_batches_
       CHECK(!transport.faulted());
       CHECK(room_for(transport, 100u));
       CHECK_EQ(transport.blobs().used(), 0u);
-      CHECK_EQ(fixture.kmt().command_id(fixture.kmt().commands() - 1u), 0x30001u);
+      CHECK_EQ(last_sent_command(fixture.kmt()), 0x30001u);
       CHECK_EQ(memory.live_allocations(), 0u);
       CHECK(transport.invariants_hold());
   } }
@@ -2021,6 +2037,28 @@ TEST(kmt_transport_holding, a_held_batch_that_cannot_be_published_loses_the_cont
   CHECK(unmade.send_sync(0x30002u, writer, reply) == TransportResult::failed);
   CHECK(!unmade.faulted()); }
 
+TEST(kmt_transport_holding, a_published_batch_ends_in_the_channel_stats_report_once_the_arena_changed)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[4096] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  std::uint8_t     room[64] = {};
+  transport.blobs().lend(room, sizeof room);
+  CHECK(holding.send(0x30001u, 4u) == TransportResult::ok);
+  CHECK(transport.flush() == TransportResult::ok);
+  const std::uint32_t last = fixture.kmt().commands() - 1u;
+  CHECK_EQ(fixture.kmt().command_id(last - 1u), 0x30001u);
+  CHECK_EQ(fixture.kmt().command_id(last), CommandHeader::channel_stats_id);
+  CHECK_EQ(fixture.kmt().command_size(last), static_cast<std::uint32_t>(av::ChannelStats::command_bytes));
+  const std::uint32_t reported = fixture.kmt().commands();
+  CHECK(holding.send(0x30001u, 4u) == TransportResult::ok);
+  CHECK(transport.flush() == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().commands(), reported + 1u);
+  CHECK_EQ(last_sent_command(fixture.kmt()), 0x30001u);
+  CHECK(transport.invariants_hold()); }
+
 TEST(kmt_transport_holding, a_long_command_is_held_in_pieces_and_fails_where_they_cannot_go)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
@@ -2035,7 +2073,7 @@ TEST(kmt_transport_holding, a_long_command_is_held_in_pieces_and_fails_where_the
   for (std::uint32_t index = 0u; index < fixture.kmt().commands(); index++)
       CHECK_EQ(fixture.kmt().command_id(index), CommandHeader::piece_id);
   CHECK(transport.flush() == TransportResult::ok);
-  CHECK_EQ(fixture.kmt().command_id(fixture.kmt().commands() - 1u), 0x30001u);
+  CHECK_EQ(last_sent_command(fixture.kmt()), 0x30001u);
   CHECK_EQ(memory.live_allocations(), 0u);
   fixture.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
   WireWriter refused = transport.request_writer();
@@ -2119,7 +2157,7 @@ TEST(kmt_transport_holding, room_held_commands_hold_comes_back_once_they_are_sen
   CHECK(room_for(transport, 0u));
   CHECK_EQ(fixture.kmt().commands(), 0u);
   CHECK(room_for(transport, 64u));
-  CHECK_EQ(fixture.kmt().commands(), 1u);
+  CHECK_EQ(sent_commands(fixture.kmt()), 1u);
   CHECK_EQ(transport.blobs().room(), 64u);
   WireWriter again = transport.request_writer();
   again.write_u64(transport.blobs().take(64u).offset());
