@@ -32,6 +32,8 @@ using av::icd::PhysicalDeviceViewProbe;
 
 namespace {
 
+HandleIdentity identity_translation;
+
 constexpr std::uint32_t vulkan_1_1_250 = 0x004010FAu;
 constexpr std::uint32_t vulkan_1_3 = 0x00403000u;
 constexpr std::uint32_t vulkan_1_4_300 = 0x0040412Cu;
@@ -52,6 +54,7 @@ public:
     IcdRig          &rig() { return rig_; }
     VkPhysicalDevice physical_device() { return physical_device_; }
     MockTransport   &transport() { return transport_; }
+    HandleTranslation &handles() { return rig_.root().wire_handles(); }
 
     void answer(const WireWriter &reply) { transport_.set_reply(reply_, reply.offset()); }
     std::uint8_t *reply_block() { return reply_; }
@@ -94,7 +97,7 @@ void write_properties2_with_identity(WireWriter &reply, std::uint32_t api_versio
     properties.pNext = &identity;
     properties.properties = host_properties(api_version);
     reply.write_pod<std::int32_t>(0);
-    serialize_VkPhysicalDeviceProperties2(reply, properties);
+    serialize_VkPhysicalDeviceProperties2(reply, identity_translation, properties);
 }
 
 bool luid_is_the_adapters(const VkPhysicalDeviceIDProperties &identity)
@@ -112,7 +115,7 @@ TEST(physical_device_view, holds_a_newer_host_to_the_version_this_icd_implements
   reply.write_pod<std::int32_t>(0);
   serialize_VkPhysicalDeviceProperties(reply, host_properties(vulkan_1_4_300));
   view_rig.answer(reply);
-  PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().lines());
   VkPhysicalDeviceProperties answer = {};
   view.properties(view_rig.physical_device(), &answer);
   CHECK(view.invariants_hold());
@@ -128,7 +131,7 @@ TEST(physical_device_view, leaves_an_older_host_at_its_own_version)
   reply.write_pod<std::int32_t>(0);
   serialize_VkPhysicalDeviceProperties(reply, host_properties(vulkan_1_1_250));
   view_rig.answer(reply);
-  PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().lines());
   VkPhysicalDeviceProperties answer = {};
   view.properties(view_rig.physical_device(), &answer);
   CHECK_EQ(answer.apiVersion, vulkan_1_1_250);
@@ -142,7 +145,7 @@ TEST(physical_device_view, leaves_an_older_host_at_its_own_version)
 TEST(physical_device_view, a_reply_that_never_came_answers_zeroed_properties)
 { ViewRig view_rig;
   view_rig.transport().fail_next();
-  PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().lines());
   VkPhysicalDeviceProperties answer = host_properties(vulkan_1_4_300);
   view.properties(view_rig.physical_device(), &answer);
   CHECK_EQ(answer.apiVersion, 0u);
@@ -156,8 +159,8 @@ TEST(physical_device_view, properties2_writes_the_adapters_luid_over_the_hosts)
       WireWriter reply(view_rig.reply_block(), reply_bytes);
       write_properties2_with_identity(reply, host_version);
       view_rig.answer(reply);
-      PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, "", vulkan_1_3,
-                              view_rig.rig().log());
+      PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, "", vulkan_1_3,
+                              view_rig.rig().lines());
       VkPhysicalDeviceIDProperties identity = {};
       identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
       VkPhysicalDeviceProperties2 answer = {};
@@ -182,7 +185,7 @@ TEST(physical_device_view, the_luid_goes_only_into_identity_nodes_anywhere_in_th
   WireWriter reply(view_rig.reply_block(), reply_bytes);
   write_properties2_with_identity(reply, vulkan_1_3);
   view_rig.answer(reply);
-  PhysicalDeviceView view(view_rig.transport(), 0x0000000900000001ull, "", vulkan_1_3, view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), 0x0000000900000001ull, "", vulkan_1_3, view_rig.rig().lines());
   VkPhysicalDeviceIDProperties identity = {};
   identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
   VkPhysicalDeviceDriverProperties driver = {};
@@ -204,7 +207,7 @@ TEST(physical_device_view, the_luid_and_node_mask_go_into_core_1_1_properties_to
   WireWriter reply(view_rig.reply_block(), reply_bytes);
   write_properties2_with_identity(reply, vulkan_1_3);
   view_rig.answer(reply);
-  PhysicalDeviceView view(view_rig.transport(), 0x0000000900000001ull, "", vulkan_1_3, view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), 0x0000000900000001ull, "", vulkan_1_3, view_rig.rig().lines());
   VkPhysicalDeviceIDProperties identity = {};
   identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
   identity.deviceNodeMask = 0x40u;
@@ -245,9 +248,9 @@ TEST(physical_device_view, properties2_with_no_chain_is_only_held_to_the_version
   host.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
   host.properties = host_properties(vulkan_1_4_300);
   reply.write_pod<std::int32_t>(0);
-  serialize_VkPhysicalDeviceProperties2(reply, host);
+  serialize_VkPhysicalDeviceProperties2(reply, identity_translation, host);
   view_rig.answer(reply);
-  PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().lines());
   VkPhysicalDeviceProperties2 answer = {};
   answer.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
   view.properties2(view_rig.physical_device(), &answer);
@@ -264,10 +267,10 @@ TEST(physical_device_view, a_host_relabelling_the_applications_structures_is_und
   reply.write_pod(VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO);
   reply.write_varint(std::uint64_t{1});
   reply.write_pod<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES);
-  serialize_VkPhysicalDevicePointClippingProperties(reply, forged);
+  serialize_VkPhysicalDevicePointClippingProperties(reply, identity_translation, forged);
   serialize_VkPhysicalDeviceProperties(reply, host_properties(vulkan_1_3));
   view_rig.answer(reply);
-  PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().lines());
   std::uint8_t block[128] = {};
   std::memset(block, canary, sizeof block);
   VkPhysicalDevicePointClippingProperties clipping = {};
@@ -289,7 +292,7 @@ TEST(physical_device_view, a_host_relabelling_the_applications_structures_is_und
 
 TEST(physical_device_view, a_chain_too_long_to_remember_or_cyclic_is_not_sent)
 { ViewRig view_rig;
-  PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().lines());
   VkPhysicalDeviceDriverProperties nodes[PhysicalDeviceView::max_chain] = {};
   for (std::uint32_t index = 0u; index < PhysicalDeviceView::max_chain; index++) {
       nodes[index].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
@@ -321,7 +324,7 @@ TEST(physical_device_view, a_reply_cut_at_every_length_leaves_the_chain_and_the_
   WireWriter full(valid, sizeof valid);
   write_properties2_with_identity(full, vulkan_1_4_300);
   const std::size_t length = full.offset();
-  PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().lines());
   for (std::size_t cut = 0u; cut <= length; cut++) {
       view_rig.transport().set_reply(valid, cut);
       VkPhysicalDeviceIDProperties identity = {};
@@ -346,7 +349,7 @@ TEST(physical_device_view, every_byte_of_a_reply_flipped_leaves_the_chain_and_th
   WireWriter full(valid, sizeof valid);
   write_properties2_with_identity(full, vulkan_1_4_300);
   const std::size_t length = full.offset();
-  PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().lines());
   std::uint8_t flipped[reply_bytes] = {};
   for (std::size_t offset = 0u; offset < length; offset++) {
       std::memcpy(flipped, valid, length);
@@ -368,7 +371,7 @@ TEST(physical_device_view, every_byte_of_a_reply_flipped_leaves_the_chain_and_th
 
 TEST(physical_device_view, invariants_refuse_more_remembered_than_it_has_room_for)
 { ViewRig view_rig;
-  PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, "", vulkan_1_3, view_rig.rig().lines());
   CHECK(view.invariants_hold());
   PhysicalDeviceViewProbe::overrun(view);
   CHECK(!view.invariants_hold()); }
@@ -379,8 +382,8 @@ TEST(physical_device_view, names_the_device_after_its_adapter)
   reply.write_pod<std::int32_t>(0);
   serialize_VkPhysicalDeviceProperties(reply, host_properties(vulkan_1_3));
   view_rig.answer(reply);
-  PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, "AMD Radeon(TM) Graphics", vulkan_1_3,
-                          view_rig.rig().log());
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, "AMD Radeon(TM) Graphics", vulkan_1_3,
+                          view_rig.rig().lines());
   VkPhysicalDeviceProperties answer = {};
   view.properties(view_rig.physical_device(), &answer);
   CHECK(std::strcmp(answer.deviceName, "AMD Radeon(TM) Graphics") == 0);
@@ -406,7 +409,7 @@ TEST(physical_device_view, an_adapter_without_a_name_keeps_the_hosts)
       reply.write_pod<std::int32_t>(0);
       serialize_VkPhysicalDeviceProperties(reply, host_properties(vulkan_1_3));
       view_rig.answer(reply);
-      PhysicalDeviceView view(view_rig.transport(), av::IcdRig::adapter_luid, none, vulkan_1_3, view_rig.rig().log());
+      PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, none, vulkan_1_3, view_rig.rig().lines());
       VkPhysicalDeviceProperties answer = {};
       view.properties(view_rig.physical_device(), &answer);
       CHECK(std::strcmp(answer.deviceName, "host gpu") == 0);
