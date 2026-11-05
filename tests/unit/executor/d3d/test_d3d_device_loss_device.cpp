@@ -10,6 +10,7 @@
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "harness/executor/executor_log_rig.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
 
@@ -118,9 +119,9 @@ av::SessionShares                 first_shares, second_shares, third_shares;
 
 class HeldBackend {
 public:
-    explicit HeldBackend(av::ObjectStorage<av::D3dBackend> &storage) : storage_(storage)
+    HeldBackend(av::ObjectStorage<av::D3dBackend> &storage, av::ExecutorLog &log) : storage_(storage)
     {
-        CHECK_STATUS(storage_.construct(), av::Status::ok);
+        CHECK_STATUS(storage_.construct(log), av::Status::ok);
     }
     ~HeldBackend() { storage_.destroy(); }
     HeldBackend(const HeldBackend &) = delete;
@@ -153,18 +154,19 @@ void *watch(void *argument)
 
 TEST(d3d_device_loss_device, a_lost_device_wakes_every_session_answers_at_once_and_is_made_again)
 {
-    av::LoaderHostApis         apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
-    HeldBackend     held_first(first_backend), held_second(second_backend), held_third(third_backend);
+    HeldBackend     held_first(first_backend, rig.log), held_second(second_backend, rig.log), held_third(third_backend, rig.log);
     av::D3dBackend &drawing = held_first.backend();
     av::D3dBackend &idle = held_second.backend();
-    CHECK(drawing.initialize(first_shares, device));
-    CHECK(idle.initialize(second_shares, device));
+    CHECK(drawing.initialize(first_shares, rig.imports, device));
+    CHECK(idle.initialize(second_shares, rig.imports, device));
     Pad drawing_pad, idle_pad;
     drawing.bind_signal(&raise_pad, &drawing_pad);
     idle.bind_signal(&raise_pad, &idle_pad);
-    av::D3dLoopback wire(drawing);
+    av::D3dLoopback wire(drawing, rig.imports);
     make_cleared_target(wire, 1u, Float4{{0.0f, 0.0f, 1.0f, 1.0f}});
     std::uint32_t texel = 0u;
     CHECK_EQ(read_target(wire, texel), 0u);
@@ -191,7 +193,7 @@ TEST(d3d_device_loss_device, a_lost_device_wakes_every_session_answers_at_once_a
     static std::uint8_t pixels[size * size * 4u];
     CHECK(!device->read_image(1u, 1u, pixels, size * 4u, size, size));
     av::D3dBackend &next = held_third.backend();
-    CHECK(!next.initialize(third_shares, device));
+    CHECK(!next.initialize(third_shares, rig.imports, device));
     CHECK(!device->renew(50u));
     drawing.shut_down();
     CHECK(!device->renew(50u));
@@ -199,8 +201,8 @@ TEST(d3d_device_loss_device, a_lost_device_wakes_every_session_answers_at_once_a
     CHECK(device->renew(50u));
     CHECK(!device->lost());
 
-    CHECK(next.initialize(third_shares, device));
-    av::D3dLoopback again(next);
+    CHECK(next.initialize(third_shares, rig.imports, device));
+    av::D3dLoopback again(next, rig.imports);
     make_cleared_target(again, 7u, Float4{{1.0f, 0.0f, 0.0f, 1.0f}});
     CHECK_EQ(read_target(again, texel), 0u);
     CHECK_EQ(texel, 0xffff0000u);
@@ -211,17 +213,18 @@ TEST(d3d_device_loss_device, a_lost_device_wakes_every_session_answers_at_once_a
 
 TEST(d3d_device_loss_device, a_submission_dxvk_saw_fail_is_a_lost_device_and_its_map_returns)
 {
-    av::LoaderHostApis         apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
-    HeldBackend     held_first(first_backend), held_second(second_backend);
+    HeldBackend     held_first(first_backend, rig.log), held_second(second_backend, rig.log);
     av::D3dBackend &drawing = held_first.backend();
     av::D3dBackend &idle = held_second.backend();
-    CHECK(drawing.initialize(first_shares, device));
-    CHECK(idle.initialize(second_shares, device));
+    CHECK(drawing.initialize(first_shares, rig.imports, device));
+    CHECK(idle.initialize(second_shares, rig.imports, device));
     Pad idle_pad;
     idle.bind_signal(&raise_pad, &idle_pad);
-    av::D3dLoopback wire(drawing);
+    av::D3dLoopback wire(drawing, rig.imports);
     make_cleared_target(wire, 1u, Float4{{0.0f, 1.0f, 0.0f, 1.0f}});
     std::uint32_t removed = 1u;
     CHECK(av_d3d_Finish11(wire, &removed));
@@ -277,7 +280,8 @@ TEST(d3d_device_loss_device, a_submission_dxvk_saw_fail_is_a_lost_device_and_its
 
 TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
 {
-    av::LoaderHostApis         apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
     std::uint32_t gpu = 0u;
@@ -286,11 +290,11 @@ TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
     constexpr std::uint64_t surface_key = 0x5100000000000011ull;
     constexpr std::uint64_t buffer_key = 0x5100000000000012ull;
     constexpr std::uint32_t misc_shared = 0x2u;
-    HeldBackend     held_creator(first_backend), held_opener(second_backend);
+    HeldBackend     held_creator(first_backend, rig.log), held_opener(second_backend, rig.log);
     av::D3dBackend &creator = held_creator.backend(), &opener = held_opener.backend();
     first_shares.bind(shares, 1u, creator);
-    CHECK(creator.initialize(first_shares, device));
-    av::D3dLoopback made(creator);
+    CHECK(creator.initialize(first_shares, rig.imports, device));
+    av::D3dLoopback made(creator, rig.imports);
     std::uint32_t   hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(made, 1u, 0u, 0u, &hresult, &level));
     ResourceDesc surface = {};
@@ -328,8 +332,8 @@ TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
     creator.shut_down();
     CHECK(device->renew(1000u));
     second_shares.bind(shares, 1u, opener);
-    CHECK(opener.initialize(second_shares, device));
-    av::D3dLoopback opening(opener);
+    CHECK(opener.initialize(second_shares, rig.imports, device));
+    av::D3dLoopback opening(opener, rig.imports);
     CHECK(av_d3d_CreateDevice11(opening, 1u, 0u, 0u, &hresult, &level));
     std::uint32_t found = 0u;
     ResourceDesc  opened = {};
@@ -351,11 +355,12 @@ TEST(d3d_device_loss_device, what_was_shared_before_the_loss_opens_after_it)
 
 TEST(carried_share, a_recorded_resource_is_made_again_as_it_was_and_marked_as_the_surface)
 {
-    av::LoaderHostApis         apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice *const device = host_device(apis);
     if (device == nullptr) return;
     av::DxvkVulkanDevice   unconnected;
-    av::ExportableImages   images(unconnected);
+    av::ExportableImages   images(unconnected, rig.log.d3d11());
     ID3D11Device5 *const   d3d11 = device->device();
     const D3D11_BUFFER_DESC buffer_desc = {256u, D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0u, 0u, 0u};
     ID3D11Buffer           *buffer = nullptr;
