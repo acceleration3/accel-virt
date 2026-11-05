@@ -1,3 +1,4 @@
+#include "core/log/keyed_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "icd/d3d/list_pieces.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
@@ -485,7 +486,7 @@ VOID D3d11Device::clear_view(D3D11DDI_HANDLETYPE, void *view, const FLOAT *color
     }
 }
 
-VOID D3d11Device::discard(D3D11DDI_HANDLETYPE, void *object, const D3D10_DDI_RECT *rects, UINT rect_count)
+VOID D3d11Device::discard(D3D11DDI_HANDLETYPE type, void *object, const D3D10_DDI_RECT *rects, UINT rect_count)
 {
     AV_SCOPE("D3d11Device::discard");
     icd::ListPieces pieces(rects == nullptr ? 0u : rect_count, max_viewports);
@@ -498,6 +499,11 @@ VOID D3d11Device::discard(D3D11DDI_HANDLETYPE, void *object, const D3D10_DDI_REC
         }
         static_cast<void>(d3dproto::av_d3d_Discard(wire(), id_of(object), used, bound));
     }
+    if (type != static_cast<D3D11DDI_HANDLETYPE>(D3D10DDI_HT_RESOURCE)) return;
+    ResourceRecord &resource = record(D3D10DDI_HRESOURCE{object});
+    if (resource.on_slice == 0u || rename_slice(resource)) return;
+    lines_.once("no slice free for a discard: the buffer is copied from then on");
+    if (!leave_slice_for_copies(resource)) set_error(E_OUTOFMEMORY);
 }
 
 VOID D3d11Device::resource_copy(D3D10DDI_HRESOURCE destination, D3D10DDI_HRESOURCE source)
