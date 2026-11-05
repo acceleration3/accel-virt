@@ -192,6 +192,23 @@ TEST(client_blob_arena, fits_counts_what_earlier_blobs_of_the_same_command_will_
   CHECK(arena.take(1u).taken());
   CHECK(!arena.fits(each, 2u)); }
 
+TEST(client_blob_arena, fits_places_from_the_segment_the_next_take_starts_at)
+{ std::uint8_t first[10];
+  std::uint8_t second[11];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  CHECK(arena.take(11u).taken());
+  arena.seal();
+  arena.mark(1u);
+  arena.retire_through(1u);
+  CHECK(arena.take(5u).offset() == slot);
+  const std::uint64_t wanted[] = {5u, 5u, 6u};
+  CHECK(!arena.fits(wanted, 3u));
+  CHECK(arena.take(5u).taken());
+  CHECK(arena.take(5u).taken());
+  CHECK(!arena.take(6u).taken());
+  CHECK(arena.invariants_hold()); }
+
 TEST(client_blob_arena, a_pointer_is_held_in_any_segment_or_region_and_named_by_its_arena_offset)
 { std::uint8_t first[64];
   std::uint8_t second[64];

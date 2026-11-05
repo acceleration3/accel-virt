@@ -327,7 +327,11 @@ TEST(blob_ring, a_batch_that_took_nothing_or_had_no_slot_joins_the_newest_mark)
   arena.mark(1u);
   arena.mark(2u);
   arena.retire_through(1u);
-  CHECK_EQ(arena.used(), 10u);
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(arena.take(7u).taken());
+  arena.seal();
+  arena.mark(2u);
+  arena.mark(3u);
   arena.retire_through(2u);
   CHECK_EQ(arena.used(), 0u);
   for (std::uint64_t fence = 3u; fence < 3u + BlobRing::max_marks + 2u; fence++) {
@@ -373,4 +377,58 @@ TEST(blob_ring, a_ring_is_idle_only_while_it_has_a_block_and_nothing_outstanding
   CHECK(!ring.idle());
   ring.retire_through(1u);
   CHECK(ring.idle());
+  CHECK(ring.invariants_hold()); }
+
+TEST(blob_ring, a_mark_with_nothing_new_keeps_the_older_fence_so_an_untouched_ring_goes_idle)
+{ std::uint8_t block[64];
+  BlobRing     ring(block, sizeof block);
+  ring.seal();
+  ring.mark(5u);
+  ring.mark(9u);
+  ring.mark(12u);
+  ring.retire_through(5u);
+  CHECK(ring.idle());
+  CHECK(ring.invariants_hold()); }
+
+TEST(blob_ring, a_placement_follows_the_takes_a_ring_would_make)
+{ std::uint8_t block[100];
+  BlobRing     ring(block, sizeof block);
+  BlobRing::Placement plan = ring.placement();
+  std::size_t at = 99u;
+  bool        wraps = true;
+  CHECK(!plan.place(0u, at, wraps));
+  CHECK(!wraps);
+  CHECK(plan.place(60u, at, wraps));
+  CHECK_EQ(at, 0u);
+  CHECK(!wraps);
+  CHECK(!plan.place(41u, at, wraps));
+  CHECK(plan.place(40u, at, wraps));
+  CHECK_EQ(at, 60u);
+  CHECK_EQ(ring.used(), 0u);
+  CHECK(!BlobRing::Placement().place(1u, at, wraps)); }
+
+TEST(blob_ring, a_placement_wraps_into_the_retired_start_and_stops_at_the_oldest_blob)
+{ std::uint8_t block[100];
+  BlobRing     ring(block, sizeof block);
+  CHECK(ring.take(70u).taken());
+  ring.seal();
+  ring.mark(1u);
+  CHECK(ring.take(20u).taken());
+  ring.seal();
+  ring.mark(2u);
+  ring.retire_through(1u);
+  BlobRing::Placement plan = ring.placement();
+  std::size_t at = 0u;
+  bool        wraps = false;
+  CHECK(!plan.place(71u, at, wraps));
+  CHECK(plan.place(30u, at, wraps));
+  CHECK(wraps);
+  CHECK_EQ(at, 0u);
+  CHECK(plan.place(40u, at, wraps));
+  CHECK(!wraps);
+  CHECK_EQ(at, 30u);
+  CHECK(!plan.place(1u, at, wraps));
+  const ClientBlobLease taken = ring.take(30u);
+  CHECK_EQ(taken.offset(), 0u);
+  CHECK_EQ(ring.room(), 40u);
   CHECK(ring.invariants_hold()); }

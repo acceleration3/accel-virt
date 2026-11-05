@@ -36,21 +36,55 @@ bool BlobRing::ready() const
 ClientBlobLease BlobRing::take(size_t count)
 {
     AV_SCOPE("BlobRing::take");
-    if (count == 0u || block_ == nullptr) return ClientBlobLease{};
-    if (wrapped_) {
-        if (count > base_ - top_) return ClientBlobLease{};
-    } else if (count > lent_ - top_) {
-        if (count > base_) return ClientBlobLease{};
+    if (block_ == nullptr) return ClientBlobLease{};
+    Placement plan = placement();
+    size_t    at = 0u;
+    bool      wraps = false;
+    if (!plan.place(count, at, wraps)) return ClientBlobLease{};
+    if (wraps) {
         end_ = top_;
-        top_ = 0u;
         wrapped_ = true;
         lap_++;
     }
-    const size_t at = top_;
-    top_ += count;
+    top_ = plan.top_;
     const size_t in_ring = wrapped_ ? end_ - base_ + top_ : top_ - base_;
     if (in_ring > peak_ring_) peak_ring_ = in_ring;
     return ClientBlobLease(block_ + at, at, count);
+}
+
+BlobRing::Placement BlobRing::placement() const
+{
+    AV_SCOPE("BlobRing::placement");
+    return Placement(lent_, base_, top_, wrapped_);
+}
+
+BlobRing::Placement::Placement() : lent_(0u), base_(0u), top_(0u), wrapped_(false)
+{
+    AV_SCOPE("BlobRing::Placement::Placement");
+}
+
+BlobRing::Placement::Placement(size_t lent, size_t base, size_t top, bool wrapped)
+    : lent_(lent), base_(base), top_(top), wrapped_(wrapped)
+{
+    AV_SCOPE("BlobRing::Placement::Placement");
+}
+
+bool BlobRing::Placement::place(size_t count, size_t &at, bool &wraps)
+{
+    AV_SCOPE("BlobRing::Placement::place");
+    wraps = false;
+    if (count == 0u || lent_ == 0u) return false;
+    if (wrapped_) {
+        if (count > base_ - top_) return false;
+    } else if (count > lent_ - top_) {
+        if (count > base_) return false;
+        top_ = 0u;
+        wrapped_ = true;
+        wraps = true;
+    }
+    at = top_;
+    top_ += count;
+    return true;
 }
 
 void BlobRing::give_back(const ClientBlobLease &lease)
@@ -86,7 +120,8 @@ void BlobRing::mark(uint64_t fence)
     AV_SCOPE("BlobRing::mark");
     if (mark_count_ != 0u) {
         Mark &newest = marks_[(first_mark_ + mark_count_ - 1u) % max_marks];
-        if ((newest.top_ == sealed_ && newest.lap_ == sealed_lap_) || mark_count_ == max_marks) {
+        if (newest.top_ == sealed_ && newest.lap_ == sealed_lap_) return;
+        if (mark_count_ == max_marks) {
             newest = Mark{fence, sealed_, sealed_lap_};
             return;
         }

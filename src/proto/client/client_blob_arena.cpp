@@ -183,14 +183,19 @@ bool ClientBlobArena::holds(const void *bytes, size_t count, uint64_t &offset) c
 bool ClientBlobArena::fits(const uint64_t *sizes, uint32_t wanted) const
 {
     AV_SCOPE("ClientBlobArena::fits");
-    size_t rooms[max_segments] = {};
-    for (uint32_t index = 0u; index < max_segments; index++) rooms[index] = segments_[index].ring_.room();
+    BlobRing::Placement plans[max_segments];
+    for (uint32_t index = 0u; index < max_segments; index++) plans[index] = segments_[index].ring_.placement();
+    uint32_t cursor = current_;
     for (uint32_t blob = 0u; blob < wanted; blob++) {
         if (sizes[blob] == 0u) continue;
+        if (sizes[blob] > ~size_t{0}) return false;
         bool placed = false;
-        for (uint32_t index = 0u; index < max_segments && !placed; index++) {
-            if (sizes[blob] > rooms[index]) continue;
-            rooms[index] -= static_cast<size_t>(sizes[blob]);
+        for (uint32_t tried = 0u; tried < max_segments && !placed; tried++) {
+            const uint32_t index = (cursor + tried) % max_segments;
+            size_t         at = 0u;
+            bool           wraps = false;
+            if (!plans[index].place(static_cast<size_t>(sizes[blob]), at, wraps)) continue;
+            cursor = index;
             placed = true;
         }
         if (!placed) return false;

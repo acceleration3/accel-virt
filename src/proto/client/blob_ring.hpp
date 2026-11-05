@@ -12,6 +12,23 @@ struct BlobRingProbe;
 
 class BlobRing {
 public:
+    class Placement {
+    public:
+        Placement();
+
+        [[nodiscard]] bool place(size_t count, size_t &at, bool &wraps);
+
+    private:
+        friend class BlobRing;
+
+        Placement(size_t lent, size_t base, size_t top, bool wrapped);
+
+        size_t lent_;
+        size_t base_;
+        size_t top_;
+        bool   wrapped_;
+    };
+
     BlobRing();
     BlobRing(uint8_t *block, size_t capacity);
     BlobRing(const BlobRing &) = delete;
@@ -20,6 +37,7 @@ public:
     void            lend(uint8_t *block, size_t capacity);
     bool            ready() const;
     ClientBlobLease take(size_t count);
+    Placement       placement() const;
     void            give_back(const ClientBlobLease &lease);
     void            seal();
     void            mark(uint64_t fence);
