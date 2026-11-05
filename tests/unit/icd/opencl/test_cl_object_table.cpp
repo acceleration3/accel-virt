@@ -144,8 +144,8 @@ TEST(cl_object_table, a_parent_must_be_of_a_lower_kind_so_the_chain_is_finite)
   ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);
   ClObject *const buffer = rig.make(ClObject::Kind::mem, 0x901u, context);
   CHECK(buffer->parent() == context);
-  CHECK(buffer->descends_from(*context));
-  CHECK(!context->descends_from(*buffer));
+  CHECK(buffer->nearest(ClObject::Kind::context) == context);
+  CHECK(context->nearest(ClObject::Kind::mem) == nullptr);
 
   ClObject *refused = nullptr;
   CHECK_STATUS(rig.objects().make(ClObject::Kind::context, 0x902u, some_context, buffer, refused),
@@ -198,8 +198,8 @@ TEST(cl_object_table, destroying_a_context_takes_its_whole_tree_at_any_depth)
   ClObject *const event = rig.make(ClObject::Kind::event, 0x904u, queue);
   rig.make(ClObject::Kind::mem, 0x905u, context);
   CHECK_EQ(rig.objects().live(), 6u);
-  CHECK(kernel->descends_from(*context));
-  CHECK(event->descends_from(*context));
+  CHECK(kernel->nearest(ClObject::Kind::context) == context);
+  CHECK(event->nearest(ClObject::Kind::context) == context);
 
   rig.objects().destroy(*context);
   CHECK_EQ(rig.objects().live(), 0u);
@@ -381,7 +381,7 @@ TEST(cl_object_table, the_invariant_catches_a_child_whose_parent_the_table_lost)
   ClObject *const queue = rig.make(ClObject::Kind::command_queue, 0x901u, context);
   CHECK(queue != nullptr);
   CHECK(rig.objects().invariants_hold());
-  ClObject outside(dispatch, ClObject::Kind::context, 0x902u, some_context, nullptr);
+  ClObject outside(dispatch, rig.platform(), ClObject::Kind::context, 0x902u, some_context, nullptr);
   ClObjectProbe::adopt(*queue, outside);
   CHECK(!rig.objects().invariants_hold());
   ClObjectProbe::adopt(*queue, *context);

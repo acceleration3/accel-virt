@@ -1,6 +1,7 @@
 #ifndef AV_CL_CONTEXT_RIG_HPP
 #define AV_CL_CONTEXT_RIG_HPP
 
+#include "core/log/keyed_log.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/lock_trace.hpp"
@@ -27,6 +28,7 @@ public:
     RecordingThreadLock    &send_lock();
     RecordingThreadLock    &blocks_lock();
     RecordingLog           &log();
+    KeyedLog               &lines();
     av::icd::IcdConnection &connection();
     av::icd::SharedHandles &handles();
 
@@ -38,6 +40,7 @@ private:
     RecordingThreadLock    send_lock_;
     RecordingThreadLock    blocks_lock_;
     RecordingLog           log_;
+    KeyedLog               lines_;
     av::icd::IcdConnection connection_;
     RecordingThreadLock    handles_lock_;
     av::icd::SharedHandles handles_;

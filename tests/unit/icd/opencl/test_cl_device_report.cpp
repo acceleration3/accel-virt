@@ -2,6 +2,7 @@
 #include "guest/kmt/pci_location.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "harness/icd/version_text_probe.hpp"
 #include "icd/common/adapter_facts.hpp"
 #include "icd/opencl/cl_device_report.hpp"
 
@@ -17,22 +18,20 @@ namespace av::clicd {
 struct ClDeviceReportProbe {
     static void report_version(ClDeviceReport &report, uint32_t major, uint32_t minor)
     {
-        report.major_ = major;
-        report.minor_ = minor;
+        av::icd::VersionTextProbe::set(report.version_, major, minor);
     }
 
     static void report_c_version(ClDeviceReport &report, uint32_t major, uint32_t minor)
     {
-        report.c_major_ = major;
-        report.c_minor_ = minor;
+        av::icd::VersionTextProbe::set(report.c_version_, major, minor);
     }
 
     static void run_version_past_its_room(ClDeviceReport &report)
     {
-        for (size_t index = 0u; index < sizeof report.version_; ++index) report.version_[index] = 'x';
+        for (size_t index = 0u; index < sizeof report.version_text_; ++index) report.version_text_[index] = 'x';
     }
 
-    static void empty_the_c_version(ClDeviceReport &report) { report.c_version_[0] = '\0'; }
+    static void empty_the_c_version(ClDeviceReport &report) { report.c_version_text_[0] = '\0'; }
 
     static void report_svm(ClDeviceReport &report, cl_device_svm_capabilities svm)
     {
@@ -180,10 +179,21 @@ TEST(cl_device_report, a_host_version_shaped_like_nothing_the_specification_fixe
   CHECK_STATUS(report.observe_version("OpenCL x.y z", sizeof "OpenCL x.y z"), Status::malformed);
   CHECK_STATUS(report.observe_version("OpenCL 3-0 Mesa", sizeof "OpenCL 3-0 Mesa"), Status::malformed);
   CHECK_STATUS(report.observe_version("OpenCL 3.x Mesa", sizeof "OpenCL 3.x Mesa"), Status::malformed);
-  CHECK_STATUS(report.observe_version("OpenCL 12.0 Mesa", sizeof "OpenCL 12.0 Mesa"), Status::malformed);
-  CHECK_STATUS(report.observe_version("OpenCL 3.25 Mesa", sizeof "OpenCL 3.25 Mesa"), Status::malformed);
+  CHECK_STATUS(report.observe_version("OpenCL 1234.0 Mesa", sizeof "OpenCL 1234.0 Mesa"), Status::malformed);
+  CHECK_STATUS(report.observe_version("OpenCL 3.1000 Mesa", sizeof "OpenCL 3.1000 Mesa"), Status::malformed);
   CHECK_STATUS(report.observe_c_version("OpenCL 1.2 Mesa", sizeof "OpenCL 1.2 Mesa"), Status::malformed);
   char text[64] = {};
+  CHECK(reads_back(report, CL_DEVICE_VERSION, text, sizeof text));
+  CHECK_EQ(std::strncmp(text, "OpenCL 3.0 ", 11u), 0);
+  CHECK(report.invariants_hold()); }
+
+TEST(cl_device_report, a_host_number_of_up_to_three_digits_is_read_and_capped_at_what_is_implemented)
+{ ClDeviceReport report(adapter_luid);
+  char text[64] = {};
+  CHECK_STATUS(report.observe_version("OpenCL 12.0 Mesa", sizeof "OpenCL 12.0 Mesa"), Status::ok);
+  CHECK(reads_back(report, CL_DEVICE_VERSION, text, sizeof text));
+  CHECK_EQ(std::strncmp(text, "OpenCL 3.0 ", 11u), 0);
+  CHECK_STATUS(report.observe_version("OpenCL 3.25 Mesa", sizeof "OpenCL 3.25 Mesa"), Status::ok);
   CHECK(reads_back(report, CL_DEVICE_VERSION, text, sizeof text));
   CHECK_EQ(std::strncmp(text, "OpenCL 3.0 ", 11u), 0);
   CHECK(report.invariants_hold()); }

@@ -8,6 +8,8 @@
 
 namespace av::icd {
 
+struct VersionTextProbe;
+
 class VersionText {
 public:
     VersionText(const char *prefix, uint32_t most_major, uint32_t most_minor);
@@ -23,6 +25,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct VersionTextProbe;
+
     static constexpr uint32_t most_digits = 3u;
 
     bool read_number(const char *host, size_t &at, size_t end, uint32_t &number) const;

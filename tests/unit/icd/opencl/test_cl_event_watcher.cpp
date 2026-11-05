@@ -2,7 +2,7 @@
 #include "harness/icd/cl_context_rig.hpp"
 #include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/counting_event_owner.hpp"
-#include "harness/icd/counting_event_owner.hpp"
+#include "core/support/growable_array.hpp"
 #include "icd/opencl/cl_event_watcher.hpp"
 #include "icd/opencl/cl_object.hpp"
 #include "icd/opencl/cl_watched_event.hpp"
@@ -11,7 +11,6 @@
 #include <cstdint>
 
 using av::ClContextRig;
-using av::CountingEventOwner;
 using av::CountingEventOwner;
 using av::ScriptedThread;
 using av::Status;
@@ -71,12 +70,12 @@ cl_icd_dispatch dispatch = {};
 class Watching {
 public:
     Watching()
-        : rig_(), thread_(), owner_(), watcher_(thread_, rig_.log(), rig_.send_lock(), owner_),
-          event_(dispatch, ClObject::Kind::event, 0x6900u, nullptr, nullptr)
+        : rig_(), thread_(), owner_(), watcher_(rig_.platform(), thread_, rig_.lines(), rig_.send_lock(), owner_),
+          event_(dispatch, rig_.platform(), ClObject::Kind::event, 0x6900u, nullptr, nullptr)
     {
         rig_.host().arena_import(0x77u, 3u);
         static_cast<void>(
-            context_.construct(rig_.connection(), rig_.platform(), rig_.send_lock(), rig_.blocks_lock(), rig_.log(), rig_.handles()));
+            context_.construct(rig_.connection(), rig_.platform(), rig_.send_lock(), rig_.blocks_lock(), rig_.lines(), rig_.handles()));
         CHECK_STATUS(context_.object().make(), Status::ok);
     }
     ~Watching() { context_.destroy(); }
@@ -205,17 +204,23 @@ TEST(cl_event_watcher, a_registration_of_nothing_is_refused)
   CHECK(!rig.thread().running());
   CHECK(rig.watcher().invariants_hold()); }
 
-TEST(cl_event_watcher, a_watcher_that_is_full_refuses_and_keeps_what_it_has)
+TEST(cl_event_watcher, a_watcher_that_cannot_grow_refuses_and_keeps_what_it_has)
 { Watching rig;
-  for (std::uint32_t index = 0u; index < ClEventWatcher::max_registrations; ++index) {
+  constexpr std::uint32_t room = av::GrowableArray<char>::first_capacity;
+  for (std::uint32_t index = 0u; index < room; ++index) {
       CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u + index, rig.wire(), CL_COMPLETE, &note,
                                    nullptr, false),
                CL_SUCCESS);
   }
-  CHECK_EQ(rig.watcher().registered(), ClEventWatcher::max_registrations);
+  CHECK_EQ(rig.watcher().registered(), room);
+  rig.rig().platform().fail_allocation_at(1u);
   CHECK_EQ(rig.watcher().watch(&rig.event(), 0x7000u, rig.wire(), CL_COMPLETE, &note, nullptr, false),
-           CL_OUT_OF_RESOURCES);
-  CHECK_EQ(rig.watcher().registered(), ClEventWatcher::max_registrations);
+           CL_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(rig.watcher().registered(), room);
+  CHECK(rig.watcher().invariants_hold());
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x7000u, rig.wire(), CL_COMPLETE, &note, nullptr, false),
+           CL_SUCCESS);
+  CHECK_EQ(rig.watcher().registered(), room + 1u);
   CHECK(rig.watcher().invariants_hold()); }
 
 TEST(cl_event_watcher, a_context_that_goes_takes_its_registrations_with_it_and_runs_none_of_them)
@@ -337,7 +342,7 @@ TEST(cl_event_watcher, forgetting_one_context_leaves_every_other_contexts_regist
   rig.rig().host().arena_import(0x78u, 3u);
   av::ObjectStorage<GuestClContext> second;
   CHECK_STATUS(second.construct(rig.rig().connection(), rig.rig().platform(),
-                                rig.rig().send_lock(), rig.rig().blocks_lock(), rig.rig().log(), rig.rig().handles()),
+                                rig.rig().send_lock(), rig.rig().blocks_lock(), rig.rig().lines(), rig.rig().handles()),
                Status::ok);
   CHECK_STATUS(second.object().make(), Status::ok);
   CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6901u, second.object().wire(), CL_COMPLETE, &note,
@@ -355,9 +360,9 @@ namespace av::clicd {
 struct ClEventWatcherProbe {
     static void miscount(ClEventWatcher &watcher) { watcher.held_ += 1u; }
     static void count_past_the_table(ClEventWatcher &watcher)
-    { watcher.held_ = ClEventWatcher::max_registrations + 1u; }
+    { watcher.held_ = watcher.rows_.size() + 1u; }
     static ClWatchedEvent &registration(ClEventWatcher &watcher, std::uint32_t slot)
-    { return watcher.registrations_[slot]; }
+    { return watcher.rows_.at(slot).registration_; }
 };
 
 }
@@ -418,10 +423,10 @@ TEST(cl_event_watcher, a_turn_asks_about_a_few_running_events_pauses_and_the_nex
 TEST(cl_event_watcher, of_one_queues_events_only_the_oldest_is_asked_about_and_the_next_follows_at_once)
 { forget();
   Watching rig;
-  ClObject queue(dispatch, ClObject::Kind::command_queue, 0x5100u, nullptr, nullptr);
-  ClObject first(dispatch, ClObject::Kind::event, 0x6901u, nullptr, &queue);
-  ClObject second(dispatch, ClObject::Kind::event, 0x6902u, nullptr, &queue);
-  ClObject third(dispatch, ClObject::Kind::event, 0x6903u, nullptr, &queue);
+  ClObject queue(dispatch, rig.rig().platform(), ClObject::Kind::command_queue, 0x5100u, nullptr, nullptr);
+  ClObject first(dispatch, rig.rig().platform(), ClObject::Kind::event, 0x6901u, nullptr, &queue);
+  ClObject second(dispatch, rig.rig().platform(), ClObject::Kind::event, 0x6902u, nullptr, &queue);
+  ClObject third(dispatch, rig.rig().platform(), ClObject::Kind::event, 0x6903u, nullptr, &queue);
   first.stamp(queue.take_ordinal());
   second.stamp(queue.take_ordinal());
   third.stamp(queue.take_ordinal());

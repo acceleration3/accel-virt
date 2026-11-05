@@ -1,4 +1,5 @@
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/version_text_probe.hpp"
 #include "icd/opencl/cl_platform.hpp"
 
 #include <CL/cl_ext.h>
@@ -11,9 +12,9 @@ using av::clicd::ClPlatformProbe;
 namespace av::clicd {
 struct ClPlatformProbe {
     static void a_version_past_what_is_implemented(ClPlatform &platform)
-    { platform.major_ += 1u; }
+    { av::icd::VersionTextProbe::set(platform.version_number_, platform.version_number_.major() + 1u, 0u); }
     static void a_minor_past_what_is_implemented(ClPlatform &platform)
-    { platform.minor_ += 1u; }
+    { av::icd::VersionTextProbe::set(platform.version_number_, platform.version_number_.major(), platform.version_number_.minor() + 1u); }
     static void an_empty_version(ClPlatform &platform) { platform.version_[0] = '\0'; }
     static void an_unterminated_version(ClPlatform &platform)
     { for (char &byte : platform.version_) byte = 'X'; }

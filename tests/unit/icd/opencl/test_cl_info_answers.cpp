@@ -1,4 +1,5 @@
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_info_answers.hpp"
 #include "icd/opencl/cl_info_request.hpp"
 #include "icd/opencl/cl_object.hpp"
@@ -17,7 +18,8 @@ constexpr std::uint64_t device = 0x4400u;
 }
 
 TEST(cl_info_answers, an_answer_kept_is_given_for_its_object_and_name_alone)
-{ ClInfoAnswers<4u, 16u> answers;
+{ av::MockPlatform       platform;
+  ClInfoAnswers<4u> answers(platform);
   std::uint32_t          got = 0u;
   std::size_t            size = 0u;
   cl_int                 result = CL_INVALID_OPERATION;
@@ -43,7 +45,8 @@ TEST(cl_info_answers, an_answer_kept_is_given_for_its_object_and_name_alone)
   CHECK_EQ(answers.kept(), 1u); }
 
 TEST(cl_info_answers, an_answer_as_long_as_the_room_is_kept_and_a_longer_one_is_not)
-{ ClInfoAnswers<4u, 8u> answers;
+{ av::MockPlatform platform;
+  ClInfoAnswers<8u> answers(platform);
   const char            whole[8] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', '\0'};
   const char            longer[9] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', '\0'};
   answers.keep(device, CL_DEVICE_NAME, whole, sizeof whole);
@@ -55,25 +58,32 @@ TEST(cl_info_answers, an_answer_as_long_as_the_room_is_kept_and_a_longer_one_is_
   CHECK(!answers.answer(device, CL_DEVICE_VENDOR, ClInfoRequest(sizeof got, got, nullptr), result));
   CHECK_EQ(answers.kept(), 1u); }
 
-TEST(cl_info_answers, a_full_table_keeps_nothing_more_and_still_answers)
-{ ClInfoAnswers<2u, 8u> answers;
-  const std::uint64_t   one = 1u, two = 2u, three = 3u;
-  answers.keep(device, 1u, &one, sizeof one);
-  answers.keep(device, 1u, &two, sizeof two);
-  answers.keep(device, 3u, &three, sizeof three);
-  CHECK_EQ(answers.kept(), 2u);
+TEST(cl_info_answers, answers_are_kept_without_a_fixed_bound_and_one_the_memory_refused_is_not_answered)
+{ av::MockPlatform platform;
+  ClInfoAnswers<8u> answers(platform);
+  constexpr std::uint32_t many = 1008u;
+  for (std::uint32_t name = 0u; name < many; ++name) {
+      const std::uint64_t value = name + 1u;
+      answers.keep(device, name, &value, sizeof value);
+  }
+  CHECK_EQ(answers.kept(), many);
+  platform.fail_allocation_at(1u);
+  const std::uint64_t refused = 5000u, later = 5001u;
+  answers.keep(device, 5000u, &refused, sizeof refused);
+  answers.keep(device, 5001u, &later, sizeof later);
   std::uint64_t got = 0u;
   cl_int        result = CL_INVALID_OPERATION;
-  CHECK(answers.answer(device, 1u, ClInfoRequest(sizeof got, &got, nullptr), result));
-  CHECK_EQ(got, 1u);
-  CHECK(!answers.answer(device, 3u, ClInfoRequest(sizeof got, &got, nullptr), result));
-  answers.keep(device, 4u, &three, sizeof three);
-  CHECK_EQ(answers.kept(), 2u); }
+  CHECK(!answers.answer(device, 5000u, ClInfoRequest(sizeof got, &got, nullptr), result));
+  CHECK(answers.answer(device, 5001u, ClInfoRequest(sizeof got, &got, nullptr), result));
+  CHECK_EQ(got, 5001u);
+  CHECK(answers.answer(device, 7u, ClInfoRequest(sizeof got, &got, nullptr), result));
+  CHECK_EQ(got, 8u); }
 
 TEST(cl_info_answers, each_mem_object_keeps_its_own_answers)
 { const cl_icd_dispatch table = {};
-  ClObject              first(table, ClObject::Kind::mem, 0x6600u, nullptr, nullptr);
-  ClObject              second(table, ClObject::Kind::mem, 0x6601u, nullptr, nullptr);
+  av::MockPlatform      platform;
+  ClObject              first(table, platform, ClObject::Kind::mem, 0x6600u, nullptr, nullptr);
+  ClObject              second(table, platform, ClObject::Kind::mem, 0x6601u, nullptr, nullptr);
   const std::size_t     size = 4096u;
   first.keep_answer(CL_MEM_SIZE, &size, sizeof size);
   std::size_t got = 0u;
