@@ -223,7 +223,7 @@ TEST(copied_gl_sharing_device, a_buffer_that_cannot_be_mirrored_is_refused_as_th
   rig.delete_buffer(empty);
   rig.delete_buffer(name); }
 
-TEST(copied_gl_sharing_device, a_table_that_cannot_grow_refuses_the_next_mirror_and_releases_its_cl_mem)
+TEST(copied_gl_sharing_device, a_table_holds_past_its_old_bound_and_one_that_cannot_grow_refuses_the_next_mirror)
 { HostGlRig rig;
   Vehicle   vehicle(rig);
   if (!rig.ready() || !vehicle.ready()) return;
@@ -231,7 +231,8 @@ TEST(copied_gl_sharing_device, a_table_that_cannot_grow_refuses_the_next_mirror_
   CopiedGlSharing     sharing(platform, vehicle.objects(), vehicle.textures());
   const std::uint32_t name = rig.buffer(nullptr, 64u);
   constexpr std::uint32_t many = 2100u;
-  static cl_mem       made[many + 64u];
+  constexpr std::uint32_t most = 4300u;
+  static cl_mem       made[most];
   bool                all_made = true;
   for (std::uint32_t index = 0u; index < many; index++) {
       made[index] = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, nullptr);
@@ -242,10 +243,16 @@ TEST(copied_gl_sharing_device, a_table_that_cannot_grow_refuses_the_next_mirror_
   platform.fail_allocation_at(1u);
   std::uint32_t held = many;
   cl_int        error = CL_SUCCESS;
-  while (held < many + 64u && (made[held] = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, &error)) != nullptr)
+  while (held < most && (made[held] = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, &error)) != nullptr)
       held++;
-  CHECK(held < many + 64u);
+  CHECK(held < most);
   CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(sharing.mirrors(), held);
+  platform.fail_allocation_at(0u);
+  made[held] = sharing.from_buffer(rig.context(), CL_MEM_READ_WRITE, name, &error);
+  CHECK(made[held] != nullptr);
+  CHECK_EQ(error, CL_SUCCESS);
+  held++;
   CHECK_EQ(sharing.mirrors(), held);
   sharing.forget_all();
   CHECK_EQ(sharing.mirrors(), 0u);
