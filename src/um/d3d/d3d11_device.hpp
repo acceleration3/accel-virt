@@ -123,6 +123,7 @@ private:
     [[nodiscard]] bool detach_slice(const ResourceRecord &resource);
     void               leave_slice(ResourceRecord &resource);
     [[nodiscard]] bool leave_slice_for_copies(ResourceRecord &resource);
+    [[nodiscard]] bool leave_immediate_slice(const ResourceRecord &resource);
     [[nodiscard]] bool own_shadow(ResourceRecord &resource);
     void               forget_copy(ResourceRecord &resource);
     void upload(const ResourceRecord &resource, uint32_t subresource, const D3D10_DDI_BOX *box, const void *data,

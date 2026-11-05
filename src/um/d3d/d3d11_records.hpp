@@ -49,6 +49,7 @@ struct ResourceRecord {
     d3d::BufferSlices::Slice slice;
     uint32_t                 on_slice;
     HostAllocation          *lent;
+    ResourceRecord          *immediate;
 };
 
 struct ObjectRecord {

@@ -23,6 +23,10 @@ void D3d11Device::map(D3D10DDI_HRESOURCE handle, UINT subresource, D3D10_DDI_MAP
         set_error(E_INVALIDARG);
         return;
     }
+    if (parent_ != nullptr && type == D3D10_DDI_MAP_WRITE_DISCARD && !leave_immediate_slice(resource)) {
+        set_error(E_OUTOFMEMORY);
+        return;
+    }
     if (parent_ != nullptr && resource.shadow_local == 0u && !own_shadow(resource)) {
         set_error(E_OUTOFMEMORY);
         return;
@@ -240,6 +244,14 @@ bool D3d11Device::rename_slice(ResourceRecord &resource)
     if (!slices_.rename(resource.shadow_bytes, resource.slice)) return false;
     resource.shadow = slices_.view(resource.slice);
     return bind_slice(resource);
+}
+
+bool D3d11Device::leave_immediate_slice(const ResourceRecord &resource)
+{
+    AV_SCOPE("D3d11Device::leave_immediate_slice");
+    ResourceRecord *const immediate = resource.immediate;
+    if (immediate == nullptr || immediate->on_slice == 0u) return true;
+    return parent_->leave_slice_for_copies(*immediate);
 }
 
 bool D3d11Device::own_shadow(ResourceRecord &resource)

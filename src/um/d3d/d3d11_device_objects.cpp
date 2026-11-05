@@ -69,7 +69,10 @@ VOID D3d11Device::create_resource(const D3D11DDIARG_CREATERESOURCE *args, D3D10D
                                   D3D10DDI_HRTRESOURCE runtime)
 {
     AV_SCOPE("D3d11Device::create_resource");
-    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ResourceRecord))) return;
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ResourceRecord))) {
+        record(handle).immediate = static_cast<ResourceRecord *>(runtime.handle);
+        return;
+    }
     ResourceRecord &resource = record(handle);
     resource = ResourceRecord{};
     resource.stamp = d3d::RecordStamp(ResourceRecord::tag, next_id());
@@ -201,7 +204,10 @@ VOID D3d11Device::open_resource(const D3D10DDIARG_OPENRESOURCE *args, D3D10DDI_H
                                 D3D10DDI_HRTRESOURCE runtime)
 {
     AV_SCOPE("D3d11Device::open_resource");
-    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ResourceRecord))) return;
+    if (context_local(handle.pDrvPrivate, runtime.handle, sizeof(ResourceRecord))) {
+        record(handle).immediate = static_cast<ResourceRecord *>(runtime.handle);
+        return;
+    }
     ResourceRecord &resource = record(handle);
     resource = ResourceRecord{};
     resource.stamp = d3d::RecordStamp(ResourceRecord::tag, next_id());
