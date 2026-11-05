@@ -1,9 +1,11 @@
 #include "proto/d3d/resource_misc.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/opengl/opengl_backend.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "harness/executor/executor_log_rig.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
@@ -63,7 +65,8 @@ constexpr unsigned gl_linear_tiling = 0x9585;
 TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_through_direct3d)
 {
     if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
-    av::LoaderHostApis apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     apis.open();
     std::uint32_t gpu = apis.gpu_count();
     for (std::uint32_t index = 0u; index < apis.gpu_count() && gpu == apis.gpu_count(); index++)
@@ -72,10 +75,10 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
         std::fprintf(stderr, "no GPU here runs both DXVK and OpenGL: nothing judged\n");
         return;
     }
-    av::D3dBackend direct3d;
+    av::D3dBackend direct3d(rig.log);
     av::SessionShares unshared;
-    CHECK(direct3d.initialize(unshared, apis.d3d11_device(gpu)));
-    av::D3dLoopback wire(direct3d);
+    CHECK(direct3d.initialize(unshared, rig.imports, apis.d3d11_device(gpu)));
+    av::D3dLoopback wire(direct3d, rig.imports);
     std::uint32_t hresult = 1u, level = 0u;
     CHECK(av_d3d_CreateDevice11(wire, 1u, 0u, 0u, &hresult, &level));
     ResourceDesc shared = {};
@@ -90,16 +93,17 @@ TEST(d3d_gl_interop_device, a_shared_texture_written_through_opengl_reads_back_t
     shared.misc_flags = misc_shared;
     CHECK(av_d3d_CreateResource(wire, 1u, shared, key, 0u, 0u));
     std::uint32_t handle_kind = 0u;
-    int           fd = -1;
-    CHECK(direct3d.export_object(AV_SHARED_MEMORY, 1u, handle_kind, fd));
+    av::OwnedFd  descriptor;
+    CHECK(direct3d.export_object(AV_SHARED_MEMORY, 1u, handle_kind, descriptor));
     CHECK_EQ(handle_kind, std::uint32_t{AV_SHARED_HANDLE_DMA_BUF});
-    CHECK(fd >= 0);
+    CHECK(descriptor.held());
 
-    av::OpenGlBackend opengl;
+    av::OpenGlBackend opengl(rig.log.opengl());
     CHECK(opengl.initialize(apis.gl_display(gpu), nullptr, nullptr));
     std::uint64_t memory = 0u;
-    CHECK(opengl.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, fd, bytes, av::SharedImageShape(), memory, detail));
-    close(fd);
+    CHECK(opengl.import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, descriptor.fd(), bytes, av::SharedImageShape(),
+                              0u, memory, detail));
+    descriptor.close();
     {
         const av::glproto::RealGl &gl = av::OpenGlBackendProbe::gl(opengl);
         unsigned texture = 0u;
