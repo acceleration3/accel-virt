@@ -5,6 +5,7 @@
 #include "harness/platform/violation.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 namespace av {
 
@@ -170,12 +171,24 @@ TEST(host_window_initialize, keeps_its_map_and_judges_a_region_found_again)
 TEST(host_window_initialize, a_map_that_cannot_be_allocated_offers_nothing)
 { MockPlatform platform;
   HostWindow window(platform);
-  platform.fail_allocation_at(1u);
+  platform.fail_allocation_at(2u);
   CHECK_STATUS(window.initialize(base, 4u * page), Status::no_memory);
   CHECK(!window.offered());
   std::uint32_t first = 99u;
   CHECK_STATUS(window.take(1u, first), Status::not_supported);
   CHECK_STATUS(window.initialize(base, 4u * page), Status::ok);
+  CHECK(window.invariants_hold()); }
+
+TEST(host_window_initialize, a_stats_page_that_cannot_be_allocated_is_logged_and_the_window_is_offered_without_it)
+{ MockPlatform platform;
+  HostWindow window(platform);
+  platform.fail_allocation_at(1u);
+  CHECK_STATUS(window.initialize(base, 4u * page), Status::ok);
+  CHECK(window.offered());
+  CHECK(platform.logged() >= 1u);
+  CHECK(std::strstr(platform.last_log(), "the host window stats page is unavailable") != nullptr);
+  std::uint32_t first = 99u;
+  CHECK_STATUS(window.take(1u, first), Status::ok);
   CHECK(window.invariants_hold()); }
 
 TEST(host_window, every_call_is_passive_only)
