@@ -27,3 +27,18 @@ TEST(pitched_rows, stops_where_the_source_or_the_count_ends)
   CHECK_EQ(into.copy_from(nothing, 4u), 0u);
   PitchedRows flat(from_bytes, 0u, sizeof from_bytes);
   CHECK_EQ(into.copy_from(flat, 4u), 0u); }
+
+TEST(pitched_rows_copy_lines, copies_the_given_number_of_bytes_of_each_row_and_no_more)
+{ std::uint8_t from_bytes[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+  std::uint8_t into_bytes[16] = {};
+  PitchedRows  from(from_bytes, 8u, sizeof from_bytes);
+  PitchedRows  into(into_bytes, 8u, sizeof into_bytes);
+  CHECK_EQ(into.copy_lines(from, 2u, 3u), 2u);
+  const std::uint8_t wanted[16] = {1, 2, 3, 0, 0, 0, 0, 0, 9, 10, 11, 0, 0, 0, 0, 0};
+  CHECK(std::memcmp(into_bytes, wanted, sizeof wanted) == 0);
+  CHECK_EQ(into.copy_lines(from, 2u, 0u), 0u);
+  CHECK_EQ(into.copy_lines(from, 3u, 8u), 2u);
+  PitchedRows shorter(from_bytes, 8u, 12u);
+  CHECK_EQ(into.copy_lines(shorter, 2u, 8u), 1u);
+  PitchedRows nowhere(static_cast<std::uint8_t *>(nullptr), 8u, 16u);
+  CHECK_EQ(nowhere.copy_lines(from, 2u, 4u), 0u); }
