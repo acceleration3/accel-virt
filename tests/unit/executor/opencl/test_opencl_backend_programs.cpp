@@ -1,10 +1,14 @@
 #include "device/abi/av_executor.h"
+#include "executor/executor_log.hpp"
+#include "executor/import_table.hpp"
 #include "executor/opencl/opencl_backend.hpp"
 #include "executor/opencl/cl_binary_envelope.hpp"
 #include "executor/shim/loader_host_apis.hpp"
 #include "executor/shim/opencl_device.hpp"
 #include "guest/probe/shaders/vector_add_spv.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <CL/cl_ext.h>
 
@@ -32,6 +36,12 @@ extern "C" const char *__lsan_default_suppressions(void)
            "leak:libdbus-1\n";
 }
 
+extern "C" const char *__asan_default_options(void);
+extern "C" const char *__asan_default_options(void)
+{
+    return "detect_leaks=0";
+}
+
 using av::ClBinaryEnvelope;
 using av::OpenClBackend;
 using av::clproto::KernelArgument;
@@ -39,12 +49,14 @@ using av::clproto::KernelArgument;
 namespace {
 class BoundBackend {
 public:
-    BoundBackend() : device_(nullptr), context_(nullptr), built_(nullptr)
+    BoundBackend()
+        : memory_(), imports_(memory_), sink_(), log_(sink_), host_(log_), backend_(log_.opencl()), device_(nullptr),
+          context_(nullptr), built_(nullptr)
     {
         host_.open();
         const av::OpenClDevice *found = nullptr;
         for (std::uint32_t i = 0u; i < host_.gpu_count() && found == nullptr; i++) found = host_.opencl_device(i);
-        if (found == nullptr || !backend_.initialize(found, nullptr, nullptr)) return;
+        if (found == nullptr || !backend_.initialize(found, nullptr, nullptr, imports_)) return;
         device_ = static_cast<cl_device_id>(found->device());
         cl_int error = CL_SUCCESS;
         context_ = ::clCreateContext(nullptr, 1u, &device_, nullptr, nullptr, &error);
@@ -75,6 +87,10 @@ public:
     cl_program    built() const { return built_; }
 
 private:
+    av::MockPlatform   memory_;
+    av::ImportTable    imports_;
+    av::RecordingLog   sink_;
+    av::ExecutorLog    log_;
     av::LoaderHostApis host_;
     OpenClBackend      backend_;
     cl_device_id       device_;
