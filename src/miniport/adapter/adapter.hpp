@@ -324,6 +324,7 @@ private:
     void                 start_copier();
     void                 start_presents();
     void                 attach_clock();
+    void                 announce_window();
     uint32_t             scanning_out() const;
     void                 restore_scanouts();
     [[nodiscard]] Status power_down();

@@ -222,8 +222,7 @@ void Adapter::remember_device()
         if (host_visible_.offered()) {
             const Status opened = window_.initialize(host_visible_.base(), host_visible_.size());
             log_status("avgpu: host window", NtStatus(opened).value());
-            if (opened == Status::ok)
-                log_status("avgpu: host window counters", NtStatus(window_.announce(device_.object())).value());
+            if (opened == Status::ok) announce_window();
         }
         log_status("avgpu: adapter description",
                    NtStatus(description_.publish(physical_device_object_, capset.gpu())).value());
@@ -262,6 +261,7 @@ Status Adapter::power_up()
     if (status == Status::ok) start_copier();
     if (status == Status::ok) start_presents();
     if (status == Status::ok) attach_clock();
+    if (status == Status::ok) announce_window();
     cursor_.forget_device();
     scanout_.forget_device();
     return status;
@@ -289,6 +289,13 @@ void Adapter::attach_clock()
     message.append("avgpu: the device refused the display clock, status 0x");
     message.append_hex(static_cast<uint32_t>(NtStatus(attached).value()), 8u);
     platform_.log(message.text());
+}
+
+void Adapter::announce_window()
+{
+    AV_SCOPE("Adapter::announce_window");
+    if (!window_.offered()) return;
+    log_status("avgpu: host window counters", NtStatus(window_.announce(device_.object())).value());
 }
 
 void Adapter::start_presents()
