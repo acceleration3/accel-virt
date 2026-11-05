@@ -2,9 +2,12 @@
 #include "device/abi/av_executor.h"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
-#include "executor/imported_blob.hpp"
+#include "executor/executor_log.hpp"
+#include "executor/import_table.hpp"
+#include "proto/submission/blob_role.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/d3d/query_result_publisher.hpp"
+#include "proto/submission/published_slot_layout.hpp"
 #include "harness/executor/local_import.hpp"
 #include "core/log/driver_log.hpp"
 #include "executor/sharing/host_shares.hpp"
@@ -26,11 +29,12 @@
 namespace av {
 struct D3dBackendProbe {
     static D3dObjectTable &objects(D3dBackend &backend) { return backend.objects_; }
+    static GuestBytes     &guest(D3dBackend &backend) { return backend.guest_; }
 };
 
 }
 using av::D3dBackend;
-using av::ImportedBlob;
+using av::BlobRole;
 using av::LocalImport;
 using namespace av::d3dproto;
 
@@ -39,13 +43,15 @@ namespace {
 constexpr std::uint32_t nobody = 77u;
 constexpr std::uint64_t page_bytes = 4096u;
 
+av::RecordingLog              backend_sink;
+av::ExecutorLog               backend_log(backend_sink);
 av::ObjectStorage<D3dBackend> backend_storage;
 alignas(4096) std::uint8_t guest[2u * page_bytes];
 alignas(4096) std::uint8_t store_bytes[page_bytes];
 
 class FreshBackend {
 public:
-    FreshBackend() { CHECK_STATUS(backend_storage.construct(), av::Status::ok); }
+    FreshBackend() { CHECK_STATUS(backend_storage.construct(backend_log), av::Status::ok); }
     ~FreshBackend()
     {
         backend_storage.object().shut_down();
@@ -62,57 +68,75 @@ std::uint64_t address_of(const av::SourceMemory &memory)
     return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&memory));
 }
 
+std::uint8_t *guest_at(D3dBackend &backend, std::uint64_t offset, std::uint64_t bytes)
+{
+    return av::D3dBackendProbe::guest(backend).at(offset, bytes);
 }
 
-TEST(d3d_backend_guest_bytes_out, reaches_the_first_import_and_nothing_else)
+bool adopt_arena(D3dBackend &backend, av::LocalImport &region, std::uint64_t base = 0u)
+{
+    std::uint64_t handle = 0u;
+    return backend.adopt(region.memory(), BlobRole(BlobRole::Kind::arena_segment, base), handle) && handle != 0u;
+}
+
+}
+
+TEST(d3d_backend_adopt, an_arena_segment_binds_its_bytes_at_its_base_and_nothing_else)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
-  CHECK(backend.guest_bytes_out(0u, 1u) == nullptr);
+  CHECK(guest_at(backend, 0u, 1u) == nullptr);
   LocalImport region(guest, sizeof guest);
-  CHECK(backend.adopt(region.blob()));
-  CHECK(backend.guest_bytes_out(0u, 16u) == guest);
-  CHECK(backend.guest_bytes_out(page_bytes, page_bytes) == guest + page_bytes);
-  CHECK(backend.guest_bytes_out(page_bytes, page_bytes + 1u) == nullptr);
-  CHECK(backend.guest_bytes(8u, 8u) == guest + 8u);
-  backend.abandon(region.blob());
-  CHECK(backend.guest_bytes_out(0u, 16u) == nullptr);
+  CHECK(adopt_arena(backend, region));
+  CHECK(guest_at(backend, 0u, 16u) == guest);
+  CHECK(guest_at(backend, page_bytes, page_bytes) == guest + page_bytes);
+  CHECK(guest_at(backend, page_bytes, page_bytes + 1u) == nullptr);
+  CHECK(guest_at(backend, 8u, 8u) == guest + 8u);
+  LocalImport second(store_bytes, sizeof store_bytes, 2u);
+  CHECK(adopt_arena(backend, second, av::GuestBytes::slot_bytes));
+  CHECK(guest_at(backend, av::GuestBytes::slot_bytes, 16u) == store_bytes);
+  CHECK(guest_at(backend, 0u, 16u) == guest);
+  backend.unbind_arena(second.memory());
+  CHECK(guest_at(backend, av::GuestBytes::slot_bytes, 16u) == nullptr);
+  backend.unbind_arena(region.memory());
+  CHECK(guest_at(backend, 0u, 16u) == nullptr);
   CHECK(backend.invariants_hold()); }
 
-TEST(d3d_backend_adopt, imports_after_the_region_are_objects_memory_named_by_their_address)
+TEST(d3d_backend_adopt, a_plain_import_is_an_object_memory_named_by_its_address_and_never_binds_bytes)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
   LocalImport region(guest, sizeof guest, 1u);
   LocalImport object(store_bytes, sizeof store_bytes, 2u);
-  CHECK(backend.adopt(region.blob()));
-  CHECK(backend.adopt(object.blob()));
-  CHECK_EQ(object.blob().wire_handle(), address_of(object.memory()));
-  CHECK_EQ(object.blob().object(), address_of(object.memory()));
-  CHECK(backend.guest_bytes_out(0u, sizeof guest) == guest);
-  CHECK(backend.guest_bytes_out(sizeof guest, 1u) == nullptr);
-  backend.abandon(object.blob());
-  CHECK(backend.guest_bytes_out(0u, 16u) == guest);
-  CHECK(backend.adopt(object.blob()));
-  backend.abandon(region.blob());
-  CHECK(backend.guest_bytes_out(0u, 16u) == nullptr);
+  CHECK(adopt_arena(backend, region));
+  std::uint64_t handle = 0u;
+  CHECK(backend.adopt(object.memory(), BlobRole(), handle));
+  CHECK_EQ(handle, address_of(object.memory()));
+  CHECK(guest_at(backend, 0u, sizeof guest) == guest);
+  CHECK(guest_at(backend, sizeof guest, 1u) == nullptr);
+  backend.abandon(object.memory(), handle);
+  CHECK(guest_at(backend, 0u, 16u) == guest);
+  backend.unbind_arena(object.memory());
+  CHECK(guest_at(backend, 0u, 16u) == guest);
+  backend.unbind_arena(region.memory());
+  CHECK(guest_at(backend, 0u, 16u) == nullptr);
   LocalImport next(guest, page_bytes, 3u);
-  CHECK(backend.adopt(next.blob()));
-  CHECK(backend.guest_bytes_out(page_bytes - 1u, 1u) == guest + page_bytes - 1u);
-  CHECK(backend.guest_bytes_out(page_bytes, 1u) == nullptr);
-  backend.abandon(object.blob());
-  backend.abandon(next.blob());
+  CHECK(adopt_arena(backend, next));
+  CHECK(guest_at(backend, page_bytes - 1u, 1u) == guest + page_bytes - 1u);
+  CHECK(guest_at(backend, page_bytes, 1u) == nullptr);
+  backend.retire_arena(next.memory());
+  backend.unbind_arena(next.memory());
+  CHECK(guest_at(backend, 0u, 1u) == nullptr);
   CHECK(backend.invariants_hold()); }
 
-TEST(d3d_backend_abandon, an_import_never_adopted_gives_nothing_back)
+TEST(d3d_backend_unbind_arena, a_memory_that_was_never_an_arena_segment_unbinds_nothing)
 { FreshBackend fresh;
   D3dBackend &backend = fresh.backend();
   LocalImport region(guest, sizeof guest);
-  CHECK(backend.adopt(region.blob()));
-  ImportedBlob stranger;
-  CHECK_STATUS(stranger.take(9u, region.memory()), av::Status::ok);
-  backend.abandon(stranger);
-  CHECK(backend.guest_bytes_out(0u, 16u) == guest);
-  static_cast<void>(stranger.give_back());
-  backend.abandon(region.blob());
+  CHECK(adopt_arena(backend, region));
+  LocalImport stranger(store_bytes, sizeof store_bytes, 9u);
+  backend.unbind_arena(stranger.memory());
+  backend.retire_arena(stranger.memory());
+  CHECK(guest_at(backend, 0u, 16u) == guest);
+  backend.unbind_arena(region.memory());
   CHECK(backend.invariants_hold()); }
 
 TEST(d3d_backend_on_BindQueryResults, binds_slots_only_inside_the_arena)
@@ -120,14 +144,15 @@ TEST(d3d_backend_on_BindQueryResults, binds_slots_only_inside_the_arena)
   D3dBackend &backend = fresh.backend();
   CHECK(!backend.on_BindQueryResults(0u, 1u));
   LocalImport region(guest, sizeof guest);
-  CHECK(backend.adopt(region.blob()));
-  const std::uint32_t fit = sizeof guest / av::QueryResultPublisher::slot_bytes;
+  CHECK(adopt_arena(backend, region));
+  const std::uint32_t fit = (sizeof guest - av::PublishedSlotLayout::error_word_bytes) / av::PublishedSlotLayout::slot_bytes;
   CHECK(backend.on_BindQueryResults(0u, fit));
   CHECK(!backend.on_BindQueryResults(0u, fit + 1u));
-  CHECK(!backend.on_BindQueryResults(av::QueryResultPublisher::slot_bytes, fit));
+  CHECK(!backend.on_BindQueryResults(av::PublishedSlotLayout::slot_bytes, fit));
+  CHECK(!backend.on_BindQueryResults(1u, 1u));
   CHECK(!backend.on_BindQueryResults(0u, 0u));
   CHECK(!backend.on_BindQueryResults(0u, 4097u));
-  backend.abandon(region.blob()); }
+  backend.unbind_arena(region.memory()); }
 
 TEST(d3d_backend_on_BindBufferSlice, a_session_with_no_device_has_no_slices)
 { FreshBackend fresh;
@@ -137,11 +162,12 @@ TEST(d3d_backend_on_BindBufferSlice, a_session_with_no_device_has_no_slices)
   CHECK_EQ(supported, 0u);
   LocalImport region(guest, sizeof guest, 1u);
   LocalImport store(store_bytes, sizeof store_bytes, 2u);
-  CHECK(backend.adopt(region.blob()));
-  CHECK(backend.adopt(store.blob()));
-  CHECK(!backend.on_BindBufferSlice(1u, store.blob().wire_handle(), 0u, 256u));
-  backend.abandon(store.blob());
-  backend.abandon(region.blob()); }
+  std::uint64_t stored = 0u;
+  CHECK(adopt_arena(backend, region));
+  CHECK(backend.adopt(store.memory(), BlobRole(), stored));
+  CHECK(!backend.on_BindBufferSlice(1u, stored, 0u, 256u));
+  backend.abandon(store.memory(), stored);
+  backend.unbind_arena(region.memory()); }
 
 TEST(d3d_backend, makes_nothing_before_the_guest_made_a_device)
 { FreshBackend fresh;
@@ -309,13 +335,14 @@ Selected select_devices()
     av::RecordingLog    log;
     av::DriverLog       lines(log, "shares: ");
     av::HostShares      shares(heap, lines);
-    av::D3d11HostDevice device11;
+    av::ImportTable     imports(heap);
+    av::D3d11HostDevice device11(lines);
     std::uint8_t        uuid[VK_UUID_SIZE] = {};
     if (!runtime.open() || !first_gpu(uuid) || !device11.open(runtime, uuid, shares)) return seen;
     FreshBackend fresh;
     D3dBackend  &backend = fresh.backend();
     av::SessionShares unshared;
-    if (!backend.initialize(unshared, &device11, nullptr)) return seen;
+    if (!backend.initialize(unshared, imports, &device11, nullptr)) return seen;
     seen.ran = 1u;
     device11.lock(nullptr);
     std::uint32_t hresult = 1u, level = 0u;
