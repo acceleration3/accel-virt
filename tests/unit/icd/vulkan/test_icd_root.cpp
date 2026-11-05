@@ -7,6 +7,10 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
+#include "core/log/keyed_log.hpp"
+#include "harness/icd/counted_wake_signal.hpp"
+#include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_thread.hpp"
 #include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/vulkan/connection.hpp"
@@ -70,6 +74,11 @@ using av::icd::IcdRootProbe;
 using av::icd::LoaderHandleProbe;
 
 namespace {
+
+std::uint64_t wire_of(IcdRig &rig, av::vkproto::HandleKind kind, const void *handle)
+{
+    return rig.root().wire_handles().wire_for(kind, reinterpret_cast<std::uint64_t>(handle));
+}
 
 using CreateInstance = VkResult (*)(const VkInstanceCreateInfo *, const VkAllocationCallbacks *, VkInstance *);
 using EnumerateAdapter = VkResult (*)(VkInstance, std::uint64_t, std::uint32_t *, VkPhysicalDevice *);
@@ -197,7 +206,7 @@ TEST(icd_root, an_instance_it_made_answers_every_entry_point_with_its_own_rows_f
       "vkWaitSemaphoresKHR", "vkQueueWaitIdle", "vkDeviceWaitIdle", "vkEnumerateDeviceExtensionProperties",
       "vkCreateDevice", "vkDestroyInstance", "vkGetPhysicalDeviceMemoryProperties",
       "vkGetPhysicalDeviceMemoryProperties2", "vkAllocateMemory", "vkFreeMemory", "vkFlushMappedMemoryRanges",
-      "vkInvalidateMappedMemoryRanges",
+      "vkInvalidateMappedMemoryRanges", "vkGetQueryPoolResults",
       "vkCreateDescriptorUpdateTemplate", "vkCreateDescriptorUpdateTemplateKHR",
       "vkDestroyDescriptorUpdateTemplate", "vkDestroyDescriptorUpdateTemplateKHR",
       "vkDestroySemaphore", "vkGetPhysicalDeviceExternalBufferProperties",
@@ -256,8 +265,8 @@ TEST(icd_root, every_manual_entry_point_it_answers_is_its_own_and_the_rest_are_n
         entry_of(&av::icd::local_vkCreateSwapchainKHR));
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateXlibSurfaceKHR") == nullptr);
   CHECK(rig.root().instance_proc_addr(instance, "vkCreateHeadlessSurfaceEXT") == nullptr);
-  CHECK_EQ(answered, 23u);
-  CHECK_EQ(through_an_instance, 21u);
+  CHECK_EQ(answered, 24u);
+  CHECK_EQ(through_an_instance, 22u);
   CHECK(rig.root().instance_proc_addr(instance, "vkGetMemoryWin32HandleKHR") ==
         entry_of(&av::icd::local_vkGetMemoryWin32HandleKHR));
   CHECK(rig.root().instance_proc_addr(instance, "vkImportSemaphoreWin32HandleKHR") ==
@@ -408,7 +417,7 @@ TEST(icd_root, create_instance_opens_its_own_connection_and_wraps_the_hosts_inst
   const Connection *const connection = av::icd::connection_of(instance);
   CHECK(connection != nullptr && connection->opened());
   CHECK_EQ(connection->luid(), IcdRig::adapter_luid);
-  CHECK_EQ(av::vkproto::handle_to_wire(instance), ScriptedHost::vk_instance);
+  CHECK_EQ(wire_of(rig, av::vkproto::HandleKind::instance, instance), ScriptedHost::vk_instance);
   rig.destroy_instance(instance);
   CHECK(rig.root().invariants_hold());
   CHECK_EQ(rig.kmt().open_objects(), 0u);
@@ -451,9 +460,15 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       av::RecordingThreadLock send_lock(trace, 'S');
       av::RecordingThreadLock memory_lock(trace, 'M');
       av::RecordingLog log;
+      av::KeyedLog lines(platform, log, "avtest: ");
       av::ScriptedWindowSurface windows;
       av::ScriptedWindowChains chains;
-      IcdRoot root(platform, kmt, lock, send_lock, memory_lock, log, av::icd::icd_binding, windows, chains);
+      av::RecordingThreadLock present_lock(trace, 'P');
+      av::ScriptedThread present_thread;
+      av::CountedWakeSignal handed;
+      av::CountedWakeSignal shown;
+      { IcdRoot root(platform, kmt, lock, send_lock, memory_lock, lines, av::icd::icd_binding, windows, chains,
+                     present_thread, handed, shown, present_lock);
       if (!refusal.no_adapter) {
           kmt.add_adapter(av::PciIdentity(av::PciIdentity::virtio_vendor, av::AvgpuAdapters::virtio_gpu_device,
                                           av::PciIdentity::virtio_vendor, av::AvgpuAdapters::av_subsystem),
@@ -472,7 +487,7 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       CHECK(instance == VK_NULL_HANDLE);
       CHECK_EQ(kmt.open_objects(), 0u);
       CHECK_EQ(kmt.commands(), 0u);
-      CHECK_EQ(log.holding("no Vulkan connection to an avgpu adapter, status 6"), 1u);
+      CHECK_EQ(log.holding("no Vulkan connection to an avgpu adapter, status 6"), 1u); }
       CHECK_EQ(platform.live_allocations(), 0u);
   }
 }
@@ -509,20 +524,45 @@ TEST(icd_root, create_instance_with_no_memory_for_its_connection_answers_out_of_
   }
 }
 
-TEST(icd_root, create_instance_with_no_memory_for_its_handle_closes_the_hosts_instance)
+TEST(icd_root, create_instance_with_no_memory_for_its_handle_closes_its_connection_and_the_hosts_instance_with_it)
+{ bool closed_the_hosts = false;
+  for (std::uint32_t failing = 1u; failing <= 12u; failing++) {
+      IcdRig rig;
+      rig.platform().fail_allocation_at(failing);
+      VkInstanceCreateInfo info = {};
+      info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+      VkInstance instance = VK_NULL_HANDLE;
+      rig.host().vk_handle(0, ScriptedHost::vk_instance);
+      const VkResult result =
+          rig.entry<CreateInstance>(VK_NULL_HANDLE, "vkCreateInstance")(&info, nullptr, &instance);
+      rig.platform().fail_allocation_at(0u);
+      CHECK(rig.root().invariants_hold());
+      if (result == VK_SUCCESS) {
+          rig.destroy_instance(instance);
+          continue;
+      }
+      CHECK_EQ(result, VK_ERROR_OUT_OF_HOST_MEMORY);
+      CHECK(instance == VK_NULL_HANDLE);
+      CHECK_EQ(rig.kmt().open_objects(), 0u);
+      if (rig.log().holding("no handle for host object, status 2") != 1u) continue;
+      closed_the_hosts = true;
+      CHECK_EQ(rig.kmt().commands(), 1u);
+      CHECK_EQ(rig.kmt().command_id(0u), static_cast<std::uint32_t>(kCmd_vkCreateInstance));
+  }
+  CHECK(closed_the_hosts); }
+
+TEST(icd_root, instances_made_and_destroyed_again_keep_no_allocation_growing)
 { IcdRig rig;
-  rig.platform().fail_allocation_at(3u);
-  VkInstanceCreateInfo info = {};
-  info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  VkInstance instance = VK_NULL_HANDLE;
-  rig.host().vk_handle(0, ScriptedHost::vk_instance);
-  CHECK_EQ(rig.entry<CreateInstance>(VK_NULL_HANDLE, "vkCreateInstance")(&info, nullptr, &instance),
-           VK_ERROR_OUT_OF_HOST_MEMORY);
-  CHECK(rig.root().invariants_hold());
-  CHECK_EQ(rig.kmt().commands(), 1u);
-  CHECK_EQ(rig.kmt().open_objects(), 0u);
-  CHECK_EQ(rig.log().holding("no handle for host object, status 2"), 1u);
-  CHECK_EQ(rig.platform().live_allocations(), 0u); }
+  std::uint32_t steady = 0u;
+  for (std::uint32_t round = 0u; round < 6u; round++) {
+      const VkInstance instance = rig.create_instance();
+      const VkPhysicalDevice physical_device = rig.physical_device(instance);
+      CHECK(physical_device != VK_NULL_HANDLE);
+      rig.destroy_instance(instance);
+      CHECK(rig.root().invariants_hold());
+      if (round == 1u) steady = rig.platform().live_allocations();
+      if (round > 1u) CHECK_EQ(rig.platform().live_allocations(), steady);
+  } }
 
 TEST(icd_root, the_adapters_luid_answers_the_same_physical_device_enumeration_does)
 { IcdRig rig;
@@ -538,7 +578,7 @@ TEST(icd_root, the_adapters_luid_answers_the_same_physical_device_enumeration_do
   CHECK_EQ(by_luid(instance, IcdRig::adapter_luid, &count, &physical_device), VK_SUCCESS);
   CHECK(std::strcmp(rig.trace().text(), "HhHhHhSHhsHh") == 0);
   CHECK(physical_device != VK_NULL_HANDLE);
-  CHECK_EQ(av::vkproto::handle_to_wire(physical_device), ScriptedHost::vk_physical_device);
+  CHECK_EQ(wire_of(rig, av::vkproto::HandleKind::physical_device, physical_device), ScriptedHost::vk_physical_device);
   const EnumeratePhysical enumerate = rig.entry<EnumeratePhysical>(instance, "vkEnumeratePhysicalDevices");
   VkPhysicalDevice again = VK_NULL_HANDLE;
   count = 1u;
@@ -563,7 +603,8 @@ void queue_group(MockKmt &kmt, std::uint32_t claimed, std::uint32_t named)
         group.physicalDevices[index] = reinterpret_cast<VkPhysicalDevice>(ScriptedHost::vk_physical_device + index);
     writer.write_pod<std::int32_t>(VK_SUCCESS);
     writer.write_pod<std::uint32_t>(1u);
-    av::vkproto::serialize_VkPhysicalDeviceGroupProperties(writer, group);
+    av::vkproto::HandleIdentity identity;
+    av::vkproto::serialize_VkPhysicalDeviceGroupProperties(writer, identity, group);
     CHECK_STATUS(writer.status(), Status::ok);
     kmt.queue_answer(answer, static_cast<std::uint32_t>(writer.offset()));
 }
@@ -602,7 +643,7 @@ TEST(icd_root, a_full_device_group_is_wrapped_and_an_overfull_one_refused)
   CHECK(rig.root().invariants_hold());
   for (std::uint32_t index = 0u; index < VK_MAX_DEVICE_GROUP_SIZE; index++) {
       CHECK(av::icd::connection_of(groups[0].physicalDevices[index]) != nullptr);
-      CHECK_EQ(av::vkproto::handle_to_wire(groups[0].physicalDevices[index]), ScriptedHost::vk_physical_device + index);
+      CHECK_EQ(wire_of(rig, av::vkproto::HandleKind::physical_device, groups[0].physicalDevices[index]), ScriptedHost::vk_physical_device + index);
   }
   CHECK_EQ(groups[1].physicalDeviceCount, 0xC0FFEEu);
   CHECK(groups[1].physicalDevices[0] == VK_NULL_HANDLE);
@@ -623,7 +664,7 @@ TEST(icd_root, a_full_device_group_is_wrapped_and_an_overfull_one_refused)
   CHECK_EQ(enumerate(instance, &count, groups), vk_error_initialization_failed);
   CHECK(rig.root().invariants_hold());
   rig.destroy_instance(instance);
-  CHECK_EQ(rig.platform().live_allocations(), 0u); }
+  CHECK(rig.root().invariants_hold()); }
 
 TEST(icd_root, another_adapters_luid_answers_no_physical_device_without_asking_the_host)
 { IcdRig rig;
@@ -678,7 +719,7 @@ TEST(icd_root, a_physical_device_no_handle_could_be_made_for_answers_out_of_host
   CHECK_EQ(by_luid(instance, IcdRig::adapter_luid, &count, &physical_device), VK_ERROR_OUT_OF_HOST_MEMORY);
   CHECK(rig.root().invariants_hold());
   rig.destroy_instance(instance);
-  CHECK_EQ(rig.platform().live_allocations(), 0u); }
+  CHECK(rig.root().invariants_hold()); }
 
 TEST(icd_root, destroying_a_device_sends_the_destroy_and_ends_its_handle)
 { IcdRig rig;
@@ -687,7 +728,7 @@ TEST(icd_root, destroying_a_device_sends_the_destroy_and_ends_its_handle)
   const VkDevice device = create_device(rig, instance, physical_device);
   CHECK(rig.root().invariants_hold());
   CHECK(device != VK_NULL_HANDLE);
-  CHECK_EQ(av::vkproto::handle_to_wire(device), ScriptedHost::vk_device);
+  CHECK_EQ(wire_of(rig, av::vkproto::HandleKind::device, device), ScriptedHost::vk_device);
   const std::uint32_t sent = rig.kmt().commands();
   rig.entry<DestroyDevice>(instance, "vkDestroyDevice")(device, nullptr);
   CHECK(rig.root().invariants_hold());
@@ -696,7 +737,7 @@ TEST(icd_root, destroying_a_device_sends_the_destroy_and_ends_its_handle)
   WireReader destroyed = body_of(rig.kmt(), sent);
   CHECK_EQ(destroyed.read_u64(), ScriptedHost::vk_device);
   CHECK(av::icd::connection_of(device) == nullptr);
-  CHECK_EQ(av::vkproto::handle_to_wire(device), 0u);
+  CHECK_EQ(wire_of(rig, av::vkproto::HandleKind::device, device), 0u);
   CHECK(av::icd::connection_of(physical_device) != nullptr);
   rig.destroy_instance(instance); }
 
@@ -727,14 +768,14 @@ TEST(icd_root, destroying_an_instance_ends_every_handle_made_through_it)
   CHECK(av::icd::connection_of(queue) == nullptr);
   CHECK(av::icd::connection_of(device) == nullptr);
   CHECK(av::icd::connection_of(physical_device) == nullptr);
-  CHECK_EQ(rig.platform().live_allocations(), 0u); }
+  CHECK(rig.root().invariants_hold()); }
 
 TEST(icd_root, queues_and_command_buffers_cross_as_the_hosts_handles)
 { IcdRig rig;
   const VkInstance instance = rig.create_instance();
   const VkDevice device = create_device(rig, instance, rig.physical_device(instance));
   const VkQueue queue = get_queue(rig, instance, device);
-  CHECK_EQ(av::vkproto::handle_to_wire(queue), queue_host);
+  CHECK_EQ(wire_of(rig, av::vkproto::HandleKind::queue, queue), queue_host);
   CHECK(av::icd::connection_of(queue) == av::icd::connection_of(device));
   VkCommandBufferAllocateInfo allocate = {};
   allocate.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -744,7 +785,7 @@ TEST(icd_root, queues_and_command_buffers_cross_as_the_hosts_handles)
   CHECK_EQ(rig.entry<AllocateCommandBuffers>(instance, "vkAllocateCommandBuffers")(device, &allocate, &command_buffer),
            VK_SUCCESS);
   CHECK(rig.root().invariants_hold());
-  CHECK_EQ(av::vkproto::handle_to_wire(command_buffer), command_buffer_host);
+  CHECK_EQ(wire_of(rig, av::vkproto::HandleKind::command_buffer, command_buffer), command_buffer_host);
   const std::uint32_t sent = rig.kmt().commands();
   rig.entry<CmdDraw>(instance, "vkCmdDraw")(command_buffer, 3u, 1u, 0u, 0u);
   CHECK_EQ(rig.kmt().commands(), sent);
@@ -819,10 +860,10 @@ TEST(icd_root, the_hooks_answer_nothing_for_what_it_did_not_make)
   CHECK(av::icd::connection_of(reinterpret_cast<VkDevice>(&stack)) == nullptr);
   CHECK(av::icd::connection_of(reinterpret_cast<VkQueue>(&stack)) == nullptr);
   CHECK(av::icd::connection_of(reinterpret_cast<VkCommandBuffer>(&stack)) == nullptr);
-  CHECK_EQ(av::vkproto::handle_to_wire(static_cast<VkInstance>(VK_NULL_HANDLE)), 0u);
-  CHECK_EQ(av::vkproto::handle_to_wire(reinterpret_cast<VkPhysicalDevice>(&stack)), 0u);
-  CHECK_EQ(av::vkproto::handle_to_wire(reinterpret_cast<VkQueue>(&stack)), 0u);
-  CHECK_EQ(av::vkproto::handle_to_wire(reinterpret_cast<VkCommandBuffer>(&stack)), 0u);
+  CHECK_EQ(wire_of(rig, av::vkproto::HandleKind::instance, static_cast<VkInstance>(VK_NULL_HANDLE)), 0u);
+  CHECK_EQ(wire_of(rig, av::vkproto::HandleKind::physical_device, reinterpret_cast<VkPhysicalDevice>(&stack)), 0u);
+  CHECK_EQ(wire_of(rig, av::vkproto::HandleKind::queue, reinterpret_cast<VkQueue>(&stack)), 0u);
+  CHECK_EQ(wire_of(rig, av::vkproto::HandleKind::command_buffer, reinterpret_cast<VkCommandBuffer>(&stack)), 0u);
   CHECK(av::icd::wrap_server_handle<VkQueue>(0u, reinterpret_cast<Connection *>(&stack)) == VK_NULL_HANDLE);
   av::icd::release_connection(reinterpret_cast<Connection *>(&stack));
   CHECK_EQ(rig.log().holding("never opened"), 1u);
