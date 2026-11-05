@@ -13,13 +13,15 @@ using av::Status;
 namespace av {
 
 struct D3dObjectTableProbe {
-    static void misplace_view(D3dObjectTable &table, std::uint32_t id, std::uint32_t at)
+    static D3dObjectTable::Entry *entry(D3dObjectTable &table, std::uint32_t id)
     {
-        table.objects_.find(id)->view_at_ = at;
+        D3dObjectKind kind = D3dObjectKind::none;
+        return table.objects_.find_any(id, kind);
     }
+    static void misplace_view(D3dObjectTable &table, std::uint32_t id, std::uint32_t at) { entry(table, id)->view_at_ = at; }
     static void list_slot(D3dObjectTable &table, std::uint32_t slot) { static_cast<void>(table.views_.append(slot)); }
     static void unlist_views(D3dObjectTable &table) { table.views_.truncate(0u); }
-    static void drop_object(D3dObjectTable &table, std::uint32_t id) { table.objects_.find(id)->object_ = nullptr; }
+    static void drop_object(D3dObjectTable &table, std::uint32_t id) { entry(table, id)->object_ = nullptr; }
 };
 
 }
@@ -61,7 +63,7 @@ TEST(d3d_object_table_insert, an_id_answers_for_the_kind_it_was_made_as_and_noth
   CHECK_EQ(table.count(), 2u);
   CHECK_EQ(buffer.references, 1u);
   CHECK(table.invariants_hold());
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_insert, refuses_id_zero_a_kind_of_none_no_object_and_an_id_in_use)
 { MockPlatform   platform;
@@ -75,7 +77,7 @@ TEST(d3d_object_table_insert, refuses_id_zero_a_kind_of_none_no_object_and_an_id
   CHECK(table.find(1u, D3dObjectKind::resource) == &one);
   CHECK_EQ(table.count(), 1u);
   CHECK_EQ(two.references, 1u);
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_find_any, answers_the_object_and_its_kind_or_none)
 { MockPlatform   platform;
@@ -90,7 +92,7 @@ TEST(d3d_object_table_find_any, answers_the_object_and_its_kind_or_none)
   kind = D3dObjectKind::query;
   CHECK(table.find_any(0u, kind) == nullptr);
   CHECK(kind == D3dObjectKind::none);
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_find_view, answers_each_view_kind_and_nothing_else)
 { MockPlatform   platform;
@@ -104,7 +106,7 @@ TEST(d3d_object_table_find_view, answers_each_view_kind_and_nothing_else)
   CHECK(table.find_view(9u) == nullptr);
   CHECK(table.find_view(10u) == nullptr);
   CHECK(table.find_view(0u) == nullptr);
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_remove, gives_the_reference_back_and_every_other_id_is_still_found)
 { MockPlatform   platform;
@@ -122,11 +124,11 @@ TEST(d3d_object_table_remove, gives_the_reference_back_and_every_other_id_is_sti
   objects[0].AddRef();
   CHECK_STATUS(table.insert(1u, D3dObjectKind::query, &objects[0]), Status::ok);
   CHECK(table.invariants_hold());
-  table.clear();
+  table.release_all();
   for (const Counted &object : objects) CHECK_EQ(object.references, 0u);
   CHECK_EQ(table.count(), 0u);
   CHECK(table.invariants_hold());
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_exchange, swaps_an_object_of_the_same_kind_and_hands_back_the_old)
 { MockPlatform   platform;
@@ -145,7 +147,7 @@ TEST(d3d_object_table_exchange, swaps_an_object_of_the_same_kind_and_hands_back_
   CHECK(table.viewed(slot) == nullptr);
   CHECK_EQ(first.references, 1u);
   CHECK_EQ(table.count(), 1u);
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_views, lists_every_view_slot_and_only_those)
 { MockPlatform   platform;
@@ -169,9 +171,9 @@ TEST(d3d_object_table_views, lists_every_view_slot_and_only_those)
   CHECK_EQ(table.views(), 3u);
   CHECK(table.at(table.view_slot(1u), id, kind) == &objects[4]);
   CHECK(kind == D3dObjectKind::unordered_access_view);
-  table.clear();
+  table.release_all();
   CHECK_EQ(table.views(), 0u);
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_note_viewed, remembers_what_a_view_slot_sees_until_the_slot_changes)
 { MockPlatform   platform;
@@ -186,32 +188,32 @@ TEST(d3d_object_table_note_viewed, remembers_what_a_view_slot_sees_until_the_slo
   CHECK(table.viewed(D3dObjectTable::no_slot) == nullptr);
   table.remove(9u);
   CHECK(table.viewed(slot) == nullptr);
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_next_used, walks_the_used_slots_in_order)
 { MockPlatform   platform;
   D3dObjectTable table(platform);
   CHECK_EQ(table.next_used(0u), D3dObjectTable::no_slot);
   Counted objects[3];
-  for (std::uint32_t id = 1u; id <= 3u; id++) CHECK_STATUS(table.insert(id * 100u, D3dObjectKind::fence12, &objects[id - 1u]), Status::ok);
+  for (std::uint32_t id = 1u; id <= 3u; id++) CHECK_STATUS(table.insert(id * 100u, D3dObjectKind::queue12, &objects[id - 1u]), Status::ok);
   std::uint32_t seen = 0u;
   std::uint32_t previous = 0u;
   for (std::uint32_t slot = table.next_used(0u); slot != D3dObjectTable::no_slot; slot = table.next_used(slot + 1u)) {
       std::uint32_t id = 0u;
       D3dObjectKind kind = D3dObjectKind::none;
       CHECK(table.at(slot, id, kind) != nullptr);
-      CHECK(kind == D3dObjectKind::fence12);
+      CHECK(kind == D3dObjectKind::queue12);
       CHECK(seen == 0u || slot > previous);
       previous = slot;
       seen++;
   }
   CHECK_EQ(seen, 3u);
   std::uint32_t id = 7u;
-  D3dObjectKind kind = D3dObjectKind::fence12;
+  D3dObjectKind kind = D3dObjectKind::queue12;
   CHECK(table.at(D3dObjectTable::no_slot, id, kind) == nullptr);
   CHECK_EQ(id, 0u);
   CHECK(kind == D3dObjectKind::none);
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_insert, keeps_well_past_the_old_table)
 { MockPlatform   platform;
@@ -236,7 +238,7 @@ TEST(d3d_object_table_insert, keeps_well_past_the_old_table)
   CHECK(table.find_view(150003u) == &object);
   CHECK_EQ(table.views(), many / 2u - 1u);
   CHECK(table.invariants_hold());
-  table.clear();
+  table.release_all();
   CHECK_EQ(object.released, many);
   CHECK_EQ(platform.live_allocations(), 0u); }
 
@@ -265,7 +267,7 @@ TEST(d3d_object_table_insert, a_table_that_cannot_grow_refuses_and_changes_nothi
   CHECK_STATUS(table.insert(1u, D3dObjectKind::render_target_view, &view), Status::ok);
   CHECK_EQ(table.views(), 1u);
   CHECK(table.invariants_hold());
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_keep, keeps_what_was_made_or_releases_it)
 { MockPlatform   platform;
@@ -279,7 +281,7 @@ TEST(d3d_object_table_keep, keeps_what_was_made_or_releases_it)
   CHECK_EQ(twin.released, 1u);
   CHECK(table.find(5u, D3dObjectKind::resource) == &made);
   CHECK(table.invariants_hold());
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_find_as, answers_the_object_as_the_interface_its_kind_is_kept_as)
 { MockPlatform   platform;
@@ -288,7 +290,7 @@ TEST(d3d_object_table_find_as, answers_the_object_as_the_interface_its_kind_is_k
   CHECK_STATUS(table.insert(3u, D3dObjectKind::resource, &buffer), Status::ok);
   CHECK(table.find_as<Counted>(3u, D3dObjectKind::resource) == &buffer);
   CHECK(table.find_as<Counted>(3u, D3dObjectKind::shader_resource_view) == nullptr);
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_kinds, count_and_remove_a_range_of_kinds_only)
 { MockPlatform   platform;
@@ -312,7 +314,7 @@ TEST(d3d_object_table_kinds, count_and_remove_a_range_of_kinds_only)
   CHECK_EQ(table.count(), 1u);
   CHECK(table.find(1u, D3dObjectKind::resource) == &resource);
   CHECK(table.invariants_hold());
-  table.clear(); }
+  table.release_all(); }
 
 TEST(d3d_object_table_clear, an_empty_table_holds_nothing_and_a_clear_gives_everything_back)
 { MockPlatform   platform;
@@ -337,7 +339,7 @@ TEST(d3d_object_table_clear, an_empty_table_holds_nothing_and_a_clear_gives_ever
   CHECK_STATUS(table.insert(1u, D3dObjectKind::resource, &object), Status::ok);
   CHECK_STATUS(table.insert(2u, D3dObjectKind::shader_resource_view, &view), Status::ok);
   table.note_viewed(table.view_slot(0u), &object);
-  table.clear();
+  table.release_all();
   CHECK_EQ(object.released, 1u);
   CHECK_EQ(view.released, 1u);
   CHECK_EQ(table.views(), 0u);
