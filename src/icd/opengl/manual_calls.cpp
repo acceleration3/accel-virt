@@ -31,17 +31,6 @@ uint64_t address_of(const void *pointer)
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointer));
 }
 
-struct TargetBinding {
-    uint32_t target;
-    uint32_t binding;
-};
-
-constexpr TargetBinding target_bindings[] = {
-    {0x8892u, 0x8894u}, {0x8893u, 0x8895u}, {0x88EBu, 0x88EDu}, {0x88ECu, 0x88EFu}, {0x8A11u, 0x8A28u},
-    {0x8C2Au, 0x8C2Bu}, {0x8C8Eu, 0x8C8Fu}, {0x8F36u, 0x8F36u}, {0x8F37u, 0x8F37u}, {0x8F3Fu, 0x8F43u},
-    {0x90D2u, 0x90D3u}, {0x90EEu, 0x90EFu}, {0x9192u, 0x9193u}, {0x92C0u, 0x92C1u},
-};
-
 bool shader_writable(uint32_t target)
 {
     AV_SCOPE("shader_writable");
@@ -286,7 +275,6 @@ void ManualCalls::bind_buffers_indexed(uint32_t target)
     AV_SCOPE("ManualCalls::bind_buffers_indexed");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    context->arrays().lose_buffer(target);
     if (shader_writable(target)) context->shadows().distrust();
 }
 
@@ -297,13 +285,34 @@ void ManualCalls::shaders_write_buffers()
     if (context != nullptr) context->shadows().distrust();
 }
 
-void ManualCalls::bindings_restored()
+void ManualCalls::client_attributes_pushed(uint32_t mask)
 {
-    AV_SCOPE("ManualCalls::bindings_restored");
+    AV_SCOPE("ManualCalls::client_attributes_pushed");
+    GuestGlContext *const context = sending();
+    if (context != nullptr) context->arrays().push_client(mask);
+}
+
+void ManualCalls::client_attributes_popped()
+{
+    AV_SCOPE("ManualCalls::client_attributes_popped");
     GuestGlContext *const context = sending();
     if (context == nullptr) return;
-    context->arrays().restore_buffers();
+    context->arrays().pop_client();
     context->shadows().forget_all();
+}
+
+void ManualCalls::client_attributes_reset(uint32_t mask)
+{
+    AV_SCOPE("ManualCalls::client_attributes_reset");
+    GuestGlContext *const context = sending();
+    if (context != nullptr) context->arrays().reset_client(mask);
+}
+
+void ManualCalls::vertex_array_elements(uint32_t array, uint32_t buffer)
+{
+    AV_SCOPE("ManualCalls::vertex_array_elements");
+    GuestGlContext *const context = sending();
+    if (context != nullptr) context->arrays().set_vertex_array_elements(array, buffer);
 }
 
 void ManualCalls::buffer_pointer(uint32_t target, uint32_t pname, void **params)
@@ -1113,16 +1122,13 @@ void ManualCalls::record(uint32_t error)
 bool ManualCalls::bound_to(GuestGlContext &context, uint32_t target, uint32_t &buffer)
 {
     AV_SCOPE("ManualCalls::bound_to");
-    for (const TargetBinding &row : target_bindings) {
-        if (row.target != target) continue;
-        if (context.arrays().known_buffer(target, buffer)) return true;
-        int32_t bound = 0;
-        glproto::av_glGetIntegerv(*context.wire(), row.binding, &bound);
-        buffer = static_cast<uint32_t>(bound);
-        return true;
+    if (!context.arrays().tracks(target)) {
+        context.record(gl_invalid_enum);
+        return false;
     }
-    context.record(gl_invalid_enum);
-    return false;
+    const uint32_t bound = context.arrays().bound_buffer(target);
+    buffer = bound == ClientArrayState::unknown ? 0u : bound;
+    return true;
 }
 
 void *ManualCalls::map_name(GuestGlContext &context, uint32_t buffer, int64_t offset, int64_t length,

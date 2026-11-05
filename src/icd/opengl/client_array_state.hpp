@@ -26,6 +26,9 @@ public:
     static constexpr uint32_t query_buffer = 0x9192u;
     static constexpr uint32_t unknown = 0xFFFFFFFFu;
     static constexpr uint32_t max_attributes = 16u;
+    static constexpr uint32_t client_pixel_store_bit = 0x00000001u;
+    static constexpr uint32_t client_vertex_array_bit = 0x00000002u;
+    static constexpr uint32_t most_pushed = 16u;
 
     explicit ClientArrayState(BlockSource &memory);
     ClientArrayState(const ClientArrayState &) = delete;
@@ -38,9 +41,11 @@ public:
     size_t compressed_bytes(int32_t image_size, bool packing) const;
 
     void     bind_buffer(uint32_t target, uint32_t buffer);
-    void     lose_buffer(uint32_t target);
-    void     restore_buffers();
-    bool     known_buffer(uint32_t target, uint32_t &buffer) const;
+    bool     tracks(uint32_t target) const;
+    void     push_client(uint32_t mask);
+    void     pop_client();
+    void     reset_client(uint32_t mask);
+    void     set_vertex_array_elements(uint32_t array, uint32_t buffer);
     void     delete_buffers(int32_t count, const uint32_t *buffers);
     uint32_t bound_buffer(uint32_t target) const;
     bool     pixel_buffer_bound(bool packing) const;
@@ -67,6 +72,17 @@ private:
     static constexpr uint32_t buffer_targets = 13u;
     static constexpr uint32_t texture0 = 0x84C0u;
 
+    struct Pushed {
+        uint32_t   mask_;
+        uint32_t   array_buffer_;
+        uint32_t   pack_buffer_;
+        uint32_t   unpack_buffer_;
+        uint32_t   vertex_array_;
+        uint32_t   elements_;
+        PixelStore pack_;
+        PixelStore unpack_;
+    };
+
     uint32_t    buffer_slot(uint32_t target) const;
     bool        indexed(uint32_t target) const;
     uint32_t    texture_slot(uint32_t target) const;
@@ -75,7 +91,8 @@ private:
     const uint32_t *elements_of(uint32_t array) const;
 
     uint32_t   buffers_[buffer_targets];
-    bool       buffers_restored_;
+    Pushed     pushed_[most_pushed];
+    uint32_t   depth_;
     PixelStore pack_;
     PixelStore unpack_;
     uint32_t   vertex_array_;

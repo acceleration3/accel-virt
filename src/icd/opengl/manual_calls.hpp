@@ -57,7 +57,10 @@ public:
     void  bind_buffer_indexed(uint32_t target, uint32_t buffer);
     void  bind_buffers_indexed(uint32_t target);
     void  shaders_write_buffers();
-    void  bindings_restored();
+    void  client_attributes_pushed(uint32_t mask);
+    void  client_attributes_popped();
+    void  client_attributes_reset(uint32_t mask);
+    void  vertex_array_elements(uint32_t array, uint32_t buffer);
 
     void  create_memory_objects(int32_t count, uint32_t *objects);
     void  delete_memory_objects(int32_t count, const uint32_t *objects);

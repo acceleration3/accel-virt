@@ -185,10 +185,28 @@ void shaders_write_buffers() noexcept
     if (gl_icd_binding.bound()) gl_icd_binding.root().manual().shaders_write_buffers();
 }
 
-void bindings_restored() noexcept
+void client_attributes_pushed(GLbitfield mask) noexcept
 {
-    AV_SCOPE("bindings_restored");
-    if (gl_icd_binding.bound()) gl_icd_binding.root().manual().bindings_restored();
+    AV_SCOPE("client_attributes_pushed");
+    if (gl_icd_binding.bound()) gl_icd_binding.root().manual().client_attributes_pushed(mask);
+}
+
+void client_attributes_popped() noexcept
+{
+    AV_SCOPE("client_attributes_popped");
+    if (gl_icd_binding.bound()) gl_icd_binding.root().manual().client_attributes_popped();
+}
+
+void client_attributes_reset(GLbitfield mask) noexcept
+{
+    AV_SCOPE("client_attributes_reset");
+    if (gl_icd_binding.bound()) gl_icd_binding.root().manual().client_attributes_reset(mask);
+}
+
+void vertex_array_elements(GLuint array, GLuint buffer) noexcept
+{
+    AV_SCOPE("vertex_array_elements");
+    if (gl_icd_binding.bound()) gl_icd_binding.root().manual().vertex_array_elements(array, buffer);
 }
 
 bool answer_buffer_map_state(GLenum target, GLenum pname, GLint *params) noexcept

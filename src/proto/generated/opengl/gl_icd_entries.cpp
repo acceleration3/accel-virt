@@ -4039,6 +4039,7 @@ void APIENTRY Wrap_glVertexArrayElementBuffer(GLuint vaobj, GLuint buffer) {
     AV_SCOPE("glVertexArrayElementBuffer");
     auto* av_t = ::av::glicd::wire();
     if (av_t == nullptr) return;
+    ::av::glicd::vertex_array_elements(vaobj, buffer);
     ::av::glproto::av_glVertexArrayElementBuffer(*av_t, vaobj, buffer);
 }
 
@@ -6788,7 +6789,7 @@ void APIENTRY Wrap_glPopClientAttrib(void) {
     }
     auto* av_t = ::av::glicd::wire();
     if (av_t == nullptr) return;
-    ::av::glicd::bindings_restored();
+    ::av::glicd::client_attributes_popped();
     ::av::glproto::av_glPopClientAttrib(*av_t);
 }
 
@@ -6844,6 +6845,7 @@ void APIENTRY Wrap_glPushClientAttrib(GLbitfield mask) {
     }
     auto* av_t = ::av::glicd::wire();
     if (av_t == nullptr) return;
+    ::av::glicd::client_attributes_pushed(mask);
     ::av::glproto::av_glPushClientAttrib(*av_t, mask);
 }
 
@@ -9383,6 +9385,7 @@ void APIENTRY Wrap_glClientAttribDefaultEXT(GLbitfield mask) {
     AV_SCOPE("glClientAttribDefaultEXT");
     auto* av_t = ::av::glicd::wire();
     if (av_t == nullptr) return;
+    ::av::glicd::client_attributes_reset(mask);
     ::av::glproto::av_glClientAttribDefaultEXT(*av_t, mask);
 }
 
@@ -9390,6 +9393,7 @@ void APIENTRY Wrap_glPushClientAttribDefaultEXT(GLbitfield mask) {
     AV_SCOPE("glPushClientAttribDefaultEXT");
     auto* av_t = ::av::glicd::wire();
     if (av_t == nullptr) return;
+    ::av::glicd::client_attributes_pushed(mask); ::av::glicd::client_attributes_reset(mask);
     ::av::glproto::av_glPushClientAttribDefaultEXT(*av_t, mask);
 }
 

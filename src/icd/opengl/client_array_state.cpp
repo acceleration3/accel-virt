@@ -32,7 +32,7 @@ constexpr uint32_t texture_targets_kept[] = {
 }
 
 ClientArrayState::ClientArrayState(BlockSource &memory)
-    : buffers_{}, buffers_restored_(false), pack_(), unpack_(), vertex_array_(0u), default_elements_(0u),
+    : buffers_{}, pushed_{}, depth_(0u), pack_(), unpack_(), vertex_array_(0u), default_elements_(0u),
       elements_(memory, Pool::paged), attribute_pointers_{}, active_unit_(unknown), textures_{}, samplers_{},
       offsets_(memory, Pool::paged), no_offsets_(0u)
 {
@@ -81,25 +81,69 @@ void ClientArrayState::bind_buffer(uint32_t target, uint32_t buffer)
     if (slot != buffer_targets) buffers_[slot] = buffer;
 }
 
-void ClientArrayState::lose_buffer(uint32_t target)
+bool ClientArrayState::tracks(uint32_t target) const
 {
-    AV_SCOPE("ClientArrayState::lose_buffer");
-    if (indexed(target)) buffers_[buffer_slot(target)] = unknown;
+    AV_SCOPE("ClientArrayState::tracks");
+    return target == element_array_buffer || buffer_slot(target) != buffer_targets;
 }
 
-void ClientArrayState::restore_buffers()
+void ClientArrayState::push_client(uint32_t mask)
 {
-    AV_SCOPE("ClientArrayState::restore_buffers");
-    buffers_restored_ = true;
+    AV_SCOPE("ClientArrayState::push_client");
+    if (depth_ == most_pushed) return;
+    const uint32_t *const elements = elements_of(vertex_array_);
+    pushed_[depth_] = Pushed{mask,
+                             buffers_[buffer_slot(array_buffer)],
+                             buffers_[buffer_slot(pixel_pack_buffer)],
+                             buffers_[buffer_slot(pixel_unpack_buffer)],
+                             vertex_array_,
+                             elements != nullptr ? *elements : 0u,
+                             pack_,
+                             unpack_};
+    depth_++;
 }
 
-bool ClientArrayState::known_buffer(uint32_t target, uint32_t &buffer) const
+void ClientArrayState::pop_client()
 {
-    AV_SCOPE("ClientArrayState::known_buffer");
-    const uint32_t slot = buffer_slot(target);
-    if (buffers_restored_ || slot == buffer_targets || buffers_[slot] == unknown) return false;
-    buffer = buffers_[slot];
-    return true;
+    AV_SCOPE("ClientArrayState::pop_client");
+    if (depth_ == 0u) return;
+    depth_--;
+    const Pushed &saved = pushed_[depth_];
+    if ((saved.mask_ & client_pixel_store_bit) != 0u) {
+        buffers_[buffer_slot(pixel_pack_buffer)] = saved.pack_buffer_;
+        buffers_[buffer_slot(pixel_unpack_buffer)] = saved.unpack_buffer_;
+        pack_ = saved.pack_;
+        unpack_ = saved.unpack_;
+    }
+    if ((saved.mask_ & client_vertex_array_bit) == 0u) return;
+    buffers_[buffer_slot(array_buffer)] = saved.array_buffer_;
+    if (saved.vertex_array_ != 0u && elements_.find(saved.vertex_array_) == nullptr) {
+        vertex_array_ = 0u;
+        return;
+    }
+    vertex_array_ = saved.vertex_array_;
+    set_vertex_array_elements(vertex_array_, saved.elements_);
+}
+
+void ClientArrayState::reset_client(uint32_t mask)
+{
+    AV_SCOPE("ClientArrayState::reset_client");
+    if ((mask & client_pixel_store_bit) != 0u) {
+        buffers_[buffer_slot(pixel_pack_buffer)] = 0u;
+        buffers_[buffer_slot(pixel_unpack_buffer)] = 0u;
+        pack_ = PixelStore();
+        unpack_ = PixelStore();
+    }
+    if ((mask & client_vertex_array_bit) == 0u) return;
+    buffers_[buffer_slot(array_buffer)] = 0u;
+    set_vertex_array_elements(vertex_array_, 0u);
+}
+
+void ClientArrayState::set_vertex_array_elements(uint32_t array, uint32_t buffer)
+{
+    AV_SCOPE("ClientArrayState::set_vertex_array_elements");
+    uint32_t *const elements = elements_of(array);
+    if (elements != nullptr) *elements = buffer;
 }
 
 void ClientArrayState::delete_buffers(int32_t count, const uint32_t *buffers)
@@ -241,6 +285,7 @@ bool ClientArrayState::invariants_hold() const
     AV_SCOPE("ClientArrayState::invariants_hold");
     if (!pack_.invariants_hold() || !unpack_.invariants_hold()) return false;
     if (active_unit_ != unknown && active_unit_ >= units) return false;
+    if (depth_ > most_pushed) return false;
     return elements_.find(0u) == nullptr && elements_.invariants_hold();
 }
 

@@ -1814,7 +1814,12 @@ BUFFER_WRITES = {
     "glMakeNamedBufferResidentNV": "::av::glicd::shaders_write_buffers()",
     "glMakeImageHandleResidentARB": "::av::glicd::shaders_write_buffers()",
     "glMakeImageHandleResidentNV": "::av::glicd::shaders_write_buffers()",
-    "glPopClientAttrib": "::av::glicd::bindings_restored()",
+    "glPopClientAttrib": "::av::glicd::client_attributes_popped()",
+    "glPushClientAttrib": "::av::glicd::client_attributes_pushed(mask)",
+    "glPushClientAttribDefaultEXT": "::av::glicd::client_attributes_pushed(mask); "
+                                    "::av::glicd::client_attributes_reset(mask)",
+    "glClientAttribDefaultEXT": "::av::glicd::client_attributes_reset(mask)",
+    "glVertexArrayElementBuffer": "::av::glicd::vertex_array_elements(vaobj, buffer)",
 }
 
 PACK_TARGET = "0x88EBu"
