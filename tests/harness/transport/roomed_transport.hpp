@@ -12,7 +12,9 @@ namespace av {
 
 class RoomedTransport : public ClientTransport {
 public:
-    [[nodiscard]] bool make_room_for_blobs(std::size_t bytes) override;
+    [[nodiscard]] bool make_room_for_blobs(const std::uint64_t *sizes, std::uint32_t count) override;
+    ClientBlobLease     open_region(std::uint64_t bytes) override;
+    void                close_region(const ClientBlobLease &region) override;
     const TransferRoom &room() const override;
     void                note(ChannelCounter counter, std::uint64_t amount) override;
     std::uint64_t       noted(ChannelCounter counter) const;

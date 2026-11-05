@@ -188,7 +188,7 @@ void ScriptedHost::gl_make(const char *renderer, const char *version)
 void ScriptedHost::gl_make_profile(const char *renderer, const char *version, std::int32_t major,
                                    std::int32_t minor, std::int32_t mask)
 {
-    blob_import(0u, 0x0000600000000077ull);
+    arena_import(0x0000600000000077ull, 2u);
     gl_string("av host vendor");
     gl_string(renderer);
     gl_string(version);
@@ -214,6 +214,11 @@ void ScriptedHost::gl_window(std::uint32_t framebuffers, std::uint32_t renderbuf
     gl_bytes(reinterpret_cast<const std::uint8_t *>(names + framebuffers), sizeof names[0]);
     if (renderbuffers != 0u)
         gl_bytes(reinterpret_cast<const std::uint8_t *>(names + framebuffers + 1u), renderbuffers * sizeof names[0]);
+}
+
+void ScriptedHost::arena_import(std::uint64_t memory, std::uint32_t segments)
+{
+    for (std::uint32_t at = 0u; at < segments; at++) blob_import(0u, memory + at);
 }
 
 void ScriptedHost::blob_import(std::uint32_t status, std::uint64_t memory)

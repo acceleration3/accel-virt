@@ -354,10 +354,16 @@ const KmtTransport &HostChannel::transport() const
     return transport_.object();
 }
 
-uint8_t *HostChannel::arena_view() const
+bool HostChannel::has_arena() const
 {
-    AV_SCOPE("HostChannel::arena_view");
-    return arena_.constructed() ? arena_.object().view() : nullptr;
+    AV_SCOPE("HostChannel::has_arena");
+    return arena_.constructed() && arena_.object().lending();
+}
+
+bool HostChannel::take_query_slots(uint32_t count, uint8_t *&view, uint64_t &offset)
+{
+    AV_SCOPE("HostChannel::take_query_slots");
+    return has_arena() && arena_.object().take_query_slots(count, view, offset);
 }
 
 uint64_t HostChannel::arena_bytes() const

@@ -4,413 +4,257 @@
 #include <cstdint>
 
 using av::ClientBlobArena;
-using av::ClientBlobArenaProbe;
 using av::ClientBlobLease;
 
-namespace av {
+namespace {
 
-struct ClientBlobArenaProbe {
-    static void overfill(ClientBlobArena &arena) { arena.top_ = arena.capacity_ + 1u; }
-    static void misplace_base(ClientBlobArena &arena)
-    {
-        arena.wrapped_ = true;
-        arena.lap_ = arena.base_lap_ + 1u;
-        arena.base_ = arena.end_ + 1u;
-    }
-    static void lose_a_lap(ClientBlobArena &arena) { arena.lap_ = arena.base_lap_ + 2u; }
-    static void orphan_capacity(ClientBlobArena &arena)
-    {
-        arena.block_ = nullptr;
-        arena.capacity_ = 1u;
-    }
-    static void outgrow(ClientBlobArena &arena) { arena.capacity_ = arena.lent_ + 1u; }
-    static void seal_behind(ClientBlobArena &arena) { arena.sealed_ = arena.base_ - 1u; }
-    static void seal_ahead(ClientBlobArena &arena) { arena.sealed_ = arena.top_ + 1u; }
-    static void seal_on_a_lost_lap(ClientBlobArena &arena) { arena.sealed_lap_ = arena.lap_ + 1u; }
-};
+constexpr std::uint64_t slot = std::uint64_t{1} << 26u;
 
 }
 
-TEST(client_blob_arena, an_arena_with_no_block_is_never_ready)
+TEST(client_blob_arena, an_arena_with_no_segment_is_never_ready)
 { ClientBlobArena arena;
-  CHECK(!arena.ready());
-  ClientBlobLease lease = arena.take(16u);
-  CHECK(!lease.taken());
-  CHECK(arena.invariants_hold()); }
-
-TEST(client_blob_arena, a_lease_carries_room_and_an_offset)
-{ std::uint8_t block[256];
-  ClientBlobArena arena(block, sizeof block);
-  CHECK(arena.ready());
-  ClientBlobLease first = arena.take(64u);
-  CHECK(first.taken());
-  CHECK(first.data() == block);
-  CHECK_EQ(first.offset(), 0u);
-  CHECK_EQ(first.bytes(), 64u);
-  ClientBlobLease second = arena.take(32u);
-  CHECK(second.data() == block + 64u);
-  CHECK_EQ(second.offset(), 64u);
-  CHECK_EQ(arena.used(), 96u);
-  CHECK(arena.invariants_hold()); }
-
-TEST(client_blob_arena, a_take_past_the_end_or_of_nothing_is_denied)
-{ std::uint8_t block[64];
-  ClientBlobArena arena(block, sizeof block);
-  CHECK(!arena.take(65u).taken());
-  CHECK(!arena.take(0u).taken());
-  CHECK_EQ(arena.room(), 64u);
-  CHECK(arena.take(60u).taken());
-  CHECK_EQ(arena.room(), 4u);
-  CHECK(!arena.take(5u).taken());
-  CHECK(arena.take(4u).taken());
-  CHECK_EQ(arena.room(), 0u);
-  CHECK(!arena.take(1u).taken());
-  CHECK(arena.invariants_hold()); }
-
-TEST(client_blob_arena, the_top_lease_comes_back_and_a_buried_one_does_not)
-{ std::uint8_t block[256];
-  ClientBlobArena arena(block, sizeof block);
-  ClientBlobLease first = arena.take(64u);
-  ClientBlobLease second = arena.take(32u);
-  arena.give_back(second);
-  CHECK_EQ(arena.used(), 64u);
-  ClientBlobLease third = arena.take(16u);
-  arena.give_back(first);
-  CHECK_EQ(arena.used(), 80u);
-  CHECK(arena.invariants_hold());
-  arena.give_back(third);
-  CHECK_EQ(arena.used(), 64u); }
-
-
-TEST(client_blob_arena, a_null_block_is_no_arena)
-{ ClientBlobArena arena(nullptr, 256u);
   CHECK(!arena.ready());
   CHECK(!arena.take(16u).taken());
-  CHECK_EQ(arena.used(), 0u);
+  CHECK_EQ(arena.segments(), 0u);
   CHECK_EQ(arena.room(), 0u);
   CHECK(arena.invariants_hold()); }
 
-TEST(client_blob_arena, an_untaken_lease_given_back_is_a_no_op)
-{ std::uint8_t block[64];
+TEST(client_blob_arena, a_single_lent_block_is_one_segment_at_offset_zero)
+{ std::uint8_t block[256];
   ClientBlobArena arena(block, sizeof block);
-  ClientBlobLease taken = arena.take(16u);
-  arena.give_back(ClientBlobLease{});
-  CHECK_EQ(arena.used(), 16u);
-  static_cast<void>(taken);
-  CHECK(arena.invariants_hold()); }
-
-TEST(client_blob_arena, an_arena_emptied_by_the_host_lends_from_its_start_again)
-{ std::uint8_t block[64];
-  ClientBlobArena arena(block, sizeof block);
-  ClientBlobLease first = arena.take(16u);
-  ClientBlobLease second = arena.take(32u);
-  CHECK(first.taken());
-  CHECK(second.taken());
-  CHECK(!arena.take(17u).taken());
-  arena.seal();
-  arena.mark(1u);
-  arena.retire_through(1u);
-  CHECK_EQ(arena.used(), 0u);
-  CHECK_EQ(arena.room(), 64u);
-  CHECK(arena.invariants_hold());
-  ClientBlobLease again = arena.take(64u);
-  CHECK(again.taken());
-  CHECK_EQ(again.offset(), 0u);
-  CHECK(again.data() == block);
-  CHECK_EQ(arena.used(), 64u);
-  CHECK(arena.invariants_hold());
-  arena.retire_through(1u);
-  arena.retire_through(9u);
-  CHECK_EQ(arena.used(), 64u);
-  CHECK(arena.invariants_hold()); }
-
-TEST(client_blob_arena, retiring_an_arena_with_no_block_keeps_it_unready)
-{ ClientBlobArena arena;
-  arena.seal();
-  arena.mark(1u);
-  arena.retire_through(1u);
-  CHECK(!arena.ready());
-  CHECK_EQ(arena.used(), 0u);
-  CHECK(!arena.take(1u).taken());
-  CHECK(arena.invariants_hold()); }
-
-TEST(client_blob_arena, an_unsealed_lease_outlives_every_batch_marked_before_its_seal)
-{ std::uint8_t block[100];
-  ClientBlobArena arena(block, sizeof block);
-  CHECK(arena.take(10u).taken());
-  arena.seal();
-  arena.mark(1u);
-  const ClientBlobLease open = arena.take(60u);
-  CHECK_EQ(open.offset(), 10u);
-  arena.mark(2u);
-  arena.mark(3u);
-  arena.retire_through(3u);
-  CHECK_EQ(arena.used(), 60u);
-  CHECK(!arena.take(31u).taken());
-  const ClientBlobLease below = arena.take(10u);
-  CHECK(below.taken());
-  CHECK_EQ(below.offset(), 70u);
-  CHECK(arena.invariants_hold());
-  arena.seal();
-  arena.mark(4u);
-  arena.retire_through(3u);
-  CHECK_EQ(arena.used(), 70u);
-  arena.retire_through(4u);
-  CHECK_EQ(arena.used(), 0u);
-  CHECK(arena.invariants_hold()); }
-
-TEST(client_blob_arena, a_sealed_lease_is_not_given_back)
-{ std::uint8_t block[64];
-  ClientBlobArena arena(block, sizeof block);
-  const ClientBlobLease framed = arena.take(16u);
-  arena.seal();
-  arena.give_back(framed);
-  CHECK_EQ(arena.used(), 16u);
-  const ClientBlobLease dropped = arena.take(8u);
-  arena.give_back(dropped);
-  CHECK_EQ(arena.used(), 16u);
-  CHECK(arena.invariants_hold()); }
-
-TEST(client_blob_arena, lent_memory_replaces_the_block_and_lending_none_takes_it_away)
-{ ClientBlobArena arena;
-  std::uint8_t first[32];
-  arena.lend(first, sizeof first);
   CHECK(arena.ready());
-  CHECK(arena.take(32u).data() == first);
-  CHECK_EQ(arena.used(), 32u);
-  std::uint8_t second[16];
-  arena.lend(second, sizeof second);
-  CHECK_EQ(arena.used(), 0u);
-  CHECK(!arena.take(17u).taken());
-  CHECK(arena.take(16u).data() == second);
-  CHECK(arena.invariants_hold());
-  arena.lend(nullptr, 64u);
+  CHECK_EQ(arena.segments(), 1u);
+  CHECK_EQ(arena.segment_base(0u), 0u);
+  CHECK_EQ(arena.segment_bytes(0u), sizeof block);
+  const ClientBlobLease first = arena.take(64u);
+  CHECK(first.data() == block);
+  CHECK_EQ(first.offset(), 0u);
+  CHECK_EQ(arena.take(32u).offset(), 64u);
+  CHECK_EQ(arena.used(), 96u);
+  arena.lend(nullptr, 0u);
   CHECK(!arena.ready());
-  CHECK_EQ(arena.used(), 0u);
-  CHECK(!arena.take(1u).taken());
+  CHECK_EQ(arena.lent(), 0u);
   CHECK(arena.invariants_hold()); }
 
-TEST(client_blob_arena, room_set_aside_comes_off_the_top_and_goes_back_last_first)
-{ std::uint8_t    block[64];
-  ClientBlobArena arena(block, sizeof block);
+TEST(client_blob_arena, a_second_segment_names_its_blobs_from_its_own_base)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  CHECK(arena.invariants_hold());
+  CHECK_EQ(arena.segments(), 2u);
+  CHECK(arena.take(64u).data() == first);
+  const ClientBlobLease spilled = arena.take(40u);
+  CHECK(spilled.taken());
+  CHECK(spilled.data() == second);
+  CHECK_EQ(spilled.offset(), slot);
+  const ClientBlobLease next = arena.take(8u);
+  CHECK_EQ(next.offset(), slot + 40u);
+  CHECK_EQ(arena.used(), 112u);
+  CHECK(!arena.take(32u).taken());
+  CHECK(arena.invariants_hold()); }
+
+TEST(client_blob_arena, a_blob_is_contiguous_within_one_segment_so_two_halves_do_not_make_a_whole)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  CHECK(arena.take(40u).taken());
+  CHECK(arena.take(40u).taken());
+  CHECK_EQ(arena.room(), 24u);
+  CHECK(!arena.take(48u).taken());
+  CHECK(arena.take(24u).taken()); }
+
+TEST(client_blob_arena, a_lease_given_back_returns_to_the_segment_that_made_it)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  CHECK(arena.take(64u).taken());
+  const ClientBlobLease top = arena.take(16u);
+  CHECK_EQ(top.offset(), slot);
+  arena.give_back(top);
+  CHECK_EQ(arena.used(), 64u);
+  CHECK_EQ(arena.take(16u).offset(), slot);
+  arena.give_back(ClientBlobLease());
+  arena.give_back(ClientBlobLease(second, slot * 5u, 16u));
+  CHECK_EQ(arena.used(), 80u);
+  CHECK(arena.invariants_hold()); }
+
+TEST(client_blob_arena, a_mark_retires_every_segment_that_the_host_has_consumed)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  CHECK(arena.take(64u).taken());
+  CHECK(arena.take(64u).taken());
+  CHECK_EQ(arena.room(), 0u);
+  arena.seal();
+  arena.mark(1u);
+  CHECK_EQ(arena.room(), 0u);
+  arena.retire_through(1u);
+  CHECK_EQ(arena.used(), 0u);
+  CHECK_EQ(arena.room(), 64u);
+  CHECK(arena.segment_idle(0u));
+  CHECK(arena.segment_idle(1u));
+  CHECK(arena.invariants_hold()); }
+
+TEST(client_blob_arena, a_segment_still_holding_data_is_not_idle_and_will_not_be_removed)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  CHECK(arena.take(64u).taken());
   CHECK(arena.take(8u).taken());
-  CHECK(!arena.set_aside(0u).taken());
-  CHECK(!arena.set_aside(57u).taken());
-  const av::ClientBlobLease frames = arena.set_aside(32u);
-  CHECK(frames.taken());
-  CHECK(frames.data() == block + 32);
-  CHECK_EQ(frames.offset(), 32u);
-  CHECK_EQ(frames.bytes(), 32u);
-  const av::ClientBlobLease more = arena.set_aside(16u);
-  CHECK_EQ(more.offset(), 16u);
-  CHECK_EQ(arena.room(), 8u);
+  CHECK(!arena.segment_idle(1u));
+  CHECK(!arena.remove_segment(slot));
   arena.seal();
   arena.mark(1u);
   arena.retire_through(1u);
-  CHECK_EQ(arena.room(), 16u);
-  CHECK(!arena.take(17u).taken());
-  CHECK(arena.invariants_hold());
-  arena.restore(frames);
-  arena.restore(av::ClientBlobLease{});
-  CHECK_EQ(arena.room(), 16u);
-  arena.restore(more);
-  CHECK_EQ(arena.room(), 32u);
-  arena.restore(more);
-  CHECK_EQ(arena.room(), 32u);
-  arena.restore(frames);
-  CHECK_EQ(arena.room(), 64u);
-  CHECK(arena.invariants_hold());
-  ClientBlobArena none;
-  CHECK(!none.set_aside(1u).taken()); }
+  CHECK(arena.remove_segment(slot));
+  CHECK_EQ(arena.segments(), 1u);
+  CHECK(!arena.remove_segment(slot));
+  CHECK(!arena.remove_segment(7u * slot));
+  CHECK(arena.invariants_hold()); }
 
-TEST(client_blob_arena, the_invariant_catches_impossible_states)
-{ std::uint8_t block[64];
-  ClientBlobArena overfilled(block, sizeof block);
-  ClientBlobArenaProbe::overfill(overfilled);
-  CHECK(!overfilled.invariants_hold());
-  ClientBlobArena orphaned(block, sizeof block);
-  ClientBlobArenaProbe::orphan_capacity(orphaned);
-  CHECK(!orphaned.invariants_hold());
-  ClientBlobArena outgrown(block, sizeof block);
-  ClientBlobArenaProbe::outgrow(outgrown);
-  CHECK(!outgrown.invariants_hold());
-  std::uint8_t    other[32];
-  ClientBlobArena misplaced(other, sizeof other);
-  ClientBlobArenaProbe::misplace_base(misplaced);
-  CHECK(!misplaced.invariants_hold());
-  ClientBlobArena lapped(other, sizeof other);
-  ClientBlobArenaProbe::lose_a_lap(lapped);
-  CHECK(!lapped.invariants_hold());
-  CHECK(!outgrown.invariants_hold());
-  ClientBlobArena behind(other, sizeof other);
-  CHECK(behind.take(8u).taken());
-  behind.seal();
-  behind.mark(1u);
-  CHECK(behind.take(8u).taken());
-  behind.retire_through(1u);
-  CHECK(behind.invariants_hold());
-  ClientBlobArenaProbe::seal_behind(behind);
-  CHECK(!behind.invariants_hold());
-  ClientBlobArena ahead(other, sizeof other);
-  CHECK(ahead.take(8u).taken());
-  ClientBlobArenaProbe::seal_ahead(ahead);
-  CHECK(!ahead.invariants_hold());
-  ClientBlobArena lost(other, sizeof other);
-  ClientBlobArenaProbe::seal_on_a_lost_lap(lost);
-  CHECK(!lost.invariants_hold()); }
+TEST(client_blob_arena, a_removed_segment_leaves_its_offsets_unnamed_and_its_slot_free_to_reuse)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  std::uint8_t third[32];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  CHECK(arena.remove_segment(slot));
+  std::uint64_t offset = 0u;
+  CHECK(!arena.holds(second, 8u, offset));
+  CHECK(arena.add_segment(slot, third, sizeof third));
+  const ClientBlobLease lease = arena.take(64u);
+  CHECK(lease.data() == first);
+  CHECK_EQ(arena.take(32u).offset(), slot);
+  CHECK(arena.invariants_hold()); }
 
-TEST(client_blob_arena, bytes_inside_the_block_are_held_at_their_offset)
-{ std::uint8_t    memory[96];
-  std::uint8_t   *block = memory + 16;
-  ClientBlobArena arena(block, 64u);
-  std::uint64_t   offset = 999u;
-  CHECK(arena.holds(block, 64u, offset));
-  CHECK_EQ(offset, 0u);
-  CHECK(arena.holds(block + 63, 1u, offset));
-  CHECK_EQ(offset, 63u);
-  CHECK(arena.holds(block + 40, 24u, offset));
-  CHECK_EQ(offset, 40u);
-  const ClientBlobLease aside = arena.set_aside(16u);
-  CHECK(arena.holds(aside.data(), 16u, offset));
-  CHECK_EQ(offset, 48u);
+TEST(client_blob_arena, overlapping_null_empty_and_surplus_segments_are_refused)
+{ std::uint8_t first[64];
+  std::uint8_t other[64];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(!arena.add_segment(32u, other, sizeof other));
+  CHECK(!arena.add_segment(0u, other, sizeof other));
+  CHECK(!arena.add_segment(slot, nullptr, sizeof other));
+  CHECK(!arena.add_segment(slot, other, 0u));
+  CHECK(!arena.add_segment(~std::uint64_t{0}, other, sizeof other));
+  CHECK_EQ(arena.segments(), 1u);
+  for (std::uint32_t index = 1u; index < ClientBlobArena::max_segments; index++)
+      CHECK(arena.add_segment(slot * index, other, sizeof other));
+  CHECK_EQ(arena.segments(), ClientBlobArena::max_segments);
+  CHECK(!arena.add_segment(slot * ClientBlobArena::max_segments, other, sizeof other));
+  CHECK(arena.invariants_hold()); }
+
+TEST(client_blob_arena, lending_again_drops_every_segment_and_region)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  std::uint8_t region[32];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  CHECK(arena.add_region(slot * 2u, region, sizeof region));
+  CHECK(arena.take(8u).taken());
+  arena.lend(second, sizeof second);
+  CHECK_EQ(arena.segments(), 1u);
+  CHECK_EQ(arena.used(), 0u);
+  CHECK_EQ(arena.set_aside_bytes(), 0u);
+  CHECK_EQ(arena.peak_ring(), 0u);
+  CHECK(arena.take(8u).data() == second);
+  CHECK(arena.invariants_hold()); }
+
+TEST(client_blob_arena, fits_places_each_blob_in_a_segment_of_its_own_by_size)
+{ std::uint8_t first[64];
+  std::uint8_t second[32];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  const std::uint64_t one[] = {64u};
+  const std::uint64_t two[] = {40u, 32u};
+  const std::uint64_t three[] = {40u, 40u};
+  const std::uint64_t none[] = {0u, 0u};
+  const std::uint64_t huge[] = {~std::uint64_t{0}};
+  CHECK(arena.fits(one, 1u));
+  CHECK(arena.fits(two, 2u));
+  CHECK(!arena.fits(three, 2u));
+  CHECK(arena.fits(none, 2u));
+  CHECK(!arena.fits(huge, 1u));
+  CHECK(arena.fits(nullptr, 0u)); }
+
+TEST(client_blob_arena, fits_counts_what_earlier_blobs_of_the_same_command_will_take)
+{ std::uint8_t first[64];
+  ClientBlobArena arena(first, sizeof first);
+  const std::uint64_t each[] = {32u, 32u};
+  const std::uint64_t over[] = {32u, 32u, 1u};
+  CHECK(arena.fits(each, 2u));
+  CHECK(!arena.fits(over, 3u));
+  CHECK(arena.take(1u).taken());
+  CHECK(!arena.fits(each, 2u)); }
+
+TEST(client_blob_arena, a_pointer_is_held_in_any_segment_or_region_and_named_by_its_arena_offset)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  std::uint8_t region[128];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  CHECK(arena.add_region(slot * 3u, region, sizeof region));
+  std::uint64_t offset = 999u;
+  CHECK(arena.holds(first + 10, 4u, offset));
+  CHECK_EQ(offset, 10u);
+  CHECK(arena.holds(second + 60, 4u, offset));
+  CHECK_EQ(offset, slot + 60u);
+  CHECK(arena.holds(region + 100, 28u, offset));
+  CHECK_EQ(offset, slot * 3u + 100u);
   offset = 999u;
-  CHECK(!arena.holds(block + 40, 25u, offset));
-  CHECK(!arena.holds(block - 1, 2u, offset));
-  CHECK(!arena.holds(block + 64, 1u, offset));
-  CHECK(!arena.holds(block + 65, 0u, offset));
-  CHECK(!arena.holds(block + 65, 1u, offset));
-  CHECK(!arena.holds(block + 8, 0u, offset));
-  CHECK(!arena.holds(memory, 8u, offset));
-  CHECK_EQ(offset, 999u);
-  ClientBlobArena none;
-  CHECK(!none.holds(block, 1u, offset));
-  arena.lend(nullptr, 64u);
-  CHECK(!arena.holds(block, 1u, offset));
+  CHECK(!arena.holds(region + 100, 29u, offset));
+  CHECK(!arena.holds(region, 0u, offset));
+  CHECK(!arena.holds(second + 64, 1u, offset));
   CHECK_EQ(offset, 999u); }
 
-TEST(client_blob_arena, a_run_batch_retires_the_leases_taken_before_it)
-{ std::uint8_t block[100];
-  ClientBlobArena arena(block, sizeof block);
-  CHECK(arena.take(30u).taken());
-  arena.seal();
-  arena.mark(1u);
-  CHECK(arena.take(30u).taken());
-  arena.seal();
-  arena.mark(2u);
-  CHECK_EQ(arena.used(), 60u);
-  arena.retire_through(1u);
-  CHECK_EQ(arena.used(), 30u);
-  arena.retire_through(1u);
-  CHECK_EQ(arena.used(), 30u);
-  arena.retire_through(2u);
-  CHECK_EQ(arena.used(), 0u);
+TEST(client_blob_arena, regions_are_counted_as_set_aside_and_are_never_leased_from)
+{ std::uint8_t first[64];
+  std::uint8_t region[128];
+  std::uint8_t more[32];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_region(slot, region, sizeof region));
+  CHECK(arena.add_region(slot * 2u, more, sizeof more));
+  CHECK_EQ(arena.set_aside_bytes(), 160u);
+  CHECK_EQ(arena.lent(), 64u + 160u);
+  CHECK_EQ(arena.ring_bytes(), 64u);
+  CHECK(!arena.take(65u).taken());
+  CHECK(!arena.remove_region(slot * 5u));
+  CHECK(arena.remove_region(slot));
+  CHECK_EQ(arena.set_aside_bytes(), 32u);
   CHECK(arena.invariants_hold()); }
 
-TEST(client_blob_arena, a_lease_wraps_to_the_start_once_the_oldest_are_retired)
-{ std::uint8_t block[100];
-  ClientBlobArena arena(block, sizeof block);
-  CHECK(arena.take(40u).taken());
-  arena.seal();
-  arena.mark(1u);
-  CHECK(arena.take(40u).taken());
-  arena.seal();
-  arena.mark(2u);
-  CHECK(!arena.take(30u).taken());
-  CHECK_EQ(arena.room(), 20u);
-  arena.retire_through(1u);
-  CHECK_EQ(arena.room(), 40u);
-  const ClientBlobLease wrapped = arena.take(30u);
-  CHECK(wrapped.taken());
-  CHECK_EQ(wrapped.offset(), 0u);
-  CHECK(wrapped.data() == block);
-  CHECK_EQ(arena.used(), 70u);
-  CHECK_EQ(arena.room(), 10u);
-  CHECK(!arena.take(11u).taken());
-  CHECK(arena.invariants_hold());
-  arena.seal();
-  arena.mark(3u);
-  arena.retire_through(2u);
-  CHECK_EQ(arena.used(), 30u);
-  CHECK(arena.invariants_hold());
-  arena.retire_through(3u);
-  CHECK_EQ(arena.used(), 0u);
+TEST(client_blob_arena, a_region_may_not_overlap_a_segment_a_region_or_wrap)
+{ std::uint8_t first[64];
+  std::uint8_t region[64];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(!arena.add_region(16u, region, sizeof region));
+  CHECK(arena.add_region(slot, region, sizeof region));
+  CHECK(!arena.add_region(slot + 32u, region, sizeof region));
+  CHECK(!arena.add_region(slot, region, sizeof region));
+  CHECK(!arena.add_region(slot * 2u, nullptr, 8u));
+  CHECK(!arena.add_region(slot * 2u, region, 0u));
+  CHECK(!arena.add_region(~std::uint64_t{0}, region, sizeof region));
+  CHECK(!arena.add_segment(slot, first, sizeof first));
+  for (std::uint32_t index = 1u; index < ClientBlobArena::max_regions; index++)
+      CHECK(arena.add_region(slot * (index + 1u), region, sizeof region));
+  CHECK(!arena.add_region(slot * (ClientBlobArena::max_regions + 1u), region, sizeof region));
   CHECK(arena.invariants_hold()); }
 
-TEST(client_blob_arena, a_mark_on_the_next_lap_retires_the_rest_of_the_last)
-{ std::uint8_t block[100];
-  ClientBlobArena arena(block, sizeof block);
-  CHECK(arena.take(60u).taken());
+TEST(client_blob_arena, the_peak_is_the_most_leased_across_all_segments_at_once)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_segment(slot, second, sizeof second));
+  CHECK(arena.take(48u).taken());
+  CHECK(arena.take(48u).taken());
+  CHECK_EQ(arena.peak_ring(), 96u);
   arena.seal();
   arena.mark(1u);
-  CHECK(arena.take(10u).taken());
   arena.retire_through(1u);
-  CHECK(arena.take(20u).taken());
-  CHECK(arena.take(50u).taken());
-  arena.seal();
-  arena.mark(2u);
-  CHECK_EQ(arena.used(), 80u);
-  CHECK(arena.invariants_hold());
-  arena.retire_through(2u);
-  CHECK_EQ(arena.used(), 0u);
-  CHECK_EQ(arena.room(), 100u);
-  CHECK(arena.invariants_hold()); }
-
-TEST(client_blob_arena, a_batch_that_took_nothing_or_had_no_slot_joins_the_newest_mark)
-{ std::uint8_t block[1024];
-  ClientBlobArena arena(block, sizeof block);
-  CHECK(arena.take(10u).taken());
-  arena.seal();
-  arena.mark(1u);
-  arena.mark(2u);
-  arena.retire_through(1u);
-  CHECK_EQ(arena.used(), 10u);
-  arena.retire_through(2u);
-  CHECK_EQ(arena.used(), 0u);
-  for (std::uint64_t fence = 3u; fence < 3u + ClientBlobArena::max_marks + 2u; fence++) {
-      CHECK(arena.take(1u).taken());
-      arena.seal();
-      arena.mark(fence);
-  }
-  const std::uint64_t last = 3u + ClientBlobArena::max_marks + 1u;
-  arena.retire_through(last - 2u);
-  CHECK(arena.used() >= 2u);
-  arena.retire_through(last);
-  CHECK_EQ(arena.used(), 0u);
-  CHECK(arena.invariants_hold()); }
-
-TEST(client_blob_arena, the_first_lease_of_a_lap_given_back_undoes_the_wrap)
-{ std::uint8_t block[100];
-  ClientBlobArena arena(block, sizeof block);
-  CHECK(arena.take(50u).taken());
-  arena.seal();
-  arena.mark(1u);
-  CHECK(arena.take(30u).taken());
-  arena.retire_through(1u);
-  const ClientBlobLease wrapped = arena.take(40u);
-  CHECK_EQ(wrapped.offset(), 0u);
-  arena.give_back(wrapped);
-  CHECK(arena.invariants_hold());
-  CHECK_EQ(arena.used(), 30u);
-  const ClientBlobLease above = arena.take(20u);
-  CHECK_EQ(above.offset(), 80u);
-  CHECK(arena.invariants_hold()); }
-
-TEST(client_blob_arena, room_is_not_set_aside_where_a_lease_still_lives)
-{ std::uint8_t block[100];
-  ClientBlobArena arena(block, sizeof block);
-  CHECK(arena.take(70u).taken());
-  arena.seal();
-  arena.mark(1u);
-  CHECK(!arena.set_aside(40u).taken());
-  CHECK(arena.take(10u).taken());
-  arena.seal();
-  arena.mark(2u);
-  arena.retire_through(1u);
-  CHECK(arena.take(25u).taken());
-  CHECK(!arena.set_aside(21u).taken());
-  const ClientBlobLease aside = arena.set_aside(20u);
-  CHECK(aside.taken());
-  CHECK_EQ(aside.offset(), 80u);
-  CHECK(arena.invariants_hold());
-  arena.restore(aside);
-  CHECK(arena.invariants_hold()); }
+  CHECK(arena.take(8u).taken());
+  CHECK_EQ(arena.peak_ring(), 96u); }

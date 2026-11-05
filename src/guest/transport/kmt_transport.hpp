@@ -26,6 +26,8 @@
 
 namespace av {
 
+class KmtBlobArena;
+
 class BlockSource;
 class ContextViewsRecord;
 
@@ -82,7 +84,10 @@ public:
     TransportResult send_async(uint32_t command_id, WireWriter &writer) override;
     TransportResult send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply) override;
     void            end_call() override;
-    [[nodiscard]] bool make_room_for_blobs(size_t bytes) override;
+    [[nodiscard]] bool make_room_for_blobs(const uint64_t *sizes, uint32_t count) override;
+    ClientBlobLease    open_region(uint64_t bytes) override;
+    void               close_region(const ClientBlobLease &region) override;
+    void               attach_arena(KmtBlobArena *arena);
     const TransferRoom &room() const override;
     void                note(ChannelCounter counter, uint64_t amount) override;
     TransportResult send_batch(const uint8_t *framed, size_t length, WireReader &reply);
@@ -178,6 +183,7 @@ private:
     uint64_t         answered_fence_;
     WireArena        decode_arena_;
     ClientBlobArena  blobs_;
+    KmtBlobArena    *arena_;
     SpillBlock       spill_;
     SpillBlock       answer_;
     ChannelStats     stats_;

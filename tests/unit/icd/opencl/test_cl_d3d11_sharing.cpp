@@ -60,7 +60,7 @@ public:
         rig_.d3d11().name_resource(&strangers_, &stranger_device_, small_buffer, buffer_bytes_,
                                    sizeof buffer_bytes_, 64u, 64u);
         if (rig_.loader().load() != FakeClLoader::Load::kept) return;
-        rig_.host().blob_import(0u, 0x77u);
+        rig_.host().arena_import(0x77u, 3u);
         rig_.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
         rig_.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
         rig_.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);
@@ -87,7 +87,7 @@ public:
 
     cl_context create(void *d3d11_device, cl_int &error)
     {
-        rig_.host().blob_import(0u, 0x78u);
+        rig_.host().arena_import(0x78u, 3u);
         rig_.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
         rig_.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
         rig_.host().cl_handle(host_context, CL_SUCCESS);
@@ -270,7 +270,7 @@ TEST(cl_d3d11_sharing, a_context_may_share_with_opengl_and_direct3d_11_both)
       reinterpret_cast<cl_context_properties>(&window_dc),
       static_cast<cl_context_properties>(ClIcdRoot::d3d11_context_device),
       reinterpret_cast<cl_context_properties>(shared.d3d_device()), 0};
-  rig.host().blob_import(0u, 0x79u);
+  rig.host().arena_import(0x79u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context + 1u, CL_SUCCESS);

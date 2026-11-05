@@ -105,8 +105,8 @@ TEST(channel_stats_observe, reads_the_arena_into_the_three_gauges)
   CHECK_EQ(value_of(stats, ChannelCounter::arena_set_aside_bytes), arena.set_aside_bytes());
   const av::ClientBlobLease lease = arena.take(1024u);
   CHECK(lease.taken());
-  const av::ClientBlobLease aside = arena.set_aside(512u);
-  CHECK(aside.taken());
+  std::uint8_t region[512];
+  CHECK(arena.add_region(std::uint64_t{1} << 26u, region, sizeof region));
   stats.observe(arena);
   CHECK(arena.peak_ring() >= 1024u);
   CHECK_EQ(value_of(stats, ChannelCounter::arena_peak_ring_bytes), arena.peak_ring());

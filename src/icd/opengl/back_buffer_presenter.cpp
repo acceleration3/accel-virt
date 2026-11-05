@@ -33,7 +33,7 @@ static_assert(BackBufferPresenter::max_edge * 4u + TransferRoom::command_bytes <
 BackBufferPresenter::BackBufferPresenter(BlockSource &memory, DriverLog &log)
     : memory_(memory), lines_(log), window_(nullptr), format_(0u, 0u, false, false, 0u), width_(0u), height_(0u),
       framebuffers_{}, texture_(0u), renderbuffers_{}, pixels_(nullptr), front_(), capacity_(0u), refusal_logged_(),
-      loop_(nullptr), arena_(nullptr), room_(), pending_(slot_count), pending_chained_(false), chained_(),
+      loop_(nullptr), room_(), pending_(slot_count), pending_chained_(false), chained_(),
       chain_refused_(false)
 {
     AV_SCOPE("BackBufferPresenter::BackBufferPresenter");
@@ -201,8 +201,8 @@ void BackBufferPresenter::report(StateWriter &writer, uint32_t index) const
 bool BackBufferPresenter::invariants_hold() const
 {
     AV_SCOPE("BackBufferPresenter::invariants_hold");
-    if (pending_ > slot_count || room_.taken() != (arena_ != nullptr)) return false;
-    if (pending_ != slot_count && !room_.taken() && !pending_chained_) return false;
+    if (pending_ > slot_count) return false;
+    if (pending_ != slot_count && !room_.held() && !pending_chained_) return false;
     if (pending_chained_ && (pending_ == slot_count || !chained_.opened())) return false;
     if (!chained_.invariants_hold()) return false;
     const bool multisampled = format_.samples() != 0u;
@@ -358,23 +358,17 @@ bool BackBufferPresenter::reserve_room(ClientTransport &wire, GlPresentQueue &lo
 {
     AV_SCOPE("BackBufferPresenter::reserve_room");
     const size_t wanted = frame_bytes() * slot_count;
-    if (room_.taken() && room_.bytes() == wanted) return true;
+    if (room_.held() && room_.bytes() == wanted) return true;
     loop_ = &loop;
     settle();
     give_room_back();
-    ClientBlobArena &arena = wire.blobs();
-    room_ = arena.set_aside(wanted);
-    if (!room_.taken()) return false;
-    arena_ = &arena;
-    return true;
+    return room_.open(wire, wanted);
 }
 
 void BackBufferPresenter::give_room_back()
 {
     AV_SCOPE("BackBufferPresenter::give_room_back");
-    if (arena_ != nullptr) arena_->restore(room_);
-    arena_ = nullptr;
-    room_ = ClientBlobLease();
+    room_.close();
 }
 
 void BackBufferPresenter::settle() const
@@ -386,7 +380,7 @@ void BackBufferPresenter::settle() const
 uint8_t *BackBufferPresenter::room_pixels(uint32_t slot) const
 {
     AV_SCOPE("BackBufferPresenter::room_pixels");
-    return static_cast<uint8_t *>(room_.data()) + slot * frame_bytes();
+    return room_.view() + slot * frame_bytes();
 }
 
 size_t BackBufferPresenter::frame_bytes() const

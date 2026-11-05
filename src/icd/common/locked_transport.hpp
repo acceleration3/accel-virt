@@ -23,7 +23,9 @@ public:
     void             end_call() override;
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;
-    [[nodiscard]] bool make_room_for_blobs(size_t bytes) override;
+    [[nodiscard]] bool make_room_for_blobs(const uint64_t *sizes, uint32_t count) override;
+    ClientBlobLease    open_region(uint64_t bytes) override;
+    void               close_region(const ClientBlobLease &region) override;
     const TransferRoom &room() const override;
     void note(ChannelCounter counter, uint64_t amount) override;
 

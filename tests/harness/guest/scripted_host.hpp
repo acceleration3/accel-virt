@@ -62,6 +62,7 @@ public:
     void vk_memory_requirements(std::uint32_t memory_types);
     void vk_memory_properties(std::uint32_t count, std::uint32_t host_visible);
     void blob_import(std::uint32_t status, std::uint64_t memory);
+    void arena_import(std::uint64_t memory, std::uint32_t segments);
     void shared_object(std::uint32_t status, std::uint64_t wire_handle);
     void vk_queue_families(std::uint32_t count);
     void cl_result(std::int32_t result);

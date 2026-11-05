@@ -55,7 +55,7 @@ public:
     d3d::D3dCommandStream &stream();
     ThreadLock            &lock();
     d3d11::QueryResults   &query_results();
-    uint8_t               *arena_view() const;
+    bool                   has_arena() const;
     uint64_t               arena_bytes() const;
     ClientBlobArena       &blobs();
     KmtTransport          &transport();

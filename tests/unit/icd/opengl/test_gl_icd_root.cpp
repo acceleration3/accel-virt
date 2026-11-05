@@ -320,7 +320,7 @@ TEST(gl_icd_root, a_make_that_fails_answers_why_and_leaves_the_context_to_retry)
   rig.platform().fail_allocation_at(1u);
   CHECK(rig.root().set_context(rig.dc(), handle, nullptr) == nullptr);
   check_error(rig, Root::error_not_enough_memory);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 2u);
   rig.kmt().withhold_answer_at(2u);
   CHECK(rig.root().set_context(rig.dc(), handle, nullptr) == nullptr);
   check_error(rig, Root::error_invalid_operation);
@@ -796,12 +796,12 @@ TEST(gl_icd_root, a_create_with_attributes_answers_the_arb_errors)
   const std::int32_t core[] = {0x2091, 4, 0x2092, 6, 0x9126, 1, 0};
   CHECK(create(rig.other_dc(), nullptr, core) == nullptr);
   check_error(rig, Root::error_invalid_pixel_format);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 2u);
   rig.kmt().withhold_answer_at(2u);
   CHECK(create(rig.dc(), nullptr, core) == nullptr);
   check_error(rig, Root::error_invalid_version_arb);
   const std::int32_t compatibility[] = {0x2091, 4, 0x2092, 6, 0x9126, 2, 0};
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 2u);
   rig.kmt().withhold_answer_at(2u);
   CHECK(create(rig.dc(), nullptr, compatibility) == nullptr);
   check_error(rig, Root::error_invalid_profile_arb);

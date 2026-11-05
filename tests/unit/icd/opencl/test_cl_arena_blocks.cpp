@@ -52,7 +52,7 @@ TEST(cl_arena_blocks, lends_nothing_until_it_is_given_an_arena)
 
 TEST(cl_arena_blocks, a_block_is_the_arena_s_own_memory_at_the_offset_it_answered)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(0u, arena, sizeof arena);
   CHECK(blocks.ready());
   std::uint64_t first = 0xEEu;
   CHECK(blocks.take(128u, first));
@@ -68,7 +68,7 @@ TEST(cl_arena_blocks, a_block_is_the_arena_s_own_memory_at_the_offset_it_answere
 
 TEST(cl_arena_blocks, reading_past_a_block_or_outside_every_block_answers_nothing)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(0u, arena, sizeof arena);
   std::uint64_t taken = 0u;
   CHECK(blocks.take(128u, taken));
   CHECK(blocks.at(taken, 128u) == arena);
@@ -80,7 +80,7 @@ TEST(cl_arena_blocks, reading_past_a_block_or_outside_every_block_answers_nothin
 
 TEST(cl_arena_blocks, a_block_given_back_is_handed_out_again)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(0u, arena, sizeof arena);
   std::uint64_t first = 0u;
   std::uint64_t second = 0u;
   CHECK(blocks.take(128u, first));
@@ -107,7 +107,7 @@ TEST(cl_arena_blocks, a_block_given_back_is_handed_out_again)
 
 TEST(cl_arena_blocks, an_arena_with_no_room_refuses_rather_than_overlapping_what_is_live)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, 2u * 4096u);
+  blocks.lend(0u, arena, 2u * 4096u);
   std::uint64_t first = 0u;
   std::uint64_t second = 0u;
   std::uint64_t third = 0xEEu;
@@ -119,7 +119,7 @@ TEST(cl_arena_blocks, an_arena_with_no_room_refuses_rather_than_overlapping_what
   CHECK(blocks.invariants_hold());
 
   ClArenaBlocks empty(platform, lock);
-  empty.lend(arena, 2u * 4096u);
+  empty.lend(0u, arena, 2u * 4096u);
   std::uint64_t huge = 0xEEu;
   CHECK(!empty.take(3u * 4096u, huge));
   CHECK(!empty.take(~std::uint64_t{0}, huge));
@@ -129,7 +129,7 @@ TEST(cl_arena_blocks, an_arena_with_no_room_refuses_rather_than_overlapping_what
 
 TEST(cl_arena_blocks, a_block_of_nothing_is_not_a_block)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(0u, arena, sizeof arena);
   std::uint64_t offset = 0xEEu;
   CHECK(!blocks.take(0u, offset));
   CHECK_EQ(offset, 0xEEu);
@@ -138,7 +138,7 @@ TEST(cl_arena_blocks, a_block_of_nothing_is_not_a_block)
 
 TEST(cl_arena_blocks, backs_a_block_on_every_page_of_the_arena)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(roomy, sizeof roomy);
+  blocks.lend(0u, roomy, sizeof roomy);
   std::uint64_t offset = 0u;
   for (std::uint32_t index = 0u; index < many; ++index) {
       CHECK(blocks.take(16u, offset));
@@ -153,7 +153,7 @@ TEST(cl_arena_blocks, backs_a_block_on_every_page_of_the_arena)
 
 TEST(cl_arena_blocks, no_memory_for_a_row_refuses_and_keeps_every_block)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(roomy, sizeof roomy);
+  blocks.lend(0u, roomy, sizeof roomy);
   std::uint64_t offset = 0u;
   for (std::uint32_t index = 0u; index < 8u; ++index) CHECK(blocks.take(16u, offset));
   platform.fail_allocation_at(1u);
@@ -167,11 +167,11 @@ TEST(cl_arena_blocks, no_memory_for_a_row_refuses_and_keeps_every_block)
 
 TEST(cl_arena_blocks, a_new_arena_forgets_every_block_of_the_old_one)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(0u, arena, sizeof arena);
   std::uint64_t taken = 0u;
   CHECK(blocks.take(128u, taken));
   CHECK_EQ(blocks.live(), 1u);
-  blocks.lend(nullptr, 0u);
+  blocks.lend(0u, nullptr, 0u);
   CHECK(!blocks.ready());
   CHECK_EQ(blocks.live(), 0u);
   CHECK(blocks.at(taken, 128u) == nullptr);
@@ -180,7 +180,7 @@ TEST(cl_arena_blocks, a_new_arena_forgets_every_block_of_the_old_one)
 TEST(cl_arena_blocks, the_invariant_catches_the_states_it_is_there_to_catch)
 { const auto broken = [](void (*corrupt)(ClArenaBlocks &)) {
       ClArenaBlocks blocks(platform, lock);
-      blocks.lend(arena, sizeof arena);
+      blocks.lend(0u, arena, sizeof arena);
       std::uint64_t first = 0u;
       std::uint64_t second = 0u;
       CHECK(blocks.take(128u, first));
@@ -196,7 +196,7 @@ TEST(cl_arena_blocks, the_invariant_catches_the_states_it_is_there_to_catch)
 
 TEST(cl_arena_blocks, a_read_of_no_bytes_names_nothing)
 { ClArenaBlocks blocks(platform, lock);
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(0u, arena, sizeof arena);
   std::uint64_t taken = 0u;
   CHECK(blocks.take(128u, taken));
   CHECK(blocks.at(taken, 0u) == nullptr);
@@ -205,7 +205,7 @@ TEST(cl_arena_blocks, a_read_of_no_bytes_names_nothing)
 TEST(cl_arena_blocks, every_call_holds_the_lock_and_lets_it_go)
 { ClArenaBlocks       blocks(platform, lock);
   const std::uint32_t before = lock.acquisitions();
-  blocks.lend(arena, sizeof arena);
+  blocks.lend(0u, arena, sizeof arena);
   std::uint64_t offset = 0u;
   CHECK(blocks.take(4096u, offset));
   CHECK(blocks.ready());
@@ -215,3 +215,29 @@ TEST(cl_arena_blocks, every_call_holds_the_lock_and_lets_it_go)
   CHECK(blocks.invariants_hold());
   CHECK_EQ(lock.acquisitions(), before + 7u);
   CHECK(!lock.held()); }
+
+TEST(cl_arena_blocks, blocks_lent_from_a_region_are_named_by_arena_offsets_and_resolve_back)
+{ const std::uint64_t base = std::uint64_t{3} << 26u;
+  ClArenaBlocks blocks(platform, lock);
+  blocks.lend(base, arena, sizeof arena);
+  std::uint64_t first = 0u;
+  std::uint64_t second = 0u;
+  CHECK(blocks.take(4096u, first));
+  CHECK(blocks.take(128u, second));
+  CHECK_EQ(first, base);
+  CHECK_EQ(second, base + 4096u);
+  CHECK(blocks.at(first, 4096u) == arena);
+  CHECK(blocks.at(second, 128u) == arena + 4096u);
+  CHECK(blocks.at(second - 4096u, 1u) == arena);
+  CHECK(blocks.at(base - 1u, 1u) == nullptr);
+  CHECK(blocks.at(0u, 1u) == nullptr);
+  CHECK(blocks.at(second, 4097u) == nullptr);
+  blocks.give_back(first);
+  CHECK_EQ(blocks.live(), 1u);
+  blocks.retire(second);
+  blocks.reclaim();
+  CHECK_EQ(blocks.live(), 0u);
+  CHECK(blocks.invariants_hold());
+  blocks.lend(0u, nullptr, 0u);
+  CHECK(!blocks.ready());
+  CHECK(blocks.invariants_hold()); }

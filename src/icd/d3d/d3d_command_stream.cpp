@@ -157,11 +157,25 @@ bool D3dCommandStream::room_for(size_t wanted)
     return true;
 }
 
-bool D3dCommandStream::make_room_for_blobs(size_t bytes)
+bool D3dCommandStream::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
 {
     AV_SCOPE("D3dCommandStream::make_room_for_blobs");
-    if (recording_ != nullptr) return bytes <= recorded_data;
-    return transport_.make_room_for_blobs(bytes);
+    if (recording_ == nullptr) return transport_.make_room_for_blobs(sizes, count);
+    for (uint32_t index = 0u; index < count; index++)
+        if (sizes[index] > recorded_data) return false;
+    return true;
+}
+
+ClientBlobLease D3dCommandStream::open_region(uint64_t bytes)
+{
+    AV_SCOPE("D3dCommandStream::open_region");
+    return recording_ != nullptr ? ClientBlobLease() : transport_.open_region(bytes);
+}
+
+void D3dCommandStream::close_region(const ClientBlobLease &region)
+{
+    AV_SCOPE("D3dCommandStream::close_region");
+    transport_.close_region(region);
 }
 
 const TransferRoom &D3dCommandStream::room() const

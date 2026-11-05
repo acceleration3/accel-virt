@@ -10,7 +10,7 @@
 #include "core/log/keyed_log.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
-#include "icd/common/arena_spans.hpp"
+#include "icd/common/arena_region.hpp"
 
 namespace av::clicd {
 
@@ -22,6 +22,7 @@ GuestClContext::GuestClContext(icd::IcdConnection &connection, BlockSource &memo
       channel_(memory, lines, icd::ChannelShape(SubApi::opencl, ring_order, reply_bytes, staging_bytes, batch_bytes, arena_bytes),
                send_lock),
       blocks_(memory, blocks_lock), orphaned_work_(false), staging_(memory, blocks_lock),
+      region_(),
       svm_(memory), external_(handles, memory, lines), d3d11_(memory), mappings_(memory), properties_(), notify_(), state_(State::created)
 {
     AV_SCOPE("GuestClContext::GuestClContext");
@@ -93,15 +94,14 @@ Status GuestClContext::build(uint32_t gl_share)
     if (link_.acquire() != Status::ok) return Status::not_supported;
     const Status opened = channel_.open(link_.device(), GlContextOptions().sharing(gl_share));
     if (opened != Status::ok) return opened;
-    if (channel_.arena_view() == nullptr) {
+    if (!channel_.has_arena()) {
         lines_.write("buffers are staged; a map copies in and out");
         return Status::ok;
     }
-    icd::ArenaSpans spans(channel_);
-    uint8_t        *staging = nullptr;
-    uint64_t        staged = 0u;
-    if (spans.span(staging_reserve, staging, staged)) staging_.lend(staging, staged);
-    blocks_.lend(channel_.arena_view(), spans.lent());
+    if (region_.open(channel_.wire(), staging_reserve + blocks_reserve)) {
+        staging_.lend(region_.offset(), region_.view(), staging_reserve);
+        blocks_.lend(region_.offset() + staging_reserve, region_.view() + staging_reserve, blocks_reserve);
+    }
     lines_.write("buffers map through the blob arena; no copy");
     return Status::ok;
 }
@@ -114,8 +114,9 @@ void GuestClContext::teardown()
     mappings_.close_all();
     svm_.give_back_all();
     if (state_ == State::made && channel_.opened()) external_.release_all(channel_.wire());
-    blocks_.lend(nullptr, 0u);
-    staging_.lend(nullptr, 0u);
+    blocks_.lend(0u, nullptr, 0u);
+    staging_.lend(0u, nullptr, 0u);
+    region_.close();
     channel_.close(state_ == State::lost);
     link_.release();
 }
@@ -130,7 +131,7 @@ Status GuestClContext::lend(void *address, uint64_t bytes, HostAllocation *&made
 {
     AV_SCOPE("GuestClContext::lend");
     made = nullptr;
-    if (state_ != State::made || channel_.arena_view() == nullptr) return Status::invalid_state;
+    if (state_ != State::made || !channel_.has_arena()) return Status::invalid_state;
     return channel_.adopt_memory(address, bytes, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), this,
                                  made);
 }
@@ -222,7 +223,7 @@ uint32_t GuestClContext::guest_device() const
 bool GuestClContext::has_arena() const
 {
     AV_SCOPE("GuestClContext::has_arena");
-    return channel_.arena_view() != nullptr;
+    return channel_.has_arena();
 }
 
 MappedRegion *GuestClContext::take_mapping(uint64_t buffer, uint64_t host, size_t offset, size_t bytes,

@@ -42,7 +42,7 @@ public:
     explicit Programs(ClIcdRig &rig) : rig_(rig), device_(nullptr), context_(nullptr), program_(nullptr)
     {
         if (rig_.loader().load() != FakeClLoader::Load::kept) return;
-        rig_.host().blob_import(0u, 0x77u);
+        rig_.host().arena_import(0x77u, 3u);
         rig_.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
         rig_.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
         rig_.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);
@@ -50,7 +50,7 @@ public:
         rig_.host().cl_info(CL_SUCCESS, "", 1u);
         cl_uint devices = 0u;
         if (rig_.loader().device_ids(CL_DEVICE_TYPE_GPU, 1u, &device_, &devices) != CL_SUCCESS) return;
-        rig_.host().blob_import(0u, 0x78u);
+        rig_.host().arena_import(0x78u, 3u);
         rig_.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
         rig_.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
         rig_.host().cl_handle(host_context, CL_SUCCESS);

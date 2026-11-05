@@ -32,7 +32,7 @@ public:
         : rig_(), thread_(), owner_(), watcher_(thread_, rig_.log(), rig_.send_lock(), owner_),
           waits_(rig_.kmt(), watcher_)
     {
-        rig_.host().blob_import(0u, 0x77u);
+        rig_.host().arena_import(0x77u, 3u);
         if (wake != 0u) {
             thread_.offer_wake(wake);
             rig_.kmt().accept_wake_events();
@@ -220,7 +220,7 @@ TEST(cl_waits, a_context_hands_the_driver_the_process_s_wake_and_its_waits_are_d
   ClContextRig rig;
   ScriptedThread thread;
   thread.offer_wake(wake);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   av::ObjectStorage<GuestClContext> refused;
   static_cast<void>(refused.construct(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(),
                                       rig.handles()));

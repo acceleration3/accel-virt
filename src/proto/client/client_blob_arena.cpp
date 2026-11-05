@@ -4,41 +4,7 @@
 
 namespace av {
 
-ClientBlobLease::ClientBlobLease() : data_(nullptr), offset_(0u), bytes_(0u)
-{
-    AV_SCOPE("ClientBlobLease::ClientBlobLease");
-}
-
-ClientBlobLease::ClientBlobLease(void *data, uint64_t offset, size_t bytes)
-    : data_(data), offset_(offset), bytes_(bytes)
-    {
-        AV_SCOPE("ClientBlobLease::ClientBlobLease");
-    }
-
-bool     ClientBlobLease::taken() const
-{
-    AV_SCOPE("ClientBlobLease::taken");
-    return data_ != nullptr;
-}
-void    *ClientBlobLease::data() const
-{
-    AV_SCOPE("ClientBlobLease::data");
-    return data_;
-}
-uint64_t ClientBlobLease::offset() const
-{
-    AV_SCOPE("ClientBlobLease::offset");
-    return offset_;
-}
-size_t   ClientBlobLease::bytes() const
-{
-    AV_SCOPE("ClientBlobLease::bytes");
-    return bytes_;
-}
-
-ClientBlobArena::ClientBlobArena()
-    : block_(nullptr), lent_(0u), capacity_(0u), base_(0u), top_(0u), end_(0u), peak_ring_(0u), wrapped_(false), lap_(0u),
-      base_lap_(0u), sealed_(0u), sealed_lap_(0u), marks_{}, first_mark_(0u), mark_count_(0u)
+ClientBlobArena::ClientBlobArena() : segments_{}, regions_{}, count_(0u), current_(0u), peak_ring_(0u)
 {
     AV_SCOPE("ClientBlobArena::ClientBlobArena");
 }
@@ -52,141 +18,241 @@ ClientBlobArena::ClientBlobArena(uint8_t *block, size_t capacity) : ClientBlobAr
 void ClientBlobArena::lend(uint8_t *block, size_t capacity)
 {
     AV_SCOPE("ClientBlobArena::lend");
-    block_ = block;
-    lent_ = block == nullptr ? 0u : capacity;
-    capacity_ = lent_;
+    for (Segment &segment : segments_) {
+        segment.base_ = 0u;
+        segment.ring_.lend(nullptr, 0u);
+    }
+    for (Region &region : regions_) region = Region{0u, nullptr, 0u};
+    count_ = 0u;
+    current_ = 0u;
     peak_ring_ = 0u;
-    empty();
+    if (block != nullptr && capacity != 0u) static_cast<void>(add_segment(0u, block, capacity));
+}
+
+bool ClientBlobArena::add_segment(uint64_t base, uint8_t *block, size_t capacity)
+{
+    AV_SCOPE("ClientBlobArena::add_segment");
+    if (block == nullptr || capacity == 0u || count_ == max_segments || base + capacity < base) return false;
+    if (overlaps(base, capacity)) return false;
+    Segment *free_segment = nullptr;
+    for (Segment &held : segments_)
+        if (!held.ring_.ready()) {
+            free_segment = &held;
+            break;
+        }
+    free_segment->base_ = base;
+    free_segment->ring_.lend(block, capacity);
+    count_++;
+    return true;
+}
+
+bool ClientBlobArena::remove_segment(uint64_t base)
+{
+    AV_SCOPE("ClientBlobArena::remove_segment");
+    for (Segment &held : segments_) {
+        if (!held.ring_.ready() || held.base_ != base || !held.ring_.idle()) continue;
+        held.ring_.lend(nullptr, 0u);
+        held.base_ = 0u;
+        count_--;
+        return true;
+    }
+    return false;
+}
+
+bool ClientBlobArena::add_region(uint64_t base, uint8_t *block, size_t bytes)
+{
+    AV_SCOPE("ClientBlobArena::add_region");
+    if (block == nullptr || bytes == 0u || base + bytes < base || overlaps(base, bytes)) return false;
+    for (Region &held : regions_) {
+        if (held.block_ != nullptr) continue;
+        held = Region{base, block, bytes};
+        return true;
+    }
+    return false;
+}
+
+bool ClientBlobArena::remove_region(uint64_t base)
+{
+    AV_SCOPE("ClientBlobArena::remove_region");
+    for (Region &held : regions_) {
+        if (held.block_ == nullptr || held.base_ != base) continue;
+        held = Region{0u, nullptr, 0u};
+        return true;
+    }
+    return false;
+}
+
+bool ClientBlobArena::overlaps(uint64_t base, size_t bytes) const
+{
+    AV_SCOPE("ClientBlobArena::overlaps");
+    for (const Segment &held : segments_)
+        if (held.ring_.ready() && base < held.base_ + held.ring_.lent() && held.base_ < base + bytes) return true;
+    for (const Region &held : regions_)
+        if (held.block_ != nullptr && base < held.base_ + held.bytes_ && held.base_ < base + bytes) return true;
+    return false;
 }
 
 bool ClientBlobArena::ready() const
 {
     AV_SCOPE("ClientBlobArena::ready");
-    return block_ != nullptr;
+    return count_ != 0u;
+}
+
+ClientBlobArena::Segment *ClientBlobArena::segment_at(uint64_t offset)
+{
+    AV_SCOPE("ClientBlobArena::segment_at");
+    for (Segment &held : segments_)
+        if (held.ring_.ready() && offset >= held.base_ && offset - held.base_ < held.ring_.lent()) return &held;
+    return nullptr;
+}
+
+const ClientBlobArena::Segment *ClientBlobArena::segment_at(uint64_t offset) const
+{
+    AV_SCOPE("ClientBlobArena::segment_at");
+    for (const Segment &held : segments_)
+        if (held.ring_.ready() && offset >= held.base_ && offset - held.base_ < held.ring_.lent()) return &held;
+    return nullptr;
 }
 
 ClientBlobLease ClientBlobArena::take(size_t count)
 {
     AV_SCOPE("ClientBlobArena::take");
-    if (count == 0u || block_ == nullptr) return ClientBlobLease{};
-    if (wrapped_) {
-        if (count > base_ - top_) return ClientBlobLease{};
-    } else if (count > capacity_ - top_) {
-        if (count > base_) return ClientBlobLease{};
-        end_ = top_;
-        top_ = 0u;
-        wrapped_ = true;
-        lap_++;
+    if (count == 0u || count_ == 0u) return ClientBlobLease{};
+    for (uint32_t tried = 0u; tried < max_segments; tried++) {
+        const uint32_t index = (current_ + tried) % max_segments;
+        Segment       &held = segments_[index];
+        if (!held.ring_.ready()) continue;
+        const ClientBlobLease lease = held.ring_.take(count);
+        if (!lease.taken()) continue;
+        current_ = index;
+        const size_t in_use = used();
+        if (in_use > peak_ring_) peak_ring_ = in_use;
+        return ClientBlobLease(lease.data(), held.base_ + lease.offset(), lease.bytes());
     }
-    const size_t at = top_;
-    top_ += count;
-    const size_t in_ring = wrapped_ ? end_ - base_ + top_ : top_ - base_;
-    if (in_ring > peak_ring_) peak_ring_ = in_ring;
-    return ClientBlobLease(block_ + at, at, count);
+    return ClientBlobLease{};
 }
 
 void ClientBlobArena::give_back(const ClientBlobLease &lease)
 {
     AV_SCOPE("ClientBlobArena::give_back");
-    if (!lease.taken() || lease.offset() + lease.bytes() != top_ || (sealed_ == top_ && sealed_lap_ == lap_)) return;
-    top_ = static_cast<size_t>(lease.offset());
-    if (wrapped_ && top_ == 0u) {
-        top_ = end_;
-        wrapped_ = false;
-        lap_--;
-    }
-}
-
-void ClientBlobArena::empty()
-{
-    AV_SCOPE("ClientBlobArena::empty");
-    base_ = top_ = end_ = sealed_ = 0u;
-    wrapped_ = false;
-    base_lap_ = sealed_lap_ = lap_;
-    first_mark_ = mark_count_ = 0u;
+    if (!lease.taken()) return;
+    Segment *const held = segment_at(lease.offset());
+    if (held == nullptr) return;
+    held->ring_.give_back(ClientBlobLease(lease.data(), lease.offset() - held->base_, lease.bytes()));
 }
 
 void ClientBlobArena::seal()
 {
     AV_SCOPE("ClientBlobArena::seal");
-    sealed_ = top_;
-    sealed_lap_ = lap_;
+    for (Segment &held : segments_)
+        if (held.ring_.ready()) held.ring_.seal();
 }
 
 void ClientBlobArena::mark(uint64_t fence)
 {
     AV_SCOPE("ClientBlobArena::mark");
-    if (mark_count_ != 0u) {
-        Mark &newest = marks_[(first_mark_ + mark_count_ - 1u) % max_marks];
-        if ((newest.top_ == sealed_ && newest.lap_ == sealed_lap_) || mark_count_ == max_marks) {
-            newest = Mark{fence, sealed_, sealed_lap_};
-            return;
-        }
-    }
-    marks_[(first_mark_ + mark_count_) % max_marks] = Mark{fence, sealed_, sealed_lap_};
-    mark_count_++;
+    for (Segment &held : segments_)
+        if (held.ring_.ready()) held.ring_.mark(fence);
 }
 
 void ClientBlobArena::retire_through(uint64_t fence)
 {
     AV_SCOPE("ClientBlobArena::retire_through");
-    while (mark_count_ != 0u && marks_[first_mark_].fence_ <= fence) {
-        const Mark &done = marks_[first_mark_];
-        if (done.lap_ != base_lap_) {
-            wrapped_ = false;
-            base_lap_ = done.lap_;
-        }
-        base_ = done.top_;
-        first_mark_ = (first_mark_ + 1u) % max_marks;
-        mark_count_--;
-    }
-    if (!wrapped_ && base_ == top_) empty();
-}
-
-ClientBlobLease ClientBlobArena::set_aside(size_t count)
-{
-    AV_SCOPE("ClientBlobArena::set_aside");
-    const size_t highest = wrapped_ ? end_ : top_;
-    if (count == 0u || block_ == nullptr || count > capacity_ - highest) return ClientBlobLease{};
-    capacity_ -= count;
-    return ClientBlobLease(block_ + capacity_, capacity_, count);
-}
-
-void ClientBlobArena::restore(const ClientBlobLease &aside)
-{
-    AV_SCOPE("ClientBlobArena::restore");
-    if (aside.taken() && aside.offset() == capacity_) capacity_ += aside.bytes();
+    for (Segment &held : segments_)
+        if (held.ring_.ready()) held.ring_.retire_through(fence);
 }
 
 bool ClientBlobArena::holds(const void *bytes, size_t count, uint64_t &offset) const
 {
     AV_SCOPE("ClientBlobArena::holds");
-    if (block_ == nullptr || count == 0u) return false;
-    const uintptr_t into = reinterpret_cast<uintptr_t>(bytes) - reinterpret_cast<uintptr_t>(block_);
-    if (into > lent_ || count > lent_ - into) return false;
-    offset = static_cast<uint64_t>(into);
+    for (const Segment &held : segments_) {
+        uint64_t inside = 0u;
+        if (!held.ring_.ready() || !held.ring_.holds(bytes, count, inside)) continue;
+        offset = held.base_ + inside;
+        return true;
+    }
+    for (const Region &held : regions_) {
+        const uintptr_t into = reinterpret_cast<uintptr_t>(bytes) - reinterpret_cast<uintptr_t>(held.block_);
+        if (held.block_ == nullptr || count == 0u || into > held.bytes_ || count > held.bytes_ - into) continue;
+        offset = held.base_ + into;
+        return true;
+    }
+    return false;
+}
+
+bool ClientBlobArena::fits(const uint64_t *sizes, uint32_t wanted) const
+{
+    AV_SCOPE("ClientBlobArena::fits");
+    size_t rooms[max_segments] = {};
+    for (uint32_t index = 0u; index < max_segments; index++) rooms[index] = segments_[index].ring_.room();
+    for (uint32_t blob = 0u; blob < wanted; blob++) {
+        if (sizes[blob] == 0u) continue;
+        bool placed = false;
+        for (uint32_t index = 0u; index < max_segments && !placed; index++) {
+            if (sizes[blob] > rooms[index]) continue;
+            rooms[index] -= static_cast<size_t>(sizes[blob]);
+            placed = true;
+        }
+        if (!placed) return false;
+    }
     return true;
+}
+
+uint32_t ClientBlobArena::segments() const
+{
+    AV_SCOPE("ClientBlobArena::segments");
+    return count_;
+}
+
+uint64_t ClientBlobArena::segment_base(uint32_t index) const
+{
+    AV_SCOPE("ClientBlobArena::segment_base");
+    return index < max_segments ? segments_[index].base_ : 0u;
+}
+
+size_t ClientBlobArena::segment_bytes(uint32_t index) const
+{
+    AV_SCOPE("ClientBlobArena::segment_bytes");
+    return index < max_segments ? segments_[index].ring_.lent() : 0u;
+}
+
+bool ClientBlobArena::segment_idle(uint32_t index) const
+{
+    AV_SCOPE("ClientBlobArena::segment_idle");
+    return index < max_segments && segments_[index].ring_.idle();
 }
 
 size_t ClientBlobArena::used() const
 {
     AV_SCOPE("ClientBlobArena::used");
-    return wrapped_ ? end_ - base_ + top_ : top_ - base_;
+    size_t total = 0u;
+    for (const Segment &held : segments_) total += held.ring_.used();
+    return total;
 }
 
 size_t ClientBlobArena::room() const
 {
     AV_SCOPE("ClientBlobArena::room");
-    if (block_ == nullptr) return 0u;
-    if (wrapped_) return base_ - top_;
-    const size_t above = capacity_ - top_;
-    return above > base_ ? above : base_;
+    size_t most = 0u;
+    for (const Segment &held : segments_) {
+        const size_t here = held.ring_.room();
+        if (here > most) most = here;
+    }
+    return most;
+}
+
+size_t ClientBlobArena::ring_bytes() const
+{
+    AV_SCOPE("ClientBlobArena::ring_bytes");
+    size_t total = 0u;
+    for (const Segment &held : segments_) total += held.ring_.lent();
+    return total;
 }
 
 size_t ClientBlobArena::lent() const
 {
     AV_SCOPE("ClientBlobArena::lent");
-    return lent_;
+    return ring_bytes() + set_aside_bytes();
 }
 
 size_t ClientBlobArena::peak_ring() const
@@ -198,18 +264,43 @@ size_t ClientBlobArena::peak_ring() const
 size_t ClientBlobArena::set_aside_bytes() const
 {
     AV_SCOPE("ClientBlobArena::set_aside_bytes");
-    return lent_ - capacity_;
+    size_t total = 0u;
+    for (const Region &held : regions_) total += held.bytes_;
+    return total;
 }
 
 bool ClientBlobArena::invariants_hold() const
 {
     AV_SCOPE("ClientBlobArena::invariants_hold");
-    const bool laid = wrapped_ ? top_ <= base_ && base_ <= end_ && end_ <= capacity_
-                               : base_ <= top_ && top_ <= capacity_;
-    const bool sealed = sealed_lap_ == base_lap_ ? base_ <= sealed_ && sealed_ <= (wrapped_ ? end_ : top_)
-                                                 : wrapped_ && sealed_lap_ == lap_ && sealed_ <= top_;
-    return laid && sealed && capacity_ <= lent_ && (block_ != nullptr || lent_ == 0u) && peak_ring_ <= lent_ && mark_count_ <= max_marks &&
-           first_mark_ < max_marks && (wrapped_ ? lap_ == base_lap_ + 1u : lap_ == base_lap_);
+    uint32_t live = 0u;
+    for (uint32_t index = 0u; index < max_segments; index++) {
+        const Segment &held = segments_[index];
+        if (!held.ring_.invariants_hold()) return false;
+        if (!held.ring_.ready()) {
+            if (held.base_ != 0u) return false;
+            continue;
+        }
+        live++;
+        for (uint32_t other = index + 1u; other < max_segments; other++) {
+            const Segment &next = segments_[other];
+            if (next.ring_.ready() && held.base_ < next.base_ + next.ring_.lent() &&
+                next.base_ < held.base_ + held.ring_.lent())
+                return false;
+        }
+    }
+    for (uint32_t index = 0u; index < max_regions; index++) {
+        const Region &held = regions_[index];
+        if ((held.block_ == nullptr) != (held.bytes_ == 0u)) return false;
+        if (held.block_ == nullptr) continue;
+        for (uint32_t other = index + 1u; other < max_regions; other++)
+            if (regions_[other].block_ != nullptr && held.base_ < regions_[other].base_ + regions_[other].bytes_ &&
+                regions_[other].base_ < held.base_ + held.bytes_)
+                return false;
+        for (const Segment &ring : segments_)
+            if (ring.ring_.ready() && held.base_ < ring.base_ + ring.ring_.lent() && ring.base_ < held.base_ + held.bytes_)
+                return false;
+    }
+    return live == count_ && current_ < max_segments;
 }
 
 }

@@ -17,6 +17,8 @@
 #include "icd/opencl/mapped_region.hpp"
 #include "icd/opencl/svm_table.hpp"
 
+#include "icd/common/arena_region.hpp"
+
 #include <stdint.h>
 
 namespace av {
@@ -45,8 +47,9 @@ public:
     static constexpr uint32_t reply_bytes = 1024u * 1024u;
     static constexpr size_t   staging_bytes = 256u * 1024u;
     static constexpr size_t   batch_bytes = 2u * staging_bytes;
-    static constexpr uint64_t arena_bytes = uint64_t{32} << 20u;
+    static constexpr uint64_t arena_bytes = uint64_t{16} << 20u;
     static constexpr uint64_t staging_reserve = uint64_t{8} << 20u;
+    static constexpr uint64_t blocks_reserve = uint64_t{8} << 20u;
 
     GuestClContext(icd::IcdConnection &connection, BlockSource &memory, ThreadLock &send_lock,
                    ThreadLock &blocks_lock, KeyedLog &lines, icd::SharedHandles &handles);
@@ -110,6 +113,7 @@ private:
     ClArenaBlocks                        blocks_;
     bool                                 orphaned_work_;
     ClArenaBlocks                        staging_;
+    icd::ArenaRegion                     region_;
     SvmTable                             svm_;
     ClExternalMemory                     external_;
     ClD3d11Objects                       d3d11_;

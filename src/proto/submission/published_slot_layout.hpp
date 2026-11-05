@@ -7,6 +7,7 @@ namespace av {
 
 class PublishedSlotLayout {
 public:
+    static constexpr uint64_t control_bytes = uint64_t{64} << 10u;
     static constexpr uint64_t error_word_bytes = sizeof(uint64_t);
     static constexpr uint32_t slot_bytes = 128u;
     static constexpr uint32_t sequence_at = 0u;
@@ -15,7 +16,7 @@ public:
     static constexpr uint32_t data_bytes = slot_bytes - data_at;
     static constexpr uint64_t unwritten = 0u;
 
-    explicit PublishedSlotLayout(uint64_t arena_bytes);
+    explicit PublishedSlotLayout(uint64_t control_length);
 
     bool     holds_tail() const;
     uint64_t error_word() const;
@@ -23,7 +24,7 @@ public:
     bool     keeps_word_clear(uint64_t offset, uint32_t count) const;
 
 private:
-    uint64_t arena_bytes_;
+    uint64_t control_length_;
 };
 
 }

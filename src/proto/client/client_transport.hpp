@@ -1,6 +1,7 @@
 #ifndef AV_CLIENT_TRANSPORT_HPP
 #define AV_CLIENT_TRANSPORT_HPP
 
+#include "proto/client/client_blob_lease.hpp"
 #include "proto/submission/channel_counter.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -31,7 +32,9 @@ public:
     virtual void end_call() = 0;
     virtual WireArena &decode_arena() = 0;
     virtual ClientBlobArena &blobs() = 0;
-    [[nodiscard]] virtual bool make_room_for_blobs(size_t bytes) = 0;
+    [[nodiscard]] virtual bool make_room_for_blobs(const uint64_t *sizes, uint32_t count) = 0;
+    virtual ClientBlobLease open_region(uint64_t bytes) = 0;
+    virtual void            close_region(const ClientBlobLease &region) = 0;
     virtual const TransferRoom &room() const = 0;
     virtual void note(ChannelCounter counter, uint64_t amount) = 0;
 

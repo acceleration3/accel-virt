@@ -23,7 +23,7 @@ public:
     ClArenaBlocks(const ClArenaBlocks &) = delete;
     ClArenaBlocks &operator=(const ClArenaBlocks &) = delete;
 
-    void lend(uint8_t *base, uint64_t bytes);
+    void lend(uint64_t arena_base, uint8_t *view, uint64_t bytes);
     bool ready() const;
 
     [[nodiscard]] bool take(uint64_t bytes, uint64_t &offset);
@@ -42,6 +42,7 @@ private:
 
     ThreadLock                      &lock_;
     uint8_t                         *base_;
+    uint64_t                         arena_base_;
     uint64_t                         bytes_;
     icd::RangeTable                  blocks_;
     icd::RetireList<uint64_t>        retired_;

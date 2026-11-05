@@ -62,11 +62,25 @@ ClientBlobArena &LockedTransport::blobs()
     return inner_.blobs();
 }
 
-bool LockedTransport::make_room_for_blobs(size_t bytes)
+bool LockedTransport::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
 {
     AV_SCOPE("LockedTransport::make_room_for_blobs");
     const ThreadLockHold hold(lock_);
-    return inner_.make_room_for_blobs(bytes);
+    return inner_.make_room_for_blobs(sizes, count);
+}
+
+ClientBlobLease LockedTransport::open_region(uint64_t bytes)
+{
+    AV_SCOPE("LockedTransport::open_region");
+    const ThreadLockHold hold(lock_);
+    return inner_.open_region(bytes);
+}
+
+void LockedTransport::close_region(const ClientBlobLease &region)
+{
+    AV_SCOPE("LockedTransport::close_region");
+    const ThreadLockHold hold(lock_);
+    inner_.close_region(region);
 }
 
 const TransferRoom &LockedTransport::room() const

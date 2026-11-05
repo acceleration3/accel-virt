@@ -63,7 +63,7 @@ void SlicedBuffers::release()
 icd::StreamMemory *SlicedBuffers::stream_of(uint32_t stream)
 {
     AV_SCOPE("SlicedBuffers::stream_of");
-    if (!granted_ || channel_.arena_view() == nullptr) return nullptr;
+    if (!granted_ || !channel_.has_arena()) return nullptr;
     ObjectStorage<icd::StreamMemory> &made = streams_[stream];
     if (!made.constructed() &&
         made.construct(memory_, channel_, owner_, timeline_, groups_.lock(), clock_, lines_, stream_requests_[stream],

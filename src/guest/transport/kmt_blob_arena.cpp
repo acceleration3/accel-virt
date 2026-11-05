@@ -4,20 +4,15 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/submission/published_slot_layout.hpp"
+#include "proto/wire/guest_bytes.hpp"
 
 namespace av {
 
-namespace {
-
-constexpr uint64_t page_bytes = 4096u;
-
-}
-
 KmtBlobArena::KmtBlobArena(GuestConnection &connection, KmtTransport &transport)
-    : transport_(transport), memory_(connection, transport), bytes_(0u)
-    {
-        AV_SCOPE("KmtBlobArena::KmtBlobArena");
-    }
+    : connection_(connection), transport_(transport), slots_(), control_(), rings_(), regions_(), slots_taken_(false)
+{
+    AV_SCOPE("KmtBlobArena::KmtBlobArena");
+}
 
 KmtBlobArena::~KmtBlobArena()
 {
@@ -25,75 +20,189 @@ KmtBlobArena::~KmtBlobArena()
     static_cast<void>(close());
 }
 
+Status KmtBlobArena::open_control()
+{
+    AV_SCOPE("KmtBlobArena::open_control");
+    if (control_.constructed()) return Status::ok;
+    static_cast<void>(control_.construct(connection_, transport_, slots_));
+    const Status opened = control_.object().open_at(0u, PublishedSlotLayout::control_bytes);
+    if (opened != Status::ok) {
+        control_.destroy();
+        return opened;
+    }
+    ArenaSegment &control = control_.object();
+    volatile unsigned char *const word = control.view() + PublishedSlotLayout(control.bytes()).error_word();
+    for (uint64_t at = 0u; at < PublishedSlotLayout::error_word_bytes; at++) word[at] = 0u;
+    if (!transport_.blobs().add_region(control.base(), control.view(), static_cast<size_t>(control.bytes()))) {
+        static_cast<void>(control.close());
+        control_.destroy();
+        return Status::invalid_state;
+    }
+    slots_taken_ = false;
+    return Status::ok;
+}
+
 Status KmtBlobArena::open(uint64_t bytes)
 {
     AV_SCOPE("KmtBlobArena::open");
-    if (bytes_ != 0u) return Status::invalid_state;
+    if (lending()) return Status::invalid_state;
     if (bytes > max_bytes) return Status::invalid_parameter;
-    const uint64_t pages = (bytes + page_bytes - 1u) / page_bytes;
-    const uint64_t size = pages * page_bytes < default_bytes ? default_bytes : pages * page_bytes;
-    const Status opened = memory_.open(size, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u),
-                                      BlobRole(BlobRole::Kind::arena_segment, 0u));
-    if (opened != Status::ok) return opened;
-    bytes_ = size;
-    const PublishedSlotLayout     tail(size);
-    volatile unsigned char *const word = memory_.view() + tail.error_word();
-    for (uint64_t at = 0u; at < PublishedSlotLayout::error_word_bytes; at++) word[at] = 0u;
-    transport_.blobs().lend(memory_.view(), static_cast<size_t>(tail.error_word()));
+    const Status controlled = open_control();
+    if (controlled != Status::ok) return controlled;
+    uint64_t size = bytes < default_bytes ? default_bytes : bytes;
+    if (size > GuestBytes::slot_bytes) size = GuestBytes::slot_bytes;
+    static_cast<void>(rings_[0].construct(connection_, transport_, slots_));
+    const Status opened = rings_[0].object().open(size);
+    if (opened != Status::ok) {
+        rings_[0].destroy();
+        return opened;
+    }
+    ArenaSegment &ring = rings_[0].object();
+    if (!transport_.blobs().add_segment(ring.base(), ring.view(), static_cast<size_t>(ring.bytes()))) {
+        static_cast<void>(ring.close());
+        rings_[0].destroy();
+        return Status::invalid_state;
+    }
+    transport_.attach_arena(this);
     return Status::ok;
+}
+
+Status KmtBlobArena::settle(bool abandoning)
+{
+    AV_SCOPE("KmtBlobArena::settle");
+    transport_.attach_arena(nullptr);
+    transport_.blobs().lend(nullptr, 0u);
+    Status result = Status::ok;
+    auto   note = [&result](Status status) {
+        if (result == Status::ok) result = status;
+    };
+    for (ObjectStorage<ArenaSegment> &storage : regions_) {
+        if (!storage.constructed()) continue;
+        note(abandoning ? storage.object().abandon() : storage.object().close());
+        storage.destroy();
+    }
+    for (ObjectStorage<ArenaSegment> &storage : rings_) {
+        if (!storage.constructed()) continue;
+        note(abandoning ? storage.object().abandon() : storage.object().close());
+        storage.destroy();
+    }
+    if (control_.constructed()) {
+        note(abandoning ? control_.object().abandon() : control_.object().close());
+        control_.destroy();
+    }
+    slots_taken_ = false;
+    return result;
 }
 
 Status KmtBlobArena::close()
 {
     AV_SCOPE("KmtBlobArena::close");
-    if (bytes_ == 0u) return Status::ok;
-    transport_.blobs().lend(nullptr, 0u);
-    bytes_ = 0u;
-    return memory_.close();
+    return settle(false);
 }
 
 Status KmtBlobArena::abandon()
 {
     AV_SCOPE("KmtBlobArena::abandon");
-    if (bytes_ == 0u) return Status::ok;
-    transport_.blobs().lend(nullptr, 0u);
-    bytes_ = 0u;
-    return memory_.abandon();
+    return settle(true);
 }
 
-bool     KmtBlobArena::lending() const
+Status KmtBlobArena::open_region(uint64_t bytes, ArenaSegment *&region)
+{
+    AV_SCOPE("KmtBlobArena::open_region");
+    region = nullptr;
+    if (!lending() || bytes == 0u || bytes > max_bytes) return Status::invalid_parameter;
+    for (ObjectStorage<ArenaSegment> &storage : regions_) {
+        if (storage.constructed()) continue;
+        static_cast<void>(storage.construct(connection_, transport_, slots_));
+        ArenaSegment &made = storage.object();
+        const Status  opened = made.open(bytes);
+        if (opened != Status::ok) {
+            storage.destroy();
+            return opened;
+        }
+        if (!transport_.blobs().add_region(made.base(), made.view(), static_cast<size_t>(made.bytes()))) {
+            static_cast<void>(made.close());
+            storage.destroy();
+            return Status::no_space;
+        }
+        region = &made;
+        return Status::ok;
+    }
+    return Status::no_space;
+}
+
+Status KmtBlobArena::close_region(uint64_t base)
+{
+    AV_SCOPE("KmtBlobArena::close_region");
+    for (ObjectStorage<ArenaSegment> &storage : regions_) {
+        if (!storage.constructed() || storage.object().base() != base) continue;
+        static_cast<void>(transport_.blobs().remove_region(base));
+        const Status closed = storage.object().close();
+        storage.destroy();
+        return closed;
+    }
+    return Status::not_found;
+}
+
+bool KmtBlobArena::take_query_slots(uint32_t count, uint8_t *&view, uint64_t &offset)
+{
+    AV_SCOPE("KmtBlobArena::take_query_slots");
+    if (!control_.constructed() || slots_taken_) return false;
+    const ArenaSegment       &control = control_.object();
+    const PublishedSlotLayout tail(control.bytes());
+    const uint64_t            at = tail.slots_at(count);
+    if (at == 0u) return false;
+    slots_taken_ = true;
+    view = control.view() + at;
+    offset = control.base() + at;
+    return true;
+}
+
+bool KmtBlobArena::lending() const
 {
     AV_SCOPE("KmtBlobArena::lending");
-    return bytes_ != 0u;
+    return rings_[0].constructed();
 }
+
 uint64_t KmtBlobArena::bytes() const
 {
     AV_SCOPE("KmtBlobArena::bytes");
-    return bytes_;
-}
-
-uint8_t *KmtBlobArena::view() const
-{
-    AV_SCOPE("KmtBlobArena::view");
-    if (bytes_ == 0u) return nullptr;
-    return memory_.view();
+    uint64_t total = control_.constructed() ? control_.object().bytes() : 0u;
+    for (const ObjectStorage<ArenaSegment> &storage : rings_)
+        if (storage.constructed()) total += storage.object().bytes();
+    for (const ObjectStorage<ArenaSegment> &storage : regions_)
+        if (storage.constructed()) total += storage.object().bytes();
+    return total;
 }
 
 uint64_t KmtBlobArena::host_errors() const
 {
     AV_SCOPE("KmtBlobArena::host_errors");
-    if (bytes_ == 0u) return 0u;
-    const auto *const word =
-        reinterpret_cast<const volatile uint64_t *>(memory_.view() + PublishedSlotLayout(bytes_).error_word());
+    if (!control_.constructed()) return 0u;
+    const ArenaSegment &control = control_.object();
+    const auto *const   word = reinterpret_cast<const volatile uint64_t *>(
+        control.view() + PublishedSlotLayout(control.bytes()).error_word());
     return __atomic_load_n(word, __ATOMIC_ACQUIRE);
 }
 
 bool KmtBlobArena::invariants_hold() const
 {
     AV_SCOPE("KmtBlobArena::invariants_hold");
-    if (bytes_ == 0u) return !transport_.blobs().ready();
-    return bytes_ % page_bytes == 0u && bytes_ >= default_bytes && bytes_ <= max_bytes &&
-           transport_.blobs().ready();
+    if (!control_.constructed()) {
+        for (const ObjectStorage<ArenaSegment> &storage : rings_)
+            if (storage.constructed()) return false;
+        return !transport_.blobs().ready();
+    }
+    if (!control_.object().invariants_hold() || control_.object().base() != 0u) return false;
+    uint32_t rings = 0u;
+    for (const ObjectStorage<ArenaSegment> &storage : rings_) {
+        if (!storage.constructed()) continue;
+        if (!storage.object().invariants_hold() || storage.object().bytes() > GuestBytes::slot_bytes) return false;
+        rings++;
+    }
+    for (const ObjectStorage<ArenaSegment> &storage : regions_)
+        if (storage.constructed() && !storage.object().invariants_hold()) return false;
+    return rings == transport_.blobs().segments();
 }
 
 }

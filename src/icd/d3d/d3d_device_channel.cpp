@@ -92,12 +92,28 @@ Status D3dDeviceChannel::execute(const uint8_t *commands, size_t length)
     return Status::ok;
 }
 
-bool D3dDeviceChannel::make_room_for_blobs(size_t bytes)
+bool D3dDeviceChannel::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
 {
     AV_SCOPE("D3dDeviceChannel::make_room_for_blobs");
-    if (stream_.room().inline_both(bytes)) return true;
+    bool inline_all = true;
+    for (uint32_t index = 0u; index < count; index++) inline_all = inline_all && stream_.room().inline_both(static_cast<size_t>(sizes[index]));
+    if (inline_all) return true;
     const ThreadLockHold release(lock_);
-    return stream_.make_room_for_blobs(bytes);
+    return stream_.make_room_for_blobs(sizes, count);
+}
+
+ClientBlobLease D3dDeviceChannel::open_region(uint64_t bytes)
+{
+    AV_SCOPE("D3dDeviceChannel::open_region");
+    const ThreadLockHold release(lock_);
+    return stream_.open_region(bytes);
+}
+
+void D3dDeviceChannel::close_region(const ClientBlobLease &region)
+{
+    AV_SCOPE("D3dDeviceChannel::close_region");
+    const ThreadLockHold release(lock_);
+    stream_.close_region(region);
 }
 
 const TransferRoom &D3dDeviceChannel::room() const

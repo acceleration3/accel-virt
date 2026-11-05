@@ -11,27 +11,19 @@
 #include "proto/resources/host_memory_request.hpp"
 #include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/published_slot_layout.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
 #include <cstring>
 
-namespace av {
-
-struct KmtBlobArenaProbe {
-    static void lend_without_chunk(KmtBlobArena &arena) { arena.bytes_ = 0u; }
-    static void claim_bytes(KmtBlobArena &arena, std::uint64_t bytes) { arena.bytes_ = bytes; }
-};
-
-}
-
 using av::ClientBlobLease;
 using av::CommandHeader;
 using av::GuestConnection;
 using av::HostMemoryRequest;
 using av::KmtBlobArena;
-using av::KmtBlobArenaProbe;
 using av::KmtTransport;
 using av::MockKmt;
 using av::PciIdentity;
@@ -44,10 +36,10 @@ namespace {
 const PciIdentity av(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 constexpr std::uint64_t mib = std::uint64_t{1} << 20u;
 constexpr std::uint64_t imported_memory = 0x0000600000000077ull;
-constexpr std::uint32_t refused = 0xC0000001u;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::uint32_t link_objects = 7u;
-constexpr std::uint64_t window_bytes = KmtBlobArena::max_bytes + 4096u;
+constexpr std::uint64_t window_bytes = std::uint64_t{256} << 20u;
+constexpr std::uint64_t slot = av::GuestBytes::slot_bytes;
 
 class Rig {
 public:
@@ -73,7 +65,14 @@ public:
     KmtTransport &transport() { return transport_; }
     KmtBlobArena &arena() { return arena_; }
 
-    void host_takes_the_import() { host_.blob_import(0u, imported_memory); }
+    void host_takes_the_imports(std::uint32_t count = 2u)
+    {
+        for (std::uint32_t index = 0u; index < count; index++) host_.blob_import(0u, imported_memory + index);
+    }
+    void host_takes_the_releases(std::uint32_t count)
+    {
+        for (std::uint32_t index = 0u; index < count; index++) host_.nop();
+    }
 
     void check_nothing_is_held(std::uint32_t kernels = 0u)
     {
@@ -96,6 +95,18 @@ private:
     KmtTransport    transport_;
     KmtBlobArena    arena_;
 };
+
+std::uint32_t command_of(const MockKmt &kmt, std::uint32_t id, std::uint32_t nth)
+{
+    for (std::uint32_t at = 0u; at < kmt.commands(); at++)
+        if (kmt.command_id(at) == id && nth-- == 0u) return at;
+    return 0xFFFFFFFFu;
+}
+
+const std::uint8_t *body_of(const MockKmt &kmt, std::uint32_t id, std::uint32_t nth)
+{
+    return kmt.command_bytes(command_of(kmt, id, nth)) + CommandHeader::encoded_size;
+}
 
 std::uint32_t u32_at(const std::uint8_t *bytes, std::uint32_t at)
 {
@@ -131,105 +142,157 @@ TEST(kmt_blob_arena, lends_nothing_before_it_is_opened)
   CHECK(!rig.transport().blobs().take(4096u).taken());
   CHECK_STATUS(rig.arena().close(), Status::ok);
   CHECK_EQ(rig.kmt().commands(), 0u);
+  uint8_t *view = nullptr;
+  std::uint64_t offset = 0u;
+  CHECK(!rig.arena().take_query_slots(4u, view, offset));
   rig.check_nothing_is_held(); }
 
-TEST(kmt_blob_arena, opens_a_bound_chunk_imported_whole_and_lends_inside_its_view)
+TEST(kmt_blob_arena, opens_a_control_segment_at_slot_zero_and_a_ring_at_the_next_slot)
 { Rig rig;
-  rig.host_takes_the_import();
+  rig.host_takes_the_imports();
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
   CHECK(rig.arena().invariants_hold());
   CHECK(rig.arena().lending());
-  CHECK_EQ(rig.arena().bytes(), KmtBlobArena::default_bytes);
-  CHECK_EQ(KmtBlobArena::default_bytes, 16u * mib);
-  CHECK_EQ(rig.kmt().window_chunks(), 1u);
-  CHECK(rig.kmt().last_window_request().kind() == HostMemoryRequest::Kind::readback);
-  CHECK(rig.kmt().last_window_request().valid());
-  CHECK_EQ(rig.kmt().commands(), 1u);
-  CHECK_EQ(rig.kmt().command_id(0u), CommandHeader::import_blob_id);
-  const std::uint8_t *const request = rig.kmt().command_bytes(0u) + CommandHeader::encoded_size;
-  CHECK_EQ(u32_at(request, 0u), MockKmt::first_window_resource);
-  CHECK_EQ(u32_at(request, 4u), 0u);
+  CHECK_EQ(rig.arena().bytes(), av::PublishedSlotLayout::control_bytes + KmtBlobArena::default_bytes);
+  CHECK_EQ(rig.kmt().window_chunks(), 2u);
+  const std::uint8_t *const control_request = body_of(rig.kmt(), CommandHeader::import_blob_id, 0u);
+  CHECK_EQ(u32_at(control_request, 0u), MockKmt::first_window_resource);
+  CHECK_EQ(u32_at(control_request, 4u), 1u);
+  CHECK_EQ(u64_at(control_request, 8u), 0u);
+  const std::uint8_t *const ring_request = body_of(rig.kmt(), CommandHeader::import_blob_id, 1u);
+  CHECK_EQ(u32_at(ring_request, 0u), MockKmt::first_window_resource + 1u);
+  CHECK_EQ(u32_at(ring_request, 4u), 1u);
+  CHECK_EQ(u64_at(ring_request, 8u), slot);
   av::ClientBlobArena &blobs = rig.transport().blobs();
   CHECK(blobs.ready());
-  const std::uint8_t *const view = rig.kmt().window_chunk_memory(MockKmt::first_window_resource);
-  CHECK(view == rig.arena().view());
-  ClientBlobLease first = blobs.take(4096u);
-  ClientBlobLease second = blobs.take(100u);
-  CHECK(first.taken());
-  CHECK_EQ(first.offset(), 0u);
-  CHECK(static_cast<const void *>(first.data()) == static_cast<const void *>(view));
-  CHECK_EQ(second.offset(), 4096u);
-  CHECK(static_cast<const void *>(second.data()) == static_cast<const void *>(view + 4096u));
-  std::memset(second.data(), 0xA5, second.bytes());
-  CHECK_EQ(view[4096u + 99u], 0xA5u);
-  CHECK(rig.arena().invariants_hold());
-  CHECK(!blobs.take(16u * mib - KmtBlobArena::error_word_bytes).taken());
-  CHECK_EQ(blobs.used(), 4196u);
-  blobs.give_back(first);
-  CHECK_EQ(blobs.used(), 4196u);
-  blobs.give_back(second);
-  CHECK_EQ(blobs.used(), 4096u);
-  blobs.seal();
-  blobs.mark(1u);
-  blobs.retire_through(1u);
-  CHECK_EQ(blobs.used(), 0u);
-  CHECK(!blobs.take(16u * mib).taken());
-  CHECK(blobs.take(16u * mib - KmtBlobArena::error_word_bytes).taken());
-  CHECK(rig.arena().invariants_hold());
+  CHECK_EQ(blobs.segments(), 1u);
+  const std::uint8_t *const ring = rig.kmt().window_chunk_memory(MockKmt::first_window_resource + 1u);
+  const ClientBlobLease first = blobs.take(4096u);
+  CHECK_EQ(first.offset(), slot);
+  CHECK(static_cast<const void *>(first.data()) == static_cast<const void *>(ring));
+  CHECK(!blobs.take(16u * mib + 1u).taken());
+  CHECK(blobs.take(16u * mib - 4096u).taken());
+  const std::uint32_t before = rig.kmt().commands();
   CHECK_STATUS(rig.arena().open(0u), Status::invalid_state);
-  CHECK_EQ(rig.kmt().commands(), 1u);
-  CHECK_EQ(rig.kmt().window_chunks(), 1u);
-  rig.host().nop();
+  CHECK_EQ(rig.kmt().commands(), before);
+  rig.host_takes_the_releases(2u);
   CHECK_STATUS(rig.arena().close(), Status::ok);
-  CHECK_EQ(rig.kmt().commands(), 2u);
-  CHECK_EQ(rig.kmt().command_id(1u), CommandHeader::release_blob_id);
-  CHECK_EQ(u64_at(rig.kmt().command_bytes(1u) + CommandHeader::encoded_size, 0u), imported_memory);
+  CHECK_EQ(u64_at(body_of(rig.kmt(), CommandHeader::release_blob_id, 0u), 0u), imported_memory + 1u);
+  CHECK_EQ(u64_at(body_of(rig.kmt(), CommandHeader::release_blob_id, 1u), 0u), imported_memory);
   rig.check_nothing_is_held(); }
 
-TEST(kmt_blob_arena, sizes_are_whole_pages_between_the_default_and_the_ceiling)
-{ struct Case { std::uint64_t asked; std::uint64_t made; };
+TEST(kmt_blob_arena, a_ring_is_whole_pages_between_the_default_and_one_slot)
+{ struct Case { std::uint64_t asked; std::uint64_t ring; };
   const Case cases[] = {{1u, 16u * mib}, {16u * mib - 1u, 16u * mib}, {16u * mib, 16u * mib},
-                        {16u * mib + 1u, 16u * mib + 4096u}, {100u * mib + 5u, 100u * mib + 4096u},
-                        {KmtBlobArena::max_bytes, 1024u * mib}};
+                        {16u * mib + 1u, 16u * mib + 4096u}, {40u * mib + 5u, 40u * mib + 4096u},
+                        {slot, slot}, {slot + 1u, slot}, {KmtBlobArena::max_bytes, slot}};
   for (const Case &one : cases) {
       Rig rig;
-      rig.host_takes_the_import();
+      rig.host_takes_the_imports();
       CHECK_STATUS(rig.arena().open(one.asked), Status::ok);
-      CHECK_EQ(rig.arena().bytes(), one.made);
-      CHECK(rig.kmt().window_chunk_memory(MockKmt::first_window_resource) == rig.kmt().window_base());
-      CHECK(!rig.transport().blobs().take(static_cast<std::size_t>(one.made)).taken());
-      CHECK(rig.transport().blobs().take(static_cast<std::size_t>(one.made - KmtBlobArena::error_word_bytes)).taken());
+      CHECK_EQ(rig.arena().bytes(), av::PublishedSlotLayout::control_bytes + one.ring);
+      CHECK_EQ(rig.transport().blobs().ring_bytes(), one.ring);
       CHECK(rig.arena().invariants_hold());
-      rig.host().nop();
+      rig.host_takes_the_releases(2u);
       CHECK_STATUS(rig.arena().close(), Status::ok);
       rig.check_nothing_is_held();
   }
-  const std::uint64_t pasts[] = {KmtBlobArena::max_bytes + 1u, KmtBlobArena::max_bytes + 4096u,
-                                 ~std::uint64_t{0}, ~std::uint64_t{0} - 4094u};
+  const std::uint64_t pasts[] = {KmtBlobArena::max_bytes + 1u, ~std::uint64_t{0}};
   for (const std::uint64_t past : pasts) {
       Rig rig;
       CHECK_STATUS(rig.arena().open(past), Status::invalid_parameter);
-      CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), 2u);
-      CHECK_EQ(rig.kmt().window_opens(), 0u);
       CHECK_EQ(rig.kmt().commands(), 0u);
       rig.check_nothing_is_held();
   } }
 
-TEST(kmt_blob_arena, a_refused_chunk_leaves_nothing_held)
+TEST(kmt_blob_arena, the_error_word_is_the_last_word_of_the_control_segment)
 { Rig rig;
-  const std::uint32_t before = rig.kmt().calls(MockKmt::Call::escape);
-  rig.kmt().fail_at(MockKmt::Call::escape, 1u, refused);
-  CHECK_STATUS(rig.arena().open(0u), Status::invalid_state);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), before + 1u);
-  CHECK_EQ(rig.kmt().commands(), 0u);
-  rig.check_nothing_is_held();
-  rig.host_takes_the_import();
+  CHECK_EQ(rig.arena().host_errors(), 0u);
+  rig.host_takes_the_imports();
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  std::uint8_t *const control = rig.kmt().window_chunk_memory(MockKmt::first_window_resource);
+  CHECK_EQ(rig.arena().host_errors(), 0u);
+  const std::uint64_t word = 0x8000000000030201ull;
+  std::memcpy(control + av::PublishedSlotLayout::control_bytes - 8u, &word, sizeof word);
+  CHECK_EQ(rig.arena().host_errors(), word);
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok);
+  CHECK_EQ(rig.arena().host_errors(), 0u); }
+
+TEST(kmt_blob_arena, query_slots_come_from_the_control_segment_once)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  std::uint8_t *view = nullptr;
+  std::uint64_t offset = 0u;
+  CHECK(!rig.arena().take_query_slots(0u, view, offset));
+  CHECK(!rig.arena().take_query_slots(av::PublishedSlotLayout::control_bytes, view, offset));
+  CHECK(rig.arena().take_query_slots(64u, view, offset));
+  const av::PublishedSlotLayout tail(av::PublishedSlotLayout::control_bytes);
+  CHECK_EQ(offset, tail.slots_at(64u));
+  CHECK(view == rig.kmt().window_chunk_memory(MockKmt::first_window_resource) + offset);
+  CHECK(offset + 64u * av::PublishedSlotLayout::slot_bytes <= tail.error_word());
+  CHECK(!rig.arena().take_query_slots(64u, view, offset));
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok); }
+
+TEST(kmt_blob_arena, a_region_is_its_own_segment_named_apart_from_the_ring)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  rig.host().blob_import(0u, imported_memory + 2u);
+  av::ArenaSegment *region = nullptr;
+  CHECK_STATUS(rig.arena().open_region(3u * mib + 5u, region), Status::ok);
+  CHECK(region != nullptr);
+  CHECK_EQ(region->base(), 2u * slot);
+  CHECK_EQ(region->bytes(), 3u * mib + 4096u);
+  CHECK_EQ(u64_at(body_of(rig.kmt(), CommandHeader::import_blob_id, 2u), 8u), 2u * slot);
+  CHECK_EQ(rig.transport().blobs().set_aside_bytes(), av::PublishedSlotLayout::control_bytes + 3u * mib + 4096u);
+  std::uint64_t offset = 0u;
+  CHECK(rig.transport().blobs().holds(region->view() + 100, 8u, offset));
+  CHECK_EQ(offset, 2u * slot + 100u);
+  CHECK(rig.arena().invariants_hold());
+  CHECK_STATUS(rig.arena().close_region(slot * 9u), Status::not_found);
   rig.host().nop();
+  CHECK_STATUS(rig.arena().close_region(2u * slot), Status::ok);
+  CHECK(!rig.transport().blobs().holds(region->view(), 1u, offset));
+  CHECK_EQ(rig.transport().blobs().set_aside_bytes(), av::PublishedSlotLayout::control_bytes);
+  rig.host().blob_import(0u, imported_memory + 3u);
+  av::ArenaSegment *again = nullptr;
+  CHECK_STATUS(rig.arena().open_region(4096u, again), Status::ok);
+  CHECK_EQ(again->base(), 2u * slot);
+  rig.host_takes_the_releases(3u);
   CHECK_STATUS(rig.arena().close(), Status::ok);
   rig.check_nothing_is_held(); }
 
-TEST(kmt_blob_arena, an_import_the_host_does_not_take_leaves_nothing_held)
+TEST(kmt_blob_arena, a_region_needs_a_lending_arena_and_a_size_it_can_name)
+{ Rig rig;
+  av::ArenaSegment *region = reinterpret_cast<av::ArenaSegment *>(1u);
+  CHECK_STATUS(rig.arena().open_region(4096u, region), Status::invalid_parameter);
+  CHECK(region == nullptr);
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  CHECK_STATUS(rig.arena().open_region(0u, region), Status::invalid_parameter);
+  CHECK_STATUS(rig.arena().open_region(KmtBlobArena::max_bytes + 1u, region), Status::invalid_parameter);
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok); }
+
+TEST(kmt_blob_arena, only_eight_regions_open_at_once)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  av::ArenaSegment *region = nullptr;
+  for (std::uint32_t index = 0u; index < KmtBlobArena::max_regions; index++) {
+      rig.host().blob_import(0u, imported_memory + 2u + index);
+      CHECK_STATUS(rig.arena().open_region(4096u, region), Status::ok);
+  }
+  CHECK_STATUS(rig.arena().open_region(4096u, region), Status::no_space);
+  CHECK(region == nullptr);
+  rig.host_takes_the_releases(2u + KmtBlobArena::max_regions);
+  CHECK_STATUS(rig.arena().close(), Status::ok);
+  rig.check_nothing_is_held(); }
+
+TEST(kmt_blob_arena, a_control_import_the_host_refuses_leaves_nothing_held)
 { { Rig rig;
     rig.host().blob_import(av::BlobImportAnswer::executor_refused, 0u);
     CHECK_STATUS(rig.arena().open(0u), Status::invalid_parameter);
@@ -245,88 +308,50 @@ TEST(kmt_blob_arena, an_import_the_host_does_not_take_leaves_nothing_held)
     CHECK(rig.transport().faulted());
     rig.check_nothing_is_held(1u); } }
 
-TEST(kmt_blob_arena, close_releases_the_import_while_the_chunk_is_still_bound)
+TEST(kmt_blob_arena, a_ring_the_host_refuses_keeps_the_control_for_the_next_try_and_close_lets_it_go)
 { Rig rig;
-  rig.host_takes_the_import();
+  rig.host().blob_import(0u, imported_memory);
+  rig.host().blob_import(av::BlobImportAnswer::no_room, 0u);
+  CHECK_STATUS(rig.arena().open(0u), Status::no_memory);
+  CHECK(!rig.arena().lending());
+  CHECK(!rig.transport().blobs().ready());
+  CHECK(rig.arena().invariants_hold());
+  rig.host().blob_import(0u, imported_memory + 1u);
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  CHECK_EQ(rig.kmt().window_chunks(), 2u);
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok);
+  rig.check_nothing_is_held(); }
+
+TEST(kmt_blob_arena, close_releases_every_import_while_its_chunk_is_still_bound)
+{ Rig rig;
+  rig.host_takes_the_imports();
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
   ReleaseWitness witness = {&rig.kmt(), 0xFFu};
   rig.kmt().play_at_wait(1u, &witness_release, &witness);
-  rig.host().nop();
+  rig.host_takes_the_releases(2u);
   CHECK_STATUS(rig.arena().close(), Status::ok);
-  CHECK_EQ(witness.bindings_at_release, 1u);
+  CHECK_EQ(witness.bindings_at_release, 2u);
   rig.check_nothing_is_held();
   const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
   CHECK_STATUS(rig.arena().close(), Status::ok);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes); }
 
 TEST(kmt_blob_arena, close_lets_every_part_go_and_answers_the_first_failure)
-{ { Rig rig;
-    rig.host_takes_the_import();
-    CHECK_STATUS(rig.arena().open(0u), Status::ok);
-    rig.host().blob_import(0u, 1u);
-    CHECK_STATUS(rig.arena().close(), Status::malformed);
-    rig.check_nothing_is_held(); }
-  { Rig rig;
-    rig.host_takes_the_import();
-    CHECK_STATUS(rig.arena().open(0u), Status::ok);
-    rig.host().nop();
-    rig.kmt().fail_at(MockKmt::Call::escape, 1u, refused);
-    CHECK_STATUS(rig.arena().close(), Status::invalid_state);
-    CHECK(!rig.arena().lending());
-    CHECK(!rig.transport().blobs().ready());
-    CHECK_EQ(rig.kmt().window_chunks(), 1u);
-    rig.host_takes_the_import();
-    CHECK_STATUS(rig.arena().open(0u), Status::ok);
-    rig.host().nop();
-    CHECK_STATUS(rig.arena().close(), Status::ok);
-    rig.check_nothing_is_held(1u); } }
-
-TEST(kmt_blob_arena, keeps_the_last_word_for_the_hosts_errors)
 { Rig rig;
-  CHECK_EQ(rig.arena().host_errors(), 0u);
-  rig.host_takes_the_import();
+  rig.host_takes_the_imports();
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
-  std::uint8_t *const chunk = rig.kmt().window_base();
-  CHECK_EQ(rig.arena().host_errors(), 0u);
-  const std::uint64_t word = 0x8000000000030201ull;
-  std::memcpy(chunk + 16u * mib - 8u, &word, sizeof word);
-  CHECK_EQ(rig.arena().host_errors(), word);
-  av::ClientBlobArena &blobs = rig.transport().blobs();
-  CHECK_EQ(blobs.room(), 16u * mib - 8u);
-  const ClientBlobLease all = blobs.take(blobs.room());
-  CHECK(all.taken());
-  CHECK(static_cast<const std::uint8_t *>(all.data()) + all.bytes() == chunk + 16u * mib - 8u);
+  rig.host().blob_import(0u, 1u);
   rig.host().nop();
-  CHECK_STATUS(rig.arena().close(), Status::ok);
-  CHECK_EQ(rig.arena().host_errors(), 0u); }
+  CHECK_STATUS(rig.arena().close(), Status::malformed);
+  CHECK(!rig.arena().lending());
+  CHECK(!rig.transport().blobs().ready());
+  CHECK_EQ(rig.kmt().window_chunks(), 0u); }
 
-TEST(kmt_blob_arena, the_invariant_catches_a_size_it_never_makes_and_lending_out_of_step)
-{ Rig rig;
-  rig.host_takes_the_import();
-  CHECK_STATUS(rig.arena().open(0u), Status::ok);
-  CHECK(rig.arena().invariants_hold());
-  KmtBlobArenaProbe::claim_bytes(rig.arena(), 16u * mib + 1u);
-  CHECK(!rig.arena().invariants_hold());
-  KmtBlobArenaProbe::claim_bytes(rig.arena(), KmtBlobArena::max_bytes + 4096u);
-  CHECK(!rig.arena().invariants_hold());
-  KmtBlobArenaProbe::claim_bytes(rig.arena(), 4096u);
-  CHECK(!rig.arena().invariants_hold());
-  KmtBlobArenaProbe::claim_bytes(rig.arena(), 16u * mib);
-  rig.transport().blobs().lend(nullptr, 0u);
-  CHECK(!rig.arena().invariants_hold());
-  rig.transport().blobs().lend(rig.kmt().window_base(), 16u * mib);
-  CHECK(rig.arena().invariants_hold());
-  KmtBlobArenaProbe::lend_without_chunk(rig.arena());
-  CHECK(!rig.arena().invariants_hold());
-  KmtBlobArenaProbe::claim_bytes(rig.arena(), 16u * mib);
-  CHECK(rig.arena().invariants_hold());
-  rig.host().nop();
-  CHECK_STATUS(rig.arena().close(), Status::ok); }
-
-TEST(kmt_blob_arena, abandon_lets_the_chunk_go_without_a_host_call)
+TEST(kmt_blob_arena, abandon_lets_every_chunk_go_without_a_host_call)
 { Rig rig;
   CHECK_STATUS(rig.arena().abandon(), Status::ok);
-  rig.host_takes_the_import();
+  rig.host_takes_the_imports();
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
   const std::uint32_t commands = rig.kmt().commands();
   CHECK_STATUS(rig.arena().abandon(), Status::ok);
@@ -334,65 +359,17 @@ TEST(kmt_blob_arena, abandon_lets_the_chunk_go_without_a_host_call)
   rig.check_nothing_is_held();
   const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
   CHECK_STATUS(rig.arena().abandon(), Status::ok);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
-  rig.host_takes_the_import();
-  CHECK_STATUS(rig.arena().open(0u), Status::ok);
-  rig.kmt().fail_at(MockKmt::Call::escape, 1u, refused);
-  CHECK_STATUS(rig.arena().abandon(), Status::invalid_state);
-  rig.check_nothing_is_held(1u); }
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes); }
 
-TEST(kmt_blob_arena, an_arena_that_lends_nothing_has_no_view)
+TEST(kmt_blob_arena, the_invariant_catches_rings_the_transport_does_not_lend)
 { Rig rig;
-  CHECK(rig.arena().view() == nullptr);
-  CHECK_EQ(rig.arena().bytes(), 0u);
-  CHECK(rig.arena().invariants_hold()); }
-
-TEST(kmt_blob_arena, two_arenas_lend_apart_in_the_window)
-{ Rig rig;
-  rig.host_takes_the_import();
+  rig.host_takes_the_imports();
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
-  KmtTransport other(rig.connection(), SubApi::opengl, 12u, reply_bytes, rig.spare_staging(), 1024u);
-  CHECK_STATUS(other.initialize(), Status::ok);
-  KmtBlobArena second(rig.connection(), other);
-  rig.host_takes_the_import();
-  CHECK_STATUS(second.open(0u), Status::ok);
-  CHECK(second.view() == rig.arena().view() + KmtBlobArena::default_bytes);
-  CHECK_EQ(rig.kmt().window_chunks(), 2u);
-  rig.host().nop();
-  CHECK_STATUS(second.close(), Status::ok);
-  other.teardown();
-  rig.host().nop();
-  CHECK_STATUS(rig.arena().close(), Status::ok);
-  rig.check_nothing_is_held(); }
+  CHECK(rig.arena().invariants_hold());
+  rig.transport().blobs().lend(nullptr, 0u);
+  CHECK(!rig.arena().invariants_hold());
+  rig.transport().blobs().lend(rig.kmt().window_chunk_memory(MockKmt::first_window_resource + 1u), 16u * mib);
+  CHECK(rig.arena().invariants_hold());
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok); }
 
-TEST(kmt_blob_arena, no_window_or_no_room_lends_nothing)
-{ { Rig rig;
-    rig.kmt().open_host_window(0u);
-    CHECK_STATUS(rig.arena().open(0u), Status::not_supported);
-    CHECK_EQ(rig.kmt().commands(), 0u);
-    rig.check_nothing_is_held(); }
-  { Rig rig;
-    rig.kmt().open_host_window(8u * mib);
-    CHECK_STATUS(rig.arena().open(0u), Status::invalid_parameter);
-    CHECK_EQ(rig.kmt().commands(), 0u);
-    CHECK(rig.arena().view() == nullptr);
-    rig.check_nothing_is_held(); } }
-
-TEST(kmt_blob_arena, an_abandoned_window_arena_is_closed_by_the_kernel)
-{ Rig rig;
-  rig.host_takes_the_import();
-  CHECK_STATUS(rig.arena().open(0u), Status::ok);
-  rig.kmt().withhold_answer_at(1u);
-  av::WireWriter request = rig.transport().request_writer();
-  request.write_u32(1u);
-  av::WireReader reply(nullptr, 0u);
-  CHECK(rig.transport().send_sync(1u, request, reply) != av::TransportResult::ok);
-  rig.transport().end_call();
-  CHECK(rig.transport().faulted());
-  const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
-  CHECK_STATUS(rig.arena().abandon(), Status::ok);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
-  CHECK(!rig.arena().lending());
-  CHECK_EQ(rig.kmt().window_chunks(), 1u);
-  rig.transport().teardown();
-  CHECK_EQ(rig.kmt().window_chunks(), 0u); }

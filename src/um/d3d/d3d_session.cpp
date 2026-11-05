@@ -1,7 +1,6 @@
 #include "um/d3d/d3d_session.hpp"
 
 #include "core/platform/block_source.hpp"
-#include "icd/common/arena_spans.hpp"
 #include "guest/transport/host_allocation.hpp"
 #include "um/d3d/d3d11_device.hpp"
 #include "core/trace/function_scope.hpp"
@@ -87,10 +86,9 @@ HRESULT D3dSession::open(uint32_t adapter)
     if (opened != Status::ok) return opened == Status::no_memory ? E_OUTOFMEMORY : E_FAIL;
     static_cast<void>(stream_.construct(channel_.transport()));
     stream_.object().speak_with(select_command_, flush_command_);
-    icd::ArenaSpans spans(channel_);
-    uint8_t        *slots = nullptr;
-    uint64_t        slots_at = 0u;
-    if (spans.slots(d3d11::QueryResults::slots, slots, slots_at)) query_results_.take(slots, slots_at);
+    uint8_t *slots = nullptr;
+    uint64_t slots_at = 0u;
+    if (channel_.take_query_slots(d3d11::QueryResults::slots, slots, slots_at)) query_results_.take(slots, slots_at);
     shared_memory_.open(stream_.object());
     return S_OK;
 }
@@ -150,10 +148,10 @@ d3d11::QueryResults &D3dSession::query_results()
     return query_results_;
 }
 
-uint8_t *D3dSession::arena_view() const
+bool D3dSession::has_arena() const
 {
-    AV_SCOPE("D3dSession::arena_view");
-    return channel_.arena_view();
+    AV_SCOPE("D3dSession::has_arena");
+    return channel_.has_arena();
 }
 
 uint64_t D3dSession::arena_bytes() const

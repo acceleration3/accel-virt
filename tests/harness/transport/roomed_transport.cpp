@@ -9,7 +9,14 @@ RoomedTransport::RoomedTransport(std::size_t staging_bytes, std::size_t reply_by
 {
 }
 
-bool RoomedTransport::make_room_for_blobs(std::size_t bytes) { return blobs().ready() && blobs().room() >= bytes; }
+bool RoomedTransport::make_room_for_blobs(const std::uint64_t *sizes, std::uint32_t count)
+{
+    return blobs().ready() && blobs().fits(sizes, count);
+}
+
+ClientBlobLease RoomedTransport::open_region(std::uint64_t) { return ClientBlobLease(); }
+
+void RoomedTransport::close_region(const ClientBlobLease &) {}
 
 const TransferRoom &RoomedTransport::room() const { return room_; }
 

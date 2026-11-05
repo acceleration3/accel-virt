@@ -320,7 +320,7 @@ target_link_options(av_vendor PUBLIC ${AV_TEST_FLAGS})
 
 file(GLOB_RECURSE AV_D3D_UMD_SOURCES CONFIGURE_DEPENDS src/icd/d3d/*.cpp)
 add_library(av_d3d_umd STATIC ${AV_D3D_UMD_SOURCES}
-  ${CMAKE_SOURCE_DIR}/src/icd/common/arena_spans.cpp
+  ${CMAKE_SOURCE_DIR}/src/icd/common/arena_region.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/host_channel.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/locked_timeline.cpp
   ${CMAKE_SOURCE_DIR}/src/icd/common/locked_transport.cpp

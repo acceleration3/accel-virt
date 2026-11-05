@@ -35,7 +35,7 @@ constexpr std::uint64_t host_kernel = 0x6800u;
 
 void device_opens(ClIcdRig &rig)
 {
-    rig.host().blob_import(0u, 0x77u);
+    rig.host().arena_import(0x77u, 3u);
     rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
     rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
     rig.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);
@@ -267,7 +267,7 @@ TEST(cl_icd_root, a_context_is_made_on_the_device_and_carries_the_dispatch_table
   cl_device_id device = opened_device(rig);
   CHECK(device != nullptr);
 
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -297,7 +297,7 @@ TEST(cl_icd_root, a_context_made_from_something_that_is_not_a_device_is_refused)
 TEST(cl_icd_root, retaining_a_context_keeps_it_until_as_many_releases)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -327,7 +327,7 @@ TEST(cl_icd_root, every_kind_has_its_own_refusal_rather_than_one_for_all_of_them
 TEST(cl_icd_root, a_queue_a_buffer_a_program_and_a_kernel_are_objects_of_their_context)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -372,7 +372,7 @@ TEST(cl_icd_root, a_queue_a_buffer_a_program_and_a_kernel_are_objects_of_their_c
 TEST(cl_icd_root, a_buffer_of_no_bytes_is_refused_before_the_host_is_asked)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -405,7 +405,7 @@ TEST(cl_icd_root, an_object_of_this_icd_is_never_confused_with_one_of_another_ki
 TEST(cl_icd_root, a_program_built_from_nothing_is_refused_and_a_kernel_needs_a_name)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -451,7 +451,7 @@ TEST(cl_icd_root, a_state_dump_says_what_the_process_holds)
 TEST(cl_icd_root, svm_alloc_hands_back_a_mirror_and_svm_free_takes_it_back)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -476,7 +476,7 @@ TEST(cl_icd_root, svm_alloc_hands_back_a_mirror_and_svm_free_takes_it_back)
 TEST(cl_icd_root, an_allocation_of_nothing_or_on_something_that_is_not_a_context_answers_nothing)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -492,7 +492,7 @@ TEST(cl_icd_root, an_allocation_of_nothing_or_on_something_that_is_not_a_context
 TEST(cl_icd_root, a_kernel_argument_is_translated_and_an_invented_address_never_reaches_the_wire)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -523,7 +523,7 @@ TEST(cl_icd_root, a_kernel_argument_is_translated_and_an_invented_address_never_
 TEST(cl_icd_root, mapping_and_unmapping_shared_memory_is_refused_for_an_address_of_no_allocation)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -547,7 +547,7 @@ TEST(cl_icd_root, mapping_and_unmapping_shared_memory_is_refused_for_an_address_
 TEST(cl_icd_root, unmapping_a_buffer_pointer_no_mapping_answered_is_refused)
 { ClIcdRig rig;
   cl_device_id device = opened_device(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -619,7 +619,7 @@ cl_context opened_context(ClIcdRig &rig, cl_device_id &device)
 {
     device = opened_device(rig);
     if (device == nullptr) return nullptr;
-    rig.host().blob_import(0u, 0x77u);
+    rig.host().arena_import(0x77u, 3u);
     rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
     rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
     rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -927,7 +927,7 @@ TEST(cl_icd_root, a_context_named_on_another_platform_is_refused_and_on_this_one
   CHECK_EQ(rig.root().platform_ids(1u, &ours, &platforms), CL_SUCCESS);
   const cl_context_properties named[] = {CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(ours),
                                          CL_CONTEXT_INTEROP_USER_SYNC, 0, 0};
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -1532,7 +1532,7 @@ TEST(cl_icd_root, a_contexts_info_is_this_icds_own_and_asks_the_host_nothing)
   const cl_context_properties asked[] = {CL_CONTEXT_PLATFORM,
                                          reinterpret_cast<cl_context_properties>(rig.loader().platform(0u)),
                                          CL_CONTEXT_INTEROP_USER_SYNC, CL_TRUE, 0};
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);
@@ -1818,7 +1818,7 @@ TEST(cl_icd_root, a_queue_says_its_context_and_device_and_asks_the_host_the_rest
   cl_device_id device = opened_device(rig);
   CHECK(device != nullptr);
   if (device == nullptr) return;
-  rig.host().blob_import(0u, 0x78u);
+  rig.host().arena_import(0x78u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context, CL_SUCCESS);

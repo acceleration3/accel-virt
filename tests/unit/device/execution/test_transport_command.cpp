@@ -87,9 +87,9 @@ TEST(transport_command_run, the_blob_ids_are_answered_by_the_blob_command)
 { Fixture fixture;
   CHECK_EQ(CommandHeader::import_blob_id, 0x00000002u);
   CHECK_EQ(CommandHeader::release_blob_id, 0x00000003u);
-  std::uint8_t reserved_set[8] = {};
-  reserved_set[4] = 1u;
-  CHECK_STATUS(fixture.run(CommandHeader(CommandHeader::import_blob_id, 16u, CommandHeader::generate_reply),
+  std::uint8_t reserved_set[16] = {};
+  reserved_set[4] = 2u;
+  CHECK_STATUS(fixture.run(CommandHeader(CommandHeader::import_blob_id, 24u, CommandHeader::generate_reply),
                            reserved_set),
                Status::ok);
   CHECK_EQ(fixture.produced(), BlobImportAnswer::encoded_size);

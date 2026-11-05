@@ -11,6 +11,7 @@
 #include "icd/opengl/pixel_format.hpp"
 #include "proto/client/client_blob_arena.hpp"
 
+#include "icd/common/arena_region.hpp"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -113,8 +114,7 @@ private:
     size_t        capacity_;
     icd::OnceLatch refusal_logged_;
     GlPresentQueue  *loop_;
-    ClientBlobArena *arena_;
-    ClientBlobLease  room_;
+    icd::ArenaRegion room_;
     uint32_t         pending_;
     bool             pending_chained_;
     ChainedFrames    chained_;

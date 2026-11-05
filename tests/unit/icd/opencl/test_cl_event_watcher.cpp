@@ -74,7 +74,7 @@ public:
         : rig_(), thread_(), owner_(), watcher_(thread_, rig_.log(), rig_.send_lock(), owner_),
           event_(dispatch, ClObject::Kind::event, 0x6900u, nullptr, nullptr)
     {
-        rig_.host().blob_import(0u, 0x77u);
+        rig_.host().arena_import(0x77u, 3u);
         static_cast<void>(
             context_.construct(rig_.connection(), rig_.platform(), rig_.send_lock(), rig_.blocks_lock(), rig_.log(), rig_.handles()));
         CHECK_STATUS(context_.object().make(), Status::ok);
@@ -334,7 +334,7 @@ TEST(cl_event_watcher, forgetting_one_context_leaves_every_other_contexts_regist
 { Watching rig;
   CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
            CL_SUCCESS);
-  rig.rig().host().blob_import(0u, 0x78u);
+  rig.rig().host().arena_import(0x78u, 3u);
   av::ObjectStorage<GuestClContext> second;
   CHECK_STATUS(second.construct(rig.rig().connection(), rig.rig().platform(),
                                 rig.rig().send_lock(), rig.rig().blocks_lock(), rig.rig().log(), rig.rig().handles()),

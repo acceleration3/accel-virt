@@ -45,7 +45,7 @@ void two_gpus(ClIcdRig &rig)
 
 void device_opens(ClIcdRig &rig)
 {
-    rig.host().blob_import(0u, 0x77u);
+    rig.host().arena_import(0x77u, 3u);
     rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
     rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
     rig.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);
@@ -79,7 +79,7 @@ void both_devices(ClIcdRig &rig, cl_device_id (&devices)[2])
 
 cl_context context_on(ClIcdRig &rig, cl_device_id device)
 {
-    rig.host().blob_import(0u, 0x78u);
+    rig.host().arena_import(0x78u, 3u);
     rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
     rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
     rig.host().cl_handle(host_context, CL_SUCCESS);

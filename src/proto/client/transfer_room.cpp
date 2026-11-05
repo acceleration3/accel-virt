@@ -36,7 +36,8 @@ size_t TransferRoom::write_piece(ClientTransport &wire, uint64_t left) const
     const size_t inline_piece = left < inline_write() ? static_cast<size_t>(left) : inline_write();
     if (!wire.blobs().ready()) return inline_piece;
     const size_t lent = left < lent_bytes ? static_cast<size_t>(left) : lent_bytes;
-    return wire.make_room_for_blobs(lent) ? lent : inline_piece;
+    const uint64_t wanted[1] = {lent};
+    return wire.make_room_for_blobs(wanted, 1u) ? lent : inline_piece;
 }
 
 size_t TransferRoom::read_piece(ClientTransport &wire) const

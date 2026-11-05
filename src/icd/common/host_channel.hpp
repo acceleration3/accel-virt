@@ -70,7 +70,8 @@ public:
     [[nodiscard]] TransportResult send_batch(const uint8_t *framed, size_t length);
     [[nodiscard]] Status          run_held();
     [[nodiscard]] TransportResult send_command(uint32_t command_id, WireWriter &writer);
-    uint8_t          *arena_view() const;
+    bool              has_arena() const;
+    [[nodiscard]] bool   take_query_slots(uint32_t count, uint8_t *&view, uint64_t &offset);
     uint64_t          arena_bytes() const;
     uint64_t          host_errors() const;
 

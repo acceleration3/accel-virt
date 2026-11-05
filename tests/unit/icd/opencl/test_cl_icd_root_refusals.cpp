@@ -95,7 +95,7 @@ TEST(cl_icd_root_refusals, every_type_that_includes_this_gpu_finds_it)
   bool first = true;
   for (const cl_device_type type : accepted) {
       if (first) {
-          rig.host().blob_import(0u, 0x77u);
+          rig.host().arena_import(0x77u, 3u);
           rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
           rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
           rig.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);
@@ -115,7 +115,7 @@ TEST(cl_icd_root_refusals, a_host_that_lists_no_platform_opens_no_device)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_platform_id platform = this_platform(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_INVALID_VALUE, nullptr, 0u, 0u);
   cl_device_id device = nullptr;
   cl_uint      count = 0xEEu;
@@ -130,7 +130,7 @@ TEST(cl_icd_root_refusals, a_host_that_lists_a_platform_but_no_device_opens_none
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_platform_id platform = this_platform(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_INVALID_VALUE, nullptr, 0u, 0u);
   cl_uint count = 0xEEu;
@@ -144,7 +144,7 @@ TEST(cl_icd_root_refusals, a_host_that_answers_a_count_of_none_opens_no_device)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_platform_id platform = this_platform(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, nullptr, 0u, 0u);
   cl_uint count = 0xEEu;
   CHECK_EQ(rig.root().device_ids(platform, CL_DEVICE_TYPE_GPU, 0u, nullptr, &count),
@@ -157,7 +157,7 @@ TEST(cl_icd_root_refusals, a_host_that_names_a_platform_of_zero_opens_no_device)
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_platform_id platform = this_platform(rig);
   const std::uint64_t nothing = 0u;
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &nothing, 1u, 1u);
   cl_uint count = 0xEEu;
   CHECK_EQ(rig.root().device_ids(platform, CL_DEVICE_TYPE_GPU, 0u, nullptr, &count),
@@ -170,7 +170,7 @@ TEST(cl_icd_root_refusals, a_host_that_names_a_device_of_zero_opens_no_device)
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_platform_id platform = this_platform(rig);
   const std::uint64_t nothing = 0u;
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &nothing, 1u, 1u);
   cl_uint count = 0xEEu;
@@ -183,7 +183,7 @@ TEST(cl_icd_root_refusals, a_host_that_will_not_say_what_it_is_still_opens_the_d
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_platform_id platform = this_platform(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_info(CL_INVALID_VALUE, nullptr, 0u);
@@ -224,7 +224,7 @@ public:
     explicit Opened(ClIcdRig &rig) : rig_(rig), device_(nullptr), context_(nullptr)
     {
         if (rig_.loader().load() != FakeClLoader::Load::kept) return;
-        rig_.host().blob_import(0u, 0x77u);
+        rig_.host().arena_import(0x77u, 3u);
         rig_.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
         rig_.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
         rig_.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);
@@ -233,7 +233,7 @@ public:
         cl_uint devices = 0u;
         if (rig_.loader().device_ids(CL_DEVICE_TYPE_GPU, 1u, &device_, &devices) != CL_SUCCESS)
             return;
-        rig_.host().blob_import(0u, 0x78u);
+        rig_.host().arena_import(0x78u, 3u);
         rig_.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
         rig_.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
         rig_.host().cl_handle(0x6400u, CL_SUCCESS);
@@ -393,7 +393,7 @@ TEST(cl_icd_root_refusals, a_context_on_another_vendors_platform_is_refused)
 
   cl_platform_id      mine = this_platform(rig);
   const cl_context_properties ours[] = {CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties>(mine), 0};
-  rig.host().blob_import(0u, 0x79u);
+  rig.host().arena_import(0x79u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(0x6402u, CL_SUCCESS);
@@ -421,7 +421,7 @@ TEST(cl_icd_root_refusals, a_host_that_will_not_make_the_context_takes_the_guest
   if (!opened.made()) return;
   cl_device_id device = opened.device();
 
-  rig.host().blob_import(0u, 0x7Au);
+  rig.host().arena_import(0x7Au, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(0u, CL_OUT_OF_HOST_MEMORY);
@@ -429,7 +429,7 @@ TEST(cl_icd_root_refusals, a_host_that_will_not_make_the_context_takes_the_guest
   CHECK(rig.root().create_context(nullptr, &device, 1u, &error) == nullptr);
   CHECK_EQ(error, CL_OUT_OF_HOST_MEMORY);
 
-  rig.host().blob_import(0u, 0x7Bu);
+  rig.host().arena_import(0x7Bu, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(0u, CL_SUCCESS);
@@ -437,7 +437,7 @@ TEST(cl_icd_root_refusals, a_host_that_will_not_make_the_context_takes_the_guest
   CHECK(rig.root().create_context(nullptr, &device, 1u, &error) == nullptr);
   CHECK_EQ(error, CL_DEVICE_NOT_AVAILABLE);
 
-  rig.host().blob_import(0u, 0x7Cu);
+  rig.host().arena_import(0x7Cu, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(0x6403u, CL_SUCCESS);
@@ -451,13 +451,13 @@ TEST(cl_icd_root_refusals, a_host_that_will_not_list_its_own_platform_makes_no_c
   if (!opened.made()) return;
   cl_device_id device = opened.device();
 
-  rig.host().blob_import(0u, 0x7Du);
+  rig.host().arena_import(0x7Du, 3u);
   rig.host().cl_ids(CL_INVALID_VALUE, nullptr, 0u, 0u);
   cl_int error = CL_SUCCESS;
   CHECK(rig.root().create_context(nullptr, &device, 1u, &error) == nullptr);
   CHECK_EQ(error, CL_DEVICE_NOT_AVAILABLE);
 
-  rig.host().blob_import(0u, 0x7Eu);
+  rig.host().arena_import(0x7Eu, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_INVALID_VALUE, nullptr, 0u, 0u);
   error = CL_SUCCESS;
@@ -469,7 +469,7 @@ TEST(cl_icd_root_refusals, the_two_call_shape_writes_only_what_it_was_asked_for)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_platform_id platform = this_platform(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);
@@ -531,7 +531,7 @@ TEST(cl_icd_root_refusals, a_host_that_counts_no_devices_on_its_platform_opens_n
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_platform_id platform = this_platform(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, nullptr, 0u, 0u);
   cl_uint count = 0xEEu;
@@ -548,7 +548,7 @@ TEST(cl_icd_root_refusals, a_guest_with_no_memory_for_the_open_shows_no_device)
       ClIcdRig rig;
       if (rig.loader().load() != FakeClLoader::Load::kept) continue;
       cl_platform_id platform = this_platform(rig);
-      rig.host().blob_import(0u, 0x77u);
+      rig.host().arena_import(0x77u, 3u);
       rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
       rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
       rig.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);
@@ -624,7 +624,7 @@ TEST(cl_icd_root_refusals, a_platform_property_of_nothing_is_no_preference_at_al
   if (!opened.made()) return;
   const cl_context_properties none[] = {CL_CONTEXT_PLATFORM, 0, 0};
   cl_device_id        device = opened.device();
-  rig.host().blob_import(0u, 0x7Fu);
+  rig.host().arena_import(0x7Fu, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(0x6404u, CL_SUCCESS);
@@ -637,7 +637,7 @@ TEST(cl_icd_root_refusals, an_open_that_fails_writes_no_count_it_was_not_given)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
   cl_platform_id platform = this_platform(rig);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_INVALID_VALUE, nullptr, 0u, 0u);
   cl_device_id devices[1] = {reinterpret_cast<cl_device_id>(std::uintptr_t{0xAA})};
   CHECK_EQ(rig.root().device_ids(platform, CL_DEVICE_TYPE_GPU, 1u, devices, nullptr),
@@ -759,7 +759,7 @@ TEST(cl_icd_root_refusals, an_external_acquire_on_a_queue_with_no_context_is_ref
 TEST(cl_icd_root_refusals, a_root_with_no_memory_for_its_first_context_makes_none)
 { ClIcdRig rig;
   CHECK(rig.loader().load() == FakeClLoader::Load::kept);
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_info(CL_SUCCESS, "OpenCL 3.0 host", 16u);

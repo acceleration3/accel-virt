@@ -47,10 +47,22 @@ ClientBlobArena &D3dDeviceSelection::blobs()
     return stream_.blobs();
 }
 
-bool D3dDeviceSelection::make_room_for_blobs(size_t bytes)
+bool D3dDeviceSelection::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
 {
     AV_SCOPE("D3dDeviceSelection::make_room_for_blobs");
-    return stream_.make_room_for_blobs(bytes);
+    return stream_.make_room_for_blobs(sizes, count);
+}
+
+ClientBlobLease D3dDeviceSelection::open_region(uint64_t bytes)
+{
+    AV_SCOPE("D3dDeviceSelection::open_region");
+    return stream_.open_region(bytes);
+}
+
+void D3dDeviceSelection::close_region(const ClientBlobLease &region)
+{
+    AV_SCOPE("D3dDeviceSelection::close_region");
+    stream_.close_region(region);
 }
 
 const TransferRoom &D3dDeviceSelection::room() const

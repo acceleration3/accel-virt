@@ -316,7 +316,8 @@ bool D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const
                                   uint32_t copy_flags)
 {
     AV_SCOPE("D3d11Device::upload_piece_of");
-    if (!wire().make_room_for_blobs(bytes)) lines_.once("an upload larger than the arena");
+    const uint64_t wanted_1[1] = {static_cast<uint64_t>(bytes)};
+    if (!wire().make_room_for_blobs(wanted_1, 1u)) lines_.once("an upload larger than the arena");
     if (d3dproto::av_d3d_UpdateSubresource(wire(), resource, subresource, 1u, box, row_pitch, depth_pitch, copy_flags,
                                             data, bytes))
         return true;
@@ -327,7 +328,8 @@ bool D3d11Device::upload_piece_of(uint32_t resource, uint32_t subresource, const
 bool D3d11Device::read_back(const ResourceRecord &resource, uint32_t subresource, uint8_t *out, size_t capacity)
 {
     AV_SCOPE("D3d11Device::read_back");
-    if (!wire().make_room_for_blobs(capacity)) return false;
+    const uint64_t wanted_2[1] = {static_cast<uint64_t>(capacity)};
+    if (!wire().make_room_for_blobs(wanted_2, 1u)) return false;
     uint32_t hresult = 1u, row_pitch = 0u, depth_pitch = 0u;
     uint64_t read = 0u;
     if (!d3dproto::av_d3d_ReadSubresource(wire(), resource.stamp.id(), subresource, &hresult, &row_pitch, &depth_pitch, out,

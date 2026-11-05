@@ -28,7 +28,7 @@ void SessionMemory::open(ClientTransport &host)
 bool SessionMemory::host_grants_slices(ClientTransport &host)
 {
     AV_SCOPE("SessionMemory::host_grants_slices");
-    if (offer_ == nullptr || channel_.arena_view() == nullptr) return false;
+    if (offer_ == nullptr || !channel_.has_arena()) return false;
     return offer_->granted(host, lines_);
 }
 

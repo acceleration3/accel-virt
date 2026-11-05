@@ -555,7 +555,8 @@ void D3d11Device::create_shader(uint32_t stage, const UINT *code, D3D10DDI_HSHAD
         rasterized = stream_out->RasterizedStream;
     }
     const size_t bytes = static_cast<size_t>(code[1]) * sizeof(UINT);
-    if (!wire().make_room_for_blobs(bytes))
+    const uint64_t wanted_1[1] = {static_cast<uint64_t>(bytes)};
+    if (!wire().make_room_for_blobs(wanted_1, 1u))
         lines_.write("a shader larger than the arena");
     if (!d3dproto::av_d3d_CreateShader(wire(), record_of.stamp.id(), stage, counts[0], signatures[0], counts[1],
                                         signatures[1], counts[2], signatures[2], declared, declaration, strides_count,

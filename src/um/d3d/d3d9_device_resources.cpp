@@ -563,7 +563,8 @@ HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data,
     while (pieces.next()) {
         const uint32_t done = static_cast<uint32_t>(pieces.offset());
         const uint32_t piece = static_cast<uint32_t>(pieces.count());
-        if (!wire().make_room_for_blobs(piece)) return lost(__func__);
+        const uint64_t wanted_1[1] = {static_cast<uint64_t>(piece)};
+        if (!wire().make_room_for_blobs(wanted_1, 1u)) return lost(__func__);
         if (!d3d9proto::av_d3d9_WriteBuffer9(wire(), id, offset + done, pieces.first() ? flags : flags & ~write_discard,
                                              from + done, piece))
             return lost(__func__);
@@ -609,7 +610,8 @@ bool D3d9Device::write_piece(uint32_t id, uint32_t index, const d3d9proto::Box &
     AV_SCOPE("D3d9Device::write_piece");
     written_ += bytes;
     const uint64_t started = clock_.microseconds();
-    const bool     room = wire().make_room_for_blobs(bytes);
+    const uint64_t wanted_2[1] = {static_cast<uint64_t>(bytes)};
+    const bool     room = wire().make_room_for_blobs(wanted_2, 1u);
     trace_wait("wait-room", started, static_cast<uint32_t>(bytes));
     if (room && d3d9proto::av_d3d9_WriteTexture9(wire(), id, index, box, row_pitch, slice_pitch, flags, data, bytes))
         return true;
@@ -645,7 +647,8 @@ HRESULT D3d9Device::read_surface(const D3d9Resource &resource, uint32_t index, u
     constexpr uint32_t pitch_slack = 256u;
     const size_t capacity = (size_t{layout.row_bytes(level.width)} + pitch_slack) * layout.rows(level.height);
     if (capacity == 0u || !readback_room(capacity)) return E_OUTOFMEMORY;
-    if (!wire().make_room_for_blobs(capacity)) return lost(__func__);
+    const uint64_t wanted_3[1] = {static_cast<uint64_t>(capacity)};
+    if (!wire().make_room_for_blobs(wanted_3, 1u)) return lost(__func__);
     uint32_t hresult = 1u, width = 0u, height = 0u, format = 0u;
     uint64_t read = 0u;
     const uint64_t started = clock_.microseconds();

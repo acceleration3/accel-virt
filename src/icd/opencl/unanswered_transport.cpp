@@ -48,10 +48,22 @@ ClientBlobArena &UnansweredTransport::blobs()
     return inner_.blobs();
 }
 
-bool UnansweredTransport::make_room_for_blobs(size_t bytes)
+bool UnansweredTransport::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
 {
     AV_SCOPE("UnansweredTransport::make_room_for_blobs");
-    return inner_.make_room_for_blobs(bytes);
+    return inner_.make_room_for_blobs(sizes, count);
+}
+
+ClientBlobLease UnansweredTransport::open_region(uint64_t bytes)
+{
+    AV_SCOPE("UnansweredTransport::open_region");
+    return inner_.open_region(bytes);
+}
+
+void UnansweredTransport::close_region(const ClientBlobLease &region)
+{
+    AV_SCOPE("UnansweredTransport::close_region");
+    inner_.close_region(region);
 }
 
 const TransferRoom &UnansweredTransport::room() const

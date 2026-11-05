@@ -87,7 +87,7 @@ TEST(mapped_region, giving_it_up_leaves_it_answering_for_nothing)
 
 TEST(guest_cl_context, a_mapping_is_taken_from_the_context_and_given_back_to_it)
 { ClContextRig rig;
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
 
@@ -108,7 +108,7 @@ TEST(guest_cl_context, a_mapping_is_taken_from_the_context_and_given_back_to_it)
 
 TEST(guest_cl_context, a_mapping_of_nothing_or_of_no_buffer_is_refused)
 { ClContextRig rig;
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
   CHECK(context.take_mapping(host_buffer, host_address, 0u, 0u, CL_MAP_READ) == nullptr);
@@ -119,7 +119,7 @@ TEST(guest_cl_context, a_mapping_of_nothing_or_of_no_buffer_is_refused)
 
 TEST(guest_cl_context, application_mappings_are_never_freed_and_a_released_buffer_takes_its_own)
 { ClContextRig rig;
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
   static std::uint8_t own[64];
@@ -142,7 +142,7 @@ TEST(guest_cl_context, application_mappings_are_never_freed_and_a_released_buffe
 
 TEST(guest_cl_context, a_context_that_can_hold_no_more_mappings_refuses_and_stays_usable)
 { ClContextRig rig;
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
   std::uint8_t *const first = context.take_mapping(host_buffer, host_address, 0u, 16u, CL_MAP_READ);
@@ -160,7 +160,7 @@ TEST(guest_cl_context, a_context_that_can_hold_no_more_mappings_refuses_and_stay
 
 TEST(guest_cl_context, mappings_left_live_go_with_the_context)
 { ClContextRig rig;
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   { GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
     CHECK_STATUS(context.make(), Status::ok);
     CHECK(context.take_mapping(host_buffer, host_address, 0u, 256u, CL_MAP_WRITE) != nullptr);
@@ -226,7 +226,7 @@ TEST(mapped_region, an_image_mapping_names_its_region_and_lays_it_out_packed)
 
 TEST(guest_cl_context, an_image_mapping_is_staged_zeroed_and_refused_for_no_region)
 { ClContextRig rig;
-  rig.host().blob_import(0u, 0x77u);
+  rig.host().arena_import(0x77u, 3u);
   GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.log(), rig.handles());
   CHECK_STATUS(context.make(), Status::ok);
   const size_t origin[3] = {0u, 0u, 0u}, extent[3] = {4u, 2u, 1u}, empty[3] = {4u, 0u, 1u};

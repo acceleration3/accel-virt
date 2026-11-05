@@ -197,7 +197,7 @@ TEST(cl_buffer_paths, the_acquire_and_release_of_an_external_object_are_answered
   cl_device_id device = nullptr;
   cl_uint      devices = 0u;
   CHECK_EQ(rig.loader().device_ids(CL_DEVICE_TYPE_GPU, 1u, &device, &devices), CL_SUCCESS);
-  rig.host().blob_import(0u, 0x79u);
+  rig.host().arena_import(0x79u, 3u);
   rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
   rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
   rig.host().cl_handle(host_context + 1u, CL_SUCCESS);

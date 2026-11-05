@@ -374,7 +374,7 @@ bool GuestGlContext::take_host_error(uint32_t &error)
 {
     AV_SCOPE("GuestGlContext::take_host_error");
     error = no_error;
-    if (channel_.arena_view() == nullptr) return false;
+    if (!channel_.has_arena()) return false;
     const uint64_t word = channel_.host_errors();
     if (!reported_.readable(word)) return false;
     error = reported_.take(word);
@@ -457,7 +457,7 @@ void GuestGlContext::report(StateWriter &writer, uint64_t handle) const
     writer.number("error", error_);
     writer.number("device", guest_device());
     loss_.report(writer);
-    writer.flag("arena", channel_.arena_view() != nullptr);
+    writer.flag("arena", channel_.has_arena());
     writer.text("renderer", state_ == State::created ? "" : strings_[renderer_row]);
     writer.number("extensions", extensions_.count());
     framebuffers_.report(writer);
@@ -531,7 +531,7 @@ bool GuestGlContext::learn()
     cap_version(shading_row, latest_language_minor);
     policy_.learn(wire, extensions_);
     uint32_t sliced = 0u;
-    if (channel_.arena_view() != nullptr && glmemproto::av_glmem_QueryBufferSlicesGL(wire, &sliced) && sliced == 1u)
+    if (channel_.has_arena() && glmemproto::av_glmem_QueryBufferSlicesGL(wire, &sliced) && sliced == 1u)
         slices_.grant(link_.device().kmt());
     return !channel_.lost();
 }

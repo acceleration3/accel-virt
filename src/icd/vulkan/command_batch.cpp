@@ -157,10 +157,21 @@ ClientBlobArena &CommandBatch::blobs()
     return blobs_;
 }
 
-bool CommandBatch::make_room_for_blobs(size_t)
+bool CommandBatch::make_room_for_blobs(const uint64_t *, uint32_t)
 {
     AV_SCOPE("CommandBatch::make_room_for_blobs");
     return false;
+}
+
+ClientBlobLease CommandBatch::open_region(uint64_t)
+{
+    AV_SCOPE("CommandBatch::open_region");
+    return ClientBlobLease();
+}
+
+void CommandBatch::close_region(const ClientBlobLease &)
+{
+    AV_SCOPE("CommandBatch::close_region");
 }
 
 const TransferRoom &CommandBatch::room() const

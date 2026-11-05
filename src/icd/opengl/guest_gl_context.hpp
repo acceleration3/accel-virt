@@ -129,7 +129,7 @@ private:
     enum : uint32_t { vendor_row, renderer_row, version_row, shading_row, strings };
     static constexpr uint32_t string_names[strings] = {gl_vendor, gl_renderer, gl_version,
                                                         gl_shading_language_version};
-    static constexpr uint64_t arena_bytes = uint64_t{48} << 20u;
+    static constexpr uint64_t arena_bytes = uint64_t{32} << 20u;
 
     [[nodiscard]] Status build();
     [[nodiscard]] Status make_once();
