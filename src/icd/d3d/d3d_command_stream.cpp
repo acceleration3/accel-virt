@@ -32,7 +32,10 @@ Status D3dCommandStream::flush()
     if (recording_ != nullptr || transport_.held() == 0u) return Status::ok;
     const TransportResult sent = transport_.flush();
     batches_++;
-    if (sent == TransportResult::ok) return Status::ok;
+    if (sent == TransportResult::ok) {
+        transport_.grow_if_pressed();
+        return Status::ok;
+    }
     failed_ = true;
     return Status::invalid_state;
 }

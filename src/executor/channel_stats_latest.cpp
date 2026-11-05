@@ -39,7 +39,7 @@ bool ChannelStatsLatest::received() const
     return __atomic_load_n(&reports_, __ATOMIC_ACQUIRE) != 0u || __atomic_load_n(&rejected_, __ATOMIC_RELAXED) != 0u;
 }
 
-void ChannelStatsLatest::report(StateWriter &writer) const
+void ChannelStatsLatest::report(StateWriter &writer, uint32_t parked_blobs) const
 {
     AV_SCOPE("ChannelStatsLatest::report");
     auto value = [this](ChannelCounter counter) {
@@ -58,9 +58,12 @@ void ChannelStatsLatest::report(StateWriter &writer) const
     writer.number("refused_no_space", value(ChannelCounter::refused_no_space));
     writer.number("refused_no_memory", value(ChannelCounter::refused_no_memory));
     writer.number("refused_other", value(ChannelCounter::refused_other));
+    writer.number("arena_grows", value(ChannelCounter::arena_grows));
     writer.number("arena_bytes", value(ChannelCounter::arena_bytes));
     writer.number("arena_peak_ring_bytes", value(ChannelCounter::arena_peak_ring_bytes));
     writer.number("arena_set_aside_bytes", value(ChannelCounter::arena_set_aside_bytes));
+    writer.number("arena_segments", value(ChannelCounter::arena_segments));
+    writer.number("parked_blobs", parked_blobs);
     writer.close();
 }
 

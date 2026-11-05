@@ -21,6 +21,7 @@
 #include "proto/submission/command_pieces.hpp"
 #include "proto/submission/command_stream.hpp"
 #include "proto/submission/ring_header.hpp"
+#include "proto/wire/guest_bytes.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 
 namespace av {
@@ -37,7 +38,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, BlockSource &memory, Sub
       room_(staging != nullptr ? staging_bytes : 0u, reply_bytes), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
       path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_{}, route_(nullptr), standby_(nullptr), gates_busy_(0u), pending_(nullptr, 0u), unpublished_(0u), answered_(false), answered_fence_(0u),
-      decode_arena_(nullptr, 0u), blobs_(), arena_(nullptr), spill_(memory), answer_(memory)
+      decode_arena_(nullptr, 0u), blobs_(), arena_(nullptr), room_pressure_(0u), room_wait_ticks_(0u), spill_(memory), answer_(memory)
 {
     AV_SCOPE("KmtTransport::KmtTransport");
 }
@@ -49,7 +50,7 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
       room_(staging != nullptr ? staging_bytes : 0u, reply_bytes), allocations_{},
       dma_address_(0u), context_(0u), hardware_scheduled_(false), ring_(), newest_end_(0u), newest_fence_(0u), previous_end_(0u), doorbell_(connection.kmt()),
       path_(connection.kmt(), doorbell_, ring_), reply_(), watch_(connection.kmt(), ring_), fences_(), fence_ends_{}, faulted_(false), held_{}, route_(nullptr), standby_(nullptr), gates_busy_(0u), pending_(nullptr, 0u), unpublished_(0u), answered_(false), answered_fence_(0u),
-      decode_arena_(nullptr, 0u), blobs_(), arena_(nullptr), spill_(), answer_()
+      decode_arena_(nullptr, 0u), blobs_(), arena_(nullptr), room_pressure_(0u), room_wait_ticks_(0u), spill_(), answer_()
 {
     AV_SCOPE("KmtTransport::KmtTransport");
 }
@@ -593,12 +594,16 @@ bool KmtTransport::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
 {
     AV_SCOPE("KmtTransport::make_room_for_blobs");
     if (!blobs_.ready()) return false;
-    release_idle_segments();
+    if (blobs_.fits(sizes, count)) return true;
+    if (!blobs_.fits_drained(sizes, count) && !grow_for_blobs(sizes, count)) return false;
     if (blobs_.fits(sizes, count)) return true;
     if (flush() != TransportResult::ok) return false;
     retire_consumed();
-    if (blobs_.fits(sizes, count) || consumed_for_blobs(sizes, count)) return true;
-    if (grow_for_blobs(sizes, count)) return true;
+    if (blobs_.fits(sizes, count)) return true;
+    room_pressure_++;
+    const uint64_t waiting_from = published_now();
+    ScopeExit      waited([this, waiting_from] { room_wait_ticks_ += published_now() - waiting_from; });
+    if (consumed_for_blobs(sizes, count)) return true;
     while (!blobs_.fits(sizes, count) && fences_.outstanding() != 0u && !faulted_) {
         const uint64_t oldest = fences_.oldest();
         const uint64_t end = fence_ends_[oldest % TransportFence::max_outstanding];
@@ -634,9 +639,41 @@ bool KmtTransport::grow_for_blobs(const uint64_t *sizes, uint32_t count)
 {
     AV_SCOPE("KmtTransport::grow_for_blobs");
     if (arena_ == nullptr || faulted_) return false;
-    uint64_t need = 0u;
-    for (uint32_t index = 0u; index < count; index++) need += sizes[index];
-    return arena_->grow(need) == Status::ok && blobs_.fits(sizes, count);
+    uint64_t sum = 0u;
+    uint64_t largest = 0u;
+    for (uint32_t index = 0u; index < count; index++) {
+        sum = sizes[index] > ~sum ? ~uint64_t{0} : sum + sizes[index];
+        if (sizes[index] > largest) largest = sizes[index];
+    }
+    const uint64_t need = sum <= GuestBytes::slot_bytes ? sum : largest;
+    return grow_arena(need) && blobs_.fits_drained(sizes, count);
+}
+
+bool KmtTransport::grow_arena(uint64_t need)
+{
+    AV_SCOPE("KmtTransport::grow_arena");
+    if (arena_->grow(need) != Status::ok) return false;
+    stats_.note(ChannelCounter::arena_grows, 1u);
+    stats_.observe(blobs_);
+    retire_consumed();
+    return true;
+}
+
+void KmtTransport::grow_if_pressed()
+{
+    AV_SCOPE("KmtTransport::grow_if_pressed");
+    if (arena_ == nullptr || faulted_ || !blobs_.ready()) return;
+    const bool waiting = room_pressure_ >= pressure_waits || room_wait_ticks_ >= pressure_wait_ticks;
+    const bool pressed = waiting && uint64_t{blobs_.peak_ring()} * 100u >=
+                                        uint64_t{blobs_.ring_bytes()} * pressure_percent;
+    if (!pressed) {
+        room_pressure_ >>= 1u;
+        room_wait_ticks_ >>= 1u;
+        return;
+    }
+    room_pressure_ = 0u;
+    room_wait_ticks_ = 0u;
+    static_cast<void>(grow_arena(0u));
 }
 
 ClientBlobLease KmtTransport::open_region(uint64_t bytes)

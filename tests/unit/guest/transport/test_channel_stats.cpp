@@ -49,7 +49,8 @@ TEST(channel_stats_note, every_event_counter_accepts_a_note)
                                    ChannelCounter::room_waits,      ChannelCounter::room_wait_us,
                                    ChannelCounter::inline_bulk,     ChannelCounter::copied_mappings,
                                    ChannelCounter::slice_waits,     ChannelCounter::refused_no_space,
-                                   ChannelCounter::refused_no_memory, ChannelCounter::refused_other};
+                                   ChannelCounter::refused_no_memory, ChannelCounter::refused_other,
+                                   ChannelCounter::arena_grows};
   ChannelStats stats;
   for (const ChannelCounter counter : events) stats.note(counter, 1u);
   for (const ChannelCounter counter : events) CHECK_EQ(value_of(stats, counter), 1u); }
@@ -65,6 +66,7 @@ TEST(channel_stats_note, the_gauges_and_out_of_range_counters_cannot_be_noted)
   stats.note(ChannelCounter::arena_bytes, 9u);
   stats.note(ChannelCounter::arena_peak_ring_bytes, 9u);
   stats.note(ChannelCounter::arena_set_aside_bytes, 9u);
+  stats.note(ChannelCounter::arena_segments, 9u);
   stats.note(ChannelCounter::count, 9u);
   stats.note(static_cast<ChannelCounter>(0xFFFFFFFFu), 9u);
   for (std::uint32_t index = 0u; index < ChannelStatsReport::counters; index++)
@@ -95,7 +97,7 @@ TEST(channel_stats_piece, the_second_piece_splits_a_transfer_and_every_later_one
   CHECK_EQ(value_of(stats, ChannelCounter::split_pieces), 4u);
   CHECK(stats.invariants_hold()); }
 
-TEST(channel_stats_observe, reads_the_arena_into_the_three_gauges)
+TEST(channel_stats_observe, reads_the_arena_into_its_gauges)
 { std::uint8_t     block[4096];
   ClientBlobArena  arena(block, sizeof block);
   ChannelStats     stats;
@@ -103,14 +105,18 @@ TEST(channel_stats_observe, reads_the_arena_into_the_three_gauges)
   CHECK_EQ(value_of(stats, ChannelCounter::arena_bytes), arena.lent());
   CHECK_EQ(value_of(stats, ChannelCounter::arena_peak_ring_bytes), arena.peak_ring());
   CHECK_EQ(value_of(stats, ChannelCounter::arena_set_aside_bytes), arena.set_aside_bytes());
+  CHECK_EQ(value_of(stats, ChannelCounter::arena_segments), 1u);
   const av::ClientBlobLease lease = arena.take(1024u);
   CHECK(lease.taken());
   std::uint8_t region[512];
   CHECK(arena.add_region(std::uint64_t{1} << 26u, region, sizeof region));
+  std::uint8_t more[64];
+  CHECK(arena.add_segment(std::uint64_t{2} << 26u, more, sizeof more));
   stats.observe(arena);
   CHECK(arena.peak_ring() >= 1024u);
   CHECK_EQ(value_of(stats, ChannelCounter::arena_peak_ring_bytes), arena.peak_ring());
   CHECK_EQ(value_of(stats, ChannelCounter::arena_set_aside_bytes), arena.set_aside_bytes());
+  CHECK_EQ(value_of(stats, ChannelCounter::arena_segments), 2u);
   CHECK(stats.invariants_hold()); }
 
 TEST(channel_stats_observe, an_unchanged_gauge_is_not_a_reason_to_report)

@@ -19,7 +19,7 @@ public:
     void accept(uint32_t context_id, const uint8_t *body, size_t size);
     void reset();
     bool received() const;
-    void report(StateWriter &writer) const;
+    void report(StateWriter &writer, uint32_t parked_blobs) const;
 
     bool invariants_hold() const;
 

@@ -1,5 +1,7 @@
 #include "icd/common/host_channel.hpp"
 
+#include "core/log/log_line.hpp"
+
 #include "core/log/driver_log.hpp"
 #include "core/platform/block_source.hpp"
 #include "core/platform/thread_lock_hold.hpp"
@@ -54,12 +56,15 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
     }
     static_cast<void>(locked_.construct(transport_.object(), lock_));
     device_ = &device;
-    if (arena_bytes_ != 0u && open_arena(device) != Status::ok) {
-        if (transport_.object().faulted()) {
-            lines_.write("the context faulted opening its blob arena");
-            return Status::invalid_state;
-        }
-        lines_.write("no blob arena for the context; bulk data crosses inline");
+    const Status arena = arena_bytes_ != 0u ? open_arena(device) : Status::ok;
+    if (arena != Status::ok) {
+        const bool faulted = transport_.object().faulted();
+        LogLine(lines_)
+            .text(faulted ? "the context faulted opening its blob arena, status "
+                          : "no blob arena for the context; bulk data crosses inline, status ")
+            .number(static_cast<uint32_t>(arena))
+            .write();
+        if (faulted) return Status::invalid_state;
     }
     undo.dismiss();
     return Status::ok;
@@ -68,7 +73,7 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
 Status HostChannel::open_arena(GuestConnection &device)
 {
     AV_SCOPE("HostChannel::open_arena");
-    static_cast<void>(arena_.construct(device, transport_.object()));
+    static_cast<void>(arena_.construct(device, transport_.object(), lines_));
     uint64_t bytes = arena_bytes_;
     Status   opened = arena_.object().open(bytes);
     while (opened != Status::ok && !transport_.object().faulted() && bytes / 2u >= KmtBlobArena::default_bytes) {
@@ -315,7 +320,9 @@ TransportResult HostChannel::flush()
     if (!opened()) return TransportResult::failed;
     const ThreadLockHold release(lock_);
     const TransportResult flushed = transport_.object().flush();
-    if (flushed == TransportResult::ok) transport_.object().release_idle_segments();
+    if (flushed != TransportResult::ok) return flushed;
+    transport_.object().release_idle_segments();
+    transport_.object().grow_if_pressed();
     return flushed;
 }
 

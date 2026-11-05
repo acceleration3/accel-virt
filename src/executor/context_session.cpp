@@ -84,7 +84,7 @@ void ContextSession::channel_stats(uint32_t context_id, const uint8_t *body, siz
 void ContextSession::report_channel(StateWriter &writer) const
 {
     AV_SCOPE("ContextSession::report_channel");
-    if (channel_.received()) channel_.report(writer);
+    if (channel_.received()) channel_.report(writer, parked_count_);
 }
 
 uint32_t ContextSession::lose_device()

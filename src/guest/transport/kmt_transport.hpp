@@ -38,6 +38,10 @@ struct KmtTransportProbe;
 
 class KmtTransport final : public ClientTransport {
 public:
+    static constexpr uint32_t pressure_waits = 4u;
+    static constexpr uint64_t pressure_wait_ticks = 1000000u;
+    static constexpr uint64_t pressure_percent = 75u;
+
     static constexpr uint32_t dma_bytes    = 4096u;
 
     KmtTransport(GuestConnection &connection, BlockSource &memory, SubApi sub_api, uint8_t ring_order,
@@ -89,6 +93,7 @@ public:
     void               close_region(const ClientBlobLease &region) override;
     void               attach_arena(KmtBlobArena *arena);
     void               release_idle_segments();
+    void               grow_if_pressed();
     const TransferRoom &room() const override;
     void                note(ChannelCounter counter, uint64_t amount) override;
     TransportResult send_batch(const uint8_t *framed, size_t length, WireReader &reply);
@@ -143,6 +148,7 @@ private:
     bool                          consumed_within_spin();
     bool                          consumed_for_blobs(const uint64_t *sizes, uint32_t count);
     bool                          grow_for_blobs(const uint64_t *sizes, uint32_t count);
+    bool                          grow_arena(uint64_t need);
     void                          spin_once() const;
     template <typename Arrived> bool arrives_eventually(Arrived arrived);
     [[nodiscard]] Status          wait_for_host(uint64_t fence);
@@ -188,6 +194,8 @@ private:
     WireArena        decode_arena_;
     ClientBlobArena  blobs_;
     KmtBlobArena    *arena_;
+    uint32_t         room_pressure_;
+    uint64_t         room_wait_ticks_;
     SpillBlock       spill_;
     SpillBlock       answer_;
     ChannelStats     stats_;

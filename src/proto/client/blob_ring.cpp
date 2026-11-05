@@ -58,6 +58,12 @@ BlobRing::Placement BlobRing::placement() const
     return Placement(lent_, base_, top_, wrapped_);
 }
 
+BlobRing::Placement BlobRing::drained() const
+{
+    AV_SCOPE("BlobRing::drained");
+    return Placement(lent_, 0u, 0u, false);
+}
+
 BlobRing::Placement::Placement() : lent_(0u), base_(0u), top_(0u), wrapped_(false)
 {
     AV_SCOPE("BlobRing::Placement::Placement");

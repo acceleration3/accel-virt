@@ -35,6 +35,7 @@ public:
     void            retire_through(uint64_t fence);
     [[nodiscard]] bool holds(const void *bytes, size_t count, uint64_t &offset) const;
     bool               fits(const uint64_t *sizes, uint32_t count) const;
+    bool               fits_drained(const uint64_t *sizes, uint32_t count) const;
 
     uint32_t segments() const;
     uint64_t segment_base(uint32_t index) const;
@@ -64,7 +65,7 @@ private:
     bool           overlaps(uint64_t base, size_t bytes) const;
     const Segment *segment_at(uint64_t offset) const;
     Segment       *segment_at(uint64_t offset);
-    void           drop_all();
+    bool           placed(BlobRing::Placement *plans, const uint64_t *sizes, uint32_t wanted) const;
 
     Segment  segments_[max_segments];
     Region   regions_[max_regions];

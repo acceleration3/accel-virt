@@ -1,5 +1,7 @@
 #include "guest/transport/kmt_blob_arena.hpp"
 
+#include "core/log/driver_log.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/client/client_blob_arena.hpp"
@@ -8,8 +10,8 @@
 
 namespace av {
 
-KmtBlobArena::KmtBlobArena(GuestConnection &connection, KmtTransport &transport)
-    : connection_(connection), transport_(transport), slots_(), control_(), rings_(), regions_(), slots_taken_(false), idle_since_{}
+KmtBlobArena::KmtBlobArena(GuestConnection &connection, KmtTransport &transport, DriverLog &lines)
+    : connection_(connection), transport_(transport), lines_(lines), slots_(), control_(), rings_(), regions_(), slots_taken_(false), idle_since_{}
 {
     AV_SCOPE("KmtBlobArena::KmtBlobArena");
 }
@@ -109,13 +111,31 @@ Status KmtBlobArena::abandon()
 Status KmtBlobArena::grow(uint64_t need)
 {
     AV_SCOPE("KmtBlobArena::grow");
-    if (!lending()) return Status::invalid_state;
     const uint64_t total = transport_.blobs().ring_bytes();
     const uint64_t doubled = total < GuestBytes::slot_bytes ? total : GuestBytes::slot_bytes;
     const uint64_t page = ArenaSegment::page_bytes;
-    uint64_t       want = doubled > need ? doubled : need;
-    want = (want + page - 1u) / page * page;
-    if (want == 0u || want < need || want > max_bytes || total + want > max_bytes) return Status::no_space;
+    Status         grown = lending() ? Status::no_space : Status::invalid_state;
+    if (lending() && need <= GuestBytes::slot_bytes) {
+        uint64_t want = doubled > need ? doubled : need;
+        want = (want + page - 1u) / page * page;
+        if (want != 0u && want >= need && want <= GuestBytes::slot_bytes && total + want <= max_bytes)
+            grown = add_ring(want);
+    }
+    if (grown != Status::ok)
+        LogLine(lines_)
+            .text("the blob arena did not grow by ")
+            .number(need)
+            .text(" bytes over ")
+            .number(total)
+            .text(", status ")
+            .number(static_cast<uint32_t>(grown))
+            .write();
+    return grown;
+}
+
+Status KmtBlobArena::add_ring(uint64_t want)
+{
+    AV_SCOPE("KmtBlobArena::add_ring");
     for (ObjectStorage<ArenaSegment> &storage : rings_) {
         if (storage.constructed()) continue;
         static_cast<void>(storage.construct(connection_, transport_, slots_));

@@ -35,16 +35,16 @@ private:
 
 class Dump {
 public:
-    explicit Dump(const ChannelStatsLatest &latest)
+    explicit Dump(const ChannelStatsLatest &latest, std::uint32_t parked = 0u)
         : writer_(text_, sizeof text_)
     {
-        latest.report(writer_);
+        latest.report(writer_, parked);
     }
     bool has(const char *needle) const { return std::strstr(writer_.dump(), needle) != nullptr; }
     const char *text() const { return writer_.dump(); }
 
 private:
-    char        text_[1024] = {};
+    char        text_[2048] = {};
     StateWriter writer_;
 };
 
@@ -66,10 +66,11 @@ TEST(channel_stats_latest_accept, keeps_the_newest_report_and_the_context_it_cam
   CHECK(latest.invariants_hold());
   latest.accept(9u, second.bytes(), ChannelStatsReport::encoded_size);
   CHECK(latest.invariants_hold());
-  const Dump dump(latest);
+  const Dump dump(latest, 3u);
   CHECK(dump.has("channel/9 reports=2 rejected=0"));
   CHECK(dump.has("split_transfers=5000 split_pieces=5001 room_waits=5002 room_wait_us=5003"));
-  CHECK(dump.has("arena_bytes=5010 arena_peak_ring_bytes=5011 arena_set_aside_bytes=5012")); }
+  CHECK(dump.has("arena_grows=5010 arena_bytes=5011 arena_peak_ring_bytes=5012 arena_set_aside_bytes=5013 "
+                 "arena_segments=5014 parked_blobs=3")); }
 
 TEST(channel_stats_latest_accept, a_malformed_report_is_counted_and_changes_nothing_else)
 { ChannelStatsLatest latest;
@@ -115,7 +116,7 @@ TEST(channel_stats_latest_reset, forgets_every_report_and_every_value)
   CHECK(latest.invariants_hold());
   const Dump dump(latest);
   CHECK(dump.has("channel/0 reports=0 rejected=0 split_transfers=0"));
-  CHECK(dump.has("arena_set_aside_bytes=0")); }
+  CHECK(dump.has("arena_set_aside_bytes=0 arena_segments=0 parked_blobs=0")); }
 
 TEST(channel_stats_latest_reset, a_reset_collector_accepts_again)
 { ChannelStatsLatest latest;
@@ -132,8 +133,8 @@ TEST(channel_stats_latest, the_report_names_every_counter_once_in_order)
   const Dump           dump(latest);
   const char *const    names[] = {"split_transfers", "split_pieces", "room_waits", "room_wait_us", "inline_bulk",
                                   "copied_mappings", "slice_waits", "refused_no_space", "refused_no_memory",
-                                  "refused_other", "arena_bytes", "arena_peak_ring_bytes",
-                                  "arena_set_aside_bytes"};
+                                  "refused_other", "arena_grows", "arena_bytes", "arena_peak_ring_bytes",
+                                  "arena_set_aside_bytes", "arena_segments"};
   CHECK_EQ(sizeof names / sizeof names[0], ChannelStatsReport::counters);
   const char *last = dump.text();
   for (const char *name : names) {

@@ -50,7 +50,7 @@ TEST(channel_stats_report_encode, places_the_version_the_count_and_every_counter
   std::uint8_t             bytes[ChannelStatsReport::encoded_size] = {};
   CHECK_STATUS(report.encode(bytes, sizeof bytes), Status::ok);
   const ByteLayout layout(bytes, sizeof bytes);
-  CHECK_EQ(layout.at(0u, 4u), 2u);
+  CHECK_EQ(layout.at(0u, 4u), 3u);
   CHECK_EQ(layout.at(4u, 4u), ChannelStatsReport::counters);
   for (std::uint32_t index = 0u; index < ChannelStatsReport::counters; index++)
       CHECK(layout.at(value_offset(index), 8u) == 0x0101010101010101ull * (index + 1u)); }
@@ -113,8 +113,8 @@ TEST(channel_stats_report_decode, only_the_exact_length_is_accepted)
       CHECK_STATUS(decoded.decode(bytes, length), Status::malformed);
   } }
 
-TEST(channel_stats_report_decode, a_version_other_than_two_is_malformed)
-{ const std::uint8_t versions[] = {0u, 1u, 3u, 0x80u, 0xFFu};
+TEST(channel_stats_report_decode, a_version_other_than_three_is_malformed)
+{ const std::uint8_t versions[] = {0u, 1u, 2u, 4u, 0x80u, 0xFFu};
   for (const std::uint8_t version : versions) {
       std::uint8_t bytes[ChannelStatsReport::encoded_size] = {};
       CHECK_STATUS(filled().encode(bytes, sizeof bytes), Status::ok);

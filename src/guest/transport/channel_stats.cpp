@@ -32,6 +32,7 @@ void ChannelStats::observe(const ClientBlobArena &arena)
     gauge(ChannelCounter::arena_bytes, arena.lent());
     gauge(ChannelCounter::arena_peak_ring_bytes, arena.peak_ring());
     gauge(ChannelCounter::arena_set_aside_bytes, arena.set_aside_bytes());
+    gauge(ChannelCounter::arena_segments, arena.segments());
 }
 
 void ChannelStats::gauge(ChannelCounter counter, uint64_t value)

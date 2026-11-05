@@ -38,6 +38,7 @@ public:
     bool            ready() const;
     ClientBlobLease take(size_t count);
     Placement       placement() const;
+    Placement       drained() const;
     void            give_back(const ClientBlobLease &lease);
     void            seal();
     void            mark(uint64_t fence);
