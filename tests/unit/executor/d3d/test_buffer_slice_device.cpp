@@ -6,7 +6,12 @@
 #include "executor/sharing/session_shares.hpp"
 #include "fixtures/d3d/triangle_ps.hpp"
 #include "fixtures/d3d/triangle_vs.hpp"
+#include "executor/import_table.hpp"
+#include "executor/imported_blob.hpp"
 #include "harness/executor/d3d_loopback.hpp"
+#include "proto/d3d/buffer_slice_support.hpp"
+#include "proto/submission/blob_role.hpp"
+#include "harness/executor/executor_log_rig.hpp"
 #include "harness/executor/local_import.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d/d3d_dispatch_client.h"
@@ -52,13 +57,14 @@ av::ObjectStorage<av::D3dBackend> backend_storage;
 
 class SliceSession {
 public:
-    SliceSession(av::D3d11HostDevice &device, av::HostMemorySource &source)
-        : made_(backend_storage.construct()), wire_(backend_storage.object(), &source, region_bytes, lent_bytes)
+    SliceSession(av::ExecutorLogRig &rig, av::D3d11HostDevice &device, av::HostMemorySource &source)
+        : made_(backend_storage.construct(rig.log)),
+          wire_(backend_storage.object(), rig.imports, &source, region_bytes, lent_bytes)
     {
-        CHECK(backend().initialize(unshared_, &device));
+        CHECK(backend().initialize(unshared_, rig.imports, &device));
         std::uint32_t hresult = 1u, level = 0u, supported = 0u;
         CHECK(av_d3d_QueryBufferSlices11(wire_, &supported));
-        CHECK_EQ(supported, 1u);
+        CHECK_EQ(supported, static_cast<std::uint32_t>(av::BufferSliceSupport::multi_block));
         CHECK(av_d3d_CreateDevice11(wire_, 1u, 0u, 0u, &hresult, &level));
         CHECK_EQ(hresult, 0u);
     }
@@ -126,11 +132,12 @@ bool holds(av::D3dLoopback &wire, std::uint32_t resource, std::uint32_t seed)
 
 TEST(buffer_slice_device, a_buffer_on_a_slice_reads_what_the_guest_wrote_when_the_gpu_runs)
 {
-    av::LoaderHostApis    apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice  *device = nullptr;
     av::HostMemorySource *source = nullptr;
     if (!slice_host(apis, device, source)) return;
-    SliceSession     session(*device, *source);
+    SliceSession     session(rig, *device, *source);
     av::D3dLoopback &wire = session.wire();
     const std::uint64_t store = wire.open_memory(upload, store_bytes);
     CHECK(store != 0u);
@@ -155,6 +162,37 @@ TEST(buffer_slice_device, a_buffer_on_a_slice_reads_what_the_guest_wrote_when_th
     CHECK(av_d3d_CopyResource(wire, late, mapped));
     CHECK_EQ(session.finish(), 0u);
     CHECK(holds(wire, late, 3000u));
+    CHECK_EQ(wire.refused(), 0u);
+    CHECK(session.backend().invariants_hold());
+}
+
+TEST(buffer_slice_device, a_buffer_follows_its_slice_from_one_block_of_memory_to_another)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice  *device = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!slice_host(apis, device, source)) return;
+    SliceSession     session(rig, *device, *source);
+    av::D3dLoopback &wire = session.wire();
+    const std::uint64_t first = wire.open_memory(upload, store_bytes);
+    const std::uint64_t second = wire.open_memory(upload, store_bytes);
+    CHECK(first != 0u);
+    CHECK(second != 0u);
+    CHECK(first != second);
+    constexpr std::uint32_t mapped = 10u, from_first = 11u, from_second = 12u;
+    CHECK(av_d3d_CreateResource(wire, mapped, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateResource(wire, from_first, buffer_desc(usage_default, 0u, 0u), 0u, 0u, 0u));
+    CHECK(av_d3d_CreateResource(wire, from_second, buffer_desc(usage_default, 0u, 0u), 0u, 0u, 0u));
+    fill(wire.memory(first, first_slice), 1000u);
+    fill(wire.memory(second, 0u), 2000u);
+    CHECK(av_d3d_BindBufferSlice(wire, mapped, first, first_slice, buffer_bytes));
+    CHECK(av_d3d_CopyResource(wire, from_first, mapped));
+    CHECK(av_d3d_BindBufferSlice(wire, mapped, second, 0u, buffer_bytes));
+    CHECK(av_d3d_CopyResource(wire, from_second, mapped));
+    CHECK_EQ(session.finish(), 0u);
+    CHECK(holds(wire, from_first, 1000u));
+    CHECK(holds(wire, from_second, 2000u));
     CHECK_EQ(wire.refused(), 0u);
     CHECK(session.backend().invariants_hold());
 }
@@ -195,23 +233,19 @@ const Misuse misuses[] = {
     [](av::D3dLoopback &wire, std::uint64_t store) {
         CHECK(av_d3d_BindBufferSlice(wire, fixed, store, 0u, buffer_bytes));
     },
-    [](av::D3dLoopback &wire, std::uint64_t) {
-        const std::uint64_t second = wire.open_memory(upload, store_bytes);
-        CHECK(second != 0u);
-        CHECK(av_d3d_BindBufferSlice(wire, dynamic, second, 0u, buffer_bytes));
-    },
 };
 
 }
 
 TEST(buffer_slice_device, each_misuse_of_a_bind_removes_a_healthy_device)
 {
-    av::LoaderHostApis    apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice  *device = nullptr;
     av::HostMemorySource *source = nullptr;
     if (!slice_host(apis, device, source)) return;
     for (const Misuse misuse : misuses) {
-        SliceSession     session(*device, *source);
+        SliceSession     session(rig, *device, *source);
         av::D3dLoopback &wire = session.wire();
         const std::uint64_t store = wire.open_memory(upload, store_bytes);
         CHECK(store != 0u);
@@ -233,19 +267,25 @@ TEST(buffer_slice_device, each_misuse_of_a_bind_removes_a_healthy_device)
     }
 }
 
-TEST(buffer_slice_device, a_store_that_cannot_be_imported_refuses_every_bind_after)
+TEST(buffer_slice_device, a_store_that_cannot_be_imported_refuses_its_own_binds_and_no_other_store_s)
 {
-    av::LoaderHostApis    apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice  *device = nullptr;
     av::HostMemorySource *source = nullptr;
     if (!slice_host(apis, device, source)) return;
-    SliceSession     session(*device, *source);
-    av::D3dLoopback &wire = session.wire();
     alignas(4096) static std::uint8_t unexported[store_bytes];
     av::LocalImport lost(unexported, sizeof unexported, 99u);
-    CHECK(session.backend().adopt(lost.blob()));
+    lost.memory().bind(*source);
+    SliceSession     session(rig, *device, *source);
+    av::D3dLoopback &wire = session.wire();
+    std::uint64_t lost_handle = 0u;
+    av::ImportedBlob *taken = nullptr;
+    CHECK_STATUS(rig.imports.take(99u, lost.memory(), taken), av::Status::ok);
+    CHECK(session.backend().adopt(lost.memory(), av::BlobRole(), lost_handle));
+    CHECK_STATUS(rig.imports.name(*taken, lost_handle), av::Status::ok);
     CHECK(av_d3d_CreateResource(wire, dynamic, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u, 0u, 0u));
-    CHECK(av_d3d_BindBufferSlice(wire, dynamic, lost.blob().wire_handle(), 0u, buffer_bytes));
+    CHECK(av_d3d_BindBufferSlice(wire, dynamic, lost_handle, 0u, buffer_bytes));
     CHECK_EQ(session.finish(), driver_internal_error);
     const std::uint64_t store = wire.open_memory(upload, store_bytes);
     CHECK(store != 0u);
@@ -254,18 +294,22 @@ TEST(buffer_slice_device, a_store_that_cannot_be_imported_refuses_every_bind_aft
     CHECK(av_d3d_SelectDevice11(wire, 2u));
     CHECK(av_d3d_CreateResource(wire, dynamic + 1u, buffer_desc(usage_dynamic, bind_vertex, cpu_write), 0u, 0u, 0u));
     CHECK_EQ(session.finish(), 0u);
+    CHECK_EQ(rig.sink.holding("could not be imported to draw from"), 1u);
     CHECK(av_d3d_BindBufferSlice(wire, dynamic + 1u, store, 0u, buffer_bytes));
-    CHECK_EQ(session.finish(), driver_internal_error);
-    session.backend().abandon(lost.blob());
+    CHECK_EQ(session.finish(), 0u);
+    CHECK_EQ(rig.sink.holding("could not be imported to draw from"), 1u);
+    session.backend().abandon(lost.memory(), lost_handle);
+    CHECK(rig.imports.forget(99u) == &lost.memory());
 }
 
 TEST(buffer_slice_device, a_buffer_on_a_store_that_goes_is_given_storage_of_its_own)
 {
-    av::LoaderHostApis    apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice  *device = nullptr;
     av::HostMemorySource *source = nullptr;
     if (!slice_host(apis, device, source)) return;
-    SliceSession     session(*device, *source);
+    SliceSession     session(rig, *device, *source);
     av::D3dLoopback &wire = session.wire();
     const std::uint64_t store = wire.open_memory(upload, store_bytes);
     CHECK(store != 0u);
@@ -315,11 +359,12 @@ std::uint32_t pixel(const std::uint8_t *pixels, std::uint32_t x, std::uint32_t y
 
 TEST(buffer_slice_device, a_draw_reads_vertices_and_constants_from_slices)
 {
-    av::LoaderHostApis    apis;
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
     av::D3d11HostDevice  *device = nullptr;
     av::HostMemorySource *source = nullptr;
     if (!slice_host(apis, device, source)) return;
-    SliceSession     session(*device, *source);
+    SliceSession     session(rig, *device, *source);
     av::D3dLoopback &wire = session.wire();
     const std::uint64_t store = wire.open_memory(upload, store_bytes);
     CHECK(store != 0u);
