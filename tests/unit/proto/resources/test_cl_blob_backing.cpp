@@ -96,3 +96,23 @@ TEST(cl_blob_backing, the_invariant_catches_an_offset_held_by_nothing)
   CHECK(backing.invariants_hold());
   ClBlobBackingProbe::orphan_offset(backing);
   CHECK(!backing.invariants_hold()); }
+
+TEST(cl_blob_backing_set_in, names_the_memory_the_backing_is_inside_and_writes_it_into_the_list)
+{ ClBlobBacking written;
+  written.set_in(0x7700u, 0x4000u);
+  CHECK(written.held());
+  CHECK_EQ(written.memory(), 0x7700u);
+  CHECK_EQ(written.offset(), 0x4000u);
+  CHECK(written.invariants_hold());
+  std::uint64_t list[ClBlobBacking::list_words] = {};
+  CHECK(written.write(list));
+  CHECK_EQ(list[0], ClBlobBacking::property);
+  CHECK_EQ(list[1], 0x4000u);
+  CHECK_EQ(list[2], ClBlobBacking::import_property);
+  CHECK_EQ(list[3], 0x7700u);
+  CHECK_EQ(list[4], 0u);
+  ClBlobBacking read;
+  CHECK(read.read(list));
+  CHECK_EQ(read.memory(), 0x7700u);
+  CHECK_EQ(read.offset(), 0x4000u);
+  CHECK(read.invariants_hold()); }

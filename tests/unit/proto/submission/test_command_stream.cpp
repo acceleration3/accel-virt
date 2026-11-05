@@ -118,3 +118,25 @@ TEST(command_stream_next, survives_the_hostile_sweep)
   CHECK(!rejects(payload.bytes(), payload.size()));
   const std::uint32_t acceptable = 112u + 96u + 72u + 3u + 3u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
+
+TEST(command_stream_ends_in_piece, is_true_when_the_last_command_is_a_transport_piece_or_the_stream_is_damaged)
+{ Payload whole;
+  whole.command(0x10001u, 4u).command(CommandHeader::piece_id, 16u);
+  CommandStream pieced(whole.bytes(), whole.size());
+  CHECK(pieced.ends_in_piece());
+  Payload other;
+  other.command(CommandHeader::piece_id, 16u).command(0x10001u, 4u);
+  CommandStream finished(other.bytes(), other.size());
+  CHECK(!finished.ends_in_piece());
+  Payload another_api;
+  another_api.command(0x10000u | CommandHeader::piece_id, 16u);
+  CommandStream foreign(another_api.bytes(), another_api.size());
+  CHECK(!foreign.ends_in_piece());
+  CommandStream empty(nullptr, 0u);
+  CHECK(!empty.ends_in_piece());
+  Payload cut;
+  cut.command(0x10001u, 4u);
+  const std::uint8_t damaged[8] = {1, 0, 1, 0, 4, 0, 0, 0};
+  cut.raw(damaged, sizeof damaged);
+  CommandStream broken(cut.bytes(), cut.size());
+  CHECK(broken.ends_in_piece()); }
