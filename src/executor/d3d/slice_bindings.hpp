@@ -10,6 +10,7 @@
 namespace av {
 
 class BlockSource;
+class SliceImporter;
 class SourceMemory;
 
 class SliceBindings {
@@ -19,6 +20,7 @@ public:
         const SourceMemory *store_;
         const uint8_t      *slice_;
         uint64_t            bytes_;
+        const SliceImporter *importer_;
     };
 
     explicit SliceBindings(BlockSource &blocks);
@@ -30,6 +32,7 @@ public:
     bool                 find(uint32_t resource, Binding &was) const;
     template <typename Visitor>
     void                 take_all_bound_to(const SourceMemory &store, Visitor visit);
+    void                 take_all_of(const SliceImporter &importer);
     void                 clear();
     uint32_t             count() const;
 

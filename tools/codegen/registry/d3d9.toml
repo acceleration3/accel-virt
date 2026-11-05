@@ -122,10 +122,19 @@ params = ["u32 buffer", "u32 offset", "u32 flags", "bytes data"]
 [[command]]
 name = "QueryBufferSlices9"
 id = 0x210b
-doc = """Whether a vertex or index buffer made dynamic in D3DPOOL_DEFAULT can be pointed at a slice of a block of slice
-memory (BindBufferSlice9): 1 when the host's Direct3D 9 can draw from host memory in place, marks each batch against
-the GPU, and takes any number of blocks, 0 when it cannot - the host's DXVK cannot rename a buffer to storage it
-imported - and the guest then copies what it writes, as before (docs/mapped-buffers-plan.md)."""
+doc = """Whether the session's slice memory (BindBufferSlice9) is worth opening: 1 when the host has a Direct3D 9 device to
+draw from it, 0 when it has none and the guest copies what it writes, as before (docs/mapped-buffers-plan.md). Each
+device then asks QueryDeviceSlices9."""
+params = []
+reply = ["u32 supported"]
+
+[[command]]
+name = "QueryDeviceSlices9"
+id = 0x210d
+doc = """Whether the selected device can draw its dynamic buffers from slices (BindBufferSlice9), asked once when the guest
+creates the device: 1 when the host's Direct3D 9 device imports the memory of a slice block, marks its batches against the
+GPU and maps dynamic default-pool buffers directly (allowDirectBufferMapping is not off), 0 when it cannot. The guest
+then copies what it writes, as it does when QueryBufferSlices9 answered 0, and a bind it never sends cannot be refused."""
 params = []
 reply = ["u32 supported"]
 
@@ -136,8 +145,10 @@ doc = """The vertex or index buffer from now on is `bytes` at `offset` of a bloc
 upload memory the guest opened for slices and imported, named by the handle IMPORT_BLOB answered as `memory`
 (docs/host-memory.md) - which the guest writes and the host GPU reads in place: commands before this one read the
 buffer's storage before it, commands after it this slice. `bytes` covers at least the buffer; a slice outside its
-block, a buffer that was not made dynamic in D3DPOOL_DEFAULT, or a host QueryBufferSlices9 answered 0 for, is
-refused. A `memory` of 0, with `offset` and `bytes` 0, is the buffer leaving its slice, as BindBufferSlice's is: it
+block, a slice not at a multiple of 4 bytes, a buffer that was not made dynamic in D3DPOOL_DEFAULT, or a device
+QueryDeviceSlices9 answered 0 for, is refused. A bind the host cannot honour after that answer (it is out of memory,
+or marking batches failed) never removes the device: the buffer keeps its own storage and the host copies the slice
+into it before each draw that uses it. A `memory` of 0, with `offset` and `bytes` 0, is the buffer leaving its slice, as BindBufferSlice's is: it
 owns its storage again, keeping what the slice held. The host never locks a buffer bound to a slice, and a
 WriteBuffer9 to one takes it off the slice first."""
 params = ["u32 buffer", "u64 memory", "u64 offset", "u64 bytes"]

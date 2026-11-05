@@ -45,6 +45,12 @@ class SourceMemory;
 class SessionShares;
 class SharedSurfaces;
 
+enum class GuestApi : uint32_t {
+    d3d11,
+    d3d12,
+    d3d9,
+};
+
 class D3dBackend final : public SessionBackend, public d3dproto::ServerDispatch {
 public:
     static constexpr uint32_t max_rotation = 16u;
@@ -233,6 +239,7 @@ private:
     D3d11BatchProgress      progress11_;
     ConstantRing            constants_;
     uint64_t                missed_key_;
+    GuestApi                api_;
     bool                    mark_refused_;
     bool                    show_refused_;
     bool                    lost_;

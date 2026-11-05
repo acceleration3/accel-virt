@@ -26,7 +26,6 @@ public:
     [[nodiscard]] bool open(const D3dRuntime &runtime, const uint8_t *uuid);
     void               close();
     bool               opened() const;
-    bool               slices() const;
 
     int32_t make_device(IDirect3DDevice9 *&device) const;
     int32_t caps(_D3DCAPS9 &caps) const;
@@ -38,11 +37,9 @@ private:
     uint32_t adapter_for(const uint8_t *uuid);
     bool     checks(uint32_t usage, uint32_t type, uint32_t format) const;
     int32_t  multisample(uint32_t format, uint32_t type, uint32_t &quality_levels) const;
-    bool     probe_slices() const;
 
     IDirect3D9 *d3d9_;
     uint32_t    adapter_;
-    bool        slices_;
     D3d9FramePool frames_;
 };
 

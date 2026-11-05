@@ -28,6 +28,7 @@ inline constexpr uint32_t kCmd_ColorFill9 = 0x00042109;
 inline constexpr uint32_t kCmd_PresentPoint9 = 0x0004210a;
 inline constexpr uint32_t kCmd_QueryBufferSlices9 = 0x0004210b;
 inline constexpr uint32_t kCmd_BindBufferSlice9 = 0x0004210c;
+inline constexpr uint32_t kCmd_QueryDeviceSlices9 = 0x0004210d;
 inline constexpr uint32_t kCmd_SetRenderTarget9 = 0x00042200;
 inline constexpr uint32_t kCmd_Clear9 = 0x00042201;
 inline constexpr uint32_t kCmd_CreateVertexShader9 = 0x00042300;

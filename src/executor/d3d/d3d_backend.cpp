@@ -113,9 +113,9 @@ D3dBackend::D3dBackend(ExecutorLog &log)
       blocks_(heap_), remade_(blocks_, Pool::paged), states_(blocks_),
       lines_(log.d3d11()), refusal_(lines_), arena_(nullptr), objects_(blocks_), guest_(),
       region_(guest_), imports_(nullptr), slices_(blocks_, lines_), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_, log.d3d12()),
-      d3d9_(guest_, objects_, blocks_, slices_, log.d3d9()),
+      d3d9_(guest_, objects_, blocks_, slices_, fence_wake_, log.d3d9()),
       published_(blocks_, guest_), progress11_(fence_wake_), constants_(blocks_),
-      missed_key_(0u), mark_refused_(false), show_refused_(false), lost_(false)
+      missed_key_(0u), api_(GuestApi::d3d11), mark_refused_(false), show_refused_(false), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
@@ -179,10 +179,12 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
     if (device11_ == nullptr) return false;
     blocks_.forget();
     if (d3d12_.knows(command_id)) {
+        api_ = GuestApi::d3d12;
         finish_d3d11();
         return d3d12_.run(command_id, payload, reply, arena);
     }
     if (d3d9_.knows(command_id)) {
+        api_ = GuestApi::d3d9;
         finish_d3d11();
         return d3d9_.run(command_id, payload, reply, arena);
     }
@@ -212,7 +214,7 @@ void D3dBackend::finish_d3d11()
     if (device11_->signal(progress11_.fence(), progress11_.next())) {
         progress11_.signalled();
         published_.flushed();
-        slices_.reclaim(progress11_.reached());
+        slices_.reclaim();
     } else {
         if (!mark_refused_)
             LogLine(lines_).text("no fence marks the session's batches: they complete as recorded").write();
@@ -230,7 +232,7 @@ void D3dBackend::finish_d3d11()
 bool D3dBackend::poll()
 {
     AV_SCOPE("D3dBackend::poll");
-    const bool unwatched = progress11_.polled() || d3d9_.polled();
+    const bool unwatched = progress11_.polled();
     if (device11_ == nullptr || held_ || !published_.pending()) return unwatched;
     device11_->lock(nullptr);
     const bool pending = published_.publish(device11_->context());
@@ -248,14 +250,16 @@ void D3dBackend::bind_signal(void (*signal)(void *context), void *context)
 void D3dBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 {
     AV_SCOPE("D3dBackend::gpu_progress");
-    d3d12_.gpu_progress(marked, reached);
-    if (marked == 0u) {
-        marked = progress11_.marked();
-        reached = progress11_.reached();
-    }
-    if (marked == 0u) {
+    switch (api_) {
+    case GuestApi::d3d12: d3d12_.gpu_progress(marked, reached); break;
+    case GuestApi::d3d9:
         marked = d3d9_.marked();
         reached = d3d9_.reached();
+        break;
+    case GuestApi::d3d11:
+        marked = progress11_.marked();
+        reached = progress11_.reached();
+        break;
     }
     if (lost()) reached = marked;
 }
@@ -295,11 +299,11 @@ void D3dBackend::retire_slices(const SourceMemory &memory)
     AV_SCOPE("D3dBackend::retire_slices");
     const bool locked = !held_;
     if (locked) device11_->lock(nullptr);
-    slices_.retire(memory, d3d9_.slicing() ? d3d9_.next_mark() : progress11_.next());
+    slices_.retire(memory);
     slices_.take_all_bound_to(memory, [this](const SliceBindings::Binding &bound) {
         ID3D11Resource *const found = objects_.find_as<ID3D11Resource>(bound.resource_, D3dObjectKind::resource);
         if (found != nullptr) device11_->context()->DiscardResource(found);
-        else d3d9_.discard_slice(bound.resource_);
+        else d3d9_.discard_slice(bound);
     });
     if (locked) device11_->unlock();
 }
@@ -1743,8 +1747,9 @@ bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t
     ID3D11Resource *const     found = objects_.find_as<ID3D11Resource>(resource, D3dObjectKind::resource);
     SourceMemory *const       store = imports_ != nullptr ? imports_->named(memory) : nullptr;
     uint8_t *const            slice = store != nullptr ? store->at(offset, bytes) : nullptr;
-    if (!ready() || found == nullptr || !device11_->slices() || mark_refused_ || !dynamic_buffer(found)) return false;
-    const VulkanBuffer *const storage = slice != nullptr ? slices_.bind(*device11_, *store, progress11_.next(), progress11_.reached()) : nullptr;
+    if (!ready() || found == nullptr || !device11_->slices() || mark_refused_ || !dynamic_buffer(found) || offset % 4u != 0u)
+        return false;
+    const VulkanBuffer *const storage = slice != nullptr ? slices_.bind(*device11_, progress11_, *store) : nullptr;
     if (storage == nullptr) {
         static_cast<void>(detach_buffer_slice(resource, 0u, 0u));
         return false;
@@ -1756,7 +1761,7 @@ bool D3dBackend::on_BindBufferSlice(uint32_t resource, uint64_t memory, uint64_t
     const auto             abandon = [this, buffer, had_previous, &previous]() {
         if (had_previous) static_cast<void>(leave_slice(buffer, previous));
     };
-    if (!slices_.attach({resource, store, slice, bytes})) {
+    if (slices_.attach({resource, store, slice, bytes, device11_}) != Status::ok) {
         abandon();
         return false;
     }

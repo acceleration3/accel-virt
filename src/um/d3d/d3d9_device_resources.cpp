@@ -23,6 +23,13 @@ namespace av::d3d9 {
 namespace {
 
 constexpr char relocked_key[] = "relocked";
+
+bool discards(const D3DDDI_LOCKFLAGS &flags)
+{
+    AV_SCOPE("discards");
+    return flags.Discard && !flags.NoOverwrite && !flags.ReadOnly;
+}
+
 constexpr uint32_t surface_render_target = 1u;
 constexpr uint32_t surface_depth_stencil = 2u;
 constexpr uint32_t surface_offscreen_plain = 3u;
@@ -335,11 +342,19 @@ HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
         args->SlicePitch = subresource.system_slice_pitch;
         return S_OK;
     }
+    if (subresource.lock_depth != 0u && sliceable(*locked) && subresource.shadow != nullptr) {
+        subresource.lock_depth++;
+        args->pSurfData =
+            subresource.shadow + lock_offset(*locked, *args, subresource.shadow_pitch, subresource.shadow_slice_pitch);
+        args->Pitch = subresource.shadow_pitch;
+        args->SlicePitch = subresource.shadow_slice_pitch;
+        return S_OK;
+    }
     bool          served = false;
     const HRESULT sliced = lock_on_slice(*locked, subresource, *args, served);
     if (FAILED(sliced)) return sliced;
     if (!served && !make_shadow(*locked, subresource)) return E_OUTOFMEMORY;
-    if (subresource.locked && !subresource.lock_flags.ReadOnly) {
+    if (subresource.lock_depth != 0u && !subresource.lock_flags.ReadOnly) {
         char       said[160] = {};
         TextBuffer text(said, sizeof(said));
         text.append("a Direct3D 9 resource locked again before its unlock, kind ");
@@ -363,7 +378,7 @@ HRESULT D3d9Device::lock(D3DDDIARG_LOCK *args)
         subresource.shadow + lock_offset(*locked, *args, subresource.shadow_pitch, subresource.shadow_slice_pitch);
     args->Pitch = subresource.shadow_pitch;
     args->SlicePitch = subresource.shadow_slice_pitch;
-    subresource.locked = true;
+    subresource.lock_depth = 1u;
     subresource.lock_flags = args->Flags;
     subresource.lock = *args;
     return S_OK;
@@ -375,9 +390,9 @@ HRESULT D3d9Device::unlock(const D3DDDIARG_UNLOCK *args)
     D3d9Resource *const locked = resource(args->hResource);
     if (locked == nullptr || args->SubResourceIndex >= locked->count) return E_INVALIDARG;
     D3d9Subresource &subresource = locked->subresources[args->SubResourceIndex];
-    if (locked->kind == D3d9Resource::Kind::system || !subresource.locked) return S_OK;
-    subresource.locked = false;
-    if (subresource.lock_flags.ReadOnly) return S_OK;
+    if (locked->kind == D3d9Resource::Kind::system || subresource.lock_depth == 0u) return S_OK;
+    subresource.lock_depth--;
+    if (subresource.lock_depth != 0u || subresource.lock_flags.ReadOnly) return S_OK;
     return unlock_subresource(*locked, subresource, args->SubResourceIndex);
 }
 
@@ -386,7 +401,7 @@ HRESULT D3d9Device::unlock_subresource(const D3d9Resource &resource, D3d9Subreso
     AV_SCOPE("D3d9Device::unlock_subresource");
     if (subresource.on_slice) return S_OK;
     const D3DDDIARG_LOCK &lock = subresource.lock;
-    const uint32_t flags = (lock.Flags.Discard ? write_discard : 0u) | (lock.Flags.NoOverwrite ? write_no_overwrite : 0u);
+    const uint32_t flags = (discards(lock.Flags) ? write_discard : 0u) | (lock.Flags.NoOverwrite ? write_no_overwrite : 0u);
     const size_t offset = lock_offset(resource, lock, subresource.shadow_pitch, subresource.shadow_slice_pitch);
     if (resource.kind == D3d9Resource::Kind::vertex_buffer || resource.kind == D3d9Resource::Kind::index_buffer) {
         const uint32_t start = lock.Flags.RangeValid ? lock.Range.Offset : 0u;
@@ -424,10 +439,10 @@ HRESULT D3d9Device::lock_on_slice(D3d9Resource &resource, D3d9Subresource &subre
     }
     if (subresource.copies_only) return S_OK;
     if (!subresource.on_slice) {
-        served = lock.Flags.Discard && place_on_slice(resource, subresource);
+        served = discards(lock.Flags) && place_on_slice(resource, subresource);
         return S_OK;
     }
-    if (lock.Flags.Discard) {
+    if (discards(lock.Flags)) {
         served = rename_slice(resource, subresource);
         if (served) return S_OK;
         lines_.once("no slice free for a discarding lock: the buffer is copied from then on");

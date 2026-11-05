@@ -1,8 +1,8 @@
 #ifndef AV_D3D9_SLICES_HPP
 #define AV_D3D9_SLICES_HPP
 
+#include "core/support/keyed_slots.hpp"
 #include "executor/d3d/slice_bindings.hpp"
-#include "executor/shim/d3d9_slice_device.hpp"
 
 #include <stdint.h>
 
@@ -11,8 +11,10 @@ struct IDirect3DResource9;
 
 namespace av {
 
-class D3d9BatchProgress;
+class BlockSource;
 class D3d9HostDevice;
+class D3d9Lane;
+class D3d9Lanes;
 class DriverLog;
 class ImportTable;
 class SliceStorages;
@@ -20,7 +22,7 @@ class SourceMemory;
 
 class D3d9Slices {
 public:
-    D3d9Slices(SliceStorages &storages, D3d9BatchProgress &progress, DriverLog &lines);
+    D3d9Slices(BlockSource &blocks, SliceStorages &storages, D3d9Lanes &lanes, DriverLog &lines);
     D3d9Slices(const D3d9Slices &) = delete;
     D3d9Slices &operator=(const D3d9Slices &) = delete;
 
@@ -28,11 +30,12 @@ public:
     void shut_down();
 
     bool               supported() const;
-    bool               active() const;
+    [[nodiscard]] bool probe(IDirect3DDevice9 *device);
     [[nodiscard]] bool bind(IDirect3DDevice9 *device, uint32_t resource, IDirect3DResource9 *buffer, uint64_t memory,
                             uint64_t offset, uint64_t bytes);
     [[nodiscard]] bool detach(uint32_t resource, IDirect3DResource9 *buffer);
-    void               discard(IDirect3DResource9 *buffer);
+    void               copy_in_use(IDirect3DDevice9 *device);
+    void               discard(const SliceBindings::Binding &bound, IDirect3DResource9 *buffer);
     void               forget(uint32_t resource);
     void               forget_device(IDirect3DDevice9 *device);
     void               reclaim();
@@ -40,19 +43,31 @@ public:
     bool invariants_hold() const;
 
 private:
-    bool                 fits(IDirect3DResource9 *buffer, uint64_t bytes) const;
-    [[nodiscard]] bool   leave(IDirect3DResource9 *buffer, const SliceBindings::Binding &was);
-    [[nodiscard]] bool   lock_fresh(IDirect3DResource9 *buffer, void *&mapped, uint32_t &size) const;
-    void                 unlock(IDirect3DResource9 *buffer) const;
-    void                 settle();
+    static constexpr uint32_t most_streams = 16u;
+    static constexpr uint64_t offset_alignment = 4u;
 
-    SliceStorages     &storages_;
-    D3d9BatchProgress &progress_;
-    DriverLog         &lines_;
-    D3d9HostDevice    *host_;
-    ImportTable       *imports_;
-    D3d9SliceDevice    lane_;
-    bool               reported_;
+    struct Copied {
+        IDirect3DResource9 *buffer_;
+        IDirect3DDevice9   *device_;
+    };
+
+    [[nodiscard]] bool bound_to_storage(D3d9Lane &lane, IDirect3DResource9 *buffer, uint32_t resource,
+                                        SourceMemory &store, uint8_t *slice, uint64_t offset, uint64_t bytes);
+    [[nodiscard]] bool copy_at_draw(IDirect3DDevice9 *device, uint32_t resource, IDirect3DResource9 *buffer,
+                                    SourceMemory &store, uint8_t *slice, uint64_t bytes);
+    void               copy_one(IDirect3DResource9 *buffer);
+    bool               fits(IDirect3DResource9 *buffer, uint64_t bytes) const;
+    [[nodiscard]] bool leave(IDirect3DResource9 *buffer, const SliceBindings::Binding &was);
+    [[nodiscard]] bool lock_for(IDirect3DResource9 *buffer, uint32_t flags, void *&mapped, uint32_t &size) const;
+    void               unlock(IDirect3DResource9 *buffer) const;
+
+    SliceStorages                 &storages_;
+    D3d9Lanes                     &lanes_;
+    DriverLog                     &lines_;
+    D3d9HostDevice                *host_;
+    ImportTable                   *imports_;
+    KeyedSlots<uint32_t, Copied>   copied_;
+    bool                           reported_;
 };
 
 }

@@ -474,7 +474,7 @@ doc = """The buffer from now on is `bytes` at `offset` of a block of the session
 the guest opened for slices and imported, named by the handle IMPORT_BLOB answered as `memory`
 (docs/host-memory.md) - which the guest writes and the host GPU reads in place: commands before this one read the
 buffer's storage before it, commands after it this slice (docs/mapped-buffers-plan.md, 3.2). `bytes` covers at
-least the buffer; a slice outside its block, a resource that is no buffer, or a host QueryBufferSlices11 answered 0
+least the buffer; a slice outside its block or not at a multiple of 4 bytes, a resource that is no buffer, or a host QueryBufferSlices11 answered 0
 for, is refused. The host keeps a released block until its GPU work has run. A `memory` of 0, with `offset` and `bytes` 0,
 is the buffer leaving its slice: it owns its storage again, keeping what the slice held, and the guest sends it before
 it stops using the slice for any reason but destroying the buffer or binding it to another slice, since the host retires

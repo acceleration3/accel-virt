@@ -38,6 +38,12 @@ void EventfdWake::bind(void (*signal)(void *context), void *context)
     signal_.bind(signal, context);
 }
 
+bool EventfdWake::bound() const
+{
+    AV_SCOPE("EventfdWake::bound");
+    return signal_.bound();
+}
+
 int EventfdWake::descriptor()
 {
     AV_SCOPE("EventfdWake::descriptor");

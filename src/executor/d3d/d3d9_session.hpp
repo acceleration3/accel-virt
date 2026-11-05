@@ -3,7 +3,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/command_refusal.hpp"
-#include "executor/d3d/d3d9_batch_progress.hpp"
+#include "executor/d3d/d3d9_lanes.hpp"
 #include "executor/d3d/d3d9_flip_shares.hpp"
 #include "executor/d3d/d3d9_slices.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
@@ -24,6 +24,7 @@ class D3d9HostDevice;
 class SharedSurfaces;
 class SessionShares;
 class D3d11HostDevice;
+class EventfdWake;
 class GuestBytes;
 class ImportTable;
 class SliceStorages;
@@ -37,7 +38,7 @@ public:
     static constexpr uint32_t max_dimension = 16384u;
 
     D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks, SliceStorages &storages,
-                DriverLog &lines);
+                EventfdWake &wake, DriverLog &lines);
     ~D3d9Session();
     D3d9Session(const D3d9Session &) = delete;
     D3d9Session &operator=(const D3d9Session &) = delete;
@@ -46,14 +47,11 @@ public:
                     SessionShares *shares, ImportTable *imports);
     void shut_down();
     void end_batch();
-    void discard_slice(uint32_t resource);
+    void discard_slice(const SliceBindings::Binding &bound);
 
     bool               knows(uint32_t command_id) const;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena);
     bool               lost() const;
-    bool               slicing() const;
-    bool               polled() const;
-    uint64_t           next_mark() const;
     uint64_t           marked() const;
     uint64_t           reached() const;
 
@@ -80,6 +78,7 @@ public:
     bool on_WriteBuffer9(uint32_t buffer, uint32_t offset, uint32_t flags, const uint8_t *data,
                          uint64_t data_size) override;
     bool on_QueryBufferSlices9(uint32_t &supported) override;
+    bool on_QueryDeviceSlices9(uint32_t &supported) override;
     bool on_BindBufferSlice9(uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes) override;
     bool on_GenerateMips9(uint32_t texture, uint32_t filter) override;
     bool on_ReadSurface9(uint32_t surface, uint32_t subresource, uint32_t &hresult, uint32_t &width,
@@ -158,10 +157,8 @@ private:
     DriverLog      &lines_;
     CommandRefusal  refusal_;
     WireArena      *arena_;
-    D3d9BatchProgress progress_;
+    D3d9Lanes       lanes_;
     D3d9Slices      slices_;
-    bool            dirty_;
-    bool            mark_refused_;
     bool            lost_;
 };
 

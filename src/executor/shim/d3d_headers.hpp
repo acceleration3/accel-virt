@@ -52,6 +52,11 @@ ID3D9VkInteropDevice1 : public ID3D9VkInteropDevice {
     virtual HRESULT STDMETHODCALLTYPE BindBufferStorage(IDirect3DResource9 *resource, VkBuffer storage,
                                                         VkDeviceSize offset, VkDeviceSize length, void *map_ptr) = 0;
     virtual void STDMETHODCALLTYPE FlushCommands() = 0;
+    virtual HRESULT STDMETHODCALLTYPE BufferStorageBindable(IDirect3DResource9 *resource) = 0;
+    virtual HRESULT STDMETHODCALLTYPE UnbindBufferStorage(IDirect3DResource9 *resource) = 0;
+    virtual HRESULT STDMETHODCALLTYPE MarkSubmission(void (*callback)(void *, uint64_t), void *context,
+                                                     uint64_t value) = 0;
+    virtual void STDMETHODCALLTYPE WaitForIdle() = 0;
 };
 __CRT_UUID_DECL(ID3D9VkInteropDevice1, 0x9c3a6f27, 0x5b81, 0x4e0d, 0xa7, 0xd2, 0x1f, 0x48, 0xc6, 0xb0, 0xe3, 0x95);
 

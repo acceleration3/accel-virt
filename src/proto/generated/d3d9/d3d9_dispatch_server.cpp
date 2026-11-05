@@ -312,6 +312,18 @@ static bool decode_QueryBufferSlices9(ServerDispatch& s, ::av::WireReader& r, ::
     return true;
 }
 
+static bool decode_QueryDeviceSlices9(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+    AV_SCOPE("server:d3d9:QueryDeviceSlices9");
+    (void)s;
+    (void)reply;
+    (void)arena;
+    uint32_t supported{};
+    if (r.remaining() != 0u) return false;
+    if (!s.on_QueryDeviceSlices9(supported)) return false;
+    reply.write_pod(supported);
+    return true;
+}
+
 static bool decode_BindBufferSlice9(ServerDispatch& s, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     AV_SCOPE("server:d3d9:BindBufferSlice9");
     (void)s;
@@ -983,6 +995,7 @@ bool knows_command(uint32_t cmd_id) {
         case kCmd_WriteTexture9:
         case kCmd_WriteBuffer9:
         case kCmd_QueryBufferSlices9:
+        case kCmd_QueryDeviceSlices9:
         case kCmd_BindBufferSlice9:
         case kCmd_GenerateMips9:
         case kCmd_ReadSurface9:
@@ -1042,6 +1055,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r,
         case kCmd_WriteTexture9: return decode_WriteTexture9(s, r, reply, arena);
         case kCmd_WriteBuffer9: return decode_WriteBuffer9(s, r, reply, arena);
         case kCmd_QueryBufferSlices9: return decode_QueryBufferSlices9(s, r, reply, arena);
+        case kCmd_QueryDeviceSlices9: return decode_QueryDeviceSlices9(s, r, reply, arena);
         case kCmd_BindBufferSlice9: return decode_BindBufferSlice9(s, r, reply, arena);
         case kCmd_GenerateMips9: return decode_GenerateMips9(s, r, reply, arena);
         case kCmd_ReadSurface9: return decode_ReadSurface9(s, r, reply, arena);

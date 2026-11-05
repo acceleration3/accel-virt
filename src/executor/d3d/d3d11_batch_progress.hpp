@@ -1,6 +1,8 @@
 #ifndef AV_D3D11_BATCH_PROGRESS_HPP
 #define AV_D3D11_BATCH_PROGRESS_HPP
 
+#include "executor/d3d/slice_progress.hpp"
+
 #include <stdint.h>
 
 struct ID3D11Fence;
@@ -9,7 +11,7 @@ namespace av {
 
 class EventfdWake;
 
-class D3d11BatchProgress {
+class D3d11BatchProgress final : public SliceProgress {
 public:
     explicit D3d11BatchProgress(EventfdWake &wake);
     ~D3d11BatchProgress();
@@ -18,12 +20,12 @@ public:
 
     void         adopt(ID3D11Fence *fence);
     ID3D11Fence *fence() const;
-    uint64_t     next() const;
+    uint64_t     next() const override;
     void         signalled();
     void         release();
 
     uint64_t marked() const;
-    uint64_t reached() const;
+    uint64_t reached() const override;
     bool     pending() const;
     bool     polled() const;
 

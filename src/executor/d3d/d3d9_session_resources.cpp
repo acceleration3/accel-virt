@@ -172,6 +172,7 @@ bool D3d9Session::on_WriteTexture9(uint32_t texture, uint32_t subresource, const
                                    uint64_t data_size)
 {
     AV_SCOPE("D3d9Session::on_WriteTexture9");
+    lanes_.touch(device());
     if (mine<IDirect3DVolumeTexture9>(texture, D3dObjectKind::volume_texture9) != nullptr)
         return write_volume(texture, subresource, box, row_pitch, slice_pitch, flags, data, data_size);
     if (mine<IDirect3DSurface9>(texture, D3dObjectKind::surface9) != nullptr)
@@ -311,6 +312,14 @@ bool D3d9Session::on_QueryBufferSlices9(uint32_t &supported)
     return true;
 }
 
+bool D3d9Session::on_QueryDeviceSlices9(uint32_t &supported)
+{
+    AV_SCOPE("D3d9Session::on_QueryDeviceSlices9");
+    supported = static_cast<uint32_t>(device() != nullptr && slices_.probe(device()) ? BufferSliceSupport::direct3d9
+                                                                                     : BufferSliceSupport::none);
+    return true;
+}
+
 bool D3d9Session::on_BindBufferSlice9(uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes)
 {
     AV_SCOPE("D3d9Session::on_BindBufferSlice9");
@@ -325,6 +334,7 @@ bool D3d9Session::on_BindBufferSlice9(uint32_t buffer, uint64_t memory, uint64_t
 bool D3d9Session::on_GenerateMips9(uint32_t texture, uint32_t filter)
 {
     AV_SCOPE("D3d9Session::on_GenerateMips9");
+    lanes_.touch(device());
     auto *const flat = mine<IDirect3DTexture9>(texture, D3dObjectKind::texture9);
     IDirect3DBaseTexture9 *const base =
         flat != nullptr ? static_cast<IDirect3DBaseTexture9 *>(flat)
@@ -420,6 +430,7 @@ bool D3d9Session::on_StretchRect9(uint32_t source, uint32_t source_subresource, 
                                   const d3d9proto::Rect &destination_rect, uint32_t filter)
 {
     AV_SCOPE("D3d9Session::on_StretchRect9");
+    lanes_.touch(device());
     if (filter > D3DTEXF_LINEAR) return false;
     IDirect3DSurface9 *const from = surface(source, source_subresource);
     IDirect3DSurface9 *const to = surface(destination, destination_subresource);
@@ -441,6 +452,7 @@ bool D3d9Session::on_ColorFill9(uint32_t surface_id, uint32_t subresource, const
                                 uint32_t color)
 {
     AV_SCOPE("D3d9Session::on_ColorFill9");
+    lanes_.touch(device());
     IDirect3DSurface9 *const target = surface(surface_id, subresource);
     if (target == nullptr) return false;
     ScopeExit  release([target] { target->Release(); });
@@ -451,6 +463,7 @@ bool D3d9Session::on_ColorFill9(uint32_t surface_id, uint32_t subresource, const
 bool D3d9Session::on_PresentPoint9(uint32_t surface_id, uint32_t subresource, uint64_t key, uint32_t point)
 {
     AV_SCOPE("D3d9Session::on_PresentPoint9");
+    lanes_.touch(device());
     if (device() == nullptr) return false;
     IDirect3DSurface9 *const source = surface(surface_id, subresource);
     if (source == nullptr) return false;

@@ -230,6 +230,18 @@ bool av_d3d9_QueryBufferSlices9(::av::ClientTransport& t, uint32_t* supported) {
     return r.remaining() == 0u;
 }
 
+bool av_d3d9_QueryDeviceSlices9(::av::ClientTransport& t, uint32_t* supported) {
+    AV_SCOPE("av_d3d9_QueryDeviceSlices9");
+    ::av::WireWriter b = t.request_writer();
+    const ::av::SyncCallScope call{t};
+    ::av::WireReader r{nullptr, 0u};
+    if (t.send_sync(kCmd_QueryDeviceSlices9, b, r) != ::av::TransportResult::ok) return false;
+    { uint32_t value{};
+      if (!r.read_pod(value)) return false;
+      if (supported != nullptr) *supported = value; }
+    return r.remaining() == 0u;
+}
+
 bool av_d3d9_BindBufferSlice9(::av::ClientTransport& t, uint32_t buffer, uint64_t memory, uint64_t offset, uint64_t bytes) {
     AV_SCOPE("av_d3d9_BindBufferSlice9");
     ::av::WireWriter b = t.request_writer();

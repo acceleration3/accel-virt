@@ -8,6 +8,7 @@
 #include "proto/resources/host_memory_request.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 #include "um/d3d/d3d9_host_caps.hpp"
+#include "proto/d3d/buffer_slice_support.hpp"
 #include "um/d3d/d3d_session.hpp"
 
 #include <string.h>
@@ -103,7 +104,12 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
         session_.leave();
         return E_FAIL;
     }
-    slices_.own(session_.shared_memory().stream(HostMemoryRequest::Kind::upload));
+    uint32_t sliced = 0u;
+    const bool asked = d3d9proto::av_d3d9_QueryDeviceSlices9(wire(), &sliced);
+    if (asked && sliced == static_cast<uint32_t>(BufferSliceSupport::direct3d9))
+        slices_.own(session_.shared_memory().stream(HostMemoryRequest::Kind::upload));
+    else
+        lines_.write("the host cannot draw this Direct3D 9 device's buffers from slices: they are copied");
     return S_OK;
 }
 

@@ -13,6 +13,7 @@ namespace av {
 class BlockSource;
 class DriverLog;
 class SliceImporter;
+class SliceProgress;
 class SourceMemory;
 
 class SliceStorages {
@@ -21,15 +22,16 @@ public:
     SliceStorages(const SliceStorages &) = delete;
     SliceStorages &operator=(const SliceStorages &) = delete;
 
-    const VulkanBuffer *bind(SliceImporter &importer, SourceMemory &store, uint64_t next, uint64_t reached);
-    [[nodiscard]] bool  attach(const SliceBindings::Binding &binding);
+    const VulkanBuffer *bind(SliceImporter &importer, const SliceProgress &progress, SourceMemory &store);
+    [[nodiscard]] Status attach(const SliceBindings::Binding &binding);
     bool                leave(uint32_t resource, SliceBindings::Binding &was);
     bool                bound(uint32_t resource, SliceBindings::Binding &was) const;
     template <typename Visitor>
     void                take_all_bound_to(const SourceMemory &store, Visitor visit);
-    void                retire(const SourceMemory &store, uint64_t next);
+    void                retire(const SourceMemory &store);
+    void                destroy_for(const SliceImporter &importer);
     bool                holds(const SourceMemory &store);
-    void                reclaim(uint64_t reached);
+    void                reclaim();
     void                destroy_all();
 
     uint32_t count() const;
@@ -37,7 +39,7 @@ public:
     bool invariants_hold() const;
 
 private:
-    SliceStorage *find(const SourceMemory &store);
+    SliceStorage *find(const SourceMemory &store, const SliceImporter &importer);
 
     ObjectPool<SliceStorage> storages_;
     SliceBindings            bindings_;

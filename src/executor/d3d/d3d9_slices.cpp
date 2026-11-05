@@ -1,8 +1,10 @@
 #include "executor/d3d/d3d9_slices.hpp"
 
 #include "core/log/driver_log.hpp"
+#include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
-#include "executor/d3d/d3d9_batch_progress.hpp"
+#include "executor/d3d/d3d9_lane.hpp"
+#include "executor/d3d/d3d9_lanes.hpp"
 #include "executor/d3d/slice_storages.hpp"
 #include "executor/import_table.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
@@ -11,9 +13,9 @@
 
 namespace av {
 
-D3d9Slices::D3d9Slices(SliceStorages &storages, D3d9BatchProgress &progress, DriverLog &lines)
-    : storages_(storages), progress_(progress), lines_(lines), host_(nullptr), imports_(nullptr), lane_(),
-      reported_(false)
+D3d9Slices::D3d9Slices(BlockSource &blocks, SliceStorages &storages, D3d9Lanes &lanes, DriverLog &lines)
+    : storages_(storages), lanes_(lanes), lines_(lines), host_(nullptr), imports_(nullptr),
+      copied_(blocks, Pool::paged), reported_(false)
 {
     AV_SCOPE("D3d9Slices::D3d9Slices");
 }
@@ -29,9 +31,17 @@ void D3d9Slices::initialize(D3d9HostDevice *host, ImportTable *imports)
 void D3d9Slices::shut_down()
 {
     AV_SCOPE("D3d9Slices::shut_down");
-    settle();
-    storages_.destroy_all();
-    lane_.release();
+    const auto every_device = [this](const D3d9Lane &lane) {
+        lane.idle();
+        storages_.destroy_for(lane);
+    };
+    lanes_.for_each(every_device);
+    copied_.erase_if([this](uint32_t resource, const Copied &) {
+        SliceBindings::Binding was = {};
+        static_cast<void>(storages_.leave(resource, was));
+        return true;
+    });
+    lanes_.forget_all();
     host_ = nullptr;
     imports_ = nullptr;
 }
@@ -39,13 +49,23 @@ void D3d9Slices::shut_down()
 bool D3d9Slices::supported() const
 {
     AV_SCOPE("D3d9Slices::supported");
-    return host_ != nullptr && host_->slices();
+    return host_ != nullptr && host_->opened();
 }
 
-bool D3d9Slices::active() const
+bool D3d9Slices::probe(IDirect3DDevice9 *device)
 {
-    AV_SCOPE("D3d9Slices::active");
-    return lane_.connected();
+    AV_SCOPE("D3d9Slices::probe");
+    D3d9Lane *const lane = supported() ? lanes_.lane(device) : nullptr;
+    if (lane == nullptr || !lane->connect()) return false;
+    IDirect3DVertexBuffer9 *probe_buffer = nullptr;
+    constexpr UINT          probe_bytes = 16u;
+    if (FAILED(device->CreateVertexBuffer(probe_bytes, D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, 0u, D3DPOOL_DEFAULT,
+                                          &probe_buffer, nullptr)))
+        return false;
+    const bool bindable = lane->bindable(probe_buffer);
+    probe_buffer->Release();
+    if (bindable) lane->allow();
+    return bindable;
 }
 
 bool D3d9Slices::bind(IDirect3DDevice9 *device, uint32_t resource, IDirect3DResource9 *buffer, uint64_t memory,
@@ -55,28 +75,98 @@ bool D3d9Slices::bind(IDirect3DDevice9 *device, uint32_t resource, IDirect3DReso
     if (memory == 0u) return offset == 0u && bytes == 0u && detach(resource, buffer);
     SourceMemory *const store = imports_ != nullptr ? imports_->named(memory) : nullptr;
     uint8_t *const      slice = store != nullptr ? store->at(offset, bytes) : nullptr;
-    if (buffer == nullptr || !supported() || !fits(buffer, bytes) || !lane_.connect(device)) return false;
-    const VulkanBuffer *const storage =
-        slice != nullptr ? storages_.bind(lane_, *store, progress_.next(), progress_.reached()) : nullptr;
-    if (storage == nullptr) {
-        if (slice != nullptr && !reported_) lines_.write("a block of slice memory could not be imported to draw Direct3D 9 buffers from: they are copied");
-        reported_ = reported_ || slice != nullptr;
+    if (buffer == nullptr || !supported() || offset % offset_alignment != 0u || !fits(buffer, bytes)) return false;
+    if (slice == nullptr) {
         static_cast<void>(detach(resource, buffer));
         return false;
     }
+    D3d9Lane *const lane = lanes_.find(device);
+    if (lane != nullptr && lane->allowed() && !lanes_.marking_failed() &&
+        bound_to_storage(*lane, buffer, resource, *store, slice, offset, bytes))
+        return true;
+    return copy_at_draw(device, resource, buffer, *store, slice, bytes);
+}
+
+bool D3d9Slices::bound_to_storage(D3d9Lane &lane, IDirect3DResource9 *buffer, uint32_t resource, SourceMemory &store,
+                                  uint8_t *slice, uint64_t offset, uint64_t bytes)
+{
+    AV_SCOPE("D3d9Slices::bound_to_storage");
+    const VulkanBuffer *const storage = storages_.bind(lane, lane, store);
+    if (storage == nullptr) return false;
     SliceBindings::Binding previous = {};
-    const bool             had_previous = storages_.leave(resource, previous);
-    const auto             abandon = [this, buffer, had_previous, &previous]() {
+    Copied                 dropped = {};
+    static_cast<void>(copied_.take(resource, dropped));
+    const bool had_previous = storages_.leave(resource, previous);
+    const auto abandon = [this, buffer, had_previous, &previous]() {
         if (had_previous) static_cast<void>(leave(buffer, previous));
     };
-    if (!storages_.attach({resource, store, slice, bytes})) {
+    const Status attached = storages_.attach({resource, &store, slice, bytes, &lane});
+    if (attached != Status::ok) {
+        LogLine(lines_).text("a Direct3D 9 buffer's slice kept nowhere, status ").number(static_cast<uint32_t>(attached)).write();
         abandon();
         return false;
     }
-    if (lane_.bind_storage(buffer, *storage, offset, bytes, slice)) return true;
+    if (lane.bind_storage(buffer, *storage, offset, bytes, slice)) return true;
     forget(resource);
     abandon();
     return false;
+}
+
+bool D3d9Slices::copy_at_draw(IDirect3DDevice9 *device, uint32_t resource, IDirect3DResource9 *buffer,
+                              SourceMemory &store, uint8_t *slice, uint64_t bytes)
+{
+    AV_SCOPE("D3d9Slices::copy_at_draw");
+    if (!reported_)
+        lines_.write("a Direct3D 9 buffer's slice could not be drawn from in place: the host copies it into the buffer before each draw that uses it");
+    reported_ = true;
+    SliceBindings::Binding previous = {};
+    Copied                 dropped = {};
+    static_cast<void>(copied_.take(resource, dropped));
+    if (storages_.leave(resource, previous)) static_cast<void>(leave(buffer, previous));
+    const Status attached = storages_.attach({resource, &store, slice, bytes, nullptr});
+    if (attached != Status::ok) {
+        LogLine(lines_).text("a Direct3D 9 buffer's slice kept nowhere, status ").number(static_cast<uint32_t>(attached)).write();
+        return false;
+    }
+    uint32_t     at = KeyedSlots<uint32_t, Copied>::no_slot;
+    const Status kept = copied_.insert(resource, Copied{buffer, device}, at);
+    if (kept == Status::ok) return true;
+    LogLine(lines_).text("a Direct3D 9 buffer's copied slice kept nowhere, status ").number(static_cast<uint32_t>(kept)).write();
+    SliceBindings::Binding unused = {};
+    static_cast<void>(storages_.leave(resource, unused));
+    return false;
+}
+
+void D3d9Slices::copy_in_use(IDirect3DDevice9 *device)
+{
+    AV_SCOPE("D3d9Slices::copy_in_use");
+    if (copied_.count() == 0u) return;
+    for (uint32_t stream = 0u; stream < most_streams; stream++) {
+        IDirect3DVertexBuffer9 *vertices = nullptr;
+        UINT                    offset = 0u;
+        UINT                    stride = 0u;
+        if (FAILED(device->GetStreamSource(stream, &vertices, &offset, &stride)) || vertices == nullptr) continue;
+        copy_one(vertices);
+        vertices->Release();
+    }
+    IDirect3DIndexBuffer9 *indices = nullptr;
+    if (FAILED(device->GetIndices(&indices)) || indices == nullptr) return;
+    copy_one(indices);
+    indices->Release();
+}
+
+void D3d9Slices::copy_one(IDirect3DResource9 *buffer)
+{
+    AV_SCOPE("D3d9Slices::copy_one");
+    uint32_t resource = 0u;
+    bool     found = false;
+    copied_.for_each([buffer, &resource, &found](uint32_t key, const Copied &held) {
+        if (held.buffer_ != buffer) return;
+        resource = key;
+        found = true;
+    });
+    SliceBindings::Binding was = {};
+    if (found && storages_.bound(resource, was)) static_cast<void>(leave(buffer, was));
 }
 
 bool D3d9Slices::detach(uint32_t resource, IDirect3DResource9 *buffer)
@@ -90,18 +180,20 @@ bool D3d9Slices::detach(uint32_t resource, IDirect3DResource9 *buffer)
     return true;
 }
 
-void D3d9Slices::discard(IDirect3DResource9 *buffer)
+void D3d9Slices::discard(const SliceBindings::Binding &bound, IDirect3DResource9 *buffer)
 {
     AV_SCOPE("D3d9Slices::discard");
-    void    *mapped = nullptr;
-    uint32_t size = 0u;
-    if (buffer == nullptr || !lock_fresh(buffer, mapped, size)) return;
-    unlock(buffer);
+    Copied dropped = {};
+    static_cast<void>(copied_.take(bound.resource_, dropped));
+    D3d9Lane *const lane = bound.importer_ != nullptr ? lanes_.find(bound.importer_) : nullptr;
+    if (lane != nullptr && buffer != nullptr) static_cast<void>(lane->unbind_storage(buffer));
 }
 
 void D3d9Slices::forget(uint32_t resource)
 {
     AV_SCOPE("D3d9Slices::forget");
+    Copied dropped = {};
+    static_cast<void>(copied_.take(resource, dropped));
     SliceBindings::Binding was = {};
     static_cast<void>(storages_.leave(resource, was));
 }
@@ -109,17 +201,23 @@ void D3d9Slices::forget(uint32_t resource)
 void D3d9Slices::forget_device(IDirect3DDevice9 *device)
 {
     AV_SCOPE("D3d9Slices::forget_device");
-    progress_.forget(device);
-    if (!lane_.is(device)) return;
-    settle();
-    storages_.destroy_all();
-    lane_.release();
+    copied_.erase_if([this, device](uint32_t resource, const Copied &held) {
+        if (held.device_ != device) return false;
+        SliceBindings::Binding was = {};
+        static_cast<void>(storages_.leave(resource, was));
+        return true;
+    });
+    D3d9Lane *const lane = lanes_.find(device);
+    if (lane == nullptr) return;
+    lane->idle();
+    storages_.destroy_for(*lane);
+    lanes_.forget(device);
 }
 
 void D3d9Slices::reclaim()
 {
     AV_SCOPE("D3d9Slices::reclaim");
-    storages_.reclaim(progress_.reached());
+    storages_.reclaim();
 }
 
 bool D3d9Slices::fits(IDirect3DResource9 *buffer, uint64_t bytes) const
@@ -139,25 +237,27 @@ bool D3d9Slices::fits(IDirect3DResource9 *buffer, uint64_t bytes) const
 bool D3d9Slices::leave(IDirect3DResource9 *buffer, const SliceBindings::Binding &was)
 {
     AV_SCOPE("D3d9Slices::leave");
+    D3d9Lane *const lane = was.importer_ != nullptr ? lanes_.find(was.importer_) : nullptr;
+    if (lane != nullptr && !lane->unbind_storage(buffer)) return false;
     void    *mapped = nullptr;
     uint32_t size = 0u;
-    if (!lock_fresh(buffer, mapped, size)) return false;
+    if (!lock_for(buffer, lane != nullptr ? D3DLOCK_NOOVERWRITE : D3DLOCK_DISCARD, mapped, size)) return false;
     const uint64_t kept = size < was.bytes_ ? size : was.bytes_;
     __builtin_memcpy(mapped, was.slice_, static_cast<size_t>(kept));
     unlock(buffer);
     return true;
 }
 
-bool D3d9Slices::lock_fresh(IDirect3DResource9 *buffer, void *&mapped, uint32_t &size) const
+bool D3d9Slices::lock_for(IDirect3DResource9 *buffer, uint32_t flags, void *&mapped, uint32_t &size) const
 {
-    AV_SCOPE("D3d9Slices::lock_fresh");
+    AV_SCOPE("D3d9Slices::lock_for");
     mapped = nullptr;
     if (buffer->GetType() == D3DRTYPE_VERTEXBUFFER) {
         auto                *vertices = static_cast<IDirect3DVertexBuffer9 *>(buffer);
         D3DVERTEXBUFFER_DESC desc = {};
         if (FAILED(vertices->GetDesc(&desc))) return false;
         size = desc.Size;
-        if (FAILED(vertices->Lock(0u, 0u, &mapped, D3DLOCK_DISCARD))) return false;
+        if (FAILED(vertices->Lock(0u, 0u, &mapped, flags))) return false;
         if (mapped == nullptr) vertices->Unlock();
         return mapped != nullptr;
     }
@@ -165,7 +265,7 @@ bool D3d9Slices::lock_fresh(IDirect3DResource9 *buffer, void *&mapped, uint32_t 
     D3DINDEXBUFFER_DESC desc = {};
     if (FAILED(indices->GetDesc(&desc))) return false;
     size = desc.Size;
-    if (FAILED(indices->Lock(0u, 0u, &mapped, D3DLOCK_DISCARD))) return false;
+    if (FAILED(indices->Lock(0u, 0u, &mapped, flags))) return false;
     if (mapped == nullptr) indices->Unlock();
     return mapped != nullptr;
 }
@@ -177,16 +277,12 @@ void D3d9Slices::unlock(IDirect3DResource9 *buffer) const
     else static_cast<IDirect3DIndexBuffer9 *>(buffer)->Unlock();
 }
 
-void D3d9Slices::settle()
-{
-    AV_SCOPE("D3d9Slices::settle");
-    if (storages_.count() != 0u) lane_.idle();
-}
-
 bool D3d9Slices::invariants_hold() const
 {
     AV_SCOPE("D3d9Slices::invariants_hold");
-    return lane_.invariants_hold() && (!lane_.connected() || host_ != nullptr);
+    bool sound = copied_.invariants_hold() && lanes_.invariants_hold();
+    copied_.for_each([&sound](uint32_t, const Copied &held) { sound = sound && held.buffer_ != nullptr && held.device_ != nullptr; });
+    return sound;
 }
 
 }

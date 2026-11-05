@@ -314,7 +314,9 @@ bool D3d9Session::on_SetClipPlane9(uint32_t index, uint32_t value_count, const f
 bool D3d9Session::on_DrawPrimitive9(uint32_t type, uint32_t start_vertex, uint32_t primitive_count)
 {
     AV_SCOPE("D3d9Session::on_DrawPrimitive9");
+    lanes_.touch(device());
     if (device() == nullptr || type < D3DPT_POINTLIST || type > D3DPT_TRIANGLEFAN || primitive_count == 0u) return false;
+    slices_.copy_in_use(device());
     return SUCCEEDED(
         device()->DrawPrimitive(static_cast<D3DPRIMITIVETYPE>(type), start_vertex, primitive_count));
 }
@@ -323,7 +325,9 @@ bool D3d9Session::on_DrawIndexedPrimitive9(uint32_t type, int32_t base_vertex, u
                                            uint32_t vertex_count, uint32_t start_index, uint32_t primitive_count)
 {
     AV_SCOPE("D3d9Session::on_DrawIndexedPrimitive9");
+    lanes_.touch(device());
     if (device() == nullptr || type < D3DPT_POINTLIST || type > D3DPT_TRIANGLEFAN || primitive_count == 0u) return false;
+    slices_.copy_in_use(device());
     return SUCCEEDED(device()->DrawIndexedPrimitive(static_cast<D3DPRIMITIVETYPE>(type), base_vertex,
                                                               min_index, vertex_count, start_index,
                                                               primitive_count));
@@ -388,6 +392,7 @@ bool D3d9Session::on_Clear9(uint32_t rect_count, const d3d9proto::Rect *rects, u
                             float z, uint32_t stencil)
 {
     AV_SCOPE("D3d9Session::on_Clear9");
+    lanes_.touch(device());
     if (device() == nullptr || flags == 0u || (flags & ~clear_flags) != 0u) return false;
     D3DRECT areas[max_clear_rects];
     for (uint32_t index = 0u; index < rect_count; index++)

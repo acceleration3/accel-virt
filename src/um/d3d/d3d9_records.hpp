@@ -22,7 +22,7 @@ struct D3d9Subresource {
     size_t         shadow_bytes;
     uint32_t       shadow_pitch;
     uint32_t       shadow_slice_pitch;
-    bool             locked;
+    uint32_t         lock_depth;
     D3DDDI_LOCKFLAGS lock_flags;
     D3DDDIARG_LOCK   lock;
     icd::StreamMemory::Slice slice;

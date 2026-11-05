@@ -3,6 +3,7 @@
 #include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/watched_blocks.hpp"
+#include "executor/eventfd_wake.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "proto/generated/d3d9/d3d9_command_names.h"
@@ -13,10 +14,10 @@
 namespace av {
 
 D3d9Session::D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, WatchedBlocks &blocks,
-                         SliceStorages &storages, DriverLog &lines)
+                         SliceStorages &storages, EventfdWake &wake, DriverLog &lines)
     : d3d9proto::ServerDispatch(guest), host_(nullptr), surfaces_(nullptr), flips_(blocks), objects_(objects), blocks_(blocks),
-      devices_(blocks), lines_(lines), refusal_(lines_), arena_(nullptr), progress_(), slices_(storages, progress_, lines_),
-      dirty_(false), mark_refused_(false), lost_(false)
+      devices_(blocks), lines_(lines), refusal_(lines_), arena_(nullptr), lanes_(blocks, wake, lines_), slices_(blocks, storages, lanes_, lines_),
+      lost_(false)
 {
     AV_SCOPE("D3d9Session::D3d9Session");
 }
@@ -34,8 +35,6 @@ void D3d9Session::initialize(D3d9HostDevice *host, SharedSurfaces *surfaces, D3d
     host_ = host != nullptr && host->opened() ? host : nullptr;
     surfaces_ = surfaces;
     lost_ = false;
-    dirty_ = false;
-    mark_refused_ = false;
     flips_.bind(device11, shares);
     slices_.initialize(host_, imports);
 }
@@ -44,7 +43,6 @@ void D3d9Session::shut_down()
 {
     AV_SCOPE("D3d9Session::shut_down");
     slices_.shut_down();
-    progress_.release();
     flips_.release();
     objects_.remove_kinds(D3dObjectKind::surface9, D3dObjectKind::query9);
     for (IDirect3DDevice9 *device = devices_.remove_any(); device != nullptr; device = devices_.remove_any())
@@ -61,7 +59,6 @@ bool D3d9Session::knows(uint32_t command_id) const
 bool D3d9Session::run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena)
 {
     AV_SCOPE("D3d9Session::run");
-    dirty_ = true;
     arena_ = &arena;
     const bool ran = d3d9proto::dispatch_command(*this, command_id, payload, reply, arena);
     arena_ = nullptr;
@@ -204,51 +201,27 @@ bool D3d9Session::lost() const
 void D3d9Session::end_batch()
 {
     AV_SCOPE("D3d9Session::end_batch");
-    if (!dirty_) return;
-    dirty_ = false;
-    if (!slices_.supported() || device() == nullptr) return;
-    if (progress_.signalled(device())) {
-        slices_.reclaim();
-        return;
-    }
-    if (!mark_refused_) lines_.write("no event query marks the session's Direct3D 9 batches: they complete as recorded");
-    mark_refused_ = true;
+    if (!slices_.supported()) return;
+    lanes_.mark_touched();
+    slices_.reclaim();
 }
 
-void D3d9Session::discard_slice(uint32_t resource)
+void D3d9Session::discard_slice(const SliceBindings::Binding &bound)
 {
     AV_SCOPE("D3d9Session::discard_slice");
-    slices_.discard(buffer_object(resource));
-}
-
-bool D3d9Session::slicing() const
-{
-    AV_SCOPE("D3d9Session::slicing");
-    return slices_.active();
-}
-
-bool D3d9Session::polled() const
-{
-    AV_SCOPE("D3d9Session::polled");
-    return progress_.pending();
-}
-
-uint64_t D3d9Session::next_mark() const
-{
-    AV_SCOPE("D3d9Session::next_mark");
-    return progress_.next();
+    slices_.discard(bound, buffer_object(bound.resource_));
 }
 
 uint64_t D3d9Session::marked() const
 {
     AV_SCOPE("D3d9Session::marked");
-    return progress_.marked();
+    return lanes_.marked();
 }
 
 uint64_t D3d9Session::reached() const
 {
     AV_SCOPE("D3d9Session::reached");
-    return progress_.reached();
+    return lanes_.reached();
 }
 
 IDirect3DResource9 *D3d9Session::buffer_object(uint32_t id) const
@@ -262,7 +235,7 @@ IDirect3DResource9 *D3d9Session::buffer_object(uint32_t id) const
 bool D3d9Session::invariants_hold() const
 {
     AV_SCOPE("D3d9Session::invariants_hold");
-    return devices_.invariants_hold() && objects_.invariants_hold() && progress_.invariants_hold() &&
+    return devices_.invariants_hold() && objects_.invariants_hold() && lanes_.invariants_hold() &&
            slices_.invariants_hold();
 }
 

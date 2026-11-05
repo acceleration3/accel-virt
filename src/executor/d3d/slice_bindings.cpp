@@ -37,6 +37,12 @@ bool SliceBindings::find(uint32_t resource, Binding &was) const
     return true;
 }
 
+void SliceBindings::take_all_of(const SliceImporter &importer)
+{
+    AV_SCOPE("SliceBindings::take_all_of");
+    bound_.erase_if([&importer](uint32_t, const Binding &binding) { return binding.importer_ == &importer; });
+}
+
 void SliceBindings::clear()
 {
     AV_SCOPE("SliceBindings::clear");

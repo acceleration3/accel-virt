@@ -22,9 +22,10 @@ public:
     void               stop();
     void               unbind();
     void               run();
+    int                descriptor();
+    bool               bound() const;
 
 private:
-    int  descriptor();
     bool open();
     bool start();
 

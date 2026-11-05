@@ -2,6 +2,7 @@
 
 #include "core/log/driver_log.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/d3d/slice_progress.hpp"
 
 namespace av {
 
@@ -11,26 +12,26 @@ SliceStorages::SliceStorages(BlockSource &blocks, DriverLog &lines)
     AV_SCOPE("SliceStorages::SliceStorages");
 }
 
-const VulkanBuffer *SliceStorages::bind(SliceImporter &importer, SourceMemory &store, uint64_t next, uint64_t reached)
+const VulkanBuffer *SliceStorages::bind(SliceImporter &importer, const SliceProgress &progress, SourceMemory &store)
 {
     AV_SCOPE("SliceStorages::bind");
-    reclaim(reached);
-    SliceStorage *storage = find(store);
-    if (storage == nullptr && storages_.create(storage, store) != Status::ok) return nullptr;
+    reclaim();
+    SliceStorage *storage = find(store, importer);
+    if (storage == nullptr && storages_.create(storage, store, importer, progress) != Status::ok) return nullptr;
     if (storage->retired() || storage->refused()) return nullptr;
-    if (!storage->imported() && !storage->import(importer)) {
+    if (!storage->imported() && !storage->import()) {
         if (!reported_) lines_.write("a block of slice memory could not be imported to draw from: its buffers are copied");
         reported_ = true;
         return nullptr;
     }
-    storage->used_at(next);
+    storage->stamp();
     return &storage->buffer();
 }
 
-bool SliceStorages::attach(const SliceBindings::Binding &binding)
+Status SliceStorages::attach(const SliceBindings::Binding &binding)
 {
     AV_SCOPE("SliceStorages::attach");
-    return bindings_.bind(binding) == Status::ok;
+    return bindings_.bind(binding);
 }
 
 bool SliceStorages::leave(uint32_t resource, SliceBindings::Binding &was)
@@ -45,28 +46,43 @@ bool SliceStorages::bound(uint32_t resource, SliceBindings::Binding &was) const
     return bindings_.find(resource, was);
 }
 
-void SliceStorages::retire(const SourceMemory &store, uint64_t next)
+void SliceStorages::retire(const SourceMemory &store)
 {
     AV_SCOPE("SliceStorages::retire");
-    SliceStorage *const storage = find(store);
-    if (storage == nullptr || storage->retired()) return;
-    storage->used_at(next);
-    storage->retire();
-    retiring_++;
+    const auto live_in_store = [&store](const SliceStorage &held) { return held.holds_memory(store) && !held.retired(); };
+    for (SliceStorage *storage = storages_.find_if(live_in_store); storage != nullptr;
+         storage = storages_.find_if(live_in_store)) {
+        storage->stamp();
+        storage->retire();
+        retiring_++;
+    }
+}
+
+void SliceStorages::destroy_for(const SliceImporter &importer)
+{
+    AV_SCOPE("SliceStorages::destroy_for");
+    uint32_t retired = 0u;
+    storages_.destroy_if([&importer, &retired](const SliceStorage &storage) {
+        if (!storage.imported_by(importer)) return false;
+        retired += storage.retired() ? 1u : 0u;
+        return true;
+    });
+    bindings_.take_all_of(importer);
+    retiring_ -= retired;
 }
 
 bool SliceStorages::holds(const SourceMemory &store)
 {
     AV_SCOPE("SliceStorages::holds");
-    return find(store) != nullptr;
+    return storages_.find_if([&store](const SliceStorage &held) { return held.holds_memory(store); }) != nullptr;
 }
 
-void SliceStorages::reclaim(uint64_t reached)
+void SliceStorages::reclaim()
 {
     AV_SCOPE("SliceStorages::reclaim");
     if (retiring_ == 0u) return;
     const uint32_t before = storages_.live();
-    storages_.destroy_if([reached](const SliceStorage &storage) { return storage.done(reached); });
+    storages_.destroy_if([](const SliceStorage &storage) { return storage.done(); });
     retiring_ -= before - storages_.live();
 }
 
@@ -85,10 +101,10 @@ uint32_t SliceStorages::count() const
     return storages_.live();
 }
 
-SliceStorage *SliceStorages::find(const SourceMemory &store)
+SliceStorage *SliceStorages::find(const SourceMemory &store, const SliceImporter &importer)
 {
     AV_SCOPE("SliceStorages::find");
-    return storages_.find_if([&store](const SliceStorage &storage) { return storage.holds(store); });
+    return storages_.find_if([&store, &importer](const SliceStorage &storage) { return storage.holds(store, importer); });
 }
 
 bool SliceStorages::invariants_hold() const
