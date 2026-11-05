@@ -30,10 +30,14 @@ uint64_t GlPollClock::now_nanoseconds() const
     return ticks / frequency * nanoseconds_per_second + ticks % frequency * nanoseconds_per_second / frequency;
 }
 
-void GlPollClock::pause(uint64_t)
+void GlPollClock::pause(uint64_t nanoseconds)
 {
     AV_SCOPE("GlPollClock::pause");
-    if (kmt_ != nullptr) kmt_->sleep_briefly();
+    if (kmt_ == nullptr) return;
+    const uint64_t until = now_nanoseconds() + nanoseconds;
+    do {
+        kmt_->sleep_briefly();
+    } while (now_nanoseconds() < until);
 }
 
 }
