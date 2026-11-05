@@ -1,14 +1,12 @@
+#include "core/log/driver_log.hpp"
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
-#include "executor/vulkan/extension_list.hpp"
+#include "executor/executor_log.hpp"
+#include "executor/owned_fd.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
-#include "executor/vulkan/handle_registry.hpp"
-#include "executor/vulkan/host_exported_fds.hpp"
 #include "executor/host_gpu.hpp"
-#include "executor/vulkan/host_template_table.hpp"
 #include "executor/exported_memory.hpp"
 #include "executor/host_memory_source.hpp"
-#include "executor/imported_blob.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/import_table.hpp"
 #include "executor/shim/loader_host_apis.hpp"
@@ -18,6 +16,9 @@
 #include "harness/platform/mock_platform.hpp"
 #include "executor/sharing/shared_image_shape.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/recording_log.hpp"
+#include "harness/transport/roomed_transport.hpp"
+#include "proto/submission/blob_role.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/resources/host_memory_request.hpp"
 #include "proto/client/client_transport.hpp"
@@ -38,7 +39,6 @@
 extern "C" int __lsan_is_turned_off(void);
 extern "C" int __lsan_is_turned_off(void) { return 1; }
 
-using av::ImportedBlob;
 using av::VulkanBackend;
 using av::VulkanBackendProbe;
 using av::WireArena;
@@ -52,6 +52,8 @@ std::uint64_t detail = 0u;
 constexpr std::size_t block_bytes = 65536u;
 constexpr std::size_t page = 4096u;
 constexpr std::uint32_t domain = 1u;
+
+vkproto::HandleIdentity translation;
 
 template <typename H>
 H as_handle(std::uint64_t raw)
@@ -91,7 +93,7 @@ public:
         VkInstanceCreateInfo create = {};
         create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         create.pApplicationInfo = &application;
-        vkproto::serialize_VkInstanceCreateInfo(writer, create);
+        vkproto::serialize_VkInstanceCreateInfo(writer, identity_, create);
         std::uint8_t reply[64] = {};
         std::size_t  answered = 0u;
         if (!send(vkproto::kCmd_vkCreateInstance, frame, writer.offset(), reply, sizeof reply,
@@ -139,7 +141,7 @@ public:
         create.pQueueCreateInfos = &queue;
         create.enabledExtensionCount = count;
         create.ppEnabledExtensionNames = extensions;
-        vkproto::serialize_VkDeviceCreateInfo(writer, create);
+        vkproto::serialize_VkDeviceCreateInfo(writer, identity_, create);
         std::uint8_t reply[64] = {};
         std::size_t  answered = 0u;
         if (!send(vkproto::kCmd_vkCreateDevice, frame, writer.offset(), reply, sizeof reply,
@@ -149,7 +151,7 @@ public:
     }
 
     VkResult create_template(std::uint64_t device, const VkDescriptorUpdateTemplateEntry *entries,
-                             std::uint32_t count)
+                             std::uint32_t count, std::uint64_t *made = nullptr, std::uint64_t layout = 0u)
     {
         std::uint8_t frame[1024];
         WireWriter   writer(frame, sizeof frame);
@@ -159,7 +161,8 @@ public:
         create.descriptorUpdateEntryCount = count;
         create.pDescriptorUpdateEntries = entries;
         create.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET;
-        vkproto::serialize_VkDescriptorUpdateTemplateCreateInfo(writer, create);
+        create.descriptorSetLayout = as_handle<VkDescriptorSetLayout>(layout);
+        vkproto::serialize_VkDescriptorUpdateTemplateCreateInfo(writer, identity_, create);
         std::uint8_t reply[64] = {};
         std::size_t  answered = 0u;
         if (!send(vkproto::kCmd_vkCreateDescriptorUpdateTemplate, frame, writer.offset(), reply, sizeof reply,
@@ -168,8 +171,13 @@ public:
         WireReader   read(reply, answered);
         std::int32_t returned = 0;
         (void)read.read_pod(returned);
+        std::uint64_t handle = 0u;
+        (void)read.read_pod(handle);
+        if (made != nullptr) *made = handle;
         return static_cast<VkResult>(returned);
     }
+
+    vkproto::HandleTranslation &identity() { return identity_; }
 
     bool destroy(std::uint32_t command, std::uint64_t handle)
     {
@@ -194,12 +202,14 @@ private:
 
     VulkanBackend &backend_;
     std::uint8_t   block_[block_bytes];
+    vkproto::HandleIdentity identity_;
 };
 
-class BackendTransport final : public av::ClientTransport {
+class BackendTransport final : public av::RoomedTransport {
 public:
     explicit BackendTransport(VulkanBackend &backend)
-        : backend_(backend), request_{}, reply_{}, block_{}, arena_(nullptr, 0u), blobs_(), ran_(false)
+        : av::RoomedTransport(4096u, 4096u), backend_(backend), request_{}, reply_{}, block_{}, arena_(nullptr, 0u),
+          blobs_(), ran_(false)
     {}
 
     WireWriter request_writer() override { return WireWriter(request_, sizeof request_); }
@@ -261,15 +271,8 @@ public:
 
     bool made() const { return made_; }
     int  descriptor() const { return answered_.fd; }
-    bool take(ImportedBlob &blob, std::uint64_t id)
-    { av::SourceMemory *const memory = made_ ? source_->acquire(domain, key_) : nullptr;
-      if (memory == nullptr) return false;
-      if (blob.take(id, *memory) == av::Status::ok) return true;
-      source_->release(*memory);
-      return false; }
-    void give_back(ImportedBlob &blob)
-    { av::SourceMemory *const memory = blob.give_back();
-      if (memory != nullptr) source_->release(*memory); }
+    av::SourceMemory *acquire() { return made_ ? source_->acquire(domain, key_) : nullptr; }
+    void release(av::SourceMemory &memory) { source_->release(memory); }
     std::uint8_t *bytes() const
     { if (!made_) return nullptr;
       av::SourceMemory *const memory = source_->acquire(domain, key_);
@@ -288,10 +291,10 @@ class GuestDevice {
 public:
     GuestDevice(av::LoaderHostApis &host, std::uint32_t index, std::uint32_t count = 0u,
                 const char *const *extensions = nullptr)
-        : gpu_(), source_(host.memory_source(index)), backend_(), probe_(backend_), guest_(backend_), instance_(0u),
-          physical_(0u), device_(0u)
+        : gpu_(), source_(host.memory_source(index)), sink_(), lines_(sink_, "vulkan: "), memory_(), imports_(memory_),
+          backend_(lines_), probe_(backend_), guest_(backend_), instance_(0u), physical_(0u), device_(0u)
     { gpu_.describe(host, index);
-      backend_.initialize(gpu_, source_);
+      backend_.initialize(gpu_, source_, imports_);
       instance_ = guest_.create_instance();
       physical_ = instance_ != 0u ? guest_.first_physical_device(instance_) : 0u;
       device_ = physical_ != 0u ? guest_.create_device(physical_, count, extensions) : 0u; }
@@ -300,6 +303,7 @@ public:
     GuestDevice &operator=(const GuestDevice &) = delete;
 
     VulkanBackend      &backend() { return backend_; }
+    av::ImportTable    &imports() { return imports_; }
     VulkanBackendProbe &probe() { return probe_; }
     GuestSequence      &guest() { return guest_; }
     std::uint64_t       instance() const { return instance_; }
@@ -327,6 +331,10 @@ public:
 private:
     av::HostGpu        gpu_;
     av::HostMemorySource *source_;
+    av::RecordingLog   sink_;
+    av::DriverLog      lines_;
+    av::MockPlatform   memory_;
+    av::ImportTable    imports_;
     VulkanBackend      backend_;
     VulkanBackendProbe probe_;
     GuestSequence      guest_;
@@ -336,7 +344,9 @@ private:
 };
 
 av::LoaderHostApis &opened_host()
-{ static av::LoaderHostApis host;
+{ static av::RecordingLog   sink;
+  static av::ExecutorLog    log(sink);
+  static av::LoaderHostApis host(log);
   host.open();
   return host; }
 
@@ -353,8 +363,30 @@ bool same_kind(std::uint64_t physical, std::uint32_t mask, std::uint32_t type)
   return false; }
 
 bool free_memory(BackendTransport &wire, std::uint64_t device, std::uint64_t memory)
-{ vkproto::av_vkFreeMemory(wire, as_handle<VkDevice>(device), as_handle<VkDeviceMemory>(memory), nullptr);
+{ vkproto::av_vkFreeMemory(wire, translation, as_handle<VkDevice>(device), as_handle<VkDeviceMemory>(memory), nullptr);
   return wire.ran(); }
+
+bool import_blob(GuestDevice &made, Allocation &allocation, std::uint64_t id, std::uint64_t &handle)
+{ handle = 0u;
+  av::SourceMemory *const memory = allocation.acquire();
+  if (memory == nullptr) return false;
+  av::ImportedBlob *taken = nullptr;
+  if (made.imports().take(id, *memory, taken) != av::Status::ok) {
+      allocation.release(*memory);
+      return false;
+  }
+  if (!made.backend().adopt(*memory, av::BlobRole(), handle) || made.imports().name(*taken, handle) != av::Status::ok) {
+      allocation.release(*made.imports().forget(id));
+      handle = 0u;
+      return false;
+  }
+  return true; }
+
+void drop_blob(GuestDevice &made, Allocation &allocation, std::uint64_t id)
+{ av::ImportedBlob *const blob = made.imports().find(id);
+  if (blob == nullptr) return;
+  if (blob->handle() != 0u) made.backend().abandon(blob->memory(), blob->handle());
+  allocation.release(*made.imports().forget(id)); }
 
 }
 
@@ -367,22 +399,27 @@ TEST(vulkan_backend_device, a_guest_s_device_imports_source_memory_and_tears_dow
       CHECK(backend.knows_handle(made.device()));
       CHECK(made.probe().memory_import());
 
-      Allocation   allocation(made.source(), 1u, lowest(made.mappable()));
-      ImportedBlob blob;
-      CHECK(allocation.take(blob, 1u));
-      CHECK(backend.adopt(blob));
-      CHECK(blob.object() != 0u);
-      CHECK_EQ(made.probe().imports_held(), 1u);
-      backend.abandon(blob);
-      CHECK_EQ(blob.object(), 0u);
-      backend.abandon(blob);
-      CHECK_EQ(made.probe().imports_held(), 0u);
+      Allocation allocation(made.source(), 1u, lowest(made.mappable()));
+      av::SourceMemory *const memory = allocation.acquire();
+      CHECK(memory != nullptr);
+      if (memory == nullptr) continue;
+      std::uint64_t handle = 0u;
+      CHECK(!backend.adopt(*memory, av::BlobRole(av::BlobRole::Kind::arena_segment, 0u), handle));
+      CHECK_EQ(handle, 0u);
+      CHECK(backend.adopt(*memory, av::BlobRole(), handle));
+      CHECK(handle != 0u);
+      CHECK(backend.knows_handle(handle));
+      CHECK(!backend.knows_handle(handle, av::VulkanObjectKind::device));
+      backend.abandon(*memory, handle);
+      CHECK(!backend.knows_handle(handle));
+      backend.abandon(*memory, handle);
 
       CHECK(!made.guest().destroy(vkproto::kCmd_vkDestroyDevice, made.device() ^ 0x1000u));
       CHECK(made.guest().destroy(vkproto::kCmd_vkDestroyDevice, made.device()));
       CHECK(!backend.knows_handle(made.device()));
-      CHECK(!backend.adopt(blob));
-      allocation.give_back(blob);
+      CHECK(!backend.adopt(*memory, av::BlobRole(), handle));
+      CHECK_EQ(handle, 0u);
+      allocation.release(*memory);
   }
 }
 
@@ -400,20 +437,16 @@ TEST(vulkan_backend_device, every_mappable_type_imports_as_itself_and_no_other_i
           CHECK_EQ(allocation.made(), may);
           if (!may) continue;
           CHECK(same_kind(made.physical(), made.importable_dmabuf(allocation.descriptor()), type));
-          ImportedBlob blob;
-          CHECK(allocation.take(blob, 1u));
-          CHECK(backend.adopt(blob));
-          CHECK(blob.invariants_hold());
-          CHECK(blob.object() != 0u);
-          CHECK_EQ(blob.wire_handle(), blob.object());
-          CHECK(backend.knows_handle(blob.wire_handle()));
+          std::uint64_t memory = 0u;
+          CHECK(import_blob(made, allocation, 1u, memory));
+          CHECK(memory != 0u);
+          CHECK(backend.knows_handle(memory));
+          CHECK(made.imports().invariants_hold());
           CHECK_EQ(made.probe().imports_held(), 1u);
-          const std::uint64_t memory = blob.wire_handle();
-          backend.abandon(blob);
-          CHECK_EQ(blob.wire_handle(), 0u);
+          CHECK(made.imports().named(memory) != nullptr);
+          drop_blob(made, allocation, 1u);
           CHECK(!backend.knows_handle(memory));
           CHECK_EQ(made.probe().imports_held(), 0u);
-          allocation.give_back(blob);
       }
   }
 }
@@ -427,14 +460,11 @@ TEST(vulkan_backend_device, memory_with_no_descriptor_to_share_is_not_adopted)
       av::SourceMemory memory(domain, 9u, lowest(made.mappable()), AV_MEMORY_WRITE_BACK,
                               av::ExportedMemory(0x1000u, -1, backing, page));
       const std::uint32_t known = made.probe().handles().count();
-      ImportedBlob blob;
-      CHECK_STATUS(blob.take(1u, memory), av::Status::ok);
-      CHECK(!made.backend().adopt(blob));
-      CHECK_EQ(blob.object(), 0u);
-      CHECK_EQ(blob.wire_handle(), 0u);
+      std::uint64_t handle = 9u;
+      CHECK(!made.backend().adopt(memory, av::BlobRole(), handle));
+      CHECK_EQ(handle, 0u);
       CHECK_EQ(made.probe().imports_held(), 0u);
       CHECK_EQ(made.probe().handles().count(), known);
-      static_cast<void>(blob.give_back());
   }
 }
 
@@ -450,30 +480,17 @@ TEST(vulkan_backend_device, a_device_naming_the_extensions_imports_and_a_refused
       if (made.device() == 0u || made.mappable() == 0u) continue;
       VulkanBackend &backend = made.backend();
       Allocation     allocation(made.source(), 1u, lowest(made.mappable()));
-      ImportedBlob   blob;
-      CHECK(allocation.take(blob, 1u));
-      CHECK(backend.adopt(blob));
-      backend.abandon(blob);
-      allocation.give_back(blob);
+      std::uint64_t  handle = 0u;
+      CHECK(import_blob(made, allocation, 1u, handle));
+      drop_blob(made, allocation, 1u);
 
+      const std::uint32_t known = made.probe().handles().count();
       CHECK_EQ(made.guest().create_device(made.physical(), 1u, bogus), 0u);
       CHECK_EQ(made.guest().create_device(made.physical(), 3u, bogus_and_named), 0u);
-      ImportedBlob again;
-      CHECK(allocation.take(again, 2u));
-      CHECK(backend.adopt(again));
-      backend.abandon(again);
-      allocation.give_back(again);
-
-      const char *full[av::ExtensionList::capacity];
-      for (const char *&name : full) name = "VK_KHR_maintenance1";
-      const std::uint64_t unsent = made.guest().create_device(made.physical(), av::ExtensionList::capacity, full);
-      CHECK(unsent != 0u);
-      CHECK(!made.probe().memory_import());
-      ImportedBlob none;
-      CHECK(allocation.take(none, 3u));
-      CHECK(!backend.adopt(none));
-      CHECK_EQ(none.object(), 0u);
-      allocation.give_back(none);
+      CHECK_EQ(made.probe().handles().count(), known);
+      CHECK(import_blob(made, allocation, 2u, handle));
+      CHECK(backend.knows_handle(handle));
+      drop_blob(made, allocation, 2u);
   }
 }
 
@@ -495,12 +512,12 @@ TEST(vulkan_backend_device, the_gpu_copies_between_two_imported_pages_bound_thro
       create.size = page;
       create.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
       VkBuffer source = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkCreateBuffer(wire, device, &create, nullptr, &source), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateBuffer(wire, translation, device, &create, nullptr, &source), VK_SUCCESS);
       create.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
       VkBuffer target = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkCreateBuffer(wire, device, &create, nullptr, &target), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateBuffer(wire, translation, device, &create, nullptr, &target), VK_SUCCESS);
       VkMemoryRequirements requirements = {};
-      vkproto::av_vkGetBufferMemoryRequirements(wire, device, source, &requirements);
+      vkproto::av_vkGetBufferMemoryRequirements(wire, translation, device, source, &requirements);
       CHECK(requirements.size <= page);
       const av::GuestMemoryTypes &view = made.probe().types();
       std::uint32_t               type = av::GuestMemoryTypes::no_type;
@@ -517,48 +534,43 @@ TEST(vulkan_backend_device, the_gpu_copies_between_two_imported_pages_bound_thro
       if (written == nullptr) continue;
       for (std::size_t b = 0u; b < page; b++) written[b] = static_cast<std::uint8_t>(b * 7u + 1u);
 
-      ImportedBlob blobs[2];
-      for (std::uint32_t b = 0u; b < 2u; b++) {
-          CHECK(allocations[b]->take(blobs[b], b + 1u));
-          CHECK(backend.adopt(blobs[b]));
-      }
+      std::uint64_t memories[2] = {};
+      for (std::uint32_t b = 0u; b < 2u; b++) CHECK(import_blob(made, *allocations[b], b + 1u, memories[b]));
       CHECK_EQ(made.probe().imports_held(), 2u);
-      CHECK_EQ(vkproto::av_vkBindBufferMemory(wire, device, source,
-                                               as_handle<VkDeviceMemory>(blobs[0].wire_handle()), 0u),
+      CHECK_EQ(vkproto::av_vkBindBufferMemory(wire, translation, device, source, as_handle<VkDeviceMemory>(memories[0]), 0u),
                VK_SUCCESS);
-      CHECK_EQ(vkproto::av_vkBindBufferMemory(wire, device, target,
-                                               as_handle<VkDeviceMemory>(blobs[1].wire_handle()), 0u),
+      CHECK_EQ(vkproto::av_vkBindBufferMemory(wire, translation, device, target, as_handle<VkDeviceMemory>(memories[1]), 0u),
                VK_SUCCESS);
 
       std::uint64_t queue = 0u;
-      vkproto::av_vkGetDeviceQueue(wire, device, 0u, 0u, &queue);
+      vkproto::av_vkGetDeviceQueue(wire, translation, device, 0u, 0u, &queue);
       CHECK(queue != 0u);
       VkCommandPoolCreateInfo pool_create = {};
       pool_create.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
       VkCommandPool pool = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkCreateCommandPool(wire, device, &pool_create, nullptr, &pool), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateCommandPool(wire, translation, device, &pool_create, nullptr, &pool), VK_SUCCESS);
       VkCommandBufferAllocateInfo allocate = {};
       allocate.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
       allocate.commandPool = pool;
       allocate.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
       allocate.commandBufferCount = 1u;
       std::uint64_t commands_raw = 0u;
-      CHECK_EQ(vkproto::av_vkAllocateCommandBuffers(wire, device, &allocate, &commands_raw), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateCommandBuffers(wire, translation, device, &allocate, &commands_raw), VK_SUCCESS);
       const VkCommandBuffer commands = as_handle<VkCommandBuffer>(commands_raw);
       VkCommandBufferBeginInfo begin = {};
       begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-      CHECK_EQ(vkproto::av_vkBeginCommandBuffer(wire, commands, &begin), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkBeginCommandBuffer(wire, translation, commands, &begin), VK_SUCCESS);
       const VkBufferCopy region = {0u, 0u, page};
-      vkproto::av_vkCmdCopyBuffer(wire, commands, source, target, 1u, &region);
+      vkproto::av_vkCmdCopyBuffer(wire, translation, commands, source, target, 1u, &region);
       CHECK(wire.ran());
-      CHECK_EQ(vkproto::av_vkEndCommandBuffer(wire, commands), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkEndCommandBuffer(wire, translation, commands), VK_SUCCESS);
       VkSubmitInfo submit = {};
       submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
       submit.commandBufferCount = 1u;
       submit.pCommandBuffers = &commands;
-      CHECK_EQ(vkproto::av_vkQueueSubmit(wire, as_handle<VkQueue>(queue), 1u, &submit, VK_NULL_HANDLE),
+      CHECK_EQ(vkproto::av_vkQueueSubmit(wire, translation, as_handle<VkQueue>(queue), 1u, &submit, VK_NULL_HANDLE),
                VK_SUCCESS);
-      CHECK_EQ(vkproto::av_vkQueueWaitIdle(wire, as_handle<VkQueue>(queue)), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkQueueWaitIdle(wire, translation, as_handle<VkQueue>(queue)), VK_SUCCESS);
 
       void *const window = ::mmap(nullptr, page, PROT_READ, MAP_SHARED, second.descriptor(), 0);
       CHECK(window != MAP_FAILED);
@@ -569,22 +581,20 @@ TEST(vulkan_backend_device, the_gpu_copies_between_two_imported_pages_bound_thro
           ::munmap(window, page);
       }
 
-      vkproto::av_vkDestroyCommandPool(wire, device, pool, nullptr);
-      vkproto::av_vkDestroyBuffer(wire, device, source, nullptr);
-      vkproto::av_vkDestroyBuffer(wire, device, target, nullptr);
+      vkproto::av_vkDestroyCommandPool(wire, translation, device, pool, nullptr);
+      vkproto::av_vkDestroyBuffer(wire, translation, device, source, nullptr);
+      vkproto::av_vkDestroyBuffer(wire, translation, device, target, nullptr);
 
       for (std::uint32_t b = 0u; b < 2u; b++) {
-          const std::uint64_t memory = blobs[b].wire_handle();
+          const std::uint64_t memory = memories[b];
           CHECK(free_memory(wire, made.device(), memory));
-          CHECK_EQ(made.probe().imports_held(), 1u - b);
           CHECK(!backend.knows_handle(memory));
-          CHECK_EQ(blobs[b].object(), 0u);
-          CHECK(blobs[b].live());
-          CHECK(blobs[b].invariants_hold());
+          CHECK(made.imports().named(memory) == nullptr);
+          CHECK_EQ(made.probe().imports_held(), 2u - b);
+          CHECK(made.imports().invariants_hold());
           CHECK(!free_memory(wire, made.device(), memory));
-          backend.abandon(blobs[b]);
+          drop_blob(made, *allocations[b], b + 1u);
           CHECK_EQ(made.probe().imports_held(), 1u - b);
-          allocations[b]->give_back(blobs[b]);
       }
   }
 }
@@ -600,7 +610,7 @@ TEST(vulkan_backend_device, freeing_memory_that_is_not_an_import_frees_it)
       allocate.allocationSize = page;
       allocate.memoryTypeIndex = 0u;
       VkDeviceMemory memory = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, as_handle<VkDevice>(made.device()), &allocate, nullptr, &memory),
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, translation, as_handle<VkDevice>(made.device()), &allocate, nullptr, &memory),
                VK_SUCCESS);
       std::uint64_t raw = 0u;
       std::memcpy(&raw, &memory, sizeof memory);
@@ -608,50 +618,6 @@ TEST(vulkan_backend_device, freeing_memory_that_is_not_an_import_frees_it)
       CHECK(free_memory(wire, made.device(), raw));
       CHECK(!made.backend().knows_handle(raw));
       CHECK(!free_memory(wire, made.device(), raw));
-  }
-}
-
-TEST(vulkan_backend_device, an_import_with_no_room_to_be_named_is_refused_and_given_back)
-{ av::LoaderHostApis &host = opened_host();
-  if (host.gpu_count() == 0u) return;
-  {
-      GuestDevice made(host, 0u);
-      if (made.device() == 0u || made.mappable() == 0u) return;
-      VulkanBackend &backend = made.backend();
-      Allocation     allocation(made.source(), 1u, lowest(made.mappable()));
-      for (std::uint64_t raw = 1u; made.probe().handles().count() < av::HandleRegistry::max_handles; raw++)
-          backend.made(raw);
-      CHECK(!backend.lost());
-      ImportedBlob blob;
-      CHECK(allocation.take(blob, 1u));
-      CHECK(!backend.adopt(blob));
-      CHECK_EQ(blob.object(), 0u);
-      CHECK_EQ(made.probe().imports_held(), 0u);
-      CHECK(!backend.lost());
-      allocation.give_back(blob);
-  }
-  {
-      GuestDevice made(host, 0u);
-      VulkanBackend &backend = made.backend();
-      Allocation     allocation(made.source(), 2u, lowest(made.mappable()));
-      static ImportedBlob blobs[av::ImportTable::max_imports + 1u];
-      for (std::uint32_t b = 0u; b < av::ImportTable::max_imports; b++) {
-          CHECK(allocation.take(blobs[b], b + 1u));
-          CHECK(backend.adopt(blobs[b]));
-      }
-      ImportedBlob &extra = blobs[av::ImportTable::max_imports];
-      CHECK(allocation.take(extra, 0xFFFFu));
-      CHECK(!backend.adopt(extra));
-      CHECK_EQ(extra.object(), 0u);
-      CHECK_EQ(made.probe().imports_held(), av::ImportTable::max_imports);
-
-      backend.abandon(blobs[0]);
-      CHECK(backend.adopt(extra));
-      for (ImportedBlob &blob : blobs) {
-          backend.abandon(blob);
-          allocation.give_back(blob);
-      }
-      CHECK_EQ(made.probe().imports_held(), 0u);
   }
 }
 
@@ -671,8 +637,12 @@ TEST(vulkan_backend_device, a_second_instance_and_device_are_the_ones_kept)
   if (host.gpu_count() == 0u) return;
   av::HostGpu gpu;
   gpu.describe(host, 0u);
-  VulkanBackend backend;
-  backend.initialize(gpu, host.memory_source(0u));
+  av::RecordingLog sink;
+  av::DriverLog    lines(sink, "vulkan: ");
+  av::MockPlatform memory;
+  av::ImportTable  imports(memory);
+  VulkanBackend    backend(lines);
+  backend.initialize(gpu, host.memory_source(0u), imports);
   GuestSequence guest(backend);
   const std::uint64_t first = guest.create_instance();
   if (first == 0u) return;
@@ -712,16 +682,14 @@ TEST(vulkan_backend_device, memory_of_a_device_that_is_gone_is_not_freed_through
       if (made.device() == 0u || made.mappable() == 0u) continue;
       VulkanBackend &backend = made.backend();
       Allocation     allocation(made.source(), 1u, lowest(made.mappable()));
-      ImportedBlob   blob;
-      CHECK(allocation.take(blob, 1u));
-      CHECK(backend.adopt(blob));
-      const std::uint64_t memory = blob.object();
+      std::uint64_t  memory = 0u;
+      CHECK(import_blob(made, allocation, 1u, memory));
       CHECK(made.guest().destroy(vkproto::kCmd_vkDestroyDevice, made.device()));
       CHECK(!backend.knows_handle(memory));
-      backend.abandon(blob);
-      CHECK_EQ(blob.object(), memory);
-      CHECK_EQ(made.probe().imports_held(), 1u);
-      allocation.give_back(blob);
+      CHECK(made.imports().named(memory) != nullptr);
+      drop_blob(made, allocation, 1u);
+      CHECK_EQ(made.probe().imports_held(), 0u);
+      CHECK(made.imports().invariants_hold());
   }
 }
 
@@ -739,7 +707,7 @@ TEST(vulkan_backend_device, a_buffer_this_context_made_is_accepted_back)
       create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
       create.size = page;
       create.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-      vkproto::serialize_VkBufferCreateInfo(writer, create);
+      vkproto::serialize_VkBufferCreateInfo(writer, guest.identity(), create);
       std::uint8_t reply[64] = {};
       std::size_t answered = 0u;
       CHECK(guest.send(vkproto::kCmd_vkCreateBuffer, frame, writer.offset(), reply, sizeof reply,
@@ -773,7 +741,7 @@ TEST(vulkan_backend_device, a_buffer_of_a_destroyed_device_is_refused)
       create.size = page;
       create.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
       VkBuffer buffer = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkCreateBuffer(wire, as_handle<VkDevice>(made.device()), &create, nullptr, &buffer),
+      CHECK_EQ(vkproto::av_vkCreateBuffer(wire, translation, as_handle<VkDevice>(made.device()), &create, nullptr, &buffer),
                VK_SUCCESS);
       std::uint64_t raw = 0u;
       std::memcpy(&raw, &buffer, sizeof buffer);
@@ -855,19 +823,19 @@ bool driver_imports_image(std::uint64_t physical, const VkImageCreateInfo &creat
 std::uint32_t wire_buffer_types(BackendTransport &wire, std::uint64_t device, const VkBufferCreateInfo &create)
 { const VkDevice host = as_handle<VkDevice>(device);
   VkBuffer buffer = VK_NULL_HANDLE;
-  if (vkproto::av_vkCreateBuffer(wire, host, &create, nullptr, &buffer) != VK_SUCCESS) return 0u;
+  if (vkproto::av_vkCreateBuffer(wire, translation, host, &create, nullptr, &buffer) != VK_SUCCESS) return 0u;
   VkMemoryRequirements requirements = {};
-  vkproto::av_vkGetBufferMemoryRequirements(wire, host, buffer, &requirements);
-  vkproto::av_vkDestroyBuffer(wire, host, buffer, nullptr);
+  vkproto::av_vkGetBufferMemoryRequirements(wire, translation, host, buffer, &requirements);
+  vkproto::av_vkDestroyBuffer(wire, translation, host, buffer, nullptr);
   return requirements.memoryTypeBits; }
 
 std::uint32_t wire_image_types(BackendTransport &wire, std::uint64_t device, const VkImageCreateInfo &create)
 { const VkDevice host = as_handle<VkDevice>(device);
   VkImage image = VK_NULL_HANDLE;
-  if (vkproto::av_vkCreateImage(wire, host, &create, nullptr, &image) != VK_SUCCESS) return 0u;
+  if (vkproto::av_vkCreateImage(wire, translation, host, &create, nullptr, &image) != VK_SUCCESS) return 0u;
   VkMemoryRequirements requirements = {};
-  vkproto::av_vkGetImageMemoryRequirements(wire, host, image, &requirements);
-  vkproto::av_vkDestroyImage(wire, host, image, nullptr);
+  vkproto::av_vkGetImageMemoryRequirements(wire, translation, host, image, &requirements);
+  vkproto::av_vkDestroyImage(wire, translation, host, image, nullptr);
   return requirements.memoryTypeBits; }
 
 }
@@ -899,30 +867,11 @@ TEST(vulkan_backend_device, buffers_and_images_are_made_for_host_allocation_wher
       CHECK(driver != 0u);
       std::uint32_t native = 0u;
       VkPhysicalDeviceMemoryProperties guest = {};
-      vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, as_handle<VkPhysicalDevice>(made.physical()), &guest);
+      vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, translation, as_handle<VkPhysicalDevice>(made.physical()), &guest);
       for (std::uint32_t type = 0u; type < guest.memoryTypeCount; type++)
           if ((guest.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0u) native |= 1u << type;
       CHECK(imports || (driver & native) != 0u);
       CHECK_EQ(wire_image_types(wire, made.device(), image), imports ? driver : driver & native);
-  }
-}
-
-TEST(vulkan_backend_device, a_device_that_imports_nothing_makes_buffers_as_asked)
-{ av::LoaderHostApis &host = opened_host();
-  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      GuestDevice made(host, i);
-      if (made.device() == 0u) continue;
-      BackendTransport wire(made.backend());
-      const VkBufferCreateInfo asked = storage_buffer();
-
-      const std::uint64_t replaced = made.device();
-      const char *full[av::ExtensionList::capacity];
-      for (const char *&name : full) name = "VK_KHR_maintenance1";
-      const std::uint64_t unsent = made.guest().create_device(made.physical(), av::ExtensionList::capacity, full);
-      CHECK(!made.probe().memory_import());
-      CHECK(unsent != 0u);
-      CHECK_EQ(wire_buffer_types(wire, unsent, asked), driver_buffer_types(unsent, asked));
-      CHECK_EQ(wire_buffer_types(wire, replaced, asked), driver_buffer_types(replaced, asked));
   }
 }
 
@@ -984,9 +933,9 @@ TEST(vulkan_backend_device, an_image_laid_out_by_a_drm_modifier_is_made_without_
       if (driver_image_types(made.device(), create) == 0u) continue;
       const VkDevice device = as_handle<VkDevice>(made.device());
       VkImage image = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkCreateImage(wire, device, &create, nullptr, &image), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateImage(wire, translation, device, &create, nullptr, &image), VK_SUCCESS);
       CHECK(made.backend().knows_handle(as_wire(image)));
-      vkproto::av_vkDestroyImage(wire, device, image, nullptr);
+      vkproto::av_vkDestroyImage(wire, translation, device, image, nullptr);
   }
 }
 
@@ -1040,8 +989,12 @@ TEST(vulkan_backend_device, memory_is_host_visible_to_the_guest_only_where_the_s
           const std::uint32_t mappable = used != nullptr ? used->mappable_types() : 0u;
           av::HostGpu gpu;
           gpu.describe(host, i);
-          VulkanBackend fresh;
-          fresh.initialize(gpu, used);
+          av::RecordingLog sink;
+          av::DriverLog    lines(sink, "vulkan: ");
+          av::MockPlatform tables;
+          av::ImportTable  imports(tables);
+          VulkanBackend    fresh(lines);
+          fresh.initialize(gpu, used, imports);
           VulkanBackendProbe probe(fresh);
           GuestSequence  guest(fresh);
           BackendTransport wire(fresh);
@@ -1051,7 +1004,7 @@ TEST(vulkan_backend_device, memory_is_host_visible_to_the_guest_only_where_the_s
           if (physical == 0u) { fresh.shut_down(); continue; }
           const VkPhysicalDeviceMemoryProperties driver = driver_memory(physical);
           VkPhysicalDeviceMemoryProperties before = {};
-          vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, as_handle<VkPhysicalDevice>(physical), &before);
+          vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, translation, as_handle<VkPhysicalDevice>(physical), &before);
           check_view(before, driver, probe.types(), mappable);
           av::GuestMemoryTypes sourced;
           if (used == source && source != nullptr && source->vulkan_types(sourced)) {
@@ -1063,11 +1016,11 @@ TEST(vulkan_backend_device, memory_is_host_visible_to_the_guest_only_where_the_s
           VkPhysicalDeviceMemoryProperties2 after = {};
           after.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
           CHECK(guest.create_device(physical) != 0u);
-          vkproto::av_vkGetPhysicalDeviceMemoryProperties2(wire, as_handle<VkPhysicalDevice>(physical), &after);
+          vkproto::av_vkGetPhysicalDeviceMemoryProperties2(wire, translation, as_handle<VkPhysicalDevice>(physical), &after);
           CHECK(std::memcmp(&after.memoryProperties, &before, sizeof before) == 0);
           VkPhysicalDeviceMemoryProperties2 khr = {};
           khr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
-          vkproto::av_vkGetPhysicalDeviceMemoryProperties2KHR(wire, as_handle<VkPhysicalDevice>(physical), &khr);
+          vkproto::av_vkGetPhysicalDeviceMemoryProperties2KHR(wire, translation, as_handle<VkPhysicalDevice>(physical), &khr);
           CHECK(std::memcmp(&khr.memoryProperties, &before, sizeof before) == 0);
           fresh.shut_down();
       }
@@ -1086,203 +1039,142 @@ TEST(vulkan_backend_device, a_template_the_device_cannot_track_is_refused_before
       hostile.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
       hostile.offset = ~static_cast<std::size_t>(0);
       hostile.stride = sizeof(VkDescriptorImageInfo);
+      const std::uint32_t known = made.probe().handles().count();
       CHECK_EQ(made.guest().create_template(made.device(), &hostile, 1u), VK_ERROR_INITIALIZATION_FAILED);
+      CHECK_EQ(made.probe().handles().count(), known);
+  }
+}
+
+TEST(vulkan_backend_device, a_template_the_device_made_is_sized_until_it_is_destroyed)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      GuestDevice made(host, i);
+      if (made.device() == 0u) continue;
 
       VkDescriptorUpdateTemplateEntry one = {};
       one.descriptorCount = 1u;
       one.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
       one.stride = sizeof(VkDescriptorImageInfo);
-      for (std::uint32_t taken = 0u; taken < av::HostTemplateTable::max_templates; taken++) {
-          CHECK_EQ(made.probe().reserve_template(as_handle<VkDevice>(made.device()), &one), av::Status::ok);
-          VulkanBackendProbe::name_template(made.backend(), as_handle<VkDescriptorUpdateTemplate>(0x5000u + taken));
-      }
-      CHECK_EQ(made.guest().create_template(made.device(), &one, 1u), VK_ERROR_OUT_OF_HOST_MEMORY);
+      BackendTransport wire(made.backend());
+      VkDescriptorSetLayoutBinding binding = {};
+      binding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+      binding.descriptorCount = 1u;
+      binding.stageFlags = VK_SHADER_STAGE_ALL;
+      VkDescriptorSetLayoutCreateInfo layout_create = {};
+      layout_create.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+      layout_create.bindingCount = 1u;
+      layout_create.pBindings = &binding;
+      VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::av_vkCreateDescriptorSetLayout(wire, translation, as_handle<VkDevice>(made.device()),
+                                                       &layout_create, nullptr, &layout),
+               VK_SUCCESS);
+      std::uint64_t made_template = 0u;
+      CHECK_EQ(made.guest().create_template(made.device(), &one, 1u, &made_template, as_wire(layout)), VK_SUCCESS);
+      CHECK(made_template != 0u);
+      const auto handle = as_handle<VkDescriptorUpdateTemplate>(made_template);
+      CHECK(made.backend().knows_handle(made_template, av::VulkanObjectKind::descriptor_template));
+      CHECK_EQ(made.backend().template_bytes(handle), sizeof(VkDescriptorImageInfo));
+      CHECK_EQ(made.backend().template_bytes(as_handle<VkDescriptorUpdateTemplate>(made_template + 8u)), 0u);
+      vkproto::av_vkDestroyDescriptorUpdateTemplate(wire, translation, as_handle<VkDevice>(made.device()), handle,
+                                                    nullptr);
+      CHECK(wire.ran());
+      CHECK(!made.backend().knows_handle(made_template));
+      CHECK_EQ(made.backend().template_bytes(handle), 0u);
   }
 }
 
-TEST(vulkan_backend_device, an_import_names_an_fd_this_context_exported)
+TEST(vulkan_backend_device, no_file_descriptor_crosses_the_wire_in_either_direction)
 { av::LoaderHostApis &host = opened_host();
   for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
       if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
-      const char *const extensions[] = {"VK_KHR_external_memory_fd"};
-      GuestDevice made(host, i, 1u, extensions);
+      const char *const extensions[] = {"VK_KHR_external_memory_fd", "VK_KHR_external_semaphore_fd",
+                                        "VK_KHR_external_fence_fd"};
+      GuestDevice made(host, i, 3u, extensions);
       if (made.device() == 0u) continue;
       BackendTransport wire(made.backend());
       const VkDevice   device = as_handle<VkDevice>(made.device());
 
-      VkExportMemoryAllocateInfo exportable = {};
-      exportable.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
-      exportable.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
       VkMemoryAllocateInfo allocate = {};
       allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-      allocate.pNext = &exportable;
       allocate.allocationSize = page;
-      allocate.memoryTypeIndex = 0u;
-      VkDeviceMemory shared = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
+      VkDeviceMemory plain = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, translation, device, &allocate, nullptr, &plain), VK_SUCCESS);
 
       VkMemoryGetFdInfoKHR get = {};
       get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
-      get.memory = shared;
+      get.memory = plain;
       get.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
-      int fd = -1;
-      if (vkproto::av_vkGetMemoryFdKHR(wire, device, &get, &fd) != VK_SUCCESS) continue;
-      CHECK(fd >= 0);
-      CHECK(made.probe().holds_fd(fd));
+      int fd = 9;
+      CHECK_EQ(vkproto::av_vkGetMemoryFdKHR(wire, translation, device, &get, &fd), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      fd = 9;
+      CHECK_EQ(made.backend().on_vkGetMemoryFdKHR(device, &get, &fd), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      CHECK_EQ(fd, -1);
 
-      VkImportMemoryFdInfoKHR forged = {};
-      forged.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
-      forged.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
-      forged.fd = fd + 4096;
-      VkMemoryAllocateInfo importing = allocate;
-      importing.pNext = &forged;
+      const int stranger = ::memfd_create("not exported", MFD_CLOEXEC);
+      CHECK(stranger >= 0);
+      VkMemoryFdPropertiesKHR properties = {};
+      properties.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
+      CHECK_EQ(vkproto::av_vkGetMemoryFdPropertiesKHR(wire, translation, device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+                                                      stranger, &properties),
+               VK_ERROR_INVALID_EXTERNAL_HANDLE);
+
+      VkImportMemoryFdInfoKHR import = {};
+      import.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR;
+      import.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
+      import.fd = stranger;
+      VkMemoryAllocateInfo importing = {};
+      importing.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+      importing.pNext = &import;
+      importing.allocationSize = page;
       VkDeviceMemory imported = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &importing, nullptr, &imported),
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, translation, device, &importing, nullptr, &imported),
                VK_ERROR_INVALID_EXTERNAL_HANDLE);
       CHECK(imported == VK_NULL_HANDLE);
-
-      VkImportMemoryFdInfoKHR import = forged;
-      import.fd = fd;
-      importing.pNext = &import;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &importing, nullptr, &imported), VK_SUCCESS);
-      CHECK(!made.probe().holds_fd(fd));
-      VkDeviceMemory again = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &importing, nullptr, &again),
-               VK_ERROR_INVALID_EXTERNAL_HANDLE);
-
-      VkDeviceMemory plain = VK_NULL_HANDLE;
-      VkMemoryAllocateInfo alone = {};
-      alone.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-      alone.allocationSize = page;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &alone, nullptr, &plain), VK_SUCCESS);
-      VkMemoryAllocateInfo absurd = alone;
-      absurd.allocationSize = ~static_cast<VkDeviceSize>(0) / 2u;
-      VkDeviceMemory none = VK_NULL_HANDLE;
-      CHECK(vkproto::av_vkAllocateMemory(wire, device, &absurd, nullptr, &none) != VK_SUCCESS);
-  }
-}
-
-TEST(vulkan_backend_device, shutting_down_closes_every_fd_the_context_exported)
-{ av::LoaderHostApis &host = opened_host();
-  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
-      const char *const extensions[] = {"VK_KHR_external_memory_fd"};
-      GuestDevice made(host, i, 1u, extensions);
-      if (made.device() == 0u) continue;
-      BackendTransport wire(made.backend());
-      const VkDevice   device = as_handle<VkDevice>(made.device());
-      VkExportMemoryAllocateInfo exportable = {};
-      exportable.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
-      exportable.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
-      VkMemoryAllocateInfo allocate = {};
-      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-      allocate.pNext = &exportable;
-      allocate.allocationSize = page;
-      VkDeviceMemory shared = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
-      VkMemoryGetFdInfoKHR get = {};
-      get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
-      get.memory = shared;
-      get.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
-      int fd = -1;
-      if (vkproto::av_vkGetMemoryFdKHR(wire, device, &get, &fd) != VK_SUCCESS) continue;
-      CHECK(made.probe().holds_fd(fd));
-      made.backend().shut_down();
-      CHECK(!made.probe().holds_fd(fd));
-      CHECK(::fcntl(fd, F_GETFD) == -1);
-  }
-}
-
-TEST(vulkan_backend_device, a_semaphore_import_names_an_fd_this_context_exported)
-{ av::LoaderHostApis &host = opened_host();
-  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
-      const char *const extensions[] = {"VK_KHR_external_semaphore_fd"};
-      GuestDevice made(host, i, 1u, extensions);
-      if (made.device() == 0u) continue;
-      BackendTransport wire(made.backend());
-      const VkDevice   device = as_handle<VkDevice>(made.device());
+      CHECK(::fcntl(stranger, F_GETFD) != -1);
+      ::close(stranger);
 
       VkSemaphoreCreateInfo create = {};
       create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
       VkSemaphore semaphore = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
-      VkImportSemaphoreFdInfoKHR importing = {};
-      importing.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
-      importing.semaphore = semaphore;
-      importing.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
-      importing.fd = 4096;
-      CHECK_EQ(vkproto::av_vkImportSemaphoreFdKHR(wire, device, &importing), VK_ERROR_INVALID_EXTERNAL_HANDLE);
-      vkproto::av_vkDestroySemaphore(wire, device, semaphore, nullptr);
+      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, translation, device, &create, nullptr, &semaphore), VK_SUCCESS);
+      VkSemaphoreGetFdInfoKHR semaphore_get = {};
+      semaphore_get.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR;
+      semaphore_get.semaphore = semaphore;
+      semaphore_get.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+      CHECK_EQ(vkproto::av_vkGetSemaphoreFdKHR(wire, translation, device, &semaphore_get, &fd), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      fd = 9;
+      CHECK_EQ(made.backend().on_vkGetSemaphoreFdKHR(device, &semaphore_get, &fd), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      CHECK_EQ(fd, -1);
+      VkImportSemaphoreFdInfoKHR semaphore_import = {};
+      semaphore_import.sType = VK_STRUCTURE_TYPE_IMPORT_SEMAPHORE_FD_INFO_KHR;
+      semaphore_import.semaphore = semaphore;
+      semaphore_import.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+      semaphore_import.fd = 4096;
+      CHECK_EQ(vkproto::av_vkImportSemaphoreFdKHR(wire, translation, device, &semaphore_import), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      vkproto::av_vkDestroySemaphore(wire, translation, device, semaphore, nullptr);
 
-      int nothing = -1;
-      CHECK_EQ(made.probe().export_answered(VK_ERROR_INVALID_EXTERNAL_HANDLE, nothing),
-               VK_ERROR_INVALID_EXTERNAL_HANDLE);
-      CHECK(!made.probe().holds_fd(nothing));
+      VkFenceCreateInfo fence_create = {};
+      fence_create.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+      VkFence fence = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::av_vkCreateFence(wire, translation, device, &fence_create, nullptr, &fence), VK_SUCCESS);
+      VkFenceGetFdInfoKHR fence_get = {};
+      fence_get.sType = VK_STRUCTURE_TYPE_FENCE_GET_FD_INFO_KHR;
+      fence_get.fence = fence;
+      fence_get.handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT;
+      CHECK_EQ(vkproto::av_vkGetFenceFdKHR(wire, translation, device, &fence_get, &fd), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      fd = 9;
+      CHECK_EQ(made.backend().on_vkGetFenceFdKHR(device, &fence_get, &fd), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      CHECK_EQ(fd, -1);
+      VkImportFenceFdInfoKHR fence_import = {};
+      fence_import.sType = VK_STRUCTURE_TYPE_IMPORT_FENCE_FD_INFO_KHR;
+      fence_import.fence = fence;
+      fence_import.handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT;
+      fence_import.fd = 4096;
+      CHECK_EQ(vkproto::av_vkImportFenceFdKHR(wire, translation, device, &fence_import), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      vkproto::av_vkDestroyFence(wire, translation, device, fence, nullptr);
   }
 }
-
-TEST(vulkan_backend_device, exports_past_what_the_table_holds_are_refused)
-{ av::LoaderHostApis &host = opened_host();
-  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
-      const char *const extensions[] = {"VK_KHR_external_memory_fd"};
-      GuestDevice made(host, i, 1u, extensions);
-      if (made.device() == 0u) continue;
-      BackendTransport wire(made.backend());
-      const VkDevice   device = as_handle<VkDevice>(made.device());
-
-      VkExportMemoryAllocateInfo exportable = {};
-      exportable.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
-      exportable.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
-      VkMemoryAllocateInfo allocate = {};
-      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-      allocate.pNext = &exportable;
-      allocate.allocationSize = page;
-      VkDeviceMemory shared = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
-
-      VkMemoryGetFdInfoKHR get = {};
-      get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
-      get.memory = shared;
-      get.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
-      int first = -1;
-      if (vkproto::av_vkGetMemoryFdKHR(wire, device, &get, &first) != VK_SUCCESS) continue;
-      for (std::uint32_t taken = 1u; taken < av::HostExportedFds::max_fds; taken++) {
-          int more = -1;
-          CHECK_EQ(vkproto::av_vkGetMemoryFdKHR(wire, device, &get, &more), VK_SUCCESS);
-      }
-      int past = -1;
-      CHECK_EQ(vkproto::av_vkGetMemoryFdKHR(wire, device, &get, &past), VK_ERROR_TOO_MANY_OBJECTS);
-      CHECK(!made.probe().holds_fd(past));
-      VkDeviceMemory plain = VK_NULL_HANDLE;
-      VkMemoryAllocateInfo alone = {};
-      alone.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-      alone.allocationSize = page;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &alone, nullptr, &plain), VK_SUCCESS);
-      VkMemoryGetFdInfoKHR unshared = get;
-      unshared.memory = plain;
-      int refused = -1;
-      CHECK(vkproto::av_vkGetMemoryFdKHR(wire, device, &unshared, &refused) != VK_SUCCESS);
-  }
-}
-
-TEST(vulkan_backend_device, a_guest_list_with_no_room_left_is_sent_as_the_guest_wrote_it)
-{ av::LoaderHostApis &host = opened_host();
-  static char        spelled[av::ExtensionList::capacity][32] = {};
-  const char        *names[av::ExtensionList::capacity] = {};
-  for (std::uint32_t index = 0u; index < av::ExtensionList::capacity; index++) {
-      std::snprintf(spelled[index], sizeof spelled[index], "VK_AV_no_such_extension_%u", index);
-      names[index] = spelled[index];
-  }
-  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      GuestDevice made(host, i, av::ExtensionList::capacity, names);
-      CHECK(made.instance() != 0u);
-      CHECK(made.physical() != 0u);
-      CHECK_EQ(made.device(), 0u);
-  }
-}
-
 
 TEST(vulkan_backend_device, shares_memory_as_a_dma_buf)
 { av::LoaderHostApis &host = opened_host();
@@ -1303,39 +1195,39 @@ TEST(vulkan_backend_device, shares_memory_as_a_dma_buf)
       allocate.allocationSize = page;
       allocate.memoryTypeIndex = 0u;
       VkDeviceMemory shared = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &shared), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, translation, device, &allocate, nullptr, &shared), VK_SUCCESS);
       const std::uint64_t handle = as_wire(shared);
 
       std::uint32_t handle_kind = 9u;
-      int           fd = 9;
-      CHECK(!made.backend().export_object(AV_SHARED_MEMORY, handle + 0x1000u, handle_kind, fd));
+      av::OwnedFd   descriptor;
+      CHECK(!made.backend().export_object(AV_SHARED_MEMORY, handle + 0x1000u, handle_kind, descriptor));
       CHECK_EQ(handle_kind, 0u);
-      CHECK_EQ(fd, -1);
-      CHECK(!made.backend().export_object(AV_SHARED_MEMORY, 0u, handle_kind, fd));
-      CHECK(!made.backend().export_object(AV_SHARED_NATIVE_FENCE + 1u, handle, handle_kind, fd));
+      CHECK(!descriptor.held());
+      CHECK(!made.backend().export_object(AV_SHARED_MEMORY, 0u, handle_kind, descriptor));
+      CHECK(!made.backend().export_object(AV_SHARED_NATIVE_FENCE + 1u, handle, handle_kind, descriptor));
 
-      if (!made.backend().export_object(AV_SHARED_MEMORY, handle, handle_kind, fd)) continue;
+      if (!made.backend().export_object(AV_SHARED_MEMORY, handle, handle_kind, descriptor)) continue;
       CHECK_EQ(handle_kind, AV_SHARED_HANDLE_DMA_BUF);
-      CHECK(fd >= 0);
+      CHECK(descriptor.held());
+      const int fd = descriptor.fd();
 
       std::uint64_t imported = 9u;
-      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, -1, page, av::SharedImageShape(), imported, detail));
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, -1, page, av::SharedImageShape(), made.device(), imported, detail));
       CHECK_EQ(imported, 0u);
       CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_OPAQUE_FD, fd, page, av::SharedImageShape(),
-                                          imported, detail));
-      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, 0u, av::SharedImageShape(), imported, detail));
-      CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE + 1u, handle_kind, fd, page, av::SharedImageShape(), imported, detail));
+                                          made.device(), imported, detail));
+      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, 0u, av::SharedImageShape(), made.device(), imported, detail));
+      CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE + 1u, handle_kind, fd, page, av::SharedImageShape(), made.device(), imported, detail));
 
-      CHECK(made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, page, av::SharedImageShape(), imported, detail));
+      CHECK(made.backend().import_object(AV_SHARED_MEMORY, handle_kind, fd, page, av::SharedImageShape(), made.device(), imported, detail));
       CHECK(imported != 0u);
       CHECK(imported != handle);
-      CHECK(made.probe().handles().knows(imported));
+      CHECK(made.backend().knows_handle(imported));
       made.backend().release_object(AV_SHARED_MEMORY, imported, detail);
-      CHECK(!made.probe().handles().knows(imported));
+      CHECK(!made.backend().knows_handle(imported));
       CHECK(::fcntl(fd, F_GETFD) != -1);
       made.backend().release_object(AV_SHARED_MEMORY, handle + 0x1000u, detail);
       made.backend().release_object(AV_SHARED_MEMORY, 0u, detail);
-      ::close(fd);
   }
 }
 
@@ -1354,20 +1246,20 @@ TEST(vulkan_backend_device, a_refused_export_and_an_unimportable_descriptor_are_
       allocate.allocationSize = page;
       allocate.memoryTypeIndex = 0u;
       VkDeviceMemory plain = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &plain), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, translation, device, &allocate, nullptr, &plain), VK_SUCCESS);
 
       int ends[2] = {-1, -1};
       CHECK_EQ(::pipe(ends), 0);
       ::close(ends[1]);
       std::uint64_t imported = 9u;
       CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, ends[0], page, av::SharedImageShape(),
-                                          imported, detail));
+                                          made.device(), imported, detail));
       CHECK_EQ(imported, 0u);
       ::close(ends[0]);
 
-      CHECK(made.probe().handles().knows(as_wire(plain)));
+      CHECK(made.backend().knows_handle(as_wire(plain)));
       made.backend().release_object(AV_SHARED_MEMORY, as_wire(plain), detail);
-      CHECK(!made.probe().handles().knows(as_wire(plain)));
+      CHECK(!made.backend().knows_handle(as_wire(plain)));
   }
 }
 
@@ -1384,12 +1276,14 @@ TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
       VkSemaphoreCreateInfo plain_create = {};
       plain_create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
       VkSemaphore plain = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, device, &plain_create, nullptr, &plain), VK_SUCCESS);
-      made.backend().release_object(AV_SHARED_MONITORED_FENCE, as_wire(plain), detail);
-      CHECK(!made.probe().handles().knows(as_wire(plain)));
-
+      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, translation, device, &plain_create, nullptr, &plain), VK_SUCCESS);
       std::uint32_t handle_kind = 9u;
-      int           fd = 9;
+      av::OwnedFd   descriptor;
+      std::uint64_t none = 0u;
+      CHECK(made.backend().knows_handle(as_wire(plain)));
+      made.backend().release_object(AV_SHARED_MONITORED_FENCE, as_wire(plain), none);
+      CHECK(!made.backend().knows_handle(as_wire(plain)));
+
       VkExportSemaphoreCreateInfo exportable = {};
       exportable.sType = VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO;
       exportable.handleTypes = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
@@ -1401,75 +1295,38 @@ TEST(vulkan_backend_device, exports_and_imports_a_fence_as_an_opaque_fd_only)
       create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
       create.pNext = &timeline;
       VkSemaphore semaphore = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, translation, device, &create, nullptr, &semaphore), VK_SUCCESS);
+      VkSemaphore target = VK_NULL_HANDLE;
+      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, translation, device, &create, nullptr, &target), VK_SUCCESS);
 
-      if (!made.backend().export_object(AV_SHARED_NATIVE_FENCE, as_wire(semaphore), handle_kind, fd))
+      if (!made.backend().export_object(AV_SHARED_NATIVE_FENCE, as_wire(semaphore), handle_kind, descriptor))
           continue;
       CHECK_EQ(handle_kind, AV_SHARED_HANDLE_OPAQUE_FD);
-      CHECK(fd >= 0);
+      CHECK(descriptor.held());
+      const int fd = descriptor.fd();
 
       std::uint64_t imported = 9u;
-      CHECK(!made.backend().import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, fd, 0u, av::SharedImageShape(),
-                                          imported, detail));
+      CHECK(!made.backend().import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_DMA_BUF, fd, 0u,
+                                          av::SharedImageShape(), as_wire(target), imported, detail));
       CHECK_EQ(imported, 0u);
       int ends[2] = {-1, -1};
       CHECK_EQ(::pipe(ends), 0);
       ::close(ends[1]);
-      CHECK(!made.backend().import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, ends[0],
-                                          0u, av::SharedImageShape(), imported, detail));
+      CHECK(!made.backend().import_object(AV_SHARED_MONITORED_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, ends[0], 0u,
+                                          av::SharedImageShape(), as_wire(target), imported, detail));
       CHECK_EQ(imported, 0u);
+      CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE, handle_kind, fd, 0u, av::SharedImageShape(), 0u,
+                                          imported, detail));
+      CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE, handle_kind, fd, 0u, av::SharedImageShape(),
+                                          as_wire(target) + 0x1000u, imported, detail));
       ::close(ends[0]);
 
-      CHECK(made.backend().import_object(AV_SHARED_NATIVE_FENCE, handle_kind, fd, 0u, av::SharedImageShape(), imported, detail));
-      CHECK(imported != 0u);
-      CHECK(made.probe().handles().knows(imported));
+      CHECK(made.backend().import_object(AV_SHARED_NATIVE_FENCE, handle_kind, fd, 0u, av::SharedImageShape(),
+                                         as_wire(target), imported, detail));
+      CHECK_EQ(imported, as_wire(target));
       made.backend().release_object(AV_SHARED_NATIVE_FENCE, imported, detail);
-      CHECK(!made.probe().handles().knows(imported));
+      CHECK(made.backend().knows_handle(as_wire(target)));
       CHECK(::fcntl(fd, F_GETFD) != -1);
-      ::close(fd);
-  }
-}
-
-TEST(vulkan_backend_device, a_device_without_the_fd_extensions_shares_nothing_either_way)
-{ av::LoaderHostApis &host = opened_host();
-  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
-      GuestDevice made(host, i, 3u, nullptr);
-      if (made.device() == 0u) continue;
-      CHECK(!made.probe().memory_import());
-      BackendTransport wire(made.backend());
-      const VkDevice   device = as_handle<VkDevice>(made.device());
-
-      VkMemoryAllocateInfo allocate = {};
-      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-      allocate.allocationSize = page;
-      allocate.memoryTypeIndex = 0u;
-      VkDeviceMemory memory = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &memory), VK_SUCCESS);
-      VkSemaphoreCreateInfo create = {};
-      create.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-      VkSemaphore semaphore = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkCreateSemaphore(wire, device, &create, nullptr, &semaphore), VK_SUCCESS);
-
-      std::uint32_t handle_kind = 9u;
-      int           fd = 9;
-      CHECK(!made.backend().export_object(AV_SHARED_MEMORY, as_wire(memory), handle_kind, fd));
-      CHECK_EQ(handle_kind, 0u);
-      CHECK_EQ(fd, -1);
-      CHECK(!made.backend().export_object(AV_SHARED_MONITORED_FENCE, as_wire(semaphore), handle_kind, fd));
-      CHECK_EQ(fd, -1);
-
-      int ends[2] = {-1, -1};
-      CHECK_EQ(::pipe(ends), 0);
-      ::close(ends[1]);
-      std::uint64_t imported = 9u;
-      CHECK(!made.backend().import_object(AV_SHARED_NATIVE_FENCE, AV_SHARED_HANDLE_OPAQUE_FD, ends[0],
-                                          0u, av::SharedImageShape(), imported, detail));
-      CHECK_EQ(imported, 0u);
-      CHECK(!made.backend().import_object(AV_SHARED_MEMORY, AV_SHARED_HANDLE_DMA_BUF, ends[0], page, av::SharedImageShape(),
-                                          imported, detail));
-      CHECK_EQ(imported, 0u);
-      ::close(ends[0]);
   }
 }
 
@@ -1488,7 +1345,7 @@ std::uint32_t show_integrated(GuestDevice &made)
 
 VkPhysicalDeviceMemoryProperties wire_memory(BackendTransport &wire, std::uint64_t physical)
 { VkPhysicalDeviceMemoryProperties memory = {};
-  vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, as_handle<VkPhysicalDevice>(physical), &memory);
+  vkproto::av_vkGetPhysicalDeviceMemoryProperties(wire, translation, as_handle<VkPhysicalDevice>(physical), &memory);
   return memory; }
 
 std::uint32_t over(GuestDevice &made, const VkPhysicalDeviceMemoryProperties &guest, std::uint32_t host_bits,
@@ -1510,29 +1367,29 @@ ImageAnswers wire_image_answers(BackendTransport &wire, std::uint64_t device, co
 { const VkDevice host = as_handle<VkDevice>(device);
   ImageAnswers answers = {};
   VkImage image = VK_NULL_HANDLE;
-  if (vkproto::av_vkCreateImage(wire, host, &create, nullptr, &image) != VK_SUCCESS) return answers;
+  if (vkproto::av_vkCreateImage(wire, translation, host, &create, nullptr, &image) != VK_SUCCESS) return answers;
   VkMemoryRequirements one = {};
-  vkproto::av_vkGetImageMemoryRequirements(wire, host, image, &one);
+  vkproto::av_vkGetImageMemoryRequirements(wire, translation, host, image, &one);
   answers.bits[0] = one.memoryTypeBits;
   VkImageMemoryRequirementsInfo2 info = {};
   info.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
   info.image = image;
   VkMemoryRequirements2 two = {};
   two.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
-  vkproto::av_vkGetImageMemoryRequirements2(wire, host, &info, &two);
+  vkproto::av_vkGetImageMemoryRequirements2(wire, translation, host, &info, &two);
   answers.bits[1] = two.memoryRequirements.memoryTypeBits;
   two = VkMemoryRequirements2{VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2, nullptr, {}};
-  vkproto::av_vkGetImageMemoryRequirements2KHR(wire, host, &info, &two);
+  vkproto::av_vkGetImageMemoryRequirements2KHR(wire, translation, host, &info, &two);
   answers.bits[2] = two.memoryRequirements.memoryTypeBits;
-  vkproto::av_vkDestroyImage(wire, host, image, nullptr);
+  vkproto::av_vkDestroyImage(wire, translation, host, image, nullptr);
   VkDeviceImageMemoryRequirements asked = {};
   asked.sType = VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS;
   asked.pCreateInfo = &create;
   two = VkMemoryRequirements2{VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2, nullptr, {}};
-  vkproto::av_vkGetDeviceImageMemoryRequirements(wire, host, &asked, &two);
+  vkproto::av_vkGetDeviceImageMemoryRequirements(wire, translation, host, &asked, &two);
   answers.bits[3] = two.memoryRequirements.memoryTypeBits;
   two = VkMemoryRequirements2{VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2, nullptr, {}};
-  vkproto::av_vkGetDeviceImageMemoryRequirementsKHR(wire, host, &asked, &two);
+  vkproto::av_vkGetDeviceImageMemoryRequirementsKHR(wire, translation, host, &asked, &two);
   answers.bits[4] = two.memoryRequirements.memoryTypeBits;
   return answers; }
 
@@ -1540,29 +1397,29 @@ ImageAnswers wire_buffer_answers(BackendTransport &wire, std::uint64_t device, c
 { const VkDevice host = as_handle<VkDevice>(device);
   ImageAnswers answers = {};
   VkBuffer buffer = VK_NULL_HANDLE;
-  if (vkproto::av_vkCreateBuffer(wire, host, &create, nullptr, &buffer) != VK_SUCCESS) return answers;
+  if (vkproto::av_vkCreateBuffer(wire, translation, host, &create, nullptr, &buffer) != VK_SUCCESS) return answers;
   VkMemoryRequirements one = {};
-  vkproto::av_vkGetBufferMemoryRequirements(wire, host, buffer, &one);
+  vkproto::av_vkGetBufferMemoryRequirements(wire, translation, host, buffer, &one);
   answers.bits[0] = one.memoryTypeBits;
   VkBufferMemoryRequirementsInfo2 info = {};
   info.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
   info.buffer = buffer;
   VkMemoryRequirements2 two = {};
   two.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
-  vkproto::av_vkGetBufferMemoryRequirements2(wire, host, &info, &two);
+  vkproto::av_vkGetBufferMemoryRequirements2(wire, translation, host, &info, &two);
   answers.bits[1] = two.memoryRequirements.memoryTypeBits;
   two = VkMemoryRequirements2{VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2, nullptr, {}};
-  vkproto::av_vkGetBufferMemoryRequirements2KHR(wire, host, &info, &two);
+  vkproto::av_vkGetBufferMemoryRequirements2KHR(wire, translation, host, &info, &two);
   answers.bits[2] = two.memoryRequirements.memoryTypeBits;
-  vkproto::av_vkDestroyBuffer(wire, host, buffer, nullptr);
+  vkproto::av_vkDestroyBuffer(wire, translation, host, buffer, nullptr);
   VkDeviceBufferMemoryRequirements asked = {};
   asked.sType = VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS;
   asked.pCreateInfo = &create;
   two = VkMemoryRequirements2{VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2, nullptr, {}};
-  vkproto::av_vkGetDeviceBufferMemoryRequirements(wire, host, &asked, &two);
+  vkproto::av_vkGetDeviceBufferMemoryRequirements(wire, translation, host, &asked, &two);
   answers.bits[3] = two.memoryRequirements.memoryTypeBits;
   two = VkMemoryRequirements2{VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2, nullptr, {}};
-  vkproto::av_vkGetDeviceBufferMemoryRequirementsKHR(wire, host, &asked, &two);
+  vkproto::av_vkGetDeviceBufferMemoryRequirementsKHR(wire, translation, host, &asked, &two);
   answers.bits[4] = two.memoryRequirements.memoryTypeBits;
   return answers; }
 
@@ -1589,26 +1446,26 @@ TEST(vulkan_backend_device, device_local_memory_the_guest_never_maps_is_the_driv
       allocate.allocationSize = page;
       allocate.memoryTypeIndex = 0u;
       VkDeviceMemory memory = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &memory), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, translation, device, &allocate, nullptr, &memory), VK_SUCCESS);
       CHECK(made.backend().knows_handle(as_wire(memory)));
       CHECK_EQ(made.probe().imports_held(), 0u);
       CHECK_EQ(made.source() != nullptr ? made.source()->live() : 0u, live);
 
       VkBufferCreateInfo create = storage_buffer();
       VkBuffer buffer = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkCreateBuffer(wire, device, &create, nullptr, &buffer), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateBuffer(wire, translation, device, &create, nullptr, &buffer), VK_SUCCESS);
       VkMemoryRequirements needs = {};
-      vkproto::av_vkGetBufferMemoryRequirements(wire, device, buffer, &needs);
+      vkproto::av_vkGetBufferMemoryRequirements(wire, translation, device, buffer, &needs);
       CHECK((needs.memoryTypeBits & 1u) != 0u);
-      CHECK_EQ(vkproto::av_vkBindBufferMemory(wire, device, buffer, memory, 0u), VK_SUCCESS);
-      vkproto::av_vkDestroyBuffer(wire, device, buffer, nullptr);
-      vkproto::av_vkFreeMemory(wire, device, memory, nullptr);
+      CHECK_EQ(vkproto::av_vkBindBufferMemory(wire, translation, device, buffer, memory, 0u), VK_SUCCESS);
+      vkproto::av_vkDestroyBuffer(wire, translation, device, buffer, nullptr);
+      vkproto::av_vkFreeMemory(wire, translation, device, memory, nullptr);
 
       const std::uint32_t outside[] = {guest.memoryTypeCount, VK_MAX_MEMORY_TYPES, 0xFFFFFFFFu};
       for (const std::uint32_t type : outside) {
           allocate.memoryTypeIndex = type;
           VkDeviceMemory refused = VK_NULL_HANDLE;
-          CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &refused),
+          CHECK_EQ(vkproto::av_vkAllocateMemory(wire, translation, device, &allocate, nullptr, &refused),
                    VK_ERROR_OUT_OF_DEVICE_MEMORY);
           CHECK(refused == VK_NULL_HANDLE);
       }
@@ -1694,20 +1551,20 @@ TEST(vulkan_backend_device, a_create_info_query_with_its_create_info_left_out_is
       image.sType = VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS;
       VkMemoryRequirements2 answer = {};
       answer.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
-      vkproto::av_vkGetDeviceImageMemoryRequirements(wire, device, &image, &answer);
+      vkproto::av_vkGetDeviceImageMemoryRequirements(wire, translation, device, &image, &answer);
       CHECK(!wire.ran());
-      vkproto::av_vkGetDeviceImageMemoryRequirementsKHR(wire, device, &image, &answer);
+      vkproto::av_vkGetDeviceImageMemoryRequirementsKHR(wire, translation, device, &image, &answer);
       CHECK(!wire.ran());
       std::uint32_t count = 0u;
-      vkproto::av_vkGetDeviceImageSparseMemoryRequirements(wire, device, &image, &count, nullptr);
+      vkproto::av_vkGetDeviceImageSparseMemoryRequirements(wire, translation, device, &image, &count, nullptr);
       CHECK(!wire.ran());
-      vkproto::av_vkGetDeviceImageSparseMemoryRequirementsKHR(wire, device, &image, &count, nullptr);
+      vkproto::av_vkGetDeviceImageSparseMemoryRequirementsKHR(wire, translation, device, &image, &count, nullptr);
       CHECK(!wire.ran());
       VkDeviceBufferMemoryRequirements buffer = {};
       buffer.sType = VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS;
-      vkproto::av_vkGetDeviceBufferMemoryRequirements(wire, device, &buffer, &answer);
+      vkproto::av_vkGetDeviceBufferMemoryRequirements(wire, translation, device, &buffer, &answer);
       CHECK(!wire.ran());
-      vkproto::av_vkGetDeviceBufferMemoryRequirementsKHR(wire, device, &buffer, &answer);
+      vkproto::av_vkGetDeviceBufferMemoryRequirementsKHR(wire, translation, device, &buffer, &answer);
       CHECK(!wire.ran());
 
       const VkImageCreateInfo create = colour_image();
@@ -1724,7 +1581,7 @@ TEST(vulkan_backend_device, a_create_info_query_with_its_create_info_left_out_is
       no_create.pSubresource = &subresource;
       const VkDeviceImageSubresourceInfo *const refused[] = {&neither, &no_subresource, &no_create};
       for (const VkDeviceImageSubresourceInfo *info : refused) {
-          vkproto::av_vkGetDeviceImageSubresourceLayoutKHR(wire, device, info, &layout);
+          vkproto::av_vkGetDeviceImageSubresourceLayoutKHR(wire, translation, device, info, &layout);
           CHECK(!wire.ran());
       }
       CHECK(!made.backend().lost());
@@ -1743,12 +1600,12 @@ TEST(vulkan_backend_device, an_image_s_create_info_queries_answer_what_the_made_
       create.tiling = VK_IMAGE_TILING_LINEAR;
       create.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
       VkImage image = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkCreateImage(wire, device, &create, nullptr, &image), VK_SUCCESS);
+      CHECK_EQ(vkproto::av_vkCreateImage(wire, translation, device, &create, nullptr, &image), VK_SUCCESS);
 
       VkImageSubresource whole = {};
       whole.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
       VkSubresourceLayout made_layout = {};
-      vkproto::av_vkGetImageSubresourceLayout(wire, device, image, &whole, &made_layout);
+      vkproto::av_vkGetImageSubresourceLayout(wire, translation, device, image, &whole, &made_layout);
       VkImageSubresource2 subresource = {};
       subresource.sType = VK_STRUCTURE_TYPE_IMAGE_SUBRESOURCE_2;
       subresource.imageSubresource = whole;
@@ -1758,26 +1615,26 @@ TEST(vulkan_backend_device, an_image_s_create_info_queries_answer_what_the_made_
       asked.pSubresource = &subresource;
       VkSubresourceLayout2 layout = {};
       layout.sType = VK_STRUCTURE_TYPE_SUBRESOURCE_LAYOUT_2;
-      vkproto::av_vkGetDeviceImageSubresourceLayoutKHR(wire, device, &asked, &layout);
+      vkproto::av_vkGetDeviceImageSubresourceLayoutKHR(wire, translation, device, &asked, &layout);
       CHECK(wire.ran());
       CHECK_EQ(layout.subresourceLayout.size, made_layout.size);
       CHECK_EQ(layout.subresourceLayout.rowPitch, made_layout.rowPitch);
       CHECK_EQ(layout.subresourceLayout.offset, made_layout.offset);
 
       std::uint32_t made_count = 9u;
-      vkproto::av_vkGetImageSparseMemoryRequirements(wire, device, image, &made_count, nullptr);
+      vkproto::av_vkGetImageSparseMemoryRequirements(wire, translation, device, image, &made_count, nullptr);
       VkDeviceImageMemoryRequirements sparse = {};
       sparse.sType = VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS;
       sparse.pCreateInfo = &create;
       std::uint32_t count = 9u;
-      vkproto::av_vkGetDeviceImageSparseMemoryRequirements(wire, device, &sparse, &count, nullptr);
+      vkproto::av_vkGetDeviceImageSparseMemoryRequirements(wire, translation, device, &sparse, &count, nullptr);
       CHECK(wire.ran());
       CHECK_EQ(count, made_count);
       CHECK_EQ(count, 0u);
       count = 9u;
-      vkproto::av_vkGetDeviceImageSparseMemoryRequirementsKHR(wire, device, &sparse, &count, nullptr);
+      vkproto::av_vkGetDeviceImageSparseMemoryRequirementsKHR(wire, translation, device, &sparse, &count, nullptr);
       CHECK_EQ(count, 0u);
-      vkproto::av_vkDestroyImage(wire, device, image, nullptr);
+      vkproto::av_vkDestroyImage(wire, translation, device, image, nullptr);
   }
 }
 
@@ -1789,66 +1646,19 @@ TEST(vulkan_backend_device, a_required_handle_named_null_is_refused_before_the_d
       BackendTransport wire(made.backend());
       const VkDevice device = as_handle<VkDevice>(made.device());
       VkMemoryRequirements needs = {};
-      vkproto::av_vkGetImageMemoryRequirements(wire, device, VK_NULL_HANDLE, &needs);
+      vkproto::av_vkGetImageMemoryRequirements(wire, translation, device, VK_NULL_HANDLE, &needs);
       CHECK(!wire.ran());
       VkImageMemoryRequirementsInfo2 info = {};
       info.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
       VkMemoryRequirements2 answer = {};
       answer.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
-      vkproto::av_vkGetImageMemoryRequirements2(wire, device, &info, &answer);
+      vkproto::av_vkGetImageMemoryRequirements2(wire, translation, device, &info, &answer);
       CHECK(!wire.ran());
-      vkproto::av_vkGetBufferMemoryRequirements(wire, device, VK_NULL_HANDLE, &needs);
+      vkproto::av_vkGetBufferMemoryRequirements(wire, translation, device, VK_NULL_HANDLE, &needs);
       CHECK(!wire.ran());
-      CHECK(!made.backend().knows_handle(0u, av::HandleKind::external_image));
-      vkproto::av_vkDestroyImage(wire, device, VK_NULL_HANDLE, nullptr);
+      CHECK(!made.backend().knows_handle(0u, av::VulkanObjectKind::external_image));
+      vkproto::av_vkDestroyImage(wire, translation, device, VK_NULL_HANDLE, nullptr);
       CHECK(wire.ran());
   }
 }
 
-TEST(vulkan_backend_device, an_exported_fd_s_types_are_the_guest_s_and_another_fd_is_refused)
-{ av::LoaderHostApis &host = opened_host();
-  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
-      GuestDevice made(host, i);
-      if (made.device() == 0u || !made.probe().memory_import()) continue;
-      show_integrated(made);
-      BackendTransport wire(made.backend());
-      const VkDevice device = as_handle<VkDevice>(made.device());
-      const VkPhysicalDeviceMemoryProperties guest = wire_memory(wire, made.physical());
-      VkExportMemoryAllocateInfo exportable = {};
-      exportable.sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO;
-      exportable.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-      VkMemoryAllocateInfo allocate = {};
-      allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-      allocate.pNext = &exportable;
-      allocate.allocationSize = page;
-      VkDeviceMemory memory = VK_NULL_HANDLE;
-      CHECK_EQ(vkproto::av_vkAllocateMemory(wire, device, &allocate, nullptr, &memory), VK_SUCCESS);
-      VkMemoryGetFdInfoKHR get = {};
-      get.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
-      get.memory = memory;
-      get.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-      int fd = -1;
-      if (vkproto::av_vkGetMemoryFdKHR(wire, device, &get, &fd) != VK_SUCCESS) continue;
-      VkMemoryFdPropertiesKHR properties = {};
-      properties.sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR;
-      CHECK_EQ(vkproto::av_vkGetMemoryFdPropertiesKHR(wire, device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT, fd,
-                                                      &properties),
-               VK_SUCCESS);
-      const std::uint32_t expected = over(made, guest, made.importable_dmabuf(fd), false);
-      CHECK(expected != 0u);
-      CHECK_EQ(properties.memoryTypeBits, expected);
-
-      CHECK_EQ(vkproto::av_vkGetMemoryFdPropertiesKHR(wire, device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT, fd,
-                                                      &properties),
-               VK_ERROR_INVALID_EXTERNAL_HANDLE);
-      CHECK_EQ(properties.memoryTypeBits, 0u);
-
-      const int stranger = ::memfd_create("not exported", MFD_CLOEXEC);
-      CHECK(stranger >= 0);
-      properties.memoryTypeBits = 0x5A5Au;
-      CHECK_EQ(vkproto::av_vkGetMemoryFdPropertiesKHR(wire, device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-                                                      stranger, &properties),
-               VK_ERROR_INVALID_EXTERNAL_HANDLE);
-      ::close(stranger);
-  }
-}
