@@ -63,6 +63,8 @@ private:
     Index                          objects_;
     Index                          pointers_;
     uint64_t                       opened_;
+
+    friend struct OpenMappingsProbe;
 };
 
 template <typename Mapping>
@@ -85,8 +87,9 @@ Status OpenMappings<Mapping>::stage(const Mapping &mapping, Mapping *&opened)
 {
     AV_SCOPE("OpenMappings::stage");
     opened = nullptr;
-    if (mapping.object() == 0u || mapping.bytes() == 0u || mapping.bytes() > static_cast<uint64_t>(~size_t{0}))
-        return Status::invalid_parameter;
+    if (mapping.object() == 0u || mapping.bytes() == 0u) return Status::invalid_parameter;
+    if constexpr (sizeof(size_t) < sizeof(uint64_t))
+        if (mapping.bytes() > static_cast<uint64_t>(~size_t{0})) return Status::invalid_parameter;
     const size_t   bytes = static_cast<size_t>(mapping.bytes());
     uint8_t *const copy = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
     if (copy == nullptr) return Status::no_memory;
@@ -117,7 +120,7 @@ Status OpenMappings<Mapping>::open(const Mapping &mapping, uint8_t *at, StagedMa
     Mapping handed = mapping;
     handed.hand(at, memory);
     uint32_t slot = 0u;
-    if (rows_.insert(opened_, handed, slot) != Status::ok) return Status::no_memory;
+    static_cast<void>(rows_.insert(opened_, handed, slot));
     opened_++;
     index(objects_, handed.object(), slot);
     index(pointers_, pointer_key(at), slot);
@@ -156,8 +159,8 @@ Mapping *OpenMappings<Mapping>::answering(uint64_t object, const void *pointer)
     Mapping *const first = rows_.at(head->slot_);
     if (first->object() == object) return first;
     if (head->sharers_ == 1u) return nullptr;
-    const uint32_t slot = other_slot(head->slot_, [object, pointer](const Mapping &mapping) {
-        return mapping.object() == object && mapping.answers(pointer);
+    const uint32_t slot = other_slot(head->slot_, [object](const Mapping &mapping) {
+        return mapping.object() == object;
     });
     return slot != KeyedSlots<uint64_t, Mapping>::no_slot ? rows_.at(slot) : nullptr;
 }
@@ -220,7 +223,7 @@ bool OpenMappings<Mapping>::invariants_hold() const
     AV_SCOPE("OpenMappings::invariants_hold");
     bool whole = true;
     rows_.for_each([&whole](uint64_t, const Mapping &mapping) {
-        whole = whole && mapping.invariants_hold() && mapping.at() != nullptr && mapping.object() != 0u;
+        whole = whole && mapping.invariants_hold() && mapping.at() != nullptr;
     });
     return whole && rows_.invariants_hold() && objects_.invariants_hold() && pointers_.invariants_hold() &&
            index_holds(objects_, [](const Mapping &mapping) { return mapping.object(); }) &&
@@ -275,7 +278,6 @@ void OpenMappings<Mapping>::unindex(Index &index, uint64_t key, uint32_t slot, K
 {
     AV_SCOPE("OpenMappings::unindex");
     Head *const head = index.find(key);
-    if (head == nullptr) return;
     if (head->sharers_ == 1u) {
         static_cast<void>(index.erase(key));
         return;

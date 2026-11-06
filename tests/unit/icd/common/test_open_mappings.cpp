@@ -11,6 +11,37 @@ using av::Status;
 using av::icd::OpenMappings;
 using av::icd::StagedMapping;
 
+namespace av {
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_free_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.free_count_ = count; }
+};
+
+}
+
+namespace av::icd {
+struct OpenMappingsProbe {
+    template <typename Maps>
+    static void miscount_rows(Maps &maps, std::uint32_t count) { KeyedSlotsProbe::corrupt_free_count(maps.rows_, count); }
+    template <typename Maps>
+    static void miscount_objects(Maps &maps, std::uint32_t count) { KeyedSlotsProbe::corrupt_free_count(maps.objects_, count); }
+    template <typename Maps>
+    static void miscount_pointers(Maps &maps, std::uint32_t count) { KeyedSlotsProbe::corrupt_free_count(maps.pointers_, count); }
+    template <typename Maps>
+    static void set_object_sharers(Maps &maps, std::uint64_t object, std::uint32_t sharers)
+    { maps.objects_.find(object)->sharers_ = sharers; }
+    template <typename Maps>
+    static void set_pointer_sharers(Maps &maps, const void *pointer, std::uint32_t sharers)
+    { maps.pointers_.find(maps.pointer_key(pointer))->sharers_ = sharers; }
+    template <typename Maps>
+    static void drop_row_of(Maps &maps, std::uint64_t object)
+    { maps.rows_.erase_slot(maps.objects_.find(object)->slot_); }
+};
+
+}
+
+using av::icd::OpenMappingsProbe;
+
 namespace {
 
 constexpr std::uint32_t discard = 0x2u;
@@ -180,3 +211,175 @@ TEST(open_mappings, reflagging_a_map_changes_its_flags_and_nothing_else)
   CHECK(maps.find(6u, 2u)->flags() == no_overwrite);
   CHECK(maps.invariants_hold());
   maps.close(*staged); }
+
+TEST(open_mappings, a_map_that_is_not_open_is_not_closed_and_a_later_map_of_an_object_closes_on_its_own)
+{ MockPlatform platform;
+  Maps maps(platform);
+  StagedMapping *first = nullptr, *second = nullptr, *third = nullptr;
+  std::uint8_t memory[3u * bytes] = {};
+  CHECK_STATUS(maps.lend(mapping(7u, 1u, 0u), memory, first), Status::ok);
+  CHECK_STATUS(maps.lend(mapping(7u, 2u, 0u), memory + bytes, second), Status::ok);
+  CHECK_STATUS(maps.lend(mapping(7u, 3u, 0u), memory + 2u * bytes, third), Status::ok);
+  StagedMapping stranger = mapping(99u, 0u, 0u);
+  maps.close(stranger);
+  StagedMapping twin = *first;
+  maps.close(twin);
+  CHECK_EQ(maps.count(), 3u);
+  CHECK(maps.invariants_hold());
+  maps.close(*third);
+  CHECK_EQ(maps.count(), 2u);
+  CHECK(maps.find(7u, 3u) == nullptr);
+  CHECK(maps.find(7u, 2u) == second);
+  CHECK(maps.find(7u, 1u) == first);
+  CHECK(maps.invariants_hold());
+  maps.close(*second);
+  CHECK(maps.find(7u, 1u) == first);
+  CHECK(maps.invariants_hold()); }
+
+TEST(open_mappings, a_subresource_is_found_among_the_other_maps_of_a_busy_table)
+{ MockPlatform platform;
+  Maps maps(platform);
+  StagedMapping *opened = nullptr;
+  CHECK_STATUS(maps.stage(mapping(4u, 0u, 0u), opened), Status::ok);
+  CHECK_STATUS(maps.stage(mapping(5u, 0u, 0u), opened), Status::ok);
+  CHECK_STATUS(maps.stage(mapping(4u, 2u, 0u), opened), Status::ok);
+  CHECK(maps.find(4u, 2u) == opened);
+  CHECK(maps.find(4u, 9u) == nullptr);
+  const Maps &view = maps;
+  CHECK(view.find(4u, 2u) == opened);
+  CHECK(maps.invariants_hold()); }
+
+TEST(open_mappings, maps_sharing_one_memory_are_told_apart_by_their_object)
+{ MockPlatform platform;
+  Maps maps(platform);
+  StagedMapping *first = nullptr, *second = nullptr, *third = nullptr;
+  std::uint8_t memory[bytes] = {};
+  CHECK_STATUS(maps.lend(mapping(1u, 0u, 0u), memory, first), Status::ok);
+  CHECK_STATUS(maps.lend(mapping(2u, 0u, 0u), memory, second), Status::ok);
+  CHECK_STATUS(maps.lend(mapping(3u, 0u, 0u), memory, third), Status::ok);
+  CHECK(maps.answering(1u, memory) == first);
+  CHECK(maps.answering(2u, memory) == second);
+  CHECK(maps.answering(3u, memory) == third);
+  CHECK(maps.answering(4u, memory) == nullptr);
+  CHECK(maps.invariants_hold());
+  maps.close(*first);
+  CHECK(maps.answering(2u, memory) == second);
+  CHECK(maps.answering(1u, memory) == nullptr);
+  CHECK(maps.invariants_hold()); }
+
+TEST(open_mappings, a_table_with_no_room_for_its_indexes_refuses_the_map_whole)
+{ for (std::uint32_t failing = 1u; failing <= 6u; failing++) {
+      MockPlatform platform;
+      Maps maps(platform);
+      StagedMapping *opened = nullptr;
+      std::uint8_t memory[bytes] = {};
+      platform.fail_allocation_at(failing);
+      CHECK_STATUS(maps.lend(mapping(7u, 0u, 0u), memory, opened), Status::no_memory);
+      CHECK(opened == nullptr);
+      CHECK_EQ(maps.count(), 0u);
+      CHECK(maps.invariants_hold());
+      CHECK_STATUS(maps.lend(mapping(7u, 0u, 0u), memory, opened), Status::ok);
+      CHECK_EQ(maps.count(), 1u);
+      CHECK(maps.invariants_hold());
+  } }
+
+TEST(open_mappings, a_staged_map_with_no_room_for_its_indexes_gives_its_copy_back)
+{ for (std::uint32_t failing = 2u; failing <= 7u; failing++) {
+      MockPlatform platform;
+      {
+          Maps maps(platform);
+          StagedMapping *opened = nullptr;
+          platform.fail_allocation_at(failing);
+          CHECK_STATUS(maps.stage(mapping(7u, 0u, 0u), opened), Status::no_memory);
+          CHECK(opened == nullptr);
+          CHECK_EQ(maps.count(), 0u);
+          CHECK(maps.invariants_hold());
+          CHECK_STATUS(maps.stage(mapping(7u, 0u, 0u), opened), Status::ok);
+          CHECK_EQ(maps.count(), 1u);
+      }
+      CHECK_EQ(platform.live_allocations(), 0u);
+  } }
+
+TEST(open_mappings, a_default_map_owns_no_memory_and_a_copy_of_no_bytes_is_broken)
+{ StagedMapping none;
+  CHECK(!none.copied());
+  CHECK(none.at() == nullptr);
+  std::uint8_t memory[bytes] = {};
+  StagedMapping empty(7u, 0u, 0u, 0u, 0u);
+  empty.hand(memory, StagedMapping::Memory::copy);
+  CHECK(!empty.invariants_hold());
+  empty.hand(memory, StagedMapping::Memory::named);
+  CHECK(empty.invariants_hold()); }
+
+TEST(open_mappings, its_invariants_catch_a_broken_map_row_or_index)
+{ MockPlatform platform;
+  Maps maps(platform);
+  StagedMapping *opened = nullptr;
+  std::uint8_t memory[bytes] = {};
+  CHECK_STATUS(maps.lend(mapping(7u, 0u, 0u), memory, opened), Status::ok);
+  CHECK(maps.invariants_hold());
+
+  StagedMapping *other = nullptr;
+  std::uint8_t more[bytes] = {};
+  CHECK_STATUS(maps.lend(mapping(9u, 0u, 0u), more, other), Status::ok);
+  opened->hand(nullptr, StagedMapping::Memory::named);
+  CHECK(!maps.invariants_hold());
+  opened->hand(memory, StagedMapping::Memory::named);
+  CHECK(maps.invariants_hold());
+
+  const StagedMapping whole = *opened;
+  *opened = StagedMapping(0u, 0u, 0u, bytes, 0u);
+  opened->hand(memory, StagedMapping::Memory::named);
+  CHECK(!maps.invariants_hold());
+  *opened = whole;
+  CHECK(maps.invariants_hold());
+
+  *opened = StagedMapping(8u, 0u, 0u, bytes, 0u);
+  opened->hand(memory, StagedMapping::Memory::named);
+  CHECK(!maps.invariants_hold());
+  *opened = whole;
+  CHECK(maps.invariants_hold());
+
+  OpenMappingsProbe::miscount_rows(maps, 5u);
+  CHECK(!maps.invariants_hold());
+  OpenMappingsProbe::miscount_rows(maps, 0u);
+  OpenMappingsProbe::miscount_objects(maps, 5u);
+  CHECK(!maps.invariants_hold());
+  OpenMappingsProbe::miscount_objects(maps, 0u);
+  OpenMappingsProbe::miscount_pointers(maps, 5u);
+  CHECK(!maps.invariants_hold());
+  OpenMappingsProbe::miscount_pointers(maps, 0u);
+  CHECK(maps.invariants_hold());
+  maps.close_all();
+  CHECK_EQ(maps.count(), 0u); }
+
+TEST(open_mappings, its_invariants_catch_an_index_that_names_no_map_the_wrong_map_or_the_wrong_count)
+{ MockPlatform platform;
+  Maps maps(platform);
+  StagedMapping *opened = nullptr;
+  std::uint8_t memory[bytes] = {};
+  CHECK_STATUS(maps.lend(mapping(7u, 0u, 0u), memory, opened), Status::ok);
+
+  StagedMapping *other = nullptr;
+  std::uint8_t more[bytes] = {};
+  CHECK_STATUS(maps.lend(mapping(9u, 0u, 0u), more, other), Status::ok);
+  const StagedMapping whole = *opened;
+  *opened = StagedMapping(8u, 0u, 0u, bytes, 0u);
+  opened->hand(memory, StagedMapping::Memory::named);
+  CHECK(!maps.invariants_hold());
+  *opened = whole;
+  CHECK(maps.invariants_hold());
+
+  OpenMappingsProbe::set_object_sharers(maps, 7u, 0u);
+  CHECK(!maps.invariants_hold());
+  OpenMappingsProbe::set_object_sharers(maps, 7u, 2u);
+  CHECK(!maps.invariants_hold());
+  OpenMappingsProbe::set_object_sharers(maps, 7u, 1u);
+  OpenMappingsProbe::set_pointer_sharers(maps, memory, 2u);
+  CHECK(!maps.invariants_hold());
+  OpenMappingsProbe::set_pointer_sharers(maps, memory, 1u);
+  CHECK(maps.invariants_hold());
+
+  OpenMappingsProbe::drop_row_of(maps, 7u);
+  CHECK_EQ(maps.count(), 1u);
+  CHECK(!maps.invariants_hold()); }

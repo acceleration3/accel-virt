@@ -20,7 +20,6 @@ public:
     void     reflag(uint32_t flags);
     uint8_t *at() const;
     bool     copied() const;
-    bool     answers(const void *pointer) const;
     void     hand(uint8_t *at, Memory memory);
 
     bool invariants_hold() const;
