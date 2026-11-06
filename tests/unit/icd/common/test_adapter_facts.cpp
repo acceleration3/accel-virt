@@ -19,6 +19,25 @@ using av::TextBuffer;
 using av::UmdAdapterInfo;
 using av::icd::AdapterFacts;
 
+namespace av::icd {
+struct AdapterFactsProbe {
+    static void know(AdapterFacts &facts, std::uint32_t known) { facts.known_ = known; }
+    static void set_luid(AdapterFacts &facts, std::uint64_t luid) { facts.luid_ = luid; }
+    static void set_name(AdapterFacts &facts, const std::uint16_t *wide) { facts.name_.take(wide); }
+    static void set_driver_version(AdapterFacts &facts, std::uint64_t version) { facts.driver_version_ = version; }
+    static void set_segments(AdapterFacts &facts, std::uint64_t video, std::uint64_t system, std::uint64_t shared)
+    {
+        facts.dedicated_video_ = video;
+        facts.dedicated_system_ = system;
+        facts.shared_system_ = shared;
+    }
+    static void set_integrated(AdapterFacts &facts, bool integrated) { facts.integrated_ = integrated; }
+};
+
+}
+
+using av::icd::AdapterFactsProbe;
+
 namespace {
 
 const PciIdentity       on_raphael(0x1002u, 0x13C0u, 0x1AF4u, 0x5256u, 0xC9u);
@@ -158,3 +177,35 @@ TEST(adapter_facts, writes_the_driver_version_as_windows_does)
   TextBuffer again(more, sizeof more);
   facts.append_driver_version(again);
   CHECK(std::strcmp(more, "1.65535.2.3") == 0); }
+
+TEST(adapter_facts, its_invariants_catch_a_value_held_without_the_fact_that_names_it)
+{ AdapterFacts facts;
+  CHECK(facts.invariants_hold());
+  AdapterFactsProbe::know(facts, 1u << 7u);
+  CHECK(!facts.invariants_hold());
+  AdapterFactsProbe::know(facts, 0u);
+
+  AdapterFactsProbe::set_luid(facts, some_luid);
+  CHECK(!facts.invariants_hold());
+  AdapterFactsProbe::set_luid(facts, 0u);
+
+  const std::uint16_t wide[] = {'G', 'P', 'U', 0u};
+  AdapterFactsProbe::set_name(facts, wide);
+  CHECK(!facts.invariants_hold());
+  const std::uint16_t blank[] = {0u};
+  AdapterFactsProbe::set_name(facts, blank);
+
+  AdapterFactsProbe::set_driver_version(facts, version);
+  CHECK(!facts.invariants_hold());
+  AdapterFactsProbe::set_driver_version(facts, 0u);
+
+  AdapterFactsProbe::set_segments(facts, 0u, 0u, 1u);
+  CHECK(!facts.invariants_hold());
+  AdapterFactsProbe::set_segments(facts, 1u, 0u, 0u);
+  CHECK(!facts.invariants_hold());
+  AdapterFactsProbe::set_segments(facts, 0u, 0u, 0u);
+
+  AdapterFactsProbe::set_integrated(facts, true);
+  CHECK(!facts.invariants_hold());
+  AdapterFactsProbe::know(facts, AdapterFacts::features_fact);
+  CHECK(facts.invariants_hold()); }

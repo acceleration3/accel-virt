@@ -54,6 +54,8 @@ private:
     uint64_t      dedicated_system_;
     uint64_t      shared_system_;
     bool          integrated_;
+
+    friend struct AdapterFactsProbe;
 };
 
 }
