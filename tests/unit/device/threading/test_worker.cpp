@@ -407,3 +407,38 @@ TEST(worker_run, a_worker_watches_a_gpu_that_still_has_work_before_it_gives_up_s
   fixture.host().join_thread(thread);
   CHECK(!watching.kept_working);
   CHECK(polls.load() > 5u); }
+
+namespace {
+
+struct Racing {
+    Fixture *fixture;
+};
+
+void publish_a_batch(void *context)
+{
+    Fixture &fixture = *static_cast<Racing *>(context)->fixture;
+    fixture.guest().write_batch(1u, 0u);
+    fixture.guest().publish();
+}
+
+void attach_and_expect_the_race(void *context)
+{
+    Racing &racing = *static_cast<Racing *>(context);
+    racing.fixture->ring().attach();
+    racing.fixture->host().on_clock_reaching(racing.fixture->host().peek_clock() + 100000u, &publish_a_batch, &racing);
+}
+
+}
+
+TEST(worker_run, a_batch_published_as_the_worker_gives_up_spinning_is_served_without_a_sleep)
+{ Fixture fixture;
+  fixture.host().advance_clock_per_read(1000u);
+  CHECK_STATUS(fixture.worker().start(), Status::ok);
+  CHECK_STATUS(fixture.ring().prepare(fixture.window()), Status::ok);
+  Racing racing{&fixture};
+  CHECK_STATUS(fixture.worker().post(WorkItem(&attach_and_expect_the_race, nullptr, &racing)), Status::ok);
+  for (std::uint32_t spins = 0u; spins < 50000000u && fixture.guest().tail() != 32u; spins++) sched_yield();
+  CHECK_EQ(fixture.guest().tail(), 32u);
+  CHECK(fixture.published(32u));
+  fixture.worker().stop();
+  CHECK(fixture.worker().invariants_hold()); }

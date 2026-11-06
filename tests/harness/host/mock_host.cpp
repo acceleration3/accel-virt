@@ -47,7 +47,7 @@ MockHost::MockHost()
       fail_allocation_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
-      placements_{}, placements_made_(0u), last_placement_{-1, 0u, 0u}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, clock_(0u), clock_step_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), ranges_{},
+      placements_{}, placements_made_(0u), last_placement_{-1, 0u, 0u}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, clock_(0u), clock_step_(0u), clock_hook_at_(0u), clock_hook_(nullptr), clock_hook_context_(nullptr), fail_bind_gpu_(0u), bound_gpu_(no_gpu), ranges_{},
       fail_reserve_(0u), fail_alias_(0u), counted_{},
       recordings_{}, fail_recording_create_(0u), fail_recording_append_(0u),
       fail_recording_truncate_(0u), display_heads_(0u), refuse_scanout_(0u), scanouts_{}, images_shown_{}, last_images_{},
@@ -414,10 +414,31 @@ std::uint64_t MockHost::watched_when_landed()
 
 std::uint64_t MockHost::monotonic_nanoseconds()
 {
-    StateLock lock(state_);
-    const std::uint64_t now = clock_.load();
-    clock_.store(now + clock_step_);
+    void (*hook)(void *) = nullptr;
+    void  *hook_context = nullptr;
+    std::uint64_t now = 0u;
+    {
+        StateLock lock(state_);
+        now = clock_.load();
+        clock_.store(now + clock_step_);
+        if (clock_hook_ != nullptr && now >= clock_hook_at_) {
+            hook = clock_hook_;
+            hook_context = clock_hook_context_;
+            clock_hook_ = nullptr;
+        }
+    }
+    if (hook != nullptr) hook(hook_context);
     return now;
+}
+
+std::uint64_t MockHost::peek_clock() const { return clock_.load(); }
+
+void MockHost::on_clock_reaching(std::uint64_t at, void (*hook)(void *), void *context)
+{
+    StateLock lock(state_);
+    clock_hook_at_ = at;
+    clock_hook_ = hook;
+    clock_hook_context_ = context;
 }
 
 Status MockHost::bind_gpu(std::uint32_t index)

@@ -155,6 +155,8 @@ public:
     std::uint64_t watched_when_landed();
     void advance_clock_per_read(std::uint64_t nanoseconds);
     void set_clock(std::uint64_t now);
+    std::uint64_t peek_clock() const;
+    void on_clock_reaching(std::uint64_t at, void (*hook)(void *), void *context);
     bool          next_deadline(std::uint64_t &deadline);
     bool          wait_for_deadline_after(std::uint64_t after, std::uint32_t milliseconds);
     std::uint32_t    images_shown(std::uint32_t head) const;
@@ -403,6 +405,9 @@ private:
     std::atomic<std::uint64_t> clock_;
     std::atomic<std::uint64_t> mutex_locks_{0u};
     std::uint64_t   clock_step_;
+    std::uint64_t   clock_hook_at_;
+    void          (*clock_hook_)(void *);
+    void           *clock_hook_context_;
     std::uint32_t   fail_bind_gpu_;
     std::uint32_t   bound_gpu_;
     Range           ranges_[max_ranges];
