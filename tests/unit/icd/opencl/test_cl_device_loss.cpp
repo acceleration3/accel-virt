@@ -1,6 +1,8 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
+#include "harness/icd/cl_running_rig.hpp"
+#include "icd/opencl/cl_buffer_rect.hpp"
 
 #include <CL/cl_ext.h>
 
@@ -8,6 +10,7 @@
 #include <cstring>
 
 using av::ClIcdRig;
+using av::ClRunningRig;
 using av::FakeClLoader;
 using av::MockKmt;
 using av::clicd::ClObject;
@@ -264,5 +267,61 @@ TEST(cl_device_loss, every_entry_on_a_lost_context_refuses_at_once_and_sends_not
   CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_OPENCL_C_FEATURES, sizeof features, features, nullptr),
            CL_INVALID_DEVICE);
 
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_device_loss, a_lost_context_refuses_the_info_image_rectangle_sampler_and_gl_entries_as_well)
+{ ClIcdRig     rig;
+  ClRunningRig run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const cl_mem image = run.image();
+  const cl_event event = run.queue_event();
+  CHECK(image != nullptr && event != nullptr);
+  if (image == nullptr || event == nullptr) return;
+  run.lose();
+  const std::uint32_t sent = rig.kmt().commands();
+  const std::size_t   origin[3] = {0u, 0u, 0u}, region[3] = {4u, 2u, 1u};
+  const av::clicd::ClBufferRect rect(origin, origin, region, 0u, 0u, 0u, 0u);
+  unsigned char bytes[64] = {};
+  std::size_t   wide = 0u;
+  cl_int        error = CL_SUCCESS;
+  cl_event      marker = nullptr;
+
+  CHECK_EQ(rig.root().mem_object_info(run.buffer(), CL_MEM_FLAGS, sizeof wide, &wide, nullptr), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().mem_object_info(run.buffer(), CL_MEM_SIZE, sizeof wide, &wide, nullptr), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().image_info(image, CL_IMAGE_WIDTH, sizeof wide, &wide, nullptr), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().event_profiling(event, CL_PROFILING_COMMAND_START, sizeof wide, &wide, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().program_build_info(run.program(), run.device(), CL_PROGRAM_BUILD_STATUS, sizeof wide, &wide,
+                                         nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().kernel_work_group_info(run.kernel(), run.device(), CL_KERNEL_WORK_GROUP_SIZE, sizeof wide, &wide,
+                                             nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().enqueue_copy_buffer(run.queue(), run.buffer(), run.buffer(), 0u, 64u, 16u, nullptr),
+           CL_OUT_OF_RESOURCES);
+  const std::uint32_t pattern = 1u;
+  CHECK_EQ(rig.root().enqueue_fill_buffer(run.queue(), run.buffer(), &pattern, sizeof pattern, 0u, 16u, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().enqueue_read_image(run.queue(), image, origin, region, 0u, 0u, bytes, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().enqueue_write_image(run.queue(), image, origin, region, 0u, 0u, bytes, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().enqueue_read_buffer_rect(run.queue(), run.buffer(), rect, bytes, nullptr), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().enqueue_write_buffer_rect(run.queue(), run.buffer(), rect, bytes, nullptr), CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().enqueue_copy_buffer_rect(run.queue(), run.buffer(), run.buffer(), origin, origin, region, 0u, 0u,
+                                               0u, 0u, nullptr),
+           CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.root().enqueue_marker(run.queue(), 0u, nullptr, &marker), CL_OUT_OF_RESOURCES);
+  CHECK(rig.root().create_sampler(run.context(), nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+  cl_uint formats = 0u;
+  CHECK_EQ(rig.root().supported_image_formats(run.context(), CL_MEM_READ_WRITE, CL_MEM_OBJECT_IMAGE2D, 0u, nullptr,
+                                              &formats),
+           CL_OUT_OF_RESOURCES);
+  cl_gl_object_type type = 0u;
+  cl_GLuint         name = 0u;
+  CHECK_EQ(rig.root().gl_object_info(run.buffer(), &type, &name), CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }

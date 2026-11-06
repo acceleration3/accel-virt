@@ -283,7 +283,7 @@ uint64_t ClIcdRoot::host_device_of(ClObject &object)
     AV_SCOPE("ClIcdRoot::host_device_of");
     GuestClContext *const context = context_of(object);
     ClDevice *const       device = context != nullptr ? devices_.running(*context) : nullptr;
-    return device != nullptr && device->object() != nullptr ? device->object()->wire() : 0u;
+    return device != nullptr ? device->object()->wire() : 0u;
 }
 
 cl_int ClIcdRoot::device_info(cl_device_id device, cl_device_info name, size_t value_bytes,
@@ -458,7 +458,7 @@ void *ClIcdRoot::wrap(ClientTransport &transport, ClObject::Kind kind, uint64_t 
         report_error(error, CL_OUT_OF_HOST_MEMORY);
         return nullptr;
     }
-    if (kind == ClObject::Kind::event && parent != nullptr && parent->kind() == ClObject::Kind::command_queue)
+    if (kind == ClObject::Kind::event && parent->kind() == ClObject::Kind::command_queue)
         object->stamp(parent->take_ordinal());
     report_error(error, CL_SUCCESS);
     return object;
@@ -550,7 +550,7 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
     cl_uint               found = 0u;
     cl_int                host_error = CL_SUCCESS;
     uint64_t              host_context = 0u;
-    if (av::clproto::av_clGetPlatformIDs(*wire, 1u, &host_platform, &platforms) == CL_SUCCESS &&
+    if (wire != nullptr && av::clproto::av_clGetPlatformIDs(*wire, 1u, &host_platform, &platforms) == CL_SUCCESS &&
         av::clproto::av_clGetDeviceIDs(*wire, host_platform, CL_DEVICE_TYPE_GPU, 1u, &host_device,
                                         &found) == CL_SUCCESS) {
         host_context = av::clproto::av_clCreateContext(*wire, nullptr, 1u, &host_device,
@@ -1117,9 +1117,7 @@ cl_int ClIcdRoot::flush(cl_command_queue queue)
     if (held == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClientTransport *const wire = wire_of(*held);
     if (wire == nullptr) return CL_OUT_OF_RESOURCES;
-    const cl_int queued = av::clproto::av_clFlush(*wire, held->wire());
-    if (queued != CL_SUCCESS) return queued;
-    return context_of(*held)->flush() == TransportResult::ok ? CL_SUCCESS : CL_OUT_OF_RESOURCES;
+    return av::clproto::av_clFlush(*wire, held->wire());
 }
 
 

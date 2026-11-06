@@ -914,3 +914,47 @@ TEST(cl_buffer_paths, a_staged_map_whose_row_cannot_grow_gives_its_block_back)
   CHECK_EQ(rig.kmt().commands(), sent + 2u);
   CHECK_EQ(rig.kmt().command_id(sent + 1u), static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueUnmapMemObject));
   CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_buffer_paths, an_external_acquire_behind_a_wait_list_is_a_barrier_and_a_list_the_api_refuses_sends_nothing)
+{ ClIcdRig rig;
+  Opened   opened(rig, true);
+  CHECK(opened.made());
+  if (!opened.made()) return;
+  const std::uint64_t     handle = shared_handle(rig);
+  const cl_mem_properties list[] = {CL_EXTERNAL_MEMORY_HANDLE_OPAQUE_WIN32_KHR,
+                                    static_cast<cl_mem_properties>(handle), 0u};
+  rig.host().shared_object(0u, host_buffer);
+  cl_int error = CL_INVALID_VALUE;
+  cl_mem shared = rig.loader().create_buffer_with_properties(opened.context(), list, CL_MEM_READ_WRITE, buffer_bytes,
+                                                             &error);
+  CHECK(shared != nullptr);
+  rig.host().cl_handle(host_event, CL_SUCCESS);
+  const cl_event gate = rig.loader().create_user_event(opened.context(), &error);
+  CHECK(gate != nullptr);
+  if (shared == nullptr || gate == nullptr) return;
+  auto *const acquire = reinterpret_cast<clEnqueueAcquireExternalMemObjectsKHR_fn>(
+      rig.root().extension_function("clEnqueueAcquireExternalMemObjectsKHR"));
+  CHECK(acquire != nullptr);
+  if (acquire == nullptr) return;
+
+  int            not_an_event = 0;
+  const cl_event stray = reinterpret_cast<cl_event>(&not_an_event);
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(acquire(opened.queue(), 1u, &shared, 1u, &stray, nullptr), CL_INVALID_EVENT_WAIT_LIST);
+  CHECK_EQ(rig.kmt().commands(), sent);
+
+  cl_event fence = nullptr;
+  rig.host().cl_enqueued(CL_SUCCESS, host_event + 1u);
+  CHECK_EQ(acquire(opened.queue(), 1u, &shared, 1u, &gate, &fence), CL_SUCCESS);
+  CHECK(fence != nullptr);
+  CHECK_EQ(rig.kmt().command_id(sent), static_cast<std::uint32_t>(av::clproto::kCmd_clEnqueueBarrierWithWaitList));
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(acquire(opened.queue(), 1u, &shared, 1u, &gate, nullptr), CL_SUCCESS);
+  rig.host().cl_enqueued(CL_INVALID_OPERATION, 0u);
+  cl_event refused = nullptr;
+  CHECK_EQ(acquire(opened.queue(), 1u, &shared, 1u, &gate, &refused), CL_INVALID_OPERATION);
+  CHECK(refused == nullptr);
+  rig.host().cl_result(CL_INVALID_OPERATION);
+  CHECK_EQ(acquire(opened.queue(), 1u, &shared, 1u, &gate, nullptr), CL_INVALID_OPERATION);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }

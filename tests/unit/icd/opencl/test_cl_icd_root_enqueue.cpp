@@ -709,3 +709,131 @@ TEST(cl_icd_root_enqueue, an_image_mapped_to_read_only_is_unmapped_without_a_wri
     CHECK_EQ(rig.root().unmap(run.queue(), image, mapped, nullptr), CL_INVALID_OPERATION);
     CHECK_EQ(rig.kmt().queued_answers(), 0u);
     CHECK(rig.root().invariants_hold()); } }
+
+namespace {
+
+constexpr std::size_t big_shared_bytes = 64u * 1024u;
+std::uint8_t          big_guest[big_shared_bytes];
+
+}
+
+TEST(cl_icd_root_enqueue, a_copy_into_shared_memory_whose_staged_bytes_the_host_refuses_gives_the_scratch_buffer_back)
+{ ClIcdRig     rig;
+  ClRunningRig run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  rig.host().cl_handle(host_shared, CL_SUCCESS);
+  void *const mirror = rig.root().svm_alloc(run.context(), CL_MEM_READ_WRITE, big_shared_bytes, 0u);
+  CHECK(mirror != nullptr);
+  if (mirror == nullptr) return;
+  rig.host().cl_handle(host_scratch, CL_SUCCESS);
+  rig.host().cl_result(CL_INVALID_OPERATION);
+  rig.host().cl_result(CL_SUCCESS);
+  CHECK_EQ(rig.root().svm_memcpy(run.queue(), CL_TRUE, mirror, big_guest, big_shared_bytes, nullptr),
+           CL_INVALID_OPERATION);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+namespace {
+
+struct TwoMirrors {
+    TwoMirrors() : rig(), run(rig), first(nullptr), second(nullptr)
+    {
+        if (!run.made()) return;
+        rig.host().cl_handle(host_shared, CL_SUCCESS);
+        first = static_cast<std::uint8_t *>(rig.root().svm_alloc(run.context(), CL_MEM_READ_WRITE, shared_bytes, 0u));
+        rig.host().cl_handle(host_shared + 0x1000u, CL_SUCCESS);
+        second = static_cast<std::uint8_t *>(rig.root().svm_alloc(run.context(), CL_MEM_READ_WRITE, shared_bytes, 0u));
+    }
+
+    bool made() const { return run.made() && first != nullptr && second != nullptr; }
+
+    ClIcdRig      rig;
+    ClRunningRig  run;
+    std::uint8_t *first;
+    std::uint8_t *second;
+};
+
+}
+
+TEST(cl_icd_root_enqueue, shared_to_shared_copies_and_fills_run_without_an_event_or_a_wait)
+{ TwoMirrors shared;
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  ClIcdRig &rig = shared.rig;
+  rig.host().cl_result(CL_SUCCESS);
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().svm_memcpy(shared.run.queue(), CL_FALSE, shared.second, shared.first, 16u, nullptr), CL_SUCCESS);
+  const std::uint32_t pattern = 0x5A5A5A5Au;
+  CHECK_EQ(rig.root().svm_mem_fill(shared.run.queue(), shared.first, &pattern, sizeof pattern, 64u, nullptr), CL_SUCCESS);
+  CHECK_EQ(rig.kmt().commands(), sent + 1u);
+  CHECK(ClIcdRootProbe::context(rig.root(), shared.run.context())->flush() == av::TransportResult::ok);
+  CHECK(rig.kmt().commands() > sent + 1u);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root_enqueue, a_shared_to_shared_copy_the_host_refuses_hands_back_no_event)
+{ TwoMirrors shared;
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  cl_event event = nullptr;
+  shared.rig.host().cl_enqueued(CL_INVALID_OPERATION, 0u);
+  CHECK_EQ(shared.rig.root().svm_memcpy(shared.run.queue(), CL_FALSE, shared.second, shared.first, 16u, &event),
+           CL_INVALID_OPERATION);
+  CHECK(event == nullptr);
+  CHECK(shared.rig.root().invariants_hold()); }
+
+TEST(cl_icd_root_enqueue, a_copy_between_shared_and_guest_memory_whose_drain_the_host_refuses_is_the_copys_error)
+{ TwoMirrors shared;
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  unsigned char guest[16] = {};
+  const cl_event gate = shared.run.gate();
+  shared.rig.host().cl_enqueued(CL_INVALID_OPERATION, 0u);
+  CHECK_EQ(shared.rig.root().svm_memcpy(shared.run.queue(), CL_TRUE, shared.second, guest, sizeof guest, nullptr,
+                                        ClWaitList(1u, &gate, CL_TRUE)),
+           CL_INVALID_OPERATION);
+  CHECK(shared.rig.root().invariants_hold()); }
+
+TEST(cl_icd_root_enqueue, a_shared_fill_the_host_refuses_hands_back_no_event)
+{ TwoMirrors shared;
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  const std::uint32_t pattern = 1u;
+  cl_event            event = nullptr;
+  shared.rig.host().cl_enqueued(CL_INVALID_OPERATION, 0u);
+  CHECK_EQ(shared.rig.root().svm_mem_fill(shared.run.queue(), shared.first, &pattern, sizeof pattern, 64u, &event),
+           CL_INVALID_OPERATION);
+  CHECK(event == nullptr);
+  CHECK(shared.rig.root().invariants_hold()); }
+
+TEST(cl_icd_root_enqueue, a_copy_between_shared_and_guest_memory_behind_a_bad_wait_list_sends_nothing)
+{ TwoMirrors shared;
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  int            not_an_event = 0;
+  const cl_event stray = reinterpret_cast<cl_event>(&not_an_event);
+  unsigned char  guest[16] = {};
+  const std::uint32_t sent = shared.rig.kmt().commands();
+  CHECK_EQ(shared.rig.root().svm_memcpy(shared.run.queue(), CL_TRUE, shared.second, guest, sizeof guest, nullptr,
+                                        ClWaitList(1u, &stray)),
+           CL_INVALID_EVENT_WAIT_LIST);
+  CHECK_EQ(shared.rig.root().svm_memcpy(shared.run.queue(), CL_TRUE, guest, shared.first, sizeof guest, nullptr,
+                                        ClWaitList(1u, &stray)),
+           CL_INVALID_EVENT_WAIT_LIST);
+  CHECK_EQ(shared.rig.kmt().commands(), sent);
+  CHECK(shared.rig.root().invariants_hold()); }
+
+TEST(cl_icd_root_enqueue, a_copy_into_or_out_of_a_buffer_that_is_no_buffer_asks_the_host_nothing)
+{ ClIcdRig     rig;
+  ClRunningRig run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const cl_mem image = run.image();
+  const cl_mem not_memory = reinterpret_cast<cl_mem>(run.kernel());
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.root().enqueue_copy_image_to_buffer(run.queue(), image, not_memory, origin, region, 0u, nullptr),
+           CL_INVALID_MEM_OBJECT);
+  CHECK_EQ(rig.root().enqueue_copy_buffer_to_image(run.queue(), not_memory, image, 0u, origin, region, nullptr),
+           CL_INVALID_MEM_OBJECT);
+  CHECK_EQ(rig.kmt().commands(), sent); }

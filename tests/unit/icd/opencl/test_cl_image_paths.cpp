@@ -1131,3 +1131,25 @@ TEST(cl_image_paths, a_buffer_rectangle_the_api_would_refuse_asks_the_host_nothi
                                                0u, 0u, 0u, nullptr),
            CL_INVALID_VALUE);
   CHECK_EQ(rig.kmt().commands(), sent); }
+
+TEST(cl_image_paths, an_image_copied_from_memory_whose_queue_the_host_does_not_make_is_given_back)
+{ ClIcdRig rig;
+  Running  run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const cl_image_format format = {CL_RGBA, CL_UNORM_INT8};
+  cl_image_desc         desc = {};
+  desc.image_type = CL_MEM_OBJECT_IMAGE2D;
+  desc.image_width = 4u;
+  desc.image_height = 2u;
+  std::uint32_t texels[8] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
+  rig.host().cl_handle(host_image, CL_SUCCESS);
+  run.element_is(4u);
+  rig.host().cl_handle(0u, CL_SUCCESS);
+  rig.host().cl_result(CL_SUCCESS);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().create_image(run.context(), CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, &format, &desc, texels,
+                                &error) == nullptr);
+  CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }

@@ -407,3 +407,18 @@ TEST(cl_icd_root_programs, a_long_build_log_is_cut_at_a_limit_of_lines)
   CHECK_EQ(rig.log().holding("build: l25"), 0u);
   CHECK_EQ(rig.kmt().queued_answers(), 0u);
   CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root_programs, a_host_that_makes_more_kernels_than_there_is_room_for_hands_back_what_fits)
+{ ClIcdRig     rig;
+  ClRunningRig run(rig);
+  CHECK(run.made());
+  if (!run.made()) return;
+  const std::uint64_t hosts[3] = {host_other_program, host_other_program + 1u, host_other_program + 2u};
+  rig.host().cl_ids(CL_SUCCESS, hosts, 3u, 4u);
+  cl_kernel kernels[3] = {};
+  cl_uint   made = 0u;
+  CHECK_EQ(rig.root().create_kernels_in_program(run.program(), 3u, kernels, &made), CL_SUCCESS);
+  CHECK_EQ(made, 4u);
+  CHECK(kernels[0] != nullptr && kernels[1] != nullptr && kernels[2] != nullptr);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  CHECK(rig.root().invariants_hold()); }

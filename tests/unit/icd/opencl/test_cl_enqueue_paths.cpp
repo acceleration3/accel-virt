@@ -769,3 +769,30 @@ TEST(cl_enqueue_paths, a_finish_delivers_every_row_the_icd_can_hold)
   for (const auto &row : into)
       for (const unsigned char byte : row) CHECK_EQ(byte, 1u);
   CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_enqueue_paths, a_finish_whose_deliveries_the_transport_cannot_publish_is_out_of_resources)
+{ bool refused = false;
+  for (std::uint32_t nth = 1u; nth <= 8u; ++nth) {
+      ClIcdRig rig;
+      Running  run(rig);
+      CHECK(run.made());
+      if (!run.made()) return;
+      unsigned char into[8] = {};
+      rig.host().cl_enqueued(CL_SUCCESS, host_event);
+      CHECK_EQ(rig.root().enqueue_read(run.queue(), run.buffer(), CL_FALSE, 0u, sizeof into, into, nullptr),
+               CL_SUCCESS);
+      rig.host().cl_enqueued(CL_SUCCESS, host_event + 2u);
+      rig.host().cl_result(CL_SUCCESS);
+      const cl_int complete = CL_COMPLETE;
+      rig.host().cl_info(CL_SUCCESS, reinterpret_cast<const char *>(&complete), sizeof complete);
+      rig.host().cl_result(CL_SUCCESS);
+      const unsigned char ones[8] = {1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u};
+      rig.host().cl_bytes(CL_SUCCESS, ones, sizeof ones);
+      rig.host().cl_result(CL_SUCCESS);
+      rig.kmt().fail_at(av::MockKmt::Call::submit, nth, 0xC0000001u);
+      const cl_int finished = rig.loader().finish(run.queue());
+      refused = refused || finished == CL_OUT_OF_RESOURCES;
+      CHECK(finished == CL_SUCCESS || finished == CL_OUT_OF_RESOURCES);
+      CHECK(rig.root().invariants_hold());
+  }
+  CHECK(refused); }
