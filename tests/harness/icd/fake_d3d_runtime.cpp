@@ -33,6 +33,8 @@ void *const *slots_of(const d3d::D3d12ddiAdapterFuncsRecord &table)
 
 __attribute__((no_sanitize("function"))) std::int32_t refuse_adapter_info(void *, void *) { return -1; }
 
+__attribute__((no_sanitize("function"))) std::int32_t answer_unreadable_info(void *, void *) { return 0; }
+
 struct AdapterInfoQuery {
     void         *private_data;
     std::uint32_t private_bytes;
@@ -79,6 +81,13 @@ void FakeD3dRuntime::answer_luid(std::uint64_t luid)
 {
     luid_ = luid;
     callbacks_.pfnQueryAdapterInfoCb = reinterpret_cast<void *>(&answer_adapter_info);
+}
+
+void FakeD3dRuntime::offer_no_adapter_query() { callbacks_.pfnQueryAdapterInfoCb = nullptr; }
+
+void FakeD3dRuntime::answer_unreadable_adapter_info()
+{
+    callbacks_.pfnQueryAdapterInfoCb = reinterpret_cast<void *>(&answer_unreadable_info);
 }
 
 Hresult FakeD3dRuntime::open()

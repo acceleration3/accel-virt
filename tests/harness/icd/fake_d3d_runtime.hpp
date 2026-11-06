@@ -43,6 +43,8 @@ public:
     void offer_no_dxgi_table();
     void scribble_the_device_block();
     void answer_luid(std::uint64_t luid);
+    void offer_no_adapter_query();
+    void answer_unreadable_adapter_info();
 
     d3d::Hresult open();
     bool         table_is_whole() const;

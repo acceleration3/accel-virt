@@ -162,3 +162,14 @@ TEST(umd_root_open_adapter9, caps_reach_the_host_driver_as_direct3d_9s)
     CHECK_EQ(driver.caps_type(), caps_d3d9);
     CHECK_EQ(runtime.close_adapter(), hr_ok);
 }
+
+TEST(umd_root_create_device9, a_create_with_no_record_is_refused_unasked)
+{
+    RecordingHostDriver driver;
+    UmdRig              rig(&driver);
+    FakeD3dRuntime      runtime(rig.root(), RuntimeKind::d3d9);
+    CHECK_EQ(runtime.open(), hr_ok);
+    CHECK_EQ(rig.root().create_device9(runtime.adapter(), nullptr), hr_invalid_arg);
+    CHECK_EQ(driver.builds9(), 0u);
+    CHECK_EQ(runtime.close_adapter(), hr_ok);
+}

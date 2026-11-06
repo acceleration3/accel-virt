@@ -2,6 +2,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/fake_d3d_runtime.hpp"
+#include "harness/icd/recording_host_driver.hpp"
 #include "harness/icd/umd_rig.hpp"
 #include "icd/d3d/hresult.hpp"
 #include "icd/d3d/umd_binding.hpp"
@@ -11,6 +12,7 @@
 
 using av::FakeD3dRuntime;
 using av::MockKmt;
+using av::RecordingHostDriver;
 using av::UmdRig;
 using av::d3d::RuntimeKind;
 using namespace av::d3d;
@@ -200,3 +202,82 @@ TEST(umd_root_open, the_root_is_bound_while_it_lives_and_unbound_after)
     CHECK(umd_binding.bound());
     CHECK(&umd_binding.root() == &rig.root()); }
   CHECK(!umd_binding.bound()); }
+
+TEST(umd_root_open, an_adapter_whose_luid_cannot_be_read_still_opens_and_no_luid_is_logged)
+{ UmdRig rig;
+  FakeD3dRuntime refusing(rig.root(), RuntimeKind::d3d10_11);
+  CHECK_EQ(refusing.open(), hr_ok);
+  CHECK_EQ(rig.log().holding("adapter luid"), 0u);
+  CHECK_EQ(refusing.close_adapter(), hr_ok);
+
+  FakeD3dRuntime absent(rig.root(), RuntimeKind::d3d10_11);
+  absent.offer_no_adapter_query();
+  CHECK_EQ(absent.open(), hr_ok);
+  CHECK_EQ(rig.log().holding("adapter luid"), 0u);
+  CHECK_EQ(absent.close_adapter(), hr_ok);
+
+  FakeD3dRuntime unreadable(rig.root(), RuntimeKind::d3d10_11);
+  unreadable.answer_unreadable_adapter_info();
+  CHECK_EQ(unreadable.open(), hr_ok);
+  CHECK_EQ(rig.log().holding("adapter luid"), 0u);
+  CHECK_EQ(unreadable.close_adapter(), hr_ok);
+
+  FakeD3dRuntime answering(rig.root(), RuntimeKind::d3d10_11);
+  answering.answer_luid(UmdRig::adapter_luid);
+  CHECK_EQ(answering.open(), hr_ok);
+  CHECK_EQ(rig.log().holding("adapter luid"), 1u);
+  CHECK_EQ(answering.close_adapter(), hr_ok);
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(umd_root_open, an_open_with_no_memory_whose_connection_will_not_close_logs_the_release)
+{ UmdRig rig;
+  rig.platform().fail_allocation_at(1u);
+  rig.kmt().fail_at(MockKmt::Call::close_adapter, 1u, 0xC0000001u);
+  FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
+  CHECK_EQ(runtime.open(), hr_out_of_memory);
+  CHECK_EQ(rig.log().holding("no memory for the adapter"), 1u);
+  CHECK_EQ(rig.log().holding("connection release, status"), 1u);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(umd_root_open, a_create_reaches_the_host_driver_and_a_refusal_leaves_no_device)
+{ RecordingHostDriver host;
+  UmdRig rig(&host);
+  FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d10_11);
+  CHECK_EQ(runtime.open(), hr_ok);
+  CHECK_EQ(runtime.create_device(), hr_ok);
+  CHECK_EQ(host.builds11(), 1u);
+  CHECK(host.kmt_adapter() != 0u);
+  CHECK(rig.root().device_of(runtime.device_block()) != nullptr);
+  rig.root().destroy_device(runtime.device_block());
+  CHECK_EQ(host.tear_downs(), 1u);
+  CHECK(rig.root().device_of(runtime.device_block()) == nullptr);
+  host.answer(hr_fail, hr_ok, hr_ok);
+  CHECK_EQ(runtime.create_device(), hr_fail);
+  CHECK_EQ(host.builds11(), 2u);
+  CHECK(rig.root().device_of(runtime.device_block()) == nullptr);
+  CHECK_EQ(runtime.close_adapter(), hr_ok);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(umd_root_open, a_d3d12_create_with_no_memory_for_the_device_is_out_of_memory)
+{ RecordingHostDriver host;
+  UmdRig rig(&host);
+  FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d12);
+  CHECK_EQ(runtime.open(), hr_ok);
+  rig.platform().fail_allocation_at(1u);
+  CHECK_EQ(runtime.create_device(), hr_out_of_memory);
+  CHECK_EQ(host.builds12(), 0u);
+  CHECK_EQ(rig.log().holding("no device, status"), 1u);
+  CHECK(rig.root().device_of(runtime.device_block()) == nullptr);
+  CHECK_EQ(runtime.close_adapter(), hr_ok);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(umd_root_open, a_table_fill_with_no_table_is_refused)
+{ RecordingHostDriver host;
+  UmdRig rig(&host);
+  FakeD3dRuntime runtime(rig.root(), RuntimeKind::d3d12);
+  CHECK_EQ(runtime.open(), hr_ok);
+  CHECK_EQ(rig.root().fill_ddi_table(runtime.adapter(), 0u, nullptr, 0u, 0u, nullptr), hr_invalid_arg);
+  CHECK_EQ(rig.root().fill_ddi_table(runtime.adapter(), 3u, nullptr, 0u, 0u, nullptr), hr_invalid_arg);
+  CHECK_EQ(host.table_type(), ~0u);
+  CHECK_EQ(runtime.close_adapter(), hr_ok); }
