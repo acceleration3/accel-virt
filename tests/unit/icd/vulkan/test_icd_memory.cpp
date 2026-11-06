@@ -34,6 +34,14 @@ struct ConnectionProbe {
     static KmtTransport    &transport(Connection &connection) { return connection.channel_.transport(); }
 };
 
+struct MemoryTypeTableProbe {
+    static VkPhysicalDeviceMemoryProperties &properties(MemoryTypeTable &table) { return table.properties_; }
+};
+
+struct DeviceMemoryProbe {
+    static MemoryTypeTable &types(DeviceMemory &memory) { return memory.types_; }
+};
+
 struct IcdRootProbe {
     static ObjectPool<DeviceMemory> &memories(IcdRoot &root) { return root.memories_; }
 };
@@ -50,7 +58,9 @@ struct ObjectPoolProbe {
 }
 
 using av::ObjectPoolProbe;
+using av::icd::DeviceMemoryProbe;
 using av::icd::IcdRootProbe;
+using av::icd::MemoryTypeTableProbe;
 
 namespace {
 
@@ -737,3 +747,19 @@ TEST(icd_memory, a_host_pointer_the_host_will_not_take_is_an_invalid_handle_or_a
     VkDeviceMemory memory = VK_NULL_HANDLE;
     CHECK_EQ(allocate_importing(rig, import, page, 1u, memory), VK_ERROR_DEVICE_LOST);
     CHECK(rig.connection().lost()); } }
+
+TEST(icd_memory, root_invariants_refuse_a_device_whose_memory_types_are_unsound)
+{ MemoryRig rig;
+  av::icd::IcdRoot &root = rig.rig().root();
+  const VkDeviceMemory memory = rig.host_visible(page, imported, true);
+  CHECK(root.invariants_hold());
+  DeviceMemory *const owner = IcdRootProbe::memories(root).find_if([](const DeviceMemory &) { return true; });
+  CHECK(owner != nullptr);
+  VkPhysicalDeviceMemoryProperties &properties = MemoryTypeTableProbe::properties(DeviceMemoryProbe::types(*owner));
+  const std::uint32_t count = properties.memoryTypeCount;
+  properties.memoryTypeCount = VK_MAX_MEMORY_TYPES + 1u;
+  CHECK(!root.invariants_hold());
+  properties.memoryTypeCount = count;
+  CHECK(root.invariants_hold());
+  rig.host().nop();
+  rig.free(memory); }

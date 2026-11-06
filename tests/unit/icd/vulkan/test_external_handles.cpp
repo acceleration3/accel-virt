@@ -1151,3 +1151,18 @@ TEST(icd_external_handles, an_import_the_device_opens_is_kept_under_the_name_it_
   CHECK_EQ(rig.last_command(), av::CommandHeader::release_shared_object_id);
   CHECK(rig.rig().root().invariants_hold()); }
 
+
+TEST(icd_external_handles, a_semaphore_import_naming_no_semaphore_is_an_invalid_handle_and_sends_nothing)
+{ SharingRig  rig;
+  void *const handle = rig.exported_semaphore();
+  ImportSemaphoreWin32HandleRecord importing = {};
+  importing.type_ = av::icd::import_semaphore_win32_handle_info;
+  importing.semaphore_ = VK_NULL_HANDLE;
+  importing.handle_type_ = av::icd::opaque_win32_semaphore;
+  importing.flags_ = VK_SEMAPHORE_IMPORT_TEMPORARY_BIT;
+  importing.handle_ = handle;
+  const std::uint32_t sent = rig.rig().kmt().commands();
+  CHECK_EQ(rig.entry<ImportSemaphore>("vkImportSemaphoreWin32HandleKHR")(rig.device(), &importing),
+           VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(rig.rig().kmt().commands(), sent);
+  CHECK(rig.rig().root().invariants_hold()); }

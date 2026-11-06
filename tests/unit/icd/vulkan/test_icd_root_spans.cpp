@@ -13,8 +13,21 @@
 
 #include <cstdint>
 
+namespace av {
+struct ObjectPoolProbe {
+    template <typename T>
+    static void miscount(ObjectPool<T> &pool, std::int32_t by) { pool.live_ += static_cast<std::uint32_t>(by); }
+};
+
+}
+
 namespace av::icd {
+struct InstanceSpanProbe {
+    static void set_count(InstanceSpan &span, std::uint32_t count) { span.count_ = count; }
+};
+
 struct IcdRootProbe {
+    static ObjectPool<InstanceSpan> &spans(IcdRoot &root) { return root.spans_; }
     static InstanceSpan *span(IcdRoot &root, VkInstance instance) { return root.span_of(instance); }
     static void          drop_instance(IcdRoot &root, VkInstance instance) { root.destroy_one_instance(instance, nullptr); }
 };
@@ -333,3 +346,18 @@ TEST(icd_root_spans, a_sibling_instance_the_handle_pool_has_no_room_for_is_given
       CHECK_EQ(rig.kmt().open_objects(), 0u);
   }
   CHECK(alone > 0u); }
+
+TEST(icd_root_spans, the_roots_invariants_refuse_a_span_pool_that_lost_count_and_a_span_that_is_unsound)
+{ IcdRig rig;
+  const VkInstance instance = two_adapter_instance(rig);
+  CHECK(rig.root().invariants_hold());
+  av::ObjectPoolProbe::miscount(av::icd::IcdRootProbe::spans(rig.root()), 1);
+  CHECK(!rig.root().invariants_hold());
+  av::ObjectPoolProbe::miscount(av::icd::IcdRootProbe::spans(rig.root()), -1);
+  CHECK(rig.root().invariants_hold());
+  InstanceSpan *const span = IcdRootProbe::span(rig.root(), instance);
+  av::icd::InstanceSpanProbe::set_count(*span, 0u);
+  CHECK(!rig.root().invariants_hold());
+  av::icd::InstanceSpanProbe::set_count(*span, 2u);
+  CHECK(rig.root().invariants_hold());
+  rig.destroy_instance(instance); }

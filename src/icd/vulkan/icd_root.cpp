@@ -628,7 +628,7 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
     if (taken != Status::ok) {
         lines_.note("vkCreateDevice: the extensions it names are not a list this driver can pass on, count",
              create->enabledExtensionCount);
-        return taken == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_EXTENSION_NOT_PRESENT;
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
     if (asked.named(win32_memory_extension)) {
         learn_host_sharing(*made, physical_device);
