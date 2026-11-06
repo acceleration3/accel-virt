@@ -224,6 +224,7 @@ public:
     void          time_out_while_beating(std::uint32_t count);
     void          time_out_faulted();
     bool          fault_page_of(std::uint32_t context);
+    void          fault_every_page();
     void          time_out_silently(std::uint32_t count);
     void          time_out_while_pulsing(std::uint32_t count);
     void          pulse(std::uint32_t context);

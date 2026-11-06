@@ -48,6 +48,9 @@ public:
     ScriptedHost &operator=(const ScriptedHost &) = delete;
 
     void nop();
+    void d3d_device(std::uint32_t hresult, std::uint32_t level);
+    void d3d_finish(std::uint32_t hresult);
+    void host_loss(std::uint32_t status);
     void transport_run();
     void submit_run();
     void vk_result(std::int32_t result);

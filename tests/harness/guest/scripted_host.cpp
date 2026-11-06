@@ -31,6 +31,29 @@ void ScriptedHost::cut_next(std::uint32_t bytes) { cut_ = bytes; }
 
 void ScriptedHost::nop() { kmt_.queue_answer(nullptr, 0u); }
 
+void ScriptedHost::d3d_device(std::uint32_t hresult, std::uint32_t level)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_pod<std::uint32_t>(hresult);
+    writer.write_pod<std::uint32_t>(level);
+    queue(writer);
+}
+
+void ScriptedHost::d3d_finish(std::uint32_t hresult)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_pod<std::uint32_t>(hresult);
+    queue(writer);
+}
+
+void ScriptedHost::host_loss(std::uint32_t status)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_pod<std::uint32_t>(status);
+    writer.write_pod<std::uint32_t>(0u);
+    queue(writer);
+}
+
 void ScriptedHost::transport_run()
 {
     for (std::uint32_t wait = 0u; wait < transport_waits; wait++) nop();

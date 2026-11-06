@@ -1292,6 +1292,12 @@ bool MockKmt::fault_page_of(std::uint32_t context)
     return true;
 }
 
+void MockKmt::fault_every_page()
+{
+    for (const Object &object : objects_)
+        if (object.kind == Kind::context && fence_memory(object) != nullptr) fault_fence_page(object);
+}
+
 void MockKmt::time_out_silently(std::uint32_t count) { timeouts_silent_ = count; }
 
 void MockKmt::beat(const Object &context) const
