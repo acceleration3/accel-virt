@@ -10,6 +10,8 @@
 #include "device/threading/doorbell.hpp"
 #include "device/threading/worker.hpp"
 #include "device/recording/wire_recorder.hpp"
+#include "device/abi/av_executor.h"
+#include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/executor/mock_context_execution.hpp"
@@ -45,6 +47,7 @@ struct WorkerProbe {
     static void misplace_head(Worker &worker) { worker.head_ = Worker::queue_capacity; }
     static Doorbell &doorbell(Worker &worker) { return worker.doorbell_; }
     static void     *lock(Worker &worker) { return worker.lock_; }
+    static bool      spin(Worker &worker) { return worker.work_within_spin(); }
 };
 
 }
@@ -114,6 +117,7 @@ public:
     Journal      &journal() { return journal_; }
     RingConsumer &ring() { return ring_; }
     GuestRing    &guest() { return memory_.guest(); }
+    av::MockExecutorOps &ops() { return execution_.ops(); }
     RingWindow    window() const { return memory_.window(); }
     Entry         entry(std::uint32_t number, void *gate = nullptr) { return Entry{&journal_, number, gate}; }
 
@@ -371,3 +375,35 @@ TEST(worker_invariants, a_queue_past_capacity_or_a_head_outside_it_is_detected)
   av::DoorbellProbe::forget_event(av::WorkerProbe::doorbell(stopped));
   CHECK(!stopped.invariants_hold());
   av::DoorbellProbe::repair(av::WorkerProbe::doorbell(stopped)); }
+
+namespace {
+
+std::atomic<std::uint32_t> polls{0u};
+
+std::uint32_t pending_for_a_while(void *, AvExecutor *) { return polls++ < 5u ? AV_POLL_PENDING : AV_POLL_IDLE; }
+
+struct Watching {
+    Fixture *fixture;
+    bool     kept_working;
+};
+
+}
+
+TEST(worker_run, a_worker_watches_a_gpu_that_still_has_work_before_it_gives_up_spinning)
+{ Fixture fixture;
+  fixture.ops().editable().poll = pending_for_a_while;
+  polls = 0u;
+  CHECK_STATUS(fixture.ring().prepare(fixture.window()), Status::ok);
+  fixture.host().advance_clock_per_read(1000u);
+  Watching watching{&fixture, true};
+  void    *thread = nullptr;
+  CHECK_STATUS(fixture.host().start_thread([](void *context) {
+                   auto *const w = static_cast<Watching *>(context);
+                   w->fixture->ring().attach();
+                   w->kept_working = av::WorkerProbe::spin(w->fixture->worker());
+               },
+                                           &watching, thread),
+               Status::ok);
+  fixture.host().join_thread(thread);
+  CHECK(!watching.kept_working);
+  CHECK(polls.load() > 5u); }
