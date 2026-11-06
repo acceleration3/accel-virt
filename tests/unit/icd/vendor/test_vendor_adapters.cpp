@@ -1,3 +1,4 @@
+#include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/kmt/pci_location.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -134,3 +135,50 @@ TEST(vendor_adapters, a_refused_features_query_reads_discrete)
   CHECK(!amd->facts().integrated());
   CHECK_STATUS(adapters.learn(), Status::ok);
   CHECK(adapters.nth_of(0x1002u, 0u)->facts().integrated()); }
+
+TEST(vendor_adapters, the_local_memory_left_is_the_adapters_budget_less_what_it_uses)
+{ MockKmt kmt;
+  kmt.add_adapter(on_raphael, 3200u);
+  kmt.add_adapter(on_geforce, 3200u);
+  kmt.describe_adapter(0u, PciLocation(0u, 17u, 0u), "AMD Radeon(TM) Graphics", version);
+  kmt.describe_adapter(1u, PciLocation(3u, 0u, 1u), "NVIDIA GeForce RTX 4080", version);
+  kmt.set_adapter_luid(0u, 0x51u);
+  kmt.set_adapter_luid(1u, 0x52u);
+  kmt.set_segment_sizes(512ull << 20u, 0u, 4ull << 30u);
+  kmt.set_video_memory(av::MemorySegmentGroup::local, 800ull << 20u, 300ull << 20u);
+  VendorAdapters adapters(kmt);
+  CHECK_STATUS(adapters.learn(), Status::ok);
+  const VendorAdapter *const amd = adapters.nth_of(0x1002u, 0u);
+  const VendorAdapter *const nvidia = adapters.nth_of(0x10DEu, 0u);
+  CHECK(amd != nullptr && nvidia != nullptr);
+  std::uint64_t left = 1u;
+  CHECK_STATUS(adapters.local_memory_left(*amd, left), Status::ok);
+  CHECK_EQ(left, 500ull << 20u);
+  left = 1u;
+  CHECK_STATUS(adapters.local_memory_left(*nvidia, left), Status::ok);
+  CHECK_EQ(left, 500ull << 20u);
+  kmt.set_video_memory(av::MemorySegmentGroup::local, 100ull << 20u, 300ull << 20u);
+  CHECK_STATUS(adapters.local_memory_left(*amd, left), Status::ok);
+  CHECK_EQ(left, 0u);
+  CHECK_EQ(kmt.open_objects(), 0u); }
+
+TEST(vendor_adapters, the_local_memory_left_of_an_adapter_windows_no_longer_lists_or_will_not_read_is_none)
+{ MockKmt kmt;
+  kmt.add_adapter(on_raphael, 3200u);
+  kmt.describe_adapter(0u, PciLocation(0u, 17u, 0u), "AMD Radeon(TM) Graphics", version);
+  kmt.set_adapter_luid(0u, 0x51u);
+  kmt.set_segment_sizes(512ull << 20u, 0u, 4ull << 30u);
+  kmt.set_video_memory(av::MemorySegmentGroup::local, 800ull << 20u, 300ull << 20u);
+  VendorAdapters adapters(kmt);
+  CHECK_STATUS(adapters.learn(), Status::ok);
+  const VendorAdapter *const amd = adapters.nth_of(0x1002u, 0u);
+  CHECK(amd != nullptr);
+  std::uint64_t left = 7u;
+  kmt.fail_at(MockKmt::Call::query_video_memory, 1u, MockKmt::invalid_parameter);
+  CHECK(adapters.local_memory_left(*amd, left) != Status::ok);
+  CHECK_EQ(left, 0u);
+  kmt.set_adapter_luid(0u, 0x99u);
+  left = 7u;
+  CHECK(adapters.local_memory_left(*amd, left) != Status::ok);
+  CHECK_EQ(left, 0u);
+  CHECK_EQ(kmt.open_objects(), 0u); }
