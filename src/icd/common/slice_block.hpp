@@ -42,6 +42,8 @@ private:
     uint32_t        live_;
     bool            empty_;
     uint64_t        emptied_at_;
+
+    friend struct SliceBlockProbe;
 };
 
 }

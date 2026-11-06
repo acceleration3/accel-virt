@@ -189,3 +189,16 @@ TEST(range_table, an_alignment_that_is_no_power_of_two_holds_nothing)
 { MockPlatform platform;
   Table        table(platform, 3u);
   CHECK(!table.invariants_hold()); }
+
+TEST(range_table, removing_an_offset_that_starts_no_range_is_refused_and_changes_nothing)
+{ MockPlatform platform;
+  Table table(platform, page);
+  table.reset(0u, 8u * page);
+  CHECK_EQ(placed_at(table, page), 0u);
+  CHECK_EQ(placed_at(table, page), page);
+  CHECK_EQ(placed_at(table, page), 2u * page);
+  CHECK_STATUS(table.remove(page), Status::ok);
+  CHECK_STATUS(table.remove(page), Status::invalid_parameter);
+  CHECK_STATUS(table.remove(3u * page), Status::invalid_parameter);
+  CHECK_EQ(table.placed(), 2u);
+  CHECK(table.invariants_hold()); }

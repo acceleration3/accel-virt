@@ -160,3 +160,41 @@ TEST(slice_block_invariants, an_idle_block_that_still_has_live_slices_breaks_the
   CHECK(!block.invariants_hold());
   block.freed();
   CHECK(block.invariants_hold()); }
+
+namespace av::icd {
+struct RangeTableProbe {
+    static void set_region(RangeTable &table, std::uint64_t begin, std::uint64_t end)
+    {
+        table.begin_ = begin;
+        table.end_ = end;
+    }
+};
+
+struct SliceBlockProbe {
+    static RangeTable &ranges(SliceBlock &block) { return block.ranges_; }
+    static void        set_bytes(SliceBlock &block, std::uint64_t bytes) { block.bytes_ = bytes; }
+};
+
+}
+
+using av::icd::RangeTableProbe;
+using av::icd::SliceBlockProbe;
+
+TEST(slice_block, its_invariants_catch_ranges_that_fall_outside_the_bytes_and_a_busy_empty_block)
+{ Rig rig;
+  SliceBlock block(rig.platform(), rig.memory(), 4u * mib, page);
+  std::uint64_t offset = 0u;
+  CHECK_STATUS(block.place(page, offset), Status::ok);
+  CHECK(block.invariants_hold());
+  RangeTableProbe::set_region(SliceBlockProbe::ranges(block), page, 4u * mib);
+  CHECK(!block.invariants_hold());
+  RangeTableProbe::set_region(SliceBlockProbe::ranges(block), 0u, 4u * mib);
+  CHECK(block.invariants_hold());
+  SliceBlockProbe::set_bytes(block, 2u * mib);
+  CHECK(!block.invariants_hold());
+  SliceBlockProbe::set_bytes(block, 4u * mib);
+  block.empty_since(5u);
+  block.took();
+  CHECK(block.invariants_hold());
+  block.empty_since(6u);
+  CHECK(!block.invariants_hold()); }
