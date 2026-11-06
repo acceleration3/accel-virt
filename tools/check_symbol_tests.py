@@ -60,6 +60,23 @@ EXCLUDE = {
     "src/icd/opencl/d3d11_bridge.hpp": "the Direct3D 11 the OpenCL ICD copies through, implemented by "
                              "WindowsD3d11Bridge in src/um and by ScriptedD3d11Bridge in tests/harness, and "
                              "exercised through every cl_d3d11_sharing test",
+    "src/guest/probe/cl_entry.hpp": "the OpenCL the probe calls, implemented by WindowsClEntry in src/um and by "
+                             "ScriptedCl in tests/harness, and exercised through every OpenCL probe test",
+    "src/guest/probe/overlay_entry.hpp": "the overlay support the probe asks of Direct3D, implemented by "
+                             "WindowsOverlayEntry in src/um and by ScriptedOverlay in tests/harness, and "
+                             "exercised through every overlay probe test",
+    "src/guest/transport/release_route.hpp": "how a release record reaches the kernel, implemented by "
+                             "CrossAdapterWaits in src/um and exercised through every cross-adapter wait test",
+    "src/icd/common/calling_thread.hpp": "the thread a call runs on, implemented by ThreadSlot and by "
+                             "WindowsCallingThread in src/um, and exercised through every ICD root test",
+    "src/icd/common/completion_probe.hpp": "what a wait polls to learn a host object completed, implemented by "
+                             "the fence, query, semaphore, sync and event probes and exercised through each "
+                             "probe's own wait test",
+    "src/icd/common/gpu_timeline.hpp": "a GPU's progress counter, implemented by LockedTimeline and by "
+                             "ScriptedGpuTimeline in tests/harness, and exercised through every timeline test",
+    "src/icd/common/service_thread.hpp": "a thread an ICD runs its service loop on, implemented by "
+                             "WindowsServiceThread in src/um and by ScriptedThread in tests/harness, and "
+                             "exercised through every service thread test",
     "src/icd/opencl/d3d11_rows.hpp": "what is done with a mapped subresource, implemented by ClD3d11Upload and "
                              "ClD3d11Download, whose own tests call it",
 }
