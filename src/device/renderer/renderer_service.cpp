@@ -118,11 +118,10 @@ Status RendererService::hello(const RendererMessageHeader &header, const uint8_t
     const ReadyMessage ready(HelloMessage::protocol_version, ops->abi_version, sub_apis);
     const RendererMessageHeader out(RendererMessageHeader::Kind::ready, ReadyMessage::encoded_size,
                                     header.sequence());
-    if (capacity < RendererMessageHeader::encoded_size + ReadyMessage::encoded_size ||
-        out.encode(answer, capacity) != Status::ok ||
-        ready.encode(answer + RendererMessageHeader::encoded_size,
-                     capacity - RendererMessageHeader::encoded_size) != Status::ok)
-        return Status::too_large;
+    if (capacity < RendererMessageHeader::encoded_size + ReadyMessage::encoded_size) return Status::too_large;
+    static_cast<void>(out.encode(answer, capacity));
+    static_cast<void>(ready.encode(answer + RendererMessageHeader::encoded_size,
+                                   capacity - RendererMessageHeader::encoded_size));
     answer_length = RendererMessageHeader::encoded_size + ReadyMessage::encoded_size;
     ready_ = true;
     return Status::ok;
@@ -192,10 +191,13 @@ Status RendererService::allocate_memory(const RendererMessageHeader &header, con
     }
     const RendererMessageHeader out(RendererMessageHeader::Kind::allocated_memory,
                                     AllocatedMemoryMessage::encoded_size, header.sequence());
-    if (answer == nullptr || capacity < RendererMessageHeader::encoded_size + AllocatedMemoryMessage::encoded_size ||
-        out.encode(answer, capacity) != Status::ok ||
-        allocated.encode(answer + RendererMessageHeader::encoded_size,
-                         capacity - RendererMessageHeader::encoded_size) != Status::ok) {
+    if (answer == nullptr || capacity < RendererMessageHeader::encoded_size + AllocatedMemoryMessage::encoded_size) {
+        answer_descriptor = -1;
+        return Status::too_large;
+    }
+    static_cast<void>(out.encode(answer, capacity));
+    if (allocated.encode(answer + RendererMessageHeader::encoded_size, capacity - RendererMessageHeader::encoded_size) !=
+        Status::ok) {
         answer_descriptor = -1;
         return Status::too_large;
     }
@@ -294,11 +296,11 @@ Status RendererService::answer_with(uint64_t sequence, Status outcome, uint8_t *
     const ReplyMessage          reply(sequence, outcome, nullptr, 0u);
     const RendererMessageHeader header(RendererMessageHeader::Kind::reply, static_cast<uint32_t>(reply.encoded_length()),
                                        sequence);
-    if (answer == nullptr || capacity < RendererMessageHeader::encoded_size + reply.encoded_length() ||
-        header.encode(answer, capacity) != Status::ok ||
-        reply.encode(answer + RendererMessageHeader::encoded_size, capacity - RendererMessageHeader::encoded_size) !=
-            Status::ok)
+    if (answer == nullptr || capacity < RendererMessageHeader::encoded_size + reply.encoded_length())
         return Status::too_large;
+    static_cast<void>(header.encode(answer, capacity));
+    static_cast<void>(reply.encode(answer + RendererMessageHeader::encoded_size,
+                                   capacity - RendererMessageHeader::encoded_size));
     answer_length = RendererMessageHeader::encoded_size + reply.encoded_length();
     return Status::ok;
 }
@@ -324,10 +326,13 @@ Status RendererService::export_image(const RendererMessageHeader &header, const 
     }
     const RendererMessageHeader out(RendererMessageHeader::Kind::exported_image, ExportedImageMessage::encoded_size,
                                     header.sequence());
-    if (answer == nullptr || capacity < RendererMessageHeader::encoded_size + ExportedImageMessage::encoded_size ||
-        out.encode(answer, capacity) != Status::ok ||
-        exported.encode(answer + RendererMessageHeader::encoded_size, capacity - RendererMessageHeader::encoded_size) !=
-            Status::ok) {
+    if (answer == nullptr || capacity < RendererMessageHeader::encoded_size + ExportedImageMessage::encoded_size) {
+        answer_descriptor = -1;
+        return Status::too_large;
+    }
+    static_cast<void>(out.encode(answer, capacity));
+    if (exported.encode(answer + RendererMessageHeader::encoded_size, capacity - RendererMessageHeader::encoded_size) !=
+        Status::ok) {
         answer_descriptor = -1;
         return Status::too_large;
     }

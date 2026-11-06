@@ -10,7 +10,7 @@ namespace av {
 
 MockRendererResources::MockRendererResources(MockHost &qemu, const AvExecutorOps &executor)
     : qemu_(qemu), executor_(executor), held_{}, mappings_(0u), lines_{},
-      refuse_executor_(false), loads_(0u), path_{}
+      refuse_executor_(false), load_nothing_(false), loads_(0u), path_{}
 {
     for (int &line : lines_) line = -1;
     for (int &held : held_) held = -1;
@@ -85,7 +85,7 @@ Status MockRendererResources::load_executor(const char *path, std::uint32_t leng
         refuse_executor_ = false;
         return Status::not_found;
     }
-    ops = &executor_;
+    if (!load_nothing_) ops = &executor_;
     return Status::ok;
 }
 
@@ -101,6 +101,11 @@ void MockRendererResources::adopt(const int *descriptors, std::uint32_t count)
         }
         if (!kept) TestRegistry::instance().record_failure(__FILE__, __LINE__, "more descriptors than the mock keeps");
     }
+}
+
+void MockRendererResources::load_executor_without_table()
+{
+    load_nothing_ = true;
 }
 
 void MockRendererResources::refuse_executor()

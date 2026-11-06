@@ -1,5 +1,6 @@
 #include "harness/host/mock_host.hpp"
 
+#include "device/renderer/doorbell_offers.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/host/renderer_peer.hpp"
@@ -438,6 +439,9 @@ void MockHost::connect_doorbell(void *event, std::uint32_t index)
         if (connected) doorbells_[index] = event;
     }
     if (!connected) record(HostViolation::doorbell_misuse, "MockHost::connect_doorbell");
+    int taken = -1;
+    if (connected && offered_doorbells_ != nullptr && offered_doorbells_->take(index, taken) == Status::ok)
+        doorbell_closer_(doorbell_closer_context_, taken);
 }
 
 void MockHost::disconnect_doorbell(void *event, std::uint32_t index)
@@ -1229,6 +1233,14 @@ bool MockHost::resource_exists(std::uint32_t id)
 }
 
 void MockHost::leave_listing_unterminated() { unterminated_listing_ = true; }
+
+void MockHost::take_doorbells_from(DoorbellOffers &offers, void (*closer)(void *, int), void *context)
+{
+    StateLock lock(state_);
+    offered_doorbells_ = &offers;
+    doorbell_closer_ = closer;
+    doorbell_closer_context_ = context;
+}
 
 void MockHost::split_guest_memory_every(std::uint64_t step) { StateLock lock(state_); split_step_ = step; }
 

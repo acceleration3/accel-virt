@@ -1,6 +1,10 @@
 #include "core/support/status.hpp"
 #include "device/abi/av_executor.h"
+#include "core/support/keyed_slots.hpp"
+#include "device/context/device_context_table.hpp"
 #include "device/context/local_context_plane.hpp"
+#include "device/fence/fence_interrupts.hpp"
+#include "harness/context/local_context_plane_probe.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/renderer/doorbell_offers.hpp"
@@ -49,7 +53,42 @@ using Kind = av::RendererMessageHeader::Kind;
 
 namespace av {
 
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.count_ = count; }
+};
+
+struct BlobTableProbe {
+    static void corrupt(BlobTable &table) { KeyedSlotsProbe::corrupt_count(table.ids_, table.ids_.count() + 3u); }
+};
+
+struct FenceInterruptsProbe {
+    static void connect_without_lock(FenceInterrupts &interrupts) { interrupts.connected_ = true; }
+    static void repair(FenceInterrupts &interrupts) { interrupts.connected_ = false; }
+};
+
+struct GuestMemoryTableProbe {
+    static void set_size(GuestMemoryTable &table, std::uint32_t slot, std::uint64_t size) { table.regions_[slot].size_ = size; }
+};
+
+struct DoorbellOffersProbe {
+    static void set(DoorbellOffers &offers, std::uint32_t index, int descriptor) { offers.descriptors_[index] = descriptor; }
+};
+
+struct DeviceContextTableProbe {
+    static void place_unstarted(DeviceContextTable &table, std::uint32_t id)
+    {
+        for (ObjectStorage<DeviceContext> &slot : table.slots_)
+            if (!slot.constructed()) {
+                static_cast<void>(slot.construct(table.host_, table.blobs_, table.owners_, table.interrupts_, table.library_,
+                                                table.shares_, table.recorder_, table.ordering_, table.pulse_, id, "test"));
+                return;
+            }
+    }
+};
+
 struct RendererServiceProbe {
+    static FenceInterrupts   &interrupts(RendererService &service) { return service.interrupts_; }
     static BlobTable         &blobs(RendererService &service) { return service.blobs_; }
     static LocalContextPlane &plane(RendererService &service) { return service.plane_; }
     static RendererHostBlobs &owners(RendererService &service) { return service.owners_; }
@@ -324,7 +363,7 @@ TEST(renderer_service_hello, a_library_that_does_not_load_or_is_refused_answers_
     rig.ops().editable().abi_version = 0u;
     CHECK_STATUS(rig.hello(), Status::not_supported);
     CHECK(!rig.service().ready()); }
-  for (std::uint32_t lock = 1u; lock <= 3u; lock++) {
+  for (std::uint32_t lock = 1u; lock <= 4u; lock++) {
       Rig rig;
       rig.host().fail_mutex_at(lock);
       CHECK_STATUS(rig.hello(), Status::no_memory);
@@ -350,6 +389,13 @@ TEST(renderer_service_hello, a_library_that_does_not_load_or_is_refused_answers_
   CHECK_EQ(answered, 0u);
   CHECK_EQ(descriptor, -1);
   CHECK(!rig.service().ready()); }
+
+TEST(renderer_service_hello, a_library_that_loads_with_no_table_is_not_supported)
+{ Rig rig;
+  rig.resources().load_executor_without_table();
+  CHECK_STATUS(rig.hello(), Status::not_supported);
+  CHECK(!rig.service().ready());
+  CHECK_EQ(rig.answer_length(), 0u); }
 
 TEST(renderer_service_receive, nothing_but_a_hello_or_interrupts_off_is_taken_first)
 { Rig rig;
@@ -844,3 +890,109 @@ TEST(renderer_service_invariants, a_context_without_a_hello_breaks_them)
   CHECK_STATUS(rig.context(Kind::destroy_context, context_id, 2u), Status::invalid_state);
   rig.service().shut_down();
   CHECK(rig.service().invariants_hold()); }
+
+TEST(renderer_service_allocate_memory, an_answer_with_nowhere_to_go_or_a_caching_the_protocol_has_not_got_is_refused)
+{ Rig rig;
+  CHECK_STATUS(rig.hello(), Status::ok);
+  std::uint8_t datagram[RendererMessageHeader::encoded_size + av::AllocateMemoryMessage::encoded_size] = {};
+  CHECK_STATUS(RendererMessageHeader(Kind::allocate_memory, av::AllocateMemoryMessage::encoded_size, 5u)
+                   .encode(datagram, sizeof datagram),
+               Status::ok);
+  CHECK_STATUS(av::AllocateMemoryMessage(context_id, 0x101u, av::HostBlobId::first, 0x1000u)
+                   .encode(datagram + RendererMessageHeader::encoded_size, av::AllocateMemoryMessage::encoded_size),
+               Status::ok);
+  std::size_t answered = 0u;
+  int         descriptor = -1;
+  CHECK_STATUS(rig.service().receive(datagram, sizeof datagram, nullptr, 0u, nullptr, 64u, answered, descriptor),
+               Status::too_large);
+  CHECK_EQ(descriptor, -1);
+  rig.ops().set_memory_caching(99u);
+  CHECK_STATUS(rig.allocate(context_id, av::HostBlobId::first + 1u, 0x1000u), Status::too_large);
+  CHECK_EQ(rig.answer_descriptor(), -1);
+  CHECK_EQ(rig.answer_length(), 0u); }
+
+TEST(renderer_service_export_image, an_answer_with_nowhere_to_go_or_an_image_the_protocol_cannot_describe_is_refused)
+{ Rig rig;
+  rig.ops().editable().export_image = &export_published;
+  CHECK_STATUS(rig.hello(), Status::ok);
+  const int image_fd = fresh_descriptor();
+  published = Published{true, AvExportedImage{image_fd, 1u, 64u, 32u, 256u, 0u, 0x34325258u, 0u, 7u}};
+  std::uint8_t datagram[RendererMessageHeader::encoded_size + av::ExportImageMessage::encoded_size] = {};
+  CHECK_STATUS(RendererMessageHeader(Kind::export_image, av::ExportImageMessage::encoded_size, 60u)
+                   .encode(datagram, sizeof datagram),
+               Status::ok);
+  CHECK_STATUS(av::ExportImageMessage(0x77u).encode(datagram + RendererMessageHeader::encoded_size,
+                                                    av::ExportImageMessage::encoded_size),
+               Status::ok);
+  std::size_t  answered = 0u;
+  int          descriptor = 5;
+  std::uint8_t small[RendererMessageHeader::encoded_size] = {};
+  CHECK_STATUS(rig.service().receive(datagram, sizeof datagram, nullptr, 0u, nullptr, 64u, answered, descriptor),
+               Status::too_large);
+  CHECK_EQ(descriptor, -1);
+  descriptor = 5;
+  CHECK_STATUS(rig.service().receive(datagram, sizeof datagram, nullptr, 0u, small, sizeof small, answered, descriptor),
+               Status::too_large);
+  CHECK_EQ(descriptor, -1);
+  published.image.width = 0u;
+  CHECK_STATUS(rig.raw(datagram, sizeof datagram, nullptr, 0u), Status::too_large);
+  CHECK_EQ(rig.answer_descriptor(), -1);
+  CHECK(is_open(image_fd));
+  ::close(image_fd); }
+
+TEST(renderer_service_bind, a_host_that_took_the_doorbell_itself_leaves_nothing_for_the_service_to_take)
+{ Rig rig;
+  rig.host().take_doorbells_from(rig.doorbells(),
+                                 [](void *resources, int descriptor) {
+                                     static_cast<av::MockRendererResources *>(resources)->close_descriptor(descriptor);
+                                 },
+                                 &rig.resources());
+  CHECK_STATUS(rig.hello(), Status::ok);
+  CHECK_STATUS(rig.region(), Status::ok);
+  rig.rings();
+  CHECK_STATUS(rig.context(Kind::create_context, context_id, 1u), Status::ok);
+  const int bell = fresh_descriptor();
+  CHECK_STATUS(rig.bind(context_id, doorbell, bell, 7u), Status::ok);
+  std::uint64_t sequence = 0u;
+  CHECK_STATUS(rig.reply(sequence).status(), Status::ok);
+  CHECK_EQ(sequence, 7u);
+  CHECK(RendererServiceProbe::plane(rig.service()).holds_doorbell(doorbell));
+  int left = -1;
+  CHECK_STATUS(rig.doorbells().take(doorbell, left), Status::not_found);
+  CHECK(!is_open(bell));
+  CHECK(rig.service().invariants_hold()); }
+
+TEST(renderer_service_receive, a_datagram_that_is_missing_closes_no_descriptors_it_was_not_given)
+{ Rig rig;
+  CHECK_STATUS(rig.hello(), Status::ok);
+  std::size_t answered = 0u;
+  int         descriptor = -1;
+  std::uint8_t room[64] = {};
+  CHECK_STATUS(rig.service().receive(nullptr, 0u, nullptr, 2u, room, sizeof room, answered, descriptor),
+               Status::malformed); }
+
+TEST(renderer_service_invariants, each_part_the_service_holds_can_break_them)
+{ { Rig plane;
+    CHECK_STATUS(plane.hello(), Status::ok);
+    av::DeviceContextTableProbe::place_unstarted(av::LocalContextPlaneProbe::table(RendererServiceProbe::plane(plane.service())), 9u);
+    CHECK(!plane.service().invariants_hold()); }
+  { Rig blobs;
+    CHECK_STATUS(blobs.hello(), Status::ok);
+    av::BlobTableProbe::corrupt(RendererServiceProbe::blobs(blobs.service()));
+    CHECK(!blobs.service().invariants_hold()); }
+  { Rig interrupts;
+    av::FenceInterruptsProbe::connect_without_lock(RendererServiceProbe::interrupts(interrupts.service()));
+    CHECK(!interrupts.service().invariants_hold());
+    av::FenceInterruptsProbe::repair(RendererServiceProbe::interrupts(interrupts.service())); }
+  { Rig memory;
+    CHECK_STATUS(memory.hello(), Status::ok);
+    CHECK_STATUS(memory.region(), Status::ok);
+    CHECK(memory.service().invariants_hold());
+    av::GuestMemoryTableProbe::set_size(memory.memory(), 0u, 0u);
+    CHECK(!memory.service().invariants_hold());
+    av::GuestMemoryTableProbe::set_size(memory.memory(), 0u, region_size); }
+  { Rig doorbells;
+    CHECK_STATUS(doorbells.hello(), Status::ok);
+    av::DoorbellOffersProbe::set(doorbells.doorbells(), 0u, -2);
+    CHECK(!doorbells.service().invariants_hold());
+    av::DoorbellOffersProbe::set(doorbells.doorbells(), 0u, -1); } }

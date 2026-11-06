@@ -30,6 +30,7 @@ public:
 
     void          adopt(const int *descriptors, std::uint32_t count);
     void          refuse_executor();
+    void          load_executor_without_table();
     std::uint32_t live_descriptors() const;
     std::uint32_t live_mappings() const;
     std::uint32_t interrupt_lines() const;
@@ -43,6 +44,7 @@ private:
     std::uint32_t         mappings_;
     int                   lines_[max_lines];
     bool                  refuse_executor_;
+    bool                  load_nothing_;
     std::uint32_t         loads_;
     char                  path_[max_path];
 };

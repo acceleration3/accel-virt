@@ -13,6 +13,7 @@
 
 namespace av {
 
+class DoorbellOffers;
 class RendererPeer;
 
 class MockHost final : public Host {
@@ -203,6 +204,7 @@ public:
     void          add_guest_ram(std::uint64_t base, std::size_t size);
     void          split_guest_memory_at(std::uint64_t address);
     void          split_guest_memory_every(std::uint64_t step);
+    void          take_doorbells_from(DoorbellOffers &offers, void (*closer)(void *, int), void *context);
     void          fail_guest_region_at(std::uint32_t nth);
     void          add_bounce_region(std::uint64_t base, std::uint64_t size);
     std::uint8_t *guest_ram(std::uint64_t address);
@@ -369,6 +371,9 @@ private:
     std::uint32_t   fail_allocation_;
     bool            unterminated_listing_ = false;
     std::uint64_t   split_step_ = 0u;
+    DoorbellOffers *offered_doorbells_ = nullptr;
+    void          (*doorbell_closer_)(void *, int) = nullptr;
+    void           *doorbell_closer_context_ = nullptr;
     std::uint32_t   fail_guest_region_ = 0u;
     std::uint32_t   fail_placement_;
     std::uint32_t   empty_mapping_;
