@@ -266,3 +266,17 @@ TEST(nvapi_root, a_second_initialise_that_finds_no_gpu_leaves_none_to_describe)
   void *display = nullptr;
   CHECK_EQ(machine.root().enum_display(0u, &display), NvapiRoot::end_enumeration);
   CHECK(machine.unlocked()); }
+
+TEST(nvapi_root, memory_info_of_a_current_version_is_an_error_when_the_adapters_memory_cannot_be_read)
+{ Machine machine;
+  CHECK_EQ(machine.root().initialize(), NvapiRoot::ok);
+  void *const gpu = machine.gpu(0u);
+  NvDisplayDriverMemoryInfoRecord memory = {};
+  memory.version = memory_v2;
+  machine.kmt().fail_at(MockKmt::Call::query_video_memory, 1u, MockKmt::invalid_parameter);
+  CHECK_EQ(machine.root().memory_info(gpu, &memory), NvapiRoot::error);
+  CHECK_EQ(memory.dedicatedVideoMemory, 0u);
+  CHECK_EQ(memory.curAvailableDedicatedVideoMemory, 0u);
+  CHECK(machine.unlocked());
+  CHECK_EQ(machine.root().memory_info(gpu, &memory), NvapiRoot::ok);
+  CHECK_EQ(memory.curAvailableDedicatedVideoMemory, 16u << 20u); }
