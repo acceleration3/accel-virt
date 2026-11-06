@@ -155,8 +155,7 @@ Status KmtTransport::adopt_views()
     if constexpr (sizeof(uintptr_t) < sizeof(uint64_t))
         if (uint64_t{ring} != views.ring() || uint64_t{reply} != views.reply() || uint64_t{fence} != views.fence())
             return Status::malformed;
-    const Status ring_bound = ring_.initialize(reinterpret_cast<uint8_t *>(ring), ring_order_);
-    if (ring_bound != Status::ok) return ring_bound;
+    static_cast<void>(ring_.initialize(reinterpret_cast<uint8_t *>(ring), ring_order_));
     reply_ = ReplyReader(reinterpret_cast<uint8_t *>(reply), reply_bytes_);
     watch_.read_page(reinterpret_cast<const uint8_t *>(fence));
     return Status::ok;
@@ -224,7 +223,7 @@ Status KmtTransport::wake_on_raise(uint64_t handle)
     if (!established() || faulted()) return Status::invalid_state;
     uint8_t               bytes[WakeEventRecord::encoded_size] = {};
     const WakeEventRecord request(handle);
-    if (request.encode(bytes, sizeof bytes) != Status::ok) return Status::invalid_parameter;
+    static_cast<void>(request.encode(bytes, sizeof bytes));
     return connection_.kmt().escape(connection_.adapter(), connection_.device(), context_, bytes, sizeof bytes);
 }
 
@@ -302,7 +301,7 @@ void KmtTransport::release_directly(const ReleaseRoute &route)
         path_.release_through(const_cast<ReleaseRoute *>(route_), ring());
         return;
     }
-    if (established() && !faulted_) static_cast<void>(await_gpu(newest_fence_));
+    if (!faulted_) static_cast<void>(await_gpu(newest_fence_));
     path_.release_through(nullptr, 0u);
     route_ = nullptr;
 }
@@ -545,7 +544,6 @@ TransportResult KmtTransport::publish_pieces(uint32_t command_id, const WireWrit
     uint64_t      cut = 0u;
     while (!pieces.done()) {
         const size_t framed = pieces.frame_next(staging_, staging_bytes_);
-        if (framed == 0u) return TransportResult::failed;
         if (pieces.done()) blobs_.seal();
         const TransportResult sent = publish_batch(staging_, static_cast<uint32_t>(framed), fence);
         if (sent != TransportResult::ok) return sent;

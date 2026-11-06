@@ -82,8 +82,13 @@ public:
     void          set_vendor(std::uint64_t vendor);
     void          offer_no_svm();
     void          offer_no_il();
+    void          refuse_binary_by_status_at(std::uint32_t nth, std::int32_t status);
+    void          accept_any_binary();
+    void          offer_il_versions(const char *text);
+    void          give_binaries_without_bytes();
     void          set_build_log(const char *log);
     void          miscompute(std::uint32_t wrong);
+    void          miscompute_after(std::uint32_t runs, std::uint32_t wrong);
     void          stale_mappings(std::uint32_t wrong);
     void          forget_callbacks();
     void          run_callbacks_twice();
@@ -206,8 +211,14 @@ private:
     std::uint64_t vendor_;
     std::uint64_t svm_capabilities_;
     bool          il_ = true;
+    std::uint32_t status_only_at_ = 0u;
+    std::int32_t  status_only_ = 0;
+    bool          any_binary_ = false;
+    const char   *il_versions_ = "SPIR-V_1.0 SPIR-V_1.1";
+    bool          binaries_empty_ = false;
     std::uint8_t  binary_[binary_bytes] = {};
     std::uint32_t wrong_;
+    std::uint32_t wrong_after_ = 0u;
     std::uint32_t stale_;
     bool          forgets_callbacks_;
     bool          notifies_twice_;

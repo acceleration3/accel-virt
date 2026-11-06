@@ -22,6 +22,7 @@ public:
     void          lose_device_below(std::uint32_t bytes);
     void          lose();
     void          misplace_rows();
+    void          overshoot_rows();
     std::uint32_t calls(Call call) const;
     bool          live() const;
     std::uint32_t width(std::uint32_t target) const;
@@ -55,6 +56,7 @@ private:
     std::uint32_t last_x_;
     std::uint32_t last_y_;
     bool          misplace_;
+    bool          overshoot_ = false;
     bool          layered_ = false;
     bool          lost_;
     bool          live_;

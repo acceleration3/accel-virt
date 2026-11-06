@@ -26,6 +26,12 @@ void ScriptedD3d11Shared::lose()
     lost_ = true;
 }
 
+void ScriptedD3d11Shared::overshoot_rows()
+{
+    misplace_ = true;
+    overshoot_ = true;
+}
+
 void ScriptedD3d11Shared::misplace_rows()
 {
     misplace_ = true;
@@ -109,10 +115,11 @@ std::int32_t ScriptedD3d11Shared::read_texel(std::uint32_t target, std::uint32_t
     last_y_ = y;
     const std::uint8_t *const colour = targets_[target].colour;
     const bool past_the_rows = misplace_ && (x + 1u == targets_[target].width) && y != 0u;
-    texel[0] = past_the_rows ? 0u : colour[2];
-    texel[1] = past_the_rows ? 0u : colour[1];
-    texel[2] = past_the_rows ? 0u : colour[0];
-    texel[3] = past_the_rows ? 0u : colour[3];
+    const std::uint8_t stray = overshoot_ ? 0xFFu : 0u;
+    texel[0] = past_the_rows ? stray : colour[2];
+    texel[1] = past_the_rows ? stray : colour[1];
+    texel[2] = past_the_rows ? stray : colour[0];
+    texel[3] = past_the_rows ? stray : colour[3];
     return 0;
 }
 

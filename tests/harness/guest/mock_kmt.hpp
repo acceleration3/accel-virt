@@ -185,6 +185,7 @@ public:
 
     void          allow_hardware_scheduling();
     void          refuse_hardware_scheduling();
+    void          lack_native_gpu_fences();
     void          set_doorbell_status(std::uint32_t doorbell, std::uint32_t status);
     void          answer_doorbell_without_pages(std::uint32_t which);
     std::uint32_t doorbell_page(std::uint32_t doorbell) const;
@@ -466,6 +467,7 @@ private:
     std::uint16_t newest_views_ = ContextViewsRecord::with_fence;
     mutable const Object *late_context_ = nullptr;
     bool          hardware_scheduling_;
+    bool          native_gpu_fences_ = true;
     std::uint32_t doorbell_page_missing_;
     DoorbellPages doorbells_[max_doorbells];
     std::uint32_t doorbell_count_;

@@ -159,6 +159,11 @@ void MockKmt::answer_doorbell_without_pages(std::uint32_t which)
     doorbell_page_missing_ = which;
 }
 
+void MockKmt::lack_native_gpu_fences()
+{
+    native_gpu_fences_ = false;
+}
+
 void MockKmt::refuse_hardware_scheduling()
 {
     hardware_scheduling_ = false;
@@ -1561,7 +1566,7 @@ void MockKmt::set_adapter_features(std::uint32_t index, std::uint64_t features)
 
 Status MockKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
 {
-    supported = true;
+    supported = native_gpu_fences_;
     return Status::ok;
 }
 

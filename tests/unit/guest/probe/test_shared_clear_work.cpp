@@ -13,6 +13,12 @@ namespace av {
 
 struct SharedClearWorkProbe {
     static void read_without_a_device(SharedClearWork &work) { work.read_ = 1u; }
+    static void targets_without_a_device(SharedClearWork &work) { work.made_targets_ = 1u; }
+    static void more_targets_than_there_are(SharedClearWork &work)
+    {
+        work.made_ = true;
+        work.made_targets_ = SharedClearWork::targets + 1u;
+    }
     static void read_past_what_was_made(SharedClearWork &work)
     {
         work.made_ = true;
@@ -108,6 +114,13 @@ TEST(shared_clear_work, rows_out_of_place_fail_the_texels_with_the_targets_right
   CHECK(std::strstr(report, "FAIL d3d11.shared_texels status=7 1") != nullptr);
   CHECK(std::strstr(report, "ok d3d11.shared_device_kept") != nullptr); }
 
+TEST(shared_clear_work, rows_the_gpu_filled_too_bright_fail_the_texels_too)
+{ SharedRig rig;
+  rig.d3d11().overshoot_rows();
+  const char *report = rig.run();
+  CHECK(std::strstr(report, "FAIL d3d11.shared_texels status=7") != nullptr);
+  CHECK(std::strstr(report, "ok d3d11.shared_device_kept") != nullptr); }
+
 TEST(shared_clear_work, a_device_removed_after_the_reads_fails_the_last_step)
 { SharedRig rig;
   rig.d3d11().fail(Call::removed_reason, 1u, ScriptedD3d11Shared::device_hung);
@@ -151,4 +164,10 @@ TEST(shared_clear_work, an_impossible_state_is_named)
   CHECK(!read.invariants_hold());
   SharedClearWork past(d3d11);
   SharedClearWorkProbe::read_past_what_was_made(past);
-  CHECK(!past.invariants_hold()); }
+  CHECK(!past.invariants_hold());
+  SharedClearWork targeted(d3d11);
+  SharedClearWorkProbe::targets_without_a_device(targeted);
+  CHECK(!targeted.invariants_hold());
+  SharedClearWork crowded(d3d11);
+  SharedClearWorkProbe::more_targets_than_there_are(crowded);
+  CHECK(!crowded.invariants_hold()); }

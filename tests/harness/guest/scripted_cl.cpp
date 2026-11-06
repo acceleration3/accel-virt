@@ -93,8 +93,24 @@ void ScriptedCl::set_vendor(std::uint64_t vendor) { vendor_ = vendor; }
 void ScriptedCl::offer_no_svm() { svm_capabilities_ = 0u; }
 
 void ScriptedCl::offer_no_il() { il_ = false; }
+
+void ScriptedCl::refuse_binary_by_status_at(std::uint32_t nth, std::int32_t status)
+{
+    status_only_at_ = nth;
+    status_only_ = status;
+}
+
+void ScriptedCl::accept_any_binary() { any_binary_ = true; }
+void ScriptedCl::offer_il_versions(const char *text) { il_versions_ = text; }
+void ScriptedCl::give_binaries_without_bytes() { binaries_empty_ = true; }
 void ScriptedCl::set_build_log(const char *log) { build_log_ = log; }
 void ScriptedCl::miscompute(std::uint32_t wrong) { wrong_ = wrong; }
+
+void ScriptedCl::miscompute_after(std::uint32_t runs, std::uint32_t wrong)
+{
+    wrong_ = wrong;
+    wrong_after_ = runs;
+}
 void ScriptedCl::stale_mappings(std::uint32_t wrong) { stale_ = wrong; }
 void ScriptedCl::forget_callbacks() { forgets_callbacks_ = true; }
 void ScriptedCl::run_callbacks_twice() { notifies_twice_ = true; }
@@ -253,7 +269,7 @@ std::int32_t ScriptedCl::device_text(void *device, std::uint32_t name, char *int
         return refused;
     }
     if (name == device_extensions) return answer_text(device_extensions_, into, room, bytes);
-    if (name == device_il_version) return answer_text(il_ ? "SPIR-V_1.0 SPIR-V_1.1" : "", into, room, bytes);
+    if (name == device_il_version) return answer_text(il_ ? il_versions_ : "", into, room, bytes);
     if (name != device_name) return refused;
     return answer_text(device_name_, into, room, bytes);
 }
@@ -399,8 +415,7 @@ std::int32_t ScriptedCl::program_build_text(void *program, void *device, char *i
 
 void *ScriptedCl::create_kernel(void *program, const char *name, std::int32_t &error)
 {
-    error = failure(Call::create_kernel);
-    if (error != 0) return nullptr;
+    if (answers_nothing(Call::create_kernel, error)) return nullptr;
     Object *const built = required(program, Kind::program);
     if (built == nullptr || !built->built) {
         error = refused;
@@ -426,7 +441,7 @@ std::uint8_t *ScriptedCl::program_binary(void *program, std::size_t &bytes, std:
         return nullptr;
     }
     std::memcpy(binary_, binary_text, binary_bytes);
-    bytes = binary_bytes;
+    bytes = binaries_empty_ ? 0u : binary_bytes;
     return binary_;
 }
 
@@ -436,11 +451,15 @@ void *ScriptedCl::create_program_with_binary(void *context, void *device, const 
     status = 0;
     error = failure(Call::create_program_with_binary);
     if (error != 0) return nullptr;
+    if (calls_[static_cast<std::uint32_t>(Call::create_program_with_binary)] == status_only_at_) {
+        status = status_only_;
+        return nullptr;
+    }
     if (required(context, Kind::context) == nullptr || !is_device(device) || binary == nullptr) {
         error = refused;
         return nullptr;
     }
-    if (bytes != binary_bytes || std::memcmp(binary, binary_text, binary_bytes) != 0) {
+    if (!any_binary_ && (bytes != binary_bytes || std::memcmp(binary, binary_text, binary_bytes) != 0)) {
         status = invalid_binary;
         error = invalid_binary;
         return nullptr;
@@ -452,8 +471,7 @@ void *ScriptedCl::create_program_with_binary(void *context, void *device, const 
 
 void *ScriptedCl::create_program_with_il(void *context, const void *il, std::size_t bytes, std::int32_t &error)
 {
-    error = failure(Call::create_program_with_il);
-    if (error != 0) return nullptr;
+    if (answers_nothing(Call::create_program_with_il, error)) return nullptr;
     if (required(context, Kind::context) == nullptr || il == nullptr || bytes < sizeof spirv_magic) {
         error = refused;
         return nullptr;
@@ -556,7 +574,8 @@ std::int32_t ScriptedCl::run_kernel(void *queue, void *kernel, std::size_t eleme
     if (first == nullptr || second == nullptr || sum == nullptr) return refused;
     for (std::size_t index = 0u; index < elements; index++) {
         sum->values[index] = first->values[index] + second->values[index];
-        if (index < wrong_) sum->values[index] += 1.0f;
+        if (index < wrong_ && calls_[static_cast<std::uint32_t>(Call::run_kernel)] > wrong_after_)
+            sum->values[index] += 1.0f;
     }
     return 0;
 }

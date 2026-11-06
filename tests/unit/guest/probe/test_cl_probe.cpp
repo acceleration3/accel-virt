@@ -527,3 +527,165 @@ TEST(cl_probe, a_device_without_il_is_judged_by_its_refusal)
     CHECK(rig.holds("FAIL opencl.il status=7 4294967266\n"));
     CHECK(!rig.holds("opencl.il_sum"));
     CHECK_EQ(rig.cl().live_objects(), 0u); } }
+
+TEST(cl_probe, a_kernel_that_computes_wrongly_fails_its_own_sum_by_the_count)
+{ const struct {
+      std::uint32_t runs;
+      const char   *line;
+  } cases[] = {
+      {1u, "FAIL opencl.long_sum status=4 3\n"},
+      {2u, "FAIL opencl.binary_sum status=4 3\n"},
+      {3u, "FAIL opencl.link_sum status=4 3\n"},
+      {4u, "FAIL opencl.il_sum status=4 3\n"},
+  };
+  for (const auto &row : cases) {
+      ProbeRig rig;
+      rig.cl().miscompute_after(row.runs, 3u);
+      rig.run();
+      CHECK(rig.holds("ok opencl.sum 0\n"));
+      CHECK(rig.holds(row.line));
+      CHECK(rig.holds("ok opencl.release\n"));
+      CHECK_EQ(rig.cl().live_objects(), 0u);
+  } }
+
+TEST(cl_probe, the_long_program_is_failed_at_the_step_that_refused_it)
+{ const struct {
+      Call          call;
+      std::uint32_t nth;
+      const char   *line;
+  } cases[] = {
+      {Call::build_program, 2u, "FAIL opencl.long_build status=7 4294967266\n"},
+      {Call::create_kernel, 2u, "FAIL opencl.long_kernel status=7 4294967266\n"},
+      {Call::run_kernel, 2u, "FAIL opencl.long_run status=7 4294967266\n"},
+      {Call::set_kernel_buffer, 5u, "FAIL opencl.long_run status=7 4294967266\n"},
+      {Call::write_buffer, 3u, "FAIL opencl.long_run status=7 4294967266\n"},
+      {Call::finish, 2u, "FAIL opencl.long_run status=7 4294967266\n"},
+      {Call::read_buffer, 2u, "FAIL opencl.long_run status=7 4294967266\n"},
+  };
+  for (const auto &row : cases) {
+      ProbeRig rig;
+      rig.cl().fail_at(row.call, row.nth, ScriptedCl::refused);
+      rig.run();
+      CHECK(rig.holds(row.line));
+      CHECK(rig.holds("ok opencl.release\n"));
+      CHECK_EQ(rig.cl().live_objects(), 0u);
+  } }
+
+TEST(cl_probe, a_later_kernel_that_cannot_be_run_is_failed_by_the_error_that_stopped_it)
+{ const struct {
+      Call          call;
+      std::uint32_t nth;
+      const char   *line;
+  } cases[] = {
+      {Call::set_kernel_buffer, 9u, "FAIL opencl.binary_sum status=4 4294967266\n"},
+      {Call::run_kernel, 4u, "FAIL opencl.link_sum status=4 4294967266\n"},
+      {Call::run_kernel, 5u, "FAIL opencl.il_sum status=4 4294967266\n"},
+  };
+  for (const auto &row : cases) {
+      ProbeRig rig;
+      rig.cl().fail_at(row.call, row.nth, ScriptedCl::refused);
+      rig.run();
+      CHECK(rig.holds(row.line));
+      CHECK_EQ(rig.cl().live_objects(), 0u);
+  } }
+
+TEST(cl_probe, a_binary_with_no_bytes_or_no_kernel_in_it_fails_its_build)
+{ { ProbeRig rig;
+    rig.cl().give_binaries_without_bytes();
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.binary status=7 0\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::create_kernel, 3u, ScriptedCl::refused);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.binary_build status=7 4294967266\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_silently_at(Call::create_kernel, 3u);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.binary_build status=7 4294967295\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::build_program, 3u, ScriptedCl::refused);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.binary_build status=7 4294967266\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); } }
+
+TEST(cl_probe, a_binary_the_opencl_loads_wrongly_or_refuses_for_the_wrong_reason_fails_its_steps)
+{ { ProbeRig rig;
+    rig.cl().refuse_binary_by_status_at(1u, -42);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.binary_build status=7 4294967254\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().accept_any_binary();
+    rig.run();
+    CHECK(rig.holds("ok opencl.binary_sum 0\n"));
+    CHECK(rig.holds("FAIL opencl.binary_refused status=4 0\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::create_program_with_binary, 2u, -42);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.binary_refused status=4 4294967254\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); } }
+
+TEST(cl_probe, a_link_the_opencl_makes_no_kernel_of_fails_its_step)
+{ { ProbeRig rig;
+    rig.cl().fail_at(Call::create_kernel, 4u, ScriptedCl::refused);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.link status=7 4294967266\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_silently_at(Call::create_kernel, 4u);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.link status=7 4294967295\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); } }
+
+TEST(cl_probe, il_is_found_in_a_version_list_whatever_stands_before_it)
+{ const char *const lists[] = {"SX SPX SPIX SPIRX SPIR-X SPIR-V_1.2", "SPIR-V_1.2"};
+  for (const char *const text : lists) {
+      ProbeRig rig;
+      rig.cl().offer_il_versions(text);
+      rig.run();
+      CHECK(rig.holds("ok opencl.il\n"));
+      CHECK(rig.holds("ok opencl.il_sum 0\n"));
+      CHECK_EQ(rig.cl().live_objects(), 0u);
+  } }
+
+TEST(cl_probe, a_version_list_that_fills_the_buffer_without_il_or_will_not_be_read_offers_none)
+{ { ProbeRig rig;
+    char text[256];
+    std::memset(text, 'x', sizeof text - 1u);
+    text[sizeof text - 1u] = '\0';
+    rig.cl().offer_il_versions(text);
+    rig.run();
+    CHECK(rig.holds("note opencl.il_version not offered\n"));
+    CHECK(rig.holds("FAIL opencl.il status=4 0\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::device_text, 2u, ScriptedCl::refused);
+    rig.run();
+    CHECK(rig.holds("note opencl.il_version not offered\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); } }
+
+TEST(cl_probe, an_il_the_opencl_makes_no_kernel_of_fails_its_step)
+{ { ProbeRig rig;
+    rig.cl().fail_at(Call::build_program, 4u, ScriptedCl::refused);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.il status=7 4294967266\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_at(Call::create_kernel, 5u, ScriptedCl::refused);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.il status=7 4294967266\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_silently_at(Call::create_kernel, 5u);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.il status=7 4294967295\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); }
+  { ProbeRig rig;
+    rig.cl().fail_silently_at(Call::create_program_with_il, 1u);
+    rig.run();
+    CHECK(rig.holds("FAIL opencl.il status=7 4294967295\n"));
+    CHECK_EQ(rig.cl().live_objects(), 0u); } }

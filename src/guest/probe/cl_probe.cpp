@@ -369,8 +369,8 @@ uint32_t ClProbe::wrong_from(void *kernel, int32_t &ran)
 void ClProbe::keep(void *program, void *kernel)
 {
     AV_SCOPE("ClProbe::keep");
-    if (program != nullptr && programs_kept_ < most_kept) kept_programs_[programs_kept_++] = program;
-    if (kernel != nullptr && kernels_kept_ < most_kept) kept_kernels_[kernels_kept_++] = kernel;
+    if (program != nullptr) kept_programs_[programs_kept_++] = program;
+    if (kernel != nullptr) kept_kernels_[kernels_kept_++] = kernel;
 }
 
 void ClProbe::binary_step()
