@@ -35,9 +35,10 @@ Status HostExtensionList::take(const char *const *names, uint32_t count)
     kept_ = 0u;
     added_ = 0u;
     if (names == nullptr && count != 0u) return Status::invalid_parameter;
+    if (count == ~uint32_t{0}) return Status::no_memory;
     for (uint32_t index = 0u; index < count; index++)
         if (names[index] == nullptr) return Status::invalid_parameter;
-    if (count == ~uint32_t{0} || names_.reserve(count + 1u) != Status::ok) return Status::no_memory;
+    if (names_.reserve(count + 1u) != Status::ok) return Status::no_memory;
     given_names_ = names;
     given_ = count;
     for (uint32_t index = 0u; index < count; index++) {

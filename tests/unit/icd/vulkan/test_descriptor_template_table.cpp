@@ -11,9 +11,25 @@ using av::RecordingThreadLock;
 using av::icd::DescriptorTemplateSlot;
 using av::icd::DescriptorTemplateTable;
 
+namespace av {
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_free_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.free_count_ = count; }
+};
+
+}
+
 namespace av::icd {
 
 struct DescriptorTemplateTableProbe {
+    static DescriptorTemplateSlot *edit(DescriptorTemplateTable &table, VkDescriptorUpdateTemplate made)
+    {
+        return table.slots_.find(table.key_of(made));
+    }
+    static void miscount(DescriptorTemplateTable &table, std::uint32_t count)
+    {
+        KeyedSlotsProbe::corrupt_free_count(table.slots_, count);
+    }
     static const DescriptorTemplateSlot *slot(const DescriptorTemplateTable &table, VkDescriptorUpdateTemplate made)
     {
         return table.slots_.find(table.key_of(made));
@@ -167,4 +183,25 @@ TEST(descriptor_template_table, a_slot_names_the_device_the_template_and_the_byt
   held.table().forget_device(device);
   CHECK(DescriptorTemplateTableProbe::slot(held.table(), handle(0x41u)) == nullptr);
   CHECK(DescriptorTemplateTableProbe::slot(held.table(), handle(0x42u)) != nullptr);
+  CHECK(held.table().invariants_hold()); }
+
+TEST(descriptor_template_table, its_invariants_catch_a_slot_with_no_device_a_wrong_key_and_a_miscounted_table)
+{ TableUnderLock                  held;
+  VkDescriptorUpdateTemplateEntry entry = {};
+  const VkDescriptorUpdateTemplateCreateInfo info = of(entry, 1u, 0u);
+  CHECK_EQ(held.table().record(device, handle(0x31u), &info), VK_SUCCESS);
+  CHECK_EQ(held.table().record(device, handle(0x32u), &info), VK_SUCCESS);
+  CHECK(held.table().invariants_hold());
+  DescriptorTemplateSlot *const first = DescriptorTemplateTableProbe::edit(held.table(), handle(0x31u));
+  DescriptorTemplateSlot *const second = DescriptorTemplateTableProbe::edit(held.table(), handle(0x32u));
+  first->device_ = VK_NULL_HANDLE;
+  CHECK(!held.table().invariants_hold());
+  first->device_ = device;
+  second->template_ = handle(0x99u);
+  CHECK(!held.table().invariants_hold());
+  second->template_ = handle(0x32u);
+  CHECK(held.table().invariants_hold());
+  DescriptorTemplateTableProbe::miscount(held.table(), 5u);
+  CHECK(!held.table().invariants_hold());
+  DescriptorTemplateTableProbe::miscount(held.table(), 0u);
   CHECK(held.table().invariants_hold()); }

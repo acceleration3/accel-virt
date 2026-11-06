@@ -36,6 +36,8 @@ private:
     uint32_t           given_;
     uint32_t           kept_;
     uint32_t           added_;
+
+    friend struct HostExtensionListProbe;
 };
 
 }

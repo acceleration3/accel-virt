@@ -8,6 +8,28 @@
 using av::Status;
 using av::icd::HostExtensionList;
 
+namespace av {
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_size(GrowableArray<T> &array, std::uint32_t size) { array.size_ = size; }
+};
+
+struct ExtensionNamesProbe {
+    static void corrupt_size(ExtensionNames &names, std::uint32_t size) { GrowableArrayProbe::corrupt_size(names.names_, size); }
+};
+
+}
+
+namespace av::icd {
+struct HostExtensionListProbe {
+    static void corrupt_names(HostExtensionList &list, std::uint32_t size) { ExtensionNamesProbe::corrupt_size(list.names_, size); }
+    static void set_kept(HostExtensionList &list, std::uint32_t kept) { list.kept_ = kept; }
+};
+
+}
+
+using av::icd::HostExtensionListProbe;
+
 TEST(host_extension_list, the_window_system_extensions_are_not_passed_on)
 { av::MockPlatform memory;
   HostExtensionList asked(memory);
@@ -155,3 +177,28 @@ TEST(host_extension_list, the_names_it_was_given_are_remembered_for_asking_about
   CHECK(asked.named("VK_EXT_memory_budget"));
   CHECK(!asked.named("VK_KHR_surface"));
   CHECK(!asked.named("VK_EXT_memory_budge")); }
+
+TEST(host_extension_list, a_count_no_array_can_hold_is_refused_before_any_name_is_read)
+{ av::MockPlatform memory;
+  HostExtensionList asked(memory);
+  const char *const one[] = {"VK_EXT_memory_budget"};
+  CHECK_STATUS(asked.take(one, 1u), Status::ok);
+  CHECK_STATUS(asked.take(one, ~std::uint32_t{0}), Status::no_memory);
+  CHECK_EQ(asked.count(), 0u);
+  CHECK_EQ(asked.kept(), 0u);
+  CHECK(asked.invariants_hold()); }
+
+TEST(host_extension_list, its_invariants_catch_a_name_table_that_lost_count_and_more_kept_than_were_given)
+{ av::MockPlatform memory;
+  HostExtensionList asked(memory);
+  const char *const enabled[] = {"VK_EXT_memory_budget", "VK_KHR_swapchain"};
+  CHECK_STATUS(asked.take(enabled, 2u), Status::ok);
+  CHECK(asked.invariants_hold());
+  HostExtensionListProbe::corrupt_names(asked, 50u);
+  CHECK(!asked.invariants_hold());
+  HostExtensionListProbe::corrupt_names(asked, 1u);
+  CHECK(asked.invariants_hold());
+  HostExtensionListProbe::set_kept(asked, 5u);
+  CHECK(!asked.invariants_hold());
+  HostExtensionListProbe::set_kept(asked, 1u);
+  CHECK(asked.invariants_hold()); }

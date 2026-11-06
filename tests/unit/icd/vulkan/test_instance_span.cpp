@@ -18,6 +18,15 @@ using av::Status;
 using av::icd::Connection;
 using av::icd::InstanceSpan;
 
+namespace av::icd {
+struct InstanceSpanProbe {
+    static void set_count(InstanceSpan &span, std::uint32_t count) { span.count_ = count; }
+};
+
+}
+
+using av::icd::InstanceSpanProbe;
+
 namespace {
 
 using EnumeratePhysical = VkResult (*)(VkInstance, std::uint32_t *, VkPhysicalDevice *);
@@ -152,3 +161,12 @@ TEST(instance_span, an_adapter_whose_host_refuses_is_left_out)
   CHECK_EQ(count, 1u);
   rig.destroy_instance(instance);
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+TEST(instance_span, a_span_of_no_instances_or_more_than_it_has_room_for_is_unsound)
+{ InstanceSpan span(fake(0x10u));
+  InstanceSpanProbe::set_count(span, 0u);
+  CHECK(!span.invariants_hold());
+  InstanceSpanProbe::set_count(span, InstanceSpan::max_instances + 1u);
+  CHECK(!span.invariants_hold());
+  InstanceSpanProbe::set_count(span, 1u);
+  CHECK(span.invariants_hold()); }

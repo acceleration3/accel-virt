@@ -27,6 +27,8 @@ public:
 private:
     VkInstance instances_[max_instances];
     uint32_t   count_;
+
+    friend struct InstanceSpanProbe;
 };
 
 }
