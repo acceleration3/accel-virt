@@ -8,9 +8,30 @@
 
 #include <cstdint>
 
+namespace av {
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_free_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.free_count_ = count; }
+    template <typename Key, typename Entry>
+    static std::uint32_t free_count(const KeyedSlots<Key, Entry> &table) { return table.free_count_; }
+};
+
+}
+
 namespace av::icd {
 struct SurfaceTableProbe {
     static void orphan(SurfaceTable &table) { table.slots_.at(table.slots_.next_live(0u))->instance_ = VK_NULL_HANDLE; }
+    static SurfaceSlot &first(SurfaceTable &table) { return *table.slots_.at(table.slots_.next_live(0u)); }
+    static SurfaceSlot &second(SurfaceTable &table) { return *table.slots_.at(table.slots_.next_live(table.slots_.next_live(0u) + 1u)); }
+    static void set_next(SurfaceTable &table, std::uint64_t next) { table.next_ = next; }
+    static void miscount(SurfaceTable &table, std::uint32_t count) { KeyedSlotsProbe::corrupt_free_count(table.slots_, count); }
+    static std::uint32_t free_count(const SurfaceTable &table) { return KeyedSlotsProbe::free_count(table.slots_); }
+    static void add_at_key(SurfaceTable &table, std::uint64_t key, const SurfaceSlot &slot)
+    {
+        std::uint32_t at = 0u;
+        CHECK_EQ(table.slots_.insert(key, slot, at), av::Status::ok);
+    }
+    static void forget_key(SurfaceTable &table, std::uint64_t key) { static_cast<void>(table.slots_.erase(key)); }
 };
 
 }
@@ -195,3 +216,34 @@ TEST(surface_table, its_invariants_refuse_a_surface_no_instance_owns)
   CHECK(surfaces.invariants_hold());
   SurfaceTableProbe::orphan(surfaces);
   CHECK(!surfaces.invariants_hold()); }
+
+TEST(surface_table, its_invariants_see_every_surface_and_refuse_each_way_one_can_be_unsound)
+{ av::MockPlatform memory;
+  SurfaceTable surfaces(memory);
+  VkSurfaceKHR one = VK_NULL_HANDLE;
+  VkSurfaceKHR two = VK_NULL_HANDLE;
+  CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x10u), one), VK_SUCCESS);
+  CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x20u), two), VK_SUCCESS);
+  CHECK(surfaces.invariants_hold());
+  SurfaceSlot &first = SurfaceTableProbe::first(surfaces);
+  const SurfaceSlot whole = first;
+  first.instance_ = VK_NULL_HANDLE;
+  CHECK(!surfaces.invariants_hold());
+  first = whole;
+  first.window_ = nullptr;
+  CHECK(!surfaces.invariants_hold());
+  first = whole;
+  CHECK(surfaces.invariants_hold());
+  SurfaceTableProbe::add_at_key(surfaces, 0u, whole);
+  CHECK(!surfaces.invariants_hold());
+  SurfaceTableProbe::forget_key(surfaces, 0u);
+  CHECK(surfaces.invariants_hold());
+  SurfaceTableProbe::set_next(surfaces, 1u);
+  CHECK(!surfaces.invariants_hold());
+  SurfaceTableProbe::set_next(surfaces, 100u);
+  CHECK(surfaces.invariants_hold());
+  const std::uint32_t free_rows = SurfaceTableProbe::free_count(surfaces);
+  SurfaceTableProbe::miscount(surfaces, free_rows + 5u);
+  CHECK(!surfaces.invariants_hold());
+  SurfaceTableProbe::miscount(surfaces, free_rows);
+  CHECK(surfaces.invariants_hold()); }
