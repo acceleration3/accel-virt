@@ -13,6 +13,22 @@ using av::d3d::D3d9StateEntry;
 using av::d3d::D3d9StateShadow;
 using Kind = av::d3d::D3d9StateEntry::Kind;
 
+namespace av::d3d {
+
+struct D3d9StateBlockProbe {
+    static void set_capacity(D3d9StateBlock &block, std::uint32_t capacity) { block.capacity_ = capacity; }
+    static void set_count(D3d9StateBlock &block, std::uint32_t count) { block.count_ = count; }
+    static bool grow(D3d9StateBlock &block) { return block.grow(); }
+    static void copy_entry(D3d9StateBlock &block, std::uint32_t to, std::uint32_t from)
+    {
+        block.entries_[to] = block.entries_[from];
+    }
+};
+
+}
+
+using av::d3d::D3d9StateBlockProbe;
+
 namespace {
 
 constexpr std::uint32_t rs_cullmode = 22u;
@@ -185,4 +201,71 @@ TEST(d3d9_state_block, a_block_that_cannot_grow_keeps_what_it_holds)
     CHECK_STATUS(block.record(D3d9StateEntry(Kind::render, over, over, &over, 1u)), Status::ok);
     CHECK_EQ(block.count(), first_room + 1u);
     CHECK(block.invariants_hold());
+}
+
+TEST(d3d9_state_entry, a_missing_value_leaves_the_words_zero)
+{
+    const D3d9StateEntry entry(Kind::render, 7u, 0u, nullptr, 3u);
+    for (std::uint32_t index = 0u; index < D3d9StateEntry::value_words; index++) CHECK_EQ(entry.value()[index], 0u);
+}
+
+TEST(d3d9_state_shadow, keeps_what_it_accepts_in_every_table)
+{
+    D3d9StateShadow shadow;
+    D3d9StateEntry  now;
+    const std::uint32_t word = 9u;
+    const D3d9StateEntry accepted[] = {
+        D3d9StateEntry(Kind::stage, 16u, 0u, &word, 1u),
+        D3d9StateEntry(Kind::texture, 3u, 0u, &word, 1u),
+        D3d9StateEntry(Kind::constant_i, 1u, 15u, &word, 1u),
+        D3d9StateEntry(Kind::constant_b, 1u, 15u, &word, 1u),
+        D3d9StateEntry(Kind::stream, 15u, 0u, &word, 1u),
+        D3d9StateEntry(Kind::clip_plane, 5u, 0u, &word, 1u),
+    };
+    CHECK(!shadow.set(accepted[0]));
+    for (std::uint32_t index = 1u; index < 6u; index++) {
+        CHECK(shadow.set(accepted[index]));
+        CHECK(shadow.current(accepted[index], now));
+        CHECK_EQ(now.value()[0], 9u);
+    }
+    CHECK(!shadow.set(D3d9StateEntry(Kind::constant_i, 2u, 0u, &word, 1u)));
+    CHECK(!shadow.set(D3d9StateEntry(Kind::constant_b, 2u, 0u, &word, 1u)));
+    CHECK(!shadow.set(D3d9StateEntry(static_cast<Kind>(200u), 0u, 0u, &word, 1u)));
+}
+
+TEST(d3d9_state_shadow, an_entry_the_shadow_cannot_place_has_no_current_value)
+{
+    D3d9StateShadow shadow;
+    D3d9StateEntry  now;
+    CHECK(!shadow.current(render(256u, 0u), now));
+    CHECK(!shadow.current(D3d9StateEntry(), now));
+    CHECK(now.kind() == Kind::none);
+}
+
+TEST(d3d9_state_block, a_capacity_too_large_to_double_cannot_grow)
+{
+    MockPlatform   platform;
+    D3d9StateBlock block(platform);
+    D3d9StateBlockProbe::set_capacity(block, 0x7FFFFFFFu / sizeof(D3d9StateEntry) + 1u);
+    CHECK(!D3d9StateBlockProbe::grow(block));
+    CHECK_EQ(platform.live_allocations(), 0u);
+    D3d9StateBlockProbe::set_capacity(block, 0u);
+    CHECK(block.invariants_hold());
+}
+
+TEST(d3d9_state_block, a_corrupted_block_breaks_the_invariants)
+{
+    MockPlatform   platform;
+    D3d9StateBlock block(platform);
+    D3d9StateBlockProbe::set_count(block, 1u);
+    CHECK(!block.invariants_hold());
+    D3d9StateBlockProbe::set_count(block, 0u);
+    D3d9StateBlockProbe::set_capacity(block, 4u);
+    CHECK(!block.invariants_hold());
+    D3d9StateBlockProbe::set_capacity(block, 0u);
+    CHECK_STATUS(block.record(render(rs_cullmode, 3u)), Status::ok);
+    CHECK_STATUS(block.record(render(rs_zenable, 3u)), Status::ok);
+    CHECK(block.invariants_hold());
+    D3d9StateBlockProbe::copy_entry(block, 1u, 0u);
+    CHECK(!block.invariants_hold());
 }

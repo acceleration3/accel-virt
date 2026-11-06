@@ -30,6 +30,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct D3d9StateBlockProbe;
+
     [[nodiscard]] bool grow();
 
     BlockSource    &memory_;
