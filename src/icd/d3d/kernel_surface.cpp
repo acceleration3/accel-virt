@@ -54,9 +54,7 @@ KernelSurface::KernelSurface(SharedWith, uint32_t width, uint32_t height, uint32
     AV_SCOPE("KernelSurface::KernelSurface");
     const DxgiFormatLayout layout(format);
     const CrossAdapterLayout across(width, height, kernel_format(), layout.element_bytes());
-    if (layout.element_bytes() == 0u || layout.element_width() != 1u || layout.element_height() != 1u ||
-        !across.valid())
-        return;
+    if (layout.element_bytes() == 0u || layout.element_width() != 1u || !across.valid()) return;
     pitch_ = across.pitch();
     bytes_ = across.bytes();
 }

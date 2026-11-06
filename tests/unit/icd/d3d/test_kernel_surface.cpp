@@ -166,3 +166,34 @@ TEST(kernel_surface, a_primary_says_where_it_is_scanned_out_and_any_other_is_non
   const KernelSurface plain(64u, 64u, b8g8r8a8);
   CHECK(!plain.primary());
   CHECK_EQ(plain.source(), 0u); }
+
+TEST(kernel_surface, a_surface_shared_with_another_adapter_is_laid_out_in_aligned_rows_and_pages)
+{ KernelSurface surface(av::d3d::SharedWith::another_adapter, 100u, 10u, b8g8r8a8);
+  CHECK_EQ(surface.pitch(), 512u);
+  CHECK_EQ(surface.bytes(), 8192u);
+  CHECK_STATUS(surface.make(), Status::ok);
+  const AllocationDescriptor descriptor = described(surface);
+  CHECK(descriptor.kind() == AllocationKind::cross_adapter);
+  CHECK(descriptor.cpu_visible());
+  CHECK_EQ(descriptor.layout().width(), 100u);
+  CHECK_EQ(descriptor.layout().height(), 10u);
+  CHECK_EQ(descriptor.layout().pitch(), 512u);
+  CHECK_EQ(descriptor.size(), 8192u);
+  CHECK(descriptor.scanout().is_empty()); }
+
+TEST(kernel_surface, a_cross_adapter_surface_that_cannot_be_shared_is_refused)
+{ KernelSurface no_size(av::d3d::SharedWith::another_adapter, 16u, 16u, 0u);
+  CHECK_EQ(no_size.bytes(), 0u);
+  CHECK_STATUS(no_size.make(), Status::invalid_parameter);
+  KernelSurface pair(av::d3d::SharedWith::another_adapter, 16u, 16u, 68u);
+  CHECK_EQ(pair.bytes(), 0u);
+  CHECK_STATUS(pair.make(), Status::invalid_parameter);
+  KernelSurface block(av::d3d::SharedWith::another_adapter, 16u, 16u, 71u);
+  CHECK_EQ(block.bytes(), 0u);
+  CHECK_STATUS(block.make(), Status::invalid_parameter);
+  KernelSurface no_width(av::d3d::SharedWith::another_adapter, 0u, 16u, b8g8r8a8);
+  CHECK_EQ(no_width.bytes(), 0u);
+  CHECK_STATUS(no_width.make(), Status::invalid_parameter);
+  KernelSurface too_wide(av::d3d::SharedWith::another_adapter, 1u << 30u, 1u, b8g8r8a8);
+  CHECK_EQ(too_wide.bytes(), 0u);
+  CHECK_STATUS(too_wide.make(), Status::invalid_parameter); }
