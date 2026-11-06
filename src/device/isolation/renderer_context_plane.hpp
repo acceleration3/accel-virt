@@ -91,7 +91,6 @@ private:
     bool                 may_restart();
     void                 drop_images();
     ObjectStorage<RemoteContext> *slot_of(uint32_t id);
-    const ObjectStorage<RemoteContext> *slot_of(uint32_t id) const;
 
     Host            &host_;
     BlobTable       &blobs_;

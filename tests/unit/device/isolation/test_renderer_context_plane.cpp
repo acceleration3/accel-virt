@@ -14,6 +14,7 @@
 #include "harness/host/loopback_renderer_peer.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
+#include "harness/host/host_violation.hpp"
 #include "harness/host/scripted_renderer_peer.hpp"
 #include "harness/context/guest_ring.hpp"
 #include "proto/context/capset_info.hpp"
@@ -45,9 +46,31 @@ struct RendererServiceProbe {
     static LocalContextPlane &plane(RendererService &service) { return service.plane_; }
 };
 
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
+};
+
+struct RemoteContextProbe {
+    static void unbind_binding(RemoteContext &context) { context.binding_.unbind(); }
+    static void set_lost(RemoteContext &context, bool lost) { context.lost_ = lost; }
+};
+
 struct RendererContextPlaneProbe {
     static void count_losses(RendererContextPlane &plane, std::uint32_t count) { plane.loss_count_ = count; }
     static void unconfigure(RendererContextPlane &plane) { plane.configured_ = false; }
+    static void corrupt_mirrored(RendererContextPlane &plane, std::uint32_t capacity)
+    {
+        GrowableArrayProbe::corrupt_capacity(plane.mirrored_, capacity);
+    }
+    static void strand_context(RendererContextPlane &plane, std::uint32_t id)
+    {
+        RemoteContextProbe::unbind_binding(plane.slot_of(id)->object());
+    }
+    static void lose_context(RendererContextPlane &plane, std::uint32_t id)
+    {
+        RemoteContextProbe::set_lost(plane.slot_of(id)->object(), true);
+    }
 };
 
 }
@@ -963,3 +986,180 @@ TEST(renderer_context_plane, owns_no_memory_domain_of_its_own_and_composes_nothi
   CHECK_STATUS(fixture.start(), Status::ok);
   CHECK_EQ(fixture.plane().memory_domain(), 0u);
   CHECK(!fixture.plane().composes()); }
+
+TEST(renderer_context_plane_memory, a_request_the_renderer_could_not_be_asked_is_out_of_memory_and_asks_nothing)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  const std::uint32_t delivered = fixture.peer().delivered();
+  AvHostMemory        memory = {-1, 0u, 0u};
+  CHECK_STATUS(fixture.plane().allocate_memory(0u, 0x01000002u, 0x1000u, 1u, memory), Status::no_memory);
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0u, 0x1000u, 1u, memory), Status::no_memory);
+  CHECK_STATUS(fixture.plane().allocate_memory(3u, 0x01000002u, 0u, 1u, memory), Status::no_memory);
+  CHECK_EQ(fixture.peer().delivered(), delivered);
+  CHECK(fixture.plane().alive()); }
+
+TEST(renderer_context_plane_blobs, a_blob_with_no_id_is_kept_until_released_and_its_release_ends_the_renderer)
+{ Fixture fixture;
+  fixture.plane().blob_created(0u);
+  CHECK_STATUS(fixture.start(), Status::ok);
+  CHECK(fixture.plane().alive());
+  fixture.plane().blob_released(0u);
+  CHECK_EQ(fixture.qemu().renderer_kills(), 1u);
+  CHECK_EQ(fixture.plane().epoch(), 2u);
+  CHECK(fixture.plane().invariants_hold()); }
+
+TEST(renderer_context_plane_blobs, a_blob_the_plane_has_no_room_to_remember_is_logged_and_left_out)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  for (std::uint32_t id = 20u; id < 28u; id++) CHECK_STATUS(fixture.guest_blob(id, 0x8000u + (id - 20u) * 0x1000u, 0x1000u), Status::ok);
+  CHECK(fixture.renderer_blobs().contains(27u));
+  av::GpuRequestBuilder entries(0u);
+  entries.u64(ram + 0x9000u).u32(0x1000u).u32(0u);
+  av::MockRequest    mock(entries.bytes(), entries.size());
+  av::ControlRequest request(fixture.qemu(), &mock);
+  CHECK_STATUS(fixture.blobs().create_guest(40u, 0x1000u, request, 24u, 1u), Status::ok);
+  fixture.qemu().fail_allocation_at(1u);
+  fixture.plane().blob_created(40u);
+  CHECK(fixture.plane().alive());
+  CHECK_EQ(fixture.qemu().renderer_kills(), 0u);
+  CHECK(!fixture.renderer_blobs().contains(40u));
+  CHECK(std::strstr(fixture.qemu().last_log(), "no memory to give a blob") != nullptr);
+  CHECK(fixture.plane().invariants_hold());
+  fixture.blobs().release_all(); }
+
+TEST(renderer_context_plane_blobs, a_renderer_that_is_gone_when_a_blob_is_told_is_given_up_on)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  fixture.qemu().renderer_gone();
+  CHECK_STATUS(fixture.guest_blob(20u, 0x8000u, 0x1000u), Status::ok);
+  CHECK_EQ(fixture.qemu().renderer_kills(), 1u);
+  CHECK_EQ(fixture.plane().epoch(), 2u);
+  CHECK(fixture.plane().invariants_hold()); }
+
+TEST(renderer_context_plane_blobs, a_blob_in_more_runs_than_a_message_can_name_is_left_out_and_the_renderer_goes_on)
+{ MockHost                 qemu;
+  MockExecutorOps          ops(both);
+  av::LoopbackRendererPeer peer(qemu, ops.table());
+  av::BlobTable            blobs(qemu);
+  av::FenceInterrupts      interrupts(qemu);
+  RendererContextPlane     plane(qemu, blobs, interrupts);
+  constexpr std::uint64_t  step = 0x1000u;
+  constexpr std::uint64_t  runs = av::GuestBlobMessage::max_extents + 1u;
+  constexpr std::uint64_t  size = runs * step;
+  qemu.add_guest_ram(0x10000000u, size);
+  qemu.add_guest_region(0u, qemu.guest_ram(0x10000000u), size);
+  qemu.set_hostmem_size(0x10000u);
+  qemu.connect_renderer(peer);
+  CHECK_STATUS(blobs.initialize(), Status::ok);
+  CHECK_STATUS(interrupts.initialize(), Status::ok);
+  CHECK_STATUS(plane.configure(renderer_path, executor_path), Status::ok);
+  CHECK_STATUS(plane.initialize(), Status::ok);
+  CHECK_STATUS(plane.start(uuid, capset()), Status::ok);
+  qemu.split_guest_memory_every(step);
+  av::GpuRequestBuilder entries(0u);
+  entries.u64(0x10000000u).u32(static_cast<std::uint32_t>(size)).u32(0u);
+  av::MockRequest    mock(entries.bytes(), entries.size());
+  av::ControlRequest request(qemu, &mock);
+  CHECK_STATUS(blobs.create_guest(20u, size, request, 24u, 1u), Status::ok);
+  plane.blob_created(20u);
+  CHECK(plane.alive());
+  CHECK_EQ(qemu.renderer_kills(), 0u);
+  CHECK(std::strstr(qemu.last_log(), "not given to it") != nullptr);
+  plane.destroy_all();
+  blobs.release_all(); }
+
+TEST(renderer_context_plane_invariants, a_broken_blob_list_or_context_is_seen)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  CHECK_STATUS(fixture.guest_blob(20u, 0x8000u, 0x1000u), Status::ok);
+  CHECK(fixture.plane().invariants_hold());
+  RendererContextPlaneProbe::corrupt_mirrored(fixture.plane(), 12u);
+  CHECK(!fixture.plane().invariants_hold());
+  RendererContextPlaneProbe::corrupt_mirrored(fixture.plane(), 8u);
+  CHECK(fixture.plane().invariants_hold());
+  fixture.rings();
+  CHECK_STATUS(fixture.plane().create(3u, "test"), Status::ok);
+  CHECK_STATUS(fixture.plane().bind(3u, setup(5u), capset()), Status::ok);
+  CHECK(fixture.plane().invariants_hold());
+  RendererContextPlaneProbe::lose_context(fixture.plane(), 3u);
+  CHECK(!fixture.plane().invariants_hold());
+  RendererContextPlaneProbe::strand_context(fixture.plane(), 3u);
+  CHECK(!fixture.plane().invariants_hold()); }
+
+namespace {
+
+class ScriptedPlane {
+public:
+    explicit ScriptedPlane(std::uint32_t regions)
+        : peer_(qemu_), blobs_(qemu_), interrupts_(qemu_), plane_(qemu_, blobs_, interrupts_)
+    {
+        qemu_.add_guest_ram(ram, ram_size);
+        for (std::uint32_t region = 0u; region < regions; region++)
+            qemu_.add_guest_region(region, qemu_.guest_ram(ram), ram_size);
+        qemu_.set_hostmem_size(0x10000u);
+        qemu_.connect_renderer(peer_);
+        static_cast<void>(blobs_.initialize());
+        static_cast<void>(interrupts_.initialize());
+        static_cast<void>(plane_.configure(renderer_path, executor_path));
+        static_cast<void>(plane_.initialize());
+    }
+    ~ScriptedPlane()
+    {
+        plane_.destroy_all();
+        blobs_.release_all();
+    }
+
+    MockHost                         &qemu() { return qemu_; }
+    av::ScriptedRendererPeer         &peer() { return peer_; }
+    RendererContextPlane             &plane() { return plane_; }
+    Status                            start() { return plane_.start(uuid, capset()); }
+    void blob(std::uint32_t id, std::uint64_t offset)
+    {
+        av::GpuRequestBuilder entries(0u);
+        entries.u64(ram + offset).u32(0x1000u).u32(0u);
+        av::MockRequest    mock(entries.bytes(), entries.size());
+        av::ControlRequest request(qemu_, &mock);
+        CHECK_STATUS(blobs_.create_guest(id, 0x1000u, request, 24u, 1u), Status::ok);
+        plane_.blob_created(id);
+    }
+
+private:
+    MockHost                 qemu_;
+    av::ScriptedRendererPeer peer_;
+    av::BlobTable            blobs_;
+    av::FenceInterrupts      interrupts_;
+    RendererContextPlane     plane_;
+};
+
+}
+
+TEST(renderer_context_plane_start, a_renderer_lost_while_the_blobs_are_told_ends_the_start)
+{ ScriptedPlane scripted(1u);
+  scripted.blob(20u, 0x8000u);
+  scripted.blob(21u, 0x9000u);
+  scripted.blob(22u, 0xA000u);
+  scripted.peer().die_on_delivery(3u);
+  CHECK_STATUS(scripted.start(), Status::not_found);
+  CHECK(!scripted.plane().alive());
+  CHECK_EQ(scripted.qemu().renderer_kills(), 1u);
+  CHECK_EQ(scripted.peer().delivered(), 3u); }
+
+TEST(renderer_context_plane_start, a_region_the_host_cannot_hand_over_or_the_renderer_cannot_take_ends_the_start)
+{ { ScriptedPlane failing(1u);
+    failing.qemu().fail_guest_region_at(1u);
+    CHECK_STATUS(failing.start(), Status::no_memory);
+    CHECK(!failing.plane().alive());
+    CHECK_EQ(failing.qemu().renderer_kills(), 1u);
+    CHECK_EQ(failing.qemu().live_descriptors(), 0u); }
+  { ScriptedPlane absurd(0u);
+    absurd.qemu().add_guest_region(0x1000000u, absurd.qemu().guest_ram(ram), 0x1000u);
+    CHECK_STATUS(absurd.start(), Status::invalid_parameter);
+    CHECK(!absurd.plane().alive());
+    CHECK_EQ(absurd.qemu().renderer_kills(), 1u);
+    CHECK_EQ(absurd.qemu().live_descriptors(), 0u); }
+  { ScriptedPlane dying(2u);
+    dying.peer().die_on_delivery(2u);
+    CHECK_STATUS(dying.start(), Status::not_found);
+    CHECK(!dying.plane().alive());
+    CHECK_EQ(dying.qemu().renderer_kills(), 1u);
+    CHECK_EQ(dying.qemu().live_descriptors(), 0u); } }

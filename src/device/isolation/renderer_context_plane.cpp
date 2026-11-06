@@ -70,7 +70,7 @@ Status RendererContextPlane::start(const uint8_t *gpu_uuid, const CapsetInfo &ca
     host_.require_main_loop("RendererContextPlane::start");
     if (!configured_ || gpu_uuid == nullptr) return Status::invalid_state;
     gpu_uuid_ = DeviceUuid(gpu_uuid);
-    if (capset.encode(capset_, sizeof capset_) != Status::ok) return Status::invalid_parameter;
+    static_cast<void>(capset.encode(capset_, sizeof capset_));
     capset_length_ = static_cast<uint32_t>(CapsetInfo::encoded_size);
     return launch();
 }
@@ -82,12 +82,12 @@ Status RendererContextPlane::launch()
     if (status != Status::ok) return status;
     epoch_++;
     const HelloMessage hello(HelloMessage::protocol_version, epoch_, gpu_uuid_, executor_, executor_length_, capset_, capset_length_);
-    status = hello.encode(body_, sizeof body_);
-    if (status == Status::ok) status = link_.greet(body_, static_cast<uint32_t>(hello.encoded_length()), ready_);
+    static_cast<void>(hello.encode(body_, sizeof body_));
+    status = link_.greet(body_, static_cast<uint32_t>(hello.encoded_length()), ready_);
     if (status == Status::ok) status = send_regions();
     for (uint32_t index = 0u; index < mirrored_.size() && status == Status::ok; index++) {
         status = mirror(mirrored_.at(index));
-        if (status == Status::invalid_parameter || status == Status::not_supported) status = Status::ok;
+        if (status == Status::invalid_parameter) status = Status::ok;
     }
     if (status == Status::ok && interrupts_on_) status = send_interrupt_lines();
     if (status != Status::ok) {
@@ -191,14 +191,6 @@ ObjectStorage<RemoteContext> *RendererContextPlane::slot_of(uint32_t id)
     return nullptr;
 }
 
-const ObjectStorage<RemoteContext> *RendererContextPlane::slot_of(uint32_t id) const
-{
-    AV_SCOPE("RendererContextPlane::slot_of");
-    for (const ObjectStorage<RemoteContext> &slot : slots_)
-        if (slot.constructed() && slot.object().id() == id) return &slot;
-    return nullptr;
-}
-
 Status RendererContextPlane::create(uint32_t id, const char *name)
 {
     AV_SCOPE("RendererContextPlane::create");
@@ -209,11 +201,10 @@ Status RendererContextPlane::create(uint32_t id, const char *name)
     for (ObjectStorage<RemoteContext> &slot : slots_) {
         if (slot.constructed()) continue;
         uint8_t       body[ContextMessage::encoded_size] = {};
-        const Status  encoded = ContextMessage(id, name).encode(body, sizeof body);
         Status        outcome = Status::ok;
-        const Status  sent = encoded == Status::ok ? link_.request(RendererMessageHeader::Kind::create_context, body,
-                                                                   ContextMessage::encoded_size, nullptr, 0u, outcome)
-                                                   : encoded;
+        static_cast<void>(ContextMessage(id, name).encode(body, sizeof body));
+        const Status  sent = link_.request(RendererMessageHeader::Kind::create_context, body,
+                                           ContextMessage::encoded_size, nullptr, 0u, outcome);
         if (sent != Status::ok) {
             give_up();
             return Status::invalid_state;
@@ -233,8 +224,8 @@ Status RendererContextPlane::destroy(uint32_t id)
     if (alive_ && !slot->object().lost()) {
         uint8_t body[ContextMessage::encoded_size] = {};
         Status  outcome = Status::ok;
-        if (ContextMessage(id).encode(body, sizeof body) != Status::ok ||
-            link_.request(RendererMessageHeader::Kind::destroy_context, body, ContextMessage::encoded_size, nullptr,
+        static_cast<void>(ContextMessage(id).encode(body, sizeof body));
+        if (link_.request(RendererMessageHeader::Kind::destroy_context, body, ContextMessage::encoded_size, nullptr,
                           0u, outcome) != Status::ok)
             give_up();
     }
@@ -306,7 +297,7 @@ void RendererContextPlane::blob_created(uint32_t id)
     if (!alive_) return;
     const Status status = mirror(id);
     if (status == Status::ok) return;
-    if (status == Status::invalid_parameter || status == Status::not_supported) {
+    if (status == Status::invalid_parameter) {
         mirrored_.truncate(mirrored_.size() - 1u);
         host_.log("virtio-gpu-av: a blob outside the renderer's memory is not given to it");
         return;
@@ -352,7 +343,7 @@ Status RendererContextPlane::mirror_guest(uint32_t id, const BlobWindow &pages)
 {
     AV_SCOPE("RendererContextPlane::mirror_guest");
     const uint32_t count = pages.extents();
-    if (count == 0u || count > GuestBlobMessage::max_extents) return Status::invalid_parameter;
+    if (count > GuestBlobMessage::max_extents) return Status::invalid_parameter;
     for (uint32_t index = 0u; index < count; index++) {
         uint64_t          bytes = 0u;
         const void *const run = pages.extent(index, bytes);
@@ -363,8 +354,7 @@ Status RendererContextPlane::mirror_guest(uint32_t id, const BlobWindow &pages)
         extents_[index] = RendererExtent(region, offset, bytes);
     }
     const GuestBlobMessage message(id, pages.length(), extents_, count);
-    const Status           status = message.encode(body_, sizeof body_);
-    if (status != Status::ok) return status;
+    static_cast<void>(message.encode(body_, sizeof body_));
     return link_.post(RendererMessageHeader::Kind::guest_blob, body_, static_cast<uint32_t>(message.encoded_length()),
                       nullptr, 0u);
 }
@@ -392,10 +382,9 @@ Status RendererContextPlane::send_interrupt_lines()
         present |= uint64_t{1} << line;
     }
     const InterruptLinesMessage message(InterruptLinesMessage::max_lines, present);
-    Status                      status = message.encode(body_, sizeof body_);
-    if (status == Status::ok)
-        status = link_.post(RendererMessageHeader::Kind::interrupt_lines, body_, InterruptLinesMessage::encoded_size,
-                            descriptors, count);
+    static_cast<void>(message.encode(body_, sizeof body_));
+    const Status                status = link_.post(RendererMessageHeader::Kind::interrupt_lines, body_,
+                                                    InterruptLinesMessage::encoded_size, descriptors, count);
     for (uint32_t index = 0u; index < count; index++) host_.close_descriptor(descriptors[index]);
     return status;
 }
@@ -403,7 +392,6 @@ Status RendererContextPlane::send_interrupt_lines()
 void RendererContextPlane::give_up()
 {
     AV_SCOPE("RendererContextPlane::give_up");
-    if (!alive_) return;
     host_.log("virtio-gpu-av: the renderer did not answer; it is ended and its contexts lost");
     host_.kill_renderer();
     renderer_lost();
@@ -466,7 +454,7 @@ bool RendererContextPlane::export_image(const uint8_t *, uint64_t key, AvExporte
     host_.require_main_loop("RendererContextPlane::export_image");
     if (!alive_) return false;
     uint8_t body[ExportImageMessage::encoded_size] = {};
-    if (ExportImageMessage(key).encode(body, sizeof body) != Status::ok) return false;
+    static_cast<void>(ExportImageMessage(key).encode(body, sizeof body));
     const uint8_t *answer = nullptr;
     uint32_t       answer_length = 0u;
     int            received = -1;

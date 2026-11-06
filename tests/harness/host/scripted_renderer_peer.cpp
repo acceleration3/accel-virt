@@ -45,8 +45,9 @@ void ScriptedRendererPeer::deliver(const std::uint8_t *bytes, std::size_t length
     if (delivered_ < max_datagrams) datagrams_[delivered_] = entry;
     else TestRegistry::instance().record_failure(__FILE__, __LINE__, "more datagrams than the peer keeps");
     delivered_++;
-    if (dying_) {
+    if (dying_ || (die_at_ != 0u && delivered_ == die_at_)) {
         dying_ = false;
+        die_at_ = 0u;
         host_.renderer_gone();
         return;
     }
@@ -166,6 +167,7 @@ void ScriptedRendererPeer::ready_with(const ReadyMessage &ready) { ready_ = read
 void ScriptedRendererPeer::refuse_memory() { refuse_memory_ = true; }
 void ScriptedRendererPeer::fall_silent() { silent_ = true; }
 void ScriptedRendererPeer::die_on_next_delivery() { dying_ = true; }
+void ScriptedRendererPeer::die_on_delivery(std::uint32_t nth) { die_at_ = nth; }
 std::uint32_t ScriptedRendererPeer::delivered() const { return delivered_; }
 std::uint32_t ScriptedRendererPeer::queued() const { return queued_; }
 

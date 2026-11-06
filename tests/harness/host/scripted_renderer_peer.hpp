@@ -33,6 +33,7 @@ public:
     void refuse_memory();
     void fall_silent();
     void die_on_next_delivery();
+    void die_on_delivery(std::uint32_t nth);
     void queue(const std::uint8_t *bytes, std::size_t length, std::uint32_t descriptors);
     void queue_reply(std::uint64_t sequence, Status outcome, std::uint32_t descriptors);
     void queue_reply(std::uint64_t header_sequence, std::uint64_t body_sequence, Status outcome);
@@ -78,6 +79,7 @@ private:
     bool          silent_;
     bool          refuse_memory_;
     bool          dying_;
+    std::uint32_t die_at_ = 0u;
 };
 
 }

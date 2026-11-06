@@ -202,6 +202,8 @@ public:
     void          translate_guest_with(GuestTranslator translate, void *context);
     void          add_guest_ram(std::uint64_t base, std::size_t size);
     void          split_guest_memory_at(std::uint64_t address);
+    void          split_guest_memory_every(std::uint64_t step);
+    void          fail_guest_region_at(std::uint32_t nth);
     void          add_bounce_region(std::uint64_t base, std::uint64_t size);
     std::uint8_t *guest_ram(std::uint64_t address);
     void          set_hostmem_size(std::uint64_t size);
@@ -366,6 +368,8 @@ private:
     std::uint32_t   fail_mutex_;
     std::uint32_t   fail_allocation_;
     bool            unterminated_listing_ = false;
+    std::uint64_t   split_step_ = 0u;
+    std::uint32_t   fail_guest_region_ = 0u;
     std::uint32_t   fail_placement_;
     std::uint32_t   empty_mapping_;
     void           *allocations_[max_allocations];

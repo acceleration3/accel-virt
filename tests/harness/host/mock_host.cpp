@@ -839,6 +839,7 @@ void *MockHost::map_guest(std::uint64_t address, std::uint64_t &length, bool &di
     std::uint64_t available = region->size - (address - region->base);
     for (std::uint32_t index = 0u; index < split_count_; index++)
         if (splits_[index] > address && splits_[index] - address < available) available = splits_[index] - address;
+    if (split_step_ != 0u && split_step_ - address % split_step_ < available) available = split_step_ - address % split_step_;
     if (length > available) length = available;
     direct = region->bytes != nullptr;
     slot->bounce = !direct;
@@ -1229,6 +1230,10 @@ bool MockHost::resource_exists(std::uint32_t id)
 
 void MockHost::leave_listing_unterminated() { unterminated_listing_ = true; }
 
+void MockHost::split_guest_memory_every(std::uint64_t step) { StateLock lock(state_); split_step_ = step; }
+
+void MockHost::fail_guest_region_at(std::uint32_t nth) { StateLock lock(state_); fail_guest_region_ = nth; }
+
 void MockHost::fail_allocation_at(std::uint32_t nth) { StateLock lock(state_); fail_allocation_ = nth; }
 void MockHost::fail_placement_at(std::uint32_t nth) { StateLock lock(state_); fail_placement_ = nth; }
 void MockHost::empty_mapping_at(std::uint32_t nth) { StateLock lock(state_); empty_mapping_ = nth; }
@@ -1521,6 +1526,7 @@ Status MockHost::guest_region(std::uint32_t index, std::uint32_t &region, int &d
     {
         StateLock lock(state_);
         if (index >= renderer_region_count_) return Status::not_supported;
+        if (fail_now(fail_guest_region_)) return Status::no_memory;
         scripted = renderer_regions_[index];
     }
     if (scripted.pointer == nullptr) return Status::not_supported;
