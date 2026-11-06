@@ -27,6 +27,14 @@ using av::ScriptedD3d11Shared;
 using av::Status;
 using Call = av::ScriptedD3d11Shared::Call;
 
+namespace av {
+
+struct HostLossWorkProbe {
+    static void a_new_device_without_an_old_one(HostLossWork &work) { work.made_after_ = true; }
+};
+
+}
+
 namespace {
 
 const PciIdentity av_gpu(PciIdentity::virtio_vendor, AvgpuAdapters::virtio_gpu_device,
@@ -161,3 +169,75 @@ TEST(host_loss_work, a_first_device_refused_asks_the_host_nothing)
   CHECK(has(report, "FAIL d3d11.loss_device"));
   CHECK(!has(report, "loss_lose"));
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_device), 0u); }
+
+TEST(host_loss_work, a_new_device_without_an_old_one_is_an_impossible_state)
+{ ScriptedD3d11Shared before;
+  ScriptedD3d11Shared after;
+  MockKmt             kmt;
+  HostLossRequest     request(kmt);
+  HostLossWork        work(before, after, request, kmt);
+  CHECK(work.invariants_hold());
+  av::HostLossWorkProbe::a_new_device_without_an_old_one(work);
+  CHECK(!work.invariants_hold());
+  av::HostLossWorkProbe::a_new_device_without_an_old_one(work); }
+
+TEST(host_loss_work, a_target_the_device_cannot_make_or_a_texel_of_the_wrong_colour_fails_the_draw)
+{ { LossRig rig(CommandHeader::host_device_lost);
+    rig.before().fail(Call::create_target, 1u, ScriptedD3d11Shared::device_removed);
+    const char *const report = rig.run();
+    CHECK(has(report, "FAIL d3d11.loss_device"));
+    CHECK(!has(report, "loss_lose")); }
+  { LossRig rig(CommandHeader::host_device_lost);
+    rig.kmt().reads_clock(&rig.loser(), 1u);
+    rig.loser().arm();
+    rig.after().fail(Call::create_target, 1u, ScriptedD3d11Shared::device_removed);
+    const char *const report = rig.run();
+    CHECK(has(report, "ok d3d11.loss_recreated\n"));
+    CHECK(has(report, "FAIL d3d11.loss_texel")); }
+  const auto wrong = [](void (*spoil)(ScriptedD3d11Shared &)) {
+      LossRig rig(CommandHeader::host_device_lost);
+      rig.kmt().reads_clock(&rig.loser(), 1u);
+      rig.loser().arm();
+      spoil(rig.after());
+      const char *const report = rig.run();
+      CHECK(has(report, "ok d3d11.loss_recreated\n"));
+      CHECK(has(report, "FAIL d3d11.loss_texel status=7 2147500037\n"));
+  };
+  wrong(+[](ScriptedD3d11Shared &device) { device.misplace_rows(); });
+  wrong(+[](ScriptedD3d11Shared &device) { device.overshoot_rows(); });
+  wrong(+[](ScriptedD3d11Shared &device) { device.misplace_one_channel(0u); });
+  wrong(+[](ScriptedD3d11Shared &device) { device.misplace_one_channel(1u); });
+  wrong(+[](ScriptedD3d11Shared &device) { device.misplace_one_channel(2u); }); }
+
+TEST(host_loss_work, a_host_that_answers_something_else_fails_the_lose_step)
+{ LossRig rig(0xDEADu);
+  const char *const report = rig.run();
+  CHECK(has(report, "ok d3d11.loss_device\n"));
+  CHECK(has(report, "FAIL d3d11.loss_lose"));
+  CHECK(!has(report, "loss_removed")); }
+
+TEST(host_loss_work, an_old_device_is_removed_when_either_its_texel_or_its_reason_says_so)
+{ { LossRig rig(CommandHeader::host_device_lost);
+    rig.before().fail(Call::removed_reason, 1u, ScriptedD3d11Shared::device_removed);
+    const char *const report = rig.run();
+    CHECK(has(report, "ok d3d11.loss_removed "));
+    CHECK(has(report, "ok d3d11.loss_reason 2289696773\n")); }
+  { LossRig rig(CommandHeader::host_device_lost);
+    rig.before().fail(Call::read_texel, 2u, ScriptedD3d11Shared::device_removed);
+    const char *const report = rig.run();
+    CHECK(has(report, "ok d3d11.loss_removed "));
+    CHECK(has(report, "FAIL d3d11.loss_reason")); } }
+
+TEST(host_loss_work, a_clock_without_a_frequency_measures_no_time_and_one_far_ahead_measures_the_most_it_can)
+{ { LossRig rig(CommandHeader::host_device_lost);
+    rig.kmt().set_frequency(0u);
+    rig.kmt().reads_clock(&rig.loser(), 1u);
+    rig.loser().arm();
+    const char *const report = rig.run();
+    CHECK(has(report, "ok d3d11.loss_removed 0\n"));
+    CHECK(has(report, "ok d3d11.loss_texel\n")); }
+  { LossRig rig(CommandHeader::host_device_lost);
+    rig.kmt().set_frequency(1000u);
+    rig.kmt().reads_clock(nullptr, 10000000000000ull);
+    const char *const report = rig.run();
+    CHECK(has(report, "FAIL d3d11.loss_removed status=7 4294967295\n")); } }

@@ -11,6 +11,7 @@ class D3d11SharedEntry;
 class HostLossRequest;
 class Kmt;
 class ScenarioSteps;
+struct HostLossWorkProbe;
 
 class HostLossWork {
 public:
@@ -40,6 +41,8 @@ private:
     Kmt              &kmt_;
     bool              made_before_;
     bool              made_after_;
+
+    friend struct HostLossWorkProbe;
 };
 
 }
