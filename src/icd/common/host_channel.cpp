@@ -66,7 +66,7 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
             .number(static_cast<uint32_t>(arena));
         if (faulted)
             line.text(", failed step ")
-                .text(arena_failed_step_ != nullptr ? arena_failed_step_ : "none")
+                .text(arena_failed_step_)
                 .text(" returned ")
                 .number(static_cast<uint32_t>(arena_failed_status_))
                 .text(", host faulted ")
@@ -379,7 +379,7 @@ const KmtTransport &HostChannel::transport() const
 bool HostChannel::has_arena() const
 {
     AV_SCOPE("HostChannel::has_arena");
-    return arena_.constructed() && arena_.object().lending();
+    return arena_.constructed();
 }
 
 bool HostChannel::take_query_slots(uint32_t count, uint8_t *&view, uint64_t &offset)

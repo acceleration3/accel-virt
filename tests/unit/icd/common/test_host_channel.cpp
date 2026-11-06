@@ -4,6 +4,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
+#include "guest/transport/channel_stats.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -36,10 +37,12 @@ struct KmtTransportProbe {
         return name;
     }
     static void restore_name(KmtTransport &t, std::uint32_t name) { t.allocations_[0] = name; }
+    static std::uint64_t counted(KmtTransport &t, ChannelCounter counter) { return t.stats_.snapshot().value(counter); }
 };
 
 }
 
+using av::ChannelCounter;
 using av::GuestConnection;
 using av::HostAllocation;
 using av::HostMemoryRequest;
@@ -742,3 +745,140 @@ TEST(host_channel_memory, memory_retired_after_a_fence_waits_for_that_fence_and_
   CHECK_STATUS(channel.close_memory(*late), Status::ok);
   channel.close(false);
   rig.check_nothing_held(channel, memory_tables); }
+
+void fault_all(void *kmt) { static_cast<MockKmt *>(kmt)->fault_every_page(); }
+
+TEST(host_channel, a_context_the_host_faulted_opening_the_arena_is_logged_with_the_hosts_code)
+{ Rig rig;
+  HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
+  rig.kmt().time_out_faulted();
+  CHECK_STATUS(channel.open(rig.device()), Status::invalid_state);
+  CHECK_EQ(rig.log().holding("host faulted 1 with code 7"), 1u);
+  rig.check_nothing_held(channel); }
+
+TEST(host_channel, a_channel_whose_host_faulted_is_lost_before_its_own_transport_knows)
+{ Rig rig;
+  HostChannel channel(rig.platform(), rig.lines(), plain(), rig.lock());
+  CHECK(!channel.lost());
+  CHECK_STATUS(channel.open(rig.device()), Status::ok);
+  CHECK(!channel.lost());
+  rig.kmt().fault_every_page();
+  CHECK(channel.lost());
+  CHECK(!channel.faulted());
+  channel.close(true);
+  CHECK(!channel.lost());
+  rig.check_nothing_held(channel); }
+
+TEST(host_channel, query_slots_come_from_the_arena_once_and_never_from_a_channel_without_one)
+{ { Rig rig;
+    HostChannel channel(rig.platform(), rig.lines(), plain(), rig.lock());
+    CHECK_STATUS(channel.open(rig.device()), Status::ok);
+    std::uint8_t *slots = nullptr;
+    std::uint64_t offset = 0u;
+    CHECK(!channel.take_query_slots(1u, slots, offset));
+    CHECK(slots == nullptr);
+    channel.close(false); }
+  { Rig rig;
+    HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
+    rig.arena_imports();
+    CHECK_STATUS(channel.open(rig.device()), Status::ok);
+    std::uint8_t *slots = nullptr;
+    std::uint64_t offset = 0u;
+    CHECK(channel.take_query_slots(1u, slots, offset));
+    CHECK(slots != nullptr);
+    std::uint8_t *again = nullptr;
+    CHECK(!channel.take_query_slots(1u, again, offset));
+    CHECK(again == nullptr);
+    rig.host().nop();
+    channel.close(false); } }
+
+TEST(host_channel_memory, a_refusal_is_counted_by_the_kind_of_its_reason)
+{ Rig rig;
+  HostChannel channel(rig.platform(), rig.lines(), plain(), rig.lock());
+  CHECK_STATUS(channel.open(rig.device()), Status::ok);
+  HostAllocation *made = nullptr;
+  av::KmtTransport &wire = channel.transport();
+  CHECK_EQ(KmtTransportProbe::counted(wire, ChannelCounter::refused_no_space), 0u);
+  rig.kmt().refuse_next_window_open(0xC000009Au);
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, made), Status::no_space);
+  CHECK_EQ(KmtTransportProbe::counted(wire, ChannelCounter::refused_no_space), 1u);
+  rig.kmt().refuse_next_window_open(0xC0000017u);
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, made), Status::no_memory);
+  CHECK_EQ(KmtTransportProbe::counted(wire, ChannelCounter::refused_no_memory), 1u);
+  rig.kmt().refuse_next_window_open(0xC000000Du);
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, made), Status::invalid_parameter);
+  CHECK_EQ(KmtTransportProbe::counted(wire, ChannelCounter::refused_other), 1u);
+  CHECK_EQ(KmtTransportProbe::counted(wire, ChannelCounter::refused_no_space), 1u);
+  CHECK_EQ(KmtTransportProbe::counted(wire, ChannelCounter::refused_no_memory), 1u);
+  channel.close(false); }
+
+TEST(host_channel_memory, a_host_that_names_two_allocations_by_one_handle_gets_the_second_back)
+{ Rig rig;
+  HostChannel channel(rig.platform(), rig.lines(), plain(), rig.lock());
+  CHECK_STATUS(channel.open(rig.device()), Status::ok);
+  HostAllocation *first = nullptr;
+  HostAllocation *second = nullptr;
+  rig.host().blob_import(0u, first_memory);
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, first), Status::ok);
+  rig.host().blob_import(0u, first_memory);
+  rig.host().nop();
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, second), Status::malformed);
+  CHECK(second == nullptr);
+  CHECK_EQ(rig.log().holding("avtest: the host named two allocations by one handle"), 1u);
+  CHECK_EQ(channel.memories(), 1u);
+  CHECK(channel.find_memory(first_memory, owner) == first);
+  CHECK(channel.invariants_hold());
+  rig.host().nop();
+  channel.close(false);
+  rig.check_nothing_held(channel, memory_tables); }
+
+TEST(host_channel_memory, an_allocation_the_channel_did_not_make_is_not_closed_by_a_handle_it_shares)
+{ Rig rig;
+  HostChannel channel(rig.platform(), rig.lines(), plain(), rig.lock());
+  CHECK_STATUS(channel.open(rig.device()), Status::ok);
+  HostAllocation *kept = nullptr;
+  rig.host().blob_import(0u, first_memory);
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, kept), Status::ok);
+  HostAllocation stranger(rig.device(), channel.transport());
+  rig.host().blob_import(0u, first_memory);
+  CHECK_STATUS(stranger.open(4096u, upload), Status::ok);
+  CHECK_EQ(stranger.handle(), first_memory);
+  CHECK_STATUS(channel.close_memory(stranger), Status::invalid_parameter);
+  CHECK_EQ(channel.memories(), 1u);
+  CHECK(channel.find_memory(first_memory, owner) == kept);
+  rig.host().nop();
+  CHECK_STATUS(stranger.close(), Status::ok);
+  rig.host().nop();
+  channel.close(false);
+  rig.check_nothing_held(channel, memory_tables); }
+
+TEST(host_channel_memory, memory_let_go_of_with_no_room_to_wait_is_closed_at_once)
+{ Rig rig;
+  HostChannel channel(rig.platform(), rig.lines(), plain(), rig.lock());
+  CHECK_STATUS(channel.open(rig.device()), Status::ok);
+  HostAllocation *made = nullptr;
+  rig.host().blob_import(0u, first_memory);
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, made), Status::ok);
+  rig.platform().fail_allocation_at(1u);
+  rig.host().nop();
+  channel.retire_memory(*made);
+  CHECK_EQ(rig.log().holding("avtest: more memory let go of than can wait for the host"), 1u);
+  CHECK_EQ(channel.memories(), 0u);
+  CHECK_EQ(rig.command_id_at(rig.commands() - 1u), av::CommandHeader::release_blob_id);
+  CHECK(channel.invariants_hold());
+  channel.close(false);
+  rig.check_nothing_held(channel, memory_tables); }
+
+TEST(host_channel_memory, the_invariant_catches_a_handle_index_that_lost_an_allocation)
+{ Rig rig;
+  HostChannel      channel(rig.platform(), rig.lines(), plain(), rig.lock());
+  HostChannelProbe probe(channel);
+  CHECK_STATUS(channel.open(rig.device()), Status::ok);
+  HostAllocation *made = nullptr;
+  rig.host().blob_import(0u, first_memory);
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, made), Status::ok);
+  CHECK(channel.invariants_hold());
+  probe.drop_handle(first_memory);
+  CHECK(!channel.invariants_hold());
+  channel.close(true);
+  CHECK(!channel.opened()); }

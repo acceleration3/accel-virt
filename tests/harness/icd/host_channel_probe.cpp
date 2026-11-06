@@ -40,4 +40,6 @@ void HostChannelProbe::build_transport(GuestConnection &device)
 
 void HostChannelProbe::drop_transport() { channel.transport_.destroy(); }
 
+void HostChannelProbe::drop_handle(uint64_t handle) { static_cast<void>(channel.handles_.erase(handle)); }
+
 }

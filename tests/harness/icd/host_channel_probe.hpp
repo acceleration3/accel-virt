@@ -22,6 +22,7 @@ struct HostChannelProbe {
     void     restore_holding();
     void     build_transport(GuestConnection &device);
     void     drop_transport();
+    void     drop_handle(uint64_t handle);
 
     HostChannel &channel;
 };
