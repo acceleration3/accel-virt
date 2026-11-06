@@ -406,7 +406,7 @@ void IcdRoot::span_adapters(const VkInstanceCreateInfo &forwarded, const VkAlloc
         count = adapters.luids(luids);
     }
     for (uint32_t index = 0u; index < count; ++index) {
-        if (primary != nullptr && luids[index] == primary->luid()) continue;
+        if (luids[index] == primary->luid()) continue;
         Connection  *opened = nullptr;
         const Status status = open_connection(opened, luids[index]);
         if (status != Status::ok) {
@@ -425,7 +425,7 @@ void IcdRoot::span_adapters(const VkInstanceCreateInfo &forwarded, const VkAlloc
             release_connection(opened);
             continue;
         }
-        if (span->add(sibling) != Status::ok) destroy_one_instance(sibling, allocator);
+        static_cast<void>(span->add(sibling));
     }
 }
 
