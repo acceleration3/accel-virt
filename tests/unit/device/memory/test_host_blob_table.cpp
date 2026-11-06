@@ -17,6 +17,22 @@
 #include <cstdint>
 #include <cstring>
 
+#include <fcntl.h>
+
+namespace av {
+
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.count_ = count; }
+};
+
+struct ObjectPoolProbe {
+    template <typename T>
+    static void corrupt_live_count(ObjectPool<T> &pool) { pool.live_ += 1u; }
+};
+
+}
+
 using av::HostBlobId;
 using av::HostBlobOwners;
 using av::HostBlobTable;
@@ -543,3 +559,245 @@ TEST(host_blob_table_invariants, a_blob_without_the_lock_is_detected)
   CHECK(!table.invariants_hold());
   CHECK_STATUS(table.initialize(plane), Status::ok);
   CHECK(table.invariants_hold()); }
+
+namespace {
+
+struct OneEntry {
+    explicit OneEntry(std::uint32_t length = 0x1000u)
+    {
+        const std::uint64_t address = 0x102000u;
+        std::memcpy(bytes + 32u, &address, sizeof address);
+        std::memcpy(bytes + 40u, &length, sizeof length);
+    }
+    std::uint8_t bytes[32u + 16u] = {};
+};
+
+class GuestFixture {
+public:
+    GuestFixture() : table_(host_), mock_(entries_.bytes, sizeof entries_.bytes), request_(host_, &mock_)
+    {
+        host_.set_hostmem_size(16u * page);
+        host_.add_guest_ram(0x100000u, 0x10000u);
+        CHECK_STATUS(table_.initialize(plane_), Status::ok);
+    }
+
+    MockHost              &host() { return host_; }
+    RecordingContextPlane &plane() { return plane_; }
+    HostBlobTable         &table() { return table_; }
+    av::ControlRequest    &request() { return request_; }
+    HostMemoryRequest      readback() const { return HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u); }
+
+private:
+    MockHost              host_;
+    RecordingContextPlane plane_;
+    HostBlobTable         table_;
+    OneEntry              entries_;
+    av::MockRequest       mock_;
+    av::ControlRequest    request_;
+};
+
+}
+
+TEST(host_blob_table_create_over_guest, refuses_what_create_refuses_before_it_makes_anything)
+{ MockHost host;
+  host.set_hostmem_size(16u * page);
+  RecordingContextPlane plane;
+  HostBlobTable         table(host);
+  const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
+  CHECK_STATUS(table.create_over_guest(first, context, readback, page), Status::invalid_state);
+  CHECK_STATUS(table.initialize(plane), Status::ok);
+  CHECK_STATUS(table.create_over_guest(first - 1u, context, readback, page), Status::not_found);
+  CHECK_STATUS(table.create_over_guest(first, context, HostMemoryRequest(), page), Status::invalid_parameter);
+  CHECK_STATUS(table.create_over_guest(first, context, readback, 0u), Status::invalid_parameter);
+  CHECK_STATUS(table.create_over_guest(first, context, readback, page + 1u), Status::invalid_parameter);
+  CHECK_EQ(table.live(), 0u);
+  CHECK_STATUS(table.create_over_guest(first, context, readback, page), Status::ok);
+  CHECK_STATUS(table.create_over_guest(first, context, readback, page), Status::conflict);
+  CHECK_EQ(table.live(), 1u);
+  CHECK(table.invariants_hold()); }
+
+TEST(host_blob_table_create_over_guest, a_host_that_cannot_make_the_table_or_the_blob_leaves_nothing)
+{ for (std::uint32_t nth = 1u; nth <= 4u; nth++) {
+      MockHost host;
+      host.set_hostmem_size(16u * page);
+      RecordingContextPlane plane;
+      HostBlobTable         table(host);
+      CHECK_STATUS(table.initialize(plane), Status::ok);
+      host.fail_allocation_at(nth);
+      const Status made = table.create_over_guest(first, context, HostMemoryRequest(HostMemoryRequest::Kind::readback, 0u), page);
+      if (made == Status::ok) {
+          CHECK(table.contains(first));
+          continue;
+      }
+      CHECK_STATUS(made, Status::no_memory);
+      CHECK_EQ(table.live(), 0u);
+      CHECK(!table.contains(first));
+      CHECK(table.invariants_hold());
+  } }
+
+TEST(host_blob_table_adopt, a_blob_that_is_not_over_guest_pages_cannot_be_laid)
+{ GuestFixture fixture;
+  CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::ok);
+  CHECK_STATUS(fixture.table().adopt(first, fixture.request(), 32u, 1u), Status::invalid_state);
+  CHECK(fixture.table().invariants_hold()); }
+
+TEST(host_blob_table_adopt, a_first_entry_that_cannot_be_read_begins_nothing)
+{ GuestFixture fixture;
+  CHECK_STATUS(fixture.table().create_over_guest(first, context, fixture.readback(), page), Status::ok);
+  CHECK_STATUS(fixture.table().adopt(first, fixture.request(), 40u, 1u), Status::invalid_parameter);
+  CHECK_EQ(fixture.plane().memory_allocations(), 0u);
+  CHECK_STATUS(fixture.table().adopt(first, fixture.request(), 32u, 1u), Status::ok);
+  CHECK_EQ(fixture.plane().memory_allocations(), 1u);
+  CHECK(fixture.table().invariants_hold()); }
+
+TEST(host_blob_table_adopt, memory_the_library_cannot_give_whole_and_write_back_is_given_back_and_refused)
+{ { GuestFixture refused;
+    refused.plane().refuse_memory_at(1u);
+    CHECK_STATUS(refused.table().create_over_guest(first, context, refused.readback(), page), Status::ok);
+    CHECK_STATUS(refused.table().adopt(first, refused.request(), 32u, 1u), Status::no_memory);
+    CHECK_EQ(refused.plane().freed_count(), 0u); }
+  { GuestFixture without;
+    without.plane().answer_without_descriptor();
+    CHECK_STATUS(without.table().create_over_guest(first, context, without.readback(), page), Status::ok);
+    CHECK_STATUS(without.table().adopt(first, without.request(), 32u, 1u), Status::no_memory);
+    CHECK_EQ(without.plane().freed_count(), 1u); }
+  { GuestFixture shorter;
+    shorter.plane().answer_short();
+    CHECK_STATUS(shorter.table().create_over_guest(first, context, shorter.readback(), 2u * page), Status::ok);
+    CHECK_STATUS(shorter.table().adopt(first, shorter.request(), 32u, 1u), Status::no_memory);
+    CHECK_EQ(shorter.plane().freed_count(), 1u); }
+  { GuestFixture lending;
+    CHECK_STATUS(lending.table().create_over_guest(first, context, lending.readback(), page), Status::ok);
+    lending.host().fail_allocation_at(1u);
+    CHECK_STATUS(lending.table().adopt(first, lending.request(), 32u, 1u), Status::no_memory);
+    CHECK_EQ(lending.plane().freed_count(), 1u);
+    CHECK_EQ(lending.host().overlaid_bytes(), 0u);
+    CHECK(lending.table().invariants_hold()); } }
+
+namespace {
+
+struct JoinRig {
+    JoinRig() : first_table(host), second_table(host), lendings(host), mock(entries.bytes, sizeof entries.bytes), request(host, &mock)
+    {
+        host.add_guest_ram(0x100000u, 0x10000u);
+        host.set_hostmem_size(16u * page);
+        first_table.share_lendings(lendings);
+        second_table.share_lendings(lendings);
+        CHECK_STATUS(first_table.initialize(first_plane), Status::ok);
+        CHECK_STATUS(second_table.initialize(second_plane), Status::ok);
+        const HostMemoryRequest readback(HostMemoryRequest::Kind::readback, 0u);
+        CHECK_STATUS(first_table.create_over_guest(first, context, readback, page), Status::ok);
+        CHECK_STATUS(first_table.adopt(first, request, 32u, 1u), Status::ok);
+        CHECK_STATUS(second_table.create_over_guest(first, context + 1u, readback, page), Status::ok);
+    }
+
+    MockHost              host;
+    HostBlobTable         first_table;
+    HostBlobTable         second_table;
+    av::GuestRamLendings  lendings;
+    RecordingContextPlane first_plane;
+    RecordingContextPlane second_plane;
+    OneEntry              entries;
+    av::MockRequest       mock;
+    av::ControlRequest    request;
+};
+
+}
+
+TEST(host_blob_table_adopt, an_alias_of_the_wrong_size_or_caching_is_given_up_and_refused)
+{ JoinRig rig;
+  AvHostMemory small = {-1, AV_MEMORY_WRITE_BACK, page / 2u};
+  rig.second_plane.alias_as(small);
+  CHECK_STATUS(rig.second_table.adopt(first, rig.request, 32u, 1u), Status::not_supported);
+  CHECK_EQ(rig.lendings.live(), 1u);
+  AvHostMemory combined = {-1, AV_MEMORY_WRITE_COMBINED, page};
+  rig.second_plane.alias_as(combined);
+  CHECK_STATUS(rig.second_table.adopt(first, rig.request, 32u, 1u), Status::not_supported);
+  CHECK_EQ(rig.second_plane.aliases(), 2u);
+  CHECK_EQ(rig.lendings.live(), 1u);
+  CHECK_STATUS(rig.first_table.release(first), Status::ok);
+  CHECK_STATUS(rig.second_table.release(first), Status::ok);
+  CHECK_EQ(rig.lendings.live(), 0u); }
+
+TEST(host_blob_table_adopt, a_joiner_laying_other_pages_than_the_lender_s_is_refused_and_stays_unlaid)
+{ JoinRig rig;
+  AvHostMemory lender_memory = {-1, AV_MEMORY_WRITE_BACK, page};
+  rig.second_plane.alias_as(lender_memory);
+  const OneEntry     other(0x800u);
+  av::MockRequest    mock(other.bytes, sizeof other.bytes);
+  av::ControlRequest request(rig.host, &mock);
+  CHECK_STATUS(rig.second_table.adopt(first, request, 32u, 1u), Status::invalid_parameter);
+  CHECK_STATUS(rig.first_table.release(first), Status::ok);
+  CHECK_STATUS(rig.second_table.release(first), Status::ok);
+  CHECK_EQ(rig.lendings.live(), 0u); }
+
+TEST(host_blob_table_release, a_blob_with_no_placement_on_record_or_a_foreign_one_leaves_the_records_alone)
+{ { Fixture fixture;
+    CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::ok);
+    std::uint32_t caching = 0u;
+    CHECK_STATUS(fixture.table().map(first, 2u * page, caching), Status::ok);
+    av::HostBlobTableProbe(fixture.table()).forget_placement(0u);
+    CHECK_STATUS(fixture.table().release(first), Status::ok);
+    CHECK_EQ(fixture.table().live(), 0u);
+    CHECK(fixture.table().invariants_hold()); }
+  { Fixture fixture;
+    CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::ok);
+    std::uint32_t caching = 0u;
+    CHECK_STATUS(fixture.table().map(first, 2u * page, caching), Status::ok);
+    av::HostBlobTableProbe(fixture.table()).misplace(0u, 5u * page);
+    CHECK_STATUS(fixture.table().unmap(first), Status::ok);
+    CHECK_EQ(fixture.table().live(), 1u);
+    CHECK(!fixture.table().invariants_hold());
+    av::HostBlobTableProbe(fixture.table()).forget_placement(0u);
+    CHECK(fixture.table().invariants_hold()); } }
+
+TEST(host_blob_table_release, a_drop_of_an_id_never_made_changes_nothing)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.table().create(first, context, upload(), page), Status::ok);
+  av::HostBlobTableProbe(fixture.table()).drop(first + 9u);
+  CHECK_EQ(fixture.table().live(), 1u);
+  CHECK(fixture.table().contains(first));
+  CHECK(fixture.table().invariants_hold()); }
+
+TEST(host_blob_table_invariants, a_broken_id_index_blob_pool_or_a_blob_no_id_names_is_detected)
+{ Fixture ids;
+  CHECK_STATUS(ids.table().create(first, context, upload(), page), Status::ok);
+  av::KeyedSlotsProbe::corrupt_count(av::HostBlobTableProbe(ids.table()).ids(), 4u);
+  CHECK(!ids.table().invariants_hold());
+  av::KeyedSlotsProbe::corrupt_count(av::HostBlobTableProbe(ids.table()).ids(), 1u);
+  CHECK(ids.table().invariants_hold());
+  Fixture pool;
+  CHECK_STATUS(pool.table().create(first, context, upload(), page), Status::ok);
+  av::ObjectPoolProbe::corrupt_live_count(av::HostBlobTableProbe(pool.table()).blobs());
+  CHECK(!pool.table().invariants_hold());
+  Fixture orphan;
+  CHECK_STATUS(orphan.table().create(first, context, upload(), page), Status::ok);
+  av::HostBlobTableProbe(orphan.table()).orphan_blob();
+  CHECK(!orphan.table().invariants_hold()); }
+
+TEST(host_blob_table_invariants, a_mapped_blob_needs_its_own_placement_and_every_placement_a_mapped_blob)
+{ Fixture missing;
+  CHECK_STATUS(missing.table().create(first, context, upload(), page), Status::ok);
+  std::uint32_t caching = 0u;
+  CHECK_STATUS(missing.table().map(first, 2u * page, caching), Status::ok);
+  av::HostBlobTableProbe(missing.table()).forget_placement(0u);
+  CHECK(!missing.table().invariants_hold());
+  Fixture first_lost;
+  CHECK_STATUS(first_lost.table().create(first, context, upload(), page), Status::ok);
+  CHECK_STATUS(first_lost.table().create(first + 1u, context, upload(), page), Status::ok);
+  CHECK_STATUS(first_lost.table().map(first, 2u * page, caching), Status::ok);
+  CHECK_STATUS(first_lost.table().map(first + 1u, 4u * page, caching), Status::ok);
+  av::HostBlobTableProbe(first_lost.table()).forget_placement(0u);
+  CHECK(!first_lost.table().invariants_hold());
+  Fixture resized;
+  CHECK_STATUS(resized.table().create(first, context, upload(), page), Status::ok);
+  CHECK_STATUS(resized.table().map(first, 2u * page, caching), Status::ok);
+  av::HostBlobTableProbe(resized.table()).resize_placement(0u, 2u * page);
+  CHECK(!resized.table().invariants_hold());
+  Fixture extra;
+  CHECK_STATUS(extra.table().create(first, context, upload(), page), Status::ok);
+  CHECK_STATUS(extra.table().map(first, 2u * page, caching), Status::ok);
+  av::HostBlobTableProbe(extra.table()).add_placement(8u * page, page);
+  CHECK(!extra.table().invariants_hold());
+  av::HostBlobTableProbe(extra.table()).forget_placement(1u);
+  CHECK(extra.table().invariants_hold()); }

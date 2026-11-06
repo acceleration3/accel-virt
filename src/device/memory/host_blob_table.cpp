@@ -183,7 +183,8 @@ Status HostBlobTable::begin_lending(uint32_t id, HostBlob &blob, ControlRequest 
         AvHostMemory  aliased = {-1, 0u, 0u};
         bool          aliased_ok = false;
         for (uint32_t tried = 0u; tried < joined->holders() && !aliased_ok; tried++) {
-            if (!joined->holder_at(tried, holder, holder_key) || holder == contexts_) continue;
+            static_cast<void>(joined->holder_at(tried, holder, holder_key));
+            if (holder == contexts_) continue;
             aliased_ok = contexts_->alias_memory(id, *holder, holder_key, aliased) == Status::ok;
         }
         if (!aliased_ok || aliased.size < blob.size() || aliased.caching != AV_MEMORY_WRITE_BACK) {
