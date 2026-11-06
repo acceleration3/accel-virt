@@ -510,3 +510,63 @@ TEST(host_shares_invariants, catch_a_lost_share_a_stray_entry_and_a_stray_holder
   CHECK(!f.shares.invariants_hold());
   probe.drop_stray(stray);
   CHECK(f.shares.invariants_hold()); }
+
+TEST(host_shares, a_direct3d_share_is_published_with_its_origin_and_found_under_its_domain_and_id)
+{ Fixture f;
+  std::uint32_t acted = 0u;
+  CHECK_STATUS(f.shares.publish_direct3d(domain, 0x31u, ShareOrigin::d3d11, f.publisher,
+                                         [&acted](av::Share &) { acted++; }),
+               Status::ok);
+  CHECK_EQ(acted, 1u);
+  CHECK_EQ(f.shares.live(), 1u);
+  ShareOrigin origin = ShareOrigin::object;
+  std::uint64_t seen = 0u;
+  CHECK(f.shares.with_direct3d(domain, 0x31u, [&](av::Share &share, av::D3dRetired &) {
+      origin = share.origin();
+      seen = share.id();
+  }));
+  CHECK(origin == ShareOrigin::d3d11);
+  CHECK_EQ(seen, 0x31u);
+  bool acted_on_stranger = false;
+  CHECK(!f.shares.with_direct3d(domain, 0x32u, [&](av::Share &, av::D3dRetired &) { acted_on_stranger = true; }));
+  CHECK(!f.shares.with_direct3d(domain + 1u, 0x31u, [&](av::Share &, av::D3dRetired &) { acted_on_stranger = true; }));
+  CHECK(!acted_on_stranger);
+  CHECK(f.shares.invariants_hold()); }
+
+TEST(host_shares, each_direct3d_share_is_visited_once_with_the_retired_list)
+{ Fixture f;
+  CHECK_STATUS(f.shares.publish_direct3d(domain, 0x31u, ShareOrigin::d3d11, f.publisher, [](av::Share &) {}),
+               Status::ok);
+  CHECK_STATUS(f.shares.publish_direct3d(domain, 0x32u, ShareOrigin::d3d12, f.publisher, [](av::Share &) {}),
+               Status::ok);
+  std::uint32_t visited = 0u;
+  std::uint64_t ids = 0u;
+  av::D3dRetired *list = nullptr;
+  bool            one_list = true;
+  f.shares.each_direct3d([&](av::Share &share, av::D3dRetired &retired) {
+      visited++;
+      ids += share.id();
+      one_list = one_list && (list == nullptr || list == &retired);
+      list = &retired;
+  });
+  CHECK_EQ(visited, 2u);
+  CHECK_EQ(ids, 0x31u + 0x32u);
+  CHECK(one_list);
+  f.shares.each_direct3d([&visited](av::Share &, av::D3dRetired &) { visited += 10u; });
+  CHECK_EQ(visited, 22u); }
+
+TEST(host_shares, the_retired_list_is_reached_under_the_lock_and_holds_what_was_retired)
+{ Fixture f;
+  CountedObject object;
+  f.shares.with_retired([&object](av::D3dRetired &retired) {
+      object.AddRef();
+      retired.retire(&object);
+      CHECK_EQ(retired.live(), 1u);
+  });
+  CHECK_EQ(object.references(), 2u);
+  IUnknown     *taken[2] = {};
+  CHECK_EQ(f.d3d.take_retired(taken, 2u), 1u);
+  CHECK(taken[0] == &object);
+  taken[0]->Release();
+  CHECK_EQ(object.references(), 1u);
+  f.shares.with_retired([](av::D3dRetired &retired) { CHECK_EQ(retired.live(), 0u); }); }
