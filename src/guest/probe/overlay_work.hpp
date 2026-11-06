@@ -7,6 +7,7 @@ namespace av {
 
 class OverlayEntry;
 class ScenarioSteps;
+struct OverlayWorkProbe;
 
 class OverlayWork {
 public:
@@ -42,6 +43,8 @@ private:
     uint32_t      hold_;
     bool          made_;
     uint32_t      mode_;
+
+    friend struct OverlayWorkProbe;
 };
 
 }

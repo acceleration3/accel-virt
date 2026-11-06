@@ -182,3 +182,47 @@ TEST(submit_benchmark, round_trips_stop_at_the_first_no_op_that_fails)
   CHECK(has_line(refused, "FAIL submit.warm"));
   CHECK(!has_line(refused, "submit.nop"));
   cold.close(); }
+
+TEST(submit_benchmark, round_trips_alternating_slow_and_fast_are_reported_in_order)
+{ Rig rig;
+  rig.kmt().spend_on_wait(10u);
+  rig.kmt().slow_every(2u, 1000u);
+  av::MockPlatform report_memory;
+  GuestReport     report(report_memory);
+  SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
+  benchmark.round_trips();
+  CHECK_EQ(report.failed(), 0u);
+  CHECK(has_line(report, "ok submit.trip_min_ns "));
+  CHECK(has_line(report, "ok submit.trip_p99_ns "));
+  CHECK(!has_line(report, "ok submit.trip_min_ns 0\n"));
+  rig.close(); }
+
+namespace {
+
+void add_avgpu(MockKmt &kmt) { kmt.add_adapter(av, AdapterScenario::wddm_3_2); }
+
+}
+
+TEST(submit_benchmark, round_trips_without_an_adapter_to_open_report_nothing)
+{ MockKmt kmt;
+  add_avgpu(kmt);
+  AdapterSearch search(kmt);
+  av::MockPlatform report_memory;
+  GuestReport     report(report_memory);
+  SubmitBenchmark benchmark(kmt, report, search);
+  benchmark.round_trips();
+  CHECK(!has_line(report, "submit.warm"));
+  CHECK(!has_line(report, "trip_min_ns"));
+  CHECK_EQ(kmt.open_objects(), 0u); }
+
+TEST(submit_benchmark, a_clock_that_counts_no_ticks_a_second_ends_the_round_trips_unmeasured)
+{ Rig rig;
+  rig.kmt().set_frequency(0u);
+  av::MockPlatform report_memory;
+  GuestReport     report(report_memory);
+  SubmitBenchmark benchmark(rig.kmt(), report, rig.search());
+  benchmark.round_trips();
+  CHECK(has_line(report, "ok submit.warm\n"));
+  CHECK(!has_line(report, "trip_min_ns"));
+  CHECK_EQ(report.failed(), 0u);
+  rig.close(); }

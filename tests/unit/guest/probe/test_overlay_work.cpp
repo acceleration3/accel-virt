@@ -10,6 +10,14 @@
 #include <cstring>
 #include <initializer_list>
 
+namespace av {
+
+struct OverlayWorkProbe {
+    static void a_mode_without_a_device(OverlayWork &work) { work.mode_ = 1u; }
+};
+
+}
+
 using av::GuestReport;
 using av::MockKmt;
 using av::OverlayWork;
@@ -130,3 +138,36 @@ TEST(overlay_work, holds_the_partial_window_when_asked)
   rig.run();
   CHECK_EQ(rig.failed(), 0u);
   CHECK_EQ(rig.dxgi().calls(Call::present), 2u * OverlayWork::presents + 40u); }
+
+TEST(overlay_work, a_video_check_the_dxgi_refuses_ends_the_run_there)
+{ OverlayRig rig;
+  rig.dxgi().fail(Call::overlay_support, 2u, static_cast<std::int32_t>(0x887A0005u));
+  const char *const report = rig.run();
+  CHECK(says(report, "FAIL overlay.check_video_overlay_support"));
+  CHECK(!says(report, "overlay_plane"));
+  CHECK_EQ(rig.dxgi().calls(Call::create_swap_chain), 0u);
+  CHECK(!rig.dxgi().live()); }
+
+TEST(overlay_work, a_present_failing_while_the_statistics_stay_disjoint_is_the_statistics_failure)
+{ OverlayRig rig;
+  rig.dxgi().fail(Call::composition, 1u, OverlayWork::disjoint);
+  rig.dxgi().fail(Call::present, OverlayWork::presents + 1u, static_cast<std::int32_t>(0x887A0005u));
+  const char *const report = rig.run();
+  CHECK(says(report, "FAIL overlay.frame_statistics"));
+  CHECK(!rig.dxgi().live()); }
+
+TEST(overlay_work, a_present_failing_while_the_window_is_held_ends_the_hold_and_the_next_swap_chain_fails_its_own)
+{ OverlayRig rig(40u);
+  rig.dxgi().fail(Call::present, OverlayWork::presents + 2u, static_cast<std::int32_t>(0x887A0005u));
+  const char *const report = rig.run();
+  CHECK(says(report, "ok overlay.overlay_plane"));
+  CHECK(says(report, "FAIL overlay.present"));
+  CHECK_EQ(rig.dxgi().calls(Call::present), OverlayWork::presents + 3u);
+  CHECK(!rig.dxgi().live()); }
+
+TEST(overlay_work, a_mode_without_a_device_is_an_impossible_state)
+{ ScriptedOverlay dxgi;
+  OverlayWork     work(dxgi, 0u);
+  CHECK(work.invariants_hold());
+  av::OverlayWorkProbe::a_mode_without_a_device(work);
+  CHECK(!work.invariants_hold()); }

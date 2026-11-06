@@ -10,6 +10,7 @@
 namespace av {
 
 class Kmt;
+struct AvgpuAdaptersProbe;
 
 class AvgpuAdapters {
 public:
@@ -46,6 +47,8 @@ private:
     PciIdentity none_;
     uint32_t    count_;
     bool        primary_;
+
+    friend struct AvgpuAdaptersProbe;
 };
 
 }

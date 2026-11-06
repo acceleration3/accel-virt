@@ -6,7 +6,25 @@
 
 #include <cstdint>
 
+namespace av {
+
+struct AvgpuAdaptersProbe {
+    static void claim(AvgpuAdapters &adapters, std::uint32_t count, bool primary)
+    {
+        adapters.count_ = count;
+        adapters.primary_ = primary;
+    }
+    static void hold(AvgpuAdapters &adapters, std::uint32_t index, std::uint32_t adapter, std::uint64_t luid)
+    {
+        adapters.adapters_[index] = adapter;
+        adapters.luids_[index] = luid;
+    }
+};
+
+}
+
 using av::AvgpuAdapters;
+using av::AvgpuAdaptersProbe;
 using av::MockKmt;
 using av::PciIdentity;
 using av::Status;
@@ -179,4 +197,29 @@ TEST(avgpu_adapters, the_luids_listed_are_the_held_adapters_in_order_without_tho
   CHECK_EQ(adapters.luids(again), 2u);
   CHECK_EQ(again[0], 0x11u);
   CHECK_EQ(again[1], 0x33u);
+  CHECK(adapters.invariants_hold()); }
+
+TEST(avgpu_adapters_invariants, a_count_past_what_it_holds_a_primary_nobody_is_or_a_stray_beyond_the_count_is_caught)
+{ MockKmt kmt;
+  AvgpuAdapters adapters(kmt);
+  CHECK(adapters.invariants_hold());
+  AvgpuAdaptersProbe::claim(adapters, AvgpuAdapters::max_adapters + 1u, false);
+  CHECK(!adapters.invariants_hold());
+  AvgpuAdaptersProbe::claim(adapters, 0u, true);
+  CHECK(!adapters.invariants_hold());
+  CHECK(!adapters.primary(0u));
+  AvgpuAdaptersProbe::claim(adapters, 1u, true);
+  CHECK(!adapters.invariants_hold());
+  AvgpuAdaptersProbe::hold(adapters, 0u, 0u, 0x44u);
+  CHECK(adapters.invariants_hold());
+  CHECK(adapters.primary(0u));
+  CHECK(!adapters.primary(1u));
+  AvgpuAdaptersProbe::claim(adapters, 1u, false);
+  AvgpuAdaptersProbe::hold(adapters, 1u, 0x99u, 0u);
+  CHECK(!adapters.invariants_hold());
+  AvgpuAdaptersProbe::hold(adapters, 1u, 0u, 0x55u);
+  CHECK(!adapters.invariants_hold());
+  AvgpuAdaptersProbe::hold(adapters, 1u, 0u, 0u);
+  AvgpuAdaptersProbe::hold(adapters, 0u, 0u, 0u);
+  AvgpuAdaptersProbe::claim(adapters, 0u, false);
   CHECK(adapters.invariants_hold()); }
