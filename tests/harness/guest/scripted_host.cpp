@@ -160,6 +160,23 @@ void ScriptedHost::vk_memory_properties(std::uint32_t count, std::uint32_t host_
     queue(writer);
 }
 
+void ScriptedHost::vk_lendable_memory_properties(std::uint32_t count, std::uint32_t lendable)
+{
+    WireWriter                       writer(answer_, sizeof answer_);
+    VkPhysicalDeviceMemoryProperties properties = {};
+    properties.memoryTypeCount = count;
+    for (std::uint32_t type = 0u; type < count && type < VK_MAX_MEMORY_TYPES; type++)
+        properties.memoryTypes[type].propertyFlags =
+            (lendable >> type & 1u) != 0u ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                                                VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+                                          : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    properties.memoryHeapCount = 1u;
+    properties.memoryHeaps[0].size = memory_heap_bytes;
+    writer.write_pod<std::int32_t>(0);
+    vkproto::serialize_VkPhysicalDeviceMemoryProperties(writer, properties);
+    queue(writer);
+}
+
 void ScriptedHost::gl_string(const char *text)
 {
     WireWriter        writer(answer_, sizeof answer_);

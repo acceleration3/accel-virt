@@ -591,3 +591,149 @@ TEST(icd_memory, root_invariants_refuse_memory_no_device_owns_or_that_is_broken)
   CHECK(root.invariants_hold());
   rig.host().nop();
   rig.free(memory); }
+
+namespace {
+
+constexpr std::uint32_t lendable = 0x6u;
+alignas(4096) std::uint8_t lent_pages[3u * 4096u];
+
+VkImportMemoryHostPointerInfoEXT importing(void *pointer)
+{ VkImportMemoryHostPointerInfoEXT import = {};
+  import.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT;
+  import.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+  import.pHostPointer = pointer;
+  return import; }
+
+VkResult allocate_importing(MemoryRig &rig, const VkImportMemoryHostPointerInfoEXT &import, std::uint64_t bytes,
+                            std::uint32_t type, VkDeviceMemory &memory)
+{ VkMemoryAllocateInfo info = allocation(bytes, type);
+  info.pNext = &import;
+  memory = VK_NULL_HANDLE;
+  const VkResult result = rig.entry<AllocateMemory>("vkAllocateMemory")(rig.device(), &info, nullptr, &memory);
+  CHECK(rig.rig().root().invariants_hold());
+  return result; }
+
+}
+
+TEST(icd_memory, the_types_that_can_take_a_host_pointer_are_the_lendable_ones_and_only_for_an_aligned_pointer)
+{ MemoryRig rig;
+  av::icd::IcdRoot &root = rig.rig().root();
+  VkMemoryHostPointerPropertiesEXT answer = {};
+  answer.memoryTypeBits = 0xFFu;
+  CHECK_EQ(root.memory_host_pointer_properties(rig.device(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
+                                               lent_pages, nullptr),
+           VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  const VkExternalMemoryHandleTypeFlagBits wrong = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+  CHECK_EQ(root.memory_host_pointer_properties(rig.device(), wrong, lent_pages, &answer),
+           VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(answer.memoryTypeBits, 0u);
+  CHECK_EQ(root.memory_host_pointer_properties(rig.device(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
+                                               nullptr, &answer),
+           VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(root.memory_host_pointer_properties(rig.device(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
+                                               lent_pages + 8, &answer),
+           VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  rig.host().vk_lendable_memory_properties(types, lendable);
+  CHECK_EQ(root.memory_host_pointer_properties(rig.device(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
+                                               lent_pages, &answer),
+           VK_SUCCESS);
+  CHECK_EQ(answer.memoryTypeBits, lendable);
+  const std::uint32_t commands = rig.kmt().commands();
+  CHECK_EQ(root.memory_host_pointer_properties(rig.device(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
+                                               lent_pages + 4096, &answer),
+           VK_SUCCESS);
+  CHECK_EQ(answer.memoryTypeBits, lendable);
+  CHECK_EQ(rig.kmt().commands(), commands); }
+
+TEST(icd_memory, host_pointer_properties_of_a_device_it_did_not_make_or_one_that_cannot_learn_are_refused)
+{ { MemoryRig rig;
+    int stack = 0;
+    const auto foreign = reinterpret_cast<VkDevice>(&stack);
+    VkMemoryHostPointerPropertiesEXT answer = {};
+    answer.memoryTypeBits = 0xFFu;
+    CHECK_EQ(rig.rig().root().memory_host_pointer_properties(
+                 foreign, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, lent_pages, &answer),
+             VK_ERROR_DEVICE_LOST);
+    CHECK_EQ(answer.memoryTypeBits, 0u); }
+  { MemoryRig rig;
+    VkMemoryHostPointerPropertiesEXT answer = {};
+    rig.rig().platform().fail_allocation_at(1u);
+    CHECK_EQ(rig.rig().root().memory_host_pointer_properties(
+                 rig.device(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, lent_pages, &answer),
+             VK_ERROR_OUT_OF_HOST_MEMORY); }
+  { MemoryRig rig;
+    VkMemoryHostPointerPropertiesEXT answer = {};
+    rig.host().cut_next(0u);
+    rig.host().vk_lendable_memory_properties(types, lendable);
+    CHECK_EQ(rig.rig().root().memory_host_pointer_properties(
+                 rig.device(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, lent_pages, &answer),
+             VK_ERROR_OUT_OF_DEVICE_MEMORY);
+    CHECK_EQ(answer.memoryTypeBits, 0u); } }
+
+TEST(icd_memory, a_host_pointer_import_is_refused_unless_it_names_aligned_whole_pages_of_a_lendable_type)
+{ MemoryRig rig;
+  rig.host().vk_lendable_memory_properties(types, lendable);
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  VkImportMemoryHostPointerInfoEXT import = importing(lent_pages);
+  import.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+  CHECK_EQ(allocate_importing(rig, import, page, 1u, memory), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  import = importing(nullptr);
+  CHECK_EQ(allocate_importing(rig, import, page, 1u, memory), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  import = importing(lent_pages + 16);
+  CHECK_EQ(allocate_importing(rig, import, page, 1u, memory), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  import = importing(lent_pages);
+  CHECK_EQ(allocate_importing(rig, import, 0u, 1u, memory), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(allocate_importing(rig, import, page + 16u, 1u, memory), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(allocate_importing(rig, import, page, 32u, memory), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(allocate_importing(rig, import, page, 0u, memory), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK_EQ(allocate_importing(rig, import, page, 3u, memory), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+  CHECK(memory == VK_NULL_HANDLE);
+  CHECK_EQ(rig.kmt().window_chunks(), 0u);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u); }
+
+TEST(icd_memory, a_host_pointer_is_lent_to_the_host_as_an_allocation_and_given_back_with_it)
+{ MemoryRig rig;
+  rig.host().vk_lendable_memory_properties(types, lendable);
+  rig.host().blob_import(0u, imported);
+  const VkImportMemoryHostPointerInfoEXT import = importing(lent_pages);
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  CHECK_EQ(allocate_importing(rig, import, 2u * page, 2u, memory), VK_SUCCESS);
+  CHECK(memory == as_memory(imported));
+  CHECK_EQ(rig.kmt().window_chunks(), 1u);
+  const av::HostMemoryRequest asked(av::HostMemoryRequest::Kind::vulkan, 2u);
+  CHECK_EQ(rig.kmt().window_request(MockKmt::first_window_resource).encoded(), asked.encoded());
+  void *data = nullptr;
+  CHECK_EQ(rig.map(memory, 0u, VK_WHOLE_SIZE, data), VK_SUCCESS);
+  CHECK(data == lent_pages);
+  rig.host().nop();
+  rig.free(memory);
+  CHECK_EQ(rig.kmt().window_chunks(), 0u); }
+
+TEST(icd_memory, a_host_pointer_the_host_will_not_take_is_an_invalid_handle_or_a_lost_device)
+{ { MemoryRig rig;
+    rig.host().vk_lendable_memory_properties(types, lendable);
+    rig.host().blob_import(av::BlobImportAnswer::executor_refused, 0u);
+    const VkImportMemoryHostPointerInfoEXT import = importing(lent_pages);
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    CHECK_EQ(allocate_importing(rig, import, page, 1u, memory), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+    CHECK_EQ(rig.rig().log().holding("took no host pointer's pages"), 1u);
+    CHECK_EQ(rig.kmt().window_chunks(), 0u); }
+  { MemoryRig rig;
+    rig.host().vk_lendable_memory_properties(types, lendable);
+    VkMemoryHostPointerPropertiesEXT answer = {};
+    CHECK_EQ(rig.rig().root().memory_host_pointer_properties(
+                 rig.device(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, lent_pages, &answer),
+             VK_SUCCESS);
+    const VkImportMemoryHostPointerInfoEXT import = importing(lent_pages);
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    rig.rig().platform().fail_allocation_at(1u);
+    CHECK_EQ(allocate_importing(rig, import, page, 1u, memory), VK_ERROR_OUT_OF_HOST_MEMORY);
+    rig.rig().platform().fail_allocation_at(0u);
+    CHECK_EQ(rig.kmt().window_chunks(), 0u); }
+  { MemoryRig rig;
+    rig.host().vk_lendable_memory_properties(types, lendable);
+    const VkImportMemoryHostPointerInfoEXT import = importing(lent_pages);
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    CHECK_EQ(allocate_importing(rig, import, page, 1u, memory), VK_ERROR_DEVICE_LOST);
+    CHECK(rig.connection().lost()); } }
