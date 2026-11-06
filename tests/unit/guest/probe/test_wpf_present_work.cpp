@@ -15,7 +15,12 @@ namespace av {
 
 struct WpfPresentWorkProbe {
     static void looked_without_a_device(WpfPresentWork &work) { work.looks_ = 1u; }
-    static void looked_past_the_blanks(WpfPresentWork &work) { work.looks_ = WpfPresentWork::blanks + 1u; }
+    static void read_without_a_device(WpfPresentWork &work) { work.read_ = true; }
+    static void looked_past_the_blanks(WpfPresentWork &work)
+    {
+        work.made_ = true;
+        work.looks_ = WpfPresentWork::blanks + 1u;
+    }
 };
 
 }
@@ -158,6 +163,9 @@ TEST(wpf_present_work, an_impossible_state_is_named)
   WpfPresentWork looked(d3d9, windows, images);
   WpfPresentWorkProbe::looked_without_a_device(looked);
   CHECK(!looked.invariants_hold());
+  WpfPresentWork read(d3d9, windows, images);
+  WpfPresentWorkProbe::read_without_a_device(read);
+  CHECK(!read.invariants_hold());
   WpfPresentWork past(d3d9, windows, images);
   WpfPresentWorkProbe::looked_past_the_blanks(past);
   CHECK(!past.invariants_hold()); }

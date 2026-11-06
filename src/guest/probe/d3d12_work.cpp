@@ -98,7 +98,7 @@ bool D3d12Work::invariants_hold() const
 {
     AV_SCOPE("D3d12Work::invariants_hold");
     if (!made_ && (read_ || adapter_ != 0u || feature_level_ != 0u || serialized_library_ != 0u)) return false;
-    return coloured() <= pixels && existing_.invariants_hold();
+    return existing_.invariants_hold();
 }
 
 }

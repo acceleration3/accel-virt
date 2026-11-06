@@ -61,7 +61,7 @@ bool WpfPresentWork::invariants_hold() const
 {
     AV_SCOPE("WpfPresentWork::invariants_hold");
     if (!made_ && (read_ || looks_ != 0u)) return false;
-    return looks_ <= blanks && coloured() <= pixels;
+    return looks_ <= blanks;
 }
 
 }

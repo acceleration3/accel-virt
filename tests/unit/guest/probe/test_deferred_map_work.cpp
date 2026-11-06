@@ -14,6 +14,7 @@ namespace av {
 struct DeferredMapWorkProbe {
     static void drew_without_a_device(DeferredMapWork &work) { work.drawn_ = 1u; }
     static void grew_without_a_device(DeferredMapWork &work) { work.growth_ = 1u; }
+    static std::uint32_t matching(const DeferredMapWork &work) { return work.matching(); }
     static void drew_past_the_frames(DeferredMapWork &work)
     {
         work.made_ = true;
@@ -187,6 +188,7 @@ TEST(deferred_map_work, an_impossible_state_is_named)
   DeferredMapWork grew(d3d11);
   DeferredMapWorkProbe::grew_without_a_device(grew);
   CHECK(!grew.invariants_hold());
+  CHECK_EQ(DeferredMapWorkProbe::matching(untouched), 0u);
   DeferredMapWork past(d3d11);
   DeferredMapWorkProbe::drew_past_the_frames(past);
   CHECK(!past.invariants_hold()); }

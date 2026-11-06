@@ -258,9 +258,12 @@ TEST(guest_session_lock, refuses_a_slot_it_never_filled_or_a_second_view_of_the_
   void *second = nullptr;
   CHECK_STATUS(session.lock(index, second), Status::invalid_state);
   CHECK(second == nullptr);
+  fixture.kmt().fail_at(MockKmt::Call::unlock, 1u, 0xC0000001u);
+  CHECK_STATUS(session.unlock(index), Status::invalid_state);
+  CHECK(session.invariants_hold());
   CHECK_STATUS(session.unlock(index), Status::ok);
   CHECK_STATUS(session.unlock(index), Status::invalid_state);
-  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::unlock), 1u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::unlock), 2u);
   CHECK_STATUS(session.tear_down(), Status::ok);
   CHECK_EQ(fixture.kmt().misuses(), 0u); }
 

@@ -13,6 +13,10 @@
 
 namespace av {
 
+struct AppPointerCheckProbe {
+    static std::uint8_t *pattern(AppPointerCheck &check) { return check.pattern_; }
+};
+
 struct D3d12WorkProbe {
     static std::uint8_t *frame(D3d12Work &work) { return work.frame_; }
     static void          read_without_a_device(D3d12Work &work) { work.read_ = true; }
@@ -20,6 +24,7 @@ struct D3d12WorkProbe {
     static void          level_without_a_device(D3d12Work &work) { work.feature_level_ = 0xC000u; }
     static void          library_without_a_device(D3d12Work &work) { work.serialized_library_ = 8u; }
     static std::uint32_t coloured(const D3d12Work &work) { return work.coloured(); }
+    static AppPointerCheck &existing(D3d12Work &work) { return work.existing_; }
 };
 
 }
@@ -203,6 +208,8 @@ TEST(d3d12_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
         }
     CHECK_EQ(D3d12WorkProbe::coloured(work), D3d12Work::pixels);
     frame[1] = static_cast<std::uint8_t>(frame[1] + 2u);
+    CHECK_EQ(D3d12WorkProbe::coloured(work), D3d12Work::pixels - 1u);
+    frame[1] = static_cast<std::uint8_t>(frame[1] - 5u);
     CHECK_EQ(D3d12WorkProbe::coloured(work), D3d12Work::pixels - 1u); }
 
   ScriptedD3d12     d3d12;
@@ -219,4 +226,7 @@ TEST(d3d12_work, rounding_is_within_a_step_and_an_impossible_state_is_named)
   CHECK(!level.invariants_hold());
   D3d12Work library(d3d12, images);
   D3d12WorkProbe::library_without_a_device(library);
-  CHECK(!library.invariants_hold()); }
+  CHECK(!library.invariants_hold());
+  D3d12Work pointer(d3d12, images);
+  av::AppPointerCheckProbe::pattern(D3d12WorkProbe::existing(pointer))[0] ^= 1u;
+  CHECK(!pointer.invariants_hold()); }

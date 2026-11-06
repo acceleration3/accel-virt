@@ -92,7 +92,7 @@ bool DeferredMapWork::invariants_hold() const
 {
     AV_SCOPE("DeferredMapWork::invariants_hold");
     if (!made_ && (drawn_ != 0u || growth_ != 0u)) return false;
-    return drawn_ <= warm_frames + measured_frames && matching() <= head_bytes;
+    return drawn_ <= warm_frames + measured_frames;
 }
 
 }

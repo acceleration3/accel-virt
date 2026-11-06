@@ -12,7 +12,13 @@ using av::Status;
 
 namespace av {
 
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
+};
+
 struct GuestReportProbe {
+    static void break_the_text(GuestReport &report) { GrowableArrayProbe::corrupt_capacity(report.text_, 3u); }
     static void set(GuestReport &report, std::uint32_t index, char value) { report.text_.at(index) = value; }
 };
 
@@ -81,7 +87,9 @@ TEST(guest_report_invariants, fail_for_a_terminator_inside_the_text_or_none_at_i
   av::GuestReportProbe::set(report, 16u, 'x');
   CHECK(!report.invariants_hold());
   av::GuestReportProbe::set(report, 16u, '\0');
-  CHECK(report.invariants_hold()); }
+  CHECK(report.invariants_hold());
+  av::GuestReportProbe::break_the_text(report);
+  CHECK(!report.invariants_hold()); }
 
 TEST(guest_report, the_summary_names_its_program)
 { av::MockPlatform report_memory;

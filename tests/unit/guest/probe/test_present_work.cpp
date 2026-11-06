@@ -355,6 +355,19 @@ TEST(present_work, a_frame_larger_than_the_triangle_is_the_background_past_it)
   rig.frames().show(cleared);
   CHECK_EQ(work.drawn_on_the_window("vulkan-resized", outcome), grown * grown - pixels); }
 
+TEST(present_work, a_window_narrower_than_the_triangle_shows_the_triangle_as_far_as_it_goes)
+{ PresentRig   rig;
+  PresentWork  work = rig.work();
+  ProbeOutcome outcome;
+  CHECK(work.make_surface(outcome));
+  CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+  CHECK_EQ(work.present_frames(1u, outcome), VK_SUCCESS);
+  CHECK(rig.frames().resize(window_handle, side / 2u, side));
+  CHECK(work.make_swapchain(VK_PRESENT_MODE_FIFO_KHR, outcome));
+  CHECK_EQ(work.present_frames(1u, outcome), VK_SUCCESS);
+  CHECK_EQ(work.drawn_on_the_window("vulkan-narrow", outcome), side / 2u * side);
+  CHECK(work.invariants_hold()); }
+
 TEST(present_work, a_window_still_showing_the_frame_from_before_it_grew_is_not_the_frame)
 { PresentRig   rig;
   PresentWork  work = rig.work();
