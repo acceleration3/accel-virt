@@ -176,6 +176,14 @@ TEST(vidpn_support_check_visit, a_source_mode_set_it_cannot_read_fails)
       CHECK_EQ(supported, 0u);
   } }
 
+TEST(vidpn_support_check_visit, a_target_mode_set_it_cannot_read_is_not_held_against_the_vidpn)
+{ VidPnFixture fixture;
+  fixture.vidpn().add_path(0u, 0u);
+  fixture.vidpn().refuse(VidPnCall::acquire_target_mode_set, no_memory);
+  std::uint8_t supported = 0u;
+  CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
+  CHECK_EQ(supported, 1u); }
+
 TEST(vidpn_support_check_decide, a_vidpn_it_cannot_read_fails)
 { VidPnFixture fixture;
   fixture.vidpn().add_path(0u, 0u);

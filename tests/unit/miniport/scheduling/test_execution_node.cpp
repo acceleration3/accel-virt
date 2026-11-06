@@ -413,3 +413,27 @@ TEST(execution_node_release_overdue, only_the_overdue_packet_goes_a_younger_one_
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(fixture.node().pending(), 1u); }
+
+TEST(execution_node_release_overdue, names_each_owner_once_and_only_as_many_as_there_is_room_for)
+{ Fixture fixture;
+  int a = 0;
+  int b = 0;
+  CHECK_STATUS(fixture.node().submit(1u, &a, 3u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(2u, &a, 4u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(3u, &b, 5u), Status::ok);
+  const std::uint64_t late = fixture.platform().interrupt_time() + ExecutionNode::park_deadline;
+  void *owners[2] = {};
+  std::uint32_t named = 99u;
+  CHECK_EQ(fixture.node().release_overdue(late, owners, 1u, &named), 3u);
+  CHECK_EQ(named, 1u);
+  CHECK(owners[0] == &a);
+  CHECK(owners[1] == nullptr);
+  CHECK(fixture.node().invariants_hold());
+  CHECK_STATUS(fixture.node().submit(4u, &a, 6u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(5u, &a, 7u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(6u, &b, 8u), Status::ok);
+  const std::uint64_t later = fixture.platform().interrupt_time() + ExecutionNode::park_deadline;
+  CHECK_EQ(fixture.node().release_overdue(later, owners, 2u, &named), 3u);
+  CHECK_EQ(named, 2u);
+  CHECK(owners[0] == &a);
+  CHECK(owners[1] == &b); }

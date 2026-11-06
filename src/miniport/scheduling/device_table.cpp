@@ -203,11 +203,9 @@ Status DeviceTable::name_point(void *process, uint64_t surface, uint32_t point, 
         return held.device().process() == process && held.allocation().shared_id() == surface;
     });
     if (open == nullptr) return Status::not_found;
-    switch (action) {
-    case NextPointRecord::Action::name: open->name_point(point); break;
-    case NextPointRecord::Action::pages: open->name_point(0u); break;
-    case NextPointRecord::Action::withdraw: static_cast<void>(open->withdraw_point(point)); break;
-    }
+    if (action == NextPointRecord::Action::name) open->name_point(point);
+    else if (action == NextPointRecord::Action::pages) open->name_point(0u);
+    else static_cast<void>(open->withdraw_point(point));
     return Status::ok;
 }
 

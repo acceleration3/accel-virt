@@ -409,6 +409,20 @@ TEST(virtio_gpu_device_connect_fence_queue, shares_vector_zero_or_assigns_nothin
       CHECK_STATUS(device.connect_fence_queue(64u, message), Status::not_found);
   } }
 
+TEST(virtio_gpu_device_connect_fence_queue, a_doorbell_past_the_queues_the_device_has_is_not_found_without_messages)
+{ MappedFunction mapped;
+  mapped.function().add_doorbell_region();
+  CHECK_STATUS(mapped.map(), Status::ok);
+  VirtioGpuDevice device(mapped.platform(), mapped.mappings(), mapped.layout());
+  CHECK_STATUS(device.start(0u), Status::ok);
+  std::uint32_t message = 99u;
+  CHECK_STATUS(device.connect_fence_queue(5u, message), Status::ok);
+  mapped.common().set_queues(4u, 64u);
+  CHECK_STATUS(device.connect_fence_queue(1u, message), Status::ok);
+  CHECK_STATUS(device.connect_fence_queue(2u, message), Status::not_found);
+  CHECK_EQ(message, 0u);
+  CHECK(device.invariants_hold()); }
+
 namespace {
 struct VectorsAtDriverOk {
     const av::FakeCommonConfig *common = nullptr;

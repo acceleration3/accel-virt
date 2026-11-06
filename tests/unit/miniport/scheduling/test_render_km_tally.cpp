@@ -35,6 +35,7 @@ namespace av {
 
 struct RenderKmTallyProbe {
     static void invent_kind(RenderKmTally &tally) { tally.last_bitblt_source_kind_ = 2u; }
+    static void invent_destination_kind(RenderKmTally &tally) { tally.last_bitblt_destination_kind_ = 2u; }
 };
 
 }
@@ -321,10 +322,13 @@ TEST(render_km_tally_render, asks_for_more_dma_buffer_and_does_not_count_the_buf
   CHECK(dump_holds(fixture.tally(), "renderkm_calls=1 renderkm_bitblt=0 renderkm_colorfill=1")); }
 
 TEST(render_km_tally_invariants, a_kind_with_no_bitblt_behind_it_is_broken)
-{ Fixture fixture;
-  CHECK(fixture.tally().invariants_hold());
-  av::RenderKmTallyProbe::invent_kind(fixture.tally());
-  CHECK(!fixture.tally().invariants_hold()); }
+{ { Fixture fixture;
+    CHECK(fixture.tally().invariants_hold());
+    av::RenderKmTallyProbe::invent_kind(fixture.tally());
+    CHECK(!fixture.tally().invariants_hold()); }
+  { Fixture fixture;
+    av::RenderKmTallyProbe::invent_destination_kind(fixture.tally());
+    CHECK(!fixture.tally().invariants_hold()); } }
 
 TEST(render_km_tally, is_passive_only)
 { Fixture fixture; Buffer buffer;
