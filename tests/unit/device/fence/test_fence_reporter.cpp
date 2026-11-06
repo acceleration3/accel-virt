@@ -36,6 +36,7 @@ struct FenceReporterProbe {
     static void pend_unprepared(FenceReporter &reporter) { reporter.pending_ = true; }
     static void lose_progress(FenceReporter &reporter) { reporter.completed_ = 5u; reporter.progress_ = 0u; }
     static void lose_page(FenceReporter &reporter) { reporter.page_ = FenceWindow(); }
+    static void raise_past_progress(FenceReporter &reporter) { reporter.raised_ = reporter.progress_ + 5u; }
     static void fault_without_code(FenceReporter &reporter) { reporter.faulted_ = true; reporter.fault_ = FaultCode::none; }
     static void fault_loudly(FenceReporter &reporter)
     {
@@ -380,6 +381,10 @@ TEST(fence_reporter_invariants, pending_before_preparing_or_a_completion_without
   CHECK_STATUS(lost.reporter().prepare(lost.window(), line), Status::ok);
   av::FenceReporterProbe::lose_progress(lost.reporter());
   CHECK(!lost.reporter().invariants_hold());
+  Fixture raised;
+  CHECK_STATUS(raised.reporter().prepare(raised.window(), line), Status::ok);
+  av::FenceReporterProbe::raise_past_progress(raised.reporter());
+  CHECK(!raised.reporter().invariants_hold());
   Fixture pageless;
   CHECK_STATUS(pageless.reporter().prepare(pageless.window(), line), Status::ok);
   av::FenceReporterProbe::lose_page(pageless.reporter());
@@ -435,3 +440,8 @@ TEST(fence_reporter_complete, a_faulted_context_completes_nothing_and_records_no
   CHECK(fixture.reporter().invariants_hold());
   CHECK_EQ(av::RecordedFile(fixture.host(), "fences.av").remaining(), 0u);
   fixture.recorder().close(); }
+
+TEST(fence_window, a_window_with_nothing_behind_it_reads_nothing)
+{ FencePage page;
+  CHECK(FenceWindow().read(page) != Status::ok);
+  CHECK(!FenceWindow().invariants_hold()); }

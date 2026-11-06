@@ -77,7 +77,6 @@ void DevicePulse::drop(FenceReporter &reporter)
 void DevicePulse::stir()
 {
     AV_SCOPE("DevicePulse::stir");
-    if (!__atomic_load_n(&dormant_, __ATOMIC_SEQ_CST)) return;
     if (__atomic_exchange_n(&dormant_, false, __ATOMIC_SEQ_CST)) host_.signal_event(wake_);
 }
 

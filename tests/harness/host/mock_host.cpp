@@ -554,6 +554,7 @@ void MockHost::lock_mutex(void *mutex)
         record(HostViolation::unknown_handle, "MockHost::lock_mutex");
         return;
     }
+    if (act_ != nullptr && lock_attempts_.fetch_add(1u) + 1u == act_at_) act_(act_context_);
     pthread_mutex_lock(&slot->lock);
     slot->locked = true;
     mutex_locks_.fetch_add(1u);
@@ -1243,6 +1244,14 @@ void MockHost::take_doorbells_from(DoorbellOffers &offers, void (*closer)(void *
 }
 
 void MockHost::split_guest_memory_every(std::uint64_t step) { StateLock lock(state_); split_step_ = step; }
+
+void MockHost::act_before_mutex_lock(std::uint32_t nth, void (*act)(void *), void *context)
+{
+    lock_attempts_.store(0u);
+    act_at_ = nth;
+    act_context_ = context;
+    act_ = act;
+}
 
 void MockHost::fail_guest_region_at(std::uint32_t nth) { StateLock lock(state_); fail_guest_region_ = nth; }
 

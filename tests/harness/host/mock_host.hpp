@@ -206,6 +206,7 @@ public:
     void          split_guest_memory_every(std::uint64_t step);
     void          take_doorbells_from(DoorbellOffers &offers, void (*closer)(void *, int), void *context);
     void          fail_guest_region_at(std::uint32_t nth);
+    void          act_before_mutex_lock(std::uint32_t nth, void (*act)(void *), void *context);
     void          add_bounce_region(std::uint64_t base, std::uint64_t size);
     std::uint8_t *guest_ram(std::uint64_t address);
     void          set_hostmem_size(std::uint64_t size);
@@ -372,6 +373,10 @@ private:
     bool            unterminated_listing_ = false;
     std::uint64_t   split_step_ = 0u;
     DoorbellOffers *offered_doorbells_ = nullptr;
+    std::atomic<std::uint32_t> lock_attempts_{0u};
+    std::uint32_t   act_at_ = 0u;
+    void          (*act_)(void *) = nullptr;
+    void           *act_context_ = nullptr;
     void          (*doorbell_closer_)(void *, int) = nullptr;
     void           *doorbell_closer_context_ = nullptr;
     std::uint32_t   fail_guest_region_ = 0u;

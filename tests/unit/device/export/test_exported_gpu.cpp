@@ -154,3 +154,61 @@ TEST(exported_gpu, a_head_goes_out_composed_beside_a_descriptor_of_its_own)
   CHECK(descriptor >= 0);
   CHECK(descriptor != plane.composed_fd());
   host.close_export(descriptor); }
+
+TEST(exported_gpu, a_head_is_refused_when_the_contexts_cannot_compose_or_compose_no_picture)
+{ av::MockHost host; av::HeadPlanes heads(host);
+  CHECK_STATUS(heads.initialize(), Status::ok);
+  av::RecordingContextPlane plane;
+  ExportedGpu exported(host);
+  int descriptor = 7;
+  const ExportRequest head(ExportOperation::head, 3u, 5u);
+  CHECK_STATUS(exported.export_head(head, descriptor).status(), Status::invalid_state);
+  CHECK_EQ(descriptor, -1);
+  exported.attach(plane, gpu, ExportGreeting(gpu), heads);
+  const std::int32_t whole[4] = {0, 0, 640, 480};
+  CHECK_STATUS(heads.set(av::ScanoutPlaneRequest(2u, 1u, av::ScanoutPlaneRequest::flag_shown, 0x77u, whole, whole,
+                                                 640u, 480u)),
+               Status::ok);
+  AvExportedImage narrow = picture;
+  narrow.stride = 639u;
+  plane.compose_as(narrow);
+  CHECK_STATUS(exported.export_head(head, descriptor).status(), Status::not_found);
+  CHECK_EQ(descriptor, -1);
+  plane.compose_as(picture);
+  plane.refuse_composition();
+  CHECK_STATUS(exported.export_head(head, descriptor).status(), Status::not_found);
+  CHECK_EQ(descriptor, -1); }
+
+TEST(exported_gpu, a_composition_with_no_dma_buf_is_refused)
+{ av::MockHost host; av::HeadPlanes heads(host);
+  CHECK_STATUS(heads.initialize(), Status::ok);
+  av::RecordingContextPlane plane;
+  plane.compose_as(picture);
+  plane.compose_without_descriptor();
+  ExportedGpu exported(host);
+  exported.attach(plane, gpu, ExportGreeting(gpu), heads);
+  const std::int32_t whole[4] = {0, 0, 640, 480};
+  CHECK_STATUS(heads.set(av::ScanoutPlaneRequest(2u, 1u, av::ScanoutPlaneRequest::flag_shown, 0x77u, whole, whole,
+                                                 640u, 480u)),
+               Status::ok);
+  int descriptor = 7;
+  CHECK_STATUS(exported.export_head(ExportRequest(ExportOperation::head, 3u, 5u), descriptor).status(),
+               Status::not_found);
+  CHECK_EQ(descriptor, -1);
+  CHECK_EQ(plane.composed_count(), 1u); }
+
+TEST(exported_gpu, an_export_the_executor_marks_unavailable_is_an_invalid_state_and_the_other_gpu_flag_reaches_it)
+{ av::MockHost host; av::HeadPlanes heads(host);
+  av::RecordingContextPlane plane;
+  plane.export_as(surface, picture, 0u);
+  plane.report_exports_unavailable();
+  ExportedGpu exported(host);
+  exported.attach(plane, gpu, ExportGreeting(gpu), heads);
+  int descriptor = 7;
+  const ExportRequest other(ExportOperation::export_surface, surface + 1u, 5u, av::ExportRequest::other_gpu);
+  CHECK_STATUS(exported.export_surface(other, descriptor).status(), Status::invalid_state);
+  CHECK_EQ(descriptor, -1);
+  CHECK_EQ(plane.export_flags(), std::uint32_t{AV_EXPORT_OTHER_GPU});
+  CHECK_STATUS(exported.export_surface(asked(ExportOperation::export_surface), descriptor).status(), Status::ok);
+  CHECK_EQ(plane.export_flags(), 0u);
+  ::close(descriptor); }

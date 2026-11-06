@@ -70,12 +70,15 @@ public:
         composed_count_ = count;
         composed_width_ = width;
         composed_height_ = height;
-        if (!composes_ || count == 0u || planes == nullptr) return false;
-        if (composed_fd_ < 0) composed_fd_ = fresh_memfd();
+        if (!composes_ || compose_refused_ || count == 0u || planes == nullptr) return false;
+        if (composed_fd_ < 0 && composed_with_descriptor_) composed_fd_ = fresh_memfd();
         image = composed_image_;
         image.fd = composed_fd_;
         return true;
     }
+    void          refuse_composition() { compose_refused_ = true; }
+    void          compose_without_descriptor() { composed_with_descriptor_ = false; }
+    void          report_exports_unavailable() { unavailable_ = true; }
     void          compose_as(const AvExportedImage &image) { composes_ = true; composed_image_ = image; }
     std::uint32_t composed_count() const { return composed_count_; }
     std::uint32_t composed_width() const { return composed_width_; }
@@ -125,7 +128,10 @@ public:
         export_gpu_ = gpu_uuid;
         export_flags_ = flags;
         exports_asked_++;
-        if (!exported(surface)) return false;
+        if (!exported(surface)) {
+            if (unavailable_) image.reserved = AV_EXPORT_UNAVAILABLE;
+            return false;
+        }
         image = exported_image_;
         image.fd = exported_fd_ ? fresh_memfd() : -1;
         return true;
@@ -181,6 +187,9 @@ private:
     }
 
     bool            composes_ = false;
+    bool            compose_refused_ = false;
+    bool            composed_with_descriptor_ = true;
+    bool            unavailable_ = false;
     AvExportedImage composed_image_ = {};
     int             composed_fd_ = -1;
     std::uint32_t   composed_count_ = 0u;

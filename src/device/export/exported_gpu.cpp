@@ -89,7 +89,7 @@ ExportAnswer ExportedGpu::export_head(const ExportRequest &request, int &descrip
 {
     AV_SCOPE("ExportedGpu::export_head");
     descriptor = -1;
-    if (contexts_ == nullptr || heads_ == nullptr || !contexts_->composes())
+    if (contexts_ == nullptr || !contexts_->composes())
         return ExportAnswer(request, Status::invalid_state);
     AvScanoutPlane planes[HeadPlanes::layers] = {};
     uint32_t       width = 0u;

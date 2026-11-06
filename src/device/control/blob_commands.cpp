@@ -164,8 +164,7 @@ uint32_t BlobCommands::create_answer(Status status) const
     switch (status) {
     case Status::ok: return GpuResponse::ok_nodata;
     case Status::invalid_parameter: return GpuResponse::err_invalid_parameter;
-    case Status::no_memory:
-    case Status::no_space: return GpuResponse::err_out_of_memory;
+    case Status::no_memory: return GpuResponse::err_out_of_memory;
     default: return GpuResponse::err_unspec;
     }
 }

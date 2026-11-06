@@ -51,3 +51,8 @@ TEST(adapter_name, fits_the_capset_field_without_splitting_a_character)
   std::memcpy(suffixed + GpuIdentity::name_bytes - 1u, " (RADV)", 8u);
   CHECK_EQ(std::strlen(AdapterName(suffixed).text()), GpuIdentity::name_bytes - 1u);
   CHECK_EQ(AdapterName(suffixed).text()[GpuIdentity::name_bytes - 2u], 'w'); }
+
+TEST(adapter_name, a_name_of_nothing_but_continuation_bytes_past_the_field_is_cut_to_nothing)
+{ char stray[GpuIdentity::name_bytes + 8u] = {};
+  std::memset(stray, static_cast<int>(0x80u), sizeof stray - 1u);
+  CHECK_EQ(std::strlen(AdapterName(stray).text()), 0u); }

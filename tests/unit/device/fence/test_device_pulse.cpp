@@ -49,6 +49,17 @@ struct DevicePulseProbe {
         pulse.lock_ = lock;
         pulse.thread_ = nullptr;
     }
+    static void lose_wake(DevicePulse &pulse, void *&wake)
+    {
+        wake = pulse.wake_;
+        pulse.wake_ = nullptr;
+        pulse.thread_ = &pulse;
+    }
+    static void restore_wake(DevicePulse &pulse, void *wake)
+    {
+        pulse.wake_ = wake;
+        pulse.thread_ = nullptr;
+    }
 };
 
 }
@@ -330,4 +341,20 @@ TEST(device_pulse_invariants, a_page_carried_twice_or_a_thread_with_no_lock_is_d
   DevicePulseProbe::lose_lock(lockless.pulse(), lock);
   CHECK(!lockless.pulse().invariants_hold());
   DevicePulseProbe::restore(lockless.pulse(), lock);
-  CHECK(lockless.pulse().invariants_hold()); }
+  CHECK(lockless.pulse().invariants_hold());
+  Fixture wakeless;
+  CHECK_STATUS(wakeless.pulse().initialize(), Status::ok);
+  void *wake = nullptr;
+  DevicePulseProbe::lose_wake(wakeless.pulse(), wake);
+  CHECK(!wakeless.pulse().invariants_hold());
+  DevicePulseProbe::restore_wake(wakeless.pulse(), wake);
+  CHECK(wakeless.pulse().invariants_hold()); }
+
+TEST(device_pulse_run, a_stop_asked_between_a_beat_and_the_rest_ends_the_loop_without_a_wait)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.pulse().initialize(), Status::ok);
+  fixture.host().act_before_mutex_lock(2u, [](void *pulse) { DevicePulseProbe::stop(*static_cast<DevicePulse *>(pulse)); },
+                                       &fixture.pulse());
+  fixture.pulse().run();
+  CHECK(!DevicePulseProbe::dormant(fixture.pulse()));
+  CHECK_EQ(fixture.host().live_threads(), 0u); }

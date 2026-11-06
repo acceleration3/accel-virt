@@ -18,7 +18,7 @@ void *ProcessBlockSource::allocate(size_t bytes, Pool)
 {
     AV_SCOPE("ProcessBlockSource::allocate");
     void *const block = calloc(1u, bytes);
-    if (block != nullptr) blocks_++;
+    blocks_ += static_cast<size_t>(block != nullptr);
     return block;
 }
 

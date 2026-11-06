@@ -264,6 +264,7 @@ TEST(blob_commands_create, refuses_what_the_protocol_does_not_allow)
       {create_host(host_blob, 0x1000u, 2u | 1u << 8u), err_invalid_parameter},
       {create_blob(1u, guest, 0u, 0u, 0u, 0x1000u), err_invalid_parameter},
       {create_blob(1u, guest, 0u, 2u, 0u, 0x1000u), err_invalid_parameter},
+      {create_blob(1u, 99u, 0u, 1u, 0u, 0x1000u), err_invalid_parameter},
   };
   for (Case &c : cases) {
       Fixture fixture;
@@ -503,3 +504,14 @@ TEST(blob_commands_create, a_creation_the_device_refused_records_nothing)
   static_cast<void>(fixture.send(named(BlobCommands::resource_unref, 99u)));
   CHECK_EQ(av::RecordedFile(fixture.host(), "refused.av").remaining(), 0u);
   fixture.recorder().close(); }
+
+TEST(blob_commands_create, an_adopted_blob_the_host_has_no_memory_to_track_is_out_of_memory)
+{ for (std::uint32_t nth = 1u; nth <= 3u; nth++) {
+      Fixture fixture;
+      fixture.host().fail_allocation_at(nth);
+      const std::uint32_t answer = fixture.send(create_adopted(host_blob, 0x1000u));
+      if (answer == ok_nodata) continue;
+      CHECK_EQ(answer, err_out_of_memory);
+      CHECK_EQ(fixture.host_blobs().live(), 0u);
+      CHECK(!fixture.host_blobs().contains(host_blob));
+  } }

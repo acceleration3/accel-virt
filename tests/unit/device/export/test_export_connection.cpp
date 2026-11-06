@@ -39,6 +39,8 @@ void unshown(void *) {}
 
 class Fixture {
 public:
+    av::RecordingContextPlane &plane() { return plane_; }
+
     Fixture()
         : host_(), plane_(), gpu_(host_), interrupts_(host_), clock_(host_, interrupts_, &unshown, nullptr),
           connection_(host_, gpu_, clock_)
@@ -317,3 +319,23 @@ TEST(export_connection, its_invariants_catch_a_table_no_request_can_make)
   av::ExportConnectionProbe::hold(connection, 0u, first);
   CHECK(connection.invariants_hold()); }
 
+
+TEST(export_connection, a_sync_the_gpu_cannot_answer_is_refused_with_no_refresh_told)
+{ Fixture fixture;
+  FakeExportConsumer consumer;
+  CHECK_STATUS(fixture.connection().open(consumer.device_end()), Status::ok);
+  CHECK_STATUS(fixture.ask(consumer, ExportOperation::export_surface, first).status(), Status::ok);
+  fixture.plane().sync_without_descriptor();
+  const ExportAnswer refused = fixture.ask(consumer, ExportOperation::sync, first);
+  CHECK_STATUS(refused.status(), Status::not_found);
+  CHECK_EQ(refused.refresh_microhz(), 0u);
+  CHECK(fixture.connection().invariants_hold()); }
+
+TEST(export_connection, a_head_is_answered_by_the_gpu_whose_contexts_do_not_compose_with_an_invalid_state)
+{ Fixture fixture;
+  FakeExportConsumer consumer;
+  CHECK_STATUS(fixture.connection().open(consumer.device_end()), Status::ok);
+  const ExportAnswer answer = fixture.ask(consumer, ExportOperation::head, 2u);
+  CHECK_STATUS(answer.status(), Status::invalid_state);
+  CHECK_EQ(fixture.connection().held(), 0u);
+  CHECK(fixture.connection().invariants_hold()); }
