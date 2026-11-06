@@ -65,6 +65,12 @@ bool StagedMapping::copied() const
     return at_ != nullptr && memory_ == Memory::copy;
 }
 
+bool StagedMapping::answers(const void *pointer) const
+{
+    AV_SCOPE("StagedMapping::answers");
+    return at_ != nullptr && pointer == at_;
+}
+
 void StagedMapping::hand(uint8_t *at, Memory memory)
 {
     AV_SCOPE("StagedMapping::hand");
