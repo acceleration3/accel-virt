@@ -240,3 +240,22 @@ TEST(gl_connection, invariants_fail_when_links_devices_and_the_adapter_disagree)
     CHECK(!rig.connection().invariants_hold());
     IcdConnectionProbe::lose_adapter(rig.connection());
     CHECK(rig.connection().invariants_hold()); } }
+
+TEST(gl_connection, invariants_fail_for_every_link_when_a_lost_generation_and_the_current_one_have_no_users)
+{ GlContextRig rig;
+  DeviceLink *old_link = nullptr;
+  CHECK_STATUS(rig.connection().acquire(old_link), Status::ok);
+  old_link->lose();
+  DeviceLink *fresh = nullptr;
+  CHECK_STATUS(rig.connection().acquire(fresh), Status::ok);
+  CHECK(old_link != fresh);
+  CHECK(rig.connection().invariants_hold());
+  CHECK(old_link->let_go());
+  CHECK(!rig.connection().invariants_hold());
+  CHECK(fresh->let_go());
+  CHECK(!rig.connection().invariants_hold());
+  old_link->hold();
+  fresh->hold();
+  CHECK(rig.connection().invariants_hold());
+  rig.connection().release(*old_link);
+  rig.connection().release(*fresh); }

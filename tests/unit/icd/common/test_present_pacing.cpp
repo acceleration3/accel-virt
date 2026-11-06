@@ -12,6 +12,25 @@
 using av::MockKmt;
 using av::icd::PresentPacing;
 
+namespace av::icd {
+struct FramePacerProbe {
+    static void count_a_blank_without_an_adapter(FramePacer &pacer)
+    {
+        pacer.adapter_ = 0u;
+        pacer.blanks_ = 1u;
+    }
+};
+
+struct PresentPacingProbe {
+    static FramePacer &pacer(PresentPacing &pacing) { return pacing.pacer_.object(); }
+    static void        set_blanks(PresentPacing &pacing, std::uint32_t blanks) { pacing.blanks_ = blanks; }
+};
+
+}
+
+using av::icd::FramePacerProbe;
+using av::icd::PresentPacingProbe;
+
 namespace {
 
 class PacingRig {
@@ -99,3 +118,15 @@ TEST(present_pacing, unbinding_stops_the_waiting)
   CHECK_EQ(pacing.waited(), 0u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_vertical_blank), 0u);
   CHECK(pacing.invariants_hold()); }
+
+TEST(present_pacing, its_invariants_catch_too_many_blanks_and_a_pacer_that_is_unsound)
+{ PacingRig rig;
+  PresentPacing pacing;
+  CHECK_STATUS(rig.bind(pacing), av::Status::ok);
+  CHECK(pacing.invariants_hold());
+  PresentPacingProbe::set_blanks(pacing, PresentPacing::max_blanks + 1u);
+  CHECK(!pacing.invariants_hold());
+  PresentPacingProbe::set_blanks(pacing, 1u);
+  CHECK(pacing.invariants_hold());
+  FramePacerProbe::count_a_blank_without_an_adapter(PresentPacingProbe::pacer(pacing));
+  CHECK(!pacing.invariants_hold()); }

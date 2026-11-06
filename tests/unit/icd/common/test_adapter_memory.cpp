@@ -13,6 +13,16 @@ using av::PciIdentity;
 using av::Status;
 using av::icd::AdapterMemory;
 
+namespace av::icd {
+struct AdapterMemoryProbe {
+    static void set_budget(AdapterMemory &memory, std::uint32_t group, std::uint64_t bytes) { memory.budgets_[group] = bytes; }
+    static void set_usage(AdapterMemory &memory, std::uint32_t group, std::uint64_t bytes) { memory.usages_[group] = bytes; }
+};
+
+}
+
+using av::icd::AdapterMemoryProbe;
+
 namespace {
 
 const PciIdentity avgpu(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
@@ -77,4 +87,15 @@ TEST(adapter_memory, a_refused_read_forgets_what_an_earlier_read_kept)
   CHECK(memory.read() != Status::ok);
   CHECK_EQ(memory.budget(MemorySegmentGroup::local), 0u);
   CHECK_EQ(memory.budget(MemorySegmentGroup::non_local), 0u);
+  CHECK(memory.invariants_hold()); }
+
+TEST(adapter_memory, figures_held_before_any_read_are_unsound)
+{ MockKmt kmt;
+  AdapterMemory memory(kmt, added(kmt));
+  AdapterMemoryProbe::set_budget(memory, 1u, 4096u);
+  CHECK(!memory.invariants_hold());
+  AdapterMemoryProbe::set_budget(memory, 1u, 0u);
+  AdapterMemoryProbe::set_usage(memory, 0u, 1u);
+  CHECK(!memory.invariants_hold());
+  AdapterMemoryProbe::set_usage(memory, 0u, 0u);
   CHECK(memory.invariants_hold()); }

@@ -35,6 +35,8 @@ private:
     bool     read_;
     uint64_t budgets_[groups];
     uint64_t usages_[groups];
+
+    friend struct AdapterMemoryProbe;
 };
 
 }

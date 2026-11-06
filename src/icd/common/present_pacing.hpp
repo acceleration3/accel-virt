@@ -37,6 +37,8 @@ private:
     ObjectStorage<FramePacer> pacer_;
     uint32_t                  blanks_;
     uint64_t                  waited_;
+
+    friend struct PresentPacingProbe;
 };
 
 }
