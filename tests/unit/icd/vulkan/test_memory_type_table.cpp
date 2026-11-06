@@ -3,6 +3,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "icd/common/adapter_memory.hpp"
 #include "icd/vulkan/memory_type_table.hpp"
 
 #include <cstdint>
@@ -15,12 +16,18 @@ using av::icd::MemoryTypeTable;
 
 namespace av::icd {
 
+struct AdapterMemoryProbe {
+    static void set_budget(AdapterMemory &memory, std::uint32_t group, std::uint64_t bytes) { memory.budgets_[group] = bytes; }
+};
+
 struct MemoryTypeTableProbe {
+    static AdapterMemory &memory(MemoryTypeTable &table) { return table.memory_; }
     static VkPhysicalDeviceMemoryProperties &properties(MemoryTypeTable &table) { return table.properties_; }
 };
 
 }
 
+using av::icd::AdapterMemoryProbe;
 using av::icd::MemoryTypeTableProbe;
 
 namespace {
@@ -284,3 +291,27 @@ TEST(memory_type_table, the_lendable_types_are_those_that_are_visible_coherent_a
   CHECK_STATUS(table.build(host(nullptr, 0u, intel_heaps, 1u)), Status::ok);
   CHECK_EQ(table.lendable_types(), 0u);
   CHECK(table.invariants_hold()); }
+
+TEST(memory_type_table, with_no_non_local_budget_the_host_heap_is_taken_from_the_host_s_own_non_local_heap)
+{ { TableRig rig;
+    rig.kmt().set_video_memory(MemorySegmentGroup::non_local, 0u, 0u);
+    MemoryTypeTable table(rig.kmt(), rig.adapter());
+    CHECK_STATUS(table.build(nvidia()), Status::ok);
+    CHECK(table.invariants_hold());
+    const VkPhysicalDeviceMemoryProperties answer = answered(table);
+    CHECK_EQ(answer.memoryHeaps[0].size, 1024u * mib);
+    CHECK_EQ(answer.memoryHeaps[1].size, 2u * 1024u * mib); }
+  { TableRig rig;
+    rig.kmt().set_video_memory(MemorySegmentGroup::non_local, 0u, 0u);
+    MemoryTypeTable table(rig.kmt(), rig.adapter());
+    CHECK_STATUS(table.build(intel()), Status::ok);
+    CHECK(table.invariants_hold());
+    const VkPhysicalDeviceMemoryProperties answer = answered(table);
+    CHECK_EQ(answer.memoryHeapCount, 1u);
+    CHECK_EQ(answer.memoryHeaps[0].size, 1024u * mib); } }
+
+TEST(memory_type_table, figures_held_before_the_adapter_was_read_are_unsound)
+{ TableRig      rig;
+  MemoryTypeTable table(rig.kmt(), rig.adapter());
+  AdapterMemoryProbe::set_budget(MemoryTypeTableProbe::memory(table), 0u, 4096u);
+  CHECK(!table.invariants_hold()); }
