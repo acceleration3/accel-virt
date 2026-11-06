@@ -164,7 +164,7 @@ bool OpenedObjects::row_holds(uint32_t kind, uint64_t made, const OpenedObjectRo
     const SharedObjectKind named(kind);
     if (made == 0u || row.object_id_ == 0u) return false;
     if (named.is_fence()) return row.size_ == 0u;
-    return named.is_memory() && row.size_ != 0u && SharedBytes(row.size_).pages() == row.size_;
+    return row.size_ != 0u && SharedBytes(row.size_).pages() == row.size_;
 }
 
 bool OpenedObjects::invariants_hold() const

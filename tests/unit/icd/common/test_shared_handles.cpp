@@ -14,8 +14,24 @@
 
 #include <cstdint>
 
+namespace av {
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_free_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.free_count_ = count; }
+};
+
+}
+
 namespace av::icd {
 struct SharedHandlesProbe {
+    static void miscount_slots(SharedHandles &handles, std::uint32_t count)
+    { KeyedSlotsProbe::corrupt_free_count(handles.slots_, count); }
+    static void miscount_names(SharedHandles &handles, std::uint32_t count)
+    { KeyedSlotsProbe::corrupt_free_count(handles.handles_of_, count); }
+    static void add_row(SharedHandles &handles, std::uint64_t key, const SharedHandleSlot &row)
+    { std::uint32_t slot = 0u;
+      CHECK_STATUS(handles.slots_.insert(key, row, slot), av::Status::ok); }
+    static void drop_row(SharedHandles &handles, std::uint64_t key) { static_cast<void>(handles.slots_.erase(key)); }
     static SharedHandleSlot &slot_for(SharedHandles &handles, std::uint64_t object_id)
     { return *handles.slots_.find(*handles.handles_of_.find(object_id)); }
 };
@@ -328,3 +344,61 @@ TEST(shared_handles_adopt, bytes_that_carry_no_usable_record_are_each_refused_an
     CHECK_EQ(handles.live(), 0u);
     CHECK(handles.invariants_hold());
     CHECK_EQ(kernel.kmt().calls(MockKmt::Call::destroy_shared_allocation), 1u); } }
+
+TEST(shared_handles_forget, two_handles_of_one_object_are_given_back_whichever_is_forgotten_first)
+{ for (std::uint32_t order = 0u; order < 2u; order++) {
+      Kernel              kernel;
+      SharedHandles       handles(kernel.kmt(), kernel.lock(), kernel.memory());
+      std::uint64_t       minted = 0u;
+      const std::uint32_t allocation = kernel.create(minted);
+      std::uint64_t       first = 0u;
+      std::uint64_t       second = 0u;
+      CHECK_STATUS(kernel.kmt().share_object(kernel.device(), allocation, first), Status::ok);
+      CHECK_STATUS(kernel.kmt().share_object(kernel.device(), allocation, second), Status::ok);
+      std::uint64_t id = 0u;
+      CHECK_STATUS(handles.adopt(kernel.device(), first, id), Status::ok);
+      CHECK_STATUS(handles.adopt(kernel.device(), second, id), Status::ok);
+      CHECK_EQ(handles.live(), 2u);
+      CHECK(handles.invariants_hold());
+      handles.forget(order == 0u ? first : second);
+      CHECK_EQ(handles.live(), 1u);
+      handles.forget(order == 0u ? second : first);
+      CHECK_EQ(handles.live(), 0u);
+      CHECK(handles.invariants_hold());
+  } }
+
+TEST(shared_handles_invariants, catch_a_table_that_lost_count_a_row_under_no_key_and_a_name_with_no_row)
+{ Kernel        kernel;
+  SharedHandles handles(kernel.kmt(), kernel.lock(), kernel.memory());
+  std::uint64_t one = 0u;
+  std::uint64_t two = 0u;
+  std::uint64_t first = 0u;
+  std::uint64_t second = 0u;
+  const std::uint32_t first_allocation = kernel.create(one);
+  const std::uint32_t second_allocation = kernel.create(two);
+  CHECK_STATUS(handles.mint(kernel.device(), first_allocation, one, first), Status::ok);
+  CHECK_STATUS(handles.mint(kernel.device(), second_allocation, two, second), Status::ok);
+  CHECK(handles.invariants_hold());
+
+  SharedHandlesProbe::miscount_slots(handles, 5u);
+  CHECK(!handles.invariants_hold());
+  SharedHandlesProbe::miscount_slots(handles, 0u);
+  SharedHandlesProbe::miscount_names(handles, 5u);
+  CHECK(!handles.invariants_hold());
+  SharedHandlesProbe::miscount_names(handles, 0u);
+  CHECK(handles.invariants_hold());
+
+  av::icd::SharedHandleSlot &row = SharedHandlesProbe::slot_for(handles, one);
+  row.handle_ = 0u;
+  CHECK(!handles.invariants_hold());
+  row.handle_ = first;
+  CHECK(handles.invariants_hold());
+
+  SharedHandlesProbe::add_row(handles, 0u, av::icd::SharedHandleSlot{0u, 77u, kernel.device(), 0u});
+  CHECK(!handles.invariants_hold());
+  handles.forget(0u);
+  SharedHandlesProbe::drop_row(handles, 0u);
+  CHECK(handles.invariants_hold());
+
+  SharedHandlesProbe::drop_row(handles, second);
+  CHECK(!handles.invariants_hold()); }

@@ -27,9 +27,21 @@ using av::SharedObjectKind;
 using av::Status;
 using av::icd::OpenedObjects;
 
+namespace av {
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_free_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.free_count_ = count; }
+};
+
+}
+
 namespace av::icd {
 
 struct OpenedObjectsProbe {
+    static void miscount(OpenedObjects &opened, std::uint32_t kind, std::uint32_t count)
+    {
+        KeyedSlotsProbe::corrupt_free_count(*opened.opens_of(kind), count);
+    }
     static OpenedObjectRow &add(OpenedObjects &opened, std::uint32_t kind, std::uint64_t made,
                                 const OpenedObjectRow &row)
     {
@@ -384,3 +396,43 @@ TEST(opened_objects, a_context_gives_back_only_what_it_opened_into)
   process.opened().give_back_into(process.wire(), into);
   CHECK_EQ(process.wire().sends(), sends + 3u);
   CHECK(process.opened().invariants_hold()); }
+
+TEST(opened_objects, a_kind_no_table_holds_is_never_answered_or_given_back)
+{ Process process;
+  const std::uint64_t named = process.handle();
+  process.answer(SharedObjectAnswer::done, made_memory);
+  std::uint64_t made = 0u;
+  CHECK_STATUS(process.opened().open(process.wire(), process.device(), named, SharedObjectKind::memory, page, into,
+                                     made),
+               Status::ok);
+  const std::uint32_t sent = process.wire().sends();
+  const av::icd::OpenedObjects &view = process.opened();
+  CHECK(view.answered(SharedObjectKind::memory, made_memory));
+  CHECK(!view.answered(0u, made_memory));
+  CHECK(!view.answered(4u, made_memory));
+  CHECK(!view.answered(SharedObjectKind::memory, 0u));
+  CHECK(!process.opened().give_back(process.wire(), 0u, made_memory));
+  CHECK(!process.opened().give_back(process.wire(), 4u, made_memory));
+  CHECK(!process.opened().give_back(process.wire(), SharedObjectKind::memory, 0u));
+  CHECK(!process.opened().give_back(process.wire(), SharedObjectKind::monitored_fence, made_memory));
+  CHECK_EQ(process.wire().sends(), sent);
+  CHECK_EQ(process.opened().live(), 1u);
+  CHECK(process.opened().invariants_hold()); }
+
+TEST(opened_objects, invariants_reject_a_row_with_no_name_and_a_table_that_lost_count)
+{ Process process;
+  static_cast<void>(OpenedObjectsProbe::add(process.opened(), SharedObjectKind::memory, made_memory,
+                                            av::icd::OpenedObjectRow{7u, into, page}));
+  static_cast<void>(OpenedObjectsProbe::add(process.opened(), SharedObjectKind::native_fence, made_fence,
+                                            av::icd::OpenedObjectRow{8u, into, 0u}));
+  CHECK(process.opened().invariants_hold());
+  OpenedObjectsProbe::miscount(process.opened(), SharedObjectKind::native_fence, 5u);
+  CHECK(!process.opened().invariants_hold());
+  OpenedObjectsProbe::miscount(process.opened(), SharedObjectKind::native_fence, 0u);
+  CHECK(process.opened().invariants_hold());
+  OpenedObjectsProbe::miscount(process.opened(), SharedObjectKind::memory, 5u);
+  CHECK(!process.opened().invariants_hold());
+  OpenedObjectsProbe::miscount(process.opened(), SharedObjectKind::memory, 0u);
+  static_cast<void>(OpenedObjectsProbe::add(process.opened(), SharedObjectKind::memory, 0u,
+                                            av::icd::OpenedObjectRow{9u, into, page}));
+  CHECK(!process.opened().invariants_hold()); }
