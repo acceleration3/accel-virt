@@ -7,6 +7,7 @@
 #include "device/present/present_engine.hpp"
 #include "device/present/present_frames.hpp"
 #include "harness/context/recording_context_plane.hpp"
+#include "harness/present/engine_side.hpp"
 #include "harness/virtio/fake_virtqueue_device.hpp"
 #include "harness/virtio/mapped_virtio_function.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -45,6 +46,7 @@ struct PresentQueueProbe {
 }
 
 using av::ControlRequest;
+using av::EngineSide;
 using av::FakeVirtqueueDevice;
 using av::FenceInterrupts;
 using av::GpuResponse;
@@ -71,82 +73,6 @@ constexpr std::uint32_t pitch = side * PresentSurface::pixel_bytes;
 constexpr std::uint32_t blue_first = 21u;
 constexpr std::uint32_t red_first = 32u;
 constexpr std::uint32_t epoch = 3u;
-constexpr std::uint8_t  gpu[av::PresentFrames::uuid_bytes] = {4};
-
-class EngineSide {
-public:
-    explicit EngineSide(MappedVirtioFunction &mapped)
-        : platform_(mapped.platform()), queue_(mapped.queue_device(0u)), host_(), interrupts_(host_),
-          engine_(host_, interrupts_), plane_(), snapshots_(plane_, gpu)
-    {
-        host_.translate_guest_with([](void *context, std::uint64_t address, std::uint64_t length) {
-            return static_cast<MockPlatform *>(context)->translate_physical(address, static_cast<std::size_t>(length));
-        }, &platform_);
-        CHECK_STATUS(engine_.initialize(), Status::ok);
-        platform_.on_stall(&EngineSide::stall, this);
-    }
-    ~EngineSide()
-    {
-        platform_.on_stall(nullptr, nullptr);
-        engine_.detach();
-    }
-    EngineSide(const EngineSide &) = delete;
-    EngineSide &operator=(const EngineSide &) = delete;
-
-    void          hold(bool held) { held_ = held; }
-    void          refuse_page() { refuse_page_ = true; }
-    void          accept_page() { refuse_page_ = false; truncate_page_ = false; }
-    void          truncate_page() { truncate_page_ = true; }
-    void          serve() { static_cast<void>(queue_.answer_all(request_, sizeof request_, &EngineSide::answer, this)); }
-    std::uint32_t presents() const { return presents_; }
-    void          frame(const av::SurfacePoint &frame, const AvFrameView &view) { plane_.serve_frame(frame, view); }
-
-private:
-    static void stall(void *context)
-    {
-        auto *const self = static_cast<EngineSide *>(context);
-        if (self->held_) return;
-        if (self->queue_.pending_type() != 0u) self->serve();
-        const timespec pause = {0, 20000};
-        nanosleep(&pause, nullptr);
-    }
-
-    static std::uint32_t answer(void *context, const std::uint8_t *request, std::uint32_t length,
-                                std::uint8_t *answer, std::uint32_t room)
-    {
-        auto *const   self = static_cast<EngineSide *>(context);
-        std::uint32_t type = 0u;
-        std::memcpy(&type, request, sizeof type);
-        if (type == 0x02F7u) self->presents_++;
-        GpuResponse refusal;
-        refusal.set(GpuResponse::err_invalid_parameter);
-        MockRequest    mock(request, length);
-        ControlRequest control(self->host_, &mock);
-        const bool     refused = type == 0x02F6u && self->refuse_page_;
-        const bool     answered =
-            !refused && PresentEngineCommands(self->host_, self->engine_, self->snapshots_).answer(control, type);
-        const std::uint8_t *bytes = answered ? mock.response_bytes() : refusal.bytes();
-        const std::size_t   size = answered ? mock.response_size() : refusal.length();
-        const std::size_t   whole = size < room ? size : room;
-        const std::size_t   given = type == 0x02F6u && self->truncate_page_ ? 2u : whole;
-        std::memcpy(answer, bytes, given);
-        return static_cast<std::uint32_t>(given);
-    }
-
-    MockPlatform       &platform_;
-    FakeVirtqueueDevice queue_;
-    MockHost            host_;
-    FenceInterrupts     interrupts_;
-    PresentEngine       engine_;
-    av::RecordingContextPlane plane_;
-    av::PresentFrames      snapshots_;
-    bool                held_ = false;
-    bool                refuse_page_ = false;
-    bool                truncate_page_ = false;
-    std::uint32_t       presents_ = 0u;
-    std::uint8_t        request_[0x9000] = {};
-};
-
 class Surface {
 public:
     explicit Surface(MockPlatform &platform) : platform_(platform)

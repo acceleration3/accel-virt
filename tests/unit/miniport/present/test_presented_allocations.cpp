@@ -84,4 +84,8 @@ TEST(presented_allocations, an_uncounted_virtual_present_names_the_fixed_indices
   present.NumDstAllocations = 1u;
   const PresentedAllocations counted(present);
   CHECK(counted.source() == &third);
-  CHECK(counted.destination() == &first); }
+  CHECK(counted.destination() == &first);
+  present.NumSrcAllocations = 0u;
+  const PresentedAllocations fill(present);
+  CHECK(fill.source() == nullptr);
+  CHECK(fill.destination() == &third); }

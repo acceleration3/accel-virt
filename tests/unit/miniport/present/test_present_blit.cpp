@@ -24,6 +24,18 @@ using av::RectRecord;
 using av::Status;
 using av::SurfaceLayout;
 
+namespace av {
+
+struct PresentBlitProbe {
+    static void hold(PresentBlit &blit, const PresentRegion &region)
+    {
+        blit.regions_[0] = region;
+        blit.held_ = 1u;
+    }
+};
+
+}
+
 namespace {
 
 constexpr std::uint32_t side = 8u;
@@ -425,6 +437,12 @@ TEST(present_blit, a_source_rectangle_outside_the_source_moves_only_what_is_insi
     CHECK_EQ(blit.rows(), 0u);
     CHECK_EQ(destination.count(0xAAu), 0u);
     CHECK(blit.invariants_hold()); }
+  { PresentBlit blit(platform, pixels, &from, into);
+    destination.paint_all(0u);
+    CHECK_STATUS(blit.blit(Rectangle(0, side, 4, side + 4), Rectangle(0, 0, 4, 4), nullptr, 0u), Status::ok);
+    CHECK_EQ(blit.rows(), 0u);
+    CHECK_EQ(destination.count(0xAAu), 0u);
+    CHECK(blit.invariants_hold()); }
   CHECK_EQ(platform.mapped_frames(), 0u); }
 
 TEST(present_blit, a_row_that_crosses_a_page_is_moved_in_both_of_them)
@@ -576,3 +594,21 @@ TEST(present_blit, a_fill_hands_the_mover_its_colour)
   CHECK_EQ(mover.taken(), 1u);
   check_region(mover.region(0u), 0u, 6u, 0u, 6u, 3u, 2u);
   CHECK_EQ(blit.rows(), 2u); }
+
+TEST(present_blit_invariants, a_held_region_past_the_destination_is_detected)
+{ MockPlatform platform;
+  MappedPixels pixels(platform);
+  Surface      source(platform, 0u);
+  Surface      destination(platform, 0u);
+  const PresentSurface from = source.present();
+  const PresentSurface into = destination.present();
+  PresentBlit blit(platform, pixels, &from, into);
+  CHECK(blit.invariants_hold());
+  av::PresentBlitProbe::hold(blit, PresentRegion(0u, 0u, 0u, 0u, side, side));
+  CHECK(blit.invariants_hold());
+  av::PresentBlitProbe::hold(blit, PresentRegion(0u, 0u, 1u, 0u, side, 1u));
+  CHECK(!blit.invariants_hold());
+  av::PresentBlitProbe::hold(blit, PresentRegion(0u, 0u, 0u, 1u, 1u, side));
+  CHECK(!blit.invariants_hold());
+  av::PresentBlitProbe::hold(blit, PresentRegion(0u, 0u, 0u, 0u, 1u, 1u));
+  CHECK(blit.invariants_hold()); }

@@ -8,6 +8,7 @@
 #include "harness/virtio/mapped_virtio_function.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "harness/present/engine_side.hpp"
 #include "proto/dma/present_region.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/surface_layout.hpp"
@@ -15,6 +16,7 @@
 #include <cstdint>
 #include <optional>
 
+using av::EngineSide;
 using av::GuestPageList;
 using av::LogBudget;
 using av::MappedVirtioFunction;
@@ -94,3 +96,39 @@ TEST(present_ticket, a_snapshot_the_queue_refuses_falls_back_to_the_pages)
   CHECK_EQ(fallback.copies, 1u);
   CHECK_EQ(fallback.fills, 1u);
   CHECK_EQ(ticket.ticket(), 0u); }
+
+TEST(present_ticket, a_present_the_queue_takes_is_waited_for_by_its_ticket_and_moved_by_nobody_here)
+{ MappedVirtioFunction mapped;
+  CHECK_STATUS(mapped.map(), Status::ok);
+  std::optional<VirtioGpuDevice> device;
+  device.emplace(mapped.platform(), mapped.mappings(), mapped.layout());
+  CHECK_STATUS(device->start(3u), Status::ok);
+  EngineSide    engine(mapped);
+  PresentQueue  queue(mapped.platform(), *device, 1u);
+  CHECK_STATUS(queue.start(), Status::ok);
+  engine.hold(true);
+  LogBudget     budget(mapped.platform());
+  CountingMover fallback;
+  PresentTicket ticket(mapped.platform(), budget, &queue, fallback, av::SurfacePoint());
+  CHECK_STATUS(ticket.copy(surface, surface, &region, 1u), Status::ok);
+  CHECK_EQ(ticket.ticket(), 1u);
+  CHECK_STATUS(ticket.fill(surface, 7u, &region, 1u), Status::ok);
+  CHECK_EQ(ticket.ticket(), 2u);
+  CHECK_EQ(fallback.copies, 0u);
+  CHECK_EQ(fallback.fills, 0u);
+  CHECK_EQ(mapped.platform().logged(), 0u); }
+
+TEST(present_ticket, refusals_past_the_log_budget_still_move_the_pixels_but_are_not_logged)
+{ MappedVirtioFunction mapped;
+  CHECK_STATUS(mapped.map(), Status::ok);
+  std::optional<VirtioGpuDevice> device;
+  device.emplace(mapped.platform(), mapped.mappings(), mapped.layout());
+  PresentQueue  queue(mapped.platform(), *device, 1u);
+  LogBudget     budget(mapped.platform());
+  CountingMover fallback;
+  PresentTicket ticket(mapped.platform(), budget, &queue, fallback, av::SurfacePoint());
+  for (std::uint32_t round = 0u; round < LogBudget::lines_per_window + 8u; round++)
+      CHECK_STATUS(ticket.copy(surface, surface, &region, 1u), Status::ok);
+  CHECK_EQ(fallback.copies, LogBudget::lines_per_window + 8u);
+  CHECK_EQ(mapped.platform().logged(), LogBudget::lines_per_window);
+  CHECK_EQ(budget.dropped(), 8u); }

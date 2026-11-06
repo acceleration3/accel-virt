@@ -4,6 +4,14 @@
 
 #include <cstdint>
 
+namespace av {
+
+struct PresentWritesProbe {
+    static void set_ticket(PresentWrites &writes, std::uint64_t ticket) { writes.ticket_ = ticket; }
+};
+
+}
+
 using av::Irql;
 using av::MockPlatform;
 using av::PresentWrites;
@@ -72,3 +80,11 @@ TEST(present_writes, is_legal_at_dispatch_for_a_present_the_dpc_and_a_reader_ali
   CHECK(writes.invariants_hold());
   platform.set_irql(Irql::passive);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
+TEST(present_writes_invariants, a_ticket_with_no_write_behind_it_is_detected)
+{ MockPlatform  platform;
+  PresentWrites writes(platform);
+  av::PresentWritesProbe::set_ticket(writes, 5u);
+  CHECK(!writes.invariants_hold());
+  writes.opening();
+  CHECK(writes.invariants_hold()); }

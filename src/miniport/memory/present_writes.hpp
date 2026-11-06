@@ -7,6 +7,8 @@
 
 namespace av {
 
+struct PresentWritesProbe;
+
 class PresentWrites {
 public:
     explicit PresentWrites(Platform &platform);
@@ -25,6 +27,8 @@ private:
     Platform &platform_;
     uint64_t  sequence_;
     uint64_t  ticket_;
+
+    friend struct PresentWritesProbe;
 };
 
 }
