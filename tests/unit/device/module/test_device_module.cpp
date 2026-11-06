@@ -7,6 +7,7 @@
 #include "device/module/device_instance.hpp"
 #include "device/module/device_module.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
+#include "harness/export/fake_export_consumer.hpp"
 #include "device/module/driver_status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
@@ -189,3 +190,102 @@ TEST(av_device_abi, av_device_control_answers_blob_requests_and_leaves_the_rest_
   CHECK_EQ(host.live_guest_mappings(), 0u);
   CHECK(av_device_create(&ops.table(), nullptr, "auto", 1, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
   CHECK(std::strstr(error, "blob=on is not supported") != nullptr); }
+
+namespace {
+
+std::uint32_t export_key_51(void *, std::uint32_t, std::uint64_t key, AvExportedImage *image)
+{
+    if (key != 0x51u) return AV_UNKNOWN;
+    image->fd = 12;
+    image->width = 640u;
+    image->height = 480u;
+    return AV_EXECUTED;
+}
+
+std::uint32_t read_key_51(void *, std::uint32_t, std::uint64_t key, void *, std::uint32_t, std::uint32_t, std::uint32_t)
+{
+    return key == 0x51u ? AV_EXECUTED : AV_UNKNOWN;
+}
+
+}
+
+TEST(av_device_abi, av_device_export_image_and_export_head_hand_over_a_surface_only_for_a_key_the_executor_knows)
+{ MockHost host; MockHostOps ops(host);
+  host.add_gpu(gpu);
+  av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_D3D);
+  executor.editable().export_image = export_key_51;
+  char error[96] = {};
+  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  CHECK(device != nullptr);
+  AvExportedImage image = {};
+  CHECK_EQ(av_device_export_image(device, 0x51u, nullptr), 0);
+  CHECK_EQ(av_device_export_image(device, 0x52u, &image), 0);
+  CHECK_EQ(av_device_export_image(device, 0x51u, &image), 1);
+  CHECK_EQ(image.fd, 12);
+  CHECK_EQ(image.width, 640u);
+  AvExportedImage head = {};
+  CHECK_EQ(av_device_export_head(device, 0u, 0x51u, nullptr), 0);
+  CHECK_EQ(av_device_export_head(device, 0u, 0u, &head), 0);
+  CHECK_EQ(av_device_export_head(device, 0u, 0x52u, &head), 0);
+  CHECK_EQ(av_device_export_head(device, 0u, 0x51u, &head), 1);
+  CHECK_EQ(head.height, 480u);
+  CHECK_EQ(av_device_destroy(device), 0); }
+
+TEST(av_device_abi, av_device_read_image_copies_a_surface_only_for_a_key_the_executor_knows)
+{ MockHost host; MockHostOps ops(host);
+  host.add_gpu(gpu);
+  av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_D3D);
+  executor.editable().read_image = read_key_51;
+  char error[96] = {};
+  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  CHECK(device != nullptr);
+  std::uint8_t pixels[16] = {};
+  CHECK_EQ(av_device_read_image(device, 0x51u, pixels, 4u, 1u, 1u), 1);
+  CHECK_EQ(av_device_read_image(device, 0x52u, pixels, 4u, 1u, 1u), 0);
+  CHECK_EQ(av_device_destroy(device), 0); }
+
+TEST(av_device_abi, av_device_set_refresh_answers_one_for_a_rate_the_device_takes_and_minus_one_for_the_rest)
+{ MockHost host; MockHostOps ops(host);
+  host.add_gpu(gpu);
+  char error[96] = {};
+  AvDevice *const device = av_device_create(&ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  CHECK(device != nullptr);
+  CHECK_EQ(av_device_set_refresh(device, 144000u), 1);
+  CHECK_EQ(av_device_set_refresh(device, 999u), -1);
+  CHECK_EQ(av_device_destroy(device), 0); }
+
+TEST(av_device_abi, av_device_post_frame_is_taken_only_once_the_guest_has_registered_its_clock_page)
+{ MockHost host; MockHostOps ops(host);
+  host.add_gpu(gpu);
+  host.add_guest_ram(0x400000u, 0x10000u);
+  host.add_display_heads(2u);
+  host.set_clock(1000u);
+  av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_D3D);
+  char error[96] = {};
+  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  CHECK(device != nullptr);
+  CHECK_EQ(av_device_post_frame(device, 0u, 5u, 0x51u), 0);
+  GpuRequestBuilder request(0x02F4u);
+  request.u64(0x401000u);
+  MockRequest mock(request.bytes(), request.size());
+  CHECK_EQ(av_device_control(device, &mock, 0x02F4u), 1);
+  CHECK_EQ(mock.response_type(), 0x1100u);
+  CHECK_EQ(av_device_post_frame(device, 0u, 5u, 0x51u), 1);
+  CHECK_EQ(av_device_post_frame(device, 0u, 0u, 0x51u), 0);
+  av_device_reset(device);
+  CHECK_EQ(av_device_destroy(device), 0); }
+
+TEST(av_device_abi, av_device_export_accepted_answers_zero_for_a_connection_it_serves_and_one_for_the_rest)
+{ MockHost host; MockHostOps ops(host);
+  host.add_gpu(gpu);
+  av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_D3D);
+  char error[96] = {};
+  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  CHECK(device != nullptr);
+  av::FakeExportConsumer stranger;
+  CHECK_EQ(av_device_export_accepted(device, stranger.device_end(), 0), 1);
+  stranger.refused();
+  av::FakeExportConsumer consumer;
+  CHECK_EQ(av_device_export_accepted(device, consumer.device_end(), 1), 0);
+  av_device_reset(device);
+  CHECK_EQ(av_device_destroy(device), 0); }
