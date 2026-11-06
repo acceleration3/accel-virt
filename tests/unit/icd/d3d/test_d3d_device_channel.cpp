@@ -2,6 +2,7 @@
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/guest/framed_block_probe.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
@@ -49,6 +50,31 @@ struct KmtTransportProbe {
 }
 
 using av::KmtTransportProbe;
+
+namespace av::icd {
+
+struct LockedTransportProbe {
+    static bool &holds(LockedTransport &transport) { return transport.holds_; }
+};
+
+}
+
+namespace av::d3d {
+
+struct D3dCommandStreamProbe {
+    static FramedBlock &framed(D3dCommandStream &stream) { return stream.framed_; }
+};
+
+struct D3dDeviceChannelProbe {
+    static icd::LockedTransport &locked(D3dDeviceChannel &channel) { return channel.locked_; }
+};
+
+}
+
+using av::FramedBlockProbe;
+using av::d3d::D3dCommandStreamProbe;
+using av::d3d::D3dDeviceChannelProbe;
+using av::icd::LockedTransportProbe;
 
 namespace {
 
@@ -542,3 +568,24 @@ TEST(d3d_device_channel, the_publish_barrier_runs_what_is_held_under_the_lock)
   CHECK_STATUS(recording.a().run_held(), Status::invalid_state);
   CHECK_EQ(recording.kmt().commands(), 0u);
   CHECK(!recording.stream().failed()); }
+
+TEST(d3d_device_channel, room_for_several_blobs_comes_back_when_a_later_one_does_not_fit_inline)
+{ Fixture fixture;
+  alignas(64) static std::uint8_t block[2u * lent_room];
+  fixture.transport().blobs().lend(block, sizeof block);
+  const std::uint64_t sizes[3] = {16u, lent_room + 1u, 16u};
+  CHECK(fixture.a().make_room_for_blobs(sizes, 3u));
+  CHECK(fixture.transport().blobs().room() >= sizes[1]);
+  CHECK(!fixture.lock().held()); }
+
+TEST(d3d_device_channel, a_lock_or_stream_in_a_state_it_cannot_reach_breaks_the_invariants)
+{ Fixture fixture;
+  CHECK(fixture.a().invariants_hold());
+  LockedTransportProbe::holds(D3dDeviceChannelProbe::locked(fixture.a())) = true;
+  CHECK(!fixture.a().invariants_hold());
+  LockedTransportProbe::holds(D3dDeviceChannelProbe::locked(fixture.a())) = false;
+  CHECK(fixture.a().invariants_hold());
+  FramedBlockProbe(D3dCommandStreamProbe::framed(fixture.stream())).capacity() = 8u;
+  CHECK(!fixture.stream().invariants_hold());
+  CHECK(!fixture.a().invariants_hold());
+  FramedBlockProbe(D3dCommandStreamProbe::framed(fixture.stream())).capacity() = 0u; }

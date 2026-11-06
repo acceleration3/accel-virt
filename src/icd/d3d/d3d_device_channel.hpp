@@ -51,6 +51,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct D3dDeviceChannelProbe;
+
     D3dCommandStream &stream_;
     ThreadLock       &lock_;
     uint32_t          device_;
