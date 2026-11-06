@@ -91,6 +91,31 @@ struct Rig {
 
 }
 
+namespace av {
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
+};
+
+}
+
+namespace av::icd {
+struct WindowPresentQueueProbe {
+    static void add_row(Queue &queue, Owner &owner, bool held, std::uint64_t order)
+    { const Queue::Row row{held ? Frame(owner, 0u, nullptr, Frame::Rows::bgra_bottom_up, 1u, 1u, nullptr, Mark{})
+                                : Frame(),
+                           held ? Queue::Stage::queued : Queue::Stage::free, order};
+      CHECK_STATUS(queue.rows_.append(row), av::Status::ok); }
+    static void clear_rows(Queue &queue) { queue.rows_.clear(); }
+    static void set_next_order(Queue &queue, std::uint64_t order) { queue.next_order_ = order; }
+    static void set_scratch_bytes(Queue &queue, std::size_t bytes) { queue.scratch_bytes_ = bytes; }
+    static void corrupt_rows(Queue &queue) { av::GrowableArrayProbe::corrupt_capacity(queue.rows_, 1u); }
+};
+
+}
+
+using av::icd::WindowPresentQueueProbe;
+
 TEST(window_present_queue, a_handed_frame_is_shown_by_the_thread_and_its_owner_told_it_was_drawn)
 { Rig rig;
   CHECK(rig.queue.start());
@@ -156,3 +181,86 @@ TEST(window_present_queue, waiting_for_a_shown_frame_waits_on_the_shown_signal_f
   rig.queue.await_shown(0u);
   CHECK_EQ(rig.shown.waits(), 2u);
   CHECK_EQ(rig.shown.last_wait(), 0u); }
+
+TEST(window_present_queue, its_invariants_walk_the_rows_in_order_and_catch_a_repeated_order_or_a_wrong_scratch)
+{ Rig rig;
+  WindowPresentQueueProbe::set_next_order(rig.queue, 4u);
+  WindowPresentQueueProbe::add_row(rig.queue, rig.owner, true, 1u);
+  WindowPresentQueueProbe::add_row(rig.queue, rig.owner, false, 0u);
+  WindowPresentQueueProbe::add_row(rig.queue, rig.owner, true, 2u);
+  CHECK(rig.queue.invariants_hold());
+  WindowPresentQueueProbe::add_row(rig.queue, rig.owner, true, 2u);
+  CHECK(!rig.queue.invariants_hold());
+  WindowPresentQueueProbe::clear_rows(rig.queue);
+  WindowPresentQueueProbe::add_row(rig.queue, rig.owner, true, 0u);
+  CHECK(!rig.queue.invariants_hold());
+  WindowPresentQueueProbe::clear_rows(rig.queue);
+  WindowPresentQueueProbe::add_row(rig.queue, rig.owner, true, 4u);
+  CHECK(!rig.queue.invariants_hold());
+  WindowPresentQueueProbe::clear_rows(rig.queue);
+  WindowPresentQueueProbe::add_row(rig.queue, rig.owner, true, 1u);
+  WindowPresentQueueProbe::add_row(rig.queue, rig.owner, true, 2u);
+  WindowPresentQueueProbe::corrupt_rows(rig.queue);
+  CHECK(!rig.queue.invariants_hold());
+  WindowPresentQueueProbe::clear_rows(rig.queue);
+  WindowPresentQueueProbe::set_scratch_bytes(rig.queue, 16u);
+  CHECK(!rig.queue.invariants_hold());
+  WindowPresentQueueProbe::set_scratch_bytes(rig.queue, 0u);
+  CHECK(rig.queue.invariants_hold()); }
+
+TEST(window_present_queue, a_red_first_frame_is_traded_to_blue_first_in_a_scratch_that_grows_and_is_reused)
+{ Rig rig;
+  std::uint8_t big[8 * 4 * 4] = {};
+  for (std::uint32_t at = 0u; at < sizeof big; at += 4u) {
+      big[at] = 0x11u;
+      big[at + 1u] = 0x22u;
+      big[at + 2u] = 0x33u;
+      big[at + 3u] = 0x44u;
+  }
+  const Frame small(rig.owner, 0u, rig.pixels, Frame::Rows::rgba_top_down, 4u, 2u, &rig.window, Mark{});
+  const Frame large(rig.owner, 0u, big, Frame::Rows::rgba_top_down, 8u, 4u, &rig.window, Mark{});
+  CHECK(rig.queue.show_now(small));
+  CHECK_EQ(rig.surface.blits(), 1u);
+  const std::uint32_t grown = rig.platform.live_allocations();
+  CHECK(rig.queue.show_now(large));
+  CHECK_EQ(rig.surface.blits(), 2u);
+  CHECK_EQ(rig.platform.live_allocations(), grown);
+  CHECK(rig.surface.last_blit_top_down());
+  CHECK_EQ(rig.surface.last_blit_bytes()[0], 0x33u);
+  CHECK_EQ(rig.surface.last_blit_bytes()[1], 0x22u);
+  CHECK_EQ(rig.surface.last_blit_bytes()[2], 0x11u);
+  CHECK_EQ(rig.surface.last_blit_bytes()[3], 0x44u);
+  const std::uint32_t held = rig.platform.live_allocations();
+  CHECK(rig.queue.show_now(small));
+  CHECK_EQ(rig.surface.blits(), 3u);
+  CHECK_EQ(rig.platform.live_allocations(), held);
+  CHECK(rig.queue.invariants_hold());
+  rig.surface.refuse_next_blit();
+  CHECK(!rig.queue.show_now(small));
+  CHECK_EQ(rig.surface.blits(), 3u);
+  CHECK(rig.queue.invariants_hold()); }
+
+TEST(window_present_queue, a_red_first_frame_is_not_shown_when_it_cannot_be_traded)
+{ Rig rig;
+  const Frame empty(rig.owner, 0u, rig.pixels, Frame::Rows::rgba_top_down, 0u, 2u, &rig.window, Mark{});
+  CHECK(!rig.queue.show_now(empty));
+  CHECK_EQ(rig.surface.blits(), 0u);
+  CHECK(rig.queue.invariants_hold());
+  const Frame vast(rig.owner, 0u, rig.pixels, Frame::Rows::rgba_top_down, 0xFFFFFFFFu, 0xFFFFFFFFu, &rig.window, Mark{});
+  CHECK(!rig.queue.show_now(vast));
+  CHECK_EQ(rig.surface.blits(), 0u);
+  CHECK(rig.queue.invariants_hold());
+  const Frame small(rig.owner, 0u, rig.pixels, Frame::Rows::rgba_top_down, 4u, 2u, &rig.window, Mark{});
+  CHECK(rig.queue.show_now(small));
+  CHECK(!rig.queue.show_now(empty));
+  CHECK_EQ(rig.surface.blits(), 1u);
+  CHECK(rig.queue.invariants_hold());
+
+  Rig starved;
+  starved.platform.fail_allocation_at(1u);
+  const Frame tiny(starved.owner, 0u, starved.pixels, Frame::Rows::rgba_top_down, 4u, 2u, &starved.window, Mark{});
+  CHECK(!starved.queue.show_now(tiny));
+  CHECK_EQ(starved.surface.blits(), 0u);
+  CHECK(starved.queue.invariants_hold());
+  CHECK(starved.queue.show_now(tiny));
+  CHECK_EQ(starved.surface.blits(), 1u); }

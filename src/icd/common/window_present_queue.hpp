@@ -400,13 +400,10 @@ bool WindowPresentQueue<Source, Readiness>::put_on_window(const Frame &frame)
 {
     AV_SCOPE("WindowPresentQueue::put_on_window");
     if (frame.chained()) return chains_.present(frame.window(), frame.slot());
-    switch (frame.rows()) {
-    case Frame::Rows::bgra_bottom_up:
+    if (frame.rows() == Frame::Rows::bgra_bottom_up)
         return surface_.blit_window(frame.window(), frame.width(), frame.height(), frame.pixels());
-    case Frame::Rows::bgra_top_down:
+    if (frame.rows() == Frame::Rows::bgra_top_down)
         return surface_.blit_window_top_down(frame.window(), frame.width(), frame.height(), frame.pixels());
-    case Frame::Rows::rgba_top_down: break;
-    }
     const uint8_t *const traded = as_bgra(frame);
     return traded != nullptr && surface_.blit_window_top_down(frame.window(), frame.width(), frame.height(), traded);
 }
@@ -415,10 +412,12 @@ template <typename Source, typename Readiness>
 const uint8_t *WindowPresentQueue<Source, Readiness>::as_bgra(const Frame &frame)
 {
     AV_SCOPE("WindowPresentQueue::as_bgra");
-    size_t pixels = 0u;
-    size_t bytes = 0u;
-    if (__builtin_mul_overflow(size_t{frame.width()}, size_t{frame.height()}, &pixels) ||
-        __builtin_mul_overflow(pixels, size_t{pixel_bytes}, &bytes)) return nullptr;
+    const uint64_t pixels = uint64_t{frame.width()} * frame.height();
+    uint64_t       whole = 0u;
+    if (__builtin_mul_overflow(pixels, uint64_t{pixel_bytes}, &whole)) return nullptr;
+    if constexpr (sizeof(size_t) < sizeof(uint64_t))
+        if (whole > ~size_t{0}) return nullptr;
+    const size_t bytes = static_cast<size_t>(whole);
     if (bytes > scratch_bytes_) {
         if (scratch_ != nullptr) memory_.release(scratch_);
         scratch_ = static_cast<uint8_t *>(memory_.allocate(bytes, Pool::paged));
