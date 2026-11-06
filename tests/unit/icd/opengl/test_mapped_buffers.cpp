@@ -368,3 +368,66 @@ TEST(mapped_buffers, map_state_answers_from_the_guests_map)
   CHECK_EQ(rig.mappings.unmap(rig.wire(), 6u), no_error);
   CHECK(rig.mappings.map_state(6u, mapped_name, value));
   CHECK_EQ(value, 0); }
+
+namespace {
+
+constexpr std::uint32_t sliced_storage = persistent | write | read;
+
+struct SlicedRig {
+    GlContextRig   context_rig;
+    GuestGlContext context{context_rig.connection(), context_rig.platform(), context_rig.send_lock(),
+                           context_rig.groups(), context_rig.lines(), context_rig.extensions(), context_rig.handles(), 1,
+                           GlContextOptions()};
+    BufferShadows  shadows{context_rig.platform()};
+    MappedBuffers  mappings{context_rig.platform(), shadows, context.slices(), context_rig.lines()};
+
+    SlicedRig()
+    {
+        context_rig.host().gl_make("renderer", "4.6");
+        context_rig.host().gl_slices(1u);
+        CHECK_STATUS(context.make(), Status::ok);
+        context_rig.host().blob_import(0u, 0x0000700000000100ull);
+        context_rig.host().gl_slices(1u);
+        CHECK_STATUS(context.slices().place(*context.wire(), 1u, 4096u, sliced_storage, nullptr), Status::ok);
+    }
+    av::ClientTransport &wire() { return *context.wire(); }
+};
+
+}
+
+TEST(mapped_buffers, a_buffer_the_gpu_shares_with_the_guest_is_mapped_marked_and_unmapped_through_its_slice)
+{ SlicedRig rig;
+  void *pointer = nullptr;
+  CHECK_EQ(rig.mappings.map(rig.wire(), 1u, 0, 128, write | persistent | explicit_flush, pointer), no_error);
+  CHECK(pointer != nullptr);
+  CHECK(rig.mappings.pointer_of(1u) == pointer);
+  CHECK_EQ(rig.mappings.held(), 0u);
+  CHECK_EQ(rig.mappings.mark(1u, 0, 16), no_error);
+  CHECK_EQ(rig.mappings.mark(1u, 120, 16), invalid_value);
+  CHECK_EQ(rig.mappings.unmap(rig.wire(), 1u), no_error);
+  CHECK(rig.mappings.invariants_hold()); }
+
+TEST(mapped_buffers, map_state_answers_a_sliced_buffers_storage_flags_and_its_map)
+{ SlicedRig rig;
+  constexpr std::uint32_t storage_flags = MappedBuffers::gl_buffer_storage_flags,
+                          mapped_name = MappedBuffers::gl_buffer_mapped, offset = MappedBuffers::gl_buffer_map_offset,
+                          length = MappedBuffers::gl_buffer_map_length;
+  std::int64_t value = -1;
+  CHECK(rig.mappings.map_state(1u, storage_flags, value));
+  CHECK_EQ(value, static_cast<std::int64_t>(sliced_storage));
+  value = -1;
+  CHECK(rig.mappings.map_state(0u, storage_flags, value));
+  CHECK_EQ(value, -1);
+  value = -1;
+  CHECK(!rig.mappings.map_state(9u, storage_flags, value));
+  CHECK_EQ(value, -1);
+  CHECK(rig.mappings.map_state(1u, mapped_name, value));
+  CHECK_EQ(value, 0);
+  void *pointer = nullptr;
+  CHECK_EQ(rig.mappings.map(rig.wire(), 1u, 16, 64, write | persistent, pointer), no_error);
+  CHECK(rig.mappings.map_state(1u, mapped_name, value));
+  CHECK_EQ(value, 1);
+  CHECK(rig.mappings.map_state(1u, offset, value));
+  CHECK_EQ(value, 16);
+  CHECK(rig.mappings.map_state(1u, length, value));
+  CHECK_EQ(value, 64); }

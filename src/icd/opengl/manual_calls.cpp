@@ -633,7 +633,7 @@ void ManualCalls::pin_storage(GuestGlContext &context, intptr_t size, const void
     if (context.pinned().pin(data, static_cast<uint64_t>(size), lent, offset) != Status::ok)
         return context.record(gl_invalid_operation);
     uint32_t previous = 0u;
-    if (!bound_to(context, copy_write_buffer, previous)) previous = 0u;
+    static_cast<void>(bound_to(context, copy_write_buffer, previous));
     ClientTransport &wire = *context.wire();
     glproto::av_glBindBuffer(wire, copy_write_buffer, buffer);
     glproto::av_glBufferStorageMemEXT(wire, copy_write_buffer, size, static_cast<uint32_t>(lent->handle()), offset);

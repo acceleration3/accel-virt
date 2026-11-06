@@ -21,6 +21,15 @@ using av::Status;
 using av::glicd::GlIcdRoot;
 using Root = GlIcdRoot;
 
+namespace av {
+
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.count_ = count; }
+};
+
+}
+
 namespace av::icd {
 
 struct IcdConnectionProbe {
@@ -39,6 +48,7 @@ struct GlIcdRootProbe {
         uint32_t slot = 0u;
         static_cast<void>(root.pending_.insert(thread, handle, slot));
     }
+    static void corrupt_pending(GlIcdRoot &root, uint32_t count) { KeyedSlotsProbe::corrupt_count(root.pending_, count); }
     static void empty_slot(GlIcdRoot &root) { root.proc_table_.slots[4] = nullptr; }
     static void miscount_table(GlIcdRoot &root) { root.proc_table_.entries = 3; }
     static void overcount_callbacks(GlIcdRoot &root) { root.callback_count_ = 10u; }
@@ -373,6 +383,10 @@ TEST(gl_icd_root, answers_gl_and_wgl_names_it_implements)
         reinterpret_cast<void *>(&av::glicd::entry::wglGetSwapIntervalEXT));
   CHECK(rig.opengl32().driver_proc_address("glNotACommand") == nullptr);
   CHECK(rig.root().get_proc_address(nullptr) == nullptr);
+  CHECK(rig.opengl32().driver_proc_address("avGetShareName") ==
+        reinterpret_cast<void *>(&av::glicd::entry::avGetShareName));
+  CHECK(rig.opengl32().driver_proc_address("avRunHeldCalls") ==
+        reinterpret_cast<void *>(&av::glicd::entry::avRunHeldCalls));
   const auto extensions = reinterpret_cast<ExtensionsFn>(rig.opengl32().driver_proc_address("wglGetExtensionsStringARB"));
   CHECK(std::strcmp(extensions(rig.dc()), "WGL_ARB_extensions_string WGL_ARB_pixel_format WGL_ARB_create_context "
                                           "WGL_ARB_create_context_profile WGL_ARB_create_context_robustness "
@@ -1149,3 +1163,55 @@ TEST(gl_icd_root, every_external_object_entry_is_answered_by_the_half_that_owns_
         reinterpret_cast<void *>(&av::glicd::generated::Wrap_glImportMemoryWin32NameEXT));
   CHECK(rig.root().get_proc_address("glImportSemaphoreWin32NameEXT") ==
         reinterpret_cast<void *>(&av::glicd::generated::Wrap_glImportSemaphoreWin32NameEXT)); }
+
+TEST(gl_icd_root, a_swap_on_a_window_that_is_gone_shows_nothing)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  const std::uint32_t blits = rig.surface().blits();
+  rig.surface().close_window(rig.window());
+  CHECK(!rig.opengl32().swap_buffers(rig.dc()));
+  CHECK_EQ(rig.surface().blits(), blits);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(gl_icd_root, held_calls_run_for_the_current_context_and_not_when_its_link_has_failed)
+{ GlIcdRig rig;
+  CHECK_EQ(rig.root().run_held_calls(), 0);
+  rig.load_with_format();
+  CHECK(rig.current_context() != nullptr);
+  rig.host().nop();
+  CHECK_EQ(rig.root().run_held_calls(), 1);
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0u);
+  CHECK_EQ(rig.root().run_held_calls(), 0); }
+
+TEST(gl_icd_root, a_create_that_shares_leaves_nothing_behind_wherever_an_allocation_fails)
+{ std::uint32_t refused = 0u;
+  std::uint32_t made = 0u;
+  for (std::uint32_t nth = 1u; nth <= 150u; nth++) {
+      GlIcdRig rig;
+      rig.load_with_format();
+      const auto create = reinterpret_cast<AttribsFn>(rig.opengl32().driver_proc_address("wglCreateContextAttribsARB"));
+      void *const first = rig.opengl32().create_context(rig.dc());
+      CHECK(first != nullptr);
+      const std::int32_t attributes[] = {0};
+      rig.host().gl_make("host gpu", "4.6");
+      rig.host().gl_policy(0);
+      rig.host().gl_make("host gpu", "4.6");
+      rig.host().gl_policy(0);
+      rig.platform().fail_allocation_at(nth);
+      void *const second = create(rig.dc(), first, attributes);
+      rig.platform().fail_allocation_at(0u);
+      CHECK(rig.root().invariants_hold());
+      if (second != nullptr) {
+          made++;
+          continue;
+      }
+      refused++;
+      const std::uint32_t error = rig.threads().last_error();
+      CHECK(error == Root::error_not_enough_memory || error == Root::error_invalid_operation);
+      rig.threads().clear_last_error();
+      CHECK_EQ(av::glicd::GlIcdRootProbe::contexts(rig.root()).live(), 1u);
+  }
+  CHECK(refused != 0u);
+  CHECK(made != 0u); }

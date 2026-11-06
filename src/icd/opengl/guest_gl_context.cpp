@@ -545,10 +545,7 @@ void GuestGlContext::cap_version(uint32_t row, uint32_t most_minor)
     if (version.read(text, string_bytes, rest) != Status::ok) return;
     char capped[string_bytes];
     version.write(capped, sizeof capped, rest);
-    for (uint32_t byte = 0u; byte < string_bytes; byte++) {
-        text[byte] = capped[byte];
-        if (capped[byte] == '\0') return;
-    }
+    __builtin_memcpy(text, capped, __builtin_strlen(capped) + 1u);
 }
 
 void GuestGlContext::teardown()

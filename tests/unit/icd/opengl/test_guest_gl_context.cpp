@@ -26,9 +26,40 @@ using av::Status;
 using av::glicd::GuestGlContext;
 using State = GuestGlContext::State;
 
+namespace av::icd {
+
+struct LossLatchProbe {
+    static void set_word(LossLatch &latch, std::uint32_t word) { latch.word_ = word; }
+};
+
+struct PresentPacingProbe {
+    static void set_blanks(PresentPacing &pacing, std::uint32_t blanks) { pacing.blanks_ = blanks; }
+};
+
+}
+
 namespace av::glicd {
 
+struct PixelStagingBufferProbe {
+    static void stage_with_no_name(PixelStagingBuffer &staging) { staging.staged_ = PixelStagingBuffer::Staged::download; }
+};
+
+struct SlicedBuffersProbe {
+    static void set_group(SlicedBuffers &slices, std::uint32_t group) { slices.group_ = group; }
+};
+
+struct SliceGroupsProbe {
+    static void plant_member(SliceGroups &groups, std::uint64_t key, const SliceGroups::Member &member)
+    {
+        std::uint32_t slot = 0u;
+        static_cast<void>(groups.members_.insert(key, member, slot));
+    }
+    static std::uint64_t next_member(SliceGroups &groups) { return groups.next_member_; }
+};
+
 struct GuestGlContextProbe {
+    using LossLatchProbe = av::icd::LossLatchProbe;
+    using PresentPacingProbe = av::icd::PresentPacingProbe;
     static void claim_made(GuestGlContext &context) { context.state_ = GuestGlContext::State::made; }
     static av::icd::HostChannel &channel(GuestGlContext &context) { return context.channel_; }
     static void unterminate(GuestGlContext &context) { std::memset(context.strings_[2], 'x', GuestGlContext::string_bytes); }
@@ -44,6 +75,12 @@ struct GuestGlContextProbe {
         av::icd::ContextLinkProbe(context.link_).link() = held;
     }
     static void report_loss(GuestGlContext &context) { context.loss_reported_ = true; }
+    static void lose(GuestGlContext &context) { context.loss_.lose(av::FaultCode::device_lost); }
+    static void mislose(GuestGlContext &context) { LossLatchProbe::set_word(context.loss_, 1u); }
+    static void set_state(GuestGlContext &context, GuestGlContext::State state) { context.state_ = state; }
+    static void name_staging(GuestGlContext &context) { PixelStagingBufferProbe::stage_with_no_name(context.staging_); }
+    static void crowd_pacing(GuestGlContext &context) { PresentPacingProbe::set_blanks(context.pacing_, 1000u); }
+    static void orphan_slices(GuestGlContext &context) { SlicedBuffersProbe::set_group(context.slices_, 0u); }
 };
 
 struct ClientArrayStateProbe {
@@ -741,3 +778,148 @@ TEST(guest_gl_context, externals_is_the_contexts_own_and_starts_holding_nothing)
   Context other(rig);
   CHECK_EQ(other->externals().live(), 0u);
   CHECK_EQ(other->externals().made(av::SharedObjectKind::memory, name), 0u); }
+
+TEST(guest_gl_context, a_lost_context_cannot_be_made_to_share_after_another)
+{ GlContextRig rig;
+  Context context(rig);
+  rig.host().gl_made(renderer, "4.6");
+  CHECK_STATUS(context->make(), Status::ok);
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(av::glproto::av_glGetError(*context->wire()), 0u);
+  CHECK(context->wire() == nullptr);
+  CHECK(context->state() == State::lost);
+  CHECK_STATUS(context->share_after(3u), Status::invalid_state);
+  CHECK_EQ(context->share_target(), 0u);
+  CHECK(context->invariants_hold()); }
+
+TEST(guest_gl_context, held_calls_that_cannot_run_are_logged_and_invalid_state)
+{ GlContextRig rig;
+  Context context(rig);
+  rig.host().gl_made(renderer, "4.6");
+  CHECK_STATUS(context->make(), Status::ok);
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(av::glproto::av_glGetError(*context->wire()), 0u);
+  CHECK_STATUS(context->run_held(), Status::invalid_state);
+  CHECK_EQ(rig.log().holding("the held calls could not be run for another API"), 1u); }
+
+TEST(guest_gl_context, a_context_not_made_sends_no_forgets)
+{ GlContextRig rig;
+  Context context(rig);
+  context->send_forgets();
+  CHECK_EQ(rig.kmt().commands(), 0u);
+  CHECK(context->invariants_hold()); }
+
+TEST(guest_gl_context, only_a_made_context_with_a_working_link_is_shareable)
+{ using av::glicd::GuestGlContextProbe;
+  GlContextRig rig;
+  Context context(rig);
+  CHECK(!context->shareable());
+  rig.host().gl_made(renderer, "4.6");
+  CHECK_STATUS(context->make(), Status::ok);
+  CHECK(context->shareable());
+  GuestGlContextProbe::lose(*context);
+  CHECK(!context->shareable());
+  Context faulted(rig);
+  rig.host().gl_made(renderer, "4.6");
+  CHECK_STATUS(faulted->make(), Status::ok);
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(av::glproto::av_glGetError(*faulted->wire()), 0u);
+  CHECK(!faulted->shareable()); }
+
+namespace {
+
+class FinishesAtRead final : public av::ClockReader {
+public:
+    void arm(MockKmt &kmt, std::uint32_t ring, std::uint64_t fence, std::uint32_t read)
+    {
+        kmt_ = &kmt;
+        ring_ = ring;
+        fence_ = fence;
+        countdown_ = read;
+    }
+    void clock_read() override
+    {
+        if (countdown_ != 0u && --countdown_ == 0u) kmt_->complete_on_page(ring_, fence_);
+    }
+
+private:
+    MockKmt      *kmt_ = nullptr;
+    std::uint32_t ring_ = 0u;
+    std::uint64_t fence_ = 0u;
+    std::uint32_t countdown_ = 0u;
+};
+
+}
+
+TEST(guest_gl_context, a_frame_the_host_finishes_while_waited_for_keeps_the_context)
+{ GlContextRig rig;
+  Context      context(rig);
+  rig.host().gl_made(renderer, "4.6");
+  CHECK_STATUS(context->make(), Status::ok);
+  const std::uint32_t ring = av::glicd::GuestGlContextProbe::channel(*context).transport().context();
+  FinishesAtRead      reader;
+  rig.kmt().reads_clock(&reader, frame_apart);
+  const std::uint64_t ended = end_a_frame(*context);
+  reader.arm(rig.kmt(), ring, ended, 3u);
+  end_a_frame(*context);
+  rig.kmt().reads_clock(nullptr, 0u);
+  CHECK(context->wire() != nullptr);
+  CHECK(context->state() == State::made);
+  CHECK_EQ(rig.log().holding("never finished an earlier frame"), 0u); }
+
+TEST(guest_gl_context, a_slice_member_that_cannot_be_enrolled_is_no_memory_with_nothing_held)
+{ GlContextRig rig;
+  Context context(rig);
+  rig.host().gl_made(renderer, "4.6");
+  av::glicd::SliceGroupsProbe::plant_member(rig.groups(), av::glicd::SliceGroupsProbe::next_member(rig.groups()),
+                                            av::glicd::SliceGroups::Member{nullptr, 99u, 0u});
+  CHECK_STATUS(context->make(), Status::no_memory);
+  CHECK(context->state() == State::created);
+  CHECK(context->invariants_hold());
+  CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+TEST(guest_gl_context, the_adapters_luid_is_kept_and_zero_when_the_adapter_will_not_say)
+{ GlContextRig rig;
+  rig.kmt().set_adapter_luid(0u, 0x0000000200001234ull);
+  Context named(rig);
+  rig.host().gl_made(renderer, "4.6");
+  CHECK_STATUS(named->make(), Status::ok);
+  CHECK_EQ(named->adapter_luid(), 0x0000000200001234ull);
+  Context silent(rig);
+  rig.host().gl_made(renderer, "4.6");
+  rig.kmt().fail_at(MockKmt::Call::adapter_luid, 1u, MockKmt::invalid_parameter);
+  CHECK_STATUS(silent->make(), Status::ok);
+  CHECK_EQ(silent->adapter_luid(), 0u); }
+
+TEST(guest_gl_context_invariants, fail_when_the_loss_state_staging_pacing_or_slices_are_broken)
+{ using av::glicd::GuestGlContextProbe;
+  GlContextRig rig;
+  Context lost(rig);
+  rig.host().gl_made(renderer, "4.6");
+  CHECK_STATUS(lost->make(), Status::ok);
+  GuestGlContextProbe::lose(*lost);
+  CHECK(!lost->invariants_hold());
+  Context mislost(rig);
+  rig.host().gl_made(renderer, "4.6");
+  CHECK_STATUS(mislost->make(), Status::ok);
+  GuestGlContextProbe::mislose(*mislost);
+  GuestGlContextProbe::set_state(*mislost, State::lost);
+  CHECK(!mislost->invariants_hold());
+  Context staged(rig);
+  GuestGlContextProbe::name_staging(*staged);
+  CHECK(!staged->invariants_hold());
+  Context made(rig);
+  rig.host().gl_made(renderer, "4.6");
+  CHECK_STATUS(made->make(), Status::ok);
+  GuestGlContextProbe::name_staging(*made);
+  CHECK(!made->invariants_hold());
+  Context paced(rig);
+  rig.host().gl_made(renderer, "4.6");
+  CHECK_STATUS(paced->make(), Status::ok);
+  GuestGlContextProbe::crowd_pacing(*paced);
+  CHECK(!paced->invariants_hold());
+  Context sliced(rig);
+  rig.host().gl_made(renderer, "4.6");
+  CHECK_STATUS(sliced->make(), Status::ok);
+  GuestGlContextProbe::orphan_slices(*sliced);
+  CHECK(!sliced->invariants_hold()); }

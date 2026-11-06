@@ -302,3 +302,20 @@ TEST(gl_share_lists, run_held_calls_runs_the_current_context_s_and_nothing_witho
   CHECK_EQ(root.run_held_calls(), 0);
   CHECK_EQ(rig.kmt().commands(), released);
   CHECK(root.invariants_hold()); }
+
+TEST(gl_share_lists, a_lost_context_cannot_be_shared_with)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const lost = rig.opengl32().create_context(rig.dc());
+  void *const other = rig.opengl32().create_context(rig.dc());
+  rig.host().gl_make("host gpu", "4.6");
+  rig.host().gl_policy(0);
+  GuestGlContext *const context = current_on(rig, lost);
+  CHECK(context != nullptr);
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(rig.opengl32().gl<GetErrorFn>(slot_get_error)(), 0u);
+  CHECK(context->wire() == nullptr);
+  CHECK(context->state() == GuestGlContext::State::lost);
+  CHECK(!rig.opengl32().share_lists(lost, other));
+  check_error(rig, Root::error_invalid_operation);
+  CHECK(rig.root().invariants_hold()); }

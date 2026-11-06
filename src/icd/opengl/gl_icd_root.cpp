@@ -680,8 +680,7 @@ bool GlIcdRoot::shares_into(uint64_t first, uint64_t second) const
 Status GlIcdRoot::make_chain(GuestGlContext &context)
 {
     AV_SCOPE("GlIcdRoot::make_chain");
-    for (uint32_t round = 0u; round <= contexts_.live() && context.state() == GuestGlContext::State::created;
-         round++) {
+    while (context.state() == GuestGlContext::State::created) {
         GuestGlContext &link = farthest_unmade(context);
         GuestGlContext *const target = contexts_.resolve(link.share_target());
         if (target != nullptr && !target->shareable()) return Status::invalid_state;

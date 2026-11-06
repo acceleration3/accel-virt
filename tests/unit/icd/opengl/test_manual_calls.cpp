@@ -20,6 +20,7 @@
 #include "icd/opengl/gl_external_objects.hpp"
 #include "icd/opengl/gl_error_query.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
+#include "icd/opengl/pinned_buffers.hpp"
 #include "icd/opengl/manual_calls.hpp"
 #include "icd/opengl/sync_wait_probe.hpp"
 #include "icd/opengl/sliced_buffers.hpp"
@@ -1877,3 +1878,212 @@ TEST(sync_wait_probe, an_answer_after_a_timeout_other_than_signaled_is_reported_
   host.gl_varint(0x911Du);
   CHECK(probe.ask(500u));
   CHECK_EQ(probe.result(), 0x911Du); }
+
+TEST(manual_calls_slices, writes_into_a_sliced_buffer_are_refused_and_reads_come_from_its_memory)
+{ SlicedCurrent current;
+  ManualCalls  &calls = current.calls();
+  calls.bind_buffer(array_buffer, sliced_buffer);
+  std::uint8_t *target = nullptr;
+  CHECK_EQ(current.context().slices().pack_target(sliced_buffer, 0u, 4u, target), av::glicd::SlicedBuffers::gl_no_error);
+  const std::uint8_t kept[4] = {9u, 8u, 7u, 6u};
+  std::memcpy(target, kept, sizeof kept);
+  const std::uint32_t before = current.sent();
+  const std::uint8_t  data[4] = {1u, 2u, 3u, 4u};
+  calls.buffer_sub_data(array_buffer, 0, sizeof data, data);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  calls.named_buffer_sub_data(sliced_buffer, 0, sizeof data, data);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  calls.named_buffer_sub_data_ext(sliced_buffer, 0, sizeof data, data);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  std::uint8_t seen[4] = {};
+  calls.get_buffer_sub_data(array_buffer, 0, sizeof seen, seen);
+  CHECK(std::memcmp(seen, kept, sizeof kept) == 0);
+  std::memset(seen, 0, sizeof seen);
+  calls.get_named_buffer_sub_data(sliced_buffer, 0, sizeof seen, seen);
+  CHECK(std::memcmp(seen, kept, sizeof kept) == 0);
+  std::memset(seen, 0, sizeof seen);
+  calls.get_named_buffer_sub_data_ext(sliced_buffer, 0, sizeof seen, seen);
+  CHECK(std::memcmp(seen, kept, sizeof kept) == 0);
+  CHECK_EQ(current.error(), 0u);
+  CHECK_EQ(current.sent(), before); }
+
+TEST(manual_calls_slices, a_sliced_buffer_is_cleared_in_place_and_any_other_is_left_to_the_host)
+{ SlicedCurrent current;
+  ManualCalls  &calls = current.calls();
+  constexpr std::uint32_t gl_r8 = 0x8229u, gl_red = 0x1903u, gl_unsigned_byte = 0x1401u;
+  const std::uint8_t      fill = 0x5Au;
+  calls.bind_buffer(array_buffer, sliced_buffer);
+  const std::uint32_t before = current.sent();
+  CHECK(calls.clear_bound_buffer(array_buffer, gl_r8, gl_red, gl_unsigned_byte, &fill));
+  std::uint8_t seen[4] = {};
+  calls.get_named_buffer_sub_data(sliced_buffer, 0, sizeof seen, seen);
+  CHECK_EQ(seen[0], 0x5Au);
+  CHECK_EQ(seen[3], 0x5Au);
+  CHECK(calls.clear_bound_buffer_range(array_buffer, gl_r8, 1, 2, gl_red, gl_unsigned_byte, &fill));
+  CHECK(calls.clear_named_buffer(sliced_buffer, gl_r8, gl_red, gl_unsigned_byte, &fill));
+  CHECK(calls.clear_named_buffer_range(sliced_buffer, gl_r8, 0, 4, gl_red, gl_unsigned_byte, &fill));
+  CHECK_EQ(current.error(), 0u);
+  CHECK(calls.clear_named_buffer(sliced_buffer, 0u, gl_red, gl_unsigned_byte, &fill));
+  CHECK_EQ(current.error(), 0x0500u);
+  CHECK(calls.clear_named_buffer_range(sliced_buffer, gl_r8, -1, 2, gl_red, gl_unsigned_byte, &fill));
+  CHECK_EQ(current.error(), gl_invalid_value);
+  CHECK(!calls.clear_named_buffer(plain_buffer, gl_r8, gl_red, gl_unsigned_byte, &fill));
+  CHECK(!calls.clear_named_buffer_range(plain_buffer, gl_r8, 0, 4, gl_red, gl_unsigned_byte, &fill));
+  calls.bind_buffer(array_buffer, plain_buffer);
+  CHECK(!calls.clear_bound_buffer(array_buffer, gl_r8, gl_red, gl_unsigned_byte, &fill));
+  CHECK(!calls.clear_bound_buffer_range(array_buffer, gl_r8, 0, 4, gl_red, gl_unsigned_byte, &fill));
+  CHECK(!calls.clear_bound_buffer(0x1234u, gl_r8, gl_red, gl_unsigned_byte, &fill));
+  CHECK_EQ(current.error(), gl_invalid_enum);
+  CHECK(!calls.clear_bound_buffer_range(0x1234u, gl_r8, 0, 4, gl_red, gl_unsigned_byte, &fill));
+  CHECK_EQ(current.error(), gl_invalid_enum);
+  CHECK_EQ(current.sent(), before + 1u); }
+
+TEST(manual_calls, the_pinned_buffer_target_binds_a_name_here_and_pins_the_memory_a_data_call_gives)
+{ Current      current;
+  ManualCalls &calls = current.rig().root().manual();
+  constexpr GLenum pinned_target = av::glicd::PinnedBuffers::target;
+  alignas(4096) static std::uint8_t pages[2u * 4096u];
+  const std::uint32_t before = current.sent();
+  calls.buffer_data(pinned_target, 64, pages, 0x88E4u);
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  calls.bind_buffer(pinned_target, 7u);
+  CHECK_EQ(current.context().pinned().bound(), 7u);
+  CHECK_EQ(current.sent(), before);
+  calls.buffer_data(pinned_target, 0, pages, 0x88E4u);
+  CHECK_EQ(current.error(), gl_invalid_value);
+  calls.buffer_data(pinned_target, 64, nullptr, 0x88E4u);
+  CHECK_EQ(current.error(), gl_invalid_value);
+  CHECK_EQ(current.sent(), before);
+  current.rig().host().blob_import(0u, 0x0000700000000300ull);
+  const std::uint32_t pinned_at = current.sent();
+  calls.buffer_data(pinned_target, 64, pages + 100, 0x88E4u);
+  CHECK_EQ(current.sent_since(pinned_at + 1u), ids::kCmd_glBindBuffer);
+  CHECK_EQ(current.argument_since(pinned_at + 1u, 1u), 7u);
+  CHECK_EQ(current.sent_since(pinned_at + 2u), ids::kCmd_glBufferStorageMemEXT);
+  CHECK_EQ(current.sent_since(pinned_at + 3u), ids::kCmd_glBindBuffer);
+  CHECK_EQ(current.argument_since(pinned_at + 3u, 1u), 0u);
+  const std::uint32_t pinned = current.sent();
+  calls.buffer_data(pinned_target, 64, pages + 100, 0x88E4u);
+  CHECK_EQ(current.sent(), pinned);
+  CHECK_EQ(current.error(), gl_invalid_operation); }
+
+TEST(manual_calls, an_atomic_counter_binding_distrusts_the_copies_of_buffers_a_shader_may_write)
+{ Current                   current;
+  ManualCalls              &calls = current.rig().root().manual();
+  constexpr GLenum          atomic = 0x92C0u;
+  av::glicd::BufferShadows &shadows = current.context().shadows();
+  CHECK(shadows.trusted());
+  calls.bind_buffer_indexed(atomic, 0u);
+  CHECK(shadows.trusted());
+  calls.bind_buffer_indexed(atomic, 3u);
+  CHECK(!shadows.trusted()); }
+
+TEST(manual_calls, the_client_attribute_stack_and_vertex_array_elements_follow_the_calls_of_the_current_context)
+{ Current                    current;
+  ManualCalls               &calls = current.rig().root().manual();
+  av::glicd::ClientArrayState &arrays = current.context().arrays();
+  constexpr std::uint32_t     vertex_bit = av::glicd::ClientArrayState::client_vertex_array_bit;
+  calls.bind_buffer(array_buffer, 5u);
+  calls.client_attributes_pushed(vertex_bit);
+  calls.bind_buffer(array_buffer, 9u);
+  calls.client_attributes_popped();
+  CHECK_EQ(arrays.bound_buffer(array_buffer), 5u);
+  calls.client_attributes_pushed(vertex_bit);
+  calls.client_attributes_reset(av::glicd::ClientArrayState::client_pixel_store_bit);
+  calls.bind_buffer(pixel_pack_buffer, 4u);
+  calls.client_attributes_reset(av::glicd::ClientArrayState::client_pixel_store_bit);
+  CHECK_EQ(arrays.bound_buffer(pixel_pack_buffer), 0u);
+  calls.bind_vertex_array(3u);
+  calls.vertex_array_elements(3u, 8u);
+  CHECK_EQ(arrays.bound_buffer(element_array_buffer), 8u);
+  CHECK(current.context().invariants_hold()); }
+
+TEST(manual_calls, with_nothing_current_a_clear_a_staging_a_finish_and_the_attribute_stack_do_nothing)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  ManualCalls &calls = rig.root().manual();
+  constexpr std::uint32_t gl_r8 = 0x8229u, gl_red = 0x1903u, gl_unsigned_byte = 0x1401u;
+  const std::uint8_t      fill = 1u;
+  std::uint8_t            pixels[4] = {};
+  const std::uint32_t     ids_deleted[] = {3u};
+  CHECK(!calls.clear_bound_buffer(array_buffer, gl_r8, gl_red, gl_unsigned_byte, &fill));
+  CHECK(!calls.clear_bound_buffer_range(array_buffer, gl_r8, 0, 4, gl_red, gl_unsigned_byte, &fill));
+  CHECK(!calls.clear_named_buffer(1u, gl_r8, gl_red, gl_unsigned_byte, &fill));
+  CHECK(!calls.clear_named_buffer_range(1u, gl_r8, 0, 4, gl_red, gl_unsigned_byte, &fill));
+  CHECK(!calls.stage_download(pixels, std::size_t{1} << 20u));
+  calls.finish_download(pixels, sizeof pixels);
+  calls.client_attributes_pushed(1u);
+  calls.client_attributes_reset(1u);
+  calls.vertex_array_elements(1u, 2u);
+  calls.delete_transform_feedbacks(1, ids_deleted);
+  calls.finish();
+  CHECK_EQ(rig.kmt().commands(), 0u); }
+
+TEST(manual_calls, without_an_arena_a_large_download_is_staged_and_finished_through_the_wrappers)
+{ Current current(no_arena);
+  ManualCalls &calls = current.rig().root().manual();
+  const GLuint staged = 23u;
+  current.rig().host().gl_bytes(reinterpret_cast<const std::uint8_t *>(&staged), sizeof staged);
+  CHECK(calls.stage_download(bulk, 200u * 100u * 4u));
+  CHECK_EQ(current.context().staging().name(), staged);
+  for (std::uint32_t answer = 0u; answer < 2u; answer++) current.rig().host().gl_bytes(nullptr, 0u);
+  calls.finish_download(bulk, 200u * 100u * 4u);
+  CHECK_EQ(current.sent_since(current.sent() - 1u), ids::kCmd_glBindBuffer);
+  CHECK(current.context().invariants_hold()); }
+
+TEST(manual_calls, the_ext_buffer_calls_send_small_data_whole_and_keep_what_they_can_of_it)
+{ Current                   current;
+  ManualCalls              &calls = current.rig().root().manual();
+  av::glicd::BufferShadows &shadows = current.context().shadows();
+  std::uint8_t              zeros[16] = {};
+  shadows.keep(4u, 0u, sizeof zeros, zeros);
+  const std::uint8_t data[4] = {1u, 2u, 3u, 4u};
+  const std::uint32_t before = current.sent();
+  calls.named_buffer_sub_data_ext(4u, 4, sizeof data, data);
+  CHECK(std::memcmp(shadows.covering(4u, 4u, 4u), data, sizeof data) == 0);
+  calls.named_buffer_sub_data_ext(4u, -1, sizeof data, data);
+  calls.named_buffer_sub_data_ext(4u, 0, -1, data);
+  CHECK_EQ(shadows.covering(4u, 0u, 1u)[0], 0u);
+  calls.named_buffer_data_ext(4u, sizeof data, data, 0x88E4u);
+  calls.named_buffer_storage_ext(4u, sizeof data, data, 0u);
+  const std::uint32_t expected[] = {ids::kCmd_glNamedBufferSubDataEXT, ids::kCmd_glNamedBufferSubDataEXT,
+                                    ids::kCmd_glNamedBufferSubDataEXT, ids::kCmd_glNamedBufferDataEXT,
+                                    ids::kCmd_glNamedBufferStorageEXT};
+  CHECK_EQ(current.sent(), before + 5u);
+  for (std::uint32_t index = 0u; index < 5u; index++) CHECK_EQ(current.sent_since(before + index), expected[index]);
+  std::uint8_t seen[4] = {};
+  current.rig().host().gl_bytes(data, sizeof data);
+  calls.get_named_buffer_sub_data(4u, 0, sizeof seen, seen);
+  CHECK(std::memcmp(seen, data, sizeof data) == 0);
+  std::memset(seen, 0, sizeof seen);
+  current.rig().host().gl_bytes(data, sizeof data);
+  calls.get_named_buffer_sub_data_ext(4u, 0, sizeof seen, seen);
+  CHECK(std::memcmp(seen, data, sizeof data) == 0);
+  CHECK_EQ(current.sent_since(before + 5u), ids::kCmd_glGetNamedBufferSubData);
+  CHECK_EQ(current.sent_since(before + 6u), ids::kCmd_glGetNamedBufferSubDataEXT); }
+
+TEST(manual_calls_slices, a_slice_is_placed_by_storage_calls_and_a_plain_storage_call_leaves_the_slice_alone)
+{ SlicedCurrent current;
+  ManualCalls  &calls = current.calls();
+  constexpr std::uint32_t storage_flags = av::glicd::BufferMapping::map_persistent | av::glicd::BufferMapping::map_write;
+  constexpr std::uint32_t new_buffer = 8u, ext_buffer = 9u, named_buffer = 10u;
+  calls.bind_buffer(array_buffer, new_buffer);
+  current.rig().host().gl_slices(1u);
+  calls.buffer_storage(array_buffer, 4096, nullptr, storage_flags);
+  CHECK(current.context().slices().holds(new_buffer));
+  current.rig().host().gl_slices(1u);
+  calls.named_buffer_storage(named_buffer, 4096, nullptr, storage_flags);
+  CHECK(current.context().slices().holds(named_buffer));
+  current.rig().host().gl_slices(1u);
+  calls.named_buffer_storage_ext(ext_buffer, 4096, nullptr, storage_flags);
+  CHECK(current.context().slices().holds(ext_buffer));
+  const std::uint32_t before = current.sent();
+  calls.bind_buffer(array_buffer, plain_buffer);
+  calls.buffer_storage(array_buffer, 4096, nullptr, 0u);
+  CHECK(!current.context().slices().holds(plain_buffer));
+  CHECK_EQ(current.sent(), before + 2u);
+  calls.bind_buffer(0x1234u, 11u);
+  calls.buffer_storage(0x1234u, 4096, nullptr, storage_flags);
+  CHECK(!current.context().slices().holds(11u));
+  CHECK_EQ(current.error(), gl_invalid_enum);
+  CHECK(current.context().invariants_hold()); }

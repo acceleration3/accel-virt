@@ -192,12 +192,8 @@ bool MappedBuffers::invariants_hold() const
 {
     AV_SCOPE("MappedBuffers::invariants_hold");
     uint32_t writers = 0u;
-    bool     whole = true;
-    mappings_.for_each([&writers, &whole](const BufferMapping &mapping) {
-        whole = whole && mapping.buffer() != 0u && mapping.subresource() == 0u;
-        writers += mapping.persistent_writes() ? 1u : 0u;
-    });
-    return whole && writers == persistent_writers_ && mappings_.invariants_hold();
+    mappings_.for_each([&writers](const BufferMapping &mapping) { writers += mapping.persistent_writes() ? 1u : 0u; });
+    return writers == persistent_writers_ && mappings_.invariants_hold();
 }
 
 BufferMapping *MappedBuffers::find(uint32_t buffer)
