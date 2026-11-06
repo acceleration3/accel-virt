@@ -155,6 +155,9 @@ TEST(external_objects_invariants, refuse_each_state_a_remember_never_leaves)
   second.handle_ = 0u;
   CHECK(!table.objects().invariants_hold());
   second = whole;
+  second.carrier_ = 0u;
+  CHECK(!table.objects().invariants_hold());
+  second = whole;
   second.object_id_ = 1u;
   CHECK(!table.objects().invariants_hold());
   second = whole;

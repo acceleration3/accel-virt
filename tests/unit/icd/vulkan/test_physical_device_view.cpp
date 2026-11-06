@@ -414,3 +414,20 @@ TEST(physical_device_view, an_adapter_without_a_name_keeps_the_hosts)
       view.properties(view_rig.physical_device(), &answer);
       CHECK(std::strcmp(answer.deviceName, "host gpu") == 0);
   } }
+
+TEST(physical_device_view, an_adapter_name_longer_than_the_property_holds_is_cut_to_fit_and_ended)
+{ ViewRig view_rig;
+  char longer[400];
+  for (char &letter : longer) letter = 'A';
+  longer[sizeof longer - 1u] = '\0';
+  WireWriter reply(view_rig.reply_block(), reply_bytes);
+  reply.write_pod<std::int32_t>(0);
+  serialize_VkPhysicalDeviceProperties(reply, host_properties(vulkan_1_3));
+  view_rig.answer(reply);
+  PhysicalDeviceView view(view_rig.transport(), view_rig.handles(), av::IcdRig::adapter_luid, longer, vulkan_1_3,
+                          view_rig.rig().lines());
+  VkPhysicalDeviceProperties answer = {};
+  view.properties(view_rig.physical_device(), &answer);
+  CHECK_EQ(std::strlen(answer.deviceName), sizeof answer.deviceName - 1u);
+  CHECK_EQ(answer.deviceName[0], 'A');
+  CHECK_EQ(answer.deviceName[sizeof answer.deviceName - 2u], 'A'); }
