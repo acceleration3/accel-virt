@@ -45,7 +45,6 @@ Status ChannelStatsReport::decode(const uint8_t *bytes, size_t length)
     const uint32_t found_counters = reader.read_u32();
     uint64_t       found[counters] = {};
     for (uint64_t &value : found) value = reader.read_u64();
-    if (reader.status() != Status::ok) return reader.status();
     if (found_version != version || found_counters != counters) return Status::malformed;
     for (uint32_t index = 0u; index < counters; index++) values_[index] = found[index];
     return Status::ok;

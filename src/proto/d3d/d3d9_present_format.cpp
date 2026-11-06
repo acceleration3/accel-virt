@@ -24,7 +24,7 @@ bool D3d9PresentFormat::take_ddi(uint32_t ddi)
     if (ddi == 0u) return false;
     for (uint32_t value = 0u; value < DxgiFormat::count; value++) {
         const DxgiFormat format(value);
-        if (format.ddi_format() != ddi || format.typeless() || format.srgb()) continue;
+        if (format.ddi_format() != ddi || format.typeless()) continue;
         dxgi_ = value;
         return true;
     }

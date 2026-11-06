@@ -37,7 +37,6 @@ Status ExportImageMessage::decode(const uint8_t *bytes, size_t length, uint32_t 
     if (bytes == nullptr || length != encoded_size || descriptor_count != descriptors) return Status::malformed;
     WireReader     reader(bytes, length);
     const uint64_t key = reader.read_u64();
-    if (reader.status() != Status::ok) return reader.status();
     key_ = key;
     return Status::ok;
 }

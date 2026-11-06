@@ -42,3 +42,13 @@ TEST(pitched_rows_copy_lines, copies_the_given_number_of_bytes_of_each_row_and_n
   CHECK_EQ(into.copy_lines(shorter, 2u, 8u), 1u);
   PitchedRows nowhere(static_cast<std::uint8_t *>(nullptr), 8u, 16u);
   CHECK_EQ(nowhere.copy_lines(from, 2u, 4u), 0u); }
+
+TEST(pitched_rows_copy_lines, a_flat_source_gives_only_its_first_row)
+{ std::uint8_t from_bytes[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+  std::uint8_t into_bytes[16] = {};
+  PitchedRows  flat(from_bytes, 0u, sizeof from_bytes);
+  PitchedRows  into(into_bytes, 8u, sizeof into_bytes);
+  CHECK_EQ(into.copy_lines(flat, 3u, 8u), 1u);
+  CHECK_EQ(into_bytes[7], 8u);
+  CHECK_EQ(into_bytes[8], 0u);
+  CHECK_EQ(into.copy_lines(flat, 1u, 9u), 0u); }

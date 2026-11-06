@@ -123,7 +123,6 @@ Status ExportedImageMessage::decode(const uint8_t *bytes, size_t length, uint32_
     candidate.offset_ = reader.read_u32();
     candidate.fourcc_ = reader.read_u32();
     candidate.modifier_ = reader.read_u64();
-    if (reader.status() != Status::ok) return reader.status();
     if (!candidate.fields_valid() || descriptor_count != candidate.descriptors()) return Status::malformed;
     *this = candidate;
     return Status::ok;

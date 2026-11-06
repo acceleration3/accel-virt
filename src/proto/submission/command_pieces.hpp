@@ -29,6 +29,8 @@ private:
     size_t         framed_;
     size_t         pieces_;
     bool           done_;
+
+    friend struct CommandPiecesProbe;
 };
 
 }

@@ -48,3 +48,7 @@ TEST(release_record, anything_else_is_malformed_and_leaves_the_reader_unchanged)
   CHECK_EQ(read.ring(), 3u);
   CHECK_STATUS(ReleaseRecord(5u, SubmissionDescriptor(1u, 0u, 8u)).encode(other, ReleaseRecord::encoded_size - 1u),
                Status::too_large); }
+
+TEST(release_record, a_missing_destination_is_too_large_whatever_the_capacity)
+{ CHECK_STATUS(ReleaseRecord(5u, SubmissionDescriptor(1u, 0u, 8u)).encode(nullptr, ReleaseRecord::encoded_size),
+               Status::too_large); }

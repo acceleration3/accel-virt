@@ -10,6 +10,7 @@ namespace av {
 
 struct ClBlobBackingProbe {
     static void orphan_offset(ClBlobBacking &backing) { backing.offset_ = 0x4000u; }
+    static void orphan_memory(ClBlobBacking &backing) { backing.memory_ = 0x7700u; }
 };
 
 }
@@ -115,4 +116,27 @@ TEST(cl_blob_backing_set_in, names_the_memory_the_backing_is_inside_and_writes_i
   CHECK(read.read(list));
   CHECK_EQ(read.memory(), 0x7700u);
   CHECK_EQ(read.offset(), 0x4000u);
+  CHECK(read.invariants_hold()); }
+
+TEST(cl_blob_backing_set_in, the_invariant_catches_a_memory_held_by_nothing)
+{ ClBlobBacking backing;
+  ClBlobBackingProbe::orphan_memory(backing);
+  CHECK(!backing.invariants_hold()); }
+
+TEST(cl_blob_backing_set_in, a_list_naming_the_memory_twice_or_as_zero_or_without_an_offset_is_refused)
+{ ClBlobBacking read;
+  const std::uint64_t twice[7] = {ClBlobBacking::property, 0x1000u, ClBlobBacking::import_property, 0x7700u,
+                                  ClBlobBacking::import_property, 0x7800u, 0u};
+  CHECK(!read.read(twice));
+  CHECK(!read.held());
+  CHECK_EQ(read.memory(), 0u);
+  CHECK(read.invariants_hold());
+  const std::uint64_t zero[5] = {ClBlobBacking::property, 0x1000u, ClBlobBacking::import_property, 0u, 0u};
+  CHECK(!read.read(zero));
+  CHECK_EQ(read.memory(), 0u);
+  CHECK_EQ(read.offset(), 0u);
+  const std::uint64_t unplaced[3] = {ClBlobBacking::import_property, 0x7700u, 0u};
+  CHECK(!read.read(unplaced));
+  CHECK(!read.held());
+  CHECK_EQ(read.memory(), 0u);
   CHECK(read.invariants_hold()); }

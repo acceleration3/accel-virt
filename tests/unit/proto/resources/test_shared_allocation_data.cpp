@@ -71,3 +71,14 @@ TEST(shared_allocation_data, rereads_what_was_written_through_the_lent_bytes_and
   CHECK(!data.read());
   CHECK_STATUS(data.decode(nullptr, SharedAllocationData::encoded_size), Status::malformed);
   CHECK_STATUS(data.decode(source.bytes(), SharedAllocationData::encoded_size + 1u), Status::malformed); }
+
+TEST(shared_allocation_data, bytes_changed_behind_a_read_through_a_kept_lend_break_the_invariant)
+{ const SharedAllocationData source = made();
+  SharedAllocationData       data;
+  std::uint8_t *const        kept = data.lend();
+  std::memcpy(kept, source.bytes(), SharedAllocationData::encoded_size);
+  CHECK_STATUS(data.reread(SharedAllocationData::encoded_size), Status::ok);
+  CHECK(data.invariants_hold());
+  kept[SharedAllocationData::encoded_size - 1u] ^= 0x01u;
+  CHECK(data.read());
+  CHECK(!data.invariants_hold()); }

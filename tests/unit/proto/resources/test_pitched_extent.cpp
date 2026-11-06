@@ -19,7 +19,8 @@ TEST(pitched_extent_pitches_hold, a_pitch_must_hold_the_line_and_a_slice_pitch_t
   CHECK(PitchedExtent(16u, 4u, 2u, 16u, 64u - 16u + 16u).pitches_hold());
   CHECK(!PitchedExtent(16u, 4u, 2u, 16u, 63u).pitches_hold());
   CHECK(!PitchedExtent(0u, 4u, 1u, 16u, 64u).pitches_hold());
-  CHECK(!PitchedExtent(16u, ~std::uint64_t{0}, 2u, 16u, ~std::uint64_t{0}).pitches_hold()); }
+  CHECK(!PitchedExtent(16u, ~std::uint64_t{0}, 2u, 16u, ~std::uint64_t{0}).pitches_hold());
+  CHECK(!PitchedExtent(16u, 2u, 2u, ~std::uint64_t{0}, ~std::uint64_t{0}).pitches_hold()); }
 
 TEST(pitched_extent, ends_at_the_last_line_of_the_last_slice_and_not_at_the_pitch)
 { const PitchedExtent extent(10u, 3u, 2u, 16u, 64u);

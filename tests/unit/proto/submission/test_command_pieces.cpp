@@ -5,8 +5,19 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
+
+namespace av {
+
+struct CommandPiecesProbe {
+    static void set_framed(CommandPieces &pieces, std::size_t framed) { pieces.framed_ = framed; }
+    static void set_done(CommandPieces &pieces, bool done) { pieces.done_ = done; }
+};
+
+}
 
 using av::CommandHeader;
+using av::CommandPiecesProbe;
 using av::CommandPieces;
 using av::Status;
 
@@ -78,3 +89,37 @@ TEST(command_pieces, a_room_with_no_byte_past_a_header_frames_nothing)
   CommandPieces empty(command, 0u, nullptr, 0u);
   CHECK_EQ(empty.frame_next(room, sizeof room), CommandHeader::encoded_size);
   CHECK(empty.done()); }
+
+TEST(command_pieces, a_piece_is_never_framed_larger_than_a_command_may_be)
+{ const std::size_t        most_body = CommandHeader::max_size - CommandHeader::encoded_size;
+  const std::vector<std::uint8_t> body(most_body + 10u, 0x5Au);
+  std::vector<std::uint8_t>       room(std::size_t{CommandHeader::max_size} + 64u, 0u);
+  CommandPieces                   pieces(command, 0u, body.data(), body.size());
+  CHECK_EQ(pieces.frame_next(room.data(), room.size()), std::size_t{CommandHeader::max_size});
+  CommandHeader header;
+  CHECK_STATUS(header.decode(room.data(), CommandHeader::encoded_size), Status::ok);
+  CHECK_EQ(header.size(), CommandHeader::max_size);
+  CHECK_EQ(header.id(), CommandHeader::piece_id);
+  CHECK(!pieces.done());
+  CHECK_EQ(pieces.rest(), 10u);
+  CHECK_EQ(pieces.pieces(), 1u);
+  CHECK(pieces.invariants_hold());
+  CHECK_EQ(pieces.frame_next(room.data(), room.size()), CommandHeader::encoded_size + 10u);
+  CHECK(pieces.done());
+  CHECK(pieces.invariants_hold()); }
+
+TEST(command_pieces, the_invariant_catches_a_frame_past_the_payload_an_unfinished_done_and_a_missing_body)
+{ const std::uint8_t body[3] = {1u, 2u, 3u};
+  CommandPieces      pieces(command, 0u, body, sizeof body);
+  CHECK(pieces.invariants_hold());
+  CommandPiecesProbe::set_framed(pieces, 4u);
+  CHECK(!pieces.invariants_hold());
+  CommandPiecesProbe::set_framed(pieces, 1u);
+  CommandPiecesProbe::set_done(pieces, true);
+  CHECK(!pieces.invariants_hold());
+  CommandPiecesProbe::set_framed(pieces, 3u);
+  CHECK(pieces.invariants_hold());
+  const CommandPieces empty(command, 0u, nullptr, 0u);
+  CHECK(empty.invariants_hold());
+  const CommandPieces missing(command, 0u, nullptr, 5u);
+  CHECK(!missing.invariants_hold()); }

@@ -5,7 +5,20 @@
 #include <cstdint>
 #include <cstring>
 
+namespace av {
+
+struct DisplayModeSetProbe {
+    static void set_count(DisplayModeSet &set, std::uint32_t count) { set.count_ = count; }
+    static void set_preferred(DisplayModeSet &set, std::uint32_t preferred) { set.preferred_ = preferred; }
+    static void set_refresh(DisplayModeSet &set, std::uint32_t millihz) { set.refresh_millihz_ = millihz; }
+    static void set_width(DisplayModeSet &set, std::uint32_t index, std::uint32_t width) { set.widths_[index] = width; }
+    static void set_height(DisplayModeSet &set, std::uint32_t index, std::uint32_t height) { set.heights_[index] = height; }
+};
+
+}
+
 using av::DisplayModeSet;
+using av::DisplayModeSetProbe;
 using av::Status;
 
 namespace {
@@ -124,3 +137,83 @@ TEST(display_mode_set, the_refresh_follows_the_modes_and_a_set_without_one_is_60
   std::memcpy(bytes + writer.offset() - DisplayModeSet::refresh_size, &slow, sizeof slow);
   CHECK_STATUS(old.decode(bytes, writer.offset()), Status::malformed);
   CHECK(old.invariants_hold()); }
+
+TEST(display_mode_set, a_mode_sharing_one_edge_with_another_is_a_different_mode)
+{ DisplayModeSet set;
+  CHECK_STATUS(set.add(1920u, 1080u), Status::ok);
+  CHECK_STATUS(set.add(1920u, 720u), Status::ok);
+  CHECK_STATUS(set.add(1280u, 1080u), Status::ok);
+  CHECK_EQ(set.count(), 3u);
+  CHECK_EQ(set.height(1u), 720u);
+  CHECK_EQ(set.height(3u), 0u);
+  CHECK_EQ(set.width(3u), 0u);
+  CHECK(set.invariants_hold()); }
+
+TEST(display_mode_set, two_sets_are_the_same_only_when_every_part_agrees)
+{ DisplayModeSet one;
+  CHECK_STATUS(one.add(1920u, 1080u), Status::ok);
+  CHECK_STATUS(one.add(1280u, 720u), Status::ok);
+  DisplayModeSet other = one;
+  CHECK(one.same_as(other));
+  CHECK_STATUS(other.add(800u, 600u), Status::ok);
+  CHECK(!one.same_as(other));
+  other = one;
+  CHECK_STATUS(other.prefer(1u), Status::ok);
+  CHECK(!one.same_as(other));
+  other = one;
+  CHECK_STATUS(other.set_refresh(144000u), Status::ok);
+  CHECK(!one.same_as(other));
+  DisplayModeSet wider;
+  CHECK_STATUS(wider.add(1921u, 1080u), Status::ok);
+  CHECK_STATUS(wider.add(1280u, 720u), Status::ok);
+  CHECK(!one.same_as(wider));
+  DisplayModeSet taller;
+  CHECK_STATUS(taller.add(1920u, 1081u), Status::ok);
+  CHECK_STATUS(taller.add(1280u, 720u), Status::ok);
+  CHECK(!one.same_as(taller)); }
+
+TEST(display_mode_set, the_invariant_catches_each_way_a_set_can_be_broken)
+{ DisplayModeSet whole;
+  CHECK_STATUS(whole.add(1920u, 1080u), Status::ok);
+  CHECK_STATUS(whole.add(1280u, 720u), Status::ok);
+  CHECK(whole.invariants_hold());
+
+  DisplayModeSet more = whole;
+  DisplayModeSetProbe::set_count(more, DisplayModeSet::max_modes + 1u);
+  CHECK(!more.invariants_hold());
+
+  DisplayModeSet empty;
+  DisplayModeSetProbe::set_preferred(empty, 1u);
+  CHECK(!empty.invariants_hold());
+  DisplayModeSet beyond = whole;
+  DisplayModeSetProbe::set_preferred(beyond, 2u);
+  CHECK(!beyond.invariants_hold());
+
+  DisplayModeSet slow = whole;
+  DisplayModeSetProbe::set_refresh(slow, DisplayModeSet::least_refresh_millihz - 1u);
+  CHECK(!slow.invariants_hold());
+  DisplayModeSet fast = whole;
+  DisplayModeSetProbe::set_refresh(fast, DisplayModeSet::most_refresh_millihz + 1u);
+  CHECK(!fast.invariants_hold());
+
+  DisplayModeSet no_width = whole;
+  DisplayModeSetProbe::set_width(no_width, 1u, 0u);
+  CHECK(!no_width.invariants_hold());
+  DisplayModeSet no_height = whole;
+  DisplayModeSetProbe::set_height(no_height, 1u, 0u);
+  CHECK(!no_height.invariants_hold());
+
+  DisplayModeSet wide = whole;
+  DisplayModeSetProbe::set_width(wide, 1u, DisplayModeSet::max_dimension + 1u);
+  CHECK(!wide.invariants_hold());
+  DisplayModeSet tall = whole;
+  DisplayModeSetProbe::set_height(tall, 1u, DisplayModeSet::max_dimension + 1u);
+  CHECK(!tall.invariants_hold());
+
+  DisplayModeSet repeated = whole;
+  DisplayModeSetProbe::set_width(repeated, 1u, 1920u);
+  DisplayModeSetProbe::set_height(repeated, 1u, 1080u);
+  CHECK(!repeated.invariants_hold());
+  DisplayModeSet sharing = whole;
+  DisplayModeSetProbe::set_width(sharing, 1u, 1920u);
+  CHECK(sharing.invariants_hold()); }

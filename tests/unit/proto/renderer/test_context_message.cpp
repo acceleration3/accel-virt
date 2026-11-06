@@ -93,3 +93,10 @@ TEST(context_message_decode, survives_the_hostile_sweep)
   CHECK(sweep.cases_run() > 32u);
   const std::uint32_t acceptable = 32u + (ContextMessage::name_bytes - 1u) * 8u + 2u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
+
+TEST(context_message, a_missing_name_is_an_empty_one)
+{ const ContextMessage unnamed(5u, nullptr);
+  CHECK_EQ(unnamed.context(), 5u);
+  CHECK_EQ(std::strlen(unnamed.name()), 0u);
+  std::uint8_t bytes[ContextMessage::encoded_size] = {};
+  CHECK_STATUS(unnamed.encode(bytes, sizeof bytes), Status::ok); }

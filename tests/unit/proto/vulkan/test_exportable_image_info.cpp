@@ -182,3 +182,8 @@ TEST(exportable_image_info, a_layout_another_image_was_given_is_described_as_it_
   CHECK(!ExportableImageInfo(4u, 4u, 1u, 1u, 1u, r8g8b8a8_unorm, bind_render_target, linear_modifier,
                              std::uint64_t{0u}, std::uint64_t{0u})
              .supported()); }
+
+TEST(exportable_image_info, a_layout_given_for_an_image_that_cannot_be_shared_stays_unsupported)
+{ CHECK(!ExportableImageInfo(0u, 4u, 1u, 1u, 1u, r8g8b8a8_unorm, bind_render_target, linear_modifier,
+                             std::uint64_t{0u}, std::uint64_t{512u})
+             .supported()); }

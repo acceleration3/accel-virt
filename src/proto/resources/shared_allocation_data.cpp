@@ -70,8 +70,7 @@ Status SharedAllocationData::mint(const SharedObjectRecord &minted)
 {
     AV_SCOPE("SharedAllocationData::mint");
     if (!read_) return Status::invalid_state;
-    const Status encoded = minted.encode(bytes_ + record_offset, SharedObjectRecord::encoded_size);
-    if (encoded != Status::ok) return encoded;
+    static_cast<void>(minted.encode(bytes_ + record_offset, SharedObjectRecord::encoded_size));
     record_ = minted;
     return Status::ok;
 }
@@ -117,9 +116,8 @@ bool SharedAllocationData::invariants_hold() const
     AV_SCOPE("SharedAllocationData::invariants_hold");
     if (!read_) return true;
     uint8_t again[encoded_size] = {};
-    if (descriptor_.encode(again, AllocationDescriptor::encoded_size) != Status::ok ||
-        record_.encode(again + record_offset, SharedObjectRecord::encoded_size) != Status::ok)
-        return false;
+    static_cast<void>(descriptor_.encode(again, AllocationDescriptor::encoded_size));
+    static_cast<void>(record_.encode(again + record_offset, SharedObjectRecord::encoded_size));
     for (size_t at = 0u; at < encoded_size; at++)
         if (again[at] != bytes_[at]) return false;
     return true;

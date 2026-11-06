@@ -9,6 +9,8 @@
 #include "proto/virtio_gpu/capset_request.hpp"
 #include "proto/virtio_gpu/context_request.hpp"
 #include "proto/virtio_gpu/create_blob_request.hpp"
+#include "proto/virtio_gpu/display_mode_set.hpp"
+#include "proto/virtio_gpu/scanout_plane_request.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/host_memory_request.hpp"
 #include "proto/virtio_gpu/av_request_writer.hpp"
@@ -313,3 +315,28 @@ TEST(av_request_writer_host_blob, what_does_not_fit_is_not_written)
   CHECK_STATUS(none.host_blob(1u, 1u, upload, 0x1000u), Status::too_large);
   CHECK_STATUS(none.map_blob(1u, 0u), Status::too_large);
   CHECK_STATUS(none.unmap_blob(1u), Status::too_large); }
+
+TEST(av_request_writer_display_modes, is_the_bare_header_of_the_display_mode_request)
+{ Buffer buffer;
+  AvRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  CHECK_STATUS(writer.display_modes(), Status::ok);
+  CHECK_EQ(writer.length(), av::DisplayModeSet::header_size);
+  std::uint32_t type = 0u;
+  std::memcpy(&type, buffer.bytes, sizeof type);
+  CHECK_EQ(type, av::DisplayModeSet::request_type);
+  CHECK(zero(buffer.bytes, 4u, av::DisplayModeSet::header_size));
+  CHECK_EQ(buffer.bytes[av::DisplayModeSet::header_size], 0xEEu); }
+
+TEST(av_request_writer_display_modes, what_does_not_fit_is_not_written)
+{ std::uint8_t bytes[av::DisplayModeSet::header_size - 1u];
+  std::memset(bytes, 0xEE, sizeof bytes);
+  AvRequestWriter writer(bytes, sizeof bytes);
+  CHECK_STATUS(writer.display_modes(), Status::too_large);
+  CHECK_EQ(writer.length(), 0u);
+  CHECK_EQ(bytes[0], 0xEEu);
+  std::uint8_t     small[av::ScanoutPlaneRequest::encoded_size - 1u];
+  std::memset(small, 0xEE, sizeof small);
+  AvRequestWriter plane(small, sizeof small);
+  CHECK_STATUS(plane.scanout_plane(av::ScanoutPlaneRequest()), Status::too_large);
+  CHECK_EQ(plane.length(), 0u);
+  CHECK_EQ(small[0], 0xEEu); }

@@ -371,3 +371,47 @@ TEST(export_answer_decode, survives_the_hostile_sweep)
   CHECK_EQ(sweep.cases_run(), 64u + 1u + 8u * 64u + 2u);
   const std::uint32_t acceptable = 16u + 64u + 64u + 32u + 32u + 64u + 32u + 31u + 12u + 1u + 1u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
+
+TEST(export_answer, a_refresh_rides_only_on_a_sync_answer)
+{ const ExportGreeting greeting(uuid);
+  const ExportedLayout layout(64u, 64u, 0x34325241u, 256u, 0u, 0u);
+  std::uint8_t         bytes[ExportAnswer::encoded_size] = {};
+  ExportAnswer         hello(ExportRequest(ExportOperation::hello, 0u, tag), Status::ok);
+  hello.greet(greeting);
+  CHECK_STATUS(hello.encode(bytes, sizeof bytes), Status::ok);
+  hello.tell_refresh(60000000u);
+  CHECK_STATUS(hello.encode(bytes, sizeof bytes), Status::invalid_parameter);
+  ExportAnswer exports(ExportRequest(ExportOperation::export_surface, surface, tag), Status::ok);
+  exports.describe(layout);
+  exports.tell_refresh(60000000u);
+  CHECK_STATUS(exports.encode(bytes, sizeof bytes), Status::invalid_parameter);
+  ExportAnswer revoked(ExportRevocation::released, surface);
+  CHECK_STATUS(revoked.encode(bytes, sizeof bytes), Status::ok);
+  revoked.tell_refresh(60000000u);
+  CHECK_STATUS(revoked.encode(bytes, sizeof bytes), Status::invalid_parameter);
+  ExportAnswer sync(ExportRequest(ExportOperation::sync, surface, tag), Status::ok);
+  sync.tell_refresh(60000000u);
+  CHECK_STATUS(sync.encode(bytes, sizeof bytes), Status::ok); }
+
+TEST(export_answer, a_head_answer_carries_a_layout_and_one_descriptor_like_an_export)
+{ const ExportedLayout layout(64u, 48u, 0x34325241u, 256u, 0u, implicit);
+  std::uint8_t         bytes[ExportAnswer::encoded_size] = {};
+  ExportAnswer         sent(ExportRequest(ExportOperation::head, surface, tag), Status::ok);
+  sent.describe(layout);
+  CHECK_EQ(sent.descriptors(), 1u);
+  CHECK_STATUS(sent.encode(bytes, sizeof bytes), Status::ok);
+  CHECK_EQ(u32_at(bytes, 8u), 6u);
+  CHECK_EQ(u32_at(bytes, 32u), 64u);
+  CHECK_EQ(u32_at(bytes, 36u), 48u);
+  ExportAnswer read;
+  CHECK_STATUS(read.decode(bytes, sizeof bytes, 1u), Status::ok);
+  CHECK(read.operation() == ExportOperation::head);
+  CHECK_EQ(read.layout().height(), 48u);
+  ExportAnswer refused(ExportRequest(ExportOperation::head, surface, tag), Status::not_found);
+  CHECK_EQ(refused.descriptors(), 0u);
+  CHECK_STATUS(refused.encode(bytes, sizeof bytes), Status::ok); }
+
+TEST(export_answer, an_operation_outside_the_protocol_is_refused_at_encode)
+{ std::uint8_t bytes[ExportAnswer::encoded_size] = {};
+  const ExportAnswer unknown(ExportRequest(static_cast<ExportOperation>(77u), surface, tag), Status::ok);
+  CHECK_STATUS(unknown.encode(bytes, sizeof bytes), Status::invalid_parameter); }

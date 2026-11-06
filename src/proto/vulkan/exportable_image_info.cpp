@@ -28,9 +28,9 @@ ExportableImageInfo::ExportableImageInfo(uint32_t width, uint32_t height, uint32
     AV_SCOPE("ExportableImageInfo::ExportableImageInfo");
     const DxgiFormat shared(format);
     if (shared.vk_format() == 0u || width == 0u || height == 0u || mips != 1u || layers != 1u || samples > 1u ||
-        (bind_flags & ~shared_binds) != 0u ||
-        !Alignment(row_alignment).align_up(static_cast<uint64_t>(width) * shared.element_bytes(), plane_.rowPitch))
+        (bind_flags & ~shared_binds) != 0u)
         return;
+    static_cast<void>(Alignment(row_alignment).align_up(static_cast<uint64_t>(width) * shared.element_bytes(), plane_.rowPitch));
     info_.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     info_.pNext = &external_;
     info_.imageType = VK_IMAGE_TYPE_2D;

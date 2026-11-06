@@ -58,8 +58,14 @@ TEST(scanout_plane_request, a_plane_turned_off_needs_no_key_or_rectangles)
 TEST(scanout_plane_request, a_malformed_plane_decodes_to_nothing)
 { const std::int32_t empty[4] = {10, 20, 10, 260};
   const std::int32_t left_of_image[4] = {-1, 0, 100, 100};
+  const std::int32_t flat[4] = {10, 20, 330, 20};
+  const std::int32_t above_image[4] = {0, -1, 100, 100};
   const std::uint32_t shown = ScanoutPlaneRequest::flag_shown;
   const ScanoutPlaneRequest refused[] = {
+      ScanoutPlaneRequest(0u, 1u, shown, 1u, source, destination, 1920u, 0u),
+      ScanoutPlaneRequest(0u, 1u, shown, 1u, source, destination, ScanoutPlaneRequest::most_extent + 1u, 1080u),
+      ScanoutPlaneRequest(0u, 1u, shown, 1u, flat, destination, 1920u, 1080u),
+      ScanoutPlaneRequest(0u, 1u, shown, 1u, above_image, destination, 1920u, 1080u),
       ScanoutPlaneRequest(0u, ScanoutPlaneRequest::layers, shown, 1u, source, destination, 1920u, 1080u),
       ScanoutPlaneRequest(0u, 1u, shown, 1u, source, destination, 0u, 1080u),
       ScanoutPlaneRequest(0u, 1u, shown, 1u, source, destination, 1920u, ScanoutPlaneRequest::most_extent + 1u),
