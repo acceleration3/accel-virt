@@ -303,6 +303,26 @@ TEST(buffer_mapping, changes_within_the_merge_gap_go_as_one_write)
     CHECK_EQ(rig.commands() - before, row.written);
   } }
 
+TEST(buffer_mapping, more_runs_than_one_batch_holds_go_in_batches)
+{ constexpr std::uint32_t changes = av::icd::WrittenRuns::max_runs + 1u;
+  constexpr std::uint64_t stride = 512u;
+  constexpr std::uint64_t length = stride * changes;
+  static std::uint8_t     zeros[length];
+  Rig rig;
+  rig.shadows.keep(buffer, 0u, length, zeros);
+  CHECK_STATUS(rig.map(buffer, 0u, length, write_only), Status::ok);
+  for (std::uint32_t change = 0u; change < changes; change++) rig.bytes()[change * stride] = 0x77u;
+  const std::uint32_t before = rig.commands();
+  rig.write_back();
+  CHECK_EQ(rig.commands() - before, changes);
+  for (std::uint32_t change = 0u; change < changes; change++) {
+    const Write sent = rig.write_at(before + change);
+    CHECK_EQ(sent.offset, change * stride);
+    CHECK_EQ(sent.size, 8u);
+  }
+  rig.write_back();
+  CHECK_EQ(rig.commands() - before, changes); }
+
 TEST(buffer_mapping, an_explicit_write_back_puts_what_it_sent_into_the_copy)
 { Rig          rig;
   std::uint8_t zeros[64] = {};

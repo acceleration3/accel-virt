@@ -16,6 +16,33 @@
 #include <cstdint>
 #include <cstring>
 
+namespace av::icd {
+
+struct ChainSlotsProbe {
+    static void set_memory(ChainSlots &slots, std::uint32_t slot, std::uint64_t memory) { slots.memories_[slot] = memory; }
+    static void set_opened(ChainSlots &slots, bool opened) { slots.opened_ = opened; }
+    static void set_count(ChainSlots &slots, std::uint32_t count) { slots.count_ = count; }
+};
+
+}
+
+namespace av::glicd {
+
+struct ChainedFramesProbe {
+    static void forget_texture(ChainedFrames &frames, std::uint32_t slot) { frames.textures_[slot] = 0u; }
+    static void forget_memory(ChainedFrames &frames, std::uint32_t slot)
+    {
+        av::icd::ChainSlotsProbe::set_memory(frames.slots_, slot, 0u);
+    }
+    static void close_slots(ChainedFrames &frames) { av::icd::ChainSlotsProbe::set_opened(frames.slots_, false); }
+    static void overfill_slots(ChainedFrames &frames)
+    {
+        av::icd::ChainSlotsProbe::set_count(frames.slots_, av::icd::ChainSlots::max_slots + 1u);
+    }
+};
+
+}
+
 namespace {
 
 using av::ClientTransport;
@@ -27,6 +54,7 @@ using av::TransportResult;
 using av::WireReader;
 using av::WireWriter;
 using av::glicd::ChainedFrames;
+using av::glicd::ChainedFramesProbe;
 
 constexpr std::uint32_t gl_srgb8_alpha8 = 0x8C43u;
 constexpr std::uint32_t first_memory = 0x700u;
@@ -41,9 +69,11 @@ public:
     static constexpr std::size_t   slot_bytes = 4096u;
 
     ScriptedGlHost() : RoomedTransport(256u * 1024u, 64u * 1024u), request_{}, reply_{}, commands_{}, async_{}, payloads_{}, sends_(0u), opens_(0u),
-                       names_(first_name), refuse_open_at_(0u), arena_(nullptr, 0u), blobs_() {}
+                       names_(first_name), refuse_open_at_(0u), wide_memory_at_(0u), zero_names_(false), arena_(nullptr, 0u), blobs_() {}
 
     void refuse_open_at(std::uint32_t nth) { refuse_open_at_ = nth; }
+    void wide_memory_at(std::uint32_t nth) { wide_memory_at_ = nth; }
+    void zero_names(bool zero) { zero_names_ = zero; }
 
     std::uint32_t sends() const { return sends_; }
     std::uint32_t command(std::uint32_t index) const { return commands_[index]; }
@@ -75,8 +105,10 @@ public:
         if (command_id == CommandHeader::open_shared_object_id) {
             opens_++;
             const bool refused = refuse_open_at_ == opens_;
+            const std::uint64_t memory = wide_memory_at_ == opens_ ? (std::uint64_t{1u} << 32) + first_memory
+                                                                   : first_memory + opens_ - 1u;
             const SharedObjectAnswer opened(refused ? SharedObjectAnswer::unknown_object : SharedObjectAnswer::done,
-                                            refused ? 0u : first_memory + opens_ - 1u);
+                                            refused ? 0u : memory);
             static_cast<void>(opened.encode(reply_, SharedObjectAnswer::encoded_size));
             reply = WireReader(reply_, SharedObjectAnswer::encoded_size);
             return TransportResult::ok;
@@ -91,7 +123,7 @@ public:
         if (command_id == av::glproto::kCmd_glCreateTextures) static_cast<void>(asked.read_varint(target));
         static_cast<void>(asked.read_varint(n));
         answer.write_varint(n * 4u);
-        for (std::uint64_t made = 0u; made < n; made++) answer.write_pod<std::uint32_t>(names_++);
+        for (std::uint64_t made = 0u; made < n; made++) answer.write_pod<std::uint32_t>(zero_names_ ? 0u : names_++);
         reply = WireReader(reply_, answer.offset());
         return TransportResult::ok;
     }
@@ -119,6 +151,8 @@ private:
     std::uint32_t       opens_;
     std::uint32_t       names_;
     std::uint32_t       refuse_open_at_;
+    std::uint32_t       wide_memory_at_;
+    bool                zero_names_;
     av::WireArena       arena_;
     av::ClientBlobArena blobs_;
 };
@@ -249,3 +283,54 @@ TEST(chained_frames, close_gives_everything_back_and_a_new_window_closes_the_old
   frames.close(nullptr);
   CHECK_EQ(host.sends(), sent);
   CHECK_EQ(chains.closes(), 3u); }
+
+
+TEST(chained_frames, memory_the_texture_cannot_address_or_a_name_the_host_does_not_give_holds_nothing)
+{ static ScriptedGlHost host;
+  ScriptedWindowChains chains;
+  chains.refuse_opens(false);
+  ChainedFrames frames;
+  int window = 0;
+  host.wide_memory_at(2u);
+  CHECK(!frames.open(host, chains, &window, luid, width, height, false));
+  CHECK(!frames.opened());
+  CHECK_EQ(chains.closes(), 1u);
+  CHECK_EQ(host.count(av::glproto::kCmd_glCreateTextures), 0u);
+  CHECK_EQ(host.count(CommandHeader::release_shared_object_id), ChainedFrames::slot_count);
+  host.wide_memory_at(0u);
+  host.zero_names(true);
+  CHECK(!frames.open(host, chains, &window, luid, width, height, false));
+  CHECK(!frames.opened());
+  CHECK_EQ(chains.closes(), 2u);
+  CHECK_EQ(host.count(av::glproto::kCmd_glTextureStorageMem2DEXT), 0u);
+  CHECK(frames.invariants_hold()); }
+
+TEST(chained_frames, an_unopened_chain_draws_nothing)
+{ static ScriptedGlHost host;
+  ChainedFrames frames;
+  frames.draw(host, 7u, 0u);
+  CHECK_EQ(host.sends(), 0u);
+  CHECK(!frames.fits(nullptr, width, height)); }
+
+TEST(chained_frames_invariants, fail_for_an_opened_chain_missing_a_texture_memory_or_slots)
+{ static ScriptedGlHost host;
+  ScriptedWindowChains chains;
+  chains.refuse_opens(false);
+  int window = 0;
+  ChainedFrames texture;
+  CHECK(texture.open(host, chains, &window, luid, width, height, false));
+  ChainedFramesProbe::forget_texture(texture, 1u);
+  CHECK(!texture.invariants_hold());
+  ChainedFrames memory;
+  CHECK(memory.open(host, chains, &window, luid, width, height, false));
+  ChainedFramesProbe::forget_memory(memory, 1u);
+  CHECK(!memory.invariants_hold());
+  ChainedFrames closed;
+  CHECK(closed.open(host, chains, &window, luid, width, height, false));
+  ChainedFramesProbe::close_slots(closed);
+  CHECK(!closed.invariants_hold());
+  ChainedFrames overfull;
+  CHECK(overfull.open(host, chains, &window, luid, width, height, false));
+  CHECK(overfull.invariants_hold());
+  ChainedFramesProbe::overfill_slots(overfull);
+  CHECK(!overfull.invariants_hold()); }

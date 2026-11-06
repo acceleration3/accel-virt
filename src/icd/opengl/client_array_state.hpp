@@ -90,7 +90,6 @@ private:
 
     void        forget_unsaved_bindings();
     uint32_t    buffer_slot(uint32_t target) const;
-    bool        indexed(uint32_t target) const;
     uint32_t    texture_slot(uint32_t target) const;
     const PixelStore *store_for(uint32_t pname, PixelStore::Field &field) const;
     uint32_t       *elements_of(uint32_t array);

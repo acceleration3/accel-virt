@@ -15,6 +15,27 @@ using av::glicd::DeferredSlices;
 using av::glicd::SliceGroups;
 using av::glicd::SlicedBuffers;
 
+namespace av {
+
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
+};
+
+}
+
+namespace av::glicd {
+
+struct DeferredSlicesProbe {
+    static void claim_marks(DeferredSlices &deferred, std::uint32_t marks) { deferred.entries_.at(0u).marks_ = marks; }
+    static void corrupt_entries(DeferredSlices &deferred) { GrowableArrayProbe::corrupt_capacity(deferred.entries_, 3u); }
+    static void corrupt_marks(DeferredSlices &deferred) { GrowableArrayProbe::corrupt_capacity(deferred.marks_, 3u); }
+};
+
+}
+
+using av::glicd::DeferredSlicesProbe;
+
 namespace {
 
 class Member {
@@ -279,3 +300,20 @@ TEST(deferred_slices_clear, drops_every_entry_and_every_mark)
   CHECK(!rig.deferred_.take_ready(rig.groups_, ready));
   CHECK_STATUS(rig.deferred_.add(rig.groups_, group, &owner.buffers_, rig.entry(9u)), Status::ok);
   CHECK(rig.deferred_.invariants_hold()); }
+
+TEST(deferred_slices_invariants, fail_for_marks_the_entries_claim_but_the_list_lacks_or_a_list_that_lost_its_shape)
+{ Rig               rig;
+  const std::uint32_t group = rig.groups_.mint();
+  Member              owner(rig.channel_, rig.groups_, group);
+  CHECK_STATUS(rig.deferred_.add(rig.groups_, group, &owner.buffers_, rig.entry(1u)), Status::ok);
+  CHECK(rig.deferred_.invariants_hold());
+  DeferredSlicesProbe::claim_marks(rig.deferred_, 5u);
+  CHECK(!rig.deferred_.invariants_hold());
+  DeferredSlicesProbe::claim_marks(rig.deferred_, 0u);
+  CHECK(rig.deferred_.invariants_hold());
+  rig.deferred_.clear();
+  DeferredSlicesProbe::corrupt_entries(rig.deferred_);
+  CHECK(!rig.deferred_.invariants_hold());
+  Rig other;
+  DeferredSlicesProbe::corrupt_marks(other.deferred_);
+  CHECK(!other.deferred_.invariants_hold()); }

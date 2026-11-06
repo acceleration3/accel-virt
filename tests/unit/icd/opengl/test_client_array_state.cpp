@@ -7,13 +7,27 @@
 
 using av::glicd::ClientArrayState;
 
+namespace av {
+
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.count_ = count; }
+};
+
+}
+
 namespace av::glicd {
+
+using av::KeyedSlotsProbe;
 
 struct PixelStoreProbe {
     static void zero_alignment(PixelStore &store) { store.values_[0] = 0; }
 };
 
 struct ClientArrayStateProbe {
+    static void set_depth(ClientArrayState &state, std::uint32_t depth) { state.depth_ = depth; }
+    static void set_unsaved(ClientArrayState &state, std::uint32_t unsaved) { state.unsaved_ = unsaved; }
+    static void corrupt_elements(ClientArrayState &state) { KeyedSlotsProbe::corrupt_count(state.elements_, 99u); }
     static void break_unit(ClientArrayState &state) { state.active_unit_ = 40u; }
     static void name_default(ClientArrayState &state)
     {
@@ -285,7 +299,20 @@ TEST(client_array_state_invariants, fail_for_state_no_call_makes)
   CHECK(!pack.invariants_hold());
   ClientArrayState unpack(platform);
   av::glicd::ClientArrayStateProbe::break_store(unpack, false);
-  CHECK(!unpack.invariants_hold()); }
+  CHECK(!unpack.invariants_hold());
+  ClientArrayState deep(platform);
+  av::glicd::ClientArrayStateProbe::set_depth(deep, ClientArrayState::most_pushed + 1u);
+  CHECK(!deep.invariants_hold());
+  ClientArrayState unsaved(platform);
+  av::glicd::ClientArrayStateProbe::set_unsaved(unsaved, 1u);
+  CHECK(!unsaved.invariants_hold());
+  av::glicd::ClientArrayStateProbe::set_depth(unsaved, ClientArrayState::most_pushed);
+  CHECK(unsaved.invariants_hold());
+  ClientArrayState table(platform);
+  CHECK_STATUS(table.bind_vertex_array(3u), av::Status::ok);
+  CHECK(table.invariants_hold());
+  av::glicd::ClientArrayStateProbe::corrupt_elements(table);
+  CHECK(!table.invariants_hold()); }
 
 TEST(client_array_state, answers_the_pixel_store_values_it_keeps)
 { av::MockPlatform platform;
@@ -317,5 +344,18 @@ TEST(client_array_state, an_element_buffer_set_for_a_vertex_array_is_the_one_bou
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 5u);
   state.set_vertex_array_elements(99u, 7u);
   CHECK_STATUS(state.bind_vertex_array(99u), av::Status::ok);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
+  CHECK(state.invariants_hold()); }
+
+TEST(client_array_state, deleting_the_buffer_the_default_vertex_array_uses_unbinds_it)
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
+  state.bind_buffer(ClientArrayState::element_array_buffer, 7u);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 7u);
+  const std::uint32_t other = 8u;
+  state.delete_buffers(1, &other);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 7u);
+  const std::uint32_t names[] = {7u};
+  state.delete_buffers(1, names);
   CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
   CHECK(state.invariants_hold()); }

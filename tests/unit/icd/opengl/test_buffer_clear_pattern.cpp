@@ -6,8 +6,18 @@
 #include <cstdint>
 #include <cstring>
 
+namespace av::glicd {
+
+struct BufferClearPatternProbe {
+    static void set_size(BufferClearPattern &pattern, std::uint32_t size) { pattern.size_ = size; }
+    static void forget_internal(BufferClearPattern &pattern) { pattern.internal_ = nullptr; }
+};
+
+}
+
 using av::GuardedBuffer;
 using av::glicd::BufferClearPattern;
+using av::glicd::BufferClearPatternProbe;
 
 namespace {
 
@@ -401,3 +411,17 @@ TEST(buffer_clear_pattern_sweep, a_name_displaced_from_any_known_name_is_refused
   }
   CHECK_EQ(Converted(rgba8, gl_rgba + 1u, t_ubyte, data).error, invalid_enum);
   CHECK_EQ(Converted(rgba8, gl_rgba, t_ubyte + 100u, data).error, invalid_enum); }
+
+TEST(buffer_clear_pattern_invariants, fail_for_a_size_beyond_the_most_a_pattern_holds_or_one_the_format_does_not_make)
+{ const std::uint8_t data[4] = {1u, 2u, 3u, 4u};
+  BufferClearPattern pattern;
+  CHECK_EQ(pattern.convert(rgba8, gl_rgba, t_ubyte, data), no_error);
+  CHECK(pattern.invariants_hold());
+  BufferClearPatternProbe::set_size(pattern, BufferClearPattern::most_bytes + 1u);
+  CHECK(!pattern.invariants_hold());
+  BufferClearPatternProbe::set_size(pattern, 8u);
+  CHECK(!pattern.invariants_hold());
+  BufferClearPatternProbe::set_size(pattern, 4u);
+  CHECK(pattern.invariants_hold());
+  BufferClearPatternProbe::forget_internal(pattern);
+  CHECK(!pattern.invariants_hold()); }

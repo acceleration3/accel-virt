@@ -47,6 +47,8 @@ private:
 
     GrowableArray<Entry> entries_;
     GrowableArray<Mark>  marks_;
+
+    friend struct DeferredSlicesProbe;
 };
 
 }

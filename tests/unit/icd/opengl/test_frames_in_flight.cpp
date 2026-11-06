@@ -9,6 +9,7 @@ namespace av::glicd {
 
 struct FramesInFlightProbe {
     static void misorder(FramesInFlight &frames) { frames.fences_[frames.oldest_] = 99u; }
+    static void misorder_times(FramesInFlight &frames) { frames.ended_at_[frames.oldest_] = 99u; }
     static void lose_place(FramesInFlight &frames) { frames.oldest_ = FramesInFlight::most; }
     static void overcount(FramesInFlight &frames) { frames.count_ = FramesInFlight::most + 1u; }
 };
@@ -69,9 +70,21 @@ TEST(frames_in_flight_invariants, frames_out_of_order_or_a_lost_place_are_detect
   static_cast<void>(misordered.end(5u, 1u, per_second, 0u));
   av::glicd::FramesInFlightProbe::misorder(misordered);
   CHECK(!misordered.invariants_hold());
+  FramesInFlight late;
+  static_cast<void>(late.end(4u, 0u, per_second, 0u));
+  static_cast<void>(late.end(5u, 1u, per_second, 0u));
+  av::glicd::FramesInFlightProbe::misorder_times(late);
+  CHECK(!late.invariants_hold());
   FramesInFlight lost;
   av::glicd::FramesInFlightProbe::lose_place(lost);
   CHECK(!lost.invariants_hold());
   FramesInFlight over;
   av::glicd::FramesInFlightProbe::overcount(over);
   CHECK(!over.invariants_hold()); }
+
+TEST(frames_in_flight_end, a_clock_too_slow_to_count_milliseconds_waits_for_the_frame_just_ended)
+{ FramesInFlight frames;
+  CHECK_EQ(frames.end(1u, 5u, 100u, 0u), 1u);
+  CHECK_EQ(frames.end(2u, 6u, 100u, 0u), 2u);
+  CHECK_EQ(frames.unfinished(), 2u);
+  CHECK(frames.invariants_hold()); }

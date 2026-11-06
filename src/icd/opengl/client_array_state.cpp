@@ -21,8 +21,6 @@ constexpr uint32_t buffer_targets_kept[] = {
     0x92C0u ,
 };
 
-constexpr uint32_t indexed_targets[] = {0x8A11u, 0x8C8Eu, 0x90D2u, 0x92C0u};
-
 constexpr uint32_t texture_targets_kept[] = {
     0x0DE0u ,       0x0DE1u ,       0x806Fu ,         0x8C18u ,
     0x8C1Au , 0x84F5u , 0x8513u ,  0x9009u ,
@@ -327,14 +325,6 @@ uint32_t ClientArrayState::buffer_slot(uint32_t target) const
     for (uint32_t slot = 0u; slot < buffer_targets; slot++)
         if (buffer_targets_kept[slot] == target) return slot;
     return buffer_targets;
-}
-
-bool ClientArrayState::indexed(uint32_t target) const
-{
-    AV_SCOPE("ClientArrayState::indexed");
-    for (const uint32_t kept : indexed_targets)
-        if (kept == target) return true;
-    return false;
 }
 
 uint32_t ClientArrayState::texture_slot(uint32_t target) const

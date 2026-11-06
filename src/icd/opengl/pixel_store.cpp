@@ -74,8 +74,10 @@ size_t PixelStore::span(uint32_t format, uint32_t type, int32_t width, int32_t h
                                static_cast<uint64_t>(depth), row, image);
     if (!extent.offset_of(static_cast<uint64_t>(get(Field::skip_rows)), skipped_images, start) ||
         __builtin_add_overflow(start, static_cast<uint64_t>(get(Field::skip_pixels)) * pixel, &start) ||
-        !extent.end(start, end) || static_cast<uint64_t>(static_cast<size_t>(end)) != end)
+        !extent.end(start, end))
         return 0u;
+    if constexpr (sizeof(size_t) < sizeof(uint64_t))
+        if (end > SIZE_MAX) return 0u;
     return static_cast<size_t>(end);
 }
 

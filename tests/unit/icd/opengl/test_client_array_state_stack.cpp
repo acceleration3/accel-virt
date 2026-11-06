@@ -250,3 +250,19 @@ TEST(client_array_state_stack, reset_client_puts_the_masked_state_back_to_its_de
   state.reset_client(ClientArrayState::client_vertex_array_bit);
   CHECK_EQ(state.bound_buffer(array_buffer), 0u);
   CHECK(state.invariants_hold()); }
+
+TEST(client_array_state_stack, a_push_while_the_bound_vertex_array_has_no_record_saves_no_element_buffer)
+{ MockPlatform     platform;
+  ClientArrayState state(platform);
+  platform.fail_allocation_at(1u);
+  Status        bound = Status::ok;
+  std::uint32_t array = 1u;
+  while (bound == Status::ok && array < 20000u) bound = state.bind_vertex_array(array++);
+  CHECK_STATUS(bound, Status::no_memory);
+  state.push_client(everything);
+  CHECK(state.invariants_hold());
+  CHECK_STATUS(state.bind_vertex_array(0u), Status::ok);
+  state.bind_buffer(elements, 5u);
+  state.pop_client();
+  CHECK_EQ(state.bound_buffer(elements), 5u);
+  CHECK(state.invariants_hold()); }

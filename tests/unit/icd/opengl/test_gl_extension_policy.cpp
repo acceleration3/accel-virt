@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 
 using av::GlContextOptions;
 using av::GlContextRig;
@@ -22,6 +23,14 @@ namespace av::glicd {
 
 struct GlExtensionPolicyProbe {
     static void blank_wgl(GlExtensionPolicy &policy) { policy.wgl_[0] = '\0'; }
+    static void overfill_gl(GlExtensionPolicy &policy, const Row *rows, std::uint32_t count)
+    {
+        std::construct_at(&policy.gl_rows_, rows, count, "GL_", av::icd::ExtensionRows::Names(nullptr, 0u));
+    }
+    static void overfill_wgl(GlExtensionPolicy &policy, const Row *rows, std::uint32_t count)
+    {
+        std::construct_at(&policy.wgl_rows_, rows, count, "WGL_", av::icd::ExtensionRows::Names(nullptr, 0u));
+    }
 };
 
 }
@@ -216,4 +225,12 @@ TEST(gl_extension_policy_invariants, fail_for_rows_of_the_wrong_kind_or_a_string
   GlExtensionPolicy blanked(nullptr, 0u, wgl_rows, 1u);
   av::glicd::GlExtensionPolicyProbe::blank_wgl(blanked);
   CHECK(!blanked.invariants_hold());
-  CHECK(GlExtensionPolicy(nullptr, 0u, nullptr, 0u).invariants_hold()); }
+  CHECK(GlExtensionPolicy(nullptr, 0u, nullptr, 0u).invariants_hold());
+  static Row many[GlExtensionPolicy::max_rows + 1u];
+  for (Row &row : many) row = Row{"GL_ARB_debug_output", 1u, "suite.case"};
+  GlExtensionPolicy gl_over(nullptr, 0u, nullptr, 0u);
+  av::glicd::GlExtensionPolicyProbe::overfill_gl(gl_over, many, GlExtensionPolicy::max_rows + 1u);
+  CHECK(!gl_over.invariants_hold());
+  GlExtensionPolicy wgl_over(nullptr, 0u, nullptr, 0u);
+  av::glicd::GlExtensionPolicyProbe::overfill_wgl(wgl_over, many, GlExtensionPolicy::max_rows + 1u);
+  CHECK(!wgl_over.invariants_hold()); }

@@ -24,6 +24,15 @@
 #include <cstdint>
 #include <cstring>
 
+namespace av {
+
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.count_ = count; }
+};
+
+}
+
 namespace av::icd {
 
 struct OpenedObjectsProbe {
@@ -50,6 +59,7 @@ struct GlExternalObjectsProbe {
     }
     static void pull(GlExternalObjects &objects, std::uint32_t name) { static_cast<void>(objects.rows_.erase(name)); }
     static icd::OpenedObjects &opened(GlExternalObjects &objects) { return objects.opened_; }
+    static void corrupt_rows(GlExternalObjects &objects, std::uint32_t count) { KeyedSlotsProbe::corrupt_count(objects.rows_, count); }
 };
 
 }
@@ -330,6 +340,17 @@ TEST(gl_external_objects_create, writes_no_names_at_all_when_one_row_cannot_be_h
   CHECK_EQ(one.objects().live(), 65u);
   CHECK(one.objects().invariants_hold()); }
 
+TEST(gl_external_objects_create, a_name_in_the_run_that_is_taken_gives_the_made_ones_back)
+{ Process       one;
+  GlExternalObjectsProbe::plant(one.objects(), 2u);
+  std::uint32_t names[2] = {0xAAAAu, 0xBBBBu};
+  CHECK_EQ(one.objects().create(SharedObjectKind::memory, 2, names), GlExternalObjects::gl_out_of_memory);
+  CHECK_EQ(names[0], 0xAAAAu);
+  CHECK_EQ(names[1], 0xBBBBu);
+  CHECK_EQ(one.objects().live(), 1u);
+  CHECK(!one.objects().holds(SharedObjectKind::memory, 1u));
+  CHECK_EQ(one.log().holding("avgl: every memory object and semaphore name is taken"), 1u); }
+
 TEST(gl_external_objects_release_all, gives_back_every_object_it_still_holds)
 { Process       one;
   std::uint32_t names[2] = {};
@@ -390,6 +411,11 @@ TEST(gl_external_objects_invariants, refuse_each_state_a_create_or_an_import_nev
   av::icd::OpenedObjectsProbe::add_empty(GlExternalObjectsProbe::opened(one.objects()));
   CHECK(!one.objects().invariants_hold());
   av::icd::OpenedObjectsProbe::drop_empty(GlExternalObjectsProbe::opened(one.objects()));
+  CHECK(one.objects().invariants_hold());
+  const std::uint32_t held = one.objects().live();
+  GlExternalObjectsProbe::corrupt_rows(one.objects(), 99u);
+  CHECK(!one.objects().invariants_hold());
+  GlExternalObjectsProbe::corrupt_rows(one.objects(), held);
   CHECK(one.objects().invariants_hold()); }
 
 TEST(gl_external_objects, a_native_fence_is_a_semaphore_and_an_unknown_kind_is_neither)

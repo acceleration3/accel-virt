@@ -18,6 +18,7 @@ namespace av::glicd {
 
 struct FrontBufferProbe {
     static void widen(FrontBuffer &front, std::uint32_t width) { front.width_ = width; }
+    static void stretch(FrontBuffer &front, std::uint32_t height) { front.height_ = height; }
 };
 
 }
@@ -94,3 +95,14 @@ TEST(front_buffer, a_frame_given_back_is_forgotten)
   front.presented(frame, 2u, 0u);
   CHECK(!front.presented());
   CHECK(front.invariants_hold()); }
+
+TEST(front_buffer, a_frame_too_big_to_measure_answers_nothing)
+{ FrontBuffer front;
+  front.presented(frame, 2u, 2u);
+  std::uint8_t pixels[4] = {};
+  CHECK(front.read(0, 0, 1, 1, FrontBuffer::gl_bgra, FrontBuffer::gl_unsigned_byte, pixels));
+  av::glicd::FrontBufferProbe::widen(front, 0xFFFFFFFFu);
+  av::glicd::FrontBufferProbe::stretch(front, 0xFFFFFFFFu);
+  std::uint8_t untouched[4] = {0xEEu, 0xEEu, 0xEEu, 0xEEu};
+  CHECK(!front.read(0, 0, 1, 1, FrontBuffer::gl_bgra, FrontBuffer::gl_unsigned_byte, untouched));
+  CHECK_EQ(untouched[0], 0xEEu); }

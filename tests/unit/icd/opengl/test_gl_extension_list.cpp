@@ -10,9 +10,28 @@ using av::MockPlatform;
 using av::glicd::GlExtensionList;
 using av::Status;
 
+namespace av {
+
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_size(GrowableArray<T> &array, std::uint32_t size) { array.size_ = size; }
+};
+
+struct ExtensionNamesProbe {
+    static void corrupt_size(ExtensionNames &names, std::uint32_t size) { GrowableArrayProbe::corrupt_size(names.names_, size); }
+};
+
+struct ExtensionWordsProbe {
+    static void corrupt_size(ExtensionWords &words, std::uint32_t size) { GrowableArrayProbe::corrupt_size(words.text_, size); }
+};
+
+}
+
 namespace av::glicd {
 
 struct GlExtensionListProbe {
+    static void corrupt_names(GlExtensionList &list) { ExtensionNamesProbe::corrupt_size(list.names_, 99u); }
+    static void corrupt_joined(GlExtensionList &list) { ExtensionWordsProbe::corrupt_size(list.joined_, 99u); }
     static void name_only(GlExtensionList &list, const char *name) { static_cast<void>(list.names_.add(name)); }
     static void word_only(GlExtensionList &list, const char *name) { static_cast<void>(list.joined_.add(name)); }
 };
@@ -62,7 +81,7 @@ TEST(gl_extension_list, grows_past_any_fixed_count_and_string_room)
   CHECK(list.invariants_hold()); }
 
 TEST(gl_extension_list, a_name_that_cannot_be_stored_is_refused_and_changes_nothing)
-{ for (std::uint32_t refused = 1u; refused <= 2u; refused++) {
+{ for (std::uint32_t refused = 1u; refused <= 6u; refused++) {
     MockPlatform platform;
     GlExtensionList list(platform);
     CHECK(list.add("GL_KHR_debug"));
@@ -97,4 +116,10 @@ TEST(gl_extension_list_invariants, fail_when_the_string_and_the_names_disagree)
   av::glicd::GlExtensionListProbe::word_only(reordered, "GL_A");
   av::glicd::GlExtensionListProbe::name_only(reordered, "GL_A");
   av::glicd::GlExtensionListProbe::word_only(reordered, "GL_B");
-  CHECK(!reordered.invariants_hold()); }
+  CHECK(!reordered.invariants_hold());
+  GlExtensionList unnamed(platform);
+  av::glicd::GlExtensionListProbe::corrupt_names(unnamed);
+  CHECK(!unnamed.invariants_hold());
+  GlExtensionList unjoined(platform);
+  av::glicd::GlExtensionListProbe::corrupt_joined(unjoined);
+  CHECK(!unjoined.invariants_hold()); }

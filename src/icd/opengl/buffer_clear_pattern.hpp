@@ -92,6 +92,8 @@ private:
     uint8_t         bytes_[most_bytes];
     uint32_t        size_;
     const Internal *internal_;
+
+    friend struct BufferClearPatternProbe;
 };
 
 }

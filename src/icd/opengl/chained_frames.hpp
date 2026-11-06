@@ -39,6 +39,8 @@ private:
     icd::ChainSlots slots_;
     uint32_t        textures_[slot_count];
     bool            opened_;
+
+    friend struct ChainedFramesProbe;
 };
 
 }

@@ -60,7 +60,9 @@ bool FrontBuffer::read(int32_t x, int32_t y, int32_t width, int32_t height, uint
     if (right > width_ || top > height_) return false;
     const uint64_t pitch = uint64_t{width_} * bytes_per_pixel;
     uint64_t frame_bytes = 0u;
-    if (__builtin_mul_overflow(pitch, uint64_t{height_}, &frame_bytes) || frame_bytes > SIZE_MAX) return false;
+    if (__builtin_mul_overflow(pitch, uint64_t{height_}, &frame_bytes)) return false;
+    if constexpr (sizeof(size_t) < sizeof(uint64_t))
+        if (frame_bytes > SIZE_MAX) return false;
     const uint64_t offset = static_cast<uint64_t>(y) * pitch + static_cast<uint64_t>(x) * bytes_per_pixel;
     const BgraRows from(pixels_ + static_cast<size_t>(offset), frame_bytes - offset, pitch);
     const uint64_t line = static_cast<uint64_t>(width) * bytes_per_pixel;

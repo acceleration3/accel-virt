@@ -10,6 +10,7 @@
 #include "harness/icd/scripted_window_chains.hpp"
 #include "harness/icd/scripted_window_surface.hpp"
 #include "icd/opengl/back_buffer_presenter.hpp"
+#include "icd/opengl/chained_frames.hpp"
 #include "icd/opengl/client_array_state.hpp"
 #include "icd/common/window_present_queue.hpp"
 #include "icd/opengl/batch_ready.hpp"
@@ -37,7 +38,16 @@ namespace ids = av::glproto;
 
 namespace av::glicd {
 
+struct ChainedFramesProbe {
+    static void forget_texture(ChainedFrames &frames, std::uint32_t slot) { frames.textures_[slot] = 0u; }
+};
+
 struct BackBufferPresenterProbe {
+    static void forget_chain_texture(BackBufferPresenter &presenter)
+    {
+        ChainedFramesProbe::forget_texture(presenter.chained_, 0u);
+    }
+    static void close_chain(BackBufferPresenter &presenter) { presenter.chained_.close(nullptr); }
     static std::uint8_t *swap_pixels(BackBufferPresenter &presenter, std::uint8_t *pixels)
     {
         std::uint8_t *const held = presenter.pixels_;
@@ -758,3 +768,66 @@ TEST(back_buffer_presenter, a_refused_chain_reads_frames_back_until_the_window_r
   CHECK(presents.thread.step());
   CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0u));
   CHECK_EQ(presents.chains.opens(), 2u); }
+
+namespace {
+
+void chained_rig(Rig &rig, Presents &presents)
+{
+  presents.chains.refuse_opens(false);
+  rig.host().gl_window(1u, 1u);
+  CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
+  rig.host().shared_object(av::SharedObjectAnswer::done, 0x700u);
+  rig.host().shared_object(av::SharedObjectAnswer::done, 0x701u);
+  const std::uint32_t textures[2] = {200u, 201u};
+  rig.host().gl_bytes(reinterpret_cast<const std::uint8_t *>(textures), sizeof textures);
+}
+
+}
+
+TEST(back_buffer_presenter, a_chain_with_every_slot_held_drops_the_frame)
+{ Rig      rig;
+  Presents presents(rig);
+  chained_rig(rig, presents);
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK_EQ(presents.loop.queued(), 2u);
+  const std::uint32_t sent = rig.commands();
+  CHECK_EQ(presents.loop.dropped_frames(), 0u);
+  CHECK(rig.presenter.present(rig.wire(), rig.state, &rig.dc, rig.surface, &presents.loop, 0x1234u));
+  CHECK_EQ(presents.loop.dropped_frames(), 1u);
+  CHECK_EQ(rig.commands(), sent);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK_EQ(presents.loop.queued(), 2u);
+  CHECK(rig.presenter.invariants_hold()); }
+
+TEST(back_buffer_presenter, a_hand_over_without_a_present_thread_hands_nothing)
+{ Rig      rig;
+  Presents presents(rig);
+  rig.host().gl_window(1u, 1u);
+  CHECK_STATUS(rig.presenter.prepare(rig.wire(), &rig.window, plain_d24s8, rig.surface), Status::ok);
+  Probe::set_pending(rig.presenter, 0u);
+  rig.presenter.hand_over(rig.context.mark());
+  CHECK_EQ(presents.loop.queued(), 0u); }
+
+TEST(back_buffer_presenter_invariants, fail_for_a_chained_frame_without_a_slot_or_a_chain_that_lost_a_part)
+{ Rig      slot;
+  Presents slots(slot);
+  chained_rig(slot, slots);
+  CHECK(slot.presenter.present(slot.wire(), slot.state, &slot.dc, slot.surface, &slots.loop, 0x1234u));
+  CHECK(slot.presenter.invariants_hold());
+  Probe::set_pending(slot.presenter, Presenter::slot_count);
+  CHECK(!slot.presenter.invariants_hold());
+  Probe::set_pending(slot.presenter, 0u);
+  CHECK(slot.presenter.invariants_hold());
+  Probe::close_chain(slot.presenter);
+  CHECK(!slot.presenter.invariants_hold());
+  Rig      part;
+  Presents parts(part);
+  chained_rig(part, parts);
+  CHECK(part.presenter.present(part.wire(), part.state, &part.dc, part.surface, &parts.loop, 0x1234u));
+  part.presenter.hand_over(part.context.mark());
+  CHECK(part.presenter.invariants_hold());
+  Probe::forget_chain_texture(part.presenter);
+  CHECK(!part.presenter.invariants_hold()); }
