@@ -102,8 +102,8 @@ Status PlaneScanout::carry(uint32_t source, const OverlayPlane *planes, uint32_t
         if (told_[source][layer] && same(wanted, sent_[source][layer])) continue;
         uint8_t         bytes[AvRequestWriter::max_request_size] = {};
         AvRequestWriter writer(bytes, sizeof bytes);
-        Status          sent = writer.scanout_plane(wanted);
-        if (sent == Status::ok) sent = device_.object().send_control(bytes, writer.length());
+        static_cast<void>(writer.scanout_plane(wanted));
+        const Status sent = device_.object().send_control(bytes, writer.length());
         if (sent != Status::ok) return sent;
         sent_[source][layer] = wanted;
         told_[source][layer] = true;

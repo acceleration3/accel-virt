@@ -39,7 +39,18 @@ public:
           video_(platform_, segments_,
                  AllocationDescriptor(AllocationKind::surface, false, SurfaceLayout(640u, 480u, 0x3231564Eu, 640u),
                                       0x71000u, ScanoutTarget(), 0x53u),
-                 0x71000u)
+                 0x71000u),
+          packed_(platform_, segments_,
+                  AllocationDescriptor(AllocationKind::surface, false, SurfaceLayout(640u, 480u, 0x32595559u, 1280u),
+                                       0x96000u, ScanoutTarget(), 0x54u),
+                  0x96000u),
+          odd_(platform_, segments_,
+               AllocationDescriptor(AllocationKind::surface, false, SurfaceLayout(640u, 480u, 0x1u, 640u), 0x71000u,
+                                    ScanoutTarget(), 0x55u),
+               0x71000u),
+          plain_(platform_, segments_,
+                 AllocationDescriptor(AllocationKind::staging, false, SurfaceLayout(), 0x1000u, ScanoutTarget(), 0x56u),
+                 0x1000u)
     { CHECK_STATUS(aperture_.initialize(0x100000000), Status::ok);
       overlays_.offer(capset(av::CapsetInfo::feature_scanout_planes)); }
 
@@ -56,6 +67,9 @@ public:
     Allocation     &other() { return other_; }
     Allocation     &unkeyed() { return unkeyed_; }
     Allocation     &video() { return video_; }
+    Allocation     &packed() { return packed_; }
+    Allocation     &odd() { return odd_; }
+    Allocation     &plain() { return plain_; }
 
     static DxgkMultiplaneOverlayPlaneWithSource2Record plane(Allocation &allocation, std::uint32_t layer)
     {
@@ -85,6 +99,9 @@ private:
     Allocation          other_;
     Allocation          unkeyed_;
     Allocation          video_;
+    Allocation          packed_;
+    Allocation          odd_;
+    Allocation          plain_;
 };
 
 DxgkargCheckMultiPlaneOverlaySupport3Record checked(Fixture &fixture, DxgkMultiplaneOverlayPlaneWithSource2Record *planes,
@@ -181,6 +198,40 @@ TEST(overlay_support_check, names_the_first_plane_it_cannot_show)
   planes[0].hAllocation = nullptr;
   CHECK(refused(0u)); }
 
+TEST(overlay_support_check, refuses_what_is_not_a_surface_the_host_can_read)
+{ Fixture fixture;
+  DxgkMultiplaneOverlayPlaneWithSource2Record planes[2] = {Fixture::plane(fixture.keyed(), 0u),
+                                                           Fixture::plane(fixture.other(), 1u)};
+  const auto refused = [&] {
+      const DxgkargCheckMultiPlaneOverlaySupport3Record check = checked(fixture, planes, 2u);
+      return check.Supported == 0 && check.ReturnInfo == 1u;
+  };
+  planes[1] = Fixture::plane(fixture.plain(), 1u);
+  CHECK(refused());
+  planes[1] = Fixture::plane(fixture.odd(), 1u);
+  CHECK(refused());
+  planes[1] = Fixture::plane(fixture.packed(), 1u);
+  planes[1].PlaneAttributes.ColorSpaceType = 6u;
+  CHECK_EQ(checked(fixture, planes, 2u).Supported, 1);
+  planes[1] = Fixture::plane(fixture.other(), 1u);
+  planes[1].PlaneAttributes.SrcRect = {-1, 0, 640, 480};
+  CHECK(refused());
+  planes[1].PlaneAttributes.SrcRect = {0, -1, 640, 480};
+  CHECK(refused());
+  planes[1].PlaneAttributes.SrcRect = {640, 0, 640, 480};
+  CHECK(refused());
+  planes[1].PlaneAttributes.SrcRect = {0, 480, 640, 480};
+  CHECK(refused());
+  planes[1].PlaneAttributes.SrcRect = {0, 0, 640, 481};
+  CHECK(refused());
+  planes[1] = Fixture::plane(fixture.other(), 1u);
+  planes[1].PlaneAttributes.DstRect = {10, 0, 10, 480};
+  CHECK(refused());
+  planes[1].PlaneAttributes.DstRect = {0, 10, 640, 10};
+  CHECK(refused());
+  planes[1].PlaneAttributes.DstRect = {0, 0, 640, 4800};
+  CHECK(refused()); }
+
 TEST(overlay_support_check, takes_only_an_unscaled_post_composition)
 { Fixture fixture;
   DxgkMultiplaneOverlayPlaneWithSource2Record plane = Fixture::plane(fixture.keyed(), 0u);
@@ -197,6 +248,29 @@ TEST(overlay_support_check, takes_only_an_unscaled_post_composition)
   CHECK_STATUS(fixture.overlays().check(check), Status::ok);
   CHECK_EQ(check.Supported, 1);
   post.DstRect = {0, 0, 1280, 960};
+  CHECK_STATUS(fixture.overlays().check(check), Status::ok);
+  CHECK_EQ(check.Supported, 0);
+  post.DstRect = {0, 0, 640, 480};
+  post.Flags = 1u;
+  CHECK_STATUS(fixture.overlays().check(check), Status::ok);
+  CHECK_EQ(check.Supported, 0);
+  post.Flags = 0u;
+  post.Rotation = av::rotation_identity;
+  check.Supported = 1;
+  CHECK_STATUS(fixture.overlays().check(check), Status::ok);
+  CHECK_EQ(check.Supported, 1);
+  post.Rotation = 2u;
+  CHECK_STATUS(fixture.overlays().check(check), Status::ok);
+  CHECK_EQ(check.Supported, 0);
+  post.Rotation = 0u;
+  post.DstRect = {0, 0, 640, 960};
+  check.Supported = 1;
+  CHECK_STATUS(fixture.overlays().check(check), Status::ok);
+  CHECK_EQ(check.Supported, 0);
+  post.DstRect = {0, 0, 640, 480};
+  av::DxgkMultiplaneOverlayPostCompositionWithSourceRecord *missing[] = {nullptr};
+  check.ppPostComposition = missing;
+  check.Supported = 1;
   CHECK_STATUS(fixture.overlays().check(check), Status::ok);
   CHECK_EQ(check.Supported, 0);
   check.ppPostComposition = nullptr;

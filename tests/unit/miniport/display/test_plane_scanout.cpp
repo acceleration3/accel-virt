@@ -9,6 +9,7 @@
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "harness/virtio/mapped_virtio_function.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/virtio_gpu/scanout_plane_request.hpp"
 
@@ -53,6 +54,50 @@ private:
     PlaneScanout                        planes_;
     Allocation                          image_;
     Allocation                          unkeyed_;
+};
+
+class CarryFixture {
+public:
+    CarryFixture()
+        : mapped_(), storage_(), segment_(mapped_.platform()), segments_(mapped_.platform(), segment_),
+          planes_(storage_), first_(mapped_.platform(), segments_, surface(0x77u), 0x12C000u),
+          second_(mapped_.platform(), segments_, surface(0x78u), 0x12C000u)
+    {
+        CHECK_STATUS(mapped_.map(), Status::ok);
+        CHECK_STATUS(segment_.initialize(0x100000000), Status::ok);
+        CHECK_STATUS(storage_.construct(mapped_.platform(), mapped_.mappings(), mapped_.layout()), Status::ok);
+        CHECK_STATUS(storage_.object().start(3u), Status::ok);
+    }
+    ~CarryFixture() { storage_.destroy(); }
+
+    PlaneScanout *operator->() { return &planes_; }
+    Allocation   &first() { return first_; }
+    Allocation   &second() { return second_; }
+    av::FakeVirtqueueDevice queue() { return mapped_.queue_device(0u); }
+
+    std::uint32_t answer(av::FakeVirtqueueDevice &control)
+    {
+        const std::uint32_t answered = control.respond_all(0x1100u);
+        std::uint32_t       harvested = 0u;
+        CHECK_STATUS(storage_.object().harvest_control(harvested), Status::ok);
+        CHECK_EQ(harvested, answered);
+        return answered;
+    }
+
+private:
+    static AllocationDescriptor surface(std::uint64_t key)
+    {
+        return AllocationDescriptor(AllocationKind::surface, false, SurfaceLayout(640u, 480u, 21u, 2560u), 0x12C000u,
+                                    ScanoutTarget(), key);
+    }
+
+    av::MappedVirtioFunction                mapped_;
+    av::ObjectStorage<av::VirtioGpuDevice>  storage_;
+    av::ApertureSegment                     segment_;
+    av::MemorySegments                      segments_;
+    PlaneScanout                            planes_;
+    Allocation                              first_;
+    Allocation                              second_;
 };
 
 DxgkMultiplaneOverlayAttributes3Record attributes(av::RectRecord from, av::RectRecord into, av::RectRecord clip)
@@ -128,4 +173,98 @@ TEST(plane_scanout_carry, needs_a_device_and_a_head_it_has)
   CHECK_STATUS(fixture.planes().carry(0u, planes, 1280u, 800u), Status::invalid_state);
   CHECK_STATUS(fixture.planes().carry(av::DisplaySources::max_sources, planes, 1280u, 800u), Status::invalid_parameter);
   CHECK_STATUS(fixture.planes().carry(0u, planes, 0u, 800u), Status::invalid_parameter);
+  CHECK_STATUS(fixture.planes().carry(0u, planes, 1280u, 0u), Status::invalid_parameter);
   fixture.planes().forget_device(); }
+
+TEST(plane_scanout_request, a_plane_with_no_size_is_off_and_an_empty_clip_cuts_nothing)
+{ Fixture fixture;
+  const av::RectRecord whole = {0, 0, 640, 480};
+  const av::RectRecord sizes[][2] = {{whole, {0, 0, 0, 480}}, {whole, {0, 0, 640, 0}},
+                                     {{0, 0, 0, 480}, whole}, {{0, 0, 640, 0}, whole}};
+  for (const auto &item : sizes) {
+      const ScanoutPlaneRequest request = fixture.planes().request(
+          0u, OverlayPlane(1u, 9u, &fixture.image(), 0, attributes(item[0], item[1], {})), 1280u, 800u);
+      CHECK(!request.shown());
+  }
+  const ScanoutPlaneRequest flat = fixture.planes().request(
+      0u, OverlayPlane(1u, 9u, &fixture.image(), 0, attributes(whole, whole, {0, 0, 640, 0})), 1280u, 800u);
+  CHECK(flat.shown());
+  CHECK_EQ(flat.destination()[3], 480);
+  const ScanoutPlaneRequest below = fixture.planes().request(
+      0u, OverlayPlane(1u, 9u, &fixture.image(), 0, attributes(whole, whole, {0, 500, 640, 600})), 1280u, 800u);
+  CHECK(!below.shown()); }
+
+TEST(plane_scanout_request, a_one_pixel_source_stretched_wide_keeps_one_pixel_of_source_in_the_cut)
+{ Fixture fixture;
+  const ScanoutPlaneRequest request = fixture.planes().request(
+      0u, OverlayPlane(1u, 9u, &fixture.image(), 0, attributes({0, 0, 1, 1}, {0, 0, 100, 100}, {})), 50u, 50u);
+  CHECK(request.shown());
+  CHECK_EQ(request.source()[0], 0);
+  CHECK_EQ(request.source()[1], 0);
+  CHECK_EQ(request.source()[2], 1);
+  CHECK_EQ(request.source()[3], 1);
+  CHECK_EQ(request.destination()[2], 50);
+  CHECK_EQ(request.destination()[3], 50); }
+
+TEST(plane_scanout_carry, tells_the_host_only_what_changed_about_each_plane)
+{ CarryFixture fixture;
+  av::FakeVirtqueueDevice control = fixture.queue();
+  OverlayPlane planes[OverlayPlane::max_planes];
+  CHECK_STATUS(fixture->carry(0u, planes, 1280u, 800u), Status::ok);
+  CHECK_EQ(fixture.answer(control), OverlayPlane::max_planes);
+  CHECK_STATUS(fixture->carry(0u, planes, 1280u, 800u), Status::ok);
+  CHECK_EQ(fixture.answer(control), 0u);
+  CHECK_STATUS(fixture->carry(0u, planes, 1920u, 800u), Status::ok);
+  CHECK_EQ(fixture.answer(control), OverlayPlane::max_planes);
+  CHECK_STATUS(fixture->carry(0u, planes, 1920u, 1080u), Status::ok);
+  CHECK_EQ(fixture.answer(control), OverlayPlane::max_planes);
+
+  const auto step = [&](const DxgkMultiplaneOverlayAttributes3Record &record, Allocation &image) {
+      planes[1] = OverlayPlane(1u, 9u, &image, 0, record);
+      CHECK_STATUS(fixture->carry(0u, planes, 1920u, 1080u), Status::ok);
+      return fixture.answer(control);
+  };
+  DxgkMultiplaneOverlayAttributes3Record record = attributes({0, 0, 640, 480}, {0, 0, 640, 480}, {});
+  CHECK_EQ(step(record, fixture.first()), 1u);
+  CHECK_EQ(step(record, fixture.first()), 0u);
+  CHECK_EQ(step(record, fixture.second()), 1u);
+  record.StretchQuality = 1u;
+  CHECK_EQ(step(record, fixture.second()), 1u);
+  record.ColorSpaceType = 5u;
+  CHECK_EQ(step(record, fixture.second()), 1u);
+  record.ColorSpaceType = 6u;
+  CHECK_EQ(step(record, fixture.second()), 1u);
+  record.ColorSpaceType = 8u;
+  CHECK_EQ(step(record, fixture.second()), 1u);
+  record.ColorSpaceType = 9u;
+  CHECK_EQ(step(record, fixture.second()), 1u);
+  record.SrcRect = {0, 0, 320, 480};
+  CHECK_EQ(step(record, fixture.second()), 1u);
+  record.DstRect = {0, 0, 320, 480};
+  CHECK_EQ(step(record, fixture.second()), 1u);
+  record.DstRect = {0, 0, 320, 240};
+  CHECK_EQ(step(record, fixture.second()), 1u);
+  record.DstRect = {0, 0, 320, 480};
+  record.SrcRect = {0, 0, 640, 480};
+  CHECK_EQ(step(record, fixture.second()), 1u);
+  planes[1] = OverlayPlane(1u, 0u);
+  CHECK_STATUS(fixture->carry(0u, planes, 1920u, 1080u), Status::ok);
+  CHECK_EQ(fixture.answer(control), 1u);
+  fixture->forget_device();
+  CHECK_STATUS(fixture->carry(0u, planes, 1920u, 1080u), Status::ok);
+  CHECK_EQ(fixture.answer(control), OverlayPlane::max_planes); }
+
+TEST(plane_scanout_carry, stops_at_the_plane_the_host_queue_has_no_room_for_and_retries_it)
+{ CarryFixture fixture;
+  av::FakeVirtqueueDevice control = fixture.queue();
+  OverlayPlane planes[OverlayPlane::max_planes];
+  Status       refused = Status::ok;
+  std::uint32_t width = 100u;
+  std::uint32_t taken = 0u;
+  while (refused == Status::ok && taken < 4096u) {
+      refused = fixture->carry(0u, planes, width++, 800u);
+      taken++;
+  }
+  CHECK(refused != Status::ok);
+  CHECK(fixture.answer(control) > 0u);
+  CHECK_STATUS(fixture->carry(0u, planes, width - 1u, 800u), Status::ok); }
