@@ -8,7 +8,21 @@
 
 using av::LockTrace;
 using av::RecordingThreadLock;
+using av::icd::DescriptorTemplateSlot;
 using av::icd::DescriptorTemplateTable;
+
+namespace av::icd {
+
+struct DescriptorTemplateTableProbe {
+    static const DescriptorTemplateSlot *slot(const DescriptorTemplateTable &table, VkDescriptorUpdateTemplate made)
+    {
+        return table.slots_.find(table.key_of(made));
+    }
+};
+
+}
+
+using av::icd::DescriptorTemplateTableProbe;
 
 namespace {
 
@@ -135,4 +149,22 @@ TEST(descriptor_template_table, it_forgets_a_template_and_a_device_s)
   CHECK_EQ(held.table().live(), 1u);
   held.table().forget_device(other_device);
   CHECK_EQ(held.table().live(), 0u);
+  CHECK(held.table().invariants_hold()); }
+
+TEST(descriptor_template_table, a_slot_names_the_device_the_template_and_the_bytes_of_one_update)
+{ TableUnderLock                  held;
+  VkDescriptorUpdateTemplateEntry entry = {};
+  const VkDescriptorUpdateTemplateCreateInfo info = of(entry, 3u, 8u);
+  CHECK(DescriptorTemplateTableProbe::slot(held.table(), handle(0x41u)) == nullptr);
+  CHECK_EQ(held.table().record(device, handle(0x41u), &info), VK_SUCCESS);
+  CHECK_EQ(held.table().record(other_device, handle(0x42u), &info), VK_SUCCESS);
+  const DescriptorTemplateSlot *const slot = DescriptorTemplateTableProbe::slot(held.table(), handle(0x41u));
+  CHECK(slot != nullptr);
+  CHECK(slot->device_ == device);
+  CHECK(slot->template_ == handle(0x41u));
+  CHECK_EQ(slot->bytes_, 8u + 3u * image_bytes);
+  CHECK(DescriptorTemplateTableProbe::slot(held.table(), handle(0x42u))->device_ == other_device);
+  held.table().forget_device(device);
+  CHECK(DescriptorTemplateTableProbe::slot(held.table(), handle(0x41u)) == nullptr);
+  CHECK(DescriptorTemplateTableProbe::slot(held.table(), handle(0x42u)) != nullptr);
   CHECK(held.table().invariants_hold()); }

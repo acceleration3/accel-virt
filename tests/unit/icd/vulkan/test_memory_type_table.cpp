@@ -272,3 +272,15 @@ TEST(memory_type_table, invariants_refuse_a_type_on_a_heap_past_the_heaps_or_a_c
   CHECK(!table.invariants_hold());
   MemoryTypeTableProbe::properties(table).memoryHeapCount = 0u;
   CHECK(!table.invariants_hold()); }
+
+TEST(memory_type_table, the_lendable_types_are_those_that_are_visible_coherent_and_cached)
+{ TableRig      rig;
+  MemoryTypeTable table(rig.kmt(), rig.adapter());
+  CHECK_EQ(table.lendable_types(), 0u);
+  CHECK_STATUS(table.build(intel()), Status::ok);
+  CHECK_EQ(table.lendable_types(), (1u << 2u) | (1u << 6u));
+  CHECK_STATUS(table.build(nvidia()), Status::ok);
+  CHECK_EQ(table.lendable_types(), 1u << 4u);
+  CHECK_STATUS(table.build(host(nullptr, 0u, intel_heaps, 1u)), Status::ok);
+  CHECK_EQ(table.lendable_types(), 0u);
+  CHECK(table.invariants_hold()); }
