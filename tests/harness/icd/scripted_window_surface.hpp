@@ -18,6 +18,7 @@ public:
     void resize(void *window, std::uint32_t width, std::uint32_t height);
     void close_window(void *window);
     void refuse_next_blit();
+    void resize_when_a_blit_is_refused(void *window, std::uint32_t width, std::uint32_t height);
 
     void *window_of(void *dc) override;
     bool  client_size(void *window, std::uint32_t &width, std::uint32_t &height) override;
@@ -48,6 +49,9 @@ private:
     Dc            dcs_[max_dcs];
     std::uint32_t dc_count_;
     bool          refuse_blit_;
+    void         *resize_window_;
+    std::uint32_t resize_width_;
+    std::uint32_t resize_height_;
     std::uint32_t blits_;
     void         *blit_dc_;
     std::uint32_t blit_width_;

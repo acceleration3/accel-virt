@@ -7,7 +7,7 @@
 namespace av {
 
 ScriptedWindowSurface::ScriptedWindowSurface()
-    : dcs_{}, dc_count_(0u), refuse_blit_(false), blits_(0u), blit_dc_(nullptr), blit_width_(0u), blit_height_(0u),
+    : dcs_{}, dc_count_(0u), refuse_blit_(false), resize_window_(nullptr), resize_width_(0u), resize_height_(0u), blits_(0u), blit_dc_(nullptr), blit_width_(0u), blit_height_(0u),
       blit_bytes_{}, top_down_(false) {}
 
 void ScriptedWindowSurface::add_dc(void *dc, void *window, std::uint32_t width, std::uint32_t height)
@@ -35,6 +35,13 @@ void ScriptedWindowSurface::close_window(void *window)
 }
 
 void ScriptedWindowSurface::refuse_next_blit() { refuse_blit_ = true; }
+
+void ScriptedWindowSurface::resize_when_a_blit_is_refused(void *window, std::uint32_t width, std::uint32_t height)
+{
+    resize_window_ = window;
+    resize_width_ = width;
+    resize_height_ = height;
+}
 
 ScriptedWindowSurface::Dc *ScriptedWindowSurface::find_dc(void *dc)
 {
@@ -68,6 +75,10 @@ bool ScriptedWindowSurface::blit(void *dc, std::uint32_t width, std::uint32_t he
     if (found == nullptr || found->window == nullptr) return false;
     if (refuse_blit_) {
         refuse_blit_ = false;
+        if (resize_window_ != nullptr) {
+            resize(resize_window_, resize_width_, resize_height_);
+            resize_window_ = nullptr;
+        }
         return false;
     }
     blits_++;

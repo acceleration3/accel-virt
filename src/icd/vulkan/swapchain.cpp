@@ -250,7 +250,7 @@ void Swapchain::done(const VkFrame &frame, bool drawn)
     AV_SCOPE("Swapchain::done");
     const uint32_t slot = frame.slot();
     if (slot >= PresentDevice::slots) return;
-    if (slot_images_[slot] < PresentDevice::max_images) holders_[slot_images_[slot]] = Holder::none;
+    holders_[slot_images_[slot]] = Holder::none;
     if (!drawn) device_.doubt(slot);
 }
 
@@ -287,7 +287,8 @@ bool Swapchain::shows_bgra() const
 {
     AV_SCOPE("Swapchain::shows_bgra");
     SlotFormat slot(SlotLayout::rgba_top_down);
-    return slot.take_vk(static_cast<uint32_t>(format_)) && slot.bgra();
+    static_cast<void>(slot.take_vk(static_cast<uint32_t>(format_)));
+    return slot.bgra();
 }
 
 void Swapchain::retire()
