@@ -32,7 +32,7 @@ bool ChainSlots::open(ClientTransport &wire, WindowChains &chains, void *window,
     for (uint32_t slot = 0u; slot < count_; slot++) {
         SharedObjectCall call(wire);
         uint64_t         opened = 0u;
-        if (call.open(ids_[slot], SharedObjectKind::memory, bytes_[slot], into, opened) == Status::ok && opened != 0u) {
+        if (call.open(ids_[slot], SharedObjectKind::memory, bytes_[slot], into, opened) == Status::ok) {
             memories_[slot] = opened;
             continue;
         }
