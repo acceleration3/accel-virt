@@ -95,7 +95,11 @@ TEST(pixel_staging_buffer, one_buffer_serves_every_transfer_at_its_size)
 { GlTransferHost     host;
   PixelStagingBuffer staging;
   Memory             memory(GlTransferHost::image_bytes, 0u);
-  CHECK(staged_read(host, staging, 0, 0, 1024, 32, memory.bytes(), 1024u * 32u * 4u));
+  CHECK(staging.stage_download(host, memory.bytes(), 1024u * 32u * 4u));
+  CHECK(staging.invariants_hold());
+  ids::av_glReadPixels(host, 0, 0, 1024, 32, gl_rgba, gl_ubyte, nullptr, 0u, true);
+  staging.finish_download(host, memory.bytes(), 1024u * 32u * 4u);
+  CHECK(staging.invariants_hold());
   const GLuint name = staging.name();
   CHECK(name != 0u);
   CHECK_EQ(host.buffer_size(name), 1024u * 32u * 4u);

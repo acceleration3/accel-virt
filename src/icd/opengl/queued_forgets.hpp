@@ -28,6 +28,8 @@ public:
 private:
     GrowableArray<uint32_t> buffers_;
     uint32_t                waiting_;
+
+    friend struct QueuedForgetsProbe;
 };
 
 }

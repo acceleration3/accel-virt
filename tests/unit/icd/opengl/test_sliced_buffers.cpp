@@ -337,6 +337,15 @@ TEST(slice_pin, a_pin_holds_its_owner_until_released_replaced_or_destroyed)
       CHECK_EQ(sibling.buffers_.pinned(), 0u);
       pin.hold(&rig.slices());
       CHECK_EQ(rig.slices().pinned(), 1u);
+      rig.slices().unpin();
+      CHECK(!pin.invariants_hold());
+      rig.slices().pin();
+      CHECK(pin.invariants_hold());
   }
   CHECK_EQ(rig.slices().pinned(), 0u);
-  CHECK_EQ(rig.slices().busy(), 0u); }
+  CHECK_EQ(rig.slices().busy(), 0u);
+  {
+      SlicePin empty;
+      CHECK_EQ(rig.slices().pinned(), 0u);
+  }
+  CHECK_EQ(rig.slices().pinned(), 0u); }

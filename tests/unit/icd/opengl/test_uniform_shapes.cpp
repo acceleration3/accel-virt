@@ -11,9 +11,19 @@ using av::Status;
 using av::glicd::UniformShape;
 using av::glicd::UniformShapes;
 
+namespace av {
+
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.count_ = count; }
+};
+
+}
+
 namespace av::glicd {
 
 struct UniformShapesProbe {
+    static void corrupt_table(UniformShapes &shapes) { KeyedSlotsProbe::corrupt_count(shapes.values_, 99u); }
     static void plant(UniformShapes &shapes, std::uint64_t key, std::uint32_t values)
     {
         std::uint32_t slot = 0u;
@@ -114,4 +124,13 @@ TEST(uniform_shapes_invariants, fail_for_rows_no_remember_writes)
   CHECK(!negative.invariants_hold());
   UniformShapes unshaped(platform);
   av::glicd::UniformShapesProbe::plant(unshaped, std::uint64_t{1u} << 32u, 0u);
-  CHECK(!unshaped.invariants_hold()); }
+  CHECK(!unshaped.invariants_hold());
+  UniformShapes both(platform);
+  av::glicd::UniformShapesProbe::plant(both, std::uint64_t{1u} << 32u, 0u);
+  av::glicd::UniformShapesProbe::plant(both, std::uint64_t{2u} << 32u, 0u);
+  CHECK(!both.invariants_hold());
+  UniformShapes table(platform);
+  CHECK_STATUS(table.remember(1u, 0, 0x1406u), Status::ok);
+  CHECK(table.invariants_hold());
+  av::glicd::UniformShapesProbe::corrupt_table(table);
+  CHECK(!table.invariants_hold()); }

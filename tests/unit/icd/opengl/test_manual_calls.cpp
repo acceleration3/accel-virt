@@ -1867,3 +1867,13 @@ TEST(sync_wait_probe, a_condition_the_host_satisfies_is_reported_as_it_came)
   CHECK(probe.ask(0u));
   CHECK_EQ(probe.result(), SyncWaitProbe::gl_condition_satisfied);
   CHECK_EQ(wait_sent(current, 0u).flags, 0u); }
+
+TEST(sync_wait_probe, an_answer_after_a_timeout_other_than_signaled_is_reported_as_it_came)
+{ Current current;
+  av::ScriptedHost &host = current.rig().host();
+  SyncWaitProbe     probe(*current.context().wire(), 0x77u, 0u);
+  host.gl_varint(SyncWaitProbe::gl_timeout_expired);
+  CHECK(!probe.ask(500u));
+  host.gl_varint(0x911Du);
+  CHECK(probe.ask(500u));
+  CHECK_EQ(probe.result(), 0x911Du); }

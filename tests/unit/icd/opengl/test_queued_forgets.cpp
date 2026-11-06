@@ -5,9 +5,27 @@
 
 #include <cstdint>
 
+namespace av {
+
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
+};
+
+}
+
 using av::MockPlatform;
 using av::Status;
 using av::glicd::QueuedForgets;
+
+namespace av::glicd {
+
+struct QueuedForgetsProbe {
+    static void claim(QueuedForgets &forgets, std::uint32_t waiting) { forgets.waiting_ = waiting; }
+    static void corrupt_list(QueuedForgets &forgets) { GrowableArrayProbe::corrupt_capacity(forgets.buffers_, 3u); }
+};
+
+}
 
 TEST(queued_forgets, starts_empty)
 { MockPlatform  platform;
@@ -103,3 +121,14 @@ TEST(queued_forgets, clear_forgets_everything_and_the_queue_is_usable_again)
   forgets.clear();
   forgets.clear();
   CHECK_EQ(forgets.waiting(), 0u); }
+
+TEST(queued_forgets_invariants, fail_for_a_count_that_is_not_the_names_held_or_a_list_that_lost_its_shape)
+{ MockPlatform  platform;
+  QueuedForgets counted(platform);
+  CHECK_STATUS(counted.add(5u), Status::ok);
+  CHECK(counted.invariants_hold());
+  av::glicd::QueuedForgetsProbe::claim(counted, 2u);
+  CHECK(!counted.invariants_hold());
+  QueuedForgets shaped(platform);
+  av::glicd::QueuedForgetsProbe::corrupt_list(shaped);
+  CHECK(!shaped.invariants_hold()); }

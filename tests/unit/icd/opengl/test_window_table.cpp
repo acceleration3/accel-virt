@@ -10,9 +10,19 @@ using av::MockPlatform;
 using av::Status;
 using av::glicd::WindowTable;
 
+namespace av {
+
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.count_ = count; }
+};
+
+}
+
 namespace av::glicd {
 
 struct WindowTableProbe {
+    static void corrupt_table(WindowTable &table) { KeyedSlotsProbe::corrupt_count(table.formats_, 99u); }
     static void plant(WindowTable &table, void *window, std::int32_t format)
     {
         std::uint32_t slot = 0u;
@@ -104,4 +114,14 @@ TEST(window_table_invariants, fail_for_rows_no_set_writes)
   CHECK(!empty.invariants_hold());
   WindowTable zero(platform);
   av::glicd::WindowTableProbe::plant(zero, &window, 0);
-  CHECK(!zero.invariants_hold()); }
+  CHECK(!zero.invariants_hold());
+  int other = 0;
+  WindowTable both(platform);
+  av::glicd::WindowTableProbe::plant(both, &window, 0);
+  av::glicd::WindowTableProbe::plant(both, &other, 0);
+  CHECK(!both.invariants_hold());
+  WindowTable table(platform);
+  av::glicd::WindowTableProbe::plant(table, &window, 3);
+  CHECK(table.invariants_hold());
+  av::glicd::WindowTableProbe::corrupt_table(table);
+  CHECK(!table.invariants_hold()); }
