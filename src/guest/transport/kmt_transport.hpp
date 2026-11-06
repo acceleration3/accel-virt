@@ -147,7 +147,7 @@ private:
     [[nodiscard]] TransportResult hold_pieces(uint32_t command_id, const WireWriter &writer, uint8_t flags);
     [[nodiscard]] TransportResult publish_held_answered(WireReader &reply);
     [[nodiscard]] TransportResult await(uint64_t fence, WireReader &reply);
-    bool                          replied_within_spin(uint64_t fence);
+    bool                          replied_within_spin(uint64_t fence, WireReader &reply, Status &read);
     bool                          consumed_within_spin();
     bool                          consumed_for_blobs(const uint64_t *sizes, uint32_t count);
     bool                          grow_for_blobs(const uint64_t *sizes, uint32_t count);

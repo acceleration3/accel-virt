@@ -57,6 +57,7 @@ struct KmtTransportProbe {
     static void orphan(KmtTransport &t) { t.context_ = 1u; t.dma_address_ = 0u; }
     static void nameless(KmtTransport &t) { t.context_ = 1u; t.dma_address_ = 0x1000u; t.allocations_[0] = 0u; }
     static void busy_gates(KmtTransport &t, bool busy) { t.gates_busy_ = busy ? 1u : 0u; }
+    static void dmaless(KmtTransport &t) { t.dma_address_ = 0u; }
     static void overhold(KmtTransport &t) { FramedBlockProbe(t.pending_).used() = t.pending_.capacity() + 1u; }
 };
 
@@ -2565,3 +2566,297 @@ TEST(kmt_transport, a_page_that_goes_silent_behind_a_route_gives_up_the_wait)
   CHECK(up.transport().send_sync(0x30002u, writer, reply) == TransportResult::failed);
   up.kmt().reads_clock(nullptr, 0u);
   CHECK(up.transport().faulted()); }
+
+namespace {
+
+class Consumer final : public av::ClockReader {
+public:
+    Consumer(MockKmt &kmt, std::uint32_t context, std::uint32_t at, bool answering = false)
+        : kmt_(kmt), context_(context), at_(at), answering_(answering)
+    {
+    }
+
+    void clock_read() override
+    {
+        if (++reads_ != at_) return;
+        if (answering_) kmt_.answer_now(context_);
+        else kmt_.consume_now(context_);
+    }
+
+private:
+    MockKmt      &kmt_;
+    std::uint32_t context_;
+    std::uint32_t at_;
+    bool          answering_;
+    std::uint32_t reads_ = 0u;
+};
+
+}
+
+TEST(kmt_transport, a_wait_on_a_routed_context_for_a_batch_the_page_has_not_shown_waits_on_the_page)
+{ Up up;
+  CHECK_STATUS(up.transport().initialize(), Status::ok);
+  RecordingReleaseRoute route;
+  CHECK_STATUS(up.transport().release_by(route), Status::ok);
+  up.send();
+  const std::uint32_t waits = up.kmt().calls(MockKmt::Call::wait_for_context);
+  SlowDevice device(up.kmt(), up.transport().context(), true, 1u, 50u);
+  up.kmt().reads_clock(&device, millisecond);
+  CHECK_STATUS(up.transport().await_gpu(1u), Status::ok);
+  up.kmt().reads_clock(nullptr, 0u);
+  CHECK(device.reads() >= 50u);
+  CHECK_EQ(up.kmt().calls(MockKmt::Call::wait_for_context), waits); }
+
+TEST(kmt_transport, a_batch_longer_than_the_ring_is_refused_with_nothing_to_wait_for)
+{ Up up;
+  CHECK_STATUS(up.transport().initialize(), Status::ok);
+  std::uint8_t framed[12u] = {};
+  const std::size_t length = frame_batch(framed, 0x10001u, 1u, false);
+  CHECK_EQ(length, 12u);
+  up.transport().note(av::ChannelCounter::ring_waits, 1u);
+  CHECK(up.transport().hold_framed(framed, 0xFFFFFFF0u) == TransportResult::failed);
+  CHECK_EQ(sent_commands(up.kmt()), 0u);
+  CHECK(up.transport().hold_framed(framed, length) == TransportResult::ok);
+  CHECK_EQ(sent_commands(up.kmt()), 1u); }
+
+TEST(kmt_transport, a_batch_that_only_just_fits_goes_without_the_channel_report)
+{ std::uint32_t most = 0u;
+  for (std::uint32_t count = 341u; count > 300u && most == 0u; count--) {
+      Up up;
+      CHECK_STATUS(up.transport().initialize(), Status::ok);
+      up.transport().note(av::ChannelCounter::ring_waits, 1u);
+      static std::uint8_t framed[12u * 341u];
+      const std::size_t length = frame_batch(framed, 0x10001u, count, false);
+      if (up.transport().hold_framed(framed, length) == TransportResult::ok) most = count;
+  }
+  CHECK(most != 0u);
+  CHECK(most < 341u); }
+
+TEST(kmt_transport, a_ring_the_host_never_empties_after_a_wait_that_returned_faults_the_context)
+{ Up up;
+  CHECK_STATUS(up.transport().initialize(), Status::ok);
+  fill_the_fence_window(up.transport());
+  up.kmt().consume_late_at(1u, 1000000u);
+  SlowDevice clock(up.kmt(), up.transport().context(), false, 0u, 0u);
+  up.kmt().reads_clock(&clock, millisecond);
+  WireWriter writer = up.transport().request_writer();
+  writer.write_u32(64u);
+  CHECK(up.transport().send_async(0x10001u, writer) == TransportResult::failed);
+  up.kmt().reads_clock(nullptr, 0u);
+  CHECK(up.transport().faulted()); }
+
+TEST(kmt_transport, room_found_because_the_host_already_consumed_is_not_waited_for)
+{ Up up;
+  CHECK_STATUS(up.transport().initialize(), Status::ok);
+  std::uint8_t room[64] = {};
+  up.transport().blobs().lend(room, sizeof room);
+  for (std::uint32_t value = 1u; value <= 2u; value++) {
+      CHECK(up.transport().blobs().take(24u).taken());
+      up.send(value);
+  }
+  CHECK_STATUS(up.kmt().wait_for_context(up.fixture().connection().device(), up.transport().context()), Status::ok);
+  const std::uint32_t waits = up.kmt().calls(MockKmt::Call::wait_for_context);
+  CHECK(room_for(up.transport(), 24u));
+  CHECK_EQ(up.kmt().calls(MockKmt::Call::wait_for_context), waits);
+  CHECK(!up.transport().faulted()); }
+
+TEST(kmt_transport, room_the_host_makes_while_the_driver_looks_is_found_without_a_wait)
+{ Up up;
+  CHECK_STATUS(up.transport().initialize(), Status::ok);
+  std::uint8_t room[32] = {};
+  up.transport().blobs().lend(room, sizeof room);
+  CHECK(up.transport().blobs().take(32u).taken());
+  up.send();
+  Consumer consumer(up.kmt(), up.transport().context(), 1u);
+  up.kmt().reads_clock(&consumer, 1u);
+  const std::uint32_t waits = up.kmt().calls(MockKmt::Call::wait_for_context);
+  CHECK(room_for(up.transport(), 8u));
+  up.kmt().reads_clock(nullptr, 0u);
+  CHECK_EQ(up.kmt().calls(MockKmt::Call::wait_for_context), waits + 1u);
+  CHECK(!up.transport().faulted()); }
+
+TEST(kmt_transport, room_waited_for_from_a_host_that_never_consumes_faults_the_context_after_the_silence)
+{ Up up;
+  CHECK_STATUS(up.transport().initialize(), Status::ok);
+  std::uint8_t room[32] = {};
+  up.transport().blobs().lend(room, sizeof room);
+  CHECK(up.transport().blobs().take(32u).taken());
+  up.send();
+  up.kmt().consume_late_at(1u, 1000000u);
+  SlowDevice clock(up.kmt(), up.transport().context(), false, 0u, 0u);
+  up.kmt().reads_clock(&clock, millisecond);
+  CHECK(!room_for(up.transport(), 8u));
+  up.kmt().reads_clock(nullptr, 0u);
+  CHECK(up.transport().faulted()); }
+
+TEST(kmt_transport, a_full_fence_table_the_host_empties_while_the_driver_spins_is_not_waited_for)
+{ Up up;
+  CHECK_STATUS(up.transport().initialize(), Status::ok);
+  fill_the_fence_window(up.transport());
+  Consumer consumer(up.kmt(), up.transport().context(), 3u);
+  up.kmt().reads_clock(&consumer, 1u);
+  const std::uint32_t waits = up.kmt().calls(MockKmt::Call::wait_for_context);
+  up.send(64u);
+  up.kmt().reads_clock(nullptr, 0u);
+  CHECK_EQ(up.kmt().calls(MockKmt::Call::wait_for_context), waits);
+  CHECK(!up.transport().faulted()); }
+
+TEST(kmt_transport, an_initialized_transport_with_no_dma_buffer_is_broken)
+{ Up up;
+  CHECK_STATUS(up.transport().initialize(), Status::ok);
+  CHECK(up.transport().invariants_hold());
+  KmtTransportProbe::dmaless(up.transport());
+  CHECK(!up.transport().invariants_hold());
+  up.transport().teardown(); }
+
+namespace {
+
+void answer_in_parts(MockKmt &kmt, std::uint64_t total, std::uint64_t first, std::uint32_t first_bytes,
+                     std::uint64_t second, std::uint32_t second_bytes)
+{
+    kmt.queue_too_large(static_cast<std::uint32_t>(total));
+    queue_part(kmt, first, 0u, first_bytes);
+    if (second_bytes != 0xFFFFFFFFu) queue_part(kmt, second, 0u, second_bytes);
+}
+
+}
+
+TEST(kmt_transport, a_long_answer_whose_parts_do_not_add_up_faults_the_context)
+{ const struct {
+      std::uint64_t total;
+      std::uint64_t first;
+      std::uint32_t first_bytes;
+      std::uint64_t second;
+      std::uint32_t second_bytes;
+  } lies[] = {
+      {300u, 300u, 0u, 300u, 0xFFFFFFFFu},
+      {300u, 300u, 200u, 300u, 0u},
+      {300u, 10u, 200u, 10u, 0xFFFFFFFFu},
+      {300u, 0u, 200u, 0u, 0xFFFFFFFFu},
+      {300u, 300u, 200u, 299u, 99u},
+  };
+  for (const auto &lie : lies) {
+      Up up(SubApi::vulkan);
+      av::MockPlatform memory;
+      std::uint8_t     staging[staging_bytes] = {};
+      KmtTransport     transport(up.fixture().connection(), memory, SubApi::vulkan, 12u, reply_bytes, staging,
+                                 sizeof staging);
+      CHECK_STATUS(transport.initialize(), Status::ok);
+      answer_in_parts(up.kmt(), lie.total, lie.first, lie.first_bytes, lie.second, lie.second_bytes);
+      WireWriter writer = transport.request_writer();
+      writer.write_u32(1u);
+      WireReader reply(nullptr, 0u);
+      CHECK(transport.send_sync(0x1000Au, writer, reply) == TransportResult::failed);
+      transport.end_call();
+      CHECK(transport.faulted());
+      transport.teardown();
+  } }
+
+TEST(kmt_transport, a_long_answer_with_a_part_too_short_to_name_its_length_faults_the_context)
+{ Up up(SubApi::vulkan);
+  av::MockPlatform memory;
+  std::uint8_t     staging[staging_bytes] = {};
+  KmtTransport     transport(up.fixture().connection(), memory, SubApi::vulkan, 12u, reply_bytes, staging,
+                             sizeof staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  up.kmt().queue_too_large(300u);
+  const std::uint8_t cut[3] = {1u, 2u, 3u};
+  up.kmt().queue_answer(cut, sizeof cut);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(1u);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_sync(0x1000Au, writer, reply) == TransportResult::failed);
+  transport.end_call();
+  CHECK(transport.faulted());
+  transport.teardown(); }
+
+TEST(kmt_transport, a_long_answer_whose_part_cannot_be_asked_for_or_waited_for_fails_the_call)
+{ for (const bool refuse_submit : {true, false}) {
+      Up up(SubApi::vulkan);
+      av::MockPlatform memory;
+      std::uint8_t     staging[staging_bytes] = {};
+      KmtTransport     transport(up.fixture().connection(), memory, SubApi::vulkan, 12u, reply_bytes, staging,
+                                 sizeof staging);
+      CHECK_STATUS(transport.initialize(), Status::ok);
+      up.kmt().queue_too_large(300u);
+      queue_part(up.kmt(), 300u, 0u, 200u);
+      if (refuse_submit) up.kmt().fail_at(MockKmt::Call::submit, 2u, MockKmt::invalid_parameter);
+      else up.kmt().fail_at(MockKmt::Call::wait_for_context, 2u, MockKmt::invalid_parameter);
+      WireWriter writer = transport.request_writer();
+      writer.write_u32(1u);
+      WireReader reply(nullptr, 0u);
+      CHECK(transport.send_sync(0x1000Au, writer, reply) == TransportResult::failed);
+      transport.end_call();
+      transport.teardown();
+  } }
+
+TEST(kmt_transport, whenever_the_host_consumes_while_the_driver_spins_for_a_fence_the_send_goes)
+{ for (std::uint32_t at = 1u; at <= 40u; at++) {
+      Up up;
+      CHECK_STATUS(up.transport().initialize(), Status::ok);
+      fill_the_fence_window(up.transport());
+      Consumer consumer(up.kmt(), up.transport().context(), at);
+      up.kmt().reads_clock(&consumer, millisecond);
+      up.send(64u);
+      up.kmt().reads_clock(nullptr, 0u);
+      CHECK(!up.transport().faulted());
+      CHECK(up.transport().invariants_hold());
+  } }
+
+TEST(kmt_transport, whenever_the_host_consumes_while_the_driver_spins_for_ring_room_the_send_goes)
+{ for (std::uint32_t at = 1u; at <= 80u; at++) {
+      Up up;
+      CHECK_STATUS(up.transport().initialize(), Status::ok);
+      Consumer consumer(up.kmt(), up.transport().context(), at);
+      up.kmt().reads_clock(&consumer, millisecond);
+      for (std::uint32_t i = 0u; i < 6u; i++) {
+          WireWriter writer = up.transport().request_writer();
+          writer.write_zeros(900u);
+          CHECK(up.transport().send_async(0x10001u, writer) == TransportResult::ok);
+      }
+      up.kmt().reads_clock(nullptr, 0u);
+      CHECK(!up.transport().faulted());
+  } }
+
+TEST(kmt_transport, a_long_answer_already_posted_when_the_driver_looks_is_fetched_without_a_wait)
+{ for (const std::uint32_t at : {2u, 5u, 8u}) {
+      Up up(SubApi::vulkan);
+      av::MockPlatform memory;
+      std::uint8_t     staging[staging_bytes] = {};
+      KmtTransport     transport(up.fixture().connection(), memory, SubApi::vulkan, 12u, reply_bytes, staging,
+                                 sizeof staging);
+      CHECK_STATUS(transport.initialize(), Status::ok);
+      up.kmt().queue_too_large(300u);
+      queue_part(up.kmt(), 300u, 0u, 200u);
+      queue_part(up.kmt(), 300u, 200u, 100u);
+      Consumer consumer(up.kmt(), transport.context(), at, true);
+      up.kmt().reads_clock(&consumer, millisecond);
+      WireWriter writer = transport.request_writer();
+      writer.write_u32(1u);
+      WireReader reply(nullptr, 0u);
+      CHECK(transport.send_sync(0x10009u, writer, reply) == TransportResult::ok);
+      up.kmt().reads_clock(nullptr, 0u);
+      CHECK_EQ(reply.remaining(), 300u);
+      transport.end_call();
+      transport.teardown();
+  } }
+
+TEST(kmt_transport, a_batch_that_fits_the_empty_ring_but_not_the_unconsumed_tail_of_an_answered_call_is_refused)
+{ std::uint32_t most = 0u;
+  static std::uint8_t framed[12u * 341u];
+  for (std::uint32_t count = 341u; count > 300u && most == 0u; count--) {
+      Up up;
+      CHECK_STATUS(up.transport().initialize(), Status::ok);
+      if (up.transport().hold_framed(framed, frame_batch(framed, 0x10001u, count, false)) == TransportResult::ok)
+          most = count;
+  }
+  CHECK(most != 0u);
+  Up up;
+  CHECK_STATUS(up.transport().initialize(), Status::ok);
+  up.kmt().consume_late_at(1u, 1000000u);
+  std::uint32_t answered = 0u;
+  up.kmt().answer_waits(nullptr, 0u);
+  CHECK_STATUS(up.transport().nop(answered), Status::ok);
+  const std::size_t length = frame_batch(framed, 0x10001u, most, false);
+  CHECK(up.transport().hold_framed(framed, length) == TransportResult::failed);
+  CHECK_EQ(sent_commands(up.kmt()), 1u); }

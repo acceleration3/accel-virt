@@ -2,6 +2,7 @@
 #include "guest/transport/release_route.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/support/untestable.hpp"
 #include "core/trace/function_scope.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "proto/escape/context_views_record.hpp"
@@ -602,7 +603,7 @@ bool KmtTransport::make_room_for_blobs(const uint64_t *sizes, uint32_t count)
     const uint64_t waiting_from = published_now();
     ScopeExit      waited([this, waiting_from] { room_wait_ticks_ += published_now() - waiting_from; });
     if (consumed_for_blobs(sizes, count)) return true;
-    while (!blobs_.fits(sizes, count) && fences_.outstanding() != 0u && !faulted_) {
+    while (!blobs_.fits(sizes, count) && fences_.outstanding() != 0u) {
         const uint64_t oldest = fences_.oldest();
         const uint64_t end = fence_ends_[oldest % TransportFence::max_outstanding];
         if (ring_.head() < end) {
@@ -739,7 +740,7 @@ Status KmtTransport::wait_on_page(uint64_t fence)
     for (;;) {
         if (gpu_completed() >= fence) return Status::ok;
         if (!watch_.keeps_waiting()) return Status::invalid_state;
-        if (!told && route_ != nullptr &&
+        if (!told &&
             connection_.kmt().performance_counter(frequency) - began > frequency * slow_wait_seconds) {
             told = true;
             const_cast<ReleaseRoute *>(route_)->waited_long();
@@ -797,7 +798,6 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
     for (uint32_t index = 0u; index < passes; index++) passing[index]->pass();
     if (fences_.full() && !room_for_fence()) return TransportResult::failed;
     uint64_t next = fences_.peek();
-    if (next == 0u) return TransportResult::failed;
     uint64_t       begin = 0u;
     uint64_t       end = 0u;
     uint8_t        trailer[ChannelStats::command_bytes] = {};
@@ -858,7 +858,8 @@ uint32_t KmtTransport::stats_trailer(const uint8_t *batch, uint32_t length, uint
     stats_.observe(blobs_);
     if (!stats_.due(now) || uint64_t{length} + size > max_batch) return 0u;
     if (!BatchHeader(length + size, 1u, now).fits(ring_.capacity())) return 0u;
-    if (CommandStream(batch, length).ends_in_piece() || !stats_.frame_report(into, size)) return 0u;
+    if (CommandStream(batch, length).ends_in_piece()) return 0u;
+    static_cast<void>(stats_.frame_report(into, size));
     return size;
 }
 
@@ -982,14 +983,13 @@ TransportResult KmtTransport::fetch_answer(WireReader &reply)
         const size_t   bytes = part.remaining();
         const bool     first = fetched == 0u;
         if (part.status() != Status::ok || (first && length == 0u) || (!first && length != total) ||
-            bytes > length - fetched || (bytes == 0u && fetched < length)) {
+            bytes > length - fetched || bytes == 0u) {
             faulted_ = true;
             return TransportResult::failed;
         }
         size_t capacity = 0u;
-        if (first && (length > ~size_t{0} ||
-                      answer_.grow(nullptr, 0u, static_cast<size_t>(length), capacity) == nullptr))
-            return TransportResult::failed;
+        if (first && length > ~size_t{0}) { AV_UNTESTABLE("a length past size_t only exists in a 32-bit guest"); return TransportResult::failed; }
+        if (first && answer_.grow(nullptr, 0u, static_cast<size_t>(length), capacity) == nullptr) return TransportResult::failed;
         total = length;
         part.copy_bytes(answer_.bytes() + fetched, bytes);
         fetched += bytes;
@@ -1013,11 +1013,11 @@ TransportResult KmtTransport::fetch_part(uint64_t offset, WireReader &part)
 Status KmtTransport::await_slot(uint64_t fence, WireReader &reply)
 {
     AV_SCOPE("KmtTransport::await_slot");
-    if (!replied_within_spin(fence)) {
+    Status read = Status::not_found;
+    if (!replied_within_spin(fence, reply, read)) {
         const Status waited = wait_for_host(fence);
-        if (waited != Status::ok || !arrives_eventually([this, fence] {
-                WireReader   probe(nullptr, 0u);
-                const Status read = reply_.read(fence, probe);
+        if (waited != Status::ok || !arrives_eventually([this, fence, &reply, &read] {
+                read = reply_.read(fence, reply);
                 return read == Status::ok || read == Status::too_large;
             })) {
             faulted_ = true;
@@ -1026,10 +1026,7 @@ Status KmtTransport::await_slot(uint64_t fence, WireReader &reply)
     }
     fences_.close(fence);
     answered_fence_ = fence;
-    const Status read = reply_.read(fence, reply);
-    if (read == Status::ok || read == Status::too_large) return read;
-    faulted_ = true;
-    return Status::invalid_state;
+    return read;
 }
 
 void KmtTransport::spin_once() const
@@ -1038,13 +1035,12 @@ void KmtTransport::spin_once() const
     __asm__ __volatile__("" ::: "memory");
 }
 
-bool KmtTransport::replied_within_spin(uint64_t fence)
+bool KmtTransport::replied_within_spin(uint64_t fence, WireReader &reply, Status &read)
 {
     AV_SCOPE("KmtTransport::replied_within_spin");
     CounterSpin spin(connection_.kmt(), reply_spin_us);
     for (;;) {
-        WireReader   probe(nullptr, 0u);
-        const Status read = reply_.read(fence, probe);
+        read = reply_.read(fence, reply);
         if (read == Status::ok || read == Status::too_large) return true;
         if (!spin.lasts()) return false;
         spin_once();

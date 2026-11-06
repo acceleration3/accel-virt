@@ -1413,6 +1413,18 @@ void MockKmt::consume_late_at(std::uint32_t nth, std::uint32_t reads)
 
 void MockKmt::answer_views_up_to(std::uint16_t version) { newest_views_ = version; }
 
+void MockKmt::consume_now(std::uint32_t context)
+{
+    const Object *const found = find(Kind::context, context);
+    if (found != nullptr) consume(*found);
+}
+
+void MockKmt::answer_now(std::uint32_t context)
+{
+    const Object *const found = find(Kind::context, context);
+    if (found != nullptr) write_answer(*found);
+}
+
 std::uint8_t *MockKmt::fence_memory(const Object &context) const
 {
     return context.reply_memory != nullptr ? context.reply_memory + context.reply_bytes : nullptr;

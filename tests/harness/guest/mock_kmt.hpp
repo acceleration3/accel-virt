@@ -227,6 +227,8 @@ public:
     void          time_out_silently(std::uint32_t count);
     void          time_out_while_pulsing(std::uint32_t count);
     void          pulse(std::uint32_t context);
+    void          consume_now(std::uint32_t context);
+    void          answer_now(std::uint32_t context);
     void          complete_on_page(std::uint32_t context, std::uint64_t fence);
     void          spend_on_submit(std::uint64_t ticks);
     void          slow_every(std::uint32_t nth, std::uint64_t ticks);

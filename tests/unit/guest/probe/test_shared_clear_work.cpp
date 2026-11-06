@@ -121,6 +121,14 @@ TEST(shared_clear_work, rows_the_gpu_filled_too_bright_fail_the_texels_too)
   CHECK(std::strstr(report, "FAIL d3d11.shared_texels status=7") != nullptr);
   CHECK(std::strstr(report, "ok d3d11.shared_device_kept") != nullptr); }
 
+TEST(shared_clear_work, a_texel_right_in_all_but_one_channel_is_wrong)
+{ for (unsigned channel = 0u; channel < 3u; channel++) {
+      SharedRig rig;
+      rig.d3d11().misplace_one_channel(channel);
+      const char *report = rig.run();
+      CHECK(std::strstr(report, "FAIL d3d11.shared_texels status=7 1") != nullptr);
+  } }
+
 TEST(shared_clear_work, a_device_removed_after_the_reads_fails_the_last_step)
 { SharedRig rig;
   rig.d3d11().fail(Call::removed_reason, 1u, ScriptedD3d11Shared::device_hung);

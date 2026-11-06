@@ -26,6 +26,12 @@ void ScriptedD3d11Shared::lose()
     lost_ = true;
 }
 
+void ScriptedD3d11Shared::misplace_one_channel(unsigned channel)
+{
+    misplace_ = true;
+    wrong_channel_ = channel;
+}
+
 void ScriptedD3d11Shared::overshoot_rows()
 {
     misplace_ = true;
@@ -120,6 +126,12 @@ std::int32_t ScriptedD3d11Shared::read_texel(std::uint32_t target, std::uint32_t
     texel[1] = past_the_rows ? stray : colour[1];
     texel[2] = past_the_rows ? stray : colour[0];
     texel[3] = past_the_rows ? stray : colour[3];
+    if (past_the_rows && wrong_channel_ < 3u) {
+        texel[0] = colour[2];
+        texel[1] = colour[1];
+        texel[2] = colour[0];
+        texel[wrong_channel_] = static_cast<std::uint8_t>(texel[wrong_channel_] ^ 0x80u);
+    }
     return 0;
 }
 

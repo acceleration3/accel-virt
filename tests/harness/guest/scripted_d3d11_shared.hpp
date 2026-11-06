@@ -23,6 +23,7 @@ public:
     void          lose();
     void          misplace_rows();
     void          overshoot_rows();
+    void          misplace_one_channel(unsigned channel);
     std::uint32_t calls(Call call) const;
     bool          live() const;
     std::uint32_t width(std::uint32_t target) const;
@@ -57,6 +58,7 @@ private:
     std::uint32_t last_y_;
     bool          misplace_;
     bool          overshoot_ = false;
+    unsigned      wrong_channel_ = 3u;
     bool          layered_ = false;
     bool          lost_;
     bool          live_;
