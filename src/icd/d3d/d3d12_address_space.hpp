@@ -21,6 +21,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct D3d12AddressSpaceProbe;
+
     uint64_t next_;
 };
 

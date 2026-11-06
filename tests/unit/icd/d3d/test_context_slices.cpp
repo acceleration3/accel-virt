@@ -108,3 +108,17 @@ TEST(context_slices_rename, takes_a_fresh_slice_and_retires_the_old_or_changes_n
   CHECK_EQ(slice.bytes_, second.bytes_);
   CHECK_EQ(rig.slices().retired(), 1u);
   CHECK(rig.slices().invariants_hold()); }
+
+TEST(context_slices_trim, reclaims_the_retired_slices_of_the_immediate_context_only)
+{ Rig rig;
+  StreamMemory::Slice slice = {};
+  CHECK(rig.immediate().place(2u * page, slice));
+  rig.immediate().leave(slice);
+  CHECK_EQ(rig.slices().retired(), 1u);
+  rig.timeline().send();
+  rig.timeline().finish(1u);
+  rig.deferred().trim();
+  CHECK_EQ(rig.slices().retired(), 1u);
+  rig.immediate().trim();
+  CHECK_EQ(rig.slices().retired(), 0u);
+  CHECK(rig.slices().invariants_hold()); }

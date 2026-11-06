@@ -99,3 +99,11 @@ TEST(command_recording, a_largest_size_below_the_first_is_the_first)
   CHECK(recording.hold(0u, first));
   CHECK(!recording.hold(0u, first + 1u));
   CHECK_EQ(recording.capacity(), first); }
+
+TEST(command_recording, growing_an_empty_recording_copies_nothing_and_still_doubles)
+{ MockPlatform platform;
+  CommandRecording recording(platform, first, most);
+  CHECK_STATUS(recording.initialize(), Status::ok);
+  CHECK(recording.hold(0u, first + 1u));
+  CHECK_EQ(recording.capacity(), 2u * first);
+  CHECK_EQ(platform.live_allocations(), 1u); }
