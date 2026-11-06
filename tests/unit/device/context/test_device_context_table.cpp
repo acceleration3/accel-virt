@@ -22,7 +22,6 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
-#include <ctime>
 
 using av::BlobTable;
 using av::DeviceContext;
@@ -188,14 +187,13 @@ TEST(device_context_table_invariants, a_duplicate_id_a_zero_id_or_a_stopped_work
 TEST(device_context_table_settle_d3d, a_table_with_no_direct3d_stream_does_not_wait)
 { MockHost host; BlobTable blobs(host); av::HostBlobTable owners(host); FenceInterrupts interrupts(host); ExecutorLibrary library; av::WireRecorder recorder(host);
   DeviceContextTable table(host, blobs, owners, interrupts, library, recorder);
-  timespec before = {}, after = {};
-  clock_gettime(CLOCK_MONOTONIC, &before);
+  const std::uint64_t unprepared = host.mutex_locks();
   table.settle_d3d();
+  CHECK_EQ(host.mutex_locks(), unprepared);
   CHECK_STATUS(table.initialize(), Status::ok);
-  CHECK_STATUS(table.create(3u, "test"), Status::ok);
+  const std::uint64_t before = host.mutex_locks();
   table.settle_d3d();
-  clock_gettime(CLOCK_MONOTONIC, &after);
-  const long long waited = (after.tv_sec - before.tv_sec) * 1000000000ll + (after.tv_nsec - before.tv_nsec);
-  CHECK(waited < 2000000ll);
+  CHECK_EQ(host.mutex_locks(), before + 1u);
+  CHECK_STATUS(table.create(3u, "test"), Status::ok);
   CHECK_EQ(table.live(), 1u);
   CHECK(table.invariants_hold()); }

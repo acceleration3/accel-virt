@@ -230,6 +230,7 @@ public:
     std::uint32_t live_threads();
     std::uint32_t live_events();
     std::uint32_t live_mutexes();
+    std::uint64_t mutex_locks() const;
     std::uint32_t live_allocations();
     std::uint32_t live_guest_mappings();
     std::uint32_t bound_gpu();
@@ -384,6 +385,7 @@ private:
     std::uint32_t   fail_fence_connect_;
     std::uint32_t   raised_[interrupt_lines];
     std::atomic<std::uint64_t> clock_;
+    std::atomic<std::uint64_t> mutex_locks_{0u};
     std::uint64_t   clock_step_;
     std::uint32_t   fail_bind_gpu_;
     std::uint32_t   bound_gpu_;

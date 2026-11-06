@@ -552,6 +552,7 @@ void MockHost::lock_mutex(void *mutex)
     }
     pthread_mutex_lock(&slot->lock);
     slot->locked = true;
+    mutex_locks_.fetch_add(1u);
 }
 
 bool MockHost::try_lock_mutex(void *mutex)
@@ -1374,6 +1375,8 @@ std::uint32_t MockHost::live_events()
     for (const Event &event : events_) live += event.live ? 1u : 0u;
     return live;
 }
+
+std::uint64_t MockHost::mutex_locks() const { return mutex_locks_.load(); }
 
 std::uint32_t MockHost::live_mutexes()
 {
