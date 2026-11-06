@@ -14,6 +14,8 @@ class BlockSource;
 
 namespace av::clicd {
 
+struct ClDestructorCallbacksProbe;
+
 class ClDestructorCallbacks {
 public:
     using MemCallback = void(CL_CALLBACK *)(cl_mem object, void *user_data);
@@ -60,6 +62,8 @@ public:
     bool     invariants_hold() const;
 
 private:
+    friend struct ClDestructorCallbacksProbe;
+
     [[nodiscard]] Status keep_row(const Row &row);
     bool                 names_gone(const Row &row, const void *const *gone, uint32_t count) const;
 

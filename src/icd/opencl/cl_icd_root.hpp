@@ -361,10 +361,11 @@ private:
     cl_int           device_ids_for_luid(uint64_t luid, cl_device_id *devices, cl_uint *num_devices);
     cl_int           d3d11_device_for(const ClPropertyList &list, const ClDevice &on, void *&device);
     cl_int           d3d11_resource(cl_context context, cl_mem_flags flags, void *resource, uint32_t subresource,
-                                    D3d11Resource::Kind kind, GuestClContext *&owner, D3d11Resource &described);
+                                    D3d11Resource::Kind kind, ClObject *&held, GuestClContext *&owner,
+                                    D3d11Resource &described);
     cl_mem           d3d11_object(cl_mem made, GuestClContext &owner, void *resource, uint32_t subresource,
                                   const D3d11Resource &described, cl_mem_flags flags, cl_int *error);
-    cl_mem           d3d11_twin(cl_context context, GuestClContext &owner, void *resource, uint32_t subresource,
+    cl_mem           d3d11_twin(ClObject &held, GuestClContext &owner, void *resource, uint32_t subresource,
                                 void *&twin);
     cl_int           d3d11_queue(cl_command_queue queue, cl_uint waits, const cl_event *events, ClObject *&held,
                                  GuestClContext *&context, ClientTransport *&wire);

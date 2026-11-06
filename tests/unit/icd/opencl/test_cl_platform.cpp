@@ -179,3 +179,14 @@ TEST(cl_platform, the_name_carries_the_adapter_s_once_it_is_known)
   CHECK(platform.names_an_adapter());
   CHECK(reads_back(platform, CL_PLATFORM_NAME, text, sizeof text));
   CHECK_EQ(std::strcmp(text, "avgpu OpenCL on Intel(R) Arc(TM) Graphics"), 0); }
+
+TEST(cl_platform, the_host_timer_resolution_is_answered_by_size_alone_or_by_value_alone)
+{ ClPlatform platform;
+  std::size_t bytes = 0u;
+  CHECK_EQ(platform.info(nullptr, CL_PLATFORM_HOST_TIMER_RESOLUTION, 0u, nullptr, &bytes), CL_SUCCESS);
+  CHECK_EQ(bytes, sizeof(cl_ulong));
+  cl_ulong resolution = 0xEEu;
+  CHECK_EQ(platform.info(nullptr, CL_PLATFORM_HOST_TIMER_RESOLUTION, sizeof resolution, &resolution, nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(resolution, 0u);
+  CHECK_EQ(platform.info(nullptr, CL_PLATFORM_HOST_TIMER_RESOLUTION, 0u, nullptr, nullptr), CL_SUCCESS); }

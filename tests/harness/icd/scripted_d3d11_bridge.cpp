@@ -9,7 +9,7 @@ namespace av {
 ScriptedD3d11Bridge::ScriptedD3d11Bridge()
     : device_(nullptr), resources_{}, count_(0u), held_{}, references_{}, staging_{}, reads_(0u), writes_(0u),
       subresource_(0u), refuse_(false), twin_(nullptr), twin_handle_(0u), twin_bytes_(0u), twin_device_(0u), closed_(0u), to_twins_(0u),
-      from_twins_(0u)
+      from_twins_(0u), twin_hook_(nullptr), twin_hook_context_(nullptr)
 {
 }
 
@@ -101,11 +101,18 @@ void ScriptedD3d11Bridge::offer_twin(void *twin, std::uint64_t handle, std::uint
     twin_bytes_ = bytes;
 }
 
+void ScriptedD3d11Bridge::on_twin(void (*hook)(void *context), void *context)
+{
+    twin_hook_ = hook;
+    twin_hook_context_ = context;
+}
+
 std::uint32_t ScriptedD3d11Bridge::twin_device() const { return twin_device_; }
 
 void *ScriptedD3d11Bridge::twin(void *, void *, std::uint32_t, std::uint32_t kmt_device, std::uint64_t &handle,
                                 std::uint64_t &bytes)
 {
+    if (twin_hook_ != nullptr) twin_hook_(twin_hook_context_);
     void *const made = twin_;
     twin_device_ = kmt_device;
     handle = twin_handle_;

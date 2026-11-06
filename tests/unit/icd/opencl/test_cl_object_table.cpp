@@ -476,3 +476,15 @@ TEST(cl_object_table, a_contexts_queues_are_idle_when_none_of_them_has_work_in_f
   CHECK(rig.objects().queues_idle(context));
   CHECK(!rig.objects().queues_idle(other));
   CHECK(rig.objects().invariants_hold()); }
+
+TEST(cl_object, an_orphan_with_no_children_does_not_owe_the_parent_one)
+{ av::MockPlatform platform;
+  ClObject parent(dispatch, platform, ClObject::Kind::command_queue, 0x900u, nullptr, nullptr);
+  CHECK(parent.release());
+  CHECK(parent.unheld());
+  parent.orphan();
+  CHECK(parent.unheld());
+  parent.adopt();
+  CHECK(!parent.unheld());
+  parent.orphan();
+  CHECK(parent.unheld()); }

@@ -11,6 +11,8 @@ class BlockSource;
 
 namespace av::clicd {
 
+struct ClHostNumbersProbe;
+
 class ClHostNumbers {
 public:
     static constexpr uint32_t kept_inline = 64u;
@@ -24,6 +26,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClHostNumbersProbe;
+
     uint64_t                inline_[kept_inline];
     GrowableArray<uint64_t> spilled_;
 };

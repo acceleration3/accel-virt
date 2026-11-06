@@ -129,7 +129,7 @@ bool ClEventWatcher::turn()
         }
         if (deliver(slot, asked.registration_, status)) ran = true;
     }
-    next_ = rows == 0u ? 0u : (next_ + step) % rows;
+    next_ = (next_ + step) % rows;
     if (!ran) thread_.pause(driven && step == rows);
     return true;
 }

@@ -19,6 +19,8 @@ namespace av::clicd {
 class ClObject;
 class GuestClContext;
 
+struct ClDevicesProbe;
+
 class ClDevices {
 public:
     static constexpr uint32_t max_devices = AvgpuAdapters::max_adapters;
@@ -41,6 +43,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClDevicesProbe;
+
     BlockSource &memory_;
     Kmt                    &kmt_;
     ObjectStorage<ClDevice> devices_[max_devices];

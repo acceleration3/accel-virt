@@ -5,6 +5,7 @@
 #include "icd/opencl/cl_dispatch_table.hpp"
 #include "icd/opencl/cl_icd_binding.hpp"
 #include "icd/opencl/cl_icd_root.hpp"
+#include "icd/opencl/cl_object_table.hpp"
 #include "icd/opencl/d3d11_resource.hpp"
 #include "proto/escape/av_context_record.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
@@ -22,7 +23,9 @@
 
 using av::ClIcdRig;
 using av::FakeClLoader;
+using av::Status;
 using av::clicd::ClIcdRoot;
+using av::clicd::ClObject;
 using av::clicd::D3d11Resource;
 
 namespace {
@@ -772,3 +775,83 @@ TEST(cl_d3d11_sharing, a_twin_copy_direct3d_refuses_is_the_call_s_error)
   CHECK_EQ(rig.loader().release_mem(image), CL_SUCCESS);
   CHECK_EQ(rig.d3d11().references(&twin), 0);
   CHECK(rig.root().invariants_hold()); }
+
+namespace av::clicd {
+struct ClIcdRootProbe {
+    static void fill_the_object_pool(ClIcdRig &rig)
+    {
+        ClObject *made = nullptr;
+        rig.platform().fail_allocation_at(1u);
+        for (std::uint64_t wire = 0x9000u; wire < 0x9400u; ++wire)
+            if (rig.root().objects_.make(ClObject::Kind::event, wire, nullptr, nullptr, made) != Status::ok) break;
+        rig.platform().fail_allocation_at(0u);
+    }
+};
+}
+
+namespace {
+
+struct LosingContext {
+    ClIcdRig *rig;
+    cl_command_queue queue;
+};
+
+void lose_the_context(void *self)
+{
+    LosingContext &losing = *static_cast<LosingContext *>(self);
+    losing.rig->kmt().withhold_answer_at(1u);
+    static_cast<void>(losing.rig->root().flush(losing.queue));
+}
+
+}
+
+TEST(cl_d3d11_sharing, a_context_lost_while_its_texture_was_being_twinned_gives_the_twin_back_and_makes_no_image)
+{ ClIcdRig rig;
+  Shared   shared(rig);
+  CHECK(shared.made());
+  if (!shared.made()) return;
+  int twin = 0;
+  rig.d3d11().offer_twin(&twin, shared_handle(rig), 4096u);
+  LosingContext losing{&rig, shared.queue()};
+  rig.d3d11().on_twin(&lose_the_context, &losing);
+  cl_int       error = CL_SUCCESS;
+  const cl_mem image = shared.from_texture2d(CL_MEM_READ_WRITE, shared.texture(), 0u, error);
+  CHECK(image == nullptr);
+  CHECK(error != CL_SUCCESS);
+  CHECK_EQ(rig.d3d11().closed(), 1u);
+  CHECK_EQ(rig.d3d11().references(&twin), 0);
+  CHECK_EQ(rig.d3d11().references(shared.texture()), 0);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_d3d11_sharing, a_twin_that_cannot_be_kept_is_given_back_whenever_memory_runs_out)
+{ bool refused = false;
+  bool made = false;
+  for (std::uint32_t nth = 1u; nth <= 40u && !made; ++nth) {
+      ClIcdRig rig;
+      Shared   shared(rig);
+      CHECK(shared.made());
+      if (!shared.made()) return;
+      int twin = 0;
+      rig.d3d11().offer_twin(&twin, shared_handle(rig), 4096u);
+      rig.host().shared_object(0u, host_image);
+      rig.host().cl_handle(host_image, CL_SUCCESS);
+      av::clicd::ClIcdRootProbe::fill_the_object_pool(rig);
+      rig.platform().fail_allocation_at(nth);
+      cl_int       error = CL_SUCCESS;
+      const cl_mem image = shared.from_texture2d(CL_MEM_READ_WRITE, shared.texture(), 0u, error);
+      if (image != nullptr) {
+          made = true;
+          CHECK_EQ(error, CL_SUCCESS);
+          rig.host().shared_object(0u, 0u);
+          rig.host().cl_result(CL_SUCCESS);
+          CHECK_EQ(rig.loader().release_mem(image), CL_SUCCESS);
+      } else {
+          refused = true;
+          CHECK(error != CL_SUCCESS);
+      }
+      CHECK_EQ(rig.d3d11().references(&twin), 0);
+      CHECK_EQ(rig.d3d11().references(shared.texture()), 0);
+      CHECK(rig.root().invariants_hold());
+  }
+  CHECK(refused);
+  CHECK(made); }

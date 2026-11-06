@@ -13,14 +13,16 @@ namespace av::clicd {
 namespace {
 constexpr char device_enqueue_feature[] = "__opencl_c_device_enqueue";
 
+static_assert(sizeof device_enqueue_feature <= CL_NAME_VERSION_MAX_NAME_SIZE, "a feature name must fit a cl_name_version");
+
 bool names_feature(const cl_name_version &entry, const char *feature)
 {
     AV_SCOPE("names_feature");
     size_t at = 0u;
-    for (; at < CL_NAME_VERSION_MAX_NAME_SIZE && feature[at] != '\0'; ++at) {
+    for (; feature[at] != '\0'; ++at) {
         if (entry.name[at] != feature[at]) return false;
     }
-    return at < CL_NAME_VERSION_MAX_NAME_SIZE && entry.name[at] == '\0';
+    return entry.name[at] == '\0';
 }
 
 }

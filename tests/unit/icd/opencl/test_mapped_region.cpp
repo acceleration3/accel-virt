@@ -15,6 +15,7 @@ namespace av::clicd {
 struct MappedRegionProbe {
     static void forget_host_address(MappedRegion &region) { region.host_ = 0u; }
     static void stray_element(MappedRegion &region) { region.element_bytes_ = 4u; }
+    static void share_the_memory(MappedRegion &region) { region.memory_ = MappedRegion::Memory::shared; }
 };
 
 }
@@ -243,3 +244,20 @@ TEST(guest_cl_context, an_image_mapping_is_staged_zeroed_and_refused_for_no_regi
   context.give_back_mapping(*region);
   CHECK_EQ(context.mappings(), 0u);
   CHECK(context.invariants_hold()); }
+
+TEST(mapped_region, the_invariant_catches_a_named_mapping_of_no_bytes)
+{ std::uint8_t at[64] = {};
+  MappedRegion empty(host_buffer, host_address, 0u, 0u, CL_MAP_READ, MappedRegion::Memory::shared);
+  empty.hand(at, av::icd::StagedMapping::Memory::named);
+  CHECK(!empty.invariants_hold());
+  MappedRegion whole(host_buffer, host_address, 0u, sizeof at, CL_MAP_READ, MappedRegion::Memory::shared);
+  whole.hand(at, av::icd::StagedMapping::Memory::named);
+  CHECK(whole.invariants_hold()); }
+
+TEST(mapped_region, the_invariant_catches_an_image_mapping_that_is_not_staged)
+{ std::uint8_t block[96] = {};
+  const size_t origin[3] = {0u, 0u, 0u}, extent[3] = {4u, 3u, 2u};
+  MappedRegion region(host_buffer, origin, extent, 4u, sizeof block, CL_MAP_WRITE);
+  region.hand(block, av::icd::StagedMapping::Memory::named);
+  MappedRegionProbe::share_the_memory(region);
+  CHECK(!region.invariants_hold()); }

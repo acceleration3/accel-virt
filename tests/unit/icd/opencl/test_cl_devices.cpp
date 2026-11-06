@@ -4,7 +4,9 @@
 #include "guest/suite/adapter_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
+#include "core/trace/state_writer.hpp"
 #include "icd/opencl/cl_devices.hpp"
+#include "icd/opencl/cl_object.hpp"
 
 #include <CL/cl_ext.h>
 
@@ -19,8 +21,34 @@ using av::MockKmt;
 using av::PciIdentity;
 using av::PciLocation;
 using av::Status;
+using av::clicd::ClDevice;
+using av::clicd::ClDeviceProbe;
 using av::clicd::ClDevices;
+using av::clicd::ClDevicesProbe;
+using av::clicd::ClObject;
 using av::clicd::ClIcdRoot;
+
+namespace av::clicd {
+struct ClDeviceReportProbe {
+    static void rename(ClDeviceReport &report, std::uint64_t luid) { report.luid_ = luid; }
+};
+
+struct ClDeviceProbe {
+    static void rename(ClDevice &device, std::uint64_t luid)
+    {
+        device.luid_ = luid;
+        ClDeviceReportProbe::rename(device.report_, luid);
+    }
+};
+
+struct ClDevicesProbe {
+    static void set_count(ClDevices &devices, std::uint32_t count) { devices.count_ = count; }
+    static void set_learnt(ClDevices &devices, bool learnt) { devices.learnt_ = learnt; }
+    static void set_left_out(ClDevices &devices, std::uint32_t left_out) { devices.left_out_ = left_out; }
+    static void rename(ClDevices &devices, std::uint32_t index, std::uint64_t luid)
+    { ClDeviceProbe::rename(devices.devices_[index].object(), luid); }
+};
+}
 
 namespace {
 
@@ -226,3 +254,85 @@ TEST(cl_devices, an_adapter_without_a_luid_is_left_out)
   CHECK_EQ(devices.left_out(), 1u);
   CHECK_EQ(devices.at(1u).luid(), 0x44u);
   CHECK(devices.invariants_hold()); }
+
+TEST(cl_devices, an_object_no_device_opened_belongs_to_none)
+{ MockKmt kmt;
+  av::MockPlatform platform;
+  kmt.add_adapter(on_radeon, AdapterScenario::wddm_3_2);
+  kmt.set_adapter_luid(0u, 0x22u);
+  ClDevices devices(platform, kmt);
+  { AvgpuAdapters adapters(kmt);
+    CHECK_STATUS(adapters.learn(), Status::ok);
+    devices.learn(adapters); }
+  cl_icd_dispatch dispatch = {};
+  ClObject opened(dispatch, platform, ClObject::Kind::device, 0x6900u, nullptr, nullptr);
+  ClObject stranger(dispatch, platform, ClObject::Kind::device, 0x6901u, nullptr, nullptr);
+  devices.at(0u).opened(opened);
+  CHECK(devices.of(opened) == &devices.at(0u));
+  CHECK(devices.of(stranger) == nullptr); }
+
+TEST(cl_devices, the_state_dump_names_every_device_learnt)
+{ MockKmt kmt;
+  av::MockPlatform platform;
+  kmt.add_adapter(on_radeon, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(on_raphael, AdapterScenario::wddm_3_2);
+  kmt.set_adapter_luid(0u, 0x22u);
+  kmt.set_adapter_luid(1u, 0x33u);
+  ClDevices devices(platform, kmt);
+  { AvgpuAdapters adapters(kmt);
+    CHECK_STATUS(adapters.learn(), Status::ok);
+    devices.learn(adapters); }
+  char          text[1024] = {};
+  av::StateWriter writer(text, sizeof text);
+  devices.report(writer);
+  CHECK(writer.invariants_hold());
+  CHECK(!writer.truncated());
+  CHECK(std::strstr(writer.dump(), "learnt") != nullptr);
+  std::size_t devices_named = 0u;
+  for (const char *at = writer.dump(); (at = std::strstr(at, "luid")) != nullptr; ++at) ++devices_named;
+  CHECK(devices_named >= 2u); }
+
+TEST(cl_devices, the_invariant_catches_the_tables_it_is_there_to_catch)
+{ MockKmt kmt;
+  av::MockPlatform platform;
+  kmt.add_adapter(on_radeon, AdapterScenario::wddm_3_2);
+  kmt.add_adapter(on_raphael, AdapterScenario::wddm_3_2);
+  kmt.set_adapter_luid(0u, 0x22u);
+  kmt.set_adapter_luid(1u, 0x33u);
+  ClDevices devices(platform, kmt);
+  { AvgpuAdapters adapters(kmt);
+    CHECK_STATUS(adapters.learn(), Status::ok);
+    devices.learn(adapters); }
+  CHECK(devices.invariants_hold());
+  ClDevicesProbe::set_count(devices, ClDevices::max_devices + 1u);
+  CHECK(!devices.invariants_hold());
+  ClDevicesProbe::set_count(devices, 3u);
+  CHECK(!devices.invariants_hold());
+  ClDevicesProbe::set_count(devices, 2u);
+  CHECK(devices.invariants_hold());
+  ClDevicesProbe::set_learnt(devices, false);
+  CHECK(!devices.invariants_hold());
+  ClDevicesProbe::set_learnt(devices, true);
+  CHECK(devices.invariants_hold());
+  ClDevicesProbe::rename(devices, 1u, 0x22u);
+  CHECK(!devices.invariants_hold());
+  ClDevicesProbe::rename(devices, 1u, 0x33u);
+  CHECK(devices.invariants_hold());
+
+  ClDevices fresh(platform, kmt);
+  ClDevicesProbe::set_left_out(fresh, 1u);
+  CHECK(!fresh.invariants_hold());
+  ClDevicesProbe::set_left_out(fresh, 0u);
+  CHECK(fresh.invariants_hold()); }
+
+TEST(cl_devices, a_device_with_no_luid_or_an_open_object_without_users_breaks_its_invariant)
+{ MockKmt kmt;
+  av::MockPlatform platform;
+  ClDevice nameless(platform, kmt, 0u);
+  CHECK(!nameless.invariants_hold());
+  ClDevice device(platform, kmt, 0x22u);
+  CHECK(device.invariants_hold());
+  cl_icd_dispatch dispatch = {};
+  ClObject opened(dispatch, platform, ClObject::Kind::device, 0x6900u, nullptr, nullptr);
+  device.opened(opened);
+  CHECK(!device.invariants_hold()); }

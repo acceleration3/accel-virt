@@ -31,6 +31,13 @@ struct ClDeviceReportProbe {
         for (size_t index = 0u; index < sizeof report.version_text_; ++index) report.version_text_[index] = 'x';
     }
 
+    static void empty_the_version(ClDeviceReport &report) { report.version_text_[0] = '\0'; }
+
+    static void run_c_version_past_its_room(ClDeviceReport &report)
+    {
+        for (size_t index = 0u; index < sizeof report.c_version_text_; ++index) report.c_version_text_[index] = 'x';
+    }
+
     static void empty_the_c_version(ClDeviceReport &report) { report.c_version_text_[0] = '\0'; }
 
     static void report_svm(ClDeviceReport &report, cl_device_svm_capabilities svm)
@@ -290,6 +297,16 @@ TEST(cl_device_report, a_report_naming_a_version_it_does_not_implement_breaks_it
 TEST(cl_device_report, a_report_whose_version_string_lost_its_terminator_breaks_its_invariant)
 { ClDeviceReport report(adapter_luid);
   av::clicd::ClDeviceReportProbe::run_version_past_its_room(report);
+  CHECK(!report.invariants_hold()); }
+
+TEST(cl_device_report, a_report_with_no_version_string_at_all_breaks_its_invariant)
+{ ClDeviceReport report(adapter_luid);
+  av::clicd::ClDeviceReportProbe::empty_the_version(report);
+  CHECK(!report.invariants_hold()); }
+
+TEST(cl_device_report, a_report_whose_language_version_string_lost_its_terminator_breaks_its_invariant)
+{ ClDeviceReport report(adapter_luid);
+  av::clicd::ClDeviceReportProbe::run_c_version_past_its_room(report);
   CHECK(!report.invariants_hold()); }
 
 TEST(cl_device_report, a_report_with_no_language_version_at_all_breaks_its_invariant)

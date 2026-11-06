@@ -58,7 +58,7 @@ bool MappedRegion::invariants_hold() const
     AV_SCOPE("MappedRegion::invariants_hold");
     if (!StagedMapping::invariants_hold()) return false;
     if (at() == nullptr) return true;
-    if (bytes() == 0u || object() == 0u || copied() != (memory_ == Memory::staged)) return false;
+    if (bytes() == 0u || copied() != (memory_ == Memory::staged)) return false;
     if (element_bytes_ != 0u) return host_ == 0u && memory_ == Memory::staged;
     return host_ != 0u;
 }

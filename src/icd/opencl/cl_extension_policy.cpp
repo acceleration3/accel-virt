@@ -5,6 +5,22 @@
 #include "proto/generated/opencl/cl_supported_extensions.h"
 
 namespace av::clicd {
+namespace {
+
+constexpr bool carried_names_fit()
+{
+    for (const char *const name : clproto::kCarriedExtensions) {
+        size_t length = 0u;
+        while (name[length] != '\0') ++length;
+        if (length >= CL_NAME_VERSION_MAX_NAME_SIZE) return false;
+    }
+    return true;
+}
+
+static_assert(carried_names_fit(), "a carried extension name must fit a cl_name_version");
+
+}
+
 const ClExtensionPolicy::Row reported_extensions[] = {
     {"cl_khr_external_memory", 1u,
      "cl_buffer_paths.the_acquire_and_release_of_an_external_object_are_answered_by_this_driver"},
@@ -131,7 +147,7 @@ size_t ClExtensionPolicy::report_versions(const ExtensionWords &host, cl_name_ve
         cl_name_version &entry = into[at++];
         entry.version = CL_MAKE_VERSION(row.spec_version_, 0u, 0u);
         size_t letter = 0u;
-        for (; row.name_[letter] != '\0' && letter + 1u < CL_NAME_VERSION_MAX_NAME_SIZE; ++letter)
+        for (; row.name_[letter] != '\0'; ++letter)
             entry.name[letter] = row.name_[letter];
         for (; letter < CL_NAME_VERSION_MAX_NAME_SIZE; ++letter) entry.name[letter] = '\0';
     }
@@ -153,7 +169,7 @@ uint32_t ClExtensionPolicy::rows() const
 bool ClExtensionPolicy::invariants_hold() const
 {
     AV_SCOPE("ClExtensionPolicy::invariants_hold");
-    return rows_.count() <= max_rows && rows_.invariants_hold();
+    return rows_.invariants_hold();
 }
 
 }

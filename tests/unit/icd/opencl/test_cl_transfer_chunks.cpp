@@ -361,6 +361,22 @@ TEST(cl_transfer_chunks, a_rectangle_row_longer_than_a_reply_comes_back_in_runs)
   CHECK_EQ(*into.at(width - 1u), host.buffer_at(3u + width - 1u));
   CHECK_EQ(*into.at(width), host.buffer_at(width + 16u + 3u)); }
 
+TEST(cl_transfer_chunks, a_gapped_rectangle_row_longer_than_a_reply_comes_back_in_runs_and_leaves_the_gap)
+{ ClTransferHost host;
+  host.fill(1u);
+  ClTransferChunks   chunks(host, queue, inline_only);
+  const std::size_t  width = read_room + 10u, host_pitch = width + 16u;
+  const std::size_t  corner[3] = {3u, 0u, 0u}, host_corner[3] = {0u, 0u, 0u}, extent[3] = {width, 2u, 1u};
+  const ClBufferRect rect(corner, host_corner, extent, width + 16u, 0u, host_pitch, 0u);
+  CHECK_EQ(rect.check(), CL_SUCCESS);
+  Memory             into(2u * host_pitch);
+  CHECK_EQ(chunks.read_buffer_rect(ClTransferHost::buffer_handle, rect, into.at(0u)), CL_SUCCESS);
+  CHECK_EQ(host.commands(), 4u);
+  CHECK_EQ(host.command(1u).region[0], 10u);
+  CHECK_EQ(*into.at(width - 1u), host.buffer_at(3u + width - 1u));
+  CHECK_EQ(*into.at(width), 0xEEu);
+  CHECK_EQ(*into.at(host_pitch), host.buffer_at(width + 16u + 3u)); }
+
 TEST(cl_transfer_chunks, rectangle_rows_go_to_the_buffer_at_its_pitch_from_the_applications_corner)
 { ClTransferHost host;
   host.fill(0u);

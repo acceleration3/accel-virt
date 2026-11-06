@@ -13,6 +13,18 @@ using av::clicd::SvmTable;
 using av::clicd::SvmAllocationProbe;
 using av::clicd::SvmTableProbe;
 
+namespace av {
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
+};
+
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_free_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.free_count_ = count; }
+};
+}
+
 namespace av::clicd {
 struct SvmAllocationProbe {
     static void forget_host_base(SvmAllocation &row) { row.host_base_ = 0u; }
@@ -36,6 +48,12 @@ struct SvmTableProbe {
       first.take(first.host_base(), first.mirror(), bytes); }
     static void a_row_that_stands_for_nothing(SvmTable &table)
     { table.allocations_.find(table.bases_.at(0u))->give_up(); }
+    static void a_row_that_is_half_there(SvmTable &table)
+    { SvmAllocationProbe::forget_length(*table.allocations_.find(table.bases_.at(0u))); }
+    static void miscount_the_slots(SvmTable &table, std::uint32_t free_count)
+    { KeyedSlotsProbe::corrupt_free_count(table.allocations_, free_count); }
+    static void resize_the_bases(SvmTable &table, std::uint32_t capacity)
+    { GrowableArrayProbe::corrupt_capacity(table.bases_, capacity); }
     static void hold_again(SvmTable &table, std::uint64_t host, std::uint8_t *mirror, std::size_t bytes)
     { table.allocations_.find(table.bases_.at(0u))->take(host, mirror, bytes); }
 };
@@ -213,6 +231,18 @@ TEST(svm_allocation, one_that_is_held_by_nothing_covers_nothing)
   CHECK(!allocation.covers(bytes));
   CHECK(allocation.invariants_hold()); }
 
+TEST(svm_allocation, one_covers_the_bytes_of_its_mirror_and_nothing_beside_them)
+{ SvmAllocation allocation;
+  std::uint8_t    bytes[64] = {};
+  allocation.take(host_base, bytes + 8, 32u);
+  CHECK(allocation.covers(bytes + 8));
+  CHECK(allocation.covers(bytes + 39));
+  CHECK(!allocation.covers(bytes + 7));
+  CHECK(!allocation.covers(bytes + 40));
+  CHECK(!allocation.covers(nullptr));
+  CHECK_EQ(allocation.host_address_of(bytes + 7), 0u);
+  CHECK_EQ(allocation.host_address_of(bytes + 9), host_base + 1u); }
+
 TEST(svm_table, the_dump_counts_what_is_live_and_what_is_mapped)
 { MockPlatform platform;
   SvmTable table(platform);
@@ -280,7 +310,41 @@ TEST(svm_table, the_invariant_catches_the_states_it_is_there_to_catch)
   SvmTableProbe::a_row_that_stands_for_nothing(rowless);
   CHECK(!rowless.invariants_hold());
   SvmTableProbe::hold_again(rowless, host_base, mirror, 64u);
-  CHECK(rowless.invariants_hold()); }
+  CHECK(rowless.invariants_hold());
+
+  MockPlatform half_platform;
+  SvmTable     half(half_platform);
+  CHECK(half.take(host_base, 64u) != nullptr);
+  SvmTableProbe::a_row_that_is_half_there(half);
+  CHECK(!half.invariants_hold());
+  SvmTableProbe::restore_length(half, 64u);
+  CHECK(half.invariants_hold());
+
+  MockPlatform moved_platform;
+  SvmTable     moved(moved_platform);
+  std::uint8_t *const own = static_cast<std::uint8_t *>(moved.take(host_base, 64u));
+  CHECK(own != nullptr);
+  static std::uint8_t elsewhere[64];
+  SvmTableProbe::hold_again(moved, host_base, elsewhere, 64u);
+  CHECK(!moved.invariants_hold());
+  SvmTableProbe::hold_again(moved, host_base, own, 64u);
+  CHECK(moved.invariants_hold());
+
+  MockPlatform slots_platform;
+  SvmTable     slots(slots_platform);
+  CHECK(slots.take(host_base, 64u) != nullptr);
+  SvmTableProbe::miscount_the_slots(slots, 5u);
+  CHECK(!slots.invariants_hold());
+  SvmTableProbe::miscount_the_slots(slots, 0u);
+  CHECK(slots.invariants_hold());
+
+  MockPlatform bases_platform;
+  SvmTable     bases(bases_platform);
+  CHECK(bases.take(host_base, 64u) != nullptr);
+  SvmTableProbe::resize_the_bases(bases, 12u);
+  CHECK(!bases.invariants_hold());
+  SvmTableProbe::resize_the_bases(bases, av::GrowableArray<std::uint64_t>::first_capacity);
+  CHECK(bases.invariants_hold()); }
 
 TEST(svm_table, an_allocations_invariant_catches_a_pair_that_is_only_half_there)
 { const auto held_but_broken = [](void (*corrupt)(SvmAllocation &)) {

@@ -60,10 +60,11 @@ cl_int ClIcdRoot::d3d11_device_for(const ClPropertyList &list, const ClDevice &o
 cl_mem ClIcdRoot::create_from_d3d11_buffer(cl_context context, cl_mem_flags flags, void *resource, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_from_d3d11_buffer");
+    ClObject       *held = nullptr;
     GuestClContext *owner = nullptr;
     D3d11Resource   described;
     const cl_int    judged_resource =
-        d3d11_resource(context, flags, resource, 0u, D3d11Resource::Kind::buffer, owner, described);
+        d3d11_resource(context, flags, resource, 0u, D3d11Resource::Kind::buffer, held, owner, described);
     if (judged_resource != CL_SUCCESS) {
         report_d3d11_error(error, judged_resource);
         return nullptr;
@@ -82,9 +83,11 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
                                             cl_uint subresource, D3d11Resource::Kind kind, cl_int *error)
 {
     AV_SCOPE("ClIcdRoot::create_from_d3d11_texture");
+    ClObject       *held = nullptr;
     GuestClContext *owner = nullptr;
     D3d11Resource   described;
-    const cl_int    judged_resource = d3d11_resource(context, flags, resource, subresource, kind, owner, described);
+    const cl_int    judged_resource =
+        d3d11_resource(context, flags, resource, subresource, kind, held, owner, described);
     if (judged_resource != CL_SUCCESS) {
         report_d3d11_error(error, judged_resource);
         return nullptr;
@@ -96,7 +99,7 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
     }
     void        *twin = nullptr;
     const cl_mem twinned = kind == D3d11Resource::Kind::texture2d && mapped.cl_image_on_host()
-                               ? d3d11_twin(context, *owner, resource, subresource, twin)
+                               ? d3d11_twin(*held, *owner, resource, subresource, twin)
                                : nullptr;
     if (twinned != nullptr) {
         const cl_mem kept = d3d11_object(twinned, *owner, resource, subresource, described, flags, error);
@@ -124,7 +127,7 @@ cl_mem ClIcdRoot::create_from_d3d11_texture(cl_context context, cl_mem_flags fla
     return d3d11_object(made, *owner, resource, subresource, described, flags, error);
 }
 
-cl_mem ClIcdRoot::d3d11_twin(cl_context context, GuestClContext &owner, void *resource, uint32_t subresource,
+cl_mem ClIcdRoot::d3d11_twin(ClObject &held, GuestClContext &owner, void *resource, uint32_t subresource,
                              void *&twin)
 {
     AV_SCOPE("ClIcdRoot::d3d11_twin");
@@ -133,8 +136,7 @@ cl_mem ClIcdRoot::d3d11_twin(cl_context context, GuestClContext &owner, void *re
     uint64_t    bytes = 0u;
     void *const made = d3d11_.twin(owner.d3d11().device(), resource, subresource, owner.guest_device(), handle, bytes);
     if (made == nullptr) return nullptr;
-    ClObject *const        held = judged(context, ClObject::Kind::context);
-    ClientTransport *const wire = held != nullptr ? wire_of(*held) : nullptr;
+    ClientTransport *const wire = wire_of(held);
     uint64_t     opened = 0u;
     bool         closed = false;
     const cl_int taken = wire != nullptr ? owner.external().open_own(*wire, owner.guest_device(), handle, bytes,
@@ -142,7 +144,7 @@ cl_mem ClIcdRoot::d3d11_twin(cl_context context, GuestClContext &owner, void *re
                                          : CL_OUT_OF_RESOURCES;
     if (!closed) d3d11_.close_handle(handle);
     ClObject *object = nullptr;
-    if (taken == CL_SUCCESS && objects_.make(ClObject::Kind::mem, opened, &owner, held, object) != Status::ok) {
+    if (taken == CL_SUCCESS && objects_.make(ClObject::Kind::mem, opened, &owner, &held, object) != Status::ok) {
         static_cast<void>(owner.external().give_back(*wire, opened));
         object = nullptr;
     }
@@ -155,10 +157,11 @@ cl_mem ClIcdRoot::d3d11_twin(cl_context context, GuestClContext &owner, void *re
 }
 
 cl_int ClIcdRoot::d3d11_resource(cl_context context, cl_mem_flags flags, void *resource, uint32_t subresource,
-                                 D3d11Resource::Kind kind, GuestClContext *&owner, D3d11Resource &described)
+                                 D3d11Resource::Kind kind, ClObject *&held, GuestClContext *&owner,
+                                 D3d11Resource &described)
 {
     AV_SCOPE("ClIcdRoot::d3d11_resource");
-    ClObject *const held = judged(context, ClObject::Kind::context);
+    held = judged(context, ClObject::Kind::context);
     if (held == nullptr) return CL_INVALID_CONTEXT;
     owner = context_of(*held);
     if (owner->d3d11().device() == nullptr) return CL_INVALID_CONTEXT;

@@ -2,10 +2,32 @@
 #include "harness/platform/mock_platform.hpp"
 #include "icd/opencl/cl_destructor_callbacks.hpp"
 
+#include <cstdint>
 #include <cstring>
+
+namespace av {
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
+};
+}
+
+namespace av::clicd {
+struct ClDestructorCallbacksProbe {
+    static void lose_the_object(ClDestructorCallbacks &callbacks) { callbacks.rows_.at(0u).object_ = nullptr; }
+    static void lose_the_callback(ClDestructorCallbacks &callbacks)
+    { callbacks.rows_.at(0u).mem_ = nullptr; callbacks.rows_.at(0u).context_ = nullptr; }
+    static void CL_CALLBACK either_kind(cl_context, void *) {}
+    static void claim_both_kinds(ClDestructorCallbacks &callbacks)
+    { callbacks.rows_.at(0u).context_ = &either_kind; }
+    static void break_the_row_storage(ClDestructorCallbacks &callbacks)
+    { av::GrowableArrayProbe::corrupt_capacity(callbacks.rows_, 12u); }
+};
+}
 
 using av::Status;
 using av::clicd::ClDestructorCallbacks;
+using av::clicd::ClDestructorCallbacksProbe;
 
 namespace {
 
@@ -121,3 +143,18 @@ TEST(cl_destructor_callbacks, a_due_that_cannot_grow_counts_the_callbacks_it_los
   due.run();
   CHECK_EQ(std::strcmp(ran.order(), "aaaa"), 0);
   CHECK(callbacks.invariants_hold()); }
+
+TEST(cl_destructor_callbacks, the_invariant_catches_the_rows_it_is_there_to_catch)
+{ const auto broken = [](void (*corrupt)(ClDestructorCallbacks &)) {
+      av::MockPlatform platform;
+      ClDestructorCallbacks callbacks(platform);
+      int object = 0;
+      CHECK(callbacks.keep(reinterpret_cast<cl_mem>(&object), &mem_went, nullptr) == Status::ok);
+      CHECK(callbacks.invariants_hold());
+      corrupt(callbacks);
+      return callbacks.invariants_hold();
+  };
+  CHECK(!broken(ClDestructorCallbacksProbe::lose_the_object));
+  CHECK(!broken(ClDestructorCallbacksProbe::lose_the_callback));
+  CHECK(!broken(ClDestructorCallbacksProbe::claim_both_kinds));
+  CHECK(!broken(ClDestructorCallbacksProbe::break_the_row_storage)); }

@@ -21,6 +21,8 @@ struct ClArenaBlocksProbe {
     static void blocks_past_the_arena(ClArenaBlocks &blocks) { blocks.bytes_ = 4096u; }
     static void capacity_without_an_arena(ClArenaBlocks &blocks)
     { blocks.base_ = nullptr; blocks.bytes_ = 4096u; }
+    static void an_arena_offset_without_an_arena(ClArenaBlocks &blocks)
+    { blocks.base_ = nullptr; blocks.bytes_ = 0u; blocks.arena_base_ = 4096u; }
     static void blocks_without_an_arena(ClArenaBlocks &blocks)
     { blocks.base_ = nullptr; blocks.bytes_ = 0u; }
     static void rows_past_the_table(ClArenaBlocks &blocks) { icd::RangeTableProbe::overlap(blocks.blocks_); }
@@ -192,6 +194,7 @@ TEST(cl_arena_blocks, the_invariant_catches_the_states_it_is_there_to_catch)
   CHECK(!broken(ClArenaBlocksProbe::blocks_past_the_arena));
   CHECK(!broken(ClArenaBlocksProbe::capacity_without_an_arena));
   CHECK(!broken(ClArenaBlocksProbe::blocks_without_an_arena));
+  CHECK(!broken(ClArenaBlocksProbe::an_arena_offset_without_an_arena));
   CHECK(!broken(ClArenaBlocksProbe::rows_past_the_table)); }
 
 TEST(cl_arena_blocks, a_read_of_no_bytes_names_nothing)
@@ -240,4 +243,15 @@ TEST(cl_arena_blocks, blocks_lent_from_a_region_are_named_by_arena_offsets_and_r
   CHECK(blocks.invariants_hold());
   blocks.lend(0u, nullptr, 0u);
   CHECK(!blocks.ready());
+  CHECK(blocks.invariants_hold()); }
+
+TEST(cl_arena_blocks, a_retirement_that_cannot_be_remembered_frees_the_block_at_once)
+{ av::MockPlatform starved;
+  ClArenaBlocks    blocks(starved, lock);
+  blocks.lend(0u, arena, sizeof arena);
+  std::uint64_t offset = 0u;
+  CHECK(blocks.take(128u, offset));
+  starved.fail_allocation_at(1u);
+  blocks.retire(offset);
+  CHECK_EQ(blocks.live(), 0u);
   CHECK(blocks.invariants_hold()); }

@@ -95,10 +95,11 @@ bool ClImageRegion::offset_of(const size_t *point, size_t &offset) const
     AV_SCOPE("ClImageRegion::offset_of");
     const PitchedExtent extent(row_bytes(), region_[1], region_[2], row_pitch(), slice_pitch());
     uint64_t            at = 0u, in_row = 0u;
+    size_t              sum = 0u;
     if (!extent.offset_of(point[1], point[2], at) || __builtin_mul_overflow(uint64_t{point[0]}, element_bytes_, &in_row) ||
-        __builtin_add_overflow(at, in_row, &at) || static_cast<uint64_t>(static_cast<size_t>(at)) != at)
+        __builtin_add_overflow(at, in_row, &sum))
         return false;
-    offset = static_cast<size_t>(at);
+    offset = sum;
     return true;
 }
 

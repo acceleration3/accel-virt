@@ -18,6 +18,8 @@ namespace av::clicd {
 class ClObject;
 class GuestClContext;
 
+struct ClDeviceProbe;
+
 class ClDevice {
 public:
     ClDevice(BlockSource &memory, Kmt &kmt, uint64_t luid);
@@ -38,6 +40,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ClDeviceProbe;
+
     uint64_t           luid_;
     icd::IcdConnection connection_;
     ClDeviceReport     report_;

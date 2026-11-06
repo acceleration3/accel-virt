@@ -211,3 +211,91 @@ TEST(cl_dispatch_table, the_invariant_catches_a_table_the_loader_would_jump_into
   CHECK(never_filled.invariants_hold());
   ClDispatchTableProbe::an_unfilled_table_that_claims_something(never_filled);
   CHECK(!never_filled.invariants_hold()); }
+
+TEST(cl_icd_binding, a_creating_entry_reached_before_a_root_exists_names_what_it_lacks)
+{
+  CHECK(!av::clicd::cl_icd_binding.bound());
+  ClDispatchTable table;
+  table.fill();
+  const cl_icd_dispatch &slots = table.table();
+  const cl_image_format format = {CL_RGBA, CL_UNORM_INT8};
+  const cl_image_desc   desc = {};
+  const size_t          origin[3] = {0u, 0u, 0u}, region[3] = {1u, 1u, 1u};
+
+  cl_int error = 7;
+  CHECK(slots.clCreateImage(nullptr, 0u, &format, &desc, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreateImage2D(nullptr, 0u, &format, 1u, 1u, 0u, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreateImage3D(nullptr, 0u, &format, 1u, 1u, 1u, 0u, 0u, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreateSamplerWithProperties(nullptr, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreateSampler(nullptr, CL_TRUE, CL_ADDRESS_NONE, CL_FILTER_NEAREST, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreateFromGLBuffer(nullptr, 0u, 0u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreateFromGLTexture(nullptr, 0u, 0u, 0, 0u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreateFromGLRenderbuffer(nullptr, 0u, 0u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreateSubBuffer(nullptr, 0u, CL_BUFFER_CREATE_TYPE_REGION, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_MEM_OBJECT);
+  error = 7;
+  CHECK(slots.clEnqueueMapImage(nullptr, nullptr, CL_TRUE, 0u, origin, region, nullptr, nullptr, 0u, nullptr,
+                                nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_COMMAND_QUEUE);
+  error = 7;
+  CHECK(slots.clCreateImageWithProperties(nullptr, nullptr, 0u, &format, &desc, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreatePipe(nullptr, 0u, 4u, 4u, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreateProgramWithBinary(nullptr, 0u, nullptr, nullptr, nullptr, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreateProgramWithIL(nullptr, nullptr, 0u, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCreateProgramWithBuiltInKernels(nullptr, 0u, nullptr, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clLinkProgram(nullptr, 0u, nullptr, nullptr, 0u, nullptr, nullptr, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = 7;
+  CHECK(slots.clCloneKernel(nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_KERNEL);
+  error = 7;
+  CHECK(slots.clCreateContextFromType(nullptr, CL_DEVICE_TYPE_ALL, nullptr, nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PLATFORM);
+
+  CHECK(slots.clCreateImage(nullptr, 0u, &format, &desc, nullptr, nullptr) == nullptr);
+  CHECK(slots.clCreateImage2D(nullptr, 0u, &format, 1u, 1u, 0u, nullptr, nullptr) == nullptr);
+  CHECK(slots.clCreateImage3D(nullptr, 0u, &format, 1u, 1u, 1u, 0u, 0u, nullptr, nullptr) == nullptr);
+  CHECK(slots.clCreateSamplerWithProperties(nullptr, nullptr, nullptr) == nullptr);
+  CHECK(slots.clCreateSampler(nullptr, CL_TRUE, CL_ADDRESS_NONE, CL_FILTER_NEAREST, nullptr) == nullptr);
+  CHECK(slots.clCreateFromGLBuffer(nullptr, 0u, 0u, nullptr) == nullptr);
+  CHECK(slots.clCreateFromGLTexture(nullptr, 0u, 0u, 0, 0u, nullptr) == nullptr);
+  CHECK(slots.clCreateFromGLRenderbuffer(nullptr, 0u, 0u, nullptr) == nullptr);
+  CHECK(slots.clCreateSubBuffer(nullptr, 0u, CL_BUFFER_CREATE_TYPE_REGION, nullptr, nullptr) == nullptr);
+  CHECK(slots.clEnqueueMapImage(nullptr, nullptr, CL_TRUE, 0u, origin, region, nullptr, nullptr, 0u, nullptr,
+                                nullptr, nullptr) == nullptr);
+  CHECK(slots.clCreateImageWithProperties(nullptr, nullptr, 0u, &format, &desc, nullptr, nullptr) == nullptr);
+  CHECK(slots.clCreatePipe(nullptr, 0u, 4u, 4u, nullptr, nullptr) == nullptr);
+  CHECK(slots.clCreateProgramWithBinary(nullptr, 0u, nullptr, nullptr, nullptr, nullptr, nullptr) == nullptr);
+  CHECK(slots.clCreateProgramWithIL(nullptr, nullptr, 0u, nullptr) == nullptr);
+  CHECK(slots.clCreateProgramWithBuiltInKernels(nullptr, 0u, nullptr, nullptr, nullptr) == nullptr);
+  CHECK(slots.clLinkProgram(nullptr, 0u, nullptr, nullptr, 0u, nullptr, nullptr, nullptr, nullptr) == nullptr);
+  CHECK(slots.clCloneKernel(nullptr, nullptr) == nullptr);
+  CHECK(slots.clCreateContextFromType(nullptr, CL_DEVICE_TYPE_ALL, nullptr, nullptr, nullptr) == nullptr);
+
+  CHECK(slots.clGetExtensionFunctionAddress("clCreateProgramWithILKHR") == nullptr); }

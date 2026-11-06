@@ -20,6 +20,13 @@ using av::clicd::ClWatchedEventProbe;
 using av::clicd::ClObject;
 using av::clicd::GuestClContext;
 
+namespace av {
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
+};
+}
+
 namespace av::clicd {
 struct ClWatchedEventProbe {
     static void forget_event(ClWatchedEvent &watched) { watched.event_ = nullptr; }
@@ -363,6 +370,16 @@ struct ClEventWatcherProbe {
     { watcher.held_ = watcher.rows_.size() + 1u; }
     static ClWatchedEvent &registration(ClEventWatcher &watcher, std::uint32_t slot)
     { return watcher.rows_.at(slot).registration_; }
+    static void reregister(ClEventWatcher &watcher, std::uint32_t slot, ClObject *event, std::uint64_t wire,
+                           av::ClientTransport *transport, ClWatchedEvent::Notify notify)
+    {
+        if (watcher.rows_.at(slot).registration_.take(event, wire, transport, CL_COMPLETE, notify, nullptr))
+            ++watcher.held_;
+    }
+    static void break_the_row_storage(ClEventWatcher &watcher)
+    { av::GrowableArrayProbe::corrupt_capacity(watcher.rows_, 12u); }
+    static void break_the_queue_storage(ClEventWatcher &watcher)
+    { av::GrowableArrayProbe::corrupt_capacity(watcher.queues_, 12u); }
 };
 
 }
@@ -538,3 +555,170 @@ TEST(cl_watched_event, a_status_is_reached_by_what_is_as_far_along_as_the_one_wa
   CHECK(watched.reached_by(CL_COMPLETE));
   CHECK(watched.reached_by(-1));
   CHECK(watched.invariants_hold()); }
+
+namespace {
+
+ClEventWatcher *forgetting_watcher = nullptr;
+av::ClientTransport *forgotten_wire = nullptr;
+
+void CL_CALLBACK forget_the_context(cl_event event, cl_int status, void *data)
+{
+    note(event, status, data);
+    forgetting_watcher->forget_context(forgotten_wire);
+}
+
+}
+
+TEST(cl_event_watcher, a_callback_that_forgets_its_context_leaves_the_later_rows_unrun)
+{ forget();
+  Watching rig;
+  forgetting_watcher = &rig.watcher();
+  forgotten_wire = rig.wire();
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &forget_the_context, &user_data, false),
+           CL_SUCCESS);
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6901u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
+           CL_SUCCESS);
+  event_is(rig.rig(), CL_COMPLETE);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 1u);
+  CHECK_EQ(rig.watcher().registered(), 0u);
+  CHECK_EQ(rig.watcher().delivered(), 1u);
+  CHECK(rig.watcher().invariants_hold()); }
+
+namespace {
+
+class Interfering {
+public:
+    enum class Kind { forget, other_event, other_wire };
+
+    Interfering(Watching &rig, Kind kind, ClObject *other) : rig_(rig), kind_(kind), other_(other) {}
+
+    void arm()
+    {
+        rig_.rig().kmt().play_at_wait(1u, &Interfering::fire, this);
+    }
+
+private:
+    static void fire(void *self) { static_cast<Interfering *>(self)->interfere(); }
+
+    void interfere()
+    {
+        rig_.watcher().forget_context(rig_.wire());
+        if (kind_ == Kind::other_event)
+            ClEventWatcherProbe::reregister(rig_.watcher(), 0u, other_, 0x6900u, rig_.wire(), &note);
+        if (kind_ == Kind::other_wire)
+            ClEventWatcherProbe::reregister(rig_.watcher(), 0u, &rig_.event(), 0x6A00u, rig_.wire(), &note);
+    }
+
+    Watching &rig_;
+    Kind      kind_;
+    ClObject *other_;
+};
+
+void a_registration_changed_under_a_turn_is_not_delivered(Interfering::Kind kind)
+{ forget();
+  Watching rig;
+  ClObject other(dispatch, rig.rig().platform(), ClObject::Kind::event, 0x6902u, nullptr, nullptr);
+  CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
+           CL_SUCCESS);
+  Interfering interfering(rig, kind, &other);
+  event_is(rig.rig(), CL_COMPLETE);
+  interfering.arm();
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 0u);
+  CHECK_EQ(rig.watcher().delivered(), 0u);
+  CHECK_EQ(rig.watcher().registered(), kind == Interfering::Kind::forget ? 0u : 1u);
+  CHECK(rig.watcher().invariants_hold());
+  rig.watcher().forget_context(rig.wire()); }
+
+}
+
+TEST(cl_event_watcher, a_registration_forgotten_while_its_event_was_asked_about_is_not_delivered)
+{ a_registration_changed_under_a_turn_is_not_delivered(Interfering::Kind::forget); }
+
+TEST(cl_event_watcher, a_slot_given_to_another_event_while_the_old_one_was_asked_about_is_not_delivered)
+{ a_registration_changed_under_a_turn_is_not_delivered(Interfering::Kind::other_event); }
+
+TEST(cl_event_watcher, a_slot_given_to_another_wire_while_the_old_one_was_asked_about_is_not_delivered)
+{ a_registration_changed_under_a_turn_is_not_delivered(Interfering::Kind::other_wire); }
+
+namespace {
+
+struct Queued {
+    explicit Queued(Watching &rig)
+        : queue_a(dispatch, rig.rig().platform(), ClObject::Kind::command_queue, 0x5100u, nullptr, nullptr),
+          queue_b(dispatch, rig.rig().platform(), ClObject::Kind::command_queue, 0x5101u, nullptr, nullptr),
+          a1(dispatch, rig.rig().platform(), ClObject::Kind::event, 0x6911u, nullptr, &queue_a),
+          a2(dispatch, rig.rig().platform(), ClObject::Kind::event, 0x6912u, nullptr, &queue_a),
+          b1(dispatch, rig.rig().platform(), ClObject::Kind::event, 0x6921u, nullptr, &queue_b)
+    {
+        a1.stamp(queue_a.take_ordinal());
+        a2.stamp(queue_a.take_ordinal());
+        b1.stamp(queue_b.take_ordinal());
+    }
+
+    ClObject queue_a, queue_b, a1, a2, b1;
+};
+
+}
+
+TEST(cl_event_watcher, an_event_never_stamped_on_its_queue_is_always_asked_about)
+{ forget();
+  Watching rig;
+  ClObject queue(dispatch, rig.rig().platform(), ClObject::Kind::command_queue, 0x5100u, nullptr, nullptr);
+  ClObject unstamped(dispatch, rig.rig().platform(), ClObject::Kind::event, 0x6901u, nullptr, &queue);
+  CHECK_EQ(rig.watcher().watch(&unstamped, 0x6901u, rig.wire(), CL_COMPLETE, &note, &user_data, false), CL_SUCCESS);
+  event_is(rig.rig(), CL_COMPLETE);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 1u);
+  CHECK(ran.event == reinterpret_cast<cl_event>(&unstamped));
+  CHECK(rig.watcher().invariants_hold()); }
+
+TEST(cl_event_watcher, each_queue_has_its_own_oldest_event_and_later_ones_wait_behind_it)
+{ forget();
+  Watching rig;
+  Queued queued(rig);
+  CHECK_EQ(rig.watcher().watch(&queued.a1, 0x6911u, rig.wire(), CL_COMPLETE, &note, &user_data, false), CL_SUCCESS);
+  CHECK_EQ(rig.watcher().watch(&queued.b1, 0x6921u, rig.wire(), CL_COMPLETE, &note, &user_data, false), CL_SUCCESS);
+  CHECK_EQ(rig.watcher().watch(&queued.a2, 0x6912u, rig.wire(), CL_COMPLETE, &note, &user_data, false), CL_SUCCESS);
+  event_is(rig.rig(), CL_COMPLETE);
+  event_is(rig.rig(), CL_COMPLETE);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 2u);
+  CHECK_EQ(rig.watcher().registered(), 1u);
+  event_is(rig.rig(), CL_COMPLETE);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 3u);
+  CHECK(ran.event == reinterpret_cast<cl_event>(&queued.a2));
+  CHECK(rig.watcher().invariants_hold()); }
+
+TEST(cl_event_watcher, a_queue_the_watcher_cannot_note_has_all_its_events_asked_about)
+{ forget();
+  Watching rig;
+  Queued queued(rig);
+  CHECK_EQ(rig.watcher().watch(&queued.a1, 0x6911u, rig.wire(), CL_COMPLETE, &note, &user_data, false), CL_SUCCESS);
+  CHECK_EQ(rig.watcher().watch(&queued.a2, 0x6912u, rig.wire(), CL_COMPLETE, &note, &user_data, false), CL_SUCCESS);
+  event_is(rig.rig(), CL_RUNNING);
+  event_is(rig.rig(), CL_COMPLETE);
+  rig.rig().platform().fail_allocation_at(1u);
+  CHECK(rig.thread().step());
+  CHECK_EQ(ran.times, 1u);
+  CHECK(ran.event == reinterpret_cast<cl_event>(&queued.a2));
+  CHECK(rig.watcher().invariants_hold()); }
+
+TEST(cl_event_watcher, the_invariant_catches_storage_that_is_not_a_table)
+{ { Watching rig;
+    CHECK_EQ(rig.watcher().watch(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
+             CL_SUCCESS);
+    CHECK(rig.watcher().invariants_hold());
+    ClEventWatcherProbe::break_the_row_storage(rig.watcher());
+    CHECK(!rig.watcher().invariants_hold()); }
+  { Watching rig;
+    Queued queued(rig);
+    CHECK_EQ(rig.watcher().watch(&queued.a1, 0x6911u, rig.wire(), CL_COMPLETE, &note, &user_data, false),
+             CL_SUCCESS);
+    event_is(rig.rig(), CL_RUNNING);
+    CHECK(rig.thread().step());
+    CHECK(rig.watcher().invariants_hold());
+    ClEventWatcherProbe::break_the_queue_storage(rig.watcher());
+    CHECK(!rig.watcher().invariants_hold()); } }

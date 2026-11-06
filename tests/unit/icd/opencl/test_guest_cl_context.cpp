@@ -32,6 +32,10 @@ using av::Status;
 using av::clicd::GuestClContext;
 
 namespace av::icd {
+struct LossLatchProbe {
+    static void set_word(LossLatch &latch, std::uint32_t word) { latch.word_ = word; }
+};
+
 struct OpenedObjectsProbe {
     static void add_empty(OpenedObjects &opened)
     {
@@ -375,6 +379,8 @@ struct GuestClContextProbe {
     { icd::ContextLinkProbe(context.link_).link() = nullptr; }
     static void          say_it_was_made(GuestClContext &context)
     { context.state_ = GuestClContext::State::made; }
+    static void          say_it_was_lost(GuestClContext &context)
+    { context.state_ = GuestClContext::State::lost; }
     static void          say_it_was_never_made(GuestClContext &context)
     { context.state_ = GuestClContext::State::created; }
     static void          drop_the_lock(GuestClContext &context) { icd::HostChannelProbe(context.channel_).drop_locked(); }
@@ -383,6 +389,7 @@ struct GuestClContextProbe {
     static void          stray_link(GuestClContext &context) { static icd::DeviceLink *const nowhere = reinterpret_cast<icd::DeviceLink *>(std::uintptr_t{8u});
       icd::ContextLinkProbe(context.link_).link() = nowhere; }
     static SvmTable     &svm_of(GuestClContext &context) { return context.svm_; }
+    static icd::LossLatch &loss_of(GuestClContext &context) { return context.loss_; }
 };
 
 }
@@ -686,3 +693,64 @@ TEST(guest_cl_context, retired_memory_is_closed_by_a_reclaim_unless_work_was_orp
   CHECK_EQ(GuestClContextProbe::channel(context).memories(), base + 1u);
   rig.host().nop();
   rig.host().nop(); }
+
+TEST(guest_cl_context, a_region_the_transport_cannot_open_leaves_an_arena_with_nothing_lent_from_it)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  rig.kmt().fail_at(MockKmt::Call::submit, 3u, 0xC0000001u);
+  CHECK_STATUS(context.make(), Status::ok);
+  CHECK(context.has_arena());
+  std::uint64_t at = 0u;
+  CHECK(!context.staging().take(4096u, at));
+  CHECK(!context.blocks().take(4096u, at));
+  CHECK(rig.log().holding("blob arena") > 0u);
+  CHECK(context.invariants_hold()); }
+
+TEST(guest_cl_context, memory_is_lent_to_the_host_only_by_a_made_context_that_has_an_arena)
+{ { ClContextRig rig;
+    GuestClContext context = made_context(rig);
+    av::HostAllocation *made = reinterpret_cast<av::HostAllocation *>(std::uintptr_t{8u});
+    std::uint8_t        bytes[16] = {};
+    CHECK_STATUS(context.lend(bytes, sizeof bytes, made), Status::invalid_state);
+    CHECK(made == nullptr); }
+  { ClContextRig rig;
+    arena_answers(rig, 1u);
+    GuestClContext context = made_context(rig);
+    CHECK_STATUS(context.make(), Status::ok);
+    CHECK(!context.has_arena());
+    av::HostAllocation *made = reinterpret_cast<av::HostAllocation *>(std::uintptr_t{8u});
+    std::uint8_t        bytes[16] = {};
+    CHECK_STATUS(context.lend(bytes, sizeof bytes, made), Status::invalid_state);
+    CHECK(made == nullptr); } }
+
+TEST(guest_cl_context, an_application_mapping_of_nothing_is_not_taken)
+{ ClContextRig   rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  std::uint8_t at[16] = {};
+  CHECK(context.take_application_mapping(0x6600u, 0u, 0u, sizeof at, CL_MAP_READ, at) == nullptr);
+  CHECK(context.take_application_mapping(0x6600u, 0x7000u, 0u, 0u, CL_MAP_READ, at) == nullptr);
+  CHECK_EQ(context.mappings(), 0u);
+  CHECK(context.take_application_mapping(0x6600u, 0x7000u, 0u, sizeof at, CL_MAP_READ, at) != nullptr);
+  CHECK_EQ(context.mappings(), 1u);
+  CHECK(context.invariants_hold()); }
+
+TEST(guest_cl_context, the_invariant_catches_a_loss_the_state_does_not_say_and_a_loss_that_is_not_one)
+{ ClContextRig   rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  CHECK(context.invariants_hold());
+  av::icd::LossLatchProbe::set_word(GuestClContextProbe::loss_of(context), 0x80000001u);
+  CHECK(!context.invariants_hold());
+  av::icd::LossLatchProbe::set_word(GuestClContextProbe::loss_of(context), 0u);
+  CHECK(context.invariants_hold());
+  GuestClContextProbe::say_it_was_lost(context);
+  CHECK(!context.invariants_hold());
+  av::icd::LossLatchProbe::set_word(GuestClContextProbe::loss_of(context), 5u);
+  CHECK(!context.invariants_hold());
+  av::icd::LossLatchProbe::set_word(GuestClContextProbe::loss_of(context), 0x80000001u);
+  CHECK(context.invariants_hold());
+  GuestClContextProbe::say_it_was_made(context); }

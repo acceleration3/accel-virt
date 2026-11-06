@@ -328,6 +328,7 @@ TEST(cl_info_paths, a_context_from_a_type_is_the_first_device_s_and_other_types_
   CHECK_EQ(error, CL_DEVICE_NOT_FOUND);
   CHECK(table.clCreateContextFromType(nullptr, 0u, nullptr, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_DEVICE_TYPE);
+  CHECK(table.clCreateContextFromType(nullptr, 0u, nullptr, nullptr, nullptr) == nullptr);
   const cl_context_properties unknown[] = {0x4242, 1, 0};
   CHECK(table.clCreateContextFromType(unknown, CL_DEVICE_TYPE_GPU, nullptr, nullptr, &error) == nullptr);
   CHECK_EQ(error, CL_INVALID_PROPERTY);
@@ -419,6 +420,8 @@ TEST(cl_info_paths, a_destructor_callback_is_refused_for_no_object_no_callback_o
       CHECK_EQ(table.clSetContextDestructorCallback(context, &context_went, &tag), CL_SUCCESS);
   rig.platform().fail_allocation_at(1u);
   CHECK_EQ(table.clSetMemObjectDestructorCallback(buffer, &mem_went, &tag), CL_OUT_OF_HOST_MEMORY);
+  rig.platform().fail_allocation_at(1u);
+  CHECK_EQ(table.clSetContextDestructorCallback(context, &context_went, &tag), CL_OUT_OF_HOST_MEMORY);
   rig.host().cl_result(CL_SUCCESS);
   CHECK_EQ(rig.loader().release_mem(buffer), CL_SUCCESS);
   CHECK_EQ(std::strcmp(seen.order(), ""), 0);

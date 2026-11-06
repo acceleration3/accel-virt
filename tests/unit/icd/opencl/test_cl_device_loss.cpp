@@ -207,6 +207,10 @@ TEST(cl_device_loss, every_entry_on_a_lost_context_refuses_at_once_and_sends_not
   cl_event user = rig.loader().create_user_event(context, nullptr);
   CHECK(kernel != nullptr && user != nullptr);
   if (kernel == nullptr || user == nullptr) return;
+  rig.host().cl_handle(0x6A00u, CL_SUCCESS);
+  cl_sampler sampler = rig.root().create_sampler(context, nullptr, nullptr);
+  CHECK(sampler != nullptr);
+  if (sampler == nullptr) return;
 
   fault_next(rig);
   cl_int error = CL_SUCCESS;
@@ -253,6 +257,12 @@ TEST(cl_device_loss, every_entry_on_a_lost_context_refuses_at_once_and_sends_not
   CHECK(rig.loader().create_user_event(context, &error) == nullptr);
   CHECK_EQ(error, CL_OUT_OF_RESOURCES);
   CHECK_EQ(rig.root().watch_event(user, CL_COMPLETE, nullptr, nullptr), CL_OUT_OF_RESOURCES);
+  cl_bool normalized = CL_FALSE;
+  CHECK_EQ(rig.root().sampler_info(sampler, CL_SAMPLER_NORMALIZED_COORDS, sizeof normalized, &normalized, nullptr),
+           CL_OUT_OF_RESOURCES);
+  cl_name_version features[4] = {};
+  CHECK_EQ(rig.loader().device_info(device, CL_DEVICE_OPENCL_C_FEATURES, sizeof features, features, nullptr),
+           CL_INVALID_DEVICE);
 
   CHECK_EQ(rig.kmt().commands(), sent);
   CHECK(rig.root().invariants_hold()); }

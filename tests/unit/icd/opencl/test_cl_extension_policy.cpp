@@ -280,3 +280,20 @@ TEST(cl_extension_policy, report_versions_names_what_report_names_with_each_row_
   CHECK_EQ(listed[1].version, CL_MAKE_VERSION(2u, 0u, 0u));
   CHECK_EQ(listed[1].name[CL_NAME_VERSION_MAX_NAME_SIZE - 1u], '\0');
   CHECK_EQ(listed[2].name[0], 'z'); }
+
+TEST(cl_extension_policy, a_row_the_wire_does_not_carry_is_held_but_never_reported_whatever_the_host_offers)
+{ const ClExtensionPolicy::Row mixed[] = {
+      {"cl_av_not_carried", 1u, "cl_extension_policy.a_row_the_host_offers_is_reported"},
+      {"cl_khr_fp64", 1u, "cl_extension_policy.a_row_the_host_offers_is_reported"},
+  };
+  ClExtensionPolicy policy(mixed, 2u);
+  const Host        host("cl_av_not_carried cl_khr_fp64");
+  char              into[128] = {};
+  CHECK_EQ(policy.report(host.words(), into, sizeof into), std::strlen("cl_khr_fp64") + 1u);
+  CHECK_EQ(std::strcmp(into, "cl_khr_fp64"), 0);
+  CHECK(!policy.reports(host.words(), "cl_av_not_carried"));
+  CHECK(!policy.reportable("cl_av_not_carried"));
+  cl_name_version listed[2] = {};
+  CHECK_EQ(policy.report_versions(host.words(), listed, 2u), 1u);
+  CHECK_EQ(std::strcmp(listed[0].name, "cl_khr_fp64"), 0);
+  CHECK(policy.invariants_hold()); }

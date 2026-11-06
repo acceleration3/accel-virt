@@ -21,6 +21,7 @@ public:
                        std::size_t size, std::size_t row_pitch, std::size_t slice_pitch);
     void refuse_next();
     void offer_twin(void *twin, std::uint64_t handle, std::uint64_t bytes = 0u);
+    void on_twin(void (*hook)(void *context), void *context);
     std::uint32_t twin_device() const;
 
     bool   device(void *object) override;
@@ -74,6 +75,8 @@ private:
     std::uint32_t closed_;
     std::uint32_t to_twins_;
     std::uint32_t from_twins_;
+    void        (*twin_hook_)(void *context);
+    void         *twin_hook_context_;
 };
 
 }

@@ -76,3 +76,16 @@ TEST(cl_staged_rows, a_run_of_one_row_is_its_columns_alone)
   CHECK_EQ(back[slice_pitch + 4u * element], static_cast<std::uint8_t>(slice_pitch + 4u * element));
   CHECK_EQ(back[slice_pitch + width * element - 1u], static_cast<std::uint8_t>(slice_pitch + width * element - 1u));
   CHECK_EQ(back[slice_pitch + width * element], 0xEEu); }
+
+TEST(cl_staged_rows, a_run_of_no_rows_moves_nothing)
+{ const ClImageRegion region(origin, extent, pitch, slice_pitch, element);
+  std::uint8_t application[2u * slice_pitch];
+  std::memset(application, 0xCC, sizeof application);
+  const RowPieces none(TexelLayout(element, 1u, 1u), width, rows, width * element, 3u * width * element);
+  const ClStagedRows empty(region, none, 0u);
+  std::uint8_t staged[16];
+  std::memset(staged, 0xAA, sizeof staged);
+  empty.pack(application, staged);
+  for (const std::uint8_t byte : staged) CHECK_EQ(byte, 0xAAu);
+  empty.unpack(staged, application);
+  for (const std::uint8_t byte : application) CHECK_EQ(byte, 0xCCu); }
