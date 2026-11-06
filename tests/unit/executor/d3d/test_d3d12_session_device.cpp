@@ -1,7 +1,12 @@
 #include "executor/d3d/shared_surfaces.hpp"
 #include "fixtures/d3d12/triangle_ps.hpp"
 #include "fixtures/d3d12/triangle_vs.hpp"
+#include "core/log/driver_log.hpp"
+#include "executor/d3d/d3d12_block_heaps.hpp"
+#include "executor/d3d/d3d12_queue_progress.hpp"
 #include "executor/d3d/d3d_backend.hpp"
+#include "executor/eventfd_wake.hpp"
+#include "harness/platform/mock_platform.hpp"
 #include "executor/host_memory_source.hpp"
 #include "executor/owned_fd.hpp"
 #include "executor/import_table.hpp"
@@ -20,6 +25,7 @@
 #include "harness/executor/executor_log_rig.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
+#include "proto/d3d/heap_slice_support.hpp"
 #include "proto/resources/host_memory_request.hpp"
 #include "proto/resources/surface_point.hpp"
 
@@ -947,4 +953,69 @@ TEST(d3d12_session_device, each_share_or_present_misuse_removes_a_healthy_device
         shares->release(1u, shown_key);
     device11->retire_shares();
     }
+}
+
+TEST(d3d12_session_device, heap_windows_are_offered_over_memory_the_host_can_open_a_heap_on_and_shared_by_block)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice *device11 = nullptr;
+    av::D3d12HostDevice *device12 = nullptr;
+    av::HostShares      *shares = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!host_devices(apis, device11, device12, shares, source)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares session;
+    CHECK(backend.initialize(*shared_as(session, shares, backend), rig.imports, device11, device12));
+    av::D3dLoopback wire(backend, rig.imports, source, region_bytes, lent_bytes);
+    if (!imports(*device12, wire)) {
+        backend.shut_down();
+        return;
+    }
+    std::uint32_t supported = 0u;
+    CHECK(av_d3d12_QueryHeapSlices12(wire, &supported));
+    CHECK_EQ(supported, static_cast<std::uint32_t>(av::HeapSliceSupport::windows));
+
+    av::MockPlatform        platform;
+    av::EventfdWake         wake;
+    av::D3d12QueueProgress  progress(wake, platform);
+    av::DriverLog           lines(rig.sink, "windows: ");
+    av::D3d12BlockHeaps     windows(platform, progress, lines);
+    const std::uint64_t     memory = wire.open_memory(upload_memory, 2u * heap_bytes);
+    av::SourceMemory *const store = rig.imports.named(memory);
+    CHECK(store != nullptr);
+    CHECK_EQ(windows.count(), 0u);
+    ID3D12Heap *const first = windows.open(*device12, *store, 9u, 0u, heap_bytes);
+    CHECK(first != nullptr);
+    CHECK_EQ(windows.count(), 1u);
+    ID3D12Heap *const second = windows.open(*device12, *store, 10u, heap_bytes, heap_bytes);
+    CHECK(second == first);
+    CHECK_EQ(windows.count(), 1u);
+    std::uint64_t base = 1u, extent = 1u;
+    CHECK(windows.window(10u, base, extent));
+    CHECK_EQ(base, heap_bytes);
+    CHECK_EQ(extent, heap_bytes);
+    CHECK(!windows.window(11u, base, extent));
+    CHECK(windows.open(*device12, *store, 9u, 0u, heap_bytes) == nullptr);
+    CHECK(windows.open(*device12, *store, 12u, 100u, heap_bytes) == nullptr);
+    CHECK(windows.open(*device12, *store, 12u, 0u, 0u) == nullptr);
+    CHECK(windows.open(*device12, *store, 12u, heap_bytes, 4u * heap_bytes) == nullptr);
+    CHECK(windows.attach(50u, 9u));
+    CHECK(windows.attach(51u, 10u));
+    CHECK(!windows.attach(52u, 99u));
+    CHECK(windows.invariants_hold());
+    windows.abandon(*store);
+    windows.release_heap(9u);
+    windows.release_heap(10u);
+    windows.detach(50u);
+    windows.reclaim();
+    CHECK_EQ(windows.count(), 1u);
+    windows.detach(51u);
+    windows.detach(51u);
+    windows.reclaim();
+    CHECK_EQ(windows.count(), 0u);
+    CHECK(!windows.window(9u, base, extent));
+    CHECK(windows.invariants_hold());
+    wire.close_memory(memory);
+    backend.shut_down();
 }
