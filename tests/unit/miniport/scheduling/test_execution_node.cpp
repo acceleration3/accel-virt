@@ -430,8 +430,8 @@ TEST(execution_node_release_overdue, names_each_owner_once_and_only_as_many_as_t
   CHECK(owners[1] == nullptr);
   CHECK(fixture.node().invariants_hold());
   CHECK_STATUS(fixture.node().submit(4u, &a, 6u), Status::ok);
-  CHECK_STATUS(fixture.node().submit(5u, &a, 7u), Status::ok);
-  CHECK_STATUS(fixture.node().submit(6u, &b, 8u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(5u, &b, 7u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(6u, &a, 8u), Status::ok);
   const std::uint64_t later = fixture.platform().interrupt_time() + ExecutionNode::park_deadline;
   CHECK_EQ(fixture.node().release_overdue(later, owners, 2u, &named), 3u);
   CHECK_EQ(named, 2u);
