@@ -19,8 +19,14 @@
 #include "proto/submission/ring_progress.hpp"
 
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <string>
+
+#include <sched.h>
+#include <unistd.h>
 
 using av::BlobWindow;
 using av::FenceInterrupts;
@@ -127,6 +133,10 @@ public:
     {
         on_worker([](RingConsumer &consumer) { consumer.service(); });
         CHECK(consumer_.invariants_hold());
+    }
+    void detach()
+    {
+        on_worker([](RingConsumer &consumer) { consumer.detach(); });
     }
 
 private:
@@ -824,3 +834,204 @@ TEST(d3d_ordering, an_ordering_never_initialized_or_an_unstamped_batch_waits_for
   started = now_ns();
   ordering.wait_before(waiting.consumer(), 900u);
   CHECK(now_ns() - started < 20000000u); }
+
+namespace {
+
+void two_commands(std::uint8_t (&payload)[16])
+{
+    std::memset(payload, 0, sizeof payload);
+    const std::uint32_t id = GuestRing::filler_command;
+    const std::uint32_t size = 8u;
+    for (std::uint32_t command = 0u; command < 2u; command++) {
+        std::memcpy(payload + command * 8u, &id, sizeof id);
+        std::memcpy(payload + command * 8u + 4u, &size, sizeof size);
+    }
+}
+
+class CapturedStderr {
+public:
+    CapturedStderr() : saved_(dup(2)), file_(tmpfile())
+    {
+        std::fflush(stderr);
+        dup2(fileno(file_), 2);
+    }
+    ~CapturedStderr()
+    {
+        restore();
+        std::fclose(file_);
+    }
+    CapturedStderr(const CapturedStderr &) = delete;
+    CapturedStderr &operator=(const CapturedStderr &) = delete;
+
+    std::string text()
+    {
+        restore();
+        std::string captured;
+        std::rewind(file_);
+        char buffer[256];
+        while (std::fgets(buffer, sizeof buffer, file_) != nullptr) captured += buffer;
+        return captured;
+    }
+
+private:
+    void restore()
+    {
+        if (saved_ < 0) return;
+        std::fflush(stderr);
+        dup2(saved_, 2);
+        close(saved_);
+        saved_ = -1;
+    }
+
+    int   saved_;
+    FILE *file_;
+};
+
+std::uint64_t held_calls = 0u;
+
+void progress_that_catches_up(void *, AvExecutor *, std::uint64_t *marked, std::uint64_t *reached)
+{
+    *marked = 5u;
+    *reached = ++held_calls > 400u ? 5u : 0u;
+}
+
+}
+
+TEST(ring_consumer_service, a_batch_abandoned_while_it_runs_stops_quietly_without_a_fault)
+{ Fixture fixture;
+  fixture.bind();
+  fixture.ops().hold();
+  std::uint8_t payload[16];
+  two_commands(payload);
+  fixture.ring().write_batch(1u, payload, sizeof payload);
+  fixture.ring().publish();
+  void *thread = nullptr;
+  CHECK_STATUS(fixture.host().start_thread([](void *consumer) { static_cast<RingConsumer *>(consumer)->service(); },
+                                           &fixture.consumer(), thread),
+               Status::ok);
+  while (fixture.ops().waiting() == 0u) sched_yield();
+  fixture.consumer().abandon();
+  fixture.ops().release();
+  fixture.host().join_thread(thread);
+  CHECK(!fixture.consumer().faulted());
+  CHECK(!fixture.page().faulted());
+  CHECK_EQ(fixture.consumer().batches(), 0u);
+  CHECK_EQ(fixture.ops().executed(), 1u);
+  CHECK_EQ(fixture.host().logged(), 0u);
+  CHECK_EQ(fixture.page().completed_fence(), 0u);
+  CHECK_EQ(fixture.consumer().head(), 0u); }
+
+TEST(ring_consumer_service, a_full_queue_of_held_completions_is_drained_until_the_gpu_catches_up)
+{ Fixture fixture;
+  held_calls = 0u;
+  fixture.ops().editable().gpu_progress = progress_that_catches_up;
+  fixture.bind();
+  std::uint64_t fence = 1u;
+  for (std::uint32_t round = 0u; round < 3u; round++) {
+      for (std::uint32_t batch = 0u; batch < 50u; batch++) fixture.ring().write_batch(fence++, 0u);
+      fixture.ring().publish();
+      fixture.serve();
+  }
+  CHECK(!fixture.consumer().faulted());
+  CHECK_EQ(fixture.consumer().batches(), 150u);
+  CHECK(held_calls > 400u);
+  CHECK_EQ(fixture.page().completed_fence(), 150u);
+  CHECK(fixture.consumer().invariants_hold()); }
+
+TEST(ring_consumer_earliest_pending, a_detached_or_unreadable_or_truncated_ring_holds_nothing_up_or_everything)
+{ Fixture detached;
+  detached.ring().write_batch(1u, 0u);
+  stamp(detached.ring(), 0u, 700u);
+  detached.ring().publish();
+  detached.bind();
+  CHECK(detached.consumer().earliest_pending() == 700u);
+  detached.detach();
+  CHECK(detached.consumer().earliest_pending() == UINT64_MAX);
+
+  Fixture unreadable;
+  unreadable.ring().write_batch(1u, 0u);
+  unreadable.ring().publish();
+  unreadable.bind();
+  unreadable.ring().bytes()[0] = 0u;
+  CHECK(!unreadable.consumer().faulted());
+  CHECK(unreadable.consumer().earliest_pending() == UINT64_MAX);
+
+  Fixture truncated;
+  truncated.bind();
+  truncated.ring().write_batch(1u, 0u);
+  truncated.ring().publish();
+  void         *pointer = truncated.ring().bytes();
+  std::uint64_t length = 32u + 20u;
+  av::RingConsumerProbe::replace_ring(truncated.consumer(), RingWindow(BlobWindow(&pointer, &length, 1u, length), 12u));
+  CHECK(truncated.consumer().earliest_pending() == 0u); }
+
+TEST(ring_consumer_earliest_pending, while_a_batch_runs_it_is_the_stamp_of_the_batch_after_it)
+{ Fixture fixture;
+  fixture.bind();
+  fixture.ops().hold();
+  fixture.ring().write_batch(1u, 8u);
+  stamp(fixture.ring(), 0u, 300u);
+  fixture.ring().write_batch(2u, 0u);
+  stamp(fixture.ring(), 40u, 800u);
+  fixture.ring().publish();
+  CHECK(fixture.consumer().earliest_pending() == 300u);
+  void *thread = nullptr;
+  CHECK_STATUS(fixture.host().start_thread([](void *consumer) { static_cast<RingConsumer *>(consumer)->service(); },
+                                           &fixture.consumer(), thread),
+               Status::ok);
+  while (fixture.ops().waiting() == 0u) sched_yield();
+  CHECK(fixture.consumer().earliest_pending() == 800u);
+  fixture.ops().release();
+  fixture.host().join_thread(thread);
+  CHECK_EQ(fixture.consumer().batches(), 2u);
+  CHECK(fixture.consumer().earliest_pending() == UINT64_MAX); }
+
+TEST(ring_consumer_service, with_clock_pairs_on_every_sixteenth_stamped_batch_prints_the_host_and_guest_clocks)
+{ setenv("AV_PERFETTO", "1", 1);
+  std::string printed;
+  {
+      CapturedStderr captured;
+      Fixture        stamped;
+      stamped.bind();
+      for (std::uint32_t batch = 0u; batch < 17u; batch++) {
+          stamped.ring().write_batch(batch + 1u, 0u);
+          stamp(stamped.ring(), batch * 32u, 100u * (batch + 1u));
+      }
+      stamped.ring().publish();
+      stamped.serve();
+      CHECK_EQ(stamped.consumer().batches(), 17u);
+      Fixture unstamped;
+      unstamped.bind();
+      unstamped.ring().write_batch(1u, 0u);
+      unstamped.ring().publish();
+      unstamped.serve();
+      CHECK_EQ(unstamped.consumer().batches(), 1u);
+      printed = captured.text();
+  }
+  unsetenv("AV_PERFETTO");
+  std::size_t lines = 0u;
+  for (std::size_t at = printed.find("av-clock host="); at != std::string::npos; at = printed.find("av-clock host=", at + 1u))
+      lines++;
+  CHECK_EQ(lines, 2u);
+  CHECK(printed.find(" guest=100\n") != std::string::npos);
+  CHECK(printed.find(" guest=1700\n") != std::string::npos);
+  CHECK(printed.find(" guest=0\n") == std::string::npos); }
+
+TEST(d3d_ordering, a_stream_added_past_the_table_is_not_waited_on)
+{ Fixture waiting;
+  Fixture other;
+  av::D3dOrdering ordering(waiting.host());
+  CHECK_STATUS(ordering.initialize(), Status::ok);
+  other.ring().write_batch(1u, 0u);
+  stamp(other.ring(), 0u, 1u);
+  other.ring().publish();
+  other.bind();
+  waiting.bind();
+  for (std::uint32_t member = 0u; member < av::D3dOrdering::capacity; member++)
+      ordering.add(waiting.consumer(), waiting.worker());
+  ordering.add(other.consumer(), other.worker());
+  const std::uint64_t started = now_ns();
+  ordering.wait_before(waiting.consumer(), 900u);
+  CHECK(now_ns() - started < 20000000u);
+  ordering.remove(other.consumer());
+  for (std::uint32_t member = 0u; member < av::D3dOrdering::capacity; member++) ordering.remove(waiting.consumer()); }
