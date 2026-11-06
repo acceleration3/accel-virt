@@ -1172,7 +1172,27 @@ TEST(vulkan_backend_device, no_file_descriptor_crosses_the_wire_in_either_direct
       fence_import.handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT;
       fence_import.fd = 4096;
       CHECK_EQ(vkproto::av_vkImportFenceFdKHR(wire, translation, device, &fence_import), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      CHECK_EQ(made.backend().on_vkImportFenceFdKHR(device, &fence_import), VK_ERROR_INVALID_EXTERNAL_HANDLE);
+      CHECK(::fcntl(fence_import.fd, F_GETFD) == -1);
       vkproto::av_vkDestroyFence(wire, translation, device, fence, nullptr);
+  }
+}
+
+TEST(vulkan_backend_device, a_device_destroyed_on_the_backend_lets_the_physical_device_make_another)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & AV_EXECUTOR_SUB_API_VULKAN) == 0u) continue;
+      GuestDevice made(host, i);
+      if (made.device() == 0u) continue;
+      const std::uint64_t first = made.device();
+      CHECK(made.backend().knows_handle(first));
+      made.backend().on_vkDestroyDevice(as_handle<VkDevice>(first), nullptr);
+      made.backend().ended(first);
+      CHECK(!made.backend().knows_handle(first));
+      const std::uint64_t second = made.guest().create_device(made.physical());
+      CHECK(second != 0u);
+      CHECK(second != made.device());
+      CHECK(made.guest().destroy(vkproto::kCmd_vkDestroyDevice, second));
   }
 }
 

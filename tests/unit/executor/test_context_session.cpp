@@ -1,4 +1,5 @@
 #include "core/log/driver_log.hpp"
+#include "core/trace/state_writer.hpp"
 #include "device/abi/av_executor.h"
 #include "executor/context_session.hpp"
 #include "harness/wire/wire_arena_probe.hpp"
@@ -11,6 +12,8 @@
 #include "executor/shim/host_heap.hpp"
 #include "harness/executor/mock_memory_exporter.hpp"
 #include "proto/resources/host_memory_request.hpp"
+#include "proto/submission/channel_counter.hpp"
+#include "proto/submission/channel_stats_report.hpp"
 #include "harness/executor/context_session_probe.hpp"
 #include "harness/executor/imported_blob_probe.hpp"
 #include "harness/executor/mock_session_backend.hpp"
@@ -19,6 +22,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <unistd.h>
 
 using av::ContextSession;
@@ -530,3 +534,35 @@ TEST(context_session, a_command_needing_more_than_the_block_decodes_past_it)
            std::uint32_t{AV_EXECUTED});
   CHECK_EQ(session.starved(), 0u);
   CHECK(session.invariants_hold()); }
+
+TEST(context_session, a_session_reports_its_channel_only_once_the_guest_has_sent_statistics)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  CHECK_STATUS(bound.status(), Status::ok);
+  char            text[2048] = {};
+  av::StateWriter before(text, sizeof text);
+  session.report_channel(before);
+  CHECK(std::strstr(before.dump(), "channel/") == nullptr);
+  av::ChannelStatsReport report;
+  report.set(av::ChannelCounter::split_transfers, 5u);
+  report.set(av::ChannelCounter::ring_waits, 9u);
+  std::uint8_t body[av::ChannelStatsReport::encoded_size] = {};
+  CHECK_STATUS(report.encode(body, sizeof body), Status::ok);
+  session.channel_stats(4u, body, sizeof body);
+  char            after_text[2048] = {};
+  av::StateWriter after(after_text, sizeof after_text);
+  session.report_channel(after);
+  CHECK(std::strstr(after.dump(), "channel/4 reports=1 rejected=0 split_transfers=5") != nullptr);
+  CHECK(std::strstr(after.dump(), "ring_waits=9") != nullptr);
+  CHECK(session.invariants_hold()); }
+
+TEST(context_session, a_malformed_statistics_report_is_counted_as_rejected_in_the_channel_report)
+{ Bound bound;
+  ContextSession &session = bound.session();
+  CHECK_STATUS(bound.status(), Status::ok);
+  const std::uint8_t garbage[3] = {1u, 2u, 3u};
+  session.channel_stats(4u, garbage, sizeof garbage);
+  char            text[2048] = {};
+  av::StateWriter writer(text, sizeof text);
+  session.report_channel(writer);
+  CHECK(std::strstr(writer.dump(), "reports=0 rejected=1") != nullptr); }
