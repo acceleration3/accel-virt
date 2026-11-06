@@ -65,7 +65,6 @@ private:
     };
 
     bool           overlaps(uint64_t base, size_t bytes) const;
-    const Segment *segment_at(uint64_t offset) const;
     Segment       *segment_at(uint64_t offset);
     bool           placed(BlobRing::Placement *plans, const uint64_t *sizes, uint32_t wanted) const;
 

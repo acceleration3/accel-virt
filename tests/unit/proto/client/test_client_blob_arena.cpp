@@ -3,7 +3,28 @@
 
 #include <cstdint>
 
+namespace av {
+
+struct BlobRingProbe {
+    static void overfill(BlobRing &ring) { ring.top_ = ring.lent_ + 1u; }
+};
+
+struct ClientBlobArenaProbe {
+    static BlobRing &ring(ClientBlobArena &arena, std::uint32_t index) { return arena.segments_[index].ring_; }
+    static void set_base(ClientBlobArena &arena, std::uint32_t index, std::uint64_t base) { arena.segments_[index].base_ = base; }
+    static void set_region(ClientBlobArena &arena, std::uint32_t index, std::uint64_t base, std::uint8_t *block, std::size_t bytes)
+    {
+        arena.regions_[index] = ClientBlobArena::Region{base, block, bytes};
+    }
+    static void set_count(ClientBlobArena &arena, std::uint32_t count) { arena.count_ = count; }
+    static void set_window_peak(ClientBlobArena &arena, std::size_t peak) { arena.window_peak_ = peak; }
+};
+
+}
+
+using av::BlobRingProbe;
 using av::ClientBlobArena;
+using av::ClientBlobArenaProbe;
 using av::ClientBlobLease;
 
 namespace {
@@ -333,4 +354,101 @@ TEST(client_blob_arena, small_blobs_return_to_the_first_segment_once_it_has_room
   arena.give_back(spilled);
   CHECK(arena.take(8u).data() == first);
   CHECK(arena.idle_at(slot));
+  CHECK(arena.invariants_hold()); }
+
+TEST(client_blob_arena, a_range_below_a_segment_or_a_region_does_not_overlap_it)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  std::uint8_t low[32];
+  std::uint8_t high[32];
+  ClientBlobArena arena;
+  CHECK(arena.add_segment(slot, first, sizeof first));
+  CHECK(arena.add_segment(0u, second, sizeof second));
+  CHECK(arena.add_region(4u * slot, high, sizeof high));
+  CHECK(arena.add_region(3u * slot, low, sizeof low));
+  CHECK_EQ(arena.segments(), 2u);
+  CHECK_EQ(arena.set_aside_bytes(), sizeof low + sizeof high);
+  CHECK(arena.invariants_hold()); }
+
+TEST(client_blob_arena, a_lease_below_every_segment_is_not_given_back_to_one)
+{ std::uint8_t block[64];
+  ClientBlobArena arena;
+  CHECK(arena.add_segment(slot, block, sizeof block));
+  const ClientBlobLease lease = arena.take(16u);
+  CHECK_EQ(lease.offset(), slot);
+  arena.give_back(ClientBlobLease(block, 100u, 16u));
+  CHECK_EQ(arena.used(), 16u);
+  arena.give_back(lease);
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(arena.invariants_hold()); }
+
+TEST(client_blob_arena, a_take_of_nothing_is_not_a_lease)
+{ std::uint8_t block[64];
+  ClientBlobArena arena(block, sizeof block);
+  CHECK(!arena.take(0u).taken());
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(arena.invariants_hold()); }
+
+TEST(client_blob_arena, a_segment_index_past_the_table_names_nothing)
+{ std::uint8_t block[64];
+  ClientBlobArena arena(block, sizeof block);
+  CHECK_EQ(arena.segment_base(ClientBlobArena::max_segments), 0u);
+  CHECK_EQ(arena.segment_bytes(ClientBlobArena::max_segments), 0u);
+  CHECK(!arena.segment_idle(ClientBlobArena::max_segments));
+  CHECK(arena.segment_idle(0u)); }
+
+TEST(client_blob_arena, the_invariant_catches_a_broken_ring_a_stray_base_and_overlapping_segments)
+{ std::uint8_t first[64];
+  std::uint8_t second[64];
+  ClientBlobArena ringed(first, sizeof first);
+  CHECK(ringed.invariants_hold());
+  BlobRingProbe::overfill(ClientBlobArenaProbe::ring(ringed, 0u));
+  CHECK(!ringed.invariants_hold());
+
+  ClientBlobArena stray(first, sizeof first);
+  ClientBlobArenaProbe::set_base(stray, 3u, 5u);
+  CHECK(!stray.invariants_hold());
+
+  ClientBlobArena apart;
+  CHECK(apart.add_segment(2u * slot, first, sizeof first));
+  CHECK(apart.add_segment(slot, second, sizeof second));
+  CHECK(apart.invariants_hold());
+  ClientBlobArenaProbe::set_base(apart, 1u, 2u * slot + 10u);
+  CHECK(!apart.invariants_hold()); }
+
+TEST(client_blob_arena, the_invariant_catches_a_half_empty_region_and_regions_that_overlap)
+{ std::uint8_t first[64];
+  std::uint8_t one[32];
+  std::uint8_t two[32];
+  ClientBlobArena arena(first, sizeof first);
+  CHECK(arena.add_region(2u * slot, one, sizeof one));
+  CHECK(arena.add_region(slot, two, sizeof two));
+  CHECK(arena.invariants_hold());
+  ClientBlobArenaProbe::set_region(arena, 1u, 2u * slot + 10u, two, sizeof two);
+  CHECK(!arena.invariants_hold());
+  ClientBlobArenaProbe::set_region(arena, 1u, slot, two, sizeof two);
+  CHECK(arena.invariants_hold());
+  ClientBlobArenaProbe::set_region(arena, 2u, 0u, nullptr, 5u);
+  CHECK(!arena.invariants_hold());
+  ClientBlobArenaProbe::set_region(arena, 2u, 0u, one, 0u);
+  CHECK(!arena.invariants_hold());
+  ClientBlobArenaProbe::set_region(arena, 2u, 0u, nullptr, 0u);
+  CHECK(arena.invariants_hold()); }
+
+TEST(client_blob_arena, the_invariant_catches_a_region_inside_a_segment_a_wrong_count_and_a_window_above_the_peak)
+{ std::uint8_t first[64];
+  std::uint8_t region[32];
+  ClientBlobArena arena;
+  CHECK(arena.add_segment(slot, first, sizeof first));
+  CHECK(arena.add_region(0u, region, sizeof region));
+  CHECK(arena.invariants_hold());
+  ClientBlobArenaProbe::set_region(arena, 0u, slot + 8u, region, sizeof region);
+  CHECK(!arena.invariants_hold());
+  ClientBlobArenaProbe::set_region(arena, 0u, 0u, region, sizeof region);
+  ClientBlobArenaProbe::set_count(arena, 2u);
+  CHECK(!arena.invariants_hold());
+  ClientBlobArenaProbe::set_count(arena, 1u);
+  ClientBlobArenaProbe::set_window_peak(arena, 1u);
+  CHECK(!arena.invariants_hold());
+  ClientBlobArenaProbe::set_window_peak(arena, 0u);
   CHECK(arena.invariants_hold()); }

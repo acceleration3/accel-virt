@@ -34,12 +34,8 @@ bool ClientBlobArena::add_segment(uint64_t base, uint8_t *block, size_t capacity
     AV_SCOPE("ClientBlobArena::add_segment");
     if (block == nullptr || capacity == 0u || count_ == max_segments || base + capacity < base) return false;
     if (overlaps(base, capacity)) return false;
-    Segment *free_segment = nullptr;
-    for (Segment &held : segments_)
-        if (!held.ring_.ready()) {
-            free_segment = &held;
-            break;
-        }
+    Segment *free_segment = segments_;
+    while (free_segment->ring_.ready()) free_segment++;
     free_segment->base_ = base;
     free_segment->ring_.lend(block, capacity);
     count_++;
@@ -103,14 +99,6 @@ ClientBlobArena::Segment *ClientBlobArena::segment_at(uint64_t offset)
 {
     AV_SCOPE("ClientBlobArena::segment_at");
     for (Segment &held : segments_)
-        if (held.ring_.ready() && offset >= held.base_ && offset - held.base_ < held.ring_.lent()) return &held;
-    return nullptr;
-}
-
-const ClientBlobArena::Segment *ClientBlobArena::segment_at(uint64_t offset) const
-{
-    AV_SCOPE("ClientBlobArena::segment_at");
-    for (const Segment &held : segments_)
         if (held.ring_.ready() && offset >= held.base_ && offset - held.base_ < held.ring_.lent()) return &held;
     return nullptr;
 }
@@ -201,7 +189,8 @@ bool ClientBlobArena::placed(BlobRing::Placement *plans, const uint64_t *sizes, 
     AV_SCOPE("ClientBlobArena::placed");
     for (uint32_t blob = 0u; blob < wanted; blob++) {
         if (sizes[blob] == 0u) continue;
-        if (sizes[blob] > ~size_t{0}) return false;
+        if constexpr (sizeof(size_t) < sizeof(uint64_t))
+            if (sizes[blob] > ~size_t{0}) return false;
         bool found = false;
         for (uint32_t tried = 0u; tried < max_segments && !found; tried++) {
             size_t         at = 0u;
