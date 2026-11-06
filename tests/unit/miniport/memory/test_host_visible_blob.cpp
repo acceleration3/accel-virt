@@ -473,3 +473,21 @@ TEST(host_visible_blob_create_over, refuses_what_it_cannot_name_and_counts_a_blo
   CHECK_STATUS(blob.create_over(device, context_id, resource, readback, &not_a_lock, page), Status::invalid_parameter);
   CHECK(blob.created());
   fixture.mapped().platform().unlock_process_pages(locked); }
+
+TEST(host_visible_blob_create_over, a_page_the_pager_cannot_name_or_a_device_that_does_not_answer_is_said)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  const std::uint64_t frames[2] = {0x40000u, 0u};
+  fixture.mapped().platform().lend_process_range(lent_at, frames, 2u);
+  void *locked = nullptr;
+  CHECK_STATUS(fixture.mapped().platform().lock_process_pages(lent_at, 2u * page, locked), Status::ok);
+  VirtioGpuDevice &device = fixture.device();
+  HostVisibleBlob  blob(fixture.mapped().platform());
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, 2u * page), Status::invalid_parameter);
+  CHECK(blob.created());
+  CHECK_STATUS(blob.destroy(device), Status::ok);
+  host.answer_nothing();
+  CHECK_STATUS(blob.create_over(device, context_id, resource, readback, locked, 2u * page), Status::not_found);
+  CHECK(blob.created());
+  fixture.mapped().platform().unlock_process_pages(locked); }

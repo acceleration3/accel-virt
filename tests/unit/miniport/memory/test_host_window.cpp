@@ -3,6 +3,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
+#include "proto/pages/window_stats.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -12,6 +13,8 @@ namespace av {
 struct HostWindowProbe {
     static void miscount(HostWindow &window, std::uint32_t used) { window.used_ = used; }
     static void set_pages(HostWindow &window, std::uint32_t pages) { window.pages_ = pages; }
+    static void set_peak(HostWindow &window, std::uint32_t peak) { window.peak_ = peak; }
+    static const WindowStatsView &view(const HostWindow &window) { return window.view_; }
 };
 
 }
@@ -229,4 +232,34 @@ TEST(host_window_invariants, a_count_that_does_not_match_the_map_is_caught)
   HostWindowProbe::set_pages(window, 1u);
   CHECK(!window.invariants_hold());
   HostWindowProbe::set_pages(window, 4u);
+  CHECK(window.invariants_hold());
+  HostWindowProbe::set_peak(window, 1u);
+  CHECK(!window.invariants_hold());
+  HostWindowProbe::set_peak(window, 5u);
+  CHECK(!window.invariants_hold());
+  HostWindowProbe::set_peak(window, 2u);
+  CHECK(window.invariants_hold()); }
+
+TEST(host_window, a_refusal_says_the_largest_run_left_past_the_words_that_are_full)
+{ MockPlatform platform;
+  HostWindow window(platform);
+  CHECK_STATUS(window.initialize(base, 200u * page), Status::ok);
+  std::uint32_t first = 99u;
+  CHECK_STATUS(window.take(64u, first), Status::ok);
+  CHECK_STATUS(window.take(100u, first), Status::ok);
+  CHECK_EQ(first, 64u);
+  CHECK_STATUS(window.take(37u, first), Status::no_space);
+  const av::WindowStatsView &view = HostWindowProbe::view(window);
+  const auto *const bytes =
+      static_cast<const std::uint8_t *>(platform.translate_physical(view.address(), av::WindowStats::page_size));
+  av::WindowStats stats;
+  CHECK_STATUS(stats.decode(bytes, av::WindowStats::encoded_size), Status::ok);
+  CHECK_EQ(stats.refusals(), 1u);
+  CHECK_EQ(stats.refused_bytes(), 37u * page);
+  CHECK_EQ(stats.largest_free_run_at_refusal(), 36u);
+  window.give_back(0u, 64u);
+  CHECK_STATUS(window.take(60u, first), Status::ok);
+  CHECK_STATUS(window.take(37u, first), Status::no_space);
+  CHECK_STATUS(stats.decode(bytes, av::WindowStats::encoded_size), Status::ok);
+  CHECK_EQ(stats.largest_free_run_at_refusal(), 36u);
   CHECK(window.invariants_hold()); }

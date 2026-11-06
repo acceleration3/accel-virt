@@ -10,6 +10,8 @@
 #include "harness/platform/mock_platform.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 
+#include <cstdint>
+
 using av::Adapter;
 using av::Allocation;
 using av::AllocationDescriptor;
@@ -108,3 +110,19 @@ TEST(device_allocation, is_pointed_once_a_point_is_named_and_tells_the_first_sta
   CHECK(view.first_starvation());
   open.view(view);
   CHECK(!view.first_starvation()); }
+
+TEST(device_allocation, forgets_the_oldest_point_when_more_are_named_than_it_can_queue)
+{ MockPlatform platform; int pdo = 0;
+  Adapter adapter(platform, &pdo);
+  Device device(platform, adapter, nullptr, 0u, nullptr);
+  av::ApertureSegment aperture(platform);
+  const av::MemorySegments segments(platform, aperture);
+  Allocation allocation(platform, segments, AllocationDescriptor(), 0x1000u);
+  DeviceAllocation open(device, allocation, nullptr);
+  for (std::uint32_t point = 1u; point <= 9u; point++) open.name_point(point);
+  CHECK_EQ(open.queued(), 8u);
+  CHECK_EQ(open.point(), 9u);
+  CHECK(!open.withdraw_point(1u));
+  CHECK(open.withdraw_point(2u));
+  CHECK_EQ(open.queued(), 7u);
+  CHECK_EQ(open.point(), 9u); }

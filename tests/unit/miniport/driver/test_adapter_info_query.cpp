@@ -136,3 +136,10 @@ TEST(adapter_info_query_read_output, copies_an_in_out_block_or_refuses_a_short_o
   record.pOutputData = nullptr;
   record.OutputDataSize = payload_bytes;
   CHECK_STATUS(AdapterInfoQuery(platform, record).read_output(copy, payload_bytes), Status::invalid_parameter); }
+
+TEST(adapter_info_query_output_size, is_the_block_sized_or_nothing_without_one)
+{ MockPlatform platform; std::uint8_t output[payload_bytes] = {};
+  DxgkargQueryAdapterInfoRecord record = record_with_output(output, payload_bytes);
+  CHECK_EQ(AdapterInfoQuery(platform, record).output_size(), payload_bytes);
+  record.pOutputData = nullptr;
+  CHECK_EQ(AdapterInfoQuery(platform, record).output_size(), 0u); }

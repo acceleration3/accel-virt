@@ -582,6 +582,16 @@ TEST(allocation_table_create, a_create_that_asks_for_a_resource_is_answered_one)
   CHECK_EQ(fixture.table().live(), 0u);
   CHECK(fixture.table().invariants_hold()); }
 
+TEST(allocation_table_create, a_resource_create_may_carry_the_resource_s_own_private_data)
+{ Fixture fixture;
+  fixture.request().Flags = 1u;
+  fixture.request().PrivateDriverDataSize = AllocationTable::resource_private_bytes;
+  CHECK_STATUS(fixture.create(), Status::ok);
+  CHECK(fixture.request().hResource != nullptr);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.destroy(1u), Status::ok);
+  CHECK(fixture.table().invariants_hold()); }
+
 TEST(allocation_table_create, a_second_create_into_a_resource_answers_the_same_one)
 { Fixture fixture;
   fixture.request().Flags = 1u;

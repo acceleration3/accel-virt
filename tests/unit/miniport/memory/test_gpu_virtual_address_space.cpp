@@ -6,6 +6,15 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace av {
+
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
+};
+
+}
+
 using av::Alignment;
 using av::AddressSpaceFixture;
 using av::ByteRange;
@@ -548,3 +557,51 @@ TEST(address_space_translate, hostile_addresses_never_translate_out_of_bounds)
                Status::ok);
   CHECK_EQ(offset, 0x10000u + kPage * 4u - 1u);
   g_hostile_space = nullptr; }
+
+TEST(address_space_invariants, a_misaligned_or_overlapping_range_is_found_past_the_packed_run)
+{ AddressSpaceFixture fixture;
+  const std::uint64_t first = fixture.reserve_page();
+  static_cast<void>(fixture.reserve_page());
+  GpuVirtualAddressSpaceProbe probe(fixture.space());
+  GpuVirtualAddressSpace &space = fixture.space();
+  probe.set_packed(0u);
+  CHECK(space.invariants_hold());
+  probe.set_span(0u, ByteRange(first + 1u, kPage));
+  CHECK(!space.invariants_hold());
+  probe.set_span(0u, ByteRange(first, 2u * kPage));
+  CHECK(!space.invariants_hold());
+  probe.set_span(0u, ByteRange(first, kPage));
+  probe.set_packed(2u);
+  CHECK(space.invariants_hold());
+  av::GrowableArrayProbe::corrupt_capacity(probe.ranges(), 3u);
+  CHECK(!space.invariants_hold()); }
+
+TEST(address_space_reserve, skips_to_the_alignment_past_a_range_that_is_not_packed)
+{ MockPlatform platform; GpuVirtualAddressSpace space(platform);
+  std::uint64_t out = 0u;
+  CHECK_STATUS(space.initialize(ByteRange(kPage, 0x3FF000ull)), Status::ok);
+  CHECK_STATUS(space.reserve(kPage, Alignment(0x10000ull), out), Status::ok);
+  CHECK_EQ(out, 0x10000ull);
+  CHECK_STATUS(space.reserve(kPage, Alignment(0x100000ull), out), Status::ok);
+  CHECK_EQ(out, 0x100000ull);
+  CHECK_STATUS(space.reserve(kPage, Alignment(kPage), out), Status::ok);
+  CHECK_EQ(out, kPage);
+  CHECK(space.invariants_hold()); }
+
+TEST(address_space_reserve, refuses_when_the_alignment_past_a_range_is_past_the_space)
+{ MockPlatform platform; GpuVirtualAddressSpace space(platform);
+  std::uint64_t out = 0u;
+  CHECK_STATUS(space.initialize(ByteRange(kPage, 0x7F000ull)), Status::ok);
+  CHECK_STATUS(space.reserve(kPage, Alignment(0x40000ull), out), Status::ok);
+  CHECK_EQ(out, 0x40000ull);
+  CHECK_STATUS(space.reserve(kPage, Alignment(0x40000ull), out), Status::no_space);
+  CHECK(space.invariants_hold()); }
+
+TEST(address_space_reserve, refuses_when_the_alignment_past_a_range_overflows)
+{ MockPlatform platform; GpuVirtualAddressSpace space(platform);
+  std::uint64_t out = 0u;
+  CHECK_STATUS(space.initialize(ByteRange(0xFFFFFFFFFFF01000ull, 0xEF000ull)), Status::ok);
+  CHECK_STATUS(space.reserve(kPage, Alignment(0x80000ull), out), Status::ok);
+  CHECK_EQ(out, 0xFFFFFFFFFFF80000ull);
+  CHECK_STATUS(space.reserve(kPage, Alignment(0x80000ull), out), Status::no_space);
+  CHECK(space.invariants_hold()); }

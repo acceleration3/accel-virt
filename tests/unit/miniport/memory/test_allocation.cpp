@@ -28,6 +28,7 @@ struct AllocationProbe {
     explicit AllocationProbe(Allocation &target) : allocation(target) {}
     void set_size(std::uint64_t size) { allocation.size_ = size; }
     void set_opens(std::uint32_t opens) { allocation.opens_ = opens; }
+    void set_process(const void *process) { allocation.process_ = process; }
     void break_aperture() { AperturePagesProbe::forget_capacity(allocation.aperture_); }
     Allocation &allocation;
 };
@@ -362,7 +363,11 @@ TEST(allocation_invariants, an_open_with_no_holder_is_detected)
   AllocationProbe(allocation).set_opens(0u);
   CHECK(!allocation.invariants_hold());
   AllocationProbe(allocation).set_opens(1u);
-  CHECK_STATUS(allocation.close(), Status::ok); }
+  CHECK_STATUS(allocation.close(), Status::ok);
+  AllocationProbe(allocation).set_process(&device);
+  CHECK(!allocation.invariants_hold());
+  AllocationProbe(allocation).set_process(nullptr);
+  CHECK(allocation.invariants_hold()); }
 
 TEST(allocation_report_to, a_client_buffer_lives_in_vidmm_s_own_system_memory)
 { MockPlatform platform;

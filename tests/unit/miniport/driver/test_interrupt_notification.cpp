@@ -1,4 +1,5 @@
 #include "miniport/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
+#include "miniport/ddi/dxgk_multiplane_overlay_vsync_info2_record.hpp"
 #include "miniport/ddi/entry_points.hpp"
 #include "miniport/driver/dxgkrnl_interface.hpp"
 #include "miniport/driver/interrupt_notification.hpp"
@@ -122,3 +123,16 @@ TEST(interrupt_notification_report_vsync, notifies_crtc_vsync_with_the_target_an
   static_cast<void>(fixture.notification().report_vsync(0u, 0u));
   fixture.platform().set_irql(Irql::passive);
   while (fixture.platform().claim(Violation::irql_ceiling)) {} }
+
+TEST(interrupt_notification_report_presented_vsync, counts_layers_only_when_it_has_them)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  av::DxgkMultiplaneOverlayVsyncInfo2Record layers[2] = {};
+  CHECK_STATUS(fixture.notification().report_presented_vsync(0u, layers, 2u), Status::ok);
+  CHECK_STATUS(fixture.notification().report_presented_vsync(0u, nullptr, 2u), Status::ok);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument2, 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).Argument2, 0u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).UnionRemainder[0], 0u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).UnionRemainder[1], 0u); }

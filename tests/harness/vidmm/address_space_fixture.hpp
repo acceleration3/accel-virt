@@ -1,6 +1,7 @@
 #ifndef AV_ADDRESS_SPACE_FIXTURE_HPP
 #define AV_ADDRESS_SPACE_FIXTURE_HPP
 
+#include "core/support/growable_array.hpp"
 #include "miniport/memory/gpu_virtual_address_space.hpp"
 #include "harness/platform/mock_platform.hpp"
 
@@ -33,6 +34,7 @@ struct GpuVirtualAddressSpaceProbe {
     explicit GpuVirtualAddressSpaceProbe(GpuVirtualAddressSpace &space);
 
     VirtualRange &range_at(std::uint32_t index);
+    GrowableArray<VirtualRange> &ranges();
     std::uint32_t capacity() const;
     std::uint32_t packed() const;
     void          set_packed(std::uint32_t packed);

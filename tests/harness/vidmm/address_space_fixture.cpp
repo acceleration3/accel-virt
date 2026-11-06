@@ -36,6 +36,9 @@ GpuVirtualAddressSpaceProbe::GpuVirtualAddressSpaceProbe(
 VirtualRange &GpuVirtualAddressSpaceProbe::range_at(std::uint32_t index)
 { return space.ranges_.at(index); }
 
+GrowableArray<VirtualRange> &GpuVirtualAddressSpaceProbe::ranges()
+{ return space.ranges_; }
+
 std::uint32_t GpuVirtualAddressSpaceProbe::capacity() const
 { return space.ranges_.capacity(); }
 
