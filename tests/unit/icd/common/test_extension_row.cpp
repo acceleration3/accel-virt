@@ -68,3 +68,30 @@ TEST(extension_row, a_table_with_a_row_outside_its_prefix_a_zero_version_or_a_re
   const ExtensionRow emptyhost[] = {{"VK_KHR_a", 1u, "t", ""}};
   CHECK(!ExtensionRows(emptyhost, 1u, "VK_", ExtensionRows::Names(none, 0u)).invariants_hold());
   CHECK(ExtensionRows(rows, count, "VK_", ExtensionRows::Names(none, 0u)).invariants_hold()); }
+
+TEST(extension_row, a_name_list_holds_a_name_only_when_one_of_its_entries_spells_it)
+{ const ExtensionRows::Names listed(carried, 2u);
+  CHECK(listed.holds("VK_KHR_swapchain"));
+  CHECK(listed.holds("VK_KHR_external_memory"));
+  CHECK(!listed.holds("VK_KHR_swapchain_mutable_format"));
+  CHECK(!listed.holds(nullptr));
+  const char *const gappy[] = {nullptr, "VK_KHR_swapchain"};
+  const ExtensionRows::Names with_gap(gappy, 2u);
+  CHECK(with_gap.holds("VK_KHR_swapchain"));
+  CHECK(!with_gap.holds("VK_EXT_debug_utils"));
+  const ExtensionRows::Names nothing(nullptr, 5u);
+  CHECK(!nothing.holds("VK_KHR_swapchain")); }
+
+TEST(extension_row, a_row_with_no_name_is_skipped_by_every_lookup_and_unsound_in_the_table)
+{ const ExtensionRow holey[] = {{nullptr, 1u, "t"}, {"VK_KHR_a", 1u, "t"}};
+  const ExtensionRows table(holey, 2u, "VK_", ExtensionRows::Names(none, 0u));
+  CHECK_EQ(table.named("VK_KHR_a"), 1u);
+  CHECK_EQ(table.named("VK_KHR_b"), 2u);
+  CHECK_EQ(table.answering("VK_KHR_a", 0u), 1u);
+  CHECK_EQ(table.answering("VK_KHR_b", 0u), 2u);
+  CHECK(table.host_name(0u) == nullptr);
+  CHECK(!table.reportable(0u));
+  CHECK(!table.invariants_hold()); }
+
+TEST(extension_row, a_table_with_no_prefix_is_unsound)
+{ CHECK(!ExtensionRows(rows, count, nullptr, ExtensionRows::Names(none, 0u)).invariants_hold()); }
