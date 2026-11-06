@@ -148,7 +148,7 @@ void VirtioGpuAv::reset()
     exports_.revoke(0u, ExportRevocation::reset);
     const bool connected = interrupts_.connected();
     status_.reset();
-    if (connected && !interrupts_.connected()) contexts_->interrupts_changed(false);
+    if (connected) contexts_->interrupts_changed(false);
     heads_.release_all();
     host_blobs_.release_all();
     blobs_.release_all();

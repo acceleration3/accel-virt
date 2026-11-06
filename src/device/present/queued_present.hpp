@@ -42,6 +42,8 @@ private:
     QueuedPresentRequest present_;
     PresentRegion        regions_[QueuedPresentRequest::max_regions];
     uint64_t             refusals_after_;
+
+    friend struct QueuedPresentProbe;
 };
 
 }

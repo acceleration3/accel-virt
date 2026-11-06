@@ -1,6 +1,12 @@
 #include "core/support/status.hpp"
 #include "core/trace/state_writer.hpp"
 #include "device/context/device_context.hpp"
+#include "proto/resources/host_blob_id.hpp"
+#include "device/export/export_connection.hpp"
+#include "device/export/export_service.hpp"
+#include "device/present/present_engine.hpp"
+#include "harness/export/export_connection_probe.hpp"
+#include "harness/memory/host_blob_table_probe.hpp"
 #include "device/context/device_context_table.hpp"
 #include "device/memory/blob_resource.hpp"
 #include "device/memory/blob_table.hpp"
@@ -41,6 +47,9 @@ using av::MockRequest;
 using av::Status;
 using av::TextBuffer;
 using av::VirtioGpuAv;
+using av::ExportConnection;
+using av::ExportService;
+using av::PresentEngine;
 
 namespace av {
 
@@ -70,7 +79,29 @@ struct FenceInterruptsProbe {
     static void repair(FenceInterrupts &interrupts) { interrupts.connected_ = false; }
 };
 
+struct ExportServiceProbe {
+    static ExportConnection &connection(ExportService &service, std::uint32_t index)
+    {
+        return service.connections_[index].object();
+    }
+};
+
+struct PresentEngineProbe {
+    static void set_first(PresentEngine &engine, std::uint32_t first) { engine.first_ = first; }
+};
+
 struct VirtioGpuAvProbe {
+    static void place_host_blob(VirtioGpuAv &device, std::uint32_t id)
+    {
+        HostBlobTableProbe(device.host_blobs_).place(id, 4096u, 0u);
+        HostBlobTableProbe(device.host_blobs_).misplace(0u, 8192u);
+    }
+    static void break_presents(VirtioGpuAv &device, std::uint32_t first) { PresentEngineProbe::set_first(device.presents_, first); }
+    static void describe_export(VirtioGpuAv &device, int descriptor)
+    {
+        ExportConnectionProbe::describe(ExportServiceProbe::connection(device.exports_, 5u), descriptor);
+    }
+    static Status accept_export(VirtioGpuAv &device, int connection) { return device.exports_.accept(connection, true); }
     static void break_interrupts(VirtioGpuAv &device) { FenceInterruptsProbe::connect_without_lock(device.interrupts_); }
     static void repair_interrupts(VirtioGpuAv &device) { FenceInterruptsProbe::repair(device.interrupts_); }
     static Status connect_behind_the_status(VirtioGpuAv &device) { return device.interrupts_.connect(); }
@@ -1190,3 +1221,99 @@ TEST(virtio_gpu_av_export_head, composes_a_head_only_when_it_shows_more_than_its
   CHECK_EQ(image.fd, 13);
   rig.device.reset();
   CHECK(rig.device.export_head(0u, 0x51u, image)); }
+
+TEST(virtio_gpu_av_realize, a_host_that_runs_out_of_mutexes_or_events_at_any_point_leaves_the_device_unrealized)
+{ std::uint32_t clock_failures = 0u;
+  for (std::uint32_t nth = 1u; nth <= 24u; nth++) {
+      for (std::uint32_t kind = 0u; kind < 2u; kind++) {
+          const bool event = kind != 0u;
+          MockHost host;
+          host.add_gpu(first);
+          if (event) host.fail_event_at(nth);
+          else host.fail_mutex_at(nth);
+          VirtioGpuAv device(host);
+          char        bytes[160];
+          TextBuffer  message(bytes, sizeof bytes);
+          const Status realized = device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message);
+          if (realized == Status::ok) {
+              CHECK(device.realized());
+              device.reset();
+              continue;
+          }
+          CHECK(message.length() != 0u);
+          device.reset();
+          CHECK(device.invariants_hold());
+          if (std::strstr(message.text(), "display clock") != nullptr) clock_failures++;
+      }
+  }
+  CHECK(clock_failures >= 3u); }
+
+TEST(virtio_gpu_av_export, an_unrealized_device_exports_composes_and_reads_nothing)
+{ MockHost host;
+  VirtioGpuAv device(host);
+  AvExportedImage image = {};
+  std::uint8_t    pixels[16] = {};
+  CHECK(!device.export_image(0x51u, image));
+  CHECK(!device.export_head(0u, 0x51u, image));
+  CHECK(!device.read_image(0x51u, pixels, 4u, 1u, 1u));
+  CHECK(device.invariants_hold()); }
+
+TEST(virtio_gpu_av_control, a_present_copy_request_is_answered_by_the_device)
+{ MockHost host;
+  host.add_gpu(first);
+  host.add_guest_ram(0x400000u, 0x10000u);
+  VirtioGpuAv device(host);
+  char        bytes[64];
+  TextBuffer  message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
+  GpuRequestBuilder copy(0x02F2u);
+  MockRequest       mock(copy.bytes(), copy.size());
+  CHECK(device.control(&mock, 0x02F2u));
+  CHECK(mock.answered());
+  device.reset(); }
+
+TEST(virtio_gpu_av_control, a_window_stats_page_request_is_answered_by_the_device_even_when_the_page_is_refused)
+{ MockHost host;
+  host.add_gpu(first);
+  host.add_guest_ram(0x400000u, 0x10000u);
+  VirtioGpuAv device(host);
+  char        bytes[64];
+  TextBuffer  message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
+  GpuRequestBuilder page(0x02F9u);
+  page.u64(0x401000u);
+  MockRequest mock(page.bytes(), page.size());
+  CHECK(device.control(&mock, 0x02F9u));
+  CHECK(mock.answered());
+  CHECK_EQ(mock.response_type(), 0x1205u);
+  device.reset(); }
+
+TEST(virtio_gpu_av_invariants, a_host_blob_a_present_engine_or_an_export_connection_that_breaks_theirs_is_detected)
+{ MockHost host;
+  host.add_gpu(first);
+  host.set_hostmem_size(0x10000u);
+  VirtioGpuAv blobs(host);
+  char        bytes[64];
+  TextBuffer  message(bytes, sizeof bytes);
+  CHECK_STATUS(blobs.realize("auto", false, nullptr, nullptr, nullptr, nullptr, message), Status::ok);
+  av::VirtioGpuAvProbe::place_host_blob(blobs, av::HostBlobId::first);
+  CHECK(!blobs.invariants_hold());
+  blobs.reset();
+  VirtioGpuAv presents(host);
+  av::VirtioGpuAvProbe::break_presents(presents, av::PresentEngine::depth);
+  CHECK(!presents.invariants_hold());
+  av::VirtioGpuAvProbe::break_presents(presents, 0u);
+  CHECK(presents.invariants_hold());
+  VirtioGpuAv exports(host);
+  av::VirtioGpuAvProbe::describe_export(exports, 3);
+  CHECK(!exports.invariants_hold());
+  av::VirtioGpuAvProbe::describe_export(exports, -1);
+  CHECK(exports.invariants_hold()); }
+
+TEST(virtio_gpu_av_invariants, an_export_connection_on_a_device_that_was_never_realized_is_detected)
+{ MockHost host;
+  VirtioGpuAv device(host);
+  av::FakeExportConsumer consumer;
+  CHECK_STATUS(av::VirtioGpuAvProbe::accept_export(device, consumer.device_end()), Status::ok);
+  CHECK(!device.invariants_hold());
+  device.reset(); }

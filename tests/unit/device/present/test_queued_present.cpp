@@ -12,7 +12,24 @@
 
 #include <cstdint>
 
+namespace av {
+
+struct GuestPageMappingProbe {
+    static void miscount(GuestPageMapping &mapping) { mapping.length_ += 1u; }
+    static void repair(GuestPageMapping &mapping, std::uint64_t length) { mapping.length_ = length; }
+};
+
+struct QueuedPresentProbe {
+    static GuestPageMapping &source(QueuedPresent &present) { return present.source_; }
+    static GuestPageMapping &destination(QueuedPresent &present) { return present.destination_; }
+    static void adopt(QueuedPresent &present, const QueuedPresentRequest &request) { present.present_ = request; }
+};
+
+}
+
 using av::ControlRequest;
+using av::GuestPageMappingProbe;
+using av::QueuedPresentProbe;
 using av::GpuRequestBuilder;
 using av::MockHost;
 using av::MockRequest;
@@ -140,3 +157,36 @@ TEST(queued_present, an_image_source_maps_its_destination_and_moves_out_of_its_s
   CHECK_EQ(plane.unmaps(), 2u);
   outside.release();
   CHECK_EQ(host.live_guest_mappings(), 0u); }
+
+TEST(queued_present, a_refusal_counted_with_nothing_mapped_or_a_broken_mapping_breaks_the_invariant)
+{ MockHost      host;
+  PresentScene  scene(host);
+  QueuedPresent idle(host);
+  idle.follow_with_refusal();
+  CHECK(!idle.invariants_hold());
+  QueuedPresent present(host);
+  CHECK_STATUS(accept(host, present, scene.blt(4u, 0u, 1u)), Status::ok);
+  CHECK(present.invariants_hold());
+  GuestPageMappingProbe::miscount(QueuedPresentProbe::source(present));
+  CHECK(!present.invariants_hold());
+  GuestPageMappingProbe::repair(QueuedPresentProbe::source(present), QueuedPresentProbe::source(present).length() - 1u);
+  CHECK(present.invariants_hold());
+  GuestPageMappingProbe::miscount(QueuedPresentProbe::destination(present));
+  CHECK(!present.invariants_hold());
+  GuestPageMappingProbe::repair(QueuedPresentProbe::destination(present),
+                                QueuedPresentProbe::destination(present).length() - 1u);
+  present.release(); }
+
+TEST(queued_present, a_ticket_held_with_nothing_mapped_breaks_the_invariant)
+{ MockHost      host;
+  PresentScene  scene(host);
+  QueuedPresent present(host);
+  const GpuRequestBuilder builder = scene.blt(4u, 0u, 1u);
+  WireReader              reader(builder.bytes(), builder.size());
+  QueuedPresentRequest    decoded;
+  CHECK_STATUS(decoded.decode(reader), Status::ok);
+  QueuedPresentProbe::adopt(present, decoded);
+  CHECK_EQ(present.ticket(), 4u);
+  CHECK(!present.invariants_hold());
+  QueuedPresentProbe::adopt(present, QueuedPresentRequest());
+  CHECK(present.invariants_hold()); }

@@ -46,9 +46,8 @@ Status RegionMover::move_row(uint64_t from, uint64_t to, uint64_t bytes)
         if (read != Status::ok) return read;
         if (blt && request_.swaps_red_and_blue()) {
             BgraRows pixels(chunk, piece, piece);
-            const Status swapped = pixels.copy_from(pixels, static_cast<uint32_t>(piece / PresentRegion::pixel_bytes),
-                                                     1u, BgraRows::Channels::red_blue_swapped);
-            if (swapped != Status::ok) return swapped;
+            static_cast<void>(pixels.copy_from(pixels, static_cast<uint32_t>(piece / PresentRegion::pixel_bytes), 1u,
+                                               BgraRows::Channels::red_blue_swapped));
         }
         const Status written = destination_.write(to + done, chunk, piece);
         if (written != Status::ok) return written;

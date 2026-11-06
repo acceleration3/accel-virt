@@ -2,6 +2,7 @@
 #include "device/control/control_request.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/present/present_engine.hpp"
+#include "device/present/present_frames.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
@@ -22,6 +23,23 @@ struct PresentEngineProbe {
         engine.stopping_ = false;
         return host.start_thread(&AvPresentEngineRun, &engine, engine.thread_);
     }
+    static void set_first(PresentEngine &engine, std::uint32_t first) { engine.first_ = first; }
+    static void set_moved(PresentEngine &engine, std::uint32_t moved) { engine.moved_ = moved; }
+    static void set_held(PresentEngine &engine, std::uint32_t held) { engine.held_ = held; }
+    static void set_counted(PresentEngine &engine, std::uint64_t counted) { engine.counted_ = counted; }
+    static void set_completed(PresentEngine &engine, std::uint64_t completed) { engine.completed_ = completed; }
+    static void set_refused(PresentEngine &engine, std::uint64_t refused) { engine.refused_ = refused; }
+    static void set_thread(PresentEngine &engine, void *thread) { engine.thread_ = thread; }
+    static void *wake(PresentEngine &engine) { return engine.wake_; }
+    static void *lock(PresentEngine &engine) { return engine.lock_; }
+    static void set_wake(PresentEngine &engine, void *wake) { engine.wake_ = wake; }
+    static void set_lock(PresentEngine &engine, void *lock) { engine.lock_ = lock; }
+    static void unconstruct(PresentEngine &engine, std::uint32_t slot) { engine.slots_[slot].destroy(); }
+    static Status construct(PresentEngine &engine, std::uint32_t slot)
+    {
+        return engine.slots_[slot].construct(engine.host_);
+    }
+    static QueuedPresent &slot(PresentEngine &engine, std::uint32_t slot) { return engine.slots_[slot].object(); }
 };
 
 }
@@ -254,4 +272,76 @@ TEST(present_engine, an_image_source_is_moved_out_of_its_snapshot_and_the_snapsh
   CHECK_EQ(rig.send(rig.scene.image(2u, 0x53u)), ok_nodata);
   CHECK(rig.reaches(2u, progress));
   CHECK_EQ(progress.refused(), 1u);
+  CHECK(rig.engine.invariants_hold()); }
+
+TEST(present_frames, a_plane_that_reads_no_frames_or_none_at_all_gives_none)
+{ av::PresentFrames none;
+  av::SurfacePoint  frame(7u, 1u);
+  AvFrameView       view = {};
+  CHECK(!none.map(frame, view));
+  none.unmap(frame);
+  av::RecordingContextPlane plane;
+  const av::PresentFrames   blind(plane, gpu);
+  CHECK(!blind.readable());
+  CHECK(!blind.map(frame, view));
+  blind.unmap(frame); }
+
+TEST(present_engine, an_engine_never_initialized_takes_nothing_and_a_lost_wake_event_takes_no_page)
+{ MockHost        host;
+  FenceInterrupts interrupts(host);
+  PresentScene    scene(host);
+  av::RecordingContextPlane plane;
+  av::PresentFrames snapshots(plane, gpu);
+  PresentEngine   idle(host, interrupts);
+  const GpuRequestBuilder request = scene.blt(1u, 0u, 1u);
+  MockRequest             mock(request.bytes(), request.size());
+  ControlRequest          control(host, &mock);
+  CHECK_EQ(idle.queue(control), err_invalid_parameter);
+  CHECK_STATUS(idle.attach(PresentScene::engine_page, snapshots), Status::invalid_state);
+  Rig rig;
+  void *const wake = PresentEngineProbe::wake(rig.engine);
+  PresentEngineProbe::set_wake(rig.engine, nullptr);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::invalid_state);
+  PresentEngineProbe::set_wake(rig.engine, wake);
+  CHECK_STATUS(rig.engine.attach(PresentScene::engine_page, rig.snapshots), Status::ok); }
+
+TEST(present_engine, the_invariant_catches_a_ring_of_slots_a_tally_or_a_thread_that_cannot_hold)
+{ Rig rig;
+  CHECK(rig.engine.invariants_hold());
+  PresentEngineProbe::set_first(rig.engine, PresentEngine::depth);
+  CHECK(!rig.engine.invariants_hold());
+  PresentEngineProbe::set_first(rig.engine, 0u);
+  PresentEngineProbe::set_moved(rig.engine, 1u);
+  CHECK(!rig.engine.invariants_hold());
+  PresentEngineProbe::set_moved(rig.engine, 0u);
+  PresentEngineProbe::set_held(rig.engine, PresentEngine::depth + 1u);
+  CHECK(!rig.engine.invariants_hold());
+  PresentEngineProbe::set_held(rig.engine, 0u);
+  PresentEngineProbe::set_completed(rig.engine, 1u);
+  PresentEngineProbe::set_refused(rig.engine, 2u);
+  CHECK(!rig.engine.invariants_hold());
+  PresentEngineProbe::set_refused(rig.engine, 0u);
+  CHECK(!rig.engine.invariants_hold());
+  PresentEngineProbe::set_counted(rig.engine, 1u);
+  CHECK(rig.engine.invariants_hold());
+  PresentEngineProbe::set_completed(rig.engine, 0u);
+  PresentEngineProbe::set_counted(rig.engine, 0u);
+  PresentEngineProbe::unconstruct(rig.engine, 3u);
+  CHECK(!rig.engine.invariants_hold());
+  CHECK_STATUS(PresentEngineProbe::construct(rig.engine, 3u), Status::ok);
+  CHECK(rig.engine.invariants_hold());
+  PresentEngineProbe::slot(rig.engine, 0u).follow_with_refusal();
+  CHECK(!rig.engine.invariants_hold());
+  PresentEngineProbe::slot(rig.engine, 0u).release();
+  void *const lock = PresentEngineProbe::lock(rig.engine);
+  void *const wake = PresentEngineProbe::wake(rig.engine);
+  PresentEngineProbe::set_thread(rig.engine, &rig);
+  PresentEngineProbe::set_lock(rig.engine, nullptr);
+  CHECK(!rig.engine.invariants_hold());
+  PresentEngineProbe::set_lock(rig.engine, lock);
+  PresentEngineProbe::set_wake(rig.engine, nullptr);
+  CHECK(!rig.engine.invariants_hold());
+  PresentEngineProbe::set_wake(rig.engine, wake);
+  CHECK(!rig.engine.invariants_hold());
+  PresentEngineProbe::set_thread(rig.engine, nullptr);
   CHECK(rig.engine.invariants_hold()); }
