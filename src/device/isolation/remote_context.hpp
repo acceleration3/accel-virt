@@ -48,6 +48,8 @@ private:
     ContextLabel     label_;
     void            *doorbell_event_;
     bool             lost_;
+
+    friend struct RemoteContextProbe;
 };
 
 }

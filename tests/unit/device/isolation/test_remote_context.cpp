@@ -22,7 +22,17 @@
 #include <cstdint>
 #include <cstring>
 
+namespace av {
+
+struct RemoteContextProbe {
+    static void set_lost(RemoteContext &context, bool lost) { context.lost_ = lost; }
+    static void unbind_binding(RemoteContext &context) { context.binding_.unbind(); }
+};
+
+}
+
 using av::BlobTable;
+using av::RemoteContextProbe;
 using av::MockHost;
 using av::RemoteContext;
 using av::ScriptedRendererPeer;
@@ -309,3 +319,18 @@ TEST(remote_context_unbind, releases_pins_and_doorbell_and_sends_nothing)
   CHECK_EQ(fixture.host().live_doorbells(), 0u);
   CHECK_EQ(fixture.host().live_events(), fixture.events());
   CHECK_EQ(fixture.peer().delivered(), 2u); }
+
+TEST(remote_context_invariants, a_doorbell_held_by_a_context_that_is_lost_or_unbound_is_detected)
+{ Fixture fixture;
+  Status outcome = Status::invalid_state;
+  CHECK_STATUS(fixture.bind(outcome), Status::ok);
+  CHECK_STATUS(outcome, Status::ok);
+  CHECK(fixture.context().invariants_hold());
+  RemoteContextProbe::set_lost(fixture.context(), true);
+  CHECK(!fixture.context().invariants_hold());
+  RemoteContextProbe::set_lost(fixture.context(), false);
+  CHECK(fixture.context().invariants_hold());
+  RemoteContextProbe::unbind_binding(fixture.context());
+  CHECK(!fixture.context().invariants_hold());
+  fixture.context().unbind();
+  CHECK(fixture.context().invariants_hold()); }

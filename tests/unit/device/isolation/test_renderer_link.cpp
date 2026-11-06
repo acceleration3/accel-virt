@@ -82,6 +82,13 @@ TEST(renderer_link_post, refuses_a_body_too_long_or_missing)
   CHECK_EQ(fixture.peer().delivered(), 1u);
   CHECK_EQ(fixture.peer().sequence_at(0u), 1u); }
 
+TEST(renderer_link_post, a_kind_the_protocol_does_not_have_is_not_framed_or_sent)
+{ Fixture fixture;
+  const std::uint8_t body[4] = {1u, 2u, 3u, 4u};
+  CHECK_STATUS(fixture.link().post(static_cast<Kind>(0x7777u), body, sizeof body, nullptr, 0u),
+               Status::invalid_parameter);
+  CHECK_EQ(fixture.peer().delivered(), 0u); }
+
 TEST(renderer_link_post, a_renderer_that_is_gone_is_not_found)
 { Fixture fixture;
   fixture.host().renderer_gone();
