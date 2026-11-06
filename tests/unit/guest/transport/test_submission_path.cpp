@@ -5,15 +5,21 @@
 #include "guest/transport/transport_ring.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "harness/transport/recording_release_route.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/resources/scanout_target.hpp"
+#include "proto/escape/release_record.hpp"
 #include "proto/resources/surface_layout.hpp"
+#include "proto/submission/submission_descriptor.hpp"
 #include "proto/submission/ring_header.hpp"
 
 #include <cstdint>
 
 using av::DoorbellStatus;
 using av::GuestDoorbell;
+using av::ReleaseRecord;
+using av::RecordingReleaseRoute;
+using av::SubmissionDescriptor;
 using av::MockKmt;
 using av::RingHeader;
 using av::Status;
@@ -235,4 +241,85 @@ TEST(submission_path, a_published_tail_skips_the_kernel_while_the_worker_is_awak
   CHECK_EQ(submitting.path().through_doorbell(), 0u);
   CHECK_EQ(submitting.path().submitted(), 3u);
   CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit), 2u);
+  CHECK(submitting.path().invariants_hold()); }
+
+namespace {
+
+void describe(std::uint8_t (&bytes)[SubmissionDescriptor::encoded_size], std::uint64_t fence, std::uint64_t begin,
+              std::uint64_t end)
+{
+    CHECK_STATUS(SubmissionDescriptor(fence, begin, end).encode(bytes, sizeof bytes), Status::ok);
+}
+
+}
+
+TEST(submission_path, a_release_route_takes_the_submission_as_a_record_naming_the_ring_and_the_batch)
+{ Submitting submitting;
+  RecordingReleaseRoute route;
+  CHECK(!submitting.path().releases());
+  submitting.path().release_through(&route, 7u);
+  CHECK(submitting.path().releases());
+  std::uint8_t descriptor[SubmissionDescriptor::encoded_size] = {};
+  describe(descriptor, 5u, 64u, 192u);
+  CHECK_STATUS(submitting.write_batch(5u), Status::ok);
+  CHECK_STATUS(submitting.path().submit(submitting.context(), submitting.dma_address(), descriptor, sizeof descriptor, 5u),
+               Status::ok);
+  CHECK_EQ(route.releases(), 1u);
+  CHECK_EQ(route.last().ring(), 7u);
+  CHECK_EQ(route.last().batch().fence_id(), 5u);
+  CHECK_EQ(route.last().batch().begin(), 64u);
+  CHECK_EQ(route.last().batch().end(), 192u);
+  CHECK_EQ(submitting.path().through_release(), 1u);
+  CHECK_EQ(submitting.path().submitted(), 1u);
+  CHECK_EQ(submitting.path().through_kernel(), 0u);
+  CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit), 0u);
+  CHECK(submitting.path().invariants_hold()); }
+
+TEST(submission_path, a_route_that_does_not_support_the_submission_leaves_it_to_the_kernel)
+{ Submitting submitting;
+  RecordingReleaseRoute route;
+  route.answer(Status::not_supported);
+  submitting.path().release_through(&route, 1u);
+  std::uint8_t descriptor[SubmissionDescriptor::encoded_size] = {};
+  describe(descriptor, 1u, 0u, 32u);
+  CHECK_STATUS(submitting.write_batch(1u), Status::ok);
+  CHECK_STATUS(submitting.path().submit(submitting.context(), submitting.dma_address(), descriptor, sizeof descriptor, 1u),
+               Status::ok);
+  CHECK_EQ(route.releases(), 1u);
+  CHECK_EQ(submitting.path().through_release(), 0u);
+  CHECK_EQ(submitting.path().through_kernel(), 1u);
+  CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit), 1u);
+  CHECK(submitting.path().invariants_hold()); }
+
+TEST(submission_path, a_route_that_fails_stops_the_submission_and_a_bad_descriptor_never_reaches_it)
+{ Submitting submitting;
+  RecordingReleaseRoute route;
+  submitting.path().release_through(&route, 1u);
+  std::uint8_t descriptor[SubmissionDescriptor::encoded_size] = {};
+  describe(descriptor, 1u, 0u, 32u);
+  route.answer(Status::conflict);
+  CHECK_STATUS(submitting.path().submit(submitting.context(), submitting.dma_address(), descriptor, sizeof descriptor, 1u),
+               Status::conflict);
+  CHECK_EQ(submitting.path().submitted(), 0u);
+  const std::uint8_t garbage[24] = {};
+  route.answer(Status::ok);
+  const std::uint32_t asked = route.releases();
+  CHECK_STATUS(submitting.path().submit(submitting.context(), submitting.dma_address(), garbage, sizeof garbage, 2u),
+               Status::invalid_parameter);
+  CHECK_EQ(route.releases(), asked);
+  CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit), 0u); }
+
+TEST(submission_path, releasing_through_nothing_returns_the_path_to_the_doorbell_and_the_kernel)
+{ Submitting submitting;
+  RecordingReleaseRoute route;
+  submitting.path().release_through(&route, 3u);
+  submitting.path().release_through(nullptr, 3u);
+  CHECK(!submitting.path().releases());
+  const std::uint8_t descriptor[24] = {};
+  CHECK_STATUS(submitting.write_batch(1u), Status::ok);
+  CHECK_STATUS(submitting.path().submit(submitting.context(), submitting.dma_address(), descriptor, sizeof descriptor, 1u),
+               Status::ok);
+  CHECK_EQ(route.releases(), 0u);
+  CHECK_EQ(submitting.path().through_release(), 0u);
+  CHECK_EQ(submitting.path().through_kernel(), 1u);
   CHECK(submitting.path().invariants_hold()); }

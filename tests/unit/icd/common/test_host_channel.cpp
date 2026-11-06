@@ -681,3 +681,64 @@ TEST(host_channel, a_closed_channel_sends_nothing_of_its_own)
   CHECK(std::strcmp(rig.locked(), "") == 0);
   CHECK_EQ(rig.commands(), 0u);
   rig.check_nothing_held(channel); }
+
+TEST(host_channel_memory, retired_memory_stays_open_until_the_channel_reclaims_it)
+{ Rig rig;
+  HostChannel channel(rig.platform(), rig.lines(), plain(), rig.lock());
+  CHECK_STATUS(channel.open(rig.device()), Status::ok);
+  HostAllocation *first = nullptr;
+  HostAllocation *second = nullptr;
+  rig.host().blob_import(0u, first_memory);
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, first), Status::ok);
+  rig.host().blob_import(0u, second_memory);
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, second), Status::ok);
+  channel.retire_memory(*first);
+  channel.retire_memory(*second);
+  CHECK_EQ(channel.memories(), 2u);
+  CHECK(channel.find_memory(first_memory, owner) == first);
+  CHECK(channel.invariants_hold());
+  rig.host().nop();
+  rig.host().nop();
+  channel.reclaim_retired();
+  CHECK_EQ(channel.memories(), 0u);
+  CHECK(channel.find_memory(first_memory, owner) == nullptr);
+  CHECK(channel.find_memory(second_memory, owner) == nullptr);
+  CHECK_EQ(rig.command_id_at(rig.commands() - 1u), av::CommandHeader::release_blob_id);
+  CHECK(channel.invariants_hold());
+  channel.reclaim_retired();
+  CHECK_EQ(channel.memories(), 0u);
+  channel.close(false);
+  rig.check_nothing_held(channel, memory_tables); }
+
+TEST(host_channel_memory, memory_retired_after_a_fence_waits_for_that_fence_and_comes_back_oldest_first)
+{ Rig rig;
+  HostChannel channel(rig.platform(), rig.lines(), plain(), rig.lock());
+  CHECK_STATUS(channel.open(rig.device()), Status::ok);
+  HostAllocation *early = nullptr;
+  HostAllocation *late = nullptr;
+  rig.host().blob_import(0u, first_memory);
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, early), Status::ok);
+  rig.host().blob_import(0u, second_memory);
+  CHECK_STATUS(channel.open_memory(4096u, upload, owner, late), Status::ok);
+  CHECK_STATUS(channel.retire_memory_after(*late, 9u), Status::ok);
+  CHECK_STATUS(channel.retire_memory_after(*early, 4u), Status::ok);
+  channel.reclaim_retired_through(3u);
+  CHECK_EQ(channel.memories(), 2u);
+  rig.host().nop();
+  channel.reclaim_retired_through(4u);
+  CHECK_EQ(channel.memories(), 1u);
+  CHECK(channel.find_memory(first_memory, owner) == nullptr);
+  CHECK(channel.find_memory(second_memory, owner) == late);
+  HostAllocation *taken = nullptr;
+  std::uint64_t   fence = 0u;
+  CHECK(channel.take_oldest_retired(taken, fence));
+  CHECK(taken == late);
+  CHECK_EQ(fence, 9u);
+  CHECK(!channel.take_oldest_retired(taken, fence));
+  channel.reclaim_retired_through(100u);
+  CHECK_EQ(channel.memories(), 1u);
+  CHECK(channel.invariants_hold());
+  rig.host().nop();
+  CHECK_STATUS(channel.close_memory(*late), Status::ok);
+  channel.close(false);
+  rig.check_nothing_held(channel, memory_tables); }

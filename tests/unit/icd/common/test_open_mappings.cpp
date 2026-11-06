@@ -163,3 +163,20 @@ TEST(open_mappings, a_map_with_no_memory_for_it_is_refused_and_the_others_kept)
   CHECK_STATUS(maps.stage(mapping(2u, 0u, discard), opened), Status::ok);
   CHECK_EQ(maps.count(), 9u);
   CHECK(maps.invariants_hold()); }
+
+TEST(open_mappings, reflagging_a_map_changes_its_flags_and_nothing_else)
+{ MockPlatform platform;
+  Maps maps(platform);
+  StagedMapping *staged = nullptr;
+  CHECK_STATUS(maps.stage(StagedMapping(6u, 2u, 16u, bytes, discard), staged), Status::ok);
+  std::uint8_t *const at = staged->at();
+  staged->reflag(no_overwrite);
+  CHECK_EQ(staged->flags(), no_overwrite);
+  CHECK_EQ(staged->object(), 6u);
+  CHECK_EQ(staged->subresource(), 2u);
+  CHECK_EQ(staged->offset(), 16u);
+  CHECK_EQ(staged->bytes(), bytes);
+  CHECK(staged->at() == at);
+  CHECK(maps.find(6u, 2u)->flags() == no_overwrite);
+  CHECK(maps.invariants_hold());
+  maps.close(*staged); }

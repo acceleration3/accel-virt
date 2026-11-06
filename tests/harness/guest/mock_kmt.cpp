@@ -1435,6 +1435,7 @@ std::uint32_t MockKmt::open_objects() const
 }
 
 std::uint32_t MockKmt::misuses() const { return misuses_; }
+std::uint32_t MockKmt::sleeps() const { return sleeps_; }
 
 std::uint32_t MockKmt::view_filled() const
 {
@@ -1564,7 +1565,7 @@ Status MockKmt::query_native_gpu_fences(std::uint32_t, bool &supported)
     return Status::ok;
 }
 
-void MockKmt::sleep_briefly() {}
+void MockKmt::sleep_briefly() { sleeps_++; }
 
 Status MockKmt::primary_display_luid(std::uint64_t &answered)
 {

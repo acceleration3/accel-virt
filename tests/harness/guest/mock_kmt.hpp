@@ -269,6 +269,7 @@ public:
     std::uint32_t calls(Call call) const;
     std::uint32_t open_objects() const;
     std::uint32_t misuses() const;
+    std::uint32_t sleeps() const;
     std::uint32_t view_filled() const;
     std::uint8_t *view_of(std::uint32_t allocation);
     const std::uint8_t *last_private() const;
@@ -429,6 +430,7 @@ private:
     std::uint32_t success_code_;
     std::uint32_t last_code_;
     std::uint32_t misuses_;
+    std::uint32_t sleeps_ = 0u;
     std::uint64_t ticks_;
     mutable std::uint64_t read_ticks_;
     static constexpr std::uint32_t spin_reads = 64u;

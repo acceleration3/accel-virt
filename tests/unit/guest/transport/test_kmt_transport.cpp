@@ -11,6 +11,7 @@
 #include "harness/guest/framed_block_probe.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "harness/transport/recording_release_route.hpp"
 #include "proto/escape/context_views_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/client/client_blob_arena.hpp"
@@ -36,6 +37,7 @@ using av::KmtTransport;
 using av::DoorbellStatus;
 using av::MockKmt;
 using av::PciIdentity;
+using av::RecordingReleaseRoute;
 using av::ReplyHeader;
 using av::AvContextRecord;
 using av::Status;
@@ -2202,3 +2204,129 @@ TEST(kmt_transport_holding, the_invariant_catches_more_held_than_the_block_holds
   CHECK(!holding.transport().invariants_hold());
   holding.transport().hold_in(block, sizeof block);
   CHECK(holding.transport().invariants_hold()); }
+
+TEST(kmt_transport_release, a_transport_that_is_not_established_or_reads_no_fence_page_takes_no_route)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  RecordingReleaseRoute route;
+  CHECK_STATUS(transport.release_by(route), Status::not_supported);
+  CHECK(!transport.routed_by(route));
+  CHECK(!transport.releases_by_packet());
+  fixture.kmt().answer_views_up_to(av::ContextViewsRecord::without_fence);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK_STATUS(transport.release_by(route), Status::not_supported);
+  CHECK(!transport.routed_by(route));
+  CHECK(!transport.releases_by_packet());
+  transport.teardown(); }
+
+TEST(kmt_transport_release, a_route_is_taken_once_a_second_waits_and_a_third_is_refused)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  RecordingReleaseRoute first;
+  RecordingReleaseRoute second;
+  RecordingReleaseRoute third;
+  CHECK_STATUS(transport.release_by(first), Status::ok);
+  CHECK(transport.routed_by(first));
+  CHECK(transport.releases_by_packet());
+  CHECK_STATUS(transport.release_by(first), Status::ok);
+  CHECK_STATUS(transport.release_by(second), Status::ok);
+  CHECK(transport.routed_by(second));
+  CHECK_STATUS(transport.release_by(second), Status::ok);
+  CHECK_STATUS(transport.release_by(third), Status::no_space);
+  CHECK(!transport.routed_by(third));
+  CHECK(transport.invariants_hold());
+  transport.teardown();
+  CHECK(!transport.releases_by_packet());
+  CHECK(!transport.routed_by(first)); }
+
+TEST(kmt_transport_release, a_routed_submission_reaches_the_route_and_not_the_kernel)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  RecordingReleaseRoute route;
+  CHECK_STATUS(transport.release_by(route), Status::ok);
+  const std::uint32_t submitted = fixture.kmt().calls(MockKmt::Call::submit);
+  WireWriter          writer = transport.request_writer();
+  writer.write_u32(3u);
+  CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  CHECK_EQ(route.releases(), 1u);
+  CHECK_EQ(route.last().ring(), transport.ring());
+  CHECK_EQ(route.last().batch().fence_id(), transport.published_fence());
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), submitted);
+  CHECK_EQ(transport.submissions_through_kernel(), 0u);
+  CHECK(transport.invariants_hold());
+  transport.teardown(); }
+
+TEST(kmt_transport_release, letting_go_of_the_standby_keeps_the_route_and_letting_go_of_the_route_promotes_the_standby)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  RecordingReleaseRoute first;
+  RecordingReleaseRoute second;
+  CHECK_STATUS(transport.release_by(first), Status::ok);
+  CHECK_STATUS(transport.release_by(second), Status::ok);
+  transport.release_directly(second);
+  CHECK(!transport.routed_by(second));
+  CHECK(transport.routed_by(first));
+  CHECK(transport.releases_by_packet());
+  CHECK_STATUS(transport.release_by(second), Status::ok);
+  transport.release_directly(first);
+  CHECK(!transport.routed_by(first));
+  CHECK(transport.routed_by(second));
+  CHECK(transport.releases_by_packet());
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(3u);
+  CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  CHECK_EQ(second.releases(), 1u);
+  CHECK_EQ(first.releases(), 0u);
+  transport.teardown(); }
+
+TEST(kmt_transport_release, the_last_route_is_let_go_after_the_published_work_completed_and_submission_returns_to_the_kernel)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u, reply_bytes, transport_staging,
+                         sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  RecordingReleaseRoute route;
+  CHECK_STATUS(transport.release_by(route), Status::ok);
+  transport.release_directly(route);
+  CHECK(!transport.routed_by(route));
+  CHECK(!transport.releases_by_packet());
+  transport.release_directly(route);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(3u);
+  CHECK(transport.send_async(0x30001u, writer) == TransportResult::ok);
+  CHECK_EQ(route.releases(), 0u);
+  CHECK_EQ(transport.submissions_through_kernel(), 1u);
+  CHECK(transport.invariants_hold());
+  transport.teardown(); }
+
+TEST(kmt_transport_holding, the_covering_fence_counts_the_batch_a_flush_would_publish)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  av::MockPlatform memory;
+  std::uint8_t     block[4096] = {};
+  Holding          holding(fixture, memory, 16u, block, sizeof block);
+  KmtTransport    &transport = holding.transport();
+  CHECK_EQ(transport.covering_fence(), transport.published_fence());
+  CHECK(holding.send(0x30001u, 4u) == TransportResult::ok);
+  CHECK_EQ(transport.covering_fence(), transport.published_fence() + 1u);
+  const std::uint64_t published = transport.published_fence();
+  CHECK(transport.flush() == TransportResult::ok);
+  CHECK_EQ(transport.published_fence(), published + 1u);
+  CHECK_EQ(transport.covering_fence(), transport.published_fence());
+  CHECK(transport.invariants_hold()); }
