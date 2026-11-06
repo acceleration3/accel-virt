@@ -1,3 +1,4 @@
+#include "core/support/keyed_slots.hpp"
 #include "core/support/status.hpp"
 #include "device/replay/recording_filter.hpp"
 #include "device/recording/record_header.hpp"
@@ -186,11 +187,17 @@ private:
 
 namespace av {
 
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.count_ = count; }
+};
+
 struct RecordingFilterProbe {
     static void invert(RecordingFilter &filter) { filter.first_fence_ = 9u; filter.last_fence_ = 8u; }
 };
 
 struct RecordingPrinterProbe {
+    static void break_the_api_table(RecordingPrinter &printer) { KeyedSlotsProbe::corrupt_count(printer.apis_, 7u); }
     static void show_too_much(RecordingPrinter &printer)
     {
         printer.payload_bytes_ = RecordingPrinter::most_payload_bytes + 1u;
@@ -564,4 +571,14 @@ TEST(recording_printer_invariants, catch_a_filter_that_stopped_making_sense)
   RecordingPrinter printer(reader, filter, 0u, memory);
   CHECK(printer.invariants_hold());
   av::RecordingFilterProbe::invert(filter);
+  CHECK(!printer.invariants_hold()); }
+
+TEST(recording_printer_invariants, catch_a_table_of_apis_that_lost_count)
+{ const Written        written;
+  const RecordingFilter filter;
+  RecordingReader      reader(written.bytes(), written.length());
+  MockHost             memory;
+  RecordingPrinter     printer(reader, filter, 0u, memory);
+  CHECK(printer.invariants_hold());
+  av::RecordingPrinterProbe::break_the_api_table(printer);
   CHECK(!printer.invariants_hold()); }

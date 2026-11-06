@@ -199,6 +199,16 @@ struct RecordingReplayProbe {
             replay.findings_text_.at(0u).text_[RecordingReplay::finding_bytes - 1u] = 'x';
     }
     static void forget_a_context(RecordingReplay &replay) { replay.contexts_ = 0u; }
+    static void unmake_a_context(RecordingReplay &replay)
+    {
+        ReplayContext *const *const found = replay.by_context_.at(replay.by_context_.next_live(0u));
+        (*found)->destroy(replay.library_);
+    }
+    static void lose_a_context_from_the_index(RecordingReplay &replay)
+    {
+        static_cast<void>(replay.by_context_.erase(replay.by_context_.key_at(replay.by_context_.next_live(0u))));
+    }
+    static void forget_the_findings(RecordingReplay &replay) { replay.findings_ = 0u; }
 };
 
 }
@@ -910,3 +920,59 @@ TEST(recording_replay_run, a_command_in_pieces_is_unreplayable_and_an_answer_par
         nullptr);
   CHECK_EQ(ops.executed(), 0u);
   CHECK(replay.invariants_hold()); }
+
+TEST(recording_replay_invariants, catch_a_context_that_was_unmade_one_the_index_lost_and_findings_that_were_not_counted)
+{ Written written;
+  one_batch(written, 0x44u);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  { Handmade made;
+    made.setup(3u, SubApi::vulkan);
+    RecordingReader reader(made.bytes(), made.length());
+    MockHost memory;
+    RecordingReplay replay(library, memory);
+    const RecordingFilter filter;
+    CHECK_STATUS(replay.run(reader, filter), Status::ok);
+    CHECK_EQ(replay.findings(), 0u);
+    CHECK(replay.invariants_hold());
+    av::RecordingReplayProbe::unmake_a_context(replay);
+    CHECK(!replay.invariants_hold()); }
+  { RecordingReader reader(written.bytes(), written.length());
+    MockHost memory;
+    RecordingReplay replay(library, memory);
+    const RecordingFilter filter;
+    CHECK_STATUS(replay.run(reader, filter), Status::ok);
+    av::RecordingReplayProbe::lose_a_context_from_the_index(replay);
+    CHECK(!replay.invariants_hold()); }
+  { Handmade           made;
+    const std::uint8_t nothing[1] = {};
+    made.add(av::RecordKind::context_setup, 1u, 0u, nothing, 0u);
+    RecordingReader reader(made.bytes(), made.length());
+    MockHost memory;
+    RecordingReplay replay(library, memory);
+    const RecordingFilter filter;
+    CHECK_STATUS(replay.run(reader, filter), Status::ok);
+    CHECK_EQ(replay.findings(), 1u);
+    av::RecordingReplayProbe::forget_the_findings(replay);
+    CHECK(!replay.invariants_hold()); } }
+
+TEST(recording_replay_run, a_host_with_no_memory_to_replay_a_context_in_makes_a_finding_and_goes_on)
+{ Written written;
+  one_batch(written, 0x44u);
+  MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  std::uint32_t without_memory = 0u;
+  for (std::uint32_t nth = 1u; nth <= 4u; nth++) {
+      RecordingReader reader(written.bytes(), written.length());
+      MockHost memory;
+      RecordingReplay replay(library, memory);
+      const RecordingFilter filter;
+      memory.fail_allocation_at(nth);
+      CHECK_STATUS(replay.run(reader, filter), Status::ok);
+      CHECK(replay.invariants_hold());
+      for (std::uint32_t index = 0u; index < replay.findings(); index++)
+          if (std::strstr(replay.finding(index), "no memory to replay it in") != nullptr) without_memory++;
+  }
+  CHECK(without_memory >= 2u); }

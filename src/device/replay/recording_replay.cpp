@@ -217,7 +217,7 @@ void RecordingReplay::keep_finding(const TextBuffer &text)
     AV_SCOPE("RecordingReplay::keep_finding");
     findings_++;
     Finding kept = {};
-    for (size_t offset = 0u; offset < text.length() && offset + 1u < finding_bytes; offset++)
+    for (size_t offset = 0u; offset < text.length(); offset++)
         kept.text_[offset] = text.text()[offset];
     static_cast<void>(findings_text_.append(kept));
 }

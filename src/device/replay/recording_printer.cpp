@@ -196,7 +196,7 @@ void RecordingPrinter::append_record(TextBuffer &text) const
         text.append_decimal(record_.length());
         text.append(" bytes");
         const uint32_t shown = record_.length() < payload_bytes_ ? record_.length() : payload_bytes_;
-        if (shown == 0u || payload_ == nullptr) return;
+        if (shown == 0u) return;
         text.append(" ");
         for (uint32_t index = 0u; index < shown; index++) text.append_hex(payload_[index], 2u);
         return;
