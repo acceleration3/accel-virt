@@ -6,8 +6,20 @@
 #include <cstdint>
 #include <cstring>
 
+namespace av {
+
+struct WireArenaProbe {
+    static void set_chunks(WireArena &arena, std::size_t chunks) { arena.chunks_ = chunks; }
+    static void set_more(WireArena &arena, BlockSource *more) { arena.more_ = more; }
+    static BlockSource *more(WireArena &arena) { return arena.more_; }
+    static void set_room(WireArena &arena, std::uint8_t *room) { arena.room_ = room; }
+};
+
+}
+
 using av::Status;
 using av::WireArena;
+using av::WireArenaProbe;
 
 namespace {
 
@@ -184,4 +196,54 @@ TEST(wire_arena, an_overflow_the_heap_refuses_is_a_refusal)
   CHECK_EQ(arena.chunks(), 1u);
   arena.attach(block, sizeof block);
   CHECK_EQ(arena.chunks(), 0u);
+  CHECK(arena.invariants_hold()); }
+
+namespace {
+
+struct alignas(64) Wide {
+    std::uint8_t bytes[64];
+};
+
+}
+
+TEST(wire_arena, a_chunk_cannot_honour_an_alignment_wider_than_its_header)
+{ av::MockPlatform platform;
+  alignas(64) std::uint8_t block[64];
+  WireArena arena(block, sizeof block);
+  arena.overflow_into(platform);
+  CHECK(arena.allocate<Wide>(1u) == reinterpret_cast<Wide *>(block));
+  CHECK(arena.allocate<Wide>(1u) == nullptr);
+  CHECK_EQ(arena.refusals(), 1u);
+  CHECK_EQ(arena.chunks(), 0u);
+  CHECK(arena.invariants_hold()); }
+
+TEST(wire_arena, a_size_the_chunk_header_would_overflow_is_a_refusal)
+{ av::MockPlatform platform;
+  std::uint8_t block[16];
+  WireArena arena(block, sizeof block);
+  arena.overflow_into(platform);
+  CHECK(arena.allocate_chars(~std::size_t{0}) == nullptr);
+  CHECK_EQ(arena.refusals(), 1u);
+  CHECK_EQ(platform.allocations_made(), 0u);
+  CHECK(arena.invariants_hold()); }
+
+TEST(wire_arena_invariants, chunks_that_disagree_with_the_chain_the_overflow_or_the_room_are_detected)
+{ av::MockPlatform platform;
+  std::uint8_t block[16];
+  WireArena arena(block, sizeof block);
+  arena.overflow_into(platform);
+  CHECK(arena.allocate<std::uint8_t>(17u) != nullptr);
+  CHECK(arena.invariants_hold());
+  WireArenaProbe::set_chunks(arena, 0u);
+  CHECK(!arena.invariants_hold());
+  WireArenaProbe::set_chunks(arena, 1u);
+  av::BlockSource *const more = WireArenaProbe::more(arena);
+  WireArenaProbe::set_more(arena, nullptr);
+  CHECK(!arena.invariants_hold());
+  WireArenaProbe::set_more(arena, more);
+  CHECK(arena.invariants_hold());
+  arena.reset();
+  WireArenaProbe::set_room(arena, block + 1u);
+  CHECK(!arena.invariants_hold());
+  WireArenaProbe::set_room(arena, block);
   CHECK(arena.invariants_hold()); }

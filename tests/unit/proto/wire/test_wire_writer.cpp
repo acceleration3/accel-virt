@@ -14,6 +14,7 @@ struct WireWriterProbe {
     explicit WireWriterProbe(WireWriter &target) : writer(target) {}
     void set_offset(std::size_t offset) { writer.offset_ = offset; }
     void drop_bytes() { writer.bytes_ = nullptr; }
+    void claim_spilled() { writer.spilled_ = true; }
     WireWriter &writer;
 };
 
@@ -224,3 +225,44 @@ TEST(wire_writer, a_writer_without_a_spill_never_reads_as_spilled)
   CHECK(!writer.spilled());
   CHECK(writer.bytes() == buffer.data());
   CHECK(writer.invariants_hold()); }
+
+namespace {
+class ShortSpill final : public av::WireSpill {
+public:
+    std::uint8_t *grow(const std::uint8_t *, std::size_t, std::size_t, std::size_t &capacity) override
+    {
+        capacity = 1u;
+        return block_;
+    }
+    std::uint8_t block_[1] = {};
+};
+
+}
+
+TEST(wire_writer, a_writer_with_a_spill_and_no_room_of_its_own_spills_at_the_first_write)
+{ OneBlockSpill spill;
+  WireWriter    writer(nullptr, 64u, spill);
+  CHECK(writer.invariants_hold());
+  writer.write_u32(0x04030201u);
+  CHECK_STATUS(writer.status(), Status::ok);
+  CHECK(writer.spilled());
+  CHECK(writer.bytes() == spill.block_);
+  CHECK_EQ(spill.block_[3], 4u);
+  CHECK(writer.invariants_hold()); }
+
+TEST(wire_writer, a_spill_that_hands_back_less_than_wanted_latches_too_large)
+{ GuardedBuffer buffer(2u);
+  ShortSpill    spill;
+  WireWriter    writer(buffer.data(), buffer.size(), spill);
+  writer.write_u32(1u);
+  CHECK_STATUS(writer.status(), Status::too_large);
+  CHECK(!writer.spilled());
+  CHECK(writer.bytes() == buffer.data());
+  CHECK_EQ(writer.offset(), 0u);
+  CHECK(writer.invariants_hold()); }
+
+TEST(wire_writer_invariants, a_spilled_writer_without_a_spill_is_detected)
+{ GuardedBuffer buffer(4u);
+  WireWriter writer(buffer.data(), buffer.size());
+  WireWriterProbe(writer).claim_spilled();
+  CHECK(!writer.invariants_hold()); }

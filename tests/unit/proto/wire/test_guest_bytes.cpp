@@ -4,7 +4,18 @@
 
 #include <cstdint>
 
+namespace av {
+
+struct GuestBytesProbe {
+    static void set_memory(GuestBytes &bytes, std::uint32_t slot, std::uint8_t *memory) { bytes.slots_[slot].memory_ = memory; }
+    static void set_length(GuestBytes &bytes, std::uint32_t slot, std::uint64_t length) { bytes.slots_[slot].length_ = length; }
+    static void set_first(GuestBytes &bytes, std::uint32_t slot, std::uint32_t first) { bytes.slots_[slot].first_ = first; }
+};
+
+}
+
 using av::GuestBytes;
+using av::GuestBytesProbe;
 using av::Status;
 
 namespace {
@@ -176,3 +187,47 @@ TEST(guest_bytes_table, every_slot_can_be_bound_and_released_in_any_order)
       CHECK(bytes.invariants_hold());
   }
   CHECK_EQ(bytes.segments(), 0u); }
+
+TEST(guest_bytes_holds, a_pointer_inside_a_later_slot_of_a_long_segment_is_held)
+{ GuestBytes bytes;
+  CHECK_STATUS(bytes.bind(0u, first_memory, 2u * slot), Status::ok);
+  CHECK(bytes.holds(first_memory + slot + 7u));
+  CHECK(bytes.holds(first_memory + 2u * slot - 1u));
+  CHECK(!bytes.holds(first_memory + 2u * slot)); }
+
+TEST(guest_bytes_invariants, an_empty_slot_that_keeps_a_length_or_a_first_is_broken)
+{ GuestBytes kept;
+  GuestBytesProbe::set_length(kept, 0u, 5u);
+  CHECK(!kept.invariants_hold());
+  GuestBytes first;
+  GuestBytesProbe::set_first(first, 0u, 3u);
+  CHECK(!first.invariants_hold()); }
+
+TEST(guest_bytes_invariants, a_backed_slot_must_belong_to_a_segment_that_starts_before_it_and_covers_it)
+{ GuestBytes lengthless;
+  GuestBytesProbe::set_memory(lengthless, 0u, first_memory);
+  CHECK(!lengthless.invariants_hold());
+
+  GuestBytes ahead;
+  GuestBytesProbe::set_memory(ahead, 2u, first_memory);
+  GuestBytesProbe::set_length(ahead, 2u, 4096u);
+  GuestBytesProbe::set_first(ahead, 2u, 5u);
+  CHECK(!ahead.invariants_hold());
+
+  GuestBytes short_of_it;
+  GuestBytesProbe::set_memory(short_of_it, 2u, first_memory);
+  GuestBytesProbe::set_length(short_of_it, 2u, 4096u);
+  CHECK(!short_of_it.invariants_hold());
+
+  GuestBytes swapped;
+  CHECK_STATUS(swapped.bind(0u, first_memory, 2u * slot), Status::ok);
+  CHECK(swapped.invariants_hold());
+  GuestBytesProbe::set_memory(swapped, 1u, second_memory);
+  CHECK(!swapped.invariants_hold());
+
+  GuestBytes chained;
+  CHECK_STATUS(chained.bind(0u, first_memory, 3u * slot), Status::ok);
+  GuestBytesProbe::set_first(chained, 2u, 1u);
+  CHECK(!chained.invariants_hold());
+  GuestBytesProbe::set_first(chained, 2u, 0u);
+  CHECK(chained.invariants_hold()); }

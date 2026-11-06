@@ -43,6 +43,8 @@ private:
 
     Slot     slots_[slot_count];
     uint32_t segments_;
+
+    friend struct GuestBytesProbe;
 };
 
 }

@@ -70,3 +70,14 @@ TEST(spill_block, no_memory_is_a_writer_that_latches_too_large)
   std::size_t capacity = 1u;
   CHECK(none.grow(room, 0u, 1u, capacity) == nullptr);
   CHECK_EQ(capacity, 0u); }
+
+TEST(spill_block, a_size_past_half_the_address_space_is_asked_for_as_stated_and_denied)
+{ MockPlatform platform;
+  SpillBlock   spill(platform);
+  platform.fail_allocation_at(1u);
+  const std::uint8_t written[4] = {1u, 2u, 3u, 4u};
+  std::size_t        capacity = 1u;
+  CHECK(spill.grow(written, sizeof written, ~std::size_t{0}, capacity) == nullptr);
+  CHECK_EQ(capacity, 0u);
+  CHECK(spill.bytes() == nullptr);
+  CHECK(spill.invariants_hold()); }
