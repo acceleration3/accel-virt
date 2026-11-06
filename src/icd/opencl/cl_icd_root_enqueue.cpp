@@ -28,7 +28,6 @@ cl_int ClIcdRoot::settle(ClientTransport &wire, ClObject &queue, const ClWaitLis
 {
     AV_SCOPE("ClIcdRoot::settle");
     GuestClContext *const context = queue.context();
-    if (context == nullptr) return CL_INVALID_COMMAND_QUEUE;
     ClHostNumbers listed_room(memory_);
     uint64_t     *listed = nullptr;
     const cl_int judged_list = wait_list(*context, waits.count(), waits.events(), listed_room, listed);

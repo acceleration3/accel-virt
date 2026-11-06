@@ -3,7 +3,9 @@
 #include "guest/kmt/pci_location.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/cl_context_rig.hpp"
 #include "harness/icd/cl_icd_rig.hpp"
+#include "icd/opencl/guest_cl_context.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/opencl/cl_devices.hpp"
 #include "icd/opencl/cl_object.hpp"
@@ -336,3 +338,18 @@ TEST(cl_devices, a_device_with_no_luid_or_an_open_object_without_users_breaks_it
   ClObject opened(dispatch, platform, ClObject::Kind::device, 0x6900u, nullptr, nullptr);
   device.opened(opened);
   CHECK(!device.invariants_hold()); }
+
+TEST(cl_devices, a_context_no_device_here_runs_is_run_by_none)
+{ MockKmt kmt;
+  av::MockPlatform platform;
+  kmt.add_adapter(on_radeon, AdapterScenario::wddm_3_2);
+  kmt.set_adapter_luid(0u, 0x22u);
+  ClDevices devices(platform, kmt);
+  { AvgpuAdapters adapters(kmt);
+    CHECK_STATUS(adapters.learn(), Status::ok);
+    devices.learn(adapters); }
+  av::ClContextRig rig;
+  av::clicd::GuestClContext context(rig.connection(), rig.platform(), rig.send_lock(), rig.blocks_lock(), rig.lines(),
+                                    rig.handles());
+  CHECK(devices.running(context) == nullptr);
+  CHECK(devices.invariants_hold()); }

@@ -1762,8 +1762,7 @@ cl_int ClIcdRoot::drain_unless_idle(ClientTransport &wire, ClObject &queue)
 {
     AV_SCOPE("ClIcdRoot::drain_unless_idle");
     if (queue.known_idle()) return CL_SUCCESS;
-    const GuestClContext *const context = queue.context();
-    const cl_int drained = drain(wire, queue.wire(), context != nullptr && context->wakes(), nullptr, 0u);
+    const cl_int drained = drain(wire, queue.wire(), queue.context()->wakes(), nullptr, 0u);
     if (drained == CL_SUCCESS) drained_queue(queue);
     return drained;
 }
@@ -1772,8 +1771,7 @@ void ClIcdRoot::drained_queue(ClObject &queue)
 {
     AV_SCOPE("ClIcdRoot::drained_queue");
     queue.idle();
-    GuestClContext *const context = queue.context();
-    if (context != nullptr && objects_.queues_idle(queue.nearest(ClObject::Kind::context))) context->reclaim();
+    if (objects_.queues_idle(queue.nearest(ClObject::Kind::context))) queue.context()->reclaim();
 }
 
 void ClIcdRoot::let_go_of_memory(GuestClContext &context, ClObject &buffer)
