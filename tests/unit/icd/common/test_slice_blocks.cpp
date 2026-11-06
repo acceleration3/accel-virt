@@ -12,6 +12,29 @@ using av::SliceChannelRig;
 using av::Status;
 using av::icd::SliceBlocks;
 
+namespace av::icd {
+struct SliceBlockProbe {
+    static void resize(SliceBlock &block, std::uint64_t bytes)
+    {
+        block.bytes_ = bytes;
+        block.ranges_.reset(0u, bytes);
+    }
+};
+
+struct SliceBlocksProbe {
+    static SliceBlock &block(SliceBlocks &blocks, std::uint32_t slot) { return blocks.blocks_[slot].object(); }
+    static void        set_total(SliceBlocks &blocks, std::uint64_t total) { blocks.total_bytes_ = total; }
+    static void        resize(SliceBlocks &blocks, std::uint32_t slot, std::uint64_t bytes)
+    {
+        blocks.total_bytes_ = blocks.total_bytes_ - blocks.blocks_[slot].object().bytes() + bytes;
+        SliceBlockProbe::resize(blocks.blocks_[slot].object(), bytes);
+    }
+};
+
+}
+
+using av::icd::SliceBlocksProbe;
+
 namespace {
 
 constexpr std::uint64_t mib = std::uint64_t{1} << 20u;
@@ -423,3 +446,83 @@ TEST(slice_blocks_close, close_unused_refuses_a_slot_nothing_holds)
   CHECK(!rig.close_unused(0u));
   CHECK(!rig.close_unused(SliceBlocks::slot_count));
   CHECK(!rig.close_unused(~0u)); }
+
+TEST(slice_blocks_open, a_free_slot_is_found_past_the_slots_in_use_without_asking_the_host_twice)
+{ Rig rig;
+  rig.open(page);
+  rig.open(page);
+  rig.open(page);
+  rig.close(1u);
+  CHECK_EQ(rig.open(page), 1u);
+  CHECK_EQ(rig.open(page), 3u);
+  CHECK(rig.blocks().invariants_hold()); }
+
+TEST(slice_blocks_free, freeing_in_a_block_that_took_nothing_leaves_it_empty_since_it_opened)
+{ Rig rig;
+  rig.open(page);
+  rig.host().clock().advance(second);
+  rig.blocks().freed(0u);
+  std::uint32_t slot = 99u;
+  rig.host().clock().advance(SliceBlocks::spare_lifetime_nanoseconds - second);
+  CHECK(rig.blocks().next_to_close(slot));
+  CHECK_EQ(slot, 0u);
+  CHECK(rig.blocks().invariants_hold()); }
+
+TEST(slice_blocks_close, the_spare_is_the_block_emptied_last_whatever_its_slot)
+{ Rig rig;
+  rig.open(page);
+  rig.open(page);
+  const std::uint64_t offset = rig.take(page);
+  rig.host().clock().advance(5u * second);
+  rig.blocks().remove(offset);
+  rig.blocks().freed(offset);
+  std::uint32_t slot = 99u;
+  rig.host().clock().advance(second);
+  CHECK(rig.blocks().next_to_close(slot));
+  CHECK_EQ(slot, 1u);
+  rig.close(1u);
+  CHECK(!rig.blocks().next_to_close(slot));
+  rig.host().clock().advance(SliceBlocks::spare_lifetime_nanoseconds - second);
+  CHECK(rig.blocks().next_to_close(slot));
+  CHECK_EQ(slot, 0u); }
+
+TEST(slice_blocks_close, a_close_the_host_answers_wrongly_is_reported_once)
+{ Rig rig;
+  rig.open(page);
+  rig.open(page);
+  CHECK_EQ(rig.host().sink().holding("could not be given back"), 0u);
+  rig.host().host().blob_import(0u, 0u);
+  rig.blocks().close(0u);
+  CHECK(!rig.blocks().holds(0u));
+  CHECK_EQ(rig.host().sink().holding("could not be given back"), 1u);
+  rig.host().host().blob_import(0u, 0u);
+  rig.blocks().close(1u);
+  CHECK(!rig.blocks().holds(1u));
+  CHECK_EQ(rig.host().sink().holding("could not be given back"), 1u);
+  CHECK_EQ(rig.blocks().open_bytes(), 0u); }
+
+TEST(slice_blocks, its_invariants_catch_a_broken_block_an_oversized_block_and_a_wrong_total)
+{ Rig rig;
+  rig.open(page);
+  rig.open(page);
+  CHECK(rig.blocks().invariants_hold());
+  const std::uint64_t held = rig.blocks().open_bytes();
+  SliceBlocksProbe::set_total(rig.blocks(), held + 1u);
+  CHECK(!rig.blocks().invariants_hold());
+  SliceBlocksProbe::set_total(rig.blocks(), held);
+  CHECK(rig.blocks().invariants_hold());
+  SliceBlocksProbe::resize(rig.blocks(), 1u, SliceBlocks::slot_bytes + page);
+  CHECK(!rig.blocks().invariants_hold());
+  SliceBlocksProbe::resize(rig.blocks(), 1u, 8u * mib);
+  CHECK(rig.blocks().invariants_hold());
+  rig.blocks().took(0u);
+  SliceBlocksProbe::block(rig.blocks(), 0u).empty_since(1u);
+  CHECK(!rig.blocks().invariants_hold()); }
+
+TEST(slice_blocks, its_invariants_catch_blocks_that_add_up_to_more_than_the_ceiling)
+{ Rig rig;
+  for (std::uint32_t opened = 0u; opened < 9u; opened++) rig.open(page);
+  CHECK(rig.blocks().invariants_hold());
+  for (std::uint32_t slot = 0u; slot < 9u; slot++) SliceBlocksProbe::resize(rig.blocks(), slot, SliceBlocks::slot_bytes);
+  CHECK_EQ(rig.blocks().open_bytes(), 9u * SliceBlocks::slot_bytes);
+  CHECK(!rig.blocks().invariants_hold()); }

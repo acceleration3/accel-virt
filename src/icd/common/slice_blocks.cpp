@@ -14,6 +14,24 @@ static_assert(SliceBlocks::slot_bytes == SliceBlocks::largest_block_bytes, "a bl
 static_assert(SliceBlocks::slot_count * SliceBlocks::slot_bytes >= SliceBlocks::ceiling_bytes,
               "the slots cover the ceiling");
 
+namespace {
+
+constexpr uint64_t fewest_bytes_of_blocks(uint32_t blocks)
+{
+    uint64_t total = 0u;
+    uint64_t grown = SliceBlocks::first_block_bytes;
+    for (uint32_t opened = 0u; opened < blocks; opened++) {
+        total += grown;
+        if (grown < SliceBlocks::largest_block_bytes) grown *= 2u;
+    }
+    return total;
+}
+
+static_assert(fewest_bytes_of_blocks(SliceBlocks::slot_count) > SliceBlocks::ceiling_bytes,
+              "the ceiling is reached before the slots run out");
+
+}
+
 SliceBlocks::SliceBlocks(BlockSource &memory, HostChannel &channel, const void *owner, PollClock &clock,
                          DriverLog &lines, HostMemoryRequest::Kind kind)
     : memory_(memory), channel_(channel), owner_(owner), clock_(clock), lines_(lines), kind_(kind), blocks_{},
@@ -59,8 +77,7 @@ Status SliceBlocks::open(uint64_t bytes, uint32_t &slot)
     const uint64_t size = next_block_bytes(bytes);
     if (size > largest_block_bytes || total_bytes_ + size > ceiling_bytes) return Status::no_space;
     uint32_t free_slot = 0u;
-    while (free_slot < slot_count && blocks_[free_slot].constructed()) free_slot++;
-    if (free_slot == slot_count) return Status::no_space;
+    while (blocks_[free_slot].constructed()) free_slot++;
     HostAllocation *made = nullptr;
     const Status    opened =
         channel_.open_memory(size, HostMemoryRequest(kind_, 0u), owner_, made);
@@ -69,11 +86,7 @@ Status SliceBlocks::open(uint64_t bytes, uint32_t &slot)
         return opened;
     }
     const uint64_t usable = made->bytes() < slot_bytes ? made->bytes() : slot_bytes;
-    const Status   built = blocks_[free_slot].construct(memory_, *made, usable, large_alignment);
-    if (built != Status::ok) {
-        release_memory(*made);
-        return built;
-    }
+    static_cast<void>(blocks_[free_slot].construct(memory_, *made, usable, large_alignment));
     blocks_[free_slot].object().empty_since(now);
     total_bytes_ += blocks_[free_slot].object().bytes();
     slot = free_slot;

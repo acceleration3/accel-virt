@@ -76,6 +76,8 @@ private:
     uint64_t                   total_bytes_;
     uint64_t                   reopen_at_;
     bool                       close_reported_;
+
+    friend struct SliceBlocksProbe;
 };
 
 }
