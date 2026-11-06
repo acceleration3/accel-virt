@@ -1,6 +1,7 @@
 #include "miniport/adapter/adapter.hpp"
 #include "miniport/adapter/debug_report.hpp"
 #include "miniport/display/display_info_response.hpp"
+#include "miniport/ddi/d3dkmdt_gdi_surface_data_record.hpp"
 #include "miniport/ddi/d3dkmdt_shadow_surface_data_record.hpp"
 #include "miniport/ddi/dxgk_allocation_info_record.hpp"
 #include "miniport/ddi/dxgk_child_container_id_record.hpp"
@@ -1902,7 +1903,7 @@ TEST(adapter_present, a_queued_blt_holds_its_packet_until_the_engine_has_moved_t
 
   fixture.serve();
   const timespec pause = {0, 100000};
-  for (std::uint32_t waited = 0u; waited < 20000u && destination.count(MappedSurface::colour) == 0u; waited++)
+  for (std::uint32_t waited = 0u; waited < 20000u && destination.count(MappedSurface::colour) < MappedSurface::side * MappedSurface::side; waited++)
       nanosleep(&pause, nullptr);
   CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
   for (std::uint32_t waited = 0u; waited < 20000u && fixture.dxgkrnl().interrupts() == before; waited++) {
@@ -5461,6 +5462,9 @@ TEST(adapter_escape, a_tail_publish_names_the_ring_of_the_context_it_is_sent_on)
   escape.hContext = nullptr;
   CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
   escape.hContext = context.hContext;
+  escape.PrivateDriverDataSize = sizeof data - 1u;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  escape.PrivateDriverDataSize = sizeof data;
   CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
   CHECK(fixture.adapter().invariants_hold());
   CHECK_EQ(nt(fixture.adapter().destroy_context(plain.hContext)), success);
@@ -5699,9 +5703,10 @@ TEST(adapter_dpc_routine, a_deadline_passed_with_the_log_budget_spent_is_let_go_
   const std::uint32_t before = fixture.dxgkrnl().interrupts();
   fixture.platform().advance_time(av::ExecutionNode::park_deadline);
   spend_log_budget(fixture);
+  const std::uint32_t logged_before = fixture.platform().logged();
   run_dpc(fixture);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 2u);
-  CHECK(!fixture.platform().logged_line("a held packet passed its deadline"));
+  CHECK_EQ(fixture.platform().logged(), logged_before);
   CHECK_EQ(nt(fixture.adapter().destroy_context(queue.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
@@ -5919,9 +5924,10 @@ TEST(adapter_overlay_ddis, a_refused_overlay_is_silent_once_the_log_budget_is_sp
   check.PlaneCount = 1u;
   check.ppPlanes = absent;
   spend_log_budget(fixture);
+  const std::uint32_t spent = fixture.platform().logged();
   CHECK_EQ(nt(fixture.adapter().check_multi_plane_overlay_support3(&check)), success);
   CHECK_EQ(check.Supported, 0);
-  CHECK(!fixture.platform().logged_line("avgpu: overlay refused")); }
+  CHECK_EQ(fixture.platform().logged(), spent); }
 
 namespace {
 
@@ -6135,3 +6141,243 @@ TEST(adapter_query_adapter_info, umd_private_offers_no_snapshots_from_an_engine_
   query.OutputDataSize = sizeof words;
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
   CHECK_EQ(words[2], 0u); }
+
+TEST(adapter_query_child_status, a_display_the_host_has_switched_off_is_not_connected)
+{ Fixture fixture;
+  fixture.answer_with(Fixture::Answer::no_scanout);
+  CHECK_EQ(fixture.start(), success);
+  DxgkChildStatusRecord status = {};
+  status.Type = 1;
+  status.HotPlugConnected = 1u;
+  CHECK_EQ(nt(fixture.adapter().query_child_status(&status, 1u)), success);
+  CHECK_EQ(status.HotPlugConnected, 0u); }
+
+namespace {
+
+class ScannedOut {
+public:
+    explicit ScannedOut(Fixture &fixture) : fixture_(fixture), primary_(fixture, 1280u, 800u)
+    {
+        CHECK_EQ(commit(fixture, 1280u, 800u), success);
+        const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
+        CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visible)), success);
+        move_to(0u);
+        fixture.platform().advance_time(display_period);
+        run_dpc(fixture);
+        static_cast<void>(fixture.control().respond_all(0x1100u));
+    }
+
+    void move_to(std::uint64_t frame)
+    {
+        av::DxgkargSetVidPnSourceAddressRecord address = {};
+        address.PrimaryAddress = primary_.address(frame);
+        address.PrimarySegment = av::ApertureSegment::segment_id;
+        address.hAllocation = primary_.handle();
+        fixture_.platform().set_irql(Irql::isr);
+        CHECK_EQ(nt(fixture_.adapter().set_vidpn_source_address(&address)), success);
+        fixture_.platform().set_irql(Irql::passive);
+    }
+
+private:
+    Fixture &fixture_;
+    Primary  primary_;
+};
+
+}
+
+TEST(adapter_dpc_routine, a_present_that_completes_is_shown_at_the_next_refresh_a_little_before_the_period_is_out)
+{ for (const bool fast : {false, true}) {
+      Fixture fixture;
+      if (fast) {
+          av::DisplayModeSet modes;
+          CHECK_STATUS(modes.add(1280u, 800u), av::Status::ok);
+          CHECK_STATUS(modes.prefer(0u), av::Status::ok);
+          CHECK_STATUS(modes.set_refresh(av::DisplayModeSet::most_refresh_millihz), av::Status::ok);
+          fixture.offer_modes(modes);
+      }
+      CHECK_EQ(fixture.start(), success);
+      ScannedOut scanned(fixture);
+      av::DxgkargCreateDeviceRecord device = {};
+      CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+      av::DxgkargCreateContextRecord context = {};
+      CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+      std::uint8_t             dma[128] = {};
+      av::DxgkargPresentRecord present = {};
+      present.pDmaBuffer = dma;
+      present.DmaSize = sizeof dma;
+      present.Flags = 4u;
+      CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+      av::DxgkargSubmitCommandRecord submit = {};
+      submit.SubmissionFenceId = 1u;
+      fixture.platform().set_irql(Irql::dispatch);
+      CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
+      fixture.platform().set_irql(Irql::passive);
+      fixture.platform().advance_time(fast ? 5000u : display_period);
+      run_dpc(fixture);
+      CHECK_EQ(fixture.dxgkrnl().interrupts() >= 1u, true);
+      const std::uint32_t refreshed = fixture.control().respond_all(0x1100u);
+      CHECK(refreshed >= 2u);
+      CHECK_EQ(fixture.control().request_type(fixture.control().requests() - 2u), 0x0105u);
+      CHECK_EQ(fixture.control().request_type(fixture.control().requests() - 1u), 0x0104u);
+      CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+      CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success);
+  } }
+
+TEST(adapter_dpc_routine, a_refused_scanout_refresh_is_silent_once_the_log_budget_is_spent)
+{ std::uint32_t refusing = 0u;
+  for (const bool spent : {false, true}) {
+      Fixture fixture;
+      CHECK_EQ(fixture.start(), success);
+      ScannedOut scanned(fixture);
+      bool refused = false;
+      for (std::uint32_t frame = 1u; frame < 200u && !refused && (!spent || frame <= refusing); frame++) {
+          scanned.move_to(frame);
+          fixture.platform().advance_time(display_period);
+          if (spent && frame == refusing) spend_log_budget(fixture);
+          const std::uint32_t before = fixture.platform().logged();
+          run_dpc(fixture);
+          refused = !spent && fixture.platform().logged() != before;
+          if (refused) refusing = frame;
+          if (spent && frame == refusing) CHECK_EQ(fixture.platform().logged(), before);
+      }
+      if (!spent) {
+          CHECK(refused);
+          CHECK(std::strcmp(fixture.platform().last_log(), "avgpu: a scanout refresh was refused in the DPC") == 0);
+      } else {
+          CHECK(refusing != 0u);
+      }
+  } }
+
+namespace {
+
+struct NestedReaders {
+    PagesReader  *readers[5];
+    std::uint32_t depth;
+    std::uint32_t refused;
+};
+
+}
+
+TEST(adapter_present, readers_of_presented_pages_beyond_the_slots_to_wait_in_are_told_so_unless_the_log_is_spent)
+{ for (const bool spent : {false, true}) {
+      Fixture fixture;
+      fixture.offer_present_engine();
+      CHECK_EQ(fixture.start(), success);
+      fixture.answer_asks();
+      av::DxgkargCreateDeviceRecord device = {};
+      CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+      av::DxgkargCreateContextRecord context = {};
+      context.Flags = 0x4u;
+      CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+      av::FakeHandleTable handles;
+      MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+      MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+      av::DxgkPresentAllocationInfoRecord info[3] = {};
+      info[1].hDeviceSpecificAllocation = source.open_handle();
+      info[2].hDeviceSpecificAllocation = destination.open_handle();
+      std::uint8_t             dma[512] = {};
+      std::uint8_t             private_data[av::PresentTicketRecord::encoded_size] = {};
+      av::DxgkargPresentRecord present = {};
+      present.pDmaBuffer = dma;
+      present.DmaSize = sizeof dma;
+      present.pDmaBufferPrivateData = private_data;
+      present.DmaBufferPrivateDataSize = sizeof private_data;
+      present.Flags = 1u;
+      present.pAllocationList = info;
+      const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+      present.SrcRect = {0, 0, side, side};
+      present.DstRect = {0, 0, side, side};
+      CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+      PagesReader first(fixture, destination.kmt_handle()), second(fixture, destination.kmt_handle()),
+          third(fixture, destination.kmt_handle()), fourth(fixture, destination.kmt_handle()),
+          fifth(fixture, destination.kmt_handle());
+      NestedReaders nested = {{&first, &second, &third, &fourth, &fifth}, 0u, 0u};
+      if (spent) spend_log_budget(fixture);
+      const std::uint32_t logged_before = fixture.platform().logged();
+      fixture.platform().on_stall(
+          [](void *context_of) {
+              auto *const running = static_cast<NestedReaders *>(context_of);
+              running->depth++;
+              if (running->depth < 5u) CHECK_EQ(running->readers[running->depth]->begin(1000u), success);
+          },
+          &nested);
+      CHECK_EQ(first.begin(1000u), success);
+      fixture.platform().on_stall(nullptr, nullptr);
+      CHECK_EQ(nested.depth, 4u);
+      for (PagesReader *reader : nested.readers) CHECK(!reader->complete());
+      CHECK_EQ(fifth.writes(), 2u);
+      if (spent) {
+          CHECK_EQ(fixture.platform().logged(), logged_before);
+      } else {
+          CHECK(fixture.platform().logged_line("avgpu: a reader of presented pages waited out its time"));
+          CHECK(fixture.platform().logged_line("avgpu: more readers of presented pages than slots to wait in"));
+      }
+      fixture.stop_presents();
+      CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+      CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success);
+  } }
+
+TEST(adapter_submit_command_virtual, a_follow_or_release_the_queue_cannot_take_is_refused)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  AvProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  av::DxgkargCreateContextRecord queue = {};
+  queue.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(process.device(), &queue)), success);
+  std::uint8_t follow[av::FollowRecord::encoded_size] = {};
+  CHECK_STATUS(av::FollowRecord(process.ring().kmt_handle(), 1u).encode(follow, sizeof follow), av::Status::ok);
+  CHECK_EQ(submit_packet(fixture, queue.hContext, 8u, follow, sizeof follow), success);
+  CHECK_EQ(submit_packet(fixture, queue.hContext, 8u, follow, sizeof follow), invalid_parameter);
+  CHECK(fixture.platform().logged_line("avgpu: SubmitCommandVirtual refused status 0xC000000D"));
+  std::uint8_t release[av::ReleaseRecord::encoded_size] = {};
+  CHECK_STATUS(av::ReleaseRecord(process.ring().kmt_handle() + 0x100u, av::SubmissionDescriptor(1u, 0u, 32u))
+                   .encode(release, sizeof release),
+               av::Status::ok);
+  CHECK_EQ(submit_packet(fixture, queue.hContext, 9u, release, sizeof release), invalid_parameter);
+  CHECK(fixture.adapter().invariants_hold());
+  CHECK_EQ(nt(fixture.adapter().destroy_context(queue.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+TEST(adapter_escape, a_point_named_wrongly_is_refused_silently_once_the_log_is_spent)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  std::uint8_t named[av::NextPointRecord::encoded_size] = {};
+  CHECK_STATUS(av::NextPointRecord(1u, 0x55u).encode(named, sizeof named), av::Status::ok);
+  DxgkargEscapeRecord escape = {};
+  escape.pPrivateDriverData = named;
+  escape.PrivateDriverDataSize = sizeof named;
+  spend_log_budget(fixture);
+  const std::uint32_t spent = fixture.platform().logged();
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  CHECK_EQ(fixture.platform().logged(), spent);
+  fixture.platform().advance_time(av::LogBudget::window_ticks);
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  CHECK(std::strstr(fixture.platform().last_log(), "avgpu: a point named by no process") != nullptr); }
+
+TEST(adapter_get_standard_allocation_driver_data, a_refused_gdi_surface_is_said_but_no_other_refusal_is_and_nothing_when_the_log_is_spent)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  std::uint8_t                                 descriptor[av::AllocationDescriptor::encoded_size] = {};
+  av::D3dkmdtGdiSurfaceDataRecord              surface = {64u, 32u, 21, 99, 0u, 0u};
+  av::DxgkargGetStandardAllocationDriverDataRecord request = {};
+  request.pAllocationPrivateDriverData = descriptor;
+  request.StandardAllocationType = 9999;
+  request.pCreateSurfaceData = &surface;
+  CHECK(nt(fixture.adapter().get_standard_allocation_driver_data(&request)) != success);
+  request.StandardAllocationType = 4;
+  request.pCreateSurfaceData = nullptr;
+  CHECK(nt(fixture.adapter().get_standard_allocation_driver_data(&request)) != success);
+  CHECK(std::strstr(fixture.platform().last_log(), "avgpu: refused GDI surface") == nullptr);
+  request.pCreateSurfaceData = &surface;
+  spend_log_budget(fixture);
+  const std::uint32_t spent = fixture.platform().logged();
+  CHECK(nt(fixture.adapter().get_standard_allocation_driver_data(&request)) != success);
+  CHECK_EQ(fixture.platform().logged(), spent);
+  fixture.platform().advance_time(av::LogBudget::window_ticks);
+  CHECK_EQ(nt(fixture.adapter().get_standard_allocation_driver_data(&request)), invalid_parameter);
+  CHECK(std::strstr(fixture.platform().last_log(), "avgpu: refused GDI surface: adapter ") != nullptr);
+  CHECK(std::strstr(fixture.platform().last_log(), " width 64 height 32 format 21 type 99 flags 0x00000000") != nullptr); }
