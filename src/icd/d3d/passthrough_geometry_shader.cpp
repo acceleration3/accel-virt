@@ -78,7 +78,7 @@ size_t PassthroughGeometryShader::bytes() const
 void PassthroughGeometryShader::put(uint32_t token)
 {
     AV_SCOPE("PassthroughGeometryShader::put");
-    if (count_ < max_tokens) tokens_[count_++] = token;
+    tokens_[count_++] = token;
 }
 
 void PassthroughGeometryShader::declare_input(uint32_t index)

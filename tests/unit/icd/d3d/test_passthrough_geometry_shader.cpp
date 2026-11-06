@@ -39,3 +39,15 @@ TEST(passthrough_geometry_shader, refuses_a_register_it_cannot_declare)
   CHECK(shader.add(1u, 0x1u, 0u));
   CHECK(!shader.add(1u, 0x2u, 1u));
   CHECK(shader.tokens() != nullptr); }
+
+TEST(passthrough_geometry_shader, every_register_named_fills_the_token_budget_exactly)
+{ PassthroughGeometryShader shader;
+  for (std::uint32_t index = 0u; index < PassthroughGeometryShader::max_registers; index++)
+      CHECK(shader.add(index, 0xFu, index + 1u));
+  const std::uint32_t *const tokens = shader.tokens();
+  CHECK(tokens != nullptr);
+  CHECK_EQ(shader.bytes(), sizeof(std::uint32_t) * PassthroughGeometryShader::max_tokens);
+  if (tokens == nullptr) return;
+  CHECK_EQ(tokens[1], PassthroughGeometryShader::max_tokens);
+  CHECK_EQ(tokens[PassthroughGeometryShader::max_tokens - 1u], 0x0100003Eu);
+  CHECK_EQ(shader.tokens()[1], PassthroughGeometryShader::max_tokens); }
