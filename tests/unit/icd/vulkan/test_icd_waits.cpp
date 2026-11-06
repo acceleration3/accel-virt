@@ -11,6 +11,7 @@
 #include "proto/client/icd_handle_registry.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
 
@@ -361,3 +362,70 @@ TEST(icd_waits, present_context_answers_a_device_s_physical_device_and_connectio
   CHECK(!rig.rig().root().present_context(reinterpret_cast<VkDevice>(&stack), physical, host_device, connection));
   CHECK(physical == VK_NULL_HANDLE);
   CHECK(connection == nullptr); }
+
+TEST(icd_waits, a_fence_kept_for_queue_idle_that_cannot_be_reset_ends_the_wait_with_the_error)
+{ WaitRig rig;
+  const VkQueue first = rig.queue(queue_host);
+  const VkQueue second = rig.queue(queue_host + 1u);
+  rig.rig().host().vk_handle(0, fence_host);
+  rig.answer(VK_SUCCESS, 1u);
+  CHECK_EQ(rig.rig().root().queue_wait_idle(first), VK_SUCCESS);
+  rig.rig().host().vk_handle(0, fence_host + 1u);
+  rig.answer(VK_SUCCESS, 1u);
+  CHECK_EQ(rig.rig().root().queue_wait_idle(second), VK_SUCCESS);
+  rig.kmt().fail_at(MockKmt::Call::submit, 1u, MockKmt::invalid_parameter);
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.rig().root().queue_wait_idle(first), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(av::icd::connection_of(first)->lost());
+  CHECK(rig.rig().root().invariants_hold()); }
+
+TEST(icd_waits, an_acquire_signal_on_a_lost_connection_is_device_lost)
+{ WaitRig rig;
+  static_cast<void>(rig.queue(queue_host));
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(rig.wait_for_fence(SlicedWait::forever), VK_ERROR_DEVICE_LOST);
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.rig().root().signal_acquire(rig.device(), reinterpret_cast<VkSemaphore>(semaphore_host), VK_NULL_HANDLE),
+           VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK(rig.rig().root().invariants_hold()); }
+
+TEST(icd_waits, query_results_come_from_the_host_at_once_or_after_a_wait_and_are_refused_for_a_lost_or_foreign_device)
+{ WaitRig rig;
+  std::uint64_t results[1] = {};
+  const VkQueryPool pool = reinterpret_cast<VkQueryPool>(0x6100u);
+  const auto answer = [&rig](std::int32_t result, std::uint64_t value) {
+      std::uint8_t bytes[MockKmt::max_answer] = {};
+      av::WireWriter writer(bytes, sizeof bytes);
+      writer.write_pod(result);
+      writer.write_pod(value);
+      rig.kmt().queue_answer(bytes, static_cast<std::uint32_t>(writer.offset()));
+  };
+  answer(VK_SUCCESS, 77u);
+  CHECK_EQ(rig.rig().root().query_pool_results(rig.device(), pool, 0u, 1u, sizeof results, results, sizeof results[0],
+                                               VK_QUERY_RESULT_64_BIT),
+           VK_SUCCESS);
+  CHECK_EQ(results[0], 77u);
+  answer(VK_NOT_READY, 0u);
+  answer(VK_SUCCESS, 88u);
+  CHECK_EQ(rig.rig().root().query_pool_results(rig.device(), pool, 0u, 1u, sizeof results, results, sizeof results[0],
+                                               VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT),
+           VK_SUCCESS);
+  CHECK_EQ(results[0], 88u);
+  CHECK_EQ(rig.kmt().queued_answers(), 0u);
+  int stack = 0;
+  const std::uint32_t sent = rig.kmt().commands();
+  CHECK_EQ(rig.rig().root().query_pool_results(reinterpret_cast<VkDevice>(&stack), pool, 0u, 1u, sizeof results, results,
+                                               sizeof results[0], VK_QUERY_RESULT_64_BIT),
+           VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.rig().log().holding("vkGetQueryPoolResults on a device this driver did not make"), 1u);
+  rig.kmt().withhold_answer_at(1u);
+  CHECK_EQ(rig.wait_for_fence(SlicedWait::forever), VK_ERROR_DEVICE_LOST);
+  const std::uint32_t lost_at = rig.kmt().commands();
+  CHECK_EQ(rig.rig().root().query_pool_results(rig.device(), pool, 0u, 1u, sizeof results, results, sizeof results[0],
+                                               VK_QUERY_RESULT_64_BIT),
+           VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.kmt().commands(), lost_at);
+  CHECK(sent <= lost_at);
+  CHECK(rig.rig().root().invariants_hold()); }

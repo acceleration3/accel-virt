@@ -483,3 +483,20 @@ TEST(icd_command_buffers, invariants_see_a_batch_no_command_buffer_owns_or_one_t
   CHECK(!root.invariants_hold());
   used -= 1u;
   CHECK(root.invariants_hold()); }
+
+TEST(icd_command_buffers, a_command_larger_than_its_room_that_the_batch_cannot_spill_is_named_when_the_buffer_ends)
+{ DeviceRig rig;
+  VkCommandBuffer command_buffer = VK_NULL_HANDLE;
+  CHECK_EQ(rig.allocate(1u, &command_buffer), VK_SUCCESS);
+  CHECK_EQ(rig.begin(command_buffer), VK_SUCCESS);
+  static std::uint8_t data[20000] = {};
+  using UpdateBuffer = void (*)(VkCommandBuffer, VkBuffer, VkDeviceSize, VkDeviceSize, const void *);
+  const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
+  rig.rig().platform().fail_allocation_at(1u);
+  rig.entry<UpdateBuffer>("vkCmdUpdateBuffer")(command_buffer, reinterpret_cast<VkBuffer>(0x4400u), 0u, sizeof data, data);
+  rig.rig().platform().fail_allocation_at(0u);
+  CHECK_EQ(rig.end(command_buffer), VK_ERROR_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(rig.rig().log().holding("a command larger than its room, id"), 1u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted);
+  CHECK_EQ(rig.begin(command_buffer), VK_SUCCESS);
+  CHECK_EQ(rig.end(command_buffer), VK_SUCCESS); }
