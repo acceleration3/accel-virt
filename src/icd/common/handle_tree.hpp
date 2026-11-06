@@ -244,7 +244,7 @@ bool HandleTree<Node>::children_agree(uint32_t slot, uint32_t &children) const
         const Place *const below = index_.at(at);
         if (below == nullptr || below->parent_ != slot || below->previous_ != previous) return false;
         if (static_cast<uint32_t>(below->node_->kind()) <= parent_kind) return false;
-        if (++children > index_.count()) return false;
+        children++;
         previous = at;
     }
     return place(slot).last_child_ == previous;

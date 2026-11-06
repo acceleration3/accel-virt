@@ -99,6 +99,14 @@ struct ObjectPoolProbe {
 
 }
 
+namespace av {
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_free_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.free_count_ = count; }
+};
+
+}
+
 namespace av::icd {
 
 struct HandleTreeProbe {
@@ -108,6 +116,24 @@ struct HandleTreeProbe {
     static const HandleTreePlace<N> *place_of(const HandleTree<N> &tree, const N *node)
     {
         return tree.index_.find(tree.key_of(node));
+    }
+    template <typename N>
+    static HandleTreePlace<N> *edit(HandleTree<N> &tree, const N *node)
+    {
+        return tree.index_.find(tree.key_of(node));
+    }
+    template <typename N>
+    static void miscount_index(HandleTree<N> &tree, std::uint32_t count)
+    {
+        av::KeyedSlotsProbe::corrupt_free_count(tree.index_, count);
+    }
+    template <typename N>
+    static void forget(HandleTree<N> &tree, const N *node) { static_cast<void>(tree.index_.erase(tree.key_of(node))); }
+    template <typename N>
+    static void remember(HandleTree<N> &tree, const void *key, const HandleTreePlace<N> &place)
+    {
+        std::uint32_t slot = 0u;
+        static_cast<void>(tree.index_.insert(tree.key_of(key), place, slot));
     }
     template <typename N>
     static std::uint32_t slot_of(const HandleTree<N> &tree, const N *node) { return tree.slot_of(node); }
@@ -284,4 +310,93 @@ TEST(handle_tree_place, a_places_links_name_its_parent_and_its_first_and_last_ch
   place = Probe::place_of(forest.tree(), root);
   CHECK_EQ(place->first_child_, Probe::slot_of(forest.tree(), second));
   CHECK_EQ(Probe::place_of(forest.tree(), second)->previous_, Probe::none<Node>());
+  CHECK(forest.tree().invariants_hold()); }
+
+TEST(handle_tree, a_child_of_what_it_does_not_hold_is_nothing)
+{ Forest forest;
+  Node *const root = forest.make(Node::Kind::root);
+  static_cast<void>(forest.make(Node::Kind::middle, root));
+  Node outside(forest.graveyard(), Node::Kind::root, nullptr);
+  CHECK(forest.tree().child(outside, Node::Kind::middle, 0u) == nullptr);
+  CHECK(forest.tree().child(*root, Node::Kind::middle, 0u) != nullptr); }
+
+TEST(handle_tree, the_invariant_catches_each_way_the_child_links_can_break)
+{ using Probe = av::icd::HandleTreeProbe;
+  Forest      forest;
+  Node *const root = forest.make(Node::Kind::root);
+  Node *const first = forest.make(Node::Kind::middle, root);
+  Node *const second = forest.make(Node::Kind::middle, root);
+  CHECK(forest.tree().invariants_hold());
+  const std::uint32_t none = Probe::none<Node>();
+
+  auto *const above = Probe::edit(forest.tree(), root);
+  const std::uint32_t head = above->first_child_;
+  above->first_child_ = 1000u;
+  CHECK(!forest.tree().invariants_hold());
+  above->first_child_ = head;
+
+  auto *const below = Probe::edit(forest.tree(), first);
+  below->parent_ = none;
+  CHECK(!forest.tree().invariants_hold());
+  below->parent_ = Probe::slot_of(forest.tree(), root);
+
+  auto *const later = Probe::edit(forest.tree(), second);
+  later->previous_ = none;
+  CHECK(!forest.tree().invariants_hold());
+  later->previous_ = Probe::slot_of(forest.tree(), first);
+  CHECK(forest.tree().invariants_hold());
+
+  Node *const peer = forest.make(Node::Kind::root, root);
+  CHECK(!forest.tree().invariants_hold());
+  CHECK_EQ(forest.tree().destroy(*peer), 1u);
+  CHECK(forest.tree().invariants_hold()); }
+
+TEST(handle_tree, the_invariant_catches_an_index_that_disagrees_with_the_pool)
+{ using Probe = av::icd::HandleTreeProbe;
+  Forest      forest;
+  Node *const root = forest.make(Node::Kind::root);
+  Node *const middle = forest.make(Node::Kind::middle, root);
+  Node *const twin = forest.make(Node::Kind::middle, root);
+
+  Probe::miscount_index(forest.tree(), 5u);
+  CHECK(!forest.tree().invariants_hold());
+  Probe::miscount_index(forest.tree(), 0u);
+  CHECK(forest.tree().invariants_hold());
+
+  const av::icd::HandleTreePlace<Node> kept = *Probe::place_of(forest.tree(), middle);
+  Probe::forget(forest.tree(), middle);
+  CHECK(!forest.tree().invariants_hold());
+  Probe::remember(forest.tree(), &kept, kept);
+  CHECK(!forest.tree().invariants_hold());
+  Probe::forget(forest.tree(), reinterpret_cast<const Node *>(&kept));
+  Probe::remember(forest.tree(), middle, kept);
+  CHECK(forest.tree().invariants_hold());
+
+  auto *const entry = Probe::edit(forest.tree(), middle);
+  entry->node_ = twin;
+  CHECK(!forest.tree().invariants_hold());
+  entry->node_ = middle;
+  CHECK(forest.tree().invariants_hold()); }
+
+TEST(handle_tree, the_invariant_catches_a_parent_that_is_not_held_and_a_link_that_leaves_a_child_out)
+{ using Probe = av::icd::HandleTreeProbe;
+  Forest      forest;
+  Node *const root = forest.make(Node::Kind::root);
+  static_cast<void>(forest.make(Node::Kind::middle, root));
+  Node        outside(forest.graveyard(), Node::Kind::root, nullptr);
+
+  Node *const stray = forest.make(Node::Kind::root);
+  stray->adopt(&outside);
+  CHECK(!forest.tree().invariants_hold());
+  stray->adopt(nullptr);
+  CHECK(forest.tree().invariants_hold());
+
+  auto *const above = Probe::edit(forest.tree(), root);
+  const std::uint32_t first = above->first_child_;
+  const std::uint32_t last = above->last_child_;
+  above->first_child_ = Probe::none<Node>();
+  above->last_child_ = Probe::none<Node>();
+  CHECK(!forest.tree().invariants_hold());
+  above->first_child_ = first;
+  above->last_child_ = last;
   CHECK(forest.tree().invariants_hold()); }
