@@ -70,7 +70,22 @@ struct KmtTransportProbe {
 
 namespace av::icd {
 
+struct LossLatchProbe {
+    static void forget_the_lost_bit(LossLatch &latch) { latch.word_ = static_cast<std::uint32_t>(FaultCode::device_lost); }
+};
+
+struct OpenedObjectsProbe {
+    static void add_a_nameless_row(OpenedObjects &opened)
+    {
+        std::uint32_t slot = 0u;
+        CHECK_STATUS(opened.opens_[0].insert(0u, OpenedObjectRow{0u, 0u, 0u}, slot), Status::ok);
+    }
+    static void clear(OpenedObjects &opened) { opened.opens_[0].clear(); }
+};
+
 struct ConnectionProbe {
+    static LossLatch &loss(Connection &c) { return c.loss_; }
+    static void       set_opened(Connection &c, bool opened) { c.opened_ = opened; }
     static GuestConnection &guest(Connection &c) { return c.connection_; }
     static HostChannel     &channel(Connection &c) { return c.channel_; }
     static AdapterSearch   &search(Connection &c) { return c.search_; }
@@ -81,6 +96,8 @@ struct ConnectionProbe {
 using av::GuestConnectionProbe;
 using av::KmtTransportProbe;
 using av::icd::ConnectionProbe;
+using av::icd::LossLatchProbe;
+using av::icd::OpenedObjectsProbe;
 using av::icd::HostChannelProbe;
 
 namespace {
@@ -506,3 +523,39 @@ TEST(connection, learns_what_windows_calls_its_adapter)
     rig.kmt().fail_at(MockKmt::Call::query_adapter_name, 1u, MockKmt::invalid_parameter);
     CHECK_STATUS(rig.connection().open(0u), Status::ok);
     CHECK(std::strcmp(rig.connection().adapter_name(), "") == 0); } }
+
+TEST(connection, invariants_see_a_connection_whose_rows_or_latch_are_unsound)
+{ Rig rig;
+  Connection &connection = rig.connection();
+  OpenedObjectsProbe::add_a_nameless_row(connection.opened_objects());
+  CHECK(!connection.invariants_hold());
+  OpenedObjectsProbe::clear(connection.opened_objects());
+  CHECK(connection.invariants_hold());
+  ConnectionProbe::loss(connection).lose(av::FaultCode::device_lost);
+  LossLatchProbe::forget_the_lost_bit(ConnectionProbe::loss(connection));
+  CHECK(!connection.invariants_hold());
+  ConnectionProbe::loss(connection).forget();
+  CHECK(connection.invariants_hold()); }
+
+TEST(connection, invariants_see_a_lost_latch_beside_a_channel_that_is_not_and_a_flag_that_disagrees_with_the_channel)
+{ Rig rig;
+  Connection &connection = rig.connection();
+  ConnectionProbe::loss(connection).lose(av::FaultCode::device_lost);
+  CHECK(connection.invariants_hold());
+  ConnectionProbe::loss(connection).forget();
+  CHECK_STATUS(connection.open(0u), Status::ok);
+  CHECK(connection.invariants_hold());
+  ConnectionProbe::loss(connection).lose(av::FaultCode::device_lost);
+  CHECK(!connection.invariants_hold());
+  ConnectionProbe::loss(connection).forget();
+  CHECK(connection.invariants_hold());
+  ConnectionProbe::set_opened(connection, false);
+  CHECK(!connection.invariants_hold());
+  ConnectionProbe::set_opened(connection, true);
+  CHECK(connection.invariants_hold());
+  connection.close();
+  CHECK(connection.invariants_hold());
+  ConnectionProbe::set_opened(connection, true);
+  CHECK(!connection.invariants_hold());
+  ConnectionProbe::set_opened(connection, false);
+  CHECK(connection.invariants_hold()); }
