@@ -1,6 +1,9 @@
 #include "core/log/driver_log.hpp"
+#include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
+#include "guest/transport/arena_segment.hpp"
+#include "guest/transport/arena_slots.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_blob_arena.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -35,6 +38,18 @@ using av::SubApi;
 
 namespace av {
 
+struct ArenaSegmentProbe {
+    static void set_bytes(ArenaSegment &segment, std::uint64_t bytes) { segment.bytes_ = bytes; }
+    static void set_base(ArenaSegment &segment, std::uint64_t base) { segment.base_ = base; }
+};
+
+struct KmtBlobArenaProbe {
+    static ObjectStorage<ArenaSegment> &control(KmtBlobArena &arena) { return arena.control_; }
+    static ObjectStorage<ArenaSegment> &ring(KmtBlobArena &arena, std::uint32_t index) { return arena.rings_[index]; }
+    static ArenaSlots                  &slots(KmtBlobArena &arena) { return arena.slots_; }
+    static std::uint64_t               *idle_since(KmtBlobArena &arena) { return arena.idle_since_; }
+};
+
 struct KmtTransportProbe {
     static void     press(KmtTransport &transport, std::uint32_t waits) { transport.room_pressure_ = waits; }
     static void     press_for(KmtTransport &transport, std::uint64_t ticks) { transport.room_wait_ticks_ = ticks; }
@@ -43,6 +58,8 @@ struct KmtTransportProbe {
 
 }
 
+using av::ArenaSegmentProbe;
+using av::KmtBlobArenaProbe;
 using av::KmtTransportProbe;
 
 namespace {
@@ -52,7 +69,7 @@ constexpr std::uint64_t mib = std::uint64_t{1} << 20u;
 constexpr std::uint64_t imported_memory = 0x0000600000000077ull;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::uint32_t link_objects = 7u;
-constexpr std::uint64_t window_bytes = std::uint64_t{256} << 20u;
+constexpr std::uint64_t window_bytes = MockKmt::rig_window_bytes;
 constexpr std::uint64_t slot = av::GuestBytes::slot_bytes;
 
 class Rig {
@@ -780,3 +797,219 @@ TEST(kmt_transport_region, a_region_opened_through_the_transport_is_the_arena_s_
   rig.host_takes_the_releases(2u);
   CHECK_STATUS(rig.arena().close(), Status::ok);
   rig.check_nothing_is_held(); }
+
+TEST(kmt_blob_arena, a_control_or_ring_the_blob_table_has_no_room_for_is_let_go_and_said)
+{ { Rig rig;
+    std::uint8_t other[64] = {};
+    CHECK(rig.transport().blobs().add_region(0u, other, sizeof other));
+    rig.host().blob_import(0u, imported_memory);
+    rig.host().nop();
+    CHECK_STATUS(rig.arena().open(0u), Status::invalid_state);
+    CHECK_EQ(std::strcmp(rig.arena().failed_step(), "control region add"), 0);
+    CHECK(rig.transport().blobs().remove_region(0u));
+    rig.check_nothing_is_held(); }
+  { Rig rig;
+    std::uint8_t other[64] = {};
+    CHECK(rig.transport().blobs().add_segment(slot, other, sizeof other));
+    rig.host().blob_import(0u, imported_memory);
+    rig.host().blob_import(0u, imported_memory + 1u);
+    rig.host().nop();
+    CHECK_STATUS(rig.arena().open(0u), Status::invalid_state);
+    CHECK_EQ(std::strcmp(rig.arena().failed_step(), "ring region add"), 0);
+    CHECK(!rig.arena().lending());
+    CHECK(rig.transport().blobs().remove_segment(slot));
+    rig.host().nop();
+    CHECK_STATUS(rig.arena().close(), Status::ok);
+    rig.check_nothing_is_held(); } }
+
+TEST(kmt_blob_arena, a_ring_or_region_the_blob_table_has_no_room_for_is_let_go_and_refused)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  std::uint8_t other[64] = {};
+  CHECK(rig.transport().blobs().add_segment(2u * slot, other, sizeof other));
+  rig.host().blob_import(0u, imported_memory + 2u);
+  rig.host().nop();
+  CHECK_STATUS(rig.arena().grow(4096u), Status::no_space);
+  CHECK(rig.transport().blobs().remove_segment(2u * slot));
+  CHECK(rig.arena().invariants_hold());
+  CHECK(rig.transport().blobs().add_region(2u * slot, other, sizeof other));
+  rig.host().blob_import(0u, imported_memory + 3u);
+  rig.host().nop();
+  av::ArenaSegment *region = nullptr;
+  CHECK_STATUS(rig.arena().open_region(4096u, region), Status::no_space);
+  CHECK(region == nullptr);
+  CHECK(rig.transport().blobs().remove_region(2u * slot));
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok);
+  rig.check_nothing_is_held(); }
+
+TEST(kmt_blob_arena, abandon_lets_an_open_region_go_without_a_host_call)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  rig.host().blob_import(0u, imported_memory + 2u);
+  av::ArenaSegment *region = nullptr;
+  CHECK_STATUS(rig.arena().open_region(3u * mib, region), Status::ok);
+  CHECK_EQ(rig.arena().bytes(), av::PublishedSlotLayout::control_bytes + KmtBlobArena::default_bytes + 3u * mib);
+  const std::uint32_t commands = rig.kmt().commands();
+  CHECK_STATUS(rig.arena().abandon(), Status::ok);
+  CHECK_EQ(rig.kmt().commands(), commands);
+  rig.check_nothing_is_held(); }
+
+TEST(kmt_blob_arena, every_ring_slot_taken_is_no_space_for_one_more)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  for (std::uint32_t index = 1u; index < av::ClientBlobArena::max_segments; index++) {
+      rig.host().blob_import(0u, imported_memory + 1u + index);
+      CHECK_STATUS(rig.arena().grow(4096u), Status::ok);
+  }
+  CHECK_STATUS(rig.arena().grow(4096u), Status::no_space);
+  CHECK(rig.arena().invariants_hold());
+  rig.host_takes_the_releases(1u + av::ClientBlobArena::max_segments);
+  CHECK_STATUS(rig.arena().close(), Status::ok);
+  rig.check_nothing_is_held(); }
+
+TEST(kmt_blob_arena_shrink, a_release_the_host_refuses_for_two_idle_segments_answers_the_first_failure)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  for (std::uint32_t grown = 0u; grown < 2u; grown++) {
+      rig.host().blob_import(0u, imported_memory + 2u + grown);
+      CHECK_STATUS(rig.arena().grow(4096u), Status::ok);
+  }
+  const std::uint64_t t0 = 1000u;
+  CHECK_STATUS(rig.arena().release_idle(t0), Status::ok);
+  rig.host().blob_import(0u, 1u);
+  rig.host().blob_import(0u, 2u);
+  CHECK_STATUS(rig.arena().release_idle(t0 + KmtBlobArena::idle_release_ticks), Status::malformed);
+  CHECK_EQ(rig.transport().blobs().segments(), 1u);
+  rig.host_takes_the_releases(2u);
+  CHECK_STATUS(rig.arena().close(), Status::ok); }
+
+TEST(kmt_blob_arena, the_invariant_catches_a_control_a_ring_or_a_region_that_is_not_what_it_was_made)
+{ { Rig rig;
+    CHECK(rig.arena().invariants_hold());
+    CHECK_STATUS(KmtBlobArenaProbe::ring(rig.arena(), 1u).construct(rig.connection(), rig.transport(),
+                                                                    KmtBlobArenaProbe::slots(rig.arena())),
+                 Status::ok);
+    CHECK(!rig.arena().invariants_hold());
+    KmtBlobArenaProbe::ring(rig.arena(), 1u).destroy();
+    CHECK(rig.arena().invariants_hold()); }
+  { Rig rig;
+    rig.host_takes_the_imports();
+    CHECK_STATUS(rig.arena().open(0u), Status::ok);
+    av::ArenaSegment &control = KmtBlobArenaProbe::control(rig.arena()).object();
+    ArenaSegmentProbe::set_bytes(control, 5u);
+    CHECK(!rig.arena().invariants_hold());
+    ArenaSegmentProbe::set_bytes(control, av::PublishedSlotLayout::control_bytes);
+    ArenaSegmentProbe::set_base(control, slot);
+    CHECK(!rig.arena().invariants_hold());
+    ArenaSegmentProbe::set_base(control, 0u);
+    av::ArenaSegment &ring = KmtBlobArenaProbe::ring(rig.arena(), 0u).object();
+    ArenaSegmentProbe::set_bytes(ring, 5u);
+    CHECK(!rig.arena().invariants_hold());
+    ArenaSegmentProbe::set_bytes(ring, KmtBlobArena::default_bytes);
+    CHECK(rig.arena().invariants_hold());
+    rig.host().blob_import(0u, imported_memory + 2u);
+    av::ArenaSegment *region = nullptr;
+    CHECK_STATUS(rig.arena().open_region(4096u, region), Status::ok);
+    ArenaSegmentProbe::set_bytes(*region, 5u);
+    CHECK(!rig.arena().invariants_hold());
+    ArenaSegmentProbe::set_bytes(*region, 4096u);
+    CHECK(rig.arena().invariants_hold());
+    CHECK_STATUS(rig.arena().abandon(), Status::ok);
+    rig.check_nothing_is_held(); }
+  { Rig rig;
+    rig.host_takes_the_imports();
+    CHECK_STATUS(rig.arena().open(0u), Status::ok);
+    av::ObjectStorage<av::ArenaSegment> &big = KmtBlobArenaProbe::ring(rig.arena(), 1u);
+    CHECK_STATUS(big.construct(rig.connection(), rig.transport(), KmtBlobArenaProbe::slots(rig.arena())), Status::ok);
+    rig.host().blob_import(0u, imported_memory + 2u);
+    CHECK_STATUS(big.object().open(slot + 4096u), Status::ok);
+    CHECK(!rig.arena().invariants_hold());
+    CHECK_STATUS(rig.arena().abandon(), Status::ok);
+    rig.check_nothing_is_held(); } }
+
+TEST(kmt_transport_pressure, a_lost_transport_neither_grows_nor_lets_go_of_what_the_arena_holds)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  fill_the_ring(rig);
+  rig.kmt().fail_at(MockKmt::Call::submit, 1u, MockKmt::invalid_parameter);
+  std::uint8_t framed[1] = {};
+  av::WireWriter writer = rig.transport().request_writer();
+  writer.write_u32(1u);
+  CHECK(rig.transport().send_async(0x10001u, writer) == av::TransportResult::failed);
+  CHECK(rig.transport().faulted());
+  KmtTransportProbe::press(rig.transport(), KmtTransport::pressure_waits);
+  const std::uint32_t commands = rig.kmt().commands();
+  rig.transport().tune_arena();
+  CHECK_EQ(rig.kmt().commands(), commands);
+  CHECK_EQ(rig.transport().blobs().segments(), 1u);
+  const std::uint64_t wanted[1] = {18u * mib};
+  CHECK(!rig.transport().make_room_for_blobs(wanted, 1u));
+  CHECK_EQ(rig.transport().blobs().segments(), 1u);
+  static_cast<void>(framed);
+  CHECK_STATUS(rig.arena().abandon(), Status::ok); }
+
+TEST(kmt_transport_region, closing_a_region_the_transport_never_lent_does_nothing)
+{ Rig rig;
+  std::uint8_t bytes[16] = {};
+  rig.transport().close_region(ClientBlobLease(bytes, 0u, sizeof bytes));
+  CHECK_EQ(rig.kmt().commands(), 0u);
+  rig.check_nothing_is_held(); }
+
+TEST(kmt_transport_grow, two_requests_that_together_pass_a_slot_gain_a_segment_for_the_larger_alone)
+{ Rig rig;
+  rig.host_takes_the_imports();
+  CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  fill_the_ring(rig);
+  rig.host().blob_import(0u, imported_memory + 2u);
+  const std::uint64_t wanted[2] = {slot / 2u + mib, slot / 2u + mib};
+  CHECK(!rig.transport().make_room_for_blobs(wanted, 2u));
+  CHECK_EQ(rig.transport().blobs().segments(), 2u);
+  CHECK(rig.arena().invariants_hold());
+  rig.host_takes_the_releases(3u);
+  CHECK_STATUS(rig.arena().close(), Status::ok); }
+
+namespace {
+
+class ConsumeAt final : public av::ClockReader {
+public:
+    ConsumeAt(MockKmt &kmt, std::uint32_t context, std::uint32_t at) : kmt_(kmt), context_(context), at_(at) {}
+    void clock_read() override
+    {
+        if (++reads_ == at_) kmt_.consume_now(context_);
+    }
+
+private:
+    MockKmt      &kmt_;
+    std::uint32_t context_;
+    std::uint32_t at_;
+    std::uint32_t reads_ = 0u;
+};
+
+}
+
+TEST(kmt_transport_grow, room_the_host_frees_while_the_driver_spins_for_it_is_found_without_a_wait_or_a_segment)
+{ for (std::uint32_t at = 1u; at <= 8u; at++) {
+      Rig rig;
+      rig.host_takes_the_imports();
+      CHECK_STATUS(rig.arena().open(0u), Status::ok);
+      av::ClientBlobArena &blobs = rig.transport().blobs();
+      CHECK(blobs.take(blobs.room()).taken());
+      av::WireWriter writer = rig.transport().request_writer();
+      writer.write_u32(1u);
+      CHECK(rig.transport().send_async(0x30001u, writer) == av::TransportResult::ok);
+      ConsumeAt consume(rig.kmt(), rig.transport().context(), at);
+      rig.kmt().reads_clock(&consume, 1u);
+      const std::uint64_t wanted[1] = {1u * mib};
+      CHECK(rig.transport().make_room_for_blobs(wanted, 1u));
+      rig.kmt().reads_clock(nullptr, 0u);
+      CHECK_EQ(blobs.segments(), 1u);
+      CHECK(!rig.transport().faulted());
+      rig.host_takes_the_releases(2u);
+      CHECK_STATUS(rig.arena().close(), Status::ok);
+  } }

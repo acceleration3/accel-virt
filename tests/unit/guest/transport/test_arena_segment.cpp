@@ -21,6 +21,16 @@
 #include <cstring>
 
 
+namespace av {
+
+struct ArenaSegmentProbe {
+    static void set_bytes(ArenaSegment &segment, std::uint64_t bytes) { segment.bytes_ = bytes; }
+    static void set_base(ArenaSegment &segment, std::uint64_t base) { segment.base_ = base; }
+};
+
+}
+
+using av::ArenaSegmentProbe;
 using av::ClientBlobLease;
 using av::CommandHeader;
 using av::GuestConnection;
@@ -162,6 +172,7 @@ TEST(arena_segment_open, refuses_empty_overflowing_taken_and_second_opens_withou
   CHECK_STATUS(rig.segment().open(~std::uint64_t{0}), Status::no_space);
   CHECK_STATUS(rig.segment().open(slot * av::GuestBytes::slot_count), Status::no_space);
   CHECK_STATUS(rig.segment().open_at(0u, 0u), Status::no_space);
+  CHECK_STATUS(rig.segment().open_at(0u, ~std::uint64_t{0}), Status::no_space);
   CHECK_STATUS(rig.segment().open_at(4096u, 4096u), Status::no_space);
   CHECK(rig.slots().take_at(0u, 1u));
   CHECK_STATUS(rig.segment().open_at(0u, 4096u), Status::no_space);
@@ -199,4 +210,40 @@ TEST(arena_segment_abandon, lets_the_chunk_and_slots_go_without_a_host_call)
   const std::uint32_t commands = rig.kmt().commands();
   CHECK_STATUS(rig.segment().abandon(), Status::ok);
   CHECK_EQ(rig.kmt().commands(), commands);
+  rig.check_nothing_is_held(); }
+
+TEST(arena_segment_invariants, what_it_holds_must_agree_with_what_it_says_it_holds)
+{ Rig rig;
+  CHECK(rig.segment().invariants_hold());
+  ArenaSegmentProbe::set_base(rig.segment(), slot);
+  CHECK(!rig.segment().invariants_hold());
+  ArenaSegmentProbe::set_base(rig.segment(), 0u);
+  ArenaSegmentProbe::set_bytes(rig.segment(), 4096u);
+  CHECK(!rig.segment().invariants_hold());
+  ArenaSegmentProbe::set_bytes(rig.segment(), 0u);
+  rig.host_takes_the_import(imported_memory);
+  CHECK_STATUS(rig.segment().open(4096u), Status::ok);
+  CHECK(rig.segment().invariants_hold());
+  const std::uint64_t base = rig.segment().base();
+  ArenaSegmentProbe::set_bytes(rig.segment(), 0u);
+  CHECK(!rig.segment().invariants_hold());
+  ArenaSegmentProbe::set_bytes(rig.segment(), 5u);
+  CHECK(!rig.segment().invariants_hold());
+  ArenaSegmentProbe::set_bytes(rig.segment(), 8192u);
+  CHECK(!rig.segment().invariants_hold());
+  ArenaSegmentProbe::set_bytes(rig.segment(), 4096u);
+  ArenaSegmentProbe::set_base(rig.segment(), base + 4096u);
+  CHECK(!rig.segment().invariants_hold());
+  ArenaSegmentProbe::set_base(rig.segment(), base);
+  CHECK(rig.segment().invariants_hold());
+  rig.host().nop();
+  CHECK_STATUS(rig.segment().close(), Status::ok);
+  rig.check_nothing_is_held();
+  rig.host_takes_the_import(imported_memory);
+  CHECK_STATUS(rig.segment().open_at(0u, 4096u), Status::ok);
+  ArenaSegmentProbe::set_bytes(rig.segment(), 0u);
+  CHECK(!rig.segment().invariants_hold());
+  ArenaSegmentProbe::set_bytes(rig.segment(), 4096u);
+  rig.host().nop();
+  CHECK_STATUS(rig.segment().close(), Status::ok);
   rig.check_nothing_is_held(); }

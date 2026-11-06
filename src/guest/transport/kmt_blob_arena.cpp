@@ -121,8 +121,7 @@ Status KmtBlobArena::grow(uint64_t need)
     if (lending() && need <= GuestBytes::slot_bytes) {
         uint64_t want = doubled > need ? doubled : need;
         want = (want + page - 1u) / page * page;
-        if (want != 0u && want >= need && want <= GuestBytes::slot_bytes && total + want <= max_bytes)
-            grown = add_ring(want);
+        grown = add_ring(want);
     }
     if (grown == Status::ok) refusals_logged_ = 0u;
     if (grown != Status::ok && first_refusal(grown))

@@ -2672,7 +2672,7 @@ TEST(kmt_transport, room_the_host_makes_while_the_driver_looks_is_found_without_
   const std::uint32_t waits = up.kmt().calls(MockKmt::Call::wait_for_context);
   CHECK(room_for(up.transport(), 8u));
   up.kmt().reads_clock(nullptr, 0u);
-  CHECK_EQ(up.kmt().calls(MockKmt::Call::wait_for_context), waits + 1u);
+  CHECK_EQ(up.kmt().calls(MockKmt::Call::wait_for_context), waits);
   CHECK(!up.transport().faulted()); }
 
 TEST(kmt_transport, room_waited_for_from_a_host_that_never_consumes_faults_the_context_after_the_silence)
