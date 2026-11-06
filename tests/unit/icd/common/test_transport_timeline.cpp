@@ -133,3 +133,24 @@ TEST(transport_timeline, without_a_progress_page_completion_is_what_was_waited_a
   CHECK_EQ(timeline.completed(), 0u);
   CHECK(timeline.await(1u));
   CHECK_EQ(timeline.completed(), 1u); }
+
+TEST(transport_timeline, a_fence_that_cannot_be_published_cannot_be_waited_for_and_one_the_gpu_never_reaches_fails)
+{ { Rig               rig;
+    TransportTimeline timeline(rig.channel());
+    rig.send();
+    rig.kmt().fail_first(MockKmt::Call::submit, 1u, 0xC0000001u);
+    uint64_t target = 7u;
+    CHECK(!timeline.publish(timeline.covering(), target));
+    CHECK(rig.channel().faulted()); }
+  { Rig               rig;
+    TransportTimeline timeline(rig.channel());
+    rig.send();
+    rig.kmt().fail_first(MockKmt::Call::submit, 1u, 0xC0000001u);
+    CHECK(!timeline.wait(timeline.covering()));
+    CHECK_EQ(timeline.completed(), 0u); }
+  { Rig               rig;
+    TransportTimeline timeline(rig.channel());
+    rig.send();
+    rig.kmt().fail_first(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
+    CHECK(!timeline.wait(timeline.covering()));
+    CHECK_EQ(timeline.completed(), 0u); } }

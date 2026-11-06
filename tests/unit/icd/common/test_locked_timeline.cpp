@@ -138,3 +138,11 @@ TEST(locked_timeline, a_lost_context_cannot_be_waited_on)
   fixture.kmt().fail_first(MockKmt::Call::wait_for_context, 1u, 0xC0000001u);
   CHECK(!fixture.timeline().wait(1u));
   CHECK(!fixture.timeline().wait(1u)); }
+
+TEST(locked_timeline, a_batch_that_cannot_be_sent_cannot_be_waited_for)
+{ Fixture fixture(av::ContextViewsRecord::with_fence);
+  fixture.record();
+  fixture.kmt().fail_first(MockKmt::Call::submit, 1u, 0xC0000001u);
+  CHECK(!fixture.timeline().wait(1u));
+  CHECK(fixture.channel().faulted());
+  CHECK_EQ(fixture.timeline().completed(), 0u); }
