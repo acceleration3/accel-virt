@@ -14,6 +14,15 @@ using av::MockKmt;
 using av::RecordingLog;
 using av::icd::FramePacer;
 
+namespace av::icd {
+struct FramePacerProbe {
+    static void set_blanks(FramePacer &pacer, std::uint64_t blanks) { pacer.blanks_ = blanks; }
+};
+
+}
+
+using av::icd::FramePacerProbe;
+
 namespace {
 
 const char *const unpaced = "presents unpaced";
@@ -201,4 +210,28 @@ TEST(frame_pacer, a_refresh_changed_while_running_is_read_again_within_a_second)
   CHECK(admits(MockKmt::ticks_per_second / 2u));
   CHECK(!admits(fast / 2u));
   CHECK(admits(fast / 2u + fast / 10u));
+  CHECK(pacer.invariants_hold()); }
+
+TEST(frame_pacer, a_refresh_the_adapter_reports_as_zero_leaves_the_known_one_in_place)
+{ PacerRig rig;
+  FramePacer pacer(rig.kmt(), rig.lines(), rig.adapter(), rig.device());
+  const auto admits = [&](std::uint64_t step) {
+      rig.kmt().reads_clock(nullptr, step);
+      rig.kmt().fail_at(MockKmt::Call::scan_line, 1u, 0xC0000001u);
+      return pacer.admits();
+  };
+  CHECK(admits(first_present));
+  rig.kmt().set_blank_period(std::uint64_t{2000} * MockKmt::ticks_per_second);
+  CHECK(admits(MockKmt::ticks_per_second));
+  CHECK(!admits(MockKmt::ticks_per_second / 120u));
+  CHECK(admits(MockKmt::ticks_per_second / 120u));
+  CHECK(pacer.invariants_hold()); }
+
+TEST(frame_pacer, a_pacer_with_no_adapter_that_counted_a_blank_is_unsound)
+{ PacerRig rig;
+  FramePacer pacer(rig.kmt(), rig.lines(), 0u, rig.device());
+  CHECK(pacer.invariants_hold());
+  FramePacerProbe::set_blanks(pacer, 1u);
+  CHECK(!pacer.invariants_hold());
+  FramePacerProbe::set_blanks(pacer, 0u);
   CHECK(pacer.invariants_hold()); }
