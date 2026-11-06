@@ -106,7 +106,7 @@ public:
     static constexpr std::uint64_t first_object_id = 1u;
     static constexpr std::uint32_t max_answer = 1024u;
     static constexpr std::uint32_t not_supported = 0xC00000BBu;
-    static constexpr std::uint32_t max_window_chunks = 24u;
+    static constexpr std::uint32_t max_window_chunks = 16u;
     static constexpr std::uint32_t first_window_resource = HostBlobId::first;
     static constexpr std::uint64_t rig_window_bytes = std::uint64_t{2} << 30u;
     static constexpr std::uint32_t not_found = 0xC0000225u;

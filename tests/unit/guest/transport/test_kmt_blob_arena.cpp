@@ -69,7 +69,7 @@ constexpr std::uint64_t mib = std::uint64_t{1} << 20u;
 constexpr std::uint64_t imported_memory = 0x0000600000000077ull;
 constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::uint32_t link_objects = 7u;
-constexpr std::uint64_t window_bytes = MockKmt::rig_window_bytes;
+constexpr std::uint64_t window_bytes = std::uint64_t{256} << 20u;
 constexpr std::uint64_t slot = av::GuestBytes::slot_bytes;
 
 class Rig {
@@ -861,13 +861,17 @@ TEST(kmt_blob_arena, every_ring_slot_taken_is_no_space_for_one_more)
 { Rig rig;
   rig.host_takes_the_imports();
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
-  for (std::uint32_t index = 1u; index < av::ClientBlobArena::max_segments; index++) {
-      rig.host().blob_import(0u, imported_memory + 1u + index);
-      CHECK_STATUS(rig.arena().grow(4096u), Status::ok);
-  }
+  for (std::uint32_t index = 1u; index < av::ClientBlobArena::max_segments; index++)
+      CHECK_STATUS(KmtBlobArenaProbe::ring(rig.arena(), index)
+                       .construct(rig.connection(), rig.transport(), KmtBlobArenaProbe::slots(rig.arena())),
+                   Status::ok);
+  const std::uint32_t commands = rig.kmt().commands();
   CHECK_STATUS(rig.arena().grow(4096u), Status::no_space);
+  CHECK_EQ(rig.kmt().commands(), commands);
+  for (std::uint32_t index = 1u; index < av::ClientBlobArena::max_segments; index++)
+      KmtBlobArenaProbe::ring(rig.arena(), index).destroy();
   CHECK(rig.arena().invariants_hold());
-  rig.host_takes_the_releases(1u + av::ClientBlobArena::max_segments);
+  rig.host_takes_the_releases(2u);
   CHECK_STATUS(rig.arena().close(), Status::ok);
   rig.check_nothing_is_held(); }
 
