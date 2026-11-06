@@ -22,7 +22,25 @@ using av::Status;
 
 namespace av {
 
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.count_ = count; }
+};
+
+struct ObjectPoolProbe {
+    template <typename T>
+    static void corrupt_live_count(ObjectPool<T> &pool) { pool.live_ += 1u; }
+};
+
 struct BlobTableProbe {
+    static void corrupt_ids(BlobTable &table) { KeyedSlotsProbe::corrupt_count(table.ids_, table.ids_.count() + 3u); }
+    static void corrupt_blobs(BlobTable &table) { ObjectPoolProbe::corrupt_live_count(table.blobs_); }
+    static void strand(BlobTable &table, std::uint32_t id)
+    {
+        table.ids_.find(id)->blob_ = reinterpret_cast<BlobResource *>(std::uintptr_t{0x10});
+    }
+    static BlobResource *take_blob(BlobTable &table, std::uint32_t id) { return table.ids_.find(id)->blob_; }
+    static void put_blob(BlobTable &table, std::uint32_t id, BlobResource *blob) { table.ids_.find(id)->blob_ = blob; }
     static BlobResource *make(BlobTable &table, std::uint32_t id)
     {
         BlobResource *blob = nullptr;
@@ -388,4 +406,42 @@ TEST(blob_table_retire, a_released_blob_s_slot_is_not_left_retiring)
   CHECK(fixture.table().invariants_hold());
   fixture.table().unpin(1u);
   CHECK_EQ(fixture.table().live(), 0u);
+  CHECK(fixture.table().invariants_hold()); }
+
+TEST(blob_table_create_guest, a_pool_that_cannot_make_the_blob_leaves_no_id_behind)
+{ Fixture fixture;
+  fixture.host().fail_allocation_at(3u);
+  CHECK_STATUS(fixture.create(1u), Status::no_memory);
+  CHECK(!fixture.table().contains(1u));
+  CHECK_EQ(fixture.table().live(), 0u);
+  CHECK_EQ(fixture.host().live_guest_mappings(), 0u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.create(1u), Status::ok);
+  CHECK(fixture.table().invariants_hold()); }
+
+TEST(blob_table_invariants, a_broken_id_index_or_blob_pool_is_detected)
+{ Fixture ids;
+  CHECK_STATUS(ids.create(1u), Status::ok);
+  CHECK(ids.table().invariants_hold());
+  av::BlobTableProbe::corrupt_ids(ids.table());
+  CHECK(!ids.table().invariants_hold());
+  Fixture pool;
+  CHECK_STATUS(pool.create(1u), Status::ok);
+  av::BlobTableProbe::corrupt_blobs(pool.table());
+  CHECK(!pool.table().invariants_hold()); }
+
+TEST(blob_table_invariants, an_id_naming_a_stranger_is_detected_whatever_the_order_of_the_ids)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.create(1u), Status::ok);
+  CHECK_STATUS(fixture.create(2u), Status::ok);
+  CHECK_STATUS(fixture.create(3u), Status::ok);
+  av::BlobResource *const kept = av::BlobTableProbe::take_blob(fixture.table(), 1u);
+  av::BlobTableProbe::strand(fixture.table(), 1u);
+  CHECK(!fixture.table().invariants_hold());
+  av::BlobTableProbe::put_blob(fixture.table(), 1u, kept);
+  CHECK(fixture.table().invariants_hold());
+  av::BlobResource *const second = av::BlobTableProbe::take_blob(fixture.table(), 2u);
+  av::BlobTableProbe::strand(fixture.table(), 2u);
+  CHECK(!fixture.table().invariants_hold());
+  av::BlobTableProbe::put_blob(fixture.table(), 2u, second);
   CHECK(fixture.table().invariants_hold()); }

@@ -31,6 +31,8 @@ public:
 private:
     Host    &host_;
     uint8_t *page_;
+
+    friend struct WindowStatsWindowProbe;
 };
 
 }

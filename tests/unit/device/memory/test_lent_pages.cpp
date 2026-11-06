@@ -114,6 +114,17 @@ TEST(lent_pages, a_set_that_cannot_grow_refuses_and_keeps_what_it_had)
   CHECK_EQ(lent.count(), 1u);
   CHECK(lent.invariants_hold()); }
 
+TEST(lent_pages, a_claim_past_what_the_set_can_ever_hold_is_refused_without_scanning_it)
+{ MockHost  host;
+  LentPages lent(host);
+  Owner     owner(host, lent);
+  CHECK_STATUS(lent.claim(0x1000u, page, owner.lending()), Status::ok);
+  CHECK_STATUS(lent.claim(0u, std::uint64_t{1} << 50u, owner.lending()), Status::no_memory);
+  CHECK_STATUS(lent.claim(0x1000u, std::uint64_t{1} << 50u, owner.lending()), Status::no_memory);
+  CHECK_EQ(lent.count(), 1u);
+  CHECK(lent.lent(0x1000u));
+  CHECK(lent.invariants_hold()); }
+
 TEST(lent_pages, every_page_names_the_lending_that_claimed_it)
 { MockHost  host;
   LentPages lent(host);

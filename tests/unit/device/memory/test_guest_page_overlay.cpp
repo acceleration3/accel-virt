@@ -5,6 +5,7 @@
 #include "device/memory/lent_pages.hpp"
 #include "harness/context/recording_context_plane.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
 
@@ -25,7 +26,20 @@ using av::Status;
 
 namespace av {
 
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
+};
+
 struct GuestPageOverlayProbe {
+    static void set_runs_capacity(GuestPageOverlay &overlay, std::uint32_t capacity)
+    {
+        GrowableArrayProbe::corrupt_capacity(overlay.runs_, capacity);
+    }
+    static void set_extents_capacity(GuestPageOverlay &overlay, std::uint32_t capacity)
+    {
+        GrowableArrayProbe::corrupt_capacity(overlay.extents_, capacity);
+    }
     static void miscount(GuestPageOverlay &overlay) { overlay.covered_ += 1u; }
     static void repair(GuestPageOverlay &overlay, std::uint64_t covered) { overlay.covered_ = covered; }
 };
@@ -276,3 +290,28 @@ TEST(guest_page_overlay_extents, name_each_stretch_of_guest_address_space_in_the
   CHECK_EQ(fixture.overlay().extent_address(1u), ram + 2u * page);
   CHECK_EQ(fixture.overlay().extent_length(1u), page);
   CHECK(fixture.overlay().invariants_hold()); }
+
+TEST(guest_page_overlay_add, a_mapping_that_covers_nothing_is_not_found_and_leaves_nothing_laid)
+{ Fixture fixture;
+  fixture.host().empty_mapping_at(1u);
+  EntryList single(1u);
+  single.add(ram, static_cast<std::uint32_t>(page));
+  CHECK_STATUS(fixture.add(single, 1u), Status::not_found);
+  CHECK(fixture.host().claim(av::HostViolation::unknown_handle));
+  CHECK_EQ(fixture.lent().count(), 0u);
+  CHECK_EQ(fixture.overlay().covered(), 0u);
+  CHECK(fixture.overlay().invariants_hold()); }
+
+TEST(guest_page_overlay_invariants, a_broken_run_list_or_extent_list_breaks_them)
+{ Fixture runs;
+  EntryList single(1u);
+  single.add(ram, static_cast<std::uint32_t>(page));
+  CHECK_STATUS(runs.add(single, 1u), Status::ok);
+  av::GuestPageOverlayProbe::set_runs_capacity(runs.overlay(), 12u);
+  CHECK(!runs.overlay().invariants_hold());
+  av::GuestPageOverlayProbe::set_runs_capacity(runs.overlay(), 8u);
+  CHECK(runs.overlay().invariants_hold());
+  av::GuestPageOverlayProbe::set_extents_capacity(runs.overlay(), 12u);
+  CHECK(!runs.overlay().invariants_hold());
+  av::GuestPageOverlayProbe::set_extents_capacity(runs.overlay(), 8u);
+  CHECK(runs.overlay().invariants_hold()); }

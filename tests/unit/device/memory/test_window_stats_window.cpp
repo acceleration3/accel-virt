@@ -5,16 +5,26 @@
 #include "harness/host/mock_host.hpp"
 #include "proto/pages/window_stats.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
 #include <pthread.h>
+
+namespace av {
+
+struct WindowStatsWindowProbe {
+    static void shift(WindowStatsWindow &window, std::ptrdiff_t by) { window.page_ += by; }
+};
+
+}
 
 using av::MockHost;
 using av::StateWriter;
 using av::Status;
 using av::WindowStats;
 using av::WindowStatsWindow;
+using av::WindowStatsWindowProbe;
 
 namespace {
 
@@ -190,3 +200,39 @@ TEST(window_stats_window, the_report_of_an_unmapped_window_has_no_numbers)
   CHECK(std::strstr(writer.dump(), "attached=false") != nullptr);
   CHECK(std::strstr(writer.dump(), "stable=false") != nullptr);
   CHECK(std::strstr(writer.dump(), "total_pages") == nullptr); }
+
+TEST(window_stats_window, a_mapping_that_covers_nothing_is_not_found)
+{ MockHost host;
+  host.add_guest_ram(ram, 0x10000u);
+  host.empty_mapping_at(1u);
+  WindowStatsWindow window(host);
+  CHECK_STATUS(window.map(page), Status::not_found);
+  CHECK(!window.mapped());
+  CHECK_EQ(host.live_guest_mappings(), 0u); }
+
+TEST(window_stats_window, a_page_the_host_cannot_map_whole_and_directly_is_not_supported)
+{ MockHost bounced;
+  bounced.add_bounce_region(ram, 0x10000u);
+  WindowStatsWindow window(bounced);
+  CHECK_STATUS(window.map(page), Status::not_supported);
+  CHECK(!window.mapped());
+  CHECK_EQ(bounced.live_guest_mappings(), 0u);
+  MockHost split;
+  split.add_guest_ram(ram, 0x10000u);
+  split.split_guest_memory_at(page + 0x800u);
+  WindowStatsWindow cut(split);
+  CHECK_STATUS(cut.map(page), Status::not_supported);
+  CHECK(!cut.mapped());
+  CHECK_EQ(split.live_guest_mappings(), 0u); }
+
+TEST(window_stats_window, a_page_held_off_an_eight_byte_boundary_breaks_the_invariant)
+{ MockHost host;
+  host.add_guest_ram(ram, 0x10000u);
+  publish(host, WindowStats(512u, 100u, 300u, 2u, 0x4000u, 5u), 6u);
+  WindowStatsWindow window(host);
+  CHECK_STATUS(window.map(page), Status::ok);
+  CHECK(window.invariants_hold());
+  WindowStatsWindowProbe::shift(window, 1);
+  CHECK(!window.invariants_hold());
+  WindowStatsWindowProbe::shift(window, -1);
+  CHECK(window.invariants_hold()); }

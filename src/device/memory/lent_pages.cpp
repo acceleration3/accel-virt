@@ -27,11 +27,10 @@ Status LentPages::claim(uint64_t address, uint64_t bytes, GuestRamLending &owner
     AV_SCOPE("LentPages::claim");
     const uint64_t first = address / page_size;
     const uint64_t pages = bytes / page_size;
+    if (pages > pages_.most_entries - pages_.count()) return Status::no_memory;
     for (uint64_t page = first; page < first + pages; page++)
         if (pages_.find(page) != nullptr) return Status::conflict;
-    if (pages > pages_.most_entries - pages_.count() ||
-        pages_.reserve(pages_.count() + static_cast<uint32_t>(pages)) != Status::ok)
-        return Status::no_memory;
+    if (pages_.reserve(pages_.count() + static_cast<uint32_t>(pages)) != Status::ok) return Status::no_memory;
     uint32_t slot = 0u;
     for (uint64_t page = first; page < first + pages; page++) static_cast<void>(pages_.insert(page, &owner, slot));
     return Status::ok;
