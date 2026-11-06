@@ -16,6 +16,36 @@ using av::Status;
 using av::icd::SliceBlocks;
 using av::icd::StreamMemory;
 
+namespace av::icd {
+struct SliceBlocksProbe {
+    static void set_total(SliceBlocks &blocks, std::uint64_t total) { blocks.total_bytes_ = total; }
+};
+
+struct StreamMemoryProbe {
+    static void set_retired_first(StreamMemory &memory, std::uint32_t first) { memory.retired_first_ = first; }
+    static void set_outstanding(StreamMemory &memory, std::uint32_t outstanding) { memory.outstanding_ = outstanding; }
+    static void set_carved(StreamMemory &memory, std::uint32_t which, std::uint32_t carved) { memory.carved_[which] = carved; }
+    static std::uint32_t carved(const StreamMemory &memory, std::uint32_t which) { return memory.carved_[which]; }
+    static void set_free(StreamMemory &memory, std::uint32_t which, std::uint32_t index, std::uint64_t offset)
+    {
+        memory.free_[which].at(index) = offset;
+    }
+    static std::uint64_t free_at(const StreamMemory &memory, std::uint32_t which, std::uint32_t index)
+    {
+        return memory.free_[which].at(index);
+    }
+    static void set_retired_tag(StreamMemory &memory, std::uint32_t index, std::uint64_t tag)
+    {
+        memory.retired_.at(index).tag_ = tag;
+    }
+    static SliceBlocks &blocks(StreamMemory &memory) { return memory.blocks_; }
+};
+
+}
+
+using av::icd::SliceBlocksProbe;
+using av::icd::StreamMemoryProbe;
+
 namespace {
 
 constexpr std::uint64_t kib = 1024u;
@@ -467,4 +497,109 @@ TEST(stream_memory_alignment, an_alignment_over_sixty_four_kibibytes_is_all_larg
 { Rig rig(1u * mib);
   const StreamMemory::Slice slice = rig.take(1u);
   CHECK_EQ(slice.bytes_, page);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_take, a_class_that_cannot_grow_its_free_list_is_no_memory_and_asks_the_host_for_nothing)
+{ Rig rig;
+  rig.host().platform().fail_allocation_at(2u);
+  StreamMemory::Slice slice = {7u, 7u};
+  CHECK_STATUS(rig.memory().take_slice(100u, slice), Status::no_memory);
+  CHECK_EQ(slice.bytes_, 0u);
+  CHECK_EQ(rig.memory().open_blocks(), 0u);
+  CHECK_EQ(rig.host().channel().memories(), 0u);
+  CHECK(rig.memory().invariants_hold());
+  slice = rig.take(100u);
+  CHECK_EQ(slice.bytes_, 256u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_retire, a_slice_nothing_took_is_retired_and_given_back_without_touching_any_block)
+{ Rig rig;
+  const StreamMemory::Slice stranger = {StreamMemory::large_alignment + (std::uint64_t{2} << SliceBlocks::slot_shift), 256u};
+  rig.memory().retire(stranger);
+  CHECK_EQ(rig.memory().retired(), 1u);
+  CHECK(rig.memory().invariants_hold());
+  rig.memory().give_back(stranger);
+  CHECK_EQ(rig.memory().open_blocks(), 0u);
+  rig.timeline().send();
+  rig.timeline().finish(1u);
+  const StreamMemory::Slice taken = rig.take(100u);
+  CHECK_EQ(rig.memory().retired(), 0u);
+  CHECK_EQ(taken.offset_, 0u);
+  CHECK_EQ(rig.memory().free_in_class(256u), StreamMemory::chunk_bytes / 256u - 1u);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_give_back, a_slice_given_back_twice_is_not_listed_twice)
+{ Rig rig;
+  const StreamMemory::Slice a = rig.take(100u);
+  rig.memory().give_back(a);
+  const std::uint32_t listed = rig.memory().free_in_class(256u);
+  CHECK_EQ(listed, StreamMemory::chunk_bytes / 256u);
+  rig.memory().give_back(a);
+  CHECK_EQ(rig.memory().free_in_class(256u), listed);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory_trim, a_block_closed_by_trim_takes_only_its_own_free_slices_with_it)
+{ Rig rig;
+  const StreamMemory::Slice small = rig.take(100u);
+  const std::uint32_t       free_small = rig.memory().free_in_class(256u);
+  const StreamMemory::Slice rest = rig.again(SliceBlocks::first_block_bytes - StreamMemory::chunk_bytes);
+  rig.host().will_open();
+  const StreamMemory::Slice large = rig.again(mib);
+  CHECK_EQ(large.offset_ >> SliceBlocks::slot_shift, 1u);
+  const StreamMemory::Slice medium = rig.again(400u);
+  CHECK_EQ(medium.offset_ >> SliceBlocks::slot_shift, 1u);
+  CHECK(rig.memory().free_in_class(512u) != 0u);
+  rig.memory().give_back(medium);
+  rig.memory().give_back(large);
+  rig.host().clock().advance(SliceBlocks::spare_lifetime_nanoseconds);
+  rig.trim_closing(1u);
+  CHECK_EQ(rig.memory().open_blocks(), 1u);
+  CHECK_EQ(rig.memory().free_in_class(256u), free_small);
+  CHECK_EQ(rig.memory().free_in_class(512u), 0u);
+  CHECK(rig.memory().invariants_hold());
+  rig.memory().give_back(rest);
+  rig.memory().give_back(small);
+  CHECK(rig.memory().invariants_hold()); }
+
+TEST(stream_memory, its_invariants_catch_each_way_the_lists_and_blocks_can_disagree)
+{ Rig rig;
+  const StreamMemory::Slice a = rig.take(100u);
+  const StreamMemory::Slice b = rig.again(100u);
+  rig.memory().retire(a);
+  rig.timeline().send();
+  rig.memory().retire(b);
+  CHECK(rig.memory().invariants_hold());
+
+  StreamMemoryProbe::set_retired_first(rig.memory(), 3u);
+  CHECK(!rig.memory().invariants_hold());
+  StreamMemoryProbe::set_retired_first(rig.memory(), 0u);
+
+  StreamMemoryProbe::set_outstanding(rig.memory(), 1000000u);
+  CHECK(!rig.memory().invariants_hold());
+  StreamMemoryProbe::set_outstanding(rig.memory(), 0u);
+  CHECK(rig.memory().invariants_hold());
+
+  SliceBlocksProbe::set_total(StreamMemoryProbe::blocks(rig.memory()), 1u);
+  CHECK(!rig.memory().invariants_hold());
+  SliceBlocksProbe::set_total(StreamMemoryProbe::blocks(rig.memory()), SliceBlocks::first_block_bytes);
+  CHECK(rig.memory().invariants_hold());
+
+  const std::uint32_t carved = StreamMemoryProbe::carved(rig.memory(), 0u);
+  StreamMemoryProbe::set_carved(rig.memory(), 0u, 1u);
+  CHECK(!rig.memory().invariants_hold());
+  StreamMemoryProbe::set_carved(rig.memory(), 0u, carved);
+  CHECK(rig.memory().invariants_hold());
+
+  const std::uint64_t listed = StreamMemoryProbe::free_at(rig.memory(), 0u, 0u);
+  StreamMemoryProbe::set_free(rig.memory(), 0u, 0u, listed + 1u);
+  CHECK(!rig.memory().invariants_hold());
+  StreamMemoryProbe::set_free(rig.memory(), 0u, 0u, SliceBlocks::first_block_bytes);
+  CHECK(!rig.memory().invariants_hold());
+  StreamMemoryProbe::set_free(rig.memory(), 0u, 0u, listed);
+  CHECK(rig.memory().invariants_hold());
+
+  StreamMemoryProbe::set_retired_tag(rig.memory(), 1u, 0u);
+  StreamMemoryProbe::set_retired_tag(rig.memory(), 0u, 7u);
+  CHECK(!rig.memory().invariants_hold());
+  StreamMemoryProbe::set_retired_tag(rig.memory(), 0u, 0u);
   CHECK(rig.memory().invariants_hold()); }
