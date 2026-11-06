@@ -156,3 +156,27 @@ TEST(avgpu_adapters, hostile_enumerations_claiming_too_many_or_a_zero_handle)
   adapters.close();
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u); }
+
+TEST(avgpu_adapters, the_luids_listed_are_the_held_adapters_in_order_without_those_windows_would_not_give)
+{ MockKmt kmt;
+  kmt.add_adapter(on_radeon, 3200u);
+  kmt.add_adapter(on_raphael, 3200u);
+  kmt.add_adapter(on_geforce, 3200u);
+  kmt.set_adapter_luid(0u, 0x11u);
+  kmt.set_adapter_luid(1u, 0x22u);
+  kmt.set_adapter_luid(2u, 0x33u);
+  AvgpuAdapters adapters(kmt);
+  std::uint64_t listed[AvgpuAdapters::max_adapters] = {};
+  CHECK_EQ(adapters.luids(listed), 0u);
+  CHECK_STATUS(adapters.learn(), Status::ok);
+  CHECK_EQ(adapters.luids(listed), 3u);
+  CHECK_EQ(listed[0], 0x11u);
+  CHECK_EQ(listed[1], 0x22u);
+  CHECK_EQ(listed[2], 0x33u);
+  kmt.fail_at(MockKmt::Call::adapter_luid, 2u, 0xC0000001u);
+  CHECK_STATUS(adapters.learn(), Status::ok);
+  std::uint64_t again[AvgpuAdapters::max_adapters] = {};
+  CHECK_EQ(adapters.luids(again), 2u);
+  CHECK_EQ(again[0], 0x11u);
+  CHECK_EQ(again[1], 0x33u);
+  CHECK(adapters.invariants_hold()); }

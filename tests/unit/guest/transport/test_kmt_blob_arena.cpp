@@ -312,7 +312,10 @@ TEST(kmt_blob_arena, only_eight_regions_open_at_once)
 TEST(kmt_blob_arena, a_control_import_the_host_refuses_leaves_nothing_held)
 { { Rig rig;
     rig.host().blob_import(av::BlobImportAnswer::executor_refused, 0u);
+    CHECK(rig.arena().failed_step() == nullptr);
     CHECK_STATUS(rig.arena().open(0u), Status::invalid_parameter);
+    CHECK_EQ(std::strcmp(rig.arena().failed_step(), "control segment open"), 0);
+    CHECK(rig.arena().failed_status() == Status::invalid_parameter);
     CHECK_EQ(rig.kmt().commands(), 1u);
     rig.check_nothing_is_held(); }
   { Rig rig;
@@ -330,11 +333,15 @@ TEST(kmt_blob_arena, a_ring_the_host_refuses_keeps_the_control_for_the_next_try_
   rig.host().blob_import(0u, imported_memory);
   rig.host().blob_import(av::BlobImportAnswer::no_room, 0u);
   CHECK_STATUS(rig.arena().open(0u), Status::no_memory);
+  CHECK_EQ(std::strcmp(rig.arena().failed_step(), "ring segment open"), 0);
+  CHECK(rig.arena().failed_status() == Status::no_memory);
   CHECK(!rig.arena().lending());
   CHECK(!rig.transport().blobs().ready());
   CHECK(rig.arena().invariants_hold());
   rig.host().blob_import(0u, imported_memory + 1u);
   CHECK_STATUS(rig.arena().open(0u), Status::ok);
+  CHECK(rig.arena().failed_step() == nullptr);
+  CHECK(rig.arena().failed_status() == Status::ok);
   CHECK_EQ(rig.kmt().window_chunks(), 2u);
   rig.host_takes_the_releases(2u);
   CHECK_STATUS(rig.arena().close(), Status::ok);
