@@ -10,6 +10,7 @@
 #include "executor/wake_signal.hpp"
 #include "core/log/driver_log.hpp"
 #include "harness/icd/recording_log.hpp"
+#include "proto/d3d/heap_slice_support.hpp"
 #include "proto/wire/guest_bytes.hpp"
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/shim/host_heap.hpp"
@@ -106,6 +107,13 @@ TEST(d3d12_session_on_ResourceAllocation12, a_session_with_no_device_answers_a_s
   CHECK(fresh.session().on_ResourceAllocation12(desc, size, alignment));
   CHECK(size == ~std::uint64_t{0});
   CHECK(alignment == 0u); }
+
+TEST(d3d12_session_on_QueryHeapSlices12, a_session_with_no_device_offers_no_heap_windows)
+{ FreshSession fresh;
+  std::uint32_t supported = 7u;
+  CHECK(fresh.session().on_QueryHeapSlices12(supported));
+  CHECK_EQ(supported, static_cast<std::uint32_t>(av::HeapSliceSupport::none));
+  CHECK(fresh.session().invariants_hold()); }
 
 TEST(d3d12_session_on_Finish12, answers_the_removed_reason_and_nothing_else_without_a_device)
 { FreshSession fresh;
