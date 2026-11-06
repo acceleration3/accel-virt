@@ -668,6 +668,18 @@ TEST(av_context_table_bind, a_setup_the_device_refuses_is_undone)
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
+TEST(av_context_table_bind, a_setup_the_device_never_answers_keeps_its_pages_out_of_use)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  host.delay_next(ctx_create_type, ~std::uint64_t{0});
+  CHECK_STATUS(fixture.bind(&first_context), Status::not_supported);
+  CHECK_EQ(fixture.table().bound(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 3u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_EQ(fixture.platform().reclaim_page_blocks(), 3u); }
+
 TEST(av_context_table_bind, a_record_the_capset_forbids_is_refused_before_the_device_is_asked)
 { Fixture fixture;
   Host host(fixture.mapped());
@@ -2046,3 +2058,19 @@ TEST(av_context_table_invariants, detect_a_live_slot_without_its_binding_and_a_f
   AvContextTableProbe::set_context(table, 0u, &first_context);
   AvContextTableProbe::binding(table, 0u).destroy();
   CHECK(!table.invariants_hold()); }
+
+TEST(av_context_table_invariants, detect_a_free_slot_that_still_holds_a_binding)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  AvContextTable &table = fixture.table();
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  ProcessAllocation other(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::context_ring,
+                          page);
+  CHECK_STATUS(fixture.bind(&second_context, AvContextRecord(SubApi::vulkan, 12u, other.handle(), page)), Status::ok);
+  CHECK(table.invariants_hold());
+  AvContextTableProbe::set_live(table, 1u, false);
+  AvContextTableProbe::set_context(table, 1u, nullptr);
+  CHECK(!table.invariants_hold());
+  AvContextTableProbe::set_context(table, 1u, &second_context);
+  AvContextTableProbe::set_live(table, 1u, true);
+  CHECK(table.invariants_hold()); }

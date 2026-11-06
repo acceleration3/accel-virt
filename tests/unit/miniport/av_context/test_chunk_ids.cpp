@@ -8,7 +8,15 @@
 
 namespace av {
 
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_size(GrowableArray<T> &array, std::uint32_t size) { array.size_ = size; }
+    template <typename T>
+    static void corrupt_capacity(GrowableArray<T> &array, std::uint32_t capacity) { array.capacity_ = capacity; }
+};
+
 struct ChunkIdsProbe {
+    static void corrupt_words(ChunkIds &ids) { GrowableArrayProbe::corrupt_capacity(ids.words_, 3u); }
     static void set_taken(ChunkIds &ids, std::uint32_t taken) { ids.taken_ = taken; }
     static void set_lowest(ChunkIds &ids, std::uint32_t lowest) { ids.lowest_ = lowest; }
     static void set_word(ChunkIds &ids, std::uint32_t word, std::uint64_t bits) { ids.words_.at(word) = bits; }
@@ -143,4 +151,16 @@ TEST(chunk_ids_invariants, fail_for_a_wrong_count_a_free_bit_below_the_search_or
   CHECK(ids.invariants_hold());
   ChunkIdsProbe::set_word(ids, 1u, std::uint64_t{1} << 40u | 3u);
   ChunkIdsProbe::set_taken(ids, 66u);
+  CHECK(!ids.invariants_hold()); }
+
+TEST(chunk_ids_invariants, hold_across_an_emptied_word_and_fail_for_a_broken_bitmap)
+{ MockPlatform  platform;
+  ChunkIds      ids(platform, 100u);
+  std::uint32_t id = 0u;
+  for (std::uint32_t taken = 0u; taken < 66u; taken++) CHECK_STATUS(ids.take(id), Status::ok);
+  ids.give_back(HostBlobId::first + 64u);
+  ids.give_back(HostBlobId::first + 65u);
+  CHECK_EQ(ids.taken(), 64u);
+  CHECK(ids.invariants_hold());
+  ChunkIdsProbe::corrupt_words(ids);
   CHECK(!ids.invariants_hold()); }

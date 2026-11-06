@@ -1,6 +1,7 @@
 #include "miniport/av_context/ring_submitter.hpp"
 
 #include "core/platform/register_window.hpp"
+#include "core/support/untestable.hpp"
 #include "core/trace/function_scope.hpp"
 #include "proto/submission/fence_progress.hpp"
 #include "proto/submission/ring_header.hpp"
@@ -48,7 +49,7 @@ Status RingSubmitter::judge_head(uint64_t tail)
     const uint64_t head = __atomic_load_n(reinterpret_cast<const uint64_t *>(ring_ + head_offset), __ATOMIC_ACQUIRE);
     if (shared_tail_) {
         const uint64_t now = __atomic_load_n(reinterpret_cast<const uint64_t *>(ring_ + tail_offset), __ATOMIC_ACQUIRE);
-        if (now > tail) tail = now;
+        if (now > tail) { AV_UNTESTABLE("the process publishes a further tail between the two loads"); tail = now; }
     }
     if (device_.observe(RingHeader(order_, tail, head)) == Status::ok) return Status::ok;
     failed_ = true;

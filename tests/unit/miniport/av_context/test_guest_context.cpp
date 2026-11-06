@@ -409,3 +409,17 @@ TEST(guest_context_next_begin, is_the_later_of_the_tail_it_kept_and_the_one_the_
   std::memcpy(fixture.memory().pages().ring_view() + 8u, &behind, sizeof behind);
   CHECK_EQ(fixture.context().next_begin(), 24u);
   CHECK(fixture.context().invariants_hold()); }
+
+TEST(guest_context_fail, fails_an_established_context_only)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.context().fail();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.context().state() == GuestContext::State::idle);
+  fixture.established();
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.context().fail();
+  fixture.context().fail();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.context().state() == GuestContext::State::failed);
+  CHECK(fixture.context().invariants_hold()); }

@@ -22,7 +22,12 @@ using av::Violation;
 
 namespace av {
 
+struct GuestPagesProbe {
+    static void set_bytes(GuestPages &pages, std::uint64_t bytes) { pages.bytes_ = bytes; }
+};
+
 struct ContextMemoryProbe {
+    static GuestPages &ring(ContextMemory &memory) { return memory.ring_; }
     static std::uint8_t *swap_ring_header(ContextMemory &memory, std::uint8_t *view)
     {
         std::uint8_t *const held = memory.ring_header_;
@@ -163,7 +168,7 @@ TEST(context_memory_map, the_process_sees_the_ring_and_reply_the_device_is_hande
   CHECK_EQ(platform.owned_page_blocks(), 0u); }
 
 TEST(context_memory_map, both_views_or_neither)
-{ for (std::uint32_t failing = 1u; failing <= 2u; failing++) {
+{ for (std::uint32_t failing = 1u; failing <= 3u; failing++) {
       MockPlatform platform;
       ContextMemory memory(platform);
       CHECK_STATUS(memory.allocate(12u, 4096u), Status::ok);
@@ -238,4 +243,23 @@ TEST(context_memory_invariants, a_holding_without_every_part_is_detected)
   CHECK(!memory.invariants_hold());
   memory.release();
   CHECK(platform.claim(Violation::broken_invariant));
+  CHECK_STATUS(memory.allocate(12u, 4096u), Status::ok);
+  ContextMemoryProbe::reply(memory).release();
+  CHECK(!memory.invariants_hold());
+  memory.release();
+  CHECK(platform.claim(Violation::broken_invariant));
   CHECK(memory.invariants_hold()); }
+
+TEST(context_memory_invariants, a_part_whose_own_book_is_wrong_is_detected)
+{ MockPlatform platform;
+  ContextMemory memory(platform);
+  CHECK_STATUS(memory.allocate(12u, 4096u), Status::ok);
+  av::GuestPages *const parts[] = {&ContextMemoryProbe::ring(memory), &ContextMemoryProbe::fence(memory),
+                                   &ContextMemoryProbe::reply(memory)};
+  for (av::GuestPages *const part : parts) {
+      av::GuestPagesProbe::set_bytes(*part, 0u);
+      CHECK(!memory.invariants_hold());
+      av::GuestPagesProbe::set_bytes(*part, page);
+      CHECK(memory.invariants_hold());
+  }
+  memory.release(); }

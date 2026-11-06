@@ -38,6 +38,7 @@ namespace av {
 struct ContextRequestSequenceProbe {
     static void overcreate(ContextRequestSequence &sequence) { sequence.blobs_created_ = 4u; }
     static void blob_without_context(ContextRequestSequence &sequence) { sequence.blobs_created_ = 1u; }
+    static void overlong_label(ContextRequestSequence &sequence) { sequence.label_length_ = ContextRequestSequence::label_bytes; }
 };
 
 }
@@ -381,7 +382,10 @@ TEST(context_request_sequence_invariants, more_blobs_created_than_a_context_has_
   CHECK(!fixture.sequence().invariants_hold());
   Fixture orphan;
   av::ContextRequestSequenceProbe::blob_without_context(orphan.sequence());
-  CHECK(!orphan.sequence().invariants_hold()); }
+  CHECK(!orphan.sequence().invariants_hold());
+  Fixture labelled;
+  av::ContextRequestSequenceProbe::overlong_label(labelled.sequence());
+  CHECK(!labelled.sequence().invariants_hold()); }
 
 TEST(context_request_sequence_begin_teardown, waits_for_a_running_sequence)
 { Fixture fixture;

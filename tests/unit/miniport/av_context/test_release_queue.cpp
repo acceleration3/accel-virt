@@ -70,3 +70,17 @@ TEST(release_queue, clear_forgets_what_was_held_and_begins_an_order_again)
   CHECK(!queue.active());
   CHECK_EQ(queue.held(), 0u);
   CHECK(queue.arrive(batch(5u, 500u, 564u), 500u) == ReleaseQueue::Turn::release_now); }
+
+TEST(release_queue, the_next_held_is_found_past_batches_that_are_not_next)
+{ ReleaseQueue queue;
+  CHECK(queue.arrive(batch(3u, 128u, 192u), 0u) == ReleaseQueue::Turn::held);
+  CHECK(queue.arrive(batch(2u, 64u, 128u), 0u) == ReleaseQueue::Turn::held);
+  CHECK(queue.arrive(batch(1u, 0u, 64u), 0u) == ReleaseQueue::Turn::release_now);
+  queue.released(batch(1u, 0u, 64u));
+  SubmissionDescriptor next;
+  CHECK(queue.next_held(next));
+  CHECK(next.fence_id() == 2u);
+  queue.released(next);
+  CHECK(queue.next_held(next));
+  CHECK(next.fence_id() == 3u);
+  CHECK_EQ(queue.held(), 0u); }
