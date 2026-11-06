@@ -334,3 +334,26 @@ TEST(dxgi_format_table, an_overlay_plane_takes_the_video_formats_the_host_has)
   table.settle();
   CHECK((table.format_support(nv12) & ddi_multiplane_overlay) != 0u);
   CHECK_EQ(table.format_support(yuy2) & ddi_multiplane_overlay, 0u); }
+
+TEST(dxgi_format_table, formats_past_the_rows_the_host_sent_have_no_support)
+{ av::d3dproto::FormatCaps rows[av::DxgiFormat::count] = {};
+  for (std::uint32_t format = 0u; format < av::DxgiFormat::count; format++) rows[format].support = api_sample;
+  DxgiFormatTable table;
+  table.learn(rows, rgba8_unorm + 1u);
+  CHECK_EQ(table.format_support(rgba8_unorm), ddi_sample);
+  CHECK_EQ(table.format_support(rgba8_unorm + 1u), 0u);
+  CHECK_EQ(table.format_support(av::DxgiFormat::count - 1u), 0u);
+  table.learn(rows, 0u);
+  CHECK_EQ(table.format_support(rgba8_unorm), 0u); }
+
+TEST(dxgi_format_table, no_format_family_has_more_members_than_the_table_weighs_at_once)
+{ constexpr std::uint32_t most_members = 8u;
+  std::uint32_t           widest = 0u;
+  for (std::uint32_t head = 1u; head < av::DxgiFormat::count; head++) {
+      std::uint32_t members = 0u;
+      for (std::uint32_t format = 1u; format < av::DxgiFormat::count; format++)
+          if (av::DxgiFormat(format).family() == head && !av::DxgiFormat(format).family_head()) members++;
+      if (members > widest) widest = members;
+  }
+  CHECK(widest != 0u);
+  CHECK(widest <= most_members); }

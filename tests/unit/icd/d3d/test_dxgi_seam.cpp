@@ -332,3 +332,39 @@ TEST(dxgi_seam, a_slot_called_with_a_foreign_device_is_refused)
   args.hDevice = nullptr;
   CHECK_EQ(device.call(Slot::present, &args), hr_invalid_arg);
   CHECK_EQ(device.call(Slot::present, static_cast<DxgiDdiArgRecord *>(nullptr)), hr_invalid_arg); }
+
+TEST(dxgi_seam, every_capability_and_reclaim_entry_refuses_a_null_argument_block)
+{ Device device;
+  CHECK_EQ(device.adopt(), hr_ok);
+  if (device.device() == nullptr) return;
+  DxgiBaseTable &dxgi = device.device()->dxgi();
+  CHECK_EQ(dxgi.gamma_caps(nullptr), hr_invalid_arg);
+  CHECK_EQ(dxgi.overlay_caps(nullptr), hr_invalid_arg);
+  CHECK_EQ(dxgi.overlay_group_caps(nullptr), hr_invalid_arg);
+  CHECK_EQ(dxgi.present_duration(nullptr), hr_invalid_arg);
+  CHECK_EQ(dxgi.overlay_color_space(nullptr), hr_invalid_arg);
+  CHECK_EQ(dxgi.reclaim_resources(nullptr), hr_invalid_arg);
+  CHECK_EQ(dxgi.reclaim_resources1(nullptr), hr_invalid_arg);
+  CHECK(device.rig().root().invariants_hold()); }
+
+TEST(dxgi_seam, a_reclaim_with_resources_but_no_resource_list_is_refused_whatever_the_results)
+{ Device device;
+  CHECK_EQ(device.adopt(), hr_ok);
+  std::uint32_t results[2] = {2u, 2u};
+  DxgiDdiArgReclaimResources1Record reclaim1 = {};
+  reclaim1.hDevice = device.block();
+  reclaim1.pResults = results;
+  reclaim1.Resources = 2u;
+  CHECK_EQ(device.call(Slot::reclaim_resources1, &reclaim1), hr_invalid_arg);
+  CHECK_EQ(results[0], 2u);
+  CHECK_EQ(results[1], 2u); }
+
+TEST(dxgi_seam, the_second_rgb_overlay_format_is_supported_in_srgb)
+{ Device device;
+  CHECK_EQ(device.adopt(), hr_ok);
+  DxgiDdiArgCheckMultiplaneOverlayColorSpaceSupportRecord space = {};
+  space.hDevice = device.block();
+  space.Format = 88u;
+  space.ColorSpace = 0u;
+  CHECK_EQ(device.call(Slot::overlay_color_space, &space), hr_ok);
+  CHECK_EQ(space.Supported, 1); }

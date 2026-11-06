@@ -81,7 +81,7 @@ void DxgiFormatTable::settle_family(uint32_t head)
     constexpr uint32_t most_members = 8u;
     uint32_t members[most_members] = {};
     uint32_t count = 0u, loads = 0u;
-    for (uint32_t format = 1u; format < DxgiFormat::count && count < most_members; format++) {
+    for (uint32_t format = 1u; format < DxgiFormat::count; format++) {
         if (DxgiFormat(format).family() != head || DxgiFormat(format).family_head() || carried(format) == 0u) continue;
         const bool load = (carried(format) & ddi_multisample_load) != 0u;
         bool       counted = false;
