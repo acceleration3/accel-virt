@@ -26,6 +26,14 @@ using av::icd::HandleRegistry;
 using av::icd::LoaderHandle;
 using Kind = av::icd::LoaderHandle::Kind;
 
+namespace av {
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_free_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.free_count_ = count; }
+};
+
+}
+
 namespace av::icd {
 
 struct LoaderHandleProbe {
@@ -57,6 +65,42 @@ struct HandleTreeProbe {
 
 struct HandleRegistryProbe {
     static ObjectPool<LoaderHandle> &pool(HandleRegistry &registry) { return HandleTreeProbe::pool(registry.tree_); }
+    static std::uint32_t unindexed(const HandleRegistry &registry) { return registry.unindexed_; }
+    static void          set_unindexed(HandleRegistry &registry, std::uint32_t count) { registry.unindexed_ = count; }
+    static void          miscount_index(HandleRegistry &registry, std::uint32_t count)
+    {
+        KeyedSlotsProbe::corrupt_free_count(registry.index_, count);
+    }
+    static void miscount_instances(HandleRegistry &registry, std::uint32_t count)
+    {
+        KeyedSlotsProbe::corrupt_free_count(registry.instances_, count);
+    }
+    static void add_instance(HandleRegistry &registry, std::uint64_t connection, LoaderHandle *handle)
+    {
+        std::uint32_t slot = 0u;
+        CHECK_STATUS(registry.instances_.insert(connection, handle, slot), Status::ok);
+    }
+    static void forget_instance(HandleRegistry &registry, std::uint64_t connection)
+    {
+        static_cast<void>(registry.instances_.erase(connection));
+    }
+    static void add_index(HandleRegistry &registry, std::uint64_t key, LoaderHandle *handle)
+    {
+        std::uint32_t slot = 0u;
+        CHECK_STATUS(registry.index_.insert(key, handle, slot), Status::ok);
+    }
+    static void forget_index(HandleRegistry &registry, std::uint64_t key)
+    {
+        static_cast<void>(registry.index_.erase(key));
+    }
+    static std::uint64_t index_key(const HandleRegistry &registry, const LoaderHandle &handle)
+    {
+        return registry.key_of(handle.kind(), handle.host(), handle.connection());
+    }
+    static std::uint64_t address(const HandleRegistry &registry, const Connection *connection)
+    {
+        return registry.address_of(connection);
+    }
 };
 
 }
@@ -560,3 +604,107 @@ TEST(handle_registry, child_answers_each_live_handle_of_a_kind_made_through_a_pa
   CHECK(registry.invariants_hold());
   CHECK(registry.child(*tree.device, Kind::queue, 0u) == tree.queue);
   CHECK(registry.child(*tree.device, Kind::queue, 1u) == nullptr); }
+
+TEST(handle_registry, a_second_instance_of_one_connection_is_wrapped_beside_the_first)
+{ MockPlatform platform;
+  HandleRegistry registry(platform);
+  Tree tree(registry);
+  LoaderHandle *second_instance = nullptr;
+  CHECK_STATUS(registry.wrap(Kind::instance, instance_host + 1u, first, nullptr, second_instance), Status::ok);
+  CHECK(second_instance != nullptr && second_instance != tree.instance);
+  CHECK(registry.instance_of(first) == tree.instance);
+  CHECK(registry.invariants_hold());
+  CHECK_EQ(registry.live(), 6u);
+  CHECK_STATUS(registry.destroy(second_instance), Status::ok);
+  CHECK(registry.invariants_hold());
+  CHECK(registry.instance_of(first) == tree.instance); }
+
+TEST(handle_registry, a_handle_the_index_had_no_room_for_is_still_found_and_forgotten_by_a_scan)
+{ std::uint32_t scanned = 0u;
+  for (std::uint32_t failing = 1u; failing <= 8u; failing++) {
+      MockPlatform platform;
+      { HandleRegistry registry(platform);
+        LoaderHandle  *instance = nullptr;
+        CHECK_STATUS(registry.wrap(Kind::instance, instance_host, first, nullptr, instance), Status::ok);
+        for (std::uint32_t index = 1u; index < 8u; index++) {
+            LoaderHandle *filler = nullptr;
+            CHECK_STATUS(registry.wrap(Kind::physical_device, physical_device_host + index, first, instance, filler),
+                         Status::ok);
+        }
+        platform.fail_allocation_at(failing);
+        LoaderHandle *made = nullptr;
+        const Status  status = registry.wrap(Kind::physical_device, physical_device_host, first, instance, made);
+        platform.fail_allocation_at(0u);
+        CHECK(registry.invariants_hold());
+        if (status == Status::ok) {
+            if (HandleRegistryProbe::unindexed(registry) != 0u) scanned++;
+            LoaderHandle *again = nullptr;
+            CHECK_STATUS(registry.wrap(Kind::physical_device, physical_device_host, first, instance, again),
+                         Status::ok);
+            CHECK(again == made);
+            CHECK_EQ(registry.live(), 9u);
+            CHECK(registry.invariants_hold());
+        }
+        CHECK_STATUS(registry.destroy(instance), Status::ok);
+        CHECK(registry.invariants_hold());
+        CHECK_EQ(registry.live(), 0u);
+        CHECK_EQ(HandleRegistryProbe::unindexed(registry), 0u); }
+      CHECK_EQ(platform.live_allocations(), 0u);
+  }
+  CHECK(scanned > 0u); }
+
+TEST(handle_registry, an_index_entry_of_another_handle_does_not_name_the_one_asked_for)
+{ MockPlatform platform;
+  HandleRegistry registry(platform);
+  Tree tree(registry);
+  const std::uint64_t key = HandleRegistryProbe::index_key(registry, *tree.physical_device);
+  LoaderHandleProbe::set_host(*tree.physical_device, physical_device_host + 5u);
+  LoaderHandle *made = nullptr;
+  CHECK_STATUS(registry.wrap(Kind::physical_device, physical_device_host, first, tree.instance, made), Status::ok);
+  CHECK(made != tree.physical_device);
+  CHECK_EQ(registry.live(), 6u);
+  LoaderHandleProbe::set_host(*tree.physical_device, physical_device_host);
+  CHECK(HandleRegistryProbe::index_key(registry, *tree.physical_device) == key);
+  CHECK_STATUS(registry.destroy(made), Status::ok); }
+
+TEST(handle_registry, invariants_refuse_instance_and_index_tables_that_lost_count)
+{ MockPlatform platform;
+  HandleRegistry registry(platform);
+  Tree tree(registry);
+  HandleRegistryProbe::miscount_index(registry, 5u);
+  CHECK(!registry.invariants_hold());
+  HandleRegistryProbe::miscount_index(registry, 0u);
+  HandleRegistryProbe::miscount_instances(registry, 5u);
+  CHECK(!registry.invariants_hold());
+  HandleRegistryProbe::miscount_instances(registry, 0u);
+  CHECK(registry.invariants_hold()); }
+
+TEST(handle_registry, invariants_refuse_an_instance_entry_that_names_nothing_held_no_instance_or_another_connection)
+{ MockPlatform platform;
+  HandleRegistry registry(platform);
+  Tree tree(registry);
+  LoaderHandle stack(Kind::instance, instance_host + 9u, second, nullptr);
+  const std::uint64_t other = HandleRegistryProbe::address(registry, second);
+  HandleRegistryProbe::add_instance(registry, other, &stack);
+  CHECK(!registry.invariants_hold());
+  HandleRegistryProbe::forget_instance(registry, other);
+  HandleRegistryProbe::add_instance(registry, other, tree.device);
+  CHECK(!registry.invariants_hold());
+  HandleRegistryProbe::forget_instance(registry, other);
+  HandleRegistryProbe::add_instance(registry, other, tree.instance);
+  CHECK(!registry.invariants_hold());
+  HandleRegistryProbe::forget_instance(registry, other);
+  CHECK(registry.invariants_hold()); }
+
+TEST(handle_registry, invariants_refuse_an_index_with_an_entry_too_many_and_a_count_of_unindexed_that_is_wrong)
+{ MockPlatform platform;
+  HandleRegistry registry(platform);
+  Tree tree(registry);
+  HandleRegistryProbe::add_index(registry, 12345u, tree.queue);
+  CHECK(!registry.invariants_hold());
+  HandleRegistryProbe::forget_index(registry, 12345u);
+  CHECK(registry.invariants_hold());
+  HandleRegistryProbe::set_unindexed(registry, 1u);
+  CHECK(!registry.invariants_hold());
+  HandleRegistryProbe::set_unindexed(registry, 0u);
+  CHECK(registry.invariants_hold()); }
