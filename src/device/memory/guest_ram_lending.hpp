@@ -49,6 +49,8 @@ private:
     int                   fd_;
     GuestPageOverlay      overlay_;
     GrowableArray<Holder> holders_;
+
+    friend struct GuestRamLendingProbe;
 };
 
 }

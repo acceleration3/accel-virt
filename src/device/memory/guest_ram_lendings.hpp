@@ -32,6 +32,8 @@ private:
     LentPages                    pages_;
     ObjectPool<GuestRamLending>  lendings_;
     BlockSource                 &blocks_;
+
+    friend struct GuestRamLendingsProbe;
 };
 
 }
