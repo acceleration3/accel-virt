@@ -11,6 +11,7 @@ struct PresentDeviceProbe {
     static void miscount(PresentDevice &device) { device.image_count_ = PresentDevice::max_images + 1u; }
     static void count_none(PresentDevice &device) { device.image_count_ = 0u; }
     static void forget_buffer_memory(PresentDevice &device) { device.buffer_memory_ = VK_NULL_HANDLE; }
+    static void doubt_without_a_fence(PresentDevice &device, std::uint32_t slot) { device.doubted_[slot] = true; }
 };
 
 }
@@ -386,3 +387,18 @@ TEST(present_device, its_invariants_refuse_an_image_without_memory_a_miscount_an
   CHECK_EQ(mapped.make_readback(frame_bytes), VK_SUCCESS);
   PresentDeviceProbe::forget_buffer_memory(mapped);
   CHECK(!mapped.invariants_hold()); }
+
+TEST(present_device, a_copy_to_the_readback_needs_the_readback_buffer_and_a_doubted_slot_needs_its_fence)
+{ ScriptedVulkanDevice host;
+  PresentDevice device(host, host.device(), host.physical());
+  CHECK_EQ(device.make_commands(), VK_SUCCESS);
+  const VkImage image = image_of(device, host);
+  CHECK_EQ(device.copy(host.queue(), image, extent, 0u, nullptr, 0u), VK_ERROR_INITIALIZATION_FAILED);
+  CHECK_EQ(host.submits(), 0u);
+  CHECK(device.invariants_hold());
+
+  ScriptedVulkanDevice other;
+  PresentDevice unfenced(other, other.device(), other.physical());
+  PresentDeviceProbe::doubt_without_a_fence(unfenced, 1u);
+  CHECK(!unfenced.invariants_hold());
+  unfenced.release(); }
