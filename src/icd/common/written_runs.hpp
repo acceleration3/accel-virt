@@ -26,6 +26,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct WrittenRunsProbe;
+
     Run      runs_[max_runs];
     uint32_t count_;
 };
