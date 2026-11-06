@@ -324,3 +324,23 @@ TEST(gl_present_loop_invariants, fail_for_a_row_held_empty_or_an_order_not_hande
   CHECK(rig.loop.hand(rig.frame(rig.first, 1u, 0, mark)));
   Probe::set_order(rig.loop, 1u, 1u);
   CHECK(!rig.loop.invariants_hold()); }
+
+TEST(gl_present_loop, a_frame_shown_now_is_put_on_its_window_ahead_of_the_queue_and_uncounted)
+{ Rig rig;
+  const BatchMark mark = rig.sent();
+  CHECK(rig.loop.show_now(rig.frame(rig.first, 0u, 1, mark)));
+  CHECK_EQ(rig.surface.blits(), 1u);
+  CHECK(rig.surface.last_blit_dc() == &rig.dcs[1]);
+  CHECK(std::memcmp(rig.surface.last_blit_bytes(), rig.pixels, sizeof rig.pixels) == 0);
+  CHECK_EQ(rig.loop.shown_frames(), 0u);
+  CHECK_EQ(rig.loop.queued(), 0u);
+  rig.surface.refuse_next_blit();
+  CHECK(!rig.loop.show_now(rig.frame(rig.first, 0u, 1, mark)));
+  CHECK(rig.loop.invariants_hold()); }
+
+TEST(gl_present_loop, awaiting_a_shown_frame_sleeps_on_the_shown_signal)
+{ Rig rig;
+  rig.loop.await_shown(12u);
+  CHECK_EQ(rig.shown.waits(), 1u);
+  CHECK_EQ(rig.shown.last_wait(), 12u);
+  CHECK_EQ(rig.handed.waits(), 0u); }

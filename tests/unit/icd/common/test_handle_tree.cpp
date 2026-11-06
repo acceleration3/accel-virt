@@ -104,6 +104,15 @@ namespace av::icd {
 struct HandleTreeProbe {
     template <typename N>
     static ObjectPool<N> &pool(HandleTree<N> &tree) { return tree.pool_; }
+    template <typename N>
+    static const HandleTreePlace<N> *place_of(const HandleTree<N> &tree, const N *node)
+    {
+        return tree.index_.find(tree.key_of(node));
+    }
+    template <typename N>
+    static std::uint32_t slot_of(const HandleTree<N> &tree, const N *node) { return tree.slot_of(node); }
+    template <typename N>
+    static constexpr std::uint32_t none() { return HandleTree<N>::no_slot; }
 };
 
 }
@@ -201,3 +210,78 @@ TEST(handle_tree, the_invariant_catches_a_lost_parent_and_an_unsound_pool)
   CHECK(forest.tree().invariants_hold());
   av::ObjectPoolProbe::miscount(av::icd::HandleTreeProbe::pool(forest.tree()));
   CHECK(!forest.tree().invariants_hold()); }
+
+TEST(handle_tree, children_are_visited_in_the_order_they_were_made_and_only_the_direct_ones)
+{ Forest      forest;
+  Node *const root = forest.make(Node::Kind::root);
+  Node *const first = forest.make(Node::Kind::middle, root);
+  Node *const second = forest.make(Node::Kind::middle, root);
+  Node *const third = forest.make(Node::Kind::middle, root);
+  Node *const grandchild = forest.make(Node::Kind::leaf, second);
+  const Node *seen[8] = {};
+  std::uint32_t visited = 0u;
+  forest.tree().for_children(*root, [&](const Node &node) { seen[visited++] = &node; });
+  CHECK_EQ(visited, 3u);
+  CHECK(seen[0] == first && seen[1] == second && seen[2] == third);
+  visited = 0u;
+  forest.tree().for_children(*second, [&](const Node &node) { seen[visited++] = &node; });
+  CHECK_EQ(visited, 1u);
+  CHECK(seen[0] == grandchild);
+  visited = 0u;
+  forest.tree().for_children(*grandchild, [&](const Node &) { visited++; });
+  CHECK_EQ(visited, 0u);
+  Node outside(forest.graveyard(), Node::Kind::root, nullptr);
+  forest.tree().for_children(outside, [&](const Node &) { visited++; });
+  CHECK_EQ(visited, 0u);
+  CHECK(forest.tree().invariants_hold()); }
+
+TEST(handle_tree, a_subtree_is_visited_parent_first_depth_first_and_stays_inside_its_branch)
+{ Forest      forest;
+  Node *const root = forest.make(Node::Kind::root);
+  Node *const left = forest.make(Node::Kind::middle, root);
+  Node *const left_leaf = forest.make(Node::Kind::leaf, left);
+  Node *const right = forest.make(Node::Kind::middle, root);
+  Node *const right_leaf = forest.make(Node::Kind::leaf, right);
+  Node *const other = forest.make(Node::Kind::root);
+  const Node *seen[8] = {};
+  std::uint32_t visited = 0u;
+  forest.tree().for_subtree(*root, [&](const Node &node) { seen[visited++] = &node; });
+  CHECK_EQ(visited, 5u);
+  CHECK(seen[0] == root && seen[1] == left && seen[2] == left_leaf && seen[3] == right && seen[4] == right_leaf);
+  visited = 0u;
+  forest.tree().for_subtree(*left, [&](const Node &node) { seen[visited++] = &node; });
+  CHECK_EQ(visited, 2u);
+  CHECK(seen[0] == left && seen[1] == left_leaf);
+  visited = 0u;
+  forest.tree().for_subtree(*other, [&](const Node &node) { seen[visited++] = &node; });
+  CHECK_EQ(visited, 1u);
+  CHECK(seen[0] == other);
+  visited = 0u;
+  Node outside(forest.graveyard(), Node::Kind::root, nullptr);
+  forest.tree().for_subtree(outside, [&](const Node &) { visited++; });
+  CHECK_EQ(visited, 0u); }
+
+TEST(handle_tree_place, a_places_links_name_its_parent_and_its_first_and_last_child)
+{ Forest      forest;
+  using Probe = av::icd::HandleTreeProbe;
+  Node *const root = forest.make(Node::Kind::root);
+  const av::icd::HandleTreePlace<Node> *place = Probe::place_of(forest.tree(), root);
+  CHECK(place != nullptr);
+  CHECK(place->node_ == root);
+  CHECK_EQ(place->parent_, Probe::none<Node>());
+  CHECK_EQ(place->first_child_, Probe::none<Node>());
+  CHECK_EQ(place->last_child_, Probe::none<Node>());
+  Node *const first = forest.make(Node::Kind::middle, root);
+  Node *const second = forest.make(Node::Kind::middle, root);
+  place = Probe::place_of(forest.tree(), root);
+  CHECK_EQ(place->first_child_, Probe::slot_of(forest.tree(), first));
+  CHECK_EQ(place->last_child_, Probe::slot_of(forest.tree(), second));
+  const auto *below = Probe::place_of(forest.tree(), first);
+  CHECK_EQ(below->parent_, Probe::slot_of(forest.tree(), root));
+  CHECK_EQ(below->previous_, Probe::none<Node>());
+  CHECK_EQ(below->next_, Probe::slot_of(forest.tree(), second));
+  CHECK_EQ(forest.tree().destroy(*first), 1u);
+  place = Probe::place_of(forest.tree(), root);
+  CHECK_EQ(place->first_child_, Probe::slot_of(forest.tree(), second));
+  CHECK_EQ(Probe::place_of(forest.tree(), second)->previous_, Probe::none<Node>());
+  CHECK(forest.tree().invariants_hold()); }
