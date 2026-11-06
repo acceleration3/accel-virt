@@ -27,6 +27,13 @@ struct BlobRingProbe {
     static void seal_behind(BlobRing &arena) { arena.sealed_ = arena.base_ - 1u; }
     static void seal_ahead(BlobRing &arena) { arena.sealed_ = arena.top_ + 1u; }
     static void seal_on_a_lost_lap(BlobRing &arena) { arena.sealed_lap_ = arena.lap_ + 1u; }
+    static void set_top(BlobRing &arena, std::size_t top) { arena.top_ = top; }
+    static void set_base(BlobRing &arena, std::size_t base) { arena.base_ = base; }
+    static void set_end(BlobRing &arena, std::size_t end) { arena.end_ = end; }
+    static void set_sealed(BlobRing &arena, std::size_t sealed) { arena.sealed_ = sealed; }
+    static void set_sealed_lap(BlobRing &arena, std::uint64_t lap) { arena.sealed_lap_ = lap; }
+    static void set_mark_count(BlobRing &arena, std::uint32_t count) { arena.mark_count_ = count; }
+    static void set_first_mark(BlobRing &arena, std::uint32_t first) { arena.first_mark_ = first; }
 };
 
 }
@@ -432,3 +439,97 @@ TEST(blob_ring, a_placement_wraps_into_the_retired_start_and_stops_at_the_oldest
   CHECK_EQ(taken.offset(), 0u);
   CHECK_EQ(ring.room(), 40u);
   CHECK(ring.invariants_hold()); }
+
+TEST(blob_ring, a_wrapped_lease_given_back_after_a_seal_on_the_old_lap_undoes_the_wrap)
+{ std::uint8_t block[32];
+  BlobRing arena(block, sizeof block);
+  CHECK(arena.take(8u).taken());
+  arena.seal();
+  arena.mark(1u);
+  CHECK(arena.take(16u).taken());
+  arena.retire_through(1u);
+  CHECK(arena.take(8u).taken());
+  const ClientBlobLease wrapped = arena.take(8u);
+  CHECK_EQ(wrapped.offset(), 0u);
+  CHECK_EQ(arena.used(), 32u);
+  CHECK(arena.invariants_hold());
+  arena.give_back(wrapped);
+  CHECK_EQ(arena.used(), 24u);
+  CHECK(arena.invariants_hold()); }
+
+TEST(blob_ring, a_lease_above_the_wrap_given_back_leaves_the_ring_wrapped)
+{ std::uint8_t block[32];
+  BlobRing arena(block, sizeof block);
+  CHECK(arena.take(16u).taken());
+  arena.seal();
+  arena.mark(1u);
+  CHECK(arena.take(8u).taken());
+  arena.retire_through(1u);
+  CHECK(arena.take(8u).taken());
+  const ClientBlobLease first = arena.take(4u);
+  const ClientBlobLease second = arena.take(4u);
+  CHECK_EQ(first.offset(), 0u);
+  CHECK_EQ(second.offset(), 4u);
+  arena.give_back(second);
+  CHECK_EQ(arena.used(), 20u);
+  CHECK(arena.invariants_hold());
+  const ClientBlobLease again = arena.take(4u);
+  CHECK_EQ(again.offset(), 4u); }
+
+TEST(blob_ring, a_seal_on_an_older_lap_at_the_same_top_does_not_merge_the_marks)
+{ std::uint8_t block[32];
+  BlobRing arena(block, sizeof block);
+  CHECK(arena.take(8u).taken());
+  arena.seal();
+  arena.mark(1u);
+  CHECK(arena.take(16u).taken());
+  arena.retire_through(1u);
+  CHECK(arena.take(8u).taken());
+  CHECK(arena.take(8u).taken());
+  arena.mark(2u);
+  arena.seal();
+  arena.mark(3u);
+  CHECK(arena.invariants_hold());
+  arena.retire_through(2u);
+  CHECK(arena.invariants_hold());
+  CHECK_EQ(arena.used(), 32u);
+  arena.retire_through(3u);
+  CHECK(arena.invariants_hold());
+  CHECK(arena.idle()); }
+
+TEST(blob_ring, the_invariant_catches_a_top_end_base_or_seal_out_of_place)
+{ std::uint8_t block[32];
+  BlobRing crossed(block, sizeof block);
+  CHECK(crossed.take(8u).taken());
+  BlobRingProbe::set_base(crossed, 9u);
+  CHECK(!crossed.invariants_hold());
+
+  BlobRing wrapped(block, sizeof block);
+  CHECK(wrapped.take(8u).taken());
+  wrapped.seal();
+  wrapped.mark(1u);
+  CHECK(wrapped.take(16u).taken());
+  wrapped.retire_through(1u);
+  CHECK(wrapped.take(8u).taken());
+  CHECK(wrapped.take(8u).taken());
+  CHECK(wrapped.invariants_hold());
+  BlobRingProbe::set_top(wrapped, 9u);
+  CHECK(!wrapped.invariants_hold());
+  BlobRingProbe::set_top(wrapped, 8u);
+  BlobRingProbe::set_end(wrapped, sizeof block + 1u);
+  CHECK(!wrapped.invariants_hold());
+  BlobRingProbe::set_end(wrapped, sizeof block);
+  BlobRingProbe::set_sealed_lap(wrapped, 7u);
+  CHECK(!wrapped.invariants_hold());
+  wrapped.seal();
+  CHECK(wrapped.invariants_hold());
+  BlobRingProbe::set_sealed(wrapped, 9u);
+  CHECK(!wrapped.invariants_hold());
+  BlobRingProbe::set_sealed(wrapped, 8u);
+  BlobRingProbe::set_mark_count(wrapped, BlobRing::max_marks + 1u);
+  CHECK(!wrapped.invariants_hold());
+  BlobRingProbe::set_mark_count(wrapped, 0u);
+  BlobRingProbe::set_first_mark(wrapped, BlobRing::max_marks);
+  CHECK(!wrapped.invariants_hold());
+  BlobRingProbe::set_first_mark(wrapped, 0u);
+  CHECK(wrapped.invariants_hold()); }
