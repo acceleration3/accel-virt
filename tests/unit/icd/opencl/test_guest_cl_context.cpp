@@ -642,3 +642,47 @@ TEST(guest_cl_context, a_d3d11_table_that_cannot_be_true_makes_the_context_untru
   void *forgotten = nullptr;
   CHECK(context.d3d11().forget(&mem, forgotten));
   CHECK(context.invariants_hold()); }
+
+namespace {
+
+alignas(4096) std::uint8_t lent_pages[2u * 4096u];
+
+}
+
+TEST(guest_cl_context, memory_lent_to_the_host_is_given_back_when_its_user_is_done)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  av::HostAllocation *lent = nullptr;
+  rig.host().blob_import(0u, 0x0000700000000001ull);
+  CHECK_STATUS(context.lend(lent_pages, sizeof lent_pages, lent), Status::ok);
+  CHECK(lent != nullptr);
+  const std::uint32_t held = GuestClContextProbe::channel(context).memories();
+  rig.host().nop();
+  context.give_back_lent(*lent);
+  CHECK_EQ(GuestClContextProbe::channel(context).memories(), held - 1u);
+  CHECK(context.invariants_hold()); }
+
+TEST(guest_cl_context, retired_memory_is_closed_by_a_reclaim_unless_work_was_orphaned)
+{ ClContextRig rig;
+  arena_answers(rig);
+  GuestClContext context = made_context(rig);
+  CHECK_STATUS(context.make(), Status::ok);
+  const std::uint32_t base = GuestClContextProbe::channel(context).memories();
+  av::HostAllocation *lent = nullptr;
+  rig.host().blob_import(0u, 0x0000700000000001ull);
+  CHECK_STATUS(context.lend(lent_pages, sizeof lent_pages, lent), Status::ok);
+  context.retire(nullptr, lent);
+  CHECK_EQ(GuestClContextProbe::channel(context).memories(), base + 1u);
+  rig.host().nop();
+  context.reclaim();
+  CHECK_EQ(GuestClContextProbe::channel(context).memories(), base);
+  rig.host().blob_import(0u, 0x0000700000000002ull);
+  CHECK_STATUS(context.lend(lent_pages, sizeof lent_pages, lent), Status::ok);
+  context.retire(nullptr, lent);
+  context.orphan_work();
+  context.reclaim();
+  CHECK_EQ(GuestClContextProbe::channel(context).memories(), base + 1u);
+  rig.host().nop();
+  rig.host().nop(); }

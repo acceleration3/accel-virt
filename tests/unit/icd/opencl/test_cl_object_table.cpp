@@ -451,3 +451,28 @@ TEST(cl_object_table, a_sub_buffer_names_the_buffer_it_is_a_region_of)
   CHECK(!buffer->invariants_hold());
   queue->slice_of(*sub);
   CHECK(!queue->invariants_hold()); }
+
+TEST(cl_object_table, a_contexts_queues_are_idle_when_none_of_them_has_work_in_flight)
+{ Table rig;
+  ClObject *const context = rig.make(ClObject::Kind::context, 0x900u);
+  ClObject *const other = rig.make(ClObject::Kind::context, 0x910u);
+  CHECK(rig.objects().queues_idle(nullptr));
+  CHECK(rig.objects().queues_idle(context));
+  ClObject *const first = rig.make(ClObject::Kind::command_queue, 0x901u, context);
+  ClObject *const second = rig.make(ClObject::Kind::command_queue, 0x902u, context);
+  ClObject *const elsewhere = rig.make(ClObject::Kind::command_queue, 0x911u, other);
+  ClObject *const buffer = rig.make(ClObject::Kind::mem, 0x903u, context);
+  CHECK(buffer != nullptr);
+  CHECK(rig.objects().queues_idle(context));
+  first->busy();
+  CHECK(!rig.objects().queues_idle(context));
+  CHECK(rig.objects().queues_idle(other));
+  first->idle();
+  second->busy();
+  CHECK(!rig.objects().queues_idle(context));
+  second->idle();
+  CHECK(rig.objects().queues_idle(context));
+  elsewhere->busy();
+  CHECK(rig.objects().queues_idle(context));
+  CHECK(!rig.objects().queues_idle(other));
+  CHECK(rig.objects().invariants_hold()); }

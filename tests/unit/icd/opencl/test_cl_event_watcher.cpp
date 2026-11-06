@@ -522,3 +522,19 @@ TEST(cl_event_watcher, a_wait_elsewhere_has_the_thread_running_and_waits_on_it)
   Watching refused;
   refused.thread().refuse_start();
   CHECK(!refused.watcher().attend()); }
+
+TEST(cl_watched_event, a_status_is_reached_by_what_is_as_far_along_as_the_one_wanted_or_failed)
+{ Watching rig;
+  ClWatchedEvent watched;
+  CHECK_EQ(true, watched.take(&rig.event(), 0x6900u, rig.wire(), CL_RUNNING, &note, &user_data));
+  CHECK(!watched.reached_by(CL_QUEUED));
+  CHECK(!watched.reached_by(CL_SUBMITTED));
+  CHECK(watched.reached_by(CL_RUNNING));
+  CHECK(watched.reached_by(CL_COMPLETE));
+  CHECK(watched.reached_by(-5));
+  watched.give_up();
+  CHECK_EQ(true, watched.take(&rig.event(), 0x6900u, rig.wire(), CL_COMPLETE, &note, &user_data));
+  CHECK(!watched.reached_by(CL_RUNNING));
+  CHECK(watched.reached_by(CL_COMPLETE));
+  CHECK(watched.reached_by(-1));
+  CHECK(watched.invariants_hold()); }

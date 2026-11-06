@@ -5,6 +5,7 @@
 #include "icd/common/sliced_wait.hpp"
 #include "icd/opencl/cl_blocking_wait.hpp"
 #include "icd/opencl/cl_event_watcher.hpp"
+#include "icd/opencl/cl_events_probe.hpp"
 #include "proto/submission/command_header.hpp"
 #include "icd/opencl/guest_cl_context.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
@@ -18,6 +19,7 @@ using av::ScriptedThread;
 using av::Status;
 using av::clicd::ClBlockingWait;
 using av::clicd::ClEventWatcher;
+using av::clicd::ClEventsProbe;
 using av::clicd::GuestClContext;
 using av::icd::SlicedWait;
 
@@ -64,6 +66,7 @@ public:
 
     ClContextRig        &rig() { return rig_; }
     ClBlockingWait      &waits() { return waits_; }
+    ClEventWatcher      &watcher() { return watcher_; }
     ScriptedThread      &thread() { return thread_; }
     GuestClContext      &context() { return context_.object(); }
     bool                 driven() { return context_.object().wakes(); }
@@ -313,3 +316,102 @@ TEST(cl_waits, a_driven_wait_with_no_thread_to_tell_it_asks_on_a_timer)
   CHECK_EQ(waiting.thread().awaits(), 0u);
   CHECK_EQ(waiting.waits().raises_asked(), 0u);
   CHECK_EQ(waiting.waits().rounds(), 2u); }
+
+TEST(cl_events_probe, an_ask_is_done_when_every_event_is_complete_and_counts_one_round)
+{ Waiting waiting;
+  const std::uint64_t both[] = {host_event, other_event};
+  std::uint64_t       rounds = 0u, raises = 0u;
+  ClEventsProbe       probe(*waiting.wire(), waiting.rig().kmt(), waiting.watcher(), both, 2u, false, rounds, raises);
+  CHECK_EQ(probe.answer(), CL_SUCCESS);
+  waiting.answers(CL_COMPLETE);
+  waiting.answers(CL_COMPLETE);
+  CHECK(probe.ask(0u));
+  CHECK_EQ(probe.answer(), CL_SUCCESS);
+  CHECK_EQ(rounds, 1u);
+  CHECK_EQ(raises, 0u); }
+
+TEST(cl_events_probe, an_event_still_running_leaves_the_ask_open_and_stops_at_it)
+{ Waiting waiting;
+  const std::uint64_t both[] = {host_event, other_event};
+  std::uint64_t       rounds = 0u, raises = 0u;
+  ClEventsProbe       probe(*waiting.wire(), waiting.rig().kmt(), waiting.watcher(), both, 2u, false, rounds, raises);
+  const std::uint32_t commands = sent(waiting.rig().kmt());
+  waiting.answers(CL_COMPLETE);
+  waiting.answers(CL_RUNNING);
+  CHECK(!probe.ask(0u));
+  CHECK_EQ(rounds, 1u);
+  CHECK_EQ(sent(waiting.rig().kmt()), commands + 2u);
+  waiting.answers(CL_COMPLETE);
+  waiting.answers(CL_COMPLETE);
+  CHECK(probe.ask(0u));
+  CHECK_EQ(rounds, 2u);
+  CHECK_EQ(probe.answer(), CL_SUCCESS); }
+
+TEST(cl_events_probe, a_failed_event_or_a_host_that_cannot_say_ends_the_ask_with_the_error_it_names)
+{ Waiting waiting;
+  std::uint64_t rounds = 0u, raises = 0u;
+  ClEventsProbe failed(*waiting.wire(), waiting.rig().kmt(), waiting.watcher(), &host_event, 1u, false, rounds, raises);
+  waiting.answers(-5);
+  CHECK(failed.ask(0u));
+  CHECK_EQ(failed.answer(), CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST);
+  ClEventsProbe refused(*waiting.wire(), waiting.rig().kmt(), waiting.watcher(), &host_event, 1u, false, rounds, raises);
+  const cl_int none = 0;
+  waiting.rig().host().cl_info(CL_INVALID_EVENT, reinterpret_cast<const char *>(&none), sizeof none);
+  CHECK(refused.ask(0u));
+  CHECK_EQ(refused.answer(), CL_INVALID_EVENT);
+  CHECK_EQ(rounds, 2u); }
+
+TEST(cl_events_probe, an_undriven_probe_rests_between_asks_once_its_spin_is_spent)
+{ Waiting waiting;
+  std::uint64_t rounds = 0u, raises = 0u;
+  ClEventsProbe probe(*waiting.wire(), waiting.rig().kmt(), waiting.watcher(), &host_event, 1u, false, rounds, raises);
+  waiting.answers(CL_RUNNING);
+  CHECK(!probe.ask(0u));
+  const std::uint32_t slept = waiting.rig().kmt().sleeps();
+  probe.pause(1000u);
+  CHECK_EQ(waiting.rig().kmt().sleeps(), slept);
+  waiting.past_the_spin();
+  probe.pause(1000u);
+  probe.pause(1000u);
+  CHECK(waiting.rig().kmt().sleeps() > slept);
+  CHECK_EQ(raises, 0u);
+  CHECK_EQ(waiting.thread().awaits(), 0u); }
+
+TEST(cl_events_probe, a_driven_probe_has_the_driver_wake_it_on_the_event_it_waits_for_and_asks_for_that_once)
+{ Waiting waiting(wake);
+  CHECK(waiting.driven());
+  std::uint64_t rounds = 0u, raises = 0u;
+  ClEventsProbe probe(*waiting.wire(), waiting.rig().kmt(), waiting.watcher(), &host_event, 1u, true, rounds, raises);
+  waiting.answers(CL_RUNNING);
+  CHECK(!probe.ask(0u));
+  waiting.past_the_spin();
+  probe.pause(500u);
+  CHECK_EQ(raises, 0u);
+  CHECK_EQ(waiting.thread().awaits(), 0u);
+  waiting.rig().host().cl_result(CL_SUCCESS);
+  probe.pause(1000u);
+  CHECK_EQ(raises, 1u);
+  CHECK_EQ(waiting.thread().awaits(), 1u);
+  CHECK_EQ(waiting.thread().last_timeout(), 1000u);
+  probe.pause(2000u);
+  CHECK_EQ(raises, 1u);
+  CHECK_EQ(waiting.thread().awaits(), 2u);
+  CHECK_EQ(waiting.thread().last_timeout(), 2000u); }
+
+TEST(cl_events_probe, a_driver_that_will_not_watch_the_event_leaves_the_probe_polling)
+{ Waiting waiting(wake);
+  std::uint64_t rounds = 0u, raises = 0u;
+  ClEventsProbe probe(*waiting.wire(), waiting.rig().kmt(), waiting.watcher(), &host_event, 1u, true, rounds, raises);
+  waiting.answers(CL_RUNNING);
+  CHECK(!probe.ask(0u));
+  waiting.past_the_spin();
+  probe.pause(500u);
+  waiting.rig().host().cl_result(CL_OUT_OF_RESOURCES);
+  const std::uint32_t slept = waiting.rig().kmt().sleeps();
+  probe.pause(1000u);
+  CHECK_EQ(raises, 1u);
+  CHECK_EQ(waiting.thread().awaits(), 0u);
+  CHECK(waiting.rig().kmt().sleeps() > slept);
+  probe.pause(1000u);
+  CHECK_EQ(raises, 1u);
+  CHECK_EQ(waiting.thread().awaits(), 0u); }

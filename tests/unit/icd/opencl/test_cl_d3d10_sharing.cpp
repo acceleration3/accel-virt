@@ -246,3 +246,15 @@ TEST(cl_d3d10_sharing, its_numbers_are_the_specifications)
   CHECK_EQ(ClIcdRoot::d3d10_all_devices, 0x4013u);
   CHECK_EQ(ClIcdRoot::d3d10_context_device, 0x4014u);
   CHECK_EQ(ClIcdRoot::invalid_d3d10_device, -1002); }
+
+TEST(cl_d3d10_sharing, a_d3d10_object_made_without_a_resource_is_an_invalid_context_whatever_the_context)
+{ ClIcdRig rig;
+  CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+  cl_int error = CL_SUCCESS;
+  CHECK(rig.root().create_from_d3d10(nullptr, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  error = CL_SUCCESS;
+  CHECK(rig.root().create_from_d3d10(reinterpret_cast<cl_context>(std::uintptr_t{0x1234}), &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_CONTEXT);
+  CHECK(rig.root().create_from_d3d10(nullptr, nullptr) == nullptr);
+  CHECK(rig.root().invariants_hold()); }
