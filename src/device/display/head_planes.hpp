@@ -39,6 +39,8 @@ private:
     bool           shown_[heads][layers];
     uint32_t       widths_[heads];
     uint32_t       heights_[heads];
+
+    friend struct HeadPlanesProbe;
 };
 
 }

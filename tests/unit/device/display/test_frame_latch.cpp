@@ -3,7 +3,17 @@
 
 #include <cstdint>
 
+namespace av {
+
+struct FrameLatchProbe {
+    static void claim_unshown(FrameLatch &latch) { latch.unshown_ = true; }
+    static void set_pending_key(FrameLatch &latch, std::uint64_t key) { latch.pending_key_ = key; }
+};
+
+}
+
 using av::FrameLatch;
+using av::FrameLatchProbe;
 
 TEST(frame_latch, a_post_waits_for_the_blank)
 { FrameLatch latch;
@@ -80,3 +90,13 @@ TEST(frame_latch, a_reset_forgets_what_was_posted_latched_and_waiting)
   CHECK(!latch.latch());
   latch.post(5u, 0x55u);
   CHECK(latch.latch()); }
+
+TEST(frame_latch, an_unshown_frame_nothing_was_latched_for_or_a_key_with_no_frame_breaks_the_invariant)
+{ FrameLatch unshown;
+  FrameLatchProbe::claim_unshown(unshown);
+  CHECK(!unshown.invariants_hold());
+  FrameLatch keyed;
+  FrameLatchProbe::set_pending_key(keyed, 0x77u);
+  CHECK(!keyed.invariants_hold());
+  keyed.post(1u, 0x77u);
+  CHECK(keyed.invariants_hold()); }

@@ -145,6 +145,7 @@ public:
     void fail_mutex_at(std::uint32_t nth);
     void hold_mutex_elsewhere(void *mutex, bool held);
     void fail_allocation_at(std::uint32_t nth);
+    void leave_listing_unterminated();
     void fail_placement_at(std::uint32_t nth);
     void fail_bind_gpu_at(std::uint32_t nth);
     void          hold_store(void *at, const void *bytes, std::size_t size);
@@ -364,6 +365,7 @@ private:
     std::uint32_t   fail_event_;
     std::uint32_t   fail_mutex_;
     std::uint32_t   fail_allocation_;
+    bool            unterminated_listing_ = false;
     std::uint32_t   fail_placement_;
     std::uint32_t   empty_mapping_;
     void           *allocations_[max_allocations];

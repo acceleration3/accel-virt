@@ -4,7 +4,16 @@
 #include <cstdint>
 #include <initializer_list>
 
+namespace av {
+
+struct VblankScheduleProbe {
+    static void set_epoch_sequence(VblankSchedule &schedule, std::uint64_t sequence) { schedule.epoch_sequence_ = sequence; }
+};
+
+}
+
 using av::VblankSchedule;
+using av::VblankScheduleProbe;
 
 namespace {
 
@@ -315,4 +324,17 @@ TEST(vblank_schedule, aligned_before_it_starts_only_the_rate_is_kept)
   CHECK_EQ(schedule.advance(second), 0u);
   schedule.start(second);
   CHECK_EQ(schedule.next(), second + period_144);
+  CHECK(schedule.invariants_hold()); }
+
+TEST(vblank_schedule, a_rate_outside_the_protocol_s_range_or_an_epoch_after_the_count_breaks_the_invariant)
+{ VblankSchedule schedule;
+  schedule.align(1000u, 0, start_at);
+  CHECK(!schedule.invariants_hold());
+  schedule.align(2000000000u, 0, start_at);
+  CHECK(!schedule.invariants_hold());
+  schedule.align(60000000u, 0, start_at);
+  CHECK(schedule.invariants_hold());
+  VblankScheduleProbe::set_epoch_sequence(schedule, 1u);
+  CHECK(!schedule.invariants_hold());
+  VblankScheduleProbe::set_epoch_sequence(schedule, 0u);
   CHECK(schedule.invariants_hold()); }

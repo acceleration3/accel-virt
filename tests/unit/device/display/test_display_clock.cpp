@@ -9,7 +9,37 @@
 #include <cstring>
 #include <time.h>
 
+namespace av {
+
+struct ClockPageWindowProbe {
+    static void set_heads(ClockPageWindow &window, std::uint32_t heads) { window.heads_ = heads; }
+};
+
+struct VblankScheduleProbe {
+    static void set_epoch_sequence(VblankSchedule &schedule, std::uint64_t sequence) { schedule.epoch_sequence_ = sequence; }
+};
+
+struct FrameLatchProbe {
+    static void claim_unshown(FrameLatch &latch) { latch.unshown_ = true; }
+    static void release_unshown(FrameLatch &latch) { latch.unshown_ = false; }
+};
+
+struct DisplayClockProbe {
+    static ClockPageWindow &page(DisplayClock &clock) { return clock.page_; }
+    static VblankSchedule &schedule(DisplayClock &clock, std::uint32_t head) { return clock.schedules_[head]; }
+    static FrameLatch &latch(DisplayClock &clock, std::uint32_t head) { return clock.latches_[head]; }
+    static void *wake(DisplayClock &clock) { return clock.wake_; }
+    static void set_wake(DisplayClock &clock, void *wake) { clock.wake_ = wake; }
+    static void set_thread(DisplayClock &clock, void *thread) { clock.thread_ = thread; }
+};
+
+}
+
 using av::ClockPageHeader;
+using av::ClockPageWindowProbe;
+using av::DisplayClockProbe;
+using av::FrameLatchProbe;
+using av::VblankScheduleProbe;
 using av::DisplayClock;
 using av::FenceInterrupts;
 using av::MockHost;
@@ -372,4 +402,50 @@ TEST(display_clock, a_live_retime_of_every_head_reaches_the_page)
   rig.host.set_clock(record.vblank_ns() + 2u * period_60);
   CHECK(rig.reaches(page, 5u, 3u, record));
   CHECK_EQ(record.refresh_millihz(), 359980u);
+  CHECK(rig.clock.invariants_hold()); }
+
+TEST(display_clock, a_clock_that_lost_its_wake_event_takes_no_page)
+{ Rig rig;
+  CHECK_STATUS(rig.clock.initialize(), Status::ok);
+  void *const wake = DisplayClockProbe::wake(rig.clock);
+  DisplayClockProbe::set_wake(rig.clock, nullptr);
+  CHECK_STATUS(rig.clock.attach(page), Status::invalid_state);
+  DisplayClockProbe::set_wake(rig.clock, wake);
+  CHECK_STATUS(rig.clock.attach(page), Status::ok);
+  CHECK(rig.clock.invariants_hold()); }
+
+TEST(display_clock, every_head_is_retimed_at_once_inside_the_protocol_s_rates_with_or_without_the_clock_started)
+{ Rig rig;
+  CHECK_STATUS(rig.clock.retime_all(VblankRecord::least_millihz - 1u), Status::invalid_parameter);
+  CHECK_STATUS(rig.clock.retime_all(VblankRecord::most_millihz + 1u), Status::invalid_parameter);
+  CHECK_STATUS(rig.clock.retime_all(144000u), Status::ok);
+  CHECK_EQ(rig.clock.refresh_microhz(), 0u);
+  CHECK_STATUS(rig.clock.initialize(), Status::ok);
+  CHECK_EQ(rig.clock.refresh_microhz(), 144000000u);
+  CHECK_STATUS(rig.clock.retime_all(VblankRecord::least_millihz), Status::ok);
+  CHECK_EQ(rig.clock.refresh_microhz(), VblankRecord::least_millihz * VblankRecord::microhz_per_millihz);
+  CHECK(rig.clock.invariants_hold()); }
+
+TEST(display_clock, the_invariant_catches_a_broken_page_schedule_latch_or_a_thread_with_nothing_to_wake_it)
+{ Rig rig;
+  CHECK(rig.clock.invariants_hold());
+  ClockPageWindowProbe::set_heads(DisplayClockProbe::page(rig.clock), 1u);
+  CHECK(!rig.clock.invariants_hold());
+  ClockPageWindowProbe::set_heads(DisplayClockProbe::page(rig.clock), 0u);
+  VblankScheduleProbe::set_epoch_sequence(DisplayClockProbe::schedule(rig.clock, 1u), 1u);
+  CHECK(!rig.clock.invariants_hold());
+  VblankScheduleProbe::set_epoch_sequence(DisplayClockProbe::schedule(rig.clock, 1u), 0u);
+  FrameLatchProbe::claim_unshown(DisplayClockProbe::latch(rig.clock, 2u));
+  CHECK(!rig.clock.invariants_hold());
+  FrameLatchProbe::release_unshown(DisplayClockProbe::latch(rig.clock, 2u));
+  CHECK(rig.clock.invariants_hold());
+  DisplayClockProbe::set_thread(rig.clock, &rig);
+  CHECK(!rig.clock.invariants_hold());
+  CHECK_STATUS(rig.clock.initialize(), Status::ok);
+  CHECK(rig.clock.invariants_hold());
+  void *const wake = DisplayClockProbe::wake(rig.clock);
+  DisplayClockProbe::set_wake(rig.clock, nullptr);
+  CHECK(!rig.clock.invariants_hold());
+  DisplayClockProbe::set_wake(rig.clock, wake);
+  DisplayClockProbe::set_thread(rig.clock, nullptr);
   CHECK(rig.clock.invariants_hold()); }

@@ -678,6 +678,7 @@ Status MockHost::list_directory(const char *path, char *buffer, std::size_t capa
         length += name_length;
         buffer[length++] = '\n';
     }
+    if (unterminated_listing_ && length != 0u) length--;
     return any ? Status::ok : Status::not_found;
 }
 
@@ -1225,6 +1226,8 @@ bool MockHost::resource_exists(std::uint32_t id)
         if (resources_[index] == id) return true;
     return false;
 }
+
+void MockHost::leave_listing_unterminated() { unterminated_listing_ = true; }
 
 void MockHost::fail_allocation_at(std::uint32_t nth) { StateLock lock(state_); fail_allocation_ = nth; }
 void MockHost::fail_placement_at(std::uint32_t nth) { StateLock lock(state_); fail_placement_ = nth; }

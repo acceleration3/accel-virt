@@ -232,6 +232,7 @@ TEST(scanout_framebuffer_same_picture, every_field_a_display_reads_must_agree)
   CHECK(!never.same_picture(never));
 
   Request variants[] = {Request().format(ScanoutFormat::b8g8r8x8), Request().size(1280u, 799u).rect(0u, 0u, 1280u, 799u),
+                        Request().size(1279u, 800u).rect(0u, 0u, 1279u, 800u),
                         Request().stride(5184u), Request().offset(4096u), Request().rect(1u, 0u, 1279u, 800u),
                         Request().rect(0u, 1u, 1280u, 799u), Request().rect(0u, 0u, 1279u, 800u),
                         Request().rect(0u, 0u, 1280u, 799u)};

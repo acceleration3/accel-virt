@@ -7,7 +7,16 @@
 #include <cstdint>
 #include <cstring>
 
+namespace av {
+
+struct ClockPageWindowProbe {
+    static void set_heads(ClockPageWindow &window, std::uint32_t heads) { window.heads_ = heads; }
+};
+
+}
+
 using av::ClockPageHeader;
+using av::ClockPageWindowProbe;
 using av::ClockPageWindow;
 using av::MockHost;
 using av::Status;
@@ -119,3 +128,20 @@ TEST(clock_page_window, a_page_mapped_again_lets_the_first_go)
   CHECK_STATUS(window.map(0x80000000u, 1u), Status::not_found);
   CHECK_EQ(host.live_guest_mappings(), 0u);
   CHECK(!window.mapped()); }
+
+TEST(clock_page_window, the_invariant_ties_the_head_count_to_whether_a_page_is_mapped)
+{ MockHost host;
+  host.add_guest_ram(ram, 0x10000u);
+  ClockPageWindow window(host);
+  CHECK(window.invariants_hold());
+  ClockPageWindowProbe::set_heads(window, 1u);
+  CHECK(!window.invariants_hold());
+  ClockPageWindowProbe::set_heads(window, 0u);
+  CHECK_STATUS(window.map(page, 4u), Status::ok);
+  CHECK(window.invariants_hold());
+  ClockPageWindowProbe::set_heads(window, 0u);
+  CHECK(!window.invariants_hold());
+  ClockPageWindowProbe::set_heads(window, ClockPageHeader::max_heads + 1u);
+  CHECK(!window.invariants_hold());
+  ClockPageWindowProbe::set_heads(window, 4u);
+  CHECK(window.invariants_hold()); }

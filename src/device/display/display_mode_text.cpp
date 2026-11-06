@@ -32,7 +32,7 @@ Status DisplayModeText::read(DisplayModeSet &modes) const
     if (empty()) return Status::invalid_parameter;
     DisplayModeSet read;
     const char    *at = text_;
-    while (true) {
+    for (;;) {
         while (*at == ' ') at++;
         uint32_t width = 0u;
         uint32_t height = 0u;

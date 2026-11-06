@@ -31,6 +31,8 @@ private:
     Host    &host_;
     uint8_t *page_;
     uint32_t heads_;
+
+    friend struct ClockPageWindowProbe;
 };
 
 }

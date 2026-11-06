@@ -23,6 +23,8 @@ private:
     uint32_t latched_frame_;
     uint64_t latched_key_;
     bool     unshown_;
+
+    friend struct FrameLatchProbe;
 };
 
 }

@@ -6,7 +6,19 @@
 
 #include <cstdint>
 
+namespace av {
+
+struct HeadPlanesProbe {
+    static void hide_a_keyed_plane(HeadPlanes &planes, std::uint32_t head, std::uint32_t layer)
+    {
+        planes.shown_[head][layer] = false;
+    }
+};
+
+}
+
 using av::HeadPlanes;
+using av::HeadPlanesProbe;
 using av::ScanoutPlaneRequest;
 using av::Status;
 
@@ -70,3 +82,66 @@ TEST(head_planes, a_reset_forgets_every_head_and_a_head_past_the_last_is_refused
   CHECK_EQ(planes.planes(3u, kept, width, height), 0u);
   CHECK_EQ(width, 0u);
   CHECK(!planes.composed(3u)); }
+
+TEST(head_planes, a_layer_past_the_last_is_refused)
+{ av::MockHost host; HeadPlanes planes(host);
+  CHECK_STATUS(planes.initialize(), Status::ok);
+  CHECK_STATUS(planes.set(plane(0u, HeadPlanes::layers, shown, 0x77u, corner)), Status::invalid_parameter);
+  CHECK(!planes.composed(0u));
+  CHECK(planes.invariants_hold()); }
+
+TEST(head_planes, a_video_plane_keeps_its_conversion_flags)
+{ av::MockHost host; HeadPlanes planes(host);
+  CHECK_STATUS(planes.initialize(), Status::ok);
+  const std::uint32_t video = shown | ScanoutPlaneRequest::flag_ycbcr;
+  CHECK_STATUS(planes.set(plane(0u, 0u, video, 0x51u, whole)), Status::ok);
+  CHECK_STATUS(planes.set(plane(0u, 1u, video | ScanoutPlaneRequest::flag_bt709, 0x52u, whole)), Status::ok);
+  CHECK_STATUS(planes.set(plane(0u, 2u, video | ScanoutPlaneRequest::flag_full_range, 0x53u, whole)), Status::ok);
+  CHECK_STATUS(planes.set(plane(0u, 3u,
+                                video | ScanoutPlaneRequest::flag_bt709 | ScanoutPlaneRequest::flag_full_range |
+                                    ScanoutPlaneRequest::flag_filtered,
+                                0x54u, whole)),
+               Status::ok);
+  AvScanoutPlane kept[HeadPlanes::layers] = {};
+  std::uint32_t  width = 0u, height = 0u;
+  CHECK_EQ(planes.planes(0u, kept, width, height), 4u);
+  CHECK_EQ(kept[0].flags, AV_PLANE_YCBCR);
+  CHECK_EQ(kept[1].flags, AV_PLANE_YCBCR | AV_PLANE_BT709);
+  CHECK_EQ(kept[2].flags, AV_PLANE_YCBCR | AV_PLANE_FULL_RANGE);
+  CHECK_EQ(kept[3].flags, AV_PLANE_YCBCR | AV_PLANE_BT709 | AV_PLANE_FULL_RANGE | AV_PLANE_FILTERED);
+  CHECK(planes.invariants_hold()); }
+
+TEST(head_planes, a_base_plane_off_by_any_one_edge_is_composed)
+{ av::MockHost host; HeadPlanes planes(host);
+  CHECK_STATUS(planes.initialize(), Status::ok);
+  for (std::uint32_t edge = 0u; edge < 8u; edge++) {
+      std::int32_t source[4] = {0, 0, 1280, 800};
+      std::int32_t destination[4] = {0, 0, 1280, 800};
+      (edge < 4u ? destination : source)[edge % 4u] += 1;
+      const ScanoutPlaneRequest off(2u, 0u, shown, 0x51u, source, destination, 1280u, 800u);
+      CHECK_STATUS(planes.set(off), Status::ok);
+      CHECK(planes.composed(2u));
+  }
+  CHECK_STATUS(planes.set(plane(2u, 0u, shown, 0x51u, whole)), Status::ok);
+  CHECK(!planes.composed(2u)); }
+
+TEST(head_planes, a_planes_table_never_started_answers_nothing)
+{ av::MockHost host; HeadPlanes planes(host);
+  AvScanoutPlane kept[HeadPlanes::layers] = {};
+  std::uint32_t  width = 7u, height = 7u;
+  CHECK(!planes.composed(0u));
+  CHECK_EQ(planes.planes(0u, kept, width, height), 0u);
+  CHECK_EQ(width, 0u);
+  CHECK_EQ(height, 0u);
+  planes.clear();
+  CHECK_STATUS(planes.initialize(), Status::ok);
+  CHECK_EQ(planes.planes(HeadPlanes::heads, kept, width, height), 0u);
+  CHECK_EQ(width, 0u); }
+
+TEST(head_planes, a_plane_that_is_not_shown_but_keeps_a_key_breaks_the_invariant)
+{ av::MockHost host; HeadPlanes planes(host);
+  CHECK_STATUS(planes.initialize(), Status::ok);
+  CHECK_STATUS(planes.set(plane(1u, 1u, shown, 0x77u, corner)), Status::ok);
+  CHECK(planes.invariants_hold());
+  HeadPlanesProbe::hide_a_keyed_plane(planes, 1u, 1u);
+  CHECK(!planes.invariants_hold()); }

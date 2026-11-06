@@ -36,6 +36,8 @@ private:
     uint64_t sequence_;
     uint64_t last_;
     bool     running_;
+
+    friend struct VblankScheduleProbe;
 };
 
 }

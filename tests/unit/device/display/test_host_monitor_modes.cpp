@@ -83,3 +83,69 @@ TEST(host_monitor_modes, a_monitor_listing_more_modes_than_the_set_holds_offers_
   CHECK_EQ(modes.count(), DisplayModeSet::max_modes);
   CHECK_EQ(modes.width(0u), 3000u);
   CHECK_EQ(modes.width(modes.preferred()), 3000u); }
+
+TEST(host_monitor_modes, a_mode_line_that_is_not_two_edges_joined_by_an_x_is_skipped)
+{ MockHost host;
+  file(host, "/sys/class/drm/card0-DP-1/status", "connected\n");
+  file(host, "/sys/class/drm/card0-DP-1/modes",
+       "1920\n-1920x1080\n1234567x1080\n1920x1234567\n1920y1080\nx1080\n1920x\n1920x1080x\n1280x1024");
+  DisplayModeSet modes;
+  CHECK_STATUS(HostMonitorModes(host).read(modes), Status::ok);
+  CHECK_EQ(modes.count(), 1u);
+  CHECK_EQ(modes.width(0u), 1280u);
+  CHECK_EQ(modes.height(0u), 1024u);
+  CHECK(modes.invariants_hold()); }
+
+TEST(host_monitor_modes, a_mode_too_small_in_either_edge_is_skipped)
+{ MockHost host;
+  file(host, "/sys/class/drm/card0-DP-1/status", "connected\n");
+  file(host, "/sys/class/drm/card0-DP-1/modes", "639x1080\n1024x479\n800x600\n");
+  DisplayModeSet modes;
+  CHECK_STATUS(HostMonitorModes(host).read(modes), Status::ok);
+  CHECK_EQ(modes.count(), 1u);
+  CHECK_EQ(modes.width(0u), 800u);
+  CHECK_EQ(modes.height(0u), 600u); }
+
+TEST(host_monitor_modes, a_status_that_is_missing_short_or_run_on_is_not_connected)
+{ const char *const statuses[] = {"conn", "connectedX", "connect\n", ""};
+  for (const char *status : statuses) {
+      MockHost host;
+      file(host, "/sys/class/drm/card0-DP-1/status", status);
+      file(host, "/sys/class/drm/card0-DP-1/modes", "1920x1080\n");
+      DisplayModeSet modes;
+      CHECK_STATUS(HostMonitorModes(host).read(modes), Status::not_found);
+  }
+  MockHost bare;
+  file(bare, "/sys/class/drm/card0-DP-1/modes", "1920x1080\n");
+  DisplayModeSet modes;
+  CHECK_STATUS(HostMonitorModes(bare).read(modes), Status::not_found);
+  MockHost exact;
+  file(exact, "/sys/class/drm/card0-DP-1/status", "connected");
+  file(exact, "/sys/class/drm/card0-DP-1/modes", "1920x1080\n");
+  CHECK_STATUS(HostMonitorModes(exact).read(modes), Status::ok); }
+
+TEST(host_monitor_modes, the_preferred_mode_is_the_first_of_the_monitor_with_the_most_area_not_just_its_width)
+{ MockHost host;
+  file(host, "/sys/class/drm/card0-DP-1/status", "connected\n");
+  file(host, "/sys/class/drm/card0-DP-1/modes", "1920x1200\n1920x1080\n1280x800\n");
+  DisplayModeSet modes;
+  CHECK_STATUS(HostMonitorModes(host).read(modes), Status::ok);
+  CHECK_EQ(modes.count(), 3u);
+  CHECK_EQ(modes.width(modes.preferred()), 1920u);
+  CHECK_EQ(modes.height(modes.preferred()), 1200u);
+  MockHost second;
+  file(second, "/sys/class/drm/card0-DP-1/status", "connected\n");
+  file(second, "/sys/class/drm/card0-DP-1/modes", "1920x1080\n1920x1200\n");
+  CHECK_STATUS(HostMonitorModes(second).read(modes), Status::ok);
+  CHECK_EQ(modes.width(modes.preferred()), 1920u);
+  CHECK_EQ(modes.height(modes.preferred()), 1080u); }
+
+TEST(host_monitor_modes, a_listing_whose_last_name_has_no_newline_is_still_read)
+{ MockHost host;
+  file(host, "/sys/class/drm/card0-DP-1/status", "connected\n");
+  file(host, "/sys/class/drm/card0-DP-1/modes", "1920x1080\n");
+  host.leave_listing_unterminated();
+  DisplayModeSet modes;
+  CHECK_STATUS(HostMonitorModes(host).read(modes), Status::ok);
+  CHECK_EQ(modes.count(), 1u);
+  CHECK_EQ(modes.width(0u), 1920u); }
