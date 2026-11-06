@@ -12,6 +12,14 @@
 #include <cstdint>
 #include <cstring>
 
+namespace av {
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_free_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.free_count_ = count; }
+};
+
+}
+
 namespace av::icd {
 struct SurfaceTableProbe {
     static void strip_the_instance(SurfaceTable &table)
@@ -22,9 +30,34 @@ struct SurfaceTableProbe {
 
 struct SwapchainProbe {
     static void hold_past_the_count(Swapchain &chain) { chain.holders_[chain.count_] = Swapchain::Holder::application; }
+    static void repair(Swapchain &chain) { chain.holders_[chain.count_] = Swapchain::Holder::none; }
 };
 
 struct PresentationProbe {
+    static void miscount_chains(Presentation &wsi, std::uint32_t count)
+    {
+        KeyedSlotsProbe::corrupt_free_count(wsi.swapchains_, count);
+    }
+    static void forget_a_chain(Presentation &wsi, std::uint64_t &key, Swapchain *&chain)
+    {
+        key = 0u;
+        chain = nullptr;
+        wsi.swapchains_.for_each([&key, &chain](std::uint64_t handle, Swapchain *const &held) {
+            key = handle;
+            chain = held;
+        });
+        static_cast<void>(wsi.swapchains_.erase(key));
+    }
+    static void forget_key(Presentation &wsi, std::uint64_t key) { static_cast<void>(wsi.swapchains_.erase(key)); }
+    static void remember_a_chain(Presentation &wsi, std::uint64_t key, Swapchain *chain)
+    {
+        std::uint32_t slot = 0u;
+        static_cast<void>(wsi.swapchains_.insert(key, chain, slot));
+    }
+    static void repair_swapchains(Presentation &wsi)
+    {
+        wsi.swapchains_.for_each([](uint64_t, Swapchain *const &chain) { SwapchainProbe::repair(*chain); });
+    }
     static void orphan_a_surface(Presentation &wsi) { SurfaceTableProbe::strip_the_instance(wsi.surfaces_); }
     static void break_a_swapchain(Presentation &wsi)
     {
@@ -357,3 +390,32 @@ TEST(icd_presentation, a_destroyed_swapchain_s_handle_answers_nothing)
   CHECK_EQ(rig.wsi().present(rig.host().queue(), &present), VK_ERROR_OUT_OF_DATE_KHR);
   rig.pump();
   CHECK_EQ(rig.rig().windows().blits(), 1u); }
+
+TEST(icd_presentation, its_invariants_see_every_swapchain_when_an_earlier_one_is_already_broken)
+{ PresentationRig rig;
+  static_cast<void>(rig.create(create_info(rig.surface())));
+  static_cast<void>(rig.create(create_info(rig.surface())));
+  CHECK(rig.wsi().invariants_hold());
+  PresentationProbe::break_a_swapchain(rig.wsi());
+  CHECK(!rig.wsi().invariants_hold());
+  PresentationProbe::repair_swapchains(rig.wsi());
+  CHECK(rig.wsi().invariants_hold()); }
+
+TEST(icd_presentation, its_invariants_refuse_a_swapchain_the_table_lost_or_keeps_under_another_handle_or_miscounts)
+{ PresentationRig rig;
+  static_cast<void>(rig.create(create_info(rig.surface())));
+  static_cast<void>(rig.create(create_info(rig.surface())));
+  CHECK(rig.wsi().invariants_hold());
+  std::uint64_t     key = 0u;
+  av::icd::Swapchain *chain = nullptr;
+  PresentationProbe::forget_a_chain(rig.wsi(), key, chain);
+  CHECK(!rig.wsi().invariants_hold());
+  PresentationProbe::remember_a_chain(rig.wsi(), key + 8u, chain);
+  CHECK(!rig.wsi().invariants_hold());
+  PresentationProbe::forget_key(rig.wsi(), key + 8u);
+  PresentationProbe::remember_a_chain(rig.wsi(), key, chain);
+  CHECK(rig.wsi().invariants_hold());
+  PresentationProbe::miscount_chains(rig.wsi(), 5u);
+  CHECK(!rig.wsi().invariants_hold());
+  PresentationProbe::miscount_chains(rig.wsi(), 0u);
+  CHECK(rig.wsi().invariants_hold()); }
