@@ -141,8 +141,7 @@ Status HostWindow::announce(VirtioGpuDevice &device)
     if (!view_.ready()) return Status::invalid_state;
     uint8_t         request[AvRequestWriter::max_request_size] = {};
     AvRequestWriter writer(request, sizeof request);
-    const Status    written = writer.window_stats(view_.address());
-    if (written != Status::ok) return written;
+    static_cast<void>(writer.window_stats(view_.address()));
     uint8_t      answer[answer_bytes] = {};
     uint32_t     received = 0u;
     const Status asked = device.ask_control(request, writer.length(), answer, sizeof answer, received);

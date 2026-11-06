@@ -301,10 +301,9 @@ void Adapter::announce_window()
 void Adapter::start_presents()
 {
     AV_SCOPE("Adapter::start_presents");
-    if (!device_.constructed() || presents_.constructed() || !identity_.offers(CapsetInfo::feature_present_engine))
-        return;
+    if (!identity_.offers(CapsetInfo::feature_present_engine)) return;
     present_epochs_++;
-    if (presents_.construct(platform_, device_.object(), present_epochs_) != Status::ok) return;
+    static_cast<void>(presents_.construct(platform_, device_.object(), present_epochs_));
     const Status started = presents_.object().start();
     if (started == Status::ok) {
         platform_.log("avgpu: presents are moved by the device's present engine");
@@ -321,7 +320,7 @@ void Adapter::start_presents()
 void Adapter::start_copier()
 {
     AV_SCOPE("Adapter::start_copier");
-    if (copier_.construct(platform_, device_.object(), mapped_pixels_) != Status::ok) return;
+    static_cast<void>(copier_.construct(platform_, device_.object(), mapped_pixels_));
     if (copier_.object().initialize() == Status::ok) return;
     copier_.destroy();
     platform_.log("avgpu: no memory to hand presents to the host; the miniport moves their pixels");

@@ -25,8 +25,7 @@ Status WindowStatsView::initialize()
     if (page_ == nullptr) return Status::no_memory;
     __builtin_memset(page_, 0, WindowStats::page_size);
     uint8_t      header[WindowStats::encoded_size] = {};
-    const Status encoded = WindowStats().encode(header, sizeof header);
-    if (encoded != Status::ok) return encoded;
+    static_cast<void>(WindowStats().encode(header, sizeof header));
     __builtin_memcpy(page_, header, WindowStats::fields_at);
     return Status::ok;
 }

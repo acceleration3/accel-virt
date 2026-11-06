@@ -294,6 +294,13 @@ public:
     enum class Answer { display_info, none, wrong_type, no_scanout };
     void answer_with(Answer answer) { answer_ = answer; }
 
+    enum class Misanswer { none, silent, error, truncated };
+    void misanswer(std::uint32_t asked, Misanswer how)
+    {
+        misanswered_ = asked;
+        misanswer_ = how;
+    }
+
     std::uint32_t present_copies() const { return present_copies_; }
     void answer_asks() { platform_.on_stall(&Fixture::answer_display_info, this); }
 
@@ -364,6 +371,16 @@ private:
     {
         auto *const fixture = static_cast<Fixture *>(context);
         const std::uint32_t asked = fixture->control().pending_type();
+        if (asked == fixture->misanswered_ && fixture->misanswer_ != Misanswer::none) {
+            if (fixture->misanswer_ == Misanswer::silent) return;
+            av::GpuResponse answer;
+            answer.set(av::GpuResponse::err_unspec);
+            const std::uint32_t length = fixture->misanswer_ == Misanswer::truncated
+                                             ? 2u
+                                             : static_cast<std::uint32_t>(answer.length());
+            static_cast<void>(fixture->control().respond_all(answer.bytes(), length));
+            return;
+        }
         if (asked == create_blob || asked == map_blob || asked == unmap_blob) {
             av::GpuResponse answer;
             if (fixture->refuse_blob_) {
@@ -484,6 +501,8 @@ private:
     av::FakeDisplayClock  clock_{platform_};
     av::DisplayModeSet    offered_modes_;
     Answer                answer_ = Answer::display_info;
+    std::uint32_t         misanswered_ = 0u;
+    Misanswer             misanswer_ = Misanswer::none;
     std::optional<av::FakeVirtqueueDevice> control_;
     std::uint32_t         sources_;
     std::uint32_t         children_;
@@ -5608,3 +5627,237 @@ TEST(adapter_dpc_routine, a_display_event_is_cleared_and_each_monitor_replugged)
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.dxgkrnl().child_statuses(), 2u); }
+
+namespace {
+
+void spend_log_budget(Fixture &fixture)
+{
+    const av::DxgkargRecommendVidPnTopologyRecord topology = {};
+    for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
+        static_cast<void>(fixture.adapter().recommend_vidpn_topology(&topology));
+}
+
+}
+
+TEST(adapter_dpc_routine, a_context_whose_release_is_held_past_the_deadline_is_lost_and_its_neighbour_is_not)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  AvProcess process(fixture, handles);
+  AvProcess other(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  av::DxgkargCreateContextRecord neighbour = {};
+  CHECK_EQ(other.create_context(neighbour), success);
+  av::DxgkargCreateContextRecord queue = {};
+  queue.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(process.device(), &queue)), success);
+  av::DxgkargCreateContextRecord follower = {};
+  follower.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(other.device(), &follower)), success);
+
+  std::uint8_t release[av::ReleaseRecord::encoded_size] = {};
+  CHECK_STATUS(av::ReleaseRecord(process.ring().kmt_handle(), av::SubmissionDescriptor(1u, 32u, 64u))
+                   .encode(release, sizeof release),
+               av::Status::ok);
+  CHECK_EQ(submit_packet(fixture, queue.hContext, 5u, release, sizeof release), success);
+  std::uint8_t follow[av::FollowRecord::encoded_size] = {};
+  CHECK_STATUS(av::FollowRecord(other.ring().kmt_handle(), 1u).encode(follow, sizeof follow), av::Status::ok);
+  CHECK_EQ(submit_packet(fixture, follower.hContext, 6u, follow, sizeof follow), success);
+
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  fixture.platform().advance_time(av::ExecutionNode::park_deadline);
+  run_dpc(fixture);
+  CHECK(fixture.platform().logged_line("avgpu: a held packet passed its deadline and was let go"));
+  CHECK(fixture.platform().logged_line("avgpu: a context's batches cannot be released in order: the context is lost"));
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 2u);
+  CHECK_EQ(submit_packet(fixture, queue.hContext, 7u, release, sizeof release), invalid_parameter);
+  CHECK_EQ(submit_packet(fixture, follower.hContext, 8u, follow, sizeof follow), success);
+  CHECK(fixture.adapter().invariants_hold());
+  CHECK_EQ(nt(fixture.adapter().destroy_context(follower.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(queue.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(neighbour.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(other.device())), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+TEST(adapter_dpc_routine, a_deadline_passed_with_the_log_budget_spent_is_let_go_unlogged)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  AvProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  av::DxgkargCreateContextRecord queue = {};
+  queue.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(process.device(), &queue)), success);
+  CHECK_EQ(process.submit(context.hContext, 7u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
+  std::uint8_t follow[av::FollowRecord::encoded_size] = {};
+  CHECK_STATUS(av::FollowRecord(process.ring().kmt_handle(), 1u).encode(follow, sizeof follow), av::Status::ok);
+  CHECK_EQ(submit_packet(fixture, queue.hContext, 8u, follow, sizeof follow), success);
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  fixture.platform().advance_time(av::ExecutionNode::park_deadline);
+  spend_log_budget(fixture);
+  run_dpc(fixture);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 2u);
+  CHECK(!fixture.platform().logged_line("a held packet passed its deadline"));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(queue.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+TEST(adapter_start_device, a_present_engine_the_device_will_not_start_leaves_presents_to_the_miniport_until_it_will)
+{ for (const Fixture::Misanswer how : {Fixture::Misanswer::silent, Fixture::Misanswer::error,
+                                       Fixture::Misanswer::truncated}) {
+      Fixture fixture;
+      fixture.offer_present_engine();
+      fixture.misanswer(av::PageRequest::present_engine, how);
+      CHECK_EQ(fixture.start(), success);
+      CHECK(fixture.platform().logged_line("avgpu: the device's present engine was not started, status 0x"));
+      CHECK(!fixture.platform().logged_line("avgpu: presents are moved by the device's present engine"));
+      CHECK(fixture.adapter().invariants_hold());
+      fixture.misanswer(0u, Fixture::Misanswer::none);
+      fixture.answer_asks();
+      CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+      fixture.forget_control();
+      CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+      CHECK(fixture.platform().logged_line("avgpu: presents are moved by the device's present engine"));
+      CHECK(fixture.adapter().invariants_hold());
+  } }
+
+TEST(adapter_start_device, a_host_that_answers_the_window_counters_badly_is_logged_and_the_window_stays_offered)
+{ for (const Fixture::Misanswer how : {Fixture::Misanswer::silent, Fixture::Misanswer::error,
+                                       Fixture::Misanswer::truncated}) {
+      Fixture fixture;
+      fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+      fixture.misanswer(av::PageRequest::window_stats, how);
+      CHECK_EQ(fixture.start(), success);
+      CHECK(AdapterProbe(fixture.adapter()).window_offered());
+      CHECK(fixture.platform().logged_line("avgpu: host window counters status 0x"));
+      CHECK(!fixture.platform().logged_line("avgpu: host window counters status 0x00000000"));
+  } }
+
+TEST(adapter_start_device, a_window_with_no_stats_page_or_no_map_is_logged_and_withheld_or_offered_bare)
+{ std::uint32_t stats_page = 0u;
+  for (std::uint32_t nth = 1u; nth <= 16u && stats_page == 0u; nth++) {
+      Fixture probe;
+      probe.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+      probe.platform().fail_allocation_at(nth);
+      const bool started = probe.start() == success;
+      probe.platform().fail_allocation_at(0u);
+      if (started && probe.platform().logged_line("host window stats page is unavailable")) stats_page = nth;
+  }
+  CHECK(stats_page != 0u);
+  Fixture bare;
+  bare.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  bare.platform().fail_allocation_at(stats_page);
+  CHECK_EQ(bare.start(), success);
+  bare.platform().fail_allocation_at(0u);
+  CHECK(AdapterProbe(bare.adapter()).window_offered());
+  CHECK(bare.platform().logged_line("avgpu: host window counters status 0xC0000184"));
+
+  std::uint32_t map = 0u;
+  for (std::uint32_t nth = 1u; nth <= 64u && map == 0u; nth++) {
+      Fixture probe;
+      probe.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+      probe.platform().fail_allocation_at(nth);
+      const bool started = probe.start() == success;
+      probe.platform().fail_allocation_at(0u);
+      if (started && probe.platform().logged_line("avgpu: host window status 0xC0000017")) map = nth;
+  }
+  CHECK(map != 0u);
+  Fixture mapless;
+  mapless.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  mapless.platform().fail_allocation_at(map);
+  CHECK_EQ(mapless.start(), success);
+  mapless.platform().fail_allocation_at(0u);
+  CHECK(!AdapterProbe(mapless.adapter()).window_offered());
+  CHECK(!mapless.platform().logged_line("avgpu: host window counters")); }
+
+TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay, a_base_plane_with_no_allocation_is_not_scanned_out_and_the_system_segment_is_)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  int primary = 0;
+  av::DxgkMultiplaneOverlayPlaneRecord plane = {};
+  plane.LayerIndex = 0u;
+  plane.Enabled = 1u;
+  plane.AllocationSegment = 2u;
+  plane.AllocationAddress = 0x6000000000ll;
+  plane.hAllocation = nullptr;
+  av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlayRecord request = {};
+  request.PlaneCount = 1u;
+  request.pPlanes = &plane;
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(AdapterProbe(fixture.adapter()).primary(0u) == nullptr);
+  fixture.platform().set_irql(Irql::isr);
+  plane.hAllocation = &primary;
+  plane.AllocationSegment = 0u;
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(AdapterProbe(fixture.adapter()).primary(0u) == &primary);
+  CHECK_EQ(AdapterProbe(fixture.adapter()).scanout(0u), 0x6000000000ull); }
+
+TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay3, skips_what_it_cannot_show_and_takes_no_more_than_the_planes_there_are)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  int primary = 0, overlay = 0;
+  av::DxgkPrimaryContextDataRecord base_view = {};
+  base_view.hAllocation = &primary;
+  base_view.SegmentId = 0u;
+  base_view.SegmentAddress = 0x6000000000ll;
+  av::DxgkPrimaryContextDataRecord overlay_view = {};
+  overlay_view.hAllocation = &overlay;
+  overlay_view.SegmentId = 1u;
+  overlay_view.SegmentAddress = 0x9000000000ll;
+  av::DxgkPrimaryContextDataRecord unallocated = {};
+  unallocated.hAllocation = nullptr;
+  unallocated.SegmentId = 1u;
+  av::DxgkPrimaryContextDataRecord *base_views[] = {&base_view};
+  av::DxgkPrimaryContextDataRecord *overlay_views[] = {&overlay_view};
+  av::DxgkPrimaryContextDataRecord *unallocated_views[] = {&unallocated};
+  av::DxgkMultiplaneOverlayPlane3Record planes[7] = {};
+  planes[0].LayerIndex = 0u;
+  planes[0].InputFlags = av::plane_input_enabled;
+  planes[0].ContextCount = 1u;
+  planes[0].ppContextData = base_views;
+  planes[1].LayerIndex = 1u;
+  planes[1].InputFlags = av::plane_input_enabled;
+  planes[1].ContextCount = 0u;
+  planes[1].ppContextData = overlay_views;
+  planes[2].LayerIndex = 2u;
+  planes[2].InputFlags = av::plane_input_enabled;
+  planes[2].ContextCount = 1u;
+  planes[2].ppContextData = nullptr;
+  planes[3].LayerIndex = 3u;
+  planes[3].InputFlags = av::plane_input_enabled;
+  planes[3].ContextCount = 1u;
+  planes[3].ppContextData = unallocated_views;
+  planes[4].LayerIndex = av::OverlayPlane::max_planes;
+  planes[5].LayerIndex = 1u;
+  planes[5].InputFlags = av::plane_input_enabled;
+  planes[5].ContextCount = 1u;
+  planes[5].ppContextData = overlay_views;
+  planes[6].LayerIndex = 2u;
+  planes[6].InputFlags = av::plane_input_enabled;
+  planes[6].ContextCount = 1u;
+  planes[6].ppContextData = overlay_views;
+  av::DxgkMultiplaneOverlayPlane3Record *plane_list[] = {nullptr,    &planes[4], &planes[0], &planes[1],
+                                                         &planes[2], &planes[3], &planes[5], &planes[6]};
+  av::DxgkargSetVidPnSourceAddressWithMultiPlaneOverlay3Record request = {};
+  request.PlaneCount = 8u;
+  request.ppPlanes = plane_list;
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(AdapterProbe(fixture.adapter()).scanout(0u), 0x6000000000ull);
+  CHECK(AdapterProbe(fixture.adapter()).primary(0u) == &primary);
+  CHECK(AdapterProbe(fixture.adapter()).plane(0u, 1u).allocation() == nullptr);
+  CHECK(AdapterProbe(fixture.adapter()).plane(0u, 2u).allocation() == nullptr);
+  CHECK(AdapterProbe(fixture.adapter()).plane(0u, 3u).allocation() == nullptr);
+  request.PlaneCount = 0u;
+  request.ppPlanes = nullptr;
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(AdapterProbe(fixture.adapter()).primary(0u) == &primary); }
