@@ -14,6 +14,50 @@ using av::Status;
 using av::glicd::SliceGroups;
 using av::glicd::SlicedBuffers;
 
+namespace av {
+
+struct KeyedSlotsProbe {
+    template <typename Key, typename Entry>
+    static void corrupt_count(KeyedSlots<Key, Entry> &table, std::uint32_t count) { table.count_ = count; }
+};
+
+}
+
+namespace av::glicd {
+
+struct SliceGroupsProbe {
+    static void set_next(SliceGroups &groups, std::uint32_t next) { groups.next_ = next; }
+    static void set_next_member(SliceGroups &groups, std::uint64_t next) { groups.next_member_ = next; }
+    static void plant_row(SliceGroups &groups, std::uint64_t key, const SliceGroups::Row &row)
+    {
+        std::uint32_t slot = 0u;
+        static_cast<void>(groups.rows_.insert(key, row, slot));
+    }
+    static void plant_parent(SliceGroups &groups, std::uint32_t token, std::uint32_t parent)
+    {
+        std::uint32_t slot = 0u;
+        static_cast<void>(groups.parents_.insert(token, parent, slot));
+    }
+    static void plant_member(SliceGroups &groups, std::uint64_t key, const SliceGroups::Member &member)
+    {
+        std::uint32_t slot = 0u;
+        static_cast<void>(groups.members_.insert(key, member, slot));
+    }
+    static void corrupt_rows(SliceGroups &groups, std::uint32_t count) { KeyedSlotsProbe::corrupt_count(groups.rows_, count); }
+    static void corrupt_parents(SliceGroups &groups, std::uint32_t count)
+    {
+        KeyedSlotsProbe::corrupt_count(groups.parents_, count);
+    }
+    static void corrupt_members(SliceGroups &groups, std::uint32_t count)
+    {
+        KeyedSlotsProbe::corrupt_count(groups.members_, count);
+    }
+};
+
+}
+
+using av::glicd::SliceGroupsProbe;
+
 namespace {
 
 char tokens_of_owners[8];
@@ -379,3 +423,86 @@ TEST(slice_groups_invariants, a_row_that_breaks_a_rule_is_noticed)
   const std::uint32_t a = rig.groups_.mint();
   CHECK_STATUS(rig.groups_.insert(a, 1u, good), Status::ok);
   CHECK(rig.groups_.invariants_hold()); }
+
+TEST(slice_groups_admit_join, a_group_with_several_buffers_is_refused_as_one)
+{ Rig rig;
+  const std::uint32_t a = rig.groups_.mint();
+  CHECK_STATUS(rig.groups_.insert(a, 1u, row_of(0u)), Status::ok);
+  CHECK_STATUS(rig.groups_.insert(a, 2u, row_of(0u)), Status::ok);
+  CHECK_STATUS(rig.groups_.insert(a, 3u, row_of(1u)), Status::ok);
+  CHECK_STATUS(rig.groups_.admit_join(a), Status::invalid_state);
+  CHECK(rig.groups_.invariants_hold()); }
+
+TEST(slice_groups_join, a_cycle_of_parents_ends_the_walk_to_the_root_instead_of_looping)
+{ Rig rig;
+  SliceGroupsProbe::plant_parent(rig.groups_, 1u, 2u);
+  SliceGroupsProbe::plant_parent(rig.groups_, 2u, 1u);
+  CHECK(rig.groups_.same(1u, 1u));
+  CHECK(!rig.groups_.invariants_hold()); }
+
+TEST(slice_groups_invariants, a_counter_at_zero_is_noticed)
+{ Rig next;
+  SliceGroupsProbe::set_next(next.groups_, 0u);
+  CHECK(!next.groups_.invariants_hold());
+  Rig member;
+  SliceGroupsProbe::set_next_member(member.groups_, 0u);
+  CHECK(!member.groups_.invariants_hold()); }
+
+TEST(slice_groups_invariants, rows_that_break_a_rule_are_noticed_wherever_they_come_in_the_walk)
+{ SliceGroups::Row bad = row_of(0u);
+  bad.owner_ = nullptr;
+  Rig two;
+  CHECK_STATUS(two.groups_.insert(1u, 1u, bad), Status::ok);
+  CHECK_STATUS(two.groups_.insert(1u, 2u, bad), Status::ok);
+  CHECK(!two.groups_.invariants_hold());
+  Rig unnamed;
+  SliceGroupsProbe::plant_row(unnamed.groups_, std::uint64_t{1u} << 32u, row_of(0u));
+  CHECK(!unnamed.groups_.invariants_hold());
+  SliceGroups::Row over = row_of(0u);
+  over.map_bytes_ = over.size_ + 1u;
+  Rig mapped;
+  CHECK_STATUS(mapped.groups_.insert(1u, 1u, over), Status::ok);
+  CHECK(!mapped.groups_.invariants_hold()); }
+
+TEST(slice_groups_invariants, parents_that_break_a_rule_are_noticed_wherever_they_come_in_the_walk)
+{ Rig own;
+  SliceGroupsProbe::plant_parent(own.groups_, 3u, 3u);
+  CHECK(!own.groups_.invariants_hold());
+  Rig two;
+  SliceGroupsProbe::plant_parent(two.groups_, 3u, 3u);
+  SliceGroupsProbe::plant_parent(two.groups_, 4u, 4u);
+  CHECK(!two.groups_.invariants_hold());
+  Rig cycle;
+  SliceGroupsProbe::plant_parent(cycle.groups_, 1u, 2u);
+  SliceGroupsProbe::plant_parent(cycle.groups_, 2u, 1u);
+  CHECK(!cycle.groups_.invariants_hold()); }
+
+TEST(slice_groups_invariants, members_that_break_a_rule_are_noticed_wherever_they_come_in_the_walk)
+{ Rig nameless;
+  SliceGroupsProbe::plant_member(nameless.groups_, 1u, SliceGroups::Member{nullptr, 1u, 1u});
+  CHECK(!nameless.groups_.invariants_hold());
+  Rig two;
+  SliceGroupsProbe::plant_member(two.groups_, 1u, SliceGroups::Member{nullptr, 1u, 1u});
+  SliceGroupsProbe::plant_member(two.groups_, 2u, SliceGroups::Member{nullptr, 1u, 2u});
+  CHECK(!two.groups_.invariants_hold());
+  Rig keyed;
+  SliceGroupsProbe::plant_member(keyed.groups_, 1u, SliceGroups::Member{owner(0u), 1u, 7u});
+  CHECK(!keyed.groups_.invariants_hold());
+  Rig unissued;
+  SliceGroupsProbe::plant_member(unissued.groups_, 5u, SliceGroups::Member{owner(0u), 1u, 5u});
+  CHECK(!unissued.groups_.invariants_hold()); }
+
+TEST(slice_groups_invariants, a_table_that_lost_its_shape_is_noticed)
+{ Rig rows;
+  SliceGroupsProbe::corrupt_rows(rows.groups_, 99u);
+  CHECK(!rows.groups_.invariants_hold());
+  SliceGroupsProbe::corrupt_rows(rows.groups_, 0u);
+  CHECK(rows.groups_.invariants_hold());
+  Rig parents;
+  SliceGroupsProbe::corrupt_parents(parents.groups_, 99u);
+  CHECK(!parents.groups_.invariants_hold());
+  SliceGroupsProbe::corrupt_parents(parents.groups_, 0u);
+  Rig members;
+  SliceGroupsProbe::corrupt_members(members.groups_, 99u);
+  CHECK(!members.groups_.invariants_hold());
+  SliceGroupsProbe::corrupt_members(members.groups_, 0u); }

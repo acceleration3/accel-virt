@@ -72,7 +72,7 @@ bool GlContextTable::shares_live(const GuestGlContext &context) const
     AV_SCOPE("GlContextTable::shares_live");
     bool shared = false;
     contexts_.for_each([this, &context, &shared](uint64_t, GuestGlContext *const &other) {
-        shared = shared || (other != &context && groups_.same(other->slice_group(), context.slice_group()));
+        shared = shared || groups_.same(other->slice_group(), context.slice_group());
     });
     return shared;
 }

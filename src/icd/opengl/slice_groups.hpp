@@ -70,6 +70,8 @@ private:
     KeyedSlots<uint64_t, Member>   members_;
     uint32_t                       next_;
     uint64_t                       next_member_;
+
+    friend struct SliceGroupsProbe;
 };
 
 }
