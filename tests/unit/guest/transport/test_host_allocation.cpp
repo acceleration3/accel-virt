@@ -279,3 +279,19 @@ TEST(host_allocation_invariants, a_broken_chunk_or_a_broken_import_is_caught)
   rig.host().nop();
   CHECK_STATUS(rig.allocation().close(), Status::ok);
   rig.check_nothing_is_held(); }
+
+TEST(host_allocation, a_view_is_lent_only_inside_what_is_held)
+{ Rig rig;
+  CHECK(rig.allocation().view_at(0u, 1u) == nullptr);
+  rig.host().blob_import(0u, imported_memory);
+  CHECK_STATUS(rig.allocation().open(mib, vulkan), Status::ok);
+  CHECK(rig.allocation().view_at(0u, mib) == rig.allocation().view());
+  CHECK(rig.allocation().view_at(4096u, 16u) == rig.allocation().view() + 4096u);
+  CHECK(rig.allocation().view_at(0u, 0u) == nullptr);
+  CHECK(rig.allocation().view_at(0u, mib + 1u) == nullptr);
+  CHECK(rig.allocation().view_at(mib, 1u) == nullptr);
+  CHECK(rig.allocation().view_at(mib + 1u, 1u) == nullptr);
+  CHECK(rig.allocation().view_at(~std::uint64_t{0}, 2u) == nullptr);
+  rig.host().nop();
+  CHECK_STATUS(rig.allocation().close(), Status::ok);
+  rig.check_nothing_is_held(); }

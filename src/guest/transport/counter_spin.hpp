@@ -6,6 +6,7 @@
 namespace av {
 
 class Kmt;
+struct CounterSpinProbe;
 
 class CounterSpin {
 public:
@@ -25,6 +26,8 @@ private:
     uint64_t   budget_;
     uint64_t   started_;
     bool       running_;
+
+    friend struct CounterSpinProbe;
 };
 
 }

@@ -187,6 +187,18 @@ TEST(transport_ring, refuses_fence_zero_a_null_payload_and_a_batch_too_large)
   CHECK_STATUS(ring.write_batch(huge, sizeof huge, nullptr, 0u, 1u, 0u, begin, end), Status::invalid_parameter);
   CHECK(ring.invariants_hold()); }
 
+TEST(transport_ring, a_payload_and_trailer_adding_past_32_bits_are_refused_unread)
+{ Ring          memory;
+  TransportRing ring;
+  CHECK_STATUS(ring.initialize(memory.bytes, order), Status::ok);
+  std::uint8_t payload[1] = {};
+  std::uint8_t trailer[1] = {};
+  std::uint64_t begin = 0u;
+  std::uint64_t end = 0u;
+  CHECK_STATUS(ring.write_batch(payload, 0xFFFFFFFFu, trailer, 1u, 1u, 0u, begin, end), Status::invalid_parameter);
+  CHECK_EQ(ring.tail(), 0u);
+  CHECK(ring.invariants_hold()); }
+
 TEST(transport_ring, refuses_to_initialize_bad_arguments)
 { Ring memory;
   TransportRing a;

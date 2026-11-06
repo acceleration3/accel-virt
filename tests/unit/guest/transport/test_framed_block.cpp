@@ -174,6 +174,18 @@ TEST(framed_block, a_writer_lent_with_a_spill_is_framed_in_pieces)
   none.write_u8(1u);
   CHECK(none.status() != Status::ok); }
 
+TEST(framed_block, a_writer_asking_for_more_than_is_left_with_a_spill_is_lent_what_is_left)
+{ av::MockPlatform platform;
+  av::SpillBlock   spill(platform);
+  std::uint8_t     block[64] = {};
+  FramedBlock      framed(block, sizeof block);
+  WireWriter       writer = framed.lend(1024u, spill);
+  writer.write_zeros(sizeof block - CommandHeader::encoded_size);
+  CHECK_STATUS(writer.status(), Status::ok);
+  CHECK(!writer.spilled());
+  writer.write_u8(1u);
+  CHECK(writer.spilled()); }
+
 TEST(framed_block, a_held_block_takes_a_small_piece_only_when_it_is_the_last)
 { std::uint8_t block[av::CommandPieces::least_piece] = {};
   FramedBlock  framed(block, sizeof block);

@@ -69,4 +69,7 @@ TEST(published_slot_reader, an_index_wraps_around_the_slots_and_an_unwritten_seq
   std::uint8_t too_much[PublishedSlotLayout::data_bytes + 1u] = {};
   CHECK(!reader.read(1u, 9u, too_much, sizeof too_much));
   CHECK(reader.read(1u, 9u, nullptr, 0u));
+  std::uint8_t untouched[4] = {7u, 7u, 7u, 7u};
+  CHECK(reader.read(1u, 9u, untouched, 0u));
+  CHECK_EQ(untouched[0], 7u);
   CHECK(reader.read(1u, 9u, nullptr, PublishedSlotLayout::data_bytes)); }

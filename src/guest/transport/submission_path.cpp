@@ -22,9 +22,8 @@ Status SubmissionPath::submit(uint32_t context, uint64_t dma_address, const uint
     if (route_ != nullptr) {
         SubmissionDescriptor batch;
         uint8_t              record[ReleaseRecord::encoded_size] = {};
-        if (batch.decode(descriptor, size) != Status::ok ||
-            ReleaseRecord(route_ring_, batch).encode(record, sizeof record) != Status::ok)
-            return Status::invalid_parameter;
+        if (batch.decode(descriptor, size) != Status::ok) return Status::invalid_parameter;
+        static_cast<void>(ReleaseRecord(route_ring_, batch).encode(record, sizeof record));
         const Status released = route_->release(record, sizeof record);
         if (released == Status::ok) {
             release_submissions_++;

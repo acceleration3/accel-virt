@@ -205,6 +205,33 @@ TEST(submission_path, a_tail_that_cannot_be_published_stops_the_submission)
   CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit), 0u);
   CHECK(path.invariants_hold()); }
 
+TEST(submission_path, a_given_back_doorbell_leaves_a_hardware_queue_the_published_tail_is_not_for)
+{ Submitting submitting;
+  CHECK_STATUS(submitting.open_doorbell(), Status::ok);
+  submitting.doorbell().give_back();
+  submitting.path().publish_before_kernel();
+  CHECK_STATUS(submitting.write_batch(1u), Status::ok);
+  submitting.consumer_awake(true);
+  const std::uint8_t descriptor[24] = {};
+  CHECK_STATUS(submitting.path().submit(submitting.context(), submitting.dma_address(), descriptor, sizeof descriptor, 1u),
+               Status::ok);
+  CHECK_EQ(submitting.published_tail(), 0u);
+  CHECK_EQ(submitting.path().through_kernel(), 1u);
+  CHECK_EQ(submitting.path().through_doorbell(), 0u);
+  CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit_to_hw_queue), 1u);
+  CHECK(submitting.path().invariants_hold()); }
+
+TEST(submission_path, a_published_tail_that_cannot_be_published_stops_the_submission_without_a_doorbell)
+{ Submitting submitting;
+  av::TransportRing  unbound;
+  SubmissionPath     path(submitting.kmt(), submitting.doorbell(), unbound);
+  path.publish_before_kernel();
+  const std::uint8_t descriptor[24] = {};
+  CHECK_STATUS(path.submit(submitting.context(), submitting.dma_address(), descriptor, sizeof descriptor, 1u),
+               Status::invalid_state);
+  CHECK_EQ(path.through_kernel(), 0u);
+  CHECK_EQ(submitting.kmt().calls(MockKmt::Call::submit), 0u); }
+
 TEST(submission_path_invariants, a_submission_counted_for_an_empty_ring_is_detected)
 { Submitting submitting;
   CHECK(submitting.path().invariants_hold());

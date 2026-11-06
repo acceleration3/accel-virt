@@ -39,7 +39,7 @@ void ChannelStats::gauge(ChannelCounter counter, uint64_t value)
 {
     AV_SCOPE("ChannelStats::gauge");
     const uint32_t index = static_cast<uint32_t>(counter);
-    if (index >= ChannelStatsReport::counters || __atomic_load_n(&counters_[index], __ATOMIC_RELAXED) == value) return;
+    if (__atomic_load_n(&counters_[index], __ATOMIC_RELAXED) == value) return;
     __atomic_store_n(&counters_[index], value, __ATOMIC_RELAXED);
     __atomic_fetch_add(&changes_, 1u, __ATOMIC_RELAXED);
 }
@@ -55,10 +55,10 @@ bool ChannelStats::frame_report(uint8_t *into, size_t capacity) const
 {
     AV_SCOPE("ChannelStats::frame_report");
     if (capacity < command_bytes) return false;
-    return CommandHeader(CommandHeader::channel_stats_id, static_cast<uint32_t>(command_bytes), 0u)
-                   .encode(into, command_bytes) == Status::ok &&
-           snapshot().encode(into + CommandHeader::encoded_size, command_bytes - CommandHeader::encoded_size) ==
-               Status::ok;
+    static_cast<void>(CommandHeader(CommandHeader::channel_stats_id, static_cast<uint32_t>(command_bytes), 0u)
+                          .encode(into, command_bytes));
+    static_cast<void>(snapshot().encode(into + CommandHeader::encoded_size, command_bytes - CommandHeader::encoded_size));
+    return true;
 }
 
 void ChannelStats::sent(uint64_t now)
