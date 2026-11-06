@@ -10,6 +10,27 @@ using av::RequestRoom;
 using av::Status;
 using av::Violation;
 
+namespace av {
+
+struct RequestRoomProbe {
+    static uint8_t *swap_room(RequestRoom &room, uint8_t *block)
+    {
+        uint8_t *const held = room.room_;
+        room.room_ = block;
+        return held;
+    }
+    static uint8_t *swap_spare(RequestRoom &room, uint8_t *block)
+    {
+        uint8_t *const held = room.spare_;
+        room.spare_ = block;
+        return held;
+    }
+    static void set_room_bytes(RequestRoom &room, std::size_t bytes) { room.room_bytes_ = bytes; }
+    static void set_spare_bytes(RequestRoom &room, std::size_t bytes) { room.spare_bytes_ = bytes; }
+};
+
+}
+
 namespace {
 
 constexpr std::size_t fixed = 64u;
@@ -106,3 +127,36 @@ TEST(request_room, prepare_is_passive_and_take_dispatch)
   CHECK_STATUS(room.take(256u), Status::ok);
   CHECK(platform.claim(Violation::irql_ceiling));
   platform.set_irql(Irql::passive); }
+
+TEST(request_room, a_prepare_for_less_than_the_spare_holds_allocates_nothing)
+{ MockPlatform platform; RequestRoom room(platform, fixed, entry);
+  CHECK_STATUS(room.prepare(512u), Status::ok);
+  CHECK_STATUS(room.prepare(256u), Status::ok);
+  CHECK_EQ(platform.live_allocations(), 1u);
+  platform.set_irql(Irql::dispatch);
+  CHECK_STATUS(room.take(256u), Status::ok);
+  platform.set_irql(Irql::passive);
+  CHECK_EQ(room.size(), fixed + 512u * entry);
+  CHECK(room.invariants_hold()); }
+
+TEST(request_room_invariants, a_block_without_its_size_or_a_size_without_its_block_is_detected)
+{ MockPlatform platform; RequestRoom room(platform, fixed, entry);
+  CHECK_STATUS(room.prepare(256u), Status::ok);
+  platform.set_irql(Irql::dispatch);
+  CHECK_STATUS(room.take(256u), Status::ok);
+  platform.set_irql(Irql::passive);
+  CHECK_STATUS(room.prepare(512u), Status::ok);
+  CHECK(room.invariants_hold());
+  av::RequestRoomProbe::set_room_bytes(room, 0u);
+  CHECK(!room.invariants_hold());
+  av::RequestRoomProbe::set_room_bytes(room, fixed + 256u * entry);
+  av::RequestRoomProbe::set_spare_bytes(room, 0u);
+  CHECK(!room.invariants_hold());
+  av::RequestRoomProbe::set_spare_bytes(room, fixed + 512u * entry);
+  uint8_t *const room_block = av::RequestRoomProbe::swap_room(room, nullptr);
+  CHECK(!room.invariants_hold());
+  static_cast<void>(av::RequestRoomProbe::swap_room(room, room_block));
+  uint8_t *const spare_block = av::RequestRoomProbe::swap_spare(room, nullptr);
+  CHECK(!room.invariants_hold());
+  static_cast<void>(av::RequestRoomProbe::swap_spare(room, spare_block));
+  CHECK(room.invariants_hold()); }

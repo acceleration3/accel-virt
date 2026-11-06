@@ -178,7 +178,10 @@ TEST(display_mode_matches, a_signal_at_its_refresh_and_no_other)
   D3dkmdtVideoSignalInfoRecord saved = {};
   DisplayMode(1920u, 1080u).describe(saved);
   CHECK(!mode.matches(saved));
-  CHECK(DisplayMode(1920u, 1080u).matches(saved)); }
+  CHECK(DisplayMode(1920u, 1080u).matches(saved));
+  D3dkmdtVideoSignalInfoRecord slower = signal;
+  slower.VSyncFreqDenominator = signal.VSyncFreqDenominator + 1u;
+  CHECK(!mode.matches(slower)); }
 
 TEST(display_mode, the_edid_states_the_fastest_rate_its_clock_holds)
 { const DisplayMode fits(1920u, 1080u, 240000u);
@@ -195,3 +198,9 @@ TEST(display_mode, a_period_is_in_the_100_ns_interrupt_time_units)
 { CHECK_EQ(DisplayMode(1920u, 1080u).period(), second / 60u);
   CHECK_EQ(DisplayMode(1920u, 1080u, 360000u).period(), second / 360u);
   CHECK_EQ(DisplayMode(1920u, 1080u, 1000000u).period(), second / 1000u); }
+
+TEST(display_mode_describe, a_rate_beyond_what_a_ratio_of_32_bit_fields_holds_is_the_largest_they_can)
+{ D3dkmdtVideoSignalInfoRecord signal = {};
+  DisplayMode(100u, 16384u, 4000000001u).describe(signal);
+  CHECK_EQ(signal.HSyncFreqNumerator, 0xFFFFFFFFu);
+  CHECK_EQ(signal.HSyncFreqDenominator, 1u); }

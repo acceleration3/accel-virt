@@ -5,6 +5,11 @@
 #include "miniport/driver/dxgkrnl_interface.hpp"
 #include "core/support/status.hpp"
 #include "harness/virtio/fake_virtio_gpu_function.hpp"
+#include "harness/virtio/mapped_virtio_function.hpp"
+#include "miniport/display/vblank_phase.hpp"
+#include "miniport/virtio/virtio_gpu_device.hpp"
+#include "core/support/object_storage.hpp"
+#include "proto/virtio_gpu/gpu_response.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -23,6 +28,23 @@ using av::Irql;
 using av::MockPlatform;
 using av::Status;
 using av::VblankRecord;
+
+namespace av {
+
+struct VblankPhaseProbe {
+    static void set_period(VblankPhase &phase, std::uint32_t period) { phase.period_ns_ = period; }
+};
+
+struct DeviceVblankProbe {
+    static VblankPhase &phase(DeviceVblank &vsync) { return vsync.phase_; }
+    static void         suspend_while_reporting(DeviceVblank &vsync)
+    {
+        vsync.suspended_ = true;
+        vsync.reporting_ = true;
+    }
+};
+
+}
 
 namespace {
 
@@ -227,3 +249,57 @@ TEST(device_vblank_power, nothing_is_reported_across_a_suspend_and_the_asking_co
   fixture.vsync().destroy();
   CHECK_STATUS(fixture.vsync().resume(), Status::invalid_state);
   CHECK_EQ(fixture.platform().live_allocations(), 0u); }
+
+TEST(device_vblank_invariants, a_suspended_vblank_that_reports_or_a_phase_that_is_wrong_is_detected)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK(fixture.vsync().invariants_hold());
+  av::VblankPhaseProbe::set_period(av::DeviceVblankProbe::phase(fixture.vsync()), 5u);
+  CHECK(!fixture.vsync().invariants_hold());
+  av::VblankPhaseProbe::set_period(av::DeviceVblankProbe::phase(fixture.vsync()), 0u);
+  CHECK(fixture.vsync().invariants_hold());
+  av::DeviceVblankProbe::suspend_while_reporting(fixture.vsync());
+  CHECK(!fixture.vsync().invariants_hold());
+  fixture.vsync().destroy(); }
+
+namespace {
+
+struct Answering {
+    av::FakeVirtqueueDevice *queue;
+    const std::uint8_t      *bytes;
+    std::uint32_t            length;
+};
+
+}
+
+TEST(device_vblank_attach, needs_its_page_and_an_answer_the_device_gave_whole_and_agreeing)
+{ av::MappedVirtioFunction mapped;
+  av::ObjectStorage<av::VirtioGpuDevice> storage;
+  av::DisplaySources sources(mapped.platform());
+  DeviceVblank       vsync(mapped.platform(), mapped.interface(), sources);
+  CHECK_STATUS(mapped.map(), Status::ok);
+  CHECK_STATUS(storage.construct(mapped.platform(), mapped.mappings(), mapped.layout()), Status::ok);
+  CHECK_STATUS(storage.object().start(3u), Status::ok);
+  CHECK_STATUS(vsync.attach(storage.object()), Status::invalid_state);
+  CHECK_STATUS(vsync.initialize(), Status::ok);
+  av::FakeVirtqueueDevice queue = mapped.queue_device(0u);
+  const std::uint8_t      cut[2] = {0x00u, 0x11u};
+  av::GpuResponse         refusal;
+  refusal.set(av::GpuResponse::err_unspec);
+  av::GpuResponse         agreement;
+  agreement.set(av::GpuResponse::ok_nodata);
+  Answering answering = {&queue, cut, sizeof cut};
+  mapped.platform().on_stall(+[](void *context) {
+      const auto *const answering = static_cast<const Answering *>(context);
+      static_cast<void>(answering->queue->respond_all(answering->bytes, answering->length));
+  }, &answering);
+  CHECK(vsync.attach(storage.object()) != Status::ok);
+  answering.bytes = refusal.bytes();
+  answering.length = static_cast<std::uint32_t>(refusal.length());
+  CHECK_STATUS(vsync.attach(storage.object()), Status::not_supported);
+  answering.bytes = agreement.bytes();
+  answering.length = static_cast<std::uint32_t>(agreement.length());
+  CHECK_STATUS(vsync.attach(storage.object()), Status::ok);
+  mapped.platform().on_stall(nullptr, nullptr);
+  vsync.destroy();
+  storage.destroy(); }

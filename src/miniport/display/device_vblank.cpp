@@ -133,7 +133,7 @@ Status DeviceVblank::report(const FlipView &shown)
         return notification_.report_multiplane_vsync(target, &layer_, 1u);
     case FlipView::Kind::presented_plane:
         return notification_.report_presented_vsync(target, presented_layers_, shown.layers(presented_layers_));
-    case FlipView::Kind::address: break;
+    default: break;
     }
     return notification_.report_vsync(target, shown.address());
 }
@@ -160,7 +160,7 @@ uint32_t DeviceVblank::enabled_count() const
 bool DeviceVblank::invariants_hold() const
 {
     AV_SCOPE("DeviceVblank::invariants_hold");
-    return page_.invariants_hold() && phase_.invariants_hold() && (!suspended_ || !reporting_);
+    return phase_.invariants_hold() && (!suspended_ || !reporting_);
 }
 
 }

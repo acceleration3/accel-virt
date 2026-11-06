@@ -46,6 +46,7 @@ TEST(flip_view, a_presented_flip_reports_every_flipped_layer_and_its_present_id)
   CHECK_EQ(flip.address(), 0x6000000000u);
   CHECK(flip.plane(0u).allocation() == &allocation);
   CHECK(!flip.plane(2u).shown());
+  CHECK(flip.plane(av::OverlayPlane::max_planes).allocation() == &allocation);
   av::DxgkMultiplaneOverlayVsyncInfo2Record layers[av::OverlayPlane::max_planes] = {};
   layers[1].Flags = 1u;
   CHECK_EQ(flip.layers(layers), 2u);

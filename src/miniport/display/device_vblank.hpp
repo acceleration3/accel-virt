@@ -20,6 +20,7 @@ class DisplaySources;
 class DxgkrnlInterface;
 class FlipView;
 class VirtioGpuDevice;
+struct DeviceVblankProbe;
 
 class DeviceVblank {
 public:
@@ -63,6 +64,8 @@ private:
     uint64_t              sequence_;
     uint32_t              reported_;
     uint32_t              enables_;
+
+    friend struct DeviceVblankProbe;
 };
 
 }

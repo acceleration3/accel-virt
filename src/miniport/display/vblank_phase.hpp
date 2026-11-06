@@ -5,6 +5,8 @@
 
 namespace av {
 
+struct VblankPhaseProbe;
+
 class VblankPhase {
 public:
     static constexpr uint32_t window = 64u;
@@ -27,6 +29,8 @@ private:
     int64_t  candidate_;
     uint32_t seen_;
     bool     known_;
+
+    friend struct VblankPhaseProbe;
 };
 
 }

@@ -5,6 +5,15 @@
 
 using av::VblankPhase;
 
+namespace av {
+
+struct VblankPhaseProbe {
+    static void set_period(VblankPhase &phase, std::uint32_t period) { phase.period_ns_ = period; }
+    static void set_seen(VblankPhase &phase, std::uint32_t seen) { phase.seen_ = seen; }
+};
+
+}
+
 namespace {
 constexpr std::uint32_t period_ns = 16666600u;
 constexpr std::uint64_t period_ticks = 166666u;
@@ -77,3 +86,20 @@ TEST(vblank_phase, fractional_period_at_one_hundred_twenty_hertz_tracks_jittered
       CHECK_EQ(phase.period(), 83333u);
       CHECK(phase.invariants_hold());
   } }
+
+TEST(vblank_phase_invariants, a_known_phase_has_a_period_and_a_window_in_progress_and_an_unknown_one_nothing)
+{ VblankPhase phase;
+  phase.observe(10u, blank_at(10u), period_ns);
+  CHECK(phase.invariants_hold());
+  av::VblankPhaseProbe::set_period(phase, 0u);
+  CHECK(!phase.invariants_hold());
+  av::VblankPhaseProbe::set_period(phase, period_ns);
+  av::VblankPhaseProbe::set_seen(phase, VblankPhase::window);
+  CHECK(!phase.invariants_hold());
+  phase.forget();
+  CHECK(phase.invariants_hold());
+  av::VblankPhaseProbe::set_period(phase, period_ns);
+  CHECK(!phase.invariants_hold());
+  av::VblankPhaseProbe::set_period(phase, 0u);
+  av::VblankPhaseProbe::set_seen(phase, 1u);
+  CHECK(!phase.invariants_hold()); }

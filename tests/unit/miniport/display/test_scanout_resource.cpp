@@ -103,6 +103,19 @@ public:
         return scanout_.refresh(address, frame_.pages(), presented);
     }
     void                      lose_device() { storage_.destroy(); }
+    void fill_queue()
+    {
+        const std::uint8_t header[24] = {};
+        while (storage_.object().send_control(header, sizeof header) == Status::ok) {}
+    }
+    std::uint32_t answer(FakeVirtqueueDevice &control)
+    {
+        const std::uint32_t answered = control.respond_all(ok_nodata);
+        std::uint32_t       harvested = 0u;
+        CHECK_STATUS(storage_.object().harvest_control(harvested), Status::ok);
+        CHECK_EQ(harvested, answered);
+        return answered;
+    }
     void take_room(std::uint32_t count)
     {
         const std::uint8_t header[24] = {};
@@ -475,4 +488,37 @@ TEST(scanout_resource_refresh, a_keyed_image_is_copied_from_the_host_and_flips_b
   CHECK_EQ(control.respond_all(ok_nodata), 2u);
   CHECK_EQ(control.request_type(9u), transfer);
   CHECK_EQ(control.request_type(10u), flush);
+  CHECK(fixture.scanout().invariants_hold()); }
+
+TEST(scanout_resource_configure, a_mode_with_no_room_made_for_it_makes_no_resource)
+{ Fixture fixture;
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  CHECK_STATUS(fixture.scanout().configure(DisplayMode(640u, 480u)), Status::no_memory);
+  CHECK_EQ(control.respond_all(ok_nodata), 0u);
+  CHECK(fixture.scanout().invariants_hold());
+  CHECK_STATUS(fixture.configure(DisplayMode(640u, 480u)), Status::ok);
+  CHECK_EQ(control.respond_all(ok_nodata), 1u); }
+
+TEST(scanout_resource_refresh, a_keyed_image_whose_backing_is_refused_is_not_yet_on_the_screen)
+{ Fixture fixture(0u, 8u);
+  CHECK_STATUS(fixture.configure(DisplayMode(64u, 64u)), Status::ok);
+  fixture.take_room(3u);
+  fixture.frame().describe(0x100000u, pages_for(64u, 64u));
+  CHECK(fixture.scanout().refresh(0x100000u, fixture.frame().pages(), false, 0x77u, 1u) != Status::ok);
+  CHECK(fixture.scanout().keyed());
+  CHECK(!fixture.scanout().scanning_out());
+  CHECK(!fixture.scanout().posts_frames());
+  CHECK(fixture.scanout().invariants_hold()); }
+
+TEST(scanout_resource_refresh, a_new_backing_the_host_will_not_let_go_of_the_old_one_for_is_answered)
+{ Fixture fixture(0u, 16u);
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  CHECK_STATUS(fixture.configure(DisplayMode(64u, 64u)), Status::ok);
+  CHECK_STATUS(fixture.refresh(0x200000u, false), Status::ok);
+  CHECK_EQ(fixture.answer(control), 5u);
+  fixture.fill_queue();
+  fixture.frame().describe(0x900000u, pages_for(64u, 64u));
+  CHECK(fixture.scanout().refresh(0x200000u, fixture.frame().pages(), false) != Status::ok);
+  CHECK(fixture.scanout().invariants_hold());
+  static_cast<void>(fixture.answer(control));
   CHECK(fixture.scanout().invariants_hold()); }

@@ -379,3 +379,12 @@ TEST(scanout_blob_source, the_refresh_is_dispatch_at_most_and_the_configure_is_p
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   while (fixture.platform().claim(Violation::irql_ceiling)) {}
   CHECK(fixture.platform().claim(Violation::allocation_at_dispatch)); }
+
+TEST(scanout_blob_source_configure, a_mode_with_no_room_made_for_it_keeps_no_size)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.configure(DisplayMode(640u, 480u)), Status::ok);
+  CHECK_STATUS(fixture.scanout().configure(DisplayMode(2560u, 1440u)), Status::no_memory);
+  CHECK(!fixture.scanout().needs_pages(0x40000000u));
+  CHECK(fixture.scanout().invariants_hold());
+  CHECK_STATUS(fixture.configure(DisplayMode(2560u, 1440u)), Status::ok);
+  CHECK(fixture.scanout().needs_pages(0x40000000u)); }

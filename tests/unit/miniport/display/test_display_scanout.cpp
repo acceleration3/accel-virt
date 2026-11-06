@@ -28,6 +28,7 @@
 #include "miniport/display/overlay_plane.hpp"
 
 #include <cstdint>
+#include <initializer_list>
 
 using av::Allocation;
 using av::AllocationDescriptor;
@@ -466,3 +467,96 @@ TEST(display_scanout_wait_for_refresh, returns_once_the_lock_a_refresh_holds_is_
   fixture.scanout().wait_for_refresh();
   fixture.platform().set_irql(av::Irql::passive);
   CHECK(fixture.platform().claim(av::Violation::irql_ceiling)); }
+
+namespace {
+
+av::CapsetInfo planes_capset()
+{
+    const std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {};
+    return av::CapsetInfo(
+        av::ProtocolVersion(av::ProtocolVersion::current_major, av::ProtocolVersion::current_minor), 1u, 64u, 12u, 24u,
+        av::CapsetInfo::feature_scanout_planes,
+        av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, 0u, "the host's"));
+}
+
+}
+
+TEST(display_scanout_refresh, a_source_not_yet_configured_has_no_pages_to_carry_on_either_path)
+{ { Fixture fixture;
+    FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+    fixture.scanout().offer(planes_capset());
+    Allocation *const primary = fixture.map_primary(mode);
+    CHECK_STATUS(fixture.sources().commit(0u, &mode), Status::ok);
+    CHECK_STATUS(fixture.sources().set_visible(0u, true), Status::ok);
+    CHECK_STATUS(fixture.sources().set_scanout(0u, ApertureSegment::base_address, primary), Status::ok);
+    CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
+    CHECK_EQ(control.respond_all(ok_nodata), 0u);
+    CHECK(fixture.scanout().invariants_hold()); }
+
+  { Fixture fixture;
+    FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+    av::CapsetInfo capset;
+    capset.announce(av::CapsetInfo::feature_dmabuf_scanout);
+    fixture.scanout().offer(capset);
+    Allocation *const primary = fixture.map_primary(mode);
+    CHECK_STATUS(fixture.sources().commit(0u, &mode), Status::ok);
+    CHECK_STATUS(fixture.sources().set_visible(0u, true), Status::ok);
+    CHECK_STATUS(fixture.sources().set_scanout(0u, ApertureSegment::base_address, primary), Status::ok);
+    CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
+    CHECK_EQ(control.respond_all(ok_nodata), 0u);
+    CHECK(!fixture.scanout().posts_frames(0u));
+    CHECK(fixture.scanout().invariants_hold()); } }
+
+TEST(display_scanout_refresh, an_unflipped_head_still_tells_the_host_its_planes_are_off)
+{ Fixture fixture;
+  FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+  fixture.scanout().offer(planes_capset());
+  fixture.live(0u, mode, 0x51u);
+  CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
+  const std::uint32_t sent = control.respond_all(ok_nodata);
+  CHECK(sent > av::OverlayPlane::max_planes);
+  std::uint32_t planes = 0u;
+  for (std::uint32_t index = 0u; index < sent; index++) {
+      if (control.request_type(index) != av::ScanoutPlaneRequest::type) continue;
+      av::WireReader          reader(control.request(index), av::ScanoutPlaneRequest::encoded_size);
+      av::ScanoutPlaneRequest plane;
+      CHECK_STATUS(plane.decode(reader), Status::ok);
+      CHECK(!plane.shown());
+      planes++;
+  }
+  CHECK_EQ(planes, av::OverlayPlane::max_planes);
+  CHECK(fixture.scanout().invariants_hold()); }
+
+TEST(display_scanout_refresh, a_scanout_the_host_cannot_name_is_said_with_what_the_primary_was)
+{ for (const bool primary_known : {true, false}) {
+      Fixture fixture;
+      FakeVirtqueueDevice control = fixture.mapped().queue_device(0u);
+      fixture.live(0u, mode, 0x51u);
+      CHECK_STATUS(fixture.scanout().refresh(fixture.sources(), false, true), Status::ok);
+      CHECK_EQ(control.respond_all(ok_nodata), 5u);
+      Allocation *const unkeyed = primary_known ? fixture.map_primary(mode, 0u) : nullptr;
+      CHECK_STATUS(fixture.sources().set_scanout(0u, ApertureSegment::base_address + 0x1000000, unkeyed), Status::ok);
+      CHECK(fixture.scanout().refresh(fixture.sources(), false, true) != Status::ok);
+      CHECK(fixture.platform().logged_line("avgpu: unkeyed scanout address 0x"));
+      CHECK_EQ(fixture.platform().logged_line(" kind 0 flip "), !primary_known);
+      static_cast<void>(control.respond_all(ok_nodata));
+      CHECK(fixture.scanout().invariants_hold());
+  } }
+
+TEST(display_scanout_refresh, a_plane_the_host_queue_has_no_room_for_is_answered_and_the_frame_still_goes)
+{ Fixture fixture;
+  fixture.scanout().offer(planes_capset());
+  fixture.live(0u, mode, 0x51u);
+  Allocation *const overlay = fixture.map_primary(mode, 0x77u);
+  Status            refused = Status::ok;
+  for (std::int32_t width = 100; refused == Status::ok && width < 4000; width++) {
+      av::DxgkMultiplaneOverlayAttributes3Record plane = {};
+      plane.SrcRect = {0, 0, 1280, 800};
+      plane.DstRect = {0, 0, width, 800};
+      const av::OverlayPlane planes[] = {av::OverlayPlane(1u, static_cast<std::uint32_t>(width), overlay,
+                                                          ApertureSegment::base_address, plane)};
+      CHECK_STATUS(fixture.sources().present_planes(0u, planes, 1u), Status::ok);
+      refused = fixture.scanout().refresh(fixture.sources(), false, true);
+  }
+  CHECK(refused != Status::ok);
+  CHECK(fixture.scanout().invariants_hold()); }

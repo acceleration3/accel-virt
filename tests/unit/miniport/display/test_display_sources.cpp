@@ -348,3 +348,50 @@ TEST(display_sources_present_planes, replaces_the_layers_named_and_remembers_eac
   CHECK_STATUS(sources.present_planes(0u, past, 1u), Status::invalid_parameter);
   CHECK_STATUS(sources.present_planes(1u, first, 1u), Status::invalid_parameter);
   platform.set_irql(Irql::passive); }
+
+TEST(display_sources_present_planes, refuses_a_list_that_is_missing_or_names_a_layer_there_is_not)
+{ MockPlatform platform; DisplaySources sources(platform);
+  platform.set_irql(Irql::isr);
+  CHECK_STATUS(sources.present_planes(0u, nullptr, 1u), Status::invalid_parameter);
+  const av::OverlayPlane beyond[] = {av::OverlayPlane(av::OverlayPlane::max_planes, 1u)};
+  CHECK_STATUS(sources.present_planes(0u, beyond, 1u), Status::invalid_parameter);
+  CHECK_STATUS(sources.present_planes(sources.count(), nullptr, 0u), Status::invalid_parameter);
+  CHECK_STATUS(sources.present_planes(0u, nullptr, 0u), Status::ok);
+  platform.set_irql(Irql::passive);
+  CHECK(sources.invariants_hold()); }
+
+TEST(display_sources_planes, a_source_there_is_not_has_no_plane_flipped)
+{ MockPlatform platform; DisplaySources sources(platform);
+  av::OverlayPlane planes[av::OverlayPlane::max_planes];
+  int allocation = 0;
+  planes[1] = av::OverlayPlane(1u, 4u, &allocation, 0x1000, {});
+  platform.set_irql(Irql::dispatch);
+  sources.planes(sources.count(), planes);
+  platform.set_irql(Irql::passive);
+  for (const av::OverlayPlane &plane : planes) CHECK(!plane.flipped()); }
+
+namespace {
+
+struct Tearing {
+    av::DisplaySources *sources;
+    std::uint32_t       loads;
+};
+
+}
+
+TEST(display_sources_frames, a_remembered_flip_overwritten_while_it_is_read_is_the_current_one_instead)
+{ MockPlatform platform; DisplaySources sources(platform);
+  std::uint32_t allocation = 0u;
+  platform.set_irql(Irql::isr);
+  for (std::uint32_t flip = 1u; flip <= 12u; flip++)
+      CHECK_STATUS(sources.set_scanout(0u, static_cast<std::int64_t>(flip) * 0x1000, &allocation), Status::ok);
+  platform.set_irql(Irql::dispatch);
+  CHECK_EQ(sources.shown(0u, 11u).address(), 0xB000u);
+  Tearing tearing = {&sources, 0u};
+  platform.on_load(+[](void *context) {
+      auto *const torn = static_cast<Tearing *>(context);
+      if (++torn->loads == 2u) av::DisplaySourcesProbe::tear(*torn->sources, 0u, 11u);
+  }, &tearing);
+  CHECK_EQ(sources.shown(0u, 11u).address(), 0xC000u);
+  platform.on_load(nullptr, nullptr);
+  platform.set_irql(Irql::passive); }

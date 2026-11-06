@@ -9,6 +9,8 @@
 
 namespace av {
 
+struct RequestRoomProbe;
+
 class RequestRoom {
 public:
     RequestRoom(Platform &platform, size_t fixed_bytes, size_t entry_bytes);
@@ -33,6 +35,8 @@ private:
     size_t    room_bytes_;
     uint8_t  *spare_;
     size_t    spare_bytes_;
+
+    friend struct RequestRoomProbe;
 };
 
 }
