@@ -21,6 +21,9 @@
 #include "icd/opengl/gl_error_query.hpp"
 #include "icd/opengl/guest_gl_context.hpp"
 #include "icd/opengl/manual_calls.hpp"
+#include "icd/opengl/sync_wait_probe.hpp"
+#include "icd/opengl/sliced_buffers.hpp"
+#include "icd/opengl/buffer_mapping.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -32,6 +35,7 @@
 
 using av::GlIcdRig;
 using av::glicd::ManualCalls;
+using av::glicd::SyncWaitProbe;
 namespace gen = av::glicd::generated;
 namespace ids = av::glproto;
 
@@ -1577,3 +1581,289 @@ TEST(manual_calls, without_an_arena_a_large_generated_upload_is_staged)
   CHECK_EQ(current.sent(), 9u);
   CHECK_EQ(current.sent_since(8u), ids::kCmd_glTexSubImage2D);
   CHECK(current.context().invariants_hold()); }
+
+namespace {
+
+constexpr GLenum pixel_unpack_buffer = 0x88ECu, transform_feedback_buffer = 0x8C8Eu;
+constexpr std::uint32_t sliced_buffer = 5u, plain_buffer = 6u, sliced_bytes = 4096u;
+
+class SlicedCurrent {
+public:
+    SlicedCurrent()
+    {
+        rig_.kmt().open_host_window(av::MockKmt::rig_window_bytes);
+        rig_.load_with_format();
+        void *const handle = rig_.opengl32().create_context(rig_.dc());
+        CHECK(handle != nullptr);
+        rig_.host().gl_make("host gpu", "4.6");
+        rig_.host().gl_integer(0);
+        rig_.host().gl_slices(1u);
+        rig_.host().gl_window(1u, 1u);
+        CHECK(rig_.opengl32().make_current(rig_.dc(), handle));
+        av::glicd::GuestGlContext &made = context();
+        rig_.host().blob_import(0u, 0x0000700000000100ull);
+        rig_.host().gl_slices(1u);
+        CHECK_STATUS(made.slices().place(*made.wire(), sliced_buffer, sliced_bytes,
+                                         av::glicd::BufferMapping::map_persistent | av::glicd::BufferMapping::map_write,
+                                         nullptr),
+                     av::Status::ok);
+        made.flush();
+        commands_ = rig_.kmt().commands();
+    }
+
+    GlIcdRig                  &rig() { return rig_; }
+    std::uint32_t              error() { return context().take_error(); }
+    ManualCalls               &calls() { return rig_.root().manual(); }
+    av::glicd::GuestGlContext &context() { return *rig_.root().current(); }
+    std::uint32_t              sent()
+    {
+        context().flush();
+        std::uint32_t count = 0u;
+        for (std::uint32_t at = commands_; at < rig_.kmt().commands(); at++)
+            count += rig_.kmt().command_id(at) == av::CommandHeader::channel_stats_id ? 0u : 1u;
+        return count;
+    }
+    std::uint32_t id(std::uint32_t index)
+    {
+        context().flush();
+        std::uint32_t seen = 0u;
+        for (std::uint32_t at = commands_; at < rig_.kmt().commands(); at++) {
+            if (rig_.kmt().command_id(at) == av::CommandHeader::channel_stats_id) continue;
+            if (seen++ == index) return rig_.kmt().command_id(at);
+        }
+        return 0u;
+    }
+    std::uint64_t argument(std::uint32_t index, std::uint32_t nth)
+    {
+        context().flush();
+        std::uint32_t seen = 0u;
+        for (std::uint32_t at = commands_; at < rig_.kmt().commands(); at++) {
+            if (rig_.kmt().command_id(at) == av::CommandHeader::channel_stats_id) continue;
+            if (seen++ != index) continue;
+            av::WireReader reader(rig_.kmt().command_bytes(at) + av::CommandHeader::encoded_size,
+                                  av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
+            std::uint64_t  value = 0u;
+            for (std::uint32_t arg = 0u; arg <= nth; arg++) CHECK(reader.read_varint(value));
+            return value;
+        }
+        return 0u;
+    }
+
+private:
+    GlIcdRig      rig_;
+    std::uint32_t commands_ = 0u;
+};
+
+}
+
+TEST(manual_calls_slices, a_pixel_buffer_binding_is_sliced_only_when_a_slice_is_bound_to_it)
+{ SlicedCurrent current;
+  ManualCalls  &calls = current.calls();
+  CHECK(!calls.unpack_slice_bound());
+  CHECK(!calls.pack_slice_bound());
+  calls.bind_buffer(pixel_unpack_buffer, sliced_buffer);
+  CHECK(calls.unpack_slice_bound());
+  CHECK(!calls.pack_slice_bound());
+  calls.bind_buffer(pixel_unpack_buffer, plain_buffer);
+  CHECK(!calls.unpack_slice_bound());
+  calls.bind_buffer(pixel_pack_buffer, sliced_buffer);
+  CHECK(calls.pack_slice_bound());
+  CHECK(!calls.unpack_slice_bound());
+  calls.bind_buffer(pixel_pack_buffer, 0u);
+  CHECK(!calls.pack_slice_bound()); }
+
+TEST(manual_calls_slices, no_context_current_has_no_sliced_binding_and_refuses_nothing)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  ManualCalls &calls = rig.root().manual();
+  const void  *pixels = reinterpret_cast<const void *>(8u);
+  void        *target = reinterpret_cast<void *>(8u);
+  CHECK(!calls.unpack_slice_bound());
+  CHECK(!calls.pack_slice_bound());
+  CHECK(!calls.refuse_sliced_unpack());
+  CHECK(!calls.refuse_sliced_pack());
+  CHECK(!calls.slice_unpack_pixels(pixels, 4u));
+  CHECK(!calls.slice_pack_pixels(target, 4u));
+  calls.unpack_slice_done();
+  calls.pack_slice_done();
+  CHECK(!calls.invalidate_named_buffer(sliced_buffer));
+  CHECK(!calls.invalidate_named_buffer_range(sliced_buffer, 0, 4));
+  CHECK_EQ(rig.kmt().commands(), 0u); }
+
+TEST(manual_calls_slices, an_unpack_from_a_slice_reads_the_slices_memory_with_the_host_binding_dropped_around_it)
+{ SlicedCurrent current;
+  ManualCalls  &calls = current.calls();
+  calls.bind_buffer(pixel_unpack_buffer, sliced_buffer);
+  const std::uint32_t before = current.sent();
+  const void         *pixels = reinterpret_cast<const void *>(64u);
+  CHECK(calls.slice_unpack_pixels(pixels, 32u));
+  const std::uint8_t *expected = nullptr;
+  CHECK_EQ(current.context().slices().unpack_source(sliced_buffer, 64u, 32u, expected),
+           av::glicd::SlicedBuffers::gl_no_error);
+  CHECK(pixels == expected);
+  CHECK_EQ(current.sent() - before, 1u);
+  CHECK_EQ(current.id(before), ids::kCmd_glBindBuffer);
+  CHECK_EQ(current.argument(before, 0u), pixel_unpack_buffer);
+  CHECK_EQ(current.argument(before, 1u), 0u);
+  calls.unpack_slice_done();
+  CHECK_EQ(current.sent() - before, 2u);
+  CHECK_EQ(current.id(before + 1u), ids::kCmd_glBindBuffer);
+  CHECK_EQ(current.argument(before + 1u, 0u), pixel_unpack_buffer);
+  CHECK_EQ(current.argument(before + 1u, 1u), sliced_buffer);
+  CHECK_EQ(current.error(), 0u); }
+
+TEST(manual_calls_slices, an_unpack_past_the_slice_is_refused_with_an_error_and_sends_nothing)
+{ SlicedCurrent current;
+  ManualCalls  &calls = current.calls();
+  calls.bind_buffer(pixel_unpack_buffer, sliced_buffer);
+  const std::uint32_t before = current.sent();
+  const void         *pixels = reinterpret_cast<const void *>(sliced_bytes - 8u);
+  CHECK(!calls.slice_unpack_pixels(pixels, 32u));
+  CHECK(pixels == reinterpret_cast<const void *>(sliced_bytes - 8u));
+  CHECK_EQ(current.sent(), before);
+  CHECK_EQ(current.error(), gl_invalid_operation); }
+
+TEST(manual_calls_slices, a_pack_into_a_slice_writes_the_slices_memory_with_the_host_binding_dropped_around_it)
+{ SlicedCurrent current;
+  ManualCalls  &calls = current.calls();
+  calls.bind_buffer(pixel_pack_buffer, sliced_buffer);
+  const std::uint32_t before = current.sent();
+  void               *pixels = reinterpret_cast<void *>(128u);
+  CHECK(calls.slice_pack_pixels(pixels, 16u));
+  std::uint8_t *expected = nullptr;
+  CHECK_EQ(current.context().slices().pack_target(sliced_buffer, 128u, 16u, expected),
+           av::glicd::SlicedBuffers::gl_no_error);
+  CHECK(pixels == expected);
+  static_cast<std::uint8_t *>(pixels)[0] = 0x66u;
+  std::uint8_t seen = 0u;
+  CHECK_EQ(current.context().slices().read(sliced_buffer, 128, 1, &seen), av::glicd::SlicedBuffers::gl_no_error);
+  CHECK_EQ(seen, 0x66u);
+  CHECK_EQ(current.id(before), ids::kCmd_glBindBuffer);
+  CHECK_EQ(current.argument(before, 0u), pixel_pack_buffer);
+  CHECK_EQ(current.argument(before, 1u), 0u);
+  calls.pack_slice_done();
+  CHECK_EQ(current.argument(before + 1u, 0u), pixel_pack_buffer);
+  CHECK_EQ(current.argument(before + 1u, 1u), sliced_buffer);
+  void *beyond = reinterpret_cast<void *>(sliced_bytes);
+  CHECK(!calls.slice_pack_pixels(beyond, 1u));
+  CHECK_EQ(current.error(), gl_invalid_operation); }
+
+TEST(manual_calls_slices, a_sliced_pixel_binding_is_refused_where_the_call_cannot_use_it)
+{ SlicedCurrent current;
+  ManualCalls  &calls = current.calls();
+  CHECK(!calls.refuse_sliced_unpack());
+  CHECK(!calls.refuse_sliced_pack());
+  CHECK_EQ(current.error(), 0u);
+  calls.bind_buffer(pixel_unpack_buffer, sliced_buffer);
+  CHECK(calls.refuse_sliced_unpack());
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  CHECK(!calls.refuse_sliced_pack());
+  CHECK_EQ(current.error(), 0u);
+  calls.bind_buffer(pixel_pack_buffer, sliced_buffer);
+  CHECK(calls.refuse_sliced_pack());
+  CHECK_EQ(current.error(), gl_invalid_operation);
+  calls.bind_buffer(pixel_pack_buffer, plain_buffer);
+  CHECK(!calls.refuse_sliced_pack());
+  CHECK_EQ(current.error(), 0u); }
+
+TEST(manual_calls_slices, invalidating_a_sliced_buffer_is_answered_here_and_any_other_is_left_to_the_host)
+{ SlicedCurrent current;
+  ManualCalls  &calls = current.calls();
+  const std::uint32_t before = current.sent();
+  CHECK(calls.invalidate_named_buffer(sliced_buffer));
+  CHECK(!calls.invalidate_named_buffer(plain_buffer));
+  CHECK(calls.invalidate_named_buffer_range(sliced_buffer, 16, 64));
+  CHECK_EQ(current.error(), 0u);
+  CHECK(!calls.invalidate_named_buffer_range(plain_buffer, 16, 64));
+  CHECK(calls.invalidate_named_buffer_range(sliced_buffer, sliced_bytes - 4, 64));
+  CHECK_EQ(current.error(), gl_invalid_value);
+  CHECK(calls.invalidate_named_buffer_range(sliced_buffer, -1, 64));
+  CHECK_EQ(current.error(), gl_invalid_value);
+  CHECK_EQ(current.sent(), before); }
+
+TEST(manual_calls_slices, deleting_transform_feedbacks_forgets_what_was_bound_to_their_target)
+{ SlicedCurrent current;
+  ManualCalls  &calls = current.calls();
+  const std::uint32_t ids_deleted[] = {3u, 4u};
+  calls.bind_buffer(transform_feedback_buffer, 9u);
+  CHECK_EQ(current.context().arrays().bound_buffer(transform_feedback_buffer), 9u);
+  calls.delete_transform_feedbacks(0, ids_deleted);
+  calls.delete_transform_feedbacks(2, nullptr);
+  CHECK_EQ(current.context().arrays().bound_buffer(transform_feedback_buffer), 9u);
+  calls.delete_transform_feedbacks(2, ids_deleted);
+  CHECK_EQ(current.context().arrays().bound_buffer(transform_feedback_buffer),
+           av::glicd::ClientArrayState::unknown);
+  CHECK_EQ(current.id(current.sent() - 1u), ids::kCmd_glDeleteTransformFeedbacks); }
+
+TEST(manual_calls_window, the_window_framebuffer_and_buffers_are_translated_to_the_hosts_when_the_window_is_bound)
+{ Current current;
+  constexpr GLenum gl_framebuffer = 0x8D40u, gl_back = 0x0405u, gl_color_attachment0 = 0x8CE0u;
+  ManualCalls     &calls = current.rig().root().manual();
+  calls.bind_framebuffer(gl_framebuffer, 0u);
+  calls.draw_buffer(gl_back);
+  CHECK_EQ(current.sent_since(0u), ids::kCmd_glBindFramebuffer);
+  CHECK_EQ(current.argument_since(0u, 1u), 100u);
+  CHECK_EQ(current.sent_since(1u), ids::kCmd_glDrawBuffer);
+  CHECK_EQ(current.argument_since(1u, 0u), gl_color_attachment0);
+  calls.bind_framebuffer(gl_framebuffer, 7u);
+  calls.draw_buffer(gl_back);
+  CHECK_EQ(current.argument_since(2u, 1u), 7u);
+  CHECK_EQ(current.argument_since(3u, 0u), gl_back);
+  CHECK(current.context().invariants_hold()); }
+
+namespace {
+
+struct WaitSent {
+    std::uint64_t sync = 0u;
+    std::uint64_t flags = 0u;
+    std::uint64_t timeout = 0u;
+};
+
+WaitSent wait_sent(Current &current, std::uint32_t index)
+{
+    WaitSent sent;
+    CHECK_EQ(current.sent_since(index), ids::kCmd_glClientWaitSync);
+    av::WireReader reader(current.command_since(index) + av::CommandHeader::encoded_size,
+                          av::MockKmt::journal_bytes - av::CommandHeader::encoded_size);
+    CHECK(reader.read_pod(sent.sync));
+    CHECK(reader.read_varint(sent.flags));
+    CHECK(reader.read_varint(sent.timeout));
+    return sent;
+}
+
+}
+
+TEST(sync_wait_probe, a_wait_the_host_answers_signaled_is_done_with_that_answer)
+{ Current current;
+  current.rig().host().gl_varint(SyncWaitProbe::gl_already_signaled);
+  SyncWaitProbe probe(*current.context().wire(), 0x77u, SyncWaitProbe::gl_sync_flush_commands_bit);
+  CHECK(probe.ask(1000u));
+  CHECK_EQ(probe.result(), SyncWaitProbe::gl_already_signaled);
+  const WaitSent sent = wait_sent(current, 0u);
+  CHECK_EQ(sent.sync, 0x77u);
+  CHECK_EQ(sent.flags, SyncWaitProbe::gl_sync_flush_commands_bit);
+  CHECK_EQ(sent.timeout, 1000u); }
+
+TEST(sync_wait_probe, a_wait_that_timed_out_asks_again_without_flushing_and_a_signal_after_it_is_a_satisfied_condition)
+{ Current current;
+  av::ScriptedHost &host = current.rig().host();
+  SyncWaitProbe     probe(*current.context().wire(), 0x77u, SyncWaitProbe::gl_sync_flush_commands_bit | 0x4u);
+  CHECK_EQ(probe.result(), SyncWaitProbe::gl_timeout_expired);
+  host.gl_varint(SyncWaitProbe::gl_timeout_expired);
+  CHECK(!probe.ask(500u));
+  CHECK_EQ(probe.result(), SyncWaitProbe::gl_timeout_expired);
+  host.gl_varint(SyncWaitProbe::gl_already_signaled);
+  CHECK(probe.ask(500u));
+  CHECK_EQ(probe.result(), SyncWaitProbe::gl_condition_satisfied);
+  CHECK_EQ(wait_sent(current, 0u).flags, SyncWaitProbe::gl_sync_flush_commands_bit | 0x4u);
+  CHECK_EQ(wait_sent(current, 1u).flags, 0x4u);
+  probe.pause(500u);
+  CHECK_EQ(probe.result(), SyncWaitProbe::gl_condition_satisfied); }
+
+TEST(sync_wait_probe, a_condition_the_host_satisfies_is_reported_as_it_came)
+{ Current current;
+  current.rig().host().gl_varint(SyncWaitProbe::gl_condition_satisfied);
+  SyncWaitProbe probe(*current.context().wire(), 0x77u, 0u);
+  CHECK(probe.ask(0u));
+  CHECK_EQ(probe.result(), SyncWaitProbe::gl_condition_satisfied);
+  CHECK_EQ(wait_sent(current, 0u).flags, 0u); }

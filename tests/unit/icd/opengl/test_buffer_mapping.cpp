@@ -481,3 +481,21 @@ TEST(buffer_mapping_invariants, fail_for_a_half_held_range_or_marks_outside_it_o
   CHECK(!reads.invariants_hold());
   Probe::set_dirty(reads, 0u, 0u);
   CHECK(reads.invariants_hold()); }
+
+TEST(buffer_mapping, taking_the_marked_span_returns_it_once_and_clears_it)
+{ Rig rig;
+  CHECK_STATUS(rig.map(buffer, 100u, 64u, explicit_write), Status::ok);
+  std::uint64_t from = 99u, to = 99u;
+  rig.mapping->take_marked(from, to);
+  CHECK_EQ(from, 0u);
+  CHECK_EQ(to, 0u);
+  CHECK_STATUS(rig.mapping->mark(20u, 4u), Status::ok);
+  CHECK_STATUS(rig.mapping->mark(10u, 2u), Status::ok);
+  CHECK_STATUS(rig.mapping->mark(60u, 4u), Status::ok);
+  rig.mapping->take_marked(from, to);
+  CHECK_EQ(from, 10u);
+  CHECK_EQ(to, 64u);
+  rig.mapping->take_marked(from, to);
+  CHECK_EQ(from, 0u);
+  CHECK_EQ(to, 0u);
+  CHECK(rig.mapping->invariants_hold()); }

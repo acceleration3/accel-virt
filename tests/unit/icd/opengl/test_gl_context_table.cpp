@@ -1,7 +1,9 @@
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/gl_context_rig.hpp"
+#include "icd/opengl/buffer_mapping.hpp"
 #include "icd/opengl/gl_context_table.hpp"
+#include "icd/opengl/sliced_buffers.hpp"
 
 #include <cstring>
 
@@ -170,3 +172,82 @@ TEST(gl_context_table_invariants, fail_for_no_next_handle_or_a_broken_context)
   CHECK(!broken.table.invariants_hold());
   av::glicd::GlContextTableProbe::pull(broken.table, 99u);
   CHECK(broken.table.invariants_hold()); }
+
+namespace {
+
+constexpr std::uint32_t sliced_storage = av::glicd::BufferMapping::map_persistent | av::glicd::BufferMapping::map_write;
+
+struct Sharing {
+    Table           fixture;
+    std::uint64_t   owner = 0u;
+    std::uint64_t   sharer = 0u;
+    std::uint32_t   buffer = 5u;
+
+    Sharing()
+    {
+        CHECK_STATUS(fixture.table.create(1, GlContextOptions(), owner), Status::ok);
+        CHECK_STATUS(fixture.table.create(1, GlContextOptions(), sharer), Status::ok);
+        CHECK_STATUS(fixture.table.join(sharer, owner), Status::ok);
+        fixture.rig.host().gl_make("renderer", "4.6");
+        fixture.rig.host().gl_slices(1u);
+        CHECK_STATUS(fixture.table.resolve(owner)->make(), Status::ok);
+        fixture.rig.host().blob_import(0u, 0x0000700000000100ull);
+        fixture.rig.host().gl_slices(1u);
+        GuestGlContext *const context = fixture.table.resolve(owner);
+        CHECK_STATUS(context->slices().place(*context->wire(), buffer, 4096u, sliced_storage, nullptr), Status::ok);
+    }
+
+    void sharer_forgets_the_buffer()
+    {
+        fixture.table.resolve(sharer)->slices().forget(1, &buffer);
+        CHECK_EQ(fixture.table.resolve(owner)->slices_owned(), 0u);
+    }
+};
+
+}
+
+TEST(gl_context_table, a_destroyed_context_still_owning_slices_a_sharer_may_read_is_retired_and_not_destroyed)
+{ Sharing sharing;
+  GlContextTable &table = sharing.fixture.table;
+  CHECK_EQ(table.live(), 2u);
+  CHECK_STATUS(table.destroy(sharing.owner), Status::ok);
+  CHECK_EQ(table.live(), 1u);
+  CHECK_EQ(table.retired(), 1u);
+  CHECK(table.resolve(sharing.owner) == nullptr);
+  CHECK(table.invariants_hold()); }
+
+TEST(gl_context_table, reaping_destroys_a_retired_context_only_once_it_owes_its_sharers_nothing)
+{ Sharing sharing;
+  GlContextTable &table = sharing.fixture.table;
+  CHECK_STATUS(table.destroy(sharing.owner), Status::ok);
+  table.reap();
+  CHECK_EQ(table.retired(), 1u);
+  GuestGlContext *const sharer = table.resolve(sharing.sharer);
+  sharer->slices().forget(1, &sharing.buffer);
+  CHECK_EQ(table.retired(), 1u);
+  table.reap();
+  CHECK_EQ(table.retired(), 0u);
+  CHECK_EQ(table.live(), 1u);
+  table.reap();
+  CHECK(table.invariants_hold()); }
+
+TEST(gl_context_table, reaping_with_the_lock_already_held_does_the_same_without_taking_it)
+{ Sharing sharing;
+  GlContextTable &table = sharing.fixture.table;
+  CHECK_STATUS(table.destroy(sharing.owner), Status::ok);
+  sharing.fixture.table.resolve(sharing.sharer)->slices().forget(1, &sharing.buffer);
+  sharing.fixture.lock.acquire();
+  table.reap_held();
+  sharing.fixture.lock.release();
+  CHECK_EQ(table.retired(), 0u);
+  CHECK(table.invariants_hold()); }
+
+TEST(gl_context_table, destroying_the_last_sharer_reaps_the_retired_context_it_was_waiting_on)
+{ Sharing sharing;
+  GlContextTable &table = sharing.fixture.table;
+  CHECK_STATUS(table.destroy(sharing.owner), Status::ok);
+  CHECK_EQ(table.retired(), 1u);
+  CHECK_STATUS(table.destroy(sharing.sharer), Status::ok);
+  CHECK_EQ(table.retired(), 0u);
+  CHECK_EQ(table.live(), 0u);
+  CHECK(table.invariants_hold()); }

@@ -299,3 +299,23 @@ TEST(client_array_state, answers_the_pixel_store_values_it_keeps)
   CHECK_EQ(state.pixel_value(0x0CF5u), 4);
   CHECK_EQ(state.pixel_value(0x1234u), 0);
   CHECK(state.invariants_hold()); }
+
+TEST(client_array_state, an_element_buffer_set_for_a_vertex_array_is_the_one_bound_while_it_is_bound)
+{ av::MockPlatform platform;
+  ClientArrayState state(platform);
+  CHECK_STATUS(state.bind_vertex_array(3u), av::Status::ok);
+  state.set_vertex_array_elements(3u, 8u);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 8u);
+  CHECK(state.indices_are_offset());
+  state.set_vertex_array_elements(0u, 5u);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 8u);
+  state.set_vertex_array_elements(3u, ClientArrayState::unknown);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), ClientArrayState::unknown);
+  state.set_vertex_array_elements(3u, 0u);
+  CHECK(!state.indices_are_offset());
+  CHECK_STATUS(state.bind_vertex_array(0u), av::Status::ok);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 5u);
+  state.set_vertex_array_elements(99u, 7u);
+  CHECK_STATUS(state.bind_vertex_array(99u), av::Status::ok);
+  CHECK_EQ(state.bound_buffer(ClientArrayState::element_array_buffer), 0u);
+  CHECK(state.invariants_hold()); }
