@@ -21,9 +21,7 @@ bool BgraRows::holds(uint32_t width, uint32_t height) const
     AV_SCOPE("BgraRows::holds");
     const uint64_t line = uint64_t{width} * sizeof(uint32_t);
     if (width == 0u || height == 0u || pitch_ < line || bytes_ < line) return false;
-    const uint64_t available = bytes_ < SIZE_MAX ? bytes_ : SIZE_MAX;
-    if (available < line) return false;
-    return uint64_t{height - 1u} <= (available - line) / pitch_;
+    return uint64_t{height - 1u} <= (bytes_ - line) / pitch_;
 }
 
 Status BgraRows::copy_from(const BgraRows &from, uint32_t width, uint32_t height, Channels channels)

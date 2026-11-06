@@ -8,8 +8,14 @@
 
 namespace av {
 
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_size(GrowableArray<T> &array, std::uint32_t size) { array.size_ = size; }
+};
+
 struct ExtensionNamesProbe {
     static void append(ExtensionNames &names, const char *name) { static_cast<void>(names.names_.append(name)); }
+    static void corrupt_size(ExtensionNames &names, std::uint32_t size) { GrowableArrayProbe::corrupt_size(names.names_, size); }
 };
 
 }
@@ -81,3 +87,24 @@ TEST(extension_names, a_repeated_or_nameless_row_breaks_the_invariant)
   ExtensionNames nameless(platform, Pool::paged);
   av::ExtensionNamesProbe::append(nameless, "");
   CHECK(!nameless.invariants_hold()); }
+
+TEST(extension_names, a_row_that_is_null_or_an_array_that_is_broken_breaks_the_invariant)
+{ MockPlatform platform;
+  ExtensionNames nulled(platform, Pool::paged);
+  av::ExtensionNamesProbe::append(nulled, nullptr);
+  CHECK(!nulled.invariants_hold());
+  ExtensionNames broken(platform, Pool::paged);
+  av::ExtensionNamesProbe::append(broken, "VK_KHR_a");
+  CHECK(broken.invariants_hold());
+  av::ExtensionNamesProbe::corrupt_size(broken, 9u);
+  CHECK(!broken.invariants_hold());
+  av::ExtensionNamesProbe::corrupt_size(broken, 1u); }
+
+TEST(extension_names, take_reports_the_array_that_cannot_make_room)
+{ MockPlatform platform;
+  ExtensionNames names(platform, Pool::paged);
+  const char *const given[] = {"VK_KHR_a"};
+  platform.fail_allocation_at(1u);
+  CHECK_STATUS(names.take(given, 1u, 0u), Status::no_memory);
+  CHECK_EQ(names.count(), 0u);
+  CHECK(names.invariants_hold()); }

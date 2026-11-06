@@ -24,6 +24,9 @@ struct ClaimedRowsProbe {
     static void corrupt_claimed(ClaimedRows<Row> &rows, std::uint32_t claimed) { rows.claimed_ = claimed; }
 
     template <typename Row>
+    static void corrupt_ready(ClaimedRows<Row> &rows, std::uint32_t ready) { rows.ready_ = ready; }
+
+    template <typename Row>
     static void mark_ready(ClaimedRows<Row> &rows, std::uint32_t chunk, std::uint32_t index)
     {
         rows.chunks_[chunk][index].ready_ = true;
@@ -251,6 +254,9 @@ TEST(claimed_rows_invariants, fail_for_a_claim_past_most_rows_or_a_ready_row_pas
   CHECK(!rows.invariants_hold());
   ClaimedRowsProbe::corrupt_claimed(rows, 6u);
   CHECK(rows.invariants_hold());
+  ClaimedRowsProbe::corrupt_ready(rows, 7u);
+  CHECK(!rows.invariants_hold());
+  ClaimedRowsProbe::corrupt_ready(rows, 0u);
   ClaimedRowsProbe::corrupt_claimed(rows, Lines::most_rows + 1u);
   CHECK(!rows.invariants_hold());
   ClaimedRowsProbe::corrupt_claimed(rows, 6u); }

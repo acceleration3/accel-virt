@@ -5,6 +5,16 @@
 
 #include <stdint.h>
 
+namespace av {
+
+struct PollBudgetProbe {
+    static void corrupt_expired(PollBudget &budget, bool expired) { budget.expired_ = expired; }
+    static void corrupt_started(PollBudget &budget, uint64_t started) { budget.started_ = started; }
+};
+
+}
+
+using av::PollBudgetProbe;
 using av::PollClock;
 using av::MonotonicClock;
 using av::PollBudget;
@@ -87,3 +97,15 @@ TEST(poll_budget, on_the_host_clock_a_wait_is_given_up_once_its_deadline_has_pas
   CHECK(clock.now_nanoseconds() - started >= 5000000u);
   CHECK(budget.expired());
   CHECK(polls >= 2u && polls <= 6u); }
+
+TEST(poll_budget, an_unpolled_budget_that_is_expired_or_started_breaks_the_invariant)
+{ ScriptedClock clock(0u, 0u);
+  PollBudget    budget(clock, 0u, 50000u, 1000u);
+  CHECK(budget.invariants_hold());
+  PollBudgetProbe::corrupt_expired(budget, true);
+  CHECK(!budget.invariants_hold());
+  PollBudgetProbe::corrupt_expired(budget, false);
+  PollBudgetProbe::corrupt_started(budget, 7u);
+  CHECK(!budget.invariants_hold());
+  PollBudgetProbe::corrupt_started(budget, 0u);
+  CHECK(budget.invariants_hold()); }

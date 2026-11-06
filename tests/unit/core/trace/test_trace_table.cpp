@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <string>
 
 using av::MockTraceHost;
 using av::ScopeName;
@@ -558,3 +559,46 @@ TEST(trace_table_limit_depth, does_not_apply_to_the_scopes_only_names)
   CHECK_EQ(second, first);
   fixture.table.leave(second);
   fixture.table.leave(first); }
+
+TEST(trace_table_only, a_scope_off_the_list_takes_no_slot)
+{ TableFixture fixture;
+  fixture.table.only("Outer::run");
+  CHECK_EQ(fixture.table.enter(middle), TraceTable::no_slot);
+  const std::uint32_t slot = fixture.table.enter(outer);
+  CHECK(slot != TraceTable::no_slot);
+  CHECK_EQ(fixture.table.enter(inner), TraceTable::no_slot);
+  fixture.table.leave(slot);
+  CHECK(fixture.table.invariants_hold()); }
+
+TEST(trace_table_only, the_list_ends_at_the_first_blank_and_skips_empty_names)
+{ TableFixture fixture;
+  fixture.table.only(",,Outer::run Inner::leaf");
+  const std::uint32_t first = fixture.table.enter(outer);
+  CHECK(first != TraceTable::no_slot);
+  CHECK_EQ(fixture.table.enter(inner), TraceTable::no_slot);
+  fixture.table.leave(first);
+  fixture.table.only("");
+  const std::uint32_t any = fixture.table.enter(middle);
+  CHECK(any != TraceTable::no_slot);
+  fixture.table.leave(any);
+  CHECK(fixture.table.invariants_hold()); }
+
+TEST(trace_table_only, a_name_is_cut_at_127_letters_and_the_list_at_sixteen_names)
+{ TableFixture fixture;
+  const std::string longest(200u, 'a');
+  const std::string cut(127u, 'a');
+  fixture.table.only(longest.c_str());
+  const std::uint32_t kept = fixture.table.enter(ScopeName(cut.c_str()));
+  CHECK(kept != TraceTable::no_slot);
+  fixture.table.leave(kept);
+  CHECK_EQ(fixture.table.enter(ScopeName(longest.c_str())), TraceTable::no_slot);
+  std::string names;
+  for (unsigned index = 0u; index < 17u; index++) names += (index != 0u ? ",n" : "n") + std::to_string(index);
+  fixture.table.only(names.c_str());
+  const std::string last = "n15";
+  const std::string over = "n16";
+  const std::uint32_t sixteenth = fixture.table.enter(ScopeName(last.c_str()));
+  CHECK(sixteenth != TraceTable::no_slot);
+  fixture.table.leave(sixteenth);
+  CHECK_EQ(fixture.table.enter(ScopeName(over.c_str())), TraceTable::no_slot);
+  CHECK(fixture.table.invariants_hold()); }

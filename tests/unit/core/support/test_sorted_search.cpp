@@ -7,7 +7,17 @@
 #include <cstdint>
 #include <initializer_list>
 
+namespace av {
+
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_size(GrowableArray<T> &array, std::uint32_t size) { array.size_ = size; }
+};
+
+}
+
 using av::GrowableArray;
+using av::GrowableArrayProbe;
 using av::MockPlatform;
 using av::Pool;
 using av::SortedSearch;
@@ -79,3 +89,14 @@ TEST(sorted_search, an_empty_array_holds_nothing_and_unsorted_rows_break_the_inv
   CHECK_STATUS(rows.append(30u), Status::ok);
   CHECK_STATUS(rows.append(10u), Status::ok);
   CHECK(!search.invariants_hold()); }
+
+TEST(sorted_search, rows_that_break_their_own_invariant_break_the_search_s)
+{ MockPlatform platform;
+  GrowableArray<std::uint64_t> rows(platform, Pool::paged);
+  CHECK_STATUS(rows.append(10u), Status::ok);
+  const SortedSearch<std::uint64_t> search(rows);
+  CHECK(search.invariants_hold());
+  GrowableArrayProbe::corrupt_size(rows, 9u);
+  CHECK(!search.invariants_hold());
+  GrowableArrayProbe::corrupt_size(rows, 1u);
+  CHECK(search.invariants_hold()); }

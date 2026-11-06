@@ -25,6 +25,8 @@ private:
     uint64_t   started_;
     bool       polled_;
     bool       expired_;
+
+    friend struct PollBudgetProbe;
 };
 
 }

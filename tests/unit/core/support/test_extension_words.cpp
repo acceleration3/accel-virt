@@ -6,9 +6,18 @@
 #include <cstddef>
 #include <cstring>
 
+#include <sys/mman.h>
+#include <unistd.h>
+
 namespace av {
 
+struct GrowableArrayProbe {
+    template <typename T>
+    static void corrupt_size(GrowableArray<T> &array, std::uint32_t size) { array.size_ = size; }
+};
+
 struct ExtensionWordsProbe {
+    static void corrupt_size(ExtensionWords &words, std::uint32_t size) { GrowableArrayProbe::corrupt_size(words.text_, size); }
     static void set(ExtensionWords &words, const char *text, std::size_t bytes)
     {
         words.text_.truncate(0u);
@@ -23,6 +32,41 @@ using av::ExtensionWordsProbe;
 using av::MockPlatform;
 using av::Pool;
 using av::Status;
+
+namespace {
+
+class VastText {
+public:
+    static constexpr std::size_t letters = std::size_t{1} << 31u;
+
+    VastText() : base_(nullptr)
+    {
+        constexpr std::size_t chunk = std::size_t{2} << 20u;
+        const int             file = memfd_create("vast_text", 0);
+        CHECK(file >= 0);
+        CHECK_EQ(ftruncate(file, static_cast<off_t>(chunk)), 0);
+        void *const page = mmap(nullptr, chunk, PROT_READ | PROT_WRITE, MAP_SHARED, file, 0);
+        CHECK(page != MAP_FAILED);
+        std::memset(page, 'a', chunk);
+        munmap(page, chunk);
+        void *const whole = mmap(nullptr, letters + chunk, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+        CHECK(whole != MAP_FAILED);
+        base_ = static_cast<char *>(whole);
+        for (std::size_t at = 0u; at < letters; at += chunk)
+            CHECK(mmap(base_ + at, chunk, PROT_READ, MAP_SHARED | MAP_FIXED, file, 0) != MAP_FAILED);
+        close(file);
+    }
+    ~VastText() { munmap(base_, letters + (std::size_t{2} << 20u)); }
+    VastText(const VastText &) = delete;
+    VastText &operator=(const VastText &) = delete;
+
+    const char *text() const { return base_; }
+
+private:
+    char *base_;
+};
+
+}
 
 TEST(extension_words, the_host_s_words_are_kept_one_space_apart)
 { MockPlatform platform;
@@ -112,3 +156,45 @@ TEST(extension_words, the_invariant_fails_each_way_the_text_can_be_wrong)
       ExtensionWordsProbe::set(words, item.text, item.bytes);
       CHECK(!words.invariants_hold());
   } }
+
+TEST(extension_words, striking_from_an_empty_list_changes_nothing)
+{ MockPlatform platform;
+  ExtensionWords words(platform, Pool::paged);
+  words.strike("cl_khr_icd");
+  CHECK_EQ(words.length(), 0u);
+  CHECK(std::strcmp(words.text(), "") == 0);
+  CHECK(words.invariants_hold()); }
+
+TEST(extension_words, a_host_string_the_array_cannot_reserve_leaves_the_list_empty)
+{ MockPlatform platform;
+  ExtensionWords words(platform, Pool::paged);
+  platform.fail_allocation_at(1u);
+  CHECK_STATUS(words.hold("cl_khr_icd", 11u), Status::no_memory);
+  CHECK_EQ(words.length(), 0u);
+  CHECK(words.invariants_hold());
+  CHECK_STATUS(words.add("cl_khr_fp64"), Status::ok);
+  CHECK(words.invariants_hold()); }
+
+TEST(extension_words, a_short_host_string_is_kept_whatever_the_stated_size)
+{ MockPlatform platform;
+  ExtensionWords words(platform, Pool::paged);
+  CHECK_STATUS(words.hold("cl_khr_icd", ~std::size_t{0}), Status::ok);
+  CHECK(std::strcmp(words.text(), "cl_khr_icd") == 0);
+  CHECK(words.invariants_hold()); }
+
+TEST(extension_words, a_word_of_two_billion_letters_is_refused_as_too_big)
+{ MockPlatform platform;
+  ExtensionWords words(platform, Pool::paged);
+  const VastText vast;
+  CHECK_STATUS(words.add(vast.text()), Status::no_memory);
+  CHECK_EQ(words.length(), 0u);
+  CHECK(words.invariants_hold()); }
+
+TEST(extension_words, a_broken_text_array_breaks_the_invariant)
+{ MockPlatform platform;
+  ExtensionWords words(platform, Pool::paged);
+  CHECK_STATUS(words.add("cl_khr_icd"), Status::ok);
+  CHECK(words.invariants_hold());
+  ExtensionWordsProbe::corrupt_size(words, 99u);
+  CHECK(!words.invariants_hold());
+  ExtensionWordsProbe::corrupt_size(words, 11u); }

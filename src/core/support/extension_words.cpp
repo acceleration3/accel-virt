@@ -14,8 +14,8 @@ Status ExtensionWords::hold(const char *text, size_t bytes)
     AV_SCOPE("ExtensionWords::hold");
     clear();
     size_t letters = 0u;
-    while (text != nullptr && letters < bytes && text[letters] != '\0') letters++;
-    if (letters >= GrowableArray<char>::most_values) return Status::no_memory;
+    const size_t limit = bytes < GrowableArray<char>::most_values ? bytes : GrowableArray<char>::most_values;
+    while (text != nullptr && letters < limit && text[letters] != '\0') letters++;
     if (text_.reserve(static_cast<uint32_t>(letters) + 1u) != Status::ok) return Status::no_memory;
     for (size_t at = 0u; at < letters; at++) {
         const bool space = text[at] == ' ';

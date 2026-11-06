@@ -25,6 +25,8 @@ private:
     const uint8_t *source_;
     uint64_t       bytes_;
     uint64_t       pitch_;
+
+    friend struct BgraRowsProbe;
 };
 
 }
