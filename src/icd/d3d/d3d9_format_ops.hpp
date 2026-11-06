@@ -27,6 +27,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct D3d9FormatOpsProbe;
+
     uint32_t operations(uint32_t format, uint32_t support) const;
     bool     asked(uint32_t format) const;
 

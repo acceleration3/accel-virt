@@ -5,6 +5,27 @@
 
 using av::d3d::D3d9StateBatch;
 
+namespace av::d3d {
+
+struct D3d9StateBatchProbe {
+    static void render_pending(D3d9StateBatch &batch, std::uint32_t state, std::uint32_t at)
+    {
+        batch.render_slots_[state].pending_at_ = at;
+    }
+    static void sampler_pending(D3d9StateBatch &batch, std::uint32_t slot, std::uint32_t state, std::uint32_t at)
+    {
+        batch.sampler_slots_[slot * D3d9StateBatch::sampler_states + state].pending_at_ = at;
+    }
+    static void stage_pending(D3d9StateBatch &batch, std::uint32_t stage, std::uint32_t state, std::uint32_t at)
+    {
+        batch.stage_slots_[stage * D3d9StateBatch::stage_states + state].pending_at_ = at;
+    }
+};
+
+}
+
+using av::d3d::D3d9StateBatchProbe;
+
 namespace {
 constexpr std::uint32_t ddi_colorop = 1u;
 constexpr std::uint32_t ddi_addressu = 13u;
@@ -140,4 +161,63 @@ TEST(d3d9_state_batch, ddi_only_states_go_nowhere)
     batch.render_state(256u, 1u);
     CHECK(!batch.pending());
     CHECK(batch.invariants_hold());
+}
+
+TEST(d3d9_state_batch, any_one_kind_of_queued_state_is_pending)
+{
+    D3d9StateBatch sampler_only;
+    sampler_only.stage_state(2u, ddi_minfilter, 2u);
+    CHECK(sampler_only.pending());
+    CHECK_EQ(sampler_only.render_count(), 0u);
+    CHECK_EQ(sampler_only.stage_count(), 0u);
+    D3d9StateBatch stage_only;
+    stage_only.stage_state(2u, ddi_colorop, 2u);
+    CHECK(stage_only.pending());
+    CHECK_EQ(stage_only.render_count(), 0u);
+    CHECK_EQ(stage_only.sampler_count(), 0u);
+    stage_only.taken();
+    CHECK(!stage_only.pending());
+}
+
+TEST(d3d9_state_batch, sampler_and_stage_states_the_host_has_are_not_sent_again)
+{
+    D3d9StateBatch batch;
+    batch.stage_state(2u, ddi_minfilter, 2u);
+    batch.stage_state(vertex_sampler_0, ddi_minfilter, 3u);
+    batch.stage_state(1u, ddi_colorop, 4u);
+    batch.stage_state(1u, ddi_constant, 5u);
+    CHECK_EQ(batch.sampler_count(), 6u);
+    CHECK_EQ(batch.stage_count(), 6u);
+    batch.taken();
+    CHECK(!batch.pending());
+    CHECK_EQ(batch.sampler_count(), 0u);
+    CHECK_EQ(batch.stage_count(), 0u);
+    batch.stage_state(2u, ddi_minfilter, 2u);
+    batch.stage_state(vertex_sampler_0, ddi_minfilter, 3u);
+    batch.stage_state(1u, ddi_colorop, 4u);
+    batch.stage_state(1u, ddi_constant, 5u);
+    CHECK(!batch.pending());
+    batch.stage_state(vertex_sampler_0, ddi_minfilter, 4u);
+    batch.stage_state(1u, ddi_colorop, 6u);
+    CHECK_EQ(batch.sampler_count(), 3u);
+    CHECK_EQ(batch.stage_count(), 3u);
+    CHECK(batch.invariants_hold());
+}
+
+TEST(d3d9_state_batch, a_queue_entry_its_slot_does_not_own_breaks_the_invariants)
+{
+    D3d9StateBatch render;
+    render.render_state(rs_zenable, 1u);
+    D3d9StateBatchProbe::render_pending(render, rs_zenable, 2u);
+    CHECK(!render.invariants_hold());
+    D3d9StateBatch sampler;
+    sampler.stage_state(vertex_sampler_0, ddi_minfilter, 1u);
+    D3d9StateBatchProbe::sampler_pending(sampler, 17u, samp_minfilter, 2u);
+    CHECK(!sampler.invariants_hold());
+    D3d9StateBatch stage;
+    stage.stage_state(3u, ddi_colorop, 1u);
+    D3d9StateBatchProbe::stage_pending(stage, 3u, tss_colorop, 2u);
+    CHECK(!stage.invariants_hold());
+    D3d9StateBatchProbe::stage_pending(stage, 3u, tss_colorop, 1u);
+    CHECK(stage.invariants_hold());
 }

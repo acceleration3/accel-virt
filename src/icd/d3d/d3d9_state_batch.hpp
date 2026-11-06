@@ -31,6 +31,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct D3d9StateBatchProbe;
+
     struct Slot {
         uint32_t sent_;
         uint32_t pending_at_;

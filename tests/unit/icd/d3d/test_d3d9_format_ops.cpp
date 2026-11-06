@@ -6,6 +6,20 @@
 using av::d3d::D3d9FormatOps;
 using Op = av::d3d::D3d9FormatOps::Op;
 
+namespace av::d3d {
+
+struct D3d9FormatOpsProbe {
+    static void set_count(D3d9FormatOps &ops, std::uint32_t count) { ops.count_ = count; }
+    static void set(D3d9FormatOps &ops, std::uint32_t index, std::uint32_t format, std::uint32_t operations)
+    {
+        ops.offered_[index] = D3d9FormatOps::Op{format, operations, 0u};
+    }
+};
+
+}
+
+using av::d3d::D3d9FormatOpsProbe;
+
 namespace {
 constexpr std::uint32_t texture = 1u << 0u;
 constexpr std::uint32_t cube = 1u << 1u;
@@ -152,4 +166,30 @@ TEST(d3d9_format_ops, nothing_offered_breaks_a_rule_the_runtime_disables_the_dri
     }
     CHECK(find(ops, x8r8g8b8) != nullptr);
     CHECK((find(ops, a8r8g8b8)->operations_ & op_3d) == 0u);
+}
+
+TEST(d3d9_format_ops, a_question_past_the_asked_list_names_no_format)
+{
+    D3d9FormatOps ops;
+    CHECK(ops.format_to_ask(ops.formats_to_ask() - 1u) != 0u);
+    CHECK_EQ(ops.format_to_ask(ops.formats_to_ask()), 0u);
+}
+
+TEST(d3d9_format_ops, a_corrupted_offer_list_breaks_the_invariants)
+{
+    D3d9FormatOps ops;
+    D3d9FormatOpsProbe::set_count(ops, D3d9FormatOps::max_formats + 1u);
+    CHECK(!ops.invariants_hold());
+    D3d9FormatOpsProbe::set_count(ops, 1u);
+    D3d9FormatOpsProbe::set(ops, 0u, x8r8g8b8, 0u);
+    CHECK(!ops.invariants_hold());
+    D3d9FormatOpsProbe::set(ops, 0u, 7777u, op_texture);
+    CHECK(!ops.invariants_hold());
+    D3d9FormatOpsProbe::set(ops, 0u, x8r8g8b8, op_texture);
+    CHECK(ops.invariants_hold());
+    D3d9FormatOpsProbe::set_count(ops, 2u);
+    D3d9FormatOpsProbe::set(ops, 1u, x8r8g8b8, op_texture);
+    CHECK(!ops.invariants_hold());
+    D3d9FormatOpsProbe::set(ops, 1u, a8r8g8b8, op_texture);
+    CHECK(ops.invariants_hold());
 }
