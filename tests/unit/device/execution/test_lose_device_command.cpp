@@ -65,6 +65,13 @@ public:
         const CommandHeader header(CommandHeader::lose_host_device_id, size, CommandHeader::generate_reply);
         return av::TransportCommand(imports_, executor_, header, nullptr).run(reply_, capacity, produced_);
     }
+    Status run_without_reply()
+    {
+        produced_ = 99u;
+        const CommandHeader header(CommandHeader::lose_host_device_id, CommandHeader::encoded_size,
+                                   CommandHeader::generate_reply);
+        return av::TransportCommand(imports_, executor_, header, nullptr).run(nullptr, 0u, produced_);
+    }
     std::size_t   produced() const { return produced_; }
     std::uint32_t word(std::size_t at) const
     {
@@ -129,6 +136,17 @@ TEST(lose_device_command_run, a_body_is_framing_and_a_short_slot_is_written_noth
       CHECK_STATUS(f.run(CommandHeader::encoded_size, CommandHeader::lose_host_device_answer - 1u), Status::ok);
       CHECK_EQ(f.produced(), CommandHeader::lose_host_device_answer);
       CHECK_EQ(f.word(0u), 0xEEEEEEEEu);
+      f.executor().destroy();
+  });
+  CHECK_EQ(fixture.ops().losses(), 1u); }
+
+TEST(lose_device_command_run, a_command_given_no_reply_slot_still_loses_the_device_and_counts_the_answer)
+{ Fixture fixture;
+  fixture.on_worker([](Fixture &f) {
+      CHECK_STATUS(f.executor().create(), Status::ok);
+      CHECK_STATUS(f.run_without_reply(), Status::ok);
+      CHECK_EQ(f.produced(), CommandHeader::lose_host_device_answer);
+      CHECK(f.executor().poll() == av::HostPoll::lost);
       f.executor().destroy();
   });
   CHECK_EQ(fixture.ops().losses(), 1u); }

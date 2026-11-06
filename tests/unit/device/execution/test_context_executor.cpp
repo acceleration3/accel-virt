@@ -431,3 +431,16 @@ TEST(context_executor_signals_through, installs_the_signal_on_the_executor_it_ma
   CHECK_EQ(signal.raised(), 1u);
   fixture.on_worker([](ContextExecutor &executor) { executor.destroy(); });
   worker.stop(); }
+
+TEST(context_executor_idle, a_context_with_no_executor_polls_idle_and_has_no_progress_to_report)
+{ Fixture fixture;
+  fixture.executor().configure(SubApi::vulkan, uuid, GlContextOptions());
+  CHECK(fixture.executor().poll() == av::HostPoll::idle);
+  std::uint64_t marked = 7u;
+  std::uint64_t reached = 7u;
+  fixture.executor().gpu_progress(marked, reached);
+  CHECK_EQ(marked, 0u);
+  CHECK_EQ(reached, 0u);
+  fixture.executor().end_batch();
+  CHECK_EQ(fixture.ops().created(), 0u);
+  CHECK(fixture.executor().invariants_hold()); }

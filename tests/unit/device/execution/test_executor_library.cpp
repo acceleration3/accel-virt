@@ -397,3 +397,63 @@ TEST(executor_library_composes, only_a_library_whose_table_composes_planes_does)
   library.close_domain();
   CHECK(library.composes());
   CHECK(!library.compose_planes(&plane, 1u, 8u, 8u, image)); }
+
+namespace {
+
+std::uint32_t aliased(void *, std::uint32_t, std::uint64_t, std::uint32_t, std::uint64_t, AvHostMemory *memory)
+{
+    *memory = AvHostMemory{7, 4096u, 1u};
+    return 0u;
+}
+
+std::uint32_t unavailable_surface(void *, std::uint32_t, std::uint64_t, std::uint32_t, AvExportedImage *)
+{
+    return AV_EXPORT_UNAVAILABLE;
+}
+
+std::uint32_t refused_composition(void *, std::uint32_t, const AvScanoutPlane *, std::uint32_t, std::uint32_t,
+                                  std::uint32_t, AvExportedImage *)
+{
+    return AV_UNKNOWN;
+}
+
+}
+
+TEST(executor_library_alias_memory, needs_both_domains_and_a_library_that_aliases)
+{ MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  AvHostMemory memory = {-1, 0u, 0u};
+  CHECK_STATUS(library.alias_memory(1u, 5u, 2u, memory), Status::no_memory);
+  CHECK_STATUS(library.open_domain(some_gpu), Status::ok);
+  CHECK_STATUS(library.alias_memory(1u, 0u, 2u, memory), Status::no_memory);
+  CHECK_STATUS(library.alias_memory(1u, 5u, 2u, memory), Status::no_memory);
+  CHECK_EQ(memory.fd, -1);
+  ops.editable().alias_memory = aliased;
+  CHECK_STATUS(library.alias_memory(1u, 5u, 2u, memory), Status::ok);
+  CHECK_EQ(memory.fd, 7);
+  CHECK(memory.size != 0u); }
+
+TEST(executor_library_lose_device, a_table_without_the_operation_cannot_lose_a_device)
+{ Opened opened(AV_EXECUTOR_SUB_API_VULKAN);
+  AvExecutor *const executor = opened.library.create(SubApi::vulkan, AvContextOptions{}, nullptr);
+  CHECK(executor != nullptr);
+  opened.ops.editable().lose_device = nullptr;
+  CHECK_STATUS(opened.library.lose_device(executor), Status::not_supported);
+  opened.library.destroy(executor); }
+
+TEST(executor_library_surfaces, an_export_the_library_marks_unavailable_says_so_in_the_image_it_leaves)
+{ Opened opened(AV_EXECUTOR_SUB_API_D3D);
+  opened.ops.editable().export_surface = unavailable_surface;
+  AvExportedImage image = {9, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u};
+  CHECK(!opened.library.export_surface(0x51u, 0u, image));
+  CHECK_EQ(image.fd, -1);
+  CHECK_EQ(image.reserved, std::uint32_t{AV_EXPORT_UNAVAILABLE}); }
+
+TEST(executor_library_composes, a_composition_the_library_does_not_execute_makes_no_image)
+{ Opened opened(AV_EXECUTOR_SUB_API_VULKAN);
+  opened.ops.editable().compose_planes = refused_composition;
+  AvScanoutPlane  plane = {};
+  AvExportedImage image = {};
+  CHECK(opened.library.composes());
+  CHECK(!opened.library.compose_planes(&plane, 1u, 8u, 8u, image)); }

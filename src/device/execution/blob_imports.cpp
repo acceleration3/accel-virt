@@ -32,7 +32,7 @@ Status BlobImports::import(uint32_t resource, uint64_t &device_memory, const Blo
     uint64_t       made = 0u;
     if (executor_.import(blob_id, resource, made, role) != Status::ok) return Status::not_supported;
     uint32_t slot = 0u;
-    if (made == 0u || blob_ids_.insert(made, blob_id, slot) != Status::ok) {
+    if (blob_ids_.insert(made, blob_id, slot) != Status::ok) {
         executor_.release(blob_id);
         return Status::not_supported;
     }

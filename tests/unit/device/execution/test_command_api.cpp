@@ -3,6 +3,7 @@
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "proto/generated/d3d12/d3d12_protocol_ids.h"
 #include "proto/generated/d3d9/d3d9_protocol_ids.h"
+#include "proto/generated/glmem/glmem_protocol_ids.h"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/generated/opengl/gl_protocol_ids.h"
 #include "proto/submission/command_header.hpp"
@@ -67,5 +68,11 @@ TEST(command_api, the_other_apis_and_the_transport_name_their_commands)
   CHECK(named(transport.command_name(av::CommandHeader::nop_id), "nop"));
   CHECK(named(transport.command_name(av::CommandHeader::import_blob_id), "import_blob"));
   CHECK(named(transport.command_name(av::CommandHeader::release_blob_id), "release_blob"));
+  CHECK(named(transport.command_name(av::CommandHeader::channel_stats_id), "channel_stats"));
   CHECK(named(transport.command_name(0x77u), "unknown"));
   CHECK(named(CommandApi(std::uint16_t{9u}).command_name(1u), "unknown")); }
+
+TEST(command_api, an_opengl_command_is_named_by_the_memory_registry_before_the_main_one)
+{ const CommandApi opengl(SubApi::opengl);
+  CHECK(named(opengl.command_name(av::glmemproto::kCmd_PlaceBufferSlice), "PlaceBufferSlice"));
+  CHECK(named(opengl.command_name(av::glproto::kCmd_glActiveTexture), "glActiveTexture")); }
