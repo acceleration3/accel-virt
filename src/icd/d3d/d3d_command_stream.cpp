@@ -149,7 +149,7 @@ size_t D3dCommandStream::whole_commands(const uint8_t *bytes, size_t length) con
     CommandHeader header;
     while (run < length && header.decode(bytes + run, length - run) == Status::ok) {
         const size_t size = header.size();
-        if (size < header_bytes || size > length - run || run + size > capacity) break;
+        if (size > length - run || run + size > capacity) break;
         run += size;
     }
     return run;

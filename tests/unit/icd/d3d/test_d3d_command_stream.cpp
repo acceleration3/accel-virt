@@ -3,6 +3,7 @@
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/guest/framed_block_probe.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/d3d/command_recording.hpp"
@@ -33,6 +34,18 @@ using av::WireReader;
 using av::d3d::CommandRecording;
 using av::d3d::D3dCommandStream;
 using namespace av::d3dproto;
+
+namespace av::d3d {
+
+struct D3dCommandStreamProbe {
+    static FramedBlock &framed(D3dCommandStream &stream) { return stream.framed_; }
+    static void         drop_recording(D3dCommandStream &stream) { stream.recording_ = nullptr; }
+};
+
+}
+
+using av::FramedBlockProbe;
+using av::d3d::D3dCommandStreamProbe;
 
 namespace {
 
@@ -492,3 +505,75 @@ TEST(d3d_command_stream, a_blob_import_goes_after_the_shaders_the_stream_holds)
   CHECK_EQ(fixture.commands(), 3u);
   CHECK_EQ(fixture.id(2u), av::d3d12proto::kCmd_CreateComputePipeline12);
   CHECK(fixture.stream().invariants_hold()); }
+
+TEST(d3d_command_stream, an_application_flush_with_nothing_new_still_reports_a_failed_stream)
+{ Fixture fixture;
+  CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
+  CHECK_STATUS(fixture.stream().application_flush(), Status::ok);
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, refused);
+  std::uint32_t removed = 0u;
+  CHECK(!av_d3d_Finish11(fixture.stream(), &removed));
+  CHECK(fixture.stream().failed());
+  CHECK_STATUS(fixture.stream().application_flush(), Status::invalid_state);
+  CHECK(!av_d3d_Finish11(fixture.stream(), &removed)); }
+
+TEST(d3d_command_stream, a_command_the_transport_cannot_hold_fails_the_stream_without_counting_it)
+{ Fixture fixture;
+  CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
+  const std::uint64_t before = fixture.stream().recorded_total();
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, refused);
+  av::WireWriter writer = fixture.stream().request_writer();
+  writer.write_zeros(2u * D3dCommandStream::command_room + 100u);
+  CHECK(fixture.stream().send_async(kCmd_Draw, writer) == TransportResult::failed);
+  CHECK_EQ(fixture.stream().recorded_total(), before); }
+
+TEST(d3d_command_stream, regions_are_opened_only_outside_a_recording)
+{ Fixture fixture;
+  CHECK(!fixture.stream().open_region(64u).taken());
+  Recorded recorded(block_bytes);
+  fixture.stream().record(recorded.recording());
+  const av::ClientBlobLease lease = fixture.stream().open_region(64u);
+  CHECK(!lease.taken());
+  CHECK_EQ(lease.bytes(), 0u);
+  fixture.stream().close_region(lease); }
+
+TEST(d3d_command_stream, a_recording_with_less_room_than_a_command_lends_no_writer)
+{ Fixture fixture;
+  MockPlatform platform;
+  CommandRecording small(platform, D3dCommandStream::command_room / 2u, D3dCommandStream::command_room);
+  CHECK_STATUS(small.initialize(), Status::ok);
+  fixture.stream().record(small);
+  CHECK(small.capacity() < D3dCommandStream::command_room);
+  CHECK(!av_d3d_Draw(fixture.stream(), 3u, 0u));
+  CHECK_EQ(fixture.stream().recorded_bytes(), 0u);
+  CHECK_EQ(fixture.stream().recorded_total(), 0u); }
+
+TEST(d3d_command_stream, ending_a_call_that_left_a_writer_lent_leaves_the_recording_incomplete_until_taken)
+{ Fixture fixture;
+  Recorded recorded(block_bytes);
+  fixture.stream().record(recorded.recording());
+  CHECK(av_d3d_Draw(fixture.stream(), 3u, 0u));
+  fixture.stream().end_call();
+  av::WireWriter lent = fixture.stream().request_writer();
+  CHECK(lent.offset() == 0u);
+  fixture.stream().end_call();
+  fixture.stream().end_call();
+  static std::uint8_t out[block_bytes];
+  std::size_t length = 99u;
+  CHECK_STATUS(fixture.stream().take_recorded(out, sizeof out, length), Status::no_space);
+  CHECK_EQ(length, 0u);
+  CHECK_STATUS(fixture.stream().take_recorded(out, sizeof out, length), Status::ok);
+  CHECK_EQ(length, 0u); }
+
+TEST(d3d_command_stream, a_stream_whose_framed_block_or_recording_is_inconsistent_breaks_the_invariants)
+{ Fixture fixture;
+  CHECK(fixture.stream().invariants_hold());
+  Recorded recorded(block_bytes);
+  fixture.stream().record(recorded.recording());
+  CHECK(fixture.stream().invariants_hold());
+  FramedBlockProbe(D3dCommandStreamProbe::framed(fixture.stream())).used() = block_bytes + 1u;
+  CHECK(!fixture.stream().invariants_hold());
+  FramedBlockProbe(D3dCommandStreamProbe::framed(fixture.stream())).used() = 0u;
+  CHECK(fixture.stream().invariants_hold());
+  D3dCommandStreamProbe::drop_recording(fixture.stream());
+  CHECK(!fixture.stream().invariants_hold()); }

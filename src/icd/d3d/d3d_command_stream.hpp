@@ -61,6 +61,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct D3dCommandStreamProbe;
+
     [[nodiscard]] TransportResult append(uint32_t command_id, WireWriter &writer);
     void                          adopt_recording();
     [[nodiscard]] bool            room_for(size_t wanted);
