@@ -102,6 +102,7 @@
 #include "proto/escape/release_record.hpp"
 #include "proto/escape/next_point_record.hpp"
 #include "miniport/ddi/dxgkarg_update_monitor_link_info_record.hpp"
+#include "miniport/memory/allocation.hpp"
 #include "miniport/ddi/linked_device_record.hpp"
 #include "miniport/display/display_mode.hpp"
 #include "miniport/scheduling/context.hpp"
@@ -5861,3 +5862,276 @@ TEST(adapter_set_vidpn_source_address_with_multi_plane_overlay3, skips_what_it_c
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay3(&request)), success);
   fixture.platform().set_irql(Irql::passive);
   CHECK(AdapterProbe(fixture.adapter()).primary(0u) == &primary); }
+
+TEST(adapter_overlay_ddis, a_refused_overlay_names_the_plane_and_what_the_host_could_not_take)
+{ Fixture fixture; av::FakeHandleTable handles;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  MappedSurface unkeyed(fixture, handles, device.hDevice, av::AllocationKind::surface);
+  MappedSurface keyed(fixture, handles, device.hDevice, av::AllocationKind::surface, true);
+  av::DxgkMultiplaneOverlayPlaneWithSource2Record plane = {};
+  plane.hAllocation = unkeyed.handle();
+  plane.LayerIndex = 1u;
+  av::DxgkMultiplaneOverlayPlaneWithSource2Record *planes[] = {&plane};
+  av::DxgkargCheckMultiPlaneOverlaySupport3Record check = {};
+  check.PlaneCount = 1u;
+  check.ppPlanes = planes;
+  CHECK_EQ(nt(fixture.adapter().check_multi_plane_overlay_support3(&check)), success);
+  CHECK_EQ(check.Supported, 0);
+  CHECK(fixture.platform().logged_line("overlay refused, plane 0 of 1 layer 1 format 0x00000015 unkeyed"));
+  plane.hAllocation = keyed.handle();
+  CHECK_EQ(nt(fixture.adapter().check_multi_plane_overlay_support3(&check)), success);
+  CHECK_EQ(check.Supported, 0);
+  CHECK(fixture.platform().logged_line("overlay refused, plane 0 of 1 layer 1 format 0x00000015 keyed"));
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_overlay_ddis, a_refused_overlay_with_no_plane_to_name_says_what_else_it_was)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkMultiplaneOverlayPlaneWithSource2Record *absent[] = {nullptr};
+  av::DxgkargCheckMultiPlaneOverlaySupport3Record check = {};
+  check.PlaneCount = 1u;
+  check.ppPlanes = absent;
+  CHECK_EQ(nt(fixture.adapter().check_multi_plane_overlay_support3(&check)), success);
+  CHECK_EQ(check.Supported, 0);
+  CHECK(fixture.platform().logged_line("avgpu: overlay refused, plane 0 of 1"));
+  CHECK(!fixture.platform().logged_line("layer"));
+  CHECK(!fixture.platform().logged_line("post-composition"));
+  av::DxgkMultiplaneOverlayPostCompositionWithSourceRecord composition = {};
+  composition.VidPnSourceId = 9u;
+  av::DxgkMultiplaneOverlayPostCompositionWithSourceRecord *compositions[] = {&composition};
+  check = {};
+  check.PostCompositionCount = 1u;
+  check.ppPostComposition = compositions;
+  CHECK_EQ(nt(fixture.adapter().check_multi_plane_overlay_support3(&check)), success);
+  CHECK_EQ(check.Supported, 0);
+  CHECK(fixture.platform().logged_line("avgpu: overlay refused, plane 0 of 0 (the post-composition)"));
+  check = {};
+  check.PlaneCount = 1u;
+  CHECK_EQ(nt(fixture.adapter().check_multi_plane_overlay_support3(&check)), invalid_parameter); }
+
+TEST(adapter_overlay_ddis, a_refused_overlay_is_silent_once_the_log_budget_is_spent)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkMultiplaneOverlayPlaneWithSource2Record *absent[] = {nullptr};
+  av::DxgkargCheckMultiPlaneOverlaySupport3Record check = {};
+  check.PlaneCount = 1u;
+  check.ppPlanes = absent;
+  spend_log_budget(fixture);
+  CHECK_EQ(nt(fixture.adapter().check_multi_plane_overlay_support3(&check)), success);
+  CHECK_EQ(check.Supported, 0);
+  CHECK(!fixture.platform().logged_line("avgpu: overlay refused")); }
+
+namespace {
+
+class PointedPresent {
+public:
+    explicit PointedPresent(Fixture &fixture)
+        : fixture_(fixture), process_(0), device_{}, context_{}, source_(fixture, handles_, open_device(fixture),
+                                                                        av::AllocationKind::surface, true),
+          destination_(fixture, handles_, device_.hDevice, av::AllocationKind::shared_primary), info_{}, dma_{},
+          present_{}
+    {
+        CHECK_EQ(nt(fixture.adapter().create_context(device_.hDevice, &context_)), success);
+        info_[1].hDeviceSpecificAllocation = source_.open_handle();
+        info_[2].hDeviceSpecificAllocation = destination_.open_handle();
+        present_.pDmaBuffer = dma_;
+        present_.DmaSize = sizeof dma_;
+        present_.Flags = 1u;
+        present_.pAllocationList = info_;
+        const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+        present_.SrcRect = {0, 0, side, side};
+        present_.DstRect = {0, 0, side, side};
+        source_.paint_all(MappedSurface::colour);
+    }
+    ~PointedPresent()
+    {
+        static_cast<void>(fixture_.adapter().destroy_context(context_.hContext));
+        static_cast<void>(fixture_.adapter().destroy_device(device_.hDevice));
+    }
+
+    std::uint64_t surface() const { return static_cast<const av::Allocation *>(source_.handle())->shared_id(); }
+    std::uint32_t present()
+    {
+        av::DxgkargPresentRecord again = present_;
+        again.pDmaBuffer = dma_;
+        const std::uint32_t status = nt(fixture_.adapter().present(context_.hContext, &again));
+        fixture_.serve();
+        return status;
+    }
+    std::uint32_t name(const av::NextPointRecord &record)
+    {
+        std::uint8_t named[av::NextPointRecord::encoded_size] = {};
+        CHECK_STATUS(record.encode(named, sizeof named), av::Status::ok);
+        DxgkargEscapeRecord escape = {};
+        escape.hKmdProcessHandle = &process_;
+        escape.pPrivateDriverData = named;
+        escape.PrivateDriverDataSize = sizeof named;
+        return nt(fixture_.adapter().escape(&escape));
+    }
+    std::uint32_t moved() const { return destination_.count(MappedSurface::colour); }
+    std::uint32_t queued_kind() const
+    {
+        std::uint32_t kind = 0u;
+        std::memcpy(&kind, fixture_.last_queued() + 32u, sizeof kind);
+        return kind;
+    }
+    std::uint32_t queued_point() const
+    {
+        std::uint32_t point = 0u;
+        std::memcpy(&point, fixture_.last_queued() + 36u, sizeof point);
+        return point;
+    }
+
+private:
+    void *open_device(Fixture &fixture)
+    {
+        device_.hKmdProcess = &process_;
+        CHECK_EQ(nt(fixture.adapter().create_device(&device_)), success);
+        return device_.hDevice;
+    }
+
+    Fixture                             &fixture_;
+    int                                  process_;
+    av::DxgkargCreateDeviceRecord        device_;
+    av::DxgkargCreateContextRecord       context_;
+    av::FakeHandleTable                  handles_;
+    MappedSurface                        source_;
+    MappedSurface                        destination_;
+    av::DxgkPresentAllocationInfoRecord  info_[3];
+    std::uint8_t                         dma_[512];
+    av::DxgkargPresentRecord             present_;
+};
+
+}
+
+TEST(adapter_present, a_pointed_surface_is_moved_by_the_miniport_when_the_host_takes_no_points)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  PointedPresent rig(fixture);
+  CHECK_EQ(rig.name(av::NextPointRecord(rig.surface(), 0x55u)), success);
+  CHECK_EQ(rig.present(), success);
+  CHECK_EQ(rig.moved(), MappedSurface::side * MappedSurface::side);
+  CHECK_EQ(fixture.queued_presents(), 0u); }
+
+TEST(adapter_present, a_point_named_as_pages_or_withdrawn_queues_the_pages_or_nothing)
+{ Fixture fixture;
+  fixture.offer_present_snapshots();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  PointedPresent rig(fixture);
+  CHECK_EQ(rig.name(av::NextPointRecord(rig.surface(), 0u, av::NextPointRecord::Action::pages)), success);
+  CHECK_EQ(rig.present(), success);
+  CHECK_EQ(fixture.queued_presents(), 1u);
+  CHECK_EQ(rig.queued_kind(), 0u);
+  CHECK_EQ(rig.name(av::NextPointRecord(rig.surface(), 0x77u)), success);
+  CHECK_EQ(rig.name(av::NextPointRecord(rig.surface(), 0x77u, av::NextPointRecord::Action::withdraw)), success);
+  CHECK_EQ(rig.name(av::NextPointRecord(rig.surface(), 0x78u, av::NextPointRecord::Action::withdraw)), success);
+  const std::uint32_t before = fixture.platform().logged();
+  CHECK_EQ(rig.present(), success);
+  CHECK_EQ(fixture.queued_presents(), 1u);
+  CHECK(fixture.platform().logged() > before);
+  CHECK(fixture.platform().logged_line("avgpu: a present of a pointed surface has no point named"));
+  const std::uint32_t told = fixture.platform().logged();
+  CHECK_EQ(rig.present(), success);
+  CHECK_EQ(fixture.platform().logged(), told);
+  CHECK_EQ(fixture.queued_presents(), 1u);
+  CHECK_EQ(rig.name(av::NextPointRecord(rig.surface(), 0x79u)), success);
+  CHECK_EQ(rig.present(), success);
+  CHECK_EQ(fixture.queued_presents(), 2u);
+  CHECK_EQ(rig.queued_kind(), 1u);
+  CHECK_EQ(rig.queued_point(), 0x79u);
+  fixture.stop_presents(); }
+
+TEST(adapter_present, a_refused_blt_says_what_it_was_given_even_negative_sides)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  av::DxgkargPresentRecord            present = {};
+  present.Flags = 1u;
+  present.pAllocationList = info;
+  present.SrcRect = {-1, -2, 3, 4};
+  present.DstRect = {0, 0, -5, -6};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), invalid_parameter);
+  CHECK(fixture.platform().logged_line("avgpu: present refused flags 0x00000001 list given no-dma rects 0/0"));
+  CHECK(fixture.platform().logged_line(" -1,-2,3,4, 0,0,-5,-6,"));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_present, a_blt_with_a_destination_and_no_source_in_its_list_moves_nothing)
+{ Fixture fixture; av::FakeHandleTable handles;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  destination.paint_all(0u);
+  av::DxgkAllocationListRecord list[3] = {};
+  list[0].hDeviceSpecificAllocation = nullptr;
+  list[1].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t                      dma[512] = {};
+  av::D3dddiPatchLocationListRecord patches[8] = {};
+  av::DxgkargPresentRecord          present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pPatchLocationListOut = patches;
+  present.PatchLocationListOutSize = 8u;
+  present.Flags = 1u;
+  present.pAllocationList = list;
+  present.NumSrcAllocations = 1u;
+  present.NumDstAllocations = 1u;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(fixture.platform().logged_line("avgpu: present unmoved list flags 0x00000001 sources 1 destinations 1"));
+  CHECK_EQ(destination.count(0u), MappedSurface::side * MappedSurface::side);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_present, a_device_removed_from_under_it_moves_its_pixels_in_the_miniport_though_the_engine_is_offered)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  CHECK_EQ(nt(fixture.adapter().notify_surprise_removal(1)), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::staging);
+  source.paint_all(MappedSurface::colour);
+  av::DxgkPresentAllocationInfoRecord info[3] = {};
+  info[1].hDeviceSpecificAllocation = source.open_handle();
+  info[2].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t             dma[512] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.Flags = 1u;
+  present.pAllocationList = info;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
+  CHECK_EQ(fixture.queued_presents(), 0u);
+  CHECK_EQ(fixture.present_copies(), 0u);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_query_adapter_info, umd_private_offers_no_snapshots_from_an_engine_that_takes_none)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  std::uint64_t                 words[3] = {};
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = query_umd_private;
+  query.pOutputData = words;
+  query.OutputDataSize = sizeof words;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(words[2], 0u); }
