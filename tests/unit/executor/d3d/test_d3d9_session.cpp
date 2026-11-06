@@ -11,6 +11,8 @@
 #include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "executor/d3d/slice_bindings.hpp"
+#include "proto/d3d/buffer_slice_support.hpp"
 #include "proto/generated/d3d9/d3d9_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -263,4 +265,32 @@ TEST(d3d9_session_on_Destroy9, removes_only_direct3d_9_objects)
     CHECK(fresh.table().find(32u, av::D3dObjectKind::surface9) == nullptr);
     CHECK_EQ(nine.references, 0u);
     fresh.table().remove(31u);
+}
+
+TEST(d3d9_session_slices, a_session_with_no_device_offers_no_buffer_slices_and_binds_none)
+{
+    FreshSession fresh;
+    D3d9Session &session = fresh.session();
+    std::uint32_t supported = 7u;
+    CHECK(session.on_QueryBufferSlices9(supported));
+    CHECK_EQ(supported, static_cast<std::uint32_t>(av::BufferSliceSupport::none));
+    supported = 7u;
+    CHECK(session.on_QueryDeviceSlices9(supported));
+    CHECK_EQ(supported, static_cast<std::uint32_t>(av::BufferSliceSupport::none));
+    CHECK(!session.on_BindBufferSlice9(nobody, 0x40u, 0u, 256u));
+    CHECK(!session.on_BindBufferSlice9(nobody, 0u, 0u, 0u));
+    CHECK(session.invariants_hold());
+}
+
+TEST(d3d9_session_slices, discarding_a_slice_no_lane_holds_changes_nothing)
+{
+    FreshSession fresh;
+    D3d9Session &session = fresh.session();
+    const std::uint8_t              bytes[16] = {};
+    av::SliceBindings::Binding bound = {};
+    bound.resource_ = nobody;
+    bound.slice_ = bytes;
+    bound.bytes_ = sizeof bytes;
+    session.discard_slice(bound);
+    CHECK(session.invariants_hold());
 }

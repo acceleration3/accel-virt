@@ -1,3 +1,11 @@
+#include "core/log/driver_log.hpp"
+#include "executor/d3d/d3d9_lanes.hpp"
+#include "executor/d3d/d3d9_slices.hpp"
+#include "executor/d3d/slice_storages.hpp"
+#include "executor/eventfd_wake.hpp"
+#include "executor/host_memory_source.hpp"
+#include "executor/import_table.hpp"
+#include "executor/source_memory.hpp"
 #include "executor/sharing/host_shares.hpp"
 #include "executor/sharing/session_shares.hpp"
 #include "executor/d3d/d3d_backend.hpp"
@@ -11,6 +19,7 @@
 #include "harness/executor/executor_log_rig.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/resources/host_memory_request.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
 
@@ -645,4 +654,156 @@ TEST(d3d9_session_device, each_flipping_device_has_a_lane_of_its_own_and_gives_i
         backend.shut_down();
     }
     shares->release(domain, 0u);
+}
+
+namespace {
+
+constexpr std::uint32_t slice_bytes = 256u;
+constexpr std::uint32_t slice_usage = 0x208u;
+
+bool slice_host(av::LoaderHostApis &apis, av::D3d11HostDevice *&device11, av::D3d9HostDevice *&device9,
+                av::HostMemorySource *&source)
+{
+    if (std::getenv("AV_D3D_PATH") == nullptr) setenv("AV_D3D_PATH", AV_FIXTURE_DIR "/../../build-d3d/lib", 1);
+    apis.open();
+    for (std::uint32_t index = 0u; index < apis.gpu_count(); index++) {
+        device11 = apis.d3d11_device(index);
+        device9 = apis.d3d9_device(index);
+        source = apis.memory_source(index);
+        if (device11 != nullptr && device9 != nullptr && source != nullptr) return true;
+    }
+    std::fprintf(stderr, "no GPU here runs DXVK's d3d9 with memory to share: nothing judged\n");
+    return false;
+}
+
+bool buffer_holds(IDirect3DVertexBuffer9 *buffer, const std::uint8_t *expected)
+{
+    void *mapped = nullptr;
+    if (FAILED(buffer->Lock(0u, 0u, &mapped, D3DLOCK_READONLY))) return false;
+    const bool same = std::memcmp(mapped, expected, slice_bytes) == 0;
+    buffer->Unlock();
+    return same;
+}
+
+void fill_buffer(IDirect3DVertexBuffer9 *buffer, std::uint8_t byte)
+{
+    void *mapped = nullptr;
+    CHECK(SUCCEEDED(buffer->Lock(0u, 0u, &mapped, D3DLOCK_DISCARD)));
+    std::memset(mapped, byte, slice_bytes);
+    buffer->Unlock();
+}
+
+}
+
+TEST(d3d9_session_device, a_buffer_on_a_slice_it_cannot_be_drawn_from_in_place_is_copied_into_before_each_draw)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice  *device11 = nullptr;
+    av::D3d9HostDevice   *device9 = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!slice_host(apis, device11, device9, source)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports, source, 16u << 20u, 8u << 20u);
+    const std::uint64_t memory = wire.open_memory(av::HostMemoryRequest(av::HostMemoryRequest::Kind::upload, 0u),
+                                                  4096u);
+    av::SourceMemory *const store = rig.imports.named(memory);
+    CHECK(store != nullptr);
+    for (std::uint32_t at = 0u; at < slice_bytes; at++) store->pointer()[at] = static_cast<std::uint8_t>(at * 3u + 1u);
+
+    IDirect3DDevice9 *device = nullptr;
+    CHECK_EQ(device9->make_device(device), 0);
+    IDirect3DVertexBuffer9 *buffer = nullptr;
+    CHECK(SUCCEEDED(device->CreateVertexBuffer(slice_bytes, slice_usage, 0u, D3DPOOL_DEFAULT, &buffer, nullptr)));
+    {
+        av::MockPlatform   platform;
+        av::DriverLog      lines(rig.sink, "slices: ");
+        av::SliceStorages  storages(platform, lines);
+        av::EventfdWake    wake;
+        av::D3d9Lanes      lanes(platform, wake, lines);
+        av::D3d9Slices     slices(platform, storages, lanes, lines);
+        CHECK(!slices.supported());
+        slices.initialize(device9, &rig.imports);
+        CHECK(slices.supported());
+        CHECK(slices.bind(device, 3u, buffer, memory, 0u, slice_bytes));
+        CHECK(slices.stream_bound(device, 0u, 3u));
+        fill_buffer(buffer, 0xEEu);
+        slices.copy_in_use(device);
+        CHECK(buffer_holds(buffer, store->pointer()));
+        for (std::uint32_t at = 0u; at < slice_bytes; at++) store->pointer()[at] = static_cast<std::uint8_t>(at + 9u);
+        slices.copy_in_use(device);
+        CHECK(slices.invariants_hold());
+        CHECK(slices.detach(3u, buffer));
+        CHECK(buffer_holds(buffer, store->pointer()));
+        slices.forget_device(device);
+        slices.reclaim();
+        CHECK(slices.invariants_hold());
+        slices.shut_down();
+        CHECK(!slices.supported());
+    }
+    buffer->Release();
+    device->Release();
+    wire.close_memory(memory);
+    backend.shut_down();
+}
+
+TEST(d3d9_session_device, a_device_that_can_draw_from_a_slice_in_place_is_probed_allowed_and_leaves_it_with_the_buffers_bytes)
+{
+    av::ExecutorLogRig rig;
+    av::LoaderHostApis apis(rig.log);
+    av::D3d11HostDevice  *device11 = nullptr;
+    av::D3d9HostDevice   *device9 = nullptr;
+    av::HostMemorySource *source = nullptr;
+    if (!slice_host(apis, device11, device9, source)) return;
+    av::D3dBackend backend(rig.log);
+    av::SessionShares unshared;
+    CHECK(backend.initialize(unshared, rig.imports, device11, nullptr, nullptr, device9));
+    av::D3dLoopback wire(backend, rig.imports, source, 16u << 20u, 8u << 20u);
+    const std::uint64_t memory = wire.open_memory(av::HostMemoryRequest(av::HostMemoryRequest::Kind::upload, 0u),
+                                                  4096u);
+    av::SourceMemory *const store = rig.imports.named(memory);
+    CHECK(store != nullptr);
+    for (std::uint32_t at = 0u; at < slice_bytes; at++) store->pointer()[at] = static_cast<std::uint8_t>(at * 5u + 2u);
+
+    IDirect3DDevice9 *device = nullptr;
+    CHECK_EQ(device9->make_device(device), 0);
+    IDirect3DVertexBuffer9 *buffer = nullptr;
+    CHECK(SUCCEEDED(device->CreateVertexBuffer(slice_bytes, slice_usage, 0u, D3DPOOL_DEFAULT, &buffer, nullptr)));
+    {
+        av::MockPlatform   platform;
+        av::DriverLog      lines(rig.sink, "slices: ");
+        av::SliceStorages  storages(platform, lines);
+        av::EventfdWake    wake;
+        av::D3d9Lanes      lanes(platform, wake, lines);
+        av::D3d9Slices     slices(platform, storages, lanes, lines);
+        slices.initialize(device9, &rig.imports);
+        if (slices.probe(device)) {
+            av::D3d9Lane *const lane = lanes.find(device);
+            CHECK(lane != nullptr);
+            CHECK(lane->allowed());
+            CHECK(lane->connected());
+            CHECK(lane->bindable(buffer));
+            CHECK(!lane->bindable(nullptr));
+            CHECK(slices.bind(device, 3u, buffer, memory, 0u, slice_bytes));
+            CHECK(slices.invariants_hold());
+            CHECK(lanes.invariants_hold());
+            lanes.touch(device);
+            CHECK(lane->touched());
+            lanes.mark_touched();
+            CHECK(!lane->touched());
+            CHECK(lanes.marked() >= 1u || lanes.marking_failed());
+            CHECK(slices.detach(3u, buffer));
+            CHECK(buffer_holds(buffer, store->pointer()));
+        } else {
+            std::fprintf(stderr, "this DXVK binds no buffer to imported storage: the in-place path is not judged\n");
+        }
+        slices.forget_device(device);
+        slices.shut_down();
+    }
+    buffer->Release();
+    device->Release();
+    wire.close_memory(memory);
+    backend.shut_down();
 }
