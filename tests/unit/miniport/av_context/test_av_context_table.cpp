@@ -79,6 +79,13 @@ struct AvContextTableProbe {
         table.names_[slot] = name;
         return was;
     }
+    static ObjectStorage<AvContextBinding> &binding(AvContextTable &table, std::uint32_t slot)
+    {
+        return table.bindings_[slot];
+    }
+    static void set_wake(AvContextTable &table, std::uint32_t slot, void *wake) { table.wakes_[slot] = wake; }
+    static void set_raised(AvContextTable &table, std::uint32_t slot, std::uint64_t raised) { table.raised_[slot] = raised; }
+    static void set_told_lost(AvContextTable &table, std::uint32_t slot, bool told) { table.told_lost_[slot] = told; }
     static ObjectStorage<ContextMemory> &memory(AvContextTable &table, std::uint32_t slot)
     {
         return table.memories_[slot];
@@ -133,6 +140,7 @@ public:
     { mapped.platform().on_stall(&Host::stall, this); }
 
     void                 refuse_at(int index) { refuse_at_ = index; }
+    void                 refuse_from(int index) { refuse_from_ = index; }
     void                 refuse_next(std::uint32_t type) { refuse_type_ = type; }
     void                 answer_map_with(std::uint32_t map_info) { map_info_ = map_info; }
     void                 delay_next(std::uint32_t type, std::uint64_t ticks)
@@ -184,7 +192,8 @@ private:
             answer.set_map_info(host->map_info_);
         else
             answer.set(GpuResponse::ok_nodata);
-        if (static_cast<int>(host->answered_) == host->refuse_at_ || asked == host->refuse_type_) {
+        if (static_cast<int>(host->answered_) == host->refuse_at_ || asked == host->refuse_type_ ||
+            (host->refuse_from_ >= 0 && static_cast<int>(host->answered_) >= host->refuse_from_)) {
             answer.set(GpuResponse::err_invalid_parameter);
             host->refuse_type_ = asked == host->refuse_type_ ? 0u : host->refuse_type_;
         }
@@ -197,6 +206,7 @@ private:
     const av::HostWindow   *window_ = nullptr;
     std::uint32_t           answered_ = 0u;
     int                     refuse_at_ = -1;
+    int                     refuse_from_ = -1;
     std::uint32_t           refuse_type_ = 0u;
     std::uint32_t           map_info_ = GpuResponse::map_cache_cached;
     std::uint32_t           delay_type_ = 0u;
@@ -1905,3 +1915,134 @@ TEST(av_context_table_fault_if_held, loses_a_context_that_holds_a_batch_no_earli
   fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.table().invariants_hold());
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(av_context_table_bind, a_ring_order_or_reply_the_memory_cannot_be_is_refused_as_such)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context, fixture.record(40u)), Status::invalid_parameter);
+  CHECK_STATUS(fixture.bind(&first_context, AvContextRecord(SubApi::vulkan, 12u, fixture.ring().handle(), 0u)),
+               Status::invalid_parameter);
+  CHECK_EQ(fixture.table().bound(), 0u);
+  CHECK_EQ(host.queue().requests(), 0u);
+  CHECK_EQ(fixture.platform().owned_page_blocks(), 0u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(av_context_table_bind, a_setup_and_a_teardown_the_device_both_refuse_leave_the_memory_it_may_still_write)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  host.refuse_from(2);
+  CHECK_STATUS(fixture.bind(&first_context), Status::not_supported);
+  CHECK_EQ(fixture.table().bound(), 0u);
+  CHECK_EQ(host.count_of(ctx_destroy_type), 1u);
+  CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+  CHECK_EQ(fixture.platform().process_mappings(), 0u);
+  CHECK(fixture.table().invariants_hold());
+  host.refuse_from(-1);
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(av_context_table_submit, a_submission_after_a_release_waits_its_turn_like_a_release)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  std::uint64_t awaited = 0u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), 1u);
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(3u, 64u, 96u), awaited), Status::ok);
+  CHECK_EQ(awaited, 3u);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), 1u);
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(2u, 32u, 64u), awaited), Status::ok);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), 1u + 2u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(av_context_table_release_batch, a_slot_not_yet_live_takes_nothing_and_has_nothing_running)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  std::uint64_t awaited = 9u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(2u, 32u, 64u), awaited), Status::ok);
+  AvContextTableProbe::set_live(fixture.table(), 0u, false);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited),
+               Status::invalid_parameter);
+  CHECK(!fixture.table().fault_if_held(&first_context));
+  const std::uint32_t rings = fixture.mapped().function().doorbells().rings(0u);
+  fixture.table().kick(&first_context);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), rings);
+  CHECK(fixture.table().completed_already(&first_context, 1000u));
+  AvContextTableProbe::set_live(fixture.table(), 0u, true);
+  fixture.table().kick(&first_context);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), rings + 1u);
+  CHECK(!fixture.table().completed_already(&first_context, 1000u));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(av_context_table_release_batch, a_batch_overlapping_one_released_or_refused_by_the_ring_loses_the_context)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  std::uint64_t awaited = 0u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(2u, 16u, 48u), awaited), Status::ok);
+  CHECK(fixture.platform().logged_line("the context is lost"));
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(3u, 32u, 64u), awaited),
+               Status::invalid_parameter);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(7u, 0u, 32u), awaited), Status::ok);
+  const std::uint32_t lost = fixture.platform().logged();
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(3u, 32u, 64u), awaited), Status::ok);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().logged() > lost);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(5u, 32u, 64u), awaited), Status::ok);
+  const std::uint32_t held = fixture.platform().logged();
+  CHECK_STATUS(fixture.table().release_batch(&first_context, SubmissionDescriptor(9u, 0u, 32u), awaited), Status::ok);
+  CHECK(fixture.platform().logged() > held);
+  CHECK(!fixture.table().fault_if_held(&first_context));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(av_context_table_invariants, detect_a_live_slot_without_its_binding_and_a_free_one_with_a_stray_binding_wake_or_flag)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  AvContextTable &table = fixture.table();
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  CHECK(table.invariants_hold());
+  AvContextTableProbe::set_context(table, 0u, nullptr);
+  CHECK(!table.invariants_hold());
+  AvContextTableProbe::set_context(table, 0u, &first_context);
+  CHECK(table.invariants_hold());
+  AvContextTableProbe::set_context(table, 1u, &second_context);
+  AvContextTableProbe::swap_name(table, 1u, fixture.ring().allocation());
+  AvContextTableProbe::set_wake(table, 1u, &second_context);
+  AvContextTableProbe::set_context(table, 1u, nullptr);
+  CHECK(!table.invariants_hold());
+  AvContextTableProbe::swap_name(table, 1u, nullptr);
+  CHECK(!table.invariants_hold());
+  AvContextTableProbe::set_wake(table, 1u, nullptr);
+  CHECK(table.invariants_hold());
+  AvContextTableProbe::set_raised(table, 1u, 1u);
+  CHECK(!table.invariants_hold());
+  AvContextTableProbe::set_raised(table, 1u, 0u);
+  AvContextTableProbe::set_told_lost(table, 1u, true);
+  CHECK(!table.invariants_hold());
+  AvContextTableProbe::set_told_lost(table, 1u, false);
+  CHECK(table.invariants_hold());
+  AvContextTableProbe::set_context(table, 0u, nullptr);
+  CHECK(!table.invariants_hold());
+  AvContextTableProbe::set_context(table, 0u, &first_context);
+  AvContextTableProbe::binding(table, 0u).destroy();
+  CHECK(!table.invariants_hold()); }

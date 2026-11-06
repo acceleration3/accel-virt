@@ -88,8 +88,8 @@ private:
     [[nodiscard]] Status set_up(uint32_t slot, const AvContextRecord &record, VirtioGpuDevice &device,
                                 RegisterWindow &doorbells, const CapsetInfo &capset);
     void                 release(uint32_t slot);
-    [[nodiscard]] Status in_turn(uint32_t slot, const SubmissionDescriptor &batch);
-    [[nodiscard]] Status lose(uint32_t slot);
+    void                 in_turn(uint32_t slot, const SubmissionDescriptor &batch);
+    void                 lose(uint32_t slot);
     void                 release_chunks(uint32_t slot, VirtioGpuDevice *device, bool host_let_go);
     [[nodiscard]] Status open_window(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device);
     [[nodiscard]] Status adopt_pages(uint32_t slot, HostWindowRecord &record, VirtioGpuDevice &device);
