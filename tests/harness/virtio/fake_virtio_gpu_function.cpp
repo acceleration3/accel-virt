@@ -106,6 +106,15 @@ void FakeVirtioGpuFunction::set_virtio_bar_length(std::uint32_t length)
     rebuild_resources();
 }
 
+void FakeVirtioGpuFunction::set_device_config_length(std::uint32_t length)
+{
+    constexpr std::uint8_t device_config_type = 4u;
+    constexpr std::size_t  capability_pointer = 0x34u;
+    for (std::uint8_t at = config_[capability_pointer]; at != 0u; at = config_[at + 1u])
+        if (config_[at] == 0x09u && config_[at + 3u] == device_config_type)
+            std::memcpy(config_ + at + 12u, &length, sizeof length);
+}
+
 void FakeVirtioGpuFunction::remove_virtio_bar_resource()
 {
     virtio_bar_present_ = false;

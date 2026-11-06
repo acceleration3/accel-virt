@@ -2388,7 +2388,7 @@ bool Adapter::invariants_hold() const
     const bool powered_only_when_started = !device_.constructed() || started_;
     const bool mapped_only_when_started = mappings_.mapped_bars() == 0u || started_;
     const bool presents_with_the_device =
-        !presents_.constructed() || (device_.constructed() && presents_.object().invariants_hold());
+        !presents_.constructed() || presents_.object().invariants_hold();
     return powered_only_when_started && mapped_only_when_started && presents_with_the_device;
 }
 

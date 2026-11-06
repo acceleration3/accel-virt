@@ -26,6 +26,24 @@
 #include <optional>
 #include <time.h>
 
+namespace av {
+
+struct PresentQueueProbe {
+    static void claim_started(PresentQueue &queue) { queue.started_ = true; }
+    static std::uint8_t *take_payload(PresentQueue &queue, std::uint32_t slot)
+    {
+        std::uint8_t *const taken = queue.payloads_[slot];
+        queue.payloads_[slot] = nullptr;
+        return taken;
+    }
+    static void put_payload(PresentQueue &queue, std::uint32_t slot, std::uint8_t *payload)
+    {
+        queue.payloads_[slot] = payload;
+    }
+};
+
+}
+
 using av::ControlRequest;
 using av::FakeVirtqueueDevice;
 using av::FenceInterrupts;
@@ -38,6 +56,7 @@ using av::MockRequest;
 using av::PresentEngine;
 using av::PresentEngineCommands;
 using av::PresentQueue;
+using av::PresentQueueProbe;
 using av::PresentRegion;
 using av::PresentSurface;
 using av::PresentTicketRecord;
@@ -76,6 +95,8 @@ public:
 
     void          hold(bool held) { held_ = held; }
     void          refuse_page() { refuse_page_ = true; }
+    void          accept_page() { refuse_page_ = false; truncate_page_ = false; }
+    void          truncate_page() { truncate_page_ = true; }
     void          serve() { static_cast<void>(queue_.answer_all(request_, sizeof request_, &EngineSide::answer, this)); }
     std::uint32_t presents() const { return presents_; }
     void          frame(const av::SurfacePoint &frame, const AvFrameView &view) { plane_.serve_frame(frame, view); }
@@ -106,7 +127,8 @@ private:
             !refused && PresentEngineCommands(self->host_, self->engine_, self->snapshots_).answer(control, type);
         const std::uint8_t *bytes = answered ? mock.response_bytes() : refusal.bytes();
         const std::size_t   size = answered ? mock.response_size() : refusal.length();
-        const std::size_t   given = size < room ? size : room;
+        const std::size_t   whole = size < room ? size : room;
+        const std::size_t   given = type == 0x02F6u && self->truncate_page_ ? 2u : whole;
         std::memcpy(answer, bytes, given);
         return static_cast<std::uint32_t>(given);
     }
@@ -120,6 +142,7 @@ private:
     av::PresentFrames      snapshots_;
     bool                held_ = false;
     bool                refuse_page_ = false;
+    bool                truncate_page_ = false;
     std::uint32_t       presents_ = 0u;
     std::uint8_t        request_[0x9000] = {};
 };
@@ -250,6 +273,7 @@ TEST(present_queue, it_holds_only_the_tickets_it_queued_under_its_epoch)
   CHECK(queue.holds(PresentTicketRecord(epoch, 1u)));
   CHECK(!queue.holds(PresentTicketRecord(epoch, 2u)));
   CHECK(!queue.holds(PresentTicketRecord(epoch + 1u, 1u)));
+  CHECK(!queue.holds(PresentTicketRecord(epoch, 0u)));
   CHECK(!queue.holds(PresentTicketRecord())); }
 
 TEST(present_queue, a_present_waits_for_its_payload_and_gives_up_on_a_device_that_never_finishes)
@@ -355,3 +379,51 @@ TEST(present_queue, a_blt_from_a_snapshot_is_moved_out_of_it_by_the_device)
   CHECK_EQ(destination.at(3u, 0u), swapped(pixels[3u * side + 5u]));
   CHECK_EQ(destination.at(4u, 0u), 0u);
   CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
+
+TEST(present_queue, a_start_that_failed_keeps_what_it_got_and_a_later_start_succeeds_on_it)
+{ Fixture fixture;
+  EngineSide device(fixture.mapped());
+  PresentQueue queue(fixture.platform(), fixture.device(), epoch);
+  device.refuse_page();
+  CHECK_STATUS(queue.start(), Status::not_supported);
+  CHECK_EQ(queue.completed(), 0u);
+  const std::uint64_t page = queue.progress().address();
+  CHECK(page != 0u);
+  const std::uint32_t held = fixture.platform().live_allocations();
+  device.accept_page();
+  CHECK_STATUS(queue.start(), Status::ok);
+  CHECK_EQ(queue.progress().address(), page);
+  CHECK_EQ(fixture.platform().live_allocations(), held);
+  CHECK(queue.invariants_hold()); }
+
+TEST(present_queue, a_device_that_does_not_answer_starts_nothing)
+{ Fixture fixture;
+  EngineSide device(fixture.mapped());
+  PresentQueue queue(fixture.platform(), fixture.device(), epoch);
+  device.hold(true);
+  CHECK(queue.start() != Status::ok);
+  CHECK(queue.invariants_hold()); }
+
+TEST(present_queue, a_device_that_answers_in_pieces_starts_nothing)
+{ Fixture fixture;
+  EngineSide device(fixture.mapped());
+  PresentQueue queue(fixture.platform(), fixture.device(), epoch);
+  device.truncate_page();
+  CHECK(queue.start() != Status::ok);
+  CHECK(queue.invariants_hold()); }
+
+TEST(present_queue_invariants, a_started_queue_with_no_progress_page_or_a_missing_payload_is_caught)
+{ Fixture fixture;
+  EngineSide device(fixture.mapped());
+  {
+      PresentQueue queue(fixture.platform(), fixture.device(), epoch);
+      PresentQueueProbe::claim_started(queue);
+      CHECK(!queue.invariants_hold());
+  }
+  PresentQueue queue(fixture.platform(), fixture.device(), epoch);
+  CHECK_STATUS(queue.start(), Status::ok);
+  CHECK(queue.invariants_hold());
+  std::uint8_t *const payload = PresentQueueProbe::take_payload(queue, 2u);
+  CHECK(!queue.invariants_hold());
+  PresentQueueProbe::put_payload(queue, 2u, payload);
+  CHECK(queue.invariants_hold()); }

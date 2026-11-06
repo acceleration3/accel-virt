@@ -147,9 +147,28 @@
 
 namespace av {
 
+struct PresentQueueProbe {
+    static std::uint8_t *take_payload(PresentQueue &queue, std::uint32_t slot)
+    {
+        std::uint8_t *const taken = queue.payloads_[slot];
+        queue.payloads_[slot] = nullptr;
+        return taken;
+    }
+    static void put_payload(PresentQueue &queue, std::uint32_t slot, std::uint8_t *payload)
+    {
+        queue.payloads_[slot] = payload;
+    }
+};
+
 struct AdapterProbe {
     explicit AdapterProbe(Adapter &target) : adapter(target) {}
     void set_started(bool started) { adapter.started_ = started; }
+    void spend_budget() { while (adapter.budget_.allows()) {} }
+    std::uint8_t *take_present_payload() { return PresentQueueProbe::take_payload(adapter.presents_.object(), 0u); }
+    void          put_present_payload(std::uint8_t *payload)
+    {
+        PresentQueueProbe::put_payload(adapter.presents_.object(), 0u, payload);
+    }
     void stop_device_object() { static_cast<void>(adapter.device_.object().stop()); }
     bool window_offered() const { return adapter.window_.offered(); }
     std::uint64_t scanout(std::uint32_t source) { return adapter.sources_.scanout_address(source); }
@@ -5635,12 +5654,7 @@ TEST(adapter_dpc_routine, a_display_event_is_cleared_and_each_monitor_replugged)
 
 namespace {
 
-void spend_log_budget(Fixture &fixture)
-{
-    const av::DxgkargRecommendVidPnTopologyRecord topology = {};
-    for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
-        static_cast<void>(fixture.adapter().recommend_vidpn_topology(&topology));
-}
+void spend_log_budget(Fixture &fixture) { AdapterProbe(fixture.adapter()).spend_budget(); }
 
 }
 
@@ -5962,6 +5976,18 @@ public:
     {
         av::DxgkargPresentRecord again = present_;
         again.pDmaBuffer = dma_;
+        const std::uint32_t status = nt(fixture_.adapter().present(context_.hContext, &again));
+        fixture_.serve();
+        return status;
+    }
+    std::uint32_t present_naming(std::uint32_t point)
+    {
+        std::uint8_t named[av::PresentPointRecord::encoded_size] = {};
+        CHECK_STATUS(av::PresentPointRecord(point).encode(named, sizeof named), av::Status::ok);
+        av::DxgkargPresentRecord again = present_;
+        again.pDmaBuffer = dma_;
+        again.pPrivateDriverData = named;
+        again.PrivateDriverDataSize = sizeof named;
         const std::uint32_t status = nt(fixture_.adapter().present(context_.hContext, &again));
         fixture_.serve();
         return status;
@@ -6381,3 +6407,122 @@ TEST(adapter_get_standard_allocation_driver_data, a_refused_gdi_surface_is_said_
   CHECK_EQ(nt(fixture.adapter().get_standard_allocation_driver_data(&request)), invalid_parameter);
   CHECK(std::strstr(fixture.platform().last_log(), "avgpu: refused GDI surface: adapter ") != nullptr);
   CHECK(std::strstr(fixture.platform().last_log(), " width 64 height 32 format 21 type 99 flags 0x00000000") != nullptr); }
+
+TEST(adapter_dpc_routine, a_display_event_the_device_will_not_clear_is_said_unless_the_log_is_spent)
+{ for (const bool spent : {false, true}) {
+      Fixture fixture;
+      fixture.function().set_device_config_length(4u);
+      CHECK_EQ(fixture.start(), success);
+      if (spent) spend_log_budget(fixture);
+      fixture.platform().set_irql(Irql::isr);
+      CHECK_EQ(fixture.adapter().interrupt_routine(0u), 1u);
+      fixture.platform().set_irql(Irql::passive);
+      run_dpc(fixture);
+      CHECK_EQ(fixture.dxgkrnl().child_statuses(), 2u);
+      CHECK_EQ(fixture.platform().logged_line("avgpu: the display event could not be cleared"), !spent);
+  } }
+
+TEST(adapter_start_device, display_modes_the_host_will_not_or_cannot_offer_leave_the_display_info_modes)
+{ for (const Fixture::Misanswer how : {Fixture::Misanswer::silent, Fixture::Misanswer::error,
+                                       Fixture::Misanswer::truncated, Fixture::Misanswer::none}) {
+      Fixture fixture;
+      fixture.offer_modes(host_modes({{10u, 10u}, {20u, 20u}}, 0u));
+      fixture.misanswer(av::DisplayModeSet::request_type, how);
+      CHECK_EQ(fixture.start(), success);
+      fixture.platform().on_stall(&Fixture::answer_display_info_from, &fixture);
+      CHECK_EQ(edid_preferred_width(fixture), 1280u);
+      fixture.platform().on_stall(nullptr, nullptr);
+      CHECK(!fixture.platform().logged_line("avgpu: the host offers"));
+  } }
+
+TEST(adapter_start_device, the_modes_a_host_offers_are_said_unless_the_log_is_spent)
+{ for (const bool spent : {false, true}) {
+      Fixture fixture;
+      fixture.offer_modes(host_modes({{1920u, 1080u}}, 0u));
+      if (spent) spend_log_budget(fixture);
+      CHECK_EQ(fixture.start(), success);
+      CHECK_EQ(fixture.platform().logged_line("avgpu: the host offers 1 modes, 1 taken, preferred 1920x1080"), !spent);
+  } }
+
+TEST(adapter_is_supported_vidpn, a_refusal_names_the_pinned_mode_it_could_not_take_unless_the_log_is_spent)
+{ for (const bool spent : {false, true}) {
+      Fixture fixture;
+      CHECK_EQ(fixture.start(), success);
+      av::FakeVidPn vidpn;
+      vidpn.add_path(0u, 0u);
+      vidpn.source_modes(0u).seed(source_mode(100u, 100u), true);
+      av::DxgkargIsSupportedVidPnRecord request = {&vidpn, 1u, {}};
+      if (spent) spend_log_budget(fixture);
+      CHECK_EQ(nt(fixture.adapter().is_supported_vidpn(&request)), success);
+      CHECK_EQ(request.IsVidPnSupported, 0u);
+      CHECK_EQ(fixture.platform().logged_line("avgpu: IsSupportedVidPn refused: source mode 100x100 format "), !spent);
+  } }
+
+TEST(adapter_doorbell, a_queue_destroyed_before_its_doorbell_stops_its_context_writing_progress_and_says_so_unless_the_log_is_spent)
+{ for (const bool spent : {false, true}) {
+      Fixture fixture; av::FakeHandleTable handles;
+      fixture.function().add_doorbell_region();
+      CHECK_EQ(fixture.start(), success);
+      AvProcess process(fixture, handles);
+      av::DxgkargCreateContextRecord context = {};
+      CHECK_EQ(process.create_hw_queue_context(context), success);
+      std::uint64_t                  progress = 0u;
+      av::DxgkargCreateHwQueueRecord queue = {};
+      queue.HwQueueProgressFenceCPUVirtualAddress = &progress;
+      CHECK_EQ(nt(fixture.adapter().create_hw_queue(context.hContext, &queue)), success);
+      av::DxgkargCreateDoorbellRecord create = {};
+      create.hHwQueue = queue.hHwQueue;
+      CHECK_EQ(nt(fixture.adapter().create_doorbell(&create)), success);
+      av::DxgkargConnectDoorbellRecord connect = {};
+      connect.hDoorbell = create.hDoorbell;
+      CHECK_EQ(nt(fixture.adapter().connect_doorbell(&connect)), success);
+      if (spent) spend_log_budget(fixture);
+      CHECK_EQ(nt(fixture.adapter().destroy_hw_queue(queue.hHwQueue)), success);
+      CHECK_EQ(fixture.platform().logged_line("a hardware queue went before its doorbell"), !spent);
+      CHECK(fixture.adapter().invariants_hold());
+  } }
+
+TEST(adapter_present, a_pointed_surface_presented_with_its_own_point_is_not_starved_of_one)
+{ Fixture fixture;
+  fixture.offer_present_snapshots();
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  PointedPresent rig(fixture);
+  CHECK_EQ(rig.name(av::NextPointRecord(rig.surface(), 0x77u)), success);
+  CHECK_EQ(rig.present(), success);
+  CHECK_EQ(fixture.queued_presents(), 1u);
+  CHECK_EQ(rig.present_naming(0x99u), success);
+  CHECK_EQ(fixture.queued_presents(), 2u);
+  CHECK_EQ(rig.queued_kind(), 1u);
+  CHECK_EQ(rig.queued_point(), 0x99u);
+  CHECK(!fixture.platform().logged_line("has no point named"));
+  fixture.stop_presents(); }
+
+TEST(adapter_present, a_refused_present_is_silent_once_the_log_is_spent)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::DxgkargPresentRecord present = {};
+  present.Flags = 1u;
+  spend_log_budget(fixture);
+  const std::uint32_t spent = fixture.platform().logged();
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), invalid_parameter);
+  CHECK_EQ(fixture.platform().logged(), spent);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_invariants, a_present_engine_that_lost_a_payload_is_caught)
+{ Fixture fixture;
+  fixture.offer_present_engine();
+  CHECK_EQ(fixture.start(), success);
+  CHECK(fixture.adapter().invariants_hold());
+  std::uint8_t *const payload = AdapterProbe(fixture.adapter()).take_present_payload();
+  CHECK(!fixture.adapter().invariants_hold());
+  AdapterProbe(fixture.adapter()).put_present_payload(payload);
+  CHECK(fixture.adapter().invariants_hold());
+  AdapterProbe(fixture.adapter()).set_started(false);
+  CHECK(!fixture.adapter().invariants_hold());
+  AdapterProbe(fixture.adapter()).set_started(true); }

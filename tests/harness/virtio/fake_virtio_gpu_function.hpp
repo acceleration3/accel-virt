@@ -34,6 +34,7 @@ public:
 
     void set_message_interrupts(std::uint32_t count);
     void set_virtio_bar_length(std::uint32_t length);
+    void set_device_config_length(std::uint32_t length);
     void remove_virtio_bar_resource();
     void add_shared_memory_region(std::uint8_t id, std::uint8_t bar, std::uint64_t offset,
                                   std::uint64_t length, std::uint64_t bar_address);

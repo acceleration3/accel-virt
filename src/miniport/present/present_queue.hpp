@@ -18,6 +18,7 @@ class PresentTicketRecord;
 class QueuedPresentRequest;
 class SurfacePoint;
 class VirtioGpuDevice;
+struct PresentQueueProbe;
 
 class PresentQueue {
 public:
@@ -44,6 +45,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct PresentQueueProbe;
+
     [[nodiscard]] Status enqueue(const SurfacePoint &image, const PresentCopyRequest &request, const PresentSurface *source,
                                  const PresentSurface &destination, const PresentRegion *regions, uint64_t &ticket);
     [[nodiscard]] Status wait_for_payload(uint64_t ticket);
