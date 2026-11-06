@@ -29,6 +29,8 @@ public:
 private:
     ObjectPool<T> generations_;
     T            *current_;
+
+    friend struct LinkGenerationsProbe;
 };
 
 template <typename T>

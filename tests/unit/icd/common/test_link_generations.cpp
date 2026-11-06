@@ -7,6 +7,26 @@
 using av::MockPlatform;
 using av::icd::LinkGenerations;
 
+namespace av {
+struct ObjectPoolProbe {
+    template <typename T>
+    static void miscount(ObjectPool<T> &pool) { pool.live_ += 1u; }
+};
+
+}
+
+namespace av::icd {
+struct LinkGenerationsProbe {
+    template <typename T>
+    static void miscount(LinkGenerations<T> &generations) { ObjectPoolProbe::miscount(generations.generations_); }
+    template <typename T>
+    static void point_at(LinkGenerations<T> &generations, T *current) { generations.current_ = current; }
+};
+
+}
+
+using av::icd::LinkGenerationsProbe;
+
 namespace {
 
 class Generation {
@@ -81,3 +101,17 @@ TEST(link_generations_drop, forgets_the_generation_it_is_given_and_the_next_join
   Generation *const second = generations.join(left_lost, 2u);
   CHECK_EQ(second->id(), 2u);
   CHECK_EQ(generations.count(), 1u); }
+
+TEST(link_generations, its_invariants_catch_an_unsound_pool_and_a_current_generation_it_does_not_hold)
+{ MockPlatform platform;
+  LinkGenerations<Generation> generations(platform);
+  bool left_lost = false;
+  Generation *const first = generations.join(left_lost, 1u);
+  CHECK(generations.invariants_hold());
+  Generation outside(9u);
+  LinkGenerationsProbe::point_at(generations, &outside);
+  CHECK(!generations.invariants_hold());
+  LinkGenerationsProbe::point_at(generations, first);
+  CHECK(generations.invariants_hold());
+  LinkGenerationsProbe::miscount(generations);
+  CHECK(!generations.invariants_hold()); }
