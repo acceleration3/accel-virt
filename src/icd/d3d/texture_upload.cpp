@@ -4,6 +4,8 @@
 #include "icd/common/row_pieces.hpp"
 #include "icd/common/split_report.hpp"
 #include "icd/d3d/upload_sink.hpp"
+#include "proto/client/client_transport.hpp"
+#include "proto/client/transfer_room.hpp"
 #include "proto/resources/pitched_extent.hpp"
 
 namespace av::d3d {
@@ -52,11 +54,18 @@ bool TextureUpload::readable() const
     return extent().pitches_hold();
 }
 
-bool TextureUpload::send_slice(UploadSink &sink, const uint8_t *data, uint32_t slice, icd::SplitReport &split) const
+uint64_t TextureUpload::piece_most() const
+{
+    AV_SCOPE("TextureUpload::piece_most");
+    return most_ > TransferRoom::floor_bytes ? wire_.room().upload_most(wire_, bytes()) : most_;
+}
+
+bool TextureUpload::send_slice(UploadSink &sink, const uint8_t *data, uint32_t slice, uint64_t most,
+                               icd::SplitReport &split) const
 {
     AV_SCOPE("TextureUpload::send_slice");
     const uint8_t *const plane = data + uint64_t{slice} * slice_pitch_;
-    icd::RowPieces       pieces(layout_, width(), height(), row_pitch_, most_);
+    icd::RowPieces       pieces(layout_, width(), height(), row_pitch_, most);
     while (pieces.next()) {
         const d3dproto::Box part = {box_.left + pieces.left(),  box_.top + pieces.top(),       box_.front + slice,
                                     box_.left + pieces.right(), box_.top + pieces.bottom(), box_.front + slice + 1u};
@@ -72,10 +81,11 @@ bool TextureUpload::send(UploadSink &sink, const uint8_t *data) const
 {
     AV_SCOPE("TextureUpload::send");
     if (!readable()) return false;
-    if (bytes() <= most_) return sink.piece(box_, data, bytes(), row_pitch_, slice_pitch_, true);
+    const uint64_t most = piece_most();
+    if (bytes() <= most) return sink.piece(box_, data, bytes(), row_pitch_, slice_pitch_, true);
     icd::SplitReport split(wire_);
     for (uint32_t slice = 0u; slice < slices(); slice++)
-        if (!send_slice(sink, data, slice, split)) return false;
+        if (!send_slice(sink, data, slice, most, split)) return false;
     return true;
 }
 

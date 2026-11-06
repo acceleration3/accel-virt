@@ -33,7 +33,8 @@ private:
     uint32_t width() const;
     uint32_t height() const;
     uint32_t slices() const;
-    [[nodiscard]] bool send_slice(UploadSink &sink, const uint8_t *data, uint32_t slice,
+    uint64_t     piece_most() const;
+    [[nodiscard]] bool send_slice(UploadSink &sink, const uint8_t *data, uint32_t slice, uint64_t most,
                                     icd::SplitReport &split) const;
 
     TexelLayout   layout_;

@@ -559,7 +559,7 @@ HRESULT D3d9Device::write_buffer(uint32_t id, uint32_t offset, const void *data,
     AV_SCOPE("D3d9Device::write_buffer");
     const auto *const from = static_cast<const uint8_t *>(data);
     written_ += bytes;
-    icd::Pieces pieces(bytes, TransferRoom::lent_bytes, wire());
+    icd::Pieces pieces(bytes, wire().room().upload_most(wire(), bytes), wire());
     while (pieces.next()) {
         const uint32_t done = static_cast<uint32_t>(pieces.offset());
         const uint32_t piece = static_cast<uint32_t>(pieces.count());

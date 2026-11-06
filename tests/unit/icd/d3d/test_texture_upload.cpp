@@ -2,10 +2,12 @@
 #include "harness/transport/mock_transport.hpp"
 #include "icd/d3d/texture_upload.hpp"
 #include "icd/d3d/upload_sink.hpp"
+#include "proto/client/transfer_room.hpp"
 #include "proto/resources/texel_layout.hpp"
 #include "proto/submission/channel_counter.hpp"
 
 #include <cstdint>
+#include <vector>
 
 using av::TexelLayout;
 using av::d3d::TextureUpload;
@@ -160,3 +162,32 @@ TEST(texture_upload, a_refused_piece_ends_the_upload)
   split.refuse_at(2u);
   CHECK(!TextureUpload(words, Box{0u, 0u, 0u, 16u, 4u, 2u}, 64u, 256u, 160u, wire).send(split, memory));
   CHECK_EQ(split.count(), 2u); }
+
+TEST(texture_upload, a_full_screen_bgra_surface_goes_in_one_piece_at_the_transfer_room_cap)
+{ av::MockTransport wire;
+  std::vector<std::uint8_t> arena(std::size_t{40} << 20u);
+  wire.blobs().lend(arena.data(), arena.size());
+  const std::uint32_t width = 2560u, height = 1440u;
+  const Box           box = {0u, 0u, 0u, width, height, 1u};
+  TextureUpload       upload(words, box, width * 4u, width * height * 4u, av::TransferRoom::lent_bytes, wire);
+  CHECK_EQ(upload.bytes(), std::uint64_t{width} * height * 4u);
+  Recorded sink;
+  CHECK(upload.send(sink, memory));
+  CHECK_EQ(sink.count(), 1u);
+  CHECK_EQ(sink.bytes(0u), std::uint64_t{width} * height * 4u);
+  CHECK_EQ(wire.noted(av::ChannelCounter::split_transfers), 0u);
+  CHECK_EQ(wire.noted(av::ChannelCounter::split_pieces), 0u); }
+
+TEST(texture_upload, an_upload_whose_big_room_request_fails_continues_in_floor_sized_pieces)
+{ av::MockTransport wire;
+  std::vector<std::uint8_t> arena(std::size_t{8} << 20u);
+  wire.blobs().lend(arena.data(), arena.size());
+  const std::uint32_t width = 2560u, height = 1440u;
+  const Box           box = {0u, 0u, 0u, width, height, 1u};
+  TextureUpload       upload(words, box, width * 4u, width * height * 4u, av::TransferRoom::lent_bytes, wire);
+  Recorded sink;
+  CHECK(upload.send(sink, memory));
+  CHECK_EQ(sink.count(), 4u);
+  for (std::uint32_t index = 0u; index < sink.count(); index++)
+    CHECK(sink.bytes(index) <= av::TransferRoom::floor_bytes);
+  CHECK_EQ(wire.noted(av::ChannelCounter::split_transfers), 1u); }

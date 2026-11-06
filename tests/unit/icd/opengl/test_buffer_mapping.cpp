@@ -388,33 +388,33 @@ TEST(buffer_mapping, a_persistent_map_is_a_persistent_writer_only_when_it_writes
 TEST(buffer_mapping, a_range_larger_than_the_arena_crosses_in_leases_and_waits_for_room_between)
 { Rig rig;
   const std::uint64_t mib = std::uint64_t{1} << 20u;
-  const std::uint64_t length = 17u * mib;
-  std::vector<std::uint8_t> block(static_cast<std::size_t>(16u * mib));
+  const std::uint64_t length = 33u * mib;
+  std::vector<std::uint8_t> block(static_cast<std::size_t>(32u * mib));
   rig.wire().blobs().lend(block.data(), block.size());
   for (std::uint32_t refusals = 0u; refusals < 8u; refusals++) rig.host().blob_import(av::BlobImportAnswer::no_room, 0u);
-  CHECK_EQ(rig.wire().blobs().room(), 16u * mib);
+  CHECK_EQ(rig.wire().blobs().room(), 32u * mib);
   CHECK_STATUS(rig.map(buffer, 0u, length, invalidating), Status::ok);
-  pattern(rig.bytes(), static_cast<std::size_t>(length), 5u);
+  pattern(rig.bytes(), static_cast<std::size_t>(length), 2u);
   const std::uint32_t before = rig.commands();
   rig.write_back();
-  CHECK_EQ(rig.commands() - before, 5u);
-  for (std::uint32_t chunk = 0u; chunk < 4u; chunk++) {
+  CHECK_EQ(rig.commands() - before, 2u);
+  for (std::uint32_t chunk = 0u; chunk < 1u; chunk++) {
     const Write sent = rig.write_at(before + chunk);
     CHECK_EQ(sent.mode, blob_mode);
     CHECK_EQ(sent.offset, chunk * av::TransferRoom::lent_bytes);
     CHECK_EQ(sent.size, av::TransferRoom::lent_bytes);
     CHECK_EQ(sent.lease, chunk * av::TransferRoom::lent_bytes);
   }
-  const Write last = rig.write_at(before + 4u);
+  const Write last = rig.write_at(before + 1u);
   CHECK_EQ(last.mode, blob_mode);
-  CHECK_EQ(last.offset, 16u * mib);
+  CHECK_EQ(last.offset, 32u * mib);
   CHECK_EQ(last.size, mib);
   CHECK_EQ(last.lease, 0u);
   av::ClientBlobArena  &blobs = rig.wire().blobs();
   const av::ClientBlobLease top = blobs.take(1u);
   CHECK_EQ(top.offset(), mib);
   const auto *const base = static_cast<const std::uint8_t *>(top.data()) - top.offset();
-  CHECK(std::memcmp(base, rig.bytes() + 16u * mib, static_cast<std::size_t>(mib)) == 0);
+  CHECK(std::memcmp(base, rig.bytes() + 32u * mib, static_cast<std::size_t>(mib)) == 0);
   blobs.give_back(top); }
 
 TEST(buffer_mapping, without_room_in_the_arena_or_without_an_arena_the_bytes_go_inline)
