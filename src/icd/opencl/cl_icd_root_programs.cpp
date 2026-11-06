@@ -126,7 +126,7 @@ cl_program ClIcdRoot::create_program_with_binary(cl_context context, cl_uint num
     }
     ClientTransport *const wire = wire_of(*held);
     uint64_t               host_device = host_device_of(*held);
-    if (wire == nullptr || host_device == 0u) {
+    if (wire == nullptr) {
         report_program_error(error, CL_OUT_OF_RESOURCES);
         return nullptr;
     }
@@ -189,7 +189,7 @@ cl_program ClIcdRoot::create_program_with_built_in_kernels(cl_context context, c
     }
     ClientTransport *const wire = wire_of(*held);
     uint64_t               host_device = host_device_of(*held);
-    if (wire == nullptr || host_device == 0u) {
+    if (wire == nullptr) {
         report_program_error(error, CL_OUT_OF_RESOURCES);
         return nullptr;
     }
