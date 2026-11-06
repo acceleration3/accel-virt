@@ -373,3 +373,41 @@ TEST(command_batch, invariants_see_a_recording_that_does_not_frame_or_does_not_f
   CHECK(!batch.invariants_hold());
   last = 0u;
   CHECK(batch.invariants_hold()); }
+
+TEST(command_batch, a_command_whose_spill_gave_out_part_way_is_not_recorded)
+{ BatchRig rig;
+  WireWriter writer = rig.batch().request_writer();
+  writer.write_zeros(CommandBatch::command_room + 1u);
+  CHECK(writer.spilled());
+  CHECK_STATUS(writer.status(), Status::ok);
+  rig.rig().platform().fail_allocation_at(1u);
+  writer.write_zeros(std::size_t{64} * 1024u * 1024u);
+  CHECK_STATUS(writer.status(), Status::too_large);
+  CHECK(writer.spilled());
+  CHECK(rig.batch().send_async(kCmd_vkCmdUpdateBuffer, writer) == TransportResult::failed);
+  CHECK_EQ(rig.batch().refused(), static_cast<std::uint32_t>(kCmd_vkCmdUpdateBuffer));
+  CHECK(rig.batch().invariants_hold());
+  CHECK_STATUS(rig.batch().end(), Status::no_memory); }
+
+TEST(command_batch, a_long_command_the_batch_has_no_memory_to_grow_for_is_not_recorded)
+{ BatchRig rig;
+  WireWriter writer = rig.batch().request_writer();
+  writer.write_zeros(3u * CommandBatch::first_block);
+  CHECK(writer.spilled());
+  rig.rig().platform().fail_allocation_at(1u);
+  CHECK(rig.batch().send_async(kCmd_vkCmdUpdateBuffer, writer) == TransportResult::failed);
+  CHECK_EQ(rig.batch().refused(), static_cast<std::uint32_t>(kCmd_vkCmdUpdateBuffer));
+  CHECK(rig.batch().invariants_hold());
+  CHECK_STATUS(rig.batch().end(), Status::no_memory); }
+
+TEST(command_batch, a_command_longer_than_any_batch_is_not_recorded_when_what_came_before_it_cannot_be_sent)
+{ BatchRig rig;
+  rig.draw(1u);
+  constexpr std::size_t longest = Connection::command_bytes + 100u;
+  WireWriter writer = rig.batch().request_writer();
+  writer.write_zeros(longest);
+  CHECK(writer.spilled());
+  rig.kmt().fail_at(MockKmt::Call::submit, 1u, 0xC0000001u);
+  CHECK(rig.batch().send_async(kCmd_vkCmdUpdateBuffer, writer) == TransportResult::failed);
+  CHECK(rig.batch().invariants_hold());
+  CHECK_STATUS(rig.batch().end(), Status::no_memory); }
