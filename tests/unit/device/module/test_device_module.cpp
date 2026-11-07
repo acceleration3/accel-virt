@@ -49,7 +49,7 @@ TEST(device_module_create, realizes_a_device_on_the_named_gpu)
   FreshModule fresh;
   DeviceModule &module = fresh.module();
   char error[96] = "untouched";
-  DeviceInstance *const instance = module.create(&ops.table(), nullptr, "auto", false, nullptr, nullptr, nullptr, error, sizeof error);
+  DeviceInstance *const instance = module.create(&ops.table(), nullptr, "auto", false, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   CHECK(instance != nullptr);
   CHECK(instance->device().realized());
   CHECK_EQ(error[0], '\0');
@@ -72,8 +72,8 @@ TEST(device_module_report, writes_every_live_device_under_its_slot)
   root.report(none);
   CHECK(std::strcmp(none.dump(), "module/0 devices=0") == 0);
   char error[96] = {};
-  DeviceInstance *const first = module.create(&ops.table(), nullptr, "auto", false, nullptr, nullptr, nullptr, error, sizeof error);
-  DeviceInstance *const second = module.create(&ops.table(), nullptr, "auto", false, nullptr, nullptr, nullptr, error, sizeof error);
+  DeviceInstance *const first = module.create(&ops.table(), nullptr, "auto", false, nullptr, nullptr, nullptr, 0u, error, sizeof error);
+  DeviceInstance *const second = module.create(&ops.table(), nullptr, "auto", false, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   CHECK_STATUS(module.destroy(first), Status::ok);
   av::StateWriter one(dump, sizeof dump);
   root.report(one);
@@ -91,8 +91,8 @@ TEST(device_module_destroy, finds_the_device_named_among_others)
   FreshModule fresh;
   DeviceModule &module = fresh.module();
   char error[96] = {};
-  DeviceInstance *const first = module.create(&ops.table(), nullptr, "auto", false, nullptr, nullptr, nullptr, error, sizeof error);
-  DeviceInstance *const second = module.create(&ops.table(), nullptr, "auto", false, nullptr, nullptr, nullptr, error, sizeof error);
+  DeviceInstance *const first = module.create(&ops.table(), nullptr, "auto", false, nullptr, nullptr, nullptr, 0u, error, sizeof error);
+  DeviceInstance *const second = module.create(&ops.table(), nullptr, "auto", false, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   CHECK_STATUS(module.destroy(second), Status::ok);
   CHECK_EQ(module.live(), 1u);
   CHECK_STATUS(module.destroy(first), Status::ok); }
@@ -102,10 +102,10 @@ TEST(device_module_create, a_failed_realize_or_missing_table_leaves_no_device)
   FreshModule fresh;
   DeviceModule &module = fresh.module();
   char error[96] = {};
-  CHECK(module.create(&ops.table(), nullptr, "not-a-uuid", false, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
+  CHECK(module.create(&ops.table(), nullptr, "not-a-uuid", false, nullptr, nullptr, nullptr, 0u, error, sizeof error) == nullptr);
   CHECK(std::strstr(error, "is neither auto nor a device UUID") != nullptr);
   CHECK_EQ(module.live(), 0u);
-  CHECK(module.create(nullptr, nullptr, "auto", false, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
+  CHECK(module.create(nullptr, nullptr, "auto", false, nullptr, nullptr, nullptr, 0u, error, sizeof error) == nullptr);
   CHECK(std::strcmp(error, "virtio-gpu-av: no host operations") == 0); }
 
 TEST(device_module_create, one_device_per_slot)
@@ -116,10 +116,10 @@ TEST(device_module_create, one_device_per_slot)
   char error[96] = {};
   DeviceInstance *instances[DeviceModule::max_devices] = {};
   for (DeviceInstance *&instance : instances) {
-      instance = module.create(&ops.table(), nullptr, nullptr, false, nullptr, nullptr, nullptr, error, sizeof error);
+      instance = module.create(&ops.table(), nullptr, nullptr, false, nullptr, nullptr, nullptr, 0u, error, sizeof error);
       CHECK(instance != nullptr);
   }
-  CHECK(module.create(&ops.table(), nullptr, nullptr, false, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
+  CHECK(module.create(&ops.table(), nullptr, nullptr, false, nullptr, nullptr, nullptr, 0u, error, sizeof error) == nullptr);
   CHECK(std::strcmp(error, "virtio-gpu-av: every device slot is in use") == 0);
   for (DeviceInstance *instance : instances) CHECK_STATUS(module.destroy(instance), Status::ok); }
 
@@ -127,7 +127,7 @@ TEST(av_device_abi, create_reset_and_destroy_through_the_c_entry_points)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
   char error[96] = {};
-  AvDevice *const device = av_device_create(&ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const device = av_device_create(&ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   CHECK(device != nullptr);
   auto *const instance = reinterpret_cast<DeviceInstance *>(device);
   av_device_status(device, 0x0Fu);
@@ -139,7 +139,7 @@ TEST(av_device_abi, create_reset_and_destroy_through_the_c_entry_points)
   CHECK_EQ(av::device_module.live(), 1u);
   CHECK_EQ(av_device_destroy(device), 0);
   CHECK_EQ(av_device_destroy(device), 1);
-  CHECK(av_device_create(&ops.table(), nullptr, "gpu0", 0, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
+  CHECK(av_device_create(&ops.table(), nullptr, "gpu0", 0, nullptr, nullptr, nullptr, 0u, error, sizeof error) == nullptr);
   CHECK_EQ(av::device_module.live(), 0u); }
 
 TEST(av_device_abi, av_device_pci_identity_answers_the_bound_gpus_ids_or_nothing)
@@ -151,7 +151,7 @@ TEST(av_device_abi, av_device_pci_identity_answers_the_bound_gpus_ids_or_nothing
   host.add_file("/sys/bus/pci/devices/0000:03:00.0/device", "0x7550\n", 7u);
   host.add_file("/sys/bus/pci/devices/0000:03:00.0/revision", "0xc0\n", 5u);
   char error[96] = {};
-  AvDevice *const device = av_device_create(&ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const device = av_device_create(&ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   CHECK(device != nullptr);
   AvPciIdentity identity = {};
   CHECK_EQ(av_device_pci_identity(device, &identity), 1);
@@ -161,7 +161,7 @@ TEST(av_device_abi, av_device_pci_identity_answers_the_bound_gpus_ids_or_nothing
   CHECK_EQ(av_device_destroy(device), 0);
   MockHost bare; MockHostOps bare_ops(bare);
   bare.add_gpu(gpu);
-  AvDevice *const off_pci = av_device_create(&bare_ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const off_pci = av_device_create(&bare_ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   AvPciIdentity untouched = {0xAAAAu, 0xBBBBu, 0xCCu};
   CHECK_EQ(av_device_pci_identity(off_pci, &untouched), 0);
   CHECK_EQ(untouched.vendor_id, 0xAAAAu);
@@ -174,7 +174,7 @@ TEST(av_device_abi, av_device_control_answers_blob_requests_and_leaves_the_rest_
   host.add_guest_ram(0x100000u, 0x1000u);
   av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_VULKAN);
   char error[96] = {};
-  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   CHECK(device != nullptr);
   CHECK_EQ(av_device_capsets(device), 1u);
   GpuRequestBuilder create(0x010Cu);
@@ -188,7 +188,7 @@ TEST(av_device_abi, av_device_control_answers_blob_requests_and_leaves_the_rest_
   CHECK_EQ(host.live_guest_mappings(), 1u);
   CHECK_EQ(av_device_destroy(device), 0);
   CHECK_EQ(host.live_guest_mappings(), 0u);
-  CHECK(av_device_create(&ops.table(), nullptr, "auto", 1, nullptr, nullptr, nullptr, error, sizeof error) == nullptr);
+  CHECK(av_device_create(&ops.table(), nullptr, "auto", 1, nullptr, nullptr, nullptr, 0u, error, sizeof error) == nullptr);
   CHECK(std::strstr(error, "blob=on is not supported") != nullptr); }
 
 namespace {
@@ -215,7 +215,7 @@ TEST(av_device_abi, av_device_export_image_and_export_head_hand_over_a_surface_o
   av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_D3D);
   executor.editable().export_image = export_key_51;
   char error[96] = {};
-  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   CHECK(device != nullptr);
   AvExportedImage image = {};
   CHECK_EQ(av_device_export_image(device, 0x51u, nullptr), 0);
@@ -237,7 +237,7 @@ TEST(av_device_abi, av_device_read_image_copies_a_surface_only_for_a_key_the_exe
   av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_D3D);
   executor.editable().read_image = read_key_51;
   char error[96] = {};
-  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   CHECK(device != nullptr);
   std::uint8_t pixels[16] = {};
   CHECK_EQ(av_device_read_image(device, 0x51u, pixels, 4u, 1u, 1u), 1);
@@ -248,7 +248,7 @@ TEST(av_device_abi, av_device_set_refresh_answers_one_for_a_rate_the_device_take
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
   char error[96] = {};
-  AvDevice *const device = av_device_create(&ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const device = av_device_create(&ops.table(), nullptr, "auto", 0, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   CHECK(device != nullptr);
   CHECK_EQ(av_device_set_refresh(device, 144000u), 1);
   CHECK_EQ(av_device_set_refresh(device, 999u), -1);
@@ -262,7 +262,7 @@ TEST(av_device_abi, av_device_post_frame_is_taken_only_once_the_guest_has_regist
   host.set_clock(1000u);
   av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_D3D);
   char error[96] = {};
-  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   CHECK(device != nullptr);
   CHECK_EQ(av_device_post_frame(device, 0u, 5u, 0x51u), 0);
   GpuRequestBuilder request(0x02F4u);
@@ -280,7 +280,7 @@ TEST(av_device_abi, av_device_export_accepted_answers_zero_for_a_connection_it_s
   host.add_gpu(gpu);
   av::MockExecutorOps executor(AV_EXECUTOR_SUB_API_D3D);
   char error[96] = {};
-  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, error, sizeof error);
+  AvDevice *const device = av_device_create(&ops.table(), &executor.table(), "auto", 0, nullptr, nullptr, nullptr, 0u, error, sizeof error);
   CHECK(device != nullptr);
   av::FakeExportConsumer stranger;
   CHECK_EQ(av_device_export_accepted(device, stranger.device_end(), 0), 1);

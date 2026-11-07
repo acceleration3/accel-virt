@@ -41,7 +41,7 @@ void VirtioGpuAv::share_lendings(GuestRamLendings &lendings)
 
 Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecutorOps *executor,
                              const AvRecordingOptions *recording, const char *renderer, const char *executor_path,
-                             TextBuffer &message)
+                             uint32_t vram_reserve_mib, TextBuffer &message)
 {
     AV_SCOPE("VirtioGpuAv::realize");
     host_.require_main_loop("VirtioGpuAv::realize");
@@ -51,6 +51,7 @@ Status VirtioGpuAv::realize(const char *host_gpu, bool base_blobs, const AvExecu
         host_.log(message.text());
         return Status::invalid_parameter;
     }
+    capset_.reserve_vram(vram_reserve_mib);
     const bool isolated = renderer != nullptr && renderer[0] != '\0';
     contexts_ = isolated ? static_cast<ContextPlane *>(&remote_) : &local_;
     if (isolated && remote_.configure(renderer, executor_path) != Status::ok) {

@@ -152,7 +152,7 @@ const cl_icd_dispatch *table_of(const void *object)
 class HostClDevice {
 public:
     HostClDevice(const AvExecutorOps &ops, const std::uint8_t *uuid)
-        : ops_(ops), domain_(ops.open_domain(ops.opaque, uuid)), executor_(nullptr)
+        : ops_(ops), domain_(ops.open_domain(ops.opaque, uuid, 0u)), executor_(nullptr)
     {
         const AvContextOptions options = {0u, 0u, 0u, 0u, domain_};
         executor_ = ops.create(ops.opaque, AV_EXECUTOR_SUB_API_OPENCL, &options, nullptr);

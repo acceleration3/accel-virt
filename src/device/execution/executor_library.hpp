@@ -23,7 +23,7 @@ public:
     bool                 available() const;
     uint32_t             sub_apis() const;
 
-    [[nodiscard]] Status open_domain(const uint8_t *gpu_uuid);
+    [[nodiscard]] Status open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib);
     void                 close_domain();
     uint32_t             domain() const;
     [[nodiscard]] Status allocate_memory(uint64_t key, uint64_t size, uint32_t request, AvHostMemory &memory) const;

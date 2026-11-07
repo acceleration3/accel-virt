@@ -8,7 +8,7 @@ namespace av {
 
 CapsetInfo::CapsetInfo()
     : version_(0u, 0u), sub_apis_(0u), max_contexts_(0u), min_ring_order_(0u),
-      max_ring_order_(0u), features_(0u), gpu_()
+      max_ring_order_(0u), vram_reserve_mib_(0u), features_(0u), gpu_()
       {
           AV_SCOPE("CapsetInfo::CapsetInfo");
       }
@@ -17,7 +17,7 @@ CapsetInfo::CapsetInfo(const ProtocolVersion &version, uint32_t sub_apis, uint32
                        uint8_t min_ring_order, uint8_t max_ring_order, uint64_t features,
                        const GpuIdentity &gpu)
     : version_(version), sub_apis_(sub_apis), max_contexts_(max_contexts),
-      min_ring_order_(min_ring_order), max_ring_order_(max_ring_order), features_(features),
+      min_ring_order_(min_ring_order), max_ring_order_(max_ring_order), vram_reserve_mib_(0u), features_(features),
       gpu_(gpu)
       {
           AV_SCOPE("CapsetInfo::CapsetInfo");
@@ -57,6 +57,18 @@ bool CapsetInfo::accepts_ring_order(uint8_t order) const
     return order >= min_ring_order_ && order <= max_ring_order_;
 }
 
+uint32_t CapsetInfo::vram_reserve_mib() const
+{
+    AV_SCOPE("CapsetInfo::vram_reserve_mib");
+    return vram_reserve_mib_;
+}
+
+void CapsetInfo::reserve_vram(uint32_t mib)
+{
+    AV_SCOPE("CapsetInfo::reserve_vram");
+    vram_reserve_mib_ = mib;
+}
+
 bool CapsetInfo::has_feature(uint64_t feature) const
 {
     AV_SCOPE("CapsetInfo::has_feature");
@@ -82,7 +94,8 @@ void CapsetInfo::encode(WireWriter &writer) const
     writer.write_u32(max_contexts_);
     writer.write_u8(min_ring_order_);
     writer.write_u8(max_ring_order_);
-    writer.write_zeros(6u);
+    writer.write_u32(vram_reserve_mib_);
+    writer.write_zeros(2u);
     writer.write_u64(features_);
     gpu_.encode(writer);
 }
@@ -108,7 +121,8 @@ Status CapsetInfo::decode(const uint8_t *bytes, size_t length)
     candidate.max_contexts_   = reader.read_u32();
     candidate.min_ring_order_ = reader.read_u8();
     candidate.max_ring_order_ = reader.read_u8();
-    reader.expect_zero(6u);
+    candidate.vram_reserve_mib_ = reader.read_u32();
+    reader.expect_zero(2u);
     candidate.features_ = reader.read_u64();
     const Status identity = candidate.gpu_.decode(reader);
     if (reader.status() != Status::ok) return reader.status();

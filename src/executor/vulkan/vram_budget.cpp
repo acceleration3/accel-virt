@@ -1,6 +1,7 @@
 #include "executor/vulkan/vram_budget.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "executor/vulkan/vram_policy.hpp"
 
 namespace av {
 
@@ -9,14 +10,7 @@ VramBudget::VramBudget(BlockSource &blocks) : host_(), caps_{}, used_{}, allocat
     AV_SCOPE("VramBudget::VramBudget");
 }
 
-uint64_t VramBudget::cap_for(uint64_t total) const
-{
-    AV_SCOPE("VramBudget::cap_for");
-    const uint64_t headroom = total / headroom_divisor > headroom_floor ? total / headroom_divisor : headroom_floor;
-    return total - headroom >= total / 2u ? total - headroom : total / 2u;
-}
-
-void VramBudget::learn(const VkPhysicalDeviceMemoryProperties &host)
+void VramBudget::learn(const VkPhysicalDeviceMemoryProperties &host, const VramPolicy &policy)
 {
     AV_SCOPE("VramBudget::learn");
     host_ = host;
@@ -24,7 +18,7 @@ void VramBudget::learn(const VkPhysicalDeviceMemoryProperties &host)
         caps_[heap] = 0u;
         if (heap >= host.memoryHeapCount) continue;
         const bool local = (host.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0u;
-        caps_[heap] = local ? cap_for(host.memoryHeaps[heap].size) : host.memoryHeaps[heap].size;
+        caps_[heap] = local ? policy.cap_for(host.memoryHeaps[heap].size) : host.memoryHeaps[heap].size;
     }
 }
 

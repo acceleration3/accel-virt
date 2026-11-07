@@ -53,7 +53,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
     av::ExecutorLibrary library;
     if (library.accept(&ops.table()) != av::Status::ok) __builtin_trap();
-    if (library.open_domain(uuid) != av::Status::ok) __builtin_trap();
+    if (library.open_domain(uuid, 0u) != av::Status::ok) __builtin_trap();
     av::ExecutorShares  shares(host, library);
     av::ContextExecutor executor(host, library, shares, 1u);
     executor.configure(av::SubApi::vulkan, uuid, av::GlContextOptions());

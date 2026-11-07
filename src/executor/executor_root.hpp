@@ -49,7 +49,7 @@ public:
     [[nodiscard]] Status initialize(HostApis &apis);
 
     uint32_t sub_apis() const;
-    uint32_t open_domain(const uint8_t *gpu_uuid);
+    uint32_t open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib);
     void     close_domain(uint32_t domain);
     [[nodiscard]] Status allocate_memory(uint32_t domain, uint64_t key, uint64_t size, uint32_t request,
                                          AvHostMemory &memory);

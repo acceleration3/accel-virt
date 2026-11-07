@@ -490,6 +490,7 @@ If the new driver bugchecks at boot, boot the same disk without the device
 | `display` | `on` | `off` makes a render-only adapter with no outputs, for a second host GPU. |
 | `record` | none | A file to write a wire recording to: everything the executor received. |
 | `record-limit` | `0` (256 MiB) | The recording's ceiling in bytes. |
+| `vram-reserve` | `0` (auto) | MiB of host VRAM kept from guests. Auto keeps the larger of 1 GiB and an eighth of the card. Explicit values keep at least 256 MiB and leave at least 512 MiB. |
 | `record-kinds` | all but `blob_bytes` | Comma-separated: `setup`, `batch`, `reply`, `fence`, `fault`, `blob`, `blob_bytes`, `all`. |
 | `record-wrap` | `off` | At the ceiling, wrap back to the file header instead of stopping. |
 

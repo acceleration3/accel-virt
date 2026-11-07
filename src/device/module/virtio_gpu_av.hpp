@@ -41,7 +41,7 @@ public:
 
     [[nodiscard]] Status realize(const char *host_gpu, bool base_blobs, const AvExecutorOps *executor,
                                  const AvRecordingOptions *recording, const char *renderer,
-                                 const char *executor_path, TextBuffer &message);
+                                 const char *executor_path, uint32_t vram_reserve_mib, TextBuffer &message);
     void                 reset();
     void                 status(uint8_t status);
     bool                 control(void *request, uint32_t type);

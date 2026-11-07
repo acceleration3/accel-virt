@@ -95,11 +95,14 @@ uint32_t ExecutorRoot::sub_apis() const
     return apis_ != nullptr ? gpus_.sub_apis() : 0u;
 }
 
-uint32_t ExecutorRoot::open_domain(const uint8_t *gpu_uuid)
+uint32_t ExecutorRoot::open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserve_mib)
 {
     AV_SCOPE("ExecutorRoot::open_domain");
     const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
-    return gpu != nullptr ? domains_.open(gpu->index()) : 0u;
+    if (gpu == nullptr) return 0u;
+    HostMemorySource *const source = apis_->memory_source(gpu->index());
+    if (source != nullptr) source->reserve_vram(vram_reserve_mib);
+    return domains_.open(gpu->index());
 }
 
 void ExecutorRoot::close_domain(uint32_t domain)

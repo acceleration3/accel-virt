@@ -506,7 +506,7 @@ TEST(replay_context, holds_one_executor_and_compares_the_answer_it_produced)
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_STATUS(library.open_domain(uuid), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid, 0u), Status::ok);
   ReplayContext context;
   CHECK(!context.created());
   CHECK(!context.answered());
@@ -531,7 +531,7 @@ TEST(replay_context, names_each_sub_apis_command_half)
                       | AV_EXECUTOR_SUB_API_OPENGL);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_STATUS(library.open_domain(uuid), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid, 0u), Status::ok);
   struct Case { SubApi api; std::uint16_t half; };
   const Case cases[] = {{SubApi::vulkan, 1u}, {SubApi::opencl, 2u}, {SubApi::opengl, 3u}};
   for (const Case &c : cases) {
@@ -546,7 +546,7 @@ TEST(replay_context, keeps_the_last_answer_asked_for_and_forgets_it_between_batc
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_STATUS(library.open_domain(uuid), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid, 0u), Status::ok);
   ReplayContext context;
   CHECK_STATUS(context.create(library, 3u, SubApi::vulkan), Status::ok);
 
@@ -585,7 +585,7 @@ TEST(replay_context_execute, tells_each_of_the_librarys_refusals_apart)
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_STATUS(library.open_domain(uuid), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid, 0u), Status::ok);
   struct Case { std::uint32_t id; Status status; };
   const Case cases[] = {{MockExecutorOps::unknown_id, Status::not_found},
                         {MockExecutorOps::undecodable_id, Status::malformed},
@@ -858,7 +858,7 @@ TEST(replay_context, an_answer_longer_than_it_keeps_is_reported_rather_than_comp
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_STATUS(library.open_domain(uuid), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid, 0u), Status::ok);
   ReplayContext context;
   CHECK_STATUS(context.create(library, 3u, SubApi::vulkan), Status::ok);
   av::ReplayContextProbe::answer_too_long(context);
@@ -873,7 +873,7 @@ TEST(replay_context_invariants, catch_a_context_that_kept_what_it_could_not_have
 { MockExecutorOps ops(AV_EXECUTOR_SUB_API_VULKAN);
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
-  CHECK_STATUS(library.open_domain(uuid), Status::ok);
+  CHECK_STATUS(library.open_domain(uuid, 0u), Status::ok);
   ReplayContext context;
   CHECK(context.invariants_hold());
   av::ReplayContextProbe::answer_with_no_executor(context);

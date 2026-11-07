@@ -42,7 +42,7 @@ public:
     Fixture() : ops_(AV_EXECUTOR_SUB_API_OPENGL), shares_(host_, library_)
     {
         static_cast<void>(library_.accept(&ops_.table()));
-        static_cast<void>(library_.open_domain(gpu));
+        static_cast<void>(library_.open_domain(gpu, 0u));
         CHECK_STATUS(shares_.initialize(), Status::ok);
     }
 

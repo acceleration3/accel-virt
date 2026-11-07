@@ -11,18 +11,15 @@
 namespace av {
 
 class BlockSource;
+class VramPolicy;
 
 class VramBudget {
 public:
-    static constexpr uint64_t headroom_floor = 1ull << 30;
-    static constexpr uint64_t headroom_divisor = 8u;
-
     explicit VramBudget(BlockSource &blocks);
     VramBudget(const VramBudget &) = delete;
     VramBudget &operator=(const VramBudget &) = delete;
 
-    void     learn(const VkPhysicalDeviceMemoryProperties &host);
-    uint64_t cap_for(uint64_t total) const;
+    void     learn(const VkPhysicalDeviceMemoryProperties &host, const VramPolicy &policy);
     void     clamp(VkPhysicalDeviceMemoryProperties &answer) const;
     void     report(VkPhysicalDeviceMemoryBudgetPropertiesEXT &budget) const;
     bool     fits(uint32_t heap, uint64_t size) const;

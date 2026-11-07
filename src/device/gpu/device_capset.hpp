@@ -17,6 +17,7 @@ public:
     DeviceCapset(const DeviceCapset &) = delete;
     DeviceCapset &operator=(const DeviceCapset &) = delete;
 
+    void              reserve_vram(uint32_t mib);
     void              describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t features);
     void              resolve_display(bool takes_dmabuf);
     bool              display_resolved() const;
@@ -26,6 +27,7 @@ public:
 private:
     Host      &host_;
     CapsetInfo info_;
+    uint32_t   vram_reserve_mib_;
     bool       described_;
     bool       display_resolved_;
 };

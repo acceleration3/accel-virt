@@ -28,7 +28,7 @@ public:
 
     DeviceInstance      *create(const AvHostOps *ops, const AvExecutorOps *executor, const char *host_gpu,
                                 bool base_blobs, const AvRecordingOptions *recording, const char *renderer,
-                                const char *executor_path, char *error, size_t error_size);
+                                const char *executor_path, uint32_t vram_reserve_mib, char *error, size_t error_size);
     [[nodiscard]] Status destroy(DeviceInstance *instance);
     uint32_t             live() const;
     void                 report(StateWriter &writer) override;

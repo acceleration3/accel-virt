@@ -195,13 +195,13 @@ TEST(executor_root, a_domain_is_opened_on_a_gpu_the_host_has_and_closed_once)
   apis.add_gpu(intel, AV_EXECUTOR_SUB_API_VULKAN);
   RootUnderTest held;
   ExecutorRoot &root = *held;
-  CHECK_EQ(root.open_domain(intel), 0u);
+  CHECK_EQ(root.open_domain(intel, 0u), 0u);
   CHECK_STATUS(root.initialize(apis), Status::ok);
-  CHECK_EQ(root.open_domain(absent), 0u);
-  CHECK_EQ(root.open_domain(nullptr), 0u);
-  const std::uint32_t domain = root.open_domain(intel);
+  CHECK_EQ(root.open_domain(absent, 0u), 0u);
+  CHECK_EQ(root.open_domain(nullptr, 0u), 0u);
+  const std::uint32_t domain = root.open_domain(intel, 0u);
   CHECK(domain != 0u);
-  CHECK(root.open_domain(intel) != domain);
+  CHECK(root.open_domain(intel, 0u) != domain);
   const AvContextOptions in_domain = {0u, 0u, 0u, 0u, domain};
   ContextSession *const session = root.open(AV_EXECUTOR_SUB_API_VULKAN, in_domain);
   CHECK(session != nullptr);

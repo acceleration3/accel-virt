@@ -28,10 +28,12 @@ const std::uint8_t uuid[GpuIdentity::uuid_bytes] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 1
 
 CapsetInfo sample()
 {
-    return CapsetInfo(ProtocolVersion(1u, 3u), 0x7u, 64u, 12u, 20u,
+    CapsetInfo capset = CapsetInfo(ProtocolVersion(1u, 3u), 0x7u, 64u, 12u, 20u,
                       CapsetInfo::feature_host_visible_memory,
                       GpuIdentity(0x1002u, 0x744Cu, GpuIdentity::discrete_gpu, uuid,
                                   16ull << 30, 32ull << 30, "AMD Radeon RX 7900 XTX"));
+    capset.reserve_vram(2048u);
+    return capset;
 }
 
 class Encoded {
@@ -78,8 +80,8 @@ TEST(capset_info_encode, places_every_field_at_its_offset)
   CHECK(layout.at(12u, 4u) == 64u);
   CHECK(layout.at(16u, 1u) == 12u);
   CHECK(layout.at(17u, 1u) == 20u);
-  CHECK(layout.at(18u, 2u) == 0u);
-  CHECK(layout.at(20u, 4u) == 0u);
+  CHECK(layout.at(18u, 4u) == 2048u);
+  CHECK(layout.at(22u, 2u) == 0u);
   CHECK(layout.at(24u, 8u) == 1u);
   CHECK(layout.at(32u, 4u) == 0x1002u);
   CHECK(layout.at(40u, 4u) == 2u);
@@ -102,6 +104,7 @@ TEST(capset_info, round_trips_through_its_encoding)
   CHECK(!decoded.accepts_ring_order(11u));
   CHECK(!decoded.accepts_ring_order(21u));
   CHECK(decoded.has_feature(CapsetInfo::feature_host_visible_memory));
+  CHECK_EQ(decoded.vram_reserve_mib(), 2048u);
   CHECK_EQ(decoded.gpu().vendor_id(), 0x1002u);
   Encoded again(decoded);
   CHECK(std::memcmp(again.bytes(), encoded.bytes(), CapsetInfo::encoded_size) == 0); }
@@ -150,8 +153,8 @@ TEST(capset_info_decode, rejects_each_malformed_field)
       {16u, 11u},
       {17u, 25u},
       {16u, 21u},
-      {18u, 1u},
-      {21u, 1u},
+      {22u, 1u},
+      {23u, 1u},
       {41u, 1u},
       {44u, 1u},
   };
@@ -183,7 +186,7 @@ TEST(capset_info_decode, survives_the_hostile_sweep)
   CHECK(rejects(nullptr, 0u));
   CHECK(rejects(nullptr, CapsetInfo::encoded_size));
   const std::uint32_t acceptable =
-      32u + 64u + 64u + 128u + 128u + 4u + 31u + 2u + 3u + 2u + 180u + 1u;
+      32u + 64u + 64u + 128u + 128u + 4u + 31u + 2u + 3u + 2u + 180u + 1u + 32u;
   CHECK(sweep.rejections() >= sweep.cases_run() - acceptable); }
 
 TEST(capset_info_encode, into_a_writer_matches_the_buffer_encoding_and_a_short_writer_latches)

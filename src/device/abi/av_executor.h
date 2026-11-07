@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define AV_EXECUTOR_ABI_VERSION 27u
+#define AV_EXECUTOR_ABI_VERSION 28u
 #define AV_EXECUTOR_OPS_SYMBOL "av_executor_ops"
 
 #define AV_EXECUTOR_SUB_API_VULKAN 1u
@@ -106,7 +106,7 @@ typedef struct AvExecutorOps {
     uint32_t abi_version;
     void *opaque;
     uint32_t (*sub_apis)(void *opaque);
-    uint32_t (*open_domain)(void *opaque, const uint8_t *gpu_uuid);
+    uint32_t (*open_domain)(void *opaque, const uint8_t *gpu_uuid, uint32_t vram_reserve_mib);
     void (*close_domain)(void *opaque, uint32_t domain);
 
     uint32_t (*allocate_memory)(void *opaque, uint32_t domain, uint64_t key, uint64_t size, uint32_t request,

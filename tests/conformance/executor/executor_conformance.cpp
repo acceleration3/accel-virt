@@ -117,7 +117,7 @@ bool ExecutorConformance::run(const char *path)
     check_table();
     if (found_ != 0u) return false;
     check_sub_apis();
-    domain_ = ops_->open_domain(ops_->opaque, real_gpu_ ? gpu_ : no_such_gpu);
+    domain_ = ops_->open_domain(ops_->opaque, real_gpu_ ? gpu_ : no_such_gpu, 0u);
     if (domain_ == 0u) skipped_because("the library opened no domain on this GPU; no executor could be made");
     check_memory();
     check_create_and_destroy();
@@ -369,7 +369,7 @@ bool ExecutorConformance::check_usable(const AvHostMemory &memory, std::uint64_t
 
 std::uint32_t ExecutorConformance::second_domain(const char *unchecked)
 {
-    const std::uint32_t other = ops_->open_domain(ops_->opaque, real_gpu_ ? gpu_ : no_such_gpu);
+    const std::uint32_t other = ops_->open_domain(ops_->opaque, real_gpu_ ? gpu_ : no_such_gpu, 0u);
     if (other == 0u) {
         skipped_because(unchecked);
         return 0u;

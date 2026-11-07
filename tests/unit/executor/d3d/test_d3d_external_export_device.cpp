@@ -237,7 +237,7 @@ public:
         if (!find_gpu(apis_, gpu_)) return;
         apis_.gpu_uuid(gpu_, uuid_);
         CHECK_STATUS(held_->initialize(apis_), av::Status::ok);
-        domain_ = held_->open_domain(uuid_);
+        domain_ = held_->open_domain(uuid_, 0u);
         CHECK(domain_ != 0u);
         session_.bind(*apis_.shares(gpu_), domain_, direct3d_);
         CHECK(direct3d_.initialize(session_, rig_.imports, apis_.d3d11_device(gpu_)));

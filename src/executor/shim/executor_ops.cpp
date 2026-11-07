@@ -89,10 +89,10 @@ uint32_t sub_apis(void *)
     return library.root().sub_apis();
 }
 
-uint32_t open_domain(void *, const uint8_t *gpu_uuid)
+uint32_t open_domain(void *, const uint8_t *gpu_uuid, uint32_t vram_reserve_mib)
 {
     AV_SCOPE("open_domain");
-    return library.root().open_domain(gpu_uuid);
+    return library.root().open_domain(gpu_uuid, vram_reserve_mib);
 }
 
 void close_domain(void *, uint32_t domain)

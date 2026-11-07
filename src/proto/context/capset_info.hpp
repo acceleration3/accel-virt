@@ -34,6 +34,8 @@ public:
     const GpuIdentity     &gpu() const;
     bool                   offers(SubApi api) const;
     void                   announce(uint64_t feature);
+    uint32_t               vram_reserve_mib() const;
+    void                   reserve_vram(uint32_t mib);
     bool                   accepts_ring_order(uint8_t order) const;
     bool                   has_feature(uint64_t feature) const;
 
@@ -54,6 +56,7 @@ private:
     uint32_t        max_contexts_;
     uint8_t         min_ring_order_;
     uint8_t         max_ring_order_;
+    uint32_t        vram_reserve_mib_;
     uint64_t        features_;
     GpuIdentity     gpu_;
 };

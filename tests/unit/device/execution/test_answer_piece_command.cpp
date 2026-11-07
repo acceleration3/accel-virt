@@ -28,7 +28,7 @@ public:
     Fixture() : ops_(AV_EXECUTOR_SUB_API_VULKAN), library_(), shares_(host_, library_), executor_(host_, library_, shares_, 2u)
     {
         static_cast<void>(library_.accept(&ops_.table()));
-        static_cast<void>(library_.open_domain(uuid));
+        static_cast<void>(library_.open_domain(uuid, 0u));
         static_cast<void>(shares_.initialize());
         executor_.configure(av::SubApi::vulkan, uuid, av::GlContextOptions());
     }

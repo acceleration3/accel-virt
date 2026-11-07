@@ -33,7 +33,7 @@ public:
           blobs_(host_), recorder_(host_), imports_(host_, blobs_, executor_, recorder_, 3u)
     {
         static_cast<void>(library_.accept(&ops_.table()));
-        static_cast<void>(library_.open_domain(uuid));
+        static_cast<void>(library_.open_domain(uuid, 0u));
         static_cast<void>(shares_.initialize());
         executor_.configure(av::SubApi::d3d, uuid, av::GlContextOptions());
     }

@@ -147,7 +147,7 @@ void av_device_trace_start(AvMainLoopScheduler schedule);
 
 AvDevice *av_device_create(const AvHostOps *ops, const AvExecutorOps *executor, const char *host_gpu,
                              int base_blobs, const AvRecordingOptions *recording, const char *renderer,
-                             const char *executor_path, char *error, size_t error_size);
+                             const char *executor_path, uint32_t vram_reserve_mib, char *error, size_t error_size);
 int av_device_control(AvDevice *device, void *request, uint32_t type);
 int av_device_export_image(AvDevice *device, uint64_t key, AvExportedImage *image);
 int av_device_export_head(AvDevice *device, uint32_t head, uint64_t key, AvExportedImage *image);

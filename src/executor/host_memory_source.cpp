@@ -14,7 +14,7 @@ static_assert(GuestMemoryTypes::no_type == HostMemoryRequest::memory_types);
 
 HostMemorySource::HostMemorySource(MemoryExporter &exporter, BlockSource &blocks)
     : exporter_(exporter), memories_(blocks), aliases_(blocks), lock_(), host_(), asked_(0u), mappable_(0u),
-      visible_(0u), vulkan_()
+      visible_(0u), vulkan_(), vram_()
 {
     AV_SCOPE("HostMemorySource::HostMemorySource");
 }
@@ -272,6 +272,20 @@ void HostMemorySource::release(SourceMemory &memory)
     let_go(memory);
 }
 
+void HostMemorySource::reserve_vram(uint32_t mib)
+{
+    AV_SCOPE("HostMemorySource::reserve_vram");
+    const ThreadLockHold held(lock_);
+    vram_ = VramPolicy(mib);
+}
+
+VramPolicy HostMemorySource::vram_policy() const
+{
+    AV_SCOPE("HostMemorySource::vram_policy");
+    const ThreadLockHold held(lock_);
+    return vram_;
+}
+
 uint32_t HostMemorySource::live() const
 {
     AV_SCOPE("HostMemorySource::live");
@@ -290,6 +304,12 @@ void HostMemorySource::report(StateWriter &writer) const
     uint64_t bytes = 0u;
     memories_.for_each([&bytes](const SourceMemory &memory) { bytes += memory.size(); });
     writer.number("bytes", bytes);
+    uint64_t total = 0u;
+    for (uint32_t heap = 0u; heap < host_.memoryHeapCount; heap++)
+        if ((host_.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0u) total += host_.memoryHeaps[heap].size;
+    writer.number("vram_total_bytes", total);
+    writer.number("vram_cap_bytes", vram_.cap_for(total));
+    writer.number("vram_reserve_bytes", vram_.reserve_for(total));
     writer.close();
 }
 

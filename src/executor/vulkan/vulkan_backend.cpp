@@ -469,13 +469,13 @@ void VulkanBackend::learn_types(VkPhysicalDevice physical)
     VkPhysicalDeviceMemoryProperties learnt = {};
     if (source_ != nullptr && source_->vulkan_types(types_)) {
         types_.properties(learnt);
-        vram_.learn(learnt);
+        vram_.learn(learnt, source_->vram_policy());
         return;
     }
     VkPhysicalDeviceMemoryProperties host = {};
     RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties(physical, &host);
     types_.learn(host, 0u);
-    vram_.learn(host);
+    vram_.learn(host, source_ != nullptr ? source_->vram_policy() : VramPolicy());
 }
 
 void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,

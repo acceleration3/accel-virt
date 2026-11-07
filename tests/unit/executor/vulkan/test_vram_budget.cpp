@@ -1,5 +1,6 @@
 #include "core/log/driver_log.hpp"
 #include "executor/vulkan/vram_budget.hpp"
+#include "executor/vulkan/vram_policy.hpp"
 #include "executor/vulkan/vulkan_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/icd/recording_log.hpp"
@@ -11,6 +12,7 @@
 #include <cstring>
 
 using av::VramBudget;
+using av::VramPolicy;
 
 namespace {
 
@@ -103,20 +105,31 @@ VKAPI_ATTR void VKAPI_CALL vkFreeMemory(VkDevice, VkDeviceMemory, const VkAlloca
 
 }
 
-TEST(vram_budget, the_headroom_is_an_eighth_of_the_card_and_never_less_than_a_gibibyte)
-{ av::FailingBlocks blocks;
-  VramBudget budget(blocks);
-  CHECK_EQ(budget.cap_for(16 * gib), 14 * gib);
-  CHECK_EQ(budget.cap_for(8 * gib), 7 * gib);
-  CHECK_EQ(budget.cap_for(4 * gib), 3 * gib);
-  CHECK_EQ(budget.cap_for(2 * gib), 1 * gib);
-  CHECK_EQ(budget.cap_for(1 * gib), gib / 2u);
-  CHECK_EQ(budget.cap_for(24 * gib), 21 * gib); }
+TEST(vram_policy, auto_reserves_an_eighth_of_the_card_and_never_less_than_a_gibibyte)
+{ const VramPolicy policy;
+  CHECK_EQ(policy.cap_for(16 * gib), 14 * gib);
+  CHECK_EQ(policy.cap_for(8 * gib), 7 * gib);
+  CHECK_EQ(policy.cap_for(4 * gib), 3 * gib);
+  CHECK_EQ(policy.cap_for(2 * gib), 1 * gib);
+  CHECK_EQ(policy.cap_for(1 * gib), gib / 2u);
+  CHECK_EQ(policy.cap_for(24 * gib), 21 * gib);
+  CHECK_EQ(policy.reserve_for(16 * gib), 2 * gib);
+  CHECK_EQ(policy.reserve_for(4 * gib), gib); }
+
+TEST(vram_policy, an_explicit_reserve_is_clamped_between_256_mib_and_the_card_less_512_mib)
+{ const std::uint64_t mib = 1ull << 20;
+  CHECK_EQ(VramPolicy(4096u).reserve_for(16 * gib), 4096 * mib);
+  CHECK_EQ(VramPolicy(4096u).cap_for(16 * gib), 12 * gib);
+  CHECK_EQ(VramPolicy(1u).reserve_for(16 * gib), 256 * mib);
+  CHECK_EQ(VramPolicy(65536u).reserve_for(16 * gib), 16 * gib - 512 * mib);
+  CHECK_EQ(VramPolicy(65536u).cap_for(16 * gib), 8 * gib);
+  CHECK_EQ(VramPolicy(4096u).reserve_for(256 * mib), 0u);
+  CHECK_EQ(VramPolicy(4096u).cap_for(256 * mib), 256 * mib); }
 
 TEST(vram_budget, a_commit_that_cannot_be_recorded_leaves_the_books_as_they_were)
 { av::FailingBlocks blocks;
   VramBudget budget(blocks);
-  budget.learn(host_with_vram(8 * gib));
+  budget.learn(host_with_vram(8 * gib), VramPolicy());
   CHECK(budget.commit(0u, 0x10u, gib) == av::Status::ok);
   blocks.fail_from(blocks.requests() + 1u);
   av::Status refused = av::Status::ok;
@@ -130,7 +143,7 @@ TEST(vram_budget, a_commit_that_cannot_be_recorded_leaves_the_books_as_they_were
 TEST(vram_budget, only_device_local_heaps_are_capped)
 { av::FailingBlocks blocks;
   VramBudget budget(blocks);
-  budget.learn(host_with_vram(8 * gib));
+  budget.learn(host_with_vram(8 * gib), VramPolicy());
   VkPhysicalDeviceMemoryProperties answer = host_with_vram(8 * gib);
   budget.clamp(answer);
   CHECK_EQ(answer.memoryHeaps[0].size, 7 * gib);
@@ -142,7 +155,7 @@ TEST(vram_budget, only_device_local_heaps_are_capped)
 TEST(vram_budget, the_budget_report_follows_commits_and_releases)
 { av::FailingBlocks blocks;
   VramBudget budget(blocks);
-  budget.learn(host_with_vram(8 * gib));
+  budget.learn(host_with_vram(8 * gib), VramPolicy());
   CHECK(budget.commit(0u, 0x10u, 2 * gib) == av::Status::ok);
   VkPhysicalDeviceMemoryBudgetPropertiesEXT report = {};
   budget.report(report);

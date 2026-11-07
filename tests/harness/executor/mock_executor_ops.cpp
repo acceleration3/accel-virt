@@ -102,7 +102,7 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         mock.signal_ = signal;
         mock.signal_context_ = context;
     };
-    table_.open_domain = [](void *opaque, const std::uint8_t *gpu_uuid) -> std::uint32_t {
+    table_.open_domain = [](void *opaque, const std::uint8_t *gpu_uuid, std::uint32_t) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
         Lock             lock(mock.lock_);
         if (mock.refuse_domain_ != 0u && --mock.refuse_domain_ == 0u) return 0u;

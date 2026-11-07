@@ -554,6 +554,20 @@ TEST(host_memory_source, reports_what_it_maps_and_holds)
   CHECK(std::strstr(writer.dump(), "bytes=12288") != nullptr);
   rig.source.free_domain(domain); }
 
+TEST(host_memory_source, reports_the_card_the_cap_and_the_reserve_the_policy_made_of_it)
+{ Rig rig;
+  rig.discrete();
+  AvHostMemory memory = {};
+  CHECK_STATUS(rig.allocate(1u, readback, memory), Status::ok);
+  rig.source.reserve_vram(600u);
+  char        bytes[1024] = {};
+  av::StateWriter writer(bytes, sizeof bytes);
+  rig.source.report(writer);
+  CHECK(std::strstr(writer.dump(), "vram_total_bytes=1073741824") != nullptr);
+  CHECK(std::strstr(writer.dump(), "vram_reserve_bytes=536870912") != nullptr);
+  CHECK(std::strstr(writer.dump(), "vram_cap_bytes=536870912") != nullptr);
+  rig.source.free_domain(domain); }
+
 TEST(host_memory_source, a_report_while_a_worker_holds_the_pool_says_busy_and_walks_nothing)
 { Rig rig;
   rig.discrete();

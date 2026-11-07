@@ -1,5 +1,7 @@
 #include "device/context/local_context_plane.hpp"
 
+#include "proto/context/capset_info.hpp"
+
 #include "core/trace/function_scope.hpp"
 #include "proto/resources/surface_point.hpp"
 
@@ -31,10 +33,10 @@ Status LocalContextPlane::initialize()
     return contexts_.initialize() == Status::no_memory ? Status::no_memory : Status::ok;
 }
 
-Status LocalContextPlane::start(const uint8_t *gpu_uuid, const CapsetInfo &)
+Status LocalContextPlane::start(const uint8_t *gpu_uuid, const CapsetInfo &capset)
 {
     AV_SCOPE("LocalContextPlane::start");
-    if (library_.domain() == 0u) static_cast<void>(library_.open_domain(gpu_uuid));
+    if (library_.domain() == 0u) static_cast<void>(library_.open_domain(gpu_uuid, capset.vram_reserve_mib()));
     return Status::ok;
 }
 

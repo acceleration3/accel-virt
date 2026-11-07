@@ -128,7 +128,7 @@ private:
 
 bool host_renderer(const AvExecutorOps &ops, const std::uint8_t *uuid, char *out)
 {
-    const std::uint32_t    domain = ops.open_domain(ops.opaque, uuid);
+    const std::uint32_t    domain = ops.open_domain(ops.opaque, uuid, 0u);
     const AvContextOptions options = {0u, 0u, 0u, 0u, domain};
     AvExecutor *const      executor = ops.create(ops.opaque, AV_EXECUTOR_SUB_API_OPENGL, &options, nullptr);
     if (executor == nullptr) {

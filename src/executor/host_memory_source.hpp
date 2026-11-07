@@ -6,6 +6,7 @@
 #include "device/shim/posix_lock.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
+#include "executor/vulkan/vram_policy.hpp"
 #include "proto/resources/host_memory_request.hpp"
 
 #include <stdint.h>
@@ -40,6 +41,8 @@ public:
     uint32_t             mappable_types();
     [[nodiscard]] bool   vulkan_types(GuestMemoryTypes &answer);
     uint32_t             live() const;
+    void                 reserve_vram(uint32_t mib);
+    VramPolicy           vram_policy() const;
 
     void report(StateWriter &writer) const;
     bool invariants_hold() const;
@@ -72,6 +75,7 @@ private:
     uint32_t                     mappable_;
     uint32_t                     visible_;
     GuestMemoryTypes             vulkan_;
+    VramPolicy                   vram_;
 
     friend struct HostMemorySourceProbe;
 };

@@ -11,7 +11,7 @@
 
 namespace av {
 
-DeviceCapset::DeviceCapset(Host &host) : host_(host), info_(), described_(false), display_resolved_(false)
+DeviceCapset::DeviceCapset(Host &host) : host_(host), info_(), vram_reserve_mib_(0u), described_(false), display_resolved_(false)
 {
     AV_SCOPE("DeviceCapset::DeviceCapset");
 }
@@ -28,7 +28,14 @@ void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t feat
                        RingHeader::lowest_order, RingHeader::highest_order, features,
                        GpuIdentity(gpu.vendor_id(), gpu.device_id(), type, gpu.uuid(), gpu.local_memory(),
                                    gpu.shared_memory(), AdapterName(gpu.name()).text()));
+    info_.reserve_vram(vram_reserve_mib_);
     described_ = true;
+}
+
+void DeviceCapset::reserve_vram(uint32_t mib)
+{
+    AV_SCOPE("DeviceCapset::reserve_vram");
+    vram_reserve_mib_ = mib;
 }
 
 void DeviceCapset::resolve_display(bool takes_dmabuf)
