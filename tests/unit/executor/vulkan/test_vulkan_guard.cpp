@@ -238,6 +238,31 @@ VkWriteDescriptorSet write_of(std::uint64_t target, VkDescriptorType type, std::
 
 }
 
+TEST(vulkan_guard, a_command_asks_for_a_handle_s_parent_and_device_only_where_the_guard_will_use_them)
+{ Rig rig;
+  using Needs = VulkanGuard::Needs;
+  Needs none = rig.guard.needs(HandleKind::command_buffer, cb);
+  CHECK(!none.reference_ && !none.parent_ && !none.device_);
+  rig.guard.begin_frame(true);
+  none = rig.guard.needs(HandleKind::command_buffer, 0u);
+  CHECK(!none.reference_);
+  none = rig.guard.needs(HandleKind::buffer, buffer);
+  CHECK(!none.reference_ && !none.parent_ && !none.device_);
+  const Needs owner = rig.guard.needs(HandleKind::command_buffer, cb);
+  CHECK(owner.reference_ && owner.device_ && !owner.parent_);
+  CHECK(rig.guard.reference(HandleKind::command_buffer, cb, 0u, device));
+  const Needs plain = rig.guard.needs(HandleKind::buffer, buffer);
+  CHECK(plain.reference_ && !plain.parent_ && !plain.device_);
+  const Needs pooled_set = rig.guard.needs(HandleKind::descriptor_set, set);
+  CHECK(pooled_set.reference_ && pooled_set.parent_ && !pooled_set.device_);
+  const Needs secondary_buffer = rig.guard.needs(HandleKind::command_buffer, secondary);
+  CHECK(secondary_buffer.reference_ && secondary_buffer.parent_ && !secondary_buffer.device_);
+  const Needs unheld = rig.guard.needs(HandleKind::device_memory, memory);
+  CHECK(!unheld.reference_ && !unheld.parent_ && !unheld.device_);
+  rig.guard.begin_frame(false);
+  const Needs idle = rig.guard.needs(HandleKind::buffer, buffer);
+  CHECK(!idle.reference_); }
+
 TEST(vulkan_guard, a_buffer_a_command_buffer_recorded_is_not_destroyed_before_the_command_buffer_is_reset)
 { Rig rig;
   CHECK(rig.record(cb, Named{HandleKind::buffer, buffer}, Named{HandleKind::pipeline, 300u}));

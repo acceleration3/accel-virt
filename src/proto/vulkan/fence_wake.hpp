@@ -7,7 +7,13 @@ namespace av::vkproto {
 
 class FenceWake {
 public:
-    static constexpr uint64_t arm_timeout = ~uint64_t{0} - 1u;
+    FenceWake();
+
+    uint64_t arm_timeout() const;
+    bool     arms(uint64_t timeout) const;
+
+private:
+    uint64_t arm_timeout_;
 };
 
 }

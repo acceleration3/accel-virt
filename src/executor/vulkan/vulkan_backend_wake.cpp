@@ -9,7 +9,7 @@ VkResult VulkanBackend::on_vkWaitForFences(VkDevice device, uint32_t fenceCount,
                                            VkBool32 waitAll, uint64_t timeout)
 {
     AV_SCOPE("VulkanBackend::on_vkWaitForFences");
-    if (timeout != vkproto::FenceWake::arm_timeout)
+    if (!vkproto::FenceWake().arms(timeout))
         return RealVulkanDispatch::on_vkWaitForFences(device, fenceCount, pFences, waitAll, timeout);
     const VkResult asked = RealVulkanDispatch::on_vkWaitForFences(device, fenceCount, pFences, waitAll, 0u);
     if (asked != VK_TIMEOUT) return asked;

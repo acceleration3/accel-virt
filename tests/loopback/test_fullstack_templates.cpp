@@ -53,7 +53,7 @@ public:
     explicit IcdProcess(DdiKmt &kmt)
         : lock_(trace_, 'H'), send_lock_(trace_, 'S'), memory_lock_(trace_, 'M'), present_lock_(trace_, 'P'), lines_(memory_, log_, "avvk: "),
           root_(memory_, kmt, lock_, send_lock_, memory_lock_, lines_, av::icd::icd_binding, windows_, chains_,
-                present_thread_, handed_, shown_, present_lock_)
+                present_thread_, handed_, shown_, present_lock_, wake_thread_)
     {
     }
 
@@ -72,6 +72,7 @@ private:
     av::ScriptedWindowSurface windows_;
     av::ScriptedWindowChains  chains_;
     av::ScriptedThread        present_thread_;
+    av::ScriptedThread        wake_thread_;
     av::CountedWakeSignal     handed_;
     av::CountedWakeSignal     shown_;
     av::icd::IcdRoot          root_;

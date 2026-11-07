@@ -20,7 +20,7 @@ bool FenceWaitProbe::ask(uint64_t)
     seen_ = driven_ ? wakes_.woken() : 0u;
     const bool arming = driven_ && !armed_;
     result_ = vkproto::av_vkWaitForFences(wire_, handles_, device_, count_, fences_, wait_all_,
-                                          arming ? vkproto::FenceWake::arm_timeout : 0u);
+                                          arming ? vkproto::FenceWake().arm_timeout() : 0u);
     if (result_ == VK_NOT_READY) {
         driven_ = false;
         result_ = VK_TIMEOUT;

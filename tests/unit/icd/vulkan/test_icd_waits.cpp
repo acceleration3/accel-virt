@@ -141,7 +141,7 @@ TEST(icd_waits, a_connection_the_driver_wakes_arms_a_long_fence_wait_once_and_th
   const std::uint32_t sent = rig.kmt().commands();
   CHECK_EQ(rig.wait_for_fence(1200u * ms), VK_SUCCESS);
   CHECK_EQ(rig.kmt().commands(), sent + 3u);
-  CHECK_EQ(rig.timeout_back(2u), av::vkproto::FenceWake::arm_timeout);
+  CHECK_EQ(rig.timeout_back(2u), av::vkproto::FenceWake().arm_timeout());
   CHECK_EQ(rig.timeout_back(1u), 0u);
   CHECK_EQ(rig.timeout_back(0u), 0u);
   CHECK(rig.rig().wake_thread().awaits() >= 1u);

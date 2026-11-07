@@ -135,7 +135,7 @@ TEST(fence_wait_probe, a_driven_wait_asks_the_host_to_wake_it_once_and_then_asks
   FenceWaitProbe                probe(wire, handles, kmt, wakes, true, reinterpret_cast<VkDevice>(0x9u), 1u, &fence, VK_TRUE);
   reply_with(wire, VK_TIMEOUT);
   CHECK(!probe.ask(10u));
-  CHECK_EQ(timeout_sent(wire), av::vkproto::FenceWake::arm_timeout);
+  CHECK_EQ(timeout_sent(wire), av::vkproto::FenceWake().arm_timeout());
   reply_with(wire, VK_TIMEOUT);
   CHECK(!probe.ask(10u));
   CHECK_EQ(timeout_sent(wire), 0u);
