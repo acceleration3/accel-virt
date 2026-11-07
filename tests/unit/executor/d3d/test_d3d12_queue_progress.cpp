@@ -44,6 +44,23 @@ public:
     ULONG  references = 1u;
 };
 
+struct LedgerOp {
+    std::uint32_t queue;
+    char          kind;
+    ID3D12Fence  *fence;
+    UINT64        value;
+};
+
+struct Ledger {
+    LedgerOp      ops[256] = {};
+    std::uint32_t count = 0u;
+
+    void add(std::uint32_t queue, char kind, ID3D12Fence *fence, UINT64 value)
+    {
+        if (count < 256u) ops[count++] = LedgerOp{queue, kind, fence, value};
+    }
+};
+
 class ScriptedQueue final : public ID3D12CommandQueue {
 public:
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void **object) override
@@ -64,7 +81,10 @@ public:
     ULONG STDMETHODCALLTYPE Release() override { return 1u; }
     void STDMETHODCALLTYPE UpdateTileMappings(ID3D12Resource *, UINT, const D3D12_TILED_RESOURCE_COORDINATE *, const D3D12_TILE_REGION_SIZE *, UINT, const D3D12_TILE_RANGE_FLAGS *, UINT *, UINT *, D3D12_TILE_MAPPING_FLAGS) override {}
     void STDMETHODCALLTYPE CopyTileMappings(ID3D12Resource *, const D3D12_TILED_RESOURCE_COORDINATE *, ID3D12Resource *, const D3D12_TILED_RESOURCE_COORDINATE *, const D3D12_TILE_REGION_SIZE *, D3D12_TILE_MAPPING_FLAGS) override {}
-    void STDMETHODCALLTYPE ExecuteCommandLists(UINT, ID3D12CommandList *const *) override {}
+    void STDMETHODCALLTYPE ExecuteCommandLists(UINT, ID3D12CommandList *const *) override
+    {
+        if (ledger != nullptr) ledger->add(name, 'x', nullptr, 0u);
+    }
     void STDMETHODCALLTYPE SetMarker(UINT, const void *, UINT) override {}
     void STDMETHODCALLTYPE BeginEvent(UINT, const void *, UINT) override {}
     void STDMETHODCALLTYPE EndEvent() override {}
@@ -74,6 +94,7 @@ public:
     HRESULT STDMETHODCALLTYPE Signal(ID3D12Fence *fence, UINT64 value) override
     {
         if (refuse_signal) return E_FAIL;
+        if (ledger != nullptr) ledger->add(name, 's', fence, value);
         signalled = fence;
         signalled_value = value;
         return S_OK;
@@ -81,6 +102,7 @@ public:
     HRESULT STDMETHODCALLTYPE Wait(ID3D12Fence *fence, UINT64 value) override
     {
         if (refuse_wait) return E_FAIL;
+        if (ledger != nullptr) ledger->add(name, 'w', fence, value);
         if (waits < 4u) {
             waited[waits] = fence;
             waited_value[waits] = value;
@@ -96,7 +118,39 @@ public:
     std::uint32_t waits = 0u;
     bool          refuse_signal = false;
     bool          refuse_wait = false;
+    Ledger       *ledger = nullptr;
+    std::uint32_t name = 0u;
 };
+
+bool queues_run_to_the_end(const Ledger &ledger, std::uint32_t queues)
+{
+    ID3D12Fence  *seen[16] = {};
+    UINT64        reached[16] = {};
+    bool          done[256] = {};
+    auto          slot_of = [&](ID3D12Fence *fence) {
+        std::uint32_t index = 0u;
+        while (index < 15u && seen[index] != nullptr && seen[index] != fence) index++;
+        seen[index] = fence;
+        return index;
+    };
+    bool moved = true;
+    while (moved) {
+        moved = false;
+        for (std::uint32_t queue = 0u; queue < queues; queue++) {
+            for (std::uint32_t at = 0u; at < ledger.count; at++) {
+                if (ledger.ops[at].queue != queue || done[at]) continue;
+                const LedgerOp &op = ledger.ops[at];
+                if (op.kind == 'w' && reached[slot_of(op.fence)] < op.value) break;
+                if (op.kind == 's') reached[slot_of(op.fence)] = op.value;
+                done[at] = true;
+                moved = true;
+            }
+        }
+    }
+    for (std::uint32_t at = 0u; at < ledger.count; at++)
+        if (!done[at]) return false;
+    return true;
+}
 
 class ScriptedDevice final : public ID3D12Device {
 public:
@@ -548,3 +602,73 @@ TEST(d3d12_queue_progress_prepare, a_queue_that_refuses_the_signal_marks_nothing
   direct.refuse_signal = true;
   CHECK(!progress.signal(1u, &direct));
   CHECK(progress.marked() == 0u); }
+
+namespace {
+
+struct Executing {
+    Executing() : platform(), wake(), progress(wake, platform), device(), ledger(), direct(), copy(), compute()
+    {
+        direct.ledger = &ledger;
+        direct.name = 0u;
+        copy.ledger = &ledger;
+        copy.name = 1u;
+        compute.ledger = &ledger;
+        compute.name = 2u;
+    }
+
+    ScriptedQueue &queue(std::uint32_t id) { return id == 1u ? direct : (id == 2u ? copy : compute); }
+
+    bool execute(std::uint32_t id)
+    {
+        ScriptedQueue &on = queue(id);
+        if (!progress.prepare(id, &on, &device) || !progress.after_siblings(id, &on)) return false;
+        on.ExecuteCommandLists(0u, nullptr);
+        return progress.signal(id, &on);
+    }
+
+    av::MockPlatform   platform;
+    EventfdWake        wake;
+    D3d12QueueProgress progress;
+    ScriptedDevice     device;
+    Ledger             ledger;
+    ScriptedQueue      direct, copy, compute;
+};
+
+}
+
+TEST(d3d12_queue_progress_after_siblings, a_wait_on_one_queue_and_a_signal_on_another_in_either_order_leaves_the_queues_able_to_finish)
+{ Executing rig;
+  CHECK(rig.execute(1u));
+  CHECK(rig.execute(2u));
+  CHECK(rig.execute(1u));
+  CHECK(rig.execute(2u));
+  CHECK(rig.execute(2u));
+  CHECK(rig.execute(1u));
+  CHECK(queues_run_to_the_end(rig.ledger, 2u));
+  CHECK(rig.progress.invariants_hold()); }
+
+TEST(d3d12_queue_progress_after_siblings, every_wait_a_queue_is_given_is_for_a_signal_already_queued_on_the_other_queue)
+{ Executing rig;
+  const std::uint32_t order[] = {1u, 2u, 3u, 1u, 3u, 2u, 2u, 1u, 3u};
+  for (const std::uint32_t id : order) CHECK(rig.execute(id));
+  for (std::uint32_t at = 0u; at < rig.ledger.count; at++) {
+      const LedgerOp &wait = rig.ledger.ops[at];
+      if (wait.kind != 'w') continue;
+      bool queued_before = false;
+      for (std::uint32_t before = 0u; before < at; before++)
+          queued_before = queued_before || (rig.ledger.ops[before].kind == 's' && rig.ledger.ops[before].fence == wait.fence &&
+                                            rig.ledger.ops[before].value == wait.value && rig.ledger.ops[before].queue != wait.queue);
+      CHECK(queued_before);
+  }
+  CHECK(queues_run_to_the_end(rig.ledger, 3u)); }
+
+TEST(d3d12_queue_progress_after_siblings, a_queue_made_to_follow_a_sibling_that_was_made_to_follow_it_still_finishes)
+{ Executing rig;
+  CHECK(rig.execute(1u));
+  CHECK(rig.execute(2u));
+  CHECK(rig.execute(1u));
+  CHECK(rig.execute(2u));
+  CHECK(rig.progress.mark_all());
+  CHECK(rig.execute(1u));
+  CHECK(queues_run_to_the_end(rig.ledger, 2u));
+  CHECK(!queues_run_to_the_end(Ledger{{LedgerOp{0u, 'w', &rig.device.fences[1], 9u}, LedgerOp{1u, 'w', &rig.device.fences[0], 9u}}, 2u}, 2u)); }
