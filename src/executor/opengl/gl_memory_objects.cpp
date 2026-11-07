@@ -9,7 +9,7 @@ namespace av {
 
 GlMemoryObjects::GlMemoryObjects(BlockSource &blocks, const SliceProgress &progress)
     : progress_(progress), memories_(blocks, Pool::paged), placements_(blocks, Pool::paged),
-      textures_(blocks, Pool::paged), group_(nullptr), own_(nullptr)
+      textures_(blocks, Pool::paged), group_(nullptr), own_(nullptr), retiring_(0u)
 {
     AV_SCOPE("GlMemoryObjects::GlMemoryObjects");
 }
@@ -192,6 +192,7 @@ void GlMemoryObjects::forget_all()
     memories_.clear();
     placements_.clear();
     textures_.clear();
+    retiring_ = 0u;
 }
 
 bool GlMemoryObjects::holds(uint32_t name)
@@ -309,13 +310,15 @@ void GlMemoryObjects::retire_here(uint32_t name)
     if (memory == nullptr || memory->retired_) return;
     memory->retired_ = true;
     memory->mark_ = progress_.next();
+    retiring_++;
 }
 
 void GlMemoryObjects::reclaim_here(GlHostImport &import, GlHostImport &owner)
 {
     AV_SCOPE("GlMemoryObjects::reclaim_here");
+    if (retiring_ == 0u) return;
     const uint64_t reached = progress_.reached();
-    memories_.erase_if([&import, &owner, reached](uint32_t name, const Memory &memory) {
+    retiring_ -= memories_.erase_if([&import, &owner, reached](uint32_t name, const Memory &memory) {
         if (!memory.retired_ || memory.placed_ != 0u || memory.textured_ != 0u ||
             memory.mark_ > reached) return false;
         import.delete_memory(name, owner);
@@ -332,6 +335,7 @@ void GlMemoryObjects::destroy_here(GlHostImport &import)
     });
     placements_.clear();
     textures_.clear();
+    retiring_ = 0u;
 }
 
 uint32_t GlMemoryObjects::count() const

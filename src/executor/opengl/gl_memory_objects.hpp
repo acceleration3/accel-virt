@@ -86,6 +86,7 @@ private:
 
     GlMemoryGroup *group_;
     GlHostImport  *own_;
+    uint32_t       retiring_;
 
     void bump(Memory &memory);
 };
