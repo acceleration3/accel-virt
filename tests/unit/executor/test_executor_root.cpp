@@ -1089,6 +1089,7 @@ TEST(executor_root_concurrency, a_closing_slot_cannot_be_claimed_until_its_recor
   CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
   probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
   probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  backend.set_progress(1u, 0u);
   backend.hold_shut_downs(true);
   root.close(session);
   for (std::uint32_t looks = 0u; looks < 2000u && !backend.inside_shut_down(); looks++) nap_for(1);
@@ -1453,3 +1454,95 @@ TEST(executor_root_concurrency, stopping_the_watcher_ends_its_retries_and_is_saf
   for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) later += wedged.backend(slot).drains();
   CHECK_EQ(later, stopped);
   CHECK_EQ(opened.root().wedged(), wedged_slots); }
+
+namespace {
+
+struct SessionChurn {
+    ExecutorRoot       *root;
+    std::uint32_t       domain;
+    std::atomic<std::uint32_t> failures;
+    std::atomic<std::uint32_t> done;
+};
+
+void *churn_open_close_sessions(void *context)
+{
+    SessionChurn &job = *static_cast<SessionChurn *>(context);
+    AvContextOptions options = {};
+    options.domain = job.domain;
+    for (std::uint32_t round = 0u; round < 25u; round++) {
+        ContextSession *const made = job.root->open(AV_EXECUTOR_SUB_API_VULKAN, options, nullptr);
+        if (made == nullptr) { job.failures.fetch_add(1u); continue; }
+        job.root->close(made);
+        job.done.fetch_add(1u);
+    }
+    return nullptr;
+}
+
+}
+
+TEST(executor_root_churn, two_hundred_sessions_opened_and_closed_from_eight_threads_all_open_and_all_go)
+{ Opened opened;
+  SessionChurn job{&opened.root(), opened.held().domain_of(intel), 0u, 0u};
+  pthread_t threads[8];
+  for (pthread_t &thread : threads) pthread_create(&thread, nullptr, &churn_open_close_sessions, &job);
+  for (pthread_t &thread : threads) pthread_join(thread, nullptr);
+  CHECK_EQ(job.failures.load(), 0u);
+  CHECK_EQ(job.done.load(), 200u);
+  for (std::uint32_t looks = 0u; looks < 2000u && (opened.root().closing() != 0u || opened.root().live() != 0u); looks++)
+      nap_for(1);
+  CHECK_EQ(opened.root().live(), 0u);
+  CHECK_EQ(opened.root().wedged(), 0u);
+  CHECK_EQ(opened.root().exhausted(), 0u); }
+
+TEST(executor_root_churn, a_drain_that_never_finishes_blocks_neither_opens_nor_the_teardown_of_others)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t first_block[4096];
+  static std::uint8_t second_block[4096];
+  MockSessionBackend  stuck;
+  MockSessionBackend  quick;
+  ContextSession *const stuck_session = &probe.session_at(0u);
+  ContextSession *const quick_session = &probe.session_at(1u);
+  CHECK_STATUS(stuck_session->initialize(stuck, first_block, sizeof first_block), Status::ok);
+  CHECK_STATUS(quick_session->initialize(quick, second_block, sizeof second_block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, stuck);
+  probe.shares_at(1u).bind(*opened.apis().shares(0u), domain, quick);
+  probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  probe.remember(1u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  quick.set_progress(1u, 0u);
+  stuck.hold_drains(true);
+  root.close(stuck_session);
+  root.close(quick_session);
+  for (std::uint32_t looks = 0u; looks < 3000u && quick.shut_downs() == 0u; looks++) nap_for(1);
+  CHECK_EQ(quick.shut_downs(), 1u);
+  AvContextOptions options = {};
+  options.domain = domain;
+  for (std::uint32_t round = 0u; round < 20u; round++) {
+      ContextSession *const made = root.open(AV_EXECUTOR_SUB_API_VULKAN, options, nullptr);
+      CHECK(made != nullptr);
+      if (made != nullptr) root.close(made);
+  }
+  CHECK_EQ(stuck.shut_downs(), 0u);
+  stuck.hold_drains(false);
+  for (std::uint32_t looks = 0u; looks < 3000u && root.closing() != 0u; looks++) nap_for(1);
+  CHECK_EQ(stuck.shut_downs(), 1u); }
+
+TEST(executor_root_churn, running_out_of_sessions_is_counted_and_the_refusal_is_recoverable)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  AvContextOptions options = {};
+  options.domain = domain;
+  ContextSession *first = nullptr;
+  for (std::uint32_t i = 0u; i < ExecutorRoot::sessions; i++) {
+      ContextSession *const made = root.open(AV_EXECUTOR_SUB_API_VULKAN, options, nullptr);
+      CHECK(made != nullptr);
+      if (i == 0u) first = made;
+  }
+  CHECK(root.open(AV_EXECUTOR_SUB_API_VULKAN, options, nullptr) == nullptr);
+  CHECK(root.open(AV_EXECUTOR_SUB_API_VULKAN, options, nullptr) == nullptr);
+  CHECK_EQ(root.exhausted(), 2u);
+  close_settled(root, first);
+  CHECK(root.open(AV_EXECUTOR_SUB_API_VULKAN, options, nullptr) != nullptr); }

@@ -46,7 +46,7 @@ TEST(executor_root_report, names_each_gpu_and_each_live_session)
   av::StateReporter &reporter = root;
   reporter.report(writer);
   const char *const expected =
-      "executor/0 sessions=64 live=1 gpus=2 overflowed=false\n"
+      "executor/0 sessions=512 live=1 gpus=2 overflowed=false\n"
       "executor/0/gpu/0 uuid=8680A6460C0000000002000000000000 sub_apis=0x0000000000000005\n"
       "executor/0/gpu/1 uuid=7B7AD2C542198C80C4FDA64B8775AEDB sub_apis=0x0000000000000001\n"
       "executor/0/domain/1 gpu=0\n"
@@ -105,4 +105,4 @@ TEST(executor_root_report, a_root_that_never_asked_has_nothing_but_its_line)
   char bytes[256];
   StateWriter writer(bytes, sizeof bytes);
   root.report(writer);
-  CHECK(std::strcmp(writer.dump(), "executor/0 sessions=64 live=0 gpus=0 overflowed=false") == 0); }
+  CHECK(std::strcmp(writer.dump(), "executor/0 sessions=512 live=0 gpus=0 overflowed=false") == 0); }

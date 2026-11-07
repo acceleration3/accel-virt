@@ -36,10 +36,13 @@ class SessionBackend;
 
 class ExecutorRoot final : public StateReporter {
 public:
-    static constexpr uint32_t sessions = 64u;
+    static constexpr uint32_t sessions = 512u;
+    static constexpr uint32_t warm_sessions = 64u;
+    static constexpr uint32_t teardown_workers = 4u;
     static constexpr uint64_t teardown_nanoseconds = 1000000000u;
     static constexpr uint64_t retry_wedged_nanoseconds = 250000000u;
     static constexpr uint64_t lost_leak_nanoseconds = 5000000000u;
+    static constexpr uint64_t stuck_leak_nanoseconds = 30000000000u;
 
     explicit ExecutorRoot(ExecutorLog &log);
     ~ExecutorRoot();
@@ -81,6 +84,8 @@ public:
     uint32_t        closing() const;
     void            retry_wedged();
     void            watch_wedged();
+    void            watch_closing();
+    uint32_t        exhausted() const;
     void            stop_watching();
     void            report(StateWriter &writer) override;
 
@@ -100,6 +105,9 @@ private:
     [[nodiscard]] bool note_wedged();
     void           reap_closing();
     uint32_t       closing_here() const;
+    uint32_t       unclaimed_closing_here() const;
+    void           prepare_slot(uint32_t slot);
+    void           note_exhausted(uint32_t sub_api);
     void           halt_watcher();
     const HostGpu *gpu_of(uint32_t domain) const;
     HostMemorySource *source_of(uint32_t domain) const;
@@ -138,6 +146,11 @@ private:
     PosixCondition wake_;
     pthread_t      watcher_;
     bool           watching_;
+    pthread_t      helpers_[teardown_workers];
+    uint32_t       helpers_running_;
+    bool           prepared_[max_sessions];
+    uint32_t       exhausted_;
+    bool           exhaustion_logged_;
     bool           stopping_;
     MonotonicClock clock_;
     HostApis      *apis_;

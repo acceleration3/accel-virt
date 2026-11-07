@@ -118,7 +118,7 @@ bool MockSessionBackend::signal()
 
 void MockSessionBackend::gpu_progress(uint64_t &marked, uint64_t &reached) const
 {
-    marked = marked_;
+    marked = marked_ + (__atomic_load_n(&drains_held_, __ATOMIC_ACQUIRE) ? 1u : 0u);
     reached = reached_;
 }
 

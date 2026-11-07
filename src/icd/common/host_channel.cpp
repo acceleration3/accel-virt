@@ -74,7 +74,10 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
                 .text(" with code ")
                 .number(transport_.object().host_fault_code());
         line.write();
-        if (faulted) return Status::invalid_state;
+        if (faulted)
+            return transport_.object().host_fault_code() == static_cast<uint32_t>(FaultCode::no_executor)
+                       ? Status::no_memory
+                       : Status::invalid_state;
     }
     undo.dismiss();
     return Status::ok;

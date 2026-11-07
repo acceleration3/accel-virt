@@ -1,6 +1,7 @@
 #include "executor/executor_root.hpp"
 
 #include "executor/executor_log.hpp"
+#include "core/log/log_line.hpp"
 
 #include "executor/shim/d3d11_host_device.hpp"
 
@@ -32,21 +33,34 @@ void *run_wedged_watch(void *root)
     return nullptr;
 }
 
+void *run_closing_watch(void *root)
+{
+    AV_SCOPE("run_closing_watch");
+    static_cast<ExecutorRoot *>(root)->watch_closing();
+    return nullptr;
+}
+
 }
 
 ExecutorRoot::ExecutorRoot(ExecutorLog &log)
     : gpus_(), domains_(), memory_groups_{}, group_of_{}, group_refs_{}, sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, shares_{}, apis_of_{}, gpus_of_{},
-      wedged_{}, reaping_{}, closing_{}, wedged_since_{}, lock_(), wake_(lock_), watcher_{}, watching_(false), stopping_(false), clock_(), apis_(nullptr), log_(log), lost_leak_after_(lost_leak_nanoseconds)
+      wedged_{}, reaping_{}, closing_{}, wedged_since_{}, lock_(), wake_(lock_), watcher_{}, watching_(false), helpers_{}, helpers_running_(0u), prepared_{}, exhausted_(0u), exhaustion_logged_(false), stopping_(false), clock_(), apis_(nullptr), log_(log), lost_leak_after_(lost_leak_nanoseconds)
 {
     AV_SCOPE("ExecutorRoot::ExecutorRoot");
     for (uint32_t slot = 0u; slot < max_sessions; slot++) group_of_[slot] = max_sessions;
-    for (uint32_t slot = 0u; slot < max_sessions; slot++) {
-        static_cast<void>(sessions_[slot].construct(log.sessions()));
-        static_cast<void>(vulkan_[slot].construct(log.vulkan()));
-        static_cast<void>(opencl_[slot].construct(log.opencl()));
-        static_cast<void>(opengl_[slot].construct(log.opengl()));
-        static_cast<void>(d3d_[slot].construct(log));
-    }
+    for (uint32_t slot = 0u; slot < warm_sessions; slot++) prepare_slot(slot);
+}
+
+void ExecutorRoot::prepare_slot(uint32_t slot)
+{
+    AV_SCOPE("ExecutorRoot::prepare_slot");
+    if (prepared_[slot]) return;
+    static_cast<void>(sessions_[slot].construct(log_.sessions()));
+    static_cast<void>(vulkan_[slot].construct(log_.vulkan()));
+    static_cast<void>(opencl_[slot].construct(log_.opencl()));
+    static_cast<void>(opengl_[slot].construct(log_.opengl()));
+    static_cast<void>(d3d_[slot].construct(log_));
+    prepared_[slot] = true;
 }
 
 ExecutorRoot::~ExecutorRoot()
@@ -74,11 +88,14 @@ void ExecutorRoot::halt_watcher()
     AV_SCOPE("ExecutorRoot::halt_watcher");
     lock_.acquire();
     const bool joined = watching_;
+    const uint32_t helpers = helpers_running_;
     watching_ = false;
+    helpers_running_ = 0u;
     stopping_ = true;
-    wake_.signal();
+    wake_.broadcast();
     lock_.release();
     if (joined) pthread_join(watcher_, nullptr);
+    for (uint32_t helper = 0u; helper < helpers; helper++) pthread_join(helpers_[helper], nullptr);
 }
 
 Status ExecutorRoot::initialize(HostApis &apis)
@@ -239,6 +256,7 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &opt
         return nullptr;
     }
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
+        prepare_slot(slot);
         SessionBackend &backend = *backend_in(slot, sub_api);
         if (sessions_[slot].object().initialize(backend, decode_blocks[slot], ContextSession::arena_bytes) != Status::ok)
             continue;
@@ -273,7 +291,41 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const AvContextOptions &opt
         return &sessions_[slot].object();
     }
     lock_.release();
+    note_exhausted(sub_api);
     return nullptr;
+}
+
+void ExecutorRoot::note_exhausted(uint32_t sub_api)
+{
+    AV_SCOPE("ExecutorRoot::note_exhausted");
+    lock_.acquire();
+    exhausted_++;
+    const bool first = !exhaustion_logged_;
+    exhaustion_logged_ = true;
+    const uint32_t leaving = closing_here();
+    const uint32_t stuck = wedged_here();
+    lock_.release();
+    if (!first) return;
+    LogLine(log_.sessions())
+        .text("every one of the ")
+        .number(max_sessions)
+        .text(" sessions is taken, so a ")
+        .text(api_name(sub_api))
+        .text(" context is refused: ")
+        .number(live())
+        .text(" live, ")
+        .number(leaving)
+        .text(" closing, ")
+        .number(stuck)
+        .text(" wedged; the guest is told it is out of resources")
+        .write();
+}
+
+uint32_t ExecutorRoot::exhausted() const
+{
+    AV_SCOPE("ExecutorRoot::exhausted");
+    const ThreadLockHold held(lock_);
+    return exhausted_;
 }
 
 SessionBackend *ExecutorRoot::backend_in(uint32_t slot, uint32_t sub_api)
@@ -354,9 +406,21 @@ void ExecutorRoot::close(ContextSession *session)
     if (!owns(session)) return;
     const uint32_t slot = slot_of(session);
     session->bind_signal(nullptr, nullptr);
+    uint64_t marked = 0u;
+    uint64_t reached = 0u;
+    session->gpu_progress(marked, reached);
     lock_.acquire();
     closing_[slot] = true;
+    reaping_[slot] = marked == reached;
     lock_.release();
+    if (marked == reached) {
+        TeardownBudget idle(clock_, 0u);
+        const bool done = finish(slot, idle);
+        lock_.acquire();
+        reaping_[slot] = false;
+        lock_.release();
+        if (done) return;
+    }
     if (note_wedged()) return;
     TeardownBudget budget(clock_, teardown_nanoseconds);
     finish_slot(slot, budget);
@@ -391,6 +455,7 @@ bool ExecutorRoot::finish(uint32_t slot, TeardownBudget &budget)
     gpus_of_[slot] = 0u;
     release_group(slot);
     session.vacate();
+    exhaustion_logged_ = false;
     lock_.release();
     retire(gpu);
     return true;
@@ -423,9 +488,9 @@ bool ExecutorRoot::leakable(uint32_t slot)
 {
     AV_SCOPE("ExecutorRoot::leakable");
     lock_.acquire();
-    const bool aged = clock_.now_nanoseconds() - wedged_since_[slot] >= lost_leak_after_;
+    const uint64_t age = clock_.now_nanoseconds() - wedged_since_[slot];
     lock_.release();
-    return aged && sessions_[slot].object().lost();
+    return (age >= lost_leak_after_ && sessions_[slot].object().lost()) || age >= stuck_leak_nanoseconds;
 }
 
 void ExecutorRoot::leak_slot(uint32_t slot)
@@ -455,20 +520,18 @@ void ExecutorRoot::leak_slot(uint32_t slot)
 void ExecutorRoot::reap_closing()
 {
     AV_SCOPE("ExecutorRoot::reap_closing");
-    lock_.acquire();
-    const bool over = stopping_;
-    lock_.release();
-    if (over) return;
-    for (uint32_t slot = 0u; slot < max_sessions; slot++) {
+    for (;;) {
         lock_.acquire();
-        const bool claimed = closing_[slot] && !reaping_[slot];
-        if (claimed) reaping_[slot] = true;
+        uint32_t claimed = max_sessions;
+        for (uint32_t slot = 0u; slot < max_sessions && claimed == max_sessions && !stopping_; slot++)
+            if (closing_[slot] && !reaping_[slot]) claimed = slot;
+        if (claimed != max_sessions) reaping_[claimed] = true;
         lock_.release();
-        if (!claimed) continue;
+        if (claimed == max_sessions) return;
         TeardownBudget budget(clock_, teardown_nanoseconds);
-        finish_slot(slot, budget);
+        finish_slot(claimed, budget);
         const ThreadLockHold held(lock_);
-        reaping_[slot] = false;
+        reaping_[claimed] = false;
     }
 }
 
@@ -479,6 +542,15 @@ uint32_t ExecutorRoot::closing_here() const
     for (uint32_t slot = 0u; slot < max_sessions; slot++)
         if (closing_[slot]) leaving++;
     return leaving;
+}
+
+uint32_t ExecutorRoot::unclaimed_closing_here() const
+{
+    AV_SCOPE("ExecutorRoot::unclaimed_closing_here");
+    uint32_t waiting = 0u;
+    for (uint32_t slot = 0u; slot < max_sessions; slot++)
+        if (closing_[slot] && !reaping_[slot]) waiting++;
+    return waiting;
 }
 
 uint32_t ExecutorRoot::closing() const
@@ -520,7 +592,10 @@ bool ExecutorRoot::note_wedged()
         WatcherExit::process().arm(*this);
     }
     if (!watching_) return false;
-    wake_.signal();
+    while (helpers_running_ < teardown_workers && helpers_running_ + 1u < closing_here() &&
+           pthread_create(&helpers_[helpers_running_], nullptr, &run_closing_watch, this) == 0)
+        helpers_running_++;
+    wake_.broadcast();
     return true;
 }
 
@@ -529,7 +604,7 @@ void ExecutorRoot::watch_wedged()
     AV_SCOPE("ExecutorRoot::watch_wedged");
     lock_.acquire();
     while (!stopping_) {
-        if (closing_here() != 0u) {
+        if (unclaimed_closing_here() != 0u) {
             lock_.release();
             reap_closing();
             lock_.acquire();
@@ -544,6 +619,22 @@ void ExecutorRoot::watch_wedged()
         if (stopping_) break;
         lock_.release();
         reap_wedged();
+        lock_.acquire();
+    }
+    lock_.release();
+}
+
+void ExecutorRoot::watch_closing()
+{
+    AV_SCOPE("ExecutorRoot::watch_closing");
+    lock_.acquire();
+    while (!stopping_) {
+        if (unclaimed_closing_here() == 0u) {
+            wake_.wait();
+            continue;
+        }
+        lock_.release();
+        reap_closing();
         lock_.acquire();
     }
     lock_.release();
@@ -616,7 +707,7 @@ void ExecutorRoot::report(StateWriter &writer)
     gpus_.report(writer);
     domains_.report(writer);
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
-        if (!sessions_[slot].object().live()) continue;
+        if (!prepared_[slot] || !sessions_[slot].object().live()) continue;
         writer.open("session", slot);
         writer.text("api", api_name(apis_of_[slot]));
         writer.number("gpu", gpus_of_[slot]);
@@ -655,7 +746,7 @@ uint32_t ExecutorRoot::live() const
     AV_SCOPE("ExecutorRoot::live");
     uint32_t running = 0u;
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
-        if (sessions_[slot].object().live()) running++;
+        if (prepared_[slot] && sessions_[slot].object().live()) running++;
     }
     return running;
 }
