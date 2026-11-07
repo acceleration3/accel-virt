@@ -142,6 +142,14 @@ TEST(d3d12_session, a_refused_deferred_create_costs_the_device_only_when_its_id_
   CHECK(!session.on_Destroy12(5u));
   CHECK(session.on_Destroy12(6u)); }
 
+TEST(d3d12_session, refused_creates_are_forgotten_when_the_session_shuts_down)
+{ FreshSession fresh;
+  D3d12Session &session = fresh.session();
+  const HeapProperties device_local = {1u, 0u, 0u, 0u};
+  CHECK(session.on_CreateHeapAsync12(5u, device_local, 0u, std::uint64_t{1} << 40u, 0u, 0u, 0u));
+  session.shut_down();
+  CHECK(!session.on_Destroy12(5u)); }
+
 TEST(d3d12_session, makes_nothing_without_a_device)
 { FreshSession fresh;
   D3d12Session &session = fresh.session();

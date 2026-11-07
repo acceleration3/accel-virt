@@ -50,3 +50,13 @@ TEST(d3d12_commitment, an_unknown_budget_asks_every_time_and_a_release_never_und
   commitment.release(1u << 20u);
   CHECK_EQ(commitment.committed(), 0u);
   CHECK(commitment.invariants_hold()); }
+
+TEST(d3d12_commitment, a_create_of_exactly_the_budget_is_asked_and_one_ending_on_the_near_mark_is_deferred)
+{ D3d12Commitment whole;
+  whole.learn(1000u);
+  CHECK(whole.charge(1000u) == Admission::ask);
+  CHECK(whole.charge(1u) == Admission::refused);
+  D3d12Commitment near;
+  near.learn(1000u);
+  CHECK(near.charge(900u) == Admission::defer);
+  CHECK(near.charge(1u) == Admission::ask); }
