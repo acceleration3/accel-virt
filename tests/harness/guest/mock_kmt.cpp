@@ -39,7 +39,7 @@ MockKmt::MockKmt()
       next_object_id_(first_object_id), scribble_record_(false), short_record_(false), carried_next_(),
       carried_next_size_(0u), carry_next_(false), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u), read_ticks_(0u), idle_reads_(0u), clock_step_(0u), clock_reader_(nullptr),
-      blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), timeouts_while_consuming_(0u), timeouts_while_beating_(0u), timeouts_while_pulsing_(0u), timeout_faulted_(false), timeouts_silent_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
+      blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), timeouts_while_consuming_(0u), timeouts_while_beating_(0u), timeouts_while_pulsing_(0u), timeout_faulted_(false), fault_code_(device_lost_code), fault_after_(0u), timeouts_silent_(0u), submit_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_too_large_{}, queued_count_(0u),
       queued_taken_(0u), withheld_countdown_(0u), hardware_scheduling_(false), doorbell_page_missing_(0u), doorbells_{},
       doorbell_count_(0u), queue_progress_{}, queue_progress_taken_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
@@ -770,7 +770,8 @@ Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
         pulse(context);
         return refuse(io_timeout);
     }
-    if (timeout_faulted_) {
+    if (timeout_faulted_ && fault_after_ != 0u) fault_after_--;
+    else if (timeout_faulted_) {
         timeout_faulted_ = false;
         consume(*object);
         fault_fence_page(*object);
@@ -1284,6 +1285,13 @@ void MockKmt::time_out_while_beating(std::uint32_t count) { timeouts_while_beati
 
 void MockKmt::time_out_faulted() { timeout_faulted_ = true; }
 
+void MockKmt::time_out_faulted_with(std::uint32_t code, std::uint32_t after_waits)
+{
+    timeout_faulted_ = true;
+    fault_code_ = code;
+    fault_after_ = after_waits;
+}
+
 bool MockKmt::fault_page_of(std::uint32_t context)
 {
     const Object *const on = find(Kind::context, context);
@@ -1334,11 +1342,10 @@ void MockKmt::complete_on_page(std::uint32_t context, std::uint64_t fence)
 
 void MockKmt::fault_fence_page(const Object &context) const
 {
-    constexpr std::uint32_t device_lost = 7u;
     std::uint8_t *const     memory = fence_memory(context);
     FencePage               page;
     if (memory == nullptr || page.decode(memory, FencePage::encoded_size) != Status::ok) return;
-    static_cast<void>(FencePage(page.completed_fence(), page.progress(), device_lost)
+    static_cast<void>(FencePage(page.completed_fence(), page.progress(), fault_code_)
                           .encode(memory, FencePage::encoded_size));
 }
 

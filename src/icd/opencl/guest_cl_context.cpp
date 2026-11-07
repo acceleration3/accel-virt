@@ -121,6 +121,12 @@ void GuestClContext::teardown()
     link_.release();
 }
 
+bool GuestClContext::exhausted() const
+{
+    AV_SCOPE("GuestClContext::exhausted");
+    return channel_.exhausted();
+}
+
 GuestClContext::State GuestClContext::state() const
 {
     AV_SCOPE("GuestClContext::state");

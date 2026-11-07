@@ -111,6 +111,7 @@ public:
     static constexpr std::uint64_t rig_window_bytes = std::uint64_t{2} << 30u;
     static constexpr std::uint32_t not_found = 0xC0000225u;
     static constexpr std::uint64_t first_luid = 0x0000000100000000ull;
+    static constexpr std::uint32_t device_lost_code = 7u;
     static constexpr std::uint64_t default_local_budget = std::uint64_t{256} << 20u;
     static constexpr std::uint64_t default_non_local_budget = std::uint64_t{1} << 30u;
     static constexpr std::uint32_t max_queued = 320u;
@@ -223,6 +224,7 @@ public:
     void          time_out_while_consuming(std::uint32_t count);
     void          time_out_while_beating(std::uint32_t count);
     void          time_out_faulted();
+    void          time_out_faulted_with(std::uint32_t code, std::uint32_t after_waits = 0u);
     bool          fault_page_of(std::uint32_t context);
     void          fault_every_page();
     void          time_out_silently(std::uint32_t count);
@@ -451,6 +453,8 @@ private:
     std::uint32_t timeouts_while_beating_;
     std::uint32_t timeouts_while_pulsing_;
     bool          timeout_faulted_;
+    std::uint32_t fault_code_;
+    std::uint32_t fault_after_;
     std::uint32_t timeouts_silent_;
     std::uint64_t submit_cost_;
     std::uint32_t slow_nth_;

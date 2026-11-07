@@ -412,7 +412,7 @@ private:
     cl_int           fill_buffer(ClientTransport &wire, ClArenaBlocks &blocks, uint64_t context, uint64_t device,
                                  uint64_t buffer, size_t bytes, const void *from);
     uint64_t         own_queue(ClientTransport &wire, uint64_t context, uint64_t device, cl_int &error);
-    [[nodiscard]] Status open_device(ClDevice &device);
+    [[nodiscard]] Status open_device(ClDevice &device, bool &exhausted);
     void             give_back_to_host(ClientTransport &wire, ClObject::Kind kind, uint64_t handle);
     void            *wrap(ClientTransport &transport, ClObject::Kind kind, uint64_t wire,
                           GuestClContext *context,

@@ -87,6 +87,10 @@ Status GuestGlContext::make_once()
     const Status built = build();
     if (built != Status::ok) return built;
     if (!learn()) {
+        if (channel_.exhausted()) {
+            lines_.write("the host has no session left for the context");
+            return Status::no_memory;
+        }
         lines_.write("the host refused the context's options");
         return Status::invalid_parameter;
     }

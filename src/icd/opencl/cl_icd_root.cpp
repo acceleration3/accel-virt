@@ -189,9 +189,10 @@ void *ClIcdRoot::extension_function(const char *name)
     return nullptr;
 }
 
-Status ClIcdRoot::open_device(ClDevice &device)
+Status ClIcdRoot::open_device(ClDevice &device, bool &exhausted)
 {
     AV_SCOPE("ClIcdRoot::open_device");
+    exhausted = false;
     if (device.object() != nullptr) return Status::ok;
     GuestClContext *context = nullptr;
     const Status    made =
@@ -204,6 +205,7 @@ Status ClIcdRoot::open_device(ClDevice &device)
     ClientTransport *const wire = opened == Status::ok ? context->wire() : nullptr;
     if (wire == nullptr) {
         lines_.write("the ICD's own context could not be made");
+        exhausted = context->exhausted();
         static_cast<void>(contexts_.destroy(context));
         return opened;
     }
@@ -211,6 +213,7 @@ Status ClIcdRoot::open_device(ClDevice &device)
     cl_uint  platforms = 0u;
     if (av::clproto::av_clGetPlatformIDs(*wire, 1u, &host_platform, &platforms) != CL_SUCCESS ||
         platforms == 0u || host_platform == 0u) {
+        exhausted = context->exhausted();
         static_cast<void>(contexts_.destroy(context));
         return Status::not_supported;
     }
@@ -219,6 +222,7 @@ Status ClIcdRoot::open_device(ClDevice &device)
     if (av::clproto::av_clGetDeviceIDs(*wire, host_platform, CL_DEVICE_TYPE_GPU, 1u, &host_device,
                                         &devices) != CL_SUCCESS ||
         devices == 0u || host_device == 0u) {
+        exhausted = context->exhausted();
         static_cast<void>(contexts_.destroy(context));
         return Status::not_supported;
     }
@@ -263,19 +267,24 @@ cl_int ClIcdRoot::device_ids(cl_platform_id platform, cl_device_type type, cl_ui
         return CL_DEVICE_NOT_FOUND;
     }
     cl_uint found = 0u;
+    bool    exhausted = false;
     {
         const ThreadLockHold locked(lock_);
         learn_devices();
         for (uint32_t index = 0u; index < devices_.count(); ++index) {
             ClDevice &device = devices_.at(index);
-            if (open_device(device) != Status::ok) continue;
+            bool         refused = false;
+            const Status opened = open_device(device, refused);
+            exhausted = exhausted || refused;
+            if (opened != Status::ok) continue;
             if (devices != nullptr && found < num_entries)
                 devices[found] = reinterpret_cast<cl_device_id>(device.object());
             ++found;
         }
     }
     if (num_devices != nullptr) *num_devices = found;
-    return found != 0u ? CL_SUCCESS : CL_DEVICE_NOT_FOUND;
+    if (found != 0u) return CL_SUCCESS;
+    return exhausted ? CL_OUT_OF_RESOURCES : CL_DEVICE_NOT_FOUND;
 }
 
 uint64_t ClIcdRoot::host_device_of(ClObject &object)
@@ -537,10 +546,12 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
     if (made == Status::ok) context->keep_properties(properties);
     if (made == Status::ok) context->notify_with(notify);
     if (made != Status::ok) {
+        const bool exhausted = context != nullptr && context->exhausted();
         if (context != nullptr) static_cast<void>(contexts_.destroy(context));
-        report_error(error, made == Status::no_memory ? CL_OUT_OF_HOST_MEMORY
-                            : gl_share != 0u          ? CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR
-                                                      : CL_DEVICE_NOT_AVAILABLE);
+        report_error(error, exhausted                  ? CL_OUT_OF_RESOURCES
+                            : made == Status::no_memory ? CL_OUT_OF_HOST_MEMORY
+                            : gl_share != 0u            ? CL_INVALID_GL_SHAREGROUP_REFERENCE_KHR
+                                                        : CL_DEVICE_NOT_AVAILABLE);
         return nullptr;
     }
     ClientTransport *const wire = context->wire();
@@ -557,8 +568,11 @@ cl_context ClIcdRoot::create_context(const cl_context_properties *properties, co
                                                         &host_error);
     }
     if (host_context == 0u) {
+        const bool exhausted = context->exhausted();
         static_cast<void>(contexts_.destroy(context));
-        report_error(error, host_error != CL_SUCCESS ? host_error : CL_DEVICE_NOT_AVAILABLE);
+        report_error(error, exhausted                  ? CL_OUT_OF_RESOURCES
+                            : host_error != CL_SUCCESS ? host_error
+                                                       : CL_DEVICE_NOT_AVAILABLE);
         return nullptr;
     }
     void *const wrapped = wrap(*wire, ClObject::Kind::context, host_context, context, nullptr, error);
@@ -2339,16 +2353,17 @@ cl_int ClIcdRoot::device_ids_for_luid(uint64_t luid, cl_device_id *devices, cl_u
 {
     AV_SCOPE("ClIcdRoot::device_ids_for_luid");
     ClDevice *device = nullptr;
-    bool      opened = false;
+    Status    opened = Status::not_found;
+    bool      exhausted = false;
     {
         const ThreadLockHold locked(lock_);
         learn_devices();
         device = devices_.on(luid);
-        opened = device != nullptr && open_device(*device) == Status::ok;
+        if (device != nullptr) opened = open_device(*device, exhausted);
     }
-    if (!opened) {
+    if (opened != Status::ok) {
         if (num_devices != nullptr) *num_devices = 0u;
-        return CL_DEVICE_NOT_FOUND;
+        return exhausted ? CL_OUT_OF_RESOURCES : CL_DEVICE_NOT_FOUND;
     }
     if (devices != nullptr) devices[0] = reinterpret_cast<cl_device_id>(device->object());
     if (num_devices != nullptr) *num_devices = 1u;
@@ -2504,7 +2519,8 @@ cl_int ClIcdRoot::gl_context_info(const cl_context_properties *properties, cl_gl
         const ThreadLockHold locked(lock_);
         learn_devices();
         device = devices_.count() != 0u ? &devices_.at(0u) : nullptr;
-        opened = device != nullptr && open_device(*device) == Status::ok;
+        bool refused = false;
+        opened = device != nullptr && open_device(*device, refused) == Status::ok;
     }
     if (!opened) return CL_OUT_OF_RESOURCES;
     ExtensionWords host(memory_, Pool::paged);

@@ -36,6 +36,7 @@ public:
     uint32_t         slot_of(uint32_t kmt_adapter, bool &learned);
     Caps            &caps(uint32_t slot);
     d3d::D3dSession *session(uint32_t slot);
+    bool             exhausted() const;
 
 private:
     static constexpr uint8_t  probe_ring_order = 16u;
@@ -55,6 +56,7 @@ private:
     Caps                           caps_[max_adapters];
     ObjectStorage<icd::LinkGenerations<d3d::D3dSession>> sessions_[max_adapters];
     uint32_t                       adapters_[max_adapters];
+    bool                           exhausted_;
 };
 
 template <typename Caps>
@@ -63,7 +65,7 @@ AdapterSessions<Caps>::AdapterSessions(Kmt &kmt, BlockSource &memory, DriverLog 
                                        uint32_t flush_command, const d3d::SliceOffer *offer)
     : kmt_(kmt), memory_(memory), lines_(log), refusal_(refusal), arena_bytes_(arena_bytes),
       select_command_(select_command), flush_command_(flush_command), offer_(offer), caps_(),
-      sessions_(), adapters_{}
+      sessions_(), adapters_{}, exhausted_(false)
 {
     AV_SCOPE("AdapterSessions::AdapterSessions");
     for (auto &slot : sessions_) static_cast<void>(slot.construct(memory));
@@ -81,6 +83,7 @@ uint32_t AdapterSessions<Caps>::slot_of(uint32_t kmt_adapter, bool &learned)
 {
     AV_SCOPE("AdapterSessions::slot_of");
     learned = false;
+    exhausted_ = false;
     for (uint32_t slot = 0u; slot < max_adapters; slot++)
         if (adapters_[slot] == kmt_adapter && caps_[slot].learned()) return slot;
     for (uint32_t slot = 0u; slot < max_adapters; slot++) {
@@ -108,10 +111,22 @@ bool AdapterSessions<Caps>::learn(Caps &caps, uint32_t kmt_adapter)
                            icd::ChannelShape(SubApi::d3d, probe_ring_order, probe_reply_bytes, probe_staging_bytes,
                                              0u, 0u),
                            unshared);
-    if (probe.open(connection) != Status::ok) return false;
+    const Status opened = probe.open(connection);
+    if (opened != Status::ok) {
+        exhausted_ = opened == Status::no_memory;
+        return false;
+    }
     const bool learned = caps.learn(probe.transport(), kmt_, kmt_adapter);
+    exhausted_ = !learned && probe.exhausted();
     probe.close(false);
     return learned;
+}
+
+template <typename Caps>
+bool AdapterSessions<Caps>::exhausted() const
+{
+    AV_SCOPE("AdapterSessions::exhausted");
+    return exhausted_;
 }
 
 template <typename Caps>

@@ -21,6 +21,7 @@ inline constexpr Hresult hr_dxgi_device_removed = static_cast<Hresult>(0x887A000
 inline constexpr Hresult hr_dxgi_device_hung = static_cast<Hresult>(0x887A0006u);
 inline constexpr Hresult hr_dxgi_device_reset = static_cast<Hresult>(0x887A0007u);
 
+inline constexpr Hresult hr_d3d9_out_of_video_memory = static_cast<Hresult>(0x8876017Cu);
 inline constexpr Hresult hr_d3d12_driver_version_mismatch = static_cast<Hresult>(0x887E0002u);
 
 }

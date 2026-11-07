@@ -4,6 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
+#include "icd/d3d/session_refusal.hpp"
 #include "icd/d3d/umd_adapter.hpp"
 #include "proto/generated/d3d9/d3d9_protocol_ids.h"
 #include "um/d3d/d3d9_tables.hpp"
@@ -49,7 +50,8 @@ d3d::Hresult D3d9Driver::caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t kmt
 {
     AV_SCOPE("D3d9Driver::caps");
     const uint32_t slot = slot_of(kmt_adapter);
-    if (slot == AdapterSessions<D3d9HostCaps>::none) return d3d::hr_fail;
+    if (slot == AdapterSessions<D3d9HostCaps>::none)
+        return d3d::SessionRefusal(adapters_.exhausted()).for_d3d9();
     const auto &asked = *reinterpret_cast<const D3DDDIARG_GETCAPS *>(&args);
     const HRESULT answered = adapters_.caps(slot).answer(asked);
     if (FAILED(answered)) {
@@ -65,12 +67,13 @@ d3d::Hresult D3d9Driver::build(d3d::UmdAdapter &adapter, void *create, uint32_t 
 {
     AV_SCOPE("D3d9Driver::build");
     const uint32_t slot = slot_of(kmt_adapter);
-    if (slot == AdapterSessions<D3d9HostCaps>::none) return d3d::hr_fail;
+    if (slot == AdapterSessions<D3d9HostCaps>::none)
+        return d3d::SessionRefusal(adapters_.exhausted()).for_d3d9();
     auto &arguments = *static_cast<D3DDDIARG_CREATEDEVICE *>(create);
     D3d9Device *device = nullptr;
     d3d::D3dSession *const joined = adapters_.session(slot);
     if (joined == nullptr || devices_.create(device, *joined, memory_, lines_, adapters_.caps(slot), adapter, trace_) != Status::ok)
-        return d3d::hr_out_of_memory;
+        return d3d::SessionRefusal(true).for_d3d9();
     const HRESULT opened = device->initialize(kmt_adapter, arguments);
     if (FAILED(opened)) {
         LogLine line(lines_);
@@ -78,7 +81,7 @@ d3d::Hresult D3d9Driver::build(d3d::UmdAdapter &adapter, void *create, uint32_t 
         line.hex(arguments.Flags.Value, 8u);
         line.write();
         static_cast<void>(devices_.destroy(device));
-        return static_cast<d3d::Hresult>(opened);
+        return opened == E_OUTOFMEMORY ? d3d::SessionRefusal(true).for_d3d9() : static_cast<d3d::Hresult>(opened);
     }
     arguments.hDevice = device;
     fill_device_funcs9(*arguments.pDeviceFuncs);

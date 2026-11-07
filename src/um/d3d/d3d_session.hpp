@@ -50,6 +50,7 @@ public:
     uint32_t users() const;
     bool      lost() const;
     FaultCode fault_code() const;
+    bool      exhausted() const;
 
     uint32_t               next_id();
     d3d::D3dCommandStream &stream();

@@ -68,6 +68,12 @@ FaultCode D3dSession::fault_code() const
     return channel_.fault_code();
 }
 
+bool D3dSession::exhausted() const
+{
+    AV_SCOPE("D3dSession::exhausted");
+    return channel_.exhausted();
+}
+
 Status D3dSession::escape(uint8_t *data, uint32_t size)
 {
     AV_SCOPE("D3dSession::escape");

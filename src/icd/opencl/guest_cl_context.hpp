@@ -60,6 +60,7 @@ public:
     [[nodiscard]] Status make(uint32_t gl_share = 0u, uint64_t wake = 0u);
     bool                 wakes() const;
     State                state() const;
+    bool                 exhausted() const;
     bool                 shares_gl() const;
     bool                 on(const icd::IcdConnection &connection) const;
     void                 keep_properties(const cl_context_properties *properties);

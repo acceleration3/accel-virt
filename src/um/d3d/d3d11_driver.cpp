@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
+#include "icd/d3d/session_refusal.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/ddi/d3d10ddiarg_create_device_record.hpp"
 #include "core/log/keyed_log.hpp"
@@ -28,7 +29,7 @@ d3d::Hresult D3d11Driver::caps(d3d::UmdAdapter &, d3d::D3d102ddiargGetCapsRecord
     AV_SCOPE("D3d11Driver::caps");
     bool           learned = false;
     const uint32_t slot = adapters_.slot_of(kmt_adapter, learned);
-    if (slot == AdapterSessions<D3d11HostCaps>::none) return d3d::hr_fail;
+    if (slot == AdapterSessions<D3d11HostCaps>::none) return d3d::SessionRefusal(adapters_.exhausted()).for_d3d();
     return adapters_.caps(slot).answer(*reinterpret_cast<const D3D10_2DDIARG_GETCAPS *>(&args));
 }
 
@@ -37,7 +38,7 @@ d3d::Hresult D3d11Driver::build(d3d::UmdDevice &, d3d::D3d10ddiargCreateDeviceRe
     AV_SCOPE("D3d11Driver::build");
     bool           learned = false;
     const uint32_t slot = adapters_.slot_of(kmt_adapter, learned);
-    if (slot == AdapterSessions<D3d11HostCaps>::none) return d3d::hr_fail;
+    if (slot == AdapterSessions<D3d11HostCaps>::none) return d3d::SessionRefusal(adapters_.exhausted()).for_d3d();
     const auto &arguments = *reinterpret_cast<const D3D10DDIARG_CREATEDEVICE *>(&create);
     if (arguments.Interface != D3DWDDM3_2_DDI_INTERFACE_VERSION) return d3d::hr_no_interface;
     D3d11Device *device = nullptr;

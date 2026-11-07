@@ -9,6 +9,7 @@
 #include "core/trace/state_writer.hpp"
 #include "icd/opencl/cl_devices.hpp"
 #include "icd/opencl/cl_object.hpp"
+#include "proto/submission/fault_code.hpp"
 
 #include <CL/cl_ext.h>
 
@@ -189,6 +190,28 @@ TEST(cl_devices, each_direct3d_adapter_finds_its_own_device)
                                              ClIcdRoot::d3d11_preferred_devices, 1u, &other, &count),
            CL_DEVICE_NOT_FOUND);
   CHECK_EQ(count, 0u); }
+
+TEST(cl_devices, a_direct3d_adapter_whose_device_the_host_has_no_session_for_is_out_of_resources)
+{ std::uint32_t refused = 0u;
+  for (std::uint32_t after = 0u; after < 4u; after++) {
+      ClIcdRig rig;
+      two_gpus(rig);
+      CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+      cl_platform_id platform = rig.loader().platform(0u);
+      int            integrated = 0;
+      rig.d3d_adapters().name_adapter(&integrated, integrated_luid);
+      device_opens(rig);
+      rig.kmt().time_out_faulted_with(static_cast<std::uint32_t>(av::FaultCode::no_executor), after);
+      cl_device_id found = nullptr;
+      cl_uint      count = 7u;
+      const cl_int answer = rig.root().device_ids_from_d3d11(platform, ClIcdRoot::d3d11_adapter_source, &integrated,
+                                                             ClIcdRoot::d3d11_preferred_devices, 1u, &found, &count);
+      if (answer == CL_SUCCESS) continue;
+      refused++;
+      CHECK_EQ(answer, CL_OUT_OF_RESOURCES);
+      CHECK_EQ(count, 0u);
+  }
+  CHECK(refused >= 1u); }
 
 TEST(cl_devices, a_context_and_its_queues_are_its_devices_alone)
 { ClIcdRig rig;

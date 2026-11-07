@@ -3,6 +3,7 @@
 #include "core/log/log_line.hpp"
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
+#include "icd/d3d/session_refusal.hpp"
 #include "icd/common/pieces.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/generated/d3d12/d3d12_dispatch_client.h"
@@ -73,8 +74,9 @@ HRESULT D3d12Device::initialize(uint32_t adapter, const D3D12DDIARG_CREATEDEVICE
     if (!d3d12proto::av_d3d12_OpenDevice12(channel_.object(), 0u, &hresult) || hresult != 0u) {
         lines_.write("the host made no Direct3D 12 device");
         channel_.destroy();
+        const bool exhausted = session_.exhausted();
         session_.leave();
-        return E_FAIL;
+        return d3d::SessionRefusal(exhausted).for_d3d();
     }
     return S_OK;
 }

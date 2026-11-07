@@ -9,6 +9,7 @@
 #include "proto/client/transfer_room.hpp"
 #include "core/log/keyed_log.hpp"
 #include "icd/d3d/device_table.hpp"
+#include "icd/d3d/session_refusal.hpp"
 #include "icd/d3d/texture_upload.hpp"
 #include "proto/client/client_blob_arena.hpp"
 #include "proto/context/sub_api.hpp"
@@ -89,8 +90,9 @@ HRESULT D3d11Device::initialize(uint32_t adapter, const D3D10DDIARG_CREATEDEVICE
         channel_.destroy();
         waits_.destroy();
         present_order_.destroy();
+        const bool exhausted = session_.exhausted();
         session_.leave();
-        return E_FAIL;
+        return d3d::SessionRefusal(exhausted).for_d3d();
     }
     session_.query_results().bind(channel_.object());
     slices_.own(session_.shared_memory().stream(HostMemoryRequest::Kind::upload));

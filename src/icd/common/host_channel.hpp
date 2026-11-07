@@ -63,6 +63,7 @@ public:
     bool faulted() const;
     bool      lost() const;
     FaultCode fault_code() const;
+    bool      exhausted() const;
     ClientTransport    &wire();
     KmtTransport       &transport();
     const KmtTransport &transport() const;
@@ -123,6 +124,7 @@ private:
     ObjectStorage<KmtBlobArena>     arena_;
     const char                     *arena_failed_step_;
     Status                          arena_failed_status_;
+    bool                            refused_;
     GuestConnection                *device_;
     ObjectPool<Kept>                          memories_;
     KeyedSlots<uint64_t, Kept *>              handles_;

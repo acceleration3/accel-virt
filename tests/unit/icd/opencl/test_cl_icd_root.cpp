@@ -10,6 +10,7 @@
 #include "icd/opencl/cl_property_list.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/fault_code.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 #include <CL/cl_ext.h>
@@ -277,6 +278,44 @@ TEST(cl_icd_root, a_context_is_made_on_the_device_and_carries_the_dispatch_table
   CHECK_EQ(error, CL_SUCCESS);
   CHECK(rig.loader().dispatch_of(context) == &rig.root().dispatch());
   CHECK(rig.root().invariants_hold()); }
+
+TEST(cl_icd_root, a_host_with_no_session_left_finds_no_device_and_says_out_of_resources_never_not_found)
+{ std::uint32_t refused = 0u;
+  for (std::uint32_t after = 0u; after < 6u; after++) {
+      ClIcdRig rig;
+      CHECK(rig.loader().load() == FakeClLoader::Load::kept);
+      device_opens(rig);
+      rig.kmt().time_out_faulted_with(static_cast<std::uint32_t>(av::FaultCode::no_executor), after);
+      cl_device_id device = nullptr;
+      cl_uint      devices = 7u;
+      const cl_int answer = rig.loader().device_ids(CL_DEVICE_TYPE_GPU, 1u, &device, &devices);
+      if (answer == CL_SUCCESS) continue;
+      refused++;
+      CHECK_EQ(answer, CL_OUT_OF_RESOURCES);
+      CHECK_EQ(devices, 0u);
+      CHECK(rig.root().invariants_hold());
+  }
+  CHECK(refused >= 1u); }
+
+TEST(cl_icd_root, a_host_with_no_session_left_refuses_a_context_with_out_of_resources)
+{ std::uint32_t refused = 0u;
+  for (std::uint32_t after = 0u; after < 8u; after++) {
+      ClIcdRig rig;
+      cl_device_id device = opened_device(rig);
+      CHECK(device != nullptr);
+      rig.host().arena_import(0x77u, 3u);
+      rig.host().cl_ids(CL_SUCCESS, &host_platform, 1u, 1u);
+      rig.host().cl_ids(CL_SUCCESS, &host_device, 1u, 1u);
+      rig.host().cl_handle(host_context, CL_SUCCESS);
+      rig.kmt().time_out_faulted_with(static_cast<std::uint32_t>(av::FaultCode::no_executor), after);
+      cl_int     error = CL_SUCCESS;
+      cl_context context = rig.loader().create_context(device, &error);
+      if (context != nullptr) continue;
+      refused++;
+      CHECK_EQ(error, CL_OUT_OF_RESOURCES);
+      CHECK(rig.root().invariants_hold());
+  }
+  CHECK(refused >= 1u); }
 
 TEST(cl_icd_root, a_context_made_from_something_that_is_not_a_device_is_refused)
 { ClIcdRig rig;

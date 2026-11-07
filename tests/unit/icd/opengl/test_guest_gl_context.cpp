@@ -421,6 +421,32 @@ TEST(guest_gl_context, without_a_blob_arena_the_context_is_made_and_says_so)
   CHECK_EQ(error, 0u);
   CHECK(context->invariants_hold()); }
 
+TEST(guest_gl_context, a_host_with_no_session_left_is_no_memory_wherever_in_the_make_it_faults)
+{ std::uint32_t seen = 0u, queried = 0u;
+  for (std::uint32_t after = 0u; after < 5u; after++) {
+      GlContextRig rig;
+      Context context(rig);
+      rig.host().blob_import(1u, 0u);
+      rig.host().blob_import(1u, 0u);
+      rig.kmt().time_out_faulted_with(static_cast<std::uint32_t>(av::FaultCode::no_executor), after);
+      const Status made = context->make();
+      if (made == Status::no_memory) seen++;
+      queried += rig.log().holding("no session left");
+      CHECK(context->state() == State::created);
+      CHECK_EQ(rig.kmt().open_objects(), 0u);
+  }
+  CHECK_EQ(seen, 5u);
+  CHECK(queried >= 1u); }
+
+TEST(guest_gl_context, a_host_that_faults_the_first_query_for_another_reason_still_refuses_the_options)
+{ GlContextRig rig;
+  Context context(rig);
+  rig.host().blob_import(1u, 0u);
+  rig.host().blob_import(1u, 0u);
+  rig.kmt().time_out_faulted_with(static_cast<std::uint32_t>(av::FaultCode::device_lost));
+  CHECK_STATUS(context->make(), Status::invalid_parameter);
+  CHECK(context->state() == State::created); }
+
 TEST(guest_gl_context, a_host_refusal_is_invalid_parameter_with_nothing_held)
 { for (std::uint32_t wait = 2u; wait <= GlContextRig::link_objects + 5u; wait++) {
       GlContextRig rig;

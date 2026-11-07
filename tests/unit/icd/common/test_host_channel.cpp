@@ -19,6 +19,7 @@
 #include "proto/resources/host_memory_request.hpp"
 #include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/fault_code.hpp"
 #include "proto/submission/published_slot_layout.hpp"
 #include "proto/wire/spill_block.hpp"
 #include "proto/wire/wire_reader.hpp"
@@ -295,6 +296,27 @@ TEST(host_channel, a_transport_that_faults_opening_the_arena_opens_nothing)
       CHECK_STATUS(channel.open(rig.device()), Status::invalid_state);
       CHECK_EQ(rig.log().holding("avtest: the context faulted opening its blob arena"), 1u);
       rig.check_nothing_held(channel);
+  } }
+
+TEST(host_channel, a_host_with_no_session_left_is_told_to_the_caller_as_no_memory_and_never_as_a_refusal)
+{ Rig rig;
+  HostChannel channel(rig.platform(), rig.lines(), batching(), rig.lock());
+  rig.kmt().time_out_faulted_with(static_cast<std::uint32_t>(av::FaultCode::no_executor));
+  CHECK_STATUS(channel.open(rig.device()), Status::no_memory);
+  rig.check_nothing_held(channel); }
+
+TEST(host_channel, a_channel_the_host_faulted_for_lack_of_a_session_says_exhausted_and_other_faults_do_not)
+{ for (std::uint32_t code = 1u; code <= 9u; code++) {
+      Rig rig;
+      HostChannel channel(rig.platform(), rig.lines(), plain(), rig.lock());
+      CHECK_STATUS(channel.open(rig.device()), Status::ok);
+      CHECK(!channel.exhausted());
+      rig.kmt().time_out_faulted_with(code);
+      WireWriter writer = channel.transport().request_writer();
+      WireReader reply(nullptr, 0u);
+      CHECK(channel.transport().send_sync(command_id, writer, reply) != TransportResult::ok);
+      CHECK_EQ(channel.exhausted(), code == static_cast<std::uint32_t>(av::FaultCode::no_executor));
+      channel.close(true);
   } }
 
 TEST(host_channel, no_memory_for_the_staging_or_the_batch_opens_nothing)

@@ -25,7 +25,7 @@ HostChannel::HostChannel(BlockSource &memory, DriverLog &log, const ChannelShape
     : memory_(memory), lines_(log), lock_(lock), sub_api_(shape.sub_api_), ring_order_(shape.ring_order_),
       reply_bytes_(shape.reply_bytes_), staging_bytes_(shape.staging_bytes_), batch_bytes_(shape.batch_bytes_),
       arena_bytes_(shape.arena_bytes_), staging_(nullptr), batch_block_(nullptr), transport_(), locked_(), arena_(),
-      arena_failed_step_(nullptr), arena_failed_status_(Status::ok),
+      arena_failed_step_(nullptr), arena_failed_status_(Status::ok), refused_(false),
       device_(nullptr), memories_(memory), handles_(memory, Pool::paged), retired_(memory, Pool::paged), fenced_(memory, Pool::paged)
 {
     AV_SCOPE("HostChannel::HostChannel");
@@ -41,6 +41,7 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
 {
     AV_SCOPE("HostChannel::open");
     if (opened()) return Status::invalid_state;
+    refused_ = false;
     ScopeExit undo([this] { close(true); });
     staging_ = static_cast<uint8_t *>(memory_.allocate(staging_bytes_, Pool::paged));
     if (staging_ == nullptr) return Status::no_memory;
@@ -74,10 +75,10 @@ Status HostChannel::open(GuestConnection &device, const GlContextOptions &option
                 .text(" with code ")
                 .number(transport_.object().host_fault_code());
         line.write();
-        if (faulted)
-            return transport_.object().host_fault_code() == static_cast<uint32_t>(FaultCode::no_executor)
-                       ? Status::no_memory
-                       : Status::invalid_state;
+        if (faulted) {
+            refused_ = exhausted();
+            return refused_ ? Status::no_memory : Status::invalid_state;
+        }
     }
     undo.dismiss();
     return Status::ok;
@@ -323,6 +324,12 @@ FaultCode HostChannel::fault_code() const
     AV_SCOPE("HostChannel::fault_code");
     if (!lost()) return FaultCode::none;
     return static_cast<FaultCode>(transport_.object().host_fault_code());
+}
+
+bool HostChannel::exhausted() const
+{
+    AV_SCOPE("HostChannel::exhausted");
+    return refused_ || fault_code() == FaultCode::no_executor;
 }
 
 ClientTransport &HostChannel::wire()

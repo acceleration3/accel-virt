@@ -5,6 +5,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/log/keyed_log.hpp"
 #include "icd/common/pieces.hpp"
+#include "icd/d3d/session_refusal.hpp"
 #include "icd/d3d/vcache_info.hpp"
 #include "proto/resources/host_memory_request.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_client.h"
@@ -103,8 +104,9 @@ HRESULT D3d9Device::initialize(uint32_t kmt_adapter, const D3DDDIARG_CREATEDEVIC
         lines_.write("the host made no Direct3D 9 device");
         channel_.destroy();
         present_order_.destroy();
+        const bool exhausted = session_.exhausted();
         session_.leave();
-        return E_FAIL;
+        return d3d::SessionRefusal(exhausted).for_d3d();
     }
     uint32_t sliced = 0u;
     const bool asked = d3d9proto::av_d3d9_QueryDeviceSlices9(wire(), &sliced);

@@ -8,6 +8,7 @@
 #include "icd/opengl/guest_gl_context.hpp"
 #include "proto/context/gl_context_options.hpp"
 #include "proto/escape/av_context_record.hpp"
+#include "proto/submission/fault_code.hpp"
 
 #include "gl_protocol_ids.h"
 
@@ -856,6 +857,40 @@ TEST(gl_icd_root, a_create_with_attributes_opengl32_does_not_finish_leaves_nothi
   CHECK(rig.root().create_context_attribs(rig.dc(), nullptr, none) == nullptr);
   check_error(rig, Root::error_invalid_operation);
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
+
+TEST(gl_icd_root, a_host_with_no_session_left_fails_the_legacy_context_s_first_make_current_with_not_enough_memory)
+{ std::uint32_t refused = 0u;
+  for (std::uint32_t after = 0u; after < 6u; after++) {
+      GlIcdRig rig;
+      rig.load_with_format();
+      void *const context = rig.opengl32().create_context(rig.dc());
+      CHECK(context != nullptr);
+      rig.host().gl_make("host gpu", "4.6");
+      rig.host().gl_policy(0);
+      rig.kmt().time_out_faulted_with(static_cast<std::uint32_t>(av::FaultCode::no_executor), after);
+      if (rig.opengl32().make_current(rig.dc(), context)) continue;
+      refused++;
+      check_error(rig, Root::error_not_enough_memory);
+      CHECK_EQ(rig.kmt().open_objects(), 0u);
+      CHECK(rig.root().invariants_hold());
+  }
+  CHECK(refused >= 1u); }
+
+TEST(gl_icd_root, a_host_with_no_session_left_fails_wglCreateContextAttribsARB_with_not_enough_memory)
+{ std::uint32_t refused = 0u;
+  const std::int32_t core[] = {0x2091, 4, 0x2092, 6, 0x9126, 1, 0};
+  for (std::uint32_t after = 0u; after < 6u; after++) {
+      GlIcdRig rig;
+      rig.load_with_format();
+      rig.host().gl_make("host gpu", "4.6");
+      rig.host().gl_policy(0);
+      rig.kmt().time_out_faulted_with(static_cast<std::uint32_t>(av::FaultCode::no_executor), after);
+      if (rig.root().create_context_attribs(rig.dc(), nullptr, core) != nullptr) continue;
+      refused++;
+      check_error(rig, Root::error_not_enough_memory);
+      CHECK_EQ(rig.kmt().open_objects(), 0u);
+  }
+  CHECK(refused >= 1u); }
 
 TEST(gl_icd_root, a_create_with_attributes_and_no_room_is_out_of_memory)
 { GlIcdRig rig;

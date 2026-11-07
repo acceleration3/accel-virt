@@ -3,6 +3,7 @@
 #include "core/trace/function_scope.hpp"
 #include "proto/generated/d3d/d3d_protocol_ids.h"
 #include "core/log/keyed_log.hpp"
+#include "icd/d3d/session_refusal.hpp"
 #include "icd/d3d/ddi/d3d10_2ddiarg_get_caps_record.hpp"
 #include "icd/d3d/ddi/d3d12ddiarg_create_device_record.hpp"
 #include "icd/d3d/device_block.hpp"
@@ -35,7 +36,7 @@ d3d::Hresult D3d12Driver::caps(d3d::D3d102ddiargGetCapsRecord &args, uint32_t km
     AV_SCOPE("D3d12Driver::caps");
     bool           learned = false;
     const uint32_t slot = adapters_.slot_of(kmt_adapter, learned);
-    if (slot == AdapterSessions<D3d12HostCaps>::none) return d3d::hr_fail;
+    if (slot == AdapterSessions<D3d12HostCaps>::none) return d3d::SessionRefusal(adapters_.exhausted()).for_d3d();
     const HRESULT answered = adapters_.caps(slot).answer(*reinterpret_cast<const D3D12DDIARG_GETCAPS *>(&args));
     if (FAILED(answered)) lines_.note("Direct3D 12 caps refused, type", args.Type);
     return static_cast<d3d::Hresult>(answered);
@@ -46,7 +47,7 @@ d3d::Hresult D3d12Driver::build(d3d::D3d12ddiargCreateDeviceRecord &create, uint
     AV_SCOPE("D3d12Driver::build");
     bool           learned = false;
     const uint32_t slot = adapters_.slot_of(kmt_adapter, learned);
-    if (slot == AdapterSessions<D3d12HostCaps>::none) return d3d::hr_fail;
+    if (slot == AdapterSessions<D3d12HostCaps>::none) return d3d::SessionRefusal(adapters_.exhausted()).for_d3d();
     const auto  &arguments = *reinterpret_cast<const D3D12DDIARG_CREATEDEVICE_0109 *>(&create);
     D3d12Device *device = nullptr;
     d3d::D3dSession *const joined = session(slot);
