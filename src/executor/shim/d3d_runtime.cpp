@@ -96,6 +96,20 @@ void D3dRuntime::close()
     d3d9_ = nullptr;
 }
 
+void D3dRuntime::give_vram_gate(const AvVramGate &gate) const
+{
+    AV_SCOPE("D3dRuntime::give_vram_gate");
+    void *const libraries[] = {d3d11_, d3d9_};
+    for (void *library : libraries) {
+        if (library == nullptr) continue;
+        const SetVramGate set = reinterpret_cast<SetVramGate>(dlsym(library, "dxvk_proton_set_vram_gate"));
+        if (set != nullptr) set(&gate);
+    }
+    if (d3d12core_ == nullptr) return;
+    const SetVramGate set12 = reinterpret_cast<SetVramGate>(dlsym(d3d12core_, "vkd3d_proton_set_vram_gate"));
+    if (set12 != nullptr) set12(&gate);
+}
+
 IDirect3D9 *D3dRuntime::create_d3d9() const
 {
     AV_SCOPE("D3dRuntime::create_d3d9");

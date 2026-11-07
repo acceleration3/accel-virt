@@ -6,7 +6,7 @@
 #include "device/shim/posix_lock.hpp"
 #include "executor/source_memory.hpp"
 #include "executor/vulkan/guest_memory_types.hpp"
-#include "executor/vulkan/vram_policy.hpp"
+#include "proto/context/vram_policy.hpp"
 #include "proto/resources/host_memory_request.hpp"
 
 #include <stdint.h>

@@ -13,7 +13,7 @@ namespace av {
 LoaderHostApis::LoaderHostApis(ExecutorLog &log)
     : instance_(nullptr), uuids_{}, sub_apis_{}, opencl_devices_{},
       gl_displays_{}, d3d_runtime_(), d3d11_devices_{}, d3d12_devices_{}, d3d9_devices_{}, heap_(), surfaces_{},
-      shares_{}, count_(0u), opened_(false)
+      shares_{}, ledgers_{}, vram_gate_(*this, heap_), count_(0u), opened_(false)
 {
     AV_SCOPE("LoaderHostApis::LoaderHostApis");
     for (ObjectStorage<HostShares> &shares : shares_) static_cast<void>(shares.construct(heap_, log.shares()));
@@ -68,12 +68,21 @@ void LoaderHostApis::enumerate()
         uuids_[i] = identity.uuid();
         render_minors_[i] = identity.render_minor();
         sub_apis_[i] = AV_EXECUTOR_SUB_API_VULKAN;
+        VkPhysicalDeviceMemoryProperties memory = {};
+        vkGetPhysicalDeviceMemoryProperties(devices[i], &memory);
+        uint64_t local = 0u;
+        for (uint32_t heap = 0u; heap < memory.memoryHeapCount; heap++)
+            if ((memory.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0u)
+                local += memory.memoryHeaps[heap].size;
+        ledgers_[i].learn(local);
         if (opencl_devices_[i].find(uuids_[i].raw())) sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENCL;
         if (compositors_[i].open(uuids_[i].raw()))
             static_cast<void>(sources_[i].construct(exporters_[i].object(), heap_));
         if (gl_displays_[i].open(uuids_[i].raw())) sub_apis_[i] |= AV_EXECUTOR_SUB_API_OPENGL;
     }
+    count_ = found;
     if (d3d_runtime_.open()) {
+        d3d_runtime_.give_vram_gate(vram_gate_.abi());
         for (uint32_t i = 0u; i < found; i++)
             if (d3d11_devices_[i].object().open(d3d_runtime_, uuids_[i].raw(), shares_[i].object())) {
                 sub_apis_[i] |= AV_EXECUTOR_SUB_API_D3D;
@@ -83,7 +92,6 @@ void LoaderHostApis::enumerate()
                 static_cast<void>(d3d9_devices_[i].open(d3d_runtime_, uuids_[i].raw()));
             }
     }
-    count_ = found;
 }
 
 void LoaderHostApis::close()
@@ -130,6 +138,12 @@ uint32_t LoaderHostApis::sub_apis(uint32_t index)
 {
     AV_SCOPE("LoaderHostApis::sub_apis");
     return index < count_ ? sub_apis_[index] : 0u;
+}
+
+VramLedger *LoaderHostApis::vram_ledger(uint32_t index)
+{
+    AV_SCOPE("LoaderHostApis::vram_ledger");
+    return index < count_ ? &ledgers_[index] : nullptr;
 }
 
 HostMemorySource *LoaderHostApis::memory_source(uint32_t index)

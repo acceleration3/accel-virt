@@ -1,5 +1,7 @@
 #include "executor/opengl/opengl_backend.hpp"
 
+#include "executor/vram_ledger.hpp"
+
 #include "executor/opengl/gl_memory_group.hpp"
 
 #include "executor/teardown_budget.hpp"
@@ -124,7 +126,7 @@ OpenGlBackend::OpenGlBackend(DriverLog &lines) : OpenGlBackend(heap_, lines)
 }
 
 OpenGlBackend::OpenGlBackend(BlockSource &blocks, DriverLog &lines)
-    : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), pending_(gl_, errors_), memories_(blocks, progress_), images_(blocks), slices_(memories_, gl_, import_, progress_, pending_, guest_, lines),
+    : heap_(), context_(), gl_(), import_(), buffers_(), natives_(), wake_(), pack_(gl_, buffers_), fences_(blocks), progress_(gl_, natives_, wake_), pending_(gl_, errors_), vram_guard_(blocks, gl_, pending_), memories_(blocks, progress_), images_(blocks), slices_(memories_, gl_, import_, progress_, pending_, guest_, lines),
       textures_(blocks, gl_, memories_, images_, pending_), guest_(), region_(guest_, lines), published_(guest_), errors_(),
       resolved_(0u), ran_(0u), submitted_(0u), fenced_at_(0u), drained_at_(0u), drain_fence_(nullptr),
       current_(false), poll_failure_logged_(false), lines_(lines)
@@ -137,6 +139,12 @@ const GlContext &OpenGlBackend::context() const
 {
     AV_SCOPE("OpenGlBackend::context");
     return context_;
+}
+
+void OpenGlBackend::use_vram(VramLedger *ledger)
+{
+    AV_SCOPE("OpenGlBackend::use_vram");
+    vram_guard_.bind(ledger);
 }
 
 bool OpenGlBackend::initialize(const GlDisplay *display, const AvContextOptions *options, const OpenGlBackend *share,
@@ -175,6 +183,7 @@ void OpenGlBackend::install_hooks()
     gl_.av_error_user = this;
     slices_.install();
     textures_.install();
+    vram_guard_.install();
 }
 
 bool OpenGlBackend::granted_fixed_function()
@@ -221,6 +230,7 @@ bool OpenGlBackend::drain(TeardownBudget &budget)
 void OpenGlBackend::shut_down()
 {
     AV_SCOPE("OpenGlBackend::shut_down");
+    vram_guard_.clear();
     if (context_.make_current()) {
         if (drain_fence_ != nullptr && gl_.glDeleteSync != nullptr) gl_.glDeleteSync(static_cast<GLsync>(drain_fence_));
         if (gl_.glFinish != nullptr && drained_at_ != submitted_) gl_.glFinish();

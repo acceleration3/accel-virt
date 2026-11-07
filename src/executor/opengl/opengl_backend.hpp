@@ -14,6 +14,7 @@
 #include "executor/opengl/gl_error_queue.hpp"
 #include "executor/opengl/gl_memory_objects.hpp"
 #include "executor/opengl/gl_texture_slices.hpp"
+#include "executor/opengl/gl_vram_guard.hpp"
 #include "executor/shim/gl_dma_buf_images.hpp"
 #include "executor/opengl/sync_tokens.hpp"
 #include "executor/shim/gl_context.hpp"
@@ -34,12 +35,14 @@ class SharedImageShape;
 class GlDisplay;
 class GlMemoryGroup;
 class SourceMemory;
+class VramLedger;
 
 class OpenGlBackend final : public SessionBackend {
 public:
     explicit OpenGlBackend(DriverLog &lines);
     OpenGlBackend(BlockSource &blocks, DriverLog &lines);
 
+    void               use_vram(VramLedger *ledger);
     [[nodiscard]] bool initialize(const GlDisplay *display, const AvContextOptions *options,
                                   const OpenGlBackend *share, GlMemoryGroup *group = nullptr);
     const GlContext   &context() const;
@@ -97,6 +100,7 @@ private:
     SyncTokens  fences_;
     GlBatchProgress progress_;
     GlErrorQueue    pending_;
+    GlVramGuard     vram_guard_;
     GlMemoryObjects memories_;
     GlDmaBufImages  images_;
     GlBufferSlices  slices_;

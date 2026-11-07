@@ -9,6 +9,7 @@
 #include "harness/icd/recording_log.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "executor/host_memory_source.hpp"
+#include "executor/vram_ledger.hpp"
 #include "harness/executor/mock_memory_exporter.hpp"
 
 #include <stdint.h>
@@ -44,6 +45,8 @@ public:
     SharedSurfaces     *surfaces(uint32_t index) override;
     HostShares         *shares(uint32_t index) override;
     HostMemorySource   *memory_source(uint32_t index) override;
+    VramLedger         *vram_ledger(uint32_t index) override;
+    VramLedger         &ledger();
 
 private:
     struct Gpu {
@@ -64,6 +67,7 @@ private:
     HostShares      shares_;
     MockMemoryExporter exporter_;
     HostMemorySource   source_;
+    VramLedger         ledger_;
     bool               memory_withheld_;
 };
 

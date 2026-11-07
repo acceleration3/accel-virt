@@ -7,6 +7,7 @@ struct IDirect3D9;
 struct IDXGIAdapter1;
 struct ID3D11Device;
 struct ID3D11DeviceContext;
+struct AvVramGate;
 
 namespace av {
 
@@ -22,6 +23,8 @@ public:
 
     [[nodiscard]] bool open();
     void               close();
+
+    void give_vram_gate(const AvVramGate &gate) const;
 
     IDXGIAdapter1 *adapter_for(const uint8_t *uuid) const;
     int32_t create_device11(IDXGIAdapter1 *adapter, ID3D11Device *&device, ID3D11DeviceContext *&context,
@@ -45,6 +48,7 @@ private:
     using SerializeRoot = int32_t (*)(const void *desc, void **blob, void **errors);
     using ExportImage = int32_t (*)(void *resource, Vkd3dImageExport *image);
     using ExportFence = int32_t (*)(void *fence, int *fd);
+    using SetVramGate = void (*)(const AvVramGate *gate);
 
     void *open_library(const char *name) const;
     uint32_t vulkan_index(const uint8_t *uuid) const;

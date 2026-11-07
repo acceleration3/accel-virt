@@ -621,6 +621,19 @@ TEXTURE_HOOKED = (
 
 HOST_HOOKED = BUFFER_HOOKED + TEXTURE_HOOKED
 
+VRAM_GUARDED = (
+    "glBufferData", "glNamedBufferData", "glNamedBufferDataEXT", "glBufferStorage", "glNamedBufferStorage",
+    "glNamedBufferStorageEXT",
+    "glTexImage1D", "glTexImage2D", "glTexImage3D", "glTexImage2DMultisample", "glTexImage3DMultisample",
+    "glCompressedTexImage1D", "glCompressedTexImage2D", "glCompressedTexImage3D",
+    "glTexStorage1D", "glTexStorage2D", "glTexStorage3D", "glTexStorage2DMultisample", "glTexStorage3DMultisample",
+    "glTextureStorage1D", "glTextureStorage2D", "glTextureStorage3D", "glTextureStorage2DMultisample",
+    "glTextureStorage3DMultisample",
+    "glRenderbufferStorage", "glRenderbufferStorageMultisample", "glNamedRenderbufferStorage",
+    "glNamedRenderbufferStorageMultisample",
+    "glDeleteRenderbuffers", "glDeleteBuffers", "glDeleteTextures",
+)
+
 TEXTURE_FOLLOWED = ("glCreateTextures", "glGenTextures", "glBindTexture", "glBindMultiTextureEXT", "glTextureImage1DEXT",
                     "glTextureImage2DEXT", "glTextureImage3DEXT")
 
@@ -1623,6 +1636,14 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
              else (f"({p.name}_packs ? {p.name}_packed : {p.name})" if p in packed else p.name))
             for p in cmd.params)
         c.append(f"    if (av_gl.{cmd.name} == nullptr) return false;")
+        if cmd.name in VRAM_GUARDED:
+            scalars = ", ".join(
+                (f"static_cast<uint64_t>(reinterpret_cast<uintptr_t>({p.name}))" if "*" in p.type.cpp()
+                 else f"static_cast<uint64_t>({p.name})") for p in cmd.params)
+            c.append(f"    if (av_gl.av_vram_hook != nullptr) {{")
+            c.append(f"        const uint64_t av_vram_args[] = {{{scalars}}};")
+            c.append(f"        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_{cmd.name}, av_vram_args)) return true;")
+            c.append("    }")
         if cmd.name in HOST_HOOKED:
             hook = f"av_gl.av_hook_{cmd.name}"
             c.append(f"    if ({hook} != nullptr && !{hook}(av_gl.{_hook_user(cmd.name)}, {call_args})) return true;")
@@ -1707,6 +1728,8 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            '#include "gl_types.h"',
            '#include "proto/wire/guest_bytes.hpp"\n',
            "namespace av::glproto {\n",
+           *[f"constexpr uint32_t kVram_{name} = {i}u;" for i, name in enumerate(VRAM_GUARDED)],
+           f"constexpr uint32_t kVramCommands = {len(VRAM_GUARDED)}u;\n",
            "// The host's OpenGL, by name.",
            "//",
            "// There is no OpenGL ABI past 1.1 on any platform worth the",
@@ -1754,6 +1777,12 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "",
            "    void* av_hook_user = nullptr;",
            "    void* av_texture_user = nullptr;",
+           "",
+           "    // Called with a command's scalar arguments before the host driver",
+           "    // is asked to allocate; false refuses the command (the hook has",
+           "    // recorded the error).",
+           "    bool (*av_vram_hook)(void*, uint32_t, const uint64_t*) = nullptr;",
+           "    void* av_vram_user = nullptr;",
            "",
            "    void (*av_record_error)(void*, uint32_t) = nullptr;",
            "    void* av_error_user = nullptr;",

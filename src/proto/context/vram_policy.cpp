@@ -1,4 +1,4 @@
-#include "executor/vulkan/vram_policy.hpp"
+#include "proto/context/vram_policy.hpp"
 
 #include "core/trace/function_scope.hpp"
 

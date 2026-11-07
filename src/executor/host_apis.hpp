@@ -12,6 +12,7 @@ class GlDisplay;
 class OpenClDevice;
 class HostMemorySource;
 class HostShares;
+class VramLedger;
 class SharedSurfaces;
 
 class HostApis {
@@ -32,6 +33,7 @@ public:
     virtual SharedSurfaces     *surfaces(uint32_t index) = 0;
     virtual HostShares         *shares(uint32_t index) = 0;
     virtual HostMemorySource   *memory_source(uint32_t index) = 0;
+    virtual VramLedger         *vram_ledger(uint32_t index) = 0;
 
 protected:
     HostApis() = default;

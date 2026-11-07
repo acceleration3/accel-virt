@@ -11,6 +11,7 @@
 #include "executor/host_apis.hpp"
 #include "executor/host_gpu.hpp"
 #include "executor/host_memory_source.hpp"
+#include "executor/vram_ledger.hpp"
 #include "proto/resources/host_memory_request.hpp"
 #include "executor/d3d/shared_surfaces.hpp"
 #include "executor/sharing/host_shares.hpp"
@@ -102,6 +103,8 @@ uint32_t ExecutorRoot::open_domain(const uint8_t *gpu_uuid, uint32_t vram_reserv
     if (gpu == nullptr) return 0u;
     HostMemorySource *const source = apis_->memory_source(gpu->index());
     if (source != nullptr) source->reserve_vram(vram_reserve_mib);
+    VramLedger *const ledger = apis_->vram_ledger(gpu->index());
+    if (ledger != nullptr) ledger->reserve_vram(vram_reserve_mib);
     return domains_.open(gpu->index());
 }
 
@@ -324,10 +327,12 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, con
     AV_SCOPE("ExecutorRoot::bind");
     switch (sub_api) {
     case AV_EXECUTOR_SUB_API_OPENCL:
+        opencl_[slot].object().use_vram(apis_->vram_ledger(gpu.index()));
         return opencl_[slot].object().initialize(apis_->opencl_device(gpu.index()), apis_->gl_display(gpu.index()),
                                                  share, sessions_[slot].object().imports());
     case AV_EXECUTOR_SUB_API_OPENGL:
         if (group == nullptr) return false;
+        opengl_[slot].object().use_vram(apis_->vram_ledger(gpu.index()));
         return opengl_[slot].object().initialize(apis_->gl_display(gpu.index()), &options, share, group);
     case AV_EXECUTOR_SUB_API_D3D: {
         constexpr uint32_t renew_wait_ms = 2000u;

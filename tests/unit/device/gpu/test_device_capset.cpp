@@ -152,4 +152,13 @@ TEST(device_capset_describe, names_the_gpu_without_the_host_driver_suffix)
   DeviceCapset capset(host);
   capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
   CHECK(std::strcmp(capset.info().gpu().name(), "AMD Radeon RX 9070 XT") == 0);
-  CHECK_EQ(capset.info().gpu().local_memory(), 16ull << 30); }
+  CHECK_EQ(capset.info().gpu().local_memory(), 14ull << 30); }
+
+TEST(device_capset_describe, tells_the_guest_the_capped_local_memory_so_every_budget_it_derives_is_the_cap)
+{ MockHost host;
+  host.add_gpu(GpuIdentity(0x1002u, 0x7550u, GpuIdentity::discrete_gpu, first, 16ull << 30, 0u, "AMD Radeon"));
+  DeviceCapset capset(host);
+  capset.reserve_vram(4096u);
+  capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan), decided(host));
+  CHECK_EQ(capset.info().gpu().local_memory(), 12ull << 30);
+  CHECK_EQ(capset.info().vram_reserve_mib(), 4096u); }

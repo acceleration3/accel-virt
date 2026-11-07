@@ -1408,6 +1408,10 @@ static bool decode_glBufferData(const RealGl& av_gl, ::av::WireReader& av_r, ::a
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
     if (data == nullptr ? (data_needed != 0 && !(true)) : data_room < data_needed) return false;
     if (av_gl.glBufferData == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(size), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(data)), static_cast<uint64_t>(usage)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glBufferData, av_vram_args)) return true;
+    }
     av_gl.glBufferData(target, size, data, usage);
     return true;
 }
@@ -1462,6 +1466,10 @@ static bool decode_glBufferStorage(const RealGl& av_gl, ::av::WireReader& av_r, 
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
     if (data == nullptr ? (data_needed != 0 && !(true)) : data_room < data_needed) return false;
     if (av_gl.glBufferStorage == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(size), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(data)), static_cast<uint64_t>(flags)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glBufferStorage, av_vram_args)) return true;
+    }
     av_gl.glBufferStorage(target, size, data, flags);
     return true;
 }
@@ -2640,6 +2648,10 @@ static bool decode_glCompressedTexImage1D(const RealGl& av_gl, ::av::WireReader&
         if (data_room < data_needed) return false;
     }
     if (av_gl.glCompressedTexImage1D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(level), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(border), static_cast<uint64_t>(imageSize), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(data))};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glCompressedTexImage1D, av_vram_args)) return true;
+    }
     av_gl.glCompressedTexImage1D(target, level, internalformat, width, border, imageSize, data);
     return true;
 }
@@ -2722,6 +2734,10 @@ static bool decode_glCompressedTexImage2D(const RealGl& av_gl, ::av::WireReader&
         if (data_room < data_needed) return false;
     }
     if (av_gl.glCompressedTexImage2D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(level), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(border), static_cast<uint64_t>(imageSize), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(data))};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glCompressedTexImage2D, av_vram_args)) return true;
+    }
     av_gl.glCompressedTexImage2D(target, level, internalformat, width, height, border, imageSize, data);
     return true;
 }
@@ -2808,6 +2824,10 @@ static bool decode_glCompressedTexImage3D(const RealGl& av_gl, ::av::WireReader&
         if (data_room < data_needed) return false;
     }
     if (av_gl.glCompressedTexImage3D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(level), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(depth), static_cast<uint64_t>(border), static_cast<uint64_t>(imageSize), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(data))};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glCompressedTexImage3D, av_vram_args)) return true;
+    }
     av_gl.glCompressedTexImage3D(target, level, internalformat, width, height, depth, border, imageSize, data);
     return true;
 }
@@ -4335,6 +4355,10 @@ static bool decode_glDeleteBuffers(const RealGl& av_gl, ::av::WireReader& av_r, 
     if (__builtin_mul_overflow(buffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &buffers_needed)) return false;
     if (buffers == nullptr ? (buffers_needed != 0 && !(false)) : buffers_room < buffers_needed) return false;
     if (av_gl.glDeleteBuffers == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(n), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(buffers))};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glDeleteBuffers, av_vram_args)) return true;
+    }
     if (av_gl.av_hook_glDeleteBuffers != nullptr && !av_gl.av_hook_glDeleteBuffers(av_gl.av_hook_user, n, buffers)) return true;
     av_gl.glDeleteBuffers(n, buffers);
     return true;
@@ -4539,6 +4563,10 @@ static bool decode_glDeleteRenderbuffers(const RealGl& av_gl, ::av::WireReader& 
     if (__builtin_mul_overflow(renderbuffers_elements, static_cast<uint64_t>(sizeof(GLuint)), &renderbuffers_needed)) return false;
     if (renderbuffers == nullptr ? (renderbuffers_needed != 0 && !(false)) : renderbuffers_room < renderbuffers_needed) return false;
     if (av_gl.glDeleteRenderbuffers == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(n), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(renderbuffers))};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glDeleteRenderbuffers, av_vram_args)) return true;
+    }
     av_gl.glDeleteRenderbuffers(n, renderbuffers);
     return true;
 }
@@ -4657,6 +4685,10 @@ static bool decode_glDeleteTextures(const RealGl& av_gl, ::av::WireReader& av_r,
     if (__builtin_mul_overflow(textures_elements, static_cast<uint64_t>(sizeof(GLuint)), &textures_needed)) return false;
     if (textures == nullptr ? (textures_needed != 0 && !(false)) : textures_room < textures_needed) return false;
     if (av_gl.glDeleteTextures == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(n), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(textures))};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glDeleteTextures, av_vram_args)) return true;
+    }
     if (av_gl.av_hook_glDeleteTextures != nullptr && !av_gl.av_hook_glDeleteTextures(av_gl.av_texture_user, n, textures)) return true;
     av_gl.glDeleteTextures(n, textures);
     return true;
@@ -14353,6 +14385,10 @@ static bool decode_glNamedBufferData(const RealGl& av_gl, ::av::WireReader& av_r
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
     if (data == nullptr ? (data_needed != 0 && !(true)) : data_room < data_needed) return false;
     if (av_gl.glNamedBufferData == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(buffer), static_cast<uint64_t>(size), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(data)), static_cast<uint64_t>(usage)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glNamedBufferData, av_vram_args)) return true;
+    }
     av_gl.glNamedBufferData(buffer, size, data, usage);
     return true;
 }
@@ -14407,6 +14443,10 @@ static bool decode_glNamedBufferStorage(const RealGl& av_gl, ::av::WireReader& a
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
     if (data == nullptr ? (data_needed != 0 && !(true)) : data_room < data_needed) return false;
     if (av_gl.glNamedBufferStorage == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(buffer), static_cast<uint64_t>(size), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(data)), static_cast<uint64_t>(flags)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glNamedBufferStorage, av_vram_args)) return true;
+    }
     av_gl.glNamedBufferStorage(buffer, size, data, flags);
     return true;
 }
@@ -14640,6 +14680,10 @@ static bool decode_glNamedRenderbufferStorage(const RealGl& av_gl, ::av::WireRea
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       height = static_cast<GLsizei>(av_v); }
     if (av_gl.glNamedRenderbufferStorage == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(renderbuffer), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glNamedRenderbufferStorage, av_vram_args)) return true;
+    }
     av_gl.glNamedRenderbufferStorage(renderbuffer, internalformat, width, height);
     return true;
 }
@@ -14663,6 +14707,10 @@ static bool decode_glNamedRenderbufferStorageMultisample(const RealGl& av_gl, ::
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       height = static_cast<GLsizei>(av_v); }
     if (av_gl.glNamedRenderbufferStorageMultisample == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(renderbuffer), static_cast<uint64_t>(samples), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glNamedRenderbufferStorageMultisample, av_vram_args)) return true;
+    }
     av_gl.glNamedRenderbufferStorageMultisample(renderbuffer, samples, internalformat, width, height);
     return true;
 }
@@ -17611,6 +17659,10 @@ static bool decode_glRenderbufferStorage(const RealGl& av_gl, ::av::WireReader& 
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       height = static_cast<GLsizei>(av_v); }
     if (av_gl.glRenderbufferStorage == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glRenderbufferStorage, av_vram_args)) return true;
+    }
     av_gl.glRenderbufferStorage(target, internalformat, width, height);
     return true;
 }
@@ -17634,6 +17686,10 @@ static bool decode_glRenderbufferStorageMultisample(const RealGl& av_gl, ::av::W
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       height = static_cast<GLsizei>(av_v); }
     if (av_gl.glRenderbufferStorageMultisample == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(samples), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glRenderbufferStorageMultisample, av_vram_args)) return true;
+    }
     av_gl.glRenderbufferStorageMultisample(target, samples, internalformat, width, height);
     return true;
 }
@@ -18792,6 +18848,10 @@ static bool decode_glTexImage1D(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             pixels_room < pixels_needed) return false;
     }
     if (av_gl.glTexImage1D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(level), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(border), static_cast<uint64_t>(format), static_cast<uint64_t>(type), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pixels))};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexImage1D, av_vram_args)) return true;
+    }
     av_gl.glTexImage1D(target, level, internalformat, width, border, format, type, pixels);
     return true;
 }
@@ -18875,6 +18935,10 @@ static bool decode_glTexImage2D(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             pixels_room < pixels_needed) return false;
     }
     if (av_gl.glTexImage2D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(level), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(border), static_cast<uint64_t>(format), static_cast<uint64_t>(type), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pixels))};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexImage2D, av_vram_args)) return true;
+    }
     av_gl.glTexImage2D(target, level, internalformat, width, height, border, format, type, pixels);
     return true;
 }
@@ -18901,6 +18965,10 @@ static bool decode_glTexImage2DMultisample(const RealGl& av_gl, ::av::WireReader
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       fixedsamplelocations = static_cast<GLboolean>(av_v); }
     if (av_gl.glTexImage2DMultisample == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(samples), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(fixedsamplelocations)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexImage2DMultisample, av_vram_args)) return true;
+    }
     av_gl.glTexImage2DMultisample(target, samples, internalformat, width, height, fixedsamplelocations);
     return true;
 }
@@ -18988,6 +19056,10 @@ static bool decode_glTexImage3D(const RealGl& av_gl, ::av::WireReader& av_r, ::a
             pixels_room < pixels_needed) return false;
     }
     if (av_gl.glTexImage3D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(level), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(depth), static_cast<uint64_t>(border), static_cast<uint64_t>(format), static_cast<uint64_t>(type), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pixels))};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexImage3D, av_vram_args)) return true;
+    }
     av_gl.glTexImage3D(target, level, internalformat, width, height, depth, border, format, type, pixels);
     return true;
 }
@@ -19017,6 +19089,10 @@ static bool decode_glTexImage3DMultisample(const RealGl& av_gl, ::av::WireReader
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       fixedsamplelocations = static_cast<GLboolean>(av_v); }
     if (av_gl.glTexImage3DMultisample == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(samples), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(depth), static_cast<uint64_t>(fixedsamplelocations)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexImage3DMultisample, av_vram_args)) return true;
+    }
     av_gl.glTexImage3DMultisample(target, samples, internalformat, width, height, depth, fixedsamplelocations);
     return true;
 }
@@ -19230,6 +19306,10 @@ static bool decode_glTexStorage1D(const RealGl& av_gl, ::av::WireReader& av_r, :
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       width = static_cast<GLsizei>(av_v); }
     if (av_gl.glTexStorage1D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(levels), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexStorage1D, av_vram_args)) return true;
+    }
     av_gl.glTexStorage1D(target, levels, internalformat, width);
     return true;
 }
@@ -19253,6 +19333,10 @@ static bool decode_glTexStorage2D(const RealGl& av_gl, ::av::WireReader& av_r, :
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       height = static_cast<GLsizei>(av_v); }
     if (av_gl.glTexStorage2D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(levels), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexStorage2D, av_vram_args)) return true;
+    }
     av_gl.glTexStorage2D(target, levels, internalformat, width, height);
     return true;
 }
@@ -19279,6 +19363,10 @@ static bool decode_glTexStorage2DMultisample(const RealGl& av_gl, ::av::WireRead
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       fixedsamplelocations = static_cast<GLboolean>(av_v); }
     if (av_gl.glTexStorage2DMultisample == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(samples), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(fixedsamplelocations)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexStorage2DMultisample, av_vram_args)) return true;
+    }
     av_gl.glTexStorage2DMultisample(target, samples, internalformat, width, height, fixedsamplelocations);
     return true;
 }
@@ -19305,6 +19393,10 @@ static bool decode_glTexStorage3D(const RealGl& av_gl, ::av::WireReader& av_r, :
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       depth = static_cast<GLsizei>(av_v); }
     if (av_gl.glTexStorage3D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(levels), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(depth)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexStorage3D, av_vram_args)) return true;
+    }
     av_gl.glTexStorage3D(target, levels, internalformat, width, height, depth);
     return true;
 }
@@ -19334,6 +19426,10 @@ static bool decode_glTexStorage3DMultisample(const RealGl& av_gl, ::av::WireRead
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       fixedsamplelocations = static_cast<GLboolean>(av_v); }
     if (av_gl.glTexStorage3DMultisample == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(target), static_cast<uint64_t>(samples), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(depth), static_cast<uint64_t>(fixedsamplelocations)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTexStorage3DMultisample, av_vram_args)) return true;
+    }
     av_gl.glTexStorage3DMultisample(target, samples, internalformat, width, height, depth, fixedsamplelocations);
     return true;
 }
@@ -19844,6 +19940,10 @@ static bool decode_glTextureStorage1D(const RealGl& av_gl, ::av::WireReader& av_
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       width = static_cast<GLsizei>(av_v); }
     if (av_gl.glTextureStorage1D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(texture), static_cast<uint64_t>(levels), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTextureStorage1D, av_vram_args)) return true;
+    }
     av_gl.glTextureStorage1D(texture, levels, internalformat, width);
     return true;
 }
@@ -19867,6 +19967,10 @@ static bool decode_glTextureStorage2D(const RealGl& av_gl, ::av::WireReader& av_
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       height = static_cast<GLsizei>(av_v); }
     if (av_gl.glTextureStorage2D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(texture), static_cast<uint64_t>(levels), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTextureStorage2D, av_vram_args)) return true;
+    }
     av_gl.glTextureStorage2D(texture, levels, internalformat, width, height);
     return true;
 }
@@ -19893,6 +19997,10 @@ static bool decode_glTextureStorage2DMultisample(const RealGl& av_gl, ::av::Wire
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       fixedsamplelocations = static_cast<GLboolean>(av_v); }
     if (av_gl.glTextureStorage2DMultisample == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(texture), static_cast<uint64_t>(samples), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(fixedsamplelocations)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTextureStorage2DMultisample, av_vram_args)) return true;
+    }
     av_gl.glTextureStorage2DMultisample(texture, samples, internalformat, width, height, fixedsamplelocations);
     return true;
 }
@@ -19919,6 +20027,10 @@ static bool decode_glTextureStorage3D(const RealGl& av_gl, ::av::WireReader& av_
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       depth = static_cast<GLsizei>(av_v); }
     if (av_gl.glTextureStorage3D == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(texture), static_cast<uint64_t>(levels), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(depth)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTextureStorage3D, av_vram_args)) return true;
+    }
     av_gl.glTextureStorage3D(texture, levels, internalformat, width, height, depth);
     return true;
 }
@@ -19948,6 +20060,10 @@ static bool decode_glTextureStorage3DMultisample(const RealGl& av_gl, ::av::Wire
     { uint64_t av_v = 0; if (!av_r.read_varint(av_v)) return false;
       fixedsamplelocations = static_cast<GLboolean>(av_v); }
     if (av_gl.glTextureStorage3DMultisample == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(texture), static_cast<uint64_t>(samples), static_cast<uint64_t>(internalformat), static_cast<uint64_t>(width), static_cast<uint64_t>(height), static_cast<uint64_t>(depth), static_cast<uint64_t>(fixedsamplelocations)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glTextureStorage3DMultisample, av_vram_args)) return true;
+    }
     av_gl.glTextureStorage3DMultisample(texture, samples, internalformat, width, height, depth, fixedsamplelocations);
     return true;
 }
@@ -43763,6 +43879,10 @@ static bool decode_glNamedBufferDataEXT(const RealGl& av_gl, ::av::WireReader& a
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
     if (data == nullptr ? (data_needed != 0 && !(true)) : data_room < data_needed) return false;
     if (av_gl.glNamedBufferDataEXT == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(buffer), static_cast<uint64_t>(size), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(data)), static_cast<uint64_t>(usage)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glNamedBufferDataEXT, av_vram_args)) return true;
+    }
     av_gl.glNamedBufferDataEXT(buffer, size, data, usage);
     return true;
 }
@@ -47683,6 +47803,10 @@ static bool decode_glNamedBufferStorageEXT(const RealGl& av_gl, ::av::WireReader
     if (__builtin_mul_overflow(data_elements, static_cast<uint64_t>(sizeof(uint8_t)), &data_needed)) return false;
     if (data == nullptr ? (data_needed != 0 && !(true)) : data_room < data_needed) return false;
     if (av_gl.glNamedBufferStorageEXT == nullptr) return false;
+    if (av_gl.av_vram_hook != nullptr) {
+        const uint64_t av_vram_args[] = {static_cast<uint64_t>(buffer), static_cast<uint64_t>(size), static_cast<uint64_t>(reinterpret_cast<uintptr_t>(data)), static_cast<uint64_t>(flags)};
+        if (!av_gl.av_vram_hook(av_gl.av_vram_user, kVram_glNamedBufferStorageEXT, av_vram_args)) return true;
+    }
     av_gl.glNamedBufferStorageEXT(buffer, size, data, flags);
     return true;
 }

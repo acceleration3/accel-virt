@@ -1,7 +1,7 @@
 #include "executor/vulkan/vram_budget.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "executor/vulkan/vram_policy.hpp"
+#include "proto/context/vram_policy.hpp"
 
 namespace av {
 

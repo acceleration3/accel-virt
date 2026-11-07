@@ -1,0 +1,325 @@
+From: accel-virt
+Subject: [PATCH] memory: device-local allocations take their size from the embedder's video memory cap
+
+The embedder registers a table of callbacks (dxvk_proton_set_vram_gate) that
+opens one account per device. DxvkMemoryAllocator takes every device-local
+allocation's size from it before vkAllocateMemory and gives it back when the
+memory is freed, so DXVK, vkd3d and the embedder's other backends on one GPU
+share a single cap the guest is told about. Over the cap the allocation is
+refused after the empty chunks are returned; with a gate registered nothing
+falls back to system memory and DXVK no longer relocates resources between
+heaps, because the host driver is never asked to evict for the guest.
+---
+diff --git a/src/d3d11/d3d11.sym b/src/d3d11/d3d11.sym
+index 91c8598..47bf060 100644
+--- a/src/d3d11/d3d11.sym
++++ b/src/d3d11/d3d11.sym
+@@ -4,6 +4,7 @@
+     D3D11CreateDevice;
+     D3D11CreateDeviceAndSwapChain;
+     D3D11On12CreateDevice;
++    dxvk_proton_set_vram_gate;
+ 
+   local:
+     *;
+diff --git a/src/d3d11/d3d11_main.cpp b/src/d3d11/d3d11_main.cpp
+index 9e3a126..1076d27 100644
+--- a/src/d3d11/d3d11_main.cpp
++++ b/src/d3d11/d3d11_main.cpp
+@@ -3,6 +3,7 @@
+ #include "../dxgi/dxgi_adapter.h"
+ 
+ #include "../dxvk/dxvk_instance.h"
++#include "../dxvk/dxvk_vram_gate.h"
+ 
+ #include "d3d11_device.h"
+ #include "d3d11_enums.h"
+@@ -218,6 +219,11 @@ extern "C" {
+   }
+   
+ 
++    DLLEXPORT void dxvk_proton_set_vram_gate(const dxvk::DxvkVramGate* gate) {
++      dxvk::g_vramGate = gate;
++    }
++
++
+     DLLEXPORT HRESULT __stdcall D3D11CoreCreateDevice(
+             IDXGIFactory*       pFactory,
+             IDXGIAdapter*       pAdapter,
+diff --git a/src/d3d9/d3d9.sym b/src/d3d9/d3d9.sym
+index bbfaee0..a794062 100644
+--- a/src/d3d9/d3d9.sym
++++ b/src/d3d9/d3d9.sym
+@@ -20,6 +20,7 @@
+     Direct3D9ForceHybridEnumeration;
+     Direct3DCreate9On12;
+     Direct3DCreate9On12Ex;
++    dxvk_proton_set_vram_gate;
+ 
+   local:
+     *;
+diff --git a/src/d3d9/d3d9_main.cpp b/src/d3d9/d3d9_main.cpp
+index 3fe778a..8962a20 100644
+--- a/src/d3d9/d3d9_main.cpp
++++ b/src/d3d9/d3d9_main.cpp
+@@ -1,4 +1,5 @@
+ #include "../dxvk/dxvk_instance.h"
++#include "../dxvk/dxvk_vram_gate.h"
+ 
+ #include "d3d9_interface.h"
+ #include "d3d9_shader_validator.h"
+@@ -28,6 +29,10 @@ namespace dxvk {
+ 
+ extern "C" {
+ 
++  DLLEXPORT void dxvk_proton_set_vram_gate(const dxvk::DxvkVramGate* gate) {
++    dxvk::g_vramGate = gate;
++  }
++
+   DLLEXPORT IDirect3D9* __stdcall Direct3DCreate9(UINT nSDKVersion) {
+     IDirect3D9Ex* pDirect3D = nullptr;
+     dxvk::CreateD3D9(false, &pDirect3D, nullptr, 0);
+diff --git a/src/dxvk/dxvk_memory.cpp b/src/dxvk/dxvk_memory.cpp
+index 53313c8..cae3cb1 100644
+--- a/src/dxvk/dxvk_memory.cpp
++++ b/src/dxvk/dxvk_memory.cpp
+@@ -739,7 +739,8 @@ namespace dxvk {
+ 
+ 
+   DxvkMemoryAllocator::DxvkMemoryAllocator(DxvkDevice* device)
+-  : m_device(device), m_sharingModeInfo(m_device->getSharingMode()) {
++  : m_device(device), m_sharingModeInfo(m_device->getSharingMode()),
++    m_vramAccount(m_device->adapter()->info().deviceUuid) {
+     VkPhysicalDeviceMemoryProperties memInfo = m_device->adapter()->memoryProperties();
+ 
+     m_memTypeCount = memInfo.memoryTypeCount;
+@@ -751,7 +752,7 @@ namespace dxvk {
+       heap.index = i;
+       heap.memoryBudget = memInfo.memoryHeaps[i].size;
+       heap.properties = memInfo.memoryHeaps[i];
+-      heap.enforceBudget = !m_device->isUnifiedMemoryArchitecture()
++      heap.enforceBudget = !m_vramAccount.active() && !m_device->isUnifiedMemoryArchitecture()
+         && m_device->properties().core.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+     }
+ 
+@@ -986,7 +987,7 @@ namespace dxvk {
+             return allocation;
+ 
+           if (!allocation && (allocationInfo.properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+-          && !allocationInfo.mode.test(DxvkAllocationMode::NoFallback)) {
++          && allowsFallback(allocationInfo)) {
+             DxvkAllocationInfo fallbackInfo = allocationInfo;
+             fallbackInfo.properties &= ~VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+ 
+@@ -1062,7 +1063,7 @@ namespace dxvk {
+         allocation = allocateMemory(requirements.memoryRequirements, allocationInfo);
+ 
+       if (!allocation && (allocationInfo.properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+-       && !allocationInfo.mode.test(DxvkAllocationMode::NoFallback)) {
++       && allowsFallback(allocationInfo)) {
+         DxvkAllocationInfo fallbackInfo = allocationInfo;
+         fallbackInfo.properties &= ~VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+ 
+@@ -1168,7 +1169,7 @@ namespace dxvk {
+         // Only retry with a dedicated sysmem allocation if a dedicated allocation
+         // is required. Otherwise, we should try to suballocate in device memory.
+         if (!allocation && dedicatedRequirements.requiresDedicatedAllocation
+-         && !allocationInfo.mode.test(DxvkAllocationMode::NoFallback)
++         && allowsFallback(allocationInfo)
+          && (allocationInfo.properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+           DxvkAllocationInfo fallbackInfo = allocationInfo;
+           fallbackInfo.properties &= ~VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+@@ -1190,7 +1191,7 @@ namespace dxvk {
+         allocation = allocateMemory(requirements.memoryRequirements, allocationInfo);
+ 
+         if (!allocation && (allocationInfo.properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+-         && !allocationInfo.mode.test(DxvkAllocationMode::NoFallback)) {
++         && allowsFallback(allocationInfo)) {
+           DxvkAllocationInfo fallbackInfo = allocationInfo;
+           fallbackInfo.properties &= ~VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+ 
+@@ -1362,6 +1363,18 @@ namespace dxvk {
+       return DxvkDeviceMemory();
+     }
+ 
++    const bool gated = isGated(type);
++
++    if (gated && !m_vramAccount.take(size)) {
++      // Empty chunks still hold part of the cap; give them back and ask again.
++      freeEmptyChunksInHeap(*type.heap, VkDeviceSize(-1), high_resolution_clock::time_point());
++
++      if (!m_vramAccount.take(size)) {
++        Logger::warn(str::format("Device-local allocation of ", size >> 10u, " KiB refused: over the guest's video memory cap"));
++        return DxvkDeviceMemory();
++      }
++    }
++
+     VkMemoryAllocateInfo memoryInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, next };
+     memoryInfo.allocationSize = size;
+     memoryInfo.memoryTypeIndex = type.index;
+@@ -1404,8 +1417,12 @@ namespace dxvk {
+     if (vk->vkAllocateMemory(vk->device(), &memoryInfo, nullptr, &result.memory)) {
+       freeEmptyChunksInHeap(*type.heap, VkDeviceSize(-1), high_resolution_clock::time_point());
+ 
+-      if (vk->vkAllocateMemory(vk->device(), &memoryInfo, nullptr, &result.memory))
++      if (vk->vkAllocateMemory(vk->device(), &memoryInfo, nullptr, &result.memory)) {
++        if (gated)
++          m_vramAccount.give(size);
++
+         return DxvkDeviceMemory();
++      }
+     }
+ 
+     // Technically redundant if EXT_memory_priority is also supported, but this shouldn't hurt
+@@ -1637,6 +1654,9 @@ namespace dxvk {
+     vk->vkDestroyBuffer(vk->device(), memory.buffer, nullptr);
+     vk->vkFreeMemory(vk->device(), memory.memory, nullptr);
+ 
++    if (isGated(type))
++      m_vramAccount.give(memory.size);
++
+     type.stats.memoryAllocated -= memory.size;
+   }
+ 
+@@ -1667,6 +1687,9 @@ namespace dxvk {
+         if (unlikely(allocation->m_flags.test(DxvkAllocationFlag::OwnsMemory))) {
+           // We free the actual allocation later, just update stats here.
+           allocation->m_type->stats.memoryAllocated -= allocation->m_size;
++
++          if (isGated(*allocation->m_type))
++            m_vramAccount.give(allocation->m_size);
+         } else {
+           DxvkMemoryPool& pool = allocation->m_mapPtr
+             ? allocation->m_type->mappedPool
+diff --git a/src/dxvk/dxvk_memory.h b/src/dxvk/dxvk_memory.h
+index a8e4486..16aeb8c 100644
+--- a/src/dxvk/dxvk_memory.h
++++ b/src/dxvk/dxvk_memory.h
+@@ -8,6 +8,7 @@
+ #include "dxvk_allocator.h"
+ #include "dxvk_descriptor.h"
+ #include "dxvk_hash.h"
++#include "dxvk_vram_gate.h"
+ 
+ #include "../util/util_time.h"
+ 
+@@ -1369,6 +1370,7 @@ namespace dxvk {
+     DxvkDevice* m_device;
+ 
+     DxvkSharingModeInfo       m_sharingModeInfo;
++    DxvkVramAccount           m_vramAccount;
+ 
+     dxvk::mutex               m_mutex;
+ 
+@@ -1400,6 +1402,15 @@ namespace dxvk {
+     alignas(CACHE_LINE_SIZE)
+     DxvkRelocationList        m_relocations;
+ 
++    bool isGated(const DxvkMemoryType& type) const {
++      return m_vramAccount.active()
++          && (type.properties.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++    }
++
++    bool allowsFallback(const DxvkAllocationInfo& info) const {
++      return !m_vramAccount.active() && !info.mode.test(DxvkAllocationMode::NoFallback);
++    }
++
+     DxvkDeviceMemory allocateDeviceMemory(
+             DxvkMemoryType&       type,
+             VkDeviceSize          size,
+diff --git a/src/dxvk/dxvk_vram_gate.h b/src/dxvk/dxvk_vram_gate.h
+new file mode 100644
+index 0000000..f8ca58e
+--- /dev/null
++++ b/src/dxvk/dxvk_vram_gate.h
+@@ -0,0 +1,90 @@
++#pragma once
++
++#include <cstdint>
++
++#include "dxvk_include.h"
++
++namespace dxvk {
++
++  /**
++   * \brief Embedder's cap on device-local memory
++   *
++   * Mirrors the embedder's AvVramGate: a table of C callbacks that
++   * hands out one account per device. Every device-local allocation
++   * takes its size from the account before the Vulkan call and gives it
++   * back when the memory is freed, so the sum over all APIs on a GPU
++   * stays under the cap the embedder reports to its guest.
++   */
++  struct DxvkVramGate {
++    uint32_t size;
++    void*    self;
++    void*    (*open)(void* self, const uint8_t* gpuUuid);
++    int      (*take)(void* account, uint64_t bytes);
++    void     (*give)(void* account, uint64_t bytes);
++    void     (*close)(void* self, void* account);
++    uint64_t (*freeBytes)(void* account);
++    uint64_t (*cap)(void* account);
++  };
++
++  inline const DxvkVramGate* g_vramGate = nullptr;
++
++  class DxvkVramAccount {
++
++  public:
++
++    DxvkVramAccount() = default;
++
++    explicit DxvkVramAccount(const uint8_t* gpuUuid)
++    : m_gate(g_vramGate) {
++      if (m_gate && m_gate->size >= sizeof(DxvkVramGate))
++        m_account = m_gate->open(m_gate->self, gpuUuid);
++    }
++
++    DxvkVramAccount(const DxvkVramAccount&) = delete;
++    DxvkVramAccount& operator = (const DxvkVramAccount&) = delete;
++
++    DxvkVramAccount(DxvkVramAccount&& other) noexcept
++    : m_gate(other.m_gate), m_account(other.m_account) {
++      other.m_account = nullptr;
++    }
++
++    DxvkVramAccount& operator = (DxvkVramAccount&& other) noexcept {
++      release();
++      m_gate = other.m_gate;
++      m_account = other.m_account;
++      other.m_account = nullptr;
++      return *this;
++    }
++
++    ~DxvkVramAccount() {
++      release();
++    }
++
++    bool active() const {
++      return m_account != nullptr;
++    }
++
++    bool take(VkDeviceSize bytes) const {
++      return !m_account || m_gate->take(m_account, bytes);
++    }
++
++    void give(VkDeviceSize bytes) const {
++      if (m_account)
++        m_gate->give(m_account, bytes);
++    }
++
++  private:
++
++    const DxvkVramGate* m_gate    = nullptr;
++    void*               m_account = nullptr;
++
++    void release() {
++      if (m_account)
++        m_gate->close(m_gate->self, m_account);
++
++      m_account = nullptr;
++    }
++
++  };
++
++}

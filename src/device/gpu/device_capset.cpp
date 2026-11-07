@@ -7,6 +7,7 @@
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/context/vram_policy.hpp"
 #include "proto/submission/ring_header.hpp"
 
 namespace av {
@@ -26,7 +27,7 @@ void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t feat
     info_ = CapsetInfo(ProtocolVersion(ProtocolVersion::current_major, ProtocolVersion::current_minor),
                        sub_apis, DeviceContextTable::max_contexts,
                        RingHeader::lowest_order, RingHeader::highest_order, features,
-                       GpuIdentity(gpu.vendor_id(), gpu.device_id(), type, gpu.uuid(), gpu.local_memory(),
+                       GpuIdentity(gpu.vendor_id(), gpu.device_id(), type, gpu.uuid(), VramPolicy(vram_reserve_mib_).cap_for(gpu.local_memory()),
                                    gpu.shared_memory(), AdapterName(gpu.name()).text()));
     info_.reserve_vram(vram_reserve_mib_);
     described_ = true;

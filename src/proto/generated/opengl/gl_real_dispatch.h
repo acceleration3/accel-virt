@@ -12,6 +12,39 @@
 
 namespace av::glproto {
 
+constexpr uint32_t kVram_glBufferData = 0u;
+constexpr uint32_t kVram_glNamedBufferData = 1u;
+constexpr uint32_t kVram_glNamedBufferDataEXT = 2u;
+constexpr uint32_t kVram_glBufferStorage = 3u;
+constexpr uint32_t kVram_glNamedBufferStorage = 4u;
+constexpr uint32_t kVram_glNamedBufferStorageEXT = 5u;
+constexpr uint32_t kVram_glTexImage1D = 6u;
+constexpr uint32_t kVram_glTexImage2D = 7u;
+constexpr uint32_t kVram_glTexImage3D = 8u;
+constexpr uint32_t kVram_glTexImage2DMultisample = 9u;
+constexpr uint32_t kVram_glTexImage3DMultisample = 10u;
+constexpr uint32_t kVram_glCompressedTexImage1D = 11u;
+constexpr uint32_t kVram_glCompressedTexImage2D = 12u;
+constexpr uint32_t kVram_glCompressedTexImage3D = 13u;
+constexpr uint32_t kVram_glTexStorage1D = 14u;
+constexpr uint32_t kVram_glTexStorage2D = 15u;
+constexpr uint32_t kVram_glTexStorage3D = 16u;
+constexpr uint32_t kVram_glTexStorage2DMultisample = 17u;
+constexpr uint32_t kVram_glTexStorage3DMultisample = 18u;
+constexpr uint32_t kVram_glTextureStorage1D = 19u;
+constexpr uint32_t kVram_glTextureStorage2D = 20u;
+constexpr uint32_t kVram_glTextureStorage3D = 21u;
+constexpr uint32_t kVram_glTextureStorage2DMultisample = 22u;
+constexpr uint32_t kVram_glTextureStorage3DMultisample = 23u;
+constexpr uint32_t kVram_glRenderbufferStorage = 24u;
+constexpr uint32_t kVram_glRenderbufferStorageMultisample = 25u;
+constexpr uint32_t kVram_glNamedRenderbufferStorage = 26u;
+constexpr uint32_t kVram_glNamedRenderbufferStorageMultisample = 27u;
+constexpr uint32_t kVram_glDeleteRenderbuffers = 28u;
+constexpr uint32_t kVram_glDeleteBuffers = 29u;
+constexpr uint32_t kVram_glDeleteTextures = 30u;
+constexpr uint32_t kVramCommands = 31u;
+
 // The host's OpenGL, by name.
 //
 // There is no OpenGL ABI past 1.1 on any platform worth the
@@ -59,6 +92,12 @@ struct RealGl {
 
     void* av_hook_user = nullptr;
     void* av_texture_user = nullptr;
+
+    // Called with a command's scalar arguments before the host driver
+    // is asked to allocate; false refuses the command (the hook has
+    // recorded the error).
+    bool (*av_vram_hook)(void*, uint32_t, const uint64_t*) = nullptr;
+    void* av_vram_user = nullptr;
 
     void (*av_record_error)(void*, uint32_t) = nullptr;
     void* av_error_user = nullptr;

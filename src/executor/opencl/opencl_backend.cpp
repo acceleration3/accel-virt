@@ -1,6 +1,8 @@
 #include "executor/opencl/opencl_backend.hpp"
 
+#include "executor/opencl/cl_image_bytes.hpp"
 #include "executor/teardown_budget.hpp"
+#include "executor/vram_ledger.hpp"
 
 #include "core/support/extension_words.hpp"
 #include "core/support/growable_array.hpp"
@@ -81,10 +83,16 @@ OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
-       svm_(blocks), mapped_(blocks), guest_(), arena_(guest_, lines), imported_(nullptr), events_(blocks), user_events_(blocks), drain_markers_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+       svm_(blocks), mapped_(blocks), device_memory_(blocks), guest_(), arena_(guest_, lines), imported_(nullptr), events_(blocks), user_events_(blocks), drain_markers_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false), lines_(lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
+}
+
+void OpenClBackend::use_vram(VramLedger *ledger)
+{
+    AV_SCOPE("OpenClBackend::use_vram");
+    device_memory_.bind(ledger);
 }
 
 bool OpenClBackend::initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share,
@@ -138,11 +146,38 @@ void OpenClBackend::close_vehicle()
     vehicle_.close();
 }
 
+cl_int OpenClBackend::capped_device_info(cl_device_id device, cl_device_info param_name, size_t param_value_size,
+                                         void *param_value, size_t *param_value_size_ret)
+{
+    AV_SCOPE("OpenClBackend::capped_device_info");
+    if (param_name == CL_DEVICE_GLOBAL_FREE_MEMORY_AMD) {
+        const cl_int asked = RealDispatch::on_clGetDeviceInfo(device, param_name, param_value_size, param_value,
+                                                              param_value_size_ret);
+        if (asked != CL_SUCCESS || param_value == nullptr || param_value_size < sizeof(size_t)) return asked;
+        size_t *const kilobytes = static_cast<size_t *>(param_value);
+        const uint64_t free_kib = device_memory_.free_bytes() / 1024u;
+        if (free_kib < kilobytes[0]) kilobytes[0] = static_cast<size_t>(free_kib);
+        return CL_SUCCESS;
+    }
+    cl_ulong     host_value = 0u;
+    const cl_int asked = RealDispatch::on_clGetDeviceInfo(device, param_name, sizeof host_value, &host_value, nullptr);
+    if (asked != CL_SUCCESS) return asked;
+    if (param_value_size_ret != nullptr) *param_value_size_ret = sizeof host_value;
+    if (param_value == nullptr) return CL_SUCCESS;
+    if (param_value_size < sizeof host_value) return CL_INVALID_VALUE;
+    const cl_ulong cap = device_memory_.cap();
+    *static_cast<cl_ulong *>(param_value) = host_value < cap ? host_value : cap;
+    return CL_SUCCESS;
+}
+
 cl_int OpenClBackend::on_clGetDeviceInfo(cl_device_id device, cl_device_info param_name,
                                          size_t param_value_size, void *param_value,
                                          size_t *param_value_size_ret)
 {
     AV_SCOPE("OpenClBackend::on_clGetDeviceInfo");
+    if (param_name == CL_DEVICE_GLOBAL_MEM_SIZE || param_name == CL_DEVICE_MAX_MEM_ALLOC_SIZE ||
+        param_name == CL_DEVICE_GLOBAL_FREE_MEMORY_AMD)
+        return capped_device_info(device, param_name, param_value_size, param_value, param_value_size_ret);
     if (param_name != CL_DEVICE_EXTENSIONS)
         return RealDispatch::on_clGetDeviceInfo(device, param_name, param_value_size, param_value,
                                                 param_value_size_ret);
@@ -437,8 +472,14 @@ cl_mem OpenClBackend::on_clCreateBufferWithProperties(cl_context context,
     AV_SCOPE("OpenClBackend::on_clCreateBufferWithProperties");
     ClBlobBacking backing;
     if (!backing.read(reinterpret_cast<const uint64_t *>(properties))) {
-        return ::clCreateBufferWithProperties(context, properties, flags, size, host_ptr,
-                                              errcode_ret);
+        uint64_t         claimed = 0u;
+        const cl_int     admitted = device_memory_.claim(flags, size, claimed);
+        if (admitted != CL_SUCCESS) {
+            if (errcode_ret != nullptr) *errcode_ret = admitted;
+            return nullptr;
+        }
+        return kept_mem(::clCreateBufferWithProperties(context, properties, flags, size, host_ptr, errcode_ret),
+                        claimed, errcode_ret);
     }
     const bool          in_arena = backing.memory() == 0u;
     SourceMemory *const store = in_arena                ? arena_.memory_at(backing.offset())
@@ -598,6 +639,7 @@ void OpenClBackend::shut_down()
                          });
     svm_.forget_all();
     mapped_.forget_all();
+    device_memory_.clear();
     if (queue_ != nullptr) {
         static_cast<void>(::clReleaseCommandQueue(static_cast<cl_command_queue>(queue_)));
         queue_ = nullptr;
@@ -736,9 +778,114 @@ void OpenClBackend::on_clSVMFree(cl_context context, void *svm_pointer)
     ::clSVMFree(context, svm_pointer);
 }
 
+cl_mem OpenClBackend::kept_mem(cl_mem made, uint64_t claimed, cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::kept_mem");
+    if (made == nullptr) {
+        device_memory_.unclaim(claimed);
+        return nullptr;
+    }
+    if (device_memory_.keep(made, claimed)) return made;
+    static_cast<void>(::clReleaseMemObject(made));
+    if (errcode_ret != nullptr) *errcode_ret = CL_OUT_OF_HOST_MEMORY;
+    return nullptr;
+}
+
+cl_mem OpenClBackend::on_clCreateBuffer(cl_context context, cl_mem_flags flags, size_t size, void *host_ptr,
+                                        cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateBuffer");
+    uint64_t     claimed = 0u;
+    const cl_int admitted = device_memory_.claim(flags, size, claimed);
+    if (admitted != CL_SUCCESS) {
+        if (errcode_ret != nullptr) *errcode_ret = admitted;
+        return nullptr;
+    }
+    return kept_mem(RealDispatch::on_clCreateBuffer(context, flags, size, host_ptr, errcode_ret), claimed,
+                    errcode_ret);
+}
+
+cl_mem OpenClBackend::on_clCreateImage(cl_context context, cl_mem_flags flags, const cl_image_format *image_format,
+                                       const cl_image_desc *image_desc, void *host_ptr, cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateImage");
+    uint64_t     claimed = 0u;
+    const cl_int admitted = device_memory_.claim(flags, ClImageBytes(image_format, image_desc).bytes(), claimed);
+    if (admitted != CL_SUCCESS) {
+        if (errcode_ret != nullptr) *errcode_ret = admitted;
+        return nullptr;
+    }
+    return kept_mem(RealDispatch::on_clCreateImage(context, flags, image_format, image_desc, host_ptr, errcode_ret),
+                    claimed, errcode_ret);
+}
+
+cl_mem OpenClBackend::on_clCreateImageWithProperties(cl_context context, const cl_mem_properties *properties,
+                                                     cl_mem_flags flags, const cl_image_format *image_format,
+                                                     const cl_image_desc *image_desc, void *host_ptr,
+                                                     cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateImageWithProperties");
+    uint64_t     claimed = 0u;
+    const cl_int admitted = device_memory_.claim(flags, ClImageBytes(image_format, image_desc).bytes(), claimed);
+    if (admitted != CL_SUCCESS) {
+        if (errcode_ret != nullptr) *errcode_ret = admitted;
+        return nullptr;
+    }
+    return kept_mem(RealDispatch::on_clCreateImageWithProperties(context, properties, flags, image_format,
+                                                                 image_desc, host_ptr, errcode_ret),
+                    claimed, errcode_ret);
+}
+
+cl_mem OpenClBackend::on_clCreateImage2D(cl_context context, cl_mem_flags flags, const cl_image_format *image_format,
+                                         size_t image_width, size_t image_height, size_t image_row_pitch,
+                                         void *host_ptr, cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateImage2D");
+    cl_image_desc described = {};
+    described.image_type = CL_MEM_OBJECT_IMAGE2D;
+    described.image_width = image_width;
+    described.image_height = image_height;
+    uint64_t     claimed = 0u;
+    const cl_int admitted = device_memory_.claim(flags, ClImageBytes(image_format, &described).bytes(), claimed);
+    if (admitted != CL_SUCCESS) {
+        if (errcode_ret != nullptr) *errcode_ret = admitted;
+        return nullptr;
+    }
+    return kept_mem(RealDispatch::on_clCreateImage2D(context, flags, image_format, image_width, image_height,
+                                                     image_row_pitch, host_ptr, errcode_ret),
+                    claimed, errcode_ret);
+}
+
+cl_mem OpenClBackend::on_clCreateImage3D(cl_context context, cl_mem_flags flags, const cl_image_format *image_format,
+                                         size_t image_width, size_t image_height, size_t image_depth,
+                                         size_t image_row_pitch, size_t image_slice_pitch, void *host_ptr,
+                                         cl_int *errcode_ret)
+{
+    AV_SCOPE("OpenClBackend::on_clCreateImage3D");
+    cl_image_desc described = {};
+    described.image_type = CL_MEM_OBJECT_IMAGE3D;
+    described.image_width = image_width;
+    described.image_height = image_height;
+    described.image_depth = image_depth;
+    uint64_t     claimed = 0u;
+    const cl_int admitted = device_memory_.claim(flags, ClImageBytes(image_format, &described).bytes(), claimed);
+    if (admitted != CL_SUCCESS) {
+        if (errcode_ret != nullptr) *errcode_ret = admitted;
+        return nullptr;
+    }
+    return kept_mem(RealDispatch::on_clCreateImage3D(context, flags, image_format, image_width, image_height,
+                                                     image_depth, image_row_pitch, image_slice_pitch, host_ptr,
+                                                     errcode_ret),
+                    claimed, errcode_ret);
+}
+
 cl_int OpenClBackend::on_clReleaseMemObject(cl_mem memobj)
 {
     AV_SCOPE("OpenClBackend::on_clReleaseMemObject");
+    cl_uint references = 0u;
+    if (::clGetMemObjectInfo(memobj, CL_MEM_REFERENCE_COUNT, sizeof references, &references, nullptr) == CL_SUCCESS &&
+        references == 1u)
+        device_memory_.forget(memobj);
     static_cast<void>(mapped_.forget_owned(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(memobj))));
     return RealDispatch::on_clReleaseMemObject(memobj);
 }

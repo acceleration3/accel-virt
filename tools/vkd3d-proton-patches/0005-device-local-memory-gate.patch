@@ -1,0 +1,185 @@
+From: accel-virt
+Subject: [PATCH] memory: device-local allocations take their size from the embedder's video memory cap
+
+vkd3d_proton_set_vram_gate registers the embedder's table of callbacks. Each
+device opens an account; vkd3d_try_allocate_device_memory takes a device-local
+allocation's size before vkAllocateMemory and vkd3d_free_device_memory gives it
+back. A refused allocation returns E_OUTOFMEMORY and does not fall back to
+system memory, so the host driver is never asked to evict for the guest.
+---
+diff --git a/include/vkd3d.h b/include/vkd3d.h
+index 65d5113..4f4e6bc 100644
+--- a/include/vkd3d.h
++++ b/include/vkd3d.h
+@@ -192,6 +192,9 @@ ULONG vkd3d_resource_incref(ID3D12Resource *resource);
+ 
+ /* A buffer heap over pages mapped at `address`, imported as the dma-buf `fd`
+  * (which the caller keeps). */
++/* The embedder's cap on device-local memory: a table of callbacks, kept by pointer. */
++void vkd3d_set_vram_gate(const void *gate);
++
+ HRESULT vkd3d_open_heap_from_dmabuf(ID3D12Device *device, void *address, int fd, UINT64 size,
+         REFIID iid, void **heap);
+ 
+diff --git a/libs/d3d12core/d3d12core.def b/libs/d3d12core/d3d12core.def
+index eb6cf29..e7ce6b8 100644
+--- a/libs/d3d12core/d3d12core.def
++++ b/libs/d3d12core/d3d12core.def
+@@ -4,6 +4,7 @@ EXPORTS
+     D3D12GetInterface
+     vkd3d_proton_open_heap_from_host_pointer
+     vkd3d_proton_open_heap_from_dmabuf
++    vkd3d_proton_set_vram_gate
+     vkd3d_proton_export_image
+     vkd3d_proton_export_fence
+     D3D12SDKVersion DATA PRIVATE
+diff --git a/libs/d3d12core/main.c b/libs/d3d12core/main.c
+index f756eb9..39d11d6 100644
+--- a/libs/d3d12core/main.c
++++ b/libs/d3d12core/main.c
+@@ -1357,6 +1357,11 @@ DLLEXPORT const UINT D3D12SDKVersion = D3D12_SDK_VERSION;
+ /* The same heap over a dma-buf of those pages - `address` is where the caller
+  * maps it - for a Vulkan driver that refuses a userptr over file-backed memory.
+  * The caller keeps `fd`. */
++void WINAPI DLLEXPORT vkd3d_proton_set_vram_gate(const void *gate)
++{
++    vkd3d_set_vram_gate(gate);
++}
++
+ HRESULT WINAPI DLLEXPORT vkd3d_proton_open_heap_from_dmabuf(ID3D12Device *device, void *address, int fd,
+         UINT64 size, REFIID iid, void **heap)
+ {
+diff --git a/libs/vkd3d/memory.c b/libs/vkd3d/memory.c
+index 8a2894a..f80936f 100644
+--- a/libs/vkd3d/memory.c
++++ b/libs/vkd3d/memory.c
+@@ -830,6 +830,11 @@ void vkd3d_free_device_memory(struct d3d12_device *device, const struct vkd3d_de
+     }
+ 
+     VK_CALL(vkFreeMemory(device->vk_device, allocation->vk_memory, NULL));
++
++    if (device->memory_info.vram_account &&
++            (device->memory_properties.memoryTypes[allocation->vk_memory_type].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
++        vkd3d_vram_gate->give(device->memory_info.vram_account, allocation->size);
++
+     rebar_budget = !!(device->memory_info.rebar_budget_mask & (1u << allocation->vk_memory_type));
+ 
+     if (rebar_budget || (vkd3d_config_flags & VKD3D_CONFIG_FLAG_LOG_MEMORY_BUDGET))
+@@ -864,6 +869,14 @@ void vkd3d_free_device_memory(struct d3d12_device *device, const struct vkd3d_de
+         vkd3d_report_memory_budget(device);
+ }
+ 
++const struct vkd3d_vram_gate *vkd3d_vram_gate;
++static __thread bool vkd3d_vram_refused;
++
++void vkd3d_set_vram_gate(const void *gate)
++{
++    vkd3d_vram_gate = gate;
++}
++
+ static HRESULT vkd3d_try_allocate_device_memory(struct d3d12_device *device,
+         VkDeviceSize size, VkMemoryPropertyFlags type_flags, const uint32_t base_type_mask,
+         void *pNext, bool respect_budget, struct vkd3d_device_memory_allocation *allocation)
+@@ -875,8 +888,10 @@ static HRESULT vkd3d_try_allocate_device_memory(struct d3d12_device *device,
+     VkDeviceSize *type_current, heap_size;
+     VkMemoryAllocateInfo allocate_info;
+     bool rebar_budget;
++    bool vram_gated;
+     VkResult vr;
+ 
++    vkd3d_vram_refused = false;
+     device_local_mask = 0u;
+     candidate_mask = 0u;
+ 
+@@ -991,11 +1006,26 @@ static HRESULT vkd3d_try_allocate_device_memory(struct d3d12_device *device,
+                 allocate_info.allocationSize, device->device_info.vulkan_1_1_properties.maxMemoryAllocationSize);
+     }
+ 
++    vram_gated = memory_info->vram_account &&
++            (memory_props->memoryTypes[allocate_info.memoryTypeIndex].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++
++    if (vram_gated && !vkd3d_vram_gate->take(memory_info->vram_account, size))
++    {
++        WARN("Device-local allocation of %"PRIu64" KiB refused: over the guest's video memory cap.\n", size / 1024);
++        vkd3d_vram_refused = true;
++        if (rebar_budget && respect_budget)
++            pthread_mutex_unlock(&memory_info->budget_lock);
++        return E_OUTOFMEMORY;
++    }
++
+     /* In case we get address binding callbacks, ensure driver knows it's not a sparse bind that happens async. */
+     vkd3d_address_binding_tracker_mark_user_thread();
+ 
+     vr = VK_CALL(vkAllocateMemory(device->vk_device, &allocate_info, NULL, &allocation->vk_memory));
+ 
++    if (vr != VK_SUCCESS && vram_gated)
++        vkd3d_vram_gate->give(memory_info->vram_account, size);
++
+     if (vr == VK_SUCCESS)
+     {
+         vkd3d_queue_timeline_trace_register_instantaneous(&device->queue_timeline_trace,
+@@ -1076,7 +1106,7 @@ HRESULT vkd3d_allocate_device_memory(struct d3d12_device *device,
+     hr = vkd3d_try_allocate_device_memory(device, size, type_flags,
+             type_mask, pNext, respect_budget, allocation);
+ 
+-    if (FAILED(hr) && (type_flags & optional_flags))
++    if (FAILED(hr) && (type_flags & optional_flags) && !vkd3d_vram_refused)
+     {
+         /* If we're allocating pure DEVICE_LOCAL_BIT memory, we should never need to fallback allocate ourselves.
+          * Allocating ReBAR can still fail. */
+diff --git a/libs/vkd3d/resource.c b/libs/vkd3d/resource.c
+index 8c44676..f1b849d 100644
+--- a/libs/vkd3d/resource.c
++++ b/libs/vkd3d/resource.c
+@@ -9773,6 +9773,10 @@ void vkd3d_memory_info_cleanup(struct vkd3d_memory_info *info,
+         struct d3d12_device *device)
+ {
+     pthread_mutex_destroy(&info->budget_lock);
++
++    if (info->vram_account)
++        vkd3d_vram_gate->close(vkd3d_vram_gate->self, info->vram_account);
++    info->vram_account = NULL;
+ }
+ 
+ static uint32_t vkd3d_memory_info_filter_sysmem_memory_types(struct d3d12_device *device,
+@@ -9824,6 +9828,11 @@ HRESULT vkd3d_memory_info_init(struct vkd3d_memory_info *info,
+     if (pthread_mutex_init(&info->budget_lock, NULL) != 0)
+         return E_OUTOFMEMORY;
+ 
++    info->vram_account = NULL;
++    if (vkd3d_vram_gate && vkd3d_vram_gate->size >= sizeof(*vkd3d_vram_gate))
++        info->vram_account = vkd3d_vram_gate->open(vkd3d_vram_gate->self,
++                device->device_info.vulkan_1_1_properties.deviceUUID);
++
+     buffer_requirement_info.sType = VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS;
+     buffer_requirement_info.pNext = NULL;
+     buffer_requirement_info.pCreateInfo = &buffer_info;
+diff --git a/libs/vkd3d/vkd3d_private.h b/libs/vkd3d/vkd3d_private.h
+index c872c00..509f44c 100644
+--- a/libs/vkd3d/vkd3d_private.h
++++ b/libs/vkd3d/vkd3d_private.h
+@@ -4409,8 +4409,24 @@ struct vkd3d_memory_info_domain
+     uint32_t rt_ds_type_mask;
+ };
+ 
++/* accel-virt: the embedder's cap on device-local memory, mirroring its AvVramGate. */
++struct vkd3d_vram_gate
++{
++    uint32_t size;
++    void *self;
++    void *(*open)(void *self, const uint8_t *gpu_uuid);
++    int (*take)(void *account, uint64_t bytes);
++    void (*give)(void *account, uint64_t bytes);
++    void (*close)(void *self, void *account);
++    uint64_t (*free_bytes)(void *account);
++    uint64_t (*cap)(void *account);
++};
++
++extern const struct vkd3d_vram_gate *vkd3d_vram_gate;
++
+ struct vkd3d_memory_info
+ {
++    void *vram_account;
+     /* Includes normal system memory, but also resizable BAR memory.
+      * Only types which have HOST_VISIBLE_BIT can be in this domain.
+      * For images, we only include memory types which are LINEAR tiled. */

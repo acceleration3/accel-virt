@@ -16,6 +16,7 @@
 #include "executor/guest_region.hpp"
 #include "proto/wire/guest_bytes.hpp"
 #include "executor/host_object_registry.hpp"
+#include "executor/opencl/cl_device_memory.hpp"
 #include "executor/opencl/host_svm_ranges.hpp"
 #include "executor/opencl/kernel_pacer.hpp"
 #include "executor/monotonic_clock.hpp"
@@ -44,6 +45,7 @@ class GlDisplay;
 class ImportTable;
 class OpenClDevice;
 class SourceMemory;
+class VramLedger;
 class TeardownBudget;
 struct OpenClBackendProbe;
 
@@ -52,6 +54,7 @@ public:
     explicit OpenClBackend(DriverLog &lines);
     OpenClBackend(BlockSource &blocks, DriverLog &lines);
 
+    void use_vram(VramLedger *ledger);
     [[nodiscard]] bool initialize(const OpenClDevice *device, const GlDisplay *display, const OpenGlBackend *share,
                                   const ImportTable &imports);
 
@@ -104,6 +107,20 @@ public:
                                            cl_int *errcode_ret) override;
 
     cl_int on_clReleaseMemObject(cl_mem memobj) override;
+    cl_mem on_clCreateBuffer(cl_context context, cl_mem_flags flags, size_t size, void *host_ptr,
+                             cl_int *errcode_ret) override;
+    cl_mem on_clCreateImage(cl_context context, cl_mem_flags flags, const cl_image_format *image_format,
+                            const cl_image_desc *image_desc, void *host_ptr, cl_int *errcode_ret) override;
+    cl_mem on_clCreateImageWithProperties(cl_context context, const cl_mem_properties *properties,
+                                          cl_mem_flags flags, const cl_image_format *image_format,
+                                          const cl_image_desc *image_desc, void *host_ptr,
+                                          cl_int *errcode_ret) override;
+    cl_mem on_clCreateImage2D(cl_context context, cl_mem_flags flags, const cl_image_format *image_format,
+                              size_t image_width, size_t image_height, size_t image_row_pitch, void *host_ptr,
+                              cl_int *errcode_ret) override;
+    cl_mem on_clCreateImage3D(cl_context context, cl_mem_flags flags, const cl_image_format *image_format,
+                              size_t image_width, size_t image_height, size_t image_depth, size_t image_row_pitch,
+                              size_t image_slice_pitch, void *host_ptr, cl_int *errcode_ret) override;
     void  *on_clEnqueueMapBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_map,
                                  cl_map_flags map_flags, size_t offset, size_t size,
                                  cl_uint num_events_in_wait_list, const cl_event *event_wait_list,
@@ -203,6 +220,9 @@ private:
                             size_t *param_value_size_ret);
 
     cl_int answers_type(cl_device_type device_type) const;
+    cl_mem kept_mem(cl_mem made, uint64_t claimed, cl_int *errcode_ret);
+    cl_int capped_device_info(cl_device_id device, cl_device_info param_name, size_t param_value_size,
+                              void *param_value, size_t *param_value_size_ret);
 
     [[nodiscard]] bool shares_with_gl(const GlDisplay &display) const;
     [[nodiscard]] bool copy_gl_objects();
@@ -238,6 +258,7 @@ private:
     HostObjectRegistry<uint64_t, clproto::HandleKind, void *> handles_;
     HostSvmRanges    svm_;
     HostSvmRanges    mapped_;
+    ClDeviceMemory   device_memory_;
     GuestBytes       guest_;
     GuestRegion      arena_;
     const ImportTable *imported_;

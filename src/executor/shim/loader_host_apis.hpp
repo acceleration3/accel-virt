@@ -16,6 +16,8 @@
 #include "executor/shim/host_heap.hpp"
 #include "executor/shim/gl_display.hpp"
 #include "executor/shim/opencl_device.hpp"
+#include "executor/vram_gate.hpp"
+#include "executor/vram_ledger.hpp"
 #include "proto/context/device_uuid.hpp"
 
 #include <stdint.h>
@@ -45,6 +47,7 @@ public:
     SharedSurfaces     *surfaces(uint32_t index) override;
     HostShares         *shares(uint32_t index) override;
     HostMemorySource   *memory_source(uint32_t index) override;
+    VramLedger         *vram_ledger(uint32_t index) override;
 
 private:
     void enumerate();
@@ -65,6 +68,8 @@ private:
     HostHeap                   heap_;
     ObjectStorage<SharedSurfaces> surfaces_[HostGpuSet::max_gpus];
     ObjectStorage<HostShares>  shares_[HostGpuSet::max_gpus];
+    VramLedger  ledgers_[HostGpuSet::max_gpus];
+    VramGate    vram_gate_;
     uint32_t count_;
     bool     opened_;
 };
