@@ -85,6 +85,7 @@ void VulkanGuard::end_batch()
 {
     AV_SCOPE("VulkanGuard::end_batch");
     progress_.begin_poll();
+    reap();
 }
 
 bool VulkanGuard::hold(uint64_t owner, uint64_t handle, uint64_t device, uint64_t pool)
@@ -93,6 +94,23 @@ bool VulkanGuard::hold(uint64_t owner, uint64_t handle, uint64_t device, uint64_
     if (handle == 0u) return true;
     VulkanLifetimes *const lifetimes = lifetimes_for(device);
     return lifetimes != nullptr && lifetimes->hold(owner, handle, device, pool) == Status::ok;
+}
+
+bool VulkanGuard::pooled(vkproto::HandleKind kind) const
+{
+    AV_SCOPE("VulkanGuard::pooled");
+    return kind == vkproto::HandleKind::descriptor_set || kind == vkproto::HandleKind::command_buffer;
+}
+
+VulkanGuard::Needs VulkanGuard::needs(vkproto::HandleKind kind, uint64_t wire) const
+{
+    AV_SCOPE("VulkanGuard::needs");
+    if (!recording_ || wire == 0u) return Needs{false, false, false};
+    if (owner_ == 0u) {
+        const bool owns = kind == vkproto::HandleKind::command_buffer;
+        return Needs{owns, false, owns};
+    }
+    return Needs{holdable(kind), holdable(kind) && pooled(kind), false};
 }
 
 bool VulkanGuard::reference(vkproto::HandleKind kind, uint64_t wire, uint64_t parent, uint64_t device)
@@ -106,8 +124,7 @@ bool VulkanGuard::reference(vkproto::HandleKind kind, uint64_t wire, uint64_t pa
         return true;
     }
     if (!holdable(kind)) return true;
-    const bool pooled = kind == vkproto::HandleKind::descriptor_set || kind == vkproto::HandleKind::command_buffer;
-    return hold(owner_, wire, owner_device_, pooled ? parent : 0u);
+    return hold(owner_, wire, owner_device_, pooled(kind) ? parent : 0u);
 }
 
 void VulkanGuard::reap()
@@ -175,14 +192,21 @@ bool VulkanGuard::bound(uint64_t set, uint32_t binding, uint32_t element, uint64
     AV_SCOPE("VulkanGuard::bound");
     if (set == 0u) return true;
     VulkanLifetimes *const lifetimes = lifetimes_for(device);
-    return lifetimes != nullptr &&
-           lifetimes->write(set, VulkanLifetimes::Descriptor{binding, element}, first, second, device,
-                            progress_.reached(device)) == Status::ok;
+    return lifetimes != nullptr && bind(set, binding, element, first, second, *lifetimes, device, progress_.reached(device));
+}
+
+bool VulkanGuard::bind(uint64_t set, uint32_t binding, uint32_t element, uint64_t first, uint64_t second,
+                       VulkanLifetimes &lifetimes, uint64_t device, uint64_t reached)
+{
+    AV_SCOPE("VulkanGuard::bind");
+    return lifetimes.write(set, VulkanLifetimes::Descriptor{binding, element}, first, second, device, reached) == Status::ok;
 }
 
 bool VulkanGuard::written(const VkWriteDescriptorSet *writes, uint32_t count, uint64_t device)
 {
     AV_SCOPE("VulkanGuard::written");
+    VulkanLifetimes *lifetimes = nullptr;
+    uint64_t         reached = 0u;
     for (uint32_t at = 0u; at < count; at++) {
         const VkWriteDescriptorSet &write = writes[at];
         const uint64_t              set = number(write.dstSet);
@@ -226,7 +250,13 @@ bool VulkanGuard::written(const VkWriteDescriptorSet *writes, uint32_t count, ui
             }
             default: continue;
             }
-            if (!bound(set, write.dstBinding, write.dstArrayElement + index, first, second, device)) return false;
+            if (lifetimes == nullptr) {
+                lifetimes = lifetimes_for(device);
+                if (lifetimes == nullptr) return false;
+                reached = progress_.reached(device);
+            }
+            if (!bind(set, write.dstBinding, write.dstArrayElement + index, first, second, *lifetimes, device, reached))
+                return false;
         }
     }
     return true;
@@ -237,12 +267,12 @@ bool VulkanGuard::copied(const VkCopyDescriptorSet *copies, uint32_t count, uint
     AV_SCOPE("VulkanGuard::copied");
     VulkanLifetimes *const lifetimes = lifetimes_for(device);
     if (lifetimes == nullptr) return count == 0u;
+    const uint64_t reached = count != 0u ? progress_.reached(device) : 0u;
     for (uint32_t at = 0u; at < count; at++) {
         const VkCopyDescriptorSet &copy = copies[at];
         const Status               done = lifetimes->copy(
             number(copy.dstSet), VulkanLifetimes::Descriptor{copy.dstBinding, copy.dstArrayElement}, number(copy.srcSet),
-            VulkanLifetimes::Descriptor{copy.srcBinding, copy.srcArrayElement}, copy.descriptorCount,
-            progress_.reached(device));
+            VulkanLifetimes::Descriptor{copy.srcBinding, copy.srcArrayElement}, copy.descriptorCount, reached);
         if (done != Status::ok) return false;
     }
     return true;

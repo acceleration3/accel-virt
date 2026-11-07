@@ -121,6 +121,15 @@ bool VulkanBackend::children_marks(uint64_t parent, uint64_t device, uint64_t *m
     return fits;
 }
 
+uint64_t VulkanBackend::device_of_buffer(uint64_t handle) const
+{
+    AV_SCOPE("VulkanBackend::device_of_buffer");
+    if (buffer_device_.buffer_ == handle) return buffer_device_.device_;
+    const uint64_t device = owning_device(handle);
+    buffer_device_ = BufferDevice{handle, device};
+    return device;
+}
+
 uint64_t VulkanBackend::owning_device(uint64_t handle) const
 {
     AV_SCOPE("VulkanBackend::owning_device");

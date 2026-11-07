@@ -136,7 +136,7 @@ D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, Wak
     : d3d12proto::ServerDispatch(guest), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
       progress_(fence_wake, blocks), block_heaps_(blocks, progress_, lines), holds_(blocks), descriptors_(blocks, holds_), allocators_(blocks), queries_(blocks), views_(objects_, addresses_),
-      pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), removed_(0u), lines_(lines), refusal_(lines_), clock_(), hang_ns_(hung_after), commands_(0u), drain_commands_(0u), drain_mark_(0u), drain_marked_(false)
+      pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), retained_(), removed_(0u), lines_(lines), refusal_(lines_), clock_(), hang_ns_(hung_after), commands_(0u), polled_at_(0u), drain_commands_(0u), drain_mark_(0u), drain_marked_(false)
 {
     AV_SCOPE("D3d12Session::D3d12Session");
 }
@@ -167,6 +167,7 @@ void D3d12Session::shut_down()
     }
     compiles_.bind(nullptr);
     drain_marked_ = false;
+    retained_.clear();
     const bool drained = drain();
     if (drained) {
         descriptors_.release_all();
@@ -210,13 +211,26 @@ bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &rep
     AV_SCOPE("D3d12Session::run");
     commands_++;
     block_heaps_.reclaim();
-    progress_.begin_poll();
-    if (holds_.retired() != 0u) holds_.reap(progress_.reached_this_poll());
+    if (commands_ - polled_at_ >= poll_every) refresh_progress();
     const bool ran = d3d12proto::dispatch_command(*this, command_id, payload, reply, arena);
     if (ran) return true;
     if (!refusal_.removes(d3d12proto::command_name(command_id), only_device, removed_ != 0u)) return false;
     if (removed_ == 0u) removed_ = blocks_.refusal(static_cast<uint32_t>(DXGI_ERROR_DRIVER_INTERNAL_ERROR));
     return true;
+}
+
+void D3d12Session::end_batch()
+{
+    AV_SCOPE("D3d12Session::end_batch");
+    refresh_progress();
+}
+
+void D3d12Session::refresh_progress()
+{
+    AV_SCOPE("D3d12Session::refresh_progress");
+    polled_at_ = commands_;
+    progress_.begin_poll();
+    if (holds_.retired() != 0u) holds_.reap(progress_.reached_this_poll());
 }
 
 void D3d12Session::gpu_progress(uint64_t &marked, uint64_t &reached) const
@@ -307,8 +321,15 @@ bool D3d12Session::kept(uint32_t id, D3dObjectKind kind, IUnknown *made)
 bool D3d12Session::retain(uint32_t list, IUnknown *object, D3d12BlockHeap *block)
 {
     AV_SCOPE("D3d12Session::retain");
+    if (retained_.covers(list, object, block)) {
+        holds_.let_go_pin(block, 0u);
+        return true;
+    }
     const Status held = holds_.hold(list, object, block);
-    if (held == Status::ok) return true;
+    if (held == Status::ok) {
+        retained_.note(list, object, block != nullptr);
+        return true;
+    }
     LogLine(lines_).text("list ").number(list).text(" kept nothing alive, status ").number(static_cast<uint32_t>(held))
         .write();
     return false;
@@ -325,9 +346,12 @@ bool D3d12Session::retain_resource(uint32_t list, uint32_t resource)
 {
     AV_SCOPE("D3d12Session::retain_resource");
     IUnknown *const object = objects_.find(resource, D3dObjectKind::resource12);
-    if (object == nullptr || !retain(list, object, block_heaps_.pin(resource))) return false;
+    if (object == nullptr) return false;
+    if (retained_.whole(list, object)) return true;
+    if (!retain(list, object, block_heaps_.pin(resource))) return false;
     bool mapped = true;
     holds_.for_each_held(resource, [&](IUnknown *heap) { mapped = retain(list, heap, nullptr) && mapped; });
+    if (mapped) retained_.note_whole(list, object);
     return mapped;
 }
 
@@ -350,6 +374,7 @@ bool D3d12Session::retain_address(uint32_t list, uint64_t address)
 void D3d12Session::release_holds(uint32_t list)
 {
     AV_SCOPE("D3d12Session::release_holds");
+    retained_.clear();
     if (holds_.release_list(list, progress_.reached()) == Status::ok) return;
     if (!drain()) return;
     static_cast<void>(holds_.release_list(list, progress_.reached()));

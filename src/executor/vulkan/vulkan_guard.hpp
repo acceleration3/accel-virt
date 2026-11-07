@@ -25,7 +25,14 @@ public:
     VulkanGuard(const VulkanGuard &) = delete;
     VulkanGuard &operator=(const VulkanGuard &) = delete;
 
+    struct Needs {
+        bool reference_;
+        bool parent_;
+        bool device_;
+    };
+
     void               begin_frame(bool recording);
+    Needs              needs(vkproto::HandleKind kind, uint64_t wire) const;
     [[nodiscard]] bool reference(vkproto::HandleKind kind, uint64_t wire, uint64_t parent, uint64_t device);
     void               reap();
     [[nodiscard]] bool release_all(uint64_t device);
@@ -68,6 +75,9 @@ public:
 
 private:
     [[nodiscard]] bool hold(uint64_t owner, uint64_t handle, uint64_t device, uint64_t pool);
+    [[nodiscard]] bool bind(uint64_t set, uint32_t binding, uint32_t element, uint64_t first, uint64_t second,
+                            VulkanLifetimes &lifetimes, uint64_t device, uint64_t reached);
+    bool               pooled(vkproto::HandleKind kind) const;
     VulkanLifetimes   *lifetimes_of(uint64_t device) const;
     VulkanLifetimes   *lifetimes_for(uint64_t device);
 

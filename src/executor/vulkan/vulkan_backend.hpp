@@ -274,6 +274,7 @@ private:
     void     release_children(uint64_t parent, uint64_t device);
     bool     children_marks(uint64_t parent, uint64_t device, uint64_t *marks, uint32_t &count);
     uint64_t owning_device(uint64_t handle) const;
+    uint64_t device_of_buffer(uint64_t handle) const;
     bool     reusable(VkCommandBuffer commandBuffer);
     bool     queue_admits(uint32_t command_id, const WireReader &payload) const;
     bool     family_flags(VkDevice device, uint32_t family, uint32_t &flags);
@@ -306,6 +307,11 @@ private:
 
     static constexpr uint32_t max_memory_types = 32u;
 
+    struct BufferDevice {
+        uint64_t buffer_;
+        uint64_t device_;
+    };
+
     const HostGpu     *gpu_;
     HostMemorySource  *source_;
     PhysicalDeviceList listed_;
@@ -316,6 +322,7 @@ private:
     VkPhysicalDevice physical_;
     bool             memory_import_;
     HostObjectRegistry<uint64_t, VulkanObjectKind, uint64_t> handles_;
+    mutable BufferDevice buffer_device_;
     ImportTable     *imports_;
     GuestMemoryTypes types_;
     bool             types_learnt_;

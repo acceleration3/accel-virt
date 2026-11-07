@@ -15,7 +15,8 @@ uint64_t number(const void *handle)
 
 }
 
-VulkanSubmitProgress::VulkanSubmitProgress() : slots_{}, marked_(0u), stale_(true), lost_(false)
+VulkanSubmitProgress::VulkanSubmitProgress()
+    : slots_{}, marked_(0u), cached_device_(0u), cached_reached_(0u), cached_(false), stale_(true), lost_(false)
 {
     AV_SCOPE("VulkanSubmitProgress::VulkanSubmitProgress");
 }
@@ -30,6 +31,7 @@ void VulkanSubmitProgress::begin_poll()
 {
     AV_SCOPE("VulkanSubmitProgress::begin_poll");
     stale_ = true;
+    cached_ = false;
 }
 
 void VulkanSubmitProgress::poll_all()
@@ -59,10 +61,14 @@ uint64_t VulkanSubmitProgress::reached(uint64_t device)
 {
     AV_SCOPE("VulkanSubmitProgress::reached");
     settle();
+    if (cached_ && cached_device_ == device) return cached_reached_;
     uint64_t reached = marked_;
     for (const Slot &slot : slots_)
         if (slot.state_ != State::vacant && number(slot.device_) == device && slot.mark_ - 1u < reached)
             reached = slot.mark_ - 1u;
+    cached_ = true;
+    cached_device_ = device;
+    cached_reached_ = reached;
     return reached;
 }
 
@@ -118,6 +124,7 @@ bool VulkanSubmitProgress::fenced(Slot &slot, VkDevice owner)
 uint64_t VulkanSubmitProgress::reserve(uint64_t device)
 {
     AV_SCOPE("VulkanSubmitProgress::reserve");
+    cached_ = false;
     const uint32_t at = vacancy();
     if (at == slots) return 0u;
     Slot &slot = slots_[at];
@@ -138,6 +145,7 @@ uint32_t VulkanSubmitProgress::reserved_for(uint64_t mark) const
 void VulkanSubmitProgress::commit(uint64_t mark, uint64_t queue)
 {
     AV_SCOPE("VulkanSubmitProgress::commit");
+    cached_ = false;
     const uint32_t at = reserved_for(mark);
     if (at == slots) return;
     Slot &slot = slots_[at];
@@ -172,6 +180,7 @@ bool VulkanSubmitProgress::settled(Slot &slot)
 void VulkanSubmitProgress::cancel(uint64_t mark)
 {
     AV_SCOPE("VulkanSubmitProgress::cancel");
+    cached_ = false;
     const uint32_t at = reserved_for(mark);
     if (at != slots) slots_[at].state_ = State::vacant;
 }
@@ -179,6 +188,7 @@ void VulkanSubmitProgress::cancel(uint64_t mark)
 bool VulkanSubmitProgress::wait_idle(uint64_t device)
 {
     AV_SCOPE("VulkanSubmitProgress::wait_idle");
+    cached_ = false;
     for (Slot &slot : slots_) {
         if (slot.state_ == State::vacant || number(slot.device_) != device) continue;
         if (!settled(slot)) return false;
@@ -189,6 +199,7 @@ bool VulkanSubmitProgress::wait_idle(uint64_t device)
 bool VulkanSubmitProgress::wait_marks(uint64_t device, const uint64_t *marks, uint32_t count)
 {
     AV_SCOPE("VulkanSubmitProgress::wait_marks");
+    cached_ = false;
     for (Slot &slot : slots_) {
         if (slot.state_ == State::vacant || number(slot.device_) != device) continue;
         bool stamped = false;
@@ -218,6 +229,7 @@ bool VulkanSubmitProgress::settled_within(Slot &slot, TeardownBudget &budget)
 bool VulkanSubmitProgress::drain(uint64_t device, TeardownBudget &budget)
 {
     AV_SCOPE("VulkanSubmitProgress::drain");
+    cached_ = false;
     bool drained = true;
     for (Slot &slot : slots_) {
         if (slot.state_ == State::vacant || number(slot.device_) != device) continue;
@@ -229,6 +241,7 @@ bool VulkanSubmitProgress::drain(uint64_t device, TeardownBudget &budget)
 void VulkanSubmitProgress::forget(VkDevice device)
 {
     AV_SCOPE("VulkanSubmitProgress::forget");
+    cached_ = false;
     for (Slot &slot : slots_) {
         if (slot.fence_ == VK_NULL_HANDLE || slot.device_ != device) continue;
         const bool idle = slot.state_ == State::lost ? false : slot.state_ != State::pending || waited(slot);

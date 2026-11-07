@@ -64,6 +64,9 @@ private:
 
     Slot     slots_[slots];
     uint64_t marked_;
+    uint64_t cached_device_;
+    uint64_t cached_reached_;
+    bool     cached_;
     bool     stale_;
     bool     lost_;
 };

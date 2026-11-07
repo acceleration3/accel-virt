@@ -237,6 +237,7 @@ void D3dBackend::end_batch()
 {
     AV_SCOPE("D3dBackend::end_batch");
     d3d9_.end_batch();
+    d3d12_.end_batch();
     finish_d3d11();
     batches_.end(issued(), completed());
 }

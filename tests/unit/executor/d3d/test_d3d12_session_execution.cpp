@@ -89,8 +89,7 @@ public:
 
     void reap()
     {
-        std::uint32_t supported = 0u;
-        CHECK(av_d3d12_QueryHeapSlices12(rig, &supported));
+        session().end_batch();
     }
 
     av::FakeCommandList    commands, more_commands;
@@ -122,6 +121,21 @@ TEST(d3d12_session_execution, a_list_that_ran_keeps_what_it_copied_into_until_th
   scene.reap();
   CHECK_EQ(scene.dst.references(), 0u);
   CHECK_EQ(scene.src.references(), 0u); }
+
+TEST(d3d12_session_execution, a_long_batch_looks_at_the_gpu_again_after_a_fixed_number_of_commands)
+{ Scene scene;
+  CHECK(scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));
+  CHECK(scene.execute(queue_a, list));
+  CHECK(scene.session().on_Destroy12(target));
+  CHECK(scene.session().on_ResetCommandList12(list, allocator, 0u));
+  scene.session().end_batch();
+  CHECK_EQ(scene.dst.references(), 2u);
+  scene.device.fences[0].completed = 1u;
+  std::uint32_t supported = 0u;
+  for (std::uint32_t command = 0u; command < 255u; command++) CHECK(av_d3d12_QueryHeapSlices12(scene.rig, &supported));
+  CHECK_EQ(scene.dst.references(), 2u);
+  CHECK(av_d3d12_QueryHeapSlices12(scene.rig, &supported));
+  CHECK_EQ(scene.dst.references(), 0u); }
 
 TEST(d3d12_session_execution, an_object_destroyed_while_its_list_runs_is_released_when_the_run_is_done_and_not_before)
 { Scene scene;

@@ -12,6 +12,7 @@
 #include "executor/d3d/d3d12_pipeline_compiles.hpp"
 #include "executor/d3d/d3d12_query_heaps.hpp"
 #include "executor/d3d/d3d12_queue_progress.hpp"
+#include "executor/d3d/d3d12_retain_memo.hpp"
 #include "executor/d3d/d3d12_tile_update.hpp"
 #include "executor/d3d/d3d12_view_writer.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
@@ -62,6 +63,7 @@ public:
 
     bool               knows(uint32_t command_id) const;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena);
+    void               end_batch();
     void               gpu_progress(uint64_t &marked, uint64_t &reached) const;
     void               abandon(const SourceMemory &memory);
     uint32_t           removed_reason() const;
@@ -140,6 +142,7 @@ public:
     bool invariants_hold() const;
 
 private:
+    void                       refresh_progress();
     ID3D12GraphicsCommandList *list(uint32_t id) const;
     bool                       cpu_handle(const d3d12proto::DescriptorRef &ref, uint32_t type, size_t &handle) const;
     bool                       gpu_handle(const d3d12proto::DescriptorRef &ref, uint64_t &handle) const;
@@ -205,12 +208,16 @@ private:
     D3d12PipelineCompiles  compiles_;
     D3d12Presentation      presentation_;
     D3d12TileUpdate        tile_update_;
+    D3d12RetainMemo        retained_;
     uint32_t               removed_;
     DriverLog             &lines_;
     CommandRefusal         refusal_;
     MonotonicClock         clock_;
     uint64_t               hang_ns_;
+    static constexpr uint64_t poll_every = 256u;
+
     uint64_t               commands_;
+    uint64_t               polled_at_;
     uint64_t               drain_commands_;
     uint64_t               drain_mark_;
     bool                   drain_marked_;

@@ -44,7 +44,7 @@ VulkanBackend::VulkanBackend(DriverLog &lines) : VulkanBackend(heap_, lines)
 VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
     : heap_(), blocks_(blocks), gpu_(nullptr), source_(nullptr), listed_(), extensions_(blocks, Pool::paged),
       application_(), devices_(blocks), adopting_(nullptr), physical_(VK_NULL_HANDLE),
-      memory_import_(false), handles_(blocks), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
+      memory_import_(false), handles_(blocks), buffer_device_(), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
       templates_(blocks), layouts_(blocks), families_(blocks), host_waits_(blocks), park_clock_(), parked_(blocks, *this, park_clock_), frame_(nullptr, 0u),
       frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), progress_(),
       guard_(blocks, *this, progress_), parent_(0u), ran_(0u), lost_(false), devices_leaked_(false)
@@ -126,8 +126,12 @@ bool VulkanBackend::handle_for(vkproto::HandleKind kind, uint64_t wire, uint64_t
     const VulkanObjectKind judged = object_kind(kind);
     const bool named = judged == VulkanObjectKind::other ? knows_handle(wire) : knows_handle(wire, judged);
     if (!named) return false;
-    const uint64_t device = kind == vkproto::HandleKind::command_buffer ? owning_device(wire) : 0u;
-    if (!guard_.reference(kind, wire, handles_.parent_of(wire), device)) return false;
+    const VulkanGuard::Needs needs = guard_.needs(kind, wire);
+    if (needs.reference_) {
+        const uint64_t device = needs.device_ ? device_of_buffer(wire) : 0u;
+        const uint64_t parent = needs.parent_ ? handles_.parent_of(wire) : 0u;
+        if (!guard_.reference(kind, wire, parent, device)) return false;
+    }
     handle = wire;
     return true;
 }
@@ -136,6 +140,7 @@ void VulkanBackend::keep(uint64_t raw, VulkanObjectKind kind, uint64_t bytes)
 {
     AV_SCOPE("VulkanBackend::keep");
     if (raw == 0u || handles_.holds(raw)) return;
+    buffer_device_ = BufferDevice{};
     if (handles_.remember(raw, kind, parent_, bytes) != Status::ok) {
         AV_UNTESTABLE("room for every handle a reply carries is made before the driver is called");
     }
@@ -153,12 +158,14 @@ void VulkanBackend::ended(uint64_t raw)
     templates_.forget(raw);
     layouts_.forget(raw);
     handles_.forget(raw);
+    buffer_device_ = BufferDevice{};
 }
 
 void VulkanBackend::children_ended(uint64_t raw)
 {
     AV_SCOPE("VulkanBackend::children_ended");
     handles_.forget_children(raw);
+    buffer_device_ = BufferDevice{};
 }
 
 bool VulkanBackend::knows_handle(uint64_t raw) const
@@ -322,7 +329,7 @@ bool VulkanBackend::run(uint32_t command_id, WireReader &payload, WireWriter &re
     if (!recording) parked_.service();
     if (lost_) return true;
     guard_.begin_frame(recording);
-    guard_.reap();
+    if (!recording) guard_.reap();
     frame_ = payload;
     frame_command_ = command_id;
     framed_ = true;
@@ -876,6 +883,7 @@ GuestDevice *VulkanBackend::forgot(uint64_t made)
     AV_SCOPE("VulkanBackend::forgot");
     GuestDevice *const owner = owner_of(made);
     if (handles_.holds(made)) handles_.forget(made);
+    buffer_device_ = BufferDevice{};
     return owner;
 }
 
@@ -973,6 +981,7 @@ void VulkanBackend::shut_down()
     AV_SCOPE("VulkanBackend::shut_down");
     parked_.drop_all();
     host_waits_.clear();
+    buffer_device_ = BufferDevice{};
     handles_.release_all(release_order, sizeof release_order / sizeof release_order[0],
                          [this](uint64_t raw, VulkanObjectKind kind, uint64_t &, uint32_t) { let_go(raw, kind); });
     templates_.clear();
