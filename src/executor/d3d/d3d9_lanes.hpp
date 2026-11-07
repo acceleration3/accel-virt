@@ -14,6 +14,8 @@ namespace av {
 class BlockSource;
 class DriverLog;
 class EventfdWake;
+class PollClock;
+class TeardownBudget;
 
 class D3d9Lanes {
 public:
@@ -26,6 +28,7 @@ public:
     D3d9Lane *find(const SliceImporter *importer);
     void      touch(IDirect3DDevice9 *device);
     void      mark_touched();
+    [[nodiscard]] bool settle(PollClock &clock, TeardownBudget &budget);
     void      forget(IDirect3DDevice9 *device);
     void      forget_all();
     void      begin_session();
@@ -41,6 +44,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct D3d9LanesProbe;
+
     ObjectPool<D3d9Lane> lanes_;
     EventfdWake         &wake_;
     DriverLog           &lines_;

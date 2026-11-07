@@ -14,6 +14,7 @@ struct ID3D12PipelineState;
 namespace av {
 
 class BlockSource;
+class TeardownBudget;
 
 class D3d12PipelineCompiles {
 public:
@@ -31,6 +32,7 @@ public:
     D3d12PipelineJob *pending(uint32_t id);
     D3d12PipelineJob *oldest();
     ID3D12PipelineState *collect(D3d12PipelineJob &job);
+    [[nodiscard]] bool settle(TeardownBudget &budget);
     void              stop();
     void              run();
 

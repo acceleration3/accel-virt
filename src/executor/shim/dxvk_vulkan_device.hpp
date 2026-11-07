@@ -1,6 +1,7 @@
 #ifndef AV_DXVK_VULKAN_DEVICE_HPP
 #define AV_DXVK_VULKAN_DEVICE_HPP
 
+#include "executor/d3d/idle_queue.hpp"
 #include "executor/shim/dxvk_queues.hpp"
 #include "executor/shim/queue_work.hpp"
 #include "executor/shim/vulkan_device_table.hpp"
@@ -16,7 +17,7 @@ struct D3D11_TEXTURE2D_DESC1;
 namespace av {
 
 class OwnedFd;
-class DxvkVulkanDevice {
+class DxvkVulkanDevice final : public IdleQueue {
 public:
     DxvkVulkanDevice();
     ~DxvkVulkanDevice();
@@ -33,8 +34,8 @@ public:
     [[nodiscard]] bool wait(const VulkanTimeline &timeline, uint64_t value);
     [[nodiscard]] bool signal(const VulkanTimeline &timeline, uint64_t value);
     void               idle();
-    [[nodiscard]] bool mark_idle(uint64_t &ticket);
-    [[nodiscard]] bool reached(uint64_t ticket, uint64_t nanoseconds) const;
+    [[nodiscard]] bool mark_idle(uint64_t &ticket) override;
+    [[nodiscard]] bool reached(uint64_t ticket, uint64_t nanoseconds) const override;
     [[nodiscard]] bool sync_file(int &fd);
 private:
     IDXGIVkInteropDevice1 *interop_;

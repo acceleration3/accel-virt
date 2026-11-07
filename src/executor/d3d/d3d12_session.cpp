@@ -136,7 +136,7 @@ D3d12Session::D3d12Session(const GuestBytes &guest, D3dObjectTable &objects, Wak
     : d3d12proto::ServerDispatch(guest), imports_(nullptr), device_(nullptr), shown_by_(nullptr), shares_(nullptr), tenant_(tenant),
       joined_(false), surfaces_(nullptr), objects_(objects), blocks_(blocks), addresses_(blocks),
       progress_(fence_wake, blocks), block_heaps_(blocks, progress_, lines), holds_(blocks), descriptors_(blocks, holds_), allocators_(blocks), queries_(blocks), views_(objects_, addresses_),
-      pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), removed_(0u), lines_(lines), refusal_(lines_), clock_(), hang_ns_(hung_after)
+      pipelines_(objects_), compiles_(blocks), presentation_(lines), tile_update_(), removed_(0u), lines_(lines), refusal_(lines_), clock_(), hang_ns_(hung_after), commands_(0u), drain_commands_(0u), drain_mark_(0u), drain_marked_(false)
 {
     AV_SCOPE("D3d12Session::D3d12Session");
 }
@@ -166,6 +166,7 @@ void D3d12Session::shut_down()
         if (made != nullptr) made->Release();
     }
     compiles_.bind(nullptr);
+    drain_marked_ = false;
     const bool drained = drain();
     if (drained) {
         descriptors_.release_all();
@@ -207,6 +208,7 @@ bool D3d12Session::knows(uint32_t command_id) const
 bool D3d12Session::run(uint32_t command_id, WireReader &payload, WireWriter &reply, WireArena &arena)
 {
     AV_SCOPE("D3d12Session::run");
+    commands_++;
     block_heaps_.reclaim();
     progress_.begin_poll();
     if (holds_.retired() != 0u) holds_.reap(progress_.reached_this_poll());
@@ -419,14 +421,19 @@ bool D3d12Session::drain_within(TeardownBudget &budget)
 {
     AV_SCOPE("D3d12Session::drain_within");
     if (device_ == nullptr || lost()) return true;
-    if (!progress_.mark_all()) return false;
-    const uint64_t mark = progress_.marked();
-    if (progress_.reached() >= mark) return true;
+    if (!compiles_.settle(budget)) return false;
+    if (!drain_marked_ || drain_commands_ != commands_ || progress_.marked() != drain_mark_) {
+        if (!progress_.mark_all()) return false;
+        drain_mark_ = progress_.marked();
+        drain_commands_ = commands_;
+        drain_marked_ = true;
+    }
+    if (progress_.reached() >= drain_mark_) return true;
     constexpr uint64_t spin_ns = 2000000u;
     constexpr uint64_t nap_ns = 50000u;
     PollBudget         polls(clock_, spin_ns, nap_ns, budget.remaining());
     while (polls.next())
-        if (progress_.reached() >= mark) return true;
+        if (progress_.reached() >= drain_mark_) return true;
     return false;
 }
 

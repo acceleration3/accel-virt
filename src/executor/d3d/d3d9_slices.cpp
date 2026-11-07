@@ -33,7 +33,7 @@ void D3d9Slices::shut_down()
 {
     AV_SCOPE("D3d9Slices::shut_down");
     const auto every_device = [this](const D3d9Lane &lane) {
-        lane.idle();
+        if (lane.reached() < lanes_.marked()) lane.idle();
         storages_.destroy_for(lane);
     };
     lanes_.for_each(every_device);

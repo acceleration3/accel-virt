@@ -1,9 +1,13 @@
 #include "executor/d3d/d3d12_pipeline_compiles.hpp"
 #include "executor/d3d/d3d12_pipeline_job.hpp"
+#include "executor/monotonic_clock.hpp"
 #include "executor/shim/d3d_headers.hpp"
+#include "executor/teardown_budget.hpp"
+#include "harness/executor/fake_device.hpp"
 #include "executor/shim/host_heap.hpp"
 #include "harness/framework/test_registry.hpp"
 
+#include <atomic>
 #include <cstdint>
 
 using av::D3d12PipelineCompiles;
@@ -101,3 +105,37 @@ TEST(d3d12_pipeline_compiles, a_stopped_set_starts_its_threads_again_with_the_ne
   CHECK(compiles.collect(second) == nullptr);
   CHECK(compiles.vacant() != nullptr);
   CHECK(compiles.invariants_hold()); }
+
+namespace {
+
+std::atomic<bool> compile_entered(false);
+std::atomic<bool> compile_may_end(false);
+
+void hold_compile(void *)
+{
+    compile_entered.store(true);
+    while (!compile_may_end.load()) {
+    }
+}
+
+}
+
+TEST(d3d12_pipeline_compiles, a_compile_still_running_at_the_budget_is_reported_and_one_that_ends_lets_the_set_settle)
+{ D3d12PipelineCompiles compiles(blocks);
+  Root                  root;
+  av::FakeDevice        device;
+  device.compiling = hold_compile;
+  compile_entered = false;
+  compile_may_end = false;
+  compiles.bind(&device);
+  D3d12PipelineJob &job = started(compiles, root, 1u);
+  while (!compile_entered.load()) {
+  }
+  av::MonotonicClock clock;
+  av::TeardownBudget short_budget(clock, 20u * 1000u * 1000u);
+  CHECK(!compiles.settle(short_budget));
+  compile_may_end = true;
+  av::TeardownBudget long_budget(clock, 2000u * 1000u * 1000u);
+  CHECK(compiles.settle(long_budget));
+  CHECK(compiles.collect(job) == nullptr);
+  compiles.stop(); }

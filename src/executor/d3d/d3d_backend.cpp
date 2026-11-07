@@ -118,7 +118,7 @@ D3dBackend::D3dBackend(ExecutorLog &log)
       region_(guest_, lines_), imports_(nullptr), slices_(blocks_, lines_), d3d12_(guest_, objects_, wake_, fence_wake_, blocks_, log.d3d12()),
       d3d9_(guest_, objects_, blocks_, slices_, fence_wake_, log.d3d9()),
       published_(blocks_, guest_), progress11_(fence_wake_), constants_(blocks_),
-      missed_key_(0u), batches_(), mark_refused_(false), show_refused_(false), lost_(false)
+      missed_key_(0u), batches_(), queue_drain_(), submitted_(0u), drained_(false), mark_refused_(false), show_refused_(false), lost_(false)
 {
     AV_SCOPE("D3dBackend::D3dBackend");
 }
@@ -155,7 +155,7 @@ void D3dBackend::shut_down()
         published_.unbind();
         constants_.close();
         objects_.release_all();
-        if (slices_.count() != 0u) device11_->vulkan().idle();
+        if (slices_.count() != 0u && !drained_) device11_->vulkan().idle();
         slices_.destroy_all();
         progress11_.release();
         device11_->unlock();
@@ -168,6 +168,9 @@ void D3dBackend::shut_down()
     device11_ = nullptr;
     shares_ = nullptr;
     imports_ = nullptr;
+    queue_drain_.forget();
+    submitted_ = 0u;
+    drained_ = false;
 }
 
 bool D3dBackend::knows(uint32_t command_id) const
@@ -180,6 +183,8 @@ bool D3dBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply
 {
     AV_SCOPE("D3dBackend::run");
     if (device11_ == nullptr) return false;
+    submitted_++;
+    drained_ = false;
     blocks_.forget();
     if (d3d12_.knows(command_id)) {
         finish_d3d11();
@@ -205,12 +210,22 @@ bool D3dBackend::drain(TeardownBudget &budget)
     AV_SCOPE("D3dBackend::drain");
     if (device11_ == nullptr) return true;
     bool drained = d3d12_.drain_within(budget);
+    if (!d3d9_.drain_within(budget)) drained = false;
     if (!has_device()) return drained;
-    uint64_t ticket = 0u;
+    if (!drain_queue(budget)) drained = false;
+    return drained;
+}
+
+bool D3dBackend::drain_queue(TeardownBudget &budget)
+{
+    AV_SCOPE("D3dBackend::drain_queue");
+    if (lost_ || device11_->lost()) return true;
     device11_->lock(nullptr);
-    const bool marked = device11_->vulkan().mark_idle(ticket);
+    const bool marked = queue_drain_.mark(device11_->vulkan(), submitted_);
     device11_->unlock();
-    return marked && device11_->vulkan().reached(ticket, budget.remaining()) && drained;
+    const bool reached = marked && queue_drain_.reached(device11_->vulkan(), budget.remaining());
+    if (reached) drained_ = true;
+    return reached || lost_ || device11_->lost();
 }
 
 void D3dBackend::end_batch()

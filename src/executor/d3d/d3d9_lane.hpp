@@ -48,6 +48,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct D3d9LaneProbe;
+
     IDirect3DDevice9 *device_;
     const D3d9Lanes  &lanes_;
     D3d9Interop       interop_;

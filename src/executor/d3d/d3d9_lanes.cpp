@@ -2,8 +2,10 @@
 
 #include "core/log/driver_log.hpp"
 #include "core/log/log_line.hpp"
+#include "core/platform/poll_budget.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/eventfd_wake.hpp"
+#include "executor/teardown_budget.hpp"
 
 namespace av {
 
@@ -55,6 +57,21 @@ void D3d9Lanes::mark_touched()
         if (!marking_failed_) lines_.write("a Direct3D 9 device's batches could not be marked against the GPU: its buffers are copied");
         marking_failed_ = true;
     }
+}
+
+bool D3d9Lanes::settle(PollClock &clock, TeardownBudget &budget)
+{
+    AV_SCOPE("D3d9Lanes::settle");
+    mark_touched();
+    if (marking_failed_) return true;
+    const uint64_t mark = marked_;
+    if (reached() >= mark) return true;
+    constexpr uint64_t spin_ns = 2000000u;
+    constexpr uint64_t nap_ns = 50000u;
+    PollBudget         polls(clock, spin_ns, nap_ns, budget.remaining());
+    while (polls.next())
+        if (reached() >= mark) return true;
+    return false;
 }
 
 void D3d9Lanes::forget(IDirect3DDevice9 *device)

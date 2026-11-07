@@ -338,3 +338,25 @@ TEST(d3d12_session_execution, a_list_recorded_against_a_mapped_resource_holds_th
   CHECK(scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 16u));
   CHECK(holds.holding(list, &scene.heap_object));
   CHECK_EQ(scene.heap_object.references(), 3u); }
+
+TEST(d3d12_session_execution, a_drain_that_timed_out_is_retried_against_the_same_mark_and_marks_again_only_after_new_work)
+{ Scene scene;
+  CHECK(scene.session().on_CopyBufferRegion12(list, target, 0u, source, 0u, 64u));
+  CHECK(scene.execute(queue_a, list));
+  scene.rig.hurry(quick);
+  av::MonotonicClock clock;
+  av::TeardownBudget first(clock, 0u);
+  CHECK(!scene.session().drain_within(first));
+  std::uint64_t marked = 0u, reached = 0u;
+  scene.session().gpu_progress(marked, reached);
+  const std::uint64_t after_first = marked;
+  av::TeardownBudget second(clock, 0u);
+  CHECK(!scene.session().drain_within(second));
+  scene.session().gpu_progress(marked, reached);
+  CHECK_EQ(marked, after_first);
+  for (av::FakeFence &fence : scene.device.fences) fence.completed = ~std::uint64_t{0};
+  av::TeardownBudget third(clock, 0u);
+  CHECK(scene.session().drain_within(third));
+  scene.session().gpu_progress(marked, reached);
+  CHECK_EQ(marked, after_first);
+  scene.session().shut_down(); }

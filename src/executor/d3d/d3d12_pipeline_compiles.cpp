@@ -2,6 +2,8 @@
 
 #include "core/platform/thread_lock_hold.hpp"
 #include "core/trace/function_scope.hpp"
+#include "executor/monotonic_clock.hpp"
+#include "executor/teardown_budget.hpp"
 
 #include <unistd.h>
 
@@ -104,6 +106,23 @@ ID3D12PipelineState *D3d12PipelineCompiles::collect(D3d12PipelineJob &job)
     ThreadLockHold held(lock_);
     stages_[index] = Stage::vacant;
     return made;
+}
+
+bool D3d12PipelineCompiles::settle(TeardownBudget &budget)
+{
+    AV_SCOPE("D3d12PipelineCompiles::settle");
+    constexpr uint64_t look_ns = 5000000u;
+    MonotonicClock     clock;
+    ThreadLockHold     held(lock_);
+    for (;;) {
+        bool busy = false;
+        for (uint32_t index = 0u; index < job_count; index++)
+            busy = busy || stages_[index] == Stage::started || stages_[index] == Stage::compiling;
+        if (!busy || thread_count_ == 0u) return true;
+        if (budget.expired()) return false;
+        const uint64_t left = budget.remaining();
+        static_cast<void>(compiled_.wait_until(clock.ahead(left < look_ns ? left : look_ns)));
+    }
 }
 
 void D3d12PipelineCompiles::stop()

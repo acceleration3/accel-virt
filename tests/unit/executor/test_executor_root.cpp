@@ -829,12 +829,54 @@ private:
     pthread_barrier_t gate_;
 };
 
+struct OpenAll;
+
 struct OpenAll {
     ExecutorRoot    *root;
     std::uint32_t    domain;
     std::uint32_t    sub_api;
     ContextSession  *opened[32];
     ContextSession  *shared[32];
+    pthread_barrier_t *opened_gate;
+    pthread_barrier_t *closing_gate;
+};
+
+void open_one(void *context, std::uint32_t index);
+
+class Watcher {
+public:
+    Watcher(OpenAll *all, std::uint32_t threads) : all_(all), threads_(threads)
+    {
+        for (std::uint32_t index = 0u; index < threads_; index++) {
+            members_[index] = {this, index};
+            pthread_create(&ids_[index], nullptr, &Watcher::enter, &members_[index]);
+        }
+    }
+    void join()
+    {
+        for (std::uint32_t index = 0u; index < threads_; index++) pthread_join(ids_[index], nullptr);
+        threads_ = 0u;
+    }
+    ~Watcher() { join(); }
+    Watcher(const Watcher &) = delete;
+    Watcher &operator=(const Watcher &) = delete;
+
+private:
+    struct Member {
+        Watcher      *watcher;
+        std::uint32_t index;
+    };
+    static void *enter(void *argument)
+    {
+        Member &member = *static_cast<Member *>(argument);
+        open_one(member.watcher->all_, member.index);
+        return nullptr;
+    }
+
+    OpenAll      *all_;
+    std::uint32_t threads_;
+    Member        members_[32];
+    pthread_t     ids_[32];
 };
 
 void open_one(void *context, std::uint32_t index)
@@ -845,13 +887,18 @@ void open_one(void *context, std::uint32_t index)
     all.opened[index] = all.root->open(all.sub_api, options, nullptr);
     if (all.opened[index] != nullptr && all.sub_api == AV_EXECUTOR_SUB_API_OPENGL)
         all.shared[index] = all.root->open(all.sub_api, options, all.opened[index]);
+    if (all.opened_gate == nullptr) return;
+    pthread_barrier_wait(all.opened_gate);
+    pthread_barrier_wait(all.closing_gate);
+    if (all.shared[index] != nullptr) all.root->close(all.shared[index]);
+    if (all.opened[index] != nullptr) all.root->close(all.opened[index]);
 }
 
 }
 
 TEST(executor_root_concurrency, contexts_opened_at_once_get_distinct_slots)
 { Opened opened;
-  OpenAll all = {&opened.root(), opened.held().domain_of(intel), AV_EXECUTOR_SUB_API_VULKAN, {}, {}};
+  OpenAll all = {&opened.root(), opened.held().domain_of(intel), AV_EXECUTOR_SUB_API_VULKAN, {}, {}, nullptr, nullptr};
   constexpr std::uint32_t threads = 24u;
   for (std::uint32_t round = 0u; round < 20u; round++) {
       all.opened[0] = nullptr;
@@ -879,11 +926,17 @@ TEST(executor_root_concurrency, opengl_contexts_opened_at_once_never_share_a_mem
   ExecutorRoot &root = *held;
   CHECK_STATUS(root.initialize(apis), Status::ok);
   ExecutorRootProbe probe(root);
-  OpenAll all = {&root, held.domain_of(software.uuid()), AV_EXECUTOR_SUB_API_OPENGL, {}, {}};
+  OpenAll all = {&root, held.domain_of(software.uuid()), AV_EXECUTOR_SUB_API_OPENGL, {}, {}, nullptr, nullptr};
   constexpr std::uint32_t threads = 8u;
   for (std::uint32_t round = 0u; round < 4u; round++) {
       for (std::uint32_t index = 0u; index < threads; index++) all.opened[index] = all.shared[index] = nullptr;
-      Spread(threads, open_one, &all).run();
+      pthread_barrier_t opened_gate, closing_gate;
+      pthread_barrier_init(&opened_gate, nullptr, threads + 1u);
+      pthread_barrier_init(&closing_gate, nullptr, threads + 1u);
+      all.opened_gate = &opened_gate;
+      all.closing_gate = &closing_gate;
+      Watcher watcher(&all, threads);
+      pthread_barrier_wait(&opened_gate);
       for (std::uint32_t index = 0u; index < threads; index++) {
           CHECK(all.opened[index] != nullptr);
           CHECK(all.shared[index] != nullptr);
@@ -893,12 +946,12 @@ TEST(executor_root_concurrency, opengl_contexts_opened_at_once_never_share_a_mem
               if (all.opened[other] != nullptr)
                   CHECK(probe.group_of(*all.opened[index]) != probe.group_of(*all.opened[other]));
       }
-      for (std::uint32_t index = 0u; index < threads; index++) {
-          if (all.shared[index] != nullptr) root.close(all.shared[index]);
-          if (all.opened[index] != nullptr) root.close(all.opened[index]);
-      }
+      pthread_barrier_wait(&closing_gate);
+      watcher.join();
       CHECK_EQ(root.live(), 0u);
       for (std::uint32_t group = 0u; group < ExecutorRoot::sessions; group++) CHECK_EQ(probe.group_refs(group), 0u);
+      pthread_barrier_destroy(&opened_gate);
+      pthread_barrier_destroy(&closing_gate);
   } }
 
 namespace {
@@ -953,7 +1006,7 @@ TEST(executor_root_concurrency, a_wedged_slot_reaped_by_contexts_opening_at_once
       Wedged wedged(opened);
       CHECK_EQ(opened.root().wedged(), wedged_slots);
       wedged.finish_in_time();
-      OpenAll all = {&opened.root(), opened.held().domain_of(intel), AV_EXECUTOR_SUB_API_VULKAN, {}, {}};
+      OpenAll all = {&opened.root(), opened.held().domain_of(intel), AV_EXECUTOR_SUB_API_VULKAN, {}, {}, nullptr, nullptr};
       Spread(16u, open_vulkan, &all).run();
       for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) {
           CHECK_EQ(wedged.backend(slot).shut_downs(), 1u);
@@ -973,3 +1026,18 @@ TEST(executor_root_concurrency, a_wedged_slot_whose_work_finishes_is_released_wi
   CHECK_EQ(opened.root().wedged(), 0u);
   CHECK_EQ(opened.root().live(), 0u);
   for (std::uint32_t slot = 0u; slot < wedged_slots; slot++) CHECK_EQ(wedged.backend(slot).shut_downs(), 1u); }
+
+TEST(executor_root_concurrency, closing_a_session_drains_its_backend_once_before_releasing_it)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t block[4096];
+  MockSessionBackend  backend;
+  ContextSession *const session = &probe.session_at(0u);
+  CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
+  probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  root.close(session);
+  CHECK_EQ(backend.drains(), 1u);
+  CHECK_EQ(backend.shut_downs(), 1u); }

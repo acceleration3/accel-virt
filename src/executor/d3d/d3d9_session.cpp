@@ -1,10 +1,12 @@
 #include "executor/d3d/d3d9_session.hpp"
 
 #include "core/log/driver_log.hpp"
+#include "core/platform/poll_budget.hpp"
 #include "core/trace/function_scope.hpp"
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/eventfd_wake.hpp"
 #include "executor/shim/d3d9_host_device.hpp"
+#include "executor/teardown_budget.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "proto/generated/d3d9/d3d9_command_names.h"
 #include "proto/generated/d3d9/d3d9_protocol_ids.h"
@@ -17,7 +19,7 @@ D3d9Session::D3d9Session(const GuestBytes &guest, D3dObjectTable &objects, Watch
                          SliceStorages &storages, EventfdWake &wake, DriverLog &lines)
     : d3d9proto::ServerDispatch(guest), host_(nullptr), surfaces_(nullptr), flips_(blocks), objects_(objects), blocks_(blocks),
       devices_(blocks), lines_(lines), refusal_(lines_), arena_(nullptr), lanes_(blocks, wake, lines_), slices_(blocks, storages, lanes_, lines_),
-      refused_(blocks), lost_(false)
+      refused_(blocks), clock_(), lost_(false)
 {
     AV_SCOPE("D3d9Session::D3d9Session");
 }
@@ -206,6 +208,13 @@ void D3d9Session::end_batch()
     if (!slices_.supported()) return;
     lanes_.mark_touched();
     slices_.reclaim();
+}
+
+bool D3d9Session::drain_within(TeardownBudget &budget)
+{
+    AV_SCOPE("D3d9Session::drain_within");
+    if (!slices_.supported() || lost_) return true;
+    return lanes_.settle(clock_, budget);
 }
 
 void D3d9Session::discard_slice(const SliceBindings::Binding &bound)

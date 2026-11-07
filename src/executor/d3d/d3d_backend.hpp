@@ -8,6 +8,7 @@
 #include "executor/d3d/d3d9_session.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/d3d/guest_devices.hpp"
+#include "executor/d3d/queue_drain.hpp"
 #include "executor/d3d/watched_blocks.hpp"
 #include "executor/guest_region.hpp"
 #include "proto/wire/guest_bytes.hpp"
@@ -197,6 +198,7 @@ private:
     bool                     all_of(const uint32_t *ids, uint32_t count, D3dObjectKind kind) const;
     bool                     ready() const;
     bool                     has_device() const;
+    bool                     drain_queue(TeardownBudget &budget);
     [[nodiscard]] Status     remake_views(IUnknown *const *textures, uint32_t count);
     void rebind_remade();
     bool swap_remade(IUnknown **bound, uint32_t count) const;
@@ -240,6 +242,9 @@ private:
     ConstantRing            constants_;
     uint64_t                missed_key_;
     D3dBatchCounter         batches_;
+    QueueDrain              queue_drain_;
+    uint64_t                submitted_;
+    bool                    drained_;
     bool                    mark_refused_;
     bool                    show_refused_;
     bool                    lost_;

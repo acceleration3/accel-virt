@@ -2,6 +2,8 @@
 #include "executor/d3d/d3d9_lane.hpp"
 #include "executor/d3d/d3d9_lanes.hpp"
 #include "executor/eventfd_wake.hpp"
+#include "executor/monotonic_clock.hpp"
+#include "executor/teardown_budget.hpp"
 #include "executor/owned_fd.hpp"
 #include "executor/shim/d3d_headers.hpp"
 #include "executor/shim/vulkan_buffer.hpp"
@@ -12,6 +14,16 @@
 #include <cstdint>
 #include <sys/eventfd.h>
 #include <unistd.h>
+
+namespace av {
+struct D3d9LanesProbe {
+    static void mark(D3d9Lanes &lanes, std::uint64_t value) { lanes.marked_ = value; }
+};
+
+struct D3d9LaneProbe {
+    static void issue(D3d9Lane &lane, std::uint64_t value) { lane.issued_ = value; }
+};
+}
 
 using av::D3d9Lane;
 using av::D3d9Lanes;
@@ -165,3 +177,19 @@ TEST(d3d9_lanes, forgetting_a_device_or_every_device_drops_its_lanes)
   CHECK_EQ(counted(rig.lanes), 0u);
   CHECK(rig.lanes.find(device(0u)) == nullptr);
   CHECK(rig.lanes.invariants_hold()); }
+
+TEST(d3d9_lanes, a_lane_with_work_the_gpu_has_not_reported_is_unsettled_at_the_budget_and_settles_once_it_reports)
+{ Rig rig;
+  D3d9Lane *const lane = rig.lanes.lane(device(0u));
+  av::D3d9LaneProbe::issue(*lane, 1u);
+  av::D3d9LanesProbe::mark(rig.lanes, 1u);
+  av::MonotonicClock clock;
+  av::TeardownBudget quick(clock, 0u);
+  CHECK(!rig.lanes.settle(clock, quick));
+  av::TeardownBudget again(clock, 0u);
+  CHECK(!rig.lanes.settle(clock, again));
+  CHECK_EQ(rig.lanes.marked(), 1u);
+  lane->completed(1u);
+  av::TeardownBudget last(clock, 0u);
+  CHECK(rig.lanes.settle(clock, last));
+  CHECK_EQ(rig.lanes.marked(), 1u); }

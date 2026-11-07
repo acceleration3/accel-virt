@@ -210,6 +210,10 @@ private:
     CommandRefusal         refusal_;
     MonotonicClock         clock_;
     uint64_t               hang_ns_;
+    uint64_t               commands_;
+    uint64_t               drain_commands_;
+    uint64_t               drain_mark_;
+    bool                   drain_marked_;
 
     friend struct D3d12SessionProbe;
 };

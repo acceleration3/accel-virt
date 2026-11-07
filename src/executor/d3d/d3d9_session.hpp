@@ -9,6 +9,7 @@
 #include "executor/d3d/d3d9_slices.hpp"
 #include "executor/d3d/d3d_object_table.hpp"
 #include "executor/d3d/guest_devices.hpp"
+#include "executor/monotonic_clock.hpp"
 #include "proto/generated/d3d9/d3d9_dispatch_server.h"
 
 #include <stdint.h>
@@ -29,6 +30,7 @@ class EventfdWake;
 class GuestBytes;
 class ImportTable;
 class SliceStorages;
+class TeardownBudget;
 class WatchedBlocks;
 class WireArena;
 class WireReader;
@@ -50,6 +52,7 @@ public:
                     SessionShares *shares, ImportTable *imports);
     void shut_down();
     void end_batch();
+    [[nodiscard]] bool drain_within(TeardownBudget &budget);
     void discard_slice(const SliceBindings::Binding &bound);
 
     bool               knows(uint32_t command_id) const;
@@ -166,6 +169,7 @@ private:
     D3d9Lanes       lanes_;
     D3d9Slices      slices_;
     D3d9RefusedQueries refused_;
+    MonotonicClock  clock_;
     bool            lost_;
 };
 
