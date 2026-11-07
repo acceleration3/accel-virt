@@ -37,6 +37,7 @@ public:
     void                 vacate();
     void                 let_go_of_thread();
     bool                 live() const;
+    bool                 lost() const;
     bool                 faulted() const;
     void                 hold_clocks(GpuClockHold &clocks);
     void                 draw_from(HostMemorySource &source, uint32_t domain);

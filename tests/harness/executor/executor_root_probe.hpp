@@ -24,6 +24,7 @@ struct ExecutorRootProbe {
     void            hold_lock();
     void            drop_lock();
     void            settle();
+    void            leak_lost_after(uint64_t nanoseconds);
 
     ExecutorRoot &root;
 };

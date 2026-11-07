@@ -13,6 +13,7 @@ bool holdable(vkproto::HandleKind kind)
     AV_SCOPE("holdable");
     switch (kind) {
     case vkproto::HandleKind::buffer:
+    case vkproto::HandleKind::acceleration_structure_khr:
     case vkproto::HandleKind::buffer_view:
     case vkproto::HandleKind::command_buffer:
     case vkproto::HandleKind::descriptor_set:
@@ -117,14 +118,16 @@ void VulkanGuard::reap()
     });
 }
 
-void VulkanGuard::release_all(uint64_t device)
+bool VulkanGuard::release_all(uint64_t device)
 {
     AV_SCOPE("VulkanGuard::release_all");
+    const bool       idle = progress_.wait_idle(device);
     VulkanLifetimes *const lifetimes = lifetimes_of(device);
-    if (lifetimes == nullptr) return;
-    lifetimes->release_all(progress_.wait_idle(device));
+    if (lifetimes == nullptr) return idle;
+    lifetimes->release_all(idle);
     static_cast<void>(devices_.erase(device));
     static_cast<void>(pool_.destroy(lifetimes));
+    return idle;
 }
 
 bool VulkanGuard::release(uint64_t owner, uint64_t device)
@@ -212,6 +215,15 @@ bool VulkanGuard::written(const VkWriteDescriptorSet *writes, uint32_t count, ui
             case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
                 if (write.pBufferInfo != nullptr) first = number(write.pBufferInfo[index].buffer);
                 break;
+            case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
+                const auto *next = static_cast<const VkBaseInStructure *>(write.pNext);
+                while (next != nullptr && next->sType != VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR)
+                    next = next->pNext;
+                const auto *const structures = reinterpret_cast<const VkWriteDescriptorSetAccelerationStructureKHR *>(next);
+                if (structures != nullptr && index < structures->accelerationStructureCount)
+                    first = number(structures->pAccelerationStructures[index]);
+                break;
+            }
             default: continue;
             }
             if (!bound(set, write.dstBinding, write.dstArrayElement + index, first, second, device)) return false;
@@ -383,6 +395,12 @@ uint32_t VulkanGuard::devices() const
 {
     AV_SCOPE("VulkanGuard::devices");
     return devices_.count();
+}
+
+bool VulkanGuard::lost() const
+{
+    AV_SCOPE("VulkanGuard::lost");
+    return progress_.lost();
 }
 
 bool VulkanGuard::invariants_hold() const

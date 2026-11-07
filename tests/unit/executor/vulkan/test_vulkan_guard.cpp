@@ -30,11 +30,13 @@ constexpr std::uint64_t texel_view = 207u;
 constexpr std::uint64_t other_set = 208u;
 constexpr std::uint64_t command_pool = 209u;
 constexpr std::uint64_t other_view = 210u;
+constexpr std::uint64_t structure = 211u;
 constexpr std::uint64_t slots = 16u;
 
 class ScriptedProgress final : public av::VulkanProgress {
 public:
     std::uint64_t marked() const override { return marked_; }
+    bool          lost() const override { return device_lost; }
     std::uint64_t reached(std::uint64_t of) override { return of < slots ? reached_[of] : 0u; }
     std::uint64_t reserve(std::uint64_t of) override
     {
@@ -54,6 +56,7 @@ public:
         cancels++;
         pending--;
     }
+    bool device_lost = false;
     bool wait_idle(std::uint64_t of) override
     {
         waits++;
@@ -412,6 +415,37 @@ TEST(vulkan_guard, a_descriptor_set_written_keeps_every_resource_it_names_until_
   CHECK(rig.destroyer.destroyed(buffer));
   CHECK(rig.destroyer.destroyed(sampler)); }
 
+TEST(vulkan_guard, an_acceleration_structure_a_recording_buffer_names_is_destroyed_only_after_the_buffer_finishes)
+{ Rig rig;
+  CHECK(rig.record(cb, Named{HandleKind::acceleration_structure_khr, structure}));
+  CHECK(rig.guard.holding(cb, structure));
+  CHECK(rig.submit(cb) != 0u);
+  rig.guard.destroy(VulkanDestroyKind::acceleration_structure, device, 0u, structure);
+  CHECK(rig.guard.release(cb, device));
+  CHECK(!rig.destroyer.destroyed(structure));
+  rig.guard.reap();
+  CHECK(!rig.destroyer.destroyed(structure));
+  rig.progress.reach(device, 1u);
+  rig.guard.reap();
+  CHECK(rig.destroyer.destroyed(structure));
+  CHECK(rig.destroyer.kinds[rig.destroyer.order_of(structure)] == VulkanDestroyKind::acceleration_structure); }
+
+TEST(vulkan_guard, a_descriptor_set_written_with_an_acceleration_structure_keeps_it_until_the_set_is_released)
+{ Rig rig;
+  const VkAccelerationStructureKHR structures[1] = {handle_of<VkAccelerationStructureKHR>(structure)};
+  VkWriteDescriptorSetAccelerationStructureKHR chain = {};
+  chain.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+  chain.accelerationStructureCount = 1u;
+  chain.pAccelerationStructures = structures;
+  VkWriteDescriptorSet write = write_of(set, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 0u, 0u, 1u);
+  write.pNext = &chain;
+  CHECK(rig.guard.written(&write, 1u, device));
+  CHECK(rig.guard.holding(set, structure));
+  rig.guard.destroy(VulkanDestroyKind::acceleration_structure, device, 0u, structure);
+  CHECK(!rig.destroyer.destroyed(structure));
+  CHECK(rig.guard.release(set, device));
+  CHECK(rig.destroyer.destroyed(structure)); }
+
 TEST(vulkan_guard, only_the_handles_a_descriptor_type_reads_are_kept)
 { Rig rig;
   VkDescriptorImageInfo images[1] = {};
@@ -647,7 +681,7 @@ TEST(vulkan_guard, letting_everything_go_waits_for_the_gpu_and_finishes_the_dest
   CHECK(rig.record(cb, Named{HandleKind::buffer, buffer}));
   rig.guard.destroy(VulkanDestroyKind::buffer, device, 0u, buffer);
   rig.progress.marked_ = 3u;
-  rig.guard.release_all(device);
+  static_cast<void>(rig.guard.release_all(device));
   CHECK_EQ(rig.progress.waits, 1u);
   CHECK(rig.destroyer.destroyed(buffer));
   CHECK(!rig.guard.tracked(buffer));
@@ -660,7 +694,7 @@ TEST(vulkan_guard, letting_a_device_go_whose_work_never_finished_leaks_its_objec
   CHECK_EQ(rig.submit(cb), 1u);
   rig.guard.destroy(VulkanDestroyKind::buffer, device, 0u, buffer);
   rig.progress.timeout = true;
-  rig.guard.release_all(device);
+  static_cast<void>(rig.guard.release_all(device));
   CHECK_EQ(rig.destroyer.count, 0u);
   CHECK_EQ(rig.guard.devices(), 0u); }
 
@@ -672,7 +706,7 @@ TEST(vulkan_guard, letting_a_device_go_finishes_a_view_destroyed_in_use_and_the_
   rig.guard.destroy(VulkanDestroyKind::image_view, device, 0u, view);
   rig.guard.destroy(VulkanDestroyKind::image, device, 0u, image);
   CHECK(!rig.destroyer.destroyed(view));
-  rig.guard.release_all(device);
+  static_cast<void>(rig.guard.release_all(device));
   CHECK(rig.destroyer.destroyed(view));
   CHECK(rig.destroyer.destroyed(image));
   rig.guard.reap();
@@ -685,7 +719,7 @@ TEST(vulkan_guard, letting_one_device_go_leaves_another_device_s_holds_and_pendi
   rig.guard.destroy(VulkanDestroyKind::buffer, device, 0u, buffer);
   rig.guard.destroy(VulkanDestroyKind::image, other_device, 0u, image);
   rig.progress.marked_ = 2u;
-  rig.guard.release_all(device);
+  static_cast<void>(rig.guard.release_all(device));
   CHECK(rig.destroyer.destroyed(buffer));
   CHECK(!rig.destroyer.destroyed(image));
   CHECK(rig.guard.holding(other_cb, image));
@@ -814,7 +848,7 @@ TEST(vulkan_guard, a_pool_destroyed_while_a_set_of_it_is_still_tracked_is_destro
   CHECK(rig.guard.tracked(set));
   rig.guard.destroy(VulkanDestroyKind::descriptor_pool, device, 0u, pool);
   CHECK(!rig.destroyer.destroyed(pool));
-  rig.guard.release_all(device);
+  static_cast<void>(rig.guard.release_all(device));
   CHECK(rig.destroyer.destroyed(pool));
   CHECK(!rig.destroyer.destroyed(set));
   CHECK_EQ(rig.guard.devices(), 0u); }
@@ -825,7 +859,7 @@ TEST(vulkan_guard, letting_a_device_go_destroys_the_freed_children_of_a_destroye
   CHECK(rig.begin(cb));
   rig.guard.destroy(VulkanDestroyKind::command_buffer, device, command_pool, secondary);
   rig.guard.destroy(VulkanDestroyKind::command_pool, device, 0u, command_pool);
-  rig.guard.release_all(device);
+  static_cast<void>(rig.guard.release_all(device));
   CHECK(rig.destroyer.destroyed(secondary));
   CHECK(rig.destroyer.destroyed(command_pool));
   CHECK(rig.destroyer.order_of(secondary) < rig.destroyer.order_of(command_pool)); }
@@ -836,7 +870,7 @@ TEST(vulkan_guard, a_device_whose_work_never_finished_leaves_a_destroyed_pool_al
   CHECK(rig.begin(cb));
   rig.guard.destroy(VulkanDestroyKind::descriptor_pool, device, 0u, pool);
   rig.progress.timeout = true;
-  rig.guard.release_all(device);
+  static_cast<void>(rig.guard.release_all(device));
   CHECK_EQ(rig.destroyer.count, 0u); }
 
 TEST(vulkan_guard, an_image_used_through_a_set_after_a_submission_is_freed_only_after_that_submission)

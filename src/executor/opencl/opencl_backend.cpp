@@ -379,7 +379,7 @@ bool OpenClBackend::drain(TeardownBudget &budget)
             !settled(static_cast<cl_command_queue>(*object), budget))
             drained = false;
     }
-    return drained || lost_;
+    return drained;
 }
 
 bool OpenClBackend::settled(cl_command_queue queue, TeardownBudget &budget)

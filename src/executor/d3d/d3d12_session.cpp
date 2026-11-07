@@ -405,7 +405,8 @@ bool D3d12Session::follow_queue(uint32_t queue, ID3D12CommandQueue *on, IUnknown
 bool D3d12Session::drain()
 {
     AV_SCOPE("D3d12Session::drain");
-    if (device_ == nullptr || lost()) return true;
+    if (device_ == nullptr) return true;
+    if (lost()) return false;
     if (!progress_.mark_all()) {
         if (removed_ == 0u)
             lines_.write("a queue refused the drain's signal; the device is removed");
@@ -420,7 +421,8 @@ bool D3d12Session::drain()
 bool D3d12Session::drain_within(TeardownBudget &budget)
 {
     AV_SCOPE("D3d12Session::drain_within");
-    if (device_ == nullptr || lost()) return true;
+    if (device_ == nullptr) return true;
+    if (lost()) return false;
     if (!compiles_.settle(budget)) return false;
     if (!drain_marked_ || drain_commands_ != commands_ || progress_.marked() != drain_mark_) {
         if (!progress_.mark_all()) return false;
@@ -440,7 +442,8 @@ bool D3d12Session::drain_within(TeardownBudget &budget)
 bool D3d12Session::wait_for(uint64_t mark)
 {
     AV_SCOPE("D3d12Session::wait_for");
-    if (device_ == nullptr || lost() || progress_.reached() >= mark) return true;
+    if (device_ == nullptr || progress_.reached() >= mark) return true;
+    if (lost()) return false;
     constexpr uint64_t spin_ns = 2000000u;
     constexpr uint64_t nap_ns = 50000u;
     PollBudget         polls(clock_, spin_ns, nap_ns, hang_ns_);

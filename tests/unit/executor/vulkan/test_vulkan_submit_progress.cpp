@@ -1,4 +1,5 @@
 #include "executor/monotonic_clock.hpp"
+#include "harness/executor/generous_budget.hpp"
 #include "executor/teardown_budget.hpp"
 #include "executor/vulkan/vulkan_submit_progress.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -277,14 +278,16 @@ TEST(vulkan_submit_progress, a_wait_for_marks_leaves_other_devices_alone)
   CHECK(rig.progress.wait_marks(device, marks, 2u));
   CHECK_EQ(driver.waits, 1u); }
 
-TEST(vulkan_submit_progress, a_queue_that_reports_the_device_lost_when_the_fence_is_retried_counts_the_work_as_done)
+TEST(vulkan_submit_progress, a_queue_that_reports_the_device_lost_when_the_fence_is_retried_keeps_the_work_unfinished)
 { Rig rig;
   driver.submit_fails = true;
   CHECK_EQ(rig.submit(), 1u);
   driver.submit_lost = true;
   rig.progress.begin_poll();
-  CHECK_EQ(rig.progress.reached(device), 1u);
-  CHECK_EQ(rig.progress.stuck(device), 0u); }
+  CHECK_EQ(rig.progress.reached(device), 0u);
+  CHECK(rig.progress.lost());
+  CHECK(!rig.progress.wait_idle(device));
+  CHECK_EQ(rig.progress.reached(device), 0u); }
 
 TEST(vulkan_submit_progress, a_hundred_and_twenty_eight_pending_submissions_make_the_next_wait_for_the_oldest_and_refuse_when_it_times_out)
 { Rig rig;
@@ -313,17 +316,33 @@ TEST(vulkan_submit_progress, waiting_for_a_device_succeeds_only_when_every_fence
   CHECK(!rig.progress.wait_idle(other_device));
   CHECK_EQ(rig.progress.reached(other_device), 2u); }
 
-TEST(vulkan_submit_progress, a_lost_device_s_work_counts_as_done_for_the_waits_and_the_polls)
+TEST(vulkan_submit_progress, a_lost_device_s_work_never_counts_as_done_for_the_waits_the_polls_or_the_drain)
 { Rig rig;
   CHECK_EQ(rig.submit(), 1u);
   CHECK_EQ(rig.submit(), 2u);
+  CHECK(!rig.progress.lost());
   driver.fences[0].lost = true;
   CHECK(!rig.progress.wait_idle(device));
-  CHECK_EQ(rig.progress.reached(device), 1u);
+  CHECK(rig.progress.lost());
+  CHECK_EQ(rig.progress.reached(device), 0u);
   driver.fences[1].lost = true;
   rig.progress.begin_poll();
-  CHECK_EQ(rig.progress.reached(device), 2u);
-  CHECK(rig.progress.wait_idle(device)); }
+  CHECK_EQ(rig.progress.reached(device), 0u);
+  CHECK(!rig.progress.wait_idle(device));
+  const std::uint64_t marks[1] = {2u};
+  CHECK(!rig.progress.wait_marks(device, marks, 1u));
+  av::GenerousBudget budget;
+  CHECK(!rig.progress.drain(device, budget.budget()));
+  CHECK(rig.progress.invariants_hold()); }
+
+TEST(vulkan_submit_progress, a_lost_device_s_fences_are_leaked_when_it_is_forgotten)
+{ Rig rig;
+  CHECK_EQ(rig.submit(), 1u);
+  driver.fences[0].lost = true;
+  CHECK(!rig.progress.wait_idle(device));
+  rig.progress.forget(device_of(device));
+  CHECK_EQ(driver.destroyed, 0u);
+  CHECK(driver.fences[0].alive); }
 
 TEST(vulkan_submit_progress, forgetting_a_device_destroys_its_fences_once_they_are_idle_and_leaks_them_when_they_are_not)
 { Rig rig;

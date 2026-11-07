@@ -24,6 +24,7 @@ public:
     bool     wait_marks(uint64_t device, const uint64_t *marks, uint32_t count) override;
     bool     drain(uint64_t device, TeardownBudget &budget) override;
     void     begin_poll() override;
+    bool     lost() const override;
     void     forget(VkDevice device);
 
     uint32_t stuck(uint64_t device) const;
@@ -38,7 +39,8 @@ private:
         vacant,
         reserved,
         pending,
-        stuck
+        stuck,
+        lost
     };
 
     struct Slot {
@@ -63,6 +65,7 @@ private:
     Slot     slots_[slots];
     uint64_t marked_;
     bool     stale_;
+    bool     lost_;
 };
 
 }

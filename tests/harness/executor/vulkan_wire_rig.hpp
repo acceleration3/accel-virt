@@ -168,6 +168,13 @@ public:
         return send(vkproto::kCmd_vkCmdWaitEvents2, writer);
     }
 
+    bool destroy_device()
+    {
+        WireWriter writer = frame();
+        writer.write_pod(device);
+        return send(vkproto::kCmd_vkDestroyDevice, writer);
+    }
+
     bool begin(std::uint64_t command_buffer_handle)
     {
         WireWriter writer = frame();

@@ -78,6 +78,12 @@ void ContextSession::let_go_of_thread()
     if (backend_ != nullptr) backend_->let_go_of_thread();
 }
 
+bool ContextSession::lost() const
+{
+    AV_SCOPE("ContextSession::lost");
+    return backend_ != nullptr && (faulted_ || backend_->lost());
+}
+
 bool ContextSession::live() const
 {
     AV_SCOPE("ContextSession::live");

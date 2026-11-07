@@ -70,6 +70,10 @@ void VulkanBackend::destroy(VulkanDestroyKind kind, uint64_t device, uint64_t pa
     case VulkanDestroyKind::memory:
         RealVulkanDispatch::on_vkFreeMemory(made_by, reinterpret_cast<VkDeviceMemory>(handle), nullptr);
         return;
+    case VulkanDestroyKind::acceleration_structure:
+        RealVulkanDispatch::on_vkDestroyAccelerationStructureKHR(made_by, reinterpret_cast<VkAccelerationStructureKHR>(handle),
+                                                                nullptr);
+        return;
     case VulkanDestroyKind::imported_memory: {
         GuestDevice *const owner = device_of(device);
         if (owner != nullptr) owner->memory().release(handle);
@@ -184,6 +188,29 @@ void VulkanBackend::on_vkDestroyQueryPool(VkDevice device, VkQueryPool queryPool
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyQueryPool");
     guard_.destroy(VulkanDestroyKind::query_pool, number(device), 0u, number(queryPool));
+}
+
+VkResult VulkanBackend::on_vkCreateAccelerationStructureKHR(VkDevice device,
+                                                            const VkAccelerationStructureCreateInfoKHR *pCreateInfo,
+                                                            const VkAllocationCallbacks *,
+                                                            VkAccelerationStructureKHR *pAccelerationStructure)
+{
+    AV_SCOPE("VulkanBackend::on_vkCreateAccelerationStructureKHR");
+    const VkResult made =
+        RealVulkanDispatch::on_vkCreateAccelerationStructureKHR(device, pCreateInfo, nullptr, pAccelerationStructure);
+    if (made != VK_SUCCESS ||
+        guard_.depends(number(*pAccelerationStructure), number(pCreateInfo->buffer), number(device)))
+        return made;
+    RealVulkanDispatch::on_vkDestroyAccelerationStructureKHR(device, *pAccelerationStructure, nullptr);
+    *pAccelerationStructure = VK_NULL_HANDLE;
+    return VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
+void VulkanBackend::on_vkDestroyAccelerationStructureKHR(VkDevice device, VkAccelerationStructureKHR accelerationStructure,
+                                                         const VkAllocationCallbacks *)
+{
+    AV_SCOPE("VulkanBackend::on_vkDestroyAccelerationStructureKHR");
+    guard_.destroy(VulkanDestroyKind::acceleration_structure, number(device), 0u, number(accelerationStructure));
 }
 
 void VulkanBackend::on_vkDestroyEvent(VkDevice device, VkEvent event, const VkAllocationCallbacks *)

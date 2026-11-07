@@ -48,6 +48,7 @@ public:
     bool                 describe_image(uint32_t domain, uint64_t id, const SharedImageShape &shape);
 
     void     session_closed(SessionBackend &session);
+    void     session_leaked(SessionBackend &session);
     void     release(uint32_t domain, uint64_t id);
     void     clear();
     uint32_t live() const;

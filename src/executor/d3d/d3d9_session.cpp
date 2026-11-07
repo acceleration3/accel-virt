@@ -213,7 +213,8 @@ void D3d9Session::end_batch()
 bool D3d9Session::drain_within(TeardownBudget &budget)
 {
     AV_SCOPE("D3d9Session::drain_within");
-    if (!slices_.supported() || lost_) return true;
+    if (!slices_.supported()) return true;
+    if (lost_) return false;
     return lanes_.settle(clock_, budget);
 }
 

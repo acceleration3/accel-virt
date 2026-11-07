@@ -39,6 +39,7 @@ public:
     static constexpr uint32_t sessions = 64u;
     static constexpr uint64_t teardown_nanoseconds = 1000000000u;
     static constexpr uint64_t retry_wedged_nanoseconds = 250000000u;
+    static constexpr uint64_t lost_leak_nanoseconds = 5000000000u;
 
     explicit ExecutorRoot(ExecutorLog &log);
     ~ExecutorRoot();
@@ -105,6 +106,8 @@ private:
     uint32_t       slot_of(const ContextSession *session) const;
     bool           finish(uint32_t slot, TeardownBudget &budget);
     void           finish_slot(uint32_t slot, TeardownBudget &budget);
+    bool           leakable(uint32_t slot);
+    void           leak_slot(uint32_t slot);
     void           reap_wedged();
     uint32_t       wedged_here() const;
     uint32_t       shared_answer(Status answered) const;
@@ -130,6 +133,7 @@ private:
     bool           wedged_[max_sessions];
     bool           reaping_[max_sessions];
     bool           closing_[max_sessions];
+    uint64_t       wedged_since_[max_sessions];
     mutable PosixLock lock_;
     PosixCondition wake_;
     pthread_t      watcher_;
@@ -137,6 +141,8 @@ private:
     bool           stopping_;
     MonotonicClock clock_;
     HostApis      *apis_;
+    ExecutorLog   &log_;
+    uint64_t       lost_leak_after_;
 };
 
 }

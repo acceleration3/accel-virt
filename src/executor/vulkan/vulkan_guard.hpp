@@ -28,7 +28,7 @@ public:
     void               begin_frame(bool recording);
     [[nodiscard]] bool reference(vkproto::HandleKind kind, uint64_t wire, uint64_t parent, uint64_t device);
     void               reap();
-    void               release_all(uint64_t device);
+    [[nodiscard]] bool release_all(uint64_t device);
 
     [[nodiscard]] bool release(uint64_t owner, uint64_t device);
     void               orphan_children(uint64_t pool, uint64_t device);
@@ -62,6 +62,7 @@ public:
     bool linked(uint64_t handle, uint64_t pool) const;
     bool described(uint64_t set, uint32_t binding, uint32_t element, uint64_t handle) const;
     uint32_t devices() const;
+    bool     lost() const;
 
     bool invariants_hold() const;
 

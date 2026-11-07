@@ -33,6 +33,12 @@ public:
         object().~T();
     }
 
+    void forget()
+    {
+        AV_SCOPE("ObjectStorage::forget");
+        constructed_ = false;
+    }
+
     bool     constructed() const
     {
         AV_SCOPE("ObjectStorage::constructed");

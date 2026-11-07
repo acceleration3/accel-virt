@@ -15,7 +15,7 @@ uint64_t number(const void *handle)
 
 }
 
-VulkanSubmitProgress::VulkanSubmitProgress() : slots_{}, marked_(0u), stale_(true)
+VulkanSubmitProgress::VulkanSubmitProgress() : slots_{}, marked_(0u), stale_(true), lost_(false)
 {
     AV_SCOPE("VulkanSubmitProgress::VulkanSubmitProgress");
 }
@@ -40,7 +40,10 @@ void VulkanSubmitProgress::poll_all()
         if (slot.state_ != State::pending) continue;
         const VkResult status = ::vkGetFenceStatus(slot.device_, slot.fence_);
         if (status == VK_SUCCESS) static_cast<void>(::vkResetFences(slot.device_, 1u, &slot.fence_));
-        if (status == VK_SUCCESS || status == VK_ERROR_DEVICE_LOST) slot.state_ = State::vacant;
+        if (status == VK_SUCCESS) slot.state_ = State::vacant;
+        if (status != VK_ERROR_DEVICE_LOST) continue;
+        slot.state_ = State::lost;
+        lost_ = true;
     }
 }
 
@@ -78,7 +81,11 @@ bool VulkanSubmitProgress::waited(Slot &slot, uint64_t nanoseconds)
     AV_SCOPE("VulkanSubmitProgress::waited");
     const VkResult status = ::vkWaitForFences(slot.device_, 1u, &slot.fence_, VK_TRUE, nanoseconds);
     if (status == VK_SUCCESS) static_cast<void>(::vkResetFences(slot.device_, 1u, &slot.fence_));
-    if (status != VK_SUCCESS && status != VK_ERROR_DEVICE_LOST) return false;
+    if (status == VK_ERROR_DEVICE_LOST) {
+        slot.state_ = State::lost;
+        lost_ = true;
+    }
+    if (status != VK_SUCCESS) return false;
     slot.state_ = State::vacant;
     return true;
 }
@@ -143,16 +150,18 @@ bool VulkanSubmitProgress::queued(Slot &slot)
 {
     AV_SCOPE("VulkanSubmitProgress::queued");
     const VkResult status = ::vkQueueSubmit(slot.queue_, 0u, nullptr, slot.fence_);
-    if (status == VK_ERROR_DEVICE_LOST) slot.state_ = State::vacant;
-    else if (status == VK_SUCCESS) slot.state_ = State::pending;
-    return status == VK_SUCCESS || status == VK_ERROR_DEVICE_LOST;
+    if (status == VK_SUCCESS) slot.state_ = State::pending;
+    if (status != VK_ERROR_DEVICE_LOST) return status == VK_SUCCESS;
+    slot.state_ = State::lost;
+    lost_ = true;
+    return false;
 }
 
 bool VulkanSubmitProgress::settled(Slot &slot)
 {
     AV_SCOPE("VulkanSubmitProgress::settled");
     if (slot.state_ == State::stuck && !queued(slot)) {
-        if (::vkDeviceWaitIdle(slot.device_) != VK_SUCCESS) return false;
+        if (slot.state_ == State::lost || ::vkDeviceWaitIdle(slot.device_) != VK_SUCCESS) return false;
         slot.state_ = State::vacant;
         return true;
     }
@@ -222,10 +231,16 @@ void VulkanSubmitProgress::forget(VkDevice device)
     AV_SCOPE("VulkanSubmitProgress::forget");
     for (Slot &slot : slots_) {
         if (slot.fence_ == VK_NULL_HANDLE || slot.device_ != device) continue;
-        const bool idle = slot.state_ != State::pending || waited(slot);
+        const bool idle = slot.state_ == State::lost ? false : slot.state_ != State::pending || waited(slot);
         if (idle) ::vkDestroyFence(device, slot.fence_, nullptr);
         slot = Slot{};
     }
+}
+
+bool VulkanSubmitProgress::lost() const
+{
+    AV_SCOPE("VulkanSubmitProgress::lost");
+    return lost_;
 }
 
 bool VulkanSubmitProgress::invariants_hold() const

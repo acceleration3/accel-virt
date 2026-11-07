@@ -31,6 +31,8 @@ void ExecutorRootProbe::hold_lock() { root.lock_.acquire(); }
 
 void ExecutorRootProbe::drop_lock() { root.lock_.release(); }
 
+void ExecutorRootProbe::leak_lost_after(uint64_t nanoseconds) { root.lost_leak_after_ = nanoseconds; }
+
 void ExecutorRootProbe::settle()
 {
     const timespec nap = {0, 1000000};

@@ -18,6 +18,7 @@ public:
     virtual bool     wait_marks(uint64_t device, const uint64_t *marks, uint32_t count) = 0;
     virtual bool     drain(uint64_t device, TeardownBudget &budget) = 0;
     virtual void     begin_poll() = 0;
+    virtual bool     lost() const = 0;
 
 protected:
     VulkanProgress() = default;

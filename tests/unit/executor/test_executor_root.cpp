@@ -1144,6 +1144,51 @@ TEST(executor_root_concurrency, a_drain_that_never_finishes_leaves_the_slot_wedg
   CHECK_EQ(root.wedged(), 0u);
   CHECK_EQ(backend.shut_downs(), 1u); }
 
+TEST(executor_root_concurrency, a_session_whose_device_is_lost_and_never_drains_is_let_go_by_leaking_not_by_freeing)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t block[4096];
+  MockSessionBackend  backend;
+  ContextSession *const session = &probe.session_at(0u);
+  CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
+  probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  backend.set_drains_in_time(false);
+  backend.lose_elsewhere();
+  probe.leak_lost_after(0u);
+  root.close(session);
+  for (std::uint32_t looks = 0u; looks < 100u && session->live(); looks++) nap_for(50);
+  CHECK(!session->live());
+  CHECK_EQ(root.wedged(), 0u);
+  CHECK_EQ(root.live(), 0u);
+  CHECK_EQ(backend.shut_downs(), 0u);
+  CHECK_EQ(backend.finished_drains(), 0u);
+  CHECK(root.invariants_hold()); }
+
+TEST(executor_root_concurrency, a_session_that_does_not_drain_but_whose_device_is_not_lost_stays_wedged)
+{ Opened opened;
+  ExecutorRoot       &root = opened.root();
+  ExecutorRootProbe   probe(root);
+  const std::uint32_t domain = opened.held().domain_of(intel);
+  static std::uint8_t block[4096];
+  MockSessionBackend  backend;
+  ContextSession *const session = &probe.session_at(0u);
+  CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
+  probe.shares_at(0u).bind(*opened.apis().shares(0u), domain, backend);
+  probe.remember(0u, AV_EXECUTOR_SUB_API_VULKAN, 0u);
+  backend.set_drains_in_time(false);
+  probe.leak_lost_after(0u);
+  root.close(session);
+  nap_for(800);
+  CHECK(session->live());
+  CHECK_EQ(root.wedged(), 1u);
+  CHECK_EQ(backend.shut_downs(), 0u);
+  backend.set_drains_in_time(true);
+  for (std::uint32_t looks = 0u; looks < 100u && root.wedged() != 0u; looks++) nap_for(50);
+  CHECK_EQ(backend.shut_downs(), 1u); }
+
 TEST(executor_root_concurrency, a_closed_slot_signals_nothing_to_the_context_that_closed_it)
 { Opened opened;
   ExecutorRoot       &root = opened.root();

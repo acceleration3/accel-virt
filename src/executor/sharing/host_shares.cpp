@@ -161,6 +161,23 @@ void HostShares::session_closed(SessionBackend &session)
     });
 }
 
+void HostShares::session_leaked(SessionBackend &session)
+{
+    AV_SCOPE("HostShares::session_leaked");
+    for (Share *share = held_by(session); share != nullptr; share = held_by(session)) {
+        {
+            const ThreadLockHold locked(lock_);
+            ShareHolder *const holder = share->holder_of(session);
+            drop(*share, *holder);
+        }
+        settle(*share);
+    }
+    const ThreadLockHold locked(lock_);
+    shares_.for_each([&session](const Share &share) {
+        if (share.publisher() == &session) const_cast<Share &>(share).publish_by(nullptr);
+    });
+}
+
 Share *HostShares::held_by(const SessionBackend &session)
 {
     AV_SCOPE("HostShares::held_by");

@@ -33,6 +33,7 @@ public:
     void                 written(uint64_t id);
     bool                 describe_image(uint64_t id, const SharedImageShape &shape);
     void                 end();
+    void                 leak();
 
 private:
     SessionBackend *session_;

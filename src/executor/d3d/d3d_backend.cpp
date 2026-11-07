@@ -224,13 +224,13 @@ bool D3dBackend::drain(TeardownBudget &budget)
 bool D3dBackend::drain_queue(TeardownBudget &budget)
 {
     AV_SCOPE("D3dBackend::drain_queue");
-    if (lost_ || device11_->lost()) return true;
+    if (lost_ || device11_->lost()) return false;
     device11_->lock(nullptr);
     const bool marked = queue_drain_.mark(device11_->vulkan(), submitted_);
     device11_->unlock();
     const bool reached = marked && queue_drain_.reached(device11_->vulkan(), budget.remaining());
     if (reached) drained_ = true;
-    return reached || lost_ || device11_->lost();
+    return reached;
 }
 
 void D3dBackend::end_batch()

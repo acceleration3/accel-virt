@@ -47,7 +47,7 @@ VulkanBackend::VulkanBackend(BlockSource &blocks, DriverLog &lines)
       memory_import_(false), handles_(blocks), imports_(nullptr), types_(), types_learnt_(false), timing_(lines),
       templates_(blocks), layouts_(blocks), families_(blocks), host_waits_(blocks), park_clock_(), parked_(blocks, *this, park_clock_), frame_(nullptr, 0u),
       frame_command_(0u), framed_(false), replaying_(false), last_submit_(VK_SUCCESS), lines_(lines), progress_(),
-      guard_(blocks, *this, progress_), parent_(0u), ran_(0u), lost_(false)
+      guard_(blocks, *this, progress_), parent_(0u), ran_(0u), lost_(false), devices_leaked_(false)
 {
     AV_SCOPE("VulkanBackend::VulkanBackend");
 }
@@ -663,7 +663,7 @@ void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallba
 {
     AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
     parked_.drop_device(reinterpret_cast<uint64_t>(device));
-    guard_.release_all(reinterpret_cast<uint64_t>(device));
+    const bool idle = guard_.release_all(reinterpret_cast<uint64_t>(device));
     templates_.forget_device(reinterpret_cast<uint64_t>(device));
     layouts_.forget_device(reinterpret_cast<uint64_t>(device));
     progress_.forget(device);
@@ -674,7 +674,8 @@ void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallba
         memory_import_ = false;
     }
     if (ending != nullptr) static_cast<void>(devices_.destroy(ending));
-    RealVulkanDispatch::on_vkDestroyDevice(device, nullptr);
+    if (idle) RealVulkanDispatch::on_vkDestroyDevice(device, nullptr);
+    else devices_leaked_ = true;
 }
 
 void VulkanBackend::on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *)
@@ -949,7 +950,7 @@ bool VulkanBackend::lose_device()
 bool VulkanBackend::lost() const
 {
     AV_SCOPE("VulkanBackend::lost");
-    return lost_;
+    return lost_ || guard_.lost();
 }
 
 void VulkanBackend::let_go(uint64_t raw, VulkanObjectKind kind)
@@ -959,7 +960,7 @@ void VulkanBackend::let_go(uint64_t raw, VulkanObjectKind kind)
         on_vkDestroyDevice(reinterpret_cast<VkDevice>(raw), nullptr);
         return;
     }
-    ::vkDestroyInstance(reinterpret_cast<VkInstance>(raw), nullptr);
+    if (!devices_leaked_) ::vkDestroyInstance(reinterpret_cast<VkInstance>(raw), nullptr);
 }
 
 void VulkanBackend::let_go_of_thread()
@@ -978,6 +979,7 @@ void VulkanBackend::shut_down()
     layouts_.clear();
     families_.clear();
     lost_ = false;
+    devices_leaked_ = false;
     imports_ = nullptr;
     types_learnt_ = false;
     gpu_ = nullptr;

@@ -35,7 +35,7 @@ void *run_wedged_watch(void *root)
 
 ExecutorRoot::ExecutorRoot(ExecutorLog &log)
     : gpus_(), domains_(), memory_groups_{}, group_of_{}, group_refs_{}, sessions_{}, vulkan_{}, opencl_{}, opengl_{}, d3d_{}, shares_{}, apis_of_{}, gpus_of_{},
-      wedged_{}, reaping_{}, closing_{}, lock_(), wake_(lock_), watcher_{}, watching_(false), stopping_(false), clock_(), apis_(nullptr)
+      wedged_{}, reaping_{}, closing_{}, wedged_since_{}, lock_(), wake_(lock_), watcher_{}, watching_(false), stopping_(false), clock_(), apis_(nullptr), log_(log), lost_leak_after_(lost_leak_nanoseconds)
 {
     AV_SCOPE("ExecutorRoot::ExecutorRoot");
     for (uint32_t slot = 0u; slot < max_sessions; slot++) group_of_[slot] = max_sessions;
@@ -361,6 +361,7 @@ void ExecutorRoot::finish_slot(uint32_t slot, TeardownBudget &budget)
     sessions_[slot].object().let_go_of_thread();
     lock_.acquire();
     wedged_[slot] = true;
+    wedged_since_[slot] = clock_.now_nanoseconds();
     closing_[slot] = false;
     apis_of_[slot] = 0u;
     lock_.release();
@@ -401,10 +402,46 @@ void ExecutorRoot::reap_wedged()
         lock_.release();
         if (!claimed) continue;
         TeardownBudget budget(clock_, 0u);
-        if (!finish(slot, budget)) sessions_[slot].object().let_go_of_thread();
+        if (!finish(slot, budget)) {
+            sessions_[slot].object().let_go_of_thread();
+            if (leakable(slot)) leak_slot(slot);
+        }
         const ThreadLockHold held(lock_);
         reaping_[slot] = false;
     }
+}
+
+bool ExecutorRoot::leakable(uint32_t slot)
+{
+    AV_SCOPE("ExecutorRoot::leakable");
+    lock_.acquire();
+    const bool aged = clock_.now_nanoseconds() - wedged_since_[slot] >= lost_leak_after_;
+    lock_.release();
+    return aged && sessions_[slot].object().lost();
+}
+
+void ExecutorRoot::leak_slot(uint32_t slot)
+{
+    AV_SCOPE("ExecutorRoot::leak_slot");
+    log_.sessions().write("a session whose host device is lost never drained; its host objects are leaked and its slot reused");
+    shares_[slot].leak();
+    vulkan_[slot].forget();
+    opencl_[slot].forget();
+    opengl_[slot].forget();
+    d3d_[slot].forget();
+    static_cast<void>(vulkan_[slot].construct(log_.vulkan()));
+    static_cast<void>(opencl_[slot].construct(log_.opencl()));
+    static_cast<void>(opengl_[slot].construct(log_.opengl()));
+    static_cast<void>(d3d_[slot].construct(log_));
+    lock_.acquire();
+    wedged_[slot] = false;
+    closing_[slot] = false;
+    apis_of_[slot] = 0u;
+    gpus_of_[slot] = 0u;
+    release_group(slot);
+    sessions_[slot].forget();
+    static_cast<void>(sessions_[slot].construct(log_.sessions()));
+    lock_.release();
 }
 
 void ExecutorRoot::reap_closing()

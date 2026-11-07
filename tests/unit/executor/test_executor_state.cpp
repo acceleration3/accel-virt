@@ -40,6 +40,7 @@ TEST(executor_root_report, names_each_gpu_and_each_live_session)
   CHECK(on_intel != nullptr);
   CHECK(on_nvidia != nullptr);
   root.close(on_intel);
+  av::ExecutorRootProbe(root).settle();
   char bytes[1024];
   StateWriter writer(bytes, sizeof bytes);
   av::StateReporter &reporter = root;
@@ -50,13 +51,14 @@ TEST(executor_root_report, names_each_gpu_and_each_live_session)
       "executor/0/gpu/1 uuid=7B7AD2C542198C80C4FDA64B8775AEDB sub_apis=0x0000000000000001\n"
       "executor/0/domain/1 gpu=0\n"
       "executor/0/domain/2 gpu=1\n"
-      "executor/0/session/1 api=vulkan gpu=1 domain=2 wedged=false\n"
+      "executor/0/session/1 api=vulkan gpu=1 domain=2 wedged=false closing=false\n"
       "executor/0/gpu_shares/0\n"
       "executor/0/gpu_shares/0/shares/0 busy=false live=0";
   CHECK(std::strncmp(writer.dump(), expected, std::strlen(expected)) == 0);
   CHECK(std::strstr(writer.dump(), "executor/0/gpu_shares/1/shares/0 busy=false live=0") != nullptr);
   CHECK(root.invariants_hold());
   root.close(on_nvidia);
+  av::ExecutorRootProbe(root).settle();
   StateWriter after(bytes, sizeof bytes);
   root.report(after);
   CHECK(std::strstr(after.dump(), "session/") == nullptr);
@@ -79,9 +81,9 @@ TEST(executor_root_report, names_the_api_of_every_kind_of_session)
   char bytes[1024];
   StateWriter writer(bytes, sizeof bytes);
   root.report(writer);
-  CHECK(std::strstr(writer.dump(), "\nexecutor/0/session/0 api=opencl gpu=0 domain=0 wedged=false\n"
-                                   "executor/0/session/1 api=opengl gpu=0 domain=0 wedged=false\n"
-                                   "executor/0/session/2 api=unknown gpu=0 domain=0 wedged=false") != nullptr);
+  CHECK(std::strstr(writer.dump(), "\nexecutor/0/session/0 api=opencl gpu=0 domain=0 wedged=false closing=false\n"
+                                   "executor/0/session/1 api=opengl gpu=0 domain=0 wedged=false closing=false\n"
+                                   "executor/0/session/2 api=unknown gpu=0 domain=0 wedged=false closing=false") != nullptr);
   for (std::uint32_t slot = 0u; slot < 3u; slot++) { static_cast<void>(probe.session_at(slot).release(av::GenerousBudget().budget())); probe.session_at(slot).vacate(); } }
 
 TEST(executor_root_report, a_gpu_s_device_reports_its_exportable_images)

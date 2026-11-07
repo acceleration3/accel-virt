@@ -3,6 +3,7 @@
 
 #include "core/support/growable_array.hpp"
 #include "core/support/status.hpp"
+#include "core/trace/function_scope.hpp"
 
 #include <stdint.h>
 
@@ -25,6 +26,7 @@ public:
     template <typename Visitor>
     void each(uint64_t buffer, Visitor visit) const
     {
+        AV_SCOPE("VulkanHostWaits::each");
         for (const Wait &wait : waits_)
             if (wait.buffer_ == buffer) visit(wait.event_);
     }

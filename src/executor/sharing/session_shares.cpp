@@ -79,6 +79,15 @@ bool SessionShares::describe_image(uint64_t id, const SharedImageShape &shape)
     return shares_ != nullptr && shares_->describe_image(domain_, id, shape);
 }
 
+void SessionShares::leak()
+{
+    AV_SCOPE("SessionShares::leak");
+    if (shares_ != nullptr) shares_->session_leaked(*session_);
+    shares_ = nullptr;
+    session_ = nullptr;
+    domain_ = 0u;
+}
+
 void SessionShares::end()
 {
     AV_SCOPE("SessionShares::end");
