@@ -1,5 +1,6 @@
 #include "core/support/status.hpp"
 #include "device/context/d3d_ordering.hpp"
+#include "device/fence/device_pulse.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/fence/fence_window.hpp"
@@ -92,7 +93,10 @@ public:
     {
         static_cast<void>(interrupts_.initialize());
         static_cast<void>(interrupts_.connect());
+        fences_.beat_by(pulse_);
     }
+
+    av::DevicePulse &pulse() { return pulse_; }
 
     MockHost     &host() { return host_; }
     RingConsumer &consumer() { return consumer_; }
@@ -166,6 +170,7 @@ private:
     MockHost        host_;
     FenceInterrupts interrupts_;
     av::WireRecorder recorder_;
+    av::DevicePulse pulse_{host_};
     FenceReporter   fences_;
     av::MockContextExecution execution_;
     RingConsumer    consumer_;
@@ -1082,6 +1087,67 @@ TEST(ring_consumer_watchdog, a_gpu_that_keeps_reaching_marks_is_never_judged_how
       CHECK(!fixture.poll());
   }
   CHECK(!fixture.consumer().faulted()); }
+
+TEST(ring_consumer_watchdog, a_context_queued_behind_a_busy_gpu_is_not_lost_while_other_contexts_complete_work)
+{ Fixture fixture;
+  fixture.ops().editable().gpu_progress = scripted_progress;
+  gpu_marked = 4u;
+  gpu_reached = 0u;
+  fixture.host().set_clock(1000u);
+  fixture.bind();
+  fixture.ring().write_batch(1u, 8u);
+  fixture.ring().publish();
+  fixture.serve();
+  for (std::uint64_t step = 1u; step <= 20u; step++) {
+      fixture.host().set_clock(1000u + step * (watchdog_limit_ns / 2u));
+      fixture.pulse().note_completion();
+      CHECK(!fixture.poll());
+      CHECK(!fixture.consumer().faulted());
+  }
+  CHECK(fixture.consumer().watchdog_deadline() > 1000u + 10u * watchdog_limit_ns);
+  fixture.host().set_clock(1000u + 21u * (watchdog_limit_ns / 2u) + watchdog_limit_ns + 1u);
+  CHECK(!fixture.poll());
+  CHECK(fixture.consumer().faulted());
+  CHECK_EQ(fixture.host().logged(), 1u); }
+
+TEST(ring_consumer_watchdog, a_context_with_no_progress_on_an_idle_gpu_is_lost_once_after_the_limit)
+{ Fixture fixture;
+  fixture.ops().editable().gpu_progress = scripted_progress;
+  gpu_marked = 4u;
+  gpu_reached = 0u;
+  fixture.host().set_clock(1000u);
+  fixture.bind();
+  fixture.ring().write_batch(1u, 8u);
+  fixture.ring().publish();
+  fixture.serve();
+  fixture.host().set_clock(1000u + watchdog_limit_ns - 1u);
+  CHECK(!fixture.poll());
+  CHECK(!fixture.consumer().faulted());
+  fixture.host().set_clock(1000u + watchdog_limit_ns + 1u);
+  CHECK(!fixture.poll());
+  CHECK(fixture.consumer().faulted());
+  fixture.host().set_clock(1000u + watchdog_limit_ns * 3u);
+  CHECK(!fixture.poll());
+  CHECK_EQ(fixture.host().logged(), 1u); }
+
+TEST(ring_consumer_watchdog, the_environment_override_sets_the_limit)
+{ CHECK_EQ(setenv("AV_SUBMIT_WATCHDOG_MS", "250", 1), 0);
+  {
+      Fixture fixture;
+      fixture.ops().editable().gpu_progress = scripted_progress;
+      gpu_marked = 4u;
+      gpu_reached = 0u;
+      fixture.host().set_clock(1000u);
+      fixture.bind();
+      fixture.ring().write_batch(1u, 8u);
+      fixture.ring().publish();
+      fixture.serve();
+      CHECK_EQ(fixture.consumer().watchdog_deadline(), std::uint64_t{1000u + 250000000u});
+      fixture.host().set_clock(1000u + 250000000u + 1u);
+      CHECK(!fixture.poll());
+      CHECK(fixture.consumer().faulted());
+  }
+  unsetenv("AV_SUBMIT_WATCHDOG_MS"); }
 
 TEST(ring_consumer_watchdog, a_context_with_nothing_outstanding_is_never_judged)
 { Fixture fixture;

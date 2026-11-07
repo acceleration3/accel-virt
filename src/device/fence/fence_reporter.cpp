@@ -57,6 +57,7 @@ void FenceReporter::complete(uint64_t fence)
     if (!prepared_ || faulted_) return;
     completed_ = fence;
     progress_++;
+    if (pulse_ != nullptr) pulse_->note_completion();
     pending_ = true;
     static_cast<void>(page_.publish(FencePage(completed_, progress_).raising(raised_)));
     recorder_.record_fence(context_, fence);
@@ -135,6 +136,12 @@ uint64_t FenceReporter::beats() const
 {
     AV_SCOPE("FenceReporter::beats");
     return beats_;
+}
+
+uint64_t FenceReporter::device_completions() const
+{
+    AV_SCOPE("FenceReporter::device_completions");
+    return pulse_ != nullptr ? pulse_->completions() : 0u;
 }
 
 bool     FenceReporter::faulted() const

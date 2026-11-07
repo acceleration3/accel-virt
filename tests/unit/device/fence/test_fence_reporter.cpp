@@ -1,4 +1,5 @@
 #include "core/support/status.hpp"
+#include "device/fence/device_pulse.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/recording/wire_recorder.hpp"
@@ -136,6 +137,19 @@ TEST(fence_reporter_prepare, a_blob_too_small_for_a_page_or_a_line_past_the_queu
   CHECK_STATUS(no_beat.publish(FencePage(1u, 1u)), Status::invalid_parameter);
   CHECK_STATUS(no_beat.publish_beat(1u), Status::invalid_parameter);
   CHECK_EQ(fixture.bytes()[0], 0xEEu); }
+
+TEST(fence_reporter_complete, each_completion_counts_on_the_device_pulse_it_beats_by)
+{ Fixture fixture;
+  av::DevicePulse pulse(fixture.host());
+  CHECK_EQ(fixture.reporter().device_completions(), std::uint64_t{0});
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.reporter().beat_by(pulse);
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.complete(1u);
+      reporter.complete(4u);
+  });
+  CHECK_EQ(pulse.completions(), std::uint64_t{2});
+  CHECK_EQ(fixture.reporter().device_completions(), std::uint64_t{2}); }
 
 TEST(fence_reporter_complete, publishes_each_completion_and_signals_once)
 { Fixture fixture;

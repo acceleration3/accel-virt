@@ -33,6 +33,7 @@ public:
     bool                 working() const;
     void                 beat();
     uint64_t             beats() const;
+    uint64_t             device_completions() const;
     bool                 faulted() const;
 
     uint64_t completed() const;

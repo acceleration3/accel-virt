@@ -4,17 +4,18 @@
 
 namespace av {
 
-SubmissionWatchdog::SubmissionWatchdog(uint64_t limit_ns) : limit_ns_(limit_ns), since_ns_(0u), reached_(0u)
+SubmissionWatchdog::SubmissionWatchdog(uint64_t limit_ns) : limit_ns_(limit_ns), since_ns_(0u), reached_(0u), device_completions_(0u)
 {
     AV_SCOPE("SubmissionWatchdog::SubmissionWatchdog");
 }
 
-void SubmissionWatchdog::waiting_at(uint64_t reached, uint64_t now)
+void SubmissionWatchdog::waiting_at(uint64_t reached, uint64_t device_completions, uint64_t now)
 {
     AV_SCOPE("SubmissionWatchdog::waiting_at");
-    if (since_ns_ != 0u && reached == reached_) return;
+    if (since_ns_ != 0u && reached == reached_ && device_completions == device_completions_) return;
     since_ns_ = now != 0u ? now : 1u;
     reached_ = reached;
+    device_completions_ = device_completions;
 }
 
 void SubmissionWatchdog::nothing_outstanding()

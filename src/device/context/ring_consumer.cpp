@@ -185,7 +185,7 @@ bool RingConsumer::settle()
         return newest != 0u;
     }
     const uint64_t now = host_.monotonic_nanoseconds();
-    watchdog_.waiting_at(reached, now);
+    watchdog_.waiting_at(reached, fences_.device_completions(), now);
     if (watchdog_.overran(now)) {
         fault(FaultCode::device_lost, "a submission outran the watchdog; last fence", last_fence_);
         fences_.signal();

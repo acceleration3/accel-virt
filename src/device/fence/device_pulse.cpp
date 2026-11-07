@@ -8,7 +8,7 @@
 namespace av {
 
 DevicePulse::DevicePulse(Host &host)
-    : host_(host), lock_(nullptr), wake_(nullptr), thread_(nullptr), stopping_(false), dormant_(false), carried_{}
+    : host_(host), lock_(nullptr), wake_(nullptr), thread_(nullptr), stopping_(false), dormant_(false), completions_(0u), carried_{}
 {
     AV_SCOPE("DevicePulse::DevicePulse");
 }
@@ -78,6 +78,18 @@ void DevicePulse::stir()
 {
     AV_SCOPE("DevicePulse::stir");
     if (__atomic_exchange_n(&dormant_, false, __ATOMIC_SEQ_CST)) host_.signal_event(wake_);
+}
+
+void DevicePulse::note_completion()
+{
+    AV_SCOPE("DevicePulse::note_completion");
+    __atomic_add_fetch(&completions_, 1u, __ATOMIC_RELAXED);
+}
+
+uint64_t DevicePulse::completions() const
+{
+    AV_SCOPE("DevicePulse::completions");
+    return __atomic_load_n(&completions_, __ATOMIC_RELAXED);
 }
 
 uint32_t DevicePulse::carried() const

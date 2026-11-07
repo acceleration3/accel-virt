@@ -7,13 +7,13 @@ namespace av {
 
 class SubmissionWatchdog {
 public:
-    static constexpr uint64_t default_limit_ns = 1500000000ull;
+    static constexpr uint64_t default_limit_ns = 10000000000ull;
 
     explicit SubmissionWatchdog(uint64_t limit_ns);
     SubmissionWatchdog(const SubmissionWatchdog &) = delete;
     SubmissionWatchdog &operator=(const SubmissionWatchdog &) = delete;
 
-    void     waiting_at(uint64_t reached, uint64_t now);
+    void     waiting_at(uint64_t reached, uint64_t device_completions, uint64_t now);
     void     nothing_outstanding();
     bool     overran(uint64_t now) const;
     uint64_t limit() const;
@@ -23,6 +23,7 @@ private:
     uint64_t limit_ns_;
     uint64_t since_ns_;
     uint64_t reached_;
+    uint64_t device_completions_;
 };
 
 }

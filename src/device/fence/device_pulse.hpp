@@ -26,6 +26,8 @@ public:
     void                 drop(FenceReporter &reporter);
     uint32_t             carried() const;
     void                 stir();
+    void                 note_completion();
+    uint64_t             completions() const;
     void                 run();
     bool                 tick(bool &working);
     bool                 rest();
@@ -42,6 +44,7 @@ private:
     void          *thread_;
     bool           stopping_;
     bool           dormant_;
+    uint64_t       completions_;
     FenceReporter *carried_[capacity];
 
     friend struct DevicePulseProbe;
