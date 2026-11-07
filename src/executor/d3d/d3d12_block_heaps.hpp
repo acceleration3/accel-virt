@@ -35,6 +35,7 @@ public:
     void               abandon(const SourceMemory &store);
     void               reclaim();
     void               destroy_all();
+    void               leak_all();
 
     uint32_t count() const;
 

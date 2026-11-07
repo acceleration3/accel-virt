@@ -147,6 +147,15 @@ public:
         pool_.destroy_all();
     }
 
+    void forget_all()
+    {
+        AV_SCOPE("ObjectHolds::forget_all");
+        retired_.clear();
+        head_ = 0u;
+        lists_.clear();
+        pool_.destroy_all();
+    }
+
     template <typename Visitor>
     void for_each_list(Visitor visit) const
     {

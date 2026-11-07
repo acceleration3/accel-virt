@@ -143,3 +143,19 @@ TEST(d3d12_block_heaps, memory_the_host_cannot_open_a_heap_over_leaves_no_block_
   held.heaps.destroy_all();
   CHECK_EQ(held.heaps.count(), 0u);
   CHECK(held.heaps.invariants_hold()); }
+
+TEST(d3d12_block_heap, a_leaked_block_is_not_found_by_its_memory_not_reclaimed_and_not_destroyed_with_the_rest)
+{ SliceStoreRig rig;
+  SourceMemory &store = *rig.store(1u);
+  const std::uint32_t before = store.references();
+  {
+      D3d12BlockHeap block(store);
+      block.took_heap();
+      block.leak();
+      CHECK(block.leaked());
+      CHECK(block.abandoned());
+      CHECK(!block.holds(store));
+      CHECK(!block.done(~std::uint64_t{0}));
+      CHECK(block.unreferenced());
+  }
+  CHECK_EQ(store.references(), before); }

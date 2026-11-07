@@ -164,9 +164,13 @@ void D3d12Session::shut_down()
         if (made != nullptr) made->Release();
     }
     compiles_.bind(nullptr);
-    if (drain()) {
+    const bool drained = drain();
+    if (drained) {
         descriptors_.release_all();
         holds_.release_all();
+    } else {
+        descriptors_.forget_all();
+        holds_.forget_all();
     }
     allocators_.clear();
     queries_.clear();
@@ -174,7 +178,8 @@ void D3d12Session::shut_down()
     progress_.clear();
     addresses_.clear();
     objects_.remove_kinds(D3dObjectKind::heap12, D3dObjectKind::command_signature12);
-    block_heaps_.destroy_all();
+    if (drained) block_heaps_.destroy_all();
+    else block_heaps_.leak_all();
     views_.bind(nullptr);
     pipelines_.bind(nullptr);
     if (joined_) device_->dismiss(tenant_);

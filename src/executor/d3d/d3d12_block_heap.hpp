@@ -28,6 +28,8 @@ public:
     ID3D12Heap *heap() const;
     uint64_t    bytes() const;
     bool        abandoned() const;
+    void        leak();
+    bool        leaked() const;
     bool        unreferenced() const;
     bool        done(uint64_t reached) const;
 
@@ -42,6 +44,7 @@ private:
     uint32_t      resources_;
     uint64_t      mark_;
     bool          abandoned_;
+    bool          leaked_;
 };
 
 }

@@ -224,3 +224,23 @@ TEST(d3d12_descriptor_holds, a_destroyed_heap_hands_a_list_holding_it_the_pins_o
   CHECK(!block.unreferenced());
   CHECK_STATUS(rig.objects.release_list(list_a, 0u), av::Status::ok);
   CHECK(block.unreferenced()); }
+
+TEST(d3d12_descriptor_holds, forgetting_every_view_releases_nothing_and_unpins_nothing_so_a_next_process_with_the_same_ids_starts_empty)
+{ Rig rig;
+  av::SliceStoreRig store;
+  D3d12BlockHeap block(*store.store(1u));
+  CountedObject resource;
+  CHECK_STATUS(rig.note_pinned(heap_a, 3u, &resource, &block, 0u), av::Status::ok);
+  CHECK_EQ(resource.references(), 2u);
+  CHECK(!block.unreferenced());
+  rig.descriptors.forget_all();
+  CHECK_EQ(rig.descriptors.count(), 0u);
+  CHECK_EQ(resource.references(), 2u);
+  CHECK(!block.unreferenced());
+  CHECK(rig.descriptors.pin_at(heap_a, 3u) == nullptr);
+  CHECK(rig.descriptors.resource_at(heap_a, 3u) == nullptr);
+  CountedObject next;
+  CHECK_STATUS(rig.note(heap_a, 3u, &next, nullptr, 0u), av::Status::ok);
+  CHECK_EQ(next.references(), 2u);
+  CHECK_EQ(rig.descriptors.count(), 1u);
+  CHECK(rig.descriptors.invariants_hold()); }

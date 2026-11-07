@@ -351,3 +351,24 @@ TEST(d3d12_object_holds, letting_everything_go_finishes_objects_whose_release_de
   CHECK_EQ(holds.retired(), 0u);
   CHECK_EQ(holds.lists(), 0u);
   CHECK(holds.invariants_hold()); }
+
+TEST(d3d12_object_holds, forgetting_everything_drops_the_lists_and_retired_work_without_releasing_or_unpinning)
+{ av::MockPlatform platform;
+  D3d12ObjectHolds holds(platform);
+  CountedObject target, other;
+  CHECK_STATUS(holds.hold(list_a, &target, nullptr), av::Status::ok);
+  CHECK_STATUS(holds.hold(list_b, &other, nullptr), av::Status::ok);
+  holds.submitted(list_b, 9u);
+  CHECK_STATUS(holds.release_list(list_b, 1u), av::Status::ok);
+  CHECK_EQ(holds.retired(), 1u);
+  holds.forget_all();
+  CHECK_EQ(holds.lists(), 0u);
+  CHECK_EQ(holds.retired(), 0u);
+  CHECK_EQ(target.references(), 2u);
+  CHECK_EQ(other.references(), 2u);
+  CHECK(!holds.holding(list_a, &target));
+  CHECK_STATUS(holds.release_list(list_a, 0u), av::Status::ok);
+  CHECK_EQ(target.references(), 2u);
+  CHECK_STATUS(holds.hold(list_a, &other, nullptr), av::Status::ok);
+  CHECK_EQ(other.references(), 3u);
+  CHECK(holds.invariants_hold()); }

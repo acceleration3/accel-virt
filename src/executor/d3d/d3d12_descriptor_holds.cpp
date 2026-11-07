@@ -25,6 +25,12 @@ void D3d12DescriptorHolds::release_all()
     });
 }
 
+void D3d12DescriptorHolds::forget_all()
+{
+    AV_SCOPE("D3d12DescriptorHolds::forget_all");
+    tables_.drain_all([](View &) {});
+}
+
 bool D3d12DescriptorHolds::holds(uint32_t heap, uint32_t index, const IUnknown *resource) const
 {
     AV_SCOPE("D3d12DescriptorHolds::holds");

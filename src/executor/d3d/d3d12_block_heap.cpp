@@ -10,7 +10,7 @@
 namespace av {
 
 D3d12BlockHeap::D3d12BlockHeap(SourceMemory &store)
-    : store_(&store), heap_(nullptr), heaps_(0u), resources_(0u), mark_(0u), abandoned_(false)
+    : store_(&store), heap_(nullptr), heaps_(0u), resources_(0u), mark_(0u), abandoned_(false), leaked_(false)
 {
     AV_SCOPE("D3d12BlockHeap::D3d12BlockHeap");
     store.acquire();
@@ -75,7 +75,7 @@ void D3d12BlockHeap::used_at(uint64_t mark)
 bool D3d12BlockHeap::holds(const SourceMemory &store) const
 {
     AV_SCOPE("D3d12BlockHeap::holds");
-    return store_ == &store;
+    return !leaked_ && store_ == &store;
 }
 
 ID3D12Heap *D3d12BlockHeap::heap() const
@@ -88,6 +88,21 @@ uint64_t D3d12BlockHeap::bytes() const
 {
     AV_SCOPE("D3d12BlockHeap::bytes");
     return store_->size();
+}
+
+void D3d12BlockHeap::leak()
+{
+    AV_SCOPE("D3d12BlockHeap::leak");
+    leaked_ = true;
+    abandoned_ = true;
+    heaps_ = 0u;
+    resources_ = 0u;
+}
+
+bool D3d12BlockHeap::leaked() const
+{
+    AV_SCOPE("D3d12BlockHeap::leaked");
+    return leaked_;
 }
 
 bool D3d12BlockHeap::abandoned() const
@@ -105,7 +120,7 @@ bool D3d12BlockHeap::unreferenced() const
 bool D3d12BlockHeap::done(uint64_t reached) const
 {
     AV_SCOPE("D3d12BlockHeap::done");
-    return abandoned_ && unreferenced() && mark_ <= reached;
+    return !leaked_ && abandoned_ && unreferenced() && mark_ <= reached;
 }
 
 bool D3d12BlockHeap::invariants_hold() const

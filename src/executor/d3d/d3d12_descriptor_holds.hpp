@@ -32,6 +32,7 @@ public:
     template <typename Reached>
     [[nodiscard]] Status destroy_heap(uint32_t heap, const IUnknown *object, uint64_t marked, Reached reached);
     void                 release_all();
+    void                 forget_all();
 
     bool            holds(uint32_t heap, uint32_t index, const IUnknown *resource) const;
     IUnknown       *resource_at(uint32_t heap, uint32_t index) const;

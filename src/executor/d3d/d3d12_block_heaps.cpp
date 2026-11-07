@@ -143,7 +143,17 @@ void D3d12BlockHeaps::destroy_all()
     AV_SCOPE("D3d12BlockHeaps::destroy_all");
     windows_.clear();
     placed_.clear();
-    blocks_.destroy_all();
+    blocks_.destroy_if([](const D3d12BlockHeap &block) { return !block.leaked(); });
+    abandoned_ = 0u;
+}
+
+void D3d12BlockHeaps::leak_all()
+{
+    AV_SCOPE("D3d12BlockHeaps::leak_all");
+    windows_.clear();
+    placed_.clear();
+    const auto live = [](const D3d12BlockHeap &block) { return !block.leaked(); };
+    for (D3d12BlockHeap *block = blocks_.find_if(live); block != nullptr; block = blocks_.find_if(live)) block->leak();
     abandoned_ = 0u;
 }
 
@@ -159,7 +169,7 @@ bool D3d12BlockHeaps::invariants_hold() const
     uint32_t abandoned = 0u;
     bool     sound = blocks_.invariants_hold() && windows_.invariants_hold() && placed_.invariants_hold();
     blocks_.for_each([&abandoned, &sound](const D3d12BlockHeap &block) {
-        abandoned += block.abandoned() ? 1u : 0u;
+        abandoned += block.abandoned() && !block.leaked() ? 1u : 0u;
         sound = sound && block.invariants_hold();
     });
     windows_.for_each([this, &sound](uint32_t, const Window &held) {
