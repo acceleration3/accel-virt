@@ -4,6 +4,7 @@
 #include "device/fence/fence_reporter.hpp"
 #include "device/fence/fence_window.hpp"
 #include "device/memory/blob_window.hpp"
+#include "device/context/held_completions.hpp"
 #include "device/context/ring_consumer.hpp"
 #include "device/recording/wire_recorder.hpp"
 #include "device/context/ring_window.hpp"
@@ -56,6 +57,8 @@ struct RingConsumerProbe {
     static void attach_unprepared(RingConsumer &consumer) { consumer.attached_ = true; consumer.prepared_ = false; }
     static void move_unprepared(RingConsumer &consumer) { consumer.head_ = 8u; }
     static void break_progress(RingConsumer &consumer) { RingProgressProbe::forget_order(consumer.progress_); }
+    static void fault_again(RingConsumer &consumer) { consumer.fault(FaultCode::device_lost, "again", 1u); }
+    static bool settle(RingConsumer &consumer) { return consumer.settle(); }
     static void lose_fence(RingConsumer &consumer) { consumer.batches_ = 1u; consumer.head_ = 32u; consumer.last_fence_ = 0u; }
 };
 
@@ -1106,3 +1109,52 @@ TEST(ring_consumer_watchdog, a_held_submission_exposes_the_deadline_an_idle_work
   fixture.host().set_clock(1000u + watchdog_limit_ns + 1u);
   CHECK(!fixture.poll());
   CHECK_EQ(fixture.consumer().watchdog_deadline(), std::uint64_t{0}); }
+
+namespace {
+
+std::uint64_t stuck_progress_calls = 0u;
+
+void progress_that_never_reaches(void *, AvExecutor *, std::uint64_t *marked, std::uint64_t *reached)
+{
+    stuck_progress_calls++;
+    *marked = 1000000u;
+    *reached = 0u;
+}
+
+}
+
+TEST(ring_consumer_watchdog, a_full_queue_behind_a_stuck_gpu_faults_once_logs_once_and_then_costs_nothing)
+{ Fixture fixture;
+  fixture.ops().editable().gpu_progress = progress_that_never_reaches;
+  stuck_progress_calls = 0u;
+  fixture.host().set_clock(1000u);
+  fixture.host().advance_clock_per_read(watchdog_limit_ns / 1000u);
+  fixture.bind();
+  std::uint64_t fence = 1u;
+  for (std::uint32_t round = 0u; round < 2u; round++) {
+      for (std::uint32_t batch = 0u; batch < 100u; batch++) fixture.ring().write_batch(fence++, 8u);
+      fixture.ring().publish();
+      fixture.serve();
+  }
+  CHECK(fixture.consumer().faulted());
+  CHECK(fixture.page().faulted());
+  CHECK_EQ(fixture.host().logged(), 1u);
+  CHECK_EQ(fixture.consumer().batches(), std::uint64_t{av::HeldCompletions::capacity} + 1u);
+  CHECK_EQ(fixture.ops().executed(), av::HeldCompletions::capacity + 1u);
+  const std::uint64_t batches = fixture.consumer().batches();
+  const std::uint64_t calls = stuck_progress_calls;
+  fixture.host().advance_clock_per_read(0u);
+  fixture.host().set_clock(1000u + watchdog_limit_ns * 1000u);
+  for (std::uint32_t round = 0u; round < 20u; round++) {
+      fixture.ring().write_batch(fence++, 8u);
+      fixture.ring().publish();
+      fixture.serve();
+      CHECK(!fixture.poll());
+      CHECK(!fixture.consumer().has_work());
+      CHECK_EQ(fixture.consumer().watchdog_deadline(), std::uint64_t{0});
+  }
+  av::RingConsumerProbe::fault_again(fixture.consumer());
+  CHECK(!av::RingConsumerProbe::settle(fixture.consumer()));
+  CHECK_EQ(fixture.host().logged(), 1u);
+  CHECK_EQ(stuck_progress_calls, calls);
+  CHECK_EQ(fixture.consumer().batches(), batches); }

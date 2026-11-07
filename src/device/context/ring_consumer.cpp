@@ -164,6 +164,7 @@ void RingConsumer::complete_or_hold(uint64_t fence)
     }
     while (!held_.hold(fence, marked)) {
         static_cast<void>(settle());
+        if (faulted_) return;
         __builtin_ia32_pause();
     }
     static_cast<void>(settle());
@@ -172,7 +173,7 @@ void RingConsumer::complete_or_hold(uint64_t fence)
 bool RingConsumer::settle()
 {
     AV_SCOPE("RingConsumer::settle");
-    if (held_.empty()) return false;
+    if (faulted_ || held_.empty()) return false;
     static_cast<void>(executor_.poll());
     uint64_t marked = 0u;
     uint64_t reached = 0u;
@@ -280,6 +281,7 @@ void RingConsumer::order_with(D3dOrdering &ordering)
 void RingConsumer::fault(FaultCode code, const char *reason, uint64_t value)
 {
     AV_SCOPE("RingConsumer::fault");
+    if (faulted_) return;
     char       bytes[160];
     TextBuffer message(bytes, sizeof bytes);
     message.append("virtio-gpu-av: context faulted, code ");
