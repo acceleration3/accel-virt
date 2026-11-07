@@ -33,7 +33,11 @@ public:
     ULONG STDMETHODCALLTYPE   AddRef() override { return ++references; }
     ULONG STDMETHODCALLTYPE   Release() override { return --references; }
     UINT64 STDMETHODCALLTYPE  GetCompletedValue() override { return completed; }
-    HRESULT STDMETHODCALLTYPE SetEventOnCompletion(UINT64, HANDLE) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE SetEventOnCompletion(UINT64, HANDLE) override
+    {
+        blocking_waits++;
+        return S_OK;
+    }
     HRESULT STDMETHODCALLTYPE Signal(UINT64 value) override
     {
         completed = value;
@@ -42,6 +46,7 @@ public:
 
     UINT64 completed = 0u;
     ULONG  references = 1u;
+    UINT   blocking_waits = 0u;
 };
 
 struct LedgerOp {
@@ -452,6 +457,22 @@ TEST(d3d12_queue_progress_forget, a_queue_with_unfinished_work_keeps_its_fence_d
   CHECK_EQ(progress.reached(), 2u);
   CHECK_EQ(device.fences[0].references, 1u);
   CHECK(progress.invariants_hold()); }
+
+TEST(d3d12_queue_progress_forget, never_blocks_the_caller_on_a_fence_that_has_not_completed)
+{ av::MockPlatform   platform;
+  EventfdWake         wake;
+  D3d12QueueProgress progress(wake, platform);
+  ScriptedDevice     device;
+  ScriptedQueue      direct, copy;
+  CHECK(progress.executed(1u, &direct, &device));
+  CHECK(progress.executed(2u, &copy, &device));
+  device.fences[0].completed = 0u;
+  device.fences[1].completed = 0u;
+  progress.forget(1u);
+  progress.forget(2u);
+  progress.clear();
+  CHECK_EQ(device.fences[0].blocking_waits, 0u);
+  CHECK_EQ(device.fences[1].blocking_waits, 0u); }
 
 TEST(d3d12_queue_progress_forget, a_drained_fence_is_released_by_the_next_execute_and_not_before)
 { av::MockPlatform   platform;

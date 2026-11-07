@@ -110,12 +110,9 @@ void D3d12QueueProgress::forget(uint32_t id)
     if (index == queues_.size()) return;
     Queue &gone = queues_.at(index);
     if (gone.fence_->GetCompletedValue() < gone.signalled_) {
-        if (draining_.append(gone) == Status::ok) {
-            draining_.at(draining_.size() - 1u).queue_ = nullptr;
-            queues_.remove_swap(index);
-            return;
-        }
-        static_cast<void>(gone.fence_->SetEventOnCompletion(gone.signalled_, nullptr));
+        if (draining_.append(gone) == Status::ok) draining_.at(draining_.size() - 1u).queue_ = nullptr;
+        queues_.remove_swap(index);
+        return;
     }
     gone.fence_->Release();
     queues_.remove_swap(index);
