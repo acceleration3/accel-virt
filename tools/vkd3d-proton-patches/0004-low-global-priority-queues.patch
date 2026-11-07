@@ -1,0 +1,76 @@
+diff --git a/libs/vkd3d/device.c b/libs/vkd3d/device.c
+index 0c940cb..ead5870 100644
+--- a/libs/vkd3d/device.c
++++ b/libs/vkd3d/device.c
+@@ -1417,7 +1417,7 @@ static HRESULT vkd3d_instance_init(struct vkd3d_instance *instance,
+ 
+     TRACE("Application: %s.\n", debugstr_a(application_info.pApplicationName));
+ 
+-    if (!(extensions = vkd3d_calloc(extension_count, sizeof(*extensions))))
++    if (!(extensions = vkd3d_calloc(extension_count + 1, sizeof(*extensions))))
+     {
+         vkd3d_free(user_extension_supported);
+         return E_OUTOFMEMORY;
+@@ -3940,10 +3940,16 @@ static HRESULT vkd3d_create_vk_device(struct d3d12_device *device,
+     bool *user_extension_supported = NULL;
+     VkPhysicalDevice physical_device;
+     VkDeviceCreateInfo device_info;
++    VkDeviceQueueGlobalPriorityCreateInfoKHR queue_priorities[VKD3D_QUEUE_FAMILY_COUNT];
++    VkExtensionProperties *host_extensions = NULL;
++    uint32_t host_extension_count = 0;
++    uint32_t original_extension_count;
++    bool low_priority = false;
+     unsigned int device_index;
+     uint32_t extension_count;
+     const char **extensions;
+     VkDevice vk_device;
++    unsigned int i;
+     VkResult vr;
+     HRESULT hr;
+ 
+@@ -4045,7 +4051,45 @@ static HRESULT vkd3d_create_vk_device(struct d3d12_device *device,
+     device_info.pEnabledFeatures = &device->device_info.features2.features;
+     vkd3d_free(user_extension_supported);
+ 
++    original_extension_count = device_info.enabledExtensionCount;
++
++    if (VK_CALL(vkEnumerateDeviceExtensionProperties(physical_device, NULL, &host_extension_count, NULL)) == VK_SUCCESS &&
++            host_extension_count && (host_extensions = vkd3d_calloc(host_extension_count, sizeof(*host_extensions))))
++    {
++        if (VK_CALL(vkEnumerateDeviceExtensionProperties(physical_device, NULL, &host_extension_count, host_extensions)) == VK_SUCCESS)
++        {
++            for (i = 0; i < host_extension_count; i++)
++                low_priority = low_priority || !strcmp(host_extensions[i].extensionName, VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME);
++        }
++        vkd3d_free(host_extensions);
++    }
++
++    for (i = 0; i < device_info.enabledExtensionCount; i++)
++    {
++        if (!strcmp(extensions[i], VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME))
++            low_priority = false;
++    }
++
++    if (low_priority)
++    {
++        for (i = 0; i < device_info.queueCreateInfoCount; i++)
++        {
++            queue_priorities[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR;
++            queue_priorities[i].pNext = NULL;
++            queue_priorities[i].globalPriority = VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR;
++            device_queue_info.vk_queue_create_info[i].pNext = &queue_priorities[i];
++        }
++        extensions[device_info.enabledExtensionCount++] = VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME;
++    }
++
+     vr = VK_CALL(vkCreateDevice(physical_device, &device_info, NULL, &vk_device));
++    if (vr < 0 && low_priority)
++    {
++        for (i = 0; i < device_info.queueCreateInfoCount; i++)
++            device_queue_info.vk_queue_create_info[i].pNext = NULL;
++        device_info.enabledExtensionCount = original_extension_count;
++        vr = VK_CALL(vkCreateDevice(physical_device, &device_info, NULL, &vk_device));
++    }
+     if (vr == VK_ERROR_INITIALIZATION_FAILED &&
+             vkd3d_disable_nvx_extensions(device, extensions, &device_info.enabledExtensionCount))
+     {
