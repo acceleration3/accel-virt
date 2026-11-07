@@ -47,6 +47,7 @@ constexpr cl_device_type defined_types = CL_DEVICE_TYPE_DEFAULT | CL_DEVICE_TYPE
                                          CL_DEVICE_TYPE_ACCELERATOR | CL_DEVICE_TYPE_CUSTOM;
 
 constexpr const char *gl_sharing = "cl_khr_gl_sharing";
+constexpr uint64_t shared_object_nanoseconds = 1000000000u;
 constexpr const char *external_memory = "cl_khr_external_memory";
 
 constexpr clproto::HandleKind release_order[] = {
@@ -83,7 +84,7 @@ OpenClBackend::OpenClBackend(BlockSource &blocks, DriverLog &lines)
       vehicle_(), import_(), buffers_(), renderbuffer_textures_(), object_bytes_(),
       direct_(blocks, vehicle_, renderbuffer_textures_), copied_(blocks, object_bytes_, renderbuffer_textures_),
       gl_(nullptr), reaches_gl_(false), imports_(false), context_(nullptr), queue_(nullptr), handles_(blocks),
-       svm_(blocks), mapped_(blocks), device_memory_(blocks), guest_(), arena_(guest_, lines), imported_(nullptr), events_(blocks), user_events_(blocks), drain_markers_(blocks), clock_(), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
+       svm_(blocks), mapped_(blocks), device_memory_(blocks), guest_(), arena_(guest_, lines), imported_(nullptr), events_(blocks), user_events_(blocks), drain_markers_(blocks), clock_(), queue_wait_(clock_), pacer_(), paced_queue_(nullptr), marker_(nullptr), ran_(0u),
       lost_(false), lines_(lines)
 {
     AV_SCOPE("OpenClBackend::OpenClBackend");
@@ -1164,13 +1165,14 @@ bool OpenClBackend::import_object(uint32_t kind, uint32_t handle_kind, int fd, u
         buffers_.destroy(memory, buffer);
         return false;
     }
-    const bool taken = ::clEnqueueAcquireGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u, nullptr, nullptr) == CL_SUCCESS && ::clFinish(static_cast<cl_command_queue>(queue_)) == CL_SUCCESS;
+    const bool enqueued = ::clEnqueueAcquireGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u, nullptr, nullptr) == CL_SUCCESS;
+    const bool taken = enqueued && queue_wait_.through(static_cast<cl_command_queue>(queue_), shared_object_nanoseconds);
     cl_mem const named = taken ? image_over(shared, shape) : nullptr;
     if (!taken || hold(clproto::HandleKind::mem, named) != Status::ok) { AV_UNTESTABLE("the acquire above, and a table that cannot grow");
         cl_mem const held = named != nullptr ? named : shared;
         static_cast<void>(handles_.release(number_of(held), clproto::HandleKind::mem));
         static_cast<void>(::clReleaseMemObject(held));
-        buffers_.destroy(memory, buffer);
+        if (!enqueued || taken) buffers_.destroy(memory, buffer);
         return false;
     }
     wire_handle = reinterpret_cast<uint64_t>(named);
@@ -1220,9 +1222,9 @@ void OpenClBackend::release_object(uint32_t, uint64_t wire_handle, uint64_t deta
     }
     static_cast<void>(::clEnqueueReleaseGLObjects(static_cast<cl_command_queue>(queue_), 1u, &shared, 0u,
                                                   nullptr, nullptr));
-    static_cast<void>(::clFinish(static_cast<cl_command_queue>(queue_)));
+    const bool released = queue_wait_.through(static_cast<cl_command_queue>(queue_), shared_object_nanoseconds);
     static_cast<void>(::clReleaseMemObject(shared));
-    buffers_.destroy(memory, buffer);
+    if (released) buffers_.destroy(memory, buffer);
 }
 
 }

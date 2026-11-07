@@ -3,6 +3,7 @@
 
 #include "executor/opencl/cl_event_signals.hpp"
 #include "executor/opencl/cl_drain_markers.hpp"
+#include "executor/opencl/cl_queue_wait.hpp"
 #include "executor/opencl/cl_user_events.hpp"
 #include "proto/generated/opencl/cl_dispatch_server.h"
 #include "executor/opencl/cl_argument_retention.hpp"
@@ -268,6 +269,7 @@ private:
     ClReadAhead      read_ahead_;
     ClBouncedRect    bounced_;
     MonotonicClock   clock_;
+    ClQueueWait      queue_wait_;
     KernelPacer      pacer_;
     void            *paced_queue_;
     void            *marker_;
