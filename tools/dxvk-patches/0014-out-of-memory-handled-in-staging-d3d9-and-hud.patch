@@ -1,0 +1,577 @@
+From: accel-virt
+Subject: [PATCH] out-of-memory handled in the staging buffer, D3D9 buffer discards, constant buffers, up buffers and Create calls, and the HUD
+
+DxvkStagingBuffer::alloc returns an undefined slice when the device is out of
+memory; Direct3D 11 UpdateSubresource, UpdateTileMappings data, the
+initializer uploads and the Direct3D 9 texture and buffer uploads skip the
+copy and mark the device lost, and a deferred Map returns E_OUTOFMEMORY.
+Direct3D 9 DiscardMapSlice, the constant buffers and the up buffer
+allocator report a null slice instead of dereferencing it, the draws and
+Lock return D3DERR_OUTOFVIDEOMEMORY, and CreateVertexBuffer,
+CreateIndexBuffer, CreateStateBlock and CreateAdditionalSwapChainEx return
+D3DERR_OUTOFVIDEOMEMORY. HUD rendering drops the frame when its buffers
+cannot be created.
+---
+--- a/src/d3d11/d3d11_context.cpp
++++ b/src/d3d11/d3d11_context.cpp
+@@ -3061,6 +3061,12 @@
+     VkDeviceSize bufferSize = pDestTileRegionSize->NumTiles * SparseMemoryPageSize;
+ 
+     DxvkBufferSlice slice = AllocStagingBuffer(bufferSize);
++
++    if (unlikely(!slice.defined())) {
++      m_device->markDeviceLost();
++      return;
++    }
++
+     std::memcpy(slice.mapPtr(0), pSourceTileData, bufferSize);
+ 
+     // Fix up flags. The runtime probably validates this in some
+@@ -5720,6 +5726,12 @@
+     } else {
+       // Write directly to a staging buffer and dispatch a copy
+       DxvkBufferSlice stagingSlice = AllocStagingBuffer(Length);
++
++      if (unlikely(!stagingSlice.defined())) {
++        m_device->markDeviceLost();
++        return;
++      }
++
+       std::memcpy(stagingSlice.mapPtr(0), pSrcData, Length);
+ 
+       EmitCs([
+@@ -5785,6 +5797,11 @@
+ 
+     auto stagingSlice = AllocStagingBuffer(util::computeImageDataSize(packedFormat, extent));
+ 
++    if (unlikely(!stagingSlice.defined())) {
++      m_device->markDeviceLost();
++      return;
++    }
++
+     util::packImageData(stagingSlice.mapPtr(0),
+       pSrcData, SrcRowPitch, SrcDepthPitch, 0, 0,
+       pDstTexture->GetVkImageType(), extent, 1,
+--- a/src/d3d11/d3d11_context_def.cpp
++++ b/src/d3d11/d3d11_context_def.cpp
+@@ -342,6 +342,9 @@
+     } else {
+       auto dataSlice = AllocStagingBuffer(layout.Size);
+ 
++      if (unlikely(!dataSlice.defined()))
++        return E_OUTOFMEMORY;
++
+       pMappedResource->RowPitch   = layout.RowPitch;
+       pMappedResource->DepthPitch = layout.DepthPitch;
+       pMappedResource->pData      = dataSlice.mapPtr(0);
+--- a/src/d3d11/d3d11_initializer.cpp
++++ b/src/d3d11/d3d11_initializer.cpp
+@@ -105,6 +105,11 @@
+     auto icbSlice = pShader->GetIcb();
+     auto srcSlice = m_stagingBuffer.alloc(icbSlice.length());
+ 
++    if (unlikely(!srcSlice.defined())) {
++      m_device->markDeviceLost();
++      return;
++    }
++
+     std::memcpy(srcSlice.mapPtr(0), pIcbData, IcbSize);
+ 
+     if (IcbSize < icbSlice.length())
+@@ -131,6 +136,12 @@
+ 
+     if (pInitialData != nullptr && pInitialData->pSysMem != nullptr) {
+       auto stagingSlice = m_stagingBuffer.alloc(buffer->info().size);
++
++      if (unlikely(!stagingSlice.defined())) {
++        m_device->markDeviceLost();
++        return;
++      }
++
+       std::memcpy(stagingSlice.mapPtr(0), pInitialData->pSysMem, stagingSlice.length());
+ 
+       m_transferCommands += 1;
+@@ -196,6 +207,11 @@
+         }
+ 
+         stagingSlice = m_stagingBuffer.alloc(dataSize);
++
++        if (unlikely(!stagingSlice.defined())) {
++          m_device->markDeviceLost();
++          return;
++        }
+       }
+ 
+       // Copy initial data for each subresource into the staging buffer,
+--- a/src/d3d9/d3d9_common_buffer.h
++++ b/src/d3d9/d3d9_common_buffer.h
+@@ -134,8 +134,12 @@
+     }
+ 
+     inline Rc<DxvkResourceAllocation> DiscardMapSlice() {
+-      m_allocation = GetMapBuffer()->allocateStorage();
+-      return m_allocation;
++      auto allocation = GetMapBuffer()->allocateStorage();
++
++      if (likely(allocation))
++        m_allocation = allocation;
++
++      return allocation;
+     }
+ 
+     inline Rc<DxvkResourceAllocation> ImportMapSlice(const DxvkBufferImportInfo& importInfo) {
+--- a/src/d3d9/d3d9_constant_buffer.cpp
++++ b/src/d3d9/d3d9_constant_buffer.cpp
+@@ -29,13 +29,27 @@
+ 
+ 
+   void* D3D9ConstantBuffer::Alloc(VkDeviceSize size) {
+-    if (unlikely(!m_cpuBuffer))
+-      m_cpuSlice = CreateBuffer();
++    if (unlikely(!m_cpuBuffer)) {
++      try {
++        m_cpuSlice = CreateBuffer();
++      } catch (const DxvkOutOfMemoryError& e) {
++        Logger::err(e.message());
++        m_device->GetDXVKDevice()->markDeviceLost();
++        return nullptr;
++      }
++    }
+ 
+     size = align(size, m_align);
+ 
+     if (m_offset + size > m_size) {
+-      m_cpuSlice = m_cpuBuffer->allocateStorage();
++      auto storage = m_cpuBuffer->allocateStorage();
++
++      if (unlikely(!storage)) {
++        m_device->GetDXVKDevice()->markDeviceLost();
++        return nullptr;
++      }
++
++      m_cpuSlice = std::move(storage);
+ 
+       m_device->EmitCs([
+         cBinding    = uint32_t(m_kind),
+@@ -86,6 +100,9 @@
+     if (m_usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+       bufferInfo.access |= VK_ACCESS_SHADER_READ_BIT;
+ 
++    Rc<DxvkBuffer> cpuBuffer;
++    Rc<DxvkBuffer> gpuBuffer;
++
+     if (m_useDma) {
+       // Create the CPU buffer as a pure staging buffer
+       auto cpuInfo = bufferInfo;
+@@ -93,7 +110,7 @@
+       cpuInfo.stages = VK_PIPELINE_STAGE_TRANSFER_BIT;
+       cpuInfo.access = VK_ACCESS_TRANSFER_READ_BIT;
+ 
+-      m_cpuBuffer = dxvkDevice->createBuffer(cpuInfo, m_memType);
++      cpuBuffer = dxvkDevice->createBuffer(cpuInfo, m_memType);
+ 
+       // Create the GPU buffer as the actual uniform buffer
+       auto gpuInfo = bufferInfo;
+@@ -101,13 +118,16 @@
+       gpuInfo.stages |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+       gpuInfo.access |= VK_ACCESS_TRANSFER_WRITE_BIT;
+ 
+-      m_gpuBuffer = dxvkDevice->createBuffer(gpuInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++      gpuBuffer = dxvkDevice->createBuffer(gpuInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+     } else {
+       // Create a single buffer for both CPU writes and GPU reads
+-      m_cpuBuffer = dxvkDevice->createBuffer(bufferInfo, m_memType);
+-      m_gpuBuffer = m_cpuBuffer;
++      cpuBuffer = dxvkDevice->createBuffer(bufferInfo, m_memType);
++      gpuBuffer = cpuBuffer;
+     }
+ 
++    m_cpuBuffer = std::move(cpuBuffer);
++    m_gpuBuffer = std::move(gpuBuffer);
++
+     m_device->EmitCs([
+       cBinding  = uint32_t(m_kind),
+       cStages   = m_stages,
+--- a/src/d3d9/d3d9_device.cpp
++++ b/src/d3d9/d3d9_device.cpp
+@@ -860,6 +860,10 @@
+ 
+       return D3D_OK;
+     }
++    catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return D3DERR_OUTOFVIDEOMEMORY;
++    }
+     catch (const DxvkError & e) {
+       Logger::err(e.message());
+       return D3DERR_INVALIDCALL;
+@@ -912,6 +916,10 @@
+ 
+       return D3D_OK;
+     }
++    catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return D3DERR_OUTOFVIDEOMEMORY;
++    }
+     catch (const DxvkError & e) {
+       Logger::err(e.message());
+       return D3DERR_INVALIDCALL;
+@@ -2724,6 +2732,10 @@
+ 
+       return D3D_OK;
+     }
++    catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return D3DERR_OUTOFVIDEOMEMORY;
++    }
+     catch (const DxvkError & e) {
+       Logger::err(e.message());
+       return D3DERR_INVALIDCALL;
+@@ -3044,8 +3056,9 @@
+     int32_t baseVertexIndex = 0;
+     uint32_t vertexCount    = GetVertexCount(PrimitiveType, PrimitiveCount);
+ 
+-    UploadPerDrawData(StartVertex, vertexCount, firstIndex, 0,
+-      baseVertexIndex, &dynamicSysmemVBOs, nullptr);
++    if (unlikely(!UploadPerDrawData(StartVertex, vertexCount, firstIndex, 0,
++        baseVertexIndex, &dynamicSysmemVBOs, nullptr)))
++      return D3DERR_OUTOFVIDEOMEMORY;
+ 
+     PrepareDraw(PrimitiveType, !dynamicSysmemVBOs, false);
+ 
+@@ -3095,8 +3108,9 @@
+ 
+     uint32_t indexCount = GetVertexCount(PrimitiveType, PrimitiveCount);
+ 
+-    UploadPerDrawData(MinVertexIndex, NumVertices, StartIndex, indexCount,
+-      BaseVertexIndex, &dynamicSysmemVBOs, &dynamicSysmemIBO);
++    if (unlikely(!UploadPerDrawData(MinVertexIndex, NumVertices, StartIndex, indexCount,
++        BaseVertexIndex, &dynamicSysmemVBOs, &dynamicSysmemIBO)))
++      return D3DERR_OUTOFVIDEOMEMORY;
+ 
+     PrepareDraw(PrimitiveType, !dynamicSysmemVBOs, !dynamicSysmemIBO);
+ 
+@@ -3162,6 +3176,10 @@
+     const uint32_t bufferSize = GetUPBufferSize(vertexCount, VertexStreamZeroStride);
+ 
+     auto upSlice = AllocUPBuffer(bufferSize);
++
++    if (unlikely(!upSlice.mapPtr))
++      return D3DERR_OUTOFVIDEOMEMORY;
++
+     FillUPVertexBuffer(upSlice.mapPtr, pVertexStreamZeroData, dataSize, bufferSize);
+ 
+     EmitCs([this,
+@@ -3221,6 +3239,10 @@
+     const uint32_t upSize = vertexBufferSize + indicesSize;
+ 
+     auto upSlice = AllocUPBuffer(upSize);
++
++    if (unlikely(!upSlice.mapPtr))
++      return D3DERR_OUTOFVIDEOMEMORY;
++
+     uint8_t* data = reinterpret_cast<uint8_t*>(upSlice.mapPtr);
+     FillUPVertexBuffer(data, pVertexStreamZeroData, vertexDataSize, vertexBufferSize);
+     std::memcpy(data + vertexBufferSize, pIndexData, indicesSize);
+@@ -3297,7 +3319,7 @@
+     bool dynamicSysmemVBOs;
+     uint32_t firstIndex     = 0;
+     int32_t baseVertexIndex = 0;
+-    UploadPerDrawData(
++    if (unlikely(!UploadPerDrawData(
+       SrcStartIndex,
+       VertexCount,
+       firstIndex,
+@@ -3305,7 +3327,8 @@
+       baseVertexIndex,
+       &dynamicSysmemVBOs,
+       nullptr
+-    );
++    )))
++      return D3DERR_OUTOFVIDEOMEMORY;
+ 
+     PrepareDraw(D3DPT_FORCE_DWORD, !dynamicSysmemVBOs, false);
+ 
+@@ -4550,6 +4573,10 @@
+       *ppSwapChain = ref(swapchain);
+       m_losableResourceCounter++;
+     }
++    catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return D3DERR_OUTOFVIDEOMEMORY;
++    }
+     catch (const DxvkError & e) {
+       Logger::err(e.message());
+       return D3DERR_NOTAVAILABLE;
+@@ -4786,7 +4813,15 @@
+       info.stages = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+       info.debugName = "UP buffer";
+ 
+-      Rc<DxvkBuffer> buffer = m_dxvkDevice->createBuffer(info, memoryFlags);
++      Rc<DxvkBuffer> buffer;
++
++      try {
++        buffer = m_dxvkDevice->createBuffer(info, memoryFlags);
++      } catch (const DxvkOutOfMemoryError& e) {
++        Logger::err(e.message());
++        return D3D9BufferSlice();
++      }
++
+       void* mapPtr = buffer->mapPtr(0);
+ 
+       if (size <= UPBufferSize) {
+@@ -4806,6 +4841,9 @@
+     if (unlikely(m_upBufferOffset + alignedSize > UPBufferSize)) {
+       auto slice = m_upBuffer->allocateStorage();
+ 
++      if (unlikely(!slice))
++        return D3D9BufferSlice();
++
+       m_upBufferOffset = 0;
+       m_upBufferMapPtr = slice->mapPtr();
+ 
+@@ -4829,7 +4867,7 @@
+   D3D9BufferSlice D3D9DeviceEx::AllocStagingBuffer(VkDeviceSize size) {
+     D3D9BufferSlice result;
+     result.slice = m_stagingBuffer.alloc(size);
+-    result.mapPtr = result.slice.mapPtr(0);
++    result.mapPtr = result.slice.defined() ? result.slice.mapPtr(0) : nullptr;
+     return result;
+   }
+ 
+@@ -5363,6 +5401,12 @@
+       const void* mapPtr = MapTexture(pSrcTexture, SrcSubresource);
+       VkDeviceSize dirtySize = extentBlockCount.width * extentBlockCount.height * extentBlockCount.depth * formatInfo->elementSize;
+       D3D9BufferSlice slice = AllocStagingBuffer(dirtySize);
++
++      if (unlikely(!slice.mapPtr)) {
++        m_dxvkDevice->markDeviceLost();
++        return;
++      }
++
+       const void* srcData = reinterpret_cast<const uint8_t*>(mapPtr) + copySrcOffset;
+       util::packImageData(
+         slice.mapPtr, srcData, extentBlockCount, formatInfo->elementSize,
+@@ -5414,6 +5458,12 @@
+ 
+       // the converter can not handle the 4 aligned pitch so we always repack into a staging buffer
+       D3D9BufferSlice slice = AllocStagingBuffer(pSrcTexture->GetMipSize(SrcSubresource));
++
++      if (unlikely(!slice.mapPtr)) {
++        m_dxvkDevice->markDeviceLost();
++        return;
++      }
++
+       VkDeviceSize pitch = align(srcBlockCount.width * formatElementSize, 4);
+ 
+       const DxvkFormatInfo* convertedFormatInfo = lookupFormatInfo(convertFormat.Format);
+@@ -5542,6 +5592,10 @@
+       // only way to invalidate a buffer is by mapping it.
+       Rc<DxvkBuffer> mappingBuffer = pResource->GetBuffer<D3D9_COMMON_BUFFER_TYPE_MAPPING>();
+       auto bufferSlice = pResource->DiscardMapSlice();
++
++      if (unlikely(!bufferSlice))
++        return D3DERR_OUTOFVIDEOMEMORY;
++
+       data = reinterpret_cast<uint8_t*>(bufferSlice->mapPtr());
+ 
+       EmitCs([
+@@ -5612,6 +5666,12 @@
+     D3D9Range& range = pResource->DirtyRange();
+ 
+     D3D9BufferSlice slice = AllocStagingBuffer(range.max - range.min);
++
++    if (unlikely(!slice.mapPtr)) {
++      m_dxvkDevice->markDeviceLost();
++      return D3DERR_OUTOFVIDEOMEMORY;
++    }
++
+     void* srcData = reinterpret_cast<uint8_t*>(srcSlice->mapPtr()) + range.min;
+     memcpy(slice.mapPtr, srcData, range.max - range.min);
+ 
+@@ -5667,7 +5727,7 @@
+   }
+ 
+ 
+-  void D3D9DeviceEx::UploadPerDrawData(
++  bool D3D9DeviceEx::UploadPerDrawData(
+           UINT&                   FirstVertexIndex,
+           UINT                    NumVertices,
+           UINT&                   FirstIndex,
+@@ -5688,7 +5748,7 @@
+       *pDynamicIBO = dynamicSysmemIBO;
+ 
+     if (likely(!dynamicSysmemVBOs && !dynamicSysmemIBO))
+-      return;
++      return true;
+ 
+     uint32_t vertexBuffersToUpload;
+     if (likely(dynamicSysmemVBOs))
+@@ -5785,11 +5845,14 @@
+       if (pDynamicIBO)
+         *pDynamicIBO = false;
+ 
+-      return;
++      return true;
+     }
+ 
+     auto upSlice = AllocUPBuffer(totalUpBufferSize);
+ 
++    if (unlikely(!upSlice.mapPtr))
++      return false;
++
+     // Now copy the actual data and bind it.
+     if (dynamicSysmemVBOs) {
+       for (uint32_t i : bit::BitMask(vertexBuffersToUpload)) {
+@@ -5863,6 +5926,8 @@
+       // Change the draw call parameters to reflect the changed index buffer
+       FirstIndex = 0;
+     }
++
++    return true;
+   }
+ 
+ 
+@@ -6051,6 +6116,10 @@
+       staticSize = align(staticSize, buffer.GetAlignment());
+ 
+       auto staticData = buffer.Alloc(staticSize);
++
++      if (unlikely(!staticData))
++        return;
++
+       auto staticOffset = 0u;
+ 
+       if (!dynamicSize) {
+@@ -6093,7 +6162,12 @@
+       auto& buffer = GetConstantBuffer(CbvIndex::VSDynamicConstants);
+       dynamicSize = align(dynamicSize, buffer.GetAlignment());
+ 
+-      copyArgs.floatBuffer = buffer.Alloc(dynamicSize);
++      void* dynamicData = buffer.Alloc(dynamicSize);
++
++      if (unlikely(!dynamicData))
++        return;
++
++      copyArgs.floatBuffer = dynamicData;
+       copyArgs.floatBufferSize = dynamicSize;
+       copyArgs.constFloatApi = m_state.vsConsts->fConsts;
+ 
+--- a/src/d3d9/d3d9_device.h
++++ b/src/d3d9/d3d9_device.h
+@@ -905,7 +905,7 @@
+      * @param FirstIndex The first index
+      * @param NumIndices The number of indices that will be drawn. If this is 0, the index buffer binding will not be modified.
+      */
+-    void UploadPerDrawData(
++    bool UploadPerDrawData(
+             UINT&                   FirstVertexIndex,
+             UINT                    NumVertices,
+             UINT&                   FirstIndex,
+--- a/src/d3d9/d3d9_interop.cpp
++++ b/src/d3d9/d3d9_interop.cpp
+@@ -317,9 +317,14 @@
+     if (unlikely(!buffer || buffer->GetMapMode() != D3D9_COMMON_BUFFER_MAP_MODE_DIRECT))
+       return D3DERR_INVALIDCALL;
+ 
++    auto allocation = buffer->DiscardMapSlice();
++
++    if (unlikely(!allocation))
++      return D3DERR_OUTOFVIDEOMEMORY;
++
+     m_device->EmitCs([
+       cBuffer     = buffer->GetBuffer<D3D9_COMMON_BUFFER_TYPE_MAPPING>(),
+-      cAllocation = buffer->DiscardMapSlice()
++      cAllocation = std::move(allocation)
+     ] (DxvkContext* ctx) mutable {
+       ctx->invalidateBuffer(cBuffer, std::move(cAllocation));
+     });
+--- a/src/dxvk/dxvk_staging.cpp
++++ b/src/dxvk/dxvk_staging.cpp
+@@ -33,8 +33,8 @@
+     m_allocationCounter += alignedSize;
+ 
+     if (2 * alignedSize > m_size) {
+-      return DxvkBufferSlice(m_device->createBuffer(info,
+-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
++      Rc<DxvkBuffer> large = tryCreateBuffer(info);
++      return large != nullptr ? DxvkBufferSlice(std::move(large)) : DxvkBufferSlice();
+     }
+ 
+     if (m_offset + alignedSize > m_size || m_buffer == nullptr) {
+@@ -43,9 +43,11 @@
+       // Free resources first if possible, in some rare
+       // situations this may help avoid a memory allocation.
+       m_buffer = nullptr;
+-      m_buffer = m_device->createBuffer(info,
+-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
++      m_buffer = tryCreateBuffer(info);
+       m_offset = 0;
++
++      if (m_buffer == nullptr)
++        return DxvkBufferSlice();
+     }
+ 
+     DxvkBufferSlice slice(m_buffer, m_offset, size);
+@@ -54,6 +56,18 @@
+   }
+ 
+ 
++  Rc<DxvkBuffer> DxvkStagingBuffer::tryCreateBuffer(
++    const DxvkBufferCreateInfo& info) {
++    try {
++      return m_device->createBuffer(info,
++        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++      return nullptr;
++    }
++  }
++
++
+   void DxvkStagingBuffer::reset() {
+     m_buffer = nullptr;
+     m_offset = 0;
+--- a/src/dxvk/dxvk_staging.h
++++ b/src/dxvk/dxvk_staging.h
+@@ -52,7 +52,8 @@
+      * Tries to suballocate from existing buffer,
+      * or creates a new buffer if necessary.
+      * \param [in] size Number of bytes to allocate
+-     * \returns Allocated slice
++     * \returns Allocated slice, which is not
++     *    defined when the device is out of memory
+      */
+     DxvkBufferSlice alloc(VkDeviceSize size);
+ 
+@@ -74,6 +75,9 @@
+ 
+   private:
+ 
++    Rc<DxvkBuffer> tryCreateBuffer(
++      const DxvkBufferCreateInfo& info);
++
+     Rc<DxvkDevice>  m_device = nullptr;
+     Rc<DxvkBuffer>  m_buffer = nullptr;
+     VkDeviceSize    m_offset = 0u;
+--- a/src/dxvk/hud/dxvk_hud.cpp
++++ b/src/dxvk/hud/dxvk_hud.cpp
+@@ -48,10 +48,14 @@
+ 
+     auto key = m_renderer.getPipelineKey(dstView);
+ 
+-    m_renderer.beginFrame(ctx, dstView, m_options);
+-    m_hudItems.render(ctx, key, m_options, m_renderer);
+-    m_renderer.flushDraws(ctx, dstView, m_options);
+-    m_renderer.endFrame(ctx);
++    try {
++      m_renderer.beginFrame(ctx, dstView, m_options);
++      m_hudItems.render(ctx, key, m_options, m_renderer);
++      m_renderer.flushDraws(ctx, dstView, m_options);
++      m_renderer.endFrame(ctx);
++    } catch (const DxvkOutOfMemoryError& e) {
++      Logger::err(e.message());
++    }
+   }
+ 
+ 
