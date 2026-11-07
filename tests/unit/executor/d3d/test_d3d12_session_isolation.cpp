@@ -33,6 +33,7 @@ constexpr std::uint32_t stride = 16u;
 constexpr std::uint32_t format_rgba = 28u;
 constexpr std::uint32_t format_r8 = 61u;
 constexpr std::uint32_t format_r32 = 41u;
+constexpr std::uint32_t format_rgba_uint = 30u;
 constexpr std::uint32_t location_subresource = 0u;
 constexpr std::uint32_t location_footprint = 1u;
 constexpr std::uint32_t driver_internal_error = 0x887A0020u;
@@ -282,6 +283,9 @@ TEST(d3d12_session_isolation, copy_resource_refuses_each_way_two_resources_can_d
   CHECK(!scene.session().on_CopyResource12(list, texture, other_texture));
   CHECK_EQ(scene.commands.whole_copies, 0u);
   scene.other_rgba.desc = texture_desc(DXGI_FORMAT_B8G8R8A8_UNORM, 16u, 16u);
+  CHECK(!scene.session().on_CopyResource12(list, texture, other_texture));
+  CHECK_EQ(scene.commands.whole_copies, 0u);
+  scene.other_rgba.desc = texture_desc(DXGI_FORMAT_R8G8B8A8_UINT, 16u, 16u);
   CHECK(scene.session().on_CopyResource12(list, texture, other_texture));
   CHECK_EQ(scene.commands.whole_copies, 1u); }
 
@@ -338,7 +342,7 @@ TEST(d3d12_session_isolation, a_texture_copy_between_texels_of_different_sizes_o
                                                 subresource_of(other_texture), 0u, Box{}));
   CHECK_EQ(scene.commands.texture_copies, 0u); }
 
-TEST(d3d12_session_isolation, a_buffer_footprint_is_laid_out_in_the_texels_of_the_texture_it_is_copied_with)
+TEST(d3d12_session_isolation, a_buffer_footprint_is_laid_out_in_a_format_of_the_typeless_group_of_the_texture_it_is_copied_with)
 { Scene scene;
   scene.dst.desc = buffer_desc(8192u);
   scene.src.desc = buffer_desc(8192u);
@@ -352,8 +356,10 @@ TEST(d3d12_session_isolation, a_buffer_footprint_is_laid_out_in_the_texels_of_th
                                                 Box{}));
   CHECK(!scene.session().on_CopyTextureRegion12(list, footprint_of(target, format_r8, 16u, 16u), 0u, 0u, 0u, image, 0u,
                                                 Box{}));
-  CHECK(scene.session().on_CopyTextureRegion12(list, footprint_of(target, format_r32, 16u, 16u), 0u, 0u, 0u, image, 0u,
-                                               Box{}));
+  CHECK(!scene.session().on_CopyTextureRegion12(list, footprint_of(target, format_r32, 16u, 16u), 0u, 0u, 0u, image, 0u,
+                                                Box{}));
+  CHECK(scene.session().on_CopyTextureRegion12(list, footprint_of(target, format_rgba_uint, 16u, 16u), 0u, 0u, 0u, image,
+                                               0u, Box{}));
   CHECK_EQ(scene.commands.texture_copies, 3u);
   scene.rgba.desc.SampleDesc.Count = 4u;
   CHECK(!scene.session().on_CopyTextureRegion12(list, image, 0u, 0u, 0u, footprint_of(source, format_rgba, 16u, 16u), 0u,
