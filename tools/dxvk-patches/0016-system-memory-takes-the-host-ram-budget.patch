@@ -1,0 +1,115 @@
+From: accel-virt
+Subject: [PATCH] memory: system-memory allocations take their size from the embedder's host RAM budget
+
+The embedder's gate (dxvk_proton_set_vram_gate) gains takeHost and giveHost.
+DxvkMemoryAllocator takes the size of every allocation in a memory type that
+is not device-local from the VM's host RAM budget before vkAllocateMemory and
+gives it back when the memory is freed, so system-memory staging, upload and
+fallback allocations of all the guest's devices share one budget below the
+host's RAM. Over the budget the allocation is refused after the empty chunks
+are returned, which the allocator's out-of-memory handling already answers.
+---
+diff --git a/src/dxvk/dxvk_memory.cpp b/src/dxvk/dxvk_memory.cpp
+index cae3cb1..37113eb 100644
+--- a/src/dxvk/dxvk_memory.cpp
++++ b/src/dxvk/dxvk_memory.cpp
+@@ -1364,6 +1364,16 @@ namespace dxvk {
+     }
+ 
+     const bool gated = isGated(type);
++    const bool hostGated = isHostGated(type);
++
++    if (hostGated && !m_vramAccount.takeHost(size)) {
++      freeEmptyChunksInHeap(*type.heap, VkDeviceSize(-1), high_resolution_clock::time_point());
++
++      if (!m_vramAccount.takeHost(size)) {
++        Logger::warn(str::format("System memory allocation of ", size >> 10u, " KiB refused: over the VM's host memory budget"));
++        return DxvkDeviceMemory();
++      }
++    }
+ 
+     if (gated && !m_vramAccount.take(size)) {
+       // Empty chunks still hold part of the cap; give them back and ask again.
+@@ -1371,6 +1381,7 @@ namespace dxvk {
+ 
+       if (!m_vramAccount.take(size)) {
+         Logger::warn(str::format("Device-local allocation of ", size >> 10u, " KiB refused: over the guest's video memory cap"));
++
+         return DxvkDeviceMemory();
+       }
+     }
+@@ -1421,6 +1432,9 @@ namespace dxvk {
+         if (gated)
+           m_vramAccount.give(size);
+ 
++        if (hostGated)
++          m_vramAccount.giveHost(size);
++
+         return DxvkDeviceMemory();
+       }
+     }
+@@ -1657,6 +1671,9 @@ namespace dxvk {
+     if (isGated(type))
+       m_vramAccount.give(memory.size);
+ 
++    if (isHostGated(type))
++      m_vramAccount.giveHost(memory.size);
++
+     type.stats.memoryAllocated -= memory.size;
+   }
+ 
+@@ -1690,6 +1707,9 @@ namespace dxvk {
+ 
+           if (isGated(*allocation->m_type))
+             m_vramAccount.give(allocation->m_size);
++
++          if (isHostGated(*allocation->m_type))
++            m_vramAccount.giveHost(allocation->m_size);
+         } else {
+           DxvkMemoryPool& pool = allocation->m_mapPtr
+             ? allocation->m_type->mappedPool
+diff --git a/src/dxvk/dxvk_memory.h b/src/dxvk/dxvk_memory.h
+index 16aeb8c..a73b2b7 100644
+--- a/src/dxvk/dxvk_memory.h
++++ b/src/dxvk/dxvk_memory.h
+@@ -1407,6 +1407,11 @@ namespace dxvk {
+           && (type.properties.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+     }
+ 
++    bool isHostGated(const DxvkMemoryType& type) const {
++      return m_vramAccount.active()
++          && !(type.properties.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
++    }
++
+     bool allowsFallback(const DxvkAllocationInfo& info) const {
+       return !m_vramAccount.active() && !info.mode.test(DxvkAllocationMode::NoFallback);
+     }
+diff --git a/src/dxvk/dxvk_vram_gate.h b/src/dxvk/dxvk_vram_gate.h
+index f8ca58e..c90fafa 100644
+--- a/src/dxvk/dxvk_vram_gate.h
++++ b/src/dxvk/dxvk_vram_gate.h
+@@ -24,6 +24,8 @@ namespace dxvk {
+     void     (*close)(void* self, void* account);
+     uint64_t (*freeBytes)(void* account);
+     uint64_t (*cap)(void* account);
++    int      (*takeHost)(void* account, uint64_t bytes);
++    void     (*giveHost)(void* account, uint64_t bytes);
+   };
+ 
+   inline const DxvkVramGate* g_vramGate = nullptr;
+@@ -73,6 +75,15 @@ namespace dxvk {
+         m_gate->give(m_account, bytes);
+     }
+ 
++    bool takeHost(VkDeviceSize bytes) const {
++      return !m_account || m_gate->takeHost(m_account, bytes);
++    }
++
++    void giveHost(VkDeviceSize bytes) const {
++      if (m_account)
++        m_gate->giveHost(m_account, bytes);
++    }
++
+   private:
+ 
+     const DxvkVramGate* m_gate    = nullptr;
