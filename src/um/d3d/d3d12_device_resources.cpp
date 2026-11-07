@@ -168,13 +168,19 @@ HRESULT D3d12Device::make_heap(const D3D12DDIARG_CREATEHEAP_0001 &args, HeapReco
     }
     if (heap.type != heap_default) {
         const HRESULT memory = heap_memory(args, heap);
-        if (FAILED(memory)) return memory;
+        if (FAILED(memory)) {
+            addresses_.release(heap.address, args.ByteSize);
+            heap.address = 0u;
+            return memory;
+        }
     } else if (committed) {
         return S_OK;
     }
     const HRESULT sent_heap = send_heap(heap, args.Alignment);
     if (FAILED(sent_heap)) {
         release_heap_memory(heap);
+        addresses_.release(heap.address, args.ByteSize);
+        heap.address = 0u;
         return sent_heap;
     }
     heap.made = 1u;
@@ -318,6 +324,10 @@ HRESULT D3d12Device::heap_and_resource(const D3D12DDIARG_CREATEHEAP_0001 *heap_a
         if (shown) heap.flags |= heap_shared;
         ResourceRecord &resource = *static_cast<ResourceRecord *>(handle.pDrvPrivate);
         const HRESULT   resource_made = make_resource(*args, clear, heap, 0u, resource);
+        if (FAILED(resource_made) && heap.made == 0u) {
+            addresses_.release(heap.address, sized.ByteSize);
+            heap.address = 0u;
+        }
         if (FAILED(resource_made) || !shown) return resource_made;
         const HRESULT shown_made = show(resource, runtime, *args);
         heap.allocation = resource.allocation;
@@ -384,15 +394,21 @@ HRESULT D3d12Device::open_existing(const D3D12DDIARG_OPENHEAP_0003 &args, HeapRe
     HostAllocation *lent = nullptr;
     if (lender_.lend(opened.hAllocation, heap.size, lent) != Status::ok) {
         lines_.write("the device took no existing heap's pages");
+        addresses_.release(heap.address, heap.size);
+        heap.address = 0u;
         return E_OUTOFMEMORY;
     }
     if (memories_.adopt(*lent, heap.backing) != Status::ok) {
         lender_.close(*lent);
+        addresses_.release(heap.address, heap.size);
+        heap.address = 0u;
         return E_OUTOFMEMORY;
     }
     const HRESULT sent_heap = send_heap(heap, buffer_alignment);
     if (FAILED(sent_heap)) {
         release_heap_memory(heap);
+        addresses_.release(heap.address, heap.size);
+        heap.address = 0u;
         return sent_heap;
     }
     heap.made = 1u;

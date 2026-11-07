@@ -16,6 +16,7 @@ public:
     D3d12AddressSpace &operator=(const D3d12AddressSpace &) = delete;
 
     uint64_t reserve(uint64_t bytes);
+    bool     release(uint64_t base, uint64_t bytes);
     uint64_t reserved() const;
 
     bool invariants_hold() const;

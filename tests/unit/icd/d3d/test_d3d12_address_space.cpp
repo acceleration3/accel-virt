@@ -73,3 +73,16 @@ TEST(d3d12_address_space, a_next_outside_the_space_or_off_the_alignment_breaks_t
   CHECK(!space.invariants_hold());
   D3d12AddressSpaceProbe::set_next(space, std::uint64_t{1} << D3d12AddressSpace::address_bits);
   CHECK(space.invariants_hold()); }
+
+TEST(d3d12_address_space, the_newest_reservation_can_be_given_back_and_an_older_one_cannot)
+{ D3d12AddressSpace space;
+  const std::uint64_t older = space.reserve(1u);
+  const std::uint64_t newest = space.reserve(D3d12AddressSpace::alignment + 1u);
+  CHECK(!space.release(older, 1u));
+  CHECK_EQ(space.reserved(), 3u * D3d12AddressSpace::alignment);
+  CHECK(space.release(newest, D3d12AddressSpace::alignment + 1u));
+  CHECK_EQ(space.reserved(), D3d12AddressSpace::alignment);
+  CHECK_EQ(space.reserve(1u), newest);
+  CHECK(!space.release(newest, 0u));
+  CHECK(!space.release(0u, 1u));
+  CHECK(space.invariants_hold()); }

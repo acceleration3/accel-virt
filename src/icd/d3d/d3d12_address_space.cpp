@@ -27,6 +27,15 @@ uint64_t D3d12AddressSpace::reserve(uint64_t bytes)
     return base;
 }
 
+bool D3d12AddressSpace::release(uint64_t base, uint64_t bytes)
+{
+    AV_SCOPE("D3d12AddressSpace::release");
+    if (base < first || bytes == 0u || bytes > end) return false;
+    const uint64_t rounded = (bytes + (alignment - 1u)) & ~(alignment - 1u);
+    uint64_t       top = base + rounded;
+    return __atomic_compare_exchange_n(&next_, &top, base, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+}
+
 uint64_t D3d12AddressSpace::reserved() const
 {
     AV_SCOPE("D3d12AddressSpace::reserved");
