@@ -44,6 +44,7 @@ void D3d12HostDevice::close()
 {
     AV_SCOPE("D3d12HostDevice::close");
     frames_.bind(nullptr);
+    if (device_ != nullptr && runtime_ != nullptr) runtime_->abandon_waits(device_);
     if (device_ != nullptr) device_->Release();
     device_ = nullptr;
     runtime_ = nullptr;
@@ -113,6 +114,7 @@ bool D3d12HostDevice::remake()
     if (shown_by_ != nullptr) shown_by_->forget_direct3d12();
     ID3D12Device *const old = device_;
     device_ = nullptr;
+    if (old != nullptr) runtime_->abandon_waits(old);
     const bool made = make();
     if (old != nullptr) old->Release();
     return made;

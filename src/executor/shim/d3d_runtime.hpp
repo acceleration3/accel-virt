@@ -34,6 +34,7 @@ public:
     int32_t open_dmabuf_heap(void *device, void *address, int fd, uint64_t size, void *&heap) const;
     int32_t export_image(void *resource, Vkd3dImageExport &image) const;
     int32_t export_fence(void *fence, int &fd) const;
+    void    abandon_waits(void *device) const;
     int32_t serialize_root_signature(const void *desc, void *&blob) const;
 
 private:
@@ -49,6 +50,7 @@ private:
     using ExportImage = int32_t (*)(void *resource, Vkd3dImageExport *image);
     using ExportFence = int32_t (*)(void *fence, int *fd);
     using SetVramGate = void (*)(const AvVramGate *gate);
+    using AbandonWaits = void (*)(void *device);
 
     void *open_library(const char *name) const;
     uint32_t vulkan_index(const uint8_t *uuid) const;
@@ -66,6 +68,7 @@ private:
     SerializeRoot  serialize_root_;
     ExportImage    export_image_;
     ExportFence    export_fence_;
+    AbandonWaits   abandon_waits_;
 };
 
 }
